@@ -5,11 +5,6 @@ export default function Inventory() {
     
     <div className="container mx-auto px-4">
       <div>Inventory</div>
-      <div> 
-        <Button appName="web">
-          Login
-        </Button>
-      </div>
     </div>
   );
 }

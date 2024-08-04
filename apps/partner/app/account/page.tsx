@@ -5,11 +5,6 @@ export default function Account() {
     
     <div className="container mx-auto px-4">
       <div>Account</div>
-      <div> 
-        <Button appName="web">
-          Login
-        </Button>
-      </div>
     </div>
   );
 }
