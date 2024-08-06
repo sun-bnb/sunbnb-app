@@ -1,11 +1,9 @@
 'use client'
 
-import Sidebar from "@/components/sidebar"
-import Home from './page'
-import { signIn } from 'next-auth/react'
 import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
-import { ReactNode, useEffect, useState } from "react"
+import { useRouter, usePathname } from 'next/navigation'
+import { ReactNode, useEffect, useState } from 'react'
+import Header from './header'
 
 const App = ({ children }: {
   children: React.ReactNode;
@@ -20,12 +18,15 @@ const App = ({ children }: {
     console.log(status)
     if (status === 'authenticated') {
       setContent(
-        <div className="flex">
-          <Sidebar />
-          <div className="flex-grow ml-64 p-6">
-            {children}
+        <div>
+          <Header />
+          <div className="flex">
+            <div className="flex-grow p-6">
+              {children}
+            </div>
           </div>
         </div>
+        
       )
       console.log(session)
     } else if (status === 'unauthenticated') {
