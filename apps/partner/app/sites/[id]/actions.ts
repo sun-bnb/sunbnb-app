@@ -42,7 +42,7 @@ export async function submitForm(
 
   } else {
 
-    const site = await prisma.site.findFirst({ where: { id: siteData.id } })
+    const site = await prisma.site.findFirst({ where: { id: siteId } })
     if (site) {
 
       await prisma.site.update({
