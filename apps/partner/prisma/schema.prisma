@@ -16,6 +16,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   sites         Site[]
+  partnerAccount PartnerAccount?
   // Optional for WebAuthn support
   Authenticator Authenticator[]
  
@@ -44,9 +45,30 @@ model Account {
   @@id([provider, providerAccountId])
 }
 
+model PartnerAccount {
+  
+  firstName         String @map("first_name")
+  lastName          String @map("last_name")
+  email             String
+  phoneNumber       String @map("phone_number")
+  company           String
+  websiteUrl        String? @map("website_url")
+  address           String
+  bankAccount       String? @map("bank_account")
+ 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+ 
+  userId            String @unique @map("user_id")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+ 
+  @@id([userId])
+
+}
+
 model Site {
 
-  id                String          @id @default(cuid())
+  id                String          @unique @id @default(cuid())
 
   userId            String          @map("user_id")
   name              String
