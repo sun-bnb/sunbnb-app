@@ -24,7 +24,7 @@ export default async function Site({ params, searchParams }: { params: { id: str
 
   if (params.id !== 'create') {
     mode = 'view'
-    site = await prisma.site.findFirst({ where: { userId: session.user.id }})
+    site = await prisma.site.findFirst({ where: { id: params.id }})
     if (!site) return null
   }
   

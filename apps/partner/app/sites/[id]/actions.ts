@@ -38,6 +38,7 @@ export async function submitForm(
       data: siteData
     })
     
+    revalidatePath('/sites')
     return { status: 'ok' }
 
   } else {
@@ -53,6 +54,7 @@ export async function submitForm(
 
       })
 
+      revalidatePath('/sites')
       return { status: 'ok' }
 
     } else {
