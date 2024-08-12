@@ -4,7 +4,7 @@ import { SiteProps } from '@/app/sites/types'
 import SiteEdit from './edit'
 import { useState } from 'react'
 
-export default function SiteView(site: SiteProps) {
+export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: string }) {
 
   const [ mode, setMode ] = useState('view')
 
@@ -19,7 +19,7 @@ export default function SiteView(site: SiteProps) {
             <button onClick={() => setMode('edit')}>Edit</button>
           </div>
         ) : (
-          <SiteEdit {...site} />
+          <SiteEdit site={site} apiKey={apiKey} />
         )
       
       }

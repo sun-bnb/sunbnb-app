@@ -1,0 +1,1 @@
+export type AutocompleteMode = { id: string; label: string }

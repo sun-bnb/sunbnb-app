@@ -13,6 +13,9 @@ export default async function Site({ params, searchParams }: { params: { id: str
   const session = await auth()
   if (!session?.user) return null
 
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
+  console.log('API KEY', apiKey)
+
   let mode = 'edit'
 
   let site: SiteProps | null = {
@@ -22,13 +25,14 @@ export default async function Site({ params, searchParams }: { params: { id: str
   if (params.id !== 'create') {
     mode = 'view'
     site = await prisma.site.findFirst({ where: { userId: session.user.id }})
+    if (!site) return null
   }
   
   let content = null
   if (mode === 'view') {
-    content = <SiteView {...site} />
+    content = <SiteView site={site} apiKey={apiKey}  />
   } else {
-    content = <SiteEdit {...site} />
+    content = <SiteEdit site={site} apiKey={apiKey} />
   }
 
   return (
