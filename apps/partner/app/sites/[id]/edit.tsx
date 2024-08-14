@@ -2,19 +2,47 @@
 
 
 import { useFormState, useFormStatus } from 'react-dom'
-import React, { useState } from 'react'
+import React, { ReactElement, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { APIProvider, ControlPosition, Map, AdvancedMarker } from '@vis.gl/react-google-maps'
 
 import { TextField } from '@repo/ui/TextField'
-import { submitForm } from './actions'
 import { SiteProps } from '@/app/sites/types'
-
 
 import ControlPanel from '@/components/maps/control-panel'
 import { CustomMapControl } from '@/components/maps/map-control'
 import MapHandler from '@/components/maps/map-handler'
 
+import { submitForm } from './actions'
+import Inventory from './inventory'
+
+interface TabItem {
+  id: string
+  label: string
+}
+
+function TabBar({ items, tabSelected } : { items: TabItem[], tabSelected: (id: string) => void }) {
+
+  const [ selectedTab, setSelectedTab ] = useState('general')
+
+  return (
+    <div className="border-b border-gray-200">
+      <nav className="flex gap-x-1">
+        {
+          items.map((item, index) => (
+            <button key={index} type="button"
+              className={'p-2' + (item.id === selectedTab ? ' font-bold' : '')} onClick={() => {
+                setSelectedTab(item.id)
+                tabSelected(item.id)
+              }}>
+                {item.label}
+            </button>
+          ))
+        }
+      </nav>
+    </div>
+  )
+}
 
 export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: string }) {
 
@@ -24,6 +52,7 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
     useState<google.maps.places.PlaceResult | null>(null);
 
   const [ siteLocation, setSiteLocation ] = useState<{ lat: number, lng: number } | null>(null)
+  const [ selectedTab, setSelectedTab ] = useState('general')
 
   function SubmitButton() {
     const status = useFormStatus()
@@ -42,23 +71,18 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
 
   console.log('Location', locationLat, locationLng)
 
-  return (
-    <div className="container mx-auto px-4">
-      <div>Edit Site</div>
-      <div>
+  const generalTab = (
+    <div>
         <form action={formAction}>
           <div>
             {
               site.id && (
-                <div>
-                  <div>Site ID: {site.id}</div>
                   <input type="hidden" name="id" value={site.id} />
-                </div>
               )
             }
             
             <TextField name="name" label="Site name" value={site.name || ''} />
-            <div>Site location {<pre>{locationLat} / {locationLng}</pre>}</div>
+            
             <input type="hidden" name="locationLat" value={locationLat} />
             <input type="hidden" name="locationLng" value={locationLng} />
           </div>
@@ -83,11 +107,9 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
                 }
               </Map>
               <CustomMapControl
-                controlPosition={ControlPosition.TOP}
+                controlPosition={ControlPosition.TOP_LEFT}
                 onPlaceSelect={setSelectedPlace}
               />
-
-              <ControlPanel />
 
               <MapHandler place={selectedPlace} />
             </APIProvider>
@@ -97,7 +119,28 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
           </div>
         </form>
       </div>
-      
+  )
+
+  const tabs: { [key: string]: ReactElement } = {
+    'general': generalTab,
+    'content': <div>Content</div>,
+    'inventory': <Inventory inventory={[
+      { id: '1' },
+      { id: '2' },
+      { id: '3' }
+    ]}/>
+  }
+
+  return (
+    <div className="container mx-auto px-4">
+      <TabBar items={[
+        { id: 'general', label: 'General' },
+        { id: 'content', label: 'Content' },
+        { id: 'inventory', label: 'Inventory' }
+      ]} tabSelected={setSelectedTab}/>
+      {
+        tabs[selectedTab]
+      }
     </div>
   )
 

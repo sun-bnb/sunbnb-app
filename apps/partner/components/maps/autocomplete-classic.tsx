@@ -1,4 +1,4 @@
-import React, {useRef, useEffect, useState} from 'react'
+import React, { useRef, useEffect, useState } from 'react'
 import { useMapsLibrary } from '@vis.gl/react-google-maps'
 
 interface Props {
@@ -9,31 +9,34 @@ interface Props {
 // https://developers.google.com/maps/documentation/javascript/place-autocomplete
 export const PlaceAutocompleteClassic = ({onPlaceSelect}: Props) => {
   const [placeAutocomplete, setPlaceAutocomplete] =
-    useState<google.maps.places.Autocomplete | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const places = useMapsLibrary('places');
+    useState<google.maps.places.Autocomplete | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const places = useMapsLibrary('places')
 
   useEffect(() => {
-    if (!places || !inputRef.current) return;
+    if (!places || !inputRef.current) return
 
     const options = {
       fields: ['geometry', 'name', 'formatted_address']
     };
 
-    setPlaceAutocomplete(new places.Autocomplete(inputRef.current, options));
-  }, [places]);
+    setPlaceAutocomplete(new places.Autocomplete(inputRef.current, options))
+  }, [places])
 
   useEffect(() => {
-    if (!placeAutocomplete) return;
+    if (!placeAutocomplete) return
 
     placeAutocomplete.addListener('place_changed', () => {
-      onPlaceSelect(placeAutocomplete.getPlace());
-    });
+      onPlaceSelect(placeAutocomplete.getPlace())
+    })
   }, [onPlaceSelect, placeAutocomplete]);
 
   return (
     <div className="autocomplete-container">
-      <input ref={inputRef} />
+      <input className="rounded w-full py-2 px-3 text-gray-700 border focus:outline-none focus:ring-0 focus:border-black"
+        placeholder="Search site location"
+        defaultValue={''}
+        ref={inputRef} />
     </div>
   )
 }
