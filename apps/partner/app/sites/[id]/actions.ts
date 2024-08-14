@@ -67,3 +67,32 @@ export async function submitForm(
 
   
 }
+
+export async function createInventoryItem(
+  inventoryItem: { siteId: string }
+) {
+  
+  const session = await auth()
+  console.log('ADD INV ITEM', inventoryItem, session)
+
+  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+
+  const inventoryItemData = {
+    number: Math.round(Math.random() * 10000),
+    siteId: inventoryItem.siteId,
+    userId: session.user.id,
+    status: 'new',
+    locationLat: '0',
+    locationLng: '0'
+  }
+
+  console.log('CREATE INV ITEM', inventoryItemData)
+  await prisma.inventoryItem.create({
+    data: inventoryItemData
+  })
+  
+  revalidatePath('/sites')
+  
+  return { status: 'ok' }
+  
+}

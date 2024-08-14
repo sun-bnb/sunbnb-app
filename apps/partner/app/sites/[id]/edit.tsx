@@ -121,14 +121,12 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
       </div>
   )
 
+  console.log('inv items', site.inventoryItems)
+
   const tabs: { [key: string]: ReactElement } = {
     'general': generalTab,
     'content': <div>Content</div>,
-    'inventory': <Inventory inventory={[
-      { id: '1' },
-      { id: '2' },
-      { id: '3' }
-    ]}/>
+    'inventory': <Inventory siteId={site.id || ''} inventory={site.inventoryItems || []}/>
   }
 
   return (

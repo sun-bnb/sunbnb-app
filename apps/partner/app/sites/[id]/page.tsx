@@ -24,7 +24,7 @@ export default async function Site({ params, searchParams }: { params: { id: str
 
   if (params.id !== 'create') {
     mode = 'view'
-    site = await prisma.site.findFirst({ where: { id: params.id }})
+    site = await prisma.site.findFirst({ where: { id: params.id }, include: { inventoryItems: true } })
     if (!site) return null
   }
   

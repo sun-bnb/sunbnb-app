@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
+import { createInventoryItem } from './actions'
 
-export default function Inventory({ inventory } : { inventory: { id: string }[] }) {
+export default function Inventory({ siteId, inventory } : { siteId: string, inventory: { id: string }[] }) {
   
   return (
     <div className="container mx-auto px-4">
@@ -16,7 +17,7 @@ export default function Inventory({ inventory } : { inventory: { id: string }[] 
         }
       </div>
       <div>
-        <Link href="/sites/create">+ Add item</Link>
+        <button onClick={() => createInventoryItem({ siteId })}>+ Add item</button>
       </div>
     </div>
   )

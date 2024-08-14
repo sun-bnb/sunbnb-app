@@ -16,6 +16,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   sites         Site[]
+  inventoryItems         InventoryItem[]
   partnerAccount PartnerAccount?
   // Optional for WebAuthn support
   Authenticator Authenticator[]
@@ -74,11 +75,33 @@ model Site {
   name              String
   locationLat       String          @map("location_lat")
   locationLng       String          @map("location_lng")
+
+  inventoryItems         InventoryItem[]
  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
  
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+ 
+}
+
+model InventoryItem {               @map("inventory_item")
+
+  id                String          @unique @id @default(cuid())
+
+  userId            String          @map("user_id")
+  siteId            String          @map("site_id")
+  number            Int
+  locationLat       String          @map("location_lat")
+  locationLng       String          @map("location_lng")
+  status            String
+  notes             String?
+ 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+ 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
  
 }
  

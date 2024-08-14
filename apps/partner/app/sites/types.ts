@@ -3,4 +3,5 @@ export interface SiteProps {
   name?: string | undefined
   locationLat?: string | undefined
   locationLng?: string | undefined
+  inventoryItems?: { id: string, number: number, status: string }[]
 }
