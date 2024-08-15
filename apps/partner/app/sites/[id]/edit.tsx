@@ -15,6 +15,7 @@ import MapHandler from '@/components/maps/map-handler'
 
 import { submitForm } from './actions'
 import Inventory from './inventory'
+import Content from './content'
 
 interface TabItem {
   id: string
@@ -26,12 +27,12 @@ function TabBar({ items, tabSelected } : { items: TabItem[], tabSelected: (id: s
   const [ selectedTab, setSelectedTab ] = useState('general')
 
   return (
-    <div className="border-b border-gray-200">
+    <div className="">
       <nav className="flex gap-x-1">
         {
           items.map((item, index) => (
             <button key={index} type="button"
-              className={'p-2' + (item.id === selectedTab ? ' font-bold' : '')} onClick={() => {
+              className={'w-40 border border-radius-2 p-2' + (item.id === selectedTab ? ' font-bold bg-gray-100' : '')} onClick={() => {
                 setSelectedTab(item.id)
                 tabSelected(item.id)
               }}>
@@ -39,6 +40,7 @@ function TabBar({ items, tabSelected } : { items: TabItem[], tabSelected: (id: s
             </button>
           ))
         }
+        <div className="ml-auto"></div>
       </nav>
     </div>
   )
@@ -66,8 +68,8 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
 
   console.log('API KEY', apiKey, selectedPlace)
 
-  let locationLat = siteLocation?.lat || site.locationLat
-  let locationLng = siteLocation?.lng || site.locationLng
+  let locationLat = siteLocation?.lat.toString() || site.locationLat
+  let locationLng = siteLocation?.lng.toString() || site.locationLng
 
   console.log('Location', locationLat, locationLng)
 
@@ -81,10 +83,15 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
               )
             }
             
-            <TextField name="name" label="Site name" value={site.name || ''} />
+            <div className="mt-4">
+              <TextField name="name" label="Site name" value={site.name || ''} />
+            </div>
             
             <input type="hidden" name="locationLat" value={locationLat} />
             <input type="hidden" name="locationLng" value={locationLng} />
+          </div>
+          <div className="mt-4">
+            <label className="block mb-2 text-sm font-medium text-gray-900">Site location</label>
           </div>
           <div className="h-[500px]">
             <APIProvider apiKey={apiKey}>
@@ -114,7 +121,7 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
               <MapHandler place={selectedPlace} />
             </APIProvider>
           </div>
-          <div>
+          <div className="mt-4">
             <SubmitButton />
           </div>
         </form>
@@ -125,8 +132,8 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
 
   const tabs: { [key: string]: ReactElement } = {
     'general': generalTab,
-    'content': <div>Content</div>,
-    'inventory': <Inventory siteId={site.id || ''} inventory={site.inventoryItems || []}/>
+    'content': <Content siteId={site.id || ''} content={{}}/>,
+    'inventory': <Inventory apiKey={apiKey} siteLat={locationLat || '35.5138298'} siteLng={locationLng || '24.0180367'} siteId={site.id || ''} inventory={site.inventoryItems || []}/>
   }
 
   return (

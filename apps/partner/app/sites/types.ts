@@ -5,3 +5,11 @@ export interface SiteProps {
   locationLng?: string | undefined
   inventoryItems?: { id: string, number: number, status: string }[]
 }
+
+export interface InventoryItem {
+  id: string
+  number: number
+  status: string
+  locationLat?: string
+  locationLng?: string
+}

@@ -1,8 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { auth } from '@/app/auth'
 import { SiteProps } from '@/app/sites/types'
-import Link from 'next/link'
-import SiteView from './view'
 import SiteEdit from './edit'
 
 const prisma = new PrismaClient()
@@ -16,28 +14,18 @@ export default async function Site({ params, searchParams }: { params: { id: str
   const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
   console.log('API KEY', apiKey)
 
-  let mode = 'edit'
-
   let site: SiteProps | null = {
     name: ''
   }
 
   if (params.id !== 'create') {
-    mode = 'view'
     site = await prisma.site.findFirst({ where: { id: params.id }, include: { inventoryItems: true } })
-    if (!site) return null
-  }
-  
-  let content = null
-  if (mode === 'view') {
-    content = <SiteView site={site} apiKey={apiKey}  />
-  } else {
-    content = <SiteEdit site={site} apiKey={apiKey} />
+    if (!site) return <div>Site {params.id} not found</div>
   }
 
   return (
     <div className="container mx-auto px-4">
-      { content }
+      <SiteEdit site={site} apiKey={apiKey} />
     </div>
   )
 

@@ -92,7 +92,54 @@ export async function createInventoryItem(
   })
   
   revalidatePath('/sites')
+
+  return { status: 'ok' }
   
+}
+
+export async function deleteInventoryItem(
+  id: string
+) {
+  
+  const session = await auth()
+  console.log('DEL INV ITEM', id, session)
+
+  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+
+  await prisma.inventoryItem.delete({
+    where: { id }
+  })
+  
+  revalidatePath('/sites')
+  
+  return { status: 'ok' }
+  
+}
+
+export async function saveInventoryItem(
+  id: string, 
+  inventoryItem: { locationLat: string, locationLng: string }
+) {
+  
+  const session = await auth()
+  console.log('ADD INV ITEM', inventoryItem, session)
+
+  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+
+  const inventoryItemData = {
+    status: 'active',
+    locationLat: inventoryItem.locationLat,
+    locationLng: inventoryItem.locationLng
+  }
+
+  console.log('CREATE INV ITEM', inventoryItemData)
+  await prisma.inventoryItem.update({
+    where: { id },
+    data: inventoryItemData
+  })
+  
+  revalidatePath('/sites')
+
   return { status: 'ok' }
   
 }
