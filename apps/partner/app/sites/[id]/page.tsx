@@ -24,7 +24,7 @@ export default async function Site({ params, searchParams }: { params: { id: str
   }
 
   return (
-    <div className="container mx-auto px-4">
+    <div className="container mx-auto lg:px-4">
       <SiteEdit site={site} apiKey={apiKey} />
     </div>
   )

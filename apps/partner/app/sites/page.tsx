@@ -12,7 +12,7 @@ export default async function Sites() {
   const sites = await prisma.site.findMany({ where: { userId: session.user.id }})
   
   return (
-    <div className="container mx-auto px-4">
+    <div className="container mx-auto p-4">
       <div>
         {
           sites.map(site => (
@@ -22,7 +22,7 @@ export default async function Sites() {
           ))
         }
       </div>
-      <div>
+      <div className="mt-4">
         <Link href="/sites/create">+ Add site</Link>
       </div>
     </div>

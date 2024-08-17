@@ -19,16 +19,20 @@ export default function Inventory({ siteId, siteLat, siteLng, inventory, apiKey 
   inventory.forEach(item => {
     inventoryMap[item.id] = item
   })
+
+  const beachFlagImg: HTMLImageElement = document.createElement('img');
+  beachFlagImg.src = 'https://developers.google.com/maps/documentation/javascript/examples/full/images/beachflag.png';
+
   
   return (
     <div className="container mx-auto">
-      <div className="mt-6 flex">
+      <div className="mt-6 flex flex-wrap">
         {
           inventory.map(item => (
             <div key={item.id} className={
               !selectedItem || selectedItem.id !== item.id ? 
-                'h-[32px] relative mt-[2px] mr-2 border border-gray-400 rounded-lg w-[120px] flex justify-center align-middle' :
-                'h-[32px] relative mt-[2px] mr-2 border border-gray-600 bg-gray-200 rounded-lg w-[120px] flex justify-center align-middle'
+                'h-[32px] relative mt-[2px] mr-2 border border-gray-400 rounded-lg  w-[111px] lg:w-[120px] flex justify-center align-middle' :
+                'h-[32px] relative mt-[2px] mr-2 border border-gray-600 bg-gray-200 rounded-lg w-[111px] lg:w-[120px] flex justify-center align-middle'
             }
               onClick={() => {
                 if (selectedItem && selectedItem.id === item.id) {
@@ -44,15 +48,19 @@ export default function Inventory({ siteId, siteLat, siteLng, inventory, apiKey 
             </div>
           ))
         }
-        <div className="h-[32px] mt-[2px] mr-2 border border-gray-300 border-dashed rounded-lg w-[120px] flex justify-center">
+        <div className="h-[32px] mt-[2px] mr-2 border border-gray-300 border-dashed rounded-lg w-[111px] flex justify-center">
           <button onClick={() => createInventoryItem({ siteId })}>+ Add item</button>
         </div>
       </div>
       {
         selectedItem ? (    
-          <div className="mt-6 flex justify-between">
-            <div className="w-[33%]">{selectedItem.status}</div>
-            <div className="w-[60%] h-[400px]">
+          <div className="mt-6 flex justify-between flex-col lg:flex-row">
+            <div className="w-full lg:w-1/2">
+              <div className="mb-4">
+                Item {selectedItem.number}: {selectedItem.status}
+              </div>
+            </div>
+            <div className="w-full lg:w-1/2 h-[400px]">
               <APIProvider apiKey={apiKey}>
                 <Map mapId={'7a0196a7ba317ea5'}
                   defaultZoom={18}
@@ -74,6 +82,13 @@ export default function Inventory({ siteId, siteLat, siteLng, inventory, apiKey 
                   }}
                 >
                   {
+                    (inventory.map(item => (
+                      (item.id !== selectedItem?.id) && <AdvancedMarker key={item.id}
+                        position={{ lat: Number(item.locationLat), lng: Number(item.locationLng) }} > 
+                        <img src="https://developers.google.com/maps/documentation/javascript/examples/full/images/beachflag.png" />
+                      </AdvancedMarker>)))
+                  }
+                  {
                     (selectedItem?.locationLat && selectedItem?.locationLng) &&
                       <AdvancedMarker position={{ lat: Number(selectedItem.locationLat), lng: Number(selectedItem.locationLng) }} />
 
@@ -94,7 +109,7 @@ export default function Inventory({ siteId, siteLat, siteLng, inventory, apiKey 
             <div className="w-[100%] h-[400px]">
               <APIProvider apiKey={apiKey}>
                 <Map mapId={'7a0196a7ba317ea5'}
-                  defaultZoom={18}
+                  defaultZoom={(inventory && inventory.length > 0) ? 18 : 9}
                   defaultCenter={(siteLat && siteLng) ? {
                     lat: Number(siteLat),
                     lng: Number(siteLng)
@@ -103,7 +118,11 @@ export default function Inventory({ siteId, siteLat, siteLng, inventory, apiKey 
                   disableDefaultUI={true}
                 >
                   {
-                    (inventory.map(item => (<AdvancedMarker key={item.id} position={{ lat: Number(item.locationLat), lng: Number(item.locationLng) }} />)))
+                    (inventory.map(item => (
+                      <AdvancedMarker key={item.id} position={{ lat: Number(item.locationLat), lng: Number(item.locationLng) }}>
+                        <img src="https://developers.google.com/maps/documentation/javascript/examples/full/images/beachflag.png" />
+                      </AdvancedMarker>
+                    )))
                   }
                   
                 </Map>

@@ -20,7 +20,7 @@ const nextAuthResult: NextAuthResult = NextAuth({
       return session
     },
     async signIn({ profile }) {
-      console.log('SIGNIN CALLBACK', profile)
+      // console.log('SIGNIN CALLBACK', profile)
       return true
     },
     async jwt({ token, user }) {

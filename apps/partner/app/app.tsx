@@ -21,7 +21,7 @@ const App = ({ children }: {
         <div>
           <Header />
           <div className="flex">
-            <div className="flex-grow p-6">
+            <div className="flex-grow lg:p-6">
               {children}
             </div>
           </div>

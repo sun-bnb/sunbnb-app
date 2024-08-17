@@ -28,11 +28,11 @@ function TabBar({ items, tabSelected } : { items: TabItem[], tabSelected: (id: s
 
   return (
     <div className="">
-      <nav className="flex gap-x-1">
+      <nav className="flex gap-x-1 w-full">
         {
           items.map((item, index) => (
             <button key={index} type="button"
-              className={'w-40 border border-radius-2 p-2' + (item.id === selectedTab ? ' font-bold bg-gray-100' : '')} onClick={() => {
+              className={'w-1/3 border border-radius-2 p-2' + (item.id === selectedTab ? ' font-bold bg-gray-100' : '')} onClick={() => {
                 setSelectedTab(item.id)
                 tabSelected(item.id)
               }}>
@@ -48,13 +48,15 @@ function TabBar({ items, tabSelected } : { items: TabItem[], tabSelected: (id: s
 
 export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: string }) {
 
-  const [formState, formAction] = useFormState(submitForm, { status: '' })
+  
 
   const [selectedPlace, setSelectedPlace] =
     useState<google.maps.places.PlaceResult | null>(null);
 
   const [ siteLocation, setSiteLocation ] = useState<{ lat: number, lng: number } | null>(null)
   const [ selectedTab, setSelectedTab ] = useState('general')
+
+  const [formState, formAction] = useFormState(submitForm, { status: '' })
 
   function SubmitButton() {
     const status = useFormStatus()
@@ -66,7 +68,7 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
     </button>
   }
 
-  console.log('API KEY', apiKey, selectedPlace)
+  console.log('API KEY', site, apiKey, selectedPlace)
 
   let locationLat = siteLocation?.lat.toString() || site.locationLat
   let locationLng = siteLocation?.lng.toString() || site.locationLng
@@ -132,12 +134,12 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
 
   const tabs: { [key: string]: ReactElement } = {
     'general': generalTab,
-    'content': <Content siteId={site.id || ''} content={{}}/>,
+    'content': <Content siteId={site.id || ''} content={{ image: site.image, description: site.description }}/>,
     'inventory': <Inventory apiKey={apiKey} siteLat={locationLat || '35.5138298'} siteLng={locationLng || '24.0180367'} siteId={site.id || ''} inventory={site.inventoryItems || []}/>
   }
 
   return (
-    <div className="container mx-auto px-4">
+    <div className="container mx-auto px-4 mt-2">
       <TabBar items={[
         { id: 'general', label: 'General' },
         { id: 'content', label: 'Content' },

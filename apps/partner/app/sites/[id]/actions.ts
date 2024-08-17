@@ -1,9 +1,9 @@
 'use server'
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import { PrismaClient } from '@prisma/client'
-import { connect } from 'http2';
+import { put } from '@vercel/blob'
 
 const prisma = new PrismaClient()
 
@@ -67,6 +67,59 @@ export async function submitForm(
 
   
 }
+
+export async function saveContent(
+  previousState: { status: string, errors?: string[] },
+  formData: FormData
+) {
+  
+  const session = await auth()
+  console.log('SAVE CONTENT', formData, session)
+
+  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+
+  const siteId = formData.get('id') as string
+
+  const siteData: {
+    description?: string,
+    image?: string
+  } = {
+    description: formData.get('description') as string
+  }
+
+  const imageFile = formData.get('image') as File
+
+  if (imageFile.size > 0) {
+    const blob = await put(imageFile.name, imageFile, {
+      access: 'public',
+    })
+    console.log('BLOB', blob)
+    siteData.image = blob.url  
+  }
+  
+  const site = await prisma.site.findFirst({ where: { id: siteId } })
+  if (site) {
+
+    console.log('Site data', siteData)
+    await prisma.site.update({
+      data: siteData,
+      where: {
+        id: siteId
+      }
+
+    })
+
+    revalidatePath('/sites')
+    return { status: 'ok' }
+
+  } else {
+      
+    return { status: 'error', errors: [ 'Site not found' ] }
+  
+  }
+  
+}
+
 
 export async function createInventoryItem(
   inventoryItem: { siteId: string }

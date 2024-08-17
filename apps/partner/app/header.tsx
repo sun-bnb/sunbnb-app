@@ -46,7 +46,7 @@ function Header() {
                     key={item.name}
                     href={item.href}
                     className={
-                      'hover:text-black rounded-md px-3 py-2'  + (pathname === item.href ? ' font-bold text-black' : ' text-gray-600')
+                      'hover:text-black rounded-md lg:px-3 sm:px-1 py-2'  + (pathname === item.href ? ' font-bold text-black' : ' text-gray-600')
                     }
                   >
                     {item.name}

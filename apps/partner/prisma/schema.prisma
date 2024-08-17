@@ -76,6 +76,9 @@ model Site {
   locationLat       String          @map("location_lat")
   locationLng       String          @map("location_lng")
 
+  image             String?
+  description       String?
+
   inventoryItems         InventoryItem[]
  
   createdAt DateTime @default(now())
