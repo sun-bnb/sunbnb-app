@@ -55,7 +55,7 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
   const [selectedPlace, setSelectedPlace] =
     useState<google.maps.places.PlaceResult | null>(null)
 
-  const [ workingHours, setWorkingHours ] = useState<WorkingHours>({ day: '', openTime: '', closeTime: '' })
+  const [ workingHours, setWorkingHours ] = useState<WorkingHours>({ day: '1', openTime: '', closeTime: '' })
 
   const [ siteLocation, setSiteLocation ] = useState<{ lat: number, lng: number } | null>(null)
   const [ selectedTab, setSelectedTab ] = useState('general')
@@ -143,6 +143,7 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
                 }/>
                 <button className="border border-gray-600 rounded-md p-2" onClick={(e) => {
                   e.preventDefault()
+                  console.log('Add working hours', workingHours)
                   addWorkingHpours(site.id!, workingHours)
                 }}>+ Add</button>
             </div>
