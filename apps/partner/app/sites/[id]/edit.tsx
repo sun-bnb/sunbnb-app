@@ -7,13 +7,13 @@ import { createRoot } from 'react-dom/client'
 import { APIProvider, ControlPosition, Map, AdvancedMarker } from '@vis.gl/react-google-maps'
 
 import { TextField } from '@repo/ui/TextField'
-import { SiteProps } from '@/app/sites/types'
+import { SiteProps, WorkingHours } from '@/app/sites/types'
 
 import ControlPanel from '@/components/maps/control-panel'
 import { CustomMapControl } from '@/components/maps/map-control'
 import MapHandler from '@/components/maps/map-handler'
 
-import { submitForm } from './actions'
+import { submitForm, addWorkingHpours, deleteWorkingHours } from './actions'
 import Inventory from './inventory'
 import Content from './content'
 
@@ -21,6 +21,8 @@ interface TabItem {
   id: string
   label: string
 }
+
+const weekDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 function TabBar({ items, tabSelected } : { items: TabItem[], tabSelected: (id: string) => void }) {
 
@@ -51,7 +53,9 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
   
 
   const [selectedPlace, setSelectedPlace] =
-    useState<google.maps.places.PlaceResult | null>(null);
+    useState<google.maps.places.PlaceResult | null>(null)
+
+  const [ workingHours, setWorkingHours ] = useState<WorkingHours>({ day: '', openTime: '', closeTime: '' })
 
   const [ siteLocation, setSiteLocation ] = useState<{ lat: number, lng: number } | null>(null)
   const [ selectedTab, setSelectedTab ] = useState('general')
@@ -75,6 +79,10 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
 
   console.log('Location', locationLat, locationLng)
 
+  function getHoursAndMinutes(date: Date) {
+    return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+  }
+
   const generalTab = (
     <div>
         <form action={formAction}>
@@ -91,6 +99,53 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
             
             <input type="hidden" name="locationLat" value={locationLat} />
             <input type="hidden" name="locationLng" value={locationLng} />
+          </div>
+          <div className="mt-4">
+            <label className="block mb-2 text-sm font-medium text-gray-900">Working hours</label>
+            <div className="flex flex-wrap gap-x-6">
+            {
+              (site.workingHours || []).sort((a, b) => a.day - b.day).map((hours, index) => (
+                <div key={index} className="flex gap-x-2 gap-y-2 border rounded-md px-2 my-1">
+                  <div className="font-bold">{weekDays[hours.day - 1]}</div>
+                  <div>{getHoursAndMinutes(hours.openTime)} - {getHoursAndMinutes(hours.closeTime)}</div>
+                  <div>
+                    <button onClick={(e) => {
+                      e.preventDefault()
+                      deleteWorkingHours(hours.id)
+                    }}>&#x274C;</button>
+                  </div>
+                </div>
+              ))
+            }
+            </div>
+            <div className="flex gap-x-2 mt-2">
+                <select
+                  id="weekDaySelect"
+                  onChange={(e) => setWorkingHours({ ...workingHours, day: e.target.value })}
+                  className="block w-40 p-2 border border-gray-300 rounded-md"
+      >
+                  <option value="" disabled>
+                    -- Select weekday --
+                  </option>
+                  <option value="1">Monday</option>
+                  <option value="2">Tuesday</option>
+                  <option value="3">Wednesday</option>
+                  <option value="4">Thursday</option>
+                  <option value="5">Friday</option>
+                  <option value="6">Saturday</option>
+                  <option value="7">Sunday</option>
+                </select>
+                <TextField name={`workingHours.from`} placeholder="09:00" value={workingHours?.openTime} onChange={
+                  (e) => setWorkingHours({ ...workingHours, openTime: e.target.value })
+                }/>
+                <TextField name={`workingHour.to`} placeholder="17:00" value={workingHours?.closeTime} onChange={
+                  (e) => setWorkingHours({ ...workingHours, closeTime: e.target.value })
+                }/>
+                <button className="border border-gray-600 rounded-md p-2" onClick={(e) => {
+                  e.preventDefault()
+                  addWorkingHpours(site.id!, workingHours)
+                }}>+ Add</button>
+            </div>
           </div>
           <div className="mt-4">
             <label className="block mb-2 text-sm font-medium text-gray-900">Site location</label>

@@ -16,7 +16,7 @@ const nextAuthResult: NextAuthResult = NextAuth({
   ],
   callbacks: {
     async session({ session, token, user }) {
-      console.log('SESSION CALLBACK', session, token, user)
+      // console.log('SESSION CALLBACK', session, token, user)
       return session
     },
     async signIn({ profile }) {

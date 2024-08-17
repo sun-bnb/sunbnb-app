@@ -150,6 +150,58 @@ export async function createInventoryItem(
   
 }
 
+export async function addWorkingHpours(
+  siteId: string,
+  workingHours: { day: string, openTime: string, closeTime: string }
+) {
+  
+  const session = await auth()
+  console.log('ADD WORKING HOURS', workingHours, session)
+
+  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+
+  const openTimeDate = new Date('2000-01-01T' + workingHours.openTime + ':00.000')
+  const closeTimeDate = new Date('2000-01-01T' + workingHours.closeTime + ':00.000')
+  const workingHoursData = {
+    day: Number(workingHours.day),
+    openTime: openTimeDate,
+    closeTime: closeTimeDate,
+    site: {
+      connect: { id: siteId }
+    }
+  }
+
+  console.log('CREATE WORKING HOURS', workingHoursData)
+  await prisma.siteWorkingHours.create({
+    data: workingHoursData
+  })
+  
+  revalidatePath('/sites')
+
+  return { status: 'ok' }
+  
+}
+
+export async function deleteWorkingHours(
+  id: string
+) {
+  
+  const session = await auth()
+  console.log('DEL WORKING HOURS', id, session)
+
+  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+
+  console.log('DELETE WORKING HOURS', id)
+  await prisma.siteWorkingHours.delete({
+    where: { id }
+  })
+  
+  revalidatePath('/sites')
+
+  return { status: 'ok' }
+  
+}
+
 export async function deleteInventoryItem(
   id: string
 ) {
