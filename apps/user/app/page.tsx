@@ -23,9 +23,6 @@ export default async function Sites() {
           ))
         }
       </div>
-      <div className="mt-4">
-        <Button variant="contained">Hello world</Button>
-      </div>
     </div>
   )
 

@@ -44,8 +44,7 @@ export default function CustomizedInputBase() {
       <IconButton type="button" sx={{ p: '10px' }} aria-label="search">
         <SearchIcon />
       </IconButton>
-      <IconButton type="button" sx={{ p: '10px' }} aria-label="search">
-        <div className="">
+        <div className="p-[10px]">
           <Menu as="div" className="">
             <div>
               <MenuButton className="relative flex max-w-xs items-center rounded-full bg-gray-100 text-sm hover:outline-none hover:ring-2 hover:ring-offset-gray-100">
@@ -71,7 +70,6 @@ export default function CustomizedInputBase() {
             </MenuItems>
           </Menu>
         </div>
-        </IconButton>
     </Paper>
   );
 }

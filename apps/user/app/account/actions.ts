@@ -1,6 +1,6 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath } from 'next/cache';
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 

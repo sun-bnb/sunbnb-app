@@ -1,13 +1,8 @@
 import type { Metadata } from "next"
 import localFont from "next/font/local"
-import { AppRouterCacheProvider } from '@mui/material-nextjs/v14-appRouter';
 import App from './app'
 import NextAuthProvider from './nextauth'
 import './globals.css'
-import '@fontsource/roboto/300.css';
-import '@fontsource/roboto/400.css';
-import '@fontsource/roboto/500.css';
-import '@fontsource/roboto/700.css';
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -32,12 +27,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        <NextAuthProvider> 
-          <AppRouterCacheProvider>
-            <App>
-              {children}
-            </App>
-          </AppRouterCacheProvider>
+        <NextAuthProvider>
+          <App>
+            {children}
+          </App>
         </NextAuthProvider>
       </body>
     </html>
