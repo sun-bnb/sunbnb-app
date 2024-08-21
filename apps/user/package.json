@@ -13,6 +13,8 @@
     "@fontsource/roboto": "^5.0.14",
     "@headlessui/react": "^2.1.2",
     "@heroicons/react": "^2.1.5",
+    "@mui/icons-material": "^5.16.7",
+    "@mui/material-nextjs": "^5.16.6",
     "@mui/x-date-pickers-pro": "^7.13.0",
     "@prisma/client": "^5.18.0",
     "@repo/ui": "*",
