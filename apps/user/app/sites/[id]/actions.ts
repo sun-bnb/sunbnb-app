@@ -219,26 +219,29 @@ export async function deleteInventoryItem(
   
 }
 
-export async function saveInventoryItem(
-  id: string, 
-  inventoryItem: { locationLat: string, locationLng: string }
+export async function saveReservation(
+  reservation: { userId: string, siteId: string, from: Date, to: Date }
 ) {
   
   const session = await auth()
-  console.log('ADD INV ITEM', inventoryItem, session)
+  console.log('SAVE RES', session)
 
   if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
 
-  const inventoryItemData = {
-    status: 'active',
-    locationLat: inventoryItem.locationLat,
-    locationLng: inventoryItem.locationLng
+  const reservationData = {
+    from: reservation.from,
+    to: reservation.to,
+    site: {
+      connect: { id: reservation.siteId }
+    },
+    user: {
+      connect: { id: reservation.userId }
+    }
   }
 
-  console.log('CREATE INV ITEM', inventoryItemData)
-  await prisma.inventoryItem.update({
-    where: { id },
-    data: inventoryItemData
+  console.log('CREATE RES', reservationData)
+  await prisma.reservation.create({
+    data: reservationData
   })
   
   revalidatePath('/sites')

@@ -1,7 +1,7 @@
 import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
 import { SiteProps } from '@/app/sites/types'
-import SiteEdit from './edit'
+import SiteView from './view'
 
 export default async function Site({ params, searchParams }: { params: { id: string }, searchParams: URLSearchParams }) {
 
@@ -26,7 +26,7 @@ export default async function Site({ params, searchParams }: { params: { id: str
 
   return (
     <div className="container mx-auto lg:px-4">
-      <SiteEdit site={site} apiKey={apiKey} />
+      <SiteView site={site} apiKey={apiKey} />
     </div>
   )
 

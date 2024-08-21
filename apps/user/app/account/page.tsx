@@ -26,7 +26,7 @@ export default async function Account() {
     }
 
   }
-
+  
   return <AccountView account={account} />
 
 }

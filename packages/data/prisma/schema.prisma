@@ -17,6 +17,7 @@ model User {
   sessions      Session[]
   sites         Site[]
   inventoryItems         InventoryItem[]
+  reservations           Reservation[]
   partnerAccount PartnerAccount?
   // Optional for WebAuthn support
   Authenticator Authenticator[]
@@ -81,6 +82,7 @@ model Site {
 
   inventoryItems         InventoryItem[]
   workingHours           SiteWorkingHours[]
+  reservations           Reservation[]
  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -119,9 +121,31 @@ model InventoryItem {               @map("inventory_item")
  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  reservations           Reservation[]
  
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+ 
+}
+
+model Reservation {
+
+  id                String          @unique @id @default(cuid())
+
+  userId            String          @map("user_id")
+  siteId            String          @map("site_id")
+  itemId            String?         @map("item_id")
+
+  from              DateTime          @map("open_time")
+  to                DateTime          @map("close_time")
+ 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+ 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  item InventoryItem? @relation(fields: [itemId], references: [id], onDelete: Cascade)
  
 }
  
