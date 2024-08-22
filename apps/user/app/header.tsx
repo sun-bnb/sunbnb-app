@@ -13,7 +13,7 @@ import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
 import MenuIcon from '@mui/icons-material/Menu';
 import SearchIcon from '@mui/icons-material/Search';
-import DirectionsIcon from '@mui/icons-material/Directions';
+import Glow from './Glow'
 
 const userNavigation = [
   { name: 'Your Profile', href: '#' },
@@ -27,8 +27,11 @@ export default function CustomizedInputBase() {
   const [ searchText, setSearchText ] = useState<string>('')
 
   return (
+    <div>
+      
     <Paper
       component="form"
+      elevation={0}
       sx={{ p: '2px 4px', display: 'flex', alignItems: 'center', width: 'full' }}
     >
       <Link href="/">
@@ -38,7 +41,7 @@ export default function CustomizedInputBase() {
       </Link>
       <InputBase
         sx={{ ml: 1, flex: 1 }}
-        placeholder="Search places under the sun"
+        placeholder="Find your place under the sun"
         inputProps={{ 'aria-label': 'search google maps' }}
       />
       <IconButton type="button" sx={{ p: '10px' }} aria-label="search">
@@ -70,6 +73,11 @@ export default function CustomizedInputBase() {
             </MenuItems>
           </Menu>
         </div>
+        
     </Paper>
+    <div className="-mt-4">
+          <Glow />
+    </div>
+    </div>
   );
 }

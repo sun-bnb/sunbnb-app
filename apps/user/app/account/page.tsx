@@ -1,7 +1,10 @@
 import { auth } from '@/app/auth'
-import prisma from '@repo/data/PrismaCient'
+import { PrismaClient } from '@prisma/client'
 import { AccountProps } from './view'
 import AccountView from './view'
+
+const prisma = new PrismaClient()
+  
   
 export default async function Account() {
 
@@ -26,7 +29,7 @@ export default async function Account() {
     }
 
   }
-
+  
   return <AccountView account={account} />
 
 }

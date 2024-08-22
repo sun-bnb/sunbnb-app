@@ -186,3 +186,26 @@ button.secondary {
     filter: invert();
   }
 }
+
+.glow {
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(255, 230, 3, 0.6), transparent);
+  border-radius: 50%;
+  animation: pulse 3s infinite ease-in-out;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.9);
+    filter: blur(15px);
+  }
+  50% {
+    transform: scale(1.1);
+    filter: blur(30px);
+  }
+  100% {
+    transform: scale(0.9);
+    filter: blur(15px);
+  }
+}
