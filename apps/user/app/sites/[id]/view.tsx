@@ -24,43 +24,51 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
   ])
 
   return (
-    <div className="container mx-auto px-4 py-6">
+    <div className="container mx-auto">
       <div>
-        <div>
-          {
-            site.image &&
-              <img className="h-[100px]" src={site.image} />
-          }
+        <div className="relative">
+          <div className="w-full border-t-2 border-t-white">
+            {
+              site.image &&
+                <img className="w-full h-auto" src={site.image} />
+            }
+          </div>
+          <div className="absolute inset-0 bg-gradient-to-b from-white to-transparent via-transparent h-100"></div>
+          <div className="absolute top-[2px] left-[12px] text-2xl bg-black bg-opacity-30 px-2 py-1 rounded-lg text-white">
+            { site.name }
+          </div>
         </div>
-        <div>
-          { site.name }
-        </div>
-        <div className="mt-4 mb-4">
+        <div className="mt-4 mb-4 px-2">
           <LocalizationProvider dateAdapter={AdapterDayjs}>
             <SingleInputTimeRangeField
-              label="Booking period"
+              label="Reserve chair: From - To"
               ampm={false}
+              fullWidth={true}
               value={timeRange}
               onChange={(newValue) => setTimeRange(newValue)}
             />
           </LocalizationProvider>
         </div>
-        <div>
-          <Button variant="contained" onClick={
-            () => {
-              console.log('Reserve', timeRange)
-              if (timeRange[0] && timeRange[1]) {
-                const from = timeRange[0].toISOString()
-                const to = timeRange[1].toISOString()
-                saveReservation({
-                  from: timeRange[0].toDate(),
-                  to: timeRange[1].toDate(),
-                  siteId: site.id!,
-                  userId: session?.user?.id!
-                })
+        <div className="px-2">
+          <Button variant="contained" 
+            fullWidth={true}
+            onClick={
+              () => {
+                console.log('Reserve', timeRange)
+                if (timeRange[0] && timeRange[1]) {
+                  const from = timeRange[0].toISOString()
+                  const to = timeRange[1].toISOString()
+                  saveReservation({
+                    from: timeRange[0].toDate(),
+                    to: timeRange[1].toDate(),
+                    siteId: site.id!,
+                    userId: session?.user?.id!
+                  })
+                }
               }
-            }
-          }>Reserve</Button>
+            }>
+              Reserve
+            </Button>
         </div>
       </div>
     </div>

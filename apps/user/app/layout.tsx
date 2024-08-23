@@ -3,6 +3,7 @@ import localFont from "next/font/local"
 import App from './app'
 import NextAuthProvider from './nextauth'
 import './globals.css'
+import StoreProvider from "./StoreProvider"
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -26,13 +27,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        <NextAuthProvider>
-          <App>
-            {children}
-          </App>
-        </NextAuthProvider>
-      </body>
+      <StoreProvider>
+        <body className={`${geistSans.variable} ${geistMono.variable}`}>
+          <NextAuthProvider>
+            <App>
+              {children}
+            </App>
+          </NextAuthProvider>
+        </body>
+      </StoreProvider>
     </html>
   )
 }

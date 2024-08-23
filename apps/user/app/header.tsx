@@ -15,6 +15,11 @@ import MenuIcon from '@mui/icons-material/Menu';
 import SearchIcon from '@mui/icons-material/Search';
 import Glow from './Glow'
 
+import { setSearchState } from '@/store/features/search/searchSlice'
+import { RootState } from '@/store/store'
+import { useDispatch, useSelector } from 'react-redux'
+import { useNow } from '@mui/x-date-pickers/internals'
+
 const userNavigation = [
   { name: 'Your Profile', href: '#' },
   { name: 'Settings', href: '#' },
@@ -24,60 +29,81 @@ const userNavigation = [
 export default function CustomizedInputBase() {
 
   const { data: session, status } = useSession()
-  const [ searchText, setSearchText ] = useState<string>('')
+
+  const [ inputIntervals, setInputIntervals ] = useState<number[]>([])
+  const [ lastInputTime, setLastInputTime ] = useState<number>(0)
+  const [ averageInputTime, setAverageInputTime ] = useState<number>(0)
+
+  const dispatch = useDispatch();
+  const searchState = useSelector((state: RootState) => state.search)
+  const { searchText } = searchState
 
   return (
     <div>
-      
-    <Paper
-      component="form"
-      elevation={0}
-      sx={{ p: '2px 4px', display: 'flex', alignItems: 'center', width: 'full' }}
-    >
-      <Link href="/">
-        <IconButton sx={{ p: '10px', marginTop: '-2px' }} aria-label="menu">
-          &#x2600;
+      <Paper
+        component="form"
+        elevation={0}
+        sx={{ p: '2px 4px', display: 'flex', alignItems: 'center', width: 'full' }}
+      >
+        <Link href="/">
+          <IconButton sx={{ p: '10px', marginTop: '-2px' }} aria-label="menu">
+            &#x2600;
+          </IconButton>
+        </Link>
+        <InputBase
+          sx={{ ml: 1, flex: 1 }}
+          placeholder="Find your place under the sun"
+          inputProps={{ 'aria-label': 'search google maps' }}
+          value={searchText}
+          onChange={(e) => {
+            dispatch(setSearchState({ searchText: e.target.value }))
+            const now = Date.now()
+            inputIntervals.push(now - lastInputTime)
+            if (inputIntervals.length > 5) {
+              inputIntervals.shift()
+            }
+
+            const sum = inputIntervals.reduce((accumulator, currentValue) => accumulator + currentValue, 0)
+            const average = sum / inputIntervals.length
+            setInputIntervals(inputIntervals)
+            setAverageInputTime(average)
+            setLastInputTime(now)
+          }}
+        />
+        <IconButton type="button" sx={{ p: '10px' }} aria-label="search">
+          <SearchIcon />
         </IconButton>
-      </Link>
-      <InputBase
-        sx={{ ml: 1, flex: 1 }}
-        placeholder="Find your place under the sun"
-        inputProps={{ 'aria-label': 'search google maps' }}
-      />
-      <IconButton type="button" sx={{ p: '10px' }} aria-label="search">
-        <SearchIcon />
-      </IconButton>
-        <div className="p-[10px]">
-          <Menu as="div" className="">
-            <div>
-              <MenuButton className="relative flex max-w-xs items-center rounded-full bg-gray-100 text-sm hover:outline-none hover:ring-2 hover:ring-offset-gray-100">
-                <span className="absolute -inset-1.5" />
-                <span className="sr-only">Open user menu</span>
-                <img alt="" src={session?.user?.image!} className="h-8 w-8 rounded-full" />
-              </MenuButton>
-            </div>
-            <MenuItems
-              transition
-              className="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 transition focus:outline-none data-[closed]:scale-95 data-[closed]:transform data-[closed]:opacity-0 data-[enter]:duration-100 data-[leave]:duration-75 data-[enter]:ease-out data-[leave]:ease-in"
-            >
-              {userNavigation.map((item) => (
-                <MenuItem key={item.name}>
-                  <Link
-                    href={item.href}
-                    className="block px-4 py-2 text-sm text-gray-700 data-[focus]:bg-gray-100"
-                  >
-                    {item.name}
-                  </Link>
-                </MenuItem>
-              ))}
-            </MenuItems>
-          </Menu>
-        </div>
-        
-    </Paper>
-    <div className="-mt-4">
-          <Glow />
-    </div>
+          <div className="p-[10px]">
+            <Menu as="div" className="">
+              <div>
+                <MenuButton className="relative flex max-w-xs items-center rounded-full bg-gray-100 text-sm hover:outline-none hover:ring-2 hover:ring-offset-gray-100">
+                  <span className="absolute -inset-1.5" />
+                  <span className="sr-only">Open user menu</span>
+                  <img alt="" src={session?.user?.image!} className="h-8 w-8 rounded-full" />
+                </MenuButton>
+              </div>
+              <MenuItems
+                transition
+                className="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 transition focus:outline-none data-[closed]:scale-95 data-[closed]:transform data-[closed]:opacity-0 data-[enter]:duration-100 data-[leave]:duration-75 data-[enter]:ease-out data-[leave]:ease-in"
+              >
+                {userNavigation.map((item) => (
+                  <MenuItem key={item.name}>
+                    <Link
+                      href={item.href}
+                      className="block px-4 py-2 text-sm text-gray-700 data-[focus]:bg-gray-100"
+                    >
+                      {item.name}
+                    </Link>
+                  </MenuItem>
+                ))}
+              </MenuItems>
+            </Menu>
+          </div>
+          
+      </Paper>
+      <div className="-mt-4">
+        <Glow state={searchText} />
+      </div>
     </div>
   );
 }
