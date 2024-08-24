@@ -35,6 +35,10 @@ export async function submitForm(
     await prisma.site.create({
       data: siteData
     })
+
+    await prisma.$executeRaw`
+      UPDATE "Site" SET coords = ST_MakePoint(${siteData.locationLat}::double precision, ${siteData.locationLng}::double precision)
+      WHERE id = ${siteId}`
     
     revalidatePath('/sites')
     return { status: 'ok' }
@@ -51,6 +55,10 @@ export async function submitForm(
         }
 
       })
+
+      await prisma.$executeRaw`
+        UPDATE "Site" SET coords = ST_MakePoint(${siteData.locationLat}::double precision, ${siteData.locationLng}::double precision)
+        WHERE id = ${siteId}`
 
       revalidatePath('/sites')
       return { status: 'ok' }

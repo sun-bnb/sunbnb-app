@@ -76,6 +76,7 @@ model Site {
   name              String
   locationLat       String          @map("location_lat")
   locationLng       String          @map("location_lng")
+  coords            Unsupported("geometry(Point, 4326)")?
 
   image             String?
   description       String?
@@ -88,6 +89,7 @@ model Site {
   updatedAt DateTime @updatedAt
  
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([coords], name: "site_coords_idx", type: Gist)
  
 }
 

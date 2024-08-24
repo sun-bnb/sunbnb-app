@@ -14,11 +14,33 @@ import styles from './page.module.css'
 import Glow from './Glow'
 import { SiteProps } from './sites/types'
 import { useState } from 'react'
+import { useSelector } from 'react-redux'
+import { RootState } from '@/store/store'
+import { useGetPlaceDetailsQuery } from '@/store/features/autocomplete/autocompleteSlice'
+import { useGetSitesByCoordsQuery } from '@/store/features/api/apiSlice'
 
 export default function Sites({ sites }: { sites: SiteProps[]} ) {
 
   const [ viewMode, setViewMode ] = useState<string>('list')
+
+  const searchState = useSelector((state: RootState) => state.search)
+  const { selectedPlace } = searchState
+
+  console.log('Selected place', selectedPlace)
+
+  const { data: placeDetails } = useGetPlaceDetailsQuery(selectedPlace?.placeId, {
+    skip: !selectedPlace
+  })
+
+
+  console.log('Place details', placeDetails)
+
+  const { data: nearbySites } = useGetSitesByCoordsQuery({ lat: placeDetails?.lat, lng: placeDetails?.lng }, {
+    skip: !placeDetails
+  })
   
+  console.log('Nearby sites', nearbySites)
+
   return (
     <div className="container mx-auto -mt-2">
       <div className="flex justify-between py-1 px-2">
@@ -63,7 +85,7 @@ export default function Sites({ sites }: { sites: SiteProps[]} ) {
       </div>
       <div>
         {
-          sites.map(site => (
+          (nearbySites || sites).map(site => (
             <div className="mb-6" key={site.id}>
               <div className="w-full h-[160px] mr-2 mt-1 overflow-hidden bg-gray-100 flex items-center relative">
                 { 
@@ -85,10 +107,14 @@ export default function Sites({ sites }: { sites: SiteProps[]} ) {
                       <span className="text-gray-400 mx-[1px]">/</span>
                       <span className="text-gray-400">14</span>
                     </div>
-                    <div className="mr-3">
-                      <span className="mr-[2px]">1.8</span>
-                      <span className="text-xs">KM</span>
-                    </div>
+                    {
+                      site.distance &&
+                        <div className="mr-3">
+                          <span className="mr-[2px]">{Math.round(site.distance)}</span>
+                          <span className="text-xs">KM</span>
+                        </div>
+                    }
+                    
                     <div className="mr-3">
                       <span>&#8364;</span>
                       <span>8</span>

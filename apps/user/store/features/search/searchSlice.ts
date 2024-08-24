@@ -5,6 +5,10 @@ import type { PayloadAction } from '@reduxjs/toolkit'
 
 export interface SearchState {
   searchText: string
+  selectedPlace?: { 
+    placeId: string
+    placeName: string 
+  } | null
 }
 
 const initialState: SearchState = {
@@ -18,6 +22,9 @@ export const searchSlice = createSlice({
     setSearchState: (state, action: PayloadAction<{ searchText: string }>) => {
       state.searchText = action.payload.searchText
     },
+    setSelectedPlace: (state, action: PayloadAction<{ selectedPlace: { placeId: string, placeName: string } | null }>) => {
+      state.selectedPlace = action.payload.selectedPlace
+    },
     resetSearchState: (state) => {
       state.searchText = ''
     }
@@ -25,5 +32,5 @@ export const searchSlice = createSlice({
 })
 
 // Action creators are generated for each case reducer function
-export const { setSearchState, resetSearchState } = searchSlice.actions
+export const { setSearchState, setSelectedPlace, resetSearchState } = searchSlice.actions
 export default searchSlice.reducer
