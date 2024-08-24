@@ -7,6 +7,7 @@ export interface SiteProps {
   workingHours?: { id: string, day: number, openTime: Date, closeTime: Date }[]
   image?: string | null
   description?: string | null
+  price?: number | null
 }
 
 export interface InventoryItem {

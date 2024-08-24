@@ -78,6 +78,7 @@ model Site {
   locationLng       String          @map("location_lng")
   coords            Unsupported("geometry(Point, 4326)")?
 
+  price             Float?
   image             String?
   description       String?
 

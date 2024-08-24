@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS postgis;
+
 -- AlterTable
 ALTER TABLE "Site" ADD COLUMN     "coords" geometry(Point, 4326);
 

@@ -13,13 +13,131 @@ import ListAltIcon from '@mui/icons-material/ListAlt'
 import styles from './page.module.css'
 import Glow from './Glow'
 import { SiteProps } from './sites/types'
+import { APIProvider, AdvancedMarker, ControlPosition, Map } from '@vis.gl/react-google-maps'
 import { useState } from 'react'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/store/store'
 import { useGetPlaceDetailsQuery } from '@/store/features/autocomplete/autocompleteSlice'
 import { useGetSitesByCoordsQuery } from '@/store/features/api/apiSlice'
 
-export default function Sites({ sites }: { sites: SiteProps[]} ) {
+interface MapCenter {
+  lat: number;
+  lng: number;
+}
+
+interface MapBounds {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+}
+
+function SiteList({ sites }: { sites: SiteProps[] }) {
+
+  return (
+    <div>
+        {
+          sites.map(site => (
+            <div className="mb-6" key={site.id}>
+              <div className="w-full h-[160px] mr-2 mt-1 overflow-hidden bg-gray-100 flex items-center relative">
+                { 
+                  site.image && 
+                  <Link href={`/sites/${site.id}`}>
+                    <img width="100%" src={site.image} />
+                  </Link>
+                }
+                <div className="font-bold text-white px-2 py-1 absolute top-[6px] left-[6px] bg-black bg-opacity-30 rounded-xl">
+                  <Link href={`/sites/${site.id}`}>{site.name}</Link>
+                </div>
+              </div>
+              <div className="py-3">
+                <div className="px-1 flex justify-between">
+                  <div className="flex">
+                    <div className="mr-3 pl-1">
+                      <span className="mr-1">&#x26F1;</span>
+                      <span className={(site.availableCount || 0) > 0 ? 'text-green-600' : 'text-red-600'}>{site.availableCount}</span>
+                      <span className="text-gray-400 mx-[1px]">/</span>
+                      <span className="text-gray-400">{site.itemCount}</span>
+                    </div>
+                    {
+                      site.distance &&
+                        <div className="mr-3">
+                          <span className="mr-[2px]">{Math.round(site.distance)}</span>
+                          <span className="text-xs">KM</span>
+                        </div>
+                    }
+                    {
+                      site.price &&
+                        <div className="mr-3">
+                          <span>&#8364;</span>
+                          <span>{site.price}</span>
+                        </div>
+                    }
+                    
+                  </div>
+                  <div className="flex">
+                    <div className="mr-3 border border-gray-600 rounded-md pr-[5px] pl-[4px]">
+                      <RestaurantIcon sx={{ fontSize: '16px', marginTop: '-4px' }}/>
+                    </div>
+                    <div className="mr-3 border border-gray-600 rounded-md pr-[4px] pl-[4px]">
+                      <WcIcon sx={{ fontSize: '19px', marginTop: '-4px' }}/>
+                    </div>
+                  </div>
+                </div>
+                <div className="px-1 py-2">
+                  { site.description }
+                </div>
+              </div>
+            </div>
+          ))
+        }
+      </div>
+  )
+
+}
+
+function SiteMap({ sites, bounds, apiKey }: { sites: SiteProps[], bounds?: { center: MapCenter, bounds: MapBounds }, apiKey: string }) {
+
+  const [selectedSite, setSelectedSite] = useState<SiteProps | null>(null)
+
+  const defaultBounds = bounds?.bounds
+  console.log('Default bounds', defaultBounds)
+
+  return (
+    <div>
+      <div className="w-full lg:w-1/2 h-[600px]">
+        <APIProvider apiKey={apiKey}>
+          <Map mapId={'7a0196a7ba317ea5'}
+            defaultZoom={defaultBounds ? undefined : 8}
+            defaultCenter={bounds ? bounds.center : { lat: 35.5138298, lng: 24.0180367 }}
+            defaultBounds={defaultBounds}
+            gestureHandling={'greedy'}
+            disableDefaultUI={true}
+            onClick={(e) => {
+              console.log('Map click', e)
+            }}
+          >
+            {
+              (sites.map(site => (
+                (site.id !== selectedSite?.id) && <AdvancedMarker key={site.id}
+                  position={{ lat: Number(site.locationLat), lng: Number(site.locationLng) }} > 
+                  <img src="https://developers.google.com/maps/documentation/javascript/examples/full/images/beachflag.png" />
+                </AdvancedMarker>)))
+            }
+            {
+              (selectedSite?.locationLat && selectedSite?.locationLng) &&
+                <AdvancedMarker position={{ lat: Number(selectedSite.locationLat), lng: Number(selectedSite.locationLng) }} />
+
+            }
+          </Map>
+        </APIProvider>
+      </div>
+    </div>
+  )
+
+}
+
+export default function Sites({ sites, apiKey }: { sites: SiteProps[], apiKey: string } ) {
 
   const [ viewMode, setViewMode ] = useState<string>('list')
 
@@ -35,11 +153,13 @@ export default function Sites({ sites }: { sites: SiteProps[]} ) {
 
   console.log('Place details', placeDetails)
 
-  const { data: nearbySites } = useGetSitesByCoordsQuery({ lat: placeDetails?.lat, lng: placeDetails?.lng }, {
+  const { data: sitesResponse } = useGetSitesByCoordsQuery({ lat: placeDetails?.lat, lng: placeDetails?.lng }, {
     skip: !placeDetails
   })
   
-  console.log('Nearby sites', nearbySites)
+  const { sites: nearbySites, bounds } = sitesResponse || {}
+
+  console.log('Nearby sites', nearbySites, bounds)
 
   return (
     <div className="container mx-auto -mt-2">
@@ -49,10 +169,18 @@ export default function Sites({ sites }: { sites: SiteProps[]} ) {
             <span className="mr-1 font-bold">{ sites.length }</span>
             <span>BEACHES</span>
           </div>
-          <div className="text-gray-600">
-            <span className="mr-1">near</span>
-            <span className="font-bold">Kissamos</span>
-          </div>
+          {
+            !selectedPlace ? (
+              <div className="text-gray-600">
+                <span>Showing all beaches</span>
+              </div>
+            ) : (
+              <div className="text-gray-600">
+                <span className="mr-1">near</span>
+                <span className="font-bold">{selectedPlace.mainText}</span>
+              </div>
+            )
+          }
         </div>
         <div>
           <ToggleButtonGroup
@@ -83,60 +211,13 @@ export default function Sites({ sites }: { sites: SiteProps[]} ) {
           </ToggleButtonGroup>
         </div>
       </div>
-      <div>
-        {
-          (nearbySites || sites).map(site => (
-            <div className="mb-6" key={site.id}>
-              <div className="w-full h-[160px] mr-2 mt-1 overflow-hidden bg-gray-100 flex items-center relative">
-                { 
-                  site.image && 
-                  <Link href={`/sites/${site.id}`}>
-                    <img width="100%" src={site.image} />
-                  </Link>
-                }
-                <div className="font-bold text-white px-2 py-1 absolute top-[6px] left-[6px] bg-black bg-opacity-30 rounded-xl">
-                  <Link href={`/sites/${site.id}`}>{site.name}</Link>
-                </div>
-              </div>
-              <div className="py-3">
-                <div className="px-1 flex justify-between">
-                  <div className="flex">
-                    <div className="mr-3 pl-1">
-                      <span className="mr-1">&#x26F1;</span>
-                      <span className="text-green-600">6</span>
-                      <span className="text-gray-400 mx-[1px]">/</span>
-                      <span className="text-gray-400">14</span>
-                    </div>
-                    {
-                      site.distance &&
-                        <div className="mr-3">
-                          <span className="mr-[2px]">{Math.round(site.distance)}</span>
-                          <span className="text-xs">KM</span>
-                        </div>
-                    }
-                    
-                    <div className="mr-3">
-                      <span>&#8364;</span>
-                      <span>8</span>
-                    </div>
-                  </div>
-                  <div className="flex">
-                    <div className="mr-3 border border-gray-600 rounded-md pr-[5px] pl-[4px]">
-                      <RestaurantIcon sx={{ fontSize: '16px', marginTop: '-4px' }}/>
-                    </div>
-                    <div className="mr-3 border border-gray-600 rounded-md pr-[4px] pl-[4px]">
-                      <WcIcon sx={{ fontSize: '19px', marginTop: '-4px' }}/>
-                    </div>
-                  </div>
-                </div>
-                <div className="px-1 py-2">
-                  { site.description }
-                </div>
-              </div>
-            </div>
-          ))
-        }
-      </div>
+      {
+        viewMode === 'list' ? (
+          <SiteList sites={(nearbySites || sites)} />
+        ) : (
+          <SiteMap sites={(nearbySites || sites)} bounds={bounds} apiKey={apiKey} />
+        )
+      }
     </div>
   )
 

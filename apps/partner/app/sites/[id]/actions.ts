@@ -17,12 +17,19 @@ export async function submitForm(
 
   const requiredFields = ['name', 'locationLat', 'locationLng']
   const errors = requiredFields.filter(field => !formData.get(field)).map(field => `${field} is required`)
+  let priceVal = formData.get('price') as string
+  let price = Number(priceVal)
+  if (!priceVal || isNaN(price)) {
+    errors.push(`Invalid price ${priceVal}`)
+  }
+  
   if (errors.length > 0) return { status: 'error', errors }
 
   const siteId = formData.get('id') as string
-
+   
   const siteData = {
     name: formData.get('name') as string,
+    price,
     locationLat: formData.get('locationLat') as string,
     locationLng: formData.get('locationLng') as string,
     user: {
@@ -30,6 +37,8 @@ export async function submitForm(
     }
   }
 
+  console.log('SITE DATA', siteData)
+  
   if (!siteId) {
 
     await prisma.site.create({

@@ -78,19 +78,19 @@ export default function CustomizedInputBase() {
             </>
           
           ) : (
-            <>
+            <div className="flex flex-grow items-center" onClick={
+              () => {
+                dispatch(setSearchState({ searchText: '' }))
+                dispatch(setSelectedPlace({ selectedPlace: null }))
+              }
+            }>
               <div className="flex-grow leading-[20px] pl-2">
                 { selectedPlace.placeName }
               </div>
-              <IconButton type="button" sx={{ p: '10px' }} aria-label="search" onClick={
-                () => {
-                  dispatch(setSearchState({ searchText: '' }))
-                  dispatch(setSelectedPlace({ selectedPlace: null }))
-                }
-              }>
+              <IconButton type="button" sx={{ p: '10px' }} aria-label="search" >
                 <SearchIcon />
               </IconButton>
-            </>
+            </div>
           )
 
         }
@@ -134,7 +134,8 @@ export default function CustomizedInputBase() {
                       dispatch(setSelectedPlace({ 
                         selectedPlace: { 
                           placeId: suggestion.place_id,
-                          placeName: suggestion.description
+                          placeName: suggestion.description,
+                          mainText: suggestion.structured_formatting.main_text
                         }
                       }))
                     }}>

@@ -60,7 +60,7 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
   const [ siteLocation, setSiteLocation ] = useState<{ lat: number, lng: number } | null>(null)
   const [ selectedTab, setSelectedTab ] = useState('general')
 
-  const [formState, formAction] = useFormState(submitForm, { status: '' })
+  const [ formState, formAction ] = useFormState(submitForm, { status: '' })
 
   function SubmitButton() {
     const status = useFormStatus()
@@ -83,8 +83,20 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
     return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
   }
 
+  console.log('form state', formState)
+
   const generalTab = (
     <div>
+        {
+          formState.errors &&
+            <div className="mt-2">
+              {
+                (formState.errors || []).map((error) => (
+                  <div key={error} className="text-red-500 flex justify-center">{ error }</div>
+                ))
+              }
+            </div>
+        }
         <form action={formAction}>
           <div>
             {
@@ -93,8 +105,9 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
               )
             }
             
-            <div className="mt-4">
+            <div className="mt-4 flex w-full gap-x-1">
               <TextField name="name" label="Site name" value={site.name || ''} />
+              <TextField name="price" label="Advertised price" value={(site.price || '').toString()} />
             </div>
             
             <input type="hidden" name="locationLat" value={locationLat} />

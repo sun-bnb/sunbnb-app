@@ -8,6 +8,9 @@ export interface SiteProps {
   image?: string | null
   description?: string | null
   distance?: number
+  price?: number | null
+  itemCount?: number
+  availableCount?: number
 }
 
 export interface InventoryItem {

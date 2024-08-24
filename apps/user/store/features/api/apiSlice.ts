@@ -14,7 +14,7 @@ export const httpApi = createApi({
           lat, lng
         },
       }),
-      transformResponse: (response: { sites: SiteProps[] }) => response.sites,
+      transformResponse: (response: { sites: SiteProps[], bounds: any }) => response,
     })
   }),
 });

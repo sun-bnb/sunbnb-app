@@ -3,12 +3,15 @@
 import { createSlice } from '@reduxjs/toolkit'
 import type { PayloadAction } from '@reduxjs/toolkit'
 
+interface SelectedPlace { 
+  placeId: string
+  placeName: string
+  mainText: string
+}
+
 export interface SearchState {
   searchText: string
-  selectedPlace?: { 
-    placeId: string
-    placeName: string 
-  } | null
+  selectedPlace?: SelectedPlace | null
 }
 
 const initialState: SearchState = {
@@ -22,7 +25,7 @@ export const searchSlice = createSlice({
     setSearchState: (state, action: PayloadAction<{ searchText: string }>) => {
       state.searchText = action.payload.searchText
     },
-    setSelectedPlace: (state, action: PayloadAction<{ selectedPlace: { placeId: string, placeName: string } | null }>) => {
+    setSelectedPlace: (state, action: PayloadAction<{ selectedPlace: SelectedPlace | null }>) => {
       state.selectedPlace = action.payload.selectedPlace
     },
     resetSearchState: (state) => {
