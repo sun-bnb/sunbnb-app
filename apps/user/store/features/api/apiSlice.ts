@@ -1,5 +1,6 @@
 import { SiteProps } from '@/app/sites/types';
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
+import { SiteGeography } from '@/app/sites/types';
 
 export const httpApi = createApi({
   reducerPath: 'api',
@@ -14,7 +15,7 @@ export const httpApi = createApi({
           lat, lng
         },
       }),
-      transformResponse: (response: { sites: SiteProps[], bounds: any }) => response,
+      transformResponse: (response: { sites: SiteProps[], geography: SiteGeography }) => response,
     })
   }),
 });

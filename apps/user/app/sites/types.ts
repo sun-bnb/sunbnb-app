@@ -3,14 +3,31 @@ export interface SiteProps {
   name?: string | undefined
   locationLat?: string | undefined
   locationLng?: string | undefined
-  inventoryItems?: { id: string, number: number, status: string }[]
+  inventoryItems?: InventoryItem[]
   workingHours?: { id: string, day: number, openTime: Date, closeTime: Date }[]
   image?: string | null
   description?: string | null
-  distance?: number
+  distance?: number | null
   price?: number | null
   itemCount?: number
   availableCount?: number
+}
+
+export interface MapCenter {
+  lat: number
+  lng: number
+}
+
+export interface MapBounds {
+  north: number
+  south: number
+  east: number
+  west: number
+}
+
+export interface SiteGeography {
+  center: MapCenter
+  bounds: MapBounds
 }
 
 export interface InventoryItem {
