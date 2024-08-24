@@ -6,7 +6,7 @@ import { auth } from '@/app/auth'
 export async function GET(request: NextRequest) {
 
   const session = await auth()
-  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+  if (!session?.user) return Response.json({ status: 'error', errors: [ 'Not authenticated' ] })
 
   const searchParams = request.nextUrl.searchParams
   const lat = searchParams.get('lat')
