@@ -5,7 +5,9 @@ import Button from '@mui/material/Button'
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import FormControl from '@mui/material/FormControl';
-import Select, { SelectChangeEvent } from '@mui/material/Select';
+import Select, { SelectChangeEvent } from '@mui/material/Select'
+import RestaurantIcon from '@mui/icons-material/Restaurant'
+import WcIcon from '@mui/icons-material/Wc'
 import { useState } from 'react'
 import { useSession } from 'next-auth/react'
 import dayjs, { Dayjs } from 'dayjs'
@@ -42,12 +44,15 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
     west: Math.min(...itemLngs)
   };
 
+  const itemCount = inventoryItems?.length
+  const availableCount = inventoryItems?.filter(item => item.status == 'available').length
+
   console.log('Site', site)
 
   return (
     <div className="container mx-auto">
       <div>
-        <div className="relative" onClick={() => {
+        <div className="relative h-[245px] overflow-hidden" onClick={() => {
           setFocused(false)
         }}>
           <div className="w-full border-t-2 border-t-white">
@@ -61,9 +66,46 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
             { site.name }
           </div>
         </div>
-        <div className={`relative transition-all duration-500
-          ${focused ? "-mt-[160px]" : "mt-[0px]"} 
-          bg-white px-2 py-4`}>
+        <div className="py-3 px-2">
+          <div className="px-1 flex justify-between">
+            <div className="flex">
+              <div className="mr-3 pl-1">
+                <span className="mr-1">&#x26F1;</span>
+                <span className={(availableCount || 0) > 0 ? 'text-green-600' : 'text-red-600'}>{availableCount}</span>
+                <span className="text-gray-400 mx-[1px]">/</span>
+                <span className="text-gray-400">{itemCount}</span>
+              </div>
+              {
+                site.distance &&
+                  <div className="mr-3">
+                    <span className="mr-[2px]">{Math.round(site.distance)}</span>
+                    <span className="text-xs">KM</span>
+                  </div>
+              }
+              {
+                site.price &&
+                  <div className="mr-3">
+                    <span>&#8364;</span>
+                    <span>{site.price}</span>
+                  </div>
+              }
+              
+            </div>
+            <div className="flex">
+              <div className="ml-3 border border-gray-600 rounded-md pr-[5px] pl-[4px]">
+                <RestaurantIcon sx={{ fontSize: '16px', marginTop: '-4px' }}/>
+              </div>
+              <div className="ml-3 border border-gray-600 rounded-md pr-[4px] pl-[4px]">
+                <WcIcon sx={{ fontSize: '19px', marginTop: '-4px' }}/>
+              </div>
+            </div>
+          </div>
+          <div className="px-1 py-2">
+            { site.description }
+          </div>
+        </div>
+        <div className={`fixed left-0 w-full bg-white text-white text-center px-2 py-4
+          ${!focused ? '-bottom-[433px]' : 'bottom-[0px]'} transition-bottom duration-500`}>
           <div className="mb-2">
             <LocalizationProvider dateAdapter={AdapterDayjs}>
               <SingleInputTimeRangeField
