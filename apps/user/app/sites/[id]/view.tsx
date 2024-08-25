@@ -1,11 +1,18 @@
 'use client'
 
-import { MapBounds, SiteProps } from '@/app/sites/types'
+import { InventoryItem, MapBounds, Reservation, SiteProps } from '@/app/sites/types'
 import Button from '@mui/material/Button'
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import FormControl from '@mui/material/FormControl';
-import Select, { SelectChangeEvent } from '@mui/material/Select'
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab'
+import Divider from '@mui/material/Divider'
+import { MobileDatePicker } from '@mui/x-date-pickers/MobileDatePicker'
+import { MobileDateRangePicker } from '@mui/x-date-pickers-pro/MobileDateRangePicker'
+import { SingleInputDateRangeField } from '@mui/x-date-pickers-pro/SingleInputDateRangeField'
+import Select from '@mui/material/Select'
+import Chip from '@mui/material/Chip'
 import RestaurantIcon from '@mui/icons-material/Restaurant'
 import WcIcon from '@mui/icons-material/Wc'
 import { useState } from 'react'
@@ -17,19 +24,42 @@ import { DateRange } from '@mui/x-date-pickers-pro/models'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { SingleInputTimeRangeField } from '@mui/x-date-pickers-pro/SingleInputTimeRangeField'
 import { saveReservation } from './actions'
+import { useGetAvailabilityBySiteAndTimeRangeQuery } from '@/store/features/api/apiSlice'
+
+const statusToChipColor: {
+  [key: string]: 'default' | 'success' | 'error'
+} = {
+  'pending': 'default',
+  'confirmed': 'success',
+  'canceled': 'error'
+}
+
+const statusToChipLabel: {
+  [key: string]: 'Pending' | 'Confirmed' | 'Canceled'
+} = {
+  'pending': 'Pending',
+  'confirmed': 'Confirmed',
+  'canceled': 'Canceled'
+}
 
 export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: string }) {
 
   const { data: session } = useSession()
 
-  const [ mode, setMode ] = useState('view')
+  const [ reservationMode, setReservationMode ] = useState('hours')
   const [ focused, setFocused ] = useState(false)
-  const [ selectedItem, setSelectedItem ] = useState(site.inventoryItems?.[0])
+  const [ selectedItem, setSelectedItem ] = useState<InventoryItem | null>(null)
   const [ paymentMethod, setPaymentMethod ] = useState('0001')
 
-  const [timeRange, setTimeRange] = useState<DateRange<Dayjs>>(() => [
-    dayjs('2022-04-17T15:30'),
-    dayjs('2022-04-17T18:30'),
+  const [ reservationDay, setReservationDay ] = useState<Dayjs | null>(dayjs())
+  const [ timeRange, setTimeRange ] = useState<DateRange<Dayjs>>(() => [
+    dayjs().add(2, 'hour'),
+    dayjs().add(4, 'hour')
+  ])
+
+  const [ dateRange, setDateRange ] = useState<DateRange<Dayjs>>(() => [
+    dayjs(),
+    dayjs().add(2, 'day')
   ])
 
   const { inventoryItems, workingHours } = site
@@ -47,7 +77,40 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
   const itemCount = inventoryItems?.length
   const availableCount = inventoryItems?.filter(item => item.status == 'available').length
 
-  console.log('Site', site)
+  let allReservations: Reservation[] = []
+  if (inventoryItems) {
+    allReservations = inventoryItems.flatMap(item => item.reservations)
+  }
+
+  console.log('Site', site, allReservations)
+
+  let availabilityFrom = dateRange[0]
+  let availabilityTo = dateRange[1]
+  if (reservationMode === 'hours') {
+    availabilityFrom = reservationDay!
+      .hour(timeRange[0]!.hour())
+      .minute(timeRange[0]!.minute())
+      .second(timeRange[0]!.second())
+    availabilityTo = reservationDay!
+      .hour(timeRange[1]!.hour())
+      .minute(timeRange[1]!.minute())
+      .second(timeRange[1]!.second())
+  }
+
+  const { data: availabilityResponse } = useGetAvailabilityBySiteAndTimeRangeQuery({ 
+    siteId: site.id,
+    from: availabilityFrom?.toDate().toISOString(),
+    to: availabilityTo?.toDate().toISOString()
+   }, {
+    skip: !availabilityFrom || !availabilityTo
+   })
+
+  console.log('Availability response', availabilityResponse)
+
+  function isAvailable(item: InventoryItem): boolean {
+    if (!availabilityResponse) return false
+    return !!availabilityResponse.availability.find(a => a.itemId === item.id && a.available)
+  }
 
   return (
     <div className="container mx-auto">
@@ -103,26 +166,138 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
           <div className="px-1 py-2">
             { site.description }
           </div>
+          <div className="mt-2">
+            <Divider textAlign="left">
+              <span className="text-sm font-bold">YOUR RESERVATIONS</span>
+            </Divider>
+            {
+              allReservations.map(reservation => {
+                let reservationElem = null
+                if (reservation.type === 'hours') {
+                  const formattedDate = dayjs(reservation.from).format('ddd, D MMM YYYY')
+                  const timeRangeFrom = `${dayjs(reservation.from).format('HH:mm')}`
+                  const timeRangeTo = `${dayjs(reservation.to).format('HH:mm')}`
+                  reservationElem = (
+                    <div className="flex px-1 justify-between align-center mt-2 pb-1">
+                      <div className="flex text-sm">
+                        <div className="mr-4">{formattedDate}</div>
+                        <div className="flex text-gray-600">
+                          <div className="mr-1">{timeRangeFrom}</div>
+                          <div>-</div>
+                          <div className="ml-1">{timeRangeTo}</div>
+                        </div>
+                      </div>
+                      <div className="-mt-1">
+                        <Chip color={statusToChipColor[reservation.status]} 
+                          label={statusToChipLabel[reservation.status]} 
+                          sx={{ height: '26px' }} />
+                      </div>
+                    </div>
+                  )
+                } else {
+                  const dateRangeFrom = dayjs(reservation.from).format('ddd, D MMM YYYY')
+                  const dateRangeTo = dayjs(reservation.to).format('ddd, D MMM YYYY')
+                  reservationElem = (
+                    <div className="flex px-1 justify-between align-center mt-2 pb-1">
+                      <div className="text-sm">
+                        <div className="flex">
+                          <div className="mr-1">{dateRangeFrom}</div>
+                          <div>-</div>
+                          <div className="ml-1">{dateRangeTo}</div>
+                        </div>
+                      </div>
+                      <div className="-mt-1">
+                        <Chip color={statusToChipColor[reservation.status]} 
+                          label={statusToChipLabel[reservation.status]}
+                          sx={{ height: '26px' }} />
+                      </div>
+                    </div>
+                  )
+                }
+                return (
+                  <div key={reservation.id}>{reservationElem}</div>
+                )
+              })
+            }
+          </div>
         </div>
-        <div className={`fixed left-0 w-full bg-white text-white text-center px-2 py-4
+        <div className={`fixed left-0 w-full bg-white text-white text-center px-2 pb-4
           ${!focused ? '-bottom-[433px]' : 'bottom-[0px]'} transition-bottom duration-500`}>
-          <div className="mb-2">
-            <LocalizationProvider dateAdapter={AdapterDayjs}>
-              <SingleInputTimeRangeField
-                label="Reserve chair: From - To"
-                ampm={false}
-                fullWidth={true}
-                value={timeRange}
-                onFocus={() => {
-                  console.log('Focus')
-                  setFocused(true)
-                }}
-                onBlur={() => {
-                  console.log('Blur')
-                }}
-                onChange={(newValue) => setTimeRange(newValue)}
-              />
-            </LocalizationProvider>
+          <div className="w-full">
+            <div className="mb-4">
+              <Tabs variant="fullWidth" value={reservationMode} onChange={(e, value) => {
+                console.log('New reservation mode', e, value)
+                setFocused(true)
+                setReservationMode(value)
+              }} aria-label="Reservation mode">
+                <Tab value="hours" label="Hours" />
+                <Tab value="days" label="Days" />
+              </Tabs>
+            </div>
+            {
+              reservationMode === 'hours' ? (
+                <div className="mb-2 flex">
+                  <LocalizationProvider dateAdapter={AdapterDayjs}>
+                    <MobileDatePicker sx={{ 
+                      marginRight: '4px',
+                      input: {
+                        textAlign: 'center'
+                      }
+                    }}
+                      label="Date"
+                      value={reservationDay}
+                      onOpen={() => {
+                        setFocused(true)
+                      }}
+                      onChange={(value) => {
+                        setReservationDay(value)
+                        setFocused(true)
+                      }}
+                    />
+                    <SingleInputTimeRangeField sx={{
+                      input: {
+                        textAlign: 'center'
+                      }
+                    }}
+                      label="Time"
+                      ampm={false}
+                      fullWidth={true}
+                      value={timeRange}
+                      onFocus={() => {
+                        console.log('Focus')
+                        setFocused(true)
+                      }}
+                      onBlur={() => {
+                        console.log('Blur')
+                      }}
+                      onChange={(newValue) => setTimeRange(newValue)}
+                    />
+                  </LocalizationProvider>
+                </div>
+              ) : (
+                <div className="mb-2 flex">
+                  <LocalizationProvider dateAdapter={AdapterDayjs}>
+                    <MobileDateRangePicker sx={{ 
+                        width: '100%',
+                        input: {
+                          textAlign: 'center'
+                        }
+                      }}
+                      onOpen={() => {
+                        setFocused(true)
+                      }}
+                      value={dateRange}
+                      label="From - To"
+                      slots={{ 
+                        field: SingleInputDateRangeField
+                      }}
+                      onChange={(newValue) => setDateRange(newValue)}
+                    />
+                  </LocalizationProvider>
+                </div>
+              )
+            }
+            
           </div>
           <div className="w-full lg:w-1/2 h-[300px]">
             <APIProvider apiKey={apiKey}>
@@ -137,16 +312,23 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
                 }}
               >
                 {
-                  ((inventoryItems || []).map(item => (
-                    (item.id !== selectedItem?.id) && <AdvancedMarker key={item.id}
-                      position={{ lat: Number(item.locationLat), lng: Number(item.locationLng) }}
-                      onClick={() => {
-                        setSelectedItem(item)
-                      }}>
-                      <div className="w-[40px] h-[40px] bg-yellow-200 rounded-full flex justify-center">
-                        <span className="text-4xl">&#x26F1;</span>
-                      </div>
-                    </AdvancedMarker>)))
+                  ((inventoryItems || []).map(item => {
+                    const itemAvailable = isAvailable(item)
+                    const bgColor =  itemAvailable ? 'bg-yellow-200' : 'bg-gray-200'
+                    return (
+                      (!selectedItem || (selectedItem && item.id !== selectedItem.id)) && <AdvancedMarker key={item.id}
+                        position={{ lat: Number(item.locationLat), lng: Number(item.locationLng) }}
+                        onClick={() => {
+                          if (itemAvailable) {
+                            setSelectedItem(item)
+                          }
+                        }}>
+                        
+                        <div className={`w-[40px] h-[40px] ${bgColor} rounded-full flex justify-center`}>
+                          <span className="text-4xl">&#x26F1;</span>
+                        </div>
+                      </AdvancedMarker>
+                    )}))
                 }
                 {
                   (selectedItem?.locationLat && selectedItem?.locationLng) &&
@@ -196,14 +378,36 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
               fullWidth={true}
               onClick={
                 () => {
-                  console.log('Reserve', timeRange)
-                  if (timeRange[0] && timeRange[1]) {
-                    const from = timeRange[0].toISOString()
-                    const to = timeRange[1].toISOString()
+                  console.log('Reserve', timeRange, selectedItem)
+
+                  if (reservationMode === 'hours' && reservationDay && timeRange[0] && timeRange[1]) {
+                    const from = reservationDay
+                      .hour(timeRange[0].hour())
+                      .minute(timeRange[0].minute())
+                      .second(timeRange[0].second())
+                      .toDate()
+                    const to = reservationDay
+                      .hour(timeRange[1].hour())
+                      .minute(timeRange[1].minute())
+                      .second(timeRange[1].second())
+                      .toDate()
                     saveReservation({
-                      from: timeRange[0].toDate(),
-                      to: timeRange[1].toDate(),
+                      from,
+                      to,
+                      type: 'hours',
                       siteId: site.id!,
+                      itemId: selectedItem?.id!,
+                      userId: session?.user?.id!
+                    })
+                  } else if (reservationMode === 'days' && dateRange[0] && dateRange[1]) {
+                    const from = dateRange[0].toDate()
+                    const to = dateRange[1].toDate()
+                    saveReservation({
+                      from,
+                      to,
+                      type: 'days',
+                      siteId: site.id!,
+                      itemId: selectedItem?.id!,
                       userId: session?.user?.id!
                     })
                   }

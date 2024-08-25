@@ -13,11 +13,23 @@ export const httpApi = createApi({
         url: 'sites',
         params: {
           lat, lng
-        },
+        }
       }),
-      transformResponse: (response: { sites: SiteProps[], geography: SiteGeography }) => response,
+      transformResponse: (response: { sites: SiteProps[], geography: SiteGeography }) => response
+    }),
+    getAvailabilityBySiteAndTimeRange: builder.query({
+      query: ({ siteId, from, to }) => ({
+        url: `sites/${siteId}/availability`,
+        params: {
+          from, to
+        }
+      }),
+      transformResponse: (response: { availability: { itemId: string, available: boolean }[] }) => response
     })
   }),
 });
 
-export const { useGetSitesByCoordsQuery } = httpApi;
+export const { 
+  useGetSitesByCoordsQuery,
+  useGetAvailabilityBySiteAndTimeRangeQuery 
+} = httpApi;

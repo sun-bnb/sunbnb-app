@@ -142,6 +142,9 @@ model Reservation {
 
   from              DateTime          @map("open_time")
   to                DateTime          @map("close_time")
+
+  status            String @default("pending")
+  type              String @default("hours")
  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

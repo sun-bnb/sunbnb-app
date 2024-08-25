@@ -17,10 +17,21 @@ export default async function Site({ params, searchParams }: { params: { id: str
   }
 
   if (params.id !== 'create') {
-    site = await prisma.site.findFirst({ where: { id: params.id }, include: {
-      workingHours: true,
-      inventoryItems: true
-    } })
+    site = await prisma.site.findFirst({ 
+      where: { id: params.id },
+      include: {
+        workingHours: true,
+        inventoryItems: {
+          include: {
+            reservations: {
+              where: {
+                userId: session.user.id
+              }
+            }
+          }
+        }
+      }
+    })
     if (!site) return <div>Site {params.id} not found</div>
   }
 

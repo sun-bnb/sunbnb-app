@@ -248,17 +248,27 @@ export async function saveInventoryItem(
 }
 
 export async function saveReservation(
-  reservation: { userId: string, siteId: string, from: Date, to: Date }
-) {
+  reservation: { 
+    userId: string,
+    siteId: string,
+    itemId?: string,
+    type: string,
+    from: Date, to: Date 
+  }) {
   
   const session = await auth()
-  console.log('SAVE RES', session)
+  console.log('SAVE RES', session, reservation)
 
   if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
 
   const reservationData = {
     from: reservation.from,
     to: reservation.to,
+    type: reservation.type,
+    status: 'pending',
+    item: {
+      connect: { id: reservation.itemId }
+    },
     site: {
       connect: { id: reservation.siteId }
     },

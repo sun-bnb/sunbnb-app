@@ -30,12 +30,23 @@ export interface SiteGeography {
   bounds: MapBounds
 }
 
+export interface Reservation {
+  id: string
+  userId: string
+  itemId?: string | null
+  status: string
+  type: string
+  from: Date
+  to: Date
+}
+
 export interface InventoryItem {
   id: string
   number: number
   status: string
   locationLat?: string
   locationLng?: string
+  reservations: Reservation[]
 }
 
 export interface WorkingHours {
