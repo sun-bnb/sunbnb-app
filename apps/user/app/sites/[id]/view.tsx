@@ -154,7 +154,6 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
                     <span>{site.price}</span>
                   </div>
               }
-              
             </div>
             <div className="flex">
               <div className="ml-3 border border-gray-600 rounded-md pr-[5px] pl-[4px]">
@@ -168,66 +167,69 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
           <div className="px-1 py-2">
             { site.description }
           </div>
-          <div className="mt-2">
-            <Divider textAlign="left">
-              <span className="text-sm font-bold">YOUR RESERVATIONS</span>
-            </Divider>
-            {
-              allReservations.map(reservation => {
-                let reservationElem = null
-                if (reservation.type === 'hours') {
-                  const formattedDate = dayjs(reservation.from).format('ddd, D MMM YYYY')
-                  const timeRangeFrom = `${dayjs(reservation.from).format('HH:mm')}`
-                  const timeRangeTo = `${dayjs(reservation.to).format('HH:mm')}`
-                  reservationElem = (
-                    <div className="flex px-1 justify-between align-center mt-2 pb-1">
-                      <div className="flex text-sm">
-                        <div className="mr-4">{formattedDate}</div>
-                        <div className="flex text-gray-600">
-                          <div className="mr-1">{timeRangeFrom}</div>
-                          <div>-</div>
-                          <div className="ml-1">{timeRangeTo}</div>
+          {
+            allReservations.length > 0 &&
+              <div className="mt-2">
+                <Divider textAlign="left">
+                  <span className="text-sm font-bold">YOUR RESERVATIONS</span>
+                </Divider>
+                {
+                  allReservations.map(reservation => {
+                    let reservationElem = null
+                    if (reservation.type === 'hours') {
+                      const formattedDate = dayjs(reservation.from).format('ddd, D MMM YYYY')
+                      const timeRangeFrom = `${dayjs(reservation.from).format('HH:mm')}`
+                      const timeRangeTo = `${dayjs(reservation.to).format('HH:mm')}`
+                      reservationElem = (
+                        <div className="flex px-1 justify-between align-center mt-2 pb-1">
+                          <div className="flex text-sm">
+                            <div className="mr-4">{formattedDate}</div>
+                            <div className="flex text-gray-600">
+                              <div className="mr-1">{timeRangeFrom}</div>
+                              <div>-</div>
+                              <div className="ml-1">{timeRangeTo}</div>
+                            </div>
+                          </div>
+                          <div className="-mt-1">
+                            <Chip color={statusToChipColor[reservation.status]} 
+                              label={statusToChipLabel[reservation.status]} 
+                              sx={{ height: '26px' }} />
+                          </div>
                         </div>
-                      </div>
-                      <div className="-mt-1">
-                        <Chip color={statusToChipColor[reservation.status]} 
-                          label={statusToChipLabel[reservation.status]} 
-                          sx={{ height: '26px' }} />
-                      </div>
-                    </div>
-                  )
-                } else {
-                  const dateRangeFrom = dayjs(reservation.from).format('ddd, D MMM YYYY')
-                  const dateRangeTo = dayjs(reservation.to).format('ddd, D MMM YYYY')
-                  reservationElem = (
-                    <div className="flex px-1 justify-between align-center mt-2 pb-1">
-                      <div className="text-sm">
-                        <div className="flex">
-                          <div className="mr-1">{dateRangeFrom}</div>
-                          <div>-</div>
-                          <div className="ml-1">{dateRangeTo}</div>
+                      )
+                    } else {
+                      const dateRangeFrom = dayjs(reservation.from).format('ddd, D MMM YYYY')
+                      const dateRangeTo = dayjs(reservation.to).format('ddd, D MMM YYYY')
+                      reservationElem = (
+                        <div className="flex px-1 justify-between align-center mt-2 pb-1">
+                          <div className="text-sm">
+                            <div className="flex">
+                              <div className="mr-1">{dateRangeFrom}</div>
+                              <div>-</div>
+                              <div className="ml-1">{dateRangeTo}</div>
+                            </div>
+                          </div>
+                          <div className="-mt-1">
+                            <Chip color={statusToChipColor[reservation.status]} 
+                              label={statusToChipLabel[reservation.status]}
+                              sx={{ height: '26px' }} />
+                          </div>
                         </div>
-                      </div>
-                      <div className="-mt-1">
-                        <Chip color={statusToChipColor[reservation.status]} 
-                          label={statusToChipLabel[reservation.status]}
-                          sx={{ height: '26px' }} />
-                      </div>
-                    </div>
-                  )
+                      )
+                    }
+                    return (
+                      <div key={reservation.id}>{reservationElem}</div>
+                    )
+                  })
                 }
-                return (
-                  <div key={reservation.id}>{reservationElem}</div>
-                )
-              })
-            }
-          </div>
+              </div>
+          }
         </div>
         <div className={`fixed left-0 w-full bg-white text-white text-center px-2 pb-4
-          ${!focused ? '-bottom-[433px]' : 'bottom-[0px]'} transition-bottom duration-500`}>
+          ${!focused ? '-bottom-[433px]' : 'bottom-[0px]'} border-t transition-bottom duration-500`}>
           {
             focused &&
-              <div className="text-black absolute w-[100px] bg-white rounded-md" style={{
+              <div className="text-black absolute w-[100px] bg-white rounded-md border" style={{
                 left: 'calc(50% - 50px)',
                 top: '-10px',
                 zIndex: 2
@@ -261,7 +263,9 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
                       }
                     }}
                       label="Date"
+                      format='YYYY-MM-DD'
                       value={reservationDay}
+                      selectedSections={null}
                       onOpen={() => {
                         setFocused(true)
                       }}
@@ -303,6 +307,8 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
                         setFocused(true)
                       }}
                       value={dateRange}
+                      format='YYYY-MM-DD'
+                      selectedSections={null}
                       label="From - To"
                       slots={{ 
                         field: SingleInputDateRangeField
