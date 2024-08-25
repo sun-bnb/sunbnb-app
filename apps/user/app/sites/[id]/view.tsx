@@ -15,6 +15,8 @@ import Select from '@mui/material/Select'
 import Chip from '@mui/material/Chip'
 import RestaurantIcon from '@mui/icons-material/Restaurant'
 import WcIcon from '@mui/icons-material/Wc'
+import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown'
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import { useState } from 'react'
 import { useSession } from 'next-auth/react'
 import dayjs, { Dayjs } from 'dayjs'
@@ -129,7 +131,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
             { site.name }
           </div>
         </div>
-        <div className="py-3 px-2">
+        <div className="py-3 px-2" style={{ minHeight: '600px' }}>
           <div className="px-1 flex justify-between">
             <div className="flex">
               <div className="mr-3 pl-1">
@@ -223,6 +225,20 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
         </div>
         <div className={`fixed left-0 w-full bg-white text-white text-center px-2 pb-4
           ${!focused ? '-bottom-[433px]' : 'bottom-[0px]'} transition-bottom duration-500`}>
+          {
+            focused &&
+              <div className="text-black absolute w-[100px] bg-white rounded-md" style={{
+                left: 'calc(50% - 50px)',
+                top: '-10px',
+                zIndex: 2
+              }}
+              onClick={() => {
+                setFocused(false)
+              }}>
+                <KeyboardDoubleArrowDownIcon />
+              </div>
+          }
+          
           <div className="w-full">
             <div className="mb-4">
               <Tabs variant="fullWidth" value={reservationMode} onChange={(e, value) => {
