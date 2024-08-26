@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { put } from '@vercel/blob'
+import { waitUntil } from '@vercel/functions'
 
 export async function submitForm(
   previousState: { status: string, errors?: string[] },
@@ -284,6 +285,7 @@ export async function saveReservation(
 
   console.log('NEW RES', newReservation)
 
+  /*
   setTimeout(() => {
     console.log('change status')
     prisma.reservation.update({
@@ -293,6 +295,26 @@ export async function saveReservation(
       console.log('status changed', res)
     })
   }, 6000)
+  */
+ 
+  waitUntil(
+    new Promise((resolve) => {
+      setTimeout(async () => {
+        try {
+          console.log('change status');
+          const updatedReservation = await prisma.reservation.update({
+            data: { status: 'confirmed' },
+            where: { id: newReservation.id },
+          });
+          console.log('status changed', updatedReservation);
+        } catch (error) {
+          console.error('Error updating reservation status:', error);
+        } finally {
+          resolve(1);
+        }
+      }, 6000); // 6 seconds delay
+    })
+  );
   
   revalidatePath('/sites')
 
