@@ -18,6 +18,7 @@ import WcIcon from '@mui/icons-material/Wc'
 import CircularProgress from '@mui/material/CircularProgress'
 import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
+import Image from 'next/image'
 import { useActionState, useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import dayjs, { Dayjs } from 'dayjs'
@@ -186,7 +187,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
           <div className="w-full border-t-2 border-t-white">
             {
               site.image &&
-                <img className="w-full h-auto" src={site.image} />
+                <Image fill={true} alt={site.description || ''} className="w-full h-auto" src={site.image} />
             }
           </div>
           <div className="absolute inset-0 bg-gradient-to-b from-white to-transparent via-transparent h-100"></div>

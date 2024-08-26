@@ -26,7 +26,8 @@ export default async function Site({ params, searchParams }: { params: { id: str
             reservations: {
               where: {
                 userId: session.user.id
-              }
+              },
+              orderBy: { from: 'desc' }
             }
           }
         }

@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client'
 import { NextRequest } from 'next/server'
 import { auth } from '@/app/auth'
 import { getAvailability } from '@/service/availabilityService'
+import { format } from 'path'
 
 export async function GET(request: NextRequest, { params } : { params: { id: string } }) {
 
@@ -15,7 +16,9 @@ export async function GET(request: NextRequest, { params } : { params: { id: str
     include: {
       inventoryItems: {
         include: {
-          reservations: true
+          reservations: {
+            orderBy: { from: 'desc' }
+          }
         }
       }
     }

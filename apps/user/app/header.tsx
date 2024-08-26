@@ -18,7 +18,7 @@ import { useGetAutocompleteSuggestionsQuery } from '@/store/features/autocomplet
 import { useRouter } from 'next/navigation'
 
 const userNavigation = [
-  { name: 'Your Profile', href: '#' },
+  { name: 'Profile', href: '/account' },
   { name: 'Reservations', href: '/reservations' },
   { name: 'Sign out', href: '/api/auth/signout' },
 ]
@@ -29,6 +29,7 @@ export default function CustomizedInputBase() {
 
   const router = useRouter()
 
+  const [ isMenuOpen, setIsMenuOpen ] = useState<boolean>(false)
   const [ inputIntervals, setInputIntervals ] = useState<number[]>([])
   const [ lastInputTime, setLastInputTime ] = useState<number>(0)
 
@@ -101,30 +102,33 @@ export default function CustomizedInputBase() {
         <div className="p-[10px]">
           <Menu as="div" className="">
             <div>
-              <MenuButton className="relative flex max-w-xs items-center rounded-full bg-gray-100 text-sm hover:outline-none hover:ring-2 hover:ring-offset-gray-100">
-                <span className="absolute -inset-1.5" />
-                <span className="sr-only">Open user menu</span>
+              <MenuButton className="relative flex max-w-xs items-center rounded-full bg-gray-100 text-sm hover:outline-none hover:ring-2 hover:ring-offset-gray-100"
+                onClick={() => setIsMenuOpen(!isMenuOpen)}>
                 <img alt="" src={session?.user?.image!} className="h-8 w-8 rounded-full" />
               </MenuButton>
             </div>
-            <MenuItems
-              transition
-              className="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 transition focus:outline-none data-[closed]:scale-95 data-[closed]:transform data-[closed]:opacity-0 data-[enter]:duration-100 data-[leave]:duration-75 data-[enter]:ease-out data-[leave]:ease-in"
-            >
-              {userNavigation.map((item) => (
-                <MenuItem key={item.name}>
-                  <Link
-                    href={item.href}
-                    className="block px-4 py-2 text-sm text-gray-700 data-[focus]:bg-gray-100"
-                  >
-                    {item.name}
-                  </Link>
-                </MenuItem>
-              ))}
-            </MenuItems>
           </Menu>
         </div>
       </Paper>
+      {
+        isMenuOpen && (
+          <div className="flex flex-wrap justify-center -mt-3 pb-4">
+            {
+              userNavigation.map((item, index) => {
+                return (
+                  <div className="max-w-[300px] truncate font-bold mr-1 ml-1 mt-1 px-2 border-yellow-200 border rounded-md bg-gray-600 text-yellow-200" key={'userNavigation-'+index} 
+                    onClick={() => {
+                      console.log('Selected userNavigation', item)
+                      router.push(item.href)
+                    }}>
+                    {item.name}
+                  </div>
+                )
+              })
+            }
+          </div>
+        )
+      }
       { 
         !selectedPlace && (
           <div className="flex flex-wrap justify-center -mt-3 pb-4">

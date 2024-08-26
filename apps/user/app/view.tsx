@@ -6,6 +6,7 @@ import ToggleButton from '@mui/material/ToggleButton'
 import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
 import Link from 'next/link'
+import Image from 'next/image'
 import RestaurantIcon from '@mui/icons-material/Restaurant'
 import WcIcon from '@mui/icons-material/Wc'
 import MapIcon from '@mui/icons-material/Map'
@@ -37,12 +38,12 @@ function Site({ site }: { site: SiteProps }) {
       <div className="w-full h-[160px] mr-2 mt-1 overflow-hidden bg-gray-100 flex items-center relative">
         { 
           site.image && 
-          <Link href={`/sites/${site.id}`}>
-            <img width="100%" src={site.image} />
+          <Link className="w-full" href={`/sites/${site.id}`} prefetch={true}>
+            <Image fill={true} alt={site.description || ''} style={{ width: '100%' }} src={site.image} />
           </Link>
         }
         <div className="font-bold text-white px-2 py-1 absolute top-[6px] left-[6px] bg-black bg-opacity-30 rounded-xl">
-          <Link href={`/sites/${site.id}`}>{site.name}</Link>
+          <Link href={`/sites/${site.id}`} prefetch={true}>{site.name}</Link>
         </div>
       </div>
       <div className="py-3">

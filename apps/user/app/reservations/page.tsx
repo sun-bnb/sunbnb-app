@@ -25,7 +25,10 @@ export default async function Sites() {
   const session = await auth()
   if (!session?.user) return null
 
-  const reservations = await prisma.reservation.findMany({ where: { userId: session.user.id }})
+  const reservations = await prisma.reservation.findMany({ 
+    where: { userId: session.user.id },
+    orderBy: { from: 'desc' }
+  })
 
   return (
     <div className="px-2 py-4">
