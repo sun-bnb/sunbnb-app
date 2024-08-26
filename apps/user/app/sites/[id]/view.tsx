@@ -15,9 +15,10 @@ import Select from '@mui/material/Select'
 import Chip from '@mui/material/Chip'
 import RestaurantIcon from '@mui/icons-material/Restaurant'
 import WcIcon from '@mui/icons-material/Wc'
+import CircularProgress from '@mui/material/CircularProgress'
 import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
-import { useState } from 'react'
+import { useActionState, useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import dayjs, { Dayjs } from 'dayjs'
 import { APIProvider, AdvancedMarker, Map } from '@vis.gl/react-google-maps'
@@ -26,7 +27,12 @@ import { DateRange } from '@mui/x-date-pickers-pro/models'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { SingleInputTimeRangeField } from '@mui/x-date-pickers-pro/SingleInputTimeRangeField'
 import { saveReservation } from './actions'
-import { useGetAvailabilityBySiteAndTimeRangeQuery } from '@/store/features/api/apiSlice'
+import { 
+  useGetAvailabilityBySiteAndTimeRangeQuery,
+  useGetReservationByIdQuery,
+  useGetSiteByIdQuery,
+  useLazyGetSiteByIdQuery 
+} from '@/store/features/api/apiSlice'
 
 const statusToChipColor: {
   [key: string]: 'default' | 'success' | 'error'
@@ -48,10 +54,36 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
 
   const { data: session } = useSession()
 
+  const [ reservationState, setReservationState ] = useState<string>('initial')
+  const [ pendingReservationId, setPendingReservationId ] = useState<string | null>(null)
+
   const [ reservationMode, setReservationMode ] = useState('hours')
   const [ focused, setFocused ] = useState(false)
   const [ selectedItem, setSelectedItem ] = useState<InventoryItem | null>(null)
   const [ paymentMethod, setPaymentMethod ] = useState('0001')
+
+  const [isPolling, setIsPolling] = useState(false);
+
+  // Conditionally start polling when `isPolling` is true
+  const { data, error, isLoading } = useGetReservationByIdQuery({ id: pendingReservationId }, {
+    pollingInterval: isPolling ? 3000 : 0, // Poll every 3 seconds if isPolling is true
+    skip: !isPolling // Skip the query entirely if isPolling is false
+  })
+
+  const { data: refetchedSite } = useGetSiteByIdQuery({ id: site.id }, {
+    skip: reservationState !== 'confirmed'
+  })
+
+  useEffect(() => {
+    console.log('Reservation STATE', data?.status)
+    if (data?.status === 'confirmed') {
+      setIsPolling(false)
+      setFocused(false)
+      setReservationState('confirmed')
+    }
+  }, [data?.status])
+
+  console.log('Reservation data', data, error, isLoading, refetchedSite)
 
   const [ reservationDay, setReservationDay ] = useState<Dayjs | null>(dayjs())
   const [ timeRange, setTimeRange ] = useState<DateRange<Dayjs>>(() => [
@@ -84,6 +116,11 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
     allReservations = inventoryItems.flatMap(item => item.reservations)
   }
 
+  if (refetchedSite?.inventoryItems) {
+    allReservations = refetchedSite.inventoryItems?.flatMap(item => item.reservations)
+    console.log('Refetched reservations', allReservations)
+  }
+
   console.log('Site', site, allReservations)
 
   let availabilityFrom = dateRange[0]
@@ -113,6 +150,21 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
     if (!availabilityResponse) return false
     return !!availabilityResponse.availability.find(a => a.itemId === item.id && a.available)
   }
+
+  const confirmationElem = (
+    <div className="w-full text-gray-600">
+      <div className="w-full mt-6 mb-6">
+        <div className="w-full flex justify-center">PAYMENT CONFIRMATION AND PROCESSING</div>
+        <div className="w-full flex justify-center">WILL HAPPEN HERE</div>
+      </div>
+      <div className="w-full flex justify-center">
+        <CircularProgress />
+      </div>
+      <div className="w-full mt-6">
+        <div className="w-full flex justify-center">THIS IS SIMULATION :&#41;</div>
+      </div>
+    </div>
+  )
 
   return (
     <div className="container mx-auto">
@@ -262,6 +314,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
                         textAlign: 'center'
                       }
                     }}
+                      disabled={reservationState === 'processing'}
                       label="Date"
                       format='YYYY-MM-DD'
                       value={reservationDay}
@@ -280,6 +333,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
                       }
                     }}
                       label="Time"
+                      disabled={reservationState === 'processing'}
                       ampm={false}
                       fullWidth={true}
                       value={timeRange}
@@ -307,6 +361,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
                         setFocused(true)
                       }}
                       value={dateRange}
+                      disabled={reservationState === 'processing'}
                       format='YYYY-MM-DD'
                       selectedSections={null}
                       label="From - To"
@@ -322,6 +377,9 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
             
           </div>
           <div className="w-full lg:w-1/2 h-[300px]">
+            {
+              reservationState === 'processing' ?
+                confirmationElem :
             <APIProvider apiKey={apiKey}>
               <Map mapId={'7a0196a7ba317ea5'}
                 defaultZoom={defaultBounds ? undefined : 20}
@@ -363,6 +421,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
                 }
               </Map>
             </APIProvider>
+          }
           </div>
           <div className="w-full mt-4">
             <FormControl size="medium" fullWidth={true}>
@@ -398,10 +457,17 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
           <div className="mt-[10px]">
             <Button variant="contained" 
               fullWidth={true}
+              disabled={
+                (reservationState === 'processing' || reservationState === 'saved') ||
+                !selectedItem
+              }
               onClick={
-                () => {
+                async () => {
+
+                  setReservationState('saving')
                   console.log('Reserve', timeRange, selectedItem)
 
+                  let saveResult = null
                   if (reservationMode === 'hours' && reservationDay && timeRange[0] && timeRange[1]) {
                     const from = reservationDay
                       .hour(timeRange[0].hour())
@@ -413,7 +479,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
                       .minute(timeRange[1].minute())
                       .second(timeRange[1].second())
                       .toDate()
-                    saveReservation({
+                    saveResult = await saveReservation({
                       from,
                       to,
                       type: 'hours',
@@ -424,7 +490,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
                   } else if (reservationMode === 'days' && dateRange[0] && dateRange[1]) {
                     const from = dateRange[0].toDate()
                     const to = dateRange[1].toDate()
-                    saveReservation({
+                    saveResult = await saveReservation({
                       from,
                       to,
                       type: 'days',
@@ -433,6 +499,14 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
                       userId: session?.user?.id!
                     })
                   }
+
+                  console.log('Save result', saveResult)
+                  if (saveResult?.status === 'ok' && saveResult.id) {
+                    setReservationState('processing')
+                    setPendingReservationId(saveResult.id)
+                    setIsPolling(true)
+                  }
+
                 }
               }>
                 Reserve

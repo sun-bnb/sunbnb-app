@@ -278,12 +278,24 @@ export async function saveReservation(
   }
 
   console.log('CREATE RES', reservationData)
-  await prisma.reservation.create({
+  const newReservation = await prisma.reservation.create({
     data: reservationData
   })
+
+  console.log('NEW RES', newReservation)
+
+  setTimeout(() => {
+    console.log('change status')
+    prisma.reservation.update({
+      data: { status: 'confirmed' },
+      where: { id: newReservation.id }
+    }).then((res) => {
+      console.log('status changed', res)
+    })
+  }, 6000)
   
   revalidatePath('/sites')
 
-  return { status: 'ok' }
+  return { status: 'ok', id: newReservation.id }
   
 }

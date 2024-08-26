@@ -8,6 +8,12 @@ export const httpApi = createApi({
     baseUrl: '/api',
   }),
   endpoints: (builder) => ({
+    getSiteById: builder.query({
+      query: ({ id }) => ({
+        url: `sites/${id}`
+      }),
+      transformResponse: (response: SiteProps) => response
+    }),
     getSitesByCoords: builder.query({
       query: ({ lat, lng }) => ({
         url: 'sites',
@@ -25,11 +31,20 @@ export const httpApi = createApi({
         }
       }),
       transformResponse: (response: { availability: { itemId: string, available: boolean }[] }) => response
+    }),
+    getReservationById: builder.query({
+      query: ({ id }) => ({
+        url: `reservations/${id}`
+      }),
+      transformResponse: (response: { status: string }) => response
     })
   }),
 });
 
 export const { 
   useGetSitesByCoordsQuery,
-  useGetAvailabilityBySiteAndTimeRangeQuery 
+  useGetAvailabilityBySiteAndTimeRangeQuery,
+  useGetReservationByIdQuery,
+  useGetSiteByIdQuery,
+  useLazyGetSiteByIdQuery
 } = httpApi;
