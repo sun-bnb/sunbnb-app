@@ -33,6 +33,7 @@ import {
   useGetSiteByIdQuery,
   useLazyGetSiteByIdQuery 
 } from '@/store/features/api/apiSlice'
+import { useRouter } from 'next/navigation';
 
 const statusToChipColor: {
   [key: string]: 'default' | 'success' | 'error'
@@ -54,12 +55,14 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
 
   const { data: session } = useSession()
 
+  const router = useRouter()
+
   const [ reservationState, setReservationState ] = useState<string>('initial')
   const [ pendingReservationId, setPendingReservationId ] = useState<string | null>(null)
 
   const [ reservationMode, setReservationMode ] = useState('hours')
   const [ focused, setFocused ] = useState(false)
-  const [ selectedItem, setSelectedItem ] = useState<InventoryItem | null>(null)
+  
   const [ paymentMethod, setPaymentMethod ] = useState('0001')
 
   const [isPolling, setIsPolling] = useState(false);
@@ -96,7 +99,48 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
     dayjs().add(2, 'day')
   ])
 
-  const { inventoryItems, workingHours } = site
+  let availabilityFrom = dateRange[0]
+  let availabilityTo = dateRange[1]
+  if (reservationMode === 'hours') {
+    availabilityFrom = reservationDay!
+      .hour(timeRange[0]!.hour())
+      .minute(timeRange[0]!.minute())
+      .second(timeRange[0]!.second())
+    availabilityTo = reservationDay!
+      .hour(timeRange[1]!.hour())
+      .minute(timeRange[1]!.minute())
+      .second(timeRange[1]!.second())
+  }
+
+  const { data: availabilityResponse, refetch: refetchAvailability } = useGetAvailabilityBySiteAndTimeRangeQuery({ 
+    siteId: site.id,
+    from: availabilityFrom?.toDate().toISOString(),
+    to: availabilityTo?.toDate().toISOString()
+   }, {
+    skip: !availabilityFrom || !availabilityTo
+   })
+
+  console.log('Availability response', availabilityResponse)
+
+  function isAvailable(item: InventoryItem): boolean {
+    if (!availabilityResponse) return false
+    return !!availabilityResponse.availability.find(a => a.itemId === item.id && a.available)
+  }
+
+  let inventoryItems = refetchedSite?.inventoryItems || site.inventoryItems
+  const firstAvailableItem = inventoryItems?.find(item => isAvailable(item))
+  const [ selectedItem, setSelectedItem ] = useState<InventoryItem | undefined>(firstAvailableItem)
+
+  useEffect(() => {
+    if (availabilityResponse) {
+      console.log('Reset selected for new avaiability?', selectedItem, selectedItem && isAvailable(selectedItem))
+      if ((selectedItem && !isAvailable(selectedItem)) || !selectedItem) {
+        const firstAvailableItem = inventoryItems?.find(item => isAvailable(item))
+        setSelectedItem(firstAvailableItem)
+        console.log('Reset selected for new avaiability', firstAvailableItem)
+      }
+    }
+  }, [availabilityResponse])
 
   const itemLats = (inventoryItems || []).map(item => Number(item.locationLat));
   const itemLngs = (inventoryItems || []).map(item => Number(item.locationLng));
@@ -116,40 +160,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
     allReservations = inventoryItems.flatMap(item => item.reservations)
   }
 
-  if (refetchedSite?.inventoryItems) {
-    allReservations = refetchedSite.inventoryItems?.flatMap(item => item.reservations)
-    console.log('Refetched reservations', allReservations)
-  }
-
   console.log('Site', site, allReservations)
-
-  let availabilityFrom = dateRange[0]
-  let availabilityTo = dateRange[1]
-  if (reservationMode === 'hours') {
-    availabilityFrom = reservationDay!
-      .hour(timeRange[0]!.hour())
-      .minute(timeRange[0]!.minute())
-      .second(timeRange[0]!.second())
-    availabilityTo = reservationDay!
-      .hour(timeRange[1]!.hour())
-      .minute(timeRange[1]!.minute())
-      .second(timeRange[1]!.second())
-  }
-
-  const { data: availabilityResponse } = useGetAvailabilityBySiteAndTimeRangeQuery({ 
-    siteId: site.id,
-    from: availabilityFrom?.toDate().toISOString(),
-    to: availabilityTo?.toDate().toISOString()
-   }, {
-    skip: !availabilityFrom || !availabilityTo
-   })
-
-  console.log('Availability response', availabilityResponse)
-
-  function isAvailable(item: InventoryItem): boolean {
-    if (!availabilityResponse) return false
-    return !!availabilityResponse.availability.find(a => a.itemId === item.id && a.available)
-  }
 
   const confirmationElem = (
     <div className="w-full text-gray-600">
@@ -233,7 +244,9 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
                       const timeRangeFrom = `${dayjs(reservation.from).format('HH:mm')}`
                       const timeRangeTo = `${dayjs(reservation.to).format('HH:mm')}`
                       reservationElem = (
-                        <div className="flex px-1 justify-between align-center mt-2 pb-1">
+                        <div className="flex px-1 justify-between align-center mt-2 pb-1" onClick={() => {
+                          router.push(`/reservations/${reservation.id}`)
+                        }}>
                           <div className="flex text-sm">
                             <div className="mr-4">{formattedDate}</div>
                             <div className="flex text-gray-600">
@@ -253,7 +266,9 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
                       const dateRangeFrom = dayjs(reservation.from).format('ddd, D MMM YYYY')
                       const dateRangeTo = dayjs(reservation.to).format('ddd, D MMM YYYY')
                       reservationElem = (
-                        <div className="flex px-1 justify-between align-center mt-2 pb-1">
+                        <div className="flex px-1 justify-between align-center mt-2 pb-1" onClick={() => {
+                          router.push(`/reservations/${reservation.id}`)
+                        }}>
                           <div className="text-sm">
                             <div className="flex">
                               <div className="mr-1">{dateRangeFrom}</div>
@@ -344,7 +359,9 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
                       onBlur={() => {
                         console.log('Blur')
                       }}
-                      onChange={(newValue) => setTimeRange(newValue)}
+                      onChange={(newValue) => {
+                        setTimeRange(newValue)
+                      }}
                     />
                   </LocalizationProvider>
                 </div>
@@ -431,6 +448,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
                 id="demo-select-small"
                 value={paymentMethod}
                 label="Payment method"
+                disabled={reservationState === 'processing'}
                 onChange={(...args) => {
                   console.log('Payment method', args)
                 }}
@@ -458,7 +476,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
             <Button variant="contained" 
               fullWidth={true}
               disabled={
-                (reservationState === 'processing' || reservationState === 'saved') ||
+                (reservationState === 'processing' || reservationState === 'saving') ||
                 !selectedItem
               }
               onClick={
@@ -506,6 +524,10 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
                     setPendingReservationId(saveResult.id)
                     setIsPolling(true)
                   }
+
+                  refetchAvailability().then(() => {
+                    console.log('Refetched availability')
+                  })
 
                 }
               }>

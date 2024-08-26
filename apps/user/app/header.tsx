@@ -15,16 +15,19 @@ import { setSearchState, setSelectedPlace } from '@/store/features/search/search
 import { RootState } from '@/store/store'
 import { useDispatch, useSelector } from 'react-redux'
 import { useGetAutocompleteSuggestionsQuery } from '@/store/features/autocomplete/autocompleteSlice'
+import { useRouter } from 'next/navigation'
 
 const userNavigation = [
   { name: 'Your Profile', href: '#' },
-  { name: 'Settings', href: '#' },
-  { name: 'Sign out', href: '#' },
+  { name: 'Reservations', href: '/reservations' },
+  { name: 'Sign out', href: '/api/auth/signout' },
 ]
 
 export default function CustomizedInputBase() {
 
   const { data: session, status } = useSession()
+
+  const router = useRouter()
 
   const [ inputIntervals, setInputIntervals ] = useState<number[]>([])
   const [ lastInputTime, setLastInputTime ] = useState<number>(0)
@@ -138,6 +141,7 @@ export default function CustomizedInputBase() {
                           mainText: suggestion.structured_formatting.main_text
                         }
                       }))
+                      router.push('/')
                     }}>
                     {suggestion.description}
                   </div>
