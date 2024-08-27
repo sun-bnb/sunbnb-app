@@ -18,6 +18,8 @@ import WcIcon from '@mui/icons-material/Wc'
 import CircularProgress from '@mui/material/CircularProgress'
 import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
+import ExpandLessIcon from '@mui/icons-material/ExpandLess'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import Image from 'next/image'
 import { useActionState, useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
@@ -51,6 +53,8 @@ const statusToChipLabel: {
   'canceled': 'Canceled'
 }
 
+const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
 export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: string }) {
 
   const { data: session } = useSession()
@@ -65,6 +69,8 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
   
   const [ paymentMethod, setPaymentMethod ] = useState('0001')
 
+  const [ weekDaysOpen, setWeekDaysOpen ] = useState<boolean>(false)
+
   const [isPolling, setIsPolling] = useState(false);
 
   // Conditionally start polling when `isPolling` is true
@@ -73,7 +79,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
     skip: !isPolling // Skip the query entirely if isPolling is false
   })
 
-  const { data: refetchedSite, refetch: refetchSite } = useGetSiteByIdQuery({ id: site.id }, {
+  const { data: fetchedSite, refetch: refetchSite } = useGetSiteByIdQuery({ id: site.id }, {
     skip: reservationState !== 'confirmed'
   })
 
@@ -86,7 +92,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
     }
   }, [data?.status])
 
-  console.log('Reservation data', data, error, isLoading, refetchedSite)
+  console.log('Reservation data', data, error, isLoading, fetchedSite)
 
   const [ reservationDay, setReservationDay ] = useState<Dayjs | null>(dayjs())
   const [ timeRange, setTimeRange ] = useState<DateRange<Dayjs>>(() => [
@@ -127,7 +133,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
     return !!availabilityResponse.availability.find(a => a.itemId === item.id && a.available)
   }
 
-  let inventoryItems = refetchedSite?.inventoryItems || site.inventoryItems
+  let inventoryItems = fetchedSite?.inventoryItems || site.inventoryItems
   const firstAvailableItem = inventoryItems?.find(item => isAvailable(item))
   const [ selectedItem, setSelectedItem ] = useState<InventoryItem | undefined>(firstAvailableItem)
 
@@ -160,6 +166,20 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
     allReservations = inventoryItems.flatMap(item => item.reservations)
   }
 
+  let notWorkingHours = false
+  if (reservationMode === 'hours') {
+    const reservationWeekDay = reservationDay?.day() || 0
+    const rdOpeningHours = (fetchedSite?.workingHours || site.workingHours || [])
+      .find(wh => wh.day === reservationWeekDay)
+    console.log('Reservation day', reservationWeekDay, rdOpeningHours)
+    const openFrom = reservationDay?.hour(rdOpeningHours?.openTime.getHours() || 0)
+      .minute(rdOpeningHours?.openTime.getMinutes() || 0)
+    const openTo = reservationDay?.hour(rdOpeningHours?.closeTime.getHours() || 0)
+      .minute(rdOpeningHours?.closeTime.getMinutes() || 0)
+    notWorkingHours = !rdOpeningHours || dayjs(openFrom).isAfter(timeRange[0]) 
+      || dayjs(openTo).isBefore(timeRange[1])
+  }
+
   console.log('Site', site, allReservations)
 
   const confirmationElem = (
@@ -176,6 +196,13 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
       </div>
     </div>
   )
+
+  const now = dayjs()
+
+  const siteWorkingHours = fetchedSite?.workingHours || site.workingHours || []
+  const siteWeekDays = weekDaysOpen ? siteWorkingHours : siteWorkingHours?.filter(wh => wh.day === now.day())
+
+  const whMaxHeight = weekDaysOpen ? 'max-h-[260px]' : 'max-h-[72px]'
 
   return (
     <div className="container mx-auto">
@@ -229,6 +256,35 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
           </div>
           <div className="px-1 py-2">
             { site.description }
+          </div>
+          <div className={`px-1 py-2 transition-max-height duration-1000 ease-in-out ${whMaxHeight} overflow-hidden`}>
+            <Divider textAlign="left">
+              <span className="text-sm font-bold">Working hours</span>
+            </Divider>
+            {
+              siteWeekDays.map(wh => {
+                const isCurrentDay = now.day() === wh.day
+                return (
+                  <div key={wh.id} className={`flex justify-between ${isCurrentDay ? 'font-bold' : ''}`}>
+                    <div>{weekDays[wh.day - 1]}</div>
+                    <div>{dayjs(wh.openTime).format('HH:mm')} - {dayjs(wh.closeTime).format('HH:mm')}</div>
+                  </div>
+                )
+              })
+            }
+            <Divider textAlign="center">
+              <span className="text-sm font-bold">
+                {
+                  weekDaysOpen ? 
+                    <ExpandLessIcon sx={{ marginTop: '-4px' }}
+                      onClick={() => setWeekDaysOpen(false) }/> :
+                    <ExpandMoreIcon sx={{ marginTop: '-4px' }}
+                      onClick={() => setWeekDaysOpen(true) }/>
+
+                }
+                
+              </span>
+            </Divider>
           </div>
           {
             allReservations.length > 0 &&
@@ -410,7 +466,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
               >
                 {
                   ((inventoryItems || []).map(item => {
-                    const itemAvailable = isAvailable(item)
+                    const itemAvailable = !notWorkingHours && isAvailable(item)
                     const bgColor =  itemAvailable ? 'bg-yellow-200' : 'bg-gray-200'
                     return (
                       (!selectedItem || (selectedItem && item.id !== selectedItem.id)) && <AdvancedMarker key={item.id}

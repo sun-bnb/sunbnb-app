@@ -14,6 +14,7 @@ export async function GET(request: NextRequest, { params } : { params: { id: str
   const site = await prisma.site.findUnique({ 
     where: { id: params.id },
     include: {
+      workingHours: true,
       inventoryItems: {
         include: {
           reservations: {
