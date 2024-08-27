@@ -1,7 +1,28 @@
 import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
-import { SiteProps } from '@/app/sites/types'
 import SiteView from './view'
+
+async function getSite(id: string, userId: string) {
+  const site = await prisma.site.findFirst({ 
+    where: { id: id },
+    include: {
+      workingHours: true,
+      inventoryItems: {
+        include: {
+          reservations: {
+            where: {
+              userId: userId
+            },
+            orderBy: { from: 'desc' }
+          }
+        }
+      }
+    }
+  })
+
+  return site
+
+}
 
 export default async function Site({ params, searchParams }: { params: { id: string }, searchParams: URLSearchParams }) {
 
@@ -12,12 +33,8 @@ export default async function Site({ params, searchParams }: { params: { id: str
   const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
   console.log('API KEY', apiKey)
 
-  let site: SiteProps | null = {
-    name: ''
-  }
-
-   
-    if (!site) return <div>Site {params.id} not found</div>
+  const site = await getSite(params.id, session.user.id)
+  if (!site) return <div>Site {params.id} not found</div>
 
   return (
     <div className="container mx-auto lg:px-4">
