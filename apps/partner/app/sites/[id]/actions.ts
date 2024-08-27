@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { put } from '@vercel/blob'
+import sharp from 'sharp'
+import { SiteProps } from '../types'
 
 export async function submitForm(
   previousState: { status: string, errors?: string[] },
@@ -38,7 +40,7 @@ export async function submitForm(
   }
 
   console.log('SITE DATA', siteData)
-  
+
   if (!siteId) {
 
     await prisma.site.create({
@@ -95,16 +97,25 @@ export async function saveContent(
 
   const siteId = formData.get('id') as string
 
-  const siteData: {
-    description?: string,
-    image?: string
-  } = {
+  const siteData: any = {
     description: formData.get('description') as string
   }
 
   const imageFile = formData.get('image') as File
 
   if (imageFile.size > 0) {
+
+    const buffer = Buffer.from(await imageFile.arrayBuffer())
+    const image = sharp(buffer)
+    const metadata = await image.metadata()
+
+    if (!metadata.width || !metadata.height) {
+      console.log('Could not determine image dimensions')
+    } else {
+      siteData.imageWidth = metadata.width
+      siteData.imageHeight = metadata.height
+    }
+
     const blob = await put(imageFile.name, imageFile, {
       access: 'public',
     })

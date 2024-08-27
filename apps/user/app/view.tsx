@@ -39,7 +39,10 @@ function Site({ site }: { site: SiteProps }) {
         { 
           site.image && 
           <Link className="w-full" href={`/sites/${site.id}`} prefetch={true}>
-            <Image fill={true} alt={site.description || ''} style={{ width: '100%' }} src={site.image} />
+            {
+              (site.imageWidth && site.imageHeight) &&
+                <Image width={site.imageWidth} height={site.imageHeight} alt={site.description || ''} src={site.image} />
+    }
           </Link>
         }
         <div className="font-bold text-white px-2 py-1 absolute top-[6px] left-[6px] bg-black bg-opacity-30 rounded-xl">

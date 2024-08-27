@@ -80,6 +80,9 @@ model Site {
 
   price             Float?
   image             String?
+  imageWidth        Int?            @map("image_width")
+  imageHeight       Int?            @map("image_height")
+
   description       String?
 
   inventoryItems         InventoryItem[]

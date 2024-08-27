@@ -6,6 +6,8 @@ export interface SiteProps {
   inventoryItems?: { id: string, number: number, status: string }[]
   workingHours?: { id: string, day: number, openTime: Date, closeTime: Date }[]
   image?: string | null
+  imageWidth?: number | null
+  imageHeight?: number | null
   description?: string | null
   price?: number | null
 }

@@ -31,8 +31,7 @@ import { saveReservation } from './actions'
 import { 
   useGetAvailabilityBySiteAndTimeRangeQuery,
   useGetReservationByIdQuery,
-  useGetSiteByIdQuery,
-  useLazyGetSiteByIdQuery 
+  useGetSiteByIdQuery
 } from '@/store/features/api/apiSlice'
 import { useRouter } from 'next/navigation';
 
@@ -186,8 +185,8 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
         }}>
           <div className="w-full border-t-2 border-t-white">
             {
-              site.image &&
-                <Image fill={true} alt={site.description || ''} className="w-full h-auto" src={site.image} />
+              (site.image && site.imageWidth && site.imageHeight) &&
+                <Image width={site.imageWidth} height={site.imageHeight} alt={site.description || ''} className="w-full h-auto" src={site.image} />
             }
           </div>
           <div className="absolute inset-0 bg-gradient-to-b from-white to-transparent via-transparent h-100"></div>
