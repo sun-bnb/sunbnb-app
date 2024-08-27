@@ -20,15 +20,19 @@ const statusToChipLabel: {
   'canceled': 'Canceled'
 }
 
-export default async function Sites() {
+async function getReservations(userId: string) {
+  return await prisma.reservation.findMany({ 
+    where: { userId: userId },
+    orderBy: { from: 'desc' }
+  })
+}
+
+export default async function Reservations() {
 
   const session = await auth()
   if (!session?.user) return null
 
-  const reservations = await prisma.reservation.findMany({ 
-    where: { userId: session.user.id },
-    orderBy: { from: 'desc' }
-  })
+  const reservations = await getReservations(session.user.id)
 
   return (
     <div className="px-2 py-4">
