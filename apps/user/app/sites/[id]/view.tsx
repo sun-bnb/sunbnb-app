@@ -73,7 +73,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
     skip: !isPolling // Skip the query entirely if isPolling is false
   })
 
-  const { data: refetchedSite } = useGetSiteByIdQuery({ id: site.id }, {
+  const { data: refetchedSite, refetch: refetchSite } = useGetSiteByIdQuery({ id: site.id }, {
     skip: reservationState !== 'confirmed'
   })
 
@@ -85,6 +85,16 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
       setReservationState('confirmed')
     }
   }, [data?.status])
+
+  console.log('Reservation data', data, error, isLoading, refetchedSite)
+
+  useEffect(() => {
+    if (focused) {
+      refetchSite().then(() => {
+          console.log('Refetched site')
+      })
+    }
+  }, [focused])
 
   console.log('Reservation data', data, error, isLoading, refetchedSite)
 
