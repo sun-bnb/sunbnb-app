@@ -88,16 +88,6 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
 
   console.log('Reservation data', data, error, isLoading, refetchedSite)
 
-  useEffect(() => {
-    if (focused) {
-      refetchSite().then(() => {
-          console.log('Refetched site')
-      })
-    }
-  }, [focused])
-
-  console.log('Reservation data', data, error, isLoading, refetchedSite)
-
   const [ reservationDay, setReservationDay ] = useState<Dayjs | null>(dayjs())
   const [ timeRange, setTimeRange ] = useState<DateRange<Dayjs>>(() => [
     dayjs().add(2, 'hour'),
