@@ -188,7 +188,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
   let notWorkingHours = false
   
   if (reservationMode === 'hours' && 
-    reservationDay && timeRange[0] && timeRange[1]) {
+    reservationDay && availabilityFrom && availabilityTo) {
     notWorkingHours = !isSiteOpen(reservationDay, availabilityFrom, availabilityTo, fetchedSite?.workingHours || site.workingHours)
   }
 
