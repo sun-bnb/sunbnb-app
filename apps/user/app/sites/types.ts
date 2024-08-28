@@ -4,7 +4,7 @@ export interface SiteProps {
   locationLat?: string | undefined
   locationLng?: string | undefined
   inventoryItems?: InventoryItem[]
-  workingHours?: { id: string, day: number, openTime: Date, closeTime: Date }[]
+  workingHours?: WorkingHours[]
   image?: string | null
   imageWidth?: number | null
   imageHeight?: number | null
@@ -53,7 +53,7 @@ export interface InventoryItem {
 
 export interface WorkingHours {
   id?: string
-  day: string
-  openTime: string
-  closeTime: string
+  day: number
+  openTime: Date
+  closeTime: Date
 }

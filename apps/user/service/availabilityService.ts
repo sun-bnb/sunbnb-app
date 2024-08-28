@@ -47,6 +47,7 @@ export async function getAvailability(siteId: string, from: Date, to: Date) {
   const reservations = await prisma.reservation.findMany({
     where: {
       siteId,
+      status: { not: 'canceled' },
       from: { lte: to },
       to: { gte: from }
     }

@@ -1,6 +1,6 @@
 'use client'
 
-import { InventoryItem, MapBounds, Reservation, SiteProps } from '@/app/sites/types'
+import { InventoryItem, MapBounds, Reservation, SiteProps, WorkingHours } from '@/app/sites/types'
 import Button from '@mui/material/Button'
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
@@ -54,6 +54,25 @@ const statusToChipLabel: {
 }
 
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+function isSiteOpen(reservationDay: Dayjs, from: Dayjs, to: Dayjs, workingHours: WorkingHours[] | undefined): boolean {
+
+  let notWorkingHours = false
+    const reservationWeekDay = reservationDay.day()
+    const rdOpeningHours = (workingHours || [])
+      .find(wh => wh.day === reservationWeekDay)
+    console.log('Reservation day', reservationDay, reservationWeekDay, rdOpeningHours)
+    const openFrom = reservationDay.hour(rdOpeningHours?.openTime.getHours() || 0)
+      .minute(rdOpeningHours?.openTime.getMinutes() || 0)
+    const openTo = reservationDay.hour(rdOpeningHours?.closeTime.getHours() || 0)
+      .minute(rdOpeningHours?.closeTime.getMinutes() || 0)
+    console.log('opn from to', openFrom, openTo, from, to)
+    notWorkingHours = !rdOpeningHours || dayjs(openFrom).isAfter(from) 
+      || dayjs(openTo).isBefore(to)
+
+  return !notWorkingHours
+
+}
 
 export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: string }) {
 
@@ -167,17 +186,10 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
   }
 
   let notWorkingHours = false
-  if (reservationMode === 'hours') {
-    const reservationWeekDay = reservationDay?.day() || 0
-    const rdOpeningHours = (fetchedSite?.workingHours || site.workingHours || [])
-      .find(wh => wh.day === reservationWeekDay)
-    console.log('Reservation day', reservationWeekDay, rdOpeningHours)
-    const openFrom = reservationDay?.hour(rdOpeningHours?.openTime.getHours() || 0)
-      .minute(rdOpeningHours?.openTime.getMinutes() || 0)
-    const openTo = reservationDay?.hour(rdOpeningHours?.closeTime.getHours() || 0)
-      .minute(rdOpeningHours?.closeTime.getMinutes() || 0)
-    notWorkingHours = !rdOpeningHours || dayjs(openFrom).isAfter(timeRange[0]) 
-      || dayjs(openTo).isBefore(timeRange[1])
+  
+  if (reservationMode === 'hours' && 
+    reservationDay && timeRange[0] && timeRange[1]) {
+    notWorkingHours = !isSiteOpen(reservationDay, availabilityFrom, availabilityTo, fetchedSite?.workingHours || site.workingHours)
   }
 
   console.log('Site', site, allReservations)
@@ -257,35 +269,6 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
           <div className="px-1 py-2">
             { site.description }
           </div>
-          <div className={`px-1 py-2 transition-max-height duration-1000 ease-in-out ${whMaxHeight} overflow-hidden`}>
-            <Divider textAlign="left">
-              <span className="text-sm font-bold">Working hours</span>
-            </Divider>
-            {
-              siteWeekDays.map(wh => {
-                const isCurrentDay = now.day() === wh.day
-                return (
-                  <div key={wh.id} className={`flex justify-between ${isCurrentDay ? 'font-bold' : ''}`}>
-                    <div>{weekDays[wh.day - 1]}</div>
-                    <div>{dayjs(wh.openTime).format('HH:mm')} - {dayjs(wh.closeTime).format('HH:mm')}</div>
-                  </div>
-                )
-              })
-            }
-            <Divider textAlign="center">
-              <span className="text-sm font-bold">
-                {
-                  weekDaysOpen ? 
-                    <ExpandLessIcon sx={{ marginTop: '-4px' }}
-                      onClick={() => setWeekDaysOpen(false) }/> :
-                    <ExpandMoreIcon sx={{ marginTop: '-4px' }}
-                      onClick={() => setWeekDaysOpen(true) }/>
-
-                }
-                
-              </span>
-            </Divider>
-          </div>
           {
             allReservations.length > 0 &&
               <div className="mt-2">
@@ -347,6 +330,37 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
                 }
               </div>
           }
+          <div className={`px-1 py-2 ${whMaxHeight} overflow-hidden`}>
+            <Divider textAlign="left">
+              <span className="text-sm font-bold">OPENING HOURS</span>
+            </Divider>
+            {
+              siteWeekDays.map(wh => {
+                const isCurrentDay = now.day() === wh.day
+                return (
+                  <div key={wh.id} className={`flex justify-between ${isCurrentDay ? 'font-bold' : ''}`}>
+                    <div>{weekDays[wh.day - 1]}</div>
+                    <div>{dayjs(wh.openTime).format('HH:mm')} - {dayjs(wh.closeTime).format('HH:mm')}</div>
+                  </div>
+                )
+              })
+            }
+            <Divider textAlign="center">
+              <span className="text-sm font-bold">
+                {
+                  weekDaysOpen ? 
+                    <ExpandLessIcon sx={{ marginTop: '-4px' }}
+                      onClick={() => setWeekDaysOpen(false) }/> :
+                    <ExpandMoreIcon sx={{ marginTop: '-4px' }}
+                      onClick={() => setWeekDaysOpen(true) }/>
+
+                }
+                
+              </span>
+            </Divider>
+          </div>
+        </div>
+        <div className="mt-[20px]">
         </div>
         <div className={`fixed left-0 w-full bg-white text-white text-center px-2 pb-4
           ${!focused ? '-bottom-[433px]' : 'bottom-[0px]'} border-t transition-bottom duration-500`}>
@@ -466,10 +480,22 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
               >
                 {
                   ((inventoryItems || []).map(item => {
+
+                    let bgColor = 'bg-gray-200'
+                    let borderStyle = ''
+                    let size = 40
                     const itemAvailable = !notWorkingHours && isAvailable(item)
-                    const bgColor =  itemAvailable ? 'bg-yellow-200' : 'bg-gray-200'
+                    if (itemAvailable) {
+                      bgColor = 'bg-yellow-200'
+                      if (selectedItem && selectedItem.id === item.id) {
+                        bgColor = 'bg-yellow-400'
+                        borderStyle = 'border border-[4px] border-red-800'
+                        size = 46
+                      }
+                    }
+                    
                     return (
-                      (!selectedItem || (selectedItem && item.id !== selectedItem.id)) && <AdvancedMarker key={item.id}
+                      <AdvancedMarker key={item.id}
                         position={{ lat: Number(item.locationLat), lng: Number(item.locationLng) }}
                         onClick={() => {
                           if (itemAvailable) {
@@ -477,20 +503,11 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
                           }
                         }}>
                         
-                        <div className={`w-[40px] h-[40px] ${bgColor} rounded-full flex justify-center`}>
+                        <div className={`w-[${size}px] h-[${size}px] ${bgColor} ${borderStyle} rounded-full flex justify-center`}>
                           <span className="text-4xl">&#x26F1;</span>
                         </div>
                       </AdvancedMarker>
                     )}))
-                }
-                {
-                  (selectedItem?.locationLat && selectedItem?.locationLng) &&
-                    <AdvancedMarker position={{ lat: Number(selectedItem.locationLat), lng: Number(selectedItem.locationLng) }}>
-                      <div className="border border-[4px] border-red-800 w-[46px] h-[46px] bg-yellow-400 rounded-full flex justify-center">
-                        <span className="text-4xl">&#x26F1;</span>
-                      </div>
-                    </AdvancedMarker>
-
                 }
               </Map>
             </APIProvider>
