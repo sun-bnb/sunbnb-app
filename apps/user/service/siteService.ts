@@ -92,7 +92,7 @@ const results = await prisma.$queryRaw<any[]>(
     imageHeight: r.image_height,
     locationLat: r.location_lat,
     locationLng: r.location_lng,
-    distance: null,
+    distance: r.dist_km,
     price: r.price,
     itemCount: r.item_count,
     availableCount: r.available_count
