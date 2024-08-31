@@ -23,16 +23,23 @@ export default function Inventory({ siteId, siteLat, siteLng, inventory, apiKey 
   const beachFlagImg: HTMLImageElement = document.createElement('img');
   beachFlagImg.src = 'https://developers.google.com/maps/documentation/javascript/examples/full/images/beachflag.png';
 
-  
+  console.log('Inventory', inventory)
+
   return (
     <div className="container mx-auto">
       <div className="mt-6 flex flex-wrap">
         {
-          inventory.map(item => (
+          inventory.map(item => {
+            
+            const bgColor = (item.reservations?.length || 0) > 0 ? 'bg-blue-200' : ''
+            const borderColor = (item.reservations?.length || 0) > 0 ? 'border-gray-600' : 'border-gray-400'
+            const borderStyle = (selectedItem && selectedItem.id === item.id) ? 'border-4' : 'border'
+
+            return (
             <div key={item.id} className={
               !selectedItem || selectedItem.id !== item.id ? 
-                'h-[32px] relative mt-[2px] mr-2 border border-gray-400 rounded-lg  w-[111px] lg:w-[120px] flex justify-center align-middle' :
-                'h-[32px] relative mt-[2px] mr-2 border border-gray-600 bg-gray-200 rounded-lg w-[111px] lg:w-[120px] flex justify-center align-middle'
+                `h-[32px] relative mt-[2px] mr-2 ${borderStyle} ${borderColor} ${bgColor} rounded-lg  w-[111px] lg:w-[120px] flex justify-center align-middle` :
+                `h-[32px] relative mt-[2px] mr-2 ${borderStyle} ${borderColor} ${bgColor} rounded-lg w-[111px] lg:w-[120px] flex justify-center align-middle`
             }
               onClick={() => {
                 if (selectedItem && selectedItem.id === item.id) {
@@ -46,7 +53,7 @@ export default function Inventory({ siteId, siteLat, siteLng, inventory, apiKey 
                 <div className="-mt-[7px] ml-[3px] text-gray-400">x</div>
               </label>
             </div>
-          ))
+          )})
         }
         <div className="h-[32px] mt-[2px] mr-2 border border-gray-300 border-dashed rounded-lg w-[111px] flex justify-center">
           <button onClick={() => createInventoryItem({ siteId })}>+ Add item</button>
@@ -56,6 +63,13 @@ export default function Inventory({ siteId, siteLat, siteLng, inventory, apiKey 
         selectedItem ? (    
           <div className="mt-6 flex justify-between flex-col lg:flex-row">
             <div className="w-full lg:w-1/2">
+              {
+                (selectedItem.reservations || []).map((r, i) => (
+                  <div key={`r-${i}`} className="mb-4">
+                    {r.from.toISOString()} - {r.to.toISOString()}: {r.status}
+                  </div>
+                ))
+              }
               <div className="mb-4">
                 Item {selectedItem.number}: {selectedItem.status}
               </div>

@@ -12,12 +12,19 @@ export interface SiteProps {
   price?: number | null
 }
 
+export interface Reservation {
+  status: string
+  from: Date
+  to: Date
+}
+
 export interface InventoryItem {
   id: string
   number: number
   status: string
   locationLat?: string
   locationLng?: string
+  reservations: Reservation[]
 }
 
 export interface WorkingHours {
