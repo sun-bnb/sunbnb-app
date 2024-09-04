@@ -2,6 +2,7 @@ import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
 import { SiteProps } from '@/app/sites/types'
 import SiteView from './view'
+import CreateSiteView from './create-site'
 
 export default async function Site({ params }: { params: { id: string } }) {
 
@@ -34,9 +35,14 @@ export default async function Site({ params }: { params: { id: string } }) {
   }
 
   console.log('SITE', site?.inventoryItems)
-  return (
-    <div className="container mx-auto lg:px-4">
-      <SiteView site={site} apiKey={apiKey} />
+
+  const content = params.id === 'create' ? 
+    <CreateSiteView  site={site} apiKey={apiKey} /> :
+    <SiteView site={site} apiKey={apiKey} />
+  
+    return (
+    <div className="container mx-auto">
+      { content }
     </div>
   )
 

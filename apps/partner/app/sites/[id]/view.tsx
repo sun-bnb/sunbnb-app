@@ -3,54 +3,33 @@
 
 import { useFormState, useFormStatus } from 'react-dom'
 import React, { ReactElement, useState } from 'react'
-import { createRoot } from 'react-dom/client'
 import { APIProvider, ControlPosition, Map, AdvancedMarker } from '@vis.gl/react-google-maps'
+import Tabs from '@mui/material/Tabs'
+import Tab from '@mui/material/Tab'
+import Button from '@mui/material/Button'
+import TextField from '@mui/material/TextField'
+import Divider from '@mui/material/Divider'
+import Select from '@mui/material/Select'
+import MenuItem from '@mui/material/MenuItem'
+import Chip from '@mui/material/Chip'
 
-import { TextField } from '@repo/ui/TextField'
 import { SiteProps, WorkingHours } from '@/app/sites/types'
 
-import ControlPanel from '@/components/maps/control-panel'
 import { CustomMapControl } from '@/components/maps/map-control'
 import MapHandler from '@/components/maps/map-handler'
 
-import { submitForm, addWorkingHpours, deleteWorkingHours } from './actions'
+import { submitForm, addWorkingHpours, deleteWorkingHours, deleteSite } from './actions'
 import Inventory from './inventory'
 import Content from './content'
-
-interface TabItem {
-  id: string
-  label: string
-}
+import { useRouter } from 'next/navigation'
 
 const weekDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
-function TabBar({ items, tabSelected } : { items: TabItem[], tabSelected: (id: string) => void }) {
-
-  const [ selectedTab, setSelectedTab ] = useState('general')
-
-  return (
-    <div className="">
-      <nav className="flex gap-x-1 w-full">
-        {
-          items.map((item, index) => (
-            <button key={index} type="button"
-              className={'w-1/3 border border-radius-2 p-2' + (item.id === selectedTab ? ' font-bold bg-gray-100' : '')} onClick={() => {
-                setSelectedTab(item.id)
-                tabSelected(item.id)
-              }}>
-                {item.label}
-            </button>
-          ))
-        }
-        <div className="ml-auto"></div>
-      </nav>
-    </div>
-  )
-}
 
 export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: string }) {
 
   
+  const router = useRouter()
 
   const [selectedPlace, setSelectedPlace] =
     useState<google.maps.places.PlaceResult | null>(null)
@@ -61,18 +40,6 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
   const [ selectedTab, setSelectedTab ] = useState('general')
 
   const [ formState, formAction ] = useFormState(submitForm, { status: '' })
-
-  function SubmitButton() {
-    const status = useFormStatus()
-    return <button 
-      disabled={status.pending}
-      type="submit"
-      className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none disabled:bg-blue-100 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center">
-        Save
-    </button>
-  }
-
-  console.log('API KEY', site, apiKey, selectedPlace)
 
   let locationLat = siteLocation?.lat.toString() || site.locationLat
   let locationLng = siteLocation?.lng.toString() || site.locationLng
@@ -86,7 +53,7 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
   console.log('form state', formState)
 
   const generalTab = (
-    <div>
+    <div className="py-4">
         {
           formState.errors &&
             <div className="mt-2">
@@ -106,63 +73,59 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
             }
             
             <div className="mt-4 flex w-full gap-x-1">
-              <TextField name="name" label="Site name" value={site.name || ''} />
-              <TextField name="price" label="Advertised price" value={(site.price || '').toString()} />
+              <TextField className="flex-1" name="name" label="Site name" value={site.name || ''} />
+              <TextField className="flex-1" name="price" label="Advertised price" value={(site.price || '').toString()} />
             </div>
             
             <input type="hidden" name="locationLat" value={locationLat} />
             <input type="hidden" name="locationLng" value={locationLng} />
           </div>
           <div className="mt-4">
-            <label className="block mb-2 text-sm font-medium text-gray-900">Working hours</label>
-            <div className="flex flex-wrap gap-x-6">
+            <Divider>Working hours</Divider>
+            <div className="flex flex-wrap gap-x-2 gap-y-2 mt-2">
             {
+              
               (site.workingHours || []).sort((a, b) => a.day - b.day).map((hours, index) => (
-                <div key={index} className="flex gap-x-2 gap-y-2 border rounded-md px-2 my-1">
-                  <div className="font-bold">{weekDays[hours.day - 1]}</div>
-                  <div>{getHoursAndMinutes(hours.openTime)} - {getHoursAndMinutes(hours.closeTime)}</div>
-                  <div>
-                    <button onClick={(e) => {
-                      e.preventDefault()
-                      deleteWorkingHours(hours.id)
-                    }}>&#x274C;</button>
-                  </div>
-                </div>
+                <Chip
+                  label={`${weekDays[hours.day - 1]}: ${getHoursAndMinutes(hours.openTime)} - ${getHoursAndMinutes(hours.closeTime)}`}
+                  variant="outlined"
+                  onDelete={(e) => {
+                    e.preventDefault()
+                    deleteWorkingHours(hours.id)
+                  }}
+                />
               ))
             }
             </div>
-            <div className="flex gap-x-2 mt-2">
-                <select
+            <div className="flex gap-x-2 mt-4">
+                <Select
                   id="weekDaySelect"
+                  defaultValue="1"
                   onChange={(e) => setWorkingHours({ ...workingHours, day: e.target.value })}
-                  className="block w-40 p-2 border border-gray-300 rounded-md"
-      >
-                  <option value="" disabled>
-                    -- Select weekday --
-                  </option>
-                  <option value="1">Monday</option>
-                  <option value="2">Tuesday</option>
-                  <option value="3">Wednesday</option>
-                  <option value="4">Thursday</option>
-                  <option value="5">Friday</option>
-                  <option value="6">Saturday</option>
-                  <option value="7">Sunday</option>
-                </select>
-                <TextField name={`workingHours.from`} placeholder="09:00" value={workingHours?.openTime} onChange={
+                  className="w-40 h-[41px]">
+                  <MenuItem value="1">Monday</MenuItem>
+                  <MenuItem value="2">Tuesday</MenuItem>
+                  <MenuItem value="3">Wednesday</MenuItem>
+                  <MenuItem value="4">Thursday</MenuItem>
+                  <MenuItem value="5">Friday</MenuItem>
+                  <MenuItem value="6">Saturday</MenuItem>
+                  <MenuItem value="7">Sunday</MenuItem>
+                </Select>
+                <TextField sx={{ input: { height: '8px' } }} placeholder="09:00" value={workingHours?.openTime} onChange={
                   (e) => setWorkingHours({ ...workingHours, openTime: e.target.value })
                 }/>
-                <TextField name={`workingHour.to`} placeholder="17:00" value={workingHours?.closeTime} onChange={
+                <TextField sx={{ input: { height: '8px' } }} placeholder="17:00" value={workingHours?.closeTime} onChange={
                   (e) => setWorkingHours({ ...workingHours, closeTime: e.target.value })
                 }/>
-                <button className="border border-gray-600 rounded-md p-2" onClick={(e) => {
+                <Button className="flex-1 max-w-[300px]" variant="outlined" onClick={(e) => {
                   e.preventDefault()
                   console.log('Add working hours', workingHours)
                   addWorkingHpours(site.id!, workingHours)
-                }}>+ Add</button>
+                }}>+ Add</Button>
             </div>
           </div>
-          <div className="mt-4">
-            <label className="block mb-2 text-sm font-medium text-gray-900">Site location</label>
+          <div className="mt-4 mb-2">
+            Site location
           </div>
           <div className="h-[500px]">
             <APIProvider apiKey={apiKey}>
@@ -192,14 +155,22 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
               <MapHandler place={selectedPlace} />
             </APIProvider>
           </div>
-          <div className="mt-4">
-            <SubmitButton />
+          <div className="mt-4 pb-6">
+            <div className="mb-2">
+              <Button fullWidth={true} variant="contained">Save</Button>
+            </div>
+            <div>
+              <Button color="error" variant="outlined" fullWidth={true}
+                onClick={async () => {
+                  const result = await deleteSite(site.id!)
+                  console.log('Delete result', result)
+                  router.push('/sites')
+                }}>DELETE</Button>
+            </div>
           </div>
         </form>
       </div>
   )
-
-  console.log('inv items', site.inventoryItems)
 
   const tabs: { [key: string]: ReactElement } = {
     'general': generalTab,
@@ -208,12 +179,14 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
   }
 
   return (
-    <div className="container mx-auto px-4 mt-2">
-      <TabBar items={[
-        { id: 'general', label: 'General' },
-        { id: 'content', label: 'Content' },
-        { id: 'inventory', label: 'Inventory' }
-      ]} tabSelected={setSelectedTab}/>
+    <div className="container mx-auto mt-2">
+      <Tabs variant="fullWidth" value={selectedTab} onChange={(e, value) => {
+        setSelectedTab(value)
+      }} aria-label="Reservation mode">
+        <Tab value="general" label="General" />
+        <Tab value="content" label="Content" />
+        <Tab value="inventory" label="Inventory" />
+      </Tabs>
       {
         tabs[selectedTab]
       }

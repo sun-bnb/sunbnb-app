@@ -20,18 +20,18 @@ export async function submitForm(
   const requiredFields = ['name', 'locationLat', 'locationLng']
   const errors = requiredFields.filter(field => !formData.get(field)).map(field => `${field} is required`)
   let priceVal = formData.get('price') as string
-  let price = Number(priceVal)
-  if (!priceVal || isNaN(price)) {
+  if (priceVal && isNaN(Number(priceVal))) {
     errors.push(`Invalid price ${priceVal}`)
   }
   
   if (errors.length > 0) return { status: 'error', errors }
 
   const siteId = formData.get('id') as string
-   
+  
+  let price = Number(priceVal)
   const siteData = {
     name: formData.get('name') as string,
-    price,
+    price: price > 0 ? price : null,
     locationLat: formData.get('locationLat') as string,
     locationLng: formData.get('locationLng') as string,
     user: {
@@ -43,16 +43,18 @@ export async function submitForm(
 
   if (!siteId) {
 
-    await prisma.site.create({
+    const { id: siteId } = await prisma.site.create({
       data: siteData
     })
 
+    console.log('SITE ID', siteId)
+
     await prisma.$executeRaw`
-      UPDATE "Site" SET coords = ST_MakePoint(${siteData.locationLat}::double precision, ${siteData.locationLng}::double precision)
+      UPDATE "Site" SET coords = ST_MakePoint(location_lat::double precision, location_lng::double precision)
       WHERE id = ${siteId}`
     
     revalidatePath('/sites')
-    return { status: 'ok' }
+    return { status: 'ok', siteId }
 
   } else {
 
@@ -82,6 +84,25 @@ export async function submitForm(
 
   }
 
+  
+}
+
+export async function deleteSite(
+  id: string
+) {
+  
+  const session = await auth()
+  console.log('DEL SITE', id, session)
+
+  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+
+  await prisma.site.delete({
+    where: { id }
+  })
+  
+  revalidatePath('/sites')
+  
+  return { status: 'ok' }
   
 }
 
