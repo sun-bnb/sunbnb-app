@@ -97,7 +97,8 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
               ))
             }
             </div>
-            <div className="flex gap-x-2 mt-4">
+            <div className="gap-x-2 mt-4 md:flex">
+              <div className="flex gap-x-1 mb-1">
                 <Select
                   id="weekDaySelect"
                   defaultValue="1"
@@ -117,11 +118,14 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
                 <TextField sx={{ input: { height: '8px' } }} placeholder="17:00" value={workingHours?.closeTime} onChange={
                   (e) => setWorkingHours({ ...workingHours, closeTime: e.target.value })
                 }/>
-                <Button className="flex-1 max-w-[300px]" variant="outlined" onClick={(e) => {
+              </div>
+              <div className="flex-1 md:max-w-[300px]">
+                <Button fullWidth={true} variant="outlined" className="h-[41px]" onClick={(e) => {
                   e.preventDefault()
                   console.log('Add working hours', workingHours)
                   addWorkingHpours(site.id!, workingHours)
                 }}>+ Add</Button>
+              </div>
             </div>
           </div>
           <div className="mt-4 mb-2">

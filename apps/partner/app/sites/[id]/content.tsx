@@ -45,19 +45,22 @@ export default function Content({ siteId, content } : { siteId: string, content:
       <div className="mt-6 flex w-full">
         <form action={formAction} className="w-full">
           <input type="hidden" name="id" value={siteId} />
-          <div className="md:flex w-full">
-            <div className="mt-4">
+          <div className="px-2 md:p-0 md:flex w-full">
+            <div className="mt-4 md:max-w-[250px]">
               <div>
                 <label className="block mb-2 text-sm font-medium text-gray-900">Site image</label>
               </div>
               {
                 content.image &&
-                  <div>
-                    <img width="200px" src={content.image} />
+                  <div className="w-full flex justify-center md:justify-start">
+                    <img width="250px" src={content.image} />
                   </div>
               }
+              <div className="mt-2 w-full">
+                <input type="file" id="image" name="image" />
+              </div>
             </div>
-            <div className="pl-4 flex-1">
+            <div className="px-2 md:pl-4 flex-1">
               <div className="mt-4 flex-1">
                 <TextField
                   label="Site description"
@@ -72,9 +75,7 @@ export default function Content({ siteId, content } : { siteId: string, content:
               </div>
             </div>
           </div>
-          <div className="mt-2">
-            <input type="file" id="image" name="image" />
-          </div>
+          
         </form>
       </div>
     </div>
