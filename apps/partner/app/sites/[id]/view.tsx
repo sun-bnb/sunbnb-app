@@ -73,8 +73,8 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
             }
             
             <div className="mt-4 flex w-full gap-x-1">
-              <TextField className="flex-1" name="name" label="Site name" value={site.name || ''} />
-              <TextField className="flex-1" name="price" label="Advertised price" value={(site.price || '').toString()} />
+              <TextField className="flex-1" name="name" label="Site name" defaultValue={site.name || ''} />
+              <TextField className="flex-1" name="price" label="Advertised price" defaultValue={(site.price || '').toString()} />
             </div>
             
             <input type="hidden" name="locationLat" value={locationLat} />
@@ -157,7 +157,7 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
           </div>
           <div className="mt-4 pb-6">
             <div className="mb-2">
-              <Button fullWidth={true} variant="contained">Save</Button>
+              <Button type="submit" fullWidth={true} variant="contained">Save</Button>
             </div>
             <div>
               <Button color="error" variant="outlined" fullWidth={true}

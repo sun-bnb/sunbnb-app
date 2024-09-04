@@ -3,8 +3,8 @@
 import { useFormState, useFormStatus } from 'react-dom'
 import React, { useEffect, useState } from 'react'
 import { APIProvider, ControlPosition, Map, AdvancedMarker } from '@vis.gl/react-google-maps'
-
-import { TextField } from '@repo/ui/TextField'
+import Button from '@mui/material/Button'
+import TextField from '@mui/material/TextField'
 import { SiteProps } from '@/app/sites/types'
 
 import { CustomMapControl } from '@/components/maps/map-control'
@@ -62,13 +62,13 @@ export default function CreateSite({ site, apiKey }: { site: SiteProps, apiKey: 
         <form action={formAction}>
           <div>
             <div className="mt-4 flex w-full gap-x-1">
-              <TextField name="name" label="Site name" value={site.name || ''} />
+              <TextField fullWidth={true} name="name" label="Site name" defaultValue={site.name || ''} />
             </div>
             <input type="hidden" name="locationLat" value={locationLat} />
             <input type="hidden" name="locationLng" value={locationLng} />
           </div>
-          <div className="mt-4">
-            <label className="block mb-2 text-sm font-medium text-gray-900">Site location</label>
+          <div className="mt-4 mb-2">
+            Site location
           </div>
           <div className="h-[500px]">
             <APIProvider apiKey={apiKey}>
@@ -99,7 +99,7 @@ export default function CreateSite({ site, apiKey }: { site: SiteProps, apiKey: 
             </APIProvider>
           </div>
           <div className="mt-4">
-            <SubmitButton />
+            <Button type="submit" variant="contained" fullWidth={true}>Save</Button>
           </div>
         </form>
       </div>
