@@ -4,6 +4,7 @@ import { SiteProps } from '@/app/sites/types'
 import SiteView from './view'
 import CreateSiteView from './create-site'
 
+
 export default async function Site({ params }: { params: { id: string } }) {
 
   const session = await auth()
@@ -21,6 +22,7 @@ export default async function Site({ params }: { params: { id: string } }) {
       include: { 
         workingHours: true,
         inventoryItems: {
+          orderBy: { number: 'asc' },
           include: {
             reservations: {
               where: {
@@ -41,7 +43,7 @@ export default async function Site({ params }: { params: { id: string } }) {
     <SiteView site={site} apiKey={apiKey} />
   
     return (
-    <div className="container mx-auto">
+    <div className="container mx-auto max-w-[768px]">
       { content }
     </div>
   )

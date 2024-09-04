@@ -6,15 +6,8 @@ import { createInventoryItem } from './actions'
 import { useFormState, useFormStatus } from 'react-dom'
 import React, { ReactElement, useState } from 'react'
 import ImageUploading, { ImageListType } from 'react-images-uploading'
-
-import { APIProvider, ControlPosition, Map, AdvancedMarker } from '@vis.gl/react-google-maps'
-
-import { TextField } from '@repo/ui/TextField'
-import { SiteProps } from '@/app/sites/types'
-
-import ControlPanel from '@/components/maps/control-panel'
-import { CustomMapControl } from '@/components/maps/map-control'
-import MapHandler from '@/components/maps/map-handler'
+import Button from '@mui/material/Button'
+import TextField from '@mui/material/TextField'
 
 import { saveContent } from './actions'
 
@@ -49,30 +42,38 @@ export default function Content({ siteId, content } : { siteId: string, content:
 
   return (
     <div className="container mx-auto">
-      <div className="mt-6 flex">
-        <form action={formAction}>
+      <div className="mt-6 flex w-full">
+        <form action={formAction} className="w-full">
           <input type="hidden" name="id" value={siteId} />
-          <div>  
+          <div className="md:flex w-full">
             <div className="mt-4">
-              <TextField name="description" label="Site description" value={content.description || ''} />
+              <div>
+                <label className="block mb-2 text-sm font-medium text-gray-900">Site image</label>
+              </div>
+              {
+                content.image &&
+                  <div>
+                    <img width="200px" src={content.image} />
+                  </div>
+              }
+            </div>
+            <div className="pl-4 flex-1">
+              <div className="mt-4 flex-1">
+                <TextField
+                  label="Site description"
+                  fullWidth={true}
+                  multiline
+                  defaultValue={content.description || ''}
+                  variant="standard"
+                />
+              </div>
+              <div className="mt-4 flex justify-end">
+                <Button type="submit" variant="contained">Save</Button>
+              </div>
             </div>
           </div>
-          <div className="mt-4">
-            <div>
-            <label className="block mb-2 text-sm font-medium text-gray-900">Site image</label>
-            </div>
-            {
-              content.image &&
-                <div>
-                  <img width="200px" src={content.image} />
-                </div>
-            }
-            <div className="mt-2">
-              <input type="file" id="image" name="image" />
-            </div>
-          </div>
-          <div className="mt-4">
-            <SubmitButton />
+          <div className="mt-2">
+            <input type="file" id="image" name="image" />
           </div>
         </form>
       </div>

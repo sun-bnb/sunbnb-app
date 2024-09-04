@@ -177,8 +177,13 @@ export async function createInventoryItem(
 
   if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
 
+  const lastItem = await prisma.inventoryItem.findFirst({
+    where: { siteId: inventoryItem.siteId },
+    orderBy: { number: 'desc' }
+  })
+
   const inventoryItemData = {
-    number: Math.round(Math.random() * 10000),
+    number: (lastItem?.number || 0) + 1,
     siteId: inventoryItem.siteId,
     userId: session.user.id,
     status: 'new',
@@ -187,13 +192,13 @@ export async function createInventoryItem(
   }
 
   console.log('CREATE INV ITEM', inventoryItemData)
-  await prisma.inventoryItem.create({
+  const item = await prisma.inventoryItem.create({
     data: inventoryItemData
   })
   
   revalidatePath('/sites')
 
-  return { status: 'ok' }
+  return { status: 'ok', item: item }
   
 }
 
