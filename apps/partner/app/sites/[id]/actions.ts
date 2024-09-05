@@ -300,3 +300,31 @@ export async function saveInventoryItem(
   return { status: 'ok' }
   
 }
+
+export async function cancelReservation(
+  reservationId: string
+) {
+  
+  const session = await auth()
+  console.log('CANCEL RESERVATION', reservationId, session)
+
+  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+
+  const reservation = await prisma.reservation.findUnique({
+    where: { id: reservationId }
+  })
+
+  await prisma.reservation.update({
+    data: {
+      status: 'canceled'
+    },
+    where: {
+      id: reservationId
+    }
+  })
+  
+  revalidatePath(`/sites/${reservation?.siteId}`)
+
+  return { status: 'ok' }
+  
+}

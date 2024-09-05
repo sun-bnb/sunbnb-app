@@ -25,9 +25,10 @@ export default async function Site({ params }: { params: { id: string } }) {
           orderBy: { number: 'asc' },
           include: {
             reservations: {
-              where: {
-                status: { not: 'canceled' }
-              }
+              include: {
+                user: true
+              },
+              orderBy: { from: 'asc' }
             }
           }
         }

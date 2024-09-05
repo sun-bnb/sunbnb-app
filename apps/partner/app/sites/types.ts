@@ -13,9 +13,14 @@ export interface SiteProps {
 }
 
 export interface Reservation {
+  id: string
+  type: string
   status: string
   from: Date
   to: Date
+  user: {
+    email: string
+  }
 }
 
 export interface InventoryItem {

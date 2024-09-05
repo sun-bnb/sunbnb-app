@@ -131,7 +131,7 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
           <div className="mt-4 mb-2">
             Site location
           </div>
-          <div className="h-[500px]">
+          <div className="h-[500px] border border-2 border-gray-400">
             <APIProvider apiKey={apiKey}>
               <Map mapId={'7bd5d546975a15b5'}
                 defaultZoom={9}
