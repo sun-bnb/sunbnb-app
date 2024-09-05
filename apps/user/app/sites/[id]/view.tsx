@@ -61,11 +61,13 @@ function isSiteOpen(reservationDay: Dayjs, from: Dayjs, to: Dayjs, workingHours:
     const reservationWeekDay = reservationDay.day()
     const rdOpeningHours = (workingHours || [])
       .find(wh => wh.day === reservationWeekDay)
-    console.log('Reservation day', reservationDay, reservationWeekDay, rdOpeningHours)
-    const openFrom = reservationDay.hour(rdOpeningHours?.openTime.getHours() || 0)
-      .minute(rdOpeningHours?.openTime.getMinutes() || 0)
-    const openTo = reservationDay.hour(rdOpeningHours?.closeTime.getHours() || 0)
-      .minute(rdOpeningHours?.closeTime.getMinutes() || 0)
+    
+    const openTime = new Date(rdOpeningHours?.openTime || 0)
+    const closeTime = new Date(rdOpeningHours?.closeTime || 0)
+    
+    console.log('Reservation day', reservationDay, reservationWeekDay, rdOpeningHours, openTime, closeTime)
+    const openFrom = reservationDay.hour(openTime.getHours()).minute(openTime.getMinutes())
+    const openTo = reservationDay.hour(closeTime.getHours()).minute(closeTime.getMinutes())
     console.log('opn from to', openFrom, openTo, from, to)
     notWorkingHours = !rdOpeningHours || dayjs(openFrom).isAfter(from) 
       || dayjs(openTo).isBefore(to)

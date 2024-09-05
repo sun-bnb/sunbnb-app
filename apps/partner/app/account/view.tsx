@@ -1,6 +1,9 @@
 'use client'
 
-import { TextField } from '@repo/ui/TextField'
+import Button from '@mui/material/Button'
+import TextField from '@mui/material/TextField'
+import Alert from '@mui/material/Alert'
+import CheckIcon from '@mui/icons-material/Check'
 import { submitForm } from './actions'
 import { useFormState, useFormStatus } from 'react-dom'
 
@@ -37,26 +40,28 @@ export default function AccountView({ account } : { account: AccountProps }) {
           {
             formState.status !== 'ok' ?
               (formState.errors || []).map((error) => (
-                <div key={error} className="text-red-500">{ error }</div>
+                <Alert severity="error" sx={{ marginBottom: '2px' }}>{ error }</Alert>
               )) :
-              <div className="text-green-500">Saved</div>
+              <Alert icon={<CheckIcon fontSize="inherit" />} severity="success">
+                Saved
+              </Alert>
           }
         </div>
         <form action={formAction}>
           <div className="grid gap-6 mb-6 md:grid-cols-2">
-            <TextField name="firstName" label="First name" placeholder="John" value={account.firstName || ''} />
-            <TextField name="lastName" label="Last name" placeholder="Doe" value={account.lastName || ''} />
-            <TextField name="email" label="E-mail" placeholder="john.doe@company.com" value={account.email || ''} />
-            <TextField name="phoneNumber" label="Phone number" placeholder="123-45-678" value={account.phoneNumber || ''} />
-            <TextField name="company" label="Company" placeholder="Flowbite" value={account.company || ''} />
-            <TextField name="websiteUrl" label="Website URL" placeholder="flowbite.com" value={account.websiteUrl || ''} />
+            <TextField name="firstName" label="First name" placeholder="John" defaultValue={account.firstName || ''} />
+            <TextField name="lastName" label="Last name" placeholder="Doe" defaultValue={account.lastName || ''} />
+            <TextField name="email" label="E-mail" placeholder="john.doe@company.com" defaultValue={account.email || ''} />
+            <TextField name="phoneNumber" label="Phone number" placeholder="123-45-678" defaultValue={account.phoneNumber || ''} />
+            <TextField name="company" label="Company" placeholder="Flowbite" defaultValue={account.company || ''} />
+            <TextField name="websiteUrl" label="Website URL" placeholder="flowbite.com" defaultValue={account.websiteUrl || ''} />
           </div>
           <div className="grid gap-6 mb-6 md:grid-cols-1">
-            <TextField name="address" label="Address" placeholder="Sturenkatu 37-41 B 16, 00550 Helsinki, Finland" value={account.address || ''} />
-            <TextField name="bankAccount" label="Bank account" placeholder="FI12 3456 7891 2345" value={account.bankAccount || ''} />
+            <TextField name="address" label="Address" placeholder="Sturenkatu 37-41 B 16, 00550 Helsinki, Finland" defaultValue={account.address || ''} />
+            <TextField name="bankAccount" label="Bank account" placeholder="FI12 3456 7891 2345" defaultValue={account.bankAccount || ''} />
           </div>
           <div className="grid gap-6 mb-6 md:grid-cols-1">
-            <SubmitButton />
+            <Button type="submit" variant="contained">Save</Button>
           </div>
         </form>
       </div>

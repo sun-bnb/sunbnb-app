@@ -29,7 +29,7 @@ export interface InventoryItem {
   status: string
   locationLat?: string
   locationLng?: string
-  reservations: Reservation[]
+  reservations?: Reservation[]
 }
 
 export interface WorkingHours {
