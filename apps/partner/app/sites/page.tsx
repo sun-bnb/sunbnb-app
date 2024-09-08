@@ -3,7 +3,7 @@ import { auth } from '@/app/auth'
 import Link from 'next/link'
 import Image from 'next/image'
 import Button from '@mui/material/Button'
-import { SiteProps } from './types'
+import { SiteProps } from '../../types/shared'
 
 function Site({ site }: { site: SiteProps }) {
   return (

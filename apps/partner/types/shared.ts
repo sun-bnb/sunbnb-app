@@ -14,6 +14,8 @@ export interface SiteProps {
 
 export interface Reservation {
   id: string
+  siteId: string
+  itemId?: string | null
   type: string
   status: string
   from: Date
@@ -21,6 +23,7 @@ export interface Reservation {
   user: {
     email: string
   }
+  item?: InventoryItem | null
 }
 
 export interface InventoryItem {

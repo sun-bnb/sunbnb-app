@@ -1,5 +1,5 @@
 import { Middleware, configureStore } from '@reduxjs/toolkit'
-import CounterSlice from './features/counter/CounterSlice'
+import reservationSlice from './features/reservations/reservationsSlice'
 import { httpApi } from './features/api/apiSlice'
 
 export const unauthenticatedMiddleware: Middleware = ({
@@ -11,11 +11,11 @@ export const unauthenticatedMiddleware: Middleware = ({
 export const makeStore = () => {
   return configureStore({
     reducer: {
-      counter: CounterSlice,
+      reservations: reservationSlice,
       [httpApi.reducerPath]: httpApi.reducer,
     },
     middleware: (getDefaultMiddleware) =>
-      getDefaultMiddleware().concat(httpApi.middleware),
+      getDefaultMiddleware().concat(httpApi.middleware)
   })
 }
 

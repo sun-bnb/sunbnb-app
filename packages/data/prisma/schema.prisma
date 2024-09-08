@@ -143,8 +143,8 @@ model Reservation {
   siteId            String          @map("site_id")
   itemId            String?         @map("item_id")
 
-  from              DateTime          @map("open_time")
-  to                DateTime          @map("close_time")
+  from              DateTime          @map("from")
+  to                DateTime          @map("to")
 
   status            String @default("pending")
   type              String @default("hours")

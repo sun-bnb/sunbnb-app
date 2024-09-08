@@ -13,7 +13,7 @@ import Select from '@mui/material/Select'
 import MenuItem from '@mui/material/MenuItem'
 import Chip from '@mui/material/Chip'
 
-import { SiteProps, WorkingHours } from '@/app/sites/types'
+import { SiteProps, WorkingHours } from '@/types/shared'
 
 import { CustomMapControl } from '@/components/maps/map-control'
 import MapHandler from '@/components/maps/map-handler'

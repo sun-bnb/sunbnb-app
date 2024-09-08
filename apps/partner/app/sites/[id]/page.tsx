@@ -1,6 +1,6 @@
 import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
-import { SiteProps } from '@/app/sites/types'
+import { SiteProps } from '@/types/shared'
 import SiteView from './view'
 import CreateSiteView from './create-site'
 

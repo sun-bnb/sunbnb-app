@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react'
 import { APIProvider, ControlPosition, Map, AdvancedMarker } from '@vis.gl/react-google-maps'
 import Button from '@mui/material/Button'
 import TextField from '@mui/material/TextField'
-import { SiteProps } from '@/app/sites/types'
+import { SiteProps } from '@/types/shared'
 
 import { CustomMapControl } from '@/components/maps/map-control'
 import MapHandler from '@/components/maps/map-handler'
@@ -24,16 +24,6 @@ export default function CreateSite({ site, apiKey }: { site: SiteProps, apiKey: 
   const [ siteLocation, setSiteLocation ] = useState<{ lat: number, lng: number } | null>(null)
 
   const [ formState, formAction ] = useFormState(submitForm, { status: '' })
-
-  function SubmitButton() {
-    const status = useFormStatus()
-    return <button 
-      disabled={status.pending}
-      type="submit"
-      className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none disabled:bg-blue-100 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center">
-        Save
-    </button>
-  }
 
   let locationLat = siteLocation?.lat.toString() || site.locationLat
   let locationLng = siteLocation?.lng.toString() || site.locationLng

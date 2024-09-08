@@ -5,7 +5,7 @@ import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { put } from '@vercel/blob'
 import sharp from 'sharp'
-import { SiteProps } from '../types'
+import { SiteProps } from '../../../types/shared'
 
 export async function submitForm(
   previousState: { status: string, errors?: string[] },
