@@ -13,7 +13,8 @@ export default async function Site({ params }: { params: { id: string } }) {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
 
   let site: SiteProps | null = {
-    name: ''
+    name: '',
+    services: []
   }
 
   if (params.id !== 'create') {
@@ -37,7 +38,7 @@ export default async function Site({ params }: { params: { id: string } }) {
     if (!site) return <div>Site {params.id} not found</div>
   }
 
-  console.log('SITE', site?.inventoryItems)
+  console.log('SITE', site)
 
   const content = params.id === 'create' ? 
     <CreateSiteView  site={site} apiKey={apiKey} /> :

@@ -10,6 +10,8 @@ import Image from 'next/image'
 import RestaurantIcon from '@mui/icons-material/Restaurant'
 import WcIcon from '@mui/icons-material/Wc'
 import MapIcon from '@mui/icons-material/Map'
+import SurfingIcon from '@mui/icons-material/Surfing'
+import LocalBarIcon from '@mui/icons-material/LocalBar'
 import ListAltIcon from '@mui/icons-material/ListAlt'
 import { SiteGeography, SiteProps } from './sites/types'
 import { APIProvider, AdvancedMarker, Map } from '@vis.gl/react-google-maps'
@@ -31,6 +33,14 @@ interface MapBounds {
   west: number;
 }
 
+const serviceIcons: {
+  [key: string]: React.ReactElement
+} = {
+  'wc': <WcIcon />,
+  'food': <RestaurantIcon />,
+  'drinks': <LocalBarIcon />,
+  'rental': <SurfingIcon />
+}
 
 function Site({ site }: { site: SiteProps }) {
   return (
@@ -75,12 +85,17 @@ function Site({ site }: { site: SiteProps }) {
             
           </div>
           <div className="flex">
-            <div className="mr-3 border border-gray-600 rounded-md pr-[5px] pl-[4px]">
-              <RestaurantIcon sx={{ fontSize: '16px', marginTop: '-4px' }}/>
-            </div>
-            <div className="mr-3 border border-gray-600 rounded-md pr-[4px] pl-[4px]">
-              <WcIcon sx={{ fontSize: '19px', marginTop: '-4px' }}/>
-            </div>
+            {
+              (site.services || []).map(service => {
+                return (
+                  <div key={`service-${service}`} className="mr-1 border border-gray-600 rounded-md pr-[5px] pl-[4px]">
+                    <div className="-mt-[2px]">
+                      { serviceIcons[service] }
+                    </div>
+                  </div>
+                )
+              })
+            }
           </div>
         </div>
         <div className="px-1 py-2">

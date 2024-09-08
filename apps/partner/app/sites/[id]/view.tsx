@@ -86,7 +86,7 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
             {
               
               (site.workingHours || []).sort((a, b) => a.day - b.day).map((hours, index) => (
-                <Chip
+                <Chip key={`wd-${index}`}
                   label={`${weekDays[hours.day - 1]}: ${getHoursAndMinutes(hours.openTime)} - ${getHoursAndMinutes(hours.closeTime)}`}
                   variant="outlined"
                   onDelete={(e) => {
@@ -176,9 +176,14 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
       </div>
   )
 
+  console.log('siiite', site)
   const tabs: { [key: string]: ReactElement } = {
     'general': generalTab,
-    'content': <Content siteId={site.id || ''} content={{ image: site.image, description: site.description }}/>,
+    'content': <Content siteId={site.id || ''} content={{ 
+      image: site.image,
+      description: site.description,
+      services: site.services || []
+    }}/>,
     'inventory': <Inventory apiKey={apiKey} siteLat={locationLat || '35.5138298'} siteLng={locationLng || '24.0180367'} siteId={site.id || ''} inventory={site.inventoryItems || []}/>
   }
 

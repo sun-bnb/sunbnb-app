@@ -117,9 +117,15 @@ export async function saveContent(
   if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
 
   const siteId = formData.get('id') as string
+  const services = formData.get('services') as string
+  let servicesArr: string[] = []
+  if (services && services.length > 0) {
+    servicesArr = services.split(',')
+  }
 
   const siteData: any = {
-    description: formData.get('description') as string
+    description: formData.get('description') as string,
+    services: servicesArr
   }
 
   const imageFile = formData.get('image') as File

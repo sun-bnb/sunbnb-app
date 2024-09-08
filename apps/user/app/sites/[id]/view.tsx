@@ -15,6 +15,8 @@ import Select from '@mui/material/Select'
 import Chip from '@mui/material/Chip'
 import RestaurantIcon from '@mui/icons-material/Restaurant'
 import WcIcon from '@mui/icons-material/Wc'
+import SurfingIcon from '@mui/icons-material/Surfing'
+import LocalBarIcon from '@mui/icons-material/LocalBar'
 import CircularProgress from '@mui/material/CircularProgress'
 import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
@@ -53,22 +55,29 @@ const statusToChipLabel: {
   'canceled': 'Canceled'
 }
 
+const serviceIcons: {
+  [key: string]: React.ReactElement
+} = {
+  'wc': <WcIcon />,
+  'food': <RestaurantIcon />,
+  'drinks': <LocalBarIcon />,
+  'rental': <SurfingIcon />
+}
+
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 function isSiteOpen(reservationDay: Dayjs, from: Dayjs, to: Dayjs, workingHours: WorkingHours[] | undefined): boolean {
 
   let notWorkingHours = false
-    const reservationWeekDay = reservationDay.day()
+    const reservationWeekDay = reservationDay.day() === 0 ? 7 : reservationDay.day()
     const rdOpeningHours = (workingHours || [])
       .find(wh => wh.day === reservationWeekDay)
     
     const openTime = new Date(rdOpeningHours?.openTime || 0)
     const closeTime = new Date(rdOpeningHours?.closeTime || 0)
     
-    console.log('Reservation day', reservationDay, reservationWeekDay, rdOpeningHours, openTime, closeTime)
     const openFrom = reservationDay.hour(openTime.getHours()).minute(openTime.getMinutes())
     const openTo = reservationDay.hour(closeTime.getHours()).minute(closeTime.getMinutes())
-    console.log('opn from to', openFrom, openTo, from, to)
     notWorkingHours = !rdOpeningHours || dayjs(openFrom).isAfter(from) 
       || dayjs(openTo).isBefore(to)
 
@@ -100,9 +109,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
     skip: !isPolling // Skip the query entirely if isPolling is false
   })
 
-  const { data: fetchedSite, refetch: refetchSite } = useGetSiteByIdQuery({ id: site.id }, {
-    skip: reservationState !== 'confirmed'
-  })
+  const { data: fetchedSite, refetch: refetchSite } = useGetSiteByIdQuery({ id: site.id })
 
   useEffect(() => {
     console.log('Reservation STATE', data?.status)
@@ -110,6 +117,9 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
       setIsPolling(false)
       setFocused(false)
       setReservationState('confirmed')
+      refetchSite().then(() => {
+        console.log('Refetched site')
+      })
     }
   }, [data?.status])
 
@@ -214,7 +224,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
   const now = dayjs()
 
   const siteWorkingHours = fetchedSite?.workingHours || site.workingHours || []
-  const siteWeekDays = weekDaysOpen ? siteWorkingHours : siteWorkingHours?.filter(wh => wh.day === now.day())
+  const siteWeekDays = weekDaysOpen ? siteWorkingHours : siteWorkingHours?.filter(wh => wh.day === (now.day() === 0 ? 7 : now.day()))
 
   const whMaxHeight = weekDaysOpen ? 'max-h-[260px]' : 'max-h-[72px]'
 
@@ -235,7 +245,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
             { site.name }
           </div>
         </div>
-        <div className="py-3 px-2" style={{ minHeight: '600px' }}>
+        <div className="py-3 px-2">
           <div className="px-1 flex justify-between">
             <div className="flex">
               <div className="mr-3 pl-1">
@@ -260,12 +270,17 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
               }
             </div>
             <div className="flex">
-              <div className="ml-3 border border-gray-600 rounded-md pr-[5px] pl-[4px]">
-                <RestaurantIcon sx={{ fontSize: '16px', marginTop: '-4px' }}/>
-              </div>
-              <div className="ml-3 border border-gray-600 rounded-md pr-[4px] pl-[4px]">
-                <WcIcon sx={{ fontSize: '19px', marginTop: '-4px' }}/>
-              </div>
+              {
+                (site.services || []).map(service => {
+                  return (
+                    <div key={`service-${service}`} className="mr-1 border border-gray-600 rounded-md pr-[5px] pl-[4px]">
+                      <div className="-mt-[2px]">
+                        { serviceIcons[service] }
+                      </div>
+                    </div>
+                  )
+                })
+              }
             </div>
           </div>
           <div className="px-1 py-2">
@@ -338,7 +353,9 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
             </Divider>
             {
               siteWeekDays.map(wh => {
-                const isCurrentDay = now.day() === wh.day
+                const currentDay = now.day() === 0 ? 7 : now.day()
+                const isCurrentDay = currentDay === wh.day
+                console.log('Current day', currentDay, wh.day, isCurrentDay)
                 return (
                   <div key={wh.id} className={`flex justify-between ${isCurrentDay ? 'font-bold' : ''}`}>
                     <div>{weekDays[wh.day - 1]}</div>
@@ -362,7 +379,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
             </Divider>
           </div>
         </div>
-        <div className="mt-[20px]">
+        <div className="mt-[140px]">
         </div>
         <div className={`fixed left-0 w-full bg-white text-white text-center px-2 pb-4
           ${!focused ? '-bottom-[433px]' : 'bottom-[0px]'} border-t transition-bottom duration-500`}>
@@ -383,7 +400,6 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
           <div className="w-full">
             <div className="mb-4">
               <Tabs variant="fullWidth" value={reservationMode} onChange={(e, value) => {
-                console.log('New reservation mode', e, value)
                 setFocused(true)
                 setReservationMode(value)
               }} aria-label="Reservation mode">

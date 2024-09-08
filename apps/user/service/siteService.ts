@@ -60,6 +60,7 @@ const results = await prisma.$queryRaw<any[]>(
     image_width,
     image_height,
     price,
+    services,
     location_lat,
     location_lng,
     ${distanceQuery}
@@ -81,7 +82,7 @@ const results = await prisma.$queryRaw<any[]>(
       `
   )
 
-  console.log('results', results)
+  console.log('results', results, bounds)
 
   const sites = results.map((r) => ({
     id: r.id,
@@ -94,6 +95,7 @@ const results = await prisma.$queryRaw<any[]>(
     locationLng: r.location_lng,
     distance: r.dist_km,
     price: r.price,
+    services: r.services,
     itemCount: r.item_count,
     availableCount: r.available_count
   }))

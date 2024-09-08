@@ -10,6 +10,7 @@ export interface SiteProps {
   imageHeight?: number | null
   description?: string | null
   price?: number | null
+  services: string[]
 }
 
 export interface Reservation {
