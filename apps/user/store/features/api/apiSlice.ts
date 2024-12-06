@@ -1,4 +1,4 @@
-import { SiteProps } from '@/app/sites/types';
+import { Reservation, SiteProps } from '@/app/sites/types';
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 import { SiteGeography } from '@/app/sites/types';
 
@@ -36,7 +36,7 @@ export const httpApi = createApi({
       query: ({ id }) => ({
         url: `reservations/${id}`
       }),
-      transformResponse: (response: { status: string }) => response
+      transformResponse: (response: Reservation) => response
     })
   }),
 });

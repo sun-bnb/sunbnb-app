@@ -2,6 +2,8 @@ import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
 import SiteView from './view'
 
+const { STRIPE_PUBLIC_KEY } = process.env
+
 async function getSite(id: string, userId: string) {
   const site = await prisma.site.findFirst({ 
     where: { id: id },
@@ -38,7 +40,7 @@ export default async function Site({ params, searchParams }: { params: { id: str
 
   return (
     <div className="container mx-auto lg:px-4">
-      <SiteView site={site} apiKey={apiKey} />
+      <SiteView site={site} apiKey={apiKey} stripePublicKey={STRIPE_PUBLIC_KEY}/>
     </div>
   )
 

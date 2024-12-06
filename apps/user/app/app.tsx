@@ -14,6 +14,8 @@ const App = ({ children }: {
 
   const [ content, setContent ] = useState<ReactNode | null>(null)
 
+  console.log('root session', session)
+
   useEffect(() => {
     console.log(status)
     if (status === 'authenticated') {

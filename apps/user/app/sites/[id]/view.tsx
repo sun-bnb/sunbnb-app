@@ -5,7 +5,7 @@ import Button from '@mui/material/Button'
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import FormControl from '@mui/material/FormControl';
-import Tabs from '@mui/material/Tabs';
+import Tabs from '@mui/material/Tabs'
 import Tab from '@mui/material/Tab'
 import Divider from '@mui/material/Divider'
 import { MobileDatePicker } from '@mui/x-date-pickers/MobileDatePicker'
@@ -25,6 +25,9 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import Image from 'next/image'
 import { useActionState, useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
+import { setValue } from '@/store/features/sites/sitesSlice'
+import { RootState } from '@/store/store'
+import { useDispatch, useSelector } from 'react-redux'
 import dayjs, { Dayjs } from 'dayjs'
 import { APIProvider, AdvancedMarker, Map } from '@vis.gl/react-google-maps'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
@@ -37,7 +40,10 @@ import {
   useGetReservationByIdQuery,
   useGetSiteByIdQuery
 } from '@/store/features/api/apiSlice'
-import { useRouter } from 'next/navigation';
+
+import PaymentView from '@/app/payment/Payment'
+import ReservationView from './Reservation'
+import { useRouter } from 'next/navigation'
 
 const statusToChipColor: {
   [key: string]: 'default' | 'success' | 'error'
@@ -66,129 +72,43 @@ const serviceIcons: {
 
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-function isSiteOpen(reservationDay: Dayjs, from: Dayjs, to: Dayjs, workingHours: WorkingHours[] | undefined): boolean {
+const withHours = false
 
-  let notWorkingHours = false
-    const reservationWeekDay = reservationDay.day() === 0 ? 7 : reservationDay.day()
-    const rdOpeningHours = (workingHours || [])
-      .find(wh => wh.day === reservationWeekDay)
-    
-    const openTime = new Date(rdOpeningHours?.openTime || 0)
-    const closeTime = new Date(rdOpeningHours?.closeTime || 0)
-    
-    const openFrom = reservationDay.hour(openTime.getHours()).minute(openTime.getMinutes())
-    const openTo = reservationDay.hour(closeTime.getHours()).minute(closeTime.getMinutes())
-    notWorkingHours = !rdOpeningHours || dayjs(openFrom).isAfter(from) 
-      || dayjs(openTo).isBefore(to)
-
-  return !notWorkingHours
-
+const Backdrop = ({ onClick }: { onClick?: () => void }) => {
+  return (
+    <div
+      onClick={onClick} // Optional: handle clicks to close
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)', // Dark transparent background
+        zIndex: 10, // Ensure it's above other elements
+      }}
+    />
+  );
 }
 
-export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: string }) {
-
-  const { data: session } = useSession()
+export default function SiteView({ site, apiKey, stripePublicKey  }: { site: SiteProps, apiKey: string, stripePublicKey: string | undefined }) {
 
   const router = useRouter()
 
-  const [ reservationState, setReservationState ] = useState<string>('initial')
-  const [ pendingReservationId, setPendingReservationId ] = useState<string | null>(null)
+  const dispatch = useDispatch()
+  const sitesState = useSelector((state: RootState) => state.sites)
+  const { reservationMode } = sitesState
 
-  const [ reservationMode, setReservationMode ] = useState('hours')
-  const [ focused, setFocused ] = useState(false)
-  
-  const [ paymentMethod, setPaymentMethod ] = useState('0001')
+  let focused = sitesState.focused !== undefined ? sitesState.focused : false
 
   const [ weekDaysOpen, setWeekDaysOpen ] = useState<boolean>(false)
 
-  const [isPolling, setIsPolling] = useState(false);
-
-  // Conditionally start polling when `isPolling` is true
-  const { data, error, isLoading } = useGetReservationByIdQuery({ id: pendingReservationId }, {
-    pollingInterval: isPolling ? 3000 : 0, // Poll every 3 seconds if isPolling is true
-    skip: !isPolling // Skip the query entirely if isPolling is false
-  })
-
   const { data: fetchedSite, refetch: refetchSite } = useGetSiteByIdQuery({ id: site.id })
 
-  useEffect(() => {
-    console.log('Reservation STATE', data?.status)
-    if (data?.status === 'confirmed') {
-      setIsPolling(false)
-      setFocused(false)
-      setReservationState('confirmed')
-      refetchSite().then(() => {
-        console.log('Refetched site')
-      })
-    }
-  }, [data?.status])
+  console.log('Fetched site', fetchedSite)
 
-  console.log('Reservation data', data, error, isLoading, fetchedSite)
-
-  const [ reservationDay, setReservationDay ] = useState<Dayjs | null>(dayjs())
-  const [ timeRange, setTimeRange ] = useState<DateRange<Dayjs>>(() => [
-    dayjs().add(2, 'hour'),
-    dayjs().add(4, 'hour')
-  ])
-
-  const [ dateRange, setDateRange ] = useState<DateRange<Dayjs>>(() => [
-    dayjs(),
-    dayjs().add(2, 'day')
-  ])
-
-  let availabilityFrom = dateRange[0]
-  let availabilityTo = dateRange[1]
-  if (reservationMode === 'hours') {
-    availabilityFrom = reservationDay!
-      .hour(timeRange[0]!.hour())
-      .minute(timeRange[0]!.minute())
-      .second(timeRange[0]!.second())
-    availabilityTo = reservationDay!
-      .hour(timeRange[1]!.hour())
-      .minute(timeRange[1]!.minute())
-      .second(timeRange[1]!.second())
-  }
-
-  const { data: availabilityResponse, refetch: refetchAvailability } = useGetAvailabilityBySiteAndTimeRangeQuery({ 
-    siteId: site.id,
-    from: availabilityFrom?.toDate().toISOString(),
-    to: availabilityTo?.toDate().toISOString()
-   }, {
-    skip: !availabilityFrom || !availabilityTo
-   })
-
-  console.log('Availability response', availabilityResponse)
-
-  function isAvailable(item: InventoryItem): boolean {
-    if (!availabilityResponse) return false
-    return !!availabilityResponse.availability.find(a => a.itemId === item.id && a.available)
-  }
-
-  let inventoryItems = fetchedSite?.inventoryItems || site.inventoryItems
-  const firstAvailableItem = inventoryItems?.find(item => isAvailable(item))
-  const [ selectedItem, setSelectedItem ] = useState<InventoryItem | undefined>(firstAvailableItem)
-
-  useEffect(() => {
-    if (availabilityResponse) {
-      console.log('Reset selected for new avaiability?', selectedItem, selectedItem && isAvailable(selectedItem))
-      if ((selectedItem && !isAvailable(selectedItem)) || !selectedItem) {
-        const firstAvailableItem = inventoryItems?.find(item => isAvailable(item))
-        setSelectedItem(firstAvailableItem)
-        console.log('Reset selected for new avaiability', firstAvailableItem)
-      }
-    }
-  }, [availabilityResponse])
-
-  const itemLats = (inventoryItems || []).map(item => Number(item.locationLat));
-  const itemLngs = (inventoryItems || []).map(item => Number(item.locationLng));
-
-  const defaultBounds: MapBounds = {
-    north: Math.max(...itemLats),
-    south: Math.min(...itemLats),
-    east: Math.max(...itemLngs),
-    west: Math.min(...itemLngs)
-  };
-
+  let inventoryItems = site.inventoryItems
+  
   const itemCount = inventoryItems?.length
   const availableCount = inventoryItems?.filter(item => item.status == 'available').length
 
@@ -197,29 +117,7 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
     allReservations = inventoryItems.flatMap(item => item.reservations)
   }
 
-  let notWorkingHours = false
-  
-  if (reservationMode === 'hours' && 
-    reservationDay && availabilityFrom && availabilityTo) {
-    notWorkingHours = !isSiteOpen(reservationDay, availabilityFrom, availabilityTo, fetchedSite?.workingHours || site.workingHours)
-  }
-
   console.log('Site', site, allReservations)
-
-  const confirmationElem = (
-    <div className="w-full text-gray-600">
-      <div className="w-full mt-6 mb-6">
-        <div className="w-full flex justify-center">PAYMENT CONFIRMATION AND PROCESSING</div>
-        <div className="w-full flex justify-center">WILL HAPPEN HERE</div>
-      </div>
-      <div className="w-full flex justify-center">
-        <CircularProgress />
-      </div>
-      <div className="w-full mt-6">
-        <div className="w-full flex justify-center">THIS IS SIMULATION :&#41;</div>
-      </div>
-    </div>
-  )
 
   const now = dayjs()
 
@@ -230,9 +128,15 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
 
   return (
     <div className="container mx-auto">
+      {
+        focused &&
+          <Backdrop onClick={() => {
+            dispatch(setValue({ focused: false }))
+          }} />
+      }
       <div>
         <div className="relative h-[245px] overflow-hidden" onClick={() => {
-          setFocused(false)
+          dispatch(setValue({ focused: false }))
         }}>
           <div className="w-full border-t-2 border-t-white">
             {
@@ -381,250 +285,41 @@ export default function SiteView({ site, apiKey }: { site: SiteProps, apiKey: st
         </div>
         <div className="mt-[140px]">
         </div>
-        <div className={`fixed left-0 w-full bg-white text-white text-center px-2 pb-4
-          ${!focused ? '-bottom-[433px]' : 'bottom-[0px]'} border-t transition-bottom duration-500`}>
+        <div style={{ zIndex: 11 }} className={`fixed left-0 w-full bg-white text-white text-center px-2 pb-4
+          ${!focused ? '-bottom-[364px]' : 'bottom-[0px]'} border-t transition-bottom duration-500`}>
           {
             focused &&
               <div className="text-black absolute w-[100px] bg-white rounded-md border" style={{
                 left: 'calc(50% - 50px)',
-                top: '-10px',
+                top: '-15px',
                 zIndex: 2
               }}
               onClick={() => {
-                setFocused(false)
+                dispatch(setValue({ focused: false }))
               }}>
                 <KeyboardDoubleArrowDownIcon />
               </div>
           }
           
-          <div className="w-full">
-            <div className="mb-4">
-              <Tabs variant="fullWidth" value={reservationMode} onChange={(e, value) => {
-                setFocused(true)
-                setReservationMode(value)
-              }} aria-label="Reservation mode">
-                <Tab value="hours" label="Hours" />
-                <Tab value="days" label="Days" />
-              </Tabs>
-            </div>
-            {
-              reservationMode === 'hours' ? (
-                <div className="mb-2 flex">
-                  <LocalizationProvider dateAdapter={AdapterDayjs}>
-                    <MobileDatePicker sx={{ 
-                      marginRight: '4px',
-                      input: {
-                        textAlign: 'center'
-                      }
-                    }}
-                      disabled={reservationState === 'processing'}
-                      label="Date"
-                      format='YYYY-MM-DD'
-                      value={reservationDay}
-                      selectedSections={null}
-                      onOpen={() => {
-                        setFocused(true)
-                      }}
-                      onChange={(value) => {
-                        setReservationDay(value)
-                        setFocused(true)
-                      }}
-                    />
-                    <SingleInputTimeRangeField sx={{
-                      input: {
-                        textAlign: 'center'
-                      }
-                    }}
-                      label="Time"
-                      disabled={reservationState === 'processing'}
-                      ampm={false}
-                      fullWidth={true}
-                      value={timeRange}
-                      onFocus={() => {
-                        console.log('Focus')
-                        setFocused(true)
-                      }}
-                      onBlur={() => {
-                        console.log('Blur')
-                      }}
-                      onChange={(newValue) => {
-                        setTimeRange(newValue)
-                      }}
-                    />
-                  </LocalizationProvider>
-                </div>
-              ) : (
-                <div className="mb-2 flex">
-                  <LocalizationProvider dateAdapter={AdapterDayjs}>
-                    <MobileDateRangePicker sx={{ 
-                        width: '100%',
-                        input: {
-                          textAlign: 'center'
-                        }
-                      }}
-                      onOpen={() => {
-                        setFocused(true)
-                      }}
-                      value={dateRange}
-                      disabled={reservationState === 'processing'}
-                      format='YYYY-MM-DD'
-                      selectedSections={null}
-                      label="From - To"
-                      slots={{ 
-                        field: SingleInputDateRangeField
-                      }}
-                      onChange={(newValue) => setDateRange(newValue)}
-                    />
-                  </LocalizationProvider>
-                </div>
-              )
-            }
-            
-          </div>
-          <div className="w-full lg:w-1/2 h-[300px]">
-            {
-              reservationState === 'processing' ?
-                confirmationElem :
-            <APIProvider apiKey={apiKey}>
-              <Map mapId={'7a0196a7ba317ea5'}
-                defaultZoom={defaultBounds ? undefined : 20}
-                defaultCenter={{ lat: Number(site.locationLat), lng: Number(site.locationLng) }}
-                defaultBounds={defaultBounds}
-                gestureHandling={'greedy'}
-                disableDefaultUI={true}
-                onClick={(e) => {
-                  console.log('Map click', e)
-                }}
-              >
+              <div className="w-full">
                 {
-                  ((inventoryItems || []).map(item => {
-
-                    let bgColor = 'bg-gray-200'
-                    let borderStyle = ''
-                    let size = 40
-                    const itemAvailable = !notWorkingHours && isAvailable(item)
-                    if (itemAvailable) {
-                      bgColor = 'bg-yellow-200'
-                      if (selectedItem && selectedItem.id === item.id) {
-                        bgColor = 'bg-yellow-400'
-                        borderStyle = 'border border-[4px] border-red-800'
-                        size = 46
-                      }
-                    }
-                    
-                    return (
-                      <AdvancedMarker key={item.id}
-                        position={{ lat: Number(item.locationLat), lng: Number(item.locationLng) }}
-                        onClick={() => {
-                          if (itemAvailable) {
-                            setSelectedItem(item)
-                          }
-                        }}>
-                        
-                        <div className={`w-[${size}px] h-[${size}px] ${bgColor} ${borderStyle} rounded-full flex justify-center`}>
-                          <span className="text-4xl">&#x26F1;</span>
-                        </div>
-                      </AdvancedMarker>
-                    )}))
+                  withHours ?
+                    <div className="mb-4">
+                      <Tabs variant="fullWidth" value={reservationMode} onChange={(e, value) => {
+                        dispatch(setValue({ 
+                          reservationMode: value,
+                          focused: true 
+                        }))
+                      }} aria-label="Reservation mode">
+                        <Tab value="hours" label="Hours" />
+                        <Tab value="days" label="Days" />
+                      </Tabs>
+                    </div> :
+                    <div className="mb-4">
+                    </div>
                 }
-              </Map>
-            </APIProvider>
-          }
-          </div>
-          <div className="w-full mt-4">
-            <FormControl size="medium" fullWidth={true}>
-              <InputLabel>Payment method</InputLabel>
-              <Select
-                labelId="demo-select-small-label"
-                id="demo-select-small"
-                value={paymentMethod}
-                label="Payment method"
-                disabled={reservationState === 'processing'}
-                onChange={(...args) => {
-                  console.log('Payment method', args)
-                }}
-                MenuProps={{
-                  sx: {
-                    transform: "translateX(-8px)", // Move the dropdown 10px to the left
-                  }
-                }}
-                sx={{
-                  '& .MuiSelect-select': {
-                    display: 'flex',
-                    justifyContent: 'center'
-                  }
-                 }}
-              >
-                
-                <MenuItem value={'0001'} sx={{ display: 'flex', justifyContent: 'center' }}>VISA 4398 1206 7404 9258</MenuItem>
-                <MenuItem value="" sx={{ display: 'flex', justifyContent: 'center' }}>
-                  <em>+ Add payment method</em>
-                </MenuItem>
-              </Select>
-            </FormControl>
-          </div>
-          <div className="mt-[10px]">
-            <Button variant="contained" 
-              fullWidth={true}
-              disabled={
-                (reservationState === 'processing' || reservationState === 'saving') ||
-                !selectedItem
-              }
-              onClick={
-                async () => {
-
-                  setReservationState('saving')
-                  console.log('Reserve', timeRange, selectedItem)
-
-                  let saveResult = null
-                  if (reservationMode === 'hours' && reservationDay && timeRange[0] && timeRange[1]) {
-                    const from = reservationDay
-                      .hour(timeRange[0].hour())
-                      .minute(timeRange[0].minute())
-                      .second(timeRange[0].second())
-                      .toDate()
-                    const to = reservationDay
-                      .hour(timeRange[1].hour())
-                      .minute(timeRange[1].minute())
-                      .second(timeRange[1].second())
-                      .toDate()
-                    saveResult = await saveReservation({
-                      from,
-                      to,
-                      type: 'hours',
-                      siteId: site.id!,
-                      itemId: selectedItem?.id!,
-                      userId: session?.user?.id!
-                    })
-                  } else if (reservationMode === 'days' && dateRange[0] && dateRange[1]) {
-                    const from = dateRange[0].toDate()
-                    const to = dateRange[1].toDate()
-                    saveResult = await saveReservation({
-                      from,
-                      to,
-                      type: 'days',
-                      siteId: site.id!,
-                      itemId: selectedItem?.id!,
-                      userId: session?.user?.id!
-                    })
-                  }
-
-                  console.log('Save result', saveResult)
-                  if (saveResult?.status === 'ok' && saveResult.id) {
-                    setReservationState('processing')
-                    setPendingReservationId(saveResult.id)
-                    setIsPolling(true)
-                  }
-
-                  refetchAvailability().then(() => {
-                    console.log('Refetched availability')
-                  })
-
-                }
-              }>
-                Reserve
-              </Button>
-          </div>
+              </div>
+              <ReservationView apiKey={apiKey} stripePublicKey={stripePublicKey} site={fetchedSite || site} />
         </div>
         
       </div>

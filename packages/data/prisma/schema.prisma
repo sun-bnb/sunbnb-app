@@ -145,11 +145,14 @@ model Reservation {
   siteId            String          @map("site_id")
   itemId            String?         @map("item_id")
 
-  from              DateTime          @map("from")
-  to                DateTime          @map("to")
+  from              DateTime        @map("from")
+  to                DateTime        @map("to")
 
   status            String @default("pending")
   type              String @default("hours")
+
+  paymentRef        String?         @map("payment_ref")
+  paymentAmount     Float?          @map("payment_amount")
  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

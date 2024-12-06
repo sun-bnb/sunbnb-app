@@ -41,6 +41,8 @@ export interface Reservation {
   type: string
   from: Date
   to: Date
+  paymentRef?: string | null
+  paymentAmount?: number | null
 }
 
 export interface InventoryItem {

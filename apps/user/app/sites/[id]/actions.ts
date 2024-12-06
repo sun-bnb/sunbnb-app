@@ -267,6 +267,7 @@ export async function saveReservation(
     to: reservation.to,
     type: reservation.type,
     status: 'pending',
+    paymentAmount: 0,
     item: {
       connect: { id: reservation.itemId }
     },
@@ -277,6 +278,12 @@ export async function saveReservation(
       connect: { id: reservation.userId }
     }
   }
+
+  const site = await prisma.site.findUnique({ where: { id: reservation.siteId } })
+  if (!site) return { status: 'error', errors: [ 'Site not found' ] }
+  if (!site.price) return { status: 'error', errors: [ 'Site price not set' ] }
+
+  reservationData.paymentAmount = site.price
 
   console.log('CREATE RES', reservationData)
   const newReservation = await prisma.reservation.create({
@@ -297,6 +304,7 @@ export async function saveReservation(
   }, 6000)
   */
  
+  
   waitUntil(
     new Promise((resolve) => {
       setTimeout(async () => {
@@ -314,7 +322,7 @@ export async function saveReservation(
         }
       }, 6000); // 6 seconds delay
     })
-  );
+  )
   
   revalidatePath('/sites')
 

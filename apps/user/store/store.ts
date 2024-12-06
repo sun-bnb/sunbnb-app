@@ -1,6 +1,7 @@
 import { Dispatch, Middleware, UnknownAction, configureStore } from '@reduxjs/toolkit'
 import CounterSlice from './features/counter/CounterSlice'
 import searchSlice from './features/search/searchSlice'
+import sitesSlice from './features/sites/sitesSlice'
 import { googlePlacesApi } from './features/autocomplete/autocompleteSlice'
 import { httpApi } from './features/api/apiSlice'
 
@@ -15,6 +16,7 @@ export const makeStore = () => {
     reducer: {
       counter: CounterSlice,
       search: searchSlice,
+      sites: sitesSlice,
       [googlePlacesApi.reducerPath]: googlePlacesApi.reducer,
       [httpApi.reducerPath]: httpApi.reducer,
     },
