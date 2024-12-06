@@ -5,8 +5,6 @@ interface SearchParams {
   searchParams: { [key: string]: string }
 }
 
-const { STRIPE_PUBLIC_KEY } = process.env
-
 async function getReservation(paymentRef: string) {
 
   console.log('GET RESERVATION', paymentRef)
@@ -19,16 +17,17 @@ async function getReservation(paymentRef: string) {
 }
 
 export default async function Complete({ searchParams }: SearchParams) {
+  
+  console.log('COMPLETE PAGE', searchParams, process.env.STRIPE_PUBLIC_KEY, process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY)
 
+  const stripePublicKey = process.env.STRIPE_PUBLIC_KEY || process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY
 
-  console.log('COMPLETE PAGE', searchParams, process.env.STRIPE_PUBLIC_KEY, STRIPE_PUBLIC_KEY)
-
-  if (!process.env.STRIPE_PUBLIC_KEY) {
+  if (!stripePublicKey) {
     console.error('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is not set')
     return <div>Misconfiguration</div>
   }
 
-  console.log('STRIPE PUBLISHABLE KEY', process.env.STRIPE_PUBLIC_KEY)
+  console.log('STRIPE PUBLISHABLE KEY', process.env.STRIPE_PUBLIC_KEY, process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY)
   console.log('searchParams', searchParams)
 
   const { payment_intent, payment_intent_client_secret } = searchParams
@@ -47,6 +46,6 @@ export default async function Complete({ searchParams }: SearchParams) {
   }
 
   return (
-    <CompletePage stripePublicKey={process.env.STRIPE_PUBLIC_KEY} stripeClientSecret={payment_intent_client_secret} reservation={reservation} />
+    <CompletePage stripePublicKey={stripePublicKey} stripeClientSecret={payment_intent_client_secret} reservation={reservation} />
   )
 }
