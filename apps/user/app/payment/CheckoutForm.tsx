@@ -26,8 +26,7 @@ export default function CheckoutForm({
   const [message, setMessage] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  const { NEXT_PUBLIC_APP_URL } = process.env
-  console.log('CLIENT APP URL2', process.env.NEXT_PUBLIC_APP_URL, NEXT_PUBLIC_APP_URL)
+  console.log('CLIENT APP URL2', process.env.NEXT_PUBLIC_APP_URL)
 
   const handleSubmit = async (e: FormEvent) => {
 
@@ -50,7 +49,7 @@ export default function CheckoutForm({
       elements,
       confirmParams: {
         // Make sure to change this to your payment completion page
-        return_url: `${NEXT_PUBLIC_APP_URL}/payment/complete`
+        return_url: `${process.env.NEXT_PUBLIC_APP_URL}/payment/complete`
       },
     });
 
