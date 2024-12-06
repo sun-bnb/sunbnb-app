@@ -19,6 +19,9 @@ async function getReservation(paymentRef: string) {
 
 export default async function PaymentPage({ searchParams }: SearchParams) {
 
+
+  console.log('render CompletePage', searchParams)
+
   if (!STRIPE_PUBLIC_KEY) {
     console.error('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is not set')
     return null
