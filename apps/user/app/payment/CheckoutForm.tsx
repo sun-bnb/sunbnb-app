@@ -27,6 +27,7 @@ export default function CheckoutForm({
   const [isLoading, setIsLoading] = useState(false)
 
   const { NEXT_PUBLIC_APP_URL } = process.env
+  console.log('CLIENT APP URL2', process.env.NEXT_PUBLIC_APP_URL, NEXT_PUBLIC_APP_URL)
 
   const handleSubmit = async (e: FormEvent) => {
 
