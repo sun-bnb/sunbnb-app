@@ -26,6 +26,8 @@ export default function CheckoutForm({
   const [message, setMessage] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
+  const { APP_URL } = process.env
+
   const handleSubmit = async (e: FormEvent) => {
 
     e.preventDefault();
@@ -41,11 +43,13 @@ export default function CheckoutForm({
 
     setIsLoading(true);
 
+
+
     const { error } = await stripe.confirmPayment({
       elements,
       confirmParams: {
         // Make sure to change this to your payment completion page
-        return_url: 'https://local.sunbnb.app:3002/payment/complete'
+        return_url: `${APP_URL}/payment/complete`
       },
     });
 

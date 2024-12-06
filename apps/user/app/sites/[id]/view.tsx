@@ -105,7 +105,7 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
 
   const { data: fetchedSite, refetch: refetchSite } = useGetSiteByIdQuery({ id: site.id })
 
-  console.log('Fetched site', fetchedSite)
+  console.log('Fetched site', fetchedSite, process.env.APP_URL)
 
   let inventoryItems = site.inventoryItems
   

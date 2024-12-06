@@ -35,6 +35,9 @@ export default async function Site({ params, searchParams }: { params: { id: str
   const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
   console.log('API KEY', apiKey)
 
+  const appUrl = process.env.APP_URL as string
+  console.log('APP URL', appUrl)
+
   const site = await getSite(params.id, session.user.id)
   if (!site) return <div>Site {params.id} not found</div>
 
