@@ -34,7 +34,18 @@ export async function POST(request: NextRequest) {
     automatic_payment_methods: {
       enabled: true
     }
-  });
+  })
+
+  if (paymentIntent) {
+    await prisma.reservation.update({
+      where: { id: reservationId },
+      data: {
+        status: 'confirmed'
+      }
+    })
+  } else {
+    return Response.json('Payment intent not created', { status: 500 })
+  }
 
   return Response.json({
     paymentIntentId: paymentIntent.id,

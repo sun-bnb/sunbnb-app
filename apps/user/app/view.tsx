@@ -45,7 +45,7 @@ const serviceIcons: {
 function Site({ site }: { site: SiteProps }) {
   return (
     <div className="mb-6" key={site.id}>
-      <div className="w-full h-[160px] mr-2 mt-1 overflow-hidden bg-gray-100 flex items-center relative">
+      <div className="w-full max-h-[260px] mr-2 mt-1 overflow-hidden bg-gray-100 flex items-center relative">
         { 
           site.image && 
           <Link className="w-full" href={`/sites/${site.id}`} prefetch={true}>

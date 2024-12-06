@@ -214,8 +214,12 @@ export default function ReservationView({
     <>
       {
         reservationState === 'processing' ? (
-          reservation && <PaymentView stripePublicKey={stripePublicKey} reservation={reservation}/>
-        ) : <ItemSelection apiKey={apiKey} site={site} />
+          !reservation ? (
+            <div className="flex justify-center mb-[12px] mt-[12px]">
+              <CircularProgress />
+            </div>
+          ) : <PaymentView stripePublicKey={stripePublicKey} reservation={reservation}/>
+         ) : <ItemSelection apiKey={apiKey} site={site} />
       }
     </>
   )

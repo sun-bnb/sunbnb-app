@@ -136,7 +136,7 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
           }} />
       }
       <div>
-        <div className="relative h-[245px] overflow-hidden" onClick={() => {
+        <div className="relative overflow-hidden" onClick={() => {
           dispatch(setValue({ focused: false }))
         }}>
           <div className="w-full border-t-2 border-t-white">
