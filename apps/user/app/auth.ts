@@ -1,5 +1,6 @@
 import NextAuth, { NextAuthResult } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
+import FacebookProvider from 'next-auth/providers/facebook'
 import { PrismaAdapter } from '@auth/prisma-adapter'
 import prisma from '@repo/data/PrismaCient'
 
@@ -10,6 +11,10 @@ const nextAuthResult: NextAuthResult = NextAuth({
     GoogleProvider({
       clientId: process.env.GOOGLE_OAUTH_ID,
       clientSecret: process.env.GOOGLE_OAUTH_SECRET,
+    }),
+    FacebookProvider({
+      clientId: process.env.FACEBOOK_APP_ID,
+      clientSecret: process.env.FACEBOOK_APP_SECRET,
     })
   ],
   callbacks: {
