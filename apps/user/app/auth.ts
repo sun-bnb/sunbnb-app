@@ -32,12 +32,6 @@ const nextAuthResult: NextAuthResult = NextAuth({
  
         // logic to salt and hash password
         const pwHash = null //saltAndHashPassword(credentials.password)
- 
-        // logic to verify if the user exists
-        user = {
-          name: 'John Doe',
-          email: 'vhalme@gmail.com',
-        } //await getUserFromDb(credentials.email, pwHash)
 
         const email: string = credentials.email as string
 
