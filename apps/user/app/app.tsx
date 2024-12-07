@@ -11,14 +11,16 @@ const App = ({ children }: {
 
   const { data: session, status } = useSession()
   const router = useRouter()
+  const pathname = usePathname()
 
   const [ content, setContent ] = useState<ReactNode | null>(null)
 
   console.log('root session', session)
+  
 
   useEffect(() => {
     console.log(status)
-    if (status === 'authenticated') {
+    if (status === 'authenticated' || pathname === '/privacy') {
       setContent(
         <div>
           <Header />
