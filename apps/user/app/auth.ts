@@ -1,4 +1,5 @@
 import NextAuth, { NextAuthResult } from 'next-auth'
+import { hash, compare } from 'bcryptjs'
 import GoogleProvider from 'next-auth/providers/google'
 import FacebookProvider from 'next-auth/providers/facebook'
 import Credentials from 'next-auth/providers/credentials'
@@ -8,6 +9,9 @@ import prisma from '@repo/data/PrismaCient'
 const nextAuthResult: NextAuthResult = NextAuth({
   adapter: PrismaAdapter(prisma),
   secret: process.env.AUTH_SECRET,
+  session: {
+    strategy: 'jwt'
+  },
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_OAUTH_ID,
@@ -28,18 +32,24 @@ const nextAuthResult: NextAuthResult = NextAuth({
 
         console.log('CREDENTIALS', credentials)
 
-        let user = null
- 
-        // logic to salt and hash password
-        const pwHash = null //saltAndHashPassword(credentials.password)
-
         const email: string = credentials.email as string
 
-        user = await prisma.user.findUnique({ where: { email } })
+        let user = await prisma.user.findUnique({ where: { email } })
  
         if (!user) {
-          // No user found, so this is their first attempt to login
-          // Optionally, this is also the place you could do a user registration
+          const pwHash = await hash(credentials.password, 12)
+          console.log('PW HASH', pwHash)
+          user = await prisma.user.create({
+            data: {
+              email,
+              password: pwHash
+            }
+          })
+        }
+
+        const isValid = await compare(credentials.password, user.password)
+
+        if (!isValid) {
           throw new Error("Invalid credentials.")
         }
         
@@ -58,7 +68,12 @@ const nextAuthResult: NextAuthResult = NextAuth({
       return true
     },
     async jwt({ token, user }) {
-      console.log('JWT CALLBACK', token, user)
+      if (user) {
+        token.id = user.id;
+        token.name = user.name;
+        token.email = user.email;
+      }
+      console.log('JWT Callback Token:', token); // Debug JWT
       return token;
     }
   },
