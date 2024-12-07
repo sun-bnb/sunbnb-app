@@ -20,7 +20,7 @@ const App = ({ children }: {
 
   useEffect(() => {
     console.log(status)
-    if (status === 'authenticated' || pathname === '/privacy') {
+    if (status === 'authenticated' || pathname === '/privacy' || pathname === '/tos') {
       setContent(
         <div>
           <Header />
