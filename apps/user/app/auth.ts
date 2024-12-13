@@ -33,11 +33,12 @@ const nextAuthResult: NextAuthResult = NextAuth({
         console.log('CREDENTIALS', credentials)
 
         const email: string = credentials.email as string
+        const password: string = credentials.password as string
 
         let user = await prisma.user.findUnique({ where: { email } })
- 
+
         if (!user) {
-          const pwHash = await hash(credentials.password, 12)
+          const pwHash = await hash(password, 12)
           console.log('PW HASH', pwHash)
           user = await prisma.user.create({
             data: {
@@ -47,7 +48,11 @@ const nextAuthResult: NextAuthResult = NextAuth({
           })
         }
 
-        const isValid = await compare(credentials.password, user.password)
+        if (!user.password) {
+          throw new Error('User has no password set.')
+        }
+
+        const isValid = await compare(password, user.password)
 
         if (!isValid) {
           throw new Error("Invalid credentials.")
