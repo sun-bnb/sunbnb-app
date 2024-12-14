@@ -127,6 +127,8 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
 
   const whMaxHeight = weekDaysOpen ? 'max-h-[260px]' : 'max-h-[72px]'
 
+  console.log('CHECK APP URL', process.env.NEXT_PUBLIC_APP_URL)
+
   return (
     <div className="container mx-auto">
       {
