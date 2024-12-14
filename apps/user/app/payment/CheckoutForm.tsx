@@ -41,9 +41,9 @@ export default function CheckoutForm({
       return;
     }
 
-    setIsLoading(true);
+    setIsLoading(true)
 
-
+    console.log('APP URL FOR CHECKOUT', process.env.NEXT_PUBLIC_APP_URL)
 
     const { error } = await stripe.confirmPayment({
       elements,
