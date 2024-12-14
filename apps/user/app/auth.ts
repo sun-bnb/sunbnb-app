@@ -66,6 +66,7 @@ const nextAuthResult: NextAuthResult = NextAuth({
   callbacks: {
     async session({ session, token, user }) {
       console.log('SESSION CALLBACK', session, token, user)
+      session.user.id = token.id as string
       return session
     },
     async signIn({ profile }) {
