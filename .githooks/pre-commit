@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# List of protected branches
+PROTECTED_BRANCHES=("test" "production")
+
+# Get the current branch name
+CURRENT_BRANCH=$(git branch --show-current)
+
+# Check if the current branch is in the list of protected branches
+for BRANCH in "${PROTECTED_BRANCHES[@]}"; do
+  if [ "$CURRENT_BRANCH" = "$BRANCH" ]; then
+    echo "🚨 You are attempting to commit directly to the protected branch: $BRANCH"
+    echo "It is recommended to create a feature branch and commit there instead."
+    echo "If you are sure, type 'yes' to proceed: "
+    read CONFIRMATION </dev/tty
+    if [ "$CONFIRMATION" != "yes" ]; then
+      echo "❌ Commit aborted."
+      exit 1
+    fi
+  fi
+done
+
