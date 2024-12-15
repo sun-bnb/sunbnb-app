@@ -31,7 +31,8 @@ const STATUS_CONTENT_MAP: {
     text: "Your payment was not successful, please try again.",
     severity: 'error'
   }
-};
+}
+
 
 export default function CompleteView({
   stripeClientSecret,
