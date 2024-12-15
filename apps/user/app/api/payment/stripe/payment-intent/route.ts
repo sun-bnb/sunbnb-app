@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     await prisma.reservation.update({
       where: { id: reservationId },
       data: {
-        status: 'confirmed'
+        status: 'payment_in_progress'
       }
     })
   } else {

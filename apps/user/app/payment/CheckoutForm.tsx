@@ -8,7 +8,6 @@ import {
   useStripe,
   useElements
 } from '@stripe/react-stripe-js'
-import dayjs, { Dayjs } from 'dayjs'
 import ReservationItem from './ReservationItem'
 import { Reservation } from '../sites/types'
 
