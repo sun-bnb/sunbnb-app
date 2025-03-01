@@ -317,9 +317,7 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
                         <Tab value="hours" label="Hours" />
                         <Tab value="days" label="Days" />
                       </Tabs>
-                    </div> :
-                    <div className="mb-4">
-                    </div>
+                    </div> : null
                 }
               </div>
               <ReservationView apiKey={apiKey} stripePublicKey={stripePublicKey} site={fetchedSite || site} />

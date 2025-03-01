@@ -1,5 +1,7 @@
-import type { Metadata } from "next"
-import localFont from "next/font/local"
+import type { Metadata } from 'next'
+import { NextIntlClientProvider } from 'next-intl'
+import { getLocale, getMessages } from 'next-intl/server'
+import localFont from 'next/font/local'
 import App from './app'
 import NextAuthProvider from './nextauth'
 import './globals.css'
@@ -20,19 +22,27 @@ export const metadata: Metadata = {
 }
 
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+
+  const locale = await getLocale()
+  const messages = await getMessages()
+
+  console.log('locale', locale, messages)
+
   return (
-    <html lang="en">
+    <html lang={locale}>
       <StoreProvider>
         <body className={`${geistSans.variable} ${geistMono.variable}`}>
           <NextAuthProvider>
-            <App>
-              {children}
-            </App>
+            <NextIntlClientProvider messages={messages}>
+              <App>
+                {children}
+              </App>
+            </NextIntlClientProvider>
           </NextAuthProvider>
         </body>
       </StoreProvider>

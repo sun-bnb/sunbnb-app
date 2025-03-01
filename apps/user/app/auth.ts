@@ -67,10 +67,23 @@ const nextAuthResult: NextAuthResult = NextAuth({
     async session({ session, token, user }) {
       console.log('SESSION CALLBACK', session, token, user)
       session.user.id = token.id as string
+
       return session
     },
     async signIn({ profile }) {
+
       console.log('SIGNIN CALLBACK', profile)
+
+      const email = profile?.email
+
+      if (!email) {
+        return false
+      }
+
+      const user = await prisma.user.findUnique({ where: { email } })
+      
+      console.log('USER', user)
+
       return true
     },
     async jwt({ token, user }) {
@@ -79,7 +92,7 @@ const nextAuthResult: NextAuthResult = NextAuth({
         token.name = user.name;
         token.email = user.email;
       }
-      console.log('JWT Callback Token:', token); // Debug JWT
+      console.log('JWT Callback Token:', token, user); // Debug JWT
       return token;
     }
   },

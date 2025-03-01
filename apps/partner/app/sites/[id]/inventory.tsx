@@ -1,20 +1,15 @@
 'use client'
 
-import Link from 'next/link'
 import Image from 'next/image'
-import { createInventoryItem, deleteInventoryItem, saveInventoryItem, cancelReservation } from './actions'
+import { createInventoryItem, deleteInventoryItem, saveInventoryItem } from './actions'
 import { useState } from 'react'
 import Chip from '@mui/material/Chip'
-import Button from '@mui/material/Button'
 import { InventoryItem } from '../../../types/shared'
 import { APIProvider, AdvancedMarker, ControlPosition, Map } from '@vis.gl/react-google-maps'
 import MapHandler from '@/components/maps/map-handler'
 import { CustomMapControl } from '@/components/maps/map-control'
-import MailOutlineIcon from '@mui/icons-material/MailOutline'
 import Reservation from '@/components/reservation/Reservation'
 import umbrellaImage from './umbrella-2.png'
-import dayjs, { Dayjs } from 'dayjs'
-
 export default function Inventory({ siteId, siteLat, siteLng, inventory, apiKey } : { siteId: string, siteLat: string, siteLng: string, inventory: InventoryItem[], apiKey: string }) {
   
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
@@ -29,8 +24,8 @@ export default function Inventory({ siteId, siteLat, siteLng, inventory, apiKey 
     inventoryMap[item.id] = item
   })
 
-  const beachFlagImg: HTMLImageElement = document.createElement('img');
-  beachFlagImg.src = 'https://developers.google.com/maps/documentation/javascript/examples/full/images/beachflag.png';
+  const beachFlagImg: HTMLImageElement = document.createElement('img')
+  beachFlagImg.src = 'https://developers.google.com/maps/documentation/javascript/examples/full/images/beachflag.png'
 
   console.log('Inventory', inventory)
 
@@ -43,7 +38,30 @@ export default function Inventory({ siteId, siteLat, siteLng, inventory, apiKey 
             const activeReservations = (item.reservations || [])
               .filter(reservation => reservation.status !== 'canceled')
 
-            const bgColor = activeReservations.length > 0 ? 'info' : 'success'
+            let bgColor: 'info' | 'success' | 'error' = 'info'
+
+            if (activeReservations.length > 0) {
+              
+              bgColor = 'success'
+
+              const now = new Date()
+
+              const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+              const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+
+              const reservationActiveToday = activeReservations.find((reservation) => {
+                const from = new Date(reservation.from)
+                const to = new Date(reservation.to)
+                console.log('Reservation', now, startOfToday, endOfToday, from, to)
+                console.log('TODAY', now <= endOfToday)
+                return from <= endOfToday && to >= startOfToday
+              })
+
+              if (reservationActiveToday) {
+                bgColor = 'error'
+              }
+
+            }
 
             const borderColor = (item.reservations?.length || 0) > 0 ? 'border-gray-600' : 'border-gray-400'
             const borderStyle = (selectedItem && selectedItem.id === item.id) ? 'filled' : 'outlined'
@@ -134,13 +152,18 @@ export default function Inventory({ siteId, siteLat, siteLng, inventory, apiKey 
         </div>
         <div className="w-full mt-4 text-sm md:text-base">
           {
-            (selectedItem?.reservations || []).map((reservation, i) => {
-              return (
-                <div key={reservation.id} className="border-b-[1px] border-gray-200">
-                  <Reservation reservation={reservation} />
-                </div>
+            selectedItem ?
+              (selectedItem.reservations || []).map((reservation, i) => {
+                return (
+                  <div key={reservation.id} className="border-b-[1px] border-gray-200">
+                    <Reservation reservation={reservation} />
+                  </div>
+                )
+              }) : (
+                <>
+
+                </>
               )
-            })
           }
         </div>
       </div>

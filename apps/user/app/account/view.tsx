@@ -48,12 +48,6 @@ export default function AccountView({ account } : { account: AccountProps }) {
             <TextField name="lastName" label="Last name" placeholder="Doe" value={account.lastName || ''} />
             <TextField name="email" label="E-mail" placeholder="john.doe@company.com" value={account.email || ''} />
             <TextField name="phoneNumber" label="Phone number" placeholder="123-45-678" value={account.phoneNumber || ''} />
-            <TextField name="company" label="Company" placeholder="Flowbite" value={account.company || ''} />
-            <TextField name="websiteUrl" label="Website URL" placeholder="flowbite.com" value={account.websiteUrl || ''} />
-          </div>
-          <div className="grid gap-6 mb-6 md:grid-cols-1">
-            <TextField name="address" label="Address" placeholder="Sturenkatu 37-41 B 16, 00550 Helsinki, Finland" value={account.address || ''} />
-            <TextField name="bankAccount" label="Bank account" placeholder="FI12 3456 7891 2345" value={account.bankAccount || ''} />
           </div>
           <div className="grid gap-6 mb-6 md:grid-cols-1">
             <SubmitButton />

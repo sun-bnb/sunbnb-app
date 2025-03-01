@@ -5,6 +5,7 @@ import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react'
 
 
 import * as React from 'react'
+import { useTranslations } from 'next-intl'
 import Paper from '@mui/material/Paper'
 import InputBase from '@mui/material/InputBase'
 import IconButton from '@mui/material/IconButton'
@@ -40,6 +41,8 @@ export default function CustomizedInputBase() {
   const { data: suggestions } = useGetAutocompleteSuggestionsQuery(searchText, {
     skip: searchText.length < 3, // Skip the query if inputValue is empty
   })
+
+  const t = useTranslations('HomePage')
 
   return (
     <div>
@@ -121,7 +124,7 @@ export default function CustomizedInputBase() {
                       console.log('Selected userNavigation', item)
                       router.push(item.href)
                     }}>
-                    {item.name}
+                    { t(item.name) }
                   </div>
                 )
               })

@@ -173,7 +173,10 @@ export default function SunbedSelectionComponent({
             </LocalizationProvider>
           </div>
         ) : (
-          <div className="mb-2 flex">
+          <div className="mb-2">
+            <div className="mb-2 mt-2 pb-2 pt-2 text-[#1565c0]">
+              Select dates and chairs
+            </div>
             <LocalizationProvider dateAdapter={AdapterDayjs}>
               <MobileDateRangePicker sx={{ 
                   width: '100%',

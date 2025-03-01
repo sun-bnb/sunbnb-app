@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { useState } from "react"
-
+import { useTranslations } from 'next-intl'
 
 import * as React from 'react'
 import Paper from '@mui/material/Paper'
@@ -26,7 +26,6 @@ export default function CustomizedInputBase() {
 
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [ isMenuOpen, setIsMenuOpen ] = useState<boolean>(false)
 
   const [anchorElNav, setAnchorElNav] = React.useState<null | HTMLElement>(null);
   const [anchorElUser, setAnchorElUser] = React.useState<null | HTMLElement>(null);
@@ -36,15 +35,17 @@ export default function CustomizedInputBase() {
   };
   const handleOpenUserMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorElUser(event.currentTarget);
-  };
+  }
 
   const handleCloseNavMenu = () => {
     setAnchorElNav(null);
-  };
+  }
 
   const handleCloseUserMenu = () => {
     setAnchorElUser(null);
-  };
+  }
+
+  const t = useTranslations('HomePage')
 
   return (
     <div className="w-full">
@@ -90,7 +91,7 @@ export default function CustomizedInputBase() {
               {userNavigation.map((navItem) => (
                 <MenuItem key={navItem.href} onClick={handleCloseUserMenu}>
                   <Link href={navItem.href}>
-                    <Typography sx={{ textAlign: 'center' }}>{navItem.name}</Typography>
+                    <Typography sx={{ textAlign: 'center' }}>{t(navItem.name)}</Typography>
                   </Link>
                 </MenuItem>
               ))}
