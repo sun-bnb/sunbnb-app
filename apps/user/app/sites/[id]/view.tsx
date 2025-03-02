@@ -72,7 +72,7 @@ const serviceIcons: {
 
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-const withHours = false
+const withHours = true
 
 const Backdrop = ({ onClick }: { onClick?: () => void }) => {
   return (
@@ -200,7 +200,11 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
                   <span className="text-sm font-bold">YOUR RESERVATIONS</span>
                 </Divider>
                 {
-                  allReservations.map(reservation => {
+                  allReservations.filter(reservation => reservation.to > now.toDate())
+                    .sort((a, b) => {
+                      return dayjs(a.from).isBefore(dayjs(b.from)) ? 1 : -1
+                    })
+                    .map(reservation => {
                     let reservationElem = null
                     if (reservation.type === 'hours') {
                       const formattedDate = dayjs(reservation.from).format('ddd, D MMM YYYY')
@@ -308,14 +312,14 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
                 {
                   withHours ?
                     <div className="mb-4">
-                      <Tabs variant="fullWidth" value={reservationMode} onChange={(e, value) => {
+                      <Tabs variant="fullWidth" value={reservationMode || 'days'} onChange={(e, value) => {
                         dispatch(setValue({ 
                           reservationMode: value,
                           focused: true 
                         }))
                       }} aria-label="Reservation mode">
-                        <Tab value="hours" label="Hours" />
                         <Tab value="days" label="Days" />
+                        <Tab value="hours" label="Hours" />
                       </Tabs>
                     </div> : null
                 }

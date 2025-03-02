@@ -74,9 +74,7 @@ function ReservationButton({
 
   const dispatch = useDispatch();
   const sitesState = useSelector((state: RootState) => state.sites)
-  const { reservationState, selectedItem } = sitesState
-
-  let reservationMode = 'days'
+  const { reservationState, reservationMode, selectedItem } = sitesState
 
   let reservationDay = dayjs(sitesState.reservationDay)
   let timeRange = sitesState.timeRange ? [dayjs(sitesState.timeRange[0]), dayjs(sitesState.timeRange[1])] : []

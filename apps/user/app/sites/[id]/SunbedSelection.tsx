@@ -65,14 +65,15 @@ export default function SunbedSelectionComponent({
   let availabilityFrom = dateRange[0]
   let availabilityTo = dateRange[1]
   if (reservationMode === 'hours') {
+    console.log('Time range', timeRange)
     availabilityFrom = dayjs(reservationDay)
-      .hour(timeRange[0]!.hour())
-      .minute(timeRange[0]!.minute())
-      .second(timeRange[0]!.second())
+      .hour(timeRange[0].getHours())
+      .minute(timeRange[0].getMinutes())
+      .second(timeRange[0].getSeconds()).toISOString()
     availabilityTo = dayjs(reservationDay)
-      .hour(timeRange[1]!.hour())
-      .minute(timeRange[1]!.minute())
-      .second(timeRange[1]!.second())
+      .hour(timeRange[1].getHours())
+      .minute(timeRange[1].getMinutes())
+      .second(timeRange[1].getSeconds()).toISOString()
   }
 
   const { data: availabilityResponse, refetch: refetchAvailability } = useGetAvailabilityBySiteAndTimeRangeQuery({ 
@@ -174,9 +175,6 @@ export default function SunbedSelectionComponent({
           </div>
         ) : (
           <div className="mb-2">
-            <div className="mb-2 mt-2 pb-2 pt-2 text-[#1565c0]">
-              Select dates and chairs
-            </div>
             <LocalizationProvider dateAdapter={AdapterDayjs}>
               <MobileDateRangePicker sx={{ 
                   width: '100%',
