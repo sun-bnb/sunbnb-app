@@ -1,7 +1,7 @@
 'use client'
 
 import { Reservation } from '@/types/shared'
-import ReservationComponent from '@/components/reservation/Reservation'
+import ReservationComponent from '@/components/reservation/ReservationListItem'
 
 
 export default function ReservationView({ reservation }: { reservation: Reservation }) {

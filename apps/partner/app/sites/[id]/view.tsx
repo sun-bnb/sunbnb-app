@@ -19,7 +19,7 @@ import { CustomMapControl } from '@/components/maps/map-control'
 import MapHandler from '@/components/maps/map-handler'
 
 import { submitForm, addWorkingHpours, deleteWorkingHours, deleteSite } from './actions'
-import Inventory from './inventory'
+import Inventory from './inventory/inventory'
 import Content from './content'
 import { useRouter } from 'next/navigation'
 
