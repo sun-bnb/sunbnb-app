@@ -12,11 +12,14 @@ import {
 } from '@/store/features/api/apiSlice'
 import { APIProvider, AdvancedMarker, Map } from '@vis.gl/react-google-maps'
 import sunbedIcon from './sunbed-icon-transparent.png'
+import { useState } from 'react'
 
 export default function PosView({ site, apiKey }: { site: SiteProps, apiKey: string }) {
 
   const dispatch = useDispatch()
   const sitesState = useSelector((state: RootState) => state.sites)
+
+  const [zoom, setZoom] = useState<number>(20)
 
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
@@ -47,7 +50,13 @@ export default function PosView({ site, apiKey }: { site: SiteProps, apiKey: str
 
   console.log('Availability response', availabilityResponse)
   
-    
+  function getScaledSize(zoom: number): number {
+    const baseZoom = 20
+    const baseSize = 45
+    // Adjust scale factor as you like (linear or exponential)
+    return baseSize * Math.pow(2, (zoom - baseZoom) / 2)
+  }
+
   function isAvailable(item: InventoryItem): boolean {
     if (!availabilityResponse) return false
     return !!availabilityResponse.availability.find(a => a.itemId === item.id && a.available)
@@ -64,6 +73,9 @@ export default function PosView({ site, apiKey }: { site: SiteProps, apiKey: str
 
   console.log('Def bounds', defaultBounds)
 
+  const dynamicSize = getScaledSize(zoom)
+
+  console.log('Dynamic size', dynamicSize)
 
   return (
     <div className="relative">
@@ -90,6 +102,11 @@ export default function PosView({ site, apiKey }: { site: SiteProps, apiKey: str
             defaultBounds={defaultBounds}
             gestureHandling={'greedy'}
             disableDefaultUI={true}
+            onZoomChanged={(mapInstance) => {
+              const newZoom = mapInstance.map.getZoom()
+              console.log('Zoom changed', newZoom)
+              setZoom(newZoom || 20)
+            }}
             onClick={(e) => {
               console.log('Map click', e)
             }}
@@ -104,9 +121,9 @@ export default function PosView({ site, apiKey }: { site: SiteProps, apiKey: str
                 if (itemAvailable) {
                   bgColor = ''
                   if (selectedItems?.some((selected: { id: string }) => selected.id === item.id)) {
-                    bgColor = 'bg-yellow-400'
+                    bgColor = ''
                     borderStyle = 'border border-[4px] border-red-800'
-                    size = 46
+                    size = dynamicSize
                   }
                 }
                 
@@ -145,7 +162,8 @@ export default function PosView({ site, apiKey }: { site: SiteProps, apiKey: str
                         display: 'block',
                         maxWidth: 'none',
                         height: 'auto',
-                        width: '45px'
+                        width: `${dynamicSize}px`,
+                        marginTop: `-${(dynamicSize - 40) / 2}px`
                       } : {}} src={sunbedIcon} alt="Item" />
                     </div>
                   </AdvancedMarker>
