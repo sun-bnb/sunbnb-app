@@ -138,13 +138,14 @@ export default function PosView({ site, apiKey }: { site: SiteProps, apiKey: str
                       }
                     }}>
                     
-                    <div className={`w-[${size}px] h-[${size}px] ${bgColor} ${borderStyle} rounded-full flex justify-center`}>
+                    <div className={`w-[${size}px] h-[${size}px] ${bgColor} ${borderStyle} rounded-full flex justify-center items-center`}>
                       <Image style={ item.rotation ? {
                         transform: `rotate(${item.rotation}deg)`,
                         transformOrigin: 'center',
                         display: 'block',
                         maxWidth: 'none',
-                        height: 'auto' 
+                        height: 'auto',
+                        width: '45px'
                       } : {}} src={sunbedIcon} alt="Item" />
                     </div>
                   </AdvancedMarker>
