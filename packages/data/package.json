@@ -12,7 +12,10 @@
   "scripts": {
     "lint": "eslint . --max-warnings 0",
     "generate:component": "turbo gen react-component",
-    "postinstall": "npx prisma generate"
+    "postinstall": "npx prisma generate",
+    "migrate:local": "cp .env.local .env && source .env && npx prisma migrate dev",
+    "migrate:test": "cp .env.test .env && source .env && npx prisma migrate dev && cp .env.local .env && source .env",
+    "migrate:production": "cp .env.production .env && source .env && npx prisma migrate dev && cp .env.local .env && source .env"
   },
   "devDependencies": {
     "@repo/eslint-config": "*",

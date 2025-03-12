@@ -1,15 +1,22 @@
 'use client'
 
 import Image from 'next/image'
-import { createInventoryItem, deleteInventoryItem, saveInventoryItem } from '../actions'
+import { 
+  createInventoryItem,
+  deleteInventoryItem,
+  saveInventoryItemLocation,
+  saveInventoryItemProperties
+} from '../actions'
 import { useState } from 'react'
 import Chip from '@mui/material/Chip'
+import TextField from '@mui/material/TextField'
 import { InventoryItem } from '../../../../types/shared'
 import { APIProvider, AdvancedMarker, ControlPosition, Map } from '@vis.gl/react-google-maps'
 import MapHandler from '@/components/maps/map-handler'
 import { CustomMapControl } from '@/components/maps/map-control'
-import umbrellaImage from './umbrella-2.png'
+import sunbedIcon from './sunbed-icon-transparent.png'
 import Reservations from './reservations'
+import Button from '@mui/material/Button'
 
 export default function Inventory(
   { siteId, siteLat, siteLng, inventory, apiKey } : 
@@ -18,6 +25,9 @@ export default function Inventory(
   
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [selectedPlace, setSelectedPlace] = useState<google.maps.places.PlaceResult | null>(null)
+  const [selectedItemCategory, setSelectedItemCategory] = useState<string | undefined>(undefined)
+  const [selectedItemPrice, setSelectedItemPrice] = useState<string | undefined>(undefined)
+  const [selectedItemRotation, setSelectedItemRotation] = useState<string | undefined>(undefined)
 
   const inventoryMap: { [key: string]: InventoryItem } = {
   }
@@ -100,7 +110,68 @@ export default function Inventory(
             setSelectedItemId((result.item as unknown as InventoryItem).id)
           }}
         />
-      </div>   
+      </div>
+      {
+        selectedItem && (
+          <div className="flex justify-between mt-[6px] ml-[4px]">
+            <div className="flex">
+              <div className="mr-[6px]">
+                <TextField
+                  name="item-category"
+                  label="Item category"
+                  fullWidth={true}
+                  value={selectedItemCategory || selectedItem.category || ''} 
+                  variant="standard"
+                  placeholder="PRICE1"
+                  onChange={(e) => setSelectedItemCategory(e.target.value)}
+                />
+              </div>
+              <div className="mr-[6px]">
+                <TextField
+                  name="item-price"
+                  label="Item price"
+                  fullWidth={true}
+                  value={selectedItemPrice || selectedItem.price || ''} 
+                  variant="standard"
+                  placeholder="8.5"
+                  onChange={(e) => setSelectedItemPrice(e.target.value)}
+                />
+              </div>
+              <div className="mr-[6px]">
+                <TextField
+                  name="item-rotation"
+                  label="Item rotation"
+                  fullWidth={true}
+                  value={selectedItemRotation || selectedItem.rotation || ''} 
+                  variant="standard"
+                  placeholder="0"
+                  onChange={(e) => setSelectedItemRotation(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="mt-[8px]">
+              <Button variant="contained"
+                onClick={() => {
+                  
+                  const changedValues: {
+                    category?: string,
+                    price?: number,
+                    rotation?: number
+                  } = {}
+
+                  if (selectedItemCategory) changedValues.category = selectedItemCategory
+                  if (selectedItemPrice) changedValues.price = Number(selectedItemPrice)
+                  if (selectedItemRotation) changedValues.rotation = Number(selectedItemRotation)
+
+                  saveInventoryItemProperties(selectedItem.id, changedValues)
+                
+                }}>
+                  Save
+              </Button>
+            </div>
+          </div>
+        )
+      }
       <div className="mt-6 flex justify-between flex-col">
         {
           (selectedItem && Number(selectedItem.locationLat) === 0) &&
@@ -125,7 +196,7 @@ export default function Inventory(
                 if (selectedItem && lat && lng) {
                   selectedItem.locationLat = lat.toString()
                   selectedItem.locationLng = lng.toString()
-                  saveInventoryItem(selectedItem.id, { locationLat: lat.toString(), locationLng: lng.toString() })
+                  saveInventoryItemLocation(selectedItem.id, { locationLat: lat.toString(), locationLng: lng.toString() })
                 }
               }}
             >
@@ -134,7 +205,10 @@ export default function Inventory(
                   (item.id !== selectedItem?.id) && <AdvancedMarker key={item.id}
                     position={{ lat: Number(item.locationLat), lng: Number(item.locationLng) }} >
                     <div className="rounded-full absolute -top-[40px] -left-[40px]">
-                      <Image width={80} src={umbrellaImage} alt="Item" />
+                      <Image style={ item.rotation ? {
+                        transform: `rotate(${item.rotation}deg)`,
+                        transformOrigin: 'center'
+                      } : {}} width={80} src={sunbedIcon} alt="Item" />
                     </div>
                   </AdvancedMarker>)))
               }
@@ -142,7 +216,7 @@ export default function Inventory(
                 (selectedItem?.locationLat && selectedItem?.locationLng) &&
                   <AdvancedMarker position={{ lat: Number(selectedItem.locationLat), lng: Number(selectedItem.locationLng) }}>
                     <div className="bg-white border-2 border-red-600 rounded-full absolute -top-[40px] -left-[40px] scale-50 z-10">
-                      <Image width={80} src={umbrellaImage} alt="Item" />
+                      <Image width={80} src={sunbedIcon} alt="Item" />
                     </div>
                   </AdvancedMarker>
 

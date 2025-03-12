@@ -279,9 +279,12 @@ export async function deleteInventoryItem(
   
 }
 
-export async function saveInventoryItem(
+export async function saveInventoryItemLocation(
   id: string, 
-  inventoryItem: { locationLat: string, locationLng: string }
+  inventoryItem: { 
+    locationLat: string,
+    locationLng: string
+  }
 ) {
   
   const session = await auth()
@@ -296,6 +299,38 @@ export async function saveInventoryItem(
   }
 
   console.log('CREATE INV ITEM', inventoryItemData)
+  await prisma.inventoryItem.update({
+    where: { id },
+    data: inventoryItemData
+  })
+  
+  revalidatePath('/sites')
+
+  return { status: 'ok' }
+  
+}
+
+export async function saveInventoryItemProperties(
+  id: string, 
+  inventoryItem: { 
+    category?: string,
+    price?: number,
+    rotation?: number
+  }
+) {
+  
+  const session = await auth()
+  console.log('SAVE INV ITEM PROPS', inventoryItem, session)
+
+  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+
+  const inventoryItemData = {
+    category: inventoryItem.category,
+    price: inventoryItem.price,
+    rotation: inventoryItem.rotation
+  }
+
+  console.log('SAVE INV ITEM PROPS DATA', inventoryItemData)
   await prisma.inventoryItem.update({
     where: { id },
     data: inventoryItemData

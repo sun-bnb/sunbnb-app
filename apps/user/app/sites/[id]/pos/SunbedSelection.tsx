@@ -1,7 +1,7 @@
 'use client'
 
 import { InventoryItem, MapBounds, SiteProps } from '@/app/sites/types'
-
+import Image from 'next/image'
 import { setValue } from '@/store/features/sites/sitesSlice'
 import { RootState } from '@/store/store'
 import { useSelector, useDispatch } from 'react-redux'
@@ -11,7 +11,7 @@ import {
   useGetSiteByIdQuery
 } from '@/store/features/api/apiSlice'
 import { APIProvider, AdvancedMarker, Map } from '@vis.gl/react-google-maps'
-
+import sunbedIcon from './sunbed-icon-transparent.png'
 
 export default function PosView({ site, apiKey }: { site: SiteProps, apiKey: string }) {
 
@@ -105,7 +105,7 @@ export default function PosView({ site, apiKey }: { site: SiteProps, apiKey: str
         text-lg
         font-bold
       ">{ site.name }</div>
-      <div className="w-full lg:w-1/2 h-[300px]">
+      <div className="w-full h-[320px]">
         <APIProvider apiKey={apiKey}>
           <Map mapId={'7a0196a7ba317ea5'}
             defaultZoom={defaultBounds ? undefined : 20}
@@ -125,7 +125,7 @@ export default function PosView({ site, apiKey }: { site: SiteProps, apiKey: str
                 let size = 40
                 const itemAvailable = isAvailable(item)
                 if (itemAvailable) {
-                  bgColor = 'bg-yellow-200'
+                  bgColor = ''
                   if (selectedItems?.some((selected: { id: string }) => selected.id === item.id)) {
                     bgColor = 'bg-yellow-400'
                     borderStyle = 'border border-[4px] border-red-800'
@@ -162,7 +162,10 @@ export default function PosView({ site, apiKey }: { site: SiteProps, apiKey: str
                     }}>
                     
                     <div className={`w-[${size}px] h-[${size}px] ${bgColor} ${borderStyle} rounded-full flex justify-center`}>
-                      <span className="text-4xl">&#x26F1;</span>
+                      <Image style={ item.rotation ? {
+                        transform: `rotate(${item.rotation}deg)`,
+                        transformOrigin: 'center'
+                      } : {}} src={sunbedIcon} alt="Item" />
                     </div>
                   </AdvancedMarker>
                 )}))

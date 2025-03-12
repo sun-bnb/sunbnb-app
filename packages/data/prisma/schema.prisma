@@ -130,6 +130,9 @@ model InventoryItem {               @map("inventory_item")
   label             String?
   image             String?
   rotation          Int?
+
+  category          String?
+  price             Float?
  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

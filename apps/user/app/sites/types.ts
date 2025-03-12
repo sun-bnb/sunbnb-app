@@ -50,6 +50,9 @@ export interface InventoryItem {
   id: string
   number: number
   status: string
+  category?: string | null
+  price?: number | null
+  rotation?: number | null
   locationLat?: string
   locationLng?: string
   reservations: Reservation[]

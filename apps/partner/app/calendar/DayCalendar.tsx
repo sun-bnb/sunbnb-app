@@ -16,10 +16,10 @@ export default function DayCalendar({ reservations }: { reservations: Reservatio
   const hours = Array.from({ length: 24 }, (_, index) => index);
 
   const items = reservations.reduce<InventoryItem[]>((acc, reservation) => {
-    if (!reservation.item) return acc;
-    const exists = acc.some(item => item.id === reservation.item?.id);
+    if (!reservation.items) return acc;
+    const exists = acc.some(item => item.id === reservation.items![0]?.id);
     if (!exists) {
-      acc.push(reservation.item);
+      acc.push(reservation.items[0]!);
     }
     return acc;
   }, []);
@@ -96,7 +96,7 @@ export default function DayCalendar({ reservations }: { reservations: Reservatio
                                   && (
                                     <div className="relative flex items-center w-full justify-center">
                                       <div className="absolute -top-[10px] w-full border border-black flex justify-center bg-white rounded-md">
-                                        {String(reservation.item?.number).padStart(4, '0')}
+                                        {String(reservation.items![0]?.number).padStart(4, '0')}
                                       </div>
                                       <div>
                                         {dayjs(reservation.to).hour() - dayjs(reservation.from).hour()} h
@@ -106,7 +106,7 @@ export default function DayCalendar({ reservations }: { reservations: Reservatio
                                     hour === 12 &&
                                     <div className="relative flex items-center w-full justify-center">
                                       <div className="absolute -top-[10px] w-full border border-black flex justify-center bg-white rounded-md">
-                                        {String(reservation.item?.number).padStart(4, '0')}
+                                        {String(reservation.items![0]?.number).padStart(4, '0')}
                                       </div>
                                       <div>
                                         DAY

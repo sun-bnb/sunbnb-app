@@ -160,8 +160,8 @@ export default function ReservationView({
 
   let selectedItems = sitesState.selectedItems || []
 
-  const totalPrice = selectedItems.reduce((acc: number, item: { price: number }) => {
-    return acc + site.price! || 0
+  const totalPrice = selectedItems.reduce((acc: number, item: { price?: number }) => {
+    return acc + item.price! || site.price! || 0
   }, 0)
 
   const paymentElem =

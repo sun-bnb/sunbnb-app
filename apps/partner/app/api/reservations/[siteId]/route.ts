@@ -37,7 +37,7 @@ export async function GET(request: NextRequest, { params } : { params: { siteId:
       },
       include: {
         user: true,
-        item: true
+        items: true
       }
     })
 
