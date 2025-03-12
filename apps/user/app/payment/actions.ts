@@ -16,7 +16,7 @@ export async function updateReservation(
   const session = await auth()
   console.log('SAVE RES', session, reservation)
 
-  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+  // if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
 
   const reservationData: {
     paymentRef?: string,

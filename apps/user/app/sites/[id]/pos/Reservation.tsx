@@ -18,7 +18,7 @@ import {
 } from '@/store/features/api/apiSlice'
 import dayjs, { Dayjs } from 'dayjs'
 import SunbedSelectionComponent from './SunbedSelection'
-import { saveReservation } from './actions'
+import { saveReservation, saveReservationForMultipleItems } from '../actions'
 import PaymentView from '@/app/payment/Payment'
 
 function PaymentMethodSelection() {
@@ -64,65 +64,43 @@ function PaymentMethodSelection() {
 
 function ReservationButton({
   disabled,
-  site
+  site,
+  dateRange
 }: {
   disabled: boolean,
-  site: SiteProps
+  site: SiteProps,
+  dateRange: { from: string, to: string }
 }) {
 
   const { data: session } = useSession()
 
   const dispatch = useDispatch();
   const sitesState = useSelector((state: RootState) => state.sites)
-  const { reservationState, reservationMode, selectedItem } = sitesState
+  const { reservationState, reservationMode, selectedItems } = sitesState
 
   let reservationDay = dayjs(sitesState.reservationDay)
-  let timeRange = sitesState.timeRange ? [dayjs(sitesState.timeRange[0]), dayjs(sitesState.timeRange[1])] : []
-  let dateRange = sitesState.dateRange ? [dayjs(sitesState.dateRange[0]), dayjs(sitesState.dateRange[1])] : []
 
   return (
-    <div className="mt-[10px]">
+    <div className="mt-[8px]">
       <Button variant="contained" 
         fullWidth={true}
         disabled={disabled}
         onClick={
           async () => {
             dispatch(setValue({ reservationState: 'saving' }))
-            console.log('Reserve', timeRange, selectedItem)
+            console.log('Reserve', selectedItems)
 
             let saveResult = null
-            if (reservationMode === 'hours' && reservationDay && timeRange[0] && timeRange[1]) {
-              const from = reservationDay
-                .hour(timeRange[0].hour())
-                .minute(timeRange[0].minute())
-                .second(timeRange[0].second())
-                .toDate()
-              const to = reservationDay
-                .hour(timeRange[1].hour())
-                .minute(timeRange[1].minute())
-                .second(timeRange[1].second())
-                .toDate()
-              saveResult = await saveReservation({
-                from,
-                to,
-                type: 'hours',
-                siteId: site.id!,
-                itemId: selectedItem?.id!,
-                userId: session?.user?.id!
-              })
-            } else if (reservationMode === 'days' && dateRange[0] && dateRange[1]) {
-              const from = dateRange[0].toDate()
-              const to = dateRange[1].toDate()
-              console.log('Save reservation', from, to)
-              saveResult = await saveReservation({
-                from,
-                to,
-                type: 'days',
-                siteId: site.id!,
-                itemId: selectedItem?.id!,
-                userId: session?.user?.id!
-              })
-            }
+            
+            console.log('Save reservation', dateRange)
+            saveResult = await saveReservationForMultipleItems({
+              from: dateRange.from,
+              to: dateRange.to,
+              type: 'days',
+              siteId: site.id!,
+              itemIds: selectedItems.map((item: { id: string}) => item.id),
+              userId: session?.user?.id
+            })
 
             console.log('Save result', saveResult)
             if (saveResult?.status === 'ok' && saveResult.id) {
@@ -132,15 +110,9 @@ function ReservationButton({
               }))
             }
 
-            /*
-            refetchAvailability().then(() => {
-              console.log('Refetched availability')
-            })
-            */
-
           }
         }>
-          Reserve
+          PAY
         </Button>
     </div>
   )
@@ -153,7 +125,6 @@ function ItemSelection({ apiKey, site } : { apiKey: string, site: SiteProps }) {
   return (
     <>
       <SunbedSelectionComponent apiKey={apiKey} site={site} />
-      <ReservationButton disabled={false} site={site} />
     </>
   )
 }
@@ -161,11 +132,13 @@ function ItemSelection({ apiKey, site } : { apiKey: string, site: SiteProps }) {
 export default function ReservationView({
   apiKey,
   stripePublicKey,
-  site
+  site,
+  dateRange
 } : {
   apiKey: string
   stripePublicKey: string | undefined
-  site: SiteProps
+  site: SiteProps,
+  dateRange: { from: string, to: string }
 }) {
 
   const sitesState = useSelector((state: RootState) => state.sites)
@@ -185,17 +158,52 @@ export default function ReservationView({
 
   console.log('Reservation By Id', pendingReservationId, reservation)
 
+  let selectedItems = sitesState.selectedItems || []
+
+  const totalPrice = selectedItems.reduce((acc: number, item: { price: number }) => {
+    return acc + site.price! || 0
+  }, 0)
+
+  const paymentElem =
+    (reservationState === 'processing' || reservationState === 'payment_in_progress') ? (
+      !reservation ? (
+        <div className="flex justify-center mb-[12px] mt-[12px]">
+          <CircularProgress />
+        </div>
+      ) : <PaymentView stripePublicKey={stripePublicKey} reservation={reservation} completeUrl="/payment/complete/pos"/>
+
+    ) : (
+      <div className="mx-[4px] mt-[8px]">
+        {
+          selectedItems.length > 0 ? (
+            <div>
+              <div className="flex justify-between">
+                <div>
+                  QUANTITY: <b>{selectedItems.length}</b>
+                </div>
+              </div>
+              <div className="text-center text-[96px]">
+                {totalPrice} €
+              </div>
+            </div>
+          ) : (
+            <div className="text-center my-[12px]">
+              SELECT SUNBEDS AND PAY
+            </div>
+          )
+
+        }
+        
+        <div>
+          <ReservationButton disabled={selectedItems.length === 0} site={site} dateRange={dateRange} />
+        </div>
+      </div>
+    )
+
   return (
     <>
-      {
-        (reservationState === 'processing' || reservationState === 'payment_in_progress') ? (
-          !reservation ? (
-            <div className="flex justify-center mb-[12px] mt-[12px]">
-              <CircularProgress />
-            </div>
-          ) : <PaymentView stripePublicKey={stripePublicKey} reservation={reservation} />
-         ) : <ItemSelection apiKey={apiKey} site={site} />
-      }
+      <ItemSelection apiKey={apiKey} site={site} />
+      { paymentElem}
     </>
   )
 }

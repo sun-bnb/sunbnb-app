@@ -20,11 +20,17 @@ const App = ({ children }: {
 
   useEffect(() => {
     console.log(status)
-    if (status === 'authenticated' || pathname === '/privacy' || pathname === '/tos') {
+    if (pathname.endsWith('/pos')) {
+      setContent(
+        <div>
+          {children}
+        </div>
+      )
+    } else if (status === 'authenticated' || pathname === '/privacy' || pathname === '/tos') {
       setContent(
         <div>
           <Header />
-          <div className="flex">
+          <div className="flex max-w-lg mx-auto">
             <div className="flex-grow lg:p-6">
               {children}
             </div>

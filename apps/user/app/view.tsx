@@ -1,10 +1,7 @@
 'use client'
 
-import Button from '@mui/material/Button'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import ToggleButton from '@mui/material/ToggleButton'
-import prisma from '@repo/data/PrismaCient'
-import { auth } from '@/app/auth'
 import Link from 'next/link'
 import Image from 'next/image'
 import RestaurantIcon from '@mui/icons-material/Restaurant'
@@ -129,7 +126,7 @@ function SiteMap({ sites, geography, apiKey }: { sites: SiteProps[], geography?:
 
   return (
     <div>
-      <div className="w-full lg:w-1/2 h-[300px]">
+      <div className="w-full h-[300px]">
         <APIProvider apiKey={apiKey}>
           <Map mapId={'7a0196a7ba317ea5'}
             defaultZoom={defaultBounds ? undefined : 8}

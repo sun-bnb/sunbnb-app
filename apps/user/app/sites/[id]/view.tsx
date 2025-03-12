@@ -1,47 +1,27 @@
 'use client'
 
-import { InventoryItem, MapBounds, Reservation, SiteProps, WorkingHours } from '@/app/sites/types'
-import Button from '@mui/material/Button'
-import InputLabel from '@mui/material/InputLabel';
-import MenuItem from '@mui/material/MenuItem';
-import FormControl from '@mui/material/FormControl';
+import { Reservation, SiteProps } from '@/app/sites/types'
 import Tabs from '@mui/material/Tabs'
 import Tab from '@mui/material/Tab'
 import Divider from '@mui/material/Divider'
-import { MobileDatePicker } from '@mui/x-date-pickers/MobileDatePicker'
-import { MobileDateRangePicker } from '@mui/x-date-pickers-pro/MobileDateRangePicker'
-import { SingleInputDateRangeField } from '@mui/x-date-pickers-pro/SingleInputDateRangeField'
-import Select from '@mui/material/Select'
 import Chip from '@mui/material/Chip'
 import RestaurantIcon from '@mui/icons-material/Restaurant'
 import WcIcon from '@mui/icons-material/Wc'
 import SurfingIcon from '@mui/icons-material/Surfing'
 import LocalBarIcon from '@mui/icons-material/LocalBar'
-import CircularProgress from '@mui/material/CircularProgress'
 import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown'
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import Image from 'next/image'
-import { useActionState, useEffect, useState } from 'react'
-import { useSession } from 'next-auth/react'
+import { useState } from 'react'
 import { setValue } from '@/store/features/sites/sitesSlice'
 import { RootState } from '@/store/store'
 import { useDispatch, useSelector } from 'react-redux'
-import dayjs, { Dayjs } from 'dayjs'
-import { APIProvider, AdvancedMarker, Map } from '@vis.gl/react-google-maps'
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
-import { DateRange } from '@mui/x-date-pickers-pro/models'
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
-import { SingleInputTimeRangeField } from '@mui/x-date-pickers-pro/SingleInputTimeRangeField'
-import { saveReservation } from './actions'
+import dayjs from 'dayjs'
 import { 
-  useGetAvailabilityBySiteAndTimeRangeQuery,
-  useGetReservationByIdQuery,
   useGetSiteByIdQuery
 } from '@/store/features/api/apiSlice'
 
-import PaymentView from '@/app/payment/Payment'
 import ReservationView from './Reservation'
 import { useRouter } from 'next/navigation'
 

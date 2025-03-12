@@ -9,7 +9,7 @@ import { format } from 'path'
 export async function GET(request: NextRequest, { params } : { params: { id: string } }) {
 
   const session = await auth()
-  if (!session?.user) return Response.json({ status: 'error', errors: [ 'Not authenticated' ] })
+  // if (!session?.user) return Response.json({ status: 'error', errors: [ 'Not authenticated' ] })
 
   const site = await prisma.site.findUnique({ 
     where: { id: params.id },

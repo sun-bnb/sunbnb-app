@@ -127,6 +127,9 @@ model InventoryItem {               @map("inventory_item")
   locationLng       String          @map("location_lng")
   status            String
   notes             String?
+  label             String?
+  image             String?
+  rotation          Int?
  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -160,7 +163,7 @@ model Reservation {
  
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  item InventoryItem? @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  items InventoryItem[]
  
 }
  

@@ -13,10 +13,12 @@ import { Reservation } from '../sites/types'
 
 export default function CheckoutForm({ 
   dpmCheckerLink,
-  reservation
+  reservation,
+  completeUrl
 }: { 
   dpmCheckerLink: string
   reservation: Reservation | undefined
+  completeUrl: string | undefined
 }) {
   
   const stripe = useStripe()
@@ -44,11 +46,13 @@ export default function CheckoutForm({
 
     console.log('APP URL FOR CHECKOUT', process.env.NEXT_PUBLIC_APP_URL)
 
+    const returnUrl = `${process.env.NEXT_PUBLIC_APP_URL}${completeUrl || '/payment/complete'}`
+
     const { error } = await stripe.confirmPayment({
       elements,
       confirmParams: {
         // Make sure to change this to your payment completion page
-        return_url: `${process.env.NEXT_PUBLIC_APP_URL}/payment/complete`
+        return_url: returnUrl
       },
     });
 

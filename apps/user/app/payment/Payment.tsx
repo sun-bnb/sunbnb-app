@@ -13,10 +13,12 @@ import { Reservation } from '../sites/types'
 
 export default function Payment({ 
   stripePublicKey,
-  reservation
+  reservation,
+  completeUrl
 } : { 
   stripePublicKey: string | undefined 
   reservation: Reservation
+  completeUrl?: string
 }) {
 
 
@@ -84,7 +86,7 @@ export default function Payment({
         clientSecret ? (
           <Elements options={options} stripe={stripePromise}>
             {
-                <CheckoutForm dpmCheckerLink={dpmCheckerLink} reservation={reservation} />
+                <CheckoutForm dpmCheckerLink={dpmCheckerLink} reservation={reservation} completeUrl={completeUrl} />
             }
           </Elements>
         ) : (

@@ -260,7 +260,7 @@ export async function saveReservation(
   const session = await auth()
   console.log('SAVE RES', session, reservation)
 
-  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+  // if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
 
   const reservationData = {
     from: reservation.from,
@@ -268,8 +268,8 @@ export async function saveReservation(
     type: reservation.type,
     status: 'pending',
     paymentAmount: 0,
-    item: {
-      connect: { id: reservation.itemId }
+    items: {
+      connect: [{ id: reservation.itemId }]
     },
     site: {
       connect: { id: reservation.siteId }
@@ -295,5 +295,98 @@ export async function saveReservation(
   revalidatePath('/sites')
 
   return { status: 'ok', id: newReservation.id }
+  
+}
+
+export async function saveReservationForMultipleItems(
+  reservation: { 
+    userId?: string,
+    siteId: string,
+    itemIds?: string[],
+    type: string,
+    from: string, to: string 
+  }) {
+  
+  console.log('SAVE RES', reservation)
+  
+  let reservationUserId = reservation.userId
+  if (!reservationUserId) {
+    const user = await prisma.user.findUnique({ where: { email: 'vhalme@gmail.com' } })
+    if (!user) return { status: 'error', errors: [ 'User not found' ] }
+    reservationUserId = user.id
+  }
+
+  const reservationData = {
+    from: new Date(reservation.from),
+    to: new Date(reservation.to),
+    type: reservation.type,
+    status: 'pending',
+    paymentAmount: 0,
+    items: {
+      connect: reservation.itemIds?.map(id => ({ id }))
+    },
+    site: {
+      connect: { id: reservation.siteId }
+    },
+    user: {
+      connect: { id: reservationUserId }
+    }
+  }
+
+  const site = await prisma.site.findUnique({ where: { id: reservation.siteId } })
+  if (!site) return { status: 'error', errors: [ 'Site not found' ] }
+  if (!site.price) return { status: 'error', errors: [ 'Site price not set' ] }
+
+  const totalPrice = reservation.itemIds?.length! * site.price
+
+  reservationData.paymentAmount = totalPrice
+
+  console.log('CREATE RES', reservationData)
+  const newReservation = await prisma.reservation.create({
+    data: reservationData
+  })
+
+  console.log('NEW RES', newReservation)
+  
+  revalidatePath('/sites')
+
+  return { status: 'ok', id: newReservation.id }
+  
+}
+
+export async function createReservation(
+  siteId: string,
+  from: string,
+  to: string
+) {
+  
+  const session = await auth()
+  console.log('CREATE RESERVATION', siteId, from, to, session)
+
+  const site = await prisma.site.findUnique({ where: { id: siteId } })
+  if (!site) return { status: 'error', errors: [ 'Site not found' ] }
+
+  const user = await prisma.user.findUnique({ where: { email: 'vhalme@gmail.com' } })
+  
+  const reservation = await prisma.reservation.create({
+    data: {
+      user: {
+        connect: { id: user!.id }
+      },
+      site: {
+        connect: { id: siteId }
+      },
+      from: new Date(from),
+      to: new Date(to),
+      status: 'pending'
+    }
+  })
+  
+  revalidatePath('/sites')
+
+  return {
+    status: 'ok',
+    reservation
+  }
   
 }
