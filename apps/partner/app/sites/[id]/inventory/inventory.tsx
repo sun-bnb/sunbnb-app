@@ -29,6 +29,17 @@ export default function Inventory(
   const [selectedItemPrice, setSelectedItemPrice] = useState<string | undefined>(undefined)
   const [selectedItemRotation, setSelectedItemRotation] = useState<string | undefined>(undefined)
 
+  const [zoom, setZoom] = useState<number>(20)
+
+  function getScaledSize(zoom: number): number {
+    const baseZoom = 20
+    const baseSize = 45
+    // Adjust scale factor as you like (linear or exponential)
+    return baseSize * Math.pow(2, (zoom - baseZoom) / 2)
+  }
+  
+  const dynamicSize = getScaledSize(zoom)
+
   const inventoryMap: { [key: string]: InventoryItem } = {
   }
 
@@ -189,6 +200,11 @@ export default function Inventory(
               } : { lat: 35.5138298, lng: 24.0180367 }}
               gestureHandling={'greedy'}
               disableDefaultUI={true}
+              onZoomChanged={(mapInstance) => {
+                const newZoom = mapInstance.map.getZoom()
+                console.log('Zoom changed', newZoom)
+                setZoom(newZoom || 20)
+              }}
               onClick={(e) => {
                 console.log('Map click', e)
                 const lat = e.detail.latLng?.lat
@@ -207,7 +223,12 @@ export default function Inventory(
                     <div className="rounded-full absolute -top-[40px] -left-[40px]">
                       <Image style={ item.rotation ? {
                         transform: `rotate(${item.rotation}deg)`,
-                        transformOrigin: 'center'
+                        transformOrigin: 'center',
+                        display: 'block',
+                        maxWidth: 'none',
+                        height: 'auto',
+                        width: `${dynamicSize}px`,
+                        marginTop: `-${(dynamicSize - 40) / 2}px`
                       } : {}} width={80} src={sunbedIcon} alt="Item" />
                     </div>
                   </AdvancedMarker>)))
@@ -215,8 +236,16 @@ export default function Inventory(
               {
                 (selectedItem?.locationLat && selectedItem?.locationLng) &&
                   <AdvancedMarker position={{ lat: Number(selectedItem.locationLat), lng: Number(selectedItem.locationLng) }}>
-                    <div className="bg-white border-2 border-red-600 rounded-full absolute -top-[40px] -left-[40px] scale-50 z-10">
-                      <Image width={80} src={sunbedIcon} alt="Item" />
+                    <div className="bg-white border-2 border-red-600 rounded-full absolute -top-[40px] -left-[40px] z-10">
+                      <Image style={ selectedItem.rotation ? {
+                        transform: `rotate(${selectedItem.rotation}deg)`,
+                        transformOrigin: 'center',
+                        display: 'block',
+                        maxWidth: 'none',
+                        height: 'auto',
+                        width: `${dynamicSize}px`,
+                        marginTop: `-${(dynamicSize - 40) / 2}px`
+                      } : {}} src={sunbedIcon} alt="Item" />
                     </div>
                   </AdvancedMarker>
 
