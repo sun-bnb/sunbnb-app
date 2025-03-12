@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Stripe, loadStripe } from '@stripe/stripe-js'
 import { Elements } from '@stripe/react-stripe-js'
 import CircularProgress from '@mui/material/CircularProgress'
@@ -14,10 +14,12 @@ import { Reservation } from '../sites/types'
 export default function Payment({ 
   stripePublicKey,
   reservation,
+  preview,
   completeUrl
 } : { 
   stripePublicKey: string | undefined 
   reservation: Reservation
+  preview?: React.ReactNode
   completeUrl?: string
 }) {
 
@@ -86,11 +88,14 @@ export default function Payment({
         clientSecret ? (
           <Elements options={options} stripe={stripePromise}>
             {
-                <CheckoutForm dpmCheckerLink={dpmCheckerLink} reservation={reservation} completeUrl={completeUrl} />
+                <CheckoutForm dpmCheckerLink={dpmCheckerLink} 
+                  reservation={reservation}
+                  preview={preview}
+                  completeUrl={completeUrl} />
             }
           </Elements>
         ) : (
-          <div className="flex justify-center">
+          <div className="flex justify-center mt-[24px]">
             <CircularProgress />
           </div>
         )

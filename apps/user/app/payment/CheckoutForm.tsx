@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, FormEvent } from 'react'
+import React, { useState, useEffect, FormEvent } from 'react'
 import Button from '@mui/material/Button'
 import Divider from '@mui/material/Divider'
 import {
@@ -14,11 +14,13 @@ import { Reservation } from '../sites/types'
 export default function CheckoutForm({ 
   dpmCheckerLink,
   reservation,
-  completeUrl
+  completeUrl,
+  preview
 }: { 
   dpmCheckerLink: string
   reservation: Reservation | undefined
   completeUrl: string | undefined
+  preview?: React.ReactNode
 }) {
   
   const stripe = useStripe()
@@ -78,10 +80,13 @@ export default function CheckoutForm({
 
   return (
     <>
-      <div className="mt-[32px] mb-[12px]">
+      <div className="mt-[6px]">
         { 
-          reservation &&
-            <ReservationItem reservation={reservation} />
+          preview || (reservation &&
+            <div className="mt-[26px] mb-[12px]">
+              <ReservationItem reservation={reservation} />
+            </div>
+          )
         }
       </div>
       <form id="payment-form" onSubmit={handleSubmit} className="mr-[6px] ml-[6px] mt-[6px]">

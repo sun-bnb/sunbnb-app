@@ -67,30 +67,7 @@ export default function PosView({ site, apiKey }: { site: SiteProps, apiKey: str
 
   return (
     <div className="relative">
-      {
-        selectedItems.length === 0 && (
-          <div className="
-              absolute
-              top-[10px]
-              left-1/2
-              -translate-x-1/2
-              inline-block
-              whitespace-nowrap
-              z-[1]
-              bg-white/60
-              py-[6px]
-              px-[8px]
-              border
-              border-blue-400
-              rounded-[8px]
-              text-md
-              text-blue-400
-              font-bold
-          ">
-            Select one or more sunbeds
-          </div>
-        )
-      }
+      
       <div className="
         absolute
         bottom-[10px]
@@ -105,7 +82,7 @@ export default function PosView({ site, apiKey }: { site: SiteProps, apiKey: str
         text-lg
         font-bold
       ">{ site.name }</div>
-      <div className="w-full h-[320px]">
+      <div className="w-full h-screen">
         <APIProvider apiKey={apiKey}>
           <Map mapId={'7a0196a7ba317ea5'}
             defaultZoom={defaultBounds ? undefined : 20}
@@ -164,7 +141,10 @@ export default function PosView({ site, apiKey }: { site: SiteProps, apiKey: str
                     <div className={`w-[${size}px] h-[${size}px] ${bgColor} ${borderStyle} rounded-full flex justify-center`}>
                       <Image style={ item.rotation ? {
                         transform: `rotate(${item.rotation}deg)`,
-                        transformOrigin: 'center'
+                        transformOrigin: 'center',
+                        display: 'block',
+                        maxWidth: 'none',
+                        height: 'auto' 
                       } : {}} src={sunbedIcon} alt="Item" />
                     </div>
                   </AdvancedMarker>

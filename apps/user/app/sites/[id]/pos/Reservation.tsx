@@ -9,7 +9,8 @@ import Select from '@mui/material/Select'
 import CircularProgress from '@mui/material/CircularProgress'
 import React, { useState } from 'react'
 import { useSession } from 'next-auth/react'
-
+import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown'
+import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp'
 import { setValue } from '@/store/features/sites/sitesSlice'
 import { RootState } from '@/store/store'
 import { useDispatch, useSelector } from 'react-redux'
@@ -106,7 +107,8 @@ function ReservationButton({
             if (saveResult?.status === 'ok' && saveResult.id) {
               dispatch(setValue({ 
                 reservationState: 'processing',
-                pendingReservationId: saveResult.id
+                pendingReservationId: saveResult.id,
+                panelBottom: 'bottom-[0px]'
               }))
             }
 
@@ -124,7 +126,7 @@ function ItemSelection({ apiKey, site } : { apiKey: string, site: SiteProps }) {
 
   return (
     <>
-      <SunbedSelectionComponent apiKey={apiKey} site={site} />
+    
     </>
   )
 }
@@ -141,8 +143,13 @@ export default function ReservationView({
   dateRange: { from: string, to: string }
 }) {
 
+  const dispatch = useDispatch()
+
   const sitesState = useSelector((state: RootState) => state.sites)
   const { reservationState, pendingReservationId } = sitesState
+
+  let focused = sitesState.focused
+  let panelBottom = sitesState.panelBottom || '-bottom-[364px]'
 
   if (!stripePublicKey) {
     return (
@@ -164,46 +171,105 @@ export default function ReservationView({
     return acc + item.price! || site.price! || 0
   }, 0)
 
+  const previewElem = (
+    <div>
+      <div className="flex justify-between text-black">
+        <div>
+          QUANTITY: <b>{selectedItems.length}</b>
+        </div>
+        <div className="text-center text-[64px] -mt-[20px]">
+          {totalPrice} €
+        </div>
+      </div>
+    </div>
+  )
+
   const paymentElem =
     (reservationState === 'processing' || reservationState === 'payment_in_progress') ? (
       !reservation ? (
-        <div className="flex justify-center mb-[12px] mt-[12px]">
+        <div className="flex justify-center mb-[12px] mt-[24px]">
           <CircularProgress />
         </div>
-      ) : <PaymentView stripePublicKey={stripePublicKey} reservation={reservation} completeUrl="/payment/complete/pos"/>
+      ) : <PaymentView 
+            stripePublicKey={stripePublicKey}
+            preview={previewElem}
+            reservation={reservation} 
+            completeUrl="/payment/complete/pos"/>
 
     ) : (
-      <div className="mx-[4px] mt-[8px]">
+      <div className="mx-[4px] mt-[8px] h-[420px]">
         {
-          selectedItems.length > 0 ? (
-            <div>
-              <div className="flex justify-between">
-                <div>
-                  QUANTITY: <b>{selectedItems.length}</b>
-                </div>
-              </div>
-              <div className="text-center text-[96px]">
-                {totalPrice} €
-              </div>
-            </div>
-          ) : (
-            <div className="text-center my-[12px]">
-              SELECT SUNBEDS AND PAY
-            </div>
-          )
+          selectedItems.length > 0 && <div className="mt-[10px]">
+            {previewElem}
+          </div>
 
         }
-        
-        <div>
-          <ReservationButton disabled={selectedItems.length === 0} site={site} dateRange={dateRange} />
-        </div>
       </div>
     )
 
   return (
-    <>
-      <ItemSelection apiKey={apiKey} site={site} />
-      { paymentElem}
-    </>
+    <div className="relative">
+      {
+        selectedItems.length === 0 ? (
+          <div className="
+              absolute
+              top-[10px]
+              left-1/2
+              -translate-x-1/2
+              inline-block
+              whitespace-nowrap
+              z-[1]
+              bg-white/60
+              py-[6px]
+              px-[8px]
+              border
+              border-blue-400
+              rounded-[8px]
+              text-md
+              text-blue-400
+              font-bold
+          ">
+            Select one or more sunbeds
+          </div>
+        ) : (
+          !reservation &&
+            <div className="
+                absolute
+                top-[6px]
+                left-1/2
+                -translate-x-1/2
+                inline-block
+                z-[1]
+                py-[6px]
+                px-[8px]
+                w-[80%]
+            ">
+              <ReservationButton disabled={selectedItems.length === 0} site={site} dateRange={dateRange} />
+            </div>
+        )
+      }
+      <SunbedSelectionComponent apiKey={apiKey} site={site} />
+      {
+        selectedItems.length > 0 && <div style={{ zIndex: 11 }} className={`fixed left-0 w-full bg-white text-white text-center px-2 pb-4
+          ${panelBottom} border-t transition-bottom duration-500`}>
+          {
+            focused ?
+              <div className="text-black absolute w-[100px] bg-white rounded-md border" style={{
+                left: 'calc(50% - 50px)',
+                top: '-15px',
+                zIndex: 2
+              }}
+              onClick={() => {
+                dispatch(setValue({ focused: false }))
+              }}>
+                <KeyboardDoubleArrowDownIcon />
+              </div> : null
+          }
+            { paymentElem }
+        </div>
+      }
+      
+      
+    </div>
   )
 }
