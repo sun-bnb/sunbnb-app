@@ -93,7 +93,20 @@ export default function CompleteView({
   const ticket = (
     <div>
       <div className="text-center">
-        <p className="text-lg">YOUR BEACH TICKET</p>
+        <div className="text-center">
+          <table className="mx-auto w-full table-auto border-collapse">
+            <tbody>
+              <tr>
+                <td className="px-4 text-[24px]">SEATING PASS</td>
+              </tr>
+              <tr>
+                <td className="px-4 py-2">
+                  SEATS: <b>{reservation.items?.map(item => String(item.number)).join(', ')}</b>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
       <div className="mx-auto">
         <Image src={qrTicketImage} alt="Item" />

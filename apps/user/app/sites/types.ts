@@ -37,7 +37,7 @@ export interface Reservation {
   id: string
   userId: string
   itemId?: string | null
-  items?: { id: string }[] | null
+  items?: { id: string, number: number }[] | null
   status: string
   type: string
   from: Date
