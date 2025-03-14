@@ -114,7 +114,7 @@ export default function PosView({ site, apiKey }: { site: SiteProps, apiKey: str
             {
               ((inventoryItems || []).map(item => {
 
-                let bgColor = 'bg-gray-200'
+                let bgColor = ''
                 let borderStyle = ''
                 let size = 40
                 const itemAvailable = isAvailable(item)
