@@ -56,6 +56,7 @@ export interface InventoryItem {
   locationLat?: string
   locationLng?: string
   reservations: Reservation[]
+  site?: { id: string } | null
 }
 
 export interface WorkingHours {

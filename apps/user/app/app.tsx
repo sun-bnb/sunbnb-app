@@ -20,7 +20,7 @@ const App = ({ children }: {
 
   useEffect(() => {
     console.log(status)
-    if (pathname.endsWith('/pos')) {
+    if (pathname.includes('/pos') || pathname.includes('/complete/item')) {
       setContent(
         <div>
           {children}
