@@ -96,6 +96,12 @@ export default function CheckoutForm({
             { isLoading ? <div className="spinner" id="spinner"></div> : "Pay now" }
           </Button>
         </div>
+        <div className="mt-[8px]">
+          <Button variant="outlined" fullWidth={true} id="submit" onClick={() => {}} disabled={isLoading}>
+            { isLoading ? <div className="spinner" id="spinner"></div> : "Cash payment" }
+          </Button>
+        </div>
+        ‹
         {/* Show any error or success messages */}
         {message && <div id="payment-message">{message}</div>}
       </form>
