@@ -5,6 +5,7 @@ import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { put } from '@vercel/blob'
 import { waitUntil } from '@vercel/functions'
+import { InventoryItem } from '../types'
 
 export async function submitForm(
   previousState: { status: string, errors?: string[] },
@@ -304,7 +305,7 @@ export async function saveReservationForMultipleItems(
   reservation: { 
     userId?: string,
     siteId: string,
-    itemIds?: string[],
+    items?: InventoryItem[],
     type: string,
     from: string, to: string 
   }) {
@@ -325,7 +326,7 @@ export async function saveReservationForMultipleItems(
     status: 'pending',
     paymentAmount: 0,
     items: {
-      connect: reservation.itemIds?.map(id => ({ id }))
+      connect: reservation.items?.map(item => ({ id: item.id }))
     },
     site: {
       connect: { id: reservation.siteId }
@@ -339,7 +340,9 @@ export async function saveReservationForMultipleItems(
   if (!site) return { status: 'error', errors: [ 'Site not found' ] }
   if (!site.price) return { status: 'error', errors: [ 'Site price not set' ] }
 
-  const totalPrice = reservation.itemIds?.length! * site.price
+  const totalPrice = reservation.items?.reduce((sum, item) => {
+    return sum + (item.price || 0)
+  }, 0) ?? 0
 
   reservationData.paymentAmount = totalPrice
 

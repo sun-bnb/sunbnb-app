@@ -62,8 +62,8 @@ export default function PosView({ site, apiKey }: { site: SiteProps, apiKey: str
     return !!availabilityResponse.availability.find(a => a.itemId === item.id && a.available)
   }
   
-  const itemLats = (inventoryItems || []).map(item => Number(item.locationLat));
-  const itemLngs = (inventoryItems || []).map(item => Number(item.locationLng));
+  const itemLats = (inventoryItems || []).slice(5, 10).map(item => Number(item.locationLat));
+  const itemLngs = (inventoryItems || []).slice(5, 10).map(item => Number(item.locationLng));
   const defaultBounds: MapBounds = {
     north: Math.max(...itemLats),
     south: Math.min(...itemLats),

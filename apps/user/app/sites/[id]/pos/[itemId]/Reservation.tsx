@@ -66,7 +66,7 @@ function ReservationButton({
               to: dateRange.to,
               type: 'days',
               siteId: item.site?.id!,
-              itemIds: selectedItems.map((item: { id: string}) => item.id),
+              items: selectedItems,
               userId: session?.user?.id
             })
 
