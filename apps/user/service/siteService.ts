@@ -105,7 +105,7 @@ export async function searchSites(lat?: string, lng?: string) {
     geography: bounds ? parseMapData({
       center: bounds[0].center,
       bounding_box: bounds[0].bounding_box
-    }) : null
+    }) : undefined
   }
 
 

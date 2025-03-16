@@ -21,7 +21,7 @@ export const httpApi = createApi({
           lat, lng
         }
       }),
-      transformResponse: (response: { sites: SiteProps[], geography: SiteGeography }) => response
+      transformResponse: (response: { sites: SiteProps[], geography?: SiteGeography }) => response
     }),
     getAvailabilityBySiteAndTimeRange: builder.query({
       query: ({ siteId, from, to }) => ({

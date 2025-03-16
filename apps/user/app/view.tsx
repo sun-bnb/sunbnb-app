@@ -176,7 +176,7 @@ function SiteMap({ sites, geography, apiKey }: { sites: SiteProps[], geography?:
 
 export default function Sites({ sites, geography, apiKey }: { 
   sites: SiteProps[],
-  geography: SiteGeography,
+  geography?: SiteGeography,
   apiKey: string 
 } ) {
 
