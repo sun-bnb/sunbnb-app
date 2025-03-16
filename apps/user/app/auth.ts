@@ -1,107 +1,152 @@
-import NextAuth, { NextAuthResult } from 'next-auth'
-import { hash, compare } from 'bcryptjs'
-import GoogleProvider from 'next-auth/providers/google'
-import FacebookProvider from 'next-auth/providers/facebook'
-import Credentials from 'next-auth/providers/credentials'
-import { PrismaAdapter } from '@auth/prisma-adapter'
-import prisma from '@repo/data/PrismaCient'
+import NextAuth, { NextAuthResult } from 'next-auth';
+import { hash, compare } from 'bcryptjs';
+import GoogleProvider from 'next-auth/providers/google';
+import FacebookProvider from 'next-auth/providers/facebook';
+import CredentialsProvider from 'next-auth/providers/credentials';
+import { PrismaAdapter } from '@auth/prisma-adapter';
+import prisma from '@repo/data/PrismaCient';
+
+/**
+ * Helper function that checks if a user exists,
+ * creates one if necessary, and validates the password.
+ */
+async function validateOrCreateUser(
+  email: string,
+  password: string,
+  credentials: { loginError?: string }
+) {
+
+  console.log('validateOrCreateUser', email, password, credentials)
+
+  let user = await prisma.user.findUnique({ where: { email } });
+
+  // If no user, create one with a hashed password
+  if (!user) {
+    const hashedPassword = await hash(password, 12)
+    user = await prisma.user.create({
+      data: { email, password: hashedPassword },
+    });
+  }
+
+  console.log('USER FOUND', user)
+
+  // If the user has no password, it’s likely an OAuth-only account
+  if (!user.password) {
+    credentials.loginError = 'OAuthAccountNotLinked'
+    return user
+  }
+
+  // Validate password
+  const isValid = await compare(password, user.password)
+  if (!isValid) {
+    credentials.loginError = 'CredentialsSignin'
+    return null
+  }
+
+  return user
+
+}
 
 const nextAuthResult: NextAuthResult = NextAuth({
   adapter: PrismaAdapter(prisma),
   secret: process.env.AUTH_SECRET,
   session: {
-    strategy: 'jwt'
+    strategy: 'jwt',
   },
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_OAUTH_ID,
-      clientSecret: process.env.GOOGLE_OAUTH_SECRET,
+      clientId: process.env.GOOGLE_OAUTH_ID!,
+      clientSecret: process.env.GOOGLE_OAUTH_SECRET!,
     }),
     FacebookProvider({
-      clientId: process.env.FACEBOOK_APP_ID,
-      clientSecret: process.env.FACEBOOK_APP_SECRET,
+      clientId: process.env.FACEBOOK_APP_ID!,
+      clientSecret: process.env.FACEBOOK_APP_SECRET!,
     }),
-    Credentials({
-      // You can specify which fields should be submitted, by adding keys to the `credentials` object.
-      // e.g. domain, username, password, 2FA token, etc.
+    CredentialsProvider({
       credentials: {
-        email: { label: "Email" },
-        password: { label: "Password", type: "password" }
+        email: { label: 'Email' },
+        password: { label: 'Password', type: 'password' },
       },
-      authorize: async (credentials) => {
+      authorize: async (rawCredentials) => {
 
-        console.log('CREDENTIALS', credentials)
+        console.log('AUTHORIZE', rawCredentials)
 
-        const email: string = credentials.email as string
-        const password: string = credentials.password as string
+        // Cast to a type that includes our custom 'loginError' field
+        const credentials = rawCredentials as {
+          email: string;
+          password: string;
+          loginError?: string;
+        };
 
-        let user = await prisma.user.findUnique({ where: { email } })
-
-        if (!user) {
-          const pwHash = await hash(password, 12)
-          console.log('PW HASH', pwHash)
-          user = await prisma.user.create({
-            data: {
-              email,
-              password: pwHash
-            }
-          })
-        }
-
-        if (!user.password) {
-          throw new Error('User has no password set.')
-        }
-
-        const isValid = await compare(password, user.password)
-
-        if (!isValid) {
-          throw new Error("Invalid credentials.")
-        }
-        
-        // return user object with their profile data
-        return user
+        const { email, password } = credentials;
+        return await validateOrCreateUser(email, password, credentials);
       },
-    })
+    }),
   ],
   callbacks: {
-    async session({ session, token, user }) {
-      console.log('SESSION CALLBACK', session, token, user)
-      session.user.id = token.id as string
-
-      return session
+    /**
+     * Attach user ID to the session so it's accessible on the client side.
+     */
+    async session({ session, token }) {
+      // 'user' is typically undefined here if using JWT strategy
+      session.user.id = token.id as string;
+      return session;
     },
-    async signIn({ profile }) {
 
-      console.log('SIGNIN CALLBACK', profile)
+    /**
+     * Called whenever a user tries to sign in (OAuth or Credentials).
+     * We can redirect if there's a custom error in credentials,
+     * or allow sign in to proceed.
+     */
+    async signIn({ credentials, profile, user }) {
 
-      const email = profile?.email
+      console.log('Sign in', credentials, profile, user)
 
-      if (!email) {
+      // Check if our credentials flow set a custom loginError
+      const loginError = credentials?.loginError;
+      if (loginError) {
+        console.log('Login error', loginError)
+        return `/api/auth/signin?error=${loginError}`;
+      }
+
+      // For OAuth providers, ensure we have a valid email
+      const email = profile?.email || user?.email;
+      if (!email) return false
+
+      // Optional: check if the user exists in DB
+      // (You already have 'user', so this might be redundant.)
+      const existingUser = await prisma.user.findUnique({ where: { email } });
+      if (!existingUser) {
+        // Decide how to handle users with no record
         return false
       }
 
-      const user = await prisma.user.findUnique({ where: { email } })
-      
-      console.log('USER', user)
-
-      return true
+      return true // Sign in is allowed
     },
+
+    /**
+     * The JWT callback runs on sign in and every subsequent request.
+     * Attach user fields to the token if needed.
+     */
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
         token.name = user.name;
         token.email = user.email;
       }
-      console.log('JWT Callback Token:', token, user); // Debug JWT
       return token;
-    }
+    },
   },
   pages: {
-    newUser: '/new-user'
-  }
-})
+    newUser: '/new-user',
+    // If you want a custom error/sign-in page:
+    // signIn: '/auth/api/signin',
+    // error: '/auth/api/signin',
+  },
+});
 
-export const handlers = nextAuthResult.handlers
-export const signIn = nextAuthResult.signIn
-export const signOut = nextAuthResult.signOut
-export const auth: any = nextAuthResult.auth
+// Re-export handlers from NextAuth
+export const handlers = nextAuthResult.handlers;
+export const signIn = nextAuthResult.signIn;
+export const signOut = nextAuthResult.signOut;
+export const auth: any = nextAuthResult.auth; // (kept 'any' per original code)

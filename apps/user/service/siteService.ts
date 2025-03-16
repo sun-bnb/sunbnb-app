@@ -47,32 +47,32 @@ export async function searchSites(lat?: string, lng?: string) {
   ? Prisma.sql`ST_DistanceSphere(coords, ST_MakePoint(${lat}::double precision, ${lng}::double precision)) / 1000 AS dist_km,`
   : Prisma.sql``;
 
-const orderByClause = lat && lng 
-  ? Prisma.sql`ORDER BY dist_km` 
-  : Prisma.sql``;
+  const orderByClause = lat && lng 
+    ? Prisma.sql`ORDER BY dist_km` 
+    : Prisma.sql``;
 
-const results = await prisma.$queryRaw<any[]>(
-  Prisma.sql`SELECT 
-    id,
-    name,
-    description,
-    image,
-    image_width,
-    image_height,
-    price,
-    services,
-    location_lat,
-    location_lng,
-    ${distanceQuery}
-    (SELECT COUNT(*) FROM "InventoryItem" WHERE site_id = "Site".id)::int AS item_count,
-    (SELECT COUNT(*) FROM "InventoryItem" WHERE site_id = "Site".id AND status = 'available')::int AS available_count
-    FROM "Site"
-    ${orderByClause}
-    LIMIT 10`
-);
+  const results = await prisma.$queryRaw<any[]>(
+    Prisma.sql`SELECT 
+      id,
+      name,
+      description,
+      image,
+      image_width,
+      image_height,
+      price,
+      services,
+      location_lat,
+      location_lng,
+      ${distanceQuery}
+      (SELECT COUNT(*) FROM "InventoryItem" WHERE site_id = "Site".id)::int AS item_count,
+      (SELECT COUNT(*) FROM "InventoryItem" WHERE site_id = "Site".id AND status = 'available')::int AS available_count
+      FROM "Site"
+      ${orderByClause}
+      LIMIT 10`
+  );
 
   const ids = results.map(r => r.id);
-  const bounds = await prisma.$queryRaw<any[]>(
+  const bounds = ids.length > 0 ? await prisma.$queryRaw<any[]>(
     Prisma.sql`SELECT
         ST_AsText(ST_Centroid(ST_Collect(coords))) AS center,
         ST_AsText(ST_Extent(coords)) AS bounding_box
@@ -80,7 +80,7 @@ const results = await prisma.$queryRaw<any[]>(
         "Site"
         WHERE id IN (${Prisma.join(ids)});
       `
-  )
+  ) : null
 
   console.log('results', results, bounds)
 
@@ -102,10 +102,10 @@ const results = await prisma.$queryRaw<any[]>(
 
   return {
     sites,
-    geography: parseMapData({
+    geography: bounds ? parseMapData({
       center: bounds[0].center,
       bounding_box: bounds[0].bounding_box
-    })
+    }) : null
   }
 
 

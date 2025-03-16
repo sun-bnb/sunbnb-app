@@ -11,8 +11,7 @@ import {
 import ReservationItem from './ReservationItem'
 import { Reservation } from '../sites/types'
 
-export default function CheckoutForm({ 
-  dpmCheckerLink,
+export default function CheckoutForm({
   reservation,
   completeUrl,
   preview
