@@ -122,10 +122,10 @@ function SiteMap({ sites, geography, apiKey }: { sites: SiteProps[], geography?:
   const [selectedSite, setSelectedSite] = useState<SiteProps | null>(null)
 
   const defaultBounds = geography?.bounds
-  console.log('Default bounds', defaultBounds)
+  console.log('Geography for the map', geography)
 
   return (
-    <div>
+    <div key={`${geography?.center.lat}-${geography?.center.lng}-${geography?.bounds?.north}-${geography?.bounds?.south}-${geography?.bounds?.east}-${geography?.bounds?.west}`}>
       <div className="w-full h-[300px]">
         <APIProvider apiKey={apiKey}>
           <Map mapId={'7a0196a7ba317ea5'}
@@ -205,7 +205,7 @@ export default function Sites({ sites, geography, apiKey }: {
       <div className="flex justify-between py-1 px-2">
         <div>
           <div className="text-sm text-gray-600">
-            <span className="mr-1 font-bold">{ sites.length }</span>
+            <span className="mr-1 font-bold">{ searchResponse?.sites.length || sites.length }</span>
             <span>BEACHES</span>
           </div>
           {
