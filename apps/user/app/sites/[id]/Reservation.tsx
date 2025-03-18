@@ -16,13 +16,12 @@ import { useDispatch, useSelector } from 'react-redux'
 import {
   useGetReservationByIdQuery
 } from '@/store/features/api/apiSlice'
-import dayjs, { Dayjs } from 'dayjs'
-import SunbedSelectionComponent from './SunbedSelection'
-import { saveReservation } from './actions'
+import dayjs from 'dayjs'
+import SunbedSelection from '@/components/reservation/SunbedSelection'
+import { saveReservationForMultipleItems } from './actions'
 import PaymentView from '@/app/payment/Payment'
 
 function PaymentMethodSelection() {
-
 
   const [ paymentMethod, setPaymentMethod ] = useState('0001')
 
@@ -74,7 +73,8 @@ function ReservationButton({
 
   const dispatch = useDispatch();
   const sitesState = useSelector((state: RootState) => state.sites)
-  const { reservationState, reservationMode, selectedItem } = sitesState
+  const { selectedItems } = sitesState
+  let reservationMode = sitesState.reservationMode || 'days'
 
   let reservationDay = dayjs(sitesState.reservationDay)
   let timeRange = sitesState.timeRange ? [dayjs(sitesState.timeRange[0]), dayjs(sitesState.timeRange[1])] : []
@@ -88,7 +88,7 @@ function ReservationButton({
         onClick={
           async () => {
             dispatch(setValue({ reservationState: 'saving' }))
-            console.log('Reserve', timeRange, selectedItem)
+            console.log('Reserve', reservationMode, timeRange, dateRange, selectedItems)
 
             let saveResult = null
             if (reservationMode === 'hours' && reservationDay && timeRange[0] && timeRange[1]) {
@@ -102,24 +102,24 @@ function ReservationButton({
                 .minute(timeRange[1].minute())
                 .second(timeRange[1].second())
                 .toDate()
-              saveResult = await saveReservation({
-                from,
-                to,
+              saveResult = await saveReservationForMultipleItems({
+                from: from.toISOString(),
+                to: to.toISOString(),
                 type: 'hours',
                 siteId: site.id!,
-                itemId: selectedItem?.id!,
+                items: selectedItems,
                 userId: session?.user?.id!
               })
             } else if (reservationMode === 'days' && dateRange[0] && dateRange[1]) {
               const from = dateRange[0].toDate()
               const to = dateRange[1].toDate()
               console.log('Save reservation', from, to)
-              saveResult = await saveReservation({
-                from,
-                to,
+              saveResult = await saveReservationForMultipleItems({
+                from: from.toISOString(),
+                to: to.toISOString(),
                 type: 'days',
                 siteId: site.id!,
-                itemId: selectedItem?.id!,
+                items: selectedItems,
                 userId: session?.user?.id!
               })
             }
@@ -152,7 +152,7 @@ function ItemSelection({ apiKey, site } : { apiKey: string, site: SiteProps }) {
 
   return (
     <>
-      <SunbedSelectionComponent apiKey={apiKey} site={site} />
+      <SunbedSelection apiKey={apiKey} site={site} />
       <ReservationButton disabled={false} site={site} />
     </>
   )

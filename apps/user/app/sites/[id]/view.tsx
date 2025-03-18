@@ -52,7 +52,7 @@ const serviceIcons: {
 
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-const withHours = true
+const withHours = false
 
 const Backdrop = ({ onClick }: { onClick?: () => void }) => {
   return (
@@ -301,7 +301,9 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
                         <Tab value="days" label="Days" />
                         <Tab value="hours" label="Hours" />
                       </Tabs>
-                    </div> : null
+                    </div> : <div>
+                      NO HOURS
+                    </div>
                 }
               </div>
               <ReservationView apiKey={apiKey} stripePublicKey={stripePublicKey} site={fetchedSite || site} />

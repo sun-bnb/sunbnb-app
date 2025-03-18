@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import dayjs from 'dayjs'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { put } from '@vercel/blob'
@@ -319,9 +320,13 @@ export async function saveReservationForMultipleItems(
     reservationUserId = user.id
   }
 
+  const to = reservation.type === 'days' ?
+    dayjs(reservation.to).add(1, 'day').subtract(1, 'second').toDate() :
+    new Date(reservation.to)
+
   const reservationData = {
     from: new Date(reservation.from),
-    to: new Date(reservation.to),
+    to: to,
     type: reservation.type,
     status: 'pending',
     paymentAmount: 0,
@@ -341,7 +346,7 @@ export async function saveReservationForMultipleItems(
   if (!site.price) return { status: 'error', errors: [ 'Site price not set' ] }
 
   const totalPrice = reservation.items?.reduce((sum, item) => {
-    return sum + (item.price || 0)
+    return sum + (item.price || site.price || 0)
   }, 0) ?? 0
 
   reservationData.paymentAmount = totalPrice
