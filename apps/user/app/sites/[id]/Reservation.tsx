@@ -8,7 +8,15 @@ import FormControl from '@mui/material/FormControl'
 import Select from '@mui/material/Select'
 import CircularProgress from '@mui/material/CircularProgress'
 import React, { useState } from 'react'
+
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
+import { SingleInputTimeRangeField } from '@mui/x-date-pickers-pro/SingleInputTimeRangeField'
 import { useSession } from 'next-auth/react'
+
+import { MobileDatePicker } from '@mui/x-date-pickers/MobileDatePicker'
+import { MobileDateRangePicker } from '@mui/x-date-pickers-pro/MobileDateRangePicker'
+import { SingleInputDateRangeField } from '@mui/x-date-pickers-pro/SingleInputDateRangeField'
 
 import { setValue } from '@/store/features/sites/sitesSlice'
 import { RootState } from '@/store/store'
@@ -57,6 +65,103 @@ function PaymentMethodSelection() {
         </Select>
       </FormControl>
     </div>
+  )
+
+}
+
+function ReservationTimerangeSelector() {
+
+  const dispatch = useDispatch()
+  const sitesState = useSelector((state: RootState) => state.sites)
+  const { reservationState, reservationMode } = sitesState
+
+  let reservationDay = sitesState.reservationDay || dayjs().toDate()
+  let timeRange = sitesState.timeRange || [
+    dayjs().add(2, 'hour').toDate().toISOString(),
+    dayjs().add(4, 'hour').toDate().toISOString()
+  ]
+
+  let dateRange = sitesState.dateRange || [
+    dayjs().startOf('day').toISOString(),
+    dayjs().add(1, 'day').endOf('day').toISOString().substring(0, 10)
+  ]
+
+  return (
+    reservationMode === 'hours' ? (
+      <div className="mb-2 flex">
+        <LocalizationProvider dateAdapter={AdapterDayjs}>
+          <MobileDatePicker sx={{ 
+            marginRight: '4px',
+            input: {
+              textAlign: 'center'
+            }
+          }}
+            disabled={reservationState === 'processing'}
+            label="Date"
+            format='YYYY-MM-DD'
+            value={dayjs(reservationDay)}
+            selectedSections={null}
+            onOpen={() => {
+              dispatch(setValue({ focused: true }))
+            }}
+            onChange={(value) => {
+              dispatch(setValue({
+                reservationDay: value?.toDate(),
+                focused: true
+              }))
+            }}
+          />
+          <SingleInputTimeRangeField sx={{
+            input: {
+              textAlign: 'center'
+            }
+          }}
+            label="Time"
+            disabled={reservationState === 'processing'}
+            ampm={false}
+            fullWidth={true}
+            value={[dayjs(timeRange[0]), dayjs(timeRange[1])]}
+            onFocus={() => {
+              console.log('Focus')
+              dispatch(setValue({ focused: true }))
+            }}
+            onBlur={() => {
+              console.log('Blur')
+            }}
+            onChange={(newValue) => {
+              dispatch(setValue({ timeRange: [newValue[0]?.toDate(), newValue[1]?.endOf('day').toDate()] }))
+            }}
+          />
+        </LocalizationProvider>
+      </div>
+    ) : (
+      <div className="mb-2">
+        <LocalizationProvider dateAdapter={AdapterDayjs}>
+          <MobileDateRangePicker sx={{ 
+              width: '100%',
+              input: {
+                textAlign: 'center'
+              }
+            }}
+            onOpen={() => {
+              dispatch(setValue({ focused: true }))
+            }}
+            value={[dayjs(dateRange[0]), dayjs(dateRange[1])]}
+            disabled={reservationState === 'processing'}
+            format='YYYY-MM-DD'
+            selectedSections={null}
+            label="From - To"
+            slots={{ 
+              field: SingleInputDateRangeField
+            }}
+            onChange={(newValue) => {
+              console.log('Date range', newValue)
+              dispatch(setValue({ dateRange: [newValue[0]?.toISOString(), newValue[1]?.toISOString()] }))
+            }}
+          />
+        </LocalizationProvider>
+      </div>
+    )
   )
 
 }
@@ -150,10 +255,17 @@ function ItemSelection({ apiKey, site } : { apiKey: string, site: SiteProps }) {
 
   console.log('Item selection', apiKey, site)
 
+  const sitesState = useSelector((state: RootState) => state.sites)
+  const { selectedItems } = sitesState
+
   return (
     <>
-      <SunbedSelection apiKey={apiKey} site={site} />
-      <ReservationButton disabled={false} site={site} />
+      <ReservationTimerangeSelector />
+      <div className="w-full lg:w-1/2 h-[300px]">
+        <SunbedSelection apiKey={apiKey} site={site} />
+      </div>
+      
+      <ReservationButton disabled={!selectedItems || selectedItems.length === 0} site={site} />
     </>
   )
 }

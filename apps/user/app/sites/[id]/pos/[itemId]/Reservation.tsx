@@ -20,8 +20,7 @@ import {
   useGetReservationByIdQuery
 } from '@/store/features/api/apiSlice'
 import dayjs, { Dayjs } from 'dayjs'
-import SunbedSelectionComponent from './SunbedSelection'
-import { saveReservation, saveReservationForMultipleItems } from '../../actions'
+import { saveReservationForMultipleItems } from '../../actions'
 import PaymentView from '@/app/payment/Payment'
 import sunbedIcon from './sunbed-icon-transparent.png'
 
@@ -41,8 +40,6 @@ function ReservationButton({
   const sitesState = useSelector((state: RootState) => state.sites)
 
   let selectedItems = [item]
-
-  let reservationDay = dayjs(sitesState.reservationDay)
 
   return (
     <div className="mt-[8px]">

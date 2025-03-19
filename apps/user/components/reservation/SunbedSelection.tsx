@@ -2,10 +2,7 @@
 
 import Image from 'next/image'
 import { InventoryItem, MapBounds, SiteProps, WorkingHours } from '@/app/sites/types'
-import { MobileDatePicker } from '@mui/x-date-pickers/MobileDatePicker'
-import { MobileDateRangePicker } from '@mui/x-date-pickers-pro/MobileDateRangePicker'
-import { SingleInputDateRangeField } from '@mui/x-date-pickers-pro/SingleInputDateRangeField'
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 
 import { setValue } from '@/store/features/sites/sitesSlice'
 import { RootState } from '@/store/store'
@@ -15,9 +12,6 @@ import {
 } from '@/store/features/api/apiSlice'
 import dayjs, { Dayjs } from 'dayjs'
 import { APIProvider, AdvancedMarker, Map } from '@vis.gl/react-google-maps'
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
-import { SingleInputTimeRangeField } from '@mui/x-date-pickers-pro/SingleInputTimeRangeField'
 
 import sunbedIcon from './sunbed-icon-transparent.png'
 
@@ -39,6 +33,7 @@ function isSiteOpen(reservationDay: Dayjs, from: Dayjs, to: Dayjs, workingHours:
   return !notWorkingHours
 
 }
+
 
 export default function SunbedSelection({
   apiKey,
@@ -106,7 +101,7 @@ export default function SunbedSelection({
 
   let inventoryItems = site.inventoryItems
   const firstAvailableItem = inventoryItems?.find(item => isAvailable(item))
-  let selectedItems = sitesState.selectedItems || [firstAvailableItem]
+  let selectedItems = sitesState.selectedItems || []
 
   useEffect(() => {
 
@@ -117,13 +112,13 @@ export default function SunbedSelection({
   
     // If nothing remains, you could automatically select the first available item (or multiple)
     if (!filteredSelection.length) {
-      const firstAvailableItem = inventoryItems?.find(item => isAvailable(item));
-      if (firstAvailableItem) {
-        dispatch(setValue({ selectedItems: [firstAvailableItem] }));
-      } else {
+      //const firstAvailableItem = inventoryItems?.find(item => isAvailable(item));
+      //if (firstAvailableItem) {
+      //  dispatch(setValue({ selectedItems: [firstAvailableItem] }));
+      //} else {
         // Or dispatch an empty array if no items are available
         dispatch(setValue({ selectedItems: [] }));
-      }
+      //}
     } else {
       // Keep the valid filtered list
       dispatch(setValue({ selectedItems: filteredSelection }));
@@ -154,175 +149,103 @@ export default function SunbedSelection({
 
   function getScaledSize(zoom: number): number {
     const baseZoom = 20
-    const baseSize = 45
+    const baseSize = 35
     // Adjust scale factor as you like (linear or exponential)
-    return baseSize * Math.pow(2, (zoom - baseZoom) / 2)
+    // return baseSize * Math.pow(1, (zoom - baseZoom) / 2)
+
+    const zoomDiff = zoom - baseZoom
+    if (zoomDiff < 0) return baseSize * Math.pow(4, (zoom - baseZoom) / 2)
+    else return baseSize * Math.pow(3, (zoom - baseZoom) / 2)
+
   }
   
   const dynamicSize = getScaledSize(zoom)
   console.log('Dynamic size', dynamicSize)
 
-
   return (
     <>
-      {
-        reservationMode === 'hours' ? (
-          <div className="mb-2 flex">
-            <LocalizationProvider dateAdapter={AdapterDayjs}>
-              <MobileDatePicker sx={{ 
-                marginRight: '4px',
-                input: {
-                  textAlign: 'center'
-                }
-              }}
-                disabled={reservationState === 'processing'}
-                label="Date"
-                format='YYYY-MM-DD'
-                value={dayjs(reservationDay)}
-                selectedSections={null}
-                onOpen={() => {
-                  dispatch(setValue({ focused: true }))
-                }}
-                onChange={(value) => {
-                  dispatch(setValue({
-                    reservationDay: value?.toDate(),
-                    focused: true
-                  }))
-                }}
-              />
-              <SingleInputTimeRangeField sx={{
-                input: {
-                  textAlign: 'center'
-                }
-              }}
-                label="Time"
-                disabled={reservationState === 'processing'}
-                ampm={false}
-                fullWidth={true}
-                value={[dayjs(timeRange[0]), dayjs(timeRange[1])]}
-                onFocus={() => {
-                  console.log('Focus')
-                  dispatch(setValue({ focused: true }))
-                }}
-                onBlur={() => {
-                  console.log('Blur')
-                }}
-                onChange={(newValue) => {
-                  dispatch(setValue({ timeRange: [newValue[0]?.toDate(), newValue[1]?.endOf('day').toDate()] }))
-                }}
-              />
-            </LocalizationProvider>
-          </div>
-        ) : (
-          <div className="mb-2">
-            <LocalizationProvider dateAdapter={AdapterDayjs}>
-              <MobileDateRangePicker sx={{ 
-                  width: '100%',
-                  input: {
-                    textAlign: 'center'
-                  }
-                }}
-                onOpen={() => {
-                  dispatch(setValue({ focused: true }))
-                }}
-                value={[dayjs(dateRange[0]), dayjs(dateRange[1])]}
-                disabled={reservationState === 'processing'}
-                format='YYYY-MM-DD'
-                selectedSections={null}
-                label="From - To"
-                slots={{ 
-                  field: SingleInputDateRangeField
-                }}
-                onChange={(newValue) => {
-                  console.log('Date range', newValue)
-                  dispatch(setValue({ dateRange: [newValue[0]?.toISOString(), newValue[1]?.toISOString()] }))
-                }}
-              />
-            </LocalizationProvider>
-          </div>
-        )
-      }
-      <div className="w-full lg:w-1/2 h-[300px]">
-        <APIProvider apiKey={apiKey}>
-          <Map mapId={'7a0196a7ba317ea5'}
-            defaultZoom={defaultBounds ? undefined : 20}
-            defaultCenter={{ lat: Number(site.locationLat), lng: Number(site.locationLng) }}
-            defaultBounds={defaultBounds}
-            gestureHandling={'greedy'}
-            disableDefaultUI={true}
-            onZoomChanged={(mapInstance) => {
-              const newZoom = mapInstance.map.getZoom()
-              console.log('Zoom changed', newZoom)
-              setZoom(newZoom || 20)
-            }}
-            onClick={(e) => {
-              console.log('Map click', e)
-            }}
-          >
-            {
-              ((inventoryItems || []).map(item => {
+      <APIProvider apiKey={apiKey}>
+        <Map mapId={'7a0196a7ba317ea5'}
+          defaultZoom={defaultBounds ? undefined : 20}
+          defaultCenter={{ lat: Number(site.locationLat), lng: Number(site.locationLng) }}
+          defaultBounds={defaultBounds}
+          gestureHandling={'greedy'}
+          disableDefaultUI={true}
+          onZoomChanged={(mapInstance) => {
+            const newZoom = mapInstance.map.getZoom()
+            console.log('Zoom changed', newZoom)
+            setZoom(newZoom || 20)
+          }}
+          onClick={(e) => {
+            console.log('Map click', e)
+          }}
+        >
+          {
+            ((inventoryItems || []).map(item => {
 
-                let bgColor = 'bg-[#ff0000]'
-                let borderStyle = ''
-                let size = 40
-                const itemAvailable = isAvailable(item)
-                if (itemAvailable) {
-                  bgColor = 'bg-[#00ff00]'
-                  if (selectedItems?.some((selected: { id: string }) => selected.id === item.id)) {
-                    bgColor = 'bg-[#0000ff]'
-                    borderStyle = 'border border-[4px] border-red-800'
-                    size = dynamicSize
-                  }
+              let bgColor = '' // 'bg-[#ff0000]'
+              let borderStyle = 'border border-[1px] border-[#ff0000]'
+              let size = dynamicSize
+              const itemAvailable = isAvailable(item)
+              if (itemAvailable) {
+                bgColor = '' // 'bg-[#00ff00]'
+                borderStyle = 'border border-[1px] border-[#00ff00]'
+                if (selectedItems?.some((selected: { id: string }) => selected.id === item.id)) {
+                  bgColor = '' // 'bg-[#0000ff]'
+                  borderStyle = 'border border-[4px] border-[#0000ff]'
                 }
-                
-                
-                return (
-                  <AdvancedMarker key={item.id}
-                    position={{ lat: Number(item.locationLat), lng: Number(item.locationLng) }}
-                    onClick={() => {
+              }
+              
+              
+              return (
+                <AdvancedMarker key={item.id}
+                  position={{ lat: Number(item.locationLat), lng: Number(item.locationLng) }}
+                  onClick={() => {
 
-                      if (itemAvailable) {
-                        const alreadySelected = selectedItems?.some(
-                          (selected: { id: string }) => selected.id === item.id
+                    if (itemAvailable) {
+                      const alreadySelected = selectedItems?.some(
+                        (selected: { id: string }) => selected.id === item.id
+                      )
+                  
+                      let updatedItems;
+                      if (alreadySelected) {
+                        updatedItems = selectedItems.filter(
+                          (selected: { id: string }) => selected.id !== item.id
                         )
-                    
-                        let updatedItems;
-                        if (alreadySelected) {
-                          updatedItems = selectedItems.filter(
-                            (selected: { id: string }) => selected.id !== item.id
-                          )
-                        } else {
-                          updatedItems = selectedItems ? [...selectedItems, item] : [item]
-                        }
-                    
-                        dispatch(
-                          setValue({
-                            selectedItems: updatedItems,
-                          })
-                        )
+                      } else {
+                        updatedItems = selectedItems ? [...selectedItems, item] : [item]
                       }
-                    }}>
+                  
+                      dispatch(
+                        setValue({
+                          selectedItems: updatedItems,
+                        })
+                      )
+                    }
+                  }}>
+                  
+                  <div className={`w-[${size}px] h-[${size}px] flex justify-center items-center`}>
                     
-                    <div className={`w-[${size}px] h-[${size}px] ${bgColor} ${borderStyle} rounded-full flex justify-center items-center`}>
+                    <div className={`block ${bgColor} ${borderStyle}`} style={{
+                      maxWidth: 'none',
+                      height: `${dynamicSize}px`,
+                      width: `${dynamicSize}px`,
+                      marginTop: `-${(dynamicSize - 40) / 2}px`,
+                      ...(item.rotation ? {
+                        transform: `rotate(${item.rotation}deg)`,
+                        transformOrigin: 'center'
+                      } : {})
+                    }}>
                       <Image style={{
-                          display: 'block',
-                          maxWidth: 'none',
-                          height: 'auto',
-                          width: `${dynamicSize}px`,
-                          marginTop: `-${(dynamicSize - 40) / 2}px`,
-                          ...(item.rotation ? {
-                            transform: `rotate(${item.rotation}deg)`,
-                            transformOrigin: 'center'
-                          } : {})
-                        }} src={sunbedIcon} alt="Item" />
-
-                    </div>
-                  </AdvancedMarker>
-                )}))
-            }
-          </Map>
-        </APIProvider>
-      </div>
+                        width: '100%'
+                      }} src={sunbedIcon} alt="Item" />
+                    </div>                
+                  </div>
+                </AdvancedMarker>
+              )}))
+          }
+        </Map>
+      </APIProvider>
     </>
   )
 

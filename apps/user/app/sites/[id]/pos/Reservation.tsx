@@ -18,7 +18,7 @@ import {
   useGetReservationByIdQuery
 } from '@/store/features/api/apiSlice'
 import dayjs, { Dayjs } from 'dayjs'
-import SunbedSelectionComponent from './SunbedSelection'
+import SunbedSelection from '@/components/reservation/SunbedSelection'
 import { saveReservation, saveReservationForMultipleItems } from '../actions'
 import PaymentView from '@/app/payment/Payment'
 
@@ -248,7 +248,25 @@ export default function ReservationView({
             </div>
         )
       }
-      <SunbedSelectionComponent apiKey={apiKey} site={site} />
+      <div className="relative"> 
+        <div className="
+          absolute
+          bottom-[10px]
+          right-[10px]
+          z-[1]
+          bg-white/60
+          py-[6px]
+          px-[8px]
+          border
+          border-black
+          rounded-[8px]
+          text-lg
+          font-bold
+        ">{ site.name }</div>
+        <div className="w-full h-screen">
+          <SunbedSelection apiKey={apiKey} site={site} />
+        </div>
+      </div>
       {
         selectedItems.length > 0 && <div style={{ zIndex: 11 }} className={`fixed left-0 w-full bg-white text-white text-center px-2 pb-4
           ${panelBottom} border-t transition-bottom duration-500`}>
