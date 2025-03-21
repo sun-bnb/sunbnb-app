@@ -135,7 +135,7 @@ function ReservationTimerangeSelector() {
         </LocalizationProvider>
       </div>
     ) : (
-      <div className="mb-2">
+      <div className="mb-2 bg-white">
         <LocalizationProvider dateAdapter={AdapterDayjs}>
           <MobileDateRangePicker sx={{ 
               width: '100%',

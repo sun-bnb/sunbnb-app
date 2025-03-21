@@ -201,7 +201,7 @@ export default function Sites({ sites, geography, apiKey }: {
   console.log('Search response', searchResponse)
 
   return (
-    <div className="container mx-auto -mt-2">
+    <div className="container mx-auto -mt-2 bg-[#fff5e1]">
       <div className="flex justify-between py-1 px-2">
         <div>
           <div className="text-sm text-gray-600">

@@ -3,7 +3,7 @@
 import { useSession } from 'next-auth/react'
 import { useRouter, usePathname } from 'next/navigation'
 import { ReactNode, useEffect, useState } from 'react'
-import Header from './header'
+import Header from './header/header'
 
 const App = ({ children }: {
   children: React.ReactNode;
@@ -30,7 +30,7 @@ const App = ({ children }: {
       setContent(
         <div>
           <Header />
-          <div className="flex max-w-lg mx-auto">
+          <div className="flex max-w-lg mx-auto bg-[#fff5e1]">
             <div className="flex-grow lg:p-6">
               {children}
             </div>

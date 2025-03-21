@@ -110,7 +110,7 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
   console.log('CHECK APP URL', process.env.NEXT_PUBLIC_APP_URL)
 
   return (
-    <div className="container mx-auto">
+    <div className="container mx-auto bg-[#fff5e1]">
       {
         focused &&
           <Backdrop onClick={() => {
@@ -127,7 +127,7 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
                 <Image width={site.imageWidth} height={site.imageHeight} alt={site.description || ''} className="w-full h-auto" src={site.image} />
             }
           </div>
-          <div className="absolute inset-0 bg-gradient-to-b from-white to-transparent via-transparent h-100"></div>
+          <div className="absolute inset-0 bg-gradient-to-b from-[#fff5e1] to-transparent via-transparent h-100"></div>
           <div className="absolute top-[2px] left-[12px] text-2xl bg-black bg-opacity-30 px-2 py-1 rounded-lg text-white">
             { site.name }
           </div>
@@ -272,11 +272,11 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
         </div>
         <div className="mt-[140px]">
         </div>
-        <div style={{ zIndex: 11 }} className={`fixed left-0 w-full bg-white text-white text-center px-2 pb-4
+        <div style={{ zIndex: 11 }} className={`fixed left-0 w-full bg-[#fff5e1] text-white text-center px-2 pb-4
           ${!focused ? '-bottom-[364px]' : 'bottom-[0px]'} border-t transition-bottom duration-500`}>
           {
             focused &&
-              <div className="text-black absolute w-[100px] bg-white rounded-md border" style={{
+              <div className="text-black absolute w-[100px] bg-[#fff5e1] rounded-md border" style={{
                 left: 'calc(50% - 50px)',
                 top: '-15px',
                 zIndex: 2
