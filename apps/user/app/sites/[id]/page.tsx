@@ -16,7 +16,9 @@ async function getSite(id: string, userId: string) {
               userId: userId
             },
             orderBy: { from: 'desc' }
-          }
+          },
+          pair: true,
+          pairedBy: true
         }
       }
     }

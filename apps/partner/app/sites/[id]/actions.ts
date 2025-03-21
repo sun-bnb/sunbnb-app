@@ -315,7 +315,10 @@ export async function saveInventoryItemProperties(
   inventoryItem: { 
     category?: string,
     price?: number,
-    rotation?: number
+    rotation?: number,
+    number?: number,
+    label?: string,
+    pairId?: string
   }
 ) {
   
@@ -327,13 +330,22 @@ export async function saveInventoryItemProperties(
   const inventoryItemData = {
     category: inventoryItem.category,
     price: inventoryItem.price,
-    rotation: inventoryItem.rotation
+    rotation: inventoryItem.rotation,
+    number: inventoryItem.number,
+    label: inventoryItem.label
   }
+
+  const pairItem = inventoryItem.pairId ? await prisma.inventoryItem.findUnique({
+    where: { id: inventoryItem.pairId }
+  }) : undefined
 
   console.log('SAVE INV ITEM PROPS DATA', inventoryItemData)
   await prisma.inventoryItem.update({
     where: { id },
-    data: inventoryItemData
+    data: {
+      ...inventoryItemData,
+      pair: pairItem? { connect: { id: inventoryItem.pairId } } : undefined
+    }
   })
   
   revalidatePath('/sites')

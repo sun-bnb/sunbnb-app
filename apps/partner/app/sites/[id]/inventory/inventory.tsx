@@ -1,277 +1,374 @@
 'use client'
 
 import Image from 'next/image'
+import { useState } from 'react'
+import TextField from '@mui/material/TextField'
+import Button from '@mui/material/Button'
+import { InventoryItem } from '../../../../types/shared'
 import { 
   createInventoryItem,
   deleteInventoryItem,
   saveInventoryItemLocation,
   saveInventoryItemProperties
 } from '../actions'
-import { useState } from 'react'
-import Chip from '@mui/material/Chip'
-import TextField from '@mui/material/TextField'
-import { InventoryItem } from '../../../../types/shared'
 import { APIProvider, AdvancedMarker, ControlPosition, Map } from '@vis.gl/react-google-maps'
 import MapHandler from '@/components/maps/map-handler'
 import { CustomMapControl } from '@/components/maps/map-control'
-import sunbedIcon from './sunbed-icon-transparent.png'
 import Reservations from './reservations'
-import Button from '@mui/material/Button'
+import sunbedIcon from './sunbed-icon-transparent.png'
 
-export default function Inventory(
-  { siteId, siteLat, siteLng, inventory, apiKey } : 
-  { siteId: string, siteLat: string, siteLng: string, inventory: InventoryItem[], apiKey: string }
-) {
-  
+interface InventoryProps {
+  siteId: string
+  siteLat: string
+  siteLng: string
+  inventory: InventoryItem[]
+  apiKey: string
+}
+
+function getScaledSize(zoom: number): number {
+  const physicalLength = 3.5; // in meters; adjust if needed for your actual sunbed size
+  const metersPerPixel = 156543.03392 / Math.pow(2, zoom);
+  return physicalLength / metersPerPixel;
+}
+
+interface SunbedMarkerProps {
+  item: InventoryItem
+  dynamicSize: number
+  zoom: number
+  selected?: boolean
+  pairedSelected?: boolean
+  onClick: () => void
+  onDragEnd: (e: any) => void
+}
+
+const SunbedMarker: React.FC<SunbedMarkerProps> = ({
+  item,
+  dynamicSize,
+  zoom,
+  selected = false,
+  pairedSelected = false,
+  onClick,
+  onDragEnd,
+}) => {
+
+  // At high zoom levels, render the detailed rectangle marker.
+  const width = dynamicSize * 0.5
+  const height = dynamicSize
+  const isPaired = Boolean(item.pairId || item.pairedBy?.id)
+  // Only thicken border if this marker or its pair is selected.
+  const borderThickness = (selected || pairedSelected) ? 4 : 2
+  // Use gray border if the item is paired.
+  const borderColor = isPaired ? 'gray' : 'black'
+  const rotation = item.rotation || 0
+
+  const markerContent = (
+    <div
+      className="relative"
+      style={{
+        height: `${dynamicSize}px`,
+        width: `${dynamicSize / 2.5}px`,
+        transform: `rotate(${rotation}deg)`,
+        transformOrigin: 'center',
+      }}
+    >
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          border: `${borderThickness}px solid ${borderColor}`,
+          borderRadius: '4px',
+          backgroundColor: selected ? 'rgba(0, 0, 0, 0.3)' : 'transparent',
+        }}
+      />
+      {
+        zoom > 20 &&
+          <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs rounded-full px-1">
+            {String(item.number).padStart(4, '0')}
+          </div>
+      }
+      
+    </div>
+  )
+
+  return (
+    <AdvancedMarker
+      position={{ lat: Number(item.locationLat), lng: Number(item.locationLng) }}
+      draggable
+      onClick={onClick}
+      onDragEnd={onDragEnd}
+    >
+      {markerContent}
+    </AdvancedMarker>
+  )
+}
+
+interface InventoryFormProps {
+  selectedItem: InventoryItem
+  selectedItemNumber: string
+  selectedItemLabel: string
+  selectedItemCategory: string
+  selectedItemPrice: string
+  selectedItemRotation: string
+  selectedItemPairId: string
+  onFieldChange: (
+    field: 'number' | 'label' | 'category' | 'price' | 'rotation' | 'pairId',
+    value: string
+  ) => void
+  onSave: () => void
+  onDelete: () => void
+  onPair: () => void
+}
+
+const InventoryForm: React.FC<InventoryFormProps> = ({
+  selectedItem,
+  selectedItemNumber,
+  selectedItemLabel,
+  selectedItemCategory,
+  selectedItemPrice,
+  selectedItemRotation,
+  selectedItemPairId,
+  onFieldChange,
+  onSave,
+  onDelete,
+  onPair
+}) => (
+  <div className="flex flex-col mt-[6px] ml-[4px]">
+    <div className="flex mb-2">
+      <TextField
+        name="item-number"
+        label="Item Number"
+        fullWidth
+        value={selectedItemNumber || String(selectedItem.number) || ''}
+        variant="standard"
+        placeholder="0001"
+        onChange={e => onFieldChange('number', e.target.value)}
+        sx={{ mr: 1 }}
+      />
+      <TextField
+        name="item-label"
+        label="Item Label"
+        fullWidth
+        value={selectedItemLabel || selectedItem.label || ''}
+        variant="standard"
+        placeholder="Sunbed A"
+        onChange={e => onFieldChange('label', e.target.value)}
+        sx={{ mr: 1 }}
+      />
+    </div>
+    <div className="flex mb-2">
+      <TextField
+        name="item-category"
+        label="Item Category"
+        fullWidth
+        value={selectedItemCategory || selectedItem.category || ''}
+        variant="standard"
+        placeholder="PRICE1"
+        onChange={e => onFieldChange('category', e.target.value)}
+        sx={{ mr: 1 }}
+      />
+      <TextField
+        name="item-price"
+        label="Item Price"
+        fullWidth
+        value={selectedItemPrice || selectedItem.price?.toString() || ''}
+        variant="standard"
+        placeholder="8.5"
+        onChange={e => onFieldChange('price', e.target.value)}
+        sx={{ mr: 1 }}
+      />
+    </div>
+    <div className="flex mb-2">
+      <TextField
+        name="item-rotation"
+        label="Item Rotation"
+        fullWidth
+        value={selectedItemRotation || selectedItem.rotation?.toString() || ''}
+        variant="standard"
+        placeholder="0"
+        onChange={e => onFieldChange('rotation', e.target.value)}
+        sx={{ mr: 1 }}
+      />
+      <TextField
+        name="item-pairing"
+        label="Item Pairing"
+        fullWidth
+        value={selectedItemPairId || selectedItem.pairId || selectedItem.pairedBy?.id || ''}
+        variant="standard"
+        placeholder="Pair ID"
+        onChange={e => onFieldChange('pairId', e.target.value)}
+        sx={{ mr: 1 }}
+      />
+    </div>
+    <div className="flex items-center gap-2">
+      <Button variant="contained" onClick={onSave}>
+        Save
+      </Button>
+      <Button variant="outlined" color="error" onClick={onDelete}>
+        Delete
+      </Button>
+      <Button variant="outlined" onClick={onPair}>
+        PAIR
+      </Button>
+    </div>
+  </div>
+)
+
+export default function Inventory({
+  siteId,
+  siteLat,
+  siteLng,
+  inventory,
+  apiKey,
+}: InventoryProps) {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [selectedPlace, setSelectedPlace] = useState<google.maps.places.PlaceResult | null>(null)
-  const [selectedItemCategory, setSelectedItemCategory] = useState<string | undefined>(undefined)
-  const [selectedItemPrice, setSelectedItemPrice] = useState<string | undefined>(undefined)
-  const [selectedItemRotation, setSelectedItemRotation] = useState<string | undefined>(undefined)
-
+  const [selectedItemNumber, setSelectedItemNumber] = useState<string>('')
+  const [selectedItemLabel, setSelectedItemLabel] = useState<string>('')
+  const [selectedItemCategory, setSelectedItemCategory] = useState<string>('')
+  const [selectedItemPrice, setSelectedItemPrice] = useState<string>('')
+  const [selectedItemRotation, setSelectedItemRotation] = useState<string>('')
+  const [selectedItemPairId, setSelectedItemPairId] = useState<string>('')
+  const [pairingMode, setPairingMode] = useState<boolean>(false)
   const [zoom, setZoom] = useState<number>(20)
 
-  function getScaledSize(zoom: number): number {
-    const baseZoom = 20
-    const baseSize = 45
-    // Adjust scale factor as you like (linear or exponential)
-    return baseSize * Math.pow(2, (zoom - baseZoom) / 2)
-  }
-  
   const dynamicSize = getScaledSize(zoom)
-
-  const inventoryMap: { [key: string]: InventoryItem } = {
-  }
-
   const selectedItem = inventory.find(item => item.id === selectedItemId)
 
-  inventory.forEach(item => {
-    inventoryMap[item.id] = item
-  })
+  // Toggle selection by marker click
+  const toggleSelection = (item: InventoryItem): void => {
+    setSelectedItemId(prev => (prev === item.id ? null : item.id))
+  }
 
-  const beachFlagImg: HTMLImageElement = document.createElement('img')
-  beachFlagImg.src = 'https://developers.google.com/maps/documentation/javascript/examples/full/images/beachflag.png'
+  const handleSave = (): void => {
+    if (!selectedItem) return
+    const changedValues: {
+      number?: number
+      label?: string
+      category?: string
+      price?: number
+      rotation?: number
+      pairId?: string
+    } = {}
 
-  console.log('Inventory', inventory)
+    console.log('Save item', changedValues, selectedItemNumber)
 
-  const now = new Date()
+    if (selectedItemNumber) changedValues.number = Number(selectedItemNumber)
+    if (selectedItemLabel) changedValues.label = selectedItemLabel
+    if (selectedItemCategory) changedValues.category = selectedItemCategory
+    if (selectedItemPrice) changedValues.price = Number(selectedItemPrice)
+    if (selectedItemRotation) changedValues.rotation = Number(selectedItemRotation)
+    if (selectedItemPairId) changedValues.pairId = selectedItemPairId
+    saveInventoryItemProperties(selectedItem.id, changedValues)
+  }
+
+  const handleDelete = (): void => {
+    if (selectedItem) {
+      deleteInventoryItem(selectedItem.id)
+      setSelectedItemId(null)
+    }
+  }
+
+  const handleMarkerClick = (item: InventoryItem): void => {
+    if (pairingMode && selectedItem && item.id !== selectedItem.id) {
+      setSelectedItemPairId(item.id)
+      setPairingMode(false)
+    } else {
+      // Regular toggle selection
+      setSelectedItemPairId('')
+      setSelectedItemId(prev => (prev === item.id ? null : item.id))
+    }
+  }
+
+  const handleMarkerDragEnd = (item: InventoryItem, e: any): void => {
+    const lat = e.latLng?.lat()
+    const lng = e.latLng?.lng()
+    if (lat && lng) {
+      saveInventoryItemLocation(item.id, {
+        locationLat: lat.toString(),
+        locationLng: lng.toString(),
+      })
+    }
+  }
 
   return (
     <div className="container mx-auto">
-      <div className="mt-6 flex flex-wrap">
-        {
-          inventory.map((item: InventoryItem) => {
-            
-            const activeReservations = (item.reservations || [])
-              .filter(reservation => reservation.status !== 'canceled')
-              .filter(reservation => reservation.to >= now)
-
-            let bgColor: 'success' | 'info' | 'error' = 'success'
-
-            if (activeReservations.length > 0) {
-              
-              bgColor = 'info'
-
-              const now = new Date()
-
-              const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-              const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
-
-              const reservationActiveToday = activeReservations.find((reservation) => {
-                const from = new Date(reservation.from)
-                const to = new Date(reservation.to)
-                console.log('Reservation', now, startOfToday, endOfToday, from, to)
-                console.log('TODAY', now <= endOfToday)
-                return from <= endOfToday && to >= startOfToday
-              })
-
-              if (reservationActiveToday) {
-                bgColor = 'error'
-              }
-
-            }
-
-            const borderColor = (item.reservations?.length || 0) > 0 ? 'border-gray-600' : 'border-gray-400'
-            const borderStyle = (selectedItem && selectedItem.id === item.id) ? 'filled' : 'outlined'
-
-            return <Chip
-              label={`Item ${String(item.number).padStart(4, '0')}`}
-              variant={borderStyle}
-              color={Number(item.locationLat) === 0 ? 'default' : bgColor}
-              sx={{ margin: '4px' }}
-              onClick={() => {
-                if (selectedItem && selectedItem.id === item.id) {
-                  setSelectedItemId(null)
-                } else {
-                  setSelectedItemId(item.id)
-                }
-              }}
-              onDelete={(e) => {
-                deleteInventoryItem(item.id)
-              }}
-            />
-          })
-        }
-        <Chip
-          label="+ Add Item"
+      <div className="flex justify-end mt-4">
+        <Button
           variant="outlined"
-          sx={{ margin: '4px' }}
-          onClick={async (e) => {
+          onClick={async () => {
             const result = await createInventoryItem({ siteId })
-            setSelectedItemId((result.item as unknown as InventoryItem).id)
+            setSelectedItemId((result.item as InventoryItem).id)
           }}
-        />
+        >
+          + Add Item
+        </Button>
       </div>
-      {
-        selectedItem && (
-          <div className="flex justify-between mt-[6px] ml-[4px]">
-            <div className="flex">
-              <div className="mr-[6px]">
-                <TextField
-                  name="item-category"
-                  label="Item category"
-                  fullWidth={true}
-                  value={selectedItemCategory || selectedItem.category || ''} 
-                  variant="standard"
-                  placeholder="PRICE1"
-                  onChange={(e) => setSelectedItemCategory(e.target.value)}
-                />
-              </div>
-              <div className="mr-[6px]">
-                <TextField
-                  name="item-price"
-                  label="Item price"
-                  fullWidth={true}
-                  value={selectedItemPrice || selectedItem.price || ''} 
-                  variant="standard"
-                  placeholder="8.5"
-                  onChange={(e) => setSelectedItemPrice(e.target.value)}
-                />
-              </div>
-              <div className="mr-[6px]">
-                <TextField
-                  name="item-rotation"
-                  label="Item rotation"
-                  fullWidth={true}
-                  value={selectedItemRotation || selectedItem.rotation || ''} 
-                  variant="standard"
-                  placeholder="0"
-                  onChange={(e) => setSelectedItemRotation(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="mt-[8px]">
-              <Button variant="contained"
-                onClick={() => {
-                  
-                  const changedValues: {
-                    category?: string,
-                    price?: number,
-                    rotation?: number
-                  } = {}
-
-                  if (selectedItemCategory) changedValues.category = selectedItemCategory
-                  if (selectedItemPrice) changedValues.price = Number(selectedItemPrice)
-                  if (selectedItemRotation) changedValues.rotation = Number(selectedItemRotation)
-
-                  saveInventoryItemProperties(selectedItem.id, changedValues)
-                
-                }}>
-                  Save
-              </Button>
-            </div>
-          </div>
-        )
-      }
+      {selectedItem && (
+        <InventoryForm
+          selectedItem={selectedItem}
+          selectedItemNumber={selectedItemNumber}
+          selectedItemLabel={selectedItemLabel}
+          selectedItemCategory={selectedItemCategory}
+          selectedItemPrice={selectedItemPrice}
+          selectedItemRotation={selectedItemRotation}
+          selectedItemPairId={selectedItemPairId}
+          onFieldChange={(field, value) => {
+            console.log('Field change', field, value)
+            if (field === 'number') setSelectedItemNumber(value)
+            else if (field === 'label') setSelectedItemLabel(value)
+            else if (field === 'category') setSelectedItemCategory(value)
+            else if (field === 'price') setSelectedItemPrice(value)
+            else if (field === 'rotation') setSelectedItemRotation(value)
+            else if (field === 'pairId') setSelectedItemPairId(value)
+          }}
+          onSave={handleSave}
+          onDelete={handleDelete}
+          onPair={() => setPairingMode(true)}
+        />
+      )}
       <div className="mt-6 flex justify-between flex-col">
-        {
-          (selectedItem && Number(selectedItem.locationLat) === 0) &&
-            <div className="w-full bg-yellow-400 p-2 text-gray-600 font-bold">
-              Place item on the map:
-            </div>
-        }
+        {selectedItem && Number(selectedItem.locationLat) === 0 && (
+          <div className="w-full bg-yellow-400 p-2 text-gray-600 font-bold">
+            Place item on the map:
+          </div>
+        )}
         <div className="w-full h-[400px] border border-2 border-gray-400">
           <APIProvider apiKey={apiKey}>
-            <Map mapId={'7a0196a7ba317ea5'}
+            <Map
+              mapId="7a0196a7ba317ea5"
               defaultZoom={18}
-              defaultCenter={(siteLat && siteLng) ? {
-                lat: Number(siteLat),
-                lng: Number(siteLng)
-              } : { lat: 35.5138298, lng: 24.0180367 }}
-              gestureHandling={'greedy'}
-              disableDefaultUI={true}
-              onZoomChanged={(mapInstance) => {
+              defaultCenter={
+                siteLat && siteLng
+                  ? { lat: Number(siteLat), lng: Number(siteLng) }
+                  : { lat: 35.5138298, lng: Number(24.0180367) }
+              }
+              gestureHandling="greedy"
+              disableDefaultUI
+              onZoomChanged={mapInstance => {
                 const newZoom = mapInstance.map.getZoom()
-                console.log('Zoom changed', newZoom)
                 setZoom(newZoom || 20)
               }}
-              onClick={(e) => {
-                console.log('Map click', e)
-                const lat = e.detail.latLng?.lat
-                const lng = e.detail.latLng?.lng
-                if (selectedItem && lat && lng) {
-                  selectedItem.locationLat = lat.toString()
-                  selectedItem.locationLng = lng.toString()
-                  saveInventoryItemLocation(selectedItem.id, { locationLat: lat.toString(), locationLng: lng.toString() })
-                }
-              }}
             >
-              {
-                (inventory.map(item => (
-                  (item.id !== selectedItem?.id) && <AdvancedMarker key={item.id}
-                    position={{ lat: Number(item.locationLat), lng: Number(item.locationLng) }} >
-                    <div className="rounded-full absolute -top-[40px] -left-[40px]">
-                      <Image style={ item.rotation ? {
-                        transform: `rotate(${item.rotation}deg)`,
-                        transformOrigin: 'center',
-                        display: 'block',
-                        maxWidth: 'none',
-                        height: 'auto',
-                        width: `${dynamicSize}px`,
-                        marginTop: `-${(dynamicSize - 40) / 2}px`
-                      } : {}} width={80} src={sunbedIcon} alt="Item" />
-                    </div>
-                  </AdvancedMarker>)))
-              }
-              {
-                (selectedItem?.locationLat && selectedItem?.locationLng) &&
-                  <AdvancedMarker position={{ lat: Number(selectedItem.locationLat), lng: Number(selectedItem.locationLng) }}>
-                    <div className="bg-white border-2 border-red-600 rounded-full absolute -top-[40px] -left-[40px] z-10">
-                      <Image style={ selectedItem.rotation ? {
-                        transform: `rotate(${selectedItem.rotation}deg)`,
-                        transformOrigin: 'center',
-                        display: 'block',
-                        maxWidth: 'none',
-                        height: 'auto',
-                        width: `${dynamicSize}px`,
-                        marginTop: `-${(dynamicSize - 40) / 2}px`
-                      } : {}} src={sunbedIcon} alt="Item" />
-                    </div>
-                  </AdvancedMarker>
-
-              }
-              
+              {inventory.map(item => (
+                <SunbedMarker
+                  key={item.id}
+                  item={item}
+                  dynamicSize={dynamicSize}
+                  zoom={zoom}
+                  selected={selectedItem?.id === item.id}
+                  onClick={() => handleMarkerClick(item)}
+                  onDragEnd={(e) => handleMarkerDragEnd(item, e)}
+                />
+              ))}
             </Map>
-            <CustomMapControl
-              controlPosition={ControlPosition.TOP_LEFT}
-              onPlaceSelect={setSelectedPlace}
-            />
-
+            <CustomMapControl controlPosition={ControlPosition.TOP_LEFT} onPlaceSelect={setSelectedPlace} />
             <MapHandler place={selectedPlace} />
           </APIProvider>
         </div>
         <div className="w-full mt-4 text-sm md:text-base">
-          {
-            selectedItem ?
-              (
-                <Reservations reservations={selectedItem.reservations || []} />
-              ) : (
-                <></>
-              )
-          }
+          {selectedItem && <Reservations reservations={selectedItem.reservations || []} />}
         </div>
       </div>
     </div>
   )
-
 }

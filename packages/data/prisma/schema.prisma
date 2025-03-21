@@ -134,11 +134,16 @@ model InventoryItem {               @map("inventory_item")
   category          String?
   price             Float?
  
+  pairId        String?         @unique @map("pair_id") 
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   reservations           Reservation[]
  
+  pair          InventoryItem?  @relation("ItemPair", fields: [pairId], references: [id])
+  pairedBy      InventoryItem?  @relation("ItemPair")
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
  

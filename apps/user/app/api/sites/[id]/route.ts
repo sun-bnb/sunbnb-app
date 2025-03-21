@@ -19,7 +19,9 @@ export async function GET(request: NextRequest, { params } : { params: { id: str
         include: {
           reservations: {
             orderBy: { from: 'desc' }
-          }
+          },
+          pair: true,
+          pairedBy: true
         }
       }
     }

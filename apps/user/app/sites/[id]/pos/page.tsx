@@ -12,7 +12,9 @@ async function getSite(id: string) {
         include: {
           reservations: {
             orderBy: { from: 'desc' }
-          }
+          },
+          pair: true,
+          pairedBy: true
         }
       }
     }

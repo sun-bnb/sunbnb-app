@@ -30,7 +30,9 @@ export default async function Site({ params }: { params: { id: string } }) {
                 user: true
               },
               orderBy: { from: 'asc' }
-            }
+            },
+            pair: true,
+            pairedBy: true
           }
         }
       } 
