@@ -6,6 +6,7 @@ import prisma from '@repo/data/PrismaCient'
 import { put } from '@vercel/blob'
 import sharp from 'sharp'
 import { SiteProps } from '../../../types/shared'
+import { group } from 'console'
 
 export async function submitForm(
   previousState: { status: string, errors?: string[] },
@@ -317,6 +318,7 @@ export async function saveInventoryItemProperties(
     price?: number,
     rotation?: number,
     number?: number,
+    group?: number,
     label?: string,
     pairId?: string
   }
@@ -332,6 +334,7 @@ export async function saveInventoryItemProperties(
     price: inventoryItem.price,
     rotation: inventoryItem.rotation,
     number: inventoryItem.number,
+    group: inventoryItem.group,
     label: inventoryItem.label
   }
 

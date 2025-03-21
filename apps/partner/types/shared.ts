@@ -30,6 +30,7 @@ export interface Reservation {
 export interface InventoryItem {
   id: string
   number: number
+  group: number
   status: string
   category?: string | null
   price?: number | null

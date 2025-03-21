@@ -105,13 +105,14 @@ const SunbedMarker: React.FC<SunbedMarkerProps> = ({
 interface InventoryFormProps {
   selectedItem: InventoryItem
   selectedItemNumber: string
+  selectedItemGroup: string
   selectedItemLabel: string
   selectedItemCategory: string
   selectedItemPrice: string
   selectedItemRotation: string
   selectedItemPairId: string
   onFieldChange: (
-    field: 'number' | 'label' | 'category' | 'price' | 'rotation' | 'pairId',
+    field: 'number' | 'group' | 'label' | 'category' | 'price' | 'rotation' | 'pairId',
     value: string
   ) => void
   onSave: () => void
@@ -122,6 +123,7 @@ interface InventoryFormProps {
 const InventoryForm: React.FC<InventoryFormProps> = ({
   selectedItem,
   selectedItemNumber,
+  selectedItemGroup,
   selectedItemLabel,
   selectedItemCategory,
   selectedItemPrice,
@@ -142,6 +144,16 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
         variant="standard"
         placeholder="0001"
         onChange={e => onFieldChange('number', e.target.value)}
+        sx={{ mr: 1 }}
+      />
+      <TextField
+        name="item-group"
+        label="Item Group"
+        fullWidth
+        value={selectedItemGroup || String(selectedItem.group) || ''}
+        variant="standard"
+        placeholder="0"
+        onChange={e => onFieldChange('group', e.target.value)}
         sx={{ mr: 1 }}
       />
       <TextField
@@ -223,6 +235,7 @@ export default function Inventory({
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [selectedPlace, setSelectedPlace] = useState<google.maps.places.PlaceResult | null>(null)
   const [selectedItemNumber, setSelectedItemNumber] = useState<string>('')
+  const [selectedItemGroup, setSelectedItemGroup] = useState<string>('')
   const [selectedItemLabel, setSelectedItemLabel] = useState<string>('')
   const [selectedItemCategory, setSelectedItemCategory] = useState<string>('')
   const [selectedItemPrice, setSelectedItemPrice] = useState<string>('')
@@ -234,15 +247,11 @@ export default function Inventory({
   const dynamicSize = getScaledSize(zoom)
   const selectedItem = inventory.find(item => item.id === selectedItemId)
 
-  // Toggle selection by marker click
-  const toggleSelection = (item: InventoryItem): void => {
-    setSelectedItemId(prev => (prev === item.id ? null : item.id))
-  }
-
   const handleSave = (): void => {
     if (!selectedItem) return
     const changedValues: {
       number?: number
+      group?: number
       label?: string
       category?: string
       price?: number
@@ -253,6 +262,7 @@ export default function Inventory({
     console.log('Save item', changedValues, selectedItemNumber)
 
     if (selectedItemNumber) changedValues.number = Number(selectedItemNumber)
+    if (selectedItemGroup) changedValues.group = Number(selectedItemGroup)
     if (selectedItemLabel) changedValues.label = selectedItemLabel
     if (selectedItemCategory) changedValues.category = selectedItemCategory
     if (selectedItemPrice) changedValues.price = Number(selectedItemPrice)
@@ -307,6 +317,7 @@ export default function Inventory({
         <InventoryForm
           selectedItem={selectedItem}
           selectedItemNumber={selectedItemNumber}
+          selectedItemGroup={selectedItemGroup}
           selectedItemLabel={selectedItemLabel}
           selectedItemCategory={selectedItemCategory}
           selectedItemPrice={selectedItemPrice}
@@ -315,6 +326,7 @@ export default function Inventory({
           onFieldChange={(field, value) => {
             console.log('Field change', field, value)
             if (field === 'number') setSelectedItemNumber(value)
+            else if (field === 'group') setSelectedItemGroup(value)
             else if (field === 'label') setSelectedItemLabel(value)
             else if (field === 'category') setSelectedItemCategory(value)
             else if (field === 'price') setSelectedItemPrice(value)

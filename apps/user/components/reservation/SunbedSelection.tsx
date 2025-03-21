@@ -1,6 +1,7 @@
 'use client'
 
 import Image from 'next/image'
+import Chip from '@mui/material/Chip'
 import { useEffect, useState } from 'react'
 import { InventoryItem, MapBounds, SiteProps, WorkingHours } from '@/app/sites/types'
 import { useSelector, useDispatch } from 'react-redux'
@@ -9,9 +10,12 @@ import { RootState } from '@/store/store'
 import { useGetAvailabilityBySiteAndTimeRangeQuery } from '@/store/features/api/apiSlice'
 import dayjs, { Dayjs } from 'dayjs'
 import { APIProvider, AdvancedMarker, Map } from '@vis.gl/react-google-maps'
+import { Polygon } from './polygon'
+import { getQuadragonEdges } from '@/utils/geometry'
 import sunbedIcon from './sunbed-perforated-transparent.png'
 import sunshadeIcon from './sunshade-transparent.png'
 import beachTowelIcon from './beach-towel-transparent.png'
+import React from 'react'
 
 /** Helper: Check if the site is open on a given day and time range */
 function isSiteOpen(
@@ -188,6 +192,10 @@ const SiteSunbedMarker: React.FC<SiteSunbedMarkerProps> = ({
   );
 };
 
+interface ParcelShape {
+  number: number;
+  shape: { lat: number, lng: number }[];
+}
 
 /** Main SunbedSelection Component */
 export default function SunbedSelection({
@@ -197,11 +205,14 @@ export default function SunbedSelection({
   apiKey: string
   site: SiteProps
 }) {
+
   const dispatch = useDispatch()
   const sitesState = useSelector((state: RootState) => state.sites)
   const { reservationState, reservationMode, selectedItems } = sitesState
 
   const [zoom, setZoom] = useState<number>(20)
+  const [sunbedParcels, setSunbedParcels] = useState<{ [key: number]: InventoryItem[] }>({})
+  const [parcelShapes, setParcelShapes] = useState<ParcelShape[]>([])
 
   // Calculate reservation day, timeRange, dateRange from state or defaults
   const reservationDay = sitesState.reservationDay || dayjs().toDate()
@@ -245,8 +256,21 @@ export default function SunbedSelection({
 
   const inventoryItems = site.inventoryItems
 
+  function groupByParcel(items: InventoryItem[]): Record<string, InventoryItem[]> {
+    return items.reduce((acc, item) => {
+      // Adjust this key as needed; here we use item.parcelId if present, otherwise the item id.
+      const key = item.group;
+      if (!acc[key]) {
+        acc[key] = [];
+      }
+      acc[key].push(item);
+      return acc;
+    }, {} as Record<number, InventoryItem[]>);
+  }
+
   // useEffect to update selected items based on availability.
   useEffect(() => {
+
     if (!availabilityResponse) return
 
     const filteredSelection = (selectedItems ?? []).filter(
@@ -260,6 +284,26 @@ export default function SunbedSelection({
     if (!sitesState.dateRange) {
       dispatch(setValue({ dateRange: [availabilityFrom, availabilityTo] }))
     }
+
+    const groupedItems = (inventoryItems || []).filter(item => item.group !== 0)
+
+    const sunbedParcels = groupByParcel(groupedItems)
+
+    setSunbedParcels(sunbedParcels)
+
+    setParcelShapes(Object.keys(sunbedParcels)
+      .filter(parcelNumber => sunbedParcels[parcelNumber])
+      .map(parcelNumber => {
+        const parcelItems = sunbedParcels[parcelNumber] || []
+        const shapeCoords = getQuadragonEdges(parcelItems.map(item => ({
+          locationLat: Number(item.locationLat),
+          locationLng: Number(item.locationLng)
+        })))
+        return { number: Number(parcelNumber), shape: shapeCoords }
+    }))
+
+    console.log('Parcel shapes', parcelShapes)
+
   }, [availabilityResponse])
 
   // Calculate map bounds based on inventory item positions.
@@ -307,6 +351,43 @@ export default function SunbedSelection({
     dispatch(setValue({ selectedItems: updatedItems }))
   }
 
+  const sunbedMarkers = (inventoryItems || []).map(item => {
+    const available = isAvailable(item)
+    const isSelected = selectedItems?.some(
+      (selected: { id: string }) => selected.id === item.id
+    )
+    return (
+      <SiteSunbedMarker
+        key={item.id}
+        item={item}
+        dynamicSize={dynamicSize}
+        zoom={zoom}
+        isSelected={isSelected}
+        available={available}
+        onClick={() => toggleSelection(item)}
+      />
+    )
+  })
+
+  console.log('PARCEL SJAPES', parcelShapes)
+
+  // Helper: Compute the centroid of an array of lat/lng points.
+  function getCentroid(points: google.maps.LatLngLiteral[]): google.maps.LatLngLiteral {
+    let latSum = 0,
+      lngSum = 0;
+    points.forEach(p => {
+      latSum += p.lat;
+      lngSum += p.lng;
+    });
+    return { lat: latSum / points.length, lng: lngSum / points.length };
+  }
+
+  // Helper: Count available sunbeds in a parcel.
+  // (Assuming you have an isAvailable(item) function in scope.)
+  function getAvailableCountForParcel(parcelItems: InventoryItem[]): number {
+    return parcelItems.filter(item => isAvailable(item)).length;
+  }
+
   return (
     <>
       <APIProvider apiKey={apiKey}>
@@ -329,23 +410,35 @@ export default function SunbedSelection({
             console.log('Map click', e)
           }}
         >
-          {(inventoryItems || []).map(item => {
-            const available = isAvailable(item)
-            const isSelected = selectedItems?.some(
-              (selected: { id: string }) => selected.id === item.id
-            )
-            return (
-              <SiteSunbedMarker
-                key={item.id}
-                item={item}
-                dynamicSize={dynamicSize}
-                zoom={zoom}
-                isSelected={isSelected}
-                available={available}
-                onClick={() => toggleSelection(item)}
-              />
-            )
-          })}
+          {
+            zoom > 19 ? sunbedMarkers :
+              (parcelShapes || []).map((parcelShape, idx) => {
+                // Compute the parcel centroid.
+                const centroid = getCentroid(parcelShape.shape);
+                // parcelGroups is assumed to be an array of InventoryItem[] for each parcel.
+                const availableCount = getAvailableCountForParcel(sunbedParcels[parcelShape.number] || []);
+                return (
+                  <React.Fragment key={idx}>
+                    <Polygon
+                      key={idx}
+                      paths={parcelShape.shape}
+                    />
+                    <AdvancedMarker
+                      key={`chip-${idx}`}
+                      position={centroid}
+                    >
+                      <div style={{ transform: 'translate(0%, 50%)' }}>
+                        <Chip
+                          label={`${availableCount}`}
+                          sx={{ border: '1px solid black', backgroundColor: 'white', color: 'green' }}
+                        />
+                      </div>
+                    </AdvancedMarker>
+                  </React.Fragment>
+                )
+              })
+            
+          }
         </Map>
       </APIProvider>
     </>
