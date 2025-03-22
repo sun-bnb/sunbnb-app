@@ -20,7 +20,7 @@ const App = ({ children }: {
 
   useEffect(() => {
     console.log(status)
-    if (pathname.includes('/pos') || pathname.includes('/complete/item')) {
+    if (pathname.includes('/pos') || pathname.includes('/receipt') || (pathname.includes('/complete') && status !== 'authenticated')) {
       setContent(
         <div>
           {children}

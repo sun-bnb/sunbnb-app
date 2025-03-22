@@ -9,10 +9,7 @@ async function getReservation(paymentRef: string) {
 
   console.log('GET RESERVATION', paymentRef)
   const reservation = await prisma.reservation.findFirst({ 
-    where: { paymentRef },
-    include: {
-      items: true
-    }
+    where: { paymentRef }
   })
   console.log('RESERVATION', reservation)
   return reservation

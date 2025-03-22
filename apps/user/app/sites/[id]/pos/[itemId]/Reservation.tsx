@@ -156,8 +156,7 @@ export default function ReservationView({
       ) : <PaymentView 
             stripePublicKey={stripePublicKey}
             preview={previewElem}
-            reservation={reservation} 
-            completeUrl="/payment/complete/item"/>
+            reservation={reservation} />
 
     ) : (
       <div className="mx-[4px] mt-[8px] h-[420px]">

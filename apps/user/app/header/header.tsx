@@ -143,7 +143,7 @@ export default function CustomizedInputBase() {
                 return (
                   <div
                     key={'suggestion-'+index}
-                    className="max-w-[300px] truncate font-bold mr-1 ml-1 mt-1 px-2 rounded-md bg-[#00cef1] text-[#203030] animate-bubble-up"
+                    className="max-w-[300px] truncate font-bold mr-1 ml-1 mt-1 px-2 rounded-md bg-[#00cef1] text-[#303030] animate-bubble-up"
                     style={{ animationDelay: `${index * 0.1}s` }}
                     onClick={() => {
                       console.log('Selected suggestion', suggestion)

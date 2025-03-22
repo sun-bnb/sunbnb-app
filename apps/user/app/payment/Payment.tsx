@@ -6,7 +6,7 @@ import { Elements } from '@stripe/react-stripe-js'
 import CircularProgress from '@mui/material/CircularProgress'
 import { updateReservation } from './actions'
 import CheckoutForm from './CheckoutForm'
-import CompletePage from './complete/CompletePage'
+import CompletePage from './complete/ok/CompletePage'
 import { useGetReservationByIdQuery } from '@/store/features/api/apiSlice'
 import { Reservation } from '../sites/types'
 
