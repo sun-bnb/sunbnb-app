@@ -406,6 +406,11 @@ export default function SunbedSelection({
             console.log('Zoom changed', newZoom)
             setZoom(newZoom || 20)
           }}
+          onIdle={mapInstance => {
+            const newZoom = mapInstance.map.getZoom()
+            console.log('Zoom set', newZoom)
+            setZoom(newZoom || 20)
+          }}
           onClick={e => {
             console.log('Map click', e)
           }}

@@ -1,10 +1,7 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
-import { put } from '@vercel/blob'
-import { waitUntil } from '@vercel/functions'
 
 export async function updateReservation(
   reservation: {

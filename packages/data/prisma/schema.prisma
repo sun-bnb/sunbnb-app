@@ -55,9 +55,12 @@ model PartnerAccount {
   email             String
   phoneNumber       String @map("phone_number")
   company           String
+  businessId        String? @map("business_id")
   websiteUrl        String? @map("website_url")
   address           String
   bankAccount       String? @map("bank_account")
+
+  invoices          Invoice[]
  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -80,6 +83,8 @@ model Site {
   coords            Unsupported("geometry(Point, 4326)")?
 
   price             Float?
+  vat               Float?
+
   image             String?
   imageWidth        Int?            @map("image_width")
   imageHeight       Int?            @map("image_height")
@@ -173,6 +178,48 @@ model Reservation {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
   items InventoryItem[]
+ 
+}
+
+model Invoice {
+
+  id                String          @unique @id @default(cuid())
+
+  accountId         String          @map("account_id")
+
+  status            String          @default("created")
+
+  paymentRef        String?         @map("payment_ref")
+
+  totalCharge       Float           @map("total_charge")
+  totalTax          Float           @map("total_tax") @default(0)
+  totalAmount       Float           @map("total_amount")
+
+  invoiceLines      InvoiceLine[]
+ 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+ 
+  account PartnerAccount @relation(fields: [accountId], references: [userId], onDelete: Cascade)
+ 
+}
+
+model InvoiceLine {
+
+  id                String          @unique @id @default(cuid())
+
+  invoiceId         String          @map("invoice_id")
+
+  charge            Float
+  tax               Float           @default(0)
+  amount            Float
+ 
+  description       String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+ 
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
  
 }
  

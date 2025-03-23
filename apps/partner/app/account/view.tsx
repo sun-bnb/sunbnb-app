@@ -53,10 +53,11 @@ export default function AccountView({ account } : { account: AccountProps }) {
             <TextField name="lastName" label="Last name" placeholder="Doe" defaultValue={account.lastName || ''} />
             <TextField name="email" label="E-mail" placeholder="john.doe@company.com" defaultValue={account.email || ''} />
             <TextField name="phoneNumber" label="Phone number" placeholder="123-45-678" defaultValue={account.phoneNumber || ''} />
-            <TextField name="company" label="Company" placeholder="Flowbite" defaultValue={account.company || ''} />
-            <TextField name="websiteUrl" label="Website URL" placeholder="flowbite.com" defaultValue={account.websiteUrl || ''} />
+            <TextField name="company" label="Company" placeholder="Sunbnb" defaultValue={account.company || ''} />
+            <TextField name="businessId" label="Business ID" placeholder="FI12345678" defaultValue={account.websiteUrl || ''} />
           </div>
           <div className="grid gap-6 mb-6 md:grid-cols-1">
+            <TextField name="websiteUrl" label="Website URL" placeholder="sunbnb.com" defaultValue={account.websiteUrl || ''} />
             <TextField name="address" label="Address" placeholder="Sturenkatu 37-41 B 16, 00550 Helsinki, Finland" defaultValue={account.address || ''} />
             <TextField name="bankAccount" label="Bank account" placeholder="FI12 3456 7891 2345" defaultValue={account.bankAccount || ''} />
           </div>

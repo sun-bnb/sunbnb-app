@@ -4,6 +4,7 @@ export interface SiteProps {
   locationLat?: string | undefined
   locationLng?: string | undefined
   inventoryItems?: InventoryItem[]
+  vat?: number | null
   workingHours?: { id: string, day: number, openTime: Date, closeTime: Date }[]
   image?: string | null
   imageWidth?: number | null

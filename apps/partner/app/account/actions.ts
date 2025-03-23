@@ -25,6 +25,7 @@ export async function submitForm(
     email: formData.get('email') as string,
     phoneNumber: formData.get('phoneNumber') as string,
     company: formData.get('company') as string,
+    businessId: formData.get('businessId') as string,
     websiteUrl: formData.get('websiteUrl') as string,
     address: formData.get('address') as string,
     bankAccount: formData.get('bankAccount') as string

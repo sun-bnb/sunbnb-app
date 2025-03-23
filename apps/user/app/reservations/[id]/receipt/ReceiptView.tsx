@@ -1,6 +1,3 @@
-'use client'
-
-import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import Button from '@mui/material/Button'
 import { Reservation } from '@/app/sites/types'
@@ -13,8 +10,6 @@ export default function CompleteView({
 } : {
   reservation: Reservation
 }) {
-
-  const router = useRouter()
     
   const dateStr = reservation.from.toISOString().substring(0, 10)
   const itemCount = reservation.items?.length || 0
@@ -41,7 +36,7 @@ export default function CompleteView({
         <Image src={qrTicketImage} alt="Item" />
       </div>
       <div className="text-center ml-[20px] mr-[20px]">
-        <Button fullWidth={true} variant="outlined" onClick={() => router.push(`/reservations/${reservation.id}`)}>
+        <Button fullWidth={true} variant="outlined">
           PRINT
         </Button>
       </div>

@@ -10,6 +10,7 @@ import WcIcon from '@mui/icons-material/Wc'
 import SurfingIcon from '@mui/icons-material/Surfing'
 import LocalBarIcon from '@mui/icons-material/LocalBar'
 import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown'
+import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import Image from 'next/image'
@@ -77,7 +78,7 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
 
   const dispatch = useDispatch()
   const sitesState = useSelector((state: RootState) => state.sites)
-  const { reservationMode } = sitesState
+  const { reservationMode, pendingReservationId } = sitesState
 
   let focused = sitesState.focused !== undefined ? sitesState.focused : false
 
@@ -275,7 +276,7 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
         <div style={{ zIndex: 11 }} className={`fixed left-0 w-full bg-[#fff5e1] text-white text-center px-2 pb-4
           ${!focused ? '-bottom-[364px]' : 'bottom-[0px]'} border-t transition-bottom duration-500`}>
           {
-            focused &&
+            focused ? (
               <div className="text-black absolute w-[100px] bg-[#fff5e1] rounded-md border" style={{
                 left: 'calc(50% - 50px)',
                 top: '-15px',
@@ -286,6 +287,22 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
               }}>
                 <KeyboardDoubleArrowDownIcon />
               </div>
+            ) : (
+              pendingReservationId &&
+                (
+                  <div className="text-black absolute w-[100px] bg-[#fff5e1] rounded-md border" style={{
+                    left: 'calc(50% - 50px)',
+                    top: '-15px',
+                    zIndex: 2
+                  }}
+                  onClick={() => {
+                    dispatch(setValue({ focused: true }))
+                  }}>
+                    <KeyboardDoubleArrowUpIcon />
+                  </div>
+                )
+            )
+              
           }
           
               <div className="w-full">
@@ -301,9 +318,8 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
                         <Tab value="days" label="Days" />
                         <Tab value="hours" label="Hours" />
                       </Tabs>
-                    </div> : <div>
-                      NO HOURS
-                    </div>
+                    </div> : 
+                    <div>&nbsp;</div>
                 }
               </div>
               <ReservationView apiKey={apiKey} stripePublicKey={stripePublicKey} site={fetchedSite || site} />

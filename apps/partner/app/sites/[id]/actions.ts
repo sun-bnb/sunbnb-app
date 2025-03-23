@@ -174,6 +174,46 @@ export async function saveContent(
   
 }
 
+export async function updateVat(
+  previousState: { status: string, errors?: string[] },
+  formData: FormData
+) {
+  
+  const session = await auth()
+  console.log('SAVE CONTENT', formData, session)
+
+  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+
+  const siteId = formData.get('id') as string
+  const vat = formData.get('vat') as string
+
+  const siteData: any = {
+    vat: Number(vat)
+  }
+  
+  const site = await prisma.site.findFirst({ where: { id: siteId } })
+  if (site) {
+
+    console.log('Site data', siteData)
+    await prisma.site.update({
+      data: siteData,
+      where: {
+        id: siteId
+      }
+
+    })
+
+    revalidatePath('/sites')
+    return { status: 'ok' }
+
+  } else {
+      
+    return { status: 'error', errors: [ 'Site not found' ] }
+  
+  }
+  
+}
+
 
 export async function createInventoryItem(
   inventoryItem: { siteId: string }

@@ -19,6 +19,15 @@ async function getReservation(id: string) {
 
 }
 
+async function getSite(id: string) {
+
+  console.log('GET SITE BY ID', id)
+  const site = await prisma.site.findUnique({ where: { id: id } })
+  console.log('SITE FOUND', site)
+  return site
+
+}
+
 export default async function Receipt({ params }: { params: { id: string } }) {
 
   const reservation = await getReservation(params.id)
@@ -27,6 +36,8 @@ export default async function Receipt({ params }: { params: { id: string } }) {
     console.error('Reservation not found')
     return <div>Reservation not found</div>
   }
+
+  const site = await getSite(reservation.siteId)
 
   return (
     <ReceiptPage reservation={reservation} />
