@@ -55,6 +55,13 @@ export default function CompleteView({
   const [intentId, setIntentId] = useState<string | null>(null)
 
   useEffect(() => {
+
+    if (reservation.status === 'paid') {
+      setStatus('succeeded')
+      setIntentId(reservation.paymentRef!)
+      return
+    }
+
     if (!stripe) {
       return
     }
@@ -69,19 +76,19 @@ export default function CompleteView({
       setStatus(paymentIntent.status)
       setIntentId(paymentIntent.id)
 
-      let reaervationStatus = null
+      let reservationStatus = null
       if (paymentIntent.status === 'succeeded') {
-        reaervationStatus = 'confirmed'
+        reservationStatus = 'confirmed'
       } else if (paymentIntent.status === 'requires_payment_method') {
-        reaervationStatus = 'requires_payment_method'
+        reservationStatus = 'requires_payment_method'
       } else if (paymentIntent.status === 'processing') {
-        reaervationStatus = 'processing_payment'
+        reservationStatus = 'processing_payment'
       }
 
-      if (reaervationStatus) {
+      if (reservationStatus) {
         updateReservation({
           id: reservation.id,
-          status: reaervationStatus
+          status: reservationStatus
         }).then((res) => {
           console.log('Reservation status saved', res)
         })
@@ -157,7 +164,7 @@ export default function CompleteView({
             </div>
           </div>
           <div className="relative text-[rgb(142,114,49)] cursor-pointer" 
-            onClick={() => window.open(`/reservations/${reservation.id}/receipt`, '_blank')}>
+            onClick={() => window.open(`/reservations/${reservation.id}/pass`, '_blank')}>
             <QrCode2Icon style={{
               fontSize: '84px'
             }}>
@@ -165,6 +172,19 @@ export default function CompleteView({
             <LaunchIcon className="absolute bg-[#00cef1] top-[27px] left-[27px] border border-[#fff5e1] text-[#fff5e1] border-[2px]" sx={{ 
               width: '30px',
               height: '30px' 
+            }}/>
+          </div>
+        </div>
+        <div className="w-full flex justify-center mt-[12px]">
+          <div className="border border-[rgb(142,114,49)] cursor-pointer px-[6px] flex"
+            style={{
+              borderRadius: '6px'
+            }}
+            onClick={() => window.open(`/reservations/${reservation.id}/receipt`, '_blank')}>
+            <div className="text-[rgb(142,114,49)] mr-[4px]">Open receipt</div>
+            <LaunchIcon className="bg-[#fff5e1] text-[rgb(142,114,49)] mt-[2px]" sx={{ 
+              width: '20px',
+              height: '20px' 
             }}/>
           </div>
         </div>

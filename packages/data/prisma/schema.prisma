@@ -6,7 +6,44 @@ datasource db {
 generator client {
   provider = "prisma-client-js"
 }
- 
+
+model Settings {
+
+  id            String          @id @default(cuid())
+  country       String?
+
+  vat           Float?
+  currency      String?
+
+  serviceFees   ServiceFee[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+}
+
+model ServiceFee {
+  
+  id            String          @id @default(cuid())
+  settingsId    String          @map("settings_id")
+  siteId        String?         @map("site_id")
+  accountId     String?         @map("account_id")
+  
+  serviceCode   String          @map("service_code")
+  chargeType    String          @map("charge_type")
+
+  feeAmount     Float?          @map("fee_amount")
+  percentage    Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  settings Settings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+  site Site? @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  account PartnerAccount? @relation(fields: [accountId], references: [userId], onDelete: Cascade)
+
+}
+
 model User {
   id            String          @id @default(cuid())
   name          String?
@@ -61,6 +98,7 @@ model PartnerAccount {
   bankAccount       String? @map("bank_account")
 
   invoices          Invoice[]
+  serviceFees       ServiceFee[]
  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -96,6 +134,7 @@ model Site {
   inventoryItems         InventoryItem[]
   workingHours           SiteWorkingHours[]
   reservations           Reservation[]
+  serviceFees            ServiceFee[]
  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -163,6 +202,8 @@ model Reservation {
   siteId            String          @map("site_id")
   itemId            String?         @map("item_id")
 
+  invoiceId         String?         @unique @map("invoice_id")
+
   from              DateTime        @map("from")
   to                DateTime        @map("to")
 
@@ -175,8 +216,10 @@ model Reservation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
  
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site      Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id])
+
   items InventoryItem[]
  
 }
@@ -197,9 +240,13 @@ model Invoice {
 
   invoiceLines      InvoiceLine[]
  
+  invoicedAt DateTime               @map("invoiced_at") @default(now())
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
  
+  reservation Reservation?
+
   account PartnerAccount @relation(fields: [accountId], references: [userId], onDelete: Cascade)
  
 }
@@ -214,6 +261,7 @@ model InvoiceLine {
   tax               Float           @default(0)
   amount            Float
  
+  productCode       String?
   description       String?
   
   createdAt DateTime @default(now())
