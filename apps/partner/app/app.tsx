@@ -1,7 +1,7 @@
 'use client'
 
 import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { ReactNode, useEffect, useState } from 'react'
 import Header from './header'
 
@@ -11,6 +11,7 @@ const App = ({ children }: {
 
   const { data: session, status } = useSession()
   const router = useRouter()
+  const pathname = usePathname()
 
   const [ content, setContent ] = useState<ReactNode | null>(null)
 
@@ -19,7 +20,7 @@ const App = ({ children }: {
     if (status === 'authenticated') {
       setContent(
         <div>
-          <Header />
+          { !pathname.includes('/manage') && <Header /> }
           <div className="flex">
             <div className="flex-grow lg:p-6">
               {children}

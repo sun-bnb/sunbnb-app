@@ -5,6 +5,7 @@ import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { put } from '@vercel/blob'
 import sharp from 'sharp'
+import dayjs from 'dayjs'
 import { SiteProps } from '../../../types/shared'
 import { group } from 'console'
 
@@ -423,4 +424,70 @@ export async function cancelReservation(
 
   return { status: 'ok' }
   
+}
+
+export async function reserveItem(
+  siteId: string,
+  itemId: string
+) {
+  
+  const session = await auth()
+  console.log('RESERVE ITEM', itemId, session)
+
+  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+
+  const reservation = await prisma.reservation.create({
+    data: {
+      userId: session.user.id,
+      from: dayjs().startOf('day').toDate(),
+      to: dayjs().endOf('day').toDate(),
+      siteId,
+      status: 'paid',
+      items: {
+        connect: [{ id: itemId }]
+      }
+    }
+  })
+
+  console.log('RESERVATION', reservation.to, reservation.from)
+  
+  revalidatePath(`/sites/${reservation?.siteId}/manage`)
+
+  return { status: 'ok' }
+  
+}
+
+export async function unreserveItem(siteId: string, itemId: string) {
+
+  const session = await auth();
+  console.log('UNRESERVE ITEM', itemId, session);
+
+  if (!session?.user) {
+    return { status: 'error', errors: ['Not authenticated'] };
+  }
+
+  // Example: remove today's reservation for that item
+  // Adjust logic to match your schema (maybe just delete the row, or set status)
+  const result = await prisma.reservation.deleteMany({
+    where: {
+      userId: session.user.id,
+      items: {
+        every: {
+          id: itemId
+        }
+      },
+      siteId,
+      from: {
+        lte: dayjs().endOf('day').toDate(),
+      },
+      to: {
+        gte: dayjs().startOf('day').toDate(),
+      },
+    },
+  });
+
+  console.log('UNRESERVE RESULT', result)
+  revalidatePath(`/sites/${siteId}/manage`);
+
+  return { status: 'ok' };
 }

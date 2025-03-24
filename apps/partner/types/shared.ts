@@ -23,6 +23,7 @@ export interface Reservation {
   from: Date
   to: Date
   user: {
+    id: string
     email: string
   }
   items?: InventoryItem[] | null
