@@ -50,6 +50,12 @@ const STATUS_CONTENT_MAP: {
     bgColor: '#eeeeff',
     borderColor: '#111188'
   },
+  default: {
+    text: 'Pending',
+    textColor: '#111111',
+    bgColor: '#eeeeee',
+    borderColor: '#111111'
+  },
   pending: {
     text: 'Pending',
     textColor: '#111111',
@@ -90,7 +96,12 @@ function ReservationStatus ({
         }} />
       </div>
       <div className="flex justify-center items-center flex-grow">
-        {statusMap?.text}
+        {
+          status !== 'default' ? 
+            statusMap?.text :
+            <CircularProgress />
+                        
+        }
       </div>
 
     </div>
@@ -99,9 +110,11 @@ function ReservationStatus ({
 }
 
 export default function ReservationConfirmationView({
-  reservation
+  reservation,
+  processingStatus
 } : {
-  reservation: Reservation
+  reservation: Reservation,
+  processingStatus?: string
 }) {
 
   const statusMap = STATUS_CONTENT_MAP[reservation.status]
@@ -153,7 +166,7 @@ export default function ReservationConfirmationView({
         <div className="flex mx-[12px] mt-[12px]">
           <div className="w-full">
             <div>
-              <ReservationStatus status={status} />
+              <ReservationStatus status={processingStatus || status} />
             </div>
           </div>
           {

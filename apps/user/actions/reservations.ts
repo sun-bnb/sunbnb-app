@@ -22,7 +22,7 @@ async function ensureAuthenticatedUser() {
   return session;
 }
 
-async function fetchReservation(id: string) {
+export async function fetchReservation(id: string) {
   const reservation = await prisma.reservation.findUnique({
     where: { id },
     include: { 
