@@ -106,13 +106,13 @@ function Site({ site }: { site: SiteProps }) {
 function SiteList({ sites }: { sites: SiteProps[] }) {
 
   return (
-    <div>
-        {
-          sites.map(site => (
-            <Site key={site.id} site={site} />
-          ))
-        }
-      </div>
+    <div className="mt-[50px]">
+      {
+        sites.map(site => (
+          <Site key={site.id} site={site} />
+        ))
+      }
+    </div>
   )
 
 }

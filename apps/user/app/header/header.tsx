@@ -47,6 +47,9 @@ export default function CustomizedInputBase() {
 
   const t = useTranslations('HomePage')
 
+  const showSuggestions = (suggestions || []).length > 0 && searchText.length > 2
+  console.log('Suggestions', suggestions, showSuggestions)
+
   return (
     <div className="bg-[#fff5e1]">
       <Paper
@@ -69,6 +72,7 @@ export default function CustomizedInputBase() {
                 inputProps={{ 'aria-label': 'search google maps' }}
                 value={searchText}
                 onChange={(e) => {
+                  setIsMenuOpen(false)
                   dispatch(setSearchState({ searchText: e.target.value }))
                   const now = Date.now()
                   inputIntervals.push(now - lastInputTime)
@@ -116,13 +120,16 @@ export default function CustomizedInputBase() {
           </Menu>
         </div>
       </Paper>
+      <div className="-mt-4">
+        <Glow state={searchText} />
+      </div>
       {
         isMenuOpen && (
-          <div className="flex flex-wrap justify-center -mt-3 pb-4">
+          <div className="flex flex-wrap justify-center pb-4">
             {
               userNavigation.map((item, index) => {
                 return (
-                  <div className="max-w-[300px] truncate font-bold mr-1 ml-1 mt-1 px-2 border-yellow-200 border rounded-md bg-gray-600 text-yellow-200" key={'userNavigation-'+index} 
+                  <div className="max-w-[300px] truncate font-bold mr-1 ml-1 mt-1 px-2 rounded-md bg-[#303030] text-[#fff5e1]" key={'userNavigation-'+index} 
                     onClick={() => {
                       console.log('Selected userNavigation', item)
                       router.push(item.href)
@@ -136,14 +143,14 @@ export default function CustomizedInputBase() {
         )
       }
       { 
-        !selectedPlace && (
+        (!selectedPlace && !isMenuOpen && showSuggestions) && (
           <div className="flex flex-wrap justify-center -mt-1 pb-4">
             {
               ((searchText.length > 2 && suggestions) || []).map((suggestion, index) => {
                 return (
                   <div
                     key={'suggestion-'+index}
-                    className="max-w-[300px] truncate font-bold mr-1 ml-1 mt-1 px-2 rounded-md bg-[#00cef1] text-[#303030] animate-bubble-up"
+                    className="max-w-[300px] truncate font-bold mr-1 ml-1 mt-1 px-2 rounded-md bg-[#00cef1] text-[#fff5e1] animate-bubble-up"
                     style={{ animationDelay: `${index * 0.1}s` }}
                     onClick={() => {
                       console.log('Selected suggestion', suggestion)
@@ -165,11 +172,6 @@ export default function CustomizedInputBase() {
           </div>
         )
       }
-
-      
-      <div className="-mt-4">
-        <Glow state={searchText} />
-      </div>
     </div>
   );
 }

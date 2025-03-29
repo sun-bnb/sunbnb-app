@@ -81,7 +81,8 @@ export async function getAvailability(siteId: string, from: Date, to: Date) {
       to: { gte: from },
     },
     include: {
-      items: true, // <--- add this if you haven't already
+      items: true,
+      site: true
     },
   })
 

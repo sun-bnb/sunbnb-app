@@ -16,8 +16,8 @@ export default function Reservations({ reservations }: { reservations: Reservati
     reservations.filter(reservation => reservation.to < now)
     
   return (
-    <>
-      <div className="mb-4">
+    <div className="h-screen">
+      <div className="mt-[72px]">
         <Tabs variant="fullWidth" value={reservationType} onChange={(e, value) => {
           setReservationType(value)
         }} aria-label="Reservation type">
@@ -34,7 +34,7 @@ export default function Reservations({ reservations }: { reservations: Reservati
           })
         }
       </div>
-    </>
+    </div>
   )
 
 }

@@ -106,7 +106,19 @@ export async function searchSites(lat?: string, lng?: string) {
         location_lng,
         ${distanceColumn}
         (SELECT COUNT(*) FROM "InventoryItem" WHERE site_id = "Site".id)::int AS item_count,
-        (SELECT COUNT(*) FROM "InventoryItem" WHERE site_id = "Site".id AND status = 'available')::int AS available_count
+        (
+          SELECT COUNT(*)
+          FROM "InventoryItem" i
+          WHERE i.site_id = "Site".id
+            AND NOT EXISTS (
+              SELECT 1
+              FROM "_InventoryItemToReservation" itor
+              JOIN "Reservation" r ON r.id = itor."B"
+              WHERE itor."A" = i.id
+                AND r.from <= CURRENT_DATE
+                AND r.to >= CURRENT_DATE
+            )
+        )::int AS available_count
       FROM "Site"
       ${whereClause}
       ${orderByClause}

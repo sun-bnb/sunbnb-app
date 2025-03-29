@@ -8,14 +8,16 @@ const statusToChipColor: {
 } = {
   'pending': 'default',
   'confirmed': 'success',
+  'paid': 'success',
   'canceled': 'error'
 }
 
 const statusToChipLabel: {
-  [key: string]: 'Pending' | 'Confirmed' | 'Canceled'
+  [key: string]: 'Pending' | 'Confirmed' | 'Canceled' | 'Paid'
 } = {
   'pending': 'Pending',
   'confirmed': 'Confirmed',
+  'paid': 'Paid',
   'canceled': 'Canceled'
 }
 
@@ -39,7 +41,7 @@ export default function ReservationItem({ reservation }: { reservation: Reservat
           </div>
           <div className="-mt-1">
             <Chip color={statusToChipColor[reservation.status]} 
-              label={statusToChipLabel[reservation.status]} 
+              label={statusToChipLabel[reservation.status] || 'Unknown' } 
               sx={{ height: '26px' }} />
           </div>
         </div>
@@ -60,7 +62,7 @@ export default function ReservationItem({ reservation }: { reservation: Reservat
           </div>
           <div className="-mt-1">
             <Chip color={statusToChipColor[reservation.status]} 
-              label={statusToChipLabel[reservation.status]}
+              label={statusToChipLabel[reservation.status] || 'Unknown' }
               sx={{ height: '26px' }} />
           </div>
         </div>

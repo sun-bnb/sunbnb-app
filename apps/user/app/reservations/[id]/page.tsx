@@ -3,7 +3,13 @@ import { auth } from '@/app/auth'
 import ReservationView from './view'
 
 async function getReservation(id: string) {
-  return await prisma.reservation.findUnique({ where: { id: id } })
+  return await prisma.reservation.findUnique({ 
+    where: { id: id },
+    include: {
+      items: true,
+      site: true
+    }
+  })
 }
 
 export default async function Site({ params, searchParams }: { params: { id: string }, searchParams: URLSearchParams }) {
