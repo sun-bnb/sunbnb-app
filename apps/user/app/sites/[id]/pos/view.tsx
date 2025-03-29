@@ -51,11 +51,6 @@ export default function PosView({ site, apiKey, stripePublicKey }: { site: SiteP
 
   console.log('Availability response', availabilityResponse)
   
-    
-  function isAvailable(item: InventoryItem): boolean {
-    if (!availabilityResponse) return false
-    return !!availabilityResponse.availability.find(a => a.itemId === item.id && a.available)
-  }
   
   const itemLats = (inventoryItems || []).map(item => Number(item.locationLat));
   const itemLngs = (inventoryItems || []).map(item => Number(item.locationLng));

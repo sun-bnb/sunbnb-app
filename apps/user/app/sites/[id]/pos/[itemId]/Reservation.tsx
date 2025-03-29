@@ -44,8 +44,8 @@ function ReservationButton({
   return (
     <div className="mt-[8px]">
       <Button style={{
-        backgroundColor: 'white',
-        color: '#1976d2',
+        backgroundColor: disabled ? '#bbbbbb' : 'white',
+        color: disabled ? '#888888' : '#1976d2',
         height: '45px'
       }} variant="contained"
         fullWidth={true}
@@ -124,6 +124,8 @@ export default function ReservationView({
 
   const dateStr = new Date().toISOString().substring(0, 10)
 
+  const isAvailable = item.reservations?.length === 0
+
   const previewElem = (
     <div>
       <div className={`flex justify-between ${!reservation ? 'text-white' : 'text-black'}`}>
@@ -131,7 +133,7 @@ export default function ReservationView({
           {
             !reservation ? 
               <div className="w-[200px]">
-                <ReservationButton disabled={selectedItems.length === 0} item={item} dateRange={dateRange} /> 
+                <ReservationButton disabled={!isAvailable || selectedItems.length === 0} item={item} dateRange={dateRange} /> 
               </div>:
               <div className="block mt-[6px] ml-[6px]">
                 <div className="text-left">DATE: <b>{dateStr}</b></div>
@@ -205,8 +207,12 @@ export default function ReservationView({
           <Image src={sunbedIcon} alt="Sunbed icon" width={300} />
         </div>
         <div className="flex justify-center mt-[6px]">
-          <Alert className="w-[200px] flex justify-center" icon={<CheckIcon fontSize="inherit" />} severity="success">
-            AVAILABLE
+          <Alert className="w-[200px] flex justify-center" icon={
+            isAvailable ? 
+              <CheckIcon fontSize="inherit" /> :
+              null
+            } severity={ isAvailable ? 'success' : 'error' }>
+            { isAvailable ? 'Available' : 'Reserved' }
           </Alert>
         </div>
       </div>
