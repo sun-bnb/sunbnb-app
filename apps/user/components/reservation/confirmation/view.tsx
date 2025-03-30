@@ -1,22 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import logger from '@/utils/logger'
+
 import Image from 'next/image'
-import Button from '@mui/material/Button'
 import LaunchIcon from '@mui/icons-material/Launch'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
 import CircularProgress from '@mui/material/CircularProgress'
-import Alert from '@mui/material/Alert'
-import Chip from '@mui/material/Chip'
-import {
-  useStripe,
-} from '@stripe/react-stripe-js'
-import { updateReservation } from '@/actions/reservations'
 import { Reservation } from '@/app/sites/types'
 import sunbedIcon from './sunbed-icon-transparent.png'
-
-import qrTicketImage from './qr-ticket.png'
 
 const STATUS_CONTENT_MAP: {
   [key: string]: {
@@ -62,8 +53,8 @@ const STATUS_CONTENT_MAP: {
     bgColor: '#eeeeee',
     borderColor: '#111111'
   },
-  requires_payment_method: {
-    text: 'Unsuccessful',
+  payment_failed: {
+    text: 'Payment failed',
     textColor: '#aa3333',
     bgColor: '#ffcccc',
     borderColor: '#aa3333'
@@ -97,7 +88,7 @@ function ReservationStatus ({
       </div>
       <div className="flex justify-center items-center flex-grow">
         {
-          status !== 'default' ? 
+          status !== 'processing' ? 
             statusMap?.text :
             <CircularProgress />
                         
@@ -117,19 +108,13 @@ export default function ReservationConfirmationView({
   processingStatus?: string
 }) {
 
-  const statusMap = STATUS_CONTENT_MAP[reservation.status]
-  const dateStr = reservation.from.toISOString().substring(0, 10)
-  const itemCount = reservation.items?.length || 0
-  const item = reservation.items?.[0]
-
-  const validFrom = reservation.from.toISOString().substring(0, 10)
-  const validTo = reservation.to.toISOString().substring(0, 10)
+  logger.debug('Reservation confirmation', reservation)
+  const validFrom = new Date(reservation.from).toISOString().substring(0, 10)
+  const validTo = new Date(reservation.to).toISOString().substring(0, 10)
 
   let status = reservation.status
 
   const validity = validFrom === validTo ? validFrom : `${validFrom} - ${validTo}`
-
-  console.log('reservation', reservation)
 
   const ticket = (  
     <div className="relative h-screen">
@@ -150,7 +135,7 @@ export default function ReservationConfirmationView({
               
             </div>
       }
-      <div className="w-full mt-[52px]">
+      <div className="w-full pt-[52px]">
         <div className="text-center text-2xl w-full flex justify-center">
           <div className="text-[rgb(142,114,49)] mt-[24px]">
             { reservation.site?.name }

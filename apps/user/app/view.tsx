@@ -1,5 +1,6 @@
 'use client'
 
+import logger from '@/utils/logger'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import ToggleButton from '@mui/material/ToggleButton'
 import Link from 'next/link'
@@ -122,7 +123,6 @@ function SiteMap({ sites, geography, apiKey }: { sites: SiteProps[], geography?:
   const [selectedSite, setSelectedSite] = useState<SiteProps | null>(null)
 
   const defaultBounds = geography?.bounds
-  console.log('Geography for the map', geography)
 
   return (
     <div key={`${geography?.center.lat}-${geography?.center.lng}-${geography?.bounds?.north}-${geography?.bounds?.south}-${geography?.bounds?.east}-${geography?.bounds?.west}`}>
@@ -135,7 +135,6 @@ function SiteMap({ sites, geography, apiKey }: { sites: SiteProps[], geography?:
             gestureHandling={'greedy'}
             disableDefaultUI={true}
             onClick={(e) => {
-              console.log('Map click', e)
               setSelectedSite(null)
             }}
           >
@@ -185,20 +184,17 @@ export default function Sites({ sites, geography, apiKey }: {
   const searchState = useSelector((state: RootState) => state.search)
   const { selectedPlace } = searchState
 
-  console.log('Selected place', selectedPlace)
+  logger.debug('Selected place', selectedPlace)
 
   const { data: placeDetails } = useGetPlaceDetailsQuery(selectedPlace?.placeId, {
     skip: !selectedPlace
   })
 
-
-  console.log('Place details', placeDetails)
-
   const { data: searchResponse } = useGetSitesByCoordsQuery({ lat: placeDetails?.lat, lng: placeDetails?.lng }, {
     skip: !placeDetails
   })
 
-  console.log('Search response', searchResponse)
+  logger.debug('Search response', searchResponse)
 
   return (
     <div className="container mx-auto -mt-2 bg-[#fff5e1]">

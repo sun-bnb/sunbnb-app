@@ -1,5 +1,7 @@
 'use client'
 
+import logger from '@/utils/logger'
+
 import { Reservation, SiteProps } from '@/app/sites/types'
 import Tabs from '@mui/material/Tabs'
 import Tab from '@mui/material/Tab'
@@ -25,22 +27,6 @@ import {
 
 import ReservationView from './Reservation'
 import { useRouter } from 'next/navigation'
-
-const statusToChipColor: {
-  [key: string]: 'default' | 'success' | 'error'
-} = {
-  'pending': 'default',
-  'confirmed': 'success',
-  'canceled': 'error'
-}
-
-const statusToChipLabel: {
-  [key: string]: 'Pending' | 'Confirmed' | 'Canceled'
-} = {
-  'pending': 'Pending',
-  'confirmed': 'Confirmed',
-  'canceled': 'Canceled'
-}
 
 const serviceIcons: {
   [key: string]: React.ReactElement
@@ -86,8 +72,7 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
 
   const { data: fetchedSite, refetch: refetchSite } = useGetSiteByIdQuery({ id: site.id })
 
-  console.log('Fetched site', fetchedSite, process.env.NEXT_PUBLIC_APP_URL, process.env.APP_URL)
-  console.log('CLIENT APP URL', process.env.NEXT_PUBLIC_APP_URL)
+  logger.debug('Fetched site', fetchedSite)
 
   let inventoryItems = site.inventoryItems
   
@@ -99,7 +84,7 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
     allReservations = inventoryItems.flatMap(item => item.reservations)
   }
 
-  console.log('Site', site, allReservations)
+  logger.debug('Site reservations', allReservations)
 
   const now = dayjs()
 
@@ -107,8 +92,6 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
   const siteWeekDays = weekDaysOpen ? siteWorkingHours : siteWorkingHours?.filter(wh => wh.day === (now.day() === 0 ? 7 : now.day()))
 
   const whMaxHeight = weekDaysOpen ? 'max-h-[260px]' : 'max-h-[72px]'
-
-  console.log('CHECK APP URL', process.env.NEXT_PUBLIC_APP_URL)
 
   return (
     <div className="container mx-auto bg-[#fff5e1]">
@@ -174,71 +157,6 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
           <div className="px-1 py-2">
             { site.description }
           </div>
-          {
-            allReservations.length > 0 &&
-              <div className="mt-2">
-                <Divider textAlign="left">
-                  <span className="text-sm font-bold">YOUR RESERVATIONS</span>
-                </Divider>
-                {
-                  allReservations.filter(reservation => reservation.to > now.toDate())
-                    .sort((a, b) => {
-                      return dayjs(a.from).isBefore(dayjs(b.from)) ? 1 : -1
-                    })
-                    .map(reservation => {
-                    let reservationElem = null
-                    if (reservation.type === 'hours') {
-                      const formattedDate = dayjs(reservation.from).format('ddd, D MMM YYYY')
-                      const timeRangeFrom = `${dayjs(reservation.from).format('HH:mm')}`
-                      const timeRangeTo = `${dayjs(reservation.to).format('HH:mm')}`
-                      reservationElem = (
-                        <div className="flex px-1 justify-between align-center mt-2 pb-1" onClick={() => {
-                          router.push(`/reservations/${reservation.id}`)
-                        }}>
-                          <div className="flex text-sm">
-                            <div className="mr-4">{formattedDate}</div>
-                            <div className="flex text-gray-600">
-                              <div className="mr-1">{timeRangeFrom}</div>
-                              <div>-</div>
-                              <div className="ml-1">{timeRangeTo}</div>
-                            </div>
-                          </div>
-                          <div className="-mt-1">
-                            <Chip color={statusToChipColor[reservation.status]} 
-                              label={statusToChipLabel[reservation.status]} 
-                              sx={{ height: '26px' }} />
-                          </div>
-                        </div>
-                      )
-                    } else {
-                      const dateRangeFrom = dayjs(reservation.from).format('ddd, D MMM YYYY')
-                      const dateRangeTo = dayjs(reservation.to).format('ddd, D MMM YYYY')
-                      reservationElem = (
-                        <div className="flex px-1 justify-between align-center mt-2 pb-1" onClick={() => {
-                          router.push(`/reservations/${reservation.id}`)
-                        }}>
-                          <div className="text-sm">
-                            <div className="flex">
-                              <div className="mr-1">{dateRangeFrom}</div>
-                              <div>-</div>
-                              <div className="ml-1">{dateRangeTo}</div>
-                            </div>
-                          </div>
-                          <div className="-mt-1">
-                            <Chip color={statusToChipColor[reservation.status]} 
-                              label={statusToChipLabel[reservation.status]}
-                              sx={{ height: '26px' }} />
-                          </div>
-                        </div>
-                      )
-                    }
-                    return (
-                      <div key={reservation.id}>{reservationElem}</div>
-                    )
-                  })
-                }
-              </div>
-          }
           <div className={`px-1 py-2 ${whMaxHeight} overflow-hidden`}>
             <Divider textAlign="left">
               <span className="text-sm font-bold">OPENING HOURS</span>
@@ -247,7 +165,6 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
               siteWeekDays.map(wh => {
                 const currentDay = now.day() === 0 ? 7 : now.day()
                 const isCurrentDay = currentDay === wh.day
-                console.log('Current day', currentDay, wh.day, isCurrentDay)
                 return (
                   <div key={wh.id} className={`flex justify-between ${isCurrentDay ? 'font-bold' : ''}`}>
                     <div>{weekDays[wh.day - 1]}</div>

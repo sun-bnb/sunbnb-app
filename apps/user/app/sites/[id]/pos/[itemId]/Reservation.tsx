@@ -1,26 +1,23 @@
 'use client'
 
+import logger from '@/utils/logger'
+
 import Image from 'next/image'
-import { InventoryItem, SiteProps } from '@/app/sites/types'
+import { InventoryItem } from '@/app/sites/types'
 import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
 import CheckIcon from '@mui/icons-material/Check'
 import BlockIcon from '@mui/icons-material/Block'
-import MenuItem from '@mui/material/MenuItem'
-import FormControl from '@mui/material/FormControl'
-import Select from '@mui/material/Select'
 import CircularProgress from '@mui/material/CircularProgress'
 import React, { useState } from 'react'
 import { useSession } from 'next-auth/react'
 import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown'
-import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp'
 import { setValue } from '@/store/features/sites/sitesSlice'
 import { RootState } from '@/store/store'
 import { useDispatch, useSelector } from 'react-redux'
 import {
   useGetReservationByIdQuery
 } from '@/store/features/api/apiSlice'
-import dayjs, { Dayjs } from 'dayjs'
 import { saveReservationForMultipleItems } from '../../actions'
 import PaymentView from '@/app/payment/Payment'
 import sunbedIcon from './sunbed-icon-transparent.png'
@@ -79,11 +76,10 @@ function ReservationButton({
         onClick={
           async () => {
             dispatch(setValue({ reservationState: 'saving' }))
-            console.log('Reserve', selectedItems)
+            logger.debug('Reserve ITEM', selectedItems, dateRange)
 
             let saveResult = null
             
-            console.log('Save reservation', dateRange)
             saveResult = await saveReservationForMultipleItems({
               from: dateRange.from,
               to: dateRange.to,
@@ -93,7 +89,7 @@ function ReservationButton({
               userId: session?.user?.id
             })
 
-            console.log('Save result', saveResult)
+            logger.debug('Save result ITEM', saveResult)
             if (saveResult?.status === 'ok' && saveResult.id) {
               dispatch(setValue({ 
                 reservationState: 'processing',
@@ -142,7 +138,7 @@ export default function ReservationView({
     skip: !pendingReservationId
   })
 
-  console.log('Reservation By Id', pendingReservationId, reservation)
+  logger.debug('Reservation By Id ITEM', pendingReservationId, reservation)
 
   let selectedItems = [item]
 

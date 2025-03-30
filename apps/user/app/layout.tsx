@@ -1,3 +1,5 @@
+import logger from '@/utils/logger'
+
 import type { Metadata } from 'next'
 import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages } from 'next-intl/server'
@@ -31,7 +33,7 @@ export default async function RootLayout({
   const locale = await getLocale()
   const messages = await getMessages()
 
-  console.log('locale', locale, messages)
+  logger.debug('locale', locale, messages)
 
   return (
     <html lang={locale}>

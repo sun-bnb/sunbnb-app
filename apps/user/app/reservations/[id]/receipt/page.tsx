@@ -7,7 +7,6 @@ interface SearchParams {
 
 async function getReservation(id: string) {
 
-  console.log('GET RESERVATION BY ID', id)
   const reservation = await prisma.reservation.findUnique({ 
     where: { id },
     include: {
@@ -29,7 +28,6 @@ async function getReservation(id: string) {
     }
   })
 
-  console.log('RESERVATION FOUND', reservation)
   return reservation
 
 }

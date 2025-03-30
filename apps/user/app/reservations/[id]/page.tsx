@@ -1,3 +1,5 @@
+import logger from '@/utils/logger'
+
 import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
 import ReservationView from './view'
@@ -12,9 +14,10 @@ async function getReservation(id: string) {
   })
 }
 
-export default async function Site({ params, searchParams }: { params: { id: string }, searchParams: URLSearchParams }) {
+export default async function Site({ params }: { params: { id: string }}) {
 
-  console.log('params', params)
+  logger.debug('Reservation page params', params)
+  
   const session = await auth()
   if (!session?.user) return null
 

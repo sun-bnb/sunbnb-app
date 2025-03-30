@@ -13,10 +13,7 @@ export default async function Sites() {
 
   const { sites, geography } = await getSites()
 
-  console.log('sites', sites, geography)
-
   const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
-  console.log('API KEY', apiKey)
   
   return <SitesView sites={sites} geography={geography} apiKey={apiKey} />
 

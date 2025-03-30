@@ -1,25 +1,20 @@
 'use client'
 
-import { InventoryItem, MapBounds, SiteProps } from '@/app/sites/types'
-import { useEffect } from 'react'
+import logger from '@/utils/logger'
 
-import { setValue } from '@/store/features/sites/sitesSlice'
+import { MapBounds, SiteProps } from '@/app/sites/types'
 import { RootState } from '@/store/store'
-import { useSelector, useDispatch } from 'react-redux'
+import { useSelector } from 'react-redux'
 import { 
   useGetAvailabilityBySiteAndTimeRangeQuery,
   useGetReservationByIdQuery,
   useGetSiteByIdQuery
 } from '@/store/features/api/apiSlice'
-import PaymentView from '@/app/payment/Payment'
-import { APIProvider, AdvancedMarker, Map } from '@vis.gl/react-google-maps'
 import ReservationView from './Reservation'
-import CircularProgress from '@mui/material/CircularProgress'
 
 
 export default function PosView({ site, apiKey, stripePublicKey }: { site: SiteProps, apiKey: string, stripePublicKey: string | undefined }) {
 
-  const dispatch = useDispatch()
   const sitesState = useSelector((state: RootState) => state.sites)
 
   const startOfDay = new Date();
@@ -27,9 +22,6 @@ export default function PosView({ site, apiKey, stripePublicKey }: { site: SiteP
 
   const endOfDay = new Date();
   endOfDay.setHours(23, 59, 59, 999);
-
-  console.log(startOfDay); // e.g. 2025-03-11T00:00:00.000Z
-  console.log(endOfDay);   // e.g. 2025-03-11T23:59:59.999Z
 
   let availabilityFrom = startOfDay.toISOString()
   let availabilityTo = endOfDay.toISOString()
@@ -44,13 +36,9 @@ export default function PosView({ site, apiKey, stripePublicKey }: { site: SiteP
   const { data: fetchedSite, refetch: refetchSite } = useGetSiteByIdQuery({ id: site.id })
   
   const displaySite = fetchedSite || site
-  console.log('Site', displaySite)
+  logger.debug('Site view POS', displaySite, availabilityResponse)
 
   let inventoryItems = displaySite.inventoryItems
-  let selectedItems = sitesState.selectedItems || []
-
-  console.log('Availability response', availabilityResponse)
-  
   
   const itemLats = (inventoryItems || []).map(item => Number(item.locationLat));
   const itemLngs = (inventoryItems || []).map(item => Number(item.locationLng));
@@ -75,7 +63,7 @@ export default function PosView({ site, apiKey, stripePublicKey }: { site: SiteP
     skip: !pendingReservationId
   })
 
-  console.log('Def bounds', defaultBounds)
+  logger.debug('Default bounds POS', defaultBounds)
 
   return (
     <div>

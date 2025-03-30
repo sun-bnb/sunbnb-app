@@ -1,5 +1,7 @@
 'use client'
 
+import logger from '@/utils/logger'
+
 import { useSession } from 'next-auth/react'
 import { useRouter, usePathname } from 'next/navigation'
 import { ReactNode, useEffect, useState, useRef } from 'react'
@@ -18,7 +20,7 @@ const App = ({ children }: {
   const [hideHeader, setHideHeader] = useState<boolean>(false)
   const lastScrollY = useRef(0)
 
-  console.log('root session', session)
+  logger.debug('root session', session)
 
   useEffect(() => {
     function handleScroll() {
@@ -39,8 +41,11 @@ const App = ({ children }: {
   
 
   useEffect(() => {
-    console.log(status)
-    if (pathname.includes('/pos') || pathname.includes('/receipt') || pathname.includes('/pass') || (pathname.includes('/complete') && status !== 'authenticated')) {
+    if (
+      pathname.includes('/pos') || 
+      pathname.includes('/receipt') || 
+      pathname.includes('/pass') || 
+      (pathname.includes('/complete') && status !== 'authenticated')) {
       setContent(
         <div>
           {children}
@@ -48,7 +53,6 @@ const App = ({ children }: {
       )
     } else if (status === 'authenticated' || pathname === '/privacy' || pathname === '/tos') {
       setContent(<AuthenticatedApp>{children}</AuthenticatedApp>)
-      console.log(session)
     } else if (status === 'unauthenticated') {
       router.push('/api/auth/signin')
     }

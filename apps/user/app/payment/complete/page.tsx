@@ -7,7 +7,6 @@ interface SearchParams {
 
 async function getReservation(paymentRef: string) {
 
-  console.log('GET RESERVATION', paymentRef)
   const reservation = await prisma.reservation.findFirst({ 
     where: { paymentRef },
     include: {
@@ -15,15 +14,12 @@ async function getReservation(paymentRef: string) {
       site: true
     }
   })
-  console.log('RESERVATION', reservation)
   return reservation
 
 }
 
 export default async function Complete({ searchParams }: SearchParams) {
   
-  console.log('COMPLETE PAGE', searchParams, process.env.STRIPE_PUBLIC_KEY, process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY)
-
   const stripePublicKey = process.env.STRIPE_PUBLIC_KEY || process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY
 
   if (!stripePublicKey) {
@@ -31,11 +27,7 @@ export default async function Complete({ searchParams }: SearchParams) {
     return <div>Misconfiguration</div>
   }
 
-  console.log('STRIPE PUBLISHABLE KEY', process.env.STRIPE_PUBLIC_KEY, process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY)
-  console.log('searchParams', searchParams)
-
   const { payment_intent, payment_intent_client_secret } = searchParams
-
 
   if (!payment_intent || !payment_intent_client_secret) {
     console.error('payment_intent or payment_intent_client_secret is not set')

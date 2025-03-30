@@ -27,17 +27,14 @@ function drawWavyLine(
   ctx.beginPath()
   ctx.moveTo(0, 0)
 
-  let waveLengthMultiplier = 1
   let effectMultiplier = 1
   
-  //console.log(now, effectStart, effectDuration)
   if(now < effectStart + (effectDuration / 2)) {
     effectMultiplier = 1 - ((((now - effectStart) / (effectDuration / 2))) * 0.8)
   }
 
   if(now >= (effectStart + (effectDuration / 2)) && now < (effectStart + effectDuration)) {
     effectMultiplier = 0.2 + ((((now - (effectStart + (effectDuration / 2))) / (effectDuration / 2))) * 0.8)
-    //console.log('waveLengthMultiplier (2) => ', waveLengthMultiplier)
   }
 
   function plotLine() {
@@ -81,7 +78,6 @@ export default function Glow({ state }: { state: string }) {
     if (canvas) {
       const ctx = canvas.getContext('2d')
       if (ctx) {
-        console.log('setting context', ctx)
         setCtx(ctx)
         const width = canvas.width = window.innerWidth
         const height = canvas.height
@@ -124,12 +120,9 @@ export default function Glow({ state }: { state: string }) {
     }
 
     if (intervalTimeout) {
-      console.log('clearing interval', intervalTimeout)
       clearInterval(intervalTimeout)
     }
 
-
-    console.log('effectStart => ', effectStart)
     const newIntervalTimeout = setInterval(() => animate(Date.now()), 1000 / 60) as unknown as number
     setIntervalTimeout(newIntervalTimeout)
   

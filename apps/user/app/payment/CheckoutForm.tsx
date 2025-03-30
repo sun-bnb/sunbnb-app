@@ -1,5 +1,7 @@
 'use client'
 
+import logger from '@/utils/logger'
+
 import React, { useState, useEffect, FormEvent } from 'react'
 import Button from '@mui/material/Button'
 import Divider from '@mui/material/Divider'
@@ -28,54 +30,41 @@ export default function CheckoutForm({
   const [message, setMessage] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  console.log('CLIENT APP URL2', process.env.NEXT_PUBLIC_APP_URL)
-
   const handleSubmit = async (e: FormEvent) => {
 
-    e.preventDefault();
-
-    console.log('stripe', stripe)
-    console.log('elements', elements)
+    e.preventDefault()
 
     if (!stripe || !elements) {
       // Stripe.js hasn't yet loaded.
       // Make sure to disable form submission until Stripe.js has loaded.
-      return;
+      return
     }
 
     setIsLoading(true)
-
-    console.log('APP URL FOR CHECKOUT', process.env.NEXT_PUBLIC_APP_URL)
 
     const returnUrl = `${process.env.NEXT_PUBLIC_APP_URL}${completeUrl || '/payment/complete'}`
 
     const { error } = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        // Make sure to change this to your payment completion page
         return_url: returnUrl
       },
-    });
+    })
 
-    // This point will only be reached if there is an immediate error when
-    // confirming the payment. Otherwise, your customer will be redirected to
-    // your `return_url`. For some payment methods like iDEAL, your customer will
-    // be redirected to an intermediate site first to authorize the payment, then
-    // redirected to the `return_url`.
     if (error.type === "card_error" || error.type === "validation_error") {
       setMessage(error.message || null)
     } else {
-      setMessage("An unexpected error occurred.");
+      setMessage("An unexpected error occurred.")
     }
 
-    setIsLoading(false);
-  };
+    setIsLoading(false)
+  }
 
   const paymentElementOptions: { layout: 'tabs' } = {
     layout: 'tabs'
   }
 
-  console.log('reservation', reservation)
+  logger.debug('reservation (checkout)', reservation)
 
   return (
     <>
@@ -93,11 +82,6 @@ export default function CheckoutForm({
         <div className="mt-[18px]">
           <Button variant="contained" fullWidth={true} id="submit" type="submit" disabled={isLoading}>
             { isLoading ? <div className="spinner" id="spinner"></div> : "Pay now" }
-          </Button>
-        </div>
-        <div className="mt-[8px]">
-          <Button variant="outlined" fullWidth={true} id="submit" onClick={() => {}} disabled={isLoading}>
-            { isLoading ? <div className="spinner" id="spinner"></div> : "Cash payment" }
           </Button>
         </div>
         ‹

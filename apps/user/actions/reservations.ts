@@ -1,25 +1,27 @@
 'use server';
 
-import { auth } from '@/app/auth';
-import { Reservation, ServiceFee } from '@prisma/client';
-import prisma from '@repo/data/PrismaCient';
+import logger from '@/utils/logger'
+
+import { auth } from '@/app/auth'
+import { Reservation, ServiceFee } from '@prisma/client'
+import prisma from '@repo/data/PrismaCient'
 
 function round(amount: number) {
-  return Math.round(amount * 100) / 100;
+  return Math.round(amount * 100) / 100
 }
 
 function computeVatAndBaseAmounts(finalAmount: number, vatRate: number) {
   const baseAmount = round(finalAmount / (1 + vatRate / 100))
-  const vatAmount = round(finalAmount - baseAmount);
-  return { baseAmount, vatAmount };
+  const vatAmount = round(finalAmount - baseAmount)
+  return { baseAmount, vatAmount }
 }
 
 async function ensureAuthenticatedUser() {
   const session = await auth();
   if (!session?.user) {
-    throw new Error('Not authenticated');
+    throw new Error('Not authenticated')
   }
-  return session;
+  return session
 }
 
 export async function fetchReservation(id: string) {
@@ -31,9 +33,9 @@ export async function fetchReservation(id: string) {
     }
   });
   if (!reservation) {
-    throw new Error(`Reservation not found for id: ${id}`);
+    throw new Error(`Reservation not found for id: ${id}`)
   }
-  return reservation;
+  return reservation
 }
 
 function findServiceFee(
@@ -46,14 +48,12 @@ function findServiceFee(
     site?.serviceFees?.find((fee: any) => fee.serviceCode === serviceCode) ||
     partnerAccount?.serviceFees?.find((fee: any) => fee.serviceCode === serviceCode) ||
     settings?.serviceFees?.find((fee: any) => fee.serviceCode === serviceCode)
-  );
+  )
 }
 
 
 
 async function handleConfirmedReservation(reservation: any) {
-
-  console.log('HANDLE CONFIRMED RESERVATION', reservation)
 
   let [site, partnerAccount, settings] = await Promise.all([
     prisma.site.findUnique({
@@ -67,7 +67,7 @@ async function handleConfirmedReservation(reservation: any) {
     prisma.settings.findFirst({
       include: { serviceFees: true },
     }),
-  ]);
+  ])
 
   if (!settings) {
     
@@ -97,7 +97,7 @@ async function handleConfirmedReservation(reservation: any) {
   const SERVICE_CODE = 'sunbed-rental';
   const matchedServiceFee = findServiceFee(site, partnerAccount, settings, SERVICE_CODE);
 
-  console.log('MATCHED SERVICE FEE', matchedServiceFee)
+  logger.debug('MATCHED SERVICE FEE', matchedServiceFee)
 
   const totalFinalAmount = reservation.paymentAmount ?? 0;
   const vatRate = site?.vat ?? 0;
@@ -166,15 +166,15 @@ export async function updateReservation({
   status: string;
 }) {
   try {
-    const session = await ensureAuthenticatedUser();
-    console.log('SAVE RESERVATION', { session, id, status });
 
-    let savedReservation = await fetchReservation(id);
+    const session = await ensureAuthenticatedUser()
 
-    console.log('SAVED RESERVATION', savedReservation);
+    let savedReservation = await fetchReservation(id)
+
+    logger.debug('updateReservation:', savedReservation)
 
     if (savedReservation.status === 'paid') {
-      return { status: 'ok', id };
+      return { status: 'ok', id }
     }
 
     await prisma.reservation.update({
@@ -183,13 +183,14 @@ export async function updateReservation({
     });
 
     if (savedReservation.status === 'confirmed') {
-      await handleConfirmedReservation(savedReservation);
+      await handleConfirmedReservation(savedReservation)
     }
 
-    console.log('UPDATED RESERVATION', id);
-    return { status: 'ok', id };
+    return { status: 'ok', id }
+  
   } catch (error: any) {
-    console.error('UPDATE RESERVATION ERROR:', error);
-    return { status: 'error', errors: [error.message] };
+    logger.error('updateReservation error:', error)
+    return { status: 'error', errors: [error.message] }
   }
+
 }

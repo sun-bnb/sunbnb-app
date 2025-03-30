@@ -1,5 +1,7 @@
 'use client'
 
+import logger from '@/utils/logger'
+
 import { SiteProps } from '@/app/sites/types'
 import Button from '@mui/material/Button'
 import InputLabel from '@mui/material/InputLabel'
@@ -43,7 +45,6 @@ function PaymentMethodSelection() {
           value={paymentMethod}
           label="Payment method"
           onChange={(...args) => {
-            console.log('Payment method', args)
           }}
           MenuProps={{
             sx: {
@@ -122,11 +123,9 @@ function ReservationTimerangeSelector() {
             fullWidth={true}
             value={[dayjs(timeRange[0]), dayjs(timeRange[1])]}
             onFocus={() => {
-              console.log('Focus')
               dispatch(setValue({ focused: true }))
             }}
             onBlur={() => {
-              console.log('Blur')
             }}
             onChange={(newValue) => {
               dispatch(setValue({ timeRange: [newValue[0]?.toDate(), newValue[1]?.endOf('day').toDate()] }))
@@ -155,7 +154,6 @@ function ReservationTimerangeSelector() {
               field: SingleInputDateRangeField
             }}
             onChange={(newValue) => {
-              console.log('Date range', newValue)
               dispatch(setValue({ dateRange: [newValue[0]?.toISOString(), newValue[1]?.toISOString()] }))
             }}
           />
@@ -193,7 +191,7 @@ function ReservationButton({
         onClick={
           async () => {
             dispatch(setValue({ reservationState: 'saving' }))
-            console.log('Reserve', reservationMode, timeRange, dateRange, selectedItems)
+            logger.debug('Reserve', reservationMode, timeRange, dateRange, selectedItems)
 
             let saveResult = null
             if (reservationMode === 'hours' && reservationDay && timeRange[0] && timeRange[1]) {
@@ -218,7 +216,7 @@ function ReservationButton({
             } else if (reservationMode === 'days' && dateRange[0] && dateRange[1]) {
               const from = dateRange[0].toDate()
               const to = dateRange[1].toDate()
-              console.log('Save reservation', from, to)
+              logger.debug('Save reservation', from, to)
               saveResult = await saveReservationForMultipleItems({
                 from: from.toISOString(),
                 to: to.toISOString(),
@@ -229,19 +227,13 @@ function ReservationButton({
               })
             }
 
-            console.log('Save result', saveResult)
+            logger.debug('Save result', saveResult)
             if (saveResult?.status === 'ok' && saveResult.id) {
               dispatch(setValue({ 
                 reservationState: 'processing',
                 pendingReservationId: saveResult.id
               }))
             }
-
-            /*
-            refetchAvailability().then(() => {
-              console.log('Refetched availability')
-            })
-            */
 
           }
         }>
@@ -252,8 +244,6 @@ function ReservationButton({
 }
 
 function ItemSelection({ apiKey, site } : { apiKey: string, site: SiteProps }) {
-
-  console.log('Item selection', apiKey, site)
 
   const sitesState = useSelector((state: RootState) => state.sites)
   const { selectedItems } = sitesState
@@ -295,7 +285,7 @@ export default function ReservationView({
     skip: !pendingReservationId
   })
 
-  console.log('Reservation By Id', pendingReservationId, reservation)
+  logger.debug('Reservation By Id', pendingReservationId, reservation)
 
   return (
     <>

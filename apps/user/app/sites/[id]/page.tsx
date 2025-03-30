@@ -1,3 +1,5 @@
+import logger from '@/utils/logger'
+
 import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
 import SiteView from './view'
@@ -28,17 +30,16 @@ async function getSite(id: string, userId: string) {
 
 }
 
-export default async function Site({ params, searchParams }: { params: { id: string }, searchParams: URLSearchParams }) {
+export default async function Site({ params }: { params: { id: string }}) {
 
-  console.log('params', params)
+  logger.debug('Site page params', params)
+  
   const session = await auth()
   if (!session?.user) return null
 
   const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
-  console.log('API KEY', apiKey)
 
   const appUrl = process.env.APP_URL as string
-  console.log('APP URL', appUrl)
 
   const site = await getSite(params.id, session.user.id)
   if (!site) return <div>Site {params.id} not found</div>

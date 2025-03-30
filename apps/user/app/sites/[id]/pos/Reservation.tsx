@@ -1,16 +1,13 @@
 'use client'
 
+import logger from '@/utils/logger'
+
 import { SiteProps } from '@/app/sites/types'
 import Button from '@mui/material/Button'
-import InputLabel from '@mui/material/InputLabel'
-import MenuItem from '@mui/material/MenuItem'
-import FormControl from '@mui/material/FormControl'
-import Select from '@mui/material/Select'
 import CircularProgress from '@mui/material/CircularProgress'
 import React, { useState } from 'react'
 import { useSession } from 'next-auth/react'
 import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown'
-import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp'
 import { setValue } from '@/store/features/sites/sitesSlice'
 import { RootState } from '@/store/store'
 import { useDispatch, useSelector } from 'react-redux'
@@ -22,46 +19,6 @@ import SunbedSelection from '@/components/reservation/SunbedSelection'
 import { saveReservation, saveReservationForMultipleItems } from '../actions'
 import PaymentView from '@/app/payment/Payment'
 
-function PaymentMethodSelection() {
-
-
-  const [ paymentMethod, setPaymentMethod ] = useState('0001')
-
-  return (
-    <div className="w-full mt-4">
-      <FormControl size="medium" fullWidth={true}>
-        <InputLabel>Payment method</InputLabel>
-        <Select
-          labelId="demo-select-small-label"
-          id="demo-select-small"
-          value={paymentMethod}
-          label="Payment method"
-          onChange={(...args) => {
-            console.log('Payment method', args)
-          }}
-          MenuProps={{
-            sx: {
-              transform: "translateX(-8px)", // Move the dropdown 10px to the left
-            }
-          }}
-          sx={{
-            '& .MuiSelect-select': {
-              display: 'flex',
-              justifyContent: 'center'
-            }
-            }}
-        >
-          
-          <MenuItem value={'0001'} sx={{ display: 'flex', justifyContent: 'center' }}>VISA 4398 1206 7404 9258</MenuItem>
-          <MenuItem value="" sx={{ display: 'flex', justifyContent: 'center' }}>
-            <em>+ Add payment method</em>
-          </MenuItem>
-        </Select>
-      </FormControl>
-    </div>
-  )
-
-}
 
 function ReservationButton({
   disabled,
@@ -89,11 +46,10 @@ function ReservationButton({
         onClick={
           async () => {
             dispatch(setValue({ reservationState: 'saving' }))
-            console.log('Reserve', selectedItems)
+            logger.debug('Reserve POS', selectedItems, dateRange)
 
             let saveResult = null
             
-            console.log('Save reservation', dateRange)
             saveResult = await saveReservationForMultipleItems({
               from: dateRange.from,
               to: dateRange.to,
@@ -103,7 +59,7 @@ function ReservationButton({
               userId: session?.user?.id
             })
 
-            console.log('Save result', saveResult)
+            logger.debug('Save result POS', saveResult)
             if (saveResult?.status === 'ok' && saveResult.id) {
               dispatch(setValue({ 
                 reservationState: 'processing',
@@ -117,17 +73,6 @@ function ReservationButton({
           PAY
         </Button>
     </div>
-  )
-}
-
-function ItemSelection({ apiKey, site } : { apiKey: string, site: SiteProps }) {
-
-  console.log('Item selection', apiKey, site)
-
-  return (
-    <>
-    
-    </>
   )
 }
 
@@ -163,7 +108,7 @@ export default function ReservationView({
     skip: !pendingReservationId
   })
 
-  console.log('Reservation By Id', pendingReservationId, reservation)
+  logger.debug('Reservation By Id POS', pendingReservationId, reservation)
 
   let selectedItems = sitesState.selectedItems || []
 

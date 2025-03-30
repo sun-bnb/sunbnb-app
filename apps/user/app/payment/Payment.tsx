@@ -1,13 +1,13 @@
 'use client'
 
+import logger from '@/utils/logger'
+
 import React, { useState, useEffect } from 'react'
-import { Stripe, loadStripe } from '@stripe/stripe-js'
+import { loadStripe } from '@stripe/stripe-js'
 import { Elements } from '@stripe/react-stripe-js'
 import CircularProgress from '@mui/material/CircularProgress'
 import { updateReservation } from './actions'
 import CheckoutForm from './CheckoutForm'
-import CompletePage from './complete/ok/CompletePage'
-import { useGetReservationByIdQuery } from '@/store/features/api/apiSlice'
 import { Reservation } from '../sites/types'
 
 
@@ -33,12 +33,12 @@ export default function Payment({
   }
 
   const stripePromise = loadStripe(stripePublicKey)
-  console.log('render Payment', reservation)
+  logger.debug('Payment for reservation', reservation)
 
   useEffect(() => {
 
     if (reservation.paymentRef) {
-      console.log('RESERVATION ALREADY HAS PAYMENT REF', reservation.paymentRef)
+      logger.debug('RESERVATION ALREADY HAS PAYMENT REF', reservation.paymentRef)
       return
     }
 
@@ -53,9 +53,8 @@ export default function Payment({
     })
       .then((res) => res.json())
       .then((data) => {
-        console.log('RECEIVED DATA', data)
+        logger.debug('Payment intent result', data)
         if (data.error) {
-          console.error('ERROR', data.error)
           return
         }
         setClientSecret(data.clientSecret)
@@ -66,7 +65,7 @@ export default function Payment({
           paymentRef: data.paymentIntentId
         })
       })
-      .then((res) => console.log('RESERVATION UPDATED', res));
+      .then((res) => logger.debug('Reservation updated', res));
 
   }, [reservation.id]);
 

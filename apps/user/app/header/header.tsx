@@ -49,7 +49,6 @@ export default function CustomizedInputBase() {
   const t = useTranslations('HomePage')
 
   const showSuggestions = (suggestions || []).length > 0 && searchText.length > 2
-  console.log('Suggestions', suggestions, showSuggestions)
 
   return (
     <div className="bg-[#fff5e1]">
@@ -132,7 +131,6 @@ export default function CustomizedInputBase() {
                 return (
                   <div className="max-w-[300px] truncate font-bold mr-1 ml-1 mt-1 px-2 rounded-md bg-[#303030] text-[#fff5e1]" key={'userNavigation-'+index} 
                     onClick={() => {
-                      console.log('Selected userNavigation', item)
                       setIsMenuOpen(false)
                       router.push(item.href)
                     }}>
@@ -155,7 +153,6 @@ export default function CustomizedInputBase() {
                     className="max-w-[300px] truncate font-bold mr-1 ml-1 mt-1 px-2 rounded-md bg-[#00cef1] text-[#fff5e1] animate-bubble-up"
                     style={{ animationDelay: `${index * 0.1}s` }}
                     onClick={() => {
-                      console.log('Selected suggestion', suggestion)
                       dispatch(setSelectedPlace({ 
                         selectedPlace: { 
                           placeId: suggestion.place_id,

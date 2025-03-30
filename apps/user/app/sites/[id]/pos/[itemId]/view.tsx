@@ -17,27 +17,8 @@ export default function PosView({ item, apiKey, stripePublicKey }: { item: Inven
   const endOfDay = new Date();
   endOfDay.setHours(23, 59, 59, 999);
 
-  console.log(startOfDay)
-  console.log(endOfDay)
-
   let availabilityFrom = startOfDay.toISOString()
   let availabilityTo = endOfDay.toISOString()
-
-  /*
-  const { data: availabilityResponse, refetch: refetchAvailability } = useGetAvailabilityBySiteAndTimeRangeQuery({ 
-    siteId: item.site.id,
-    from: availabilityFrom,
-    to: availabilityTo
-  })
-  
-  console.log('Availability response', availabilityResponse)
-  
-    
-  function isAvailable(item: InventoryItem): boolean {
-    if (!availabilityResponse) return false
-    return !!availabilityResponse.availability.find(a => a.itemId === item.id && a.available)
-  }
-  */
 
   if (!stripePublicKey) {
     return (
