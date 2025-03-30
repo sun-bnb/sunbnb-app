@@ -21,6 +21,8 @@ import {
 import { saveReservationForMultipleItems } from '../../actions'
 import PaymentView from '@/app/payment/Payment'
 import sunbedIcon from './sunbed-icon-transparent.png'
+import sunbedPerfIcon from '@/components/reservation/sunbed-perforated-transparent.png'
+import sunshadeIcon from '@/components/reservation/sunshade-transparent.png'
 
 // A helper function that checks if an item is free for the current day
 function isItemAvailableToday(item: InventoryItem): boolean {
@@ -49,11 +51,11 @@ function isItemAvailableToday(item: InventoryItem): boolean {
 
 function ReservationButton({
   disabled,
-  item,
+  items,
   dateRange
 }: {
   disabled: boolean,
-  item: InventoryItem,
+  items: InventoryItem[],
   dateRange: { from: string, to: string }
 }) {
 
@@ -62,7 +64,7 @@ function ReservationButton({
   const dispatch = useDispatch();
   const sitesState = useSelector((state: RootState) => state.sites)
 
-  let selectedItems = [item]
+  let selectedItems = items
 
   return (
     <div className="mt-[8px]">
@@ -84,7 +86,7 @@ function ReservationButton({
               from: dateRange.from,
               to: dateRange.to,
               type: 'days',
-              siteId: item.site?.id!,
+              siteId: items[0]!.site?.id!,
               items: selectedItems,
               userId: session?.user?.id
             })
@@ -109,12 +111,12 @@ function ReservationButton({
 export default function ReservationView({
   apiKey,
   stripePublicKey,
-  item,
+  items,
   dateRange
 } : {
   apiKey: string
   stripePublicKey: string | undefined
-  item: InventoryItem,
+  items: InventoryItem[],
   dateRange: { from: string, to: string }
 }) {
 
@@ -140,14 +142,23 @@ export default function ReservationView({
 
   logger.debug('Reservation By Id ITEM', pendingReservationId, reservation)
 
-  let selectedItems = [item]
+  let selectedItems = items
 
-  const totalPrice = item.price! || 0
+  let totalPrice = 0
+  for (let item of selectedItems) {
+    totalPrice += item.price! || 0
+  }
 
   const dateStr = new Date().toISOString().substring(0, 10)
 
-  const isAvailable = isItemAvailableToday(item);
-  
+  let isAvailable = true
+  for (let item of selectedItems) {
+    if (!isItemAvailableToday(item)) {
+      isAvailable = false
+      break
+    }
+  }
+
   const previewElem = (
     <div>
       <div className={`flex justify-between ${!reservation ? 'text-white' : 'text-black'}`}>
@@ -155,11 +166,16 @@ export default function ReservationView({
           {
             !reservation ? 
               <div className="w-[200px]">
-                <ReservationButton disabled={!isAvailable || selectedItems.length === 0} item={item} dateRange={dateRange} /> 
+                <ReservationButton disabled={!isAvailable || selectedItems.length === 0} items={items} dateRange={dateRange} /> 
               </div>:
               <div className="block mt-[6px] ml-[6px]">
                 <div className="text-left">DATE: <b>{dateStr}</b></div>
-                <div className="text-left">SEAT NUMBER: <b>{item.number}</b></div>
+                {
+                  items.length === 1 ? 
+                    <div className="text-left">SEAT NUMBER: <b>{items[0]!.number}</b></div> :
+                    <div className="text-left">SEAT NUMBERS: <b>{items.map(item => item.number).join(', ')}</b></div>
+                }
+                
               </div>
           }
           
@@ -221,12 +237,40 @@ export default function ReservationView({
           </div>
         </div>
         <div className="w-full flex justify-center mt-[24px]">
-          <div className="text-[rgb(142,114,49)] ">
-            SEAT {item.number}
-          </div>
+          {
+            items.length === 1 ?
+              <div className="text-[rgb(142,114,49)] ">
+                SEAT {items[0]!.number}
+              </div> :
+              <div className="text-[rgb(142,114,49)] ">
+                SEATS {items.map(item => item.number).join(', ')}
+              </div>
+          }
+          
         </div>
         <div className="flex justify-center mt-[16px]">
-          <Image src={sunbedIcon} alt="Sunbed icon" width={300} />
+          {
+            items.length === 1 ?
+              <Image src={sunbedIcon} alt="Sunbed icon" width={300} /> :
+              <div className="relative h-[300px] w-[300px] ml-[16px] mt-[8px]">
+                <Image src={sunbedPerfIcon} alt="Sunbed icon" width={150} style={{
+                  position: 'absolute',
+                  top: '0px',
+                  left: '0px'
+                }} />
+                <Image src={sunbedPerfIcon} alt="Sunbed icon" width={150} style={{
+                  position: 'absolute',
+                  top: '0px',
+                  right: '0px'
+                }} />
+                <Image src={sunshadeIcon} alt="Sunshade icon" width={200} style={{
+                  position: 'absolute',
+                  top: '-25px',
+                  left: '50px'
+                }}/>
+              </div>
+          }
+          
         </div>
         <div className="flex justify-center mt-[6px]">
           <Alert className="w-[200px] flex justify-center" icon={

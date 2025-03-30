@@ -1,15 +1,10 @@
 'use client'
 
 import { InventoryItem } from '@/app/sites/types'
-import { RootState } from '@/store/store'
-import { useSelector, useDispatch } from 'react-redux'
-import { 
-  useGetAvailabilityBySiteAndTimeRangeQuery
-} from '@/store/features/api/apiSlice'
 import ReservationView from './Reservation'
 
 
-export default function PosView({ item, apiKey, stripePublicKey }: { item: InventoryItem, apiKey: string, stripePublicKey: string | undefined }) {
+export default function PosView({ items, apiKey, stripePublicKey }: { items: InventoryItem[], apiKey: string, stripePublicKey: string | undefined }) {
 
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
@@ -35,7 +30,7 @@ export default function PosView({ item, apiKey, stripePublicKey }: { item: Inven
           <ReservationView 
             apiKey={apiKey} 
             stripePublicKey={stripePublicKey} 
-            item={item}
+            items={items}
             dateRange={{ from: availabilityFrom, to: availabilityTo }}
           />
         </div>
