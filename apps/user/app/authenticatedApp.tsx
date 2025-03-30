@@ -3,6 +3,10 @@
 import { useEffect, useState, useRef } from 'react'
 import Header from './header/header'
 
+const MIN_SCROLL = 100
+const HIDE_THRESHOLD = 20
+const SHOW_THRESHOLD = 1
+
 const AuthenticatedApp = ({ children }: {
   children: React.ReactNode;
 }) => {
@@ -13,17 +17,28 @@ const AuthenticatedApp = ({ children }: {
   useEffect(() => {
     function handleScroll() {
       const currentScrollY = window.scrollY;
-      if (currentScrollY > lastScrollY.current) {
-        // user is scrolling DOWN
-        setHideHeader(true);
-      } else {
-        // user is scrolling UP
+
+      // If we haven't scrolled beyond MIN_SCROLL, never hide
+      if (currentScrollY < MIN_SCROLL) {
         setHideHeader(false);
+      } else {
+        // Compare current scroll to last scroll
+        const diff = currentScrollY - lastScrollY.current;
+
+        if (diff > HIDE_THRESHOLD) {
+          // Scrolled down enough => hide
+          setHideHeader(true);
+        } else if (diff < -SHOW_THRESHOLD) {
+          // Scrolled up enough => show
+          setHideHeader(false);
+        }
       }
+
+      // Update last scroll
       lastScrollY.current = currentScrollY;
     }
 
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
   

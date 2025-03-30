@@ -17,28 +17,8 @@ const App = ({ children }: {
   const pathname = usePathname()
 
   const [ content, setContent ] = useState<ReactNode | null>(null)
-  const [hideHeader, setHideHeader] = useState<boolean>(false)
-  const lastScrollY = useRef(0)
 
   logger.debug('root session', session)
-
-  useEffect(() => {
-    function handleScroll() {
-      const currentScrollY = window.scrollY;
-      if (currentScrollY > lastScrollY.current) {
-        // user is scrolling DOWN
-        setHideHeader(true);
-      } else {
-        // user is scrolling UP
-        setHideHeader(false);
-      }
-      lastScrollY.current = currentScrollY;
-    }
-
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-  
 
   useEffect(() => {
     if (
