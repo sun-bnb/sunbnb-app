@@ -24,6 +24,7 @@ import logoIcon from './logo.svg'
 const userNavigation = [
   { name: 'Profile', href: '/account' },
   { name: 'Reservations', href: '/reservations' },
+  { name: 'Privacy', href: '/privacy' },
   { name: 'Sign out', href: '/api/auth/signout' },
 ]
 
@@ -132,6 +133,7 @@ export default function CustomizedInputBase() {
                   <div className="max-w-[300px] truncate font-bold mr-1 ml-1 mt-1 px-2 rounded-md bg-[#303030] text-[#fff5e1]" key={'userNavigation-'+index} 
                     onClick={() => {
                       console.log('Selected userNavigation', item)
+                      setIsMenuOpen(false)
                       router.push(item.href)
                     }}>
                     { t(item.name) }

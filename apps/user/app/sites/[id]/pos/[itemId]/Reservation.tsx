@@ -5,6 +5,7 @@ import { InventoryItem, SiteProps } from '@/app/sites/types'
 import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
 import CheckIcon from '@mui/icons-material/Check'
+import BlockIcon from '@mui/icons-material/Block'
 import MenuItem from '@mui/material/MenuItem'
 import FormControl from '@mui/material/FormControl'
 import Select from '@mui/material/Select'
@@ -23,6 +24,31 @@ import dayjs, { Dayjs } from 'dayjs'
 import { saveReservationForMultipleItems } from '../../actions'
 import PaymentView from '@/app/payment/Payment'
 import sunbedIcon from './sunbed-icon-transparent.png'
+
+// A helper function that checks if an item is free for the current day
+function isItemAvailableToday(item: InventoryItem): boolean {
+  if (!item.reservations || item.reservations.length === 0) {
+    // No reservations, so definitely available
+    return true;
+  }
+
+  // We'll consider "today" from midnight to midnight (ignoring times)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // If there's at least one reservation whose from <= today <= to, the item is NOT available
+  return !item.reservations.some((res) => {
+    const fromDate = new Date(res.from);
+    const toDate = new Date(res.to);
+
+    // Zero out hours if ignoring time portion
+    fromDate.setHours(0, 0, 0, 0);
+    toDate.setHours(0, 0, 0, 0);
+
+    return today >= fromDate && today <= toDate;
+  });
+}
+
 
 function ReservationButton({
   disabled,
@@ -124,8 +150,8 @@ export default function ReservationView({
 
   const dateStr = new Date().toISOString().substring(0, 10)
 
-  const isAvailable = item.reservations?.length === 0
-
+  const isAvailable = isItemAvailableToday(item);
+  
   const previewElem = (
     <div>
       <div className={`flex justify-between ${!reservation ? 'text-white' : 'text-black'}`}>
@@ -210,7 +236,7 @@ export default function ReservationView({
           <Alert className="w-[200px] flex justify-center" icon={
             isAvailable ? 
               <CheckIcon fontSize="inherit" /> :
-              null
+              <BlockIcon fontSize="inherit" />
             } severity={ isAvailable ? 'success' : 'error' }>
             { isAvailable ? 'Available' : 'Reserved' }
           </Alert>

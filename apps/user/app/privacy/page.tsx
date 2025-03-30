@@ -24,7 +24,6 @@ export default async function Privacy() {
         Personal Information: Name, email address, phone number, billing address.<br/>
         Technical Data: IP address, browser type, operating system, and usage data from our website.<br/>
         Transactional Data: Payment information, purchase history, and order details.<br/>
-        Marketing Preferences: Opt-ins and preferences for receiving marketing communications.<br/>
         We may collect this data directly from you (e.g., through forms or account creation) or automatically when you use our services.<br/>
         <br/><br/>
         3. How We Use Your Data<br/>
@@ -35,14 +34,12 @@ export default async function Privacy() {
         To process payments	              Performance of a contract<br/>
         To comply with legal obligations	Legal obligation<br/>
         To improve our services	          Legitimate interest<br/>
-        To send marketing communications	Consent (where required)<br/>
         <br/><br/>
         4. Sharing Your Data<br/>
         We may share your personal data with:
         <br/><br/>
         Service Providers: Such as payment processors, hosting services, or analytics platforms.<br/>
         Legal Authorities: When required by law or to protect our legal rights.<br/>
-        Affiliates or Partners: For business purposes, in compliance with GDPR.<br/>
         We ensure all third parties handle your data in compliance with GDPR.<br/>
 
         5. International Data Transfers<br/>
@@ -69,7 +66,7 @@ export default async function Privacy() {
         To exercise any of these rights, please contact us at info@sunbnb.app.
         <br/><br/>
         8. Cookies<br/>
-        We use cookies to enhance your experience on our website. You can manage your cookie preferences through our Cookie Policy or your browser settings.
+        We only use essential cookies that are necessary for the operation of our website. You can set your browser to block or alert you about these cookies, but some parts of the site may not function properly.
         <br/><br/>
         9. Security Measures<br/>
         We implement technical and organizational measures to protect your data against unauthorized access, alteration, disclosure, or destruction. However, no data transmission over the internet is entirely secure, and we cannot guarantee absolute security.
