@@ -94,7 +94,7 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
   const whMaxHeight = weekDaysOpen ? 'max-h-[260px]' : 'max-h-[72px]'
 
   return (
-    <div className="container mx-auto bg-[#fff5e1]">
+    <div className="container mx-auto bg-[#fff5e1] pt-[78px]">
       {
         focused &&
           <Backdrop onClick={() => {

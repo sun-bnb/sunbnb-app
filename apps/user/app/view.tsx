@@ -107,7 +107,7 @@ function Site({ site }: { site: SiteProps }) {
 function SiteList({ sites }: { sites: SiteProps[] }) {
 
   return (
-    <div className="mt-[50px]">
+    <div className="mt-[12px]">
       {
         sites.map(site => (
           <Site key={site.id} site={site} />
@@ -126,7 +126,7 @@ function SiteMap({ sites, geography, apiKey }: { sites: SiteProps[], geography?:
 
   return (
     <div key={`${geography?.center.lat}-${geography?.center.lng}-${geography?.bounds?.north}-${geography?.bounds?.south}-${geography?.bounds?.east}-${geography?.bounds?.west}`}>
-      <div className="w-full h-[300px]">
+      <div className="w-full h-[300px] mt-[12px]">
         <APIProvider apiKey={apiKey}>
           <Map mapId={'7a0196a7ba317ea5'}
             defaultZoom={defaultBounds ? undefined : 8}
@@ -197,7 +197,7 @@ export default function Sites({ sites, geography, apiKey }: {
   logger.debug('Search response', searchResponse)
 
   return (
-    <div className="container mx-auto -mt-2 bg-[#fff5e1]">
+    <div className="container mx-auto pt-[78px] bg-[#fff5e1]">
       <div className="flex justify-between py-1 px-2">
         <div>
           <div className="text-sm text-gray-600">

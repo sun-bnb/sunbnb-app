@@ -3,9 +3,9 @@
 import { useEffect, useState, useRef } from 'react'
 import Header from './header/header'
 
-const MIN_SCROLL = 100
-const HIDE_THRESHOLD = 20
-const SHOW_THRESHOLD = 1
+const MIN_SCROLL = 40
+const HIDE_THRESHOLD = 10
+const SHOW_THRESHOLD = 5
 
 const AuthenticatedApp = ({ children }: {
   children: React.ReactNode;
