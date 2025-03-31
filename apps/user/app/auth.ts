@@ -53,14 +53,24 @@ const nextAuthResult: NextAuthResult = NextAuth({
   session: {
     strategy: 'jwt',
   },
+  events: {
+    async signIn(message) {
+      console.log('SIGN IN EVT', message)
+    },
+    async linkAccount(message) {
+      console.log('LINK ACCOUNT EVT', message)
+    }
+  },
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_OAUTH_ID!,
       clientSecret: process.env.GOOGLE_OAUTH_SECRET!,
+      allowDangerousEmailAccountLinking: true
     }),
     FacebookProvider({
       clientId: process.env.FACEBOOK_APP_ID!,
       clientSecret: process.env.FACEBOOK_APP_SECRET!,
+      allowDangerousEmailAccountLinking: true
     }),
     CredentialsProvider({
       credentials: {
@@ -117,8 +127,13 @@ const nextAuthResult: NextAuthResult = NextAuth({
       // (You already have 'user', so this might be redundant.)
       const existingUser = await prisma.user.findUnique({ where: { email } });
       if (!existingUser) {
-        // Decide how to handle users with no record
-        return false
+        await prisma.user.create({ 
+          data: { 
+            email,
+            name: user?.name,
+            image: user?.image
+          } 
+        })
       }
 
       return true // Sign in is allowed
@@ -138,7 +153,7 @@ const nextAuthResult: NextAuthResult = NextAuth({
     },
   },
   pages: {
-    newUser: '/new-user',
+    newUser: '/',
     // If you want a custom error/sign-in page:
     // signIn: '/auth/api/signin',
     // error: '/auth/api/signin',
