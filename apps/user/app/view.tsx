@@ -11,6 +11,7 @@ import MapIcon from '@mui/icons-material/Map'
 import SurfingIcon from '@mui/icons-material/Surfing'
 import LocalBarIcon from '@mui/icons-material/LocalBar'
 import ListAltIcon from '@mui/icons-material/ListAlt'
+import { useTranslations } from 'next-intl'
 import { SiteGeography, SiteProps } from './sites/types'
 import { APIProvider, AdvancedMarker, Map } from '@vis.gl/react-google-maps'
 import { useState } from 'react'
@@ -184,6 +185,8 @@ export default function Sites({ sites, geography, apiKey }: {
   const searchState = useSelector((state: RootState) => state.search)
   const { selectedPlace } = searchState
 
+  const t = useTranslations('SitesView')
+
   logger.debug('Selected place', selectedPlace)
 
   const { data: placeDetails } = useGetPlaceDetailsQuery(selectedPlace?.placeId, {
@@ -202,12 +205,12 @@ export default function Sites({ sites, geography, apiKey }: {
         <div>
           <div className="text-sm text-gray-600">
             <span className="mr-1 font-bold">{ searchResponse?.sites.length || sites.length }</span>
-            <span>BEACHES</span>
+            <span>{t('BEACHES')}</span>
           </div>
           {
             !selectedPlace ? (
               <div className="text-gray-600">
-                <span>Showing all beaches</span>
+                <span>{t('Showing all beaches')}</span>
               </div>
             ) : (
               <div className="text-gray-600">
@@ -230,7 +233,7 @@ export default function Sites({ sites, geography, apiKey }: {
             <ToggleButton value="map" style={{ width: '42px', height: '42px' }}>
               <div className="mt-[3px]">
                 <div style={{ fontSize: '10px' }}>
-                  MAP
+                  {t('MAP')}
                 </div>
                 <MapIcon sx={{ fontSize: '24px', marginTop: '-12px' }}/>
               </div>
@@ -238,7 +241,7 @@ export default function Sites({ sites, geography, apiKey }: {
             <ToggleButton value="list" style={{ width: '42px', height: '42px' }}>
               <div className="mt-[3px]">
                 <div style={{ fontSize: '10px' }}>
-                  LIST
+                  {t('LIST')}
                 </div>
                 <ListAltIcon sx={{ fontSize: '24px', marginTop: '-12px' }}/>
               </div>

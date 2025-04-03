@@ -68,7 +68,7 @@ export default function CustomizedInputBase() {
             <>
               <InputBase
                 sx={{ ml: 1, flex: 1 }}
-                placeholder="Find your place under the sun"
+                placeholder={t('slogan')}
                 inputProps={{ 'aria-label': 'search google maps' }}
                 value={searchText}
                 onChange={(e) => {

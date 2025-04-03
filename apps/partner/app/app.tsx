@@ -17,7 +17,13 @@ const App = ({ children }: {
 
   useEffect(() => {
     console.log(status)
-    if (status === 'authenticated') {
+    if (pathname.endsWith('/info')) {
+      setContent(
+        <div>
+          {children}
+        </div>
+      )
+    } else if (status === 'authenticated') {
       setContent(
         <div>
           { !pathname.includes('/manage') && <Header /> }

@@ -6,6 +6,7 @@ import Image from 'next/image'
 import LaunchIcon from '@mui/icons-material/Launch'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
 import CircularProgress from '@mui/material/CircularProgress'
+import { useTranslations } from 'next-intl'
 import { Reservation } from '@/app/sites/types'
 import sunbedIcon from './sunbed-icon-transparent.png'
 
@@ -69,6 +70,7 @@ function ReservationStatus ({
 
   const statusMap = STATUS_CONTENT_MAP[status]
 
+  const ts = useTranslations('Reservations')
 
   return (
     <div className={
@@ -89,7 +91,7 @@ function ReservationStatus ({
       <div className="flex justify-center items-center flex-grow">
         {
           status !== 'processing' ? 
-            statusMap?.text :
+            ts(statusMap?.text) :
             <CircularProgress />
                         
         }
@@ -107,6 +109,8 @@ export default function ReservationConfirmationView({
   reservation: Reservation,
   processingStatus?: string
 }) {
+
+  const t = useTranslations('Reservation')
 
   logger.debug('Reservation confirmation', reservation)
   const validFrom = new Date(reservation.from).toISOString().substring(0, 10)
@@ -144,7 +148,7 @@ export default function ReservationConfirmationView({
         <div className="flex mx-[12px] mt-[48px]">
           <div className="w-full flex justify-center">
             <div className="text-[rgb(142,114,49)] pl-[8px]">
-              SEATS: <b>{reservation.items?.map(item => String(item.number)).join(', ')}</b>
+              {t('SEATS')}: <b>{reservation.items?.map(item => String(item.number)).join(', ')}</b>
             </div>
           </div>
         </div>
@@ -173,7 +177,7 @@ export default function ReservationConfirmationView({
         </div>
         <div className="flex justify-between mt-[4px] text-[rgb(142,114,49)] border border-[rgb(142,114,49)] mx-[12px]">
           <div className="bg-[#fff5e1] text-[rgb(142,114,49)] pl-[6px]">
-            VALID:
+            {t('VALID')}:
           </div>
           <div className="bg-[rgb(142,114,49)] text-[#fff5e1] pr-[6px] pl-[6px]">
             <b>{validity}</b>
@@ -194,7 +198,7 @@ export default function ReservationConfirmationView({
               }}
                 
                 onClick={() => window.open(`/reservations/${reservation.id}/receipt`, '_blank')}>
-                <div className="text-[rgb(142,114,49)] mr-[4px]">Open receipt</div>
+                <div className="text-[rgb(142,114,49)] mr-[4px]">{t('Open receipt')}</div>
                 <LaunchIcon className="bg-[#fff5e1] text-[rgb(142,114,49)] mt-[2px]" sx={{ 
                   width: '20px',
                   height: '20px' 

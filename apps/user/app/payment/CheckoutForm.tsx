@@ -10,6 +10,7 @@ import {
   useStripe,
   useElements
 } from '@stripe/react-stripe-js'
+import { useTranslations } from 'next-intl'
 import ReservationItem from './ReservationItem'
 import { Reservation } from '../sites/types'
 
@@ -26,6 +27,8 @@ export default function CheckoutForm({
   
   const stripe = useStripe()
   const elements = useElements()
+
+  const t = useTranslations('Payment')
 
   const [message, setMessage] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -81,7 +84,7 @@ export default function CheckoutForm({
         <PaymentElement id="payment-element" options={paymentElementOptions} />
         <div className="mt-[18px]">
           <Button variant="contained" fullWidth={true} id="submit" type="submit" disabled={isLoading}>
-            { isLoading ? <div className="spinner" id="spinner"></div> : "Pay now" }
+            { isLoading ? <div className="spinner" id="spinner"></div> : t('Pay now') }
           </Button>
         </div>
         ‹

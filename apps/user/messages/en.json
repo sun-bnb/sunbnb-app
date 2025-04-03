@@ -3,6 +3,50 @@
     "Profile": "Profile",
     "Reservations": "Reservations",
     "Privacy": "Privacy",
-    "Sign out": "Sign out"
+    "Sign out": "Sign out",
+    "slogan": "Find your place under the sun"
+  },
+  "SitesView": {
+    "BEACHES": "BEACHES",
+    "Showing all beaches": "Showing all beaches",
+    "MAP": "MAP",
+    "LIST": "LIST"
+  },
+  "SiteView": {
+    "OPENING HOURS": "OPENING HOURS",
+    "From": "From",
+    "To": "To",
+    "Reserve": "Reserve",
+    "OK": "OK",
+    "Cancel": "Cancel"
+  },
+  "Account": {
+    "First name": "First name",
+    "Last name": "Last name",
+    "E-mail": "E-mail",
+    "Phone number": "Phone number",
+    "Save": "Save",
+    "Saved": "Saved"
+  },
+  "Reservations": {
+    "Active": "Active",
+    "History": "History",
+    "Paid": "Paid",
+    "PAID": "PAID",
+    "Pending": "Pending",
+    "Confirmed": "Confirmed",
+    "Unknown": "Unknown",
+    "Cancelled": "Cancelled",
+    "Paymemnt received": "Payment received",
+    "Processing": "Processing",
+    "Payment failed": "Payment failed"
+  },
+  "Reservation": {
+    "SEATS": "SEATS",
+    "VALID": "VALID",
+    "Open receipt": "Open receipt"
+  },
+  "Payment": {
+    "Pay now": "Pay now"
   }
 }

@@ -1,8 +1,52 @@
 {
   "HomePage": {
-    "Profile": "Profilo",
-    "Reservations": "Reservaciones",
-    "Privacy": "Privada",
-    "Sign out": "Cerra"
+    "Profile": "Perfil",
+    "Reservations": "Reservas",
+    "Privacy": "Privacidad",
+    "Sign out": "Salir",
+    "slogan": "Encuentra tu lugar bajo el sol"
+  },
+  "SitesView": {
+    "BEACHES": "PLAYAS",
+    "Showing all beaches": "Mostrando todas las playas",
+    "MAP": "MAPA",
+    "LIST": "LISTA"
+  },
+  "SiteView": {
+    "OPENING HOURS": "HORARIO",
+    "From": "Desde",
+    "To": "Hasta",
+    "Reserve": "Reservar",
+    "OK": "Aceptar",
+    "Cancel": "Cancelar"
+  },
+  "Account": {
+    "First name": "Nombre",
+    "Last name": "Apellido",
+    "E-mail": "Correo electrónico",
+    "Phone number": "Número de teléfono",
+    "Save": "Guardar",
+    "Saved": "Guardado"
+  },
+  "Reservations": {
+    "Active": "Activa",
+    "History": "Historial",
+    "Paid": "Pagada",
+    "PAID": "PAGADA",
+    "Pending": "Pendiente",
+    "Confirmed": "Confirmada",
+    "Unknown": "Desconocida",
+    "Cancelled": "Cancelada",
+    "Payment received": "Pago recibido",
+    "Processing": "Procesando",
+    "Payment failed": "Pago fallido"
+  },
+  "Reservation": {
+    "SEATS": "ASIENTOS",
+    "VALID": "VÁLIDO",
+    "Open receipt": "Abrir factura"
+  },
+  "Payment": {
+    "Pay now": "Pagar ahora"
   }
 }

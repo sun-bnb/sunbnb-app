@@ -16,6 +16,7 @@ import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import Image from 'next/image'
+import { useTranslations } from 'next-intl'
 import { useState } from 'react'
 import { setValue } from '@/store/features/sites/sitesSlice'
 import { RootState } from '@/store/store'
@@ -93,6 +94,8 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
 
   const whMaxHeight = weekDaysOpen ? 'max-h-[260px]' : 'max-h-[72px]'
 
+  const t = useTranslations('SiteView')
+
   return (
     <div className="container mx-auto bg-[#fff5e1] pt-[78px]">
       {
@@ -159,7 +162,7 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
           </div>
           <div className={`px-1 py-2 ${whMaxHeight} overflow-hidden`}>
             <Divider textAlign="left">
-              <span className="text-sm font-bold">OPENING HOURS</span>
+              <span className="text-sm font-bold">{t('OPENING HOURS')}</span>
             </Divider>
             {
               siteWeekDays.map(wh => {

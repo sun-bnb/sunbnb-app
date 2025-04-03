@@ -23,6 +23,7 @@ import { SingleInputDateRangeField } from '@mui/x-date-pickers-pro/SingleInputDa
 import { setValue } from '@/store/features/sites/sitesSlice'
 import { RootState } from '@/store/store'
 import { useDispatch, useSelector } from 'react-redux'
+import { useTranslations } from 'next-intl'
 import {
   useGetReservationByIdQuery
 } from '@/store/features/api/apiSlice'
@@ -74,6 +75,9 @@ function ReservationTimerangeSelector() {
 
   const dispatch = useDispatch()
   const sitesState = useSelector((state: RootState) => state.sites)
+
+  const t = useTranslations('SiteView')
+
   const { reservationState, reservationMode } = sitesState
 
   let reservationDay = sitesState.reservationDay || dayjs().toDate()
@@ -149,7 +153,7 @@ function ReservationTimerangeSelector() {
             disabled={reservationState === 'processing'}
             format='YYYY-MM-DD'
             selectedSections={null}
-            label="From - To"
+            label={`${t('From')} - ${t('To')}`}
             slots={{ 
               field: SingleInputDateRangeField
             }}
@@ -182,6 +186,8 @@ function ReservationButton({
   let reservationDay = dayjs(sitesState.reservationDay)
   let timeRange = sitesState.timeRange ? [dayjs(sitesState.timeRange[0]), dayjs(sitesState.timeRange[1])] : []
   let dateRange = sitesState.dateRange ? [dayjs(sitesState.dateRange[0]), dayjs(sitesState.dateRange[1])] : []
+
+  const t = useTranslations('SiteView')
 
   return (
     <div className="mt-[10px]">
@@ -237,7 +243,7 @@ function ReservationButton({
 
           }
         }>
-          Reserve
+          {t('Reserve')}
         </Button>
     </div>
   )

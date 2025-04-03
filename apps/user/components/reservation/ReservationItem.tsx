@@ -2,6 +2,7 @@ import dayjs from 'dayjs'
 import Chip from '@mui/material/Chip'
 import Link from 'next/link'
 import { Reservation } from '@/app/sites/types'
+import { useTranslations } from 'next-intl'
 
 const statusToChipColor: {
   [key: string]: 'default' | 'success' | 'error'
@@ -24,6 +25,8 @@ const statusToChipLabel: {
 
 export default function ReservationItem({ reservation }: { reservation: Reservation }) {
 
+  const t = useTranslations('Reservations')
+
   if (reservation.type === 'hours') {
     const formattedDate = dayjs(reservation.from).format('ddd, D MMM YYYY')
     const timeRangeFrom = `${dayjs(reservation.from).format('HH:mm')}`
@@ -41,7 +44,7 @@ export default function ReservationItem({ reservation }: { reservation: Reservat
           </div>
           <div className="-mt-1">
             <Chip color={statusToChipColor[reservation.status]} 
-              label={statusToChipLabel[reservation.status] || 'Unknown' } 
+              label={t(statusToChipLabel[reservation.status] || 'Unknown') } 
               sx={{ height: '26px' }} />
           </div>
         </div>
@@ -62,7 +65,7 @@ export default function ReservationItem({ reservation }: { reservation: Reservat
           </div>
           <div className="-mt-1">
             <Chip color={statusToChipColor[reservation.status]} 
-              label={statusToChipLabel[reservation.status] || 'Unknown' }
+              label={t(statusToChipLabel[reservation.status] || 'Unknown') }
               sx={{ height: '26px' }} />
           </div>
         </div>
