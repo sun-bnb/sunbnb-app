@@ -138,8 +138,6 @@ export default function InfoPage() {
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-[#fff5e1]">
-    <div className="relative min-h-screen overflow-hidden">
-      {/* LOGO */}
       <motion.div
         className="absolute top-0 left-0"
         variants={logoVariants}
@@ -149,7 +147,6 @@ export default function InfoPage() {
         <Image src={logo} alt="Sunbnb" width={200} height={200} />
       </motion.div>
 
-      {/* SLOGAN */}
       <motion.div
         className="absolute top-0 left-0"
         variants={sloganVariants}
@@ -163,61 +160,59 @@ export default function InfoPage() {
         </div>
       </motion.div>
 
-      {/* CHAPTER TITLES */}
-        <motion.div
-          // pinned at absolute bottom-left
-          className="absolute bottom-[20px] left-[0px] h-auto w-full"
-          variants={chaptersContainerVariants}
+      <motion.div
+        // pinned at absolute bottom-left
+        className="absolute bottom-[20px] left-[0px] h-auto w-full"
+        variants={chaptersContainerVariants}
+        initial="hidden"
+        animate={chaptersState}
+      >
+        {/* motion.ul that staggers children */}
+        <motion.ul
+          variants={{
+            hidden: { opacity: 1 }, // or keep them invisible if you want
+            visible: {
+              transition: {
+                // We can stagger the child animations
+                staggerChildren: 0.15,
+              },
+            },
+          }}
           initial="hidden"
           animate={chaptersState}
         >
-          {/* motion.ul that staggers children */}
-          <motion.ul
-            variants={{
-              hidden: { opacity: 1 }, // or keep them invisible if you want
-              visible: {
-                transition: {
-                  // We can stagger the child animations
-                  staggerChildren: 0.15,
-                },
-              },
-            }}
-            initial="hidden"
-            animate={chaptersState}
-          >
-            {chaptersData.map((chap, idx) => {
-              const isOpen = selectedIndex === idx;
+          {chaptersData.map((chap, idx) => {
+            const isOpen = selectedIndex === idx;
 
-              return (
-                <motion.li
-                  key={idx}
-                  // Each list item can fade/slide in
-                  variants={chapterVariants}
-                  className="ml-[20px] pb-2 cursor-pointer"
+            return (
+              <motion.li
+                key={idx}
+                // Each list item can fade/slide in
+                variants={chapterVariants}
+                className="ml-[20px] pb-2 cursor-pointer"
+              >
+                {/* Title row */}
+                <div
+                  className="font-semibold text-lg"
+                  onClick={() => toggleChapter(idx)}
                 >
-                  {/* Title row */}
-                  <div
-                    className="font-semibold text-lg"
-                    onClick={() => toggleChapter(idx)}
-                  >
-                    {chap.title}
-                  </div>
+                  {chap.title}
+                </div>
 
-                  {/* Expanded content */}
-                  <motion.div
-                    variants={chapterContentVariants}
-                    initial="collapsed"
-                    animate={isOpen ? 'expanded' : 'collapsed'}
-                    className="overflow-hidden text-sm text-gray-700"
-                  >
-                    <div className="mt-2">{chap.content}</div>
-                  </motion.div>
-                </motion.li>
-              );
-            })}
-          </motion.ul>
-        </motion.div>
-    </div>
+                {/* Expanded content */}
+                <motion.div
+                  variants={chapterContentVariants}
+                  initial="collapsed"
+                  animate={isOpen ? 'expanded' : 'collapsed'}
+                  className="overflow-hidden text-sm text-gray-700"
+                >
+                  <div className="mt-2">{chap.content}</div>
+                </motion.div>
+              </motion.li>
+            );
+          })}
+        </motion.ul>
+      </motion.div>
     </div>
   );
 
