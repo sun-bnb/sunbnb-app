@@ -82,6 +82,19 @@ export const chapterVariants: Variants = {
       duration: 0.6,
       ease: 'easeOut'
     }
+  },
+  frame4: {
+    opacity: 0,
+    y: 20,
+  },
+  frame5: {
+    marginTop: '20px',
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.8,
+      ease: 'easeOut'
+    }
   }
 };
 
@@ -155,12 +168,22 @@ export const chapterContentVariants: Variants = {
   expanded: {
     height: 'auto',
     opacity: 1,
+    transition: { duration: 0.6, ease: 'easeOut' },
+  },
+};
+
+export const chapterContainerVariants: Variants = {
+  collapsed: { height: 0, width: 0, opacity: 0 },
+  expanded: {
+    height: '230px',
+    width: 'calc(100% - 20px)',
+    opacity: 1,
     transition: { duration: 0.3, ease: 'easeOut' },
   },
 };
 
-export const chapter1Variants: Variants = {
-  frame0: { height: 0, width: 0, opacity: 0 },
+export const chapter1Part1Variants: Variants = {
+  frame0: { height: 0, width: 0, opacity: 0, top: 0 },
   frame1: {
     height: '100%',
     width: '100%',
@@ -178,6 +201,59 @@ export const chapter1Variants: Variants = {
     width: '100%',
     opacity: 1,
     transition: { duration: 0.3, ease: 'easeOut' },
+  },
+  frame4: {
+    top: '-230px',
+    height: '100%',
+    width: '100%',
+    opacity: 1,
+    transition: { duration: 0.6, ease: 'easeOut' },
+  },
+  frame5: {
+    top: '-230px',
+    height: '100%',
+    width: '100%',
+    opacity: 1,
+    transition: { duration: 0.6, ease: 'easeOut' },
+  },
+};
+
+export const chapter1Part2Variants: Variants = {
+  frame0: { height: '100%', width: '100%', opacity: 0, top: '230px' },
+  frame1: {
+    top: '230px',
+    height: '100%',
+    width: '100%',
+    opacity: 1,
+    transition: { duration: 0, ease: 'easeOut' },
+  },
+  frame2: {
+    top: '230px',
+    height: '100%',
+    width: '100%',
+    opacity: 1,
+    transition: { duration: 0.3, ease: 'easeOut' },
+  },
+  frame3: {
+    top: '230px',
+    height: '100%',
+    width: '100%',
+    opacity: 1,
+    transition: { duration: 0.3, ease: 'easeOut' },
+  },
+  frame4: {
+    top: '0px',
+    height: '100%',
+    width: '100%',
+    opacity: 1,
+    transition: { duration: 0.6, ease: 'easeOut' },
+  },
+  frame5: {
+    top: '0px',
+    height: '100%',
+    width: '100%',
+    opacity: 1,
+    transition: { duration: 0.6, ease: 'easeOut' },
   }
 };
 
@@ -202,6 +278,12 @@ export const chapter1Frames: { [frame: string]: { [elem: string]: Variants }} = 
         opacity: 1,
         scale: 1,
         transition: { duration: 1, ease: 'easeOut' },
+      },
+      frame4: {
+        fontSize: '18px',
+        opacity: 1,
+        scale: 1,
+        transition: { duration: 1, ease: 'easeOut' },
       }
     },
     'SubTitle1': {
@@ -215,6 +297,10 @@ export const chapter1Frames: { [frame: string]: { [elem: string]: Variants }} = 
         transition: { duration: 1, ease: 'easeOut' },
       },
       frame3: {
+        left: '0px',
+        transition: { duration: 1, ease: 'easeOut' },
+      },
+      frame4: {
         left: '0px',
         transition: { duration: 1, ease: 'easeOut' },
       },
@@ -234,6 +320,12 @@ export const chapter1Frames: { [frame: string]: { [elem: string]: Variants }} = 
         transition: { duration: 0.3, ease: 'easeOut' },
       },
       frame3: {
+        width: '100%',
+        height: '160px',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      },
+      frame4: {
         width: '100%',
         height: '160px',
         opacity: 1,
@@ -272,6 +364,12 @@ export const chapter1Frames: { [frame: string]: { [elem: string]: Variants }} = 
         opacity: 1,
         transition: { duration: 0.3, ease: 'easeOut' },
       },
+      frame4: {
+        width: 'auto',
+        height: 'auto',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      },
     },
     'CheckInImage1': {
       frame0: { height: 0, width: 0, opacity: 0 },
@@ -300,6 +398,12 @@ export const chapter1Frames: { [frame: string]: { [elem: string]: Variants }} = 
       frame1: { height: 0, width: 0, opacity: 0 },
       frame2: { height: 0, width: 0, opacity: 0 },
       frame3: {
+        width: '160px',
+        height: '108px',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      },
+      frame4: {
         width: '160px',
         height: '108px',
         opacity: 1,

@@ -6,6 +6,7 @@ import logo from './logo.svg'
 import checkInBeach from './check-in-beach.png'
 import checkInVenue from './check-in-venue.png'
 import checkInAdvance from './check-in-advance.png'
+import paymentCapture from './payment-capture.gif'
 
 import { 
   logoVariants,
@@ -14,9 +15,11 @@ import {
   chaptersContainerVariants,
   chaptersListVariants,
   chapterItemVariants,
+  chapterContainerVariants,
   chapterContentVariants,
-  chapter1Variants,
-  chapter1Frames
+  chapter1Part1Variants,
+  chapter1Frames,
+  chapter1Part2Variants
 
  } from './animations';
 import { useIntroAnimations } from './useIntroAnimations';
@@ -27,6 +30,7 @@ export default function InfoPage() {
   const { 
     logoState, sloganState, chaptersState,
     chapter1State,
+    chapter2State,
     animateChaper1
   } = useIntroAnimations();
 
@@ -48,8 +52,9 @@ export default function InfoPage() {
       background: <div className="w-full mt-[80px]">
       </div>,
       content:
-      <motion.div className="w-full"
-        variants={chapter1Variants}
+      <>
+      <motion.div className="w-full h-auto absolute"
+        variants={chapter1Part1Variants}
         initial="frame0"
         animate={chapter1State}>
           <div>
@@ -117,6 +122,58 @@ export default function InfoPage() {
             </div>
           </motion.div>
         </motion.div>
+        <motion.div className="w-full h-auto absolute"
+          variants={chapter1Part2Variants}
+          initial="frame0"
+          animate={chapter1State}>
+          <div className="w-full flex">
+            <div className="text-center text-[16px] pr-[12px]">
+              <div>
+                In-app payments eliminate the need for money handling.
+              </div>
+              <motion.div className="mt-[24px]" 
+                  variants={{
+                    frame3: { opacity: 0 }, // or keep them invisible if you want
+                    frame4: { opacity: 0 }, // or keep them invisible if you want
+                    frame5: {
+                      opacity: 1,
+                      transition: {
+                        // We can stagger the child animations
+                        staggerChildren: 0.75,
+                      }
+                    },
+                  }}
+                  initial="frame3"
+                  animate={chapter1State}>
+                <motion.div
+                  key={0}
+                  variants={chapterVariants}
+                  className="mt-[8px]"
+                >
+                    <b>Secure mobile payments</b>
+                </motion.div>
+                <motion.div
+                  key={1}
+                  variants={chapterVariants}
+                  className="mt-[8px]"
+                >
+                    <b>Regular payouts</b>
+                </motion.div>
+                <motion.div
+                  key={2}
+                  variants={chapterVariants}
+                  className="mt-[8px]"
+                >
+                    <b>Automated accounting</b>
+                </motion.div>
+              </motion.div>
+            </div>
+            <div>
+              <Image src={paymentCapture} alt="Payment" width={200} height={400}/>
+            </div>
+          </div>
+        </motion.div>
+        </>
     },
     {
       title: 'Increase rental revenue',
@@ -206,7 +263,12 @@ export default function InfoPage() {
                   animate={isOpen ? 'expanded' : 'collapsed'}
                   className="overflow-hidden text-sm text-gray-700"
                 >
-                  <div className="mt-2">{chap.content}</div>
+                  <motion.div className="mt-2 relative"
+                    variants={chapterContainerVariants}
+                    initial="collapsed"
+                    animate={isOpen ? 'expanded' : 'collapsed'}>
+                      {chap.content}
+                  </motion.div>
                 </motion.div>
               </motion.li>
             );
