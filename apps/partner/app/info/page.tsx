@@ -1,8 +1,11 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import Image from 'next/image';
-import logo from './logo.svg';
+import { motion } from 'framer-motion'
+import Image from 'next/image'
+import logo from './logo.svg'
+import checkInBeach from './check-in-beach.png'
+import checkInVenue from './check-in-venue.png'
+import checkInAdvance from './check-in-advance.png'
 
 import { 
   logoVariants,
@@ -11,61 +14,21 @@ import {
   chaptersContainerVariants,
   chaptersListVariants,
   chapterItemVariants,
-  chapterContentVariants
+  chapterContentVariants,
+  chapter1Variants,
+  chapter1Frames
+
  } from './animations';
 import { useIntroAnimations } from './useIntroAnimations';
 import { useState } from 'react';
 
-const chaptersData = [
-  {
-    title: 'Cut labour costs',
-    background: <div className="w-full mt-[80px]">
-      <video
-        src="/video-1.mp4"
-        width={200}
-        controls={false}
-        autoPlay
-      />
-    </div>,
-    content:
-      <div className="w-full">
-        <div className="w-full flex ml-[4px]">
-          <div className="opacity-50">
-            <video
-              src="/video-1.mp4"
-              width={400}
-              controls={false}
-              autoPlay
-              muted
-            />
-          </div>
-          <div>
-            Self-service check-in, in-app payment and automated check-out reduce the need for staff.
-          </div>
-        </div>
-      </div>
-  },
-  {
-    title: 'Increase rental revenue',
-    content: 'Maximize occupancy and easily manage dynamic pricing...',
-  },
-  {
-    title: 'Improve customer satisfaction',
-    content: 'Provide fast service and smooth online booking experiences...',
-  },
-  {
-    title: 'Sell more products',
-    content: 'Add upsells and promotions in your app seamlessly...',
-  },
-  {
-    title: 'Automate accounting',
-    content: 'Integrate finance tools with live transaction data...',
-  },
-];
-
 export default function InfoPage() {
   
-  const { logoState, sloganState, chaptersState } = useIntroAnimations();
+  const { 
+    logoState, sloganState, chaptersState,
+    chapter1State,
+    animateChaper1
+  } = useIntroAnimations();
 
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
@@ -73,15 +36,108 @@ export default function InfoPage() {
   const containerState = selectedIndex !== null ? 'open' : 'closed';
 
   function toggleChapter(idx: number) {
+    if (selectedIndex !== idx) {
+      if (idx === 0) animateChaper1();
+    }
     setSelectedIndex((current) => (current === idx ? null : idx));
   }
 
-  const selectedBackground = selectedIndex !== null ? chaptersData[selectedIndex]!.background : null;
+  const chaptersData = [
+    {
+      title: 'Cut labour costs',
+      background: <div className="w-full mt-[80px]">
+      </div>,
+      content:
+      <motion.div className="w-full"
+        variants={chapter1Variants}
+        initial="frame0"
+        animate={chapter1State}>
+          <div>
+            <motion.div className="text-center"
+              variants={chapter1Frames['frame0']!['Title1']}
+              initial="frame0"
+              animate={chapter1State}>
+              Self-service check-in drastically reduces operation labour.
+            </motion.div>
+            <div className="w-full relative h-[24px] pt-[10px]">
+              <motion.div className="absolute whitespace-nowrap"
+                variants={chapter1Frames['frame0']!['SubTitle1']}
+                initial="frame0"
+                animate={chapter1State}>
+                <b>Your customers can check in:</b>
+              </motion.div>
+            </div>
+          </div>
+          
+          <motion.div className="w-full flex ml-[4px] flex h-[300px] justify-center items-center"
+            variants={chapter1Frames['frame0']!['CheckInContainer']}
+            initial="frame0"
+            animate={chapter1State}>
+            <div className="w-full flex justify-center items-center">
+              <div className="w-[60%]">
+                <motion.div className="transform rotate-[6deg] border border-[2px] border-black"
+                  variants={chapter1Frames['frame0']!['CheckInImage1']}
+                  initial="frame0"
+                  animate={chapter1State}>
+                  <Image src={checkInBeach} alt="Self-service check-in" width={220} height={160} />
+                </motion.div>
+                <motion.div className="transform rotate-[-2deg] border border-[2px] border-black"
+                  variants={chapter1Frames['frame0']!['CheckInImage2']}
+                  initial="frame0"
+                  animate={chapter1State}>
+                  <Image src={checkInVenue} alt="Self-service check-in" width={220} height={160} />
+                </motion.div>
+                <motion.div className="transform rotate-[4deg] border border-[2px] border-black"
+                  variants={chapter1Frames['frame0']!['CheckInImage3']}
+                  initial="frame0"
+                  animate={chapter1State}>
+                  <Image src={checkInAdvance} alt="Self-service check-in" width={220} height={160} />
+                </motion.div>
+              </div>
+              <div className="flex justify-center items-center w-full">
+                <motion.div className="whitespace-nowrap text-[16px]"
+                  variants={chapter1Frames['frame0']!['CheckIn1']}
+                  initial="frame0"
+                  animate={chapter1State}>
+                  <span>ON THE BEACH</span>
+                </motion.div>
+                <motion.div className="whitespace-nowrap text-[16px]"
+                  variants={chapter1Frames['frame0']!['CheckIn2']}
+                  initial="frame0"
+                  animate={chapter1State}>
+                  <span>AT THE VENUE</span>
+                </motion.div>
+                <motion.div className="whitespace-nowrap text-[16px]"
+                  variants={chapter1Frames['frame0']!['CheckIn3']}
+                  initial="frame0"
+                  animate={chapter1State}>
+                  <span>IN ADVANCE</span>
+                </motion.div>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+    },
+    {
+      title: 'Increase rental revenue',
+      content: 'Maximize occupancy and easily manage dynamic pricing...',
+    },
+    {
+      title: 'Improve customer satisfaction',
+      content: 'Provide fast service and smooth online booking experiences...',
+    },
+    {
+      title: 'Sell more products',
+      content: 'Add upsells and promotions in your app seamlessly...',
+    },
+    {
+      title: 'Automate accounting',
+      content: 'Integrate finance tools with live transaction data...',
+    },
+  ]
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-[#fff5e1]">
-      <div className="absolute top-0 left-0 w-full h-full opacity-50">
-      </div>
     <div className="relative min-h-screen overflow-hidden">
       {/* LOGO */}
       <motion.div
@@ -108,10 +164,9 @@ export default function InfoPage() {
       </motion.div>
 
       {/* CHAPTER TITLES */}
-      <div className="container mx-auto">
         <motion.div
           // pinned at absolute bottom-left
-          className="absolute bottom-[20px] left-[0px] max-w-md"
+          className="absolute bottom-[20px] left-[0px] h-auto w-full"
           variants={chaptersContainerVariants}
           initial="hidden"
           animate={chaptersState}
@@ -138,11 +193,11 @@ export default function InfoPage() {
                   key={idx}
                   // Each list item can fade/slide in
                   variants={chapterVariants}
-                  className="mb-2 pb-2 cursor-pointer"
+                  className="ml-[20px] pb-2 cursor-pointer"
                 >
                   {/* Title row */}
                   <div
-                    className="font-semibold text-lg pl-[20px]"
+                    className="font-semibold text-lg"
                     onClick={() => toggleChapter(idx)}
                   >
                     {chap.title}
@@ -162,7 +217,6 @@ export default function InfoPage() {
             })}
           </motion.ul>
         </motion.div>
-      </div>
     </div>
     </div>
   );

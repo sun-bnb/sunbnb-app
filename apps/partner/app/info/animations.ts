@@ -158,3 +158,235 @@ export const chapterContentVariants: Variants = {
     transition: { duration: 0.3, ease: 'easeOut' },
   },
 };
+
+export const chapter1Variants: Variants = {
+  frame0: { height: 0, width: 0, opacity: 0 },
+  frame1: {
+    height: '100%',
+    width: '100%',
+    opacity: 1,
+    transition: { duration: 0, ease: 'easeOut' },
+  },
+  frame2: {
+    height: '100%',
+    width: '100%',
+    opacity: 1,
+    transition: { duration: 0.3, ease: 'easeOut' },
+  },
+  frame3: {
+    height: '100%',
+    width: '100%',
+    opacity: 1,
+    transition: { duration: 0.3, ease: 'easeOut' },
+  }
+};
+
+export const chapter1Frames: { [frame: string]: { [elem: string]: Variants }} = {
+  frame0: {
+    'Title1': {
+      frame0: { opacity: 0, fontSize: '18px', scale: 0 },
+      frame1: {
+        fontSize: '18px',
+        opacity: 1,
+        scale: 1,
+        transition: { duration: 1, ease: 'easeOut' },
+      },
+      frame2: {
+        fontSize: '18px',
+        opacity: 1,
+        scale: 1,
+        transition: { duration: 1, ease: 'easeOut' },
+      },
+      frame3: {
+        fontSize: '18px',
+        opacity: 1,
+        scale: 1,
+        transition: { duration: 1, ease: 'easeOut' },
+      }
+    },
+    'SubTitle1': {
+      frame0: { left: '100%' },
+      frame1: {
+        left: '0px',
+        transition: { duration: 2, ease: 'easeOut' },
+      },
+      frame2: {
+        left: '0px',
+        transition: { duration: 1, ease: 'easeOut' },
+      },
+      frame3: {
+        left: '0px',
+        transition: { duration: 1, ease: 'easeOut' },
+      },
+    },
+    'CheckInContainer': {
+      frame0: { height: 0, width: 0, opacity: 0 },
+      frame1: {
+        width: '100%',
+        height: '160px',
+        opacity: 1,
+        transition: { duration: 0, ease: 'easeOut' },
+      },
+      frame2: {
+        width: '100%',
+        height: '160px',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      },
+      frame3: {
+        width: '100%',
+        height: '160px',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      }
+    },
+    'CheckIn1': {
+      frame0: { height: 0, width: 0, opacity: 0 },
+      frame1: {
+        width: 'auto',
+        height: 'auto',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      },
+      frame2: { height: 0, width: 0, opacity: 0 },
+      frame3: { height: 0, width: 0, opacity: 0 }
+    },
+    'CheckIn2': {
+      frame0: { height: 0, width: 0, opacity: 0 },
+      frame1: { height: 0, width: 0, opacity: 0 },
+      frame2: {
+        width: 'auto',
+        height: 'auto',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      },
+      frame3: { height: 0, width: 0, opacity: 0 }
+    },
+    'CheckIn3': {
+      frame0: { height: 0, width: 0, opacity: 0 },
+      frame1: { height: 0, width: 0, opacity: 0 },
+      frame2: { height: 0, width: 0, opacity: 0 },
+      frame3: {
+        width: 'auto',
+        height: 'auto',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      },
+    },
+    'CheckInImage1': {
+      frame0: { height: 0, width: 0, opacity: 0 },
+      frame1: {
+        width: '160px',
+        height: '108px',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      },
+      frame2: { height: 0, width: 0, opacity: 0 },
+      frame3: { height: 0, width: 0, opacity: 0 }
+    },
+    'CheckInImage2': {
+      frame0: { height: 0, width: 0, opacity: 0 },
+      frame1: { height: 0, width: 0, opacity: 0 },
+      frame2: {
+        width: '160px',
+        height: '108px',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      },
+      frame3: { height: 0, width: 0, opacity: 0 }
+    },
+    'CheckInImage3': {
+      frame0: { height: 0, width: 0, opacity: 0 },
+      frame1: { height: 0, width: 0, opacity: 0 },
+      frame2: { height: 0, width: 0, opacity: 0 },
+      frame3: {
+        width: '160px',
+        height: '108px',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      },
+    }
+  },
+  frame1: {
+    'Title1': {
+      frame0: { height: 0, opacity: 0 },
+      frame1: { height: 0, opacity: 0 },
+      frame2: {
+        height: 'auto',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      },
+      frame3: {
+        height: 'auto',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      }
+    },
+    'CheckIn1': {
+      frame0: { height: 0, opacity: 0 },
+      frame1: { height: 0, opacity: 0 },
+      frame2: { height: 0, opacity: 0 },
+      frame3: {
+        height: 'auto',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      }
+    }
+  },
+  frame2: {
+    'Title1': {
+      frame0: { height: 0, opacity: 0 },
+      frame1: {
+        height: 'auto',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      },
+      frame2: {
+        height: 'auto',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      },
+      frame3: {
+        height: 'auto',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      }
+    },
+    'CheckIn1': {
+      frame0: { height: 0, opacity: 0 },
+      frame1: { height: 0, opacity: 0 },
+      frame2: { height: 0, opacity: 0 },
+      frame3: {
+        height: 'auto',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      }
+    }
+  },
+  frame3: {
+    'Title1': {
+      frame0: { height: 0, opacity: 0 },
+      frame1: { height: 0, opacity: 0 },
+      frame2: {
+        height: 'auto',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      },
+      frame3: {
+        height: 'auto',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      }
+    },
+    'CheckIn1': {
+      frame0: { height: 0, opacity: 0 },
+      frame1: { height: 0, opacity: 0 },
+      frame2: { height: 0, opacity: 0 },
+      frame3: {
+        height: 'auto',
+        opacity: 1,
+        transition: { duration: 0.3, ease: 'easeOut' },
+      }
+    }
+  }
+}
