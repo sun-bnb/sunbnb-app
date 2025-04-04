@@ -63,7 +63,7 @@ export default getRequestConfig(async ({ requestLocale }) => {
   // Provide a static locale, fetch a user setting,
   // read from `cookies()`, `headers()`, etc.
 
-  const availableLocales = ['en', 'es']
+  const availableLocales = ['en', 'fi', 'es']
 
   let locale = 'en'
 

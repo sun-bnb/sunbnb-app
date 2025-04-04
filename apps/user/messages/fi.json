@@ -1,0 +1,52 @@
+{
+  "HomePage": {
+    "Profile": "Profiili",
+    "Reservations": "Varaukset",
+    "Privacy": "Tietosuja",
+    "Sign out": "Kirjaudu ulos",
+    "slogan": "Löydä paikkasi auringon alla"
+  },
+  "SitesView": {
+    "BEACHES": "RANTAA",
+    "Showing all beaches": "Kaikki rannat",
+    "MAP": "KARTTA",
+    "LIST": "LISTA"
+  },
+  "SiteView": {
+    "OPENING HOURS": "AUKIOLOAJAT",
+    "From": "Mistä",
+    "To": "Mihin",
+    "Reserve": "Varaa",
+    "OK": "OK",
+    "Cancel": "Peruuta"
+  },
+  "Account": {
+    "First name": "Etunimi",
+    "Last name": "Sukunimi",
+    "E-mail": "Sähköposti",
+    "Phone number": "Puhelinnumero",
+    "Save": "Tallenna",
+    "Saved": "Tallennetu"
+  },
+  "Reservations": {
+    "Active": "Aktiiviset",
+    "History": "Historia",
+    "Paid": "Maksettu",
+    "PAID": "MAKSETTU",
+    "Pending": "Odottaa",
+    "Confirmed": "Vahvistettu",
+    "Unknown": "Tuntematon",
+    "Cancelled": "Peruttu",
+    "Payment received": "Maksu vastaanotettu",
+    "Processing": "Käsittekyssä",
+    "Payment failed": "Maksu epäonnistui"
+  },
+  "Reservation": {
+    "SEATS": "PAIKAT",
+    "VALID": "VOIMASSA",
+    "Open receipt": "Avaa kuitti"
+  },
+  "Payment": {
+    "Pay now": "Maksa nyt"
+  }
+}
