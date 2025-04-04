@@ -137,7 +137,7 @@ export default function InfoPage() {
   ]
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-[#fff5e1]">
+    <div className="relative w-screen h-[100dvh] overflow-hidden bg-[#fff5e1]">
       <motion.div
         className="absolute top-0 left-0"
         variants={logoVariants}
