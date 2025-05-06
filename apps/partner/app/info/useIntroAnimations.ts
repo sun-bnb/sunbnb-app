@@ -8,7 +8,7 @@ export function useIntroAnimations() {
   const [chaptersState, setChaptersState] = useState<'hidden' | 'visible'>('hidden');
 
   const [chapter1State, setChapter1State] = useState<'frame0' | 'frame1' | 'frame2' | 'frame3' | 'frame4' | 'frame5'>('frame0');
-  const [chapter2State, setChapter2State] = useState<'frame0' | 'frame1' | 'frame2' | 'frame3' | 'frame4'>('frame0');
+  const [chapter2State, setChapter2State] = useState<string>('frame0');
 
   useEffect(() => {
     // Step 1: show logo + slogan in center
@@ -53,6 +53,24 @@ export function useIntroAnimations() {
     }, 100);
   }
 
-  return { logoState, sloganState, chaptersState, chapter1State, chapter2State, animateChaper1 };
+  function animateChaper2() {
+    setTimeout(() => {
+      setChapter2State('frame1');
+      setTimeout(() => {
+        setChapter2State('frame2');
+        setTimeout(() => {
+          setChapter2State('frame3');
+          setTimeout(() => {
+            setChapter2State('frame4');
+            setTimeout(() => {
+              setChapter2State('frame5');
+            }, 4000);
+          }, 6000);
+        }, 2500);
+      }, 2500);
+    }, 100);
+  }
+
+  return { logoState, sloganState, chaptersState, chapter1State, chapter2State, animateChaper1, animateChaper2 };
 
 }
