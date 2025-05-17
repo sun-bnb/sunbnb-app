@@ -510,7 +510,7 @@ export default function ChapterTwo({
         variants={chapter2Part2Variants}
         initial="frame0"
         animate={state}>
-        <div className="w-full flex justify-center text-[16px]"><b>MAXIMIZE OFF-SEASON OCCUPANCY</b></div>
+        <div className="w-full flex justify-center text-[16px] mt-[12px]"><b>MAXIMIZE OFF-SEASON OCCUPANCY</b></div>
         <motion.div className="w-full h-auto flex justify-center items-center absolute"
           variants={chapter2Frames['SalesChannelsContainer']}
           initial="frame0"

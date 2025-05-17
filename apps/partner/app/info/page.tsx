@@ -13,10 +13,11 @@ import {
   chapterContentVariants,
 
  } from './animations';
-import { useIntroAnimations } from './useIntroAnimations';
-import { useState } from 'react';
-import ChapterOne from './ChapterOne';
-import ChapterTwo from './ChapterTwo';
+import { useIntroAnimations } from './useIntroAnimations'
+import { useState } from 'react'
+import ChapterOne from './ChapterOne'
+import ChapterTwo from './ChapterTwo'
+import ChapterThree from './ChapterThree'
 
 export default function InfoPage() {
   
@@ -54,7 +55,7 @@ export default function InfoPage() {
     },
     {
       title: 'Improve customer satisfaction',
-      content: 'Provide fast service and smooth online booking experiences...',
+      content: selectedIndex === 2 ? <ChapterThree /> : null,
     },
     {
       title: 'Sell more products',
@@ -134,7 +135,7 @@ export default function InfoPage() {
                   variants={chapterContentVariants}
                   initial="collapsed"
                   animate={isOpen ? 'expanded' : 'collapsed'}
-                  className="overflow-hidden text-sm text-gray-700 max-w-[600px] mx-auto"
+                  className="overflow-hidden text-sm text-gray-700 max-w-[400px] mx-auto"
                 >
                   <motion.div className="mt-2 relative"
                     variants={chapterContainerVariants}
