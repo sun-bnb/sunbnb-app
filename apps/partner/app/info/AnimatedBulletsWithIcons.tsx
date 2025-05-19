@@ -18,7 +18,7 @@ const animations: {
     animate: { opacity: 1, y: 0, transition: { duration: 1 } }
   },
   'left': {
-    initial: { opacity: 1, x: 230 },
+    initial: { opacity: 1, x: '120%' },
     animate: { opacity: 1, x: 0, transition: { duration: 1 } }
   }
 }

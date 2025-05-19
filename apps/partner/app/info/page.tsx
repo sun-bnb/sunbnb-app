@@ -19,6 +19,7 @@ import ChapterOne from './ChapterOne'
 import ChapterTwo from './ChapterTwo'
 import ChapterThree from './ChapterThree'
 import ChapterFour from './ChapterFour'
+import ChapterFive from './ChapterFive'
 
 export default function InfoPage() {
   
@@ -64,7 +65,7 @@ export default function InfoPage() {
     },
     {
       title: 'Automate accounting',
-      content: 'Integrate finance tools with live transaction data...',
+      content: selectedIndex === 4 ? <ChapterFive /> : null
     },
   ]
 
