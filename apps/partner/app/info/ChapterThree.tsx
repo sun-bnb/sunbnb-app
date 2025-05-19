@@ -14,7 +14,7 @@ const frames = [
     imageSize={30}
     animation="horizontalFlip"
     content={
-      <AnimatedBulletsWithIcons size={16} bullets={[
+      <AnimatedBulletsWithIcons size={16} animation="up" bullets={[
         { icon: '💳', text: 'No cash required' },
         { icon: '📋', text: 'Reservation management' },
         { icon: '🧾', text: 'Customer receipt' },
@@ -27,7 +27,7 @@ const frames = [
     imageSize={45}
     animation="fadeInOut"
     content={
-      <AnimatedBulletsWithIcons size={15} bullets={[
+      <AnimatedBulletsWithIcons animation="up" size={15} bullets={[
         { icon: '🏖️', text: 'Find available sunbeds' },
         { icon: '✅', text: 'Direct check-in' },
       ]} />

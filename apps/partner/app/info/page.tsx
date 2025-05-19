@@ -18,6 +18,7 @@ import { useState } from 'react'
 import ChapterOne from './ChapterOne'
 import ChapterTwo from './ChapterTwo'
 import ChapterThree from './ChapterThree'
+import ChapterFour from './ChapterFour'
 
 export default function InfoPage() {
   
@@ -59,7 +60,7 @@ export default function InfoPage() {
     },
     {
       title: 'Sell more products',
-      content: 'Add upsells and promotions in your app seamlessly...',
+      content: selectedIndex === 3 ? <ChapterFour /> : null
     },
     {
       title: 'Automate accounting',
