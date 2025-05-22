@@ -16,10 +16,10 @@ export default function ReservationView({ reservation }: ReservationViewProps) {
   const goToPage = (p: 0 | 1) => setPage(p)
 
   const onTouchStart = (e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0].clientY
+    touchStartY.current = e.touches[0]!.clientY
   }
   const onTouchEnd = (e: React.TouchEvent) => {
-    const delta = e.changedTouches[0].clientY - touchStartY.current
+    const delta = e.changedTouches[0]!.clientY - touchStartY.current
     const threshold = 50
     if (delta < -threshold && page === 0) goToPage(1)
     else if (delta > threshold && page === 1) goToPage(0)
