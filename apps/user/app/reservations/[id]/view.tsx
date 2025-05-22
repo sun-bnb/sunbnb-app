@@ -33,14 +33,18 @@ export default function ReservationView({ reservation }: ReservationViewProps) {
       ref={containerRef}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
-      className="relative h-screen w-full overflow-hidden"
+      className="relative w-full h-screen overflow-hidden"
     >
+      {/* two “pages” stacked vertically, each exactly 100vh tall */}
       <div
-        className="h-[200%] w-full transition-transform duration-500 ease-out"
-        style={{ transform: `translateY(-${page * 50}%)` }}
+        className="transition-transform duration-500 ease-out"
+        style={{ 
+          height: '200vh',
+          transform: `translateY(-${page * 100}vh)` 
+        }}
       >
         {/* PAGE 0: Reservation + FOOD AND DRINKS button */}
-        <div className="h-[50%] w-full relative">
+        <div className="relative w-full h-screen">
           <ReservationConfirmationView reservation={reservation} />
           <button
             onClick={() => goToPage(1)}
@@ -51,8 +55,9 @@ export default function ReservationView({ reservation }: ReservationViewProps) {
         </div>
 
         {/* PAGE 1: Menu + BACK TO RESERVATION button */}
-        <div className="h-[50%] w-full relative bg-white">
+        <div className="relative w-full h-screen bg-white">
           <div className="h-full overflow-y-auto pb-16 pt-6 px-4">
+            {/* Replace with your actual menu items */}
             <ul className="space-y-4">
               <li>☀️ Cold Drink — $3.50</li>
               <li>🥤 Smoothie — $5.00</li>
