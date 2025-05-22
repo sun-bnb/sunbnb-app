@@ -16,16 +16,13 @@ export default function ReservationView({ reservation }: ReservationViewProps) {
   const goToPage = (p: 0 | 1) => setPage(p)
 
   const onTouchStart = (e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0]!.clientY
+    touchStartY.current = e.touches[0].clientY
   }
   const onTouchEnd = (e: React.TouchEvent) => {
-    const delta = e.changedTouches[0]!.clientY - touchStartY.current
+    const delta = e.changedTouches[0].clientY - touchStartY.current
     const threshold = 50
-    if (delta < -threshold && page === 0) {
-      goToPage(1)
-    } else if (delta > threshold && page === 1) {
-      goToPage(0)
-    }
+    if (delta < -threshold && page === 0) goToPage(1)
+    else if (delta > threshold && page === 1) goToPage(0)
   }
 
   return (
@@ -33,30 +30,33 @@ export default function ReservationView({ reservation }: ReservationViewProps) {
       ref={containerRef}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
-      className="relative w-full h-screen overflow-hidden"
+      className="relative w-full overflow-hidden"
+      style={{ height: '100dvh' }}
     >
-      {/* two “pages” stacked vertically, each exactly 100vh tall */}
       <div
         className="transition-transform duration-500 ease-out"
-        style={{ 
-          height: '200vh',
-          transform: `translateY(-${page * 100}vh)` 
+        style={{
+          height: '200dvh',
+          width: '100vw',
+          transform: `translateY(-${page * 100}dvh)`,
         }}
       >
-        {/* PAGE 0: Reservation + FOOD AND DRINKS button */}
-        <div className="relative w-full h-screen">
-          <ReservationConfirmationView reservation={reservation} />
+        {/* PAGE 0: Reservation */}
+        <div className="flex flex-col w-full" style={{ height: '100dvh' }}>
+          <div className="flex-1 overflow-y-auto">
+            <ReservationConfirmationView reservation={reservation} />
+          </div>
           <button
             onClick={() => goToPage(1)}
-            className="absolute bottom-0 left-0 w-full h-12 bg-[#00cef1] text-[#fff5e1] font-bold text-lg"
+            className="h-12 w-full bg-[#00cef1] text-[#fff5e1] font-bold text-lg"
           >
             FOOD AND DRINKS
           </button>
         </div>
 
-        {/* PAGE 1: Menu + BACK TO RESERVATION button */}
-        <div className="relative w-full h-screen bg-white">
-          <div className="h-full overflow-y-auto pb-16 pt-6 px-4">
+        {/* PAGE 1: Menu */}
+        <div className="flex flex-col w-full bg-white" style={{ height: '100dvh' }}>
+          <div className="flex-1 overflow-y-auto px-4 pt-6 pb-4">
             {/* Replace with your actual menu items */}
             <ul className="space-y-4">
               <li>☀️ Cold Drink — $3.50</li>
@@ -68,7 +68,7 @@ export default function ReservationView({ reservation }: ReservationViewProps) {
           </div>
           <button
             onClick={() => goToPage(0)}
-            className="absolute bottom-0 left-0 w-full h-12 bg-[#00cef1] text-[#fff5e1] font-bold text-lg"
+            className="h-12 w-full bg-[#00cef1] text-[#fff5e1] font-bold text-lg"
           >
             BACK TO RESERVATION
           </button>
