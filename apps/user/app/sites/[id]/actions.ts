@@ -305,10 +305,11 @@ export async function saveReservation(
 export async function saveReservationForMultipleItems(
   reservation: { 
     userId?: string,
+    anonId?: string,
     siteId: string,
     items?: InventoryItem[],
     type: string,
-    from: string, to: string 
+    from: string, to: string
   }) {
   
   console.log('SAVE RES', reservation)
@@ -330,6 +331,7 @@ export async function saveReservationForMultipleItems(
     type: reservation.type,
     status: 'pending',
     paymentAmount: 0,
+    anonId: reservation.anonId,
     items: {
       connect: reservation.items?.map(item => ({ id: item.id }))
     },
@@ -398,5 +400,31 @@ export async function createReservation(
     status: 'ok',
     reservation
   }
+  
+}
+
+export async function findAnonReservation(
+  anonId: string,
+  itemId: string
+) {
+
+  const reservation = await prisma.reservation.findFirst({
+    where: {
+      anonId: anonId,
+      items: {
+        some: {
+          id: { in: [itemId] },
+        },
+      }
+    },
+    include: {
+      items: true,
+      site: true
+    }
+  })
+
+  console.log('reservation by anon found', reservation)
+
+  return reservation
   
 }

@@ -1,10 +1,26 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { InventoryItem } from '@/app/sites/types'
 import ReservationView from './Reservation'
+import { findAnonReservation } from '../../actions'
 
 
 export default function PosView({ items, apiKey, stripePublicKey }: { items: InventoryItem[], apiKey: string, stripePublicKey: string | undefined }) {
+
+  const router = useRouter()
+
+  const anonId = localStorage.getItem('sunbnb-anonId')
+
+  if (anonId) {
+    findAnonReservation(anonId, items[0]!.id)
+      .then((reservation) => {
+        if (reservation) {
+          console.log('Found reservation', reservation)
+          router.push(`/reservations/${reservation.id}`)
+        }
+      })
+  }
 
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);

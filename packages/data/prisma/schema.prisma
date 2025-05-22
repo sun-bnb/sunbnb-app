@@ -202,6 +202,9 @@ model Reservation {
   siteId            String          @map("site_id")
   itemId            String?         @map("item_id")
 
+
+  anonId            String?          @map("anon_id")
+
   invoiceId         String?         @unique @map("invoice_id")
 
   from              DateTime        @map("from")

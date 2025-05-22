@@ -36,6 +36,7 @@ export interface SiteGeography {
 export interface Reservation {
   id: string
   userId: string
+  anonId?: string | null
   site?: { id: string, name?: string | null }
   itemId?: string | null
   items?: { id: string, number: number }[] | null

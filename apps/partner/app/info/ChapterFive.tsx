@@ -1,11 +1,8 @@
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
-import { motion } from 'framer-motion'
 import { FrameWrapper } from './FrameWrapper'
 import { AnimatedBulletsWithIcons } from './AnimatedBulletsWithIcons'
 import { MultimediaFrame } from './MultimediaFrame'
-import { TypingText } from './TypingText'
-import { StaggeredReveal } from './StaggeredReveal'
 import receiptSample from './receipt-sample.png'
 import taxAccounting from './tax-accounting.png'
 

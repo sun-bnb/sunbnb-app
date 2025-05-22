@@ -18,10 +18,12 @@ export default async function Site({ params }: { params: { id: string }}) {
 
   logger.debug('Reservation page params', params)
   
-  const session = await auth()
-  if (!session?.user) return null
+  //const session = await auth()
+  //if (!session?.user) return null
 
   const reservation = await getReservation(params.id)
+
+  console.log('Reservation:', reservation)
 
   if (!reservation) return <div>Reservation {params.id} not found</div>
 

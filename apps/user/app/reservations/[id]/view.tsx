@@ -1,19 +1,74 @@
 'use client'
 
-import { Reservation, SiteProps } from '@/app/sites/types'
-import dayjs, { Dayjs } from 'dayjs'
-import Button from '@mui/material/Button'
-import Chip from '@mui/material/Chip'
-import { cancelReservation } from './actions'
-import RservationConfirmationView from '@/components/reservation/confirmation/view'
+import { useRef, useState } from 'react'
+import { Reservation } from '@/app/sites/types'
 import ReservationConfirmationView from '@/components/reservation/confirmation/view'
 
-export default function ReservationView({ reservation }: { reservation: Reservation }) {
+interface ReservationViewProps {
+  reservation: Reservation
+}
+
+export default function ReservationView({ reservation }: ReservationViewProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [page, setPage] = useState<0 | 1>(0)
+  const touchStartY = useRef<number>(0)
+
+  const goToPage = (p: 0 | 1) => setPage(p)
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0]!.clientY
+  }
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const delta = e.changedTouches[0]!.clientY - touchStartY.current
+    const threshold = 50
+    if (delta < -threshold && page === 0) {
+      goToPage(1)
+    } else if (delta > threshold && page === 1) {
+      goToPage(0)
+    }
+  }
 
   return (
-    <div className="py-4 px-2">
-      <ReservationConfirmationView reservation={reservation} />
+    <div
+      ref={containerRef}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+      className="relative h-screen w-full overflow-hidden"
+    >
+      <div
+        className="h-[200%] w-full transition-transform duration-500 ease-out"
+        style={{ transform: `translateY(-${page * 50}%)` }}
+      >
+        {/* PAGE 0: Reservation + FOOD AND DRINKS button */}
+        <div className="h-[50%] w-full relative">
+          <ReservationConfirmationView reservation={reservation} />
+          <button
+            onClick={() => goToPage(1)}
+            className="absolute bottom-0 left-0 w-full h-12 bg-[#00cef1] text-[#fff5e1] font-bold text-lg"
+          >
+            FOOD AND DRINKS
+          </button>
+        </div>
+
+        {/* PAGE 1: Menu + BACK TO RESERVATION button */}
+        <div className="h-[50%] w-full relative bg-white">
+          <div className="h-full overflow-y-auto pb-16 pt-6 px-4">
+            <ul className="space-y-4">
+              <li>☀️ Cold Drink — $3.50</li>
+              <li>🥤 Smoothie — $5.00</li>
+              <li>🍹 Cocktail — $7.00</li>
+              <li>🧋 Bubble Tea — $4.00</li>
+              <li>🍦 Ice Cream — $2.50</li>
+            </ul>
+          </div>
+          <button
+            onClick={() => goToPage(0)}
+            className="absolute bottom-0 left-0 w-full h-12 bg-[#00cef1] text-[#fff5e1] font-bold text-lg"
+          >
+            BACK TO RESERVATION
+          </button>
+        </div>
+      </div>
     </div>
   )
-
 }

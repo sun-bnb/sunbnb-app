@@ -1,16 +1,7 @@
 import prisma from '@repo/data/PrismaCient'
-import { Prisma } from '@prisma/client'
-import dayjs, { Dayjs } from 'dayjs'
+import dayjs from 'dayjs'
 import isBetween from 'dayjs/plugin/isBetween'
 import { Reservation } from '@/app/sites/types'
-// Import or define the Reservation and InventoryItem types
-// type InventoryItem = { id: string; ... }
-// type Reservation = {
-//   items: InventoryItem[];
-//   from: Date;
-//   to: Date;
-//   // ...
-// };
 
 dayjs.extend(isBetween)
 
@@ -20,9 +11,7 @@ function checkAvailability(
   from: Date, 
   to: Date
 ) {
-  // Filter reservations that BOTH:
-  // 1) Contain the given itemId in their items array
-  // 2) Overlap the [from, to] time range
+  
   const periods = reservations.filter(reservation => {
     const idMatch = (reservation.items || []).some(invItem => invItem.id === itemId)
     let overlap = false

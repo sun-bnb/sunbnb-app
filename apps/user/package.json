@@ -36,6 +36,7 @@
     "react-images-uploading": "^3.1.7",
     "react-redux": "^9.1.2",
     "stripe": "^17.3.1",
+    "uuid": "^11.1.0",
     "yarn": "^1.22.22"
   },
   "devDependencies": {
