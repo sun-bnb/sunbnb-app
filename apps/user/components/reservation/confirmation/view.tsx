@@ -113,12 +113,24 @@ export default function ReservationConfirmationView({
   const t = useTranslations('Reservation')
 
   logger.debug('Reservation confirmation', reservation)
-  const validFrom = new Date(reservation.from).toISOString().substring(0, 10)
-  const validTo = new Date(reservation.to).toISOString().substring(0, 10)
 
+  const opts: Intl.DateTimeFormatOptions = {
+    year:   'numeric',
+    month:  '2-digit',
+    day:    '2-digit',
+  }
+  
+  // “en-CA” emits “YYYY-MM-DD” ordering:
+  const validFrom = new Date(reservation.from)
+    .toLocaleDateString('en-CA', opts)
+  const validTo   = new Date(reservation.to)
+    .toLocaleDateString('en-CA', opts)
+  
+  const validity = validFrom === validTo 
+    ? validFrom 
+    : `${validFrom} – ${validTo}`
+    
   let status = reservation.status
-
-  const validity = validFrom === validTo ? validFrom : `${validFrom} - ${validTo}`
 
   const ticket = (  
     <div className="relative h-screen">

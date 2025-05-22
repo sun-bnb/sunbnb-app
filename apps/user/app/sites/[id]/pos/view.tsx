@@ -20,11 +20,11 @@ export default function PosView({ site, apiKey, stripePublicKey }: { site: SiteP
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
-  const endOfDay = new Date();
-  endOfDay.setHours(23, 59, 59, 999);
+  // const endOfDay = new Date();
+  // endOfDay.setHours(23, 59, 59, 999);
 
   let availabilityFrom = startOfDay.toISOString()
-  let availabilityTo = endOfDay.toISOString()
+  let availabilityTo = startOfDay.toISOString() // The time is adjusted in the server action
 
   const { data: availabilityResponse, refetch: refetchAvailability } = useGetAvailabilityBySiteAndTimeRangeQuery({ 
     siteId: site.id,
