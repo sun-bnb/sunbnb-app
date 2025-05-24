@@ -133,7 +133,7 @@ export default function ReservationConfirmationView({
   let status = reservation.status
 
   const ticket = (  
-    <div className="relative h-screen">
+    <div className="relative">
       {
         
           !reservation &&

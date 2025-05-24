@@ -97,7 +97,7 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
   const t = useTranslations('SiteView')
 
   return (
-    <div className="container mx-auto bg-[#fff5e1] pt-[78px]">
+    <div className="container mx-auto bg-[#fff5e1] pt-[84px]">
       {
         focused &&
           <Backdrop onClick={() => {

@@ -200,7 +200,7 @@ export default function Sites({ sites, geography, apiKey }: {
   logger.debug('Search response', searchResponse)
 
   return (
-    <div className="container mx-auto pt-[78px] bg-[#fff5e1]">
+    <div className="container mx-auto pt-[82px] bg-[#fff5e1]">
       <div className="flex justify-between py-1 px-2">
         <div>
           <div className="text-sm text-gray-600">

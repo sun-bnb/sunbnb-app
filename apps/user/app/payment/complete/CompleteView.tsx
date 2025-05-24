@@ -31,14 +31,8 @@ export default function CompleteView({
   }, [finalReservation?.status])
 
   return (
-    <div id="payment-status" className="bg-[#fff5e1]">
+    <div id="payment-status" className="bg-[#fff5e1] pt-[24px]" style={{ height: '100dvh' }}>
       <ReservationConfirmationView reservation={finalReservation} processingStatus={status} />
-      {
-        status === 'succeeded' &&
-          <div className="bg-[#00cef1] fixed bottom-0 h-[70px] w-full text-[#fff5e1] text-[24px] flex justify-center items-center">
-            FOOD AND DRINK ORDERS
-          </div>
-      }
     </div>
   )
 
