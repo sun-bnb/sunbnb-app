@@ -71,41 +71,64 @@ export default function Menu({ siteId }: { siteId: string }) {
       <Grid container spacing={2} className="mb-[64px]">
         {products.map(product => (
           <Grid item xs={12} sm={6} md={4} key={product.id}>
-            <Card>
-              {product.imageUrl && (
-                <CardMedia
-                  component="img"
-                  height="140"
-                  image={product.imageUrl}
-                  alt={product.name}
-                />
-              )}
-              <CardContent>
-                <Typography variant="h6">{product.name}</Typography>
-                {product.description && (
-                  <Typography variant="body2" color="textSecondary">
-                    {product.description}
-                  </Typography>
+            <Card sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              {/* Top row: Image + Title/Description */}
+              <Box sx={{ display: 'flex', flex: 1, p: 1 }}>
+                {product.imageUrl && (
+                  <CardMedia
+                    component="div"
+                    sx={{
+                      width: 100,
+                      height: 100,
+                      overflow: 'hidden',
+                      flexShrink: 0,
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      mr: 1,
+                    }}
+                  >
+                    <Box
+                      component="img"
+                      src={product.imageUrl}
+                      alt={product.name}
+                      sx={{ maxWidth: '100%', height: 'auto', display: 'block' }}
+                    />
+                  </CardMedia>
                 )}
-                <Typography variant="subtitle1" mt={1}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'start' }}>
+                  <Typography variant="h6" noWrap>
+                    {product.name}
+                  </Typography>
+                  {product.description && (
+                    <Typography variant="body2" color="textSecondary">
+                      {product.description}
+                    </Typography>
+                  )}
+                </Box>
+              </Box>
+              {/* Bottom row: Price and quantity controls */}
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pl: '12px' }}>
+                <Typography variant="subtitle1">
                   {product.totalPrice.toFixed(2)} €
                 </Typography>
-              </CardContent>
-              <CardActions>
-                <IconButton onClick={() => updateQuantity(product, -1)}>
-                  <RemoveIcon />
-                </IconButton>
-                <Typography>
-                  {basket.find(b => b.product.id === product.id)?.quantity ?? 0}
-                </Typography>
-                <IconButton onClick={() => updateQuantity(product, 1)}>
-                  <AddIcon />
-                </IconButton>
-              </CardActions>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <IconButton onClick={() => updateQuantity(product, -1)}>
+                    <RemoveIcon />
+                  </IconButton>
+                  <Typography sx={{ mx: 1 }}>
+                    {basket.find(b => b.product.id === product.id)?.quantity ?? 0}
+                  </Typography>
+                  <IconButton onClick={() => updateQuantity(product, 1)}>
+                    <AddIcon />
+                  </IconButton>
+                </Box>
+              </Box>
             </Card>
           </Grid>
         ))}
       </Grid>
+
       {/* Basket summary button */}
       <Box position="fixed" bottom={64} left={16} right={16}>
         <Button
