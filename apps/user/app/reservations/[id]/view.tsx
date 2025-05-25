@@ -3,6 +3,7 @@
 import { useRef, useState, useLayoutEffect, useEffect } from 'react'
 import { Reservation } from '@/app/sites/types'
 import ReservationConfirmationView from '@/components/reservation/confirmation/view'
+import Menu from './Menu'
 
 interface ReservationViewProps {
   reservation: Reservation
@@ -97,16 +98,7 @@ export default function ReservationView({ reservation }: ReservationViewProps) {
             className="overflow-y-auto flex-1"
             style={{ overscrollBehavior: 'contain' }}
           >
-            <div className="p-4 pt-6 space-y-4">
-              {/* …your menu items… */}
-              <ul className="space-y-4">
-                <li>☀️ Cold Drink — $3.50</li>
-                <li>🥤 Smoothie — $5.00</li>
-                <li>🍹 Cocktail — $7.00</li>
-                <li>🧋 Bubble Tea — $4.00</li>
-                <li>🍦 Ice Cream — $2.50</li>
-              </ul>
-            </div>
+            <Menu siteId={reservation.site!.id} />
           </div>
           <button
             onClick={() => goToPage(0)}

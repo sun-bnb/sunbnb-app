@@ -4,6 +4,7 @@ export interface SiteProps {
   locationLat?: string | undefined
   locationLng?: string | undefined
   inventoryItems?: InventoryItem[]
+  products?: Product[]
   vat?: number | null
   workingHours?: { id: string, day: number, openTime: Date, closeTime: Date }[]
   image?: string | null
@@ -12,6 +13,16 @@ export interface SiteProps {
   description?: string | null
   price?: number | null
   services: string[]
+}
+
+export interface Product {
+  id: string
+  name: string
+  description?: string | null
+  imageUrl?: string | null
+  price: number
+  tax: number
+  totalPrice: number
 }
 
 export interface Reservation {

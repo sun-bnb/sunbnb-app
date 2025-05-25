@@ -21,6 +21,7 @@ import MapHandler from '@/components/maps/map-handler'
 import { submitForm, addWorkingHpours, deleteWorkingHours, deleteSite } from './actions'
 import Inventory from './inventory/inventory'
 import Accounting from './accounting/accounting'
+import Products from './products/view'
 import Content from './content'
 import { useRouter } from 'next/navigation'
 
@@ -186,6 +187,7 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
       services: site.services || []
     }}/>,
     'inventory': <Inventory apiKey={apiKey} siteLat={locationLat || '35.5138298'} siteLng={locationLng || '24.0180367'} siteId={site.id || ''} inventory={site.inventoryItems || []}/>,
+    'products': <Products siteId={site.id!} products={site.products || []} />,
     'accounting': <Accounting site={site} />
   }
 
@@ -197,6 +199,7 @@ export default function SiteEdit({ site, apiKey }: { site: SiteProps, apiKey: st
         <Tab value="general" label="General" />
         <Tab value="content" label="Content" />
         <Tab value="inventory" label="Inventory" />
+        <Tab value="products" label="Products" />
         <Tab value="accounting" label="Accounting" />
       </Tabs>
       {

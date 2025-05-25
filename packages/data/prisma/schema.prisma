@@ -62,8 +62,9 @@ model User {
  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
 }
- 
+
 model Account {
   userId            String
   type              String
@@ -135,6 +136,8 @@ model Site {
   workingHours           SiteWorkingHours[]
   reservations           Reservation[]
   serviceFees            ServiceFee[]
+  products               Product[]
+  orders                 Order[]
  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -227,6 +230,74 @@ model Reservation {
  
 }
 
+model Product {
+
+  id                String          @unique @id @default(cuid())
+  siteId            String          @map("site_id")
+
+  name              String          
+  description       String?          
+  imageUrl          String?         @map("image_url")
+
+  price             Float
+  tax               Float
+  totalPrice        Float
+
+  active            Boolean         @default(true)
+
+  site              Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+ 
+}
+
+model Order {
+
+  id                String          @unique @id @default(cuid())
+
+  invoiceId         String?         @unique @map("invoice_id")
+  siteId            String          @map("site_id")
+
+  status            String          @default("created")
+
+  name              String          
+  description       String?          
+
+  price             Float
+  tax               Float
+  totalPrice        Float
+
+  orderItems        OrderItem[]
+
+  invoice           Invoice? @relation(fields: [invoiceId], references: [id])
+  site              Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+ 
+}
+
+model OrderItem {
+
+  id                String          @unique @id @default(cuid())
+  orderId           String          @map("order_id")
+  productId         String          @map("product_id")
+
+  quantity          Int
+
+  name              String
+  price             Float
+  tax               Float
+  totalPrice        Float
+
+  order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+ 
+}
+
 model Invoice {
 
   id                String          @unique @id @default(cuid())
@@ -249,6 +320,7 @@ model Invoice {
   updatedAt DateTime @updatedAt
  
   reservation Reservation?
+  order       Order?
 
   account PartnerAccount @relation(fields: [accountId], references: [userId], onDelete: Cascade)
  

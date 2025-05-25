@@ -28,3 +28,30 @@ export async function cancelReservation(
   return { status: 'ok' }
   
 }
+
+export async function getProducts(siteId: string) {
+
+  const session = await auth();
+  console.log('GET PRODUCTS', session);
+
+  const products = await prisma.product.findMany({
+    where: { siteId: siteId, active: true },
+  })
+
+  return products;
+
+}
+
+export async function createOrder({
+  siteId,
+  items
+} : {
+  siteId: string, 
+  items: { productId: string, quantity: number }[]
+}) {
+  const session = await auth();
+  console.log('CREATE ORDER', session);
+
+  return { status: 'ok' }
+  
+}
