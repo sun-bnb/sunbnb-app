@@ -20,6 +20,8 @@ export interface Product {
   name: string
   description?: string | null
   imageUrl?: string | null
+  imageWidth?: number | null
+  imageHeight?: number | null
   price: number
   tax: number
   totalPrice: number

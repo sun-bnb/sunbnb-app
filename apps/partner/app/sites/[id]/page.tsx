@@ -35,7 +35,9 @@ export default async function Site({ params }: { params: { id: string } }) {
             pairedBy: true
           }
         },
-        products: true
+        products: {
+          where: { active: true }
+        }
       } 
     })
     if (!site) return <div>Site {params.id} not found</div>
