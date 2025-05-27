@@ -40,6 +40,43 @@ export async function updateReservation(
   
 }
 
+export async function updateOrder(
+  order: {
+    id: string,
+    paymentRef?: string,
+    paymentAmount?: number 
+  }) {
+  
+  const session = await auth()
+  console.log('SAVE ORDER', session, order)
+
+  // if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+
+  const orderData: {
+    paymentRef?: string,
+    paymentAmount?: number
+  } = { 
+  }
+
+  if (order.paymentRef) {
+    orderData.paymentRef = order.paymentRef
+  }
+
+  if (order.paymentAmount) {
+    orderData.paymentAmount = order.paymentAmount
+  }
+
+  console.log('UPDATE ORDER', orderData)
+  const updatedOrder = await prisma.order.update({ where: { id: order.id },
+    data: orderData
+  })
+
+  console.log('UPDATED ORDER', updatedOrder)
+
+  return { status: 'ok', id: updatedOrder.id }
+  
+}
+
 export async function getReservationByPaymentRef({
   paymentRef
 } : {
@@ -56,5 +93,24 @@ export async function getReservationByPaymentRef({
   console.log('reservation by ref found', reservation)
 
   return reservation
+  
+}
+
+export async function getOrderByPaymentRef({
+  paymentRef
+} : {
+  paymentRef: string 
+}) {
+  
+  const session = await auth()
+  console.log('GET ORDER', session)
+
+  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+
+  const order = await prisma.order.findFirst({ where: { paymentRef: paymentRef } })
+
+  console.log('order by ref found', order)
+
+  return order
   
 }

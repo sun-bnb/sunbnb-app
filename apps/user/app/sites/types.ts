@@ -40,12 +40,41 @@ export interface Reservation {
   site?: { id: string, name?: string | null }
   itemId?: string | null
   items?: { id: string, number: number }[] | null
+  orders?: { 
+    id: string,
+    createdAt: Date,
+    status: string,
+    totalPrice: number,
+    orderItems: { 
+      id: string
+      name: string
+      quantity: number
+      price: number
+      tax: number
+      totalPrice: number
+    }[],
+    invoice?: Invoice | null
+  }[] | null
   status: string
   type: string
   from: Date
   to: Date
   paymentRef?: string | null
   paymentAmount?: number | null
+}
+
+export interface Invoice {
+  id: string
+  totalCharge: number
+  totalTax: number
+  totalAmount: number
+  invoiceLines: {
+    id: string
+    description: string | null
+    charge: number
+    tax: number
+    amount: number
+  }[]
 }
 
 export interface InventoryItem {

@@ -56,6 +56,7 @@ model User {
   sites         Site[]
   inventoryItems         InventoryItem[]
   reservations           Reservation[]
+  orders                 Order[]
   partnerAccount PartnerAccount?
   // Optional for WebAuthn support
   Authenticator Authenticator[]
@@ -227,6 +228,7 @@ model Reservation {
   invoice   Invoice? @relation(fields: [invoiceId], references: [id])
 
   items InventoryItem[]
+  orders Order[]
  
 }
 
@@ -258,22 +260,28 @@ model Order {
 
   id                String          @unique @id @default(cuid())
 
+  userId            String          @map("user_id")
   invoiceId         String?         @unique @map("invoice_id")
   siteId            String          @map("site_id")
+  reservationId     String?         @map("reservation_id")
+  
+  anonId            String?          @map("anon_id")
 
   status            String          @default("created")
-
-  name              String          
-  description       String?          
 
   price             Float
   tax               Float
   totalPrice        Float
 
+  paymentRef        String?         @map("payment_ref")
+  paymentAmount     Float?          @map("payment_amount")
+
   orderItems        OrderItem[]
 
   invoice           Invoice? @relation(fields: [invoiceId], references: [id])
+  reservation       Reservation? @relation(fields: [reservationId], references: [id])
   site              Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

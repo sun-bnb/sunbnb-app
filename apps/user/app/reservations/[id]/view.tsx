@@ -4,19 +4,52 @@ import { useRef, useState, useLayoutEffect, useEffect } from 'react'
 import { Reservation } from '@/app/sites/types'
 import ReservationConfirmationView from '@/components/reservation/confirmation/view'
 import Menu from './Menu'
+import { Order } from '@/app/types/types'
+import { useGetOrderByIdQuery } from '@/store/features/api/apiSlice'
 
 interface ReservationViewProps {
-  reservation: Reservation
+  reservation: Reservation,
+  order: Order | null,
+  apiKey: string, stripePublicKey: string | undefined
+  serviceFee: {
+    chargeType: string
+    feeAmount?: number | null
+    percentage?: number | null
+  } | undefined
 }
 
-export default function ReservationView({ reservation }: ReservationViewProps) {
+export default function ReservationView({ serviceFee, reservation, order, apiKey, stripePublicKey }: ReservationViewProps) {
+
   const containerRef = useRef<HTMLDivElement>(null)
   const resRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const touchStartY = useRef<number>(0)
 
-  const [page, setPage] = useState<0 | 1>(0)
+  const serviceFeeAmount = serviceFee?.chargeType === 'fixed' ?
+    (serviceFee?.feeAmount || 0) : serviceFee?.percentage! * (order?.totalPrice || 0)
+
+  console.log('order', order, serviceFeeAmount)
+
+  const [page, setPage] = useState<0 | 1>(order ? 1 : 0)
   const [resScrollable, setResScrollable] = useState(false)
+  const [orderStatus, setOrderStatus] = useState<string>(order?.status || 'processing')
+
+  const { data: fetchedOrder, error: orderFetchError } = useGetOrderByIdQuery({
+    id: order?.id,
+  }, {
+    skip: !order || orderStatus === 'paid',
+    pollingInterval: orderStatus === 'processing' ? 1000 : 0
+  })
+  
+  const finalOrder = fetchedOrder || order
+  
+  useEffect(() => {
+    if (finalOrder?.status) {
+      setOrderStatus(finalOrder.status);
+    }
+  }, [finalOrder?.status])
+
+  console.log('Final order:', finalOrder, orderStatus)
 
   // Measure whether reservation content overflows
   useLayoutEffect(() => {
@@ -98,7 +131,15 @@ export default function ReservationView({ reservation }: ReservationViewProps) {
             className="overflow-y-auto flex-1"
             style={{ overscrollBehavior: 'contain' }}
           >
-            <Menu siteId={reservation.site!.id} />
+            <Menu 
+              serviceFee={serviceFeeAmount}
+              siteId={reservation.site!.id} 
+              apiKey={apiKey} 
+              stripePublicKey={stripePublicKey}
+              reservationId={reservation.id}
+              orders={reservation.orders}
+              showConfirmation={!!order}
+            />
           </div>
           <button
             onClick={() => goToPage(0)}

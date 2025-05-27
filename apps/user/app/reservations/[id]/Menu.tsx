@@ -1,8 +1,11 @@
 'use client'
 
+import logger from '@/utils/logger'
+
+import { v4 as uuidv4 } from 'uuid'
 import { useEffect, useState } from 'react'
 import { getProducts, createOrder } from './actions'
-import { Product } from '@/app/types/types'
+import { Product, Invoice } from '@/app/types/types'
 import {
   Box,
   Grid,
@@ -20,16 +23,150 @@ import {
   ListItemText,
   Divider,
   Stack,
+  CircularProgress,
+  Snackbar,
+  Alert,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
+import ListAltIcon from '@mui/icons-material/ListAlt'
 import RemoveIcon from '@mui/icons-material/Remove'
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
+import { useSession } from 'next-auth/react'
+import { useDispatch, useSelector } from 'react-redux'
+import { RootState } from '@/store/store'
+import { setValue } from '@/store/features/reservation/reservationSlice'
+import { useGetOrderByIdQuery } from '@/store/features/api/apiSlice'
+import OrderPaymentView from '@/app/payment/OrderPayment'
+import Orders from './Orders'
 
-export default function Menu({ siteId }: { siteId: string }) {
+interface OrderItem {
+  product: Product
+  quantity: number
+}
+
+function OrderButton({
+  disabled,
+  items,
+  siteId,
+  reservationId
+}: {
+  disabled: boolean,
+  items: OrderItem[],
+  siteId: string,
+  reservationId: string
+}) {
+
+  const { data: session } = useSession()
+
+  const dispatch = useDispatch();
+  const reservationState = useSelector((state: RootState) => state.reservation)
+
+  return (
+    <div className="mt-[8px]">
+      <Button style={{
+      }} variant="contained"
+        fullWidth={true}
+        disabled={disabled}
+        onClick={
+          async () => {
+            dispatch(setValue({ orderState: 'saving' }))
+            logger.debug('Order ITEMS', items)
+
+            let saveResult = null
+
+            let anonId = undefined
+            if (!(session?.user?.id)) {
+              anonId = localStorage.getItem('sunbnb-anonId')
+              if (!anonId) {
+                anonId = uuidv4()
+                localStorage.setItem('sunbnb-anonId', anonId)
+              }
+            }
+            
+            saveResult = await createOrder({
+              items: items,
+              siteId,
+              anonId,
+              reservationId
+            })
+
+            logger.debug('Save order result', saveResult)
+            if (saveResult?.status === 'ok' && saveResult.id) {
+              dispatch(setValue({ 
+                orderState: 'processing',
+                pendingOrderId: saveResult.id,
+                panelBottom: 'bottom-[0px]'
+              }))
+            }
+
+          }
+        }>
+          PLACE ORDER
+        </Button>
+    </div>
+  )
+}
+
+export default function Menu({ siteId, reservationId, apiKey, serviceFee, stripePublicKey, orders, showConfirmation }: { 
+  siteId: string,
+  reservationId: string,
+  apiKey: string,
+  stripePublicKey: string | undefined,
+  serviceFee: number,
+  orders?: { 
+    id: string,
+    createdAt: Date,
+    totalPrice: number,
+    status: string,
+    orderItems: { 
+      id: string
+      name: string
+      quantity: number
+      price: number
+      tax: number
+      totalPrice: number
+    }[],
+    invoice?: Invoice | null
+  }[] | null,
+  showConfirmation?: boolean
+}) {
+
   const [products, setProducts] = useState<Product[]>([])
   const [basket, setBasket] = useState<Array<{ product: Product; quantity: number }>>([])
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [drawerContent, setDrawerContent] = useState<string>('new-order')
 
+  const [openConfirmation, setOpenConfirmation] = useState(showConfirmation || false)
+
+  // optional: auto‐close after 3s
+  useEffect(() => {
+    if (!showConfirmation) return
+    const timer = setTimeout(() => setOpenConfirmation(false), 3000)
+    return () => clearTimeout(timer)
+  }, [])
+
+  const dispatch = useDispatch()
+  
+  const reservationState = useSelector((state: RootState) => state.reservation)
+  const { orderState, pendingOrderId } = reservationState
+
+  let focused = reservationState.focused
+  let panelBottom = reservationState.panelBottom || '-bottom-[364px]'
+
+  if (!stripePublicKey) {
+    return (
+      <div className="flex flex-col items-center justify-center">
+        <div>Payment gateway unavailable</div>
+      </div>
+    )
+  }
+
+  const { data: order } = useGetOrderByIdQuery({ id: pendingOrderId }, {
+    skip: !pendingOrderId
+  })
+  
+  logger.debug('Order By Id', pendingOrderId, order)
+  
   useEffect(() => {
     getProducts(siteId).then(fetched => setProducts(fetched))
   }, [siteId])
@@ -61,10 +198,70 @@ export default function Menu({ siteId }: { siteId: string }) {
 
   const handlePlaceOrder = async () => {
     const orderItems = basket.map(item => ({ productId: item.product.id, quantity: item.quantity }))
-    await createOrder({ siteId, items: orderItems })
+    await createOrder({ siteId, items: basket })
     setBasket([])
     setDrawerOpen(false)
   }
+
+  const previewElem = !order ? (
+    <Box p={2} height={'50dvh'} display="flex" flexDirection="column">
+      <Typography variant="h6">Order confirmation</Typography>
+      <Divider sx={{ my: 1 }} />
+      <Box flex={1} overflow="auto">
+        <List>
+          {basket.map(item => (
+            <ListItem key={item.product.id}>
+              <ListItemText
+                primary={`${item.product.name} x ${item.quantity}`}
+                secondary={`${(
+                  item.product.totalPrice * item.quantity
+                ).toFixed(2)} €`}
+              />
+            </ListItem>
+          ))}
+        </List>
+      </Box>
+      <Divider />
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        alignItems="center"
+        mt={2}
+      >
+        <Typography variant="subtitle1">
+          Total: {(totalPrice + serviceFee).toFixed(2)} €
+        </Typography>
+        <OrderButton disabled={false} items={basket} siteId={siteId} reservationId={reservationId} />
+      </Stack>
+    </Box>
+  ) : (
+    <Box p={2} height={'auto'} display="flex" flexDirection="row" justifyContent="space-between" alignItems="center">
+      <Typography variant="h6">Order payment</Typography>
+      <Typography variant="h6">
+        {(totalPrice.toFixed(2) + serviceFee)} €
+      </Typography>
+    </Box>
+  )
+
+  const paymentElem =
+    (orderState === 'processing' || orderState === 'payment_in_progress') ? (
+      !order ? (
+        <div className="flex justify-center mb-[12px] mt-[24px]">
+          <CircularProgress />
+        </div>
+      ) : <OrderPaymentView 
+            stripePublicKey={stripePublicKey}
+            preview={previewElem}
+            completeUrl={`/reservations/${reservationId}`}
+            order={order} />
+
+    ) : (
+      <div className="mx-[4px]">
+        {previewElem}
+      </div>
+    )
+    
+  const bgColor = !order ? 'bg-[#1976d2]' : 'bg-white'
 
   return (
     <Box p={2} pt={2}>
@@ -129,13 +326,38 @@ export default function Menu({ siteId }: { siteId: string }) {
         ))}
       </Grid>
 
+      <Snackbar
+        open={openConfirmation}
+        onClose={() => setOpenConfirmation(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        sx={{ bottom: 112 }}
+      >
+        <Alert
+          onClose={() => setOpenConfirmation(false)}
+          severity="success"
+          sx={{ width: 'calc(100% - 18px)' }}
+        >
+          Order received
+        </Alert>
+      </Snackbar>
+
       {/* Basket summary button */}
-      <Box position="fixed" bottom={64} left={16} right={16}>
+      <Box
+        position="fixed"
+        bottom={64}
+        left={16}
+        right={16}
+        sx={{ display: 'flex', gap: 1 }}
+      >
+        {/* Left: big checkout button */}
         <Button
           variant="contained"
           color="primary"
-          fullWidth
-          onClick={() => setDrawerOpen(true)}
+          sx={{ flex: 1 }}
+          onClick={() => {
+            setDrawerContent('new-order')
+            setDrawerOpen(true)
+          }}
           disabled={basket.length === 0}
           startIcon={
             <Badge badgeContent={totalItems} color="secondary">
@@ -143,8 +365,22 @@ export default function Menu({ siteId }: { siteId: string }) {
             </Badge>
           }
         >
-          Checkout – {totalPrice.toFixed(2)} €
+          Checkout – {(totalPrice + serviceFee).toFixed(2)} €
         </Button>
+
+        {/* Right: orders overview */}
+          <IconButton
+            size="medium"
+            color="primary"
+            onClick={() => {
+              setDrawerContent('orders')
+              setDrawerOpen(true)
+            }}
+          >
+            <Badge badgeContent={1} color="error">
+              <ListAltIcon fontSize="medium" />
+            </Badge>
+          </IconButton>
       </Box>
 
       {/* Drawer for basket details */}
@@ -153,41 +389,15 @@ export default function Menu({ siteId }: { siteId: string }) {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
       >
-        <Box p={2} height="50dvh" display="flex" flexDirection="column">
-          <Typography variant="h6">Order confirmation</Typography>
-          <Divider sx={{ my: 1 }} />
-          <Box flex={1} overflow="auto">
-            <List>
-              {basket.map(item => (
-                <ListItem key={item.product.id}>
-                  <ListItemText
-                    primary={`${item.product.name} x ${item.quantity}`}
-                    secondary={`${(
-                      item.product.totalPrice * item.quantity
-                    ).toFixed(2)} €`}
-                  />
-                </ListItem>
-              ))}
-            </List>
-          </Box>
-          <Divider />
-          <Stack
-            direction="row"
-            justifyContent="space-between"
-            alignItems="center"
-            mt={2}
-          >
-            <Typography variant="subtitle1">
-              Total: {totalPrice.toFixed(2)} €
-            </Typography>
-            <Button
-              variant="contained"
-              onClick={handlePlaceOrder}
-            >
-              Place Order
-            </Button>
-          </Stack>
-        </Box>
+        { 
+          drawerContent === 'new-order' ? 
+            paymentElem : 
+              <div>
+                {
+                  <Orders orders={(orders || [])} />
+                }
+              </div>
+        }
       </Drawer>
     </Box>
   )
