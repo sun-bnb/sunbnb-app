@@ -17,6 +17,8 @@ export async function GET(request: Request) {
     },
   })
 
+  console.log('Deleted reservations older than 15 minutes:', result.count)
+
   return Response.json({ deleted: result.count })
 
 }
