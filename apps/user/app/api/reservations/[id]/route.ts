@@ -181,7 +181,7 @@ export async function GET(request: NextRequest, { params } : { params: { id: str
     }
 
     if (paymentStatus !== 'processing') {
-      reservation = await prisma.reservation.findUnique({ 
+      reservation = await prisma.reservation.findUnique({
         where: { id: params.id },
         include: {
           items: true,

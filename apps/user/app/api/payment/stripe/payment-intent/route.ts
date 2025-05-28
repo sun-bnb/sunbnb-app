@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
   } = await request.json()
 
 
-  console.log('payment amount', paymentAmount)
+  console.log('initial payment amount', paymentAmount)
 
   const reservation = await prisma.reservation.findUnique({ where: { id: reservationId } })
   if (!reservation) {
@@ -28,8 +28,14 @@ export async function POST(request: NextRequest) {
     return Response.json('Payment intent already created', { status: 400 })
   }
 
+  if (reservation.status !== 'pending') {
+    return Response.json('Wrong reservation state', { status: 500 })
+  }
+
+  let amount = Math.round(paymentAmount * 100)
+  console.log('Creating payment intent for reservation', reservationId, 'amount', paymentAmount, amount)
   const paymentIntent = await stripe.paymentIntents.create({
-    amount: paymentAmount * 100,
+    amount: amount,
     currency: 'eur',
     automatic_payment_methods: {
       enabled: true
@@ -44,6 +50,12 @@ export async function POST(request: NextRequest) {
       }
     })
   } else {
+    await prisma.reservation.update({
+      where: { id: reservationId },
+      data: {
+        status: 'error'
+      }
+    })
     return Response.json('Payment intent not created', { status: 500 })
   }
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useGetReservationByIdQuery } from '@/store/features/api/apiSlice'
 import { Reservation } from '@/app/sites/types'
 import ReservationConfirmationView from '@/components/reservation/confirmation/view'
@@ -14,7 +15,7 @@ export default function CompleteView({
 }) {
 
   const [status, setStatus] = useState<string | undefined>('default')
-
+  const router = useRouter()
 
   const { data: fetchedReservation, error: reservationFetchError } = useGetReservationByIdQuery({
     id: reservation.id,
@@ -27,6 +28,10 @@ export default function CompleteView({
   useEffect(() => {
     if (finalReservation?.status) {
       setStatus(finalReservation.status);
+      console.log('Final reservation status:', finalReservation.status)
+      if (finalReservation.status === 'paid') {
+        router.push(`/reservations/${finalReservation.id}`)
+      }
     }
   }, [finalReservation?.status])
 

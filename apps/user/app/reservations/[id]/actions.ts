@@ -47,8 +47,9 @@ export async function createOrder(
   order: { 
     userId?: string,
     anonId?: string,
-    siteId: string,
+    siteId?: string,
     reservationId?: string,
+    seatId?: string
     items: { product: Product, quantity: number }[]
   }) {
   
@@ -91,6 +92,15 @@ export async function createOrder(
       ...orderData,
       reservation: {
         connect: { id: order.reservationId }
+      }
+    }
+  }
+
+  if (order.seatId) {
+    orderData = {
+      ...orderData,
+      seat: {
+        connect: { id: order.seatId }
       }
     }
   }

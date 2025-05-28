@@ -189,6 +189,7 @@ model InventoryItem {               @map("inventory_item")
   updatedAt DateTime @updatedAt
 
   reservations           Reservation[]
+  orders                 Order[]
  
   pair          InventoryItem?  @relation("ItemPair", fields: [pairId], references: [id])
   pairedBy      InventoryItem?  @relation("ItemPair")
@@ -264,6 +265,7 @@ model Order {
   invoiceId         String?         @unique @map("invoice_id")
   siteId            String          @map("site_id")
   reservationId     String?         @map("reservation_id")
+  seatId            String?         @map("seat_id")
   
   anonId            String?          @map("anon_id")
 
@@ -280,6 +282,7 @@ model Order {
 
   invoice           Invoice? @relation(fields: [invoiceId], references: [id])
   reservation       Reservation? @relation(fields: [reservationId], references: [id])
+  seat              InventoryItem? @relation(fields: [seatId], references: [id])
   site              Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 

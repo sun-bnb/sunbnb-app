@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
   } = await request.json()
 
 
-  console.log('payment amount', paymentAmount)
+  console.log('initial payment amount', paymentAmount)
 
   const order = await prisma.order.findUnique({ where: { id: orderId } })
   if (!order) {
@@ -27,9 +27,12 @@ export async function POST(request: NextRequest) {
   if (order.paymentRef) {
     return Response.json('Payment intent already created', { status: 400 })
   }
+  
+  let amount = Math.round(paymentAmount * 100)
+  console.log('Creating payment intent for order', orderId, 'amount', paymentAmount, amount)
 
   const paymentIntent = await stripe.paymentIntents.create({
-    amount: paymentAmount * 100,
+    amount: amount,
     currency: 'eur',
     automatic_payment_methods: {
       enabled: true

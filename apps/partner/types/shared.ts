@@ -65,3 +65,44 @@ export interface WorkingHours {
   openTime: string
   closeTime: string
 }
+
+export interface Order {
+
+  id: string
+
+  invoiceId?: string | null
+  seat?: InventoryItem | null
+
+  userId?: string | null
+  anonId?: string | null
+  siteId: string
+  
+  status : string     
+
+  price: number
+  tax: number
+  totalPrice: number
+
+  paymentRef?: string | null
+  paymentAmount?: number | null
+
+  orderItems: OrderItem[]
+
+  createdAt: Date
+
+}
+
+interface OrderItem {
+
+  id: string
+
+  orderId: string
+  productId: string
+
+  quantity: number
+  name: string
+  price: number
+  tax: number
+  totalPrice: number
+
+}

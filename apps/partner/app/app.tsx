@@ -26,7 +26,7 @@ const App = ({ children }: {
     } else if (status === 'authenticated') {
       setContent(
         <div>
-          { !pathname.includes('/manage') && <Header /> }
+          { !(pathname.includes('/manage') || pathname.includes('/orders')) && <Header /> }
           <div className="flex">
             <div className="flex-grow lg:p-6">
               {children}

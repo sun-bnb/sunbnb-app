@@ -48,12 +48,14 @@ function OrderButton({
   disabled,
   items,
   siteId,
-  reservationId
+  reservationId,
+  seatId
 }: {
   disabled: boolean,
   items: OrderItem[],
   siteId: string,
   reservationId: string
+  seatId?: string
 }) {
 
   const { data: session } = useSession()
@@ -87,7 +89,8 @@ function OrderButton({
               items: items,
               siteId,
               anonId,
-              reservationId
+              reservationId,
+              seatId
             })
 
             logger.debug('Save order result', saveResult)
@@ -107,9 +110,10 @@ function OrderButton({
   )
 }
 
-export default function Menu({ siteId, reservationId, apiKey, serviceFee, stripePublicKey, orders, showConfirmation }: { 
+export default function Menu({ siteId, reservationId, seatId, apiKey, serviceFee, stripePublicKey, orders, showConfirmation }: { 
   siteId: string,
   reservationId: string,
+  seatId?: string,
   apiKey: string,
   stripePublicKey: string | undefined,
   serviceFee: number,
@@ -145,13 +149,8 @@ export default function Menu({ siteId, reservationId, apiKey, serviceFee, stripe
     return () => clearTimeout(timer)
   }, [])
 
-  const dispatch = useDispatch()
-  
   const reservationState = useSelector((state: RootState) => state.reservation)
   const { orderState, pendingOrderId } = reservationState
-
-  let focused = reservationState.focused
-  let panelBottom = reservationState.panelBottom || '-bottom-[364px]'
 
   if (!stripePublicKey) {
     return (
@@ -196,13 +195,6 @@ export default function Menu({ siteId, reservationId, apiKey, serviceFee, stripe
     0
   )
 
-  const handlePlaceOrder = async () => {
-    const orderItems = basket.map(item => ({ productId: item.product.id, quantity: item.quantity }))
-    await createOrder({ siteId, items: basket })
-    setBasket([])
-    setDrawerOpen(false)
-  }
-
   const previewElem = !order ? (
     <Box p={2} height={'50dvh'} display="flex" flexDirection="column">
       <Typography variant="h6">Order confirmation</Typography>
@@ -231,14 +223,14 @@ export default function Menu({ siteId, reservationId, apiKey, serviceFee, stripe
         <Typography variant="subtitle1">
           Total: {(totalPrice + serviceFee).toFixed(2)} €
         </Typography>
-        <OrderButton disabled={false} items={basket} siteId={siteId} reservationId={reservationId} />
+        <OrderButton disabled={false} items={basket} siteId={siteId} reservationId={reservationId} seatId={seatId} />
       </Stack>
     </Box>
   ) : (
     <Box p={2} height={'auto'} display="flex" flexDirection="row" justifyContent="space-between" alignItems="center">
       <Typography variant="h6">Order payment</Typography>
       <Typography variant="h6">
-        {(totalPrice.toFixed(2) + serviceFee)} €
+        {(totalPrice + serviceFee).toFixed(2)} €
       </Typography>
     </Box>
   )
@@ -261,8 +253,6 @@ export default function Menu({ siteId, reservationId, apiKey, serviceFee, stripe
       </div>
     )
     
-  const bgColor = !order ? 'bg-[#1976d2]' : 'bg-white'
-
   return (
     <Box p={2} pt={2}>
       <Grid container spacing={2} className="mb-[64px]">
@@ -347,7 +337,7 @@ export default function Menu({ siteId, reservationId, apiKey, serviceFee, stripe
         bottom={64}
         left={16}
         right={16}
-        sx={{ display: 'flex', gap: 1 }}
+        sx={{ display: 'flex', gap: 1, backgroundColor: 'white' }}
       >
         {/* Left: big checkout button */}
         <Button

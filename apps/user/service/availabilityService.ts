@@ -11,7 +11,7 @@ function checkAvailability(
   from: Date, 
   to: Date
 ) {
-  
+
   const periods = reservations.filter(reservation => {
     const idMatch = (reservation.items || []).some(invItem => invItem.id === itemId)
     let overlap = false
@@ -65,7 +65,7 @@ export async function getAvailability(siteId: string, from: Date, to: Date) {
   const reservations = await prisma.reservation.findMany({
     where: {
       siteId,
-      status: { not: 'canceled' },
+      status: { in: ['pending', 'processing', 'paid'] },
       from: { lte: to },
       to: { gte: from },
     },

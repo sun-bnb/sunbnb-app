@@ -71,7 +71,8 @@ export default async function Site({ params, searchParams }: { params: { id: str
 
   const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
   
-  //const session = await auth()
+  const session = await auth()
+  const signedIn = !!(session?.user)
   //if (!session?.user) return null
 
   const reservation = await getReservation(params.id)
@@ -87,6 +88,6 @@ export default async function Site({ params, searchParams }: { params: { id: str
 
   const serviceFee = await getServiceFee(reservation.site.id, reservation.site.userId)
 
-  return <ReservationView serviceFee={serviceFee} reservation={reservation} apiKey={apiKey} stripePublicKey={STRIPE_PUBLIC_KEY} order={order} />
+  return <ReservationView signedIn={signedIn} serviceFee={serviceFee} reservation={reservation} apiKey={apiKey} stripePublicKey={STRIPE_PUBLIC_KEY} order={order} />
 
 }

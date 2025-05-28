@@ -11,6 +11,7 @@ interface ReservationViewProps {
   reservation: Reservation,
   order: Order | null,
   apiKey: string, stripePublicKey: string | undefined
+  signedIn: boolean
   serviceFee: {
     chargeType: string
     feeAmount?: number | null
@@ -18,7 +19,7 @@ interface ReservationViewProps {
   } | undefined
 }
 
-export default function ReservationView({ serviceFee, reservation, order, apiKey, stripePublicKey }: ReservationViewProps) {
+export default function ReservationView({ serviceFee, signedIn, reservation, order, apiKey, stripePublicKey }: ReservationViewProps) {
 
   const containerRef = useRef<HTMLDivElement>(null)
   const resRef = useRef<HTMLDivElement>(null)
@@ -90,12 +91,15 @@ export default function ReservationView({ serviceFee, reservation, order, apiKey
     else if (delta > threshold && page === 1) goToPage(0)
   }
 
+  const seatId = (reservation.items || []).length > 0 ? reservation.items![0]!.id : undefined
+  console.log('signedIn', signedIn)
+
   return (
     <div
       ref={containerRef}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
-      className="relative w-full overflow-hidden bg-[#fff5e1]"
+      className={`relative w-full overflow-hidden bg-[#fff5e1]`}
       style={{ height: '100dvh' }}
     >
       <div
@@ -107,7 +111,7 @@ export default function ReservationView({ serviceFee, reservation, order, apiKey
         }}
       >
         {/* Page 0: Reservation */}
-        <div className="flex flex-col w-full" style={{ height: '100dvh' }}>
+        <div className="flex flex-col w-full" style={{ height: '100dvh', paddingTop: signedIn ? '80px' : '0px' }}>
           {/* Content: only scroll if it overflows */}
           <div
             ref={resRef}
@@ -125,7 +129,7 @@ export default function ReservationView({ serviceFee, reservation, order, apiKey
         </div>
 
         {/* Page 1: Menu */}
-        <div className="flex flex-col w-full bg-white" style={{ height: '100dvh' }}>
+        <div className="flex flex-col w-full bg-white" style={{ height: '100dvh', paddingTop: signedIn ? '80px' : '0px' }}>
           <div
             ref={menuRef}
             className="overflow-y-auto flex-1"
@@ -133,7 +137,8 @@ export default function ReservationView({ serviceFee, reservation, order, apiKey
           >
             <Menu 
               serviceFee={serviceFeeAmount}
-              siteId={reservation.site!.id} 
+              siteId={reservation.site!.id}
+              seatId={seatId}
               apiKey={apiKey} 
               stripePublicKey={stripePublicKey}
               reservationId={reservation.id}
