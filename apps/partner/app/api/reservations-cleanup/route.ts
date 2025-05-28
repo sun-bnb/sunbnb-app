@@ -1,8 +1,12 @@
-// pages/api/cleanup-reservations.ts
 import prisma from '@repo/data/PrismaCient'
-import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
+import dayjs from 'dayjs'
+import { NextRequest } from 'next/server'
+import { auth } from '@/app/auth'
 
 export async function GET(request: Request) {
+
+  const session = await auth()
   
   // delete any reservation still in "pending" created > 15 minutes ago:
   const cutoff = new Date(Date.now() - 15 * 60 * 1000)
@@ -13,6 +17,6 @@ export async function GET(request: Request) {
     },
   })
 
-  return NextResponse.json({ deleted: result.count })
+  return Response.json({ deleted: result.count })
 
 }
