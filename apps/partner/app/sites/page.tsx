@@ -11,7 +11,7 @@ function Site({ site }: { site: SiteProps }) {
       <div className="w-full h-[160px] mr-2 mt-1 overflow-hidden bg-gray-100 flex items-center relative">
         { 
           site.image && 
-          <Link className="w-full" href={`/sites/${site.id}`} prefetch={true}>
+          <Link className="w-full" href={`/sites/${site.id}/general`} prefetch={true}>
             {
               (site.imageWidth && site.imageHeight) &&
                 <Image width={site.imageWidth} height={site.imageHeight} alt={site.description || ''} src={site.image} />

@@ -1,11 +1,10 @@
 'use client'
 
-import Link from 'next/link'
-import { createInventoryItem } from './actions'
+import { saveContent } from '../actions'
 
-import { useFormState, useFormStatus } from 'react-dom'
-import React, { ReactElement, useState } from 'react'
-import ImageUploading, { ImageListType } from 'react-images-uploading'
+import { useFormState } from 'react-dom'
+import React from 'react'
+import { ImageListType } from 'react-images-uploading'
 import RestaurantIcon from '@mui/icons-material/Restaurant'
 import WcIcon from '@mui/icons-material/Wc'
 import SurfingIcon from '@mui/icons-material/Surfing'
@@ -13,10 +12,7 @@ import LocalBarIcon from '@mui/icons-material/LocalBar'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
 import TextField from '@mui/material/TextField'
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
-import ToggleButton from '@mui/material/ToggleButton'
-
-import { saveContent } from './actions'
+import { useSite } from '@/app/sites/site-context'
 
 const allServices = [
   { value: 'wc', label: 'WC', icon: <WcIcon /> },
@@ -25,34 +21,28 @@ const allServices = [
   { value: 'rental', label: 'Rental', icon: <SurfingIcon /> }
 ]
 
-export default function Content({ siteId, content } : { siteId: string, content: any }) {
+export default function Content() {
+
+  const { site } = useSite()
   
   const [ formState, formAction ] = useFormState(saveContent, { status: '' })
 
-  const [ images, setImages ] = React.useState([])
+  const content = { 
+    image: site.image,
+    description: site.description,
+    services: site.services || []
+  }
+
   const [ services, setServices ] = React.useState<string[]>((content.services || []).filter((s: string) => allServices.map(s => s.value).includes(s)))
 
   console.log('Content', content)
-
-  const maxNumber = 69
-
-  const onImageChange = (
-    imageList: ImageListType,
-    addUpdateIndex: number[] | undefined
-  ) => {
-    // data for submit
-    console.log(imageList, addUpdateIndex);
-    setImages(imageList as never[]);
-  };
-
-
 
   console.log('services', services, content.services)
   return (
     <div className="container mx-auto">
       <div className="mt-6 flex w-full">
         <form action={formAction} className="w-full">
-          <input type="hidden" name="id" value={siteId} />
+          <input type="hidden" name="id" value={site.id} />
           <input type="hidden" name="services" value={services.join(',')} />
           <div className="px-2 md:p-0 md:flex w-full">
             <div className="mt-4 md:max-w-[250px]">

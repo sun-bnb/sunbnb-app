@@ -6,13 +6,14 @@ import { useFormState, useFormStatus } from 'react-dom'
 import React, { ReactElement, useState } from 'react'
 import Button from '@mui/material/Button'
 import TextField from '@mui/material/TextField'
-
 import { updateVat } from '../actions'
 import { SiteProps } from '@/types/shared'
+import { useSite } from '@/app/sites/site-context'
 
-export default function Accounting({ site } : { site: SiteProps }) {
+export default function Accounting() {
   
   const [ formState, formAction ] = useFormState(updateVat, { status: '' })
+  const { site } = useSite()
 
   return (
     <div className="container mx-auto">

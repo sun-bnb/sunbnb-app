@@ -11,19 +11,12 @@ import {
   saveInventoryItemLocation,
   saveInventoryItemProperties
 } from '../actions'
+import { useSite } from '@/app/sites/site-context'
 import { APIProvider, AdvancedMarker, ControlPosition, Map } from '@vis.gl/react-google-maps'
 import MapHandler from '@/components/maps/map-handler'
 import { CustomMapControl } from '@/components/maps/map-control'
 import Reservations from './reservations'
 import sunbedIcon from './sunbed-icon-transparent.png'
-
-interface InventoryProps {
-  siteId: string
-  siteLat: string
-  siteLng: string
-  inventory: InventoryItem[]
-  apiKey: string
-}
 
 function getScaledSize(zoom: number): number {
   const physicalLength = 3.5; // in meters; adjust if needed for your actual sunbed size
@@ -225,13 +218,14 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
   </div>
 )
 
-export default function Inventory({
-  siteId,
-  siteLat,
-  siteLng,
-  inventory,
-  apiKey,
-}: InventoryProps) {
+export default function InventoryView() {
+
+  const { site, apiKey } = useSite()
+  const inventory = site.inventoryItems || []
+  const siteId = site.id || ''
+  let siteLat = site.locationLat
+  let siteLng = site.locationLng
+
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [selectedPlace, setSelectedPlace] = useState<google.maps.places.PlaceResult | null>(null)
   const [selectedItemNumber, setSelectedItemNumber] = useState<string>('')

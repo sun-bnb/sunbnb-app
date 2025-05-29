@@ -250,7 +250,7 @@ export async function createInventoryItem(
   
 }
 
-export async function addWorkingHpours(
+export async function addWorkingHours(
   siteId: string,
   workingHours: { day: string, openTime: string, closeTime: string }
 ) {

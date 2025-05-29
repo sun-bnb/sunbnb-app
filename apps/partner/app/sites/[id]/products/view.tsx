@@ -14,27 +14,22 @@ import {
   TextField,
   Button,
   IconButton,
-  Box,
-  Typography,
+  Box
 } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/Delete'
-import { get } from 'http'
+import { useSite } from '@/app/sites/site-context'
 
-export default function ProductManagementPage({
-  siteId,
-  products,
-}: {
-  siteId: string
-  products: Product[]
-}) {
-  const router = useRouter()
-  const [productList, setProductList] = useState<Product[]>(products)
+export default function ProductManagementPage() {
+
+  const { site } = useSite()
+
+  const [productList, setProductList] = useState<Product[]>(site.products || [])
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
   const handleDelete = async (id: string) => {
     await deleteProduct(id)
-    const fetched = await getProducts(siteId)
+    const fetched = await getProducts(site.id!)
     setProductList(fetched)
   }
 
@@ -57,7 +52,7 @@ export default function ProductManagementPage({
       formEl.reset()
       setPreviewUrl(null)
       // re-fetch the list props for this page
-      getProducts(siteId).then((fetched) => {
+      getProducts(site.id!).then((fetched) => {
         console.log('Fetched products:', fetched)
         setProductList(fetched)
       })
@@ -72,7 +67,7 @@ export default function ProductManagementPage({
           encType="multipart/form-data"
           className="flex flex-wrap gap-2 items-center"
         >
-          <input type="hidden" name="siteId" value={siteId} />
+          <input type="hidden" name="siteId" value={site.id} />
 
           <TextField name="name" label="Name" required />
           <TextField name="description" label="Description" />

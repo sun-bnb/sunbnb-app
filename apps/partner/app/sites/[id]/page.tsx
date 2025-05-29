@@ -1,7 +1,5 @@
-import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
 import { SiteProps } from '@/types/shared'
-import SiteView from './view'
 import CreateSiteView from './create-site'
 
 
@@ -12,46 +10,16 @@ export default async function Site({ params }: { params: { id: string } }) {
 
   const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
 
+  console.log('SITE PAGE PARAMS', params)
+
   let site: SiteProps | null = {
     name: '',
     services: []
   }
-
-  if (params.id !== 'create') {
-    site = await prisma.site.findFirst({ 
-      where: { id: params.id }, 
-      include: { 
-        workingHours: true,
-        inventoryItems: {
-          orderBy: { number: 'asc' },
-          include: {
-            reservations: {
-              include: {
-                user: true
-              },
-              orderBy: { from: 'asc' }
-            },
-            pair: true,
-            pairedBy: true
-          }
-        },
-        products: {
-          where: { active: true }
-        }
-      } 
-    })
-    if (!site) return <div>Site {params.id} not found</div>
-  }
-
-  console.log('SITE', site)
-
-  const content = params.id === 'create' ? 
-    <CreateSiteView  site={site} apiKey={apiKey} /> :
-    <SiteView site={site} apiKey={apiKey} />
   
-    return (
+  return (
     <div className="container mx-auto max-w-[768px]">
-      { content }
+      <CreateSiteView  site={site} apiKey={apiKey} />
     </div>
   )
 
