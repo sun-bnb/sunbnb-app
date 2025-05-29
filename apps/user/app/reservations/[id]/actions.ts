@@ -147,3 +147,25 @@ export async function getOrderByPaymentRef({
   return order
   
 }
+
+export async function getOrders({
+  reservationId
+} : {
+  reservationId: string 
+}) {
+  
+  const session = await auth()
+  console.log('GET ORDERS', session)
+
+  const orders = await prisma.order.findMany({ 
+    where: { reservationId },
+    include: {
+      orderItems: true
+    }
+  })
+
+  console.log('orders by ref res', orders.length)
+
+  return orders
+  
+}

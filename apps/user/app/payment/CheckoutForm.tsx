@@ -80,14 +80,13 @@ export default function CheckoutForm({
           )
         }
       </div>
-      <form id="payment-form" onSubmit={handleSubmit} className="mr-[6px] ml-[6px] mt-[6px]">
+      <form id="payment-form" onSubmit={handleSubmit} className="mr-[6px] ml-[6px] mt-[6px] mb-[12px]">
         <PaymentElement id="payment-element" options={paymentElementOptions} />
         <div className="mt-[18px]">
           <Button variant="contained" fullWidth={true} id="submit" type="submit" disabled={isLoading}>
             { isLoading ? <div className="spinner" id="spinner"></div> : t('Pay now') }
           </Button>
         </div>
-        ‹
         {/* Show any error or success messages */}
         {message && <div id="payment-message">{message}</div>}
       </form>

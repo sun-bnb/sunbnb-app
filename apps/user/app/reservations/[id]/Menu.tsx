@@ -4,7 +4,7 @@ import logger from '@/utils/logger'
 
 import { v4 as uuidv4 } from 'uuid'
 import { useEffect, useState } from 'react'
-import { getProducts, createOrder } from './actions'
+import { getProducts, createOrder, getOrders } from './actions'
 import { Product, Invoice } from '@/app/types/types'
 import {
   Box,
@@ -142,6 +142,8 @@ export default function Menu({ siteId, reservationId, seatId, apiKey, serviceFee
 
   const [openConfirmation, setOpenConfirmation] = useState(showConfirmation || false)
 
+  const [currentOrders, setCurrentOrders] = useState(orders || [])
+
   // optional: auto‐close after 3s
   useEffect(() => {
     if (!showConfirmation) return
@@ -227,7 +229,7 @@ export default function Menu({ siteId, reservationId, seatId, apiKey, serviceFee
       </Stack>
     </Box>
   ) : (
-    <Box p={2} height={'auto'} display="flex" flexDirection="row" justifyContent="space-between" alignItems="center">
+    <Box py={2} px={'8px'} height={'auto'} display="flex" flexDirection="row" justifyContent="space-between" alignItems="center">
       <Typography variant="h6">Order payment</Typography>
       <Typography variant="h6">
         {(totalPrice + serviceFee).toFixed(2)} €
@@ -334,9 +336,12 @@ export default function Menu({ siteId, reservationId, seatId, apiKey, serviceFee
       {/* Basket summary button */}
       <Box
         position="fixed"
-        bottom={64}
-        left={16}
-        right={16}
+        bottom={48}
+        left={0}
+        right={0}
+        pr={'16px'}
+        pl={'12px'}
+        py={'8px'}
         sx={{ display: 'flex', gap: 1, backgroundColor: 'white' }}
       >
         {/* Left: big checkout button */}
@@ -363,13 +368,24 @@ export default function Menu({ siteId, reservationId, seatId, apiKey, serviceFee
             size="medium"
             color="primary"
             onClick={() => {
+              getOrders({ reservationId: reservationId }).then((orders) => {
+                logger.debug('Fetched orders', orders)
+                setCurrentOrders(orders)
+              })
               setDrawerContent('orders')
               setDrawerOpen(true)
             }}
           >
-            <Badge badgeContent={1} color="error">
-              <ListAltIcon fontSize="medium" />
-            </Badge>
+            {
+              currentOrders && currentOrders.length > 0 ? (
+                <Badge badgeContent={currentOrders.length} color="error">
+                  <ListAltIcon fontSize="medium" />
+                </Badge>
+              ) : (
+                <ListAltIcon fontSize="medium" />
+              )
+            }
+            
           </IconButton>
       </Box>
 
@@ -384,7 +400,7 @@ export default function Menu({ siteId, reservationId, seatId, apiKey, serviceFee
             paymentElem : 
               <div>
                 {
-                  <Orders orders={(orders || [])} />
+                  <Orders orders={(currentOrders || [])} />
                 }
               </div>
         }

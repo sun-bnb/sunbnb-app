@@ -82,7 +82,7 @@ export default function OrderPayment({
   };
 
   return (
-    <div className="App">
+    <div className="App" style={{ paddingLeft: '8px', paddingRight: '8px' }}>
       {
         clientSecret ? (
           <Elements options={options} stripe={stripePromise}>

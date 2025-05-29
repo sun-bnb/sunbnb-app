@@ -96,8 +96,10 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
 
   const t = useTranslations('SiteView')
 
+  const bottomOffset = pendingReservationId ? '-385px' : '-364px'
+  
   return (
-    <div className="container mx-auto bg-[#fff5e1] pt-[84px]">
+    <div className="container mx-auto bg-[#fff5e1] pt-[78px]">
       {
         focused &&
           <Backdrop onClick={() => {
@@ -193,8 +195,10 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
         </div>
         <div className="mt-[140px]">
         </div>
-        <div style={{ zIndex: 11 }} className={`fixed left-0 w-full bg-[#fff5e1] text-white text-center px-2 pb-4
-          ${!focused ? '-bottom-[364px]' : 'bottom-[0px]'} border-t transition-bottom duration-500`}>
+        <div style={{ 
+          zIndex: 11,
+          bottom: !focused ? bottomOffset : '0px',
+        }} className={`fixed left-0 w-full bg-[#fff5e1] text-white text-center px-2 pb-4 border-t transition-bottom duration-500`}>
           {
             focused ? (
               <div className="text-black absolute w-[100px] bg-[#fff5e1] rounded-md border" style={{
