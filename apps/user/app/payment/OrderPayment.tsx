@@ -14,11 +14,13 @@ import { Order } from '@/app/types/types'
 export default function OrderPayment({ 
   stripePublicKey,
   order,
+  serviceFee,
   preview,
   completeUrl
 } : { 
   stripePublicKey: string | undefined 
   order: Order
+  serviceFee?: number
   preview?: React.ReactNode
   completeUrl?: string
 }) {
@@ -48,7 +50,7 @@ export default function OrderPayment({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         orderId: order.id,
-        paymentAmount: order.paymentAmount 
+        paymentAmount: (order.paymentAmount! + (serviceFee || 0)),
       }),
     })
       .then((res) => res.json())

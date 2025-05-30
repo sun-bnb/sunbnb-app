@@ -247,6 +247,7 @@ export default function Menu({ siteId, reservationId, seatId, apiKey, serviceFee
             stripePublicKey={stripePublicKey}
             preview={previewElem}
             completeUrl={`/reservations/${reservationId}`}
+            serviceFee={serviceFee}
             order={order} />
 
     ) : (

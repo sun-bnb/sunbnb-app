@@ -160,7 +160,12 @@ export async function getOrders({
   const orders = await prisma.order.findMany({ 
     where: { reservationId },
     include: {
-      orderItems: true
+      orderItems: true,
+      invoice: {
+        include: {
+          invoiceLines: true
+        }
+      }
     }
   })
 
