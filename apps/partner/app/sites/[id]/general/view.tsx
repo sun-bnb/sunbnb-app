@@ -79,7 +79,7 @@ export default function GeneralView() {
   )
 
   return (
-    <Box component="form" action={formAction} className="py-4 px-4">
+    <Box component="form" action={formAction} className="p-4">
       {/* Errors */}
       {formState.errors?.map(err => (
         <Box key={err} className="text-red-500 mb-2 text-center">

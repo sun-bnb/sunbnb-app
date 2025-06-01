@@ -1,7 +1,8 @@
-import DashboardView from './dashboard/view'
+import DashboardPage from './dashboard/page'
+
 
 export default function Home() {
   return (
-    <DashboardView />
+    <DashboardPage />
   )
 }

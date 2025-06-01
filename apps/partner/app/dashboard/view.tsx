@@ -19,23 +19,17 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 
-export default function Dashboard() {
+export interface DashboardData {
+  totalChairs: number
+  reservationsToday: number
+  revenueThisMonth: number
+  revenueYearToDate: number,
+  revenueHistory: { month: string, revenue: number, fees: number }[]
+}
+
+export default function DashboardView({ data }: { data: DashboardData}) {
+
   const theme = useTheme()
-
-  // Placeholder data for metrics
-  const totalChairs = 120
-  const todaysReservations = 37
-  const revenueThisMonth = 8425.5
-  const revenueYearToDate = 54200.75
-
-  // Placeholder revenue + fees data for last 5 months
-  const revenueData = [
-    { month: 'Jan', revenue: 7200, fees: 360 },
-    { month: 'Feb', revenue: 8100, fees: 405 },
-    { month: 'Mar', revenue: 6500, fees: 325 },
-    { month: 'Apr', revenue: 9000, fees: 450 },
-    { month: 'May', revenue: revenueThisMonth, fees: revenueThisMonth * 0.05 },
-  ]
 
   return (
     <Box p={4}>
@@ -58,7 +52,7 @@ export default function Dashboard() {
               Total Chairs
             </Typography>
             <Typography variant="h3" fontWeight="bold">
-              {totalChairs}
+              {data.totalChairs}
             </Typography>
           </Paper>
         </Grid>
@@ -80,7 +74,7 @@ export default function Dashboard() {
               Reservations Today
             </Typography>
             <Typography variant="h3" fontWeight="bold">
-              {todaysReservations}
+              { data.reservationsToday }
             </Typography>
           </Paper>
         </Grid>
@@ -102,7 +96,7 @@ export default function Dashboard() {
               Revenue This Month
             </Typography>
             <Typography variant="h3" fontWeight="bold">
-              {revenueThisMonth.toFixed(0)} €
+              {data.revenueThisMonth.toFixed(0)} €
             </Typography>
           </Paper>
         </Grid>
@@ -124,7 +118,7 @@ export default function Dashboard() {
               Revenue YTD
             </Typography>
             <Typography variant="h3" fontWeight="bold">
-              {revenueYearToDate.toFixed(0)} €
+              {data.revenueYearToDate.toFixed(0)} €
             </Typography>
           </Paper>
         </Grid>
@@ -141,7 +135,7 @@ export default function Dashboard() {
           </Typography>
           <ResponsiveContainer width="100%" height="85%">
             <BarChart
-              data={revenueData}
+              data={data.revenueHistory}
               margin={{ top: 10, right: 20, bottom: 20, left: 0 }}
             >
               <CartesianGrid strokeDasharray="3 3" />

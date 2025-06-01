@@ -39,7 +39,7 @@ export default function Content() {
 
   console.log('services', services, content.services)
   return (
-    <div className="container mx-auto">
+    <div className="container mx-auto p-4">
       <div className="mt-6 flex w-full">
         <form action={formAction} className="w-full">
           <input type="hidden" name="id" value={site.id} />

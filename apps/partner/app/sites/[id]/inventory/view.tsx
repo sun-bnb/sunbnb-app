@@ -307,7 +307,7 @@ export default function InventoryView() {
   }
 
   return (
-    <div className="container mx-auto">
+    <div className="container mx-auto p-4">
       <div className="flex justify-end mt-4">
         <div className="mr-[6px]">
           <QrPrintButton siteId={siteId} label="Print all QR Codes" items={site.inventoryItems!} />
