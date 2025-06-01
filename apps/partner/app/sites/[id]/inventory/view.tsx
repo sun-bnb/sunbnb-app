@@ -4,6 +4,8 @@ import Image from 'next/image'
 import { useState } from 'react'
 import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
+import CancelIcon from '@mui/icons-material/Cancel'
+import CloseIcon from '@mui/icons-material/Close'
 import { InventoryItem } from '../../../../types/shared'
 import { 
   createInventoryItem,
@@ -20,9 +22,9 @@ import sunbedIcon from './sunbed-icon-transparent.png'
 import QrPrintButton from './qr-print-button'
 
 function getScaledSize(zoom: number): number {
-  const physicalLength = 3.5; // in meters; adjust if needed for your actual sunbed size
-  const metersPerPixel = 156543.03392 / Math.pow(2, zoom);
-  return physicalLength / metersPerPixel;
+  const physicalLength = 3.5 // meters
+  const metersPerPixel = 156543.03392 / Math.pow(2, zoom)
+  return physicalLength / metersPerPixel
 }
 
 interface SunbedMarkerProps {
@@ -44,14 +46,10 @@ const SunbedMarker: React.FC<SunbedMarkerProps> = ({
   onClick,
   onDragEnd,
 }) => {
-
-  // At high zoom levels, render the detailed rectangle marker.
   const width = dynamicSize * 0.5
   const height = dynamicSize
   const isPaired = Boolean(item.pairId || item.pairedBy?.id)
-  // Only thicken border if this marker or its pair is selected.
   const borderThickness = (selected || pairedSelected) ? 4 : 2
-  // Use gray border if the item is paired.
   const borderColor = isPaired ? 'gray' : 'black'
   const rotation = item.rotation || 0
 
@@ -74,13 +72,11 @@ const SunbedMarker: React.FC<SunbedMarkerProps> = ({
           backgroundColor: selected ? 'rgba(0, 0, 0, 0.3)' : 'transparent',
         }}
       />
-      {
-        zoom > 20 &&
-          <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs rounded-full px-1">
-            {String(item.number).padStart(4, '0')}
-          </div>
-      }
-      
+      {zoom > 20 && (
+        <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs rounded-full px-1">
+          {String(item.number).padStart(4, '0')}
+        </div>
+      )}
     </div>
   )
 
@@ -130,7 +126,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
   onSave,
   onDelete,
   onPrint,
-  onPair
+  onPair,
 }) => (
   <div className="flex flex-col mt-[6px] ml-[4px]">
     <div className="flex mb-2">
@@ -141,7 +137,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
         value={selectedItemNumber || String(selectedItem.number) || ''}
         variant="standard"
         placeholder="0001"
-        onChange={e => onFieldChange('number', e.target.value)}
+        onChange={(e) => onFieldChange('number', e.target.value)}
         sx={{ mr: 1 }}
       />
       <TextField
@@ -151,7 +147,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
         value={selectedItemGroup || String(selectedItem.group) || ''}
         variant="standard"
         placeholder="0"
-        onChange={e => onFieldChange('group', e.target.value)}
+        onChange={(e) => onFieldChange('group', e.target.value)}
         sx={{ mr: 1 }}
       />
       <TextField
@@ -161,7 +157,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
         value={selectedItemLabel || selectedItem.label || ''}
         variant="standard"
         placeholder="Sunbed A"
-        onChange={e => onFieldChange('label', e.target.value)}
+        onChange={(e) => onFieldChange('label', e.target.value)}
         sx={{ mr: 1 }}
       />
     </div>
@@ -173,7 +169,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
         value={selectedItemCategory || selectedItem.category || ''}
         variant="standard"
         placeholder="PRICE1"
-        onChange={e => onFieldChange('category', e.target.value)}
+        onChange={(e) => onFieldChange('category', e.target.value)}
         sx={{ mr: 1 }}
       />
       <TextField
@@ -183,7 +179,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
         value={selectedItemPrice || selectedItem.price?.toString() || ''}
         variant="standard"
         placeholder="8.5"
-        onChange={e => onFieldChange('price', e.target.value)}
+        onChange={(e) => onFieldChange('price', e.target.value)}
         sx={{ mr: 1 }}
       />
     </div>
@@ -195,7 +191,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
         value={selectedItemRotation || selectedItem.rotation?.toString() || ''}
         variant="standard"
         placeholder="0"
-        onChange={e => onFieldChange('rotation', e.target.value)}
+        onChange={(e) => onFieldChange('rotation', e.target.value)}
         sx={{ mr: 1 }}
       />
       <TextField
@@ -205,7 +201,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
         value={selectedItemPairId || selectedItem.pairId || selectedItem.pairedBy?.id || ''}
         variant="standard"
         placeholder="Pair ID"
-        onChange={e => onFieldChange('pairId', e.target.value)}
+        onChange={(e) => onFieldChange('pairId', e.target.value)}
         sx={{ mr: 1 }}
       />
     </div>
@@ -216,7 +212,9 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
       <Button variant="outlined" color="error" onClick={onDelete}>
         Delete
       </Button>
-      <QrPrintButton siteId={siteId} label="QR Code" items={[selectedItem]} />
+      <Button variant="outlined" onClick={onPrint}>
+        QR Code
+      </Button>
       <Button variant="outlined" onClick={onPair}>
         PAIR
       </Button>
@@ -232,8 +230,14 @@ export default function InventoryView() {
   let siteLat = site.locationLat
   let siteLng = site.locationLng
 
+  // track existing selection
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
-  const [selectedPlace, setSelectedPlace] = useState<google.maps.places.PlaceResult | null>(null)
+  const selectedItem = inventory.find((item) => item.id === selectedItemId)
+
+  // new creation flow
+  const [creating, setCreating] = useState<boolean>(false)
+
+  // edited fields
   const [selectedItemNumber, setSelectedItemNumber] = useState<string>('')
   const [selectedItemGroup, setSelectedItemGroup] = useState<string>('')
   const [selectedItemLabel, setSelectedItemLabel] = useState<string>('')
@@ -242,10 +246,24 @@ export default function InventoryView() {
   const [selectedItemRotation, setSelectedItemRotation] = useState<string>('')
   const [selectedItemPairId, setSelectedItemPairId] = useState<string>('')
   const [pairingMode, setPairingMode] = useState<boolean>(false)
-  const [zoom, setZoom] = useState<number>(20)
 
+  // map & zoom
+  const [selectedPlace, setSelectedPlace] = useState<google.maps.places.PlaceResult | null>(null)
+  const [zoom, setZoom] = useState<number>(20)
   const dynamicSize = getScaledSize(zoom)
-  const selectedItem = inventory.find(item => item.id === selectedItemId)
+
+  // When fields change for the form
+  const handleFieldChange = (field: string, value: string) => {
+    switch (field) {
+      case 'number': setSelectedItemNumber(value); break
+      case 'group':  setSelectedItemGroup(value); break
+      case 'label':  setSelectedItemLabel(value); break
+      case 'category': setSelectedItemCategory(value); break
+      case 'price':  setSelectedItemPrice(value); break
+      case 'rotation': setSelectedItemRotation(value); break
+      case 'pairId': setSelectedItemPairId(value); break
+    }
+  }
 
   const handleSave = (): void => {
     if (!selectedItem) return
@@ -258,9 +276,6 @@ export default function InventoryView() {
       rotation?: number
       pairId?: string
     } = {}
-
-    console.log('Save item', changedValues, selectedItemNumber)
-
     if (selectedItemNumber) changedValues.number = Number(selectedItemNumber)
     if (selectedItemGroup) changedValues.group = Number(selectedItemGroup)
     if (selectedItemLabel) changedValues.label = selectedItemLabel
@@ -281,6 +296,44 @@ export default function InventoryView() {
   const handlePrint = (): void => {
     if (selectedItem) {
       const qrCodeUrl = `${process.env.NEXT_PUBLIC_APP_URL}/sites/${siteId}/pos/${selectedItem.id}`
+      // Print handled by QrPrintButton normally
+    }
+  }
+
+  const handlePair = (): void => {
+    setPairingMode(true)
+  }
+
+  // 1) User clicks “Add Item” → enter creation mode
+  const handleStartCreate = (): void => {
+    setCreating(true)
+    setSelectedItemId(null)
+  }
+
+  // 2) Map click behavior: if creating, create then place; otherwise normal drag
+  const handleMapClick = async (e: any) => {
+    const lat = e.detail.latLng?.lat
+    const lng = e.detail.latLng?.lng
+    if (!lat || !lng) return
+
+    if (creating) {
+      // create the new item without a location
+      const result = await createInventoryItem({ siteId })
+      const newItem = result.item as InventoryItem
+
+      // immediately set the selected id and location
+      setSelectedItemId(newItem.id)
+      await saveInventoryItemLocation(newItem.id, {
+        locationLat: lat.toString(),
+        locationLng: lng.toString(),
+      })
+      setCreating(false)
+    } else if (selectedItem && typeof lat === 'number' && typeof lng === 'number') {
+      // normal drag end: update location
+      saveInventoryItemLocation(selectedItem.id, {
+        locationLat: lat.toString(),
+        locationLng: lng.toString(),
+      })
     }
   }
 
@@ -289,16 +342,16 @@ export default function InventoryView() {
       setSelectedItemPairId(item.id)
       setPairingMode(false)
     } else {
-      // Regular toggle selection
       setSelectedItemPairId('')
       setSelectedItemId(prev => (prev === item.id ? null : item.id))
+      setCreating(false)
     }
   }
 
   const handleMarkerDragEnd = (item: InventoryItem, e: any): void => {
     const lat = e.latLng?.lat()
     const lng = e.latLng?.lng()
-    if (lat && lng) {
+    if (!creating && lat && lng) {
       saveInventoryItemLocation(item.id, {
         locationLat: lat.toString(),
         locationLng: lng.toString(),
@@ -308,21 +361,26 @@ export default function InventoryView() {
 
   return (
     <div className="container mx-auto p-4">
-      <div className="flex justify-end mt-4">
-        <div className="mr-[6px]">
-          <QrPrintButton siteId={siteId} label="Print all QR Codes" items={site.inventoryItems!} />
-        </div>
-        <Button
-          variant="outlined"
-          onClick={async () => {
-            const result = await createInventoryItem({ siteId })
-            setSelectedItemId((result.item as InventoryItem).id)
-          }}
-        >
-          + Add Item
-        </Button>
+      <div className="flex justify-between mt-4 mb-6">
+        {
+          (!creating && !selectedItem) ?
+            <Button variant="outlined" onClick={handleStartCreate}>
+              + Add Item
+            </Button> : 
+            <div className='flex items-center'>
+              <Button startIcon={<CloseIcon />} variant="text" onClick={() => {
+                setSelectedItemId(null)
+                setCreating(false)
+              }}>
+                Cancel
+              </Button>
+            </div>
+        }
+        
+        <QrPrintButton siteId={siteId} label="Print all QR Codes" items={inventory} />
       </div>
-      {selectedItem && (
+
+      {selectedItem && !creating && (
         <InventoryForm
           siteId={siteId}
           selectedItem={selectedItem}
@@ -333,29 +391,26 @@ export default function InventoryView() {
           selectedItemPrice={selectedItemPrice}
           selectedItemRotation={selectedItemRotation}
           selectedItemPairId={selectedItemPairId}
-          onFieldChange={(field, value) => {
-            console.log('Field change', field, value)
-            if (field === 'number') setSelectedItemNumber(value)
-            else if (field === 'group') setSelectedItemGroup(value)
-            else if (field === 'label') setSelectedItemLabel(value)
-            else if (field === 'category') setSelectedItemCategory(value)
-            else if (field === 'price') setSelectedItemPrice(value)
-            else if (field === 'rotation') setSelectedItemRotation(value)
-            else if (field === 'pairId') setSelectedItemPairId(value)
-          }}
+          onFieldChange={handleFieldChange}
           onSave={handleSave}
           onDelete={handleDelete}
           onPrint={handlePrint}
-          onPair={() => setPairingMode(true)}
+          onPair={handlePair}
         />
       )}
-      <div className="mt-6 flex justify-between flex-col">
-        {selectedItem && Number(selectedItem.locationLat) === 0 && (
+
+      <div className="mt-6 flex flex-col">
+        {selectedItem && Number(selectedItem.locationLat) === 0 && !creating && (
           <div className="w-full bg-yellow-400 p-2 text-gray-600 font-bold">
             Place item on the map:
           </div>
         )}
-        <div className="w-full h-[400px] border border-2 border-gray-400">
+        {creating && (
+          <div className="w-full bg-green-200 p-2 text-gray-800 font-bold">
+            Click on the map to place the new item
+          </div>
+        )}
+        <div className="w-full h-[400px] border border-2 border-gray-400 mt-2">
           <APIProvider apiKey={apiKey}>
             <Map
               mapId="7a0196a7ba317ea5"
@@ -367,18 +422,24 @@ export default function InventoryView() {
               }
               gestureHandling="greedy"
               disableDefaultUI
-              onZoomChanged={mapInstance => {
+              onZoomChanged={(mapInstance) => {
                 const newZoom = mapInstance.map.getZoom()
                 setZoom(newZoom || 20)
               }}
+              onClick={handleMapClick}
             >
-              {inventory.map(item => (
+              {inventory.map((item) => (
                 <SunbedMarker
                   key={item.id}
                   item={item}
                   dynamicSize={dynamicSize}
                   zoom={zoom}
                   selected={selectedItem?.id === item.id}
+                  pairedSelected={
+                    selectedItem
+                      ? item.id === selectedItem.pairId || item.id === selectedItem.pairedBy?.id
+                      : false
+                  }
                   onClick={() => handleMarkerClick(item)}
                   onDragEnd={(e) => handleMarkerDragEnd(item, e)}
                 />
