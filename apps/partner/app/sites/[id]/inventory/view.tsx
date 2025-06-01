@@ -17,6 +17,7 @@ import MapHandler from '@/components/maps/map-handler'
 import { CustomMapControl } from '@/components/maps/map-control'
 import Reservations from './reservations'
 import sunbedIcon from './sunbed-icon-transparent.png'
+import QrPrintButton from './qr-print-button'
 
 function getScaledSize(zoom: number): number {
   const physicalLength = 3.5; // in meters; adjust if needed for your actual sunbed size
@@ -96,6 +97,7 @@ const SunbedMarker: React.FC<SunbedMarkerProps> = ({
 }
 
 interface InventoryFormProps {
+  siteId: string
   selectedItem: InventoryItem
   selectedItemNumber: string
   selectedItemGroup: string
@@ -110,10 +112,12 @@ interface InventoryFormProps {
   ) => void
   onSave: () => void
   onDelete: () => void
+  onPrint: () => void
   onPair: () => void
 }
 
 const InventoryForm: React.FC<InventoryFormProps> = ({
+  siteId,
   selectedItem,
   selectedItemNumber,
   selectedItemGroup,
@@ -125,6 +129,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
   onFieldChange,
   onSave,
   onDelete,
+  onPrint,
   onPair
 }) => (
   <div className="flex flex-col mt-[6px] ml-[4px]">
@@ -211,6 +216,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
       <Button variant="outlined" color="error" onClick={onDelete}>
         Delete
       </Button>
+      <QrPrintButton siteId={siteId} label="QR Code" items={[selectedItem]} />
       <Button variant="outlined" onClick={onPair}>
         PAIR
       </Button>
@@ -272,6 +278,12 @@ export default function InventoryView() {
     }
   }
 
+  const handlePrint = (): void => {
+    if (selectedItem) {
+      const qrCodeUrl = `${process.env.NEXT_PUBLIC_APP_URL}/sites/${siteId}/pos/${selectedItem.id}`
+    }
+  }
+
   const handleMarkerClick = (item: InventoryItem): void => {
     if (pairingMode && selectedItem && item.id !== selectedItem.id) {
       setSelectedItemPairId(item.id)
@@ -297,6 +309,9 @@ export default function InventoryView() {
   return (
     <div className="container mx-auto">
       <div className="flex justify-end mt-4">
+        <div className="mr-[6px]">
+          <QrPrintButton siteId={siteId} label="Print all QR Codes" items={site.inventoryItems!} />
+        </div>
         <Button
           variant="outlined"
           onClick={async () => {
@@ -309,6 +324,7 @@ export default function InventoryView() {
       </div>
       {selectedItem && (
         <InventoryForm
+          siteId={siteId}
           selectedItem={selectedItem}
           selectedItemNumber={selectedItemNumber}
           selectedItemGroup={selectedItemGroup}
@@ -329,6 +345,7 @@ export default function InventoryView() {
           }}
           onSave={handleSave}
           onDelete={handleDelete}
+          onPrint={handlePrint}
           onPair={() => setPairingMode(true)}
         />
       )}

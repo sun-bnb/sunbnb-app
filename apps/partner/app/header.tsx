@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useTranslations } from 'next-intl'
 
 import * as React from 'react'
+import Image from 'next/image'
 import Paper from '@mui/material/Paper'
 import IconButton from '@mui/material/IconButton'
 import AppBar from '@mui/material/AppBar'
@@ -13,6 +14,7 @@ import Avatar from '@mui/material/Avatar'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import Typography from '@mui/material/Typography'
+import sunbnbLogo from '@/app/sunbnb-logo.svg'
 
 
 import { useRouter } from 'next/navigation'
@@ -52,11 +54,14 @@ export default function CustomizedInputBase() {
       <div className="w-full flex items-center justify-between">
         <div className="flex items-center">
           <Link href="/">
-            <span style={{ fontSize: '40px', marginLeft: '10px' }}>
-              &#x2600;
-            </span>
+            <Image alt="Sunbnb" src={sunbnbLogo} 
+              style={{ width: '40px', marginLeft: '10px' }} 
+            />
           </Link>
           <div className="flex ml-2">
+            <div className="ml-2 mr-2 font-bold">
+              <Link href="/">Dashboard</Link>
+            </div>
             <div className="ml-2 mr-2 font-bold">
               <Link href="/sites">Sites</Link>
             </div>
