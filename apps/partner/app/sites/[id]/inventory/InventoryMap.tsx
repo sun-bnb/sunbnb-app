@@ -4,15 +4,15 @@
 import React, { useState } from 'react'
 import { APIProvider, Map, ControlPosition, MapMouseEvent } from '@vis.gl/react-google-maps'
 import SunbedMarker from './SunbedMarker'
-import { InventoryItem } from '../../../../types/shared'
+import { InventoryItem } from '@/types/shared'
 import MapHandler from '@/components/maps/map-handler'
 import { CustomMapControl } from '@/components/maps/map-control'
+import { useSite } from '@/app/sites/site-context'
 
 interface InventoryMapProps {
   siteLat: string
   siteLng: string
   apiKey: string
-  inventory: InventoryItem[]
   selectedItemId: string | null
   pairingMode: boolean
   onMarkerClick: (item: InventoryItem) => void
@@ -32,7 +32,6 @@ export default function InventoryMap({
   siteLat,
   siteLng,
   apiKey,
-  inventory,
   selectedItemId,
   pairingMode,
   onMapClick,
@@ -43,10 +42,10 @@ export default function InventoryMap({
 }: InventoryMapProps) {
 
 
+  const { site, nonce } = useSite()
+
   const [zoom, setZoom] = useState(20)
   const dynamicSize = getScaledSize(zoom)
-
-  console.log('zoom', zoom, 'dynamicSize', dynamicSize)
 
   return (
     <div className="w-full h-[400px] border border-2 border-gray-400">
@@ -69,18 +68,27 @@ export default function InventoryMap({
           }}
           onClick={onMapClick}
         >
-          {inventory.map((item) => {
+          {(site.inventoryItems || []).map((item) => {
             const isSelected = selectedItemId === item.id
             const pairedSelected =
               pairingMode && selectedItemId
-                ? item.id === inventory.find((i) => i.id === selectedItemId)?.pairId ||
-                  item.id === inventory.find((i) => i.id === selectedItemId)?.pairedBy?.id
+                ? item.id === (site.inventoryItems || []).find((i) => i.id === selectedItemId)?.pairId ||
+                  item.id === (site.inventoryItems || []).find((i) => i.id === selectedItemId)?.pairedBy?.id
                 : false
+
+            const position = {
+              lat: Number(item.locationLat),
+              lng: Number(item.locationLng),
+            }
 
             return (
               <SunbedMarker
                 key={item.id}
-                item={item}
+                pairedBy={item.pairedBy || undefined}
+                pairId={item.pairId || undefined}
+                number={item.number}
+                rotation={item.rotation || 0}
+                initialPosition={position}
                 zoom={zoom}
                 dynamicSize={dynamicSize}
                 selected={isSelected}

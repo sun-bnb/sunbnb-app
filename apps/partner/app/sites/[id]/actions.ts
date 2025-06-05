@@ -539,3 +539,126 @@ export async function getOrders(siteId: string): Promise<{ status: string, error
   return { status: 'ok', orders }
 
 }
+
+export async function selectItemsByGroup(siteId: string, group: number) {
+
+  const items = await prisma.inventoryItem.findMany({
+    where: { 
+      siteId: siteId,
+      group: group
+    }
+  })
+
+  return items
+
+}
+
+export async function deleteItemsByGroup(siteId: string, group: number) {
+
+  const items = await prisma.inventoryItem.deleteMany({
+    where: { 
+      siteId: siteId,
+      group: group
+    }
+  })
+
+  revalidatePath(`/sites/${siteId}/inventory`);
+  return items
+
+}
+
+
+export async function moveItemsByGroup(
+  siteId: string,
+  group: number,
+  direction: 'up' | 'down' | 'left' | 'right',
+  stepMeters: number = 0.5
+) {
+
+  const items = await prisma.inventoryItem.findMany({
+    where: {
+      siteId,
+      group
+    },
+    select: {
+      id: true,
+      locationLat: true,
+      locationLng: true
+    }
+  })
+
+  if (!items.length) return
+
+  const baseLat = parseFloat(items[0]!.locationLat)
+  const latStep = stepMeters / 111320 // Approximate meters per degree latitude
+  const lngStep = stepMeters / 111320 / (Math.cos(baseLat * Math.PI / 180))
+
+  const deltaLat = direction === 'up' ? latStep : direction === 'down' ? -latStep : 0
+  const deltaLng = direction === 'right' ? lngStep : direction === 'left' ? -lngStep : 0
+
+  for (const item of items) {
+    const newLat = (parseFloat(item.locationLat) + (deltaLat)).toFixed(8)
+    const newLng = (parseFloat(item.locationLng) + (deltaLng)).toFixed(8)
+    console.log(`Moving item ${item.id} to new location: ${newLat}, ${newLng}`, deltaLat, deltaLng)
+    const result = await prisma.inventoryItem.update({
+      where: { id: item.id },
+      data: {
+        locationLat: newLat,
+        locationLng: newLng
+      }
+    })
+
+    console.log('Moved item', result)
+
+  }
+
+  revalidatePath(`/sites/${siteId}/inventory`)
+  const site = await getSite(siteId)
+
+  return site
+  
+}
+
+
+export async function getInventoryItems(siteId: string) {
+
+  const items = await prisma.inventoryItem.findMany({
+    where: { 
+      siteId: siteId
+    }
+  })
+
+  return items
+
+}
+
+export async function getSite(siteId: string) {
+
+  const site = await prisma.site.findFirst({ 
+    where: { id: siteId }, 
+    include: { 
+      workingHours: true,
+      inventoryItems: {
+        orderBy: { number: 'asc' },
+        include: {
+          reservations: {
+            include: {
+              user: true
+            },
+            orderBy: { from: 'asc' }
+          },
+          pair: true,
+          pairedBy: true
+        }
+      },
+      products: {
+        where: { active: true }
+      }
+    } 
+  })
+
+  return site
+
+}
+
+

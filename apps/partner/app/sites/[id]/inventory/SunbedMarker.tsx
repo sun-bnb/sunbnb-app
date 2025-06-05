@@ -5,7 +5,14 @@ import { AdvancedMarker, useMap } from '@vis.gl/react-google-maps'
 import { InventoryItem } from '@/types/shared'
 
 interface SunbedMarkerProps {
-  item: InventoryItem
+  pairedBy?: InventoryItem
+  pairId?: string
+  number: number
+  rotation: number
+  initialPosition: {
+    lat: number
+    lng: number
+  }
   zoom: number
   dynamicSize: number
   selected?: boolean
@@ -15,7 +22,11 @@ interface SunbedMarkerProps {
 }
 
 export default function SunbedMarker({
-  item,
+  pairedBy,
+  pairId,
+  number,
+  rotation,
+  initialPosition,
   zoom,
   dynamicSize,
   selected = false,
@@ -23,23 +34,20 @@ export default function SunbedMarker({
   onClick,
   onDragEnd,
 }: SunbedMarkerProps) {
+
   const map = useMap()
   const svgRef = useRef<SVGSVGElement>(null)
 
-  const [position, setPosition] = useState<google.maps.LatLngLiteral>({
-    lat: Number(item.locationLat),
-    lng: Number(item.locationLng),
-  })
+  const [position, setPosition] = useState<google.maps.LatLngLiteral | null>(null)
 
   const isDraggingRef = useRef(false)
   const wasDraggedRef = useRef(false)
   const startClientRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const startWorldRef = useRef<google.maps.Point | null>(null)
 
-  const isPaired = Boolean(item.pairId || item.pairedBy?.id)
+  const isPaired = Boolean(pairId || pairedBy?.id)
   const borderThickness = selected || pairedSelected ? 4 : 2
   const borderColor = isPaired ? 'gray' : 'black'
-  const rotation = item.rotation || 0
 
   const width = dynamicSize / 2.5
   const height = dynamicSize
@@ -60,7 +68,7 @@ export default function SunbedMarker({
       wasDraggedRef.current = false
       startClientRef.current = { x: e.clientX, y: e.clientY }
 
-      const latLng = new google.maps.LatLng(position.lat, position.lng)
+      const latLng = new google.maps.LatLng((position || initialPosition).lat, (position || initialPosition).lng)
       startWorldRef.current = projection.fromLatLngToPoint(latLng)
 
       el.setPointerCapture(e.pointerId)
@@ -99,7 +107,7 @@ export default function SunbedMarker({
       map.setOptions({ draggable: true })
 
       onDragEnd({
-        latLng: new google.maps.LatLng(position.lat, position.lng),
+        latLng: new google.maps.LatLng((position || initialPosition).lat, (position || initialPosition).lng),
       } as google.maps.MapMouseEvent)
     }
 
@@ -120,8 +128,9 @@ export default function SunbedMarker({
     }
   }, [map, position, zoom, onClick, onDragEnd])
 
+  console.log('Marker position:', number, position, initialPosition)
   return (
-    <AdvancedMarker position={position} style={{ pointerEvents: 'none' }}>
+    <AdvancedMarker position={(position || initialPosition)} style={{ pointerEvents: 'none' }}>
       <svg
         ref={svgRef}
         width={width}
@@ -160,7 +169,7 @@ export default function SunbedMarker({
                 dominantBaseline="central"
                 style={{ pointerEvents: 'none' }}
               >
-                {String(item.number).padStart(4, '0')}
+                {String(number).padStart(4, '0')}
               </text>
             </g>
           )}
