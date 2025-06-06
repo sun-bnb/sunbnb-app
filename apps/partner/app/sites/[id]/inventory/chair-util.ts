@@ -41,31 +41,34 @@ export function generateChairs(config: ChairConfig): ChairDefinition[] {
   const metersPerLat = 111320
   const metersPerLng = 111320 * Math.cos(baseLat * Math.PI / 180)
 
-  let globalCounter = 1
-
   for (let r = 0; r < rows; r++) {
     let c = 0
     while (c < seatsPerRow) {
       const isPair = pairSeats && c + 1 < seatsPerRow
+      const rowNum = (r + 1).toString().padStart(2, '0')
+      const seatNum1 = (c + 1).toString().padStart(2, '0')
+      const seatNum2 = (c + 2).toString().padStart(2, '0')
+
       const dx1 = c * (pairSeats ? intraPairGap + horizontalGap : horizontalGap)
       const dy1 = r * verticalGap
 
       const offsetLat1 = (dy1 * Math.cos(rad) - dx1 * Math.sin(rad)) / metersPerLat
       const offsetLng1 = (dy1 * Math.sin(rad) + dx1 * Math.cos(rad)) / metersPerLng
 
-      const tempIdA = `T${group}-${globalCounter}`
+      const tempIdA = `${group}-R${rowNum}C${seatNum1}`
+      const tempIdB = `${group}-R${rowNum}C${seatNum2}`
+
       const seatA: ChairDefinition = {
         tempId: tempIdA,
-        ...(isPair ? { pairTempId: `T${group}-${globalCounter + 1}` } : {}),
+        ...(isPair ? { pairTempId: tempIdB } : {}),
         locationLat: (baseLat + offsetLat1).toString(),
         locationLng: (baseLng + offsetLng1).toString(),
         rotation,
         group,
-        number: group * 1000 + globalCounter,
+        number: Number(`${group}${rowNum}${seatNum1}`),
       }
 
       items.push(seatA)
-      globalCounter++
 
       if (isPair) {
         const dx2 = dx1 + intraPairGap
@@ -73,17 +76,16 @@ export function generateChairs(config: ChairConfig): ChairDefinition[] {
         const offsetLng2 = (dy1 * Math.sin(rad) + dx2 * Math.cos(rad)) / metersPerLng
 
         const seatB: ChairDefinition = {
-          tempId: `T${group}-${globalCounter}`,
+          tempId: tempIdB,
           pairTempId: tempIdA,
           locationLat: (baseLat + offsetLat2).toString(),
           locationLng: (baseLng + offsetLng2).toString(),
           rotation,
           group,
-          number: group * 1000 + globalCounter,
+          number: Number(`${group}${rowNum}${seatNum2}`),
         }
 
         items.push(seatB)
-        globalCounter++
         c += 2
       } else {
         c += 1
@@ -93,3 +95,4 @@ export function generateChairs(config: ChairConfig): ChairDefinition[] {
 
   return items
 }
+
