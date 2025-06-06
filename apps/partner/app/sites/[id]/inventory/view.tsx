@@ -5,8 +5,8 @@ import { InventoryItem } from '@/types/shared'
 import {
   createInventoryItem,
   saveInventoryItemLocation,
-  saveInventoryItemProperties,
   deleteInventoryItem,
+  getSite,
 } from '../actions'
 import { useSite } from '@/app/sites/site-context'
 import { useSharedMap } from './SharedMapContext'
@@ -16,39 +16,77 @@ import InventoryToolbar from './InventoryToolbar'
 import Reservations from './reservations'
 import ParcelForm from './ParcelForm'
 import { MapMouseEvent } from '@vis.gl/react-google-maps'
+import { ChairConfig } from './chair-util'
+import { syncChairsWithLayout } from './actions'
 
 export default function InventoryView() {
-  const { site, nonce, apiKey } = useSite()
+  const { site, setSite, apiKey } = useSite()
   const { setValue, values } = useSharedMap()
 
   const inventory: InventoryItem[] = site.inventoryItems || []
-
   const siteId = site.id || ''
-  const siteLat = site.locationLat
-  const siteLng = site.locationLng
+  const siteLat = site.locationLat!
+  const siteLng = site.locationLng!
 
   const [deleteMode, setDeleteMode] = useState(false)
+  const [editorMode, setEditorMode] = useState<'none' | 'create-chair' | 'edit-chair' | 'create-parcel' | 'edit-parcel'>('none')
 
-  const [parcelMode, setParcelMode] = useState<'none' | 'create' | 'edit'>('none')
   const [editGroup, setEditGroup] = useState<number | null>(null)
   const [parcelLatLng, setParcelLatLng] = useState<{ lat: number; lng: number } | null>(null)
+  const [parcelMoveTrigger, setParcelMoveTrigger] = useState(0)
 
-  const [creatingChair, setCreatingChair] = useState(false)
+  const [parcelConfig, setParcelConfig] = useState<ChairConfig>({
+    rows: 2,
+    seatsPerRow: 4,
+    horizontalGap: 0.4,
+    verticalGap: 4.5,
+    rotation: 0,
+    group: 1,
+    pairSeats: true,
+    intraPairGap: 1.6,
+    baseLat: Number(siteLat),
+    baseLng: Number(siteLng),
+  })
+
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const selectedItem = inventory.find((i) => i.id === selectedItemId)
 
   const [pairingMode, setPairingMode] = useState(false)
   const [selectedPlace, setSelectedPlace] = useState<google.maps.places.PlaceResult | null>(null)
 
+  const isParcelEditorActive = editorMode === 'create-parcel' || editorMode === 'edit-parcel'
+
   const handleMapClick = (e: MapMouseEvent) => {
     const lat = e?.detail.latLng?.lat
     const lng = e?.detail.latLng?.lng
     if (!lat || !lng) return
 
-    if (parcelMode !== 'none') {
-      // Always move parcel when parcel editor is active
+    if (editorMode === 'create-parcel') {
+      const newGroup = Math.max(0, ...inventory.map(i => i.group || 0)) + 1
+      const newConfig: ChairConfig = {
+        ...parcelConfig,
+        group: newGroup,
+        baseLat: lat,
+        baseLng: lng,
+      }
       setParcelLatLng({ lat, lng })
-    } else if (creatingChair) {
+      setParcelConfig(newConfig)
+      syncChairsWithLayout(siteId, newConfig).then(async () => {
+        const updatedSite = await getSite(siteId)
+        if (updatedSite) setSite(updatedSite)
+        setEditorMode('none')
+        setParcelLatLng(null)
+      })
+      return
+    }
+
+    if (editorMode === 'edit-parcel') {
+      setParcelConfig({ ...parcelConfig, baseLat: lat, baseLng: lng })
+      setParcelMoveTrigger(Date.now())
+      return
+    }
+
+    if (editorMode === 'create-chair') {
       createInventoryItem({ siteId }).then(async (result) => {
         const newItem = result.item as InventoryItem
         setSelectedItemId(newItem.id)
@@ -56,9 +94,12 @@ export default function InventoryView() {
           locationLat: lat.toString(),
           locationLng: lng.toString(),
         })
-        setCreatingChair(false)
+        setEditorMode('none')
       })
-    } else if (selectedItem) {
+      return
+    }
+
+    if (selectedItem) {
       saveInventoryItemLocation(selectedItem.id, {
         locationLat: lat.toString(),
         locationLng: lng.toString(),
@@ -69,6 +110,9 @@ export default function InventoryView() {
   const handleMarkerClick = (item: InventoryItem) => {
     if (deleteMode) {
       deleteInventoryItem(item.id)
+      getSite(siteId).then((updatedSite) => {
+        if (updatedSite) setSite(updatedSite)
+      })
       return
     }
 
@@ -77,16 +121,15 @@ export default function InventoryView() {
       setPairingMode(false)
     } else {
       setValue('selectedItemPairId', '')
-      setSelectedItemId((prev) => (prev === item.id ? null : item.id))
-      setCreatingChair(false)
-      setParcelMode('none')
+      setSelectedItemId(prev => (prev === item.id ? null : item.id))
+      setEditorMode('edit-chair')
     }
   }
 
   const handleMarkerDragEnd = (item: InventoryItem, e: any) => {
     const lat = e.latLng?.lat()
     const lng = e.latLng?.lng()
-    if (!creatingChair && lat && lng) {
+    if (lat && lng) {
       saveInventoryItemLocation(item.id, {
         locationLat: lat.toString(),
         locationLng: lng.toString(),
@@ -95,7 +138,7 @@ export default function InventoryView() {
   }
 
   const handleCancelParcel = () => {
-    setParcelMode('none')
+    setEditorMode('none')
     setEditGroup(null)
     setParcelLatLng(null)
   }
@@ -103,45 +146,37 @@ export default function InventoryView() {
   return (
     <div className="container mx-auto p-4">
       <InventoryToolbar
-        creating={creatingChair}
-        creatingParcel={parcelMode !== 'none'}
+        creating={editorMode === 'create-chair'}
+        creatingParcel={editorMode === 'create-parcel'}
         selectedItemId={selectedItemId}
         deleteMode={deleteMode}
-        onToggleDeleteMode={() => setDeleteMode((prev) => !prev)}
+        onToggleDeleteMode={() => setDeleteMode(prev => !prev)}
         onStartCreate={() => {
-          setCreatingChair(true)
-          setParcelMode('none')
+          setEditorMode('create-chair')
           setSelectedItemId(null)
         }}
         onStartParcel={() => {
-          setCreatingChair(true)
-          setParcelMode('create')
+          setEditorMode('create-parcel')
           setSelectedItemId(null)
         }}
         onCancel={() => {
-          setCreatingChair(false)
+          setEditorMode('none')
           setSelectedItemId(null)
-          setParcelMode('none')
         }}
         onPrintAll={() => {}}
       />
 
-      {parcelMode !== 'none' && parcelLatLng && (
+      {isParcelEditorActive && (
         <ParcelForm
-          mode={parcelMode}
+          mode={editorMode === 'edit-parcel' ? 'edit' : 'create'}
           siteId={siteId}
           editGroup={editGroup}
-          initialLat={parcelLatLng.lat}
-          initialLng={parcelLatLng.lng}
+          config={parcelConfig}
+          setConfig={setParcelConfig}
+          moveTrigger={parcelMoveTrigger}
           onCancel={handleCancelParcel}
-          onPlace={() => {
-            setCreatingChair(false)
-            setParcelMode('none')
-            setParcelLatLng(null)
-          }}
           onDeleteParcel={(group) => {
-            setCreatingChair(false)
-            setParcelMode('none')
+            setEditorMode('none')
             setEditGroup(null)
             setParcelLatLng(null)
             setSelectedItemId(null)
@@ -149,41 +184,52 @@ export default function InventoryView() {
         />
       )}
 
-      {selectedItem && parcelMode === 'none' && !creatingChair && (
+      {selectedItem && editorMode === 'edit-chair' && (
         <InventoryForm
           selectedItem={selectedItem}
           onSave={() => {}}
-          onDelete={() => setSelectedItemId(null)}
+          onDelete={() => {
+            setSelectedItemId(null)
+            getSite(siteId).then((updatedSite) => {
+              if (updatedSite) setSite(updatedSite)
+            })
+          }}
           onPair={() => setPairingMode(true)}
           onEditGroup={(groupNumber: number) => {
-            setEditGroup(groupNumber)
-            setParcelMode('edit')
-            setCreatingChair(false)
-            setSelectedItemId(null)
-
-            // Immediately set parcel location using the average of group items
-            const groupItems = inventory.filter((i) => i.group === groupNumber)
+            const groupItems = inventory.filter(i => i.group === groupNumber)
             const avgLat = groupItems.reduce((sum, i) => sum + parseFloat(i.locationLat!), 0) / groupItems.length
             const avgLng = groupItems.reduce((sum, i) => sum + parseFloat(i.locationLng!), 0) / groupItems.length
+
+            setParcelConfig(prev => ({
+              ...prev,
+              group: groupNumber,
+              baseLat: avgLat,
+              baseLng: avgLng,
+              rotation: groupItems[0]?.rotation || 0,
+            }))
+
             setParcelLatLng({ lat: avgLat, lng: avgLng })
+            setEditGroup(groupNumber)
+            setEditorMode('edit-parcel')
+            setSelectedItemId(null)
           }}
         />
       )}
 
       <div className="mt-6 flex flex-col">
-        {selectedItem && Number(selectedItem.locationLat) === 0 && !creatingChair && (
+        {selectedItem && Number(selectedItem.locationLat) === 0 && editorMode === 'edit-chair' && (
           <div className="w-full bg-yellow-400 p-2 text-gray-600 font-bold">
             Place item on the map:
           </div>
         )}
-        {creatingChair && parcelMode === 'none' && (
+        {editorMode === 'create-chair' && (
           <div className="w-full bg-green-200 p-2 text-gray-800 font-bold">
             Click on the map to place the new item
           </div>
         )}
         <InventoryMap
-          siteLat={siteLat!}
-          siteLng={siteLng!}
+          siteLat={siteLat}
+          siteLng={siteLng}
           apiKey={apiKey}
           selectedItemId={selectedItemId}
           pairingMode={pairingMode}

@@ -1,5 +1,3 @@
-// utils/generateChairs.ts
-
 export interface ChairConfig {
   baseLat: number
   baseLng: number
@@ -43,52 +41,49 @@ export function generateChairs(config: ChairConfig): ChairDefinition[] {
   const metersPerLat = 111320
   const metersPerLng = 111320 * Math.cos(baseLat * Math.PI / 180)
 
+  let globalCounter = 1
+
   for (let r = 0; r < rows; r++) {
     let c = 0
     while (c < seatsPerRow) {
       const isPair = pairSeats && c + 1 < seatsPerRow
-      const tempIdA = `${group}-R${r + 1}C${c + 1}`
-      const tempIdB = `${group}-R${r + 1}C${c + 2}`
-
       const dx1 = c * (pairSeats ? intraPairGap + horizontalGap : horizontalGap)
       const dy1 = r * verticalGap
 
       const offsetLat1 = (dy1 * Math.cos(rad) - dx1 * Math.sin(rad)) / metersPerLat
       const offsetLng1 = (dy1 * Math.sin(rad) + dx1 * Math.cos(rad)) / metersPerLng
 
-      const rowNum1 = (r + 1).toString().padStart(2, '0')
-      const seatNum1 = (c + 1).toString().padStart(2, '0')
-
+      const tempIdA = `T${group}-${globalCounter}`
       const seatA: ChairDefinition = {
         tempId: tempIdA,
-        ...(isPair ? { pairTempId: tempIdB } : {}),
+        ...(isPair ? { pairTempId: `T${group}-${globalCounter + 1}` } : {}),
         locationLat: (baseLat + offsetLat1).toString(),
         locationLng: (baseLng + offsetLng1).toString(),
         rotation,
         group,
-        number: Number(`${group}${rowNum1}${seatNum1}`),
+        number: group * 1000 + globalCounter,
       }
 
       items.push(seatA)
+      globalCounter++
 
       if (isPair) {
         const dx2 = dx1 + intraPairGap
         const offsetLat2 = (dy1 * Math.cos(rad) - dx2 * Math.sin(rad)) / metersPerLat
         const offsetLng2 = (dy1 * Math.sin(rad) + dx2 * Math.cos(rad)) / metersPerLng
 
-        const seatNum2 = (c + 2).toString().padStart(2, '0')
-
         const seatB: ChairDefinition = {
-          tempId: tempIdB,
+          tempId: `T${group}-${globalCounter}`,
           pairTempId: tempIdA,
           locationLat: (baseLat + offsetLat2).toString(),
           locationLng: (baseLng + offsetLng2).toString(),
           rotation,
           group,
-          number: Number(`${group}${rowNum1}${seatNum2}`),
+          number: group * 1000 + globalCounter,
         }
 
         items.push(seatB)
+        globalCounter++
         c += 2
       } else {
         c += 1
@@ -97,36 +92,4 @@ export function generateChairs(config: ChairConfig): ChairDefinition[] {
   }
 
   return items
-}
-
-export function applyChairsToExisting(
-  existing: { number: number; id: string }[],
-  generated: ChairDefinition[]
-): {
-  id: string
-  locationLat: string
-  locationLng: string
-  rotation: number
-  group: number
-  number: number
-  pairId?: string
-}[] {
-  const numberToId = new Map(existing.map(item => [item.number, item.id]))
-  const tempToNumber = new Map(generated.map(item => [item.tempId, item.number]))
-  const numberToTemp = new Map(generated.map(item => [item.number, item.tempId]))
-
-  return generated.map(item => {
-    const id = numberToId.get(item.number)!
-    const pairNumber = item.pairTempId ? tempToNumber.get(item.pairTempId) : undefined
-
-    return {
-      id,
-      locationLat: item.locationLat,
-      locationLng: item.locationLng,
-      rotation: item.rotation,
-      group: item.group,
-      number: item.number,
-      ...(pairNumber !== undefined ? { pairId: numberToId.get(pairNumber) } : {}),
-    }
-  })
 }

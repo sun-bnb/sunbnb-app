@@ -1,81 +1,63 @@
+// ParcelFormView.tsx
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 import { useSite } from '@/app/sites/site-context'
-import { generateChairs } from './chair-util'
+import { generateChairs, ChairConfig } from './chair-util'
 import { syncChairsWithLayout } from './actions'
-import { getSite } from '../actions'
+import { deleteItemsByGroup, getSite } from '../actions'
 
 interface ParcelFormProps {
   siteId: string
   editGroup?: number | null
   mode: 'create' | 'edit'
-  initialLat: number
-  initialLng: number
+  config: ChairConfig
+  setConfig: React.Dispatch<React.SetStateAction<ChairConfig>>
+  moveTrigger: number
   onCancel: () => void
-  onPlace: (items: ReturnType<typeof generateChairs>) => void
   onDeleteParcel: (group: number) => void
 }
 
 export default function ParcelFormView({
   siteId,
-  mode,
   editGroup,
-  initialLat,
-  initialLng,
+  mode,
+  config,
+  setConfig,
+  moveTrigger,
   onCancel,
-  onPlace,
   onDeleteParcel,
 }: ParcelFormProps) {
-  const [config, setConfig] = useState({
-    rows: 2,
-    seatsPerRow: 4,
-    horizontalGap: 0.4,
-    verticalGap: 4.5,
-    rotation: 0,
-    group: editGroup ?? 1,
-    pairSeats: true,
-    intraPairGap: 1.6,
-    baseLat: initialLat,
-    baseLng: initialLng,
-  })
-
   const [previewItems, setPreviewItems] = useState(generateChairs(config))
   const { setSite } = useSite()
 
-  // Regenerate chairs whenever config changes
+  const configRef = useRef(config)
+
   useEffect(() => {
     setPreviewItems(generateChairs(config))
+    configRef.current = config // Keep latest config for side effects
   }, [config])
 
-  // If group number changes in edit mode, keep config in sync
   useEffect(() => {
     if (mode === 'edit' && editGroup) {
       setConfig((prev) => ({ ...prev, group: editGroup }))
     }
-  }, [mode, editGroup])
+  }, [mode, editGroup, setConfig])
 
-  // If parcel is moved (via map click), update lat/lng
   useEffect(() => {
-    setConfig((prev) => {
-      const newConfig = { ...prev, baseLat: initialLat, baseLng: initialLng }
-  
-      // Only trigger auto-sync if we're editing
-      if (mode === 'edit') {
-        syncChairsWithLayout(siteId, newConfig).then(async () => {
-          const updatedSite = await getSite(siteId)
-          setSite(updatedSite!)
-        })
-      }
-  
-      return newConfig
-    })
-  }, [initialLat, initialLng])
-  
+    if (mode === 'edit' && moveTrigger) {
+      const latestConfig = configRef.current
+      console.log('Syncing chairs with layout due to move trigger:', latestConfig)
+      syncChairsWithLayout(siteId, latestConfig).then(async () => {
+        const updatedSite = await getSite(siteId)
+        if (updatedSite) setSite(updatedSite)
+      })
+    }
+  }, [moveTrigger])
 
-  const handleConfigChange = (field: keyof typeof config, value: number | boolean) => {
+  const handleConfigChange = (field: keyof ChairConfig, value: number | boolean) => {
     setConfig((prev) => ({ ...prev, [field]: value }))
   }
 
@@ -89,14 +71,13 @@ export default function ParcelFormView({
     const newRotation = config.rotation + delta
     const newConfig = { ...config, rotation: newRotation }
     setConfig(newConfig)
-  
+
     if (mode === 'edit') {
       await syncChairsWithLayout(siteId, newConfig)
       const updatedSite = await getSite(siteId)
       setSite(updatedSite!)
     }
   }
-  
 
   return (
     <div className="mt-4 flex flex-col gap-3">
@@ -119,18 +100,19 @@ export default function ParcelFormView({
         </Button>
       </div>
 
-      {mode === 'create' ? (
-        <div className="flex gap-2 mt-2">
-          <Button variant="contained" onClick={() => onPlace(previewItems)}>Place Parcel</Button>
-          <Button variant="outlined" color="error" onClick={onCancel}>Cancel</Button>
-        </div>
-      ) : (
+      {mode === 'edit' && (
         <div className="flex flex-wrap gap-2 mt-2">
           <Button variant="outlined" onClick={() => rotateAndSync(5)}>Rotate +5°</Button>
           <Button variant="outlined" onClick={() => rotateAndSync(-5)}>Rotate -5°</Button>
           <Button variant="contained" onClick={handleApplyChanges}>Apply Changes</Button>
           <Button variant="outlined" color="error" onClick={() => {
-            if (editGroup) onDeleteParcel(editGroup)
+            if (editGroup) {
+              deleteItemsByGroup(siteId, editGroup).then(async () => {
+                const updatedSite = await getSite(siteId)
+                setSite(updatedSite!)
+                onDeleteParcel(editGroup)
+              })
+            }
           }}>Delete Parcel</Button>
         </div>
       )}

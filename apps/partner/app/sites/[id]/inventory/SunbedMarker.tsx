@@ -128,7 +128,6 @@ export default function SunbedMarker({
     }
   }, [map, position, zoom, onClick, onDragEnd])
 
-  console.log('Marker position:', number, position, initialPosition)
   return (
     <AdvancedMarker position={(position || initialPosition)} style={{ pointerEvents: 'none' }}>
       <svg
