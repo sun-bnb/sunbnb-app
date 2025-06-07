@@ -70,7 +70,8 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig) 
 
   // 4. Assign pairIds based on tempId → number → id
   for (const item of generated) {
-    if (!item.pairTempId) continue
+    if (!item.pairTempId || item.isPrimary) continue
+
     const itemId = numberToId.get(item.number)
     const pairNumber = tempToNumber.get(item.pairTempId)
     const pairId = pairNumber ? numberToId.get(pairNumber) : undefined

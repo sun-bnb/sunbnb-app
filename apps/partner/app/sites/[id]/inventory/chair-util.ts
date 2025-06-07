@@ -19,6 +19,7 @@ export interface ChairDefinition {
   rotation: number
   group: number
   number: number
+  isPrimary?: boolean
 }
 
 export function generateChairs(config: ChairConfig): ChairDefinition[] {
@@ -66,6 +67,7 @@ export function generateChairs(config: ChairConfig): ChairDefinition[] {
         rotation,
         group,
         number: Number(`${group}${rowNum}${seatNum1}`),
+        isPrimary: true, // ← primary of the pair
       }
 
       items.push(seatA)
@@ -83,6 +85,7 @@ export function generateChairs(config: ChairConfig): ChairDefinition[] {
           rotation,
           group,
           number: Number(`${group}${rowNum}${seatNum2}`),
+          isPrimary: false,
         }
 
         items.push(seatB)
@@ -95,4 +98,3 @@ export function generateChairs(config: ChairConfig): ChairDefinition[] {
 
   return items
 }
-
