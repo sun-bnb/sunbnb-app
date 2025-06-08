@@ -101,15 +101,19 @@ export default function SunbedMarker({
 
     const handlePointerUp = (e: PointerEvent) => {
       if (!isDraggingRef.current) return
-
+    
       isDraggingRef.current = false
       el.releasePointerCapture(e.pointerId)
       map.setOptions({ draggable: true })
-
-      onDragEnd({
-        latLng: new google.maps.LatLng((position || initialPosition).lat, (position || initialPosition).lng),
-      } as google.maps.MapMouseEvent)
+    
+      if (wasDraggedRef.current) {
+        // Only call onDragEnd if it was actually dragged
+        onDragEnd({
+          latLng: new google.maps.LatLng((position || initialPosition).lat, (position || initialPosition).lng),
+        } as google.maps.MapMouseEvent)
+      }
     }
+    
 
     const handleClick = () => {
       if (!wasDraggedRef.current) onClick()

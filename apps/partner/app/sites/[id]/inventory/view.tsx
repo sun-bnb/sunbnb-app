@@ -127,8 +127,10 @@ export default function InventoryView() {
   }
 
   const handleMarkerDragEnd = (item: InventoryItem, e: any) => {
+    
     const lat = e.latLng?.lat()
     const lng = e.latLng?.lng()
+    console.log('Marker drag ended for item:', lat, lng)
     if (lat && lng) {
       saveInventoryItemLocation(item.id, {
         locationLat: lat.toString(),

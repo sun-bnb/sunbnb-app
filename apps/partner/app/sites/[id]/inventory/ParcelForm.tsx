@@ -82,8 +82,8 @@ export default function ParcelFormView({
   return (
     <div className="mt-4 flex flex-col gap-3">
       <div className="flex gap-2">
-        <TextField label="Rows" type="number" value={config.rows} disabled={mode === 'edit'} onChange={(e) => handleConfigChange('rows', Number(e.target.value))} />
-        <TextField label="Seats per Row" type="number" value={config.seatsPerRow} disabled={mode === 'edit'} onChange={(e) => handleConfigChange('seatsPerRow', Number(e.target.value))} />
+        <TextField label="Rows" type="number" value={config.rows} onChange={(e) => handleConfigChange('rows', Number(e.target.value))} />
+        <TextField label="Seats per Row" type="number" value={config.seatsPerRow} onChange={(e) => handleConfigChange('seatsPerRow', Number(e.target.value))} />
         <TextField label="Group (Parcel #)" type="number" value={config.group} disabled={mode === 'edit'} onChange={(e) => handleConfigChange('group', Number(e.target.value))} />
       </div>
 
