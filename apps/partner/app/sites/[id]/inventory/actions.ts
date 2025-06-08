@@ -6,71 +6,87 @@ import prisma from '@repo/data/PrismaCient'
 
 import { generateChairs, ChairConfig } from './chair-util'
 
-export async function syncChairsWithLayout(siteId: string, config: ChairConfig) {
+type Mode = 'create' | 'rearrange'
+
+export async function syncChairsWithLayout(siteId: string, config: ChairConfig, mode: Mode) {
   const session = await auth()
   const generated = generateChairs(config)
+  const group = config.group
 
-  // Fetch existing items in the group
-  const existing = await prisma.inventoryItem.findMany({
-    where: { siteId, group: config.group },
-    select: { id: true, number: true },
-  })
+  if (mode === 'create') {
+    // Create all chairs
+    await Promise.all(
+      generated.map((item) =>
+        prisma.inventoryItem.create({
+          data: {
+            userId: session?.user?.id,
+            siteId,
+            status: 'available',
+            locationLat: item.locationLat,
+            locationLng: item.locationLng,
+            rotation: item.rotation,
+            number: item.number,
+            group: item.group,
+            pairId: null,
+          },
+        })
+      )
+    )
+  }
 
-  const existingMap = new Map(existing.map((e) => [e.number, e.id]))
+  if (mode === 'rearrange') {
+    const existing = await prisma.inventoryItem.findMany({
+      where: { siteId, group },
+      select: { id: true, number: true },
+    })
 
-  // Separate updates and creations
-  const updates = generated.filter((g) => existingMap.has(g.number))
-  const creations = generated.filter((g) => !existingMap.has(g.number))
+    const numberToId = new Map(existing.map((e) => [e.number, e.id]))
 
-  // 1. Update existing items
-  await Promise.all(
-    updates.map((item) =>
-      prisma.inventoryItem.update({
-        where: { id: existingMap.get(item.number)! },
-        data: {
-          locationLat: item.locationLat,
-          locationLng: item.locationLng,
-          rotation: item.rotation,
-          group: item.group,
-          number: item.number,
-          pairId: null, // clear for now
-        },
+    // Update existing chairs in new layout
+    await Promise.all(
+      generated.map((item) => {
+        const id = numberToId.get(item.number)
+        if (!id) return Promise.resolve()
+
+        return prisma.inventoryItem.update({
+          where: { id },
+          data: {
+            locationLat: item.locationLat,
+            locationLng: item.locationLng,
+            rotation: item.rotation,
+            number: item.number,
+            group: item.group,
+            pairId: null, // will be updated below
+          },
+        })
       })
     )
-  )
+  }
 
-  // 2. Create new items with null pairId
-  const createdItems = await Promise.all(
-    creations.map((item) =>
-      prisma.inventoryItem.create({
-        data: {
-          userId: session?.user?.id,
-          siteId,
-          status: 'available',
-          locationLat: item.locationLat,
-          locationLng: item.locationLng,
-          rotation: item.rotation,
-          number: item.number,
-          group: item.group,
-          pairId: null,
-        },
-      })
-    )
-  )
+  await assignChairPairings({ generated, group, siteId })
 
-  // 3. Load full updated group (with ids)
+}
+
+
+async function assignChairPairings({
+  generated,
+  group,
+  siteId,
+}: {
+  generated: ReturnType<typeof generateChairs>
+  group: number
+  siteId: string
+}) {
   const allItems = await prisma.inventoryItem.findMany({
-    where: { siteId, group: config.group },
+    where: { siteId, group },
     select: { id: true, number: true },
   })
 
-  // Map number to DB id
   const numberToId = new Map(allItems.map((i) => [i.number, i.id]))
   const tempToNumber = new Map(generated.map((i) => [i.tempId, i.number]))
 
-  // 4. Assign pairIds based on tempId → number → id
   for (const item of generated) {
-    if (!item.pairTempId || item.isPrimary) continue
+    if (!item.pairTempId || !item.isPrimary) continue
 
     const itemId = numberToId.get(item.number)
     const pairNumber = tempToNumber.get(item.pairTempId)
@@ -83,6 +99,4 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig) 
       })
     }
   }
-
-  revalidatePath(`/sites/${siteId}/inventory`)
 }

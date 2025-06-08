@@ -50,7 +50,7 @@ export default function ParcelFormView({
     if (mode === 'edit' && moveTrigger) {
       const latestConfig = configRef.current
       console.log('Syncing chairs with layout due to move trigger:', latestConfig)
-      syncChairsWithLayout(siteId, latestConfig).then(async () => {
+      syncChairsWithLayout(siteId, latestConfig, 'rearrange').then(async () => {
         const updatedSite = await getSite(siteId)
         if (updatedSite) setSite(updatedSite)
       })
@@ -62,7 +62,7 @@ export default function ParcelFormView({
   }
 
   const handleApplyChanges = async () => {
-    await syncChairsWithLayout(siteId, config)
+    await syncChairsWithLayout(siteId, config, 'rearrange')
     const updatedSite = await getSite(siteId)
     setSite(updatedSite!)
   }
@@ -73,7 +73,7 @@ export default function ParcelFormView({
     setConfig(newConfig)
 
     if (mode === 'edit') {
-      await syncChairsWithLayout(siteId, newConfig)
+      await syncChairsWithLayout(siteId, newConfig, 'rearrange')
       const updatedSite = await getSite(siteId)
       setSite(updatedSite!)
     }

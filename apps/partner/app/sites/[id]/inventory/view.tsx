@@ -71,7 +71,7 @@ export default function InventoryView() {
       }
       setParcelLatLng({ lat, lng })
       setParcelConfig(newConfig)
-      syncChairsWithLayout(siteId, newConfig).then(async () => {
+      syncChairsWithLayout(siteId, newConfig, 'create').then(async () => {
         const updatedSite = await getSite(siteId)
         if (updatedSite) setSite(updatedSite)
         setEditorMode('none')

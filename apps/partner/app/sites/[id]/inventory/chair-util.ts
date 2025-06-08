@@ -67,7 +67,7 @@ export function generateChairs(config: ChairConfig): ChairDefinition[] {
         rotation,
         group,
         number: Number(`${group}${rowNum}${seatNum1}`),
-        isPrimary: true, // ← primary of the pair
+        isPrimary: true,
       }
 
       items.push(seatA)
