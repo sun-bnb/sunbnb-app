@@ -5,7 +5,9 @@ import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 import { InventoryItem } from '@/types/shared'
 import { deleteInventoryItem, saveInventoryItemProperties } from '../actions'
+import QRPrintButton from './qr-print-button'
 import { useSharedMap } from './SharedMapContext'
+import { useSite } from '@/app/sites/site-context'
 
 interface InventoryFormProps {
   selectedItem: InventoryItem
@@ -24,6 +26,7 @@ export default function InventoryForm({
 }: InventoryFormProps) {
 
   const { setValue, values } = useSharedMap()
+  const { site } = useSite()
   
   const [selectedItemNumber, setSelectedItemNumber] = useState('')
   const [selectedItemGroup, setSelectedItemGroup] = useState('')
@@ -156,9 +159,7 @@ export default function InventoryForm({
         <Button variant="outlined" color="error" onClick={handleDelete}>
           Delete
         </Button>
-        <Button variant="outlined" onClick={handlePrint}>
-          QR Code
-        </Button>
+        <QRPrintButton siteId={site.id!} label="QR Code" items={[selectedItem]}/>
         <Button variant="outlined" onClick={onPair}>
           PAIR
         </Button>

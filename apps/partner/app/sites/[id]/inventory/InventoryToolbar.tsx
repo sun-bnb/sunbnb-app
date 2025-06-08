@@ -3,6 +3,8 @@
 import React from 'react'
 import Button from '@mui/material/Button'
 import CloseIcon from '@mui/icons-material/Close'
+import QRPrintButton from './qr-print-button'
+import { useSite } from '@/app/sites/site-context'
 
 interface InventoryToolbarProps {
   creating: boolean
@@ -28,7 +30,10 @@ export default function InventoryToolbar({
   onPrintAll,
   onToggleDeleteMode
 }: InventoryToolbarProps) {
+
   const isIdle = !creating && !selectedItemId
+
+  const { site } = useSite()
 
   return (
     <div className="flex justify-between mt-4 mb-6">
@@ -57,10 +62,7 @@ export default function InventoryToolbar({
           Cancel
         </Button>
       )}
-
-      <Button variant="outlined" onClick={onPrintAll}>
-        Print all QR Codes
-      </Button>
+      <QRPrintButton siteId={site.id!} label="Print all QR Codes" items={site.inventoryItems!}/>
     </div>
   )
 }
