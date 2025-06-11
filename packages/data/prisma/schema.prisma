@@ -130,6 +130,7 @@ model Site {
   imageHeight       Int?            @map("image_height")
 
   description       String?
+  status            String          @default("active")
 
   services          String[]        @default([])
 

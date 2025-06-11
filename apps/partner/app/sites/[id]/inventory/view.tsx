@@ -99,12 +99,6 @@ export default function InventoryView() {
       return
     }
 
-    if (selectedItem) {
-      saveInventoryItemLocation(selectedItem.id, {
-        locationLat: lat.toString(),
-        locationLng: lng.toString(),
-      })
-    }
   }
 
   const handleMarkerClick = (item: InventoryItem) => {

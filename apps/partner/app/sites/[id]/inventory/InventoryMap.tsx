@@ -88,6 +88,7 @@ export default function InventoryMap({
                 pairId={item.pairId || undefined}
                 number={item.number}
                 rotation={item.rotation || 0}
+                status={item.status}
                 initialPosition={position}
                 zoom={zoom}
                 dynamicSize={dynamicSize}

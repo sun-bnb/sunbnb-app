@@ -12,6 +12,9 @@ async function getSite(id: string, userId: string) {
     include: {
       workingHours: true,
       inventoryItems: {
+        where: {
+          status: 'active'
+        },
         include: {
           reservations: {
             where: {

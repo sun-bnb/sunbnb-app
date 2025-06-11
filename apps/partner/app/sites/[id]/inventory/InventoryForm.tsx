@@ -152,25 +152,49 @@ export default function InventoryForm({
           sx={{ mr: 1 }}
         />
       </div>
-      <div className="flex items-center gap-2">
-        <Button variant="contained" onClick={handleSave}>
-          Save
-        </Button>
-        <Button variant="outlined" color="error" onClick={handleDelete}>
-          Delete
-        </Button>
-        <QRPrintButton siteId={site.id!} label="QR Code" items={[selectedItem]}/>
-        <Button variant="outlined" onClick={onPair}>
-          PAIR
-        </Button>
-        <Button variant="outlined" onClick={() => {
-          console.log('selectedItem.group)', selectedItem)
-          if (selectedItem?.group) {
-            onEditGroup(selectedItem.group)
-          }
-        }}>
-          Edit group
-        </Button>
+      <div className="flex justify-between">
+        <div className="flex items-center gap-2">
+          <Button variant="contained" onClick={handleSave}>
+            Save
+          </Button>
+          <Button variant="outlined" color="error" onClick={handleDelete}>
+            Delete
+          </Button>
+          <Button variant="outlined" onClick={() => {
+            if (selectedItem.status === 'disabled') {
+              saveInventoryItemProperties(selectedItem.id, { status: 'active' })
+                .then((result) => {
+                  if (result.status === 'ok') {
+                    selectedItem.status = 'active'
+                  }
+                })
+            } else {
+              saveInventoryItemProperties(selectedItem.id, { status: 'disabled' }).then((result) => {
+                if (result.status === 'ok') {
+                  selectedItem.status = 'disabled'
+                }
+              })
+            }
+          }}>
+            { selectedItem.status === 'disabled' ? 'Enable' : 'Disable' }
+          </Button>
+          <QRPrintButton siteId={site.id!} label="QR Code" items={[selectedItem]}/>
+          <Button variant="outlined" onClick={onPair}>
+            PAIR
+          </Button>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <Button variant="outlined" onClick={() => {
+            console.log('selectedItem.group)', selectedItem)
+            if (selectedItem?.group) {
+              onEditGroup(selectedItem.group)
+            }
+          }}>
+            Edit group
+          </Button>
+        </div>
+        
       </div>
     </div>
   )

@@ -30,6 +30,7 @@ import {
   addWorkingHours,
   deleteWorkingHours,
   deleteSite,
+  setSiteStatus
 } from '../actions'
 
 const WEEK_DAYS = [
@@ -194,6 +195,17 @@ export default function GeneralView() {
       <Box className="space-y-2 pb-6">
         <Button type="submit" variant="contained" fullWidth>
           Save
+        </Button>
+        <Button variant="outlined" fullWidth
+          onClick={async () => {
+            await setSiteStatus(site.id!, site.status === 'active' ? 'hidden' : 'active')
+              .then((result) => {{
+                if (result.status === 'ok') {
+                  site.status = site.status === 'active' ? 'hidden' : 'active'
+                }
+              }})
+          }}>
+          { site.status === 'active' ? 'Hide Site' : 'Activate Site' }
         </Button>
         <Button
           variant="outlined"

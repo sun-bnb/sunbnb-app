@@ -16,6 +16,9 @@ export async function GET(request: NextRequest, { params } : { params: { id: str
     include: {
       workingHours: true,
       inventoryItems: {
+        where: {
+          status: 'active'
+        },
         include: {
           reservations: {
             orderBy: { from: 'desc' }

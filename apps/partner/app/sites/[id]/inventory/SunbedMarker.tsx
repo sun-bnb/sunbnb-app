@@ -9,6 +9,7 @@ interface SunbedMarkerProps {
   pairId?: string
   number: number
   rotation: number
+  status: string
   initialPosition: {
     lat: number
     lng: number
@@ -26,6 +27,7 @@ export default function SunbedMarker({
   pairId,
   number,
   rotation,
+  status,
   initialPosition,
   zoom,
   dynamicSize,
@@ -108,6 +110,7 @@ export default function SunbedMarker({
     
       if (wasDraggedRef.current) {
         // Only call onDragEnd if it was actually dragged
+        console.log('SunbedMarker dragged to:', position || initialPosition)
         onDragEnd({
           latLng: new google.maps.LatLng((position || initialPosition).lat, (position || initialPosition).lng),
         } as google.maps.MapMouseEvent)
@@ -176,6 +179,19 @@ export default function SunbedMarker({
               </text>
             </g>
           )}
+          {
+            status === 'disabled' &&  
+              <line
+                  x1={0}
+                  y1={0}
+                  x2={width}
+                  y2={height}          // ↘ top-left → bottom-right
+                  stroke="red"
+                  strokeWidth={Math.max(2, width * 0.05)} // thickness scales with size
+                  strokeLinecap="round"
+                  style={{ pointerEvents: 'none' }}
+                />
+          }
 
         </g>
       </svg>

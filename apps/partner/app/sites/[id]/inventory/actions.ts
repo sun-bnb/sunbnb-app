@@ -21,7 +21,7 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
           data: {
             userId: session?.user?.id,
             siteId,
-            status: 'available',
+            status: 'active',
             locationLat: item.locationLat,
             locationLng: item.locationLng,
             rotation: item.rotation,

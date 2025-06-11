@@ -12,6 +12,7 @@ export interface SiteProps {
   imageHeight?: number | null
   description?: string | null
   price?: number | null
+  status?: string | null
   services: string[]
 }
 

@@ -84,7 +84,7 @@ export async function searchSites(lat?: string, lng?: string) {
   : Prisma.sql``;
   */
 
-  const whereClause = Prisma.sql``
+  const whereClause = Prisma.sql`WHERE status = 'active'`;
 
   const orderByClause = lat && lng
   ? Prisma.sql`ORDER BY dist_km`

@@ -52,7 +52,7 @@ function getAvailabilityData(
 export async function getAvailability(siteId: string, from: Date, to: Date) {
   // Find all items for this site
   const items = await prisma.inventoryItem.findMany({
-    where: { siteId },
+    where: { siteId, status: 'active' },
     select: { id: true },
   })
 

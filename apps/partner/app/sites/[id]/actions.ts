@@ -108,6 +108,26 @@ export async function deleteSite(
   
 }
 
+export async function setSiteStatus(
+  id: string, status: string
+) {
+  
+  const session = await auth()
+  console.log('UPDATE SITE STATUS', id, session)
+
+  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+
+  await prisma.site.update({
+    where: { id },
+    data: { status }
+  })
+  
+  revalidatePath('/sites')
+  
+  return { status: 'ok' }
+  
+}
+
 export async function saveContent(
   previousState: { status: string, errors?: string[] },
   formData: FormData
@@ -362,6 +382,7 @@ export async function saveInventoryItemProperties(
     group?: number,
     label?: string,
     pairId?: string
+    status?: string
   }
 ) {
   
@@ -376,7 +397,8 @@ export async function saveInventoryItemProperties(
     rotation: inventoryItem.rotation,
     number: inventoryItem.number,
     group: inventoryItem.group,
-    label: inventoryItem.label
+    label: inventoryItem.label,
+    status: inventoryItem.status
   }
 
   const pairItem = inventoryItem.pairId ? await prisma.inventoryItem.findUnique({
@@ -392,7 +414,7 @@ export async function saveInventoryItemProperties(
     }
   })
   
-  revalidatePath('/sites')
+  revalidatePath(`/sites`);
 
   return { status: 'ok' }
   
