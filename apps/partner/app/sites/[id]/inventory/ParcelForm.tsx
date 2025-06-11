@@ -57,7 +57,7 @@ export default function ParcelFormView({
     }
   }, [moveTrigger])
 
-  const handleConfigChange = (field: keyof ChairConfig, value: number | boolean) => {
+  const handleConfigChange = (field: keyof ChairConfig, value: number | boolean | string) => {
     setConfig((prev) => ({ ...prev, [field]: value }))
   }
 
@@ -91,6 +91,11 @@ export default function ParcelFormView({
         <TextField label="Horizontal Gap (m)" type="number" value={config.horizontalGap} onChange={(e) => handleConfigChange('horizontalGap', Number(e.target.value))} />
         <TextField label="Vertical Gap (m)" type="number" value={config.verticalGap} onChange={(e) => handleConfigChange('verticalGap', Number(e.target.value))} />
         <TextField label="Rotation (deg)" type="number" value={config.rotation} onChange={(e) => handleConfigChange('rotation', Number(e.target.value))} />
+      </div>
+
+      <div className="flex gap-2">
+        <TextField label="Category" type="string" value={config.category} onChange={(e) => handleConfigChange('category', String(e.target.value))} />
+        <TextField label="Price" type="number" value={config.price} onChange={(e) => handleConfigChange('price', Number(e.target.value))} />
       </div>
 
       <div className="flex gap-2">

@@ -27,6 +27,8 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
             rotation: item.rotation,
             number: item.number,
             group: item.group,
+            category: config.category,
+            price: config.price,
             pairId: null,
           },
         })
@@ -56,6 +58,8 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
             rotation: item.rotation,
             number: item.number,
             group: item.group,
+            category: config.category,
+            price: config.price,
             pairId: null, // will be updated below
           },
         })

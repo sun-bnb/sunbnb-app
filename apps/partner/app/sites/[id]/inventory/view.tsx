@@ -38,12 +38,14 @@ export default function InventoryView() {
   const [parcelConfig, setParcelConfig] = useState<ChairConfig>({
     rows: 2,
     seatsPerRow: 4,
-    horizontalGap: 0.4,
+    horizontalGap: 0.2,
     verticalGap: 4.5,
     rotation: 0,
     group: 1,
+    category: 'PRICE1',
+    price: 9,
     pairSeats: true,
-    intraPairGap: 1.6,
+    intraPairGap: 1.2,
     baseLat: Number(siteLat),
     baseLng: Number(siteLng),
   })

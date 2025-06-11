@@ -9,6 +9,8 @@ export interface ChairConfig {
   verticalGap: number
   intraPairGap: number
   pairSeats: boolean
+  category: string
+  price: number
 }
 
 export interface ChairDefinition {

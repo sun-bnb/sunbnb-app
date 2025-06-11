@@ -46,7 +46,7 @@ const getPairedItem = (item: InventoryItem): { id: string; } | null | undefined 
  *      size = physicalLength / resolution
  */
 function getScaledSize(zoom: number): number {
-  const physicalLength = 2.6; // in meters; adjust if needed for your actual sunbed size
+  const physicalLength = 3.5; // in meters; adjust if needed for your actual sunbed size
   const metersPerPixel = 156543.03392 / Math.pow(2, zoom);
   return physicalLength / metersPerPixel;
 }
@@ -97,20 +97,23 @@ const SiteSunbedMarker: React.FC<SiteSunbedMarkerProps> = ({
   // Assume that if the item has a pairedBy field, it is the primary in the pair.
   const isPrimary = Boolean(item.pairedBy);
 
+  const dynamicHeight = dynamicSize * (zoom > 20 ? 1 : 1.1)
+  const dynamicWidth = dynamicSize / (zoom > 20 ? 2.1 : 1.9)
+
   // Compute the shade style for a single bed or primary in a pair.
   let shadeStyle: React.CSSProperties = {};
   if (isPaired) {
     // For paired beds, only the primary gets the shade (upper, centered).
     shadeStyle = {
       position: 'absolute',
-      left: `${(dynamicSize / 4)}px`,
+      left: `-${dynamicWidth}px`,
       top: '0px'
     };
   } else {
     // For single beds, position the shade on the left-center.
     shadeStyle = {
       position: 'absolute',
-      left: `${(dynamicSize / 4)}px`,
+      left: `-${dynamicWidth}px`,
       top: '0px'
     };
   }
@@ -121,9 +124,8 @@ const SiteSunbedMarker: React.FC<SiteSunbedMarkerProps> = ({
     <div className="relative block"
         style={{
           maxWidth: 'none',
-          height: `${dynamicSize * (zoom > 20 ? 1 : 1.1)}px`,
-          width: `${dynamicSize / (zoom > 20 ? 2.1 : 1.9)}px`,
-          marginLeft: '10px',
+          height: `${dynamicHeight}px`,
+          width: `${dynamicWidth}px`,
           border: `1px solid black`,
           ...(item.rotation
             ? { transform: `rotate(${item.rotation}deg)`, transformOrigin: 'center' }
@@ -135,7 +137,6 @@ const SiteSunbedMarker: React.FC<SiteSunbedMarkerProps> = ({
             height: '100%',
             width: '100%',
             backgroundColor: backgroundColor,
-            
             zIndex: 1
           }}
         >
@@ -159,8 +160,8 @@ const SiteSunbedMarker: React.FC<SiteSunbedMarkerProps> = ({
               alt="Sunshade" 
               height={dynamicSize} 
               style={{
-                marginTop: `-${(dynamicSize - shadeDiameter) / 2}px`,
-                marginLeft: `-${(dynamicSize - shadeDiameter) / 2}px`
+                marginTop: `-${(dynamicHeight - shadeDiameter) / 2}px`,
+                marginLeft: `-${(0)}px`
               }} />
           </div>
         )}
@@ -304,6 +305,8 @@ export default function SunbedSelection({
         return { number: Number(parcelNumber), shape: shapeCoords }
     }))
 
+    console.log('Parcel shapes', parcelShapes)
+
   }, [availabilityResponse])
 
   // Calculate map bounds based on inventory item positions.
@@ -369,6 +372,8 @@ export default function SunbedSelection({
     )
   })
 
+  console.log('PARCEL SJAPES', parcelShapes)
+
   // Helper: Compute the centroid of an array of lat/lng points.
   function getCentroid(points: google.maps.LatLngLiteral[]): google.maps.LatLngLiteral {
     let latSum = 0,
@@ -386,8 +391,6 @@ export default function SunbedSelection({
     return parcelItems.filter(item => isAvailable(item)).length;
   }
 
-  console.log('bounds', defaultBounds, 'zoom', zoom, inventoryItems)
-  
   return (
     <>
       <APIProvider apiKey={apiKey}>
@@ -403,13 +406,16 @@ export default function SunbedSelection({
           disableDefaultUI={true}
           onZoomChanged={mapInstance => {
             const newZoom = mapInstance.map.getZoom()
+            console.log('Zoom changed', newZoom)
             setZoom(newZoom || 20)
           }}
           onIdle={mapInstance => {
             const newZoom = mapInstance.map.getZoom()
+            console.log('Zoom set', newZoom)
             setZoom(newZoom || 20)
           }}
           onClick={e => {
+            console.log('Map click', e)
           }}
         >
           {

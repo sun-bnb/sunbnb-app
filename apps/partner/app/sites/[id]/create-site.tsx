@@ -33,7 +33,7 @@ export default function CreateSite({ site, apiKey }: { site: SiteProps, apiKey: 
 
   useEffect(() => {
     if (formState.status === 'ok' && formState.siteId) {
-      router.push(`/sites/${formState.siteId}`)
+      router.push(`/sites/${formState.siteId}/general`)
     }
   }, [formState])
 
