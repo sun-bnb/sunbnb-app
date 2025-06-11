@@ -43,17 +43,13 @@ export default function SunbedItem({
   userId: string
 }) {
   const reservedByAnyone = isReservedToday(item)
-  const reservedByMe = isReservedTodayByUser(item, userId)
-
+  const reservedByMe     = isReservedTodayByUser(item, userId)
   const [isPending, startTransition] = useTransition()
 
   const handleToggle = () => {
     startTransition(async () => {
-      if (reservedByMe) {
-        await unreserveItem(siteId, item.id)
-      } else {
-        await reserveItem(siteId, item.id)
-      }
+      if (reservedByMe) await unreserveItem(siteId, item.id)
+      else              await reserveItem(siteId, item.id)
     })
   }
 
@@ -62,15 +58,24 @@ export default function SunbedItem({
     bgColor = reservedByMe ? 'bg-red-200' : 'bg-gray-200'
   }
 
+  // Render an empty spacer if item is disabled
+  if (item.status === 'disabled') {
+    return <div className="basis-0 flex-1 p-2" />
+  }
+
   return (
-    item.status === 'disabled' ?
-    <div className="flex items-center justify-center basis-0 flex-1 p-4"></div> :
     <button
       disabled={(!reservedByMe && reservedByAnyone) || isPending}
       onClick={handleToggle}
-      className={`${bgColor} border rounded flex items-center justify-center basis-0 flex-1 p-4`}
+      className={`
+        ${bgColor} border rounded 
+        basis-0 flex-1 min-w-0  /* allow squeezing below content width */
+        p-4 flex items-center justify-center
+      `}
     >
-      {isPending ? 'Saving...' : item.number}
+      <div style={{
+        transform: 'rotate(-90deg)',
+      }}>{isPending ? '...' : item.number}</div>
     </button>
   )
 }

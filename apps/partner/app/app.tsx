@@ -28,7 +28,7 @@ const App = ({ children }: {
         <div>
           { !(pathname.includes('/manage') || pathname.includes('/orders')) && <Header /> }
           <div className="flex">
-            <div className="flex-grow lg:p-6">
+            <div className="flex-grow">
               {children}
             </div>
           </div>

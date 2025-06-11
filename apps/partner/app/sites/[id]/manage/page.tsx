@@ -41,7 +41,7 @@ export default async function Site({ params }: { params: { id: string } }) {
   
 
   return (
-    <div className="w-screen max-w-[768px]">
+    <div className="w-screen min-w-[768px]">
       <ManagementView site={site} userId={session.user.id} apiKey={apiKey} />
     </div>
   )
