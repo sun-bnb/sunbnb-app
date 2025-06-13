@@ -17,7 +17,8 @@ import Reservations from './reservations'
 import ParcelForm from './ParcelForm'
 import { MapMouseEvent } from '@vis.gl/react-google-maps'
 import { ChairConfig } from './chair-util'
-import { syncChairsWithLayout } from './actions'
+import { syncChairsWithLayout, getItemGroup } from './actions'
+import { it } from 'node:test'
 
 export default function InventoryView() {
   const { site, setSite, apiKey } = useSite()
@@ -38,14 +39,14 @@ export default function InventoryView() {
   const [parcelConfig, setParcelConfig] = useState<ChairConfig>({
     rows: 2,
     seatsPerRow: 4,
-    horizontalGap: 0.2,
+    horizontalGap: 1.2,
     verticalGap: 4.5,
     rotation: 0,
     group: 1,
     category: 'PRICE1',
     price: 9,
     pairSeats: true,
-    intraPairGap: 1.2,
+    intraPairGap: 1,
     baseLat: Number(siteLat),
     baseLng: Number(siteLng),
   })
@@ -193,7 +194,37 @@ export default function InventoryView() {
             })
           }}
           onPair={() => setPairingMode(true)}
-          onEditGroup={(groupNumber: number) => {
+          onEditGroup={async (item: InventoryItem) => {
+
+            console.log('Edit group for item:', item)
+            if (item.itemGroupId) {
+              const itemGroup = await getItemGroup(item.itemGroupId)
+              console.log('Group', itemGroup)
+              if (itemGroup) {
+                const existingConfig: ChairConfig = {
+                  rows: itemGroup.rows,
+                  seatsPerRow: itemGroup.seatsPerRow,
+                  horizontalGap: itemGroup.horizontalGap,
+                  verticalGap: itemGroup.verticalGap,
+                  rotation: itemGroup.rotation,
+                  group: itemGroup.number,
+                  category: itemGroup.category || undefined,
+                  price: itemGroup.price || undefined,
+                  pairSeats: true,
+                  intraPairGap: itemGroup.pairGap,
+                  baseLat: parseFloat(itemGroup.locationLat),
+                  baseLng: parseFloat(itemGroup.locationLng)
+                }
+                setParcelConfig(existingConfig)
+                setParcelLatLng({ lat: parseFloat(itemGroup.locationLat), lng: parseFloat(itemGroup.locationLng) })
+                setEditGroup(itemGroup.number)
+                setEditorMode('edit-parcel')
+                setSelectedItemId(null)
+                return
+              }
+            }
+
+            let groupNumber = item.group || 1
             const groupItems = inventory.filter(i => i.group === groupNumber)
             const avgLat = groupItems.reduce((sum, i) => sum + parseFloat(i.locationLat!), 0) / groupItems.length
             const avgLng = groupItems.reduce((sum, i) => sum + parseFloat(i.locationLng!), 0) / groupItems.length
@@ -220,11 +251,20 @@ export default function InventoryView() {
             Place item on the map:
           </div>
         )}
-        {editorMode === 'create-chair' && (
-          <div className="w-full bg-green-200 p-2 text-gray-800 font-bold">
-            Click on the map to place the new item
-          </div>
-        )}
+        {
+          editorMode === 'create-chair' && (
+            <div className="w-full bg-green-200 p-2 text-gray-800 font-bold">
+              Click on the map to place the new item
+            </div>
+          )
+        }
+        {
+          editorMode === 'create-parcel' && (
+            <div className="w-full bg-green-200 p-2 text-gray-800 font-bold">
+              Click on the map to place the new parcel
+            </div>
+          )
+        }
         <InventoryMap
           siteLat={siteLat}
           siteLng={siteLng}

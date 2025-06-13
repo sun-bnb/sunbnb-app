@@ -171,6 +171,8 @@ model InventoryItem {               @map("inventory_item")
 
   userId            String          @map("user_id")
   siteId            String          @map("site_id")
+  itemGroupId       String?         @map("item_group_id")
+
   group             Int             @default(0)
   number            Int
   locationLat       String          @map("location_lat")
@@ -197,6 +199,32 @@ model InventoryItem {               @map("inventory_item")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  itemGroup ItemGroup? @relation(fields: [itemGroupId], references: [id])
+ 
+}
+
+model ItemGroup {                   @map("item_group")
+
+  id                String          @unique @id @default(cuid())
+
+  number            Int             
+  label             String?         
+  rows              Int             
+  seatsPerRow       Int             @map("seats_per_row")
+  locationLat       String          @map("location_lat")
+  locationLng       String          @map("location_lng")
+  status            String          @default("active")
+  rotation          Int             @default(0)
+  horizontalGap     Float           @map("horizontal_gap")
+  verticalGap       Float           @map("vertical_gap")
+  pairGap           Float           @map("pair_gap")
+  category          String?
+  price             Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items             InventoryItem[]
  
 }
 

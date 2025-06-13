@@ -14,7 +14,7 @@ interface InventoryFormProps {
   onSave: () => void
   onDelete: () => void
   onPair: () => void
-  onEditGroup: (group: number) => void
+  onEditGroup: (item: InventoryItem) => void
 }
 
 export default function InventoryForm({
@@ -187,8 +187,8 @@ export default function InventoryForm({
         <div className="flex items-center gap-2">
           <Button variant="outlined" onClick={() => {
             console.log('selectedItem.group)', selectedItem)
-            if (selectedItem?.group) {
-              onEditGroup(selectedItem.group)
+            if (selectedItem) {
+              onEditGroup(selectedItem)
             }
           }}>
             Edit group

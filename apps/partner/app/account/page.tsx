@@ -20,6 +20,7 @@ export default async function Account() {
       email: user.email,
       phoneNumber: '',
       company: '',
+      businessId: '',
       websiteUrl: '',
       address: '',
       bankAccount: ''

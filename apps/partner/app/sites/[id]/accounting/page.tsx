@@ -1,11 +1,11 @@
 import SitePage from '@/app/sites/site-page'
-import ContentView from './view'
+import AccountingView from './view'
 
-export default async function ContentPage({ params }: { params: { id: string } }) {
+export default async function AccountingPage({ params }: { params: { id: string } }) {
 
   return (
-    <SitePage params={params} tab="content">
-      <ContentView />
+    <SitePage params={params} tab="accounting">
+      <AccountingView />
     </SitePage>
   )
 

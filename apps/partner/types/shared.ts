@@ -47,6 +47,7 @@ export interface InventoryItem {
   id: string
   number: number
   group: number
+  itemGroupId?: string | null
   status: string
   category?: string | null
   price?: number | null

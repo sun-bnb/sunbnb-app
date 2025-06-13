@@ -9,8 +9,8 @@ export interface ChairConfig {
   verticalGap: number
   intraPairGap: number
   pairSeats: boolean
-  category: string
-  price: number
+  category?: string
+  price?: number
 }
 
 export interface ChairDefinition {
@@ -52,9 +52,13 @@ export function generateChairs(config: ChairConfig): ChairDefinition[] {
       const seatNum1 = (c + 1).toString().padStart(2, '0')
       const seatNum2 = (c + 2).toString().padStart(2, '0')
 
-      const dx1 = c * (pairSeats ? intraPairGap + horizontalGap : horizontalGap)
-      const dy1 = r * verticalGap
+      // Calculate left-edge x offset of first chair in the current unit (chair or pair)
+      const unitIndex = pairSeats ? Math.floor(c / 2) : c
+      const dx1 = unitIndex * (pairSeats
+        ? (intraPairGap + horizontalGap) // full pair width: inner gap + gap to next pair
+        : horizontalGap)
 
+      const dy1 = r * verticalGap
       const offsetLat1 = (dy1 * Math.cos(rad) - dx1 * Math.sin(rad)) / metersPerLat
       const offsetLng1 = (dy1 * Math.sin(rad) + dx1 * Math.cos(rad)) / metersPerLng
 
@@ -75,6 +79,7 @@ export function generateChairs(config: ChairConfig): ChairDefinition[] {
       items.push(seatA)
 
       if (isPair) {
+        // Second chair in pair: intra-pair gap only (no horizontalGap)
         const dx2 = dx1 + intraPairGap
         const offsetLat2 = (dy1 * Math.cos(rad) - dx2 * Math.sin(rad)) / metersPerLat
         const offsetLng2 = (dy1 * Math.sin(rad) + dx2 * Math.cos(rad)) / metersPerLng

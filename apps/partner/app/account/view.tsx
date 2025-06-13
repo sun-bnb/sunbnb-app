@@ -13,6 +13,7 @@ export interface AccountProps {
   email: string
   phoneNumber: string
   company: string
+  businessId: string | null
   websiteUrl: string | null
   address: string 
   bankAccount: string | null
@@ -54,7 +55,7 @@ export default function AccountView({ account } : { account: AccountProps }) {
             <TextField name="email" label="E-mail" placeholder="john.doe@company.com" defaultValue={account.email || ''} />
             <TextField name="phoneNumber" label="Phone number" placeholder="123-45-678" defaultValue={account.phoneNumber || ''} />
             <TextField name="company" label="Company" placeholder="Sunbnb" defaultValue={account.company || ''} />
-            <TextField name="businessId" label="Business ID" placeholder="FI12345678" defaultValue={account.websiteUrl || ''} />
+            <TextField name="businessId" label="Business ID" placeholder="FI12345678" defaultValue={account.businessId || ''} />
           </div>
           <div className="grid gap-6 mb-6 md:grid-cols-1">
             <TextField name="websiteUrl" label="Website URL" placeholder="sunbnb.com" defaultValue={account.websiteUrl || ''} />
