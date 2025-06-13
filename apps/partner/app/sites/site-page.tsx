@@ -50,6 +50,8 @@ export default async function SitePage(
   })
   
   if (!site) return <div>Site {params.id} not found</div>
+
+  if (site.userId && site.userId !== session.user.id) return <div>Site not found</div>
   
   return (
     <div className="container mx-auto max-w-[768px]">

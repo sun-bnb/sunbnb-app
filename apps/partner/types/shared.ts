@@ -1,6 +1,7 @@
 export interface SiteProps {
   id?: string | undefined
   name?: string | undefined
+  userId?: string | undefined
   locationLat?: string | undefined
   locationLng?: string | undefined
   inventoryItems?: InventoryItem[]
