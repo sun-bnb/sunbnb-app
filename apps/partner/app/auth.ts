@@ -2,6 +2,7 @@ import NextAuth, { NextAuthResult } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
 import { PrismaAdapter } from '@auth/prisma-adapter'
 import prisma from '@repo/data/PrismaCient'
+import { SiteProps } from '@/types/shared'
 
 const nextAuthResult: NextAuthResult = NextAuth({
   adapter: PrismaAdapter(prisma),
@@ -30,6 +31,19 @@ const nextAuthResult: NextAuthResult = NextAuth({
     newUser: '/new-user'
   }
 })
+
+export async function checkSiteAuth(session: any, site: SiteProps): Promise<boolean> {
+  if (!session?.user) throw new Error('Not authenticated')
+  const sudoUsers = await prisma.user.findMany({
+    where: {
+      sudo: true
+    }
+  })
+  const sudoUserEmails = sudoUsers.map(user => user.email)
+  if (sudoUserEmails.includes(session.user.email)) return true
+  if (!(session.user.id !== site.userId)) throw new Error('Unauthorized access to site')
+  return true
+}
 
 export const handlers = nextAuthResult.handlers
 export const signIn = nextAuthResult.signIn

@@ -51,6 +51,7 @@ model User {
   password      String?
   emailVerified DateTime?
   image         String?
+  sudo          Boolean         @default(false)
   accounts      Account[]
   sessions      Session[]
   sites         Site[]

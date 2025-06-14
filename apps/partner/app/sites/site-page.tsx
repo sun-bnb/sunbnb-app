@@ -51,7 +51,19 @@ export default async function SitePage(
   
   if (!site) return <div>Site {params.id} not found</div>
 
-  if (site.userId && site.userId !== session.user.id) return <div>Site not found</div>
+  const sudoUsers = await prisma.user.findMany({
+    where: {
+      sudo: true
+    }
+  })
+  const sudoUserEmails = sudoUsers.map(user => user.email)
+  
+  if (
+    (site.userId && site.userId !== session.user.id) &&
+    !sudoUserEmails.includes(session.user.email)
+  ) {
+    return <div>Site not found</div>
+  }
   
   return (
     <div className="container mx-auto max-w-[768px]">
