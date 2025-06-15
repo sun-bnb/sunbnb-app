@@ -2,7 +2,6 @@ import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
 import { SiteProps } from '@/types/shared'
 import SiteView from './site-view'
-import { SiteProvider } from './site-context'
 
 
 export default async function SitePage(

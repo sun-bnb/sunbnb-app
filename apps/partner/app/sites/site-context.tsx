@@ -1,4 +1,5 @@
-// components/SiteContext.tsx
+'use client'
+
 import React, { createContext, useContext, useState } from 'react'
 import { SiteProps } from '@/types/shared'
 

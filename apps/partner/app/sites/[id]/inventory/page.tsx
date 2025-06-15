@@ -1,14 +1,12 @@
 import SitePage from '@/app/sites/site-page'
-import { SharedMapProvider } from './SharedMapContext'
-import InventoryView from './view'
+
+import InventoryPageView from './InventoryPage'
 
 export default async function InventoryPage({ params }: { params: { id: string } }) {
 
   return (
     <SitePage params={params} tab="inventory">
-      <SharedMapProvider>
-        <InventoryView />
-      </SharedMapProvider>
+      <InventoryPageView />
     </SitePage>
   )
 
