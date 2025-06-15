@@ -67,7 +67,7 @@ async function getServiceFee(siteId: string, userId: string): Promise<{
 
 }
 
-export default async function Site({ params, searchParams }: { params: { id: string }, searchParams: { [key: string]: string } }) {
+export default async function ReservationPage({ params, searchParams }: { params: { id: string }, searchParams: { [key: string]: string } }) {
 
   const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
   
@@ -86,7 +86,8 @@ export default async function Site({ params, searchParams }: { params: { id: str
     order = await getOrder(payment_intent)
   }
 
-  const serviceFee = await getServiceFee(reservation.site.id, reservation.site.userId)
+  const serviceFee = reservation.site.appSalesEnabled ?
+    await getServiceFee(reservation.site.id, reservation.site.userId) : undefined
 
   return <ReservationView signedIn={signedIn} serviceFee={serviceFee} reservation={reservation} apiKey={apiKey} stripePublicKey={STRIPE_PUBLIC_KEY} order={order} />
 

@@ -13,6 +13,7 @@ export interface SiteProps {
   price?: number | null
   itemCount?: number
   availableCount?: number
+  appSalesEnabled?: boolean | undefined
   services: string[]
 }
 

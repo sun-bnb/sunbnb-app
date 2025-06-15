@@ -135,6 +135,8 @@ model Site {
 
   services          String[]        @default([])
 
+  appSalesEnabled   Boolean         @map("app_sales_enabled") @default(false)
+
   inventoryItems         InventoryItem[]
   workingHours           SiteWorkingHours[]
   reservations           Reservation[]

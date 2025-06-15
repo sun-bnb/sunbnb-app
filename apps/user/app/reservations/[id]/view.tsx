@@ -85,6 +85,7 @@ export default function ReservationView({ serviceFee, signedIn, reservation, ord
     touchStartY.current = e.touches[0]!.clientY
   }
   const onTouchEnd = (e: React.TouchEvent) => {
+    if (!serviceFee) return
     const delta = e.changedTouches[0]!.clientY - touchStartY.current
     const threshold = 50
     if (delta < -threshold && page === 0) goToPage(1)
@@ -120,12 +121,16 @@ export default function ReservationView({ serviceFee, signedIn, reservation, ord
           >
             <ReservationConfirmationView reservation={reservation} />
           </div>
-          <button
-            onClick={() => goToPage(1)}
-            className="h-12 w-full bg-[#00cef1] text-[#fff5e1] font-bold text-lg"
-          >
-            FOOD AND DRINKS
-          </button>
+          {
+            serviceFee &&
+              <button
+                onClick={() => goToPage(1)}
+                className="h-12 w-full bg-[#00cef1] text-[#fff5e1] font-bold text-lg"
+              >
+                FOOD AND DRINKS
+              </button>
+          }
+          
         </div>
 
         {/* Page 1: Menu */}
