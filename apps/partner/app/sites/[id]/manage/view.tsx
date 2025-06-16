@@ -12,14 +12,10 @@ function parseSunbedNumber(num: number) {
   return { parcel, row, position }
 }
 
-export default function Management({
-  site,
-  userId,
-  apiKey,
+export default function ManageView({
+  site
 }: {
   site: SiteProps
-  userId: string
-  apiKey: string
 }) {
   const { inventoryItems = [] } = site
 
@@ -52,7 +48,6 @@ export default function Management({
                 <Item
                   key={item.id}
                   siteId={site.id!}
-                  userId={userId}
                   item={item}
                 />
               ))}

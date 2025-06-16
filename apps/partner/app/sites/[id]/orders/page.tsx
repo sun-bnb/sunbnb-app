@@ -4,7 +4,7 @@ import { SiteProps } from '@/types/shared'
 import OrdersView from './view'
 
 
-export default async function Orders({ params }: { params: { id: string } }) {
+export default async function OrdersPage({ params }: { params: { id: string } }) {
 
   const session = await auth()
   if (!session?.user) return null

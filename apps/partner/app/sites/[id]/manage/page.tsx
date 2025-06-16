@@ -4,10 +4,10 @@ import { SiteProps } from '@/types/shared'
 import ManagementView from './view'
 
 
-export default async function Site({ params, searchParams }: { params: { id: string }, searchParams: { [key: string]: string } }) {
+export default async function ManagePage({ params, searchParams }: { params: { id: string }, searchParams: { [key: string]: string } }) {
 
   const session = await auth()
-  if (!session?.user) return null
+  // if (!session?.user) return null
 
   const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
 
@@ -57,7 +57,7 @@ export default async function Site({ params, searchParams }: { params: { id: str
 
   return (
     <div className="w-screen min-w-[768px]">
-      <ManagementView site={site} userId={session.user.id} apiKey={apiKey} />
+      <ManagementView site={site} />
     </div>
   )
 

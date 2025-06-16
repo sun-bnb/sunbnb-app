@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { setOrderStatus, getOrders } from '../actions'
+import { setOrderStatus, getOrders } from './actions'
 import { Order } from '@/types/shared'
-import { get } from 'http';
 
 export default function Orders({ siteId, orders }: { siteId: string; orders: Order[] }) {
 

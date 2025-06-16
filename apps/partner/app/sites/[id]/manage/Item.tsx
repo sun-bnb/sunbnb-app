@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useTransition } from 'react'
-import { reserveItem, unreserveItem } from '../actions'
+import { reserveItem, unreserveItem } from './actions'
 import { InventoryItem, Reservation } from '@/types/shared'
 
 function isReservedToday(item: InventoryItem): boolean {
@@ -18,12 +18,11 @@ function isReservedToday(item: InventoryItem): boolean {
   )
 }
 
-function isReservedTodayByUser(item: InventoryItem, userId: string): boolean {
+function isReservedTodayByUser(item: InventoryItem): boolean {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   return (
     item.reservations?.some((res: Reservation) => {
-      if (res.user.id !== userId) return false
       const fromDate = new Date(res.from)
       const toDate = new Date(res.to)
       fromDate.setHours(0, 0, 0, 0)
@@ -35,15 +34,13 @@ function isReservedTodayByUser(item: InventoryItem, userId: string): boolean {
 
 export default function SunbedItem({
   siteId,
-  item,
-  userId,
+  item
 }: {
   siteId: string
   item: InventoryItem
-  userId: string
 }) {
   const reservedByAnyone = isReservedToday(item)
-  const reservedByMe     = isReservedTodayByUser(item, userId)
+  const reservedByMe     = isReservedTodayByUser(item)
   const [isPending, startTransition] = useTransition()
 
   const handleToggle = () => {

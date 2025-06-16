@@ -16,7 +16,6 @@ const App = ({ children }: {
   const [ content, setContent ] = useState<ReactNode | null>(null)
 
   useEffect(() => {
-    console.log(status)
     if (pathname.endsWith('/info') || pathname.endsWith('/manage') || pathname.endsWith('/orders')) {
       setContent(
         <div>
