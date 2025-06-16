@@ -464,7 +464,7 @@ export async function reserveItem(
       from: dayjs().startOf('day').toDate(),
       to: dayjs().endOf('day').toDate(),
       siteId,
-      status: 'paid',
+      status: 'paid-in-cash',
       items: {
         connect: [{ id: itemId }]
       }
@@ -493,6 +493,7 @@ export async function unreserveItem(siteId: string, itemId: string) {
   const result = await prisma.reservation.deleteMany({
     where: {
       userId: session.user.id,
+      status: 'paid-in-cash',
       items: {
         every: {
           id: itemId
@@ -508,7 +509,7 @@ export async function unreserveItem(siteId: string, itemId: string) {
     },
   });
 
-  console.log('UNRESERVE RESULT', result)
+  console.log('UNRESERVE RESULT', result.count)
   revalidatePath(`/sites/${siteId}/manage`);
 
   return { status: 'ok' };

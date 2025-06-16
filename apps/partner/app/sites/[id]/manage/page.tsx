@@ -37,9 +37,6 @@ export default async function Site({ params }: { params: { id: string } }) {
   })
   if (!site) return <div>Site {params.id} not found</div>
 
-  console.log('SITE', site)
-  
-
   return (
     <div className="w-screen min-w-[768px]">
       <ManagementView site={site} userId={session.user.id} apiKey={apiKey} />

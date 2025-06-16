@@ -65,7 +65,7 @@ export async function getAvailability(siteId: string, from: Date, to: Date) {
   const reservations = await prisma.reservation.findMany({
     where: {
       siteId,
-      status: { in: ['pending', 'processing', 'paid'] },
+      status: { in: ['pending', 'processing', 'paid', 'paid-in-cash'] },
       from: { lte: to },
       to: { gte: from },
     },
