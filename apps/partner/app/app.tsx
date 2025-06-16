@@ -17,7 +17,7 @@ const App = ({ children }: {
 
   useEffect(() => {
     console.log(status)
-    if (pathname.endsWith('/info')) {
+    if (pathname.endsWith('/info') || pathname.endsWith('/manage') || pathname.endsWith('/orders')) {
       setContent(
         <div>
           {children}

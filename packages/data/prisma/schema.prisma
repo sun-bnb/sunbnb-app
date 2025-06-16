@@ -424,3 +424,12 @@ model Authenticator {
  
   @@id([userId, credentialID])
 }
+
+model SecurityToken {
+  id                String          @unique @id @default(cuid())
+  userId            String          @map("user_id")
+  expires           DateTime
+  resources         String[]        @default([])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

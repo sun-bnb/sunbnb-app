@@ -68,6 +68,9 @@ export default function CustomizedInputBase() {
             <div className="ml-2 mr-2 font-bold">
               <Link href="/calendar">Calendar</Link>
             </div>
+            <div className="ml-2 mr-2 font-bold">
+              <Link href="/security">Security</Link>
+            </div>
           </div>
         </div>
         <div className="p-[10px]">

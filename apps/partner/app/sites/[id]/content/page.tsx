@@ -1,14 +1,11 @@
-import prisma from '@repo/data/PrismaCient'
-import { auth } from '@/app/auth'
-import { SiteProps } from '@/types/shared'
 import SitePage from '@/app/sites/site-page'
-import ContentView from './view'
+import SecurityView from './view'
 
-export default async function ContentPage({ params }: { params: { id: string } }) {
+export default async function SecurityPage({ params }: { params: { id: string } }) {
 
   return (
-    <SitePage params={params} tab="content">
-      <ContentView />
+    <SitePage params={params} tab="security">
+      <SecurityView />
     </SitePage>
   )
 

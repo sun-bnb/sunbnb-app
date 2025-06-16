@@ -4,7 +4,7 @@ import { SiteProps } from '@/types/shared'
 import ManagementView from './view'
 
 
-export default async function Site({ params }: { params: { id: string } }) {
+export default async function Site({ params, searchParams }: { params: { id: string }, searchParams: { [key: string]: string } }) {
 
   const session = await auth()
   if (!session?.user) return null
@@ -16,8 +16,26 @@ export default async function Site({ params }: { params: { id: string } }) {
     services: []
   }
 
-  site = await prisma.site.findFirst({ 
-    where: { id: params.id }, 
+  const { token } = searchParams
+
+  if (!token) return <div>Missing token</div>
+
+  const securityToken = await prisma.securityToken.findUnique({
+    where: { 
+      id: token,
+      expires: { gt: new Date() },
+      resources: {
+        hasSome: ['all', 'manage_site']
+      }
+    }
+  })
+
+  if (!securityToken) {
+    return <div>Invalid or expired token</div>
+  }
+
+  site = await prisma.site.findFirst({
+    where: { id: params.id },
     include: { 
       workingHours: true,
       inventoryItems: {
