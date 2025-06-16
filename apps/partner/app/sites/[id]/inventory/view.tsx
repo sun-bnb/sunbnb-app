@@ -18,7 +18,6 @@ import ParcelForm from './ParcelForm'
 import { MapMouseEvent } from '@vis.gl/react-google-maps'
 import { ChairConfig } from './chair-util'
 import { syncChairsWithLayout, getItemGroup } from './actions'
-import { it } from 'node:test'
 
 export default function InventoryView() {
   const { site, setSite, apiKey } = useSite()
@@ -202,6 +201,7 @@ export default function InventoryView() {
               console.log('Group', itemGroup)
               if (itemGroup) {
                 const existingConfig: ChairConfig = {
+                  itemGroupId: itemGroup.id,
                   rows: itemGroup.rows,
                   seatsPerRow: itemGroup.seatsPerRow,
                   horizontalGap: itemGroup.horizontalGap,

@@ -27,6 +27,9 @@ import sunshadeIcon from '@/components/reservation/sunshade-transparent.png'
 
 // A helper function that checks if an item is free for the current day
 function isItemAvailableToday(item: InventoryItem): boolean {
+
+  if (item.status !== 'active') return false
+  
   if (!item.reservations || item.reservations.length === 0) {
     // No reservations, so definitely available
     return true;

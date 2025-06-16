@@ -156,3 +156,19 @@ export async function getItemGroup(id: string) {
     }
   })
 }
+
+export async function setItemStatusByGroup(itemGroupId: string, status: string) {
+
+  const session = await auth()
+  if (!session?.user) throw new Error('Not authenticated')
+
+  await prisma.inventoryItem.updateMany({
+    where: { itemGroupId },
+    data: {
+      status: status
+    }
+  })
+
+  return { status: 'ok' }
+  
+}

@@ -3,7 +3,7 @@
 import { SharedMapProvider } from './SharedMapContext'
 import InventoryView from './view'
 
-export default async function InventoryPage() {
+export default function InventoryContainer() {
 
   return (
     <SharedMapProvider>

@@ -6,7 +6,7 @@ import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 import { useSite } from '@/app/sites/site-context'
 import { generateChairs, ChairConfig } from './chair-util'
-import { syncChairsWithLayout } from './actions'
+import { syncChairsWithLayout, setItemStatusByGroup } from './actions'
 import { deleteItemsByGroup, getSite } from '../actions'
 
 interface ParcelFormProps {
@@ -82,25 +82,27 @@ export default function ParcelFormView({
   return (
     <div className="mt-4 flex flex-col gap-3">
       <div className="flex gap-2">
+        <TextField label="Group (Parcel #)" type="number" value={config.group} disabled={mode === 'edit'} onChange={(e) => handleConfigChange('group', Number(e.target.value))} />
         <TextField label="Rows" type="number" value={config.rows} onChange={(e) => handleConfigChange('rows', Number(e.target.value))} />
         <TextField label="Seats per Row" type="number" value={config.seatsPerRow} onChange={(e) => handleConfigChange('seatsPerRow', Number(e.target.value))} />
-        <TextField label="Group (Parcel #)" type="number" value={config.group} disabled={mode === 'edit'} onChange={(e) => handleConfigChange('group', Number(e.target.value))} />
       </div>
 
       <div className="flex gap-2">
         <TextField label="Horizontal Gap (m)" type="number" value={config.horizontalGap} onChange={(e) => handleConfigChange('horizontalGap', Number(e.target.value))} />
+        <TextField label="Pair Gap (m)" type="number" value={config.intraPairGap} disabled={!config.pairSeats} onChange={(e) => handleConfigChange('intraPairGap', Number(e.target.value))} />
         <TextField label="Vertical Gap (m)" type="number" value={config.verticalGap} onChange={(e) => handleConfigChange('verticalGap', Number(e.target.value))} />
-        <TextField label="Rotation (deg)" type="number" value={config.rotation} onChange={(e) => handleConfigChange('rotation', Number(e.target.value))} />
       </div>
 
       <div className="flex gap-2">
+        <TextField label="Rotation (deg)" type="number" value={config.rotation} onChange={(e) => handleConfigChange('rotation', Number(e.target.value))} />
         <TextField label="Category" type="string" value={config.category} onChange={(e) => handleConfigChange('category', String(e.target.value))} />
         <TextField label="Price" type="number" value={config.price} onChange={(e) => handleConfigChange('price', Number(e.target.value))} />
       </div>
 
       <div className="flex gap-2">
-        <TextField label="Intra-Pair Gap (m)" type="number" value={config.intraPairGap} disabled={!config.pairSeats} onChange={(e) => handleConfigChange('intraPairGap', Number(e.target.value))} />
-        <Button variant={config.pairSeats ? 'contained' : 'outlined'} onClick={() => handleConfigChange('pairSeats', !config.pairSeats)}>
+
+        <Button variant="contained" onClick={handleApplyChanges}>Apply Changes</Button>
+        <Button variant="outlined" onClick={() => handleConfigChange('pairSeats', !config.pairSeats)}>
           {config.pairSeats ? 'Unpair Seats' : 'Pair Seats'}
         </Button>
       </div>
@@ -109,8 +111,15 @@ export default function ParcelFormView({
         <div className="flex flex-wrap gap-2 mt-2">
           <Button variant="outlined" onClick={() => rotateAndSync(5)}>Rotate +5°</Button>
           <Button variant="outlined" onClick={() => rotateAndSync(-5)}>Rotate -5°</Button>
-          <Button variant="contained" onClick={handleApplyChanges}>Apply Changes</Button>
-          <Button variant="outlined" color="error" onClick={() => {
+          <Button variant="outlined" onClick={async() => {
+            if (editGroup) {
+              setItemStatusByGroup(config.itemGroupId!, 'disabled').then(async () => {
+                const updatedSite = await getSite(siteId)
+                setSite(updatedSite!)
+              })
+            }
+          }}>Hide parcel</Button>
+          <Button variant="outlined" color="error" onClick={async () => {
             if (editGroup) {
               deleteItemsByGroup(siteId, editGroup).then(async () => {
                 const updatedSite = await getSite(siteId)
@@ -118,7 +127,7 @@ export default function ParcelFormView({
                 onDeleteParcel(editGroup)
               })
             }
-          }}>Delete Parcel</Button>
+          }}>Delete parcel</Button>
         </div>
       )}
     </div>

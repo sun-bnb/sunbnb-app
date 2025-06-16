@@ -1,4 +1,5 @@
 export interface ChairConfig {
+  itemGroupId?: string
   baseLat: number
   baseLng: number
   group: number
