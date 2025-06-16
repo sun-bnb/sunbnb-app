@@ -17,7 +17,7 @@ export default function PosView({ items, apiKey, stripePublicKey }: { items: Inv
       .then((reservation) => {
         if (reservation) {
           console.log('Found reservation', reservation)
-          router.push(`/reservations/${reservation.id}`)
+          router.push(`/reservations/${reservation.id}?anonId=${anonId}`)
         }
       })
   }

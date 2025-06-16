@@ -70,6 +70,8 @@ async function getServiceFee(siteId: string, userId: string): Promise<{
 export default async function ReservationPage({ params, searchParams }: { params: { id: string }, searchParams: { [key: string]: string } }) {
 
   const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
+
+  const { payment_intent, payment_intent_client_secret, redirect_status, anonId } = searchParams
   
   const session = await auth()
   const signedIn = !!(session?.user)
@@ -77,9 +79,18 @@ export default async function ReservationPage({ params, searchParams }: { params
 
   const reservation = await getReservation(params.id)
 
-  if (!reservation) return <div>Reservation {params.id} not found</div>
+  if (!reservation) return <div className="h-screen flex items-center justify-center">Reservation {params.id} not found</div>
 
-  const { payment_intent, payment_intent_client_secret, redirect_status } = searchParams
+  if (signedIn) {
+    if(reservation?.userId !== session?.user?.id) {
+      return <div className="h-screen flex items-center justify-center">Reservation not found</div>
+    }
+  } else {
+    console.log('Anon reservation check', anonId, reservation.anonId)
+    if (!anonId || reservation.anonId !== anonId) {
+      return <div className="h-screen flex items-center justify-center">No reservation found</div>
+    }
+  }
 
   let order: Order | null = null
   if (redirect_status === 'succeeded' && payment_intent) {

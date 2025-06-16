@@ -237,6 +237,8 @@ export default function Menu({ siteId, reservationId, seatId, apiKey, serviceFee
     </Box>
   )
 
+  const anonId = localStorage.getItem('sunbnb-anonId')
+
   const paymentElem =
     (orderState === 'processing' || orderState === 'payment_in_progress') ? (
       !order ? (
@@ -246,7 +248,7 @@ export default function Menu({ siteId, reservationId, seatId, apiKey, serviceFee
       ) : <OrderPaymentView 
             stripePublicKey={stripePublicKey}
             preview={previewElem}
-            completeUrl={`/reservations/${reservationId}`}
+            completeUrl={`/reservations/${reservationId}${anonId ? `?anonId=${anonId}` : ''}`}
             serviceFee={serviceFee}
             order={order} />
 

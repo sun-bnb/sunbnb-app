@@ -25,12 +25,13 @@ export default function CompleteView({
 
   const finalReservation = fetchedReservation || reservation
 
+  const anonId = localStorage.getItem('sunbnb-anonId')
   useEffect(() => {
     if (finalReservation?.status) {
       setStatus(finalReservation.status);
       console.log('Final reservation status:', finalReservation.status)
       if (finalReservation.status === 'paid') {
-        router.push(`/reservations/${finalReservation.id}`)
+        router.push(`/reservations/${finalReservation.id}${anonId ? `?anonId=${anonId}` : ''}`)
       }
     }
   }, [finalReservation?.status])

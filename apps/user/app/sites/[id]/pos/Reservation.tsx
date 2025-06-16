@@ -2,6 +2,7 @@
 
 import logger from '@/utils/logger'
 
+import { v4 as uuidv4 } from 'uuid'
 import { SiteProps } from '@/app/sites/types'
 import Button from '@mui/material/Button'
 import CircularProgress from '@mui/material/CircularProgress'
@@ -50,13 +51,23 @@ function ReservationButton({
 
             let saveResult = null
             
+            let anonId = undefined
+            if (!(session?.user?.id)) {
+              anonId = localStorage.getItem('sunbnb-anonId')
+              if (!anonId) {
+                anonId = uuidv4()
+                localStorage.setItem('sunbnb-anonId', anonId)
+              }
+            }
+
             saveResult = await saveReservationForMultipleItems({
               from: dateRange.from,
               to: dateRange.to,
               type: 'days',
               siteId: site.id!,
               items: selectedItems,
-              userId: session?.user?.id
+              userId: session?.user?.id,
+              anonId
             })
 
             logger.debug('Save result POS', saveResult)

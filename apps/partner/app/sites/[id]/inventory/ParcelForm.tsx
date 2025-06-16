@@ -31,9 +31,13 @@ export default function ParcelFormView({
   onDeleteParcel,
 }: ParcelFormProps) {
   const [previewItems, setPreviewItems] = useState(generateChairs(config))
-  const { setSite } = useSite()
+  const { site, setSite } = useSite()
 
   const configRef = useRef(config)
+
+  const parcelItems = site.inventoryItems?.filter(item => item.group === config.group) || []
+  const activeItems = parcelItems?.filter(item => item.status !== 'disabled') || []
+  const allDisabled = parcelItems.length > 0 && activeItems.length === 0
 
   useEffect(() => {
     setPreviewItems(generateChairs(config))
@@ -112,13 +116,18 @@ export default function ParcelFormView({
           <Button variant="outlined" onClick={() => rotateAndSync(5)}>Rotate +5°</Button>
           <Button variant="outlined" onClick={() => rotateAndSync(-5)}>Rotate -5°</Button>
           <Button variant="outlined" onClick={async() => {
-            if (editGroup) {
+            if (allDisabled) {
+              setItemStatusByGroup(config.itemGroupId!, 'active').then(async () => {
+                const updatedSite = await getSite(siteId)
+                setSite(updatedSite!)
+              })
+            } else {
               setItemStatusByGroup(config.itemGroupId!, 'disabled').then(async () => {
                 const updatedSite = await getSite(siteId)
                 setSite(updatedSite!)
               })
             }
-          }}>Hide parcel</Button>
+          }}>{ allDisabled ? 'Show parcel' : 'Hide parcel'}</Button>
           <Button variant="outlined" color="error" onClick={async () => {
             if (editGroup) {
               deleteItemsByGroup(siteId, editGroup).then(async () => {

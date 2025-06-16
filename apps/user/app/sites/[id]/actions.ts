@@ -408,10 +408,14 @@ export async function findAnonReservation(
   itemId: string
 ) {
 
+  const now = new Date()
+
   const reservation = await prisma.reservation.findFirst({
     where: {
       anonId: anonId,
       status: 'paid',
+      from: { lte: now },
+      to: { gte: now },
       items: {
         some: {
           id: { in: [itemId] },
