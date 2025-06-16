@@ -12,6 +12,7 @@
     "@auth/prisma-adapter": "^2.4.2",
     "@headlessui/react": "^2.1.2",
     "@heroicons/react": "^2.1.5",
+    "@mui/x-date-pickers": "^6.0.0",
     "@prisma/client": "^5.18.0",
     "@repo/ui": "*",
     "@vercel/blob": "^0.23.4",
