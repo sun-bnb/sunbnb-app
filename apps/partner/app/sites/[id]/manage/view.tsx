@@ -44,7 +44,7 @@ export default function ManageView({
                 gap-1
               "
             >
-              {Object.entries(positions).map(([_, item]) => (
+              {Object.entries(positions).reverse().map(([_, item]) => (
                 <Item
                   key={item.id}
                   siteId={site.id!}
