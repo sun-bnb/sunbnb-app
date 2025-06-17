@@ -19,13 +19,6 @@ async function getReservation(paymentRef: string) {
 }
 
 export default async function Complete({ searchParams }: SearchParams) {
-  
-  const stripePublicKey = process.env.STRIPE_PUBLIC_KEY || process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY
-
-  if (!stripePublicKey) {
-    console.error('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is not set')
-    return <div>Misconfiguration</div>
-  }
 
   const { payment_intent, payment_intent_client_secret } = searchParams
 
@@ -42,6 +35,6 @@ export default async function Complete({ searchParams }: SearchParams) {
   }
 
   return (
-    <CompletePage stripePublicKey={stripePublicKey} stripeClientSecret={payment_intent_client_secret} reservation={reservation} />
+    <CompletePage reservation={reservation} />
   )
 }

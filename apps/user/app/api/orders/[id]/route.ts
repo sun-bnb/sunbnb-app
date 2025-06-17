@@ -164,7 +164,7 @@ async function handleConfirmedOrder(order: Order) {
       where: { id: order.id },
       data: {
         invoiceId: invoice.id,
-        status: 'paid'
+        status: 'complete'
       },
     });
   }

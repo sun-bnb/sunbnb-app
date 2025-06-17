@@ -5,7 +5,7 @@ import { Reservation } from '@/app/sites/types'
 import ReservationConfirmationView from '@/components/reservation/confirmation/view'
 import Menu from './Menu'
 import { Order } from '@/app/types/types'
-import { useGetOrderByIdQuery } from '@/store/features/api/apiSlice'
+import { useGetOrderByIdQuery, useGetReservationByIdQuery } from '@/store/features/api/apiSlice'
 
 interface ReservationViewProps {
   reservation: Reservation,
@@ -34,11 +34,24 @@ export default function ReservationView({ serviceFee, signedIn, reservation, ord
   const [page, setPage] = useState<0 | 1>(order ? 1 : 0)
   const [resScrollable, setResScrollable] = useState(false)
   const [orderStatus, setOrderStatus] = useState<string>(order?.status || 'processing')
+  const [reservationStatus, setReservationStatus] = useState<string>(reservation?.status || 'processing')
+
+  const { data: fetchedReservation, error: reservationFetchError } = useGetReservationByIdQuery({
+    id: reservation.id,
+  }, {
+    pollingInterval: !(reservationStatus === 'paid' || reservationStatus === 'complete') ? 1000 : 0
+  })
+
+  useEffect(() => {
+    if (fetchedReservation?.status) {
+      setReservationStatus(fetchedReservation.status);
+    }
+  }, [fetchedReservation?.status])
 
   const { data: fetchedOrder, error: orderFetchError } = useGetOrderByIdQuery({
     id: order?.id,
   }, {
-    skip: !order || orderStatus === 'paid',
+    skip: !order || (orderStatus === 'paid' || orderStatus === 'complete'),
     pollingInterval: orderStatus === 'processing' ? 1000 : 0
   })
   

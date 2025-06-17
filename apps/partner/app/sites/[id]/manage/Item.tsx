@@ -67,7 +67,7 @@ export default function SunbedItem({
       className={`
         ${bgColor} border rounded 
         basis-0 flex-1 min-w-0  /* allow squeezing below content width */
-        p-4 flex items-center justify-center
+        p-4 flex items-center justify-center ${item.number % 2 !== 0 ? 'mr-[6px]' : 'ml-[6px]'}
       `}
     >
       <div style={{

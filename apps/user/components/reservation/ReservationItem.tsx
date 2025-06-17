@@ -10,6 +10,7 @@ const statusToChipColor: {
   'pending': 'default',
   'confirmed': 'success',
   'paid': 'success',
+  'complete': 'success',
   'canceled': 'error'
 }
 
@@ -19,6 +20,7 @@ const statusToChipLabel: {
   'pending': 'Pending',
   'confirmed': 'Confirmed',
   'paid': 'Paid',
+  'complete': 'Paid',
   'canceled': 'Canceled'
 }
 

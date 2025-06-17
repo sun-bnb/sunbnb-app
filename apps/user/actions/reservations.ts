@@ -27,36 +27,3 @@ export async function fetchReservation(id: string) {
   }
   return reservation
 }
-
-export async function updateReservation({
-  id,
-  status,
-}: {
-  id: string;
-  status: string;
-}) {
-  try {
-
-    const session = await ensureAuthenticatedUser()
-
-    let savedReservation = await fetchReservation(id)
-
-    logger.debug('updateReservation:', savedReservation)
-
-    if (savedReservation.status === 'paid') {
-      return { status: 'ok', id }
-    }
-
-    await prisma.reservation.update({
-      where: { id },
-      data: { status },
-    });
-
-    return { status: 'ok', id }
-  
-  } catch (error: any) {
-    logger.error('updateReservation error:', error)
-    return { status: 'error', errors: [error.message] }
-  }
-
-}

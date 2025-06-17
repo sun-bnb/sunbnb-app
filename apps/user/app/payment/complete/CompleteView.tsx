@@ -10,7 +10,6 @@ import ReservationConfirmationView from '@/components/reservation/confirmation/v
 export default function CompleteView({
   reservation
 } : {
-  stripeClientSecret: string
   reservation: Reservation
 }) {
 
@@ -30,7 +29,7 @@ export default function CompleteView({
     if (finalReservation?.status) {
       setStatus(finalReservation.status);
       console.log('Final reservation status:', finalReservation.status)
-      if (finalReservation.status === 'paid') {
+      if (finalReservation.status === 'paid' || finalReservation.status === 'complete') {
         router.push(`/reservations/${finalReservation.id}${anonId ? `?anonId=${anonId}` : ''}`)
       }
     }

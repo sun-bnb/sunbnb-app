@@ -30,6 +30,12 @@ const STATUS_CONTENT_MAP: {
     bgColor: '#eeffee',
     borderColor: '#118811'
   },
+  complete: {
+    text: 'PAID',
+    textColor: '#118811',
+    bgColor: '#eeffee',
+    borderColor: '#118811'
+  },
   processing: {
     text: 'Processing',
     textColor: '#111188',
@@ -171,7 +177,7 @@ export default function ReservationConfirmationView({
             </div>
           </div>
           {
-            status === 'paid' && (
+            (status === 'paid' || status === 'complete') && (
               <div className="relative text-[rgb(142,114,49)] cursor-pointer -mt-[10px] -mr-[8px]" 
                 onClick={() => window.open(`/reservations/${reservation.id}/pass`, '_blank')}>
                 <QrCode2Icon style={{
@@ -196,7 +202,7 @@ export default function ReservationConfirmationView({
           </div>
         </div>
         {
-          status === 'paid' && (
+          (status === 'paid' || status === 'complete') && (
             <div className="
               flex
               justify-center

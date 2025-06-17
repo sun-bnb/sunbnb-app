@@ -413,7 +413,7 @@ export async function findAnonReservation(
   const reservation = await prisma.reservation.findFirst({
     where: {
       anonId: anonId,
-      status: 'paid',
+      status: { in: ['paid', 'complete'] },
       from: { lte: now },
       to: { gte: now },
       items: {

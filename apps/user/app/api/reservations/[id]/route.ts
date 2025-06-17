@@ -129,7 +129,7 @@ async function handleConfirmedReservation(reservation: any) {
       where: { id: reservation.id },
       data: {
         invoiceId: invoice.id,
-        status: 'paid'
+        status: 'complete'
       },
     });
   }
