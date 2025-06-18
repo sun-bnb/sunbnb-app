@@ -21,6 +21,29 @@ export async function reserveItem(
     }
   })
 
+  const item = await prisma.inventoryItem.findUnique({
+    where: { id: itemId },
+    include: {
+      pairedBy: true
+    }
+  })
+
+  if (!item) {
+    return { status: 'error', errors: ['Item not found'] }
+  }
+
+  let pairItem = item.pairedBy
+  if (!pairItem && item.pairId) {
+    pairItem = await prisma.inventoryItem.findUnique({
+      where: { id: item.pairId }
+    })
+  }
+
+  const itemIds = [{ id: item.id }]
+  if (pairItem) {
+    itemIds.push({ id: pairItem.id })
+  }
+
   const reservation = await prisma.reservation.create({
     data: {
       userId: adminUser!.id,
@@ -29,10 +52,11 @@ export async function reserveItem(
       siteId,
       status: 'paid-in-cash',
       items: {
-        connect: [{ id: itemId }]
+        connect: itemIds
       }
     }
   })
+  
 
   console.log('RESERVATION', reservation.to, reservation.from)
   
@@ -57,7 +81,7 @@ export async function unreserveItem(siteId: string, itemId: string) {
     where: {
       status: 'paid-in-cash',
       items: {
-        every: {
+        some: {
           id: itemId
         }
       },

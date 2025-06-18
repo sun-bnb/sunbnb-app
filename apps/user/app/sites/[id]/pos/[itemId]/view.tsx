@@ -1,22 +1,33 @@
 'use client'
 
+import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { InventoryItem } from '@/app/sites/types'
 import ReservationView from './Reservation'
-import { findAnonReservation } from '../../actions'
+import { findAnonReservation, findUserReservation } from '../../actions'
 
 
 export default function PosView({ items, apiKey, stripePublicKey }: { items: InventoryItem[], apiKey: string, stripePublicKey: string | undefined }) {
 
   const router = useRouter()
 
+  const { data: session, status } = useSession()
+
   const anonId = localStorage.getItem('sunbnb-anonId')
 
-  if (anonId) {
+  if (session?.user?.id) {
+    findUserReservation(session?.user?.id, items[0]!.id)
+      .then((reservation) => {
+        if (reservation) {
+          console.log('Found user reservation', reservation)
+          router.push(`/reservations/${reservation.id}`)
+        }
+      })
+  } else if (anonId) {
     findAnonReservation(anonId, items[0]!.id)
       .then((reservation) => {
         if (reservation) {
-          console.log('Found reservation', reservation)
+          console.log('Found anon reservation', reservation)
           router.push(`/reservations/${reservation.id}?anonId=${anonId}`)
         }
       })

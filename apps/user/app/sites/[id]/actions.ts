@@ -433,3 +433,34 @@ export async function findAnonReservation(
   return reservation
   
 }
+
+export async function findUserReservation(
+  userId: string,
+  itemId: string
+) {
+
+  const now = new Date()
+
+  const reservation = await prisma.reservation.findFirst({
+    where: {
+      userId: userId,
+      status: { in: ['paid', 'complete'] },
+      from: { lte: now },
+      to: { gte: now },
+      items: {
+        some: {
+          id: { in: [itemId] },
+        },
+      }
+    },
+    include: {
+      items: true,
+      site: true
+    }
+  })
+
+  console.log('reservation by user found', reservation)
+
+  return reservation
+  
+}
