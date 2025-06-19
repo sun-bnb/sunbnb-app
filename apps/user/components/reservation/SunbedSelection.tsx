@@ -210,9 +210,9 @@ export default function SunbedSelection({
   site: SiteProps
 }) {
 
-  const { session } = useSession()
+  const { data: session } = useSession()
   const loggedIn = !!(session?.user?.id)
-  
+
   const dispatch = useDispatch()
   const sitesState = useSelector((state: RootState) => state.sites)
   const { reservationState, reservationMode, selectedItems } = sitesState
