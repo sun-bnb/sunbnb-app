@@ -47,6 +47,11 @@
     "Open receipt": "Open receipt"
   },
   "Payment": {
+    "Payment confirms acceptance of": "Payment confirms acceptance of",
+    "terms of service": "terms of service",
     "Pay now": "Pay now"
+  },
+  "TermsOfService": {
+    "tos": "terms-en"
   }
 }

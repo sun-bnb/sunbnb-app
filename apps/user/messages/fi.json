@@ -47,6 +47,11 @@
     "Open receipt": "Avaa kuitti"
   },
   "Payment": {
+    "Payment confirms acceptance of": "Maksu vahvistaa suostumisen",
+    "terms of service": "palveluehtoihin",
     "Pay now": "Maksa nyt"
+  },
+  "TermsOfService": {
+    "tos": "terms-fi"
   }
 }

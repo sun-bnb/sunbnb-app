@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useGetReservationByIdQuery } from '@/store/features/api/apiSlice'
 import { Reservation } from '@/app/sites/types'
 import ReservationConfirmationView from '@/components/reservation/confirmation/view'
+import { useSession } from 'next-auth/react'
 
 
 export default function CompleteView({
@@ -15,6 +16,12 @@ export default function CompleteView({
 
   const [status, setStatus] = useState<string | undefined>('default')
   const router = useRouter()
+  const { data: session } = useSession()
+
+  let anonId = null
+  if (!(session?.user?.id)) {
+    anonId = localStorage.getItem('sunbnb-anonId')
+  }
 
   const { data: fetchedReservation, error: reservationFetchError } = useGetReservationByIdQuery({
     id: reservation.id,
@@ -24,13 +31,13 @@ export default function CompleteView({
 
   const finalReservation = fetchedReservation || reservation
 
-  const anonId = localStorage.getItem('sunbnb-anonId')
+  
   useEffect(() => {
     if (finalReservation?.status) {
       setStatus(finalReservation.status);
       console.log('Final reservation status:', finalReservation.status)
       if (finalReservation.status === 'paid' || finalReservation.status === 'complete') {
-        router.push(`/reservations/${finalReservation.id}${anonId ? `?anonId=${anonId}` : ''}`)
+        router.push(`/reservations/${finalReservation.id}?terms=true${anonId ? `&anonId=${anonId}` : ''}`)
       }
     }
   }, [finalReservation?.status])

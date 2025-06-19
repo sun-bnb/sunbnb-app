@@ -83,6 +83,12 @@ export default function CheckoutForm({
       <form id="payment-form" onSubmit={handleSubmit} className="mr-[6px] ml-[6px] mt-[6px] mb-[12px]">
         <PaymentElement id="payment-element" options={paymentElementOptions} />
         <div className="mt-[18px]">
+          <div className="text-black text-[15px] mb-[4px] whitespace-nowrap">
+            {t('Payment confirms acceptance of')} <a 
+              className="text-[#1976d2]"
+              href="/tos/reservation"
+              target="_blank" rel="noopener noreferrer">{t('terms of service')}</a>
+          </div>
           <Button variant="contained" fullWidth={true} id="submit" type="submit" disabled={isLoading}>
             { isLoading ? <div className="spinner" id="spinner"></div> : t('Pay now') }
           </Button>

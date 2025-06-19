@@ -47,6 +47,11 @@
     "Open receipt": "Abrir factura"
   },
   "Payment": {
+    "Payment confirms acceptance of": "El pago implica aceptación de",
+    "terms of service": "términos del servicio",
     "Pay now": "Pagar ahora"
+  },
+  "TermsOfService": {
+    "tos": "terms-es"
   }
 }

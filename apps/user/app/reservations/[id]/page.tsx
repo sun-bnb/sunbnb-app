@@ -71,7 +71,7 @@ export default async function ReservationPage({ params, searchParams }: { params
 
   const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
 
-  const { payment_intent, payment_intent_client_secret, redirect_status, anonId } = searchParams
+  const { payment_intent, payment_intent_client_secret, redirect_status, anonId, terms } = searchParams
   
   const session = await auth()
   const signedIn = !!(session?.user)
@@ -100,6 +100,6 @@ export default async function ReservationPage({ params, searchParams }: { params
   const serviceFee = reservation.site.appSalesEnabled ?
     await getServiceFee(reservation.site.id, reservation.site.userId) : undefined
 
-  return <ReservationView signedIn={signedIn} serviceFee={serviceFee} reservation={reservation} apiKey={apiKey} stripePublicKey={STRIPE_PUBLIC_KEY} order={order} />
+  return <ReservationView signedIn={signedIn} showTerms={terms === 'true'} serviceFee={serviceFee} reservation={reservation} apiKey={apiKey} stripePublicKey={STRIPE_PUBLIC_KEY} order={order} />
 
 }

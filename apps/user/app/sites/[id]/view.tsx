@@ -96,7 +96,7 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
 
   const t = useTranslations('SiteView')
 
-  const bottomOffset = pendingReservationId ? '-385px' : '-364px'
+  const bottomOffset = pendingReservationId ? '-405px' : '-364px'
   
   return (
     <div className="container mx-auto bg-[#fff5e1] pt-[78px]">
