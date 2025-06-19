@@ -11,6 +11,8 @@ import Paper from '@mui/material/Paper'
 import InputBase from '@mui/material/InputBase'
 import IconButton from '@mui/material/IconButton'
 import SearchIcon from '@mui/icons-material/Search'
+import AccountCircleIcon from '@mui/icons-material/AccountCircle'
+
 import Glow from './Glow'
 
 import { setSearchState, setSelectedPlace } from '@/store/features/search/searchSlice'
@@ -31,6 +33,8 @@ const userNavigation = [
 export default function CustomizedInputBase() {
 
   const { data: session, status } = useSession()
+
+  const loggedIn = !!(session?.user?.id)
 
   const router = useRouter()
 
@@ -109,13 +113,23 @@ export default function CustomizedInputBase() {
 
         }
         
-        <div className="p-[10px]">
+        <div className="p-[8px]">
           <Menu as="div" className="">
             <div>
-              <MenuButton className="relative flex max-w-xs items-center rounded-full bg-gray-100 text-sm hover:outline-none hover:ring-2 hover:ring-offset-gray-100"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}>
-                <img alt="" src={session?.user?.image!} className="h-8 w-8 rounded-full" />
-              </MenuButton>
+              {
+                loggedIn ? (
+                  <MenuButton className="relative flex max-w-xs items-center rounded-full bg-gray-100 text-sm hover:outline-none hover:ring-2 hover:ring-offset-gray-100"
+                    onClick={() => setIsMenuOpen(!isMenuOpen)}>
+                    <img alt="" src={session?.user?.image!} className="h-8 w-8 rounded-full" />
+                  </MenuButton>
+                ) : (
+                  <div style={{ width: '24px', height: '24px' }}>
+                    <AccountCircleIcon style={{ width: '32px', height: '32px', marginTop: '-5px' }} onClick={() => {
+                      router.push('/api/auth/signin')
+                    }}/>
+                  </div>
+                )
+              }
             </div>
           </Menu>
         </div>

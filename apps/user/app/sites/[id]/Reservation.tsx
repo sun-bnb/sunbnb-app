@@ -31,6 +31,7 @@ import dayjs from 'dayjs'
 import SunbedSelection from '@/components/reservation/SunbedSelection'
 import { saveReservationForMultipleItems } from './actions'
 import PaymentView from '@/app/payment/Payment'
+import { useRouter } from 'next/navigation'
 
 function PaymentMethodSelection() {
 
@@ -177,6 +178,8 @@ function ReservationButton({
 }) {
 
   const { data: session } = useSession()
+  const router = useRouter()
+  const loggedIn = !!(session?.user?.id)
 
   const dispatch = useDispatch();
   const sitesState = useSelector((state: RootState) => state.sites)
@@ -191,60 +194,72 @@ function ReservationButton({
 
   return (
     <div className="mt-[10px]">
-      <Button variant="contained" 
-        fullWidth={true}
-        disabled={disabled}
-        onClick={
-          async () => {
-            dispatch(setValue({ reservationState: 'saving' }))
-            logger.debug('Reserve', reservationMode, timeRange, dateRange, selectedItems)
+      {
+        !loggedIn ? (
+          <Button variant="contained" 
+            fullWidth={true} onClick={() => {
+              router.push('/api/auth/signin?callbackUrl=' + `/sites/${site.id}`)
+            }}>
+              {t('Login to reserve')}
+          </Button>
+        ) : (
+          <Button variant="contained" 
+            fullWidth={true}
+            disabled={disabled}
+            onClick={
+              async () => {
+                dispatch(setValue({ reservationState: 'saving' }))
+                logger.debug('Reserve', reservationMode, timeRange, dateRange, selectedItems)
 
-            let saveResult = null
-            if (reservationMode === 'hours' && reservationDay && timeRange[0] && timeRange[1]) {
-              const from = reservationDay
-                .hour(timeRange[0].hour())
-                .minute(timeRange[0].minute())
-                .second(timeRange[0].second())
-                .toDate()
-              const to = reservationDay
-                .hour(timeRange[1].hour())
-                .minute(timeRange[1].minute())
-                .second(timeRange[1].second())
-                .toDate()
-              saveResult = await saveReservationForMultipleItems({
-                from: from.toISOString(),
-                to: to.toISOString(),
-                type: 'hours',
-                siteId: site.id!,
-                items: selectedItems,
-                userId: session?.user?.id!
-              })
-            } else if (reservationMode === 'days' && dateRange[0] && dateRange[1]) {
-              const from = dateRange[0].toDate()
-              const to = dateRange[1].toDate()
-              logger.debug('Save reservation', from, to)
-              saveResult = await saveReservationForMultipleItems({
-                from: from.toISOString(),
-                to: to.toISOString(),
-                type: 'days',
-                siteId: site.id!,
-                items: selectedItems,
-                userId: session?.user?.id!
-              })
-            }
+                let saveResult = null
+                if (reservationMode === 'hours' && reservationDay && timeRange[0] && timeRange[1]) {
+                  const from = reservationDay
+                    .hour(timeRange[0].hour())
+                    .minute(timeRange[0].minute())
+                    .second(timeRange[0].second())
+                    .toDate()
+                  const to = reservationDay
+                    .hour(timeRange[1].hour())
+                    .minute(timeRange[1].minute())
+                    .second(timeRange[1].second())
+                    .toDate()
+                  saveResult = await saveReservationForMultipleItems({
+                    from: from.toISOString(),
+                    to: to.toISOString(),
+                    type: 'hours',
+                    siteId: site.id!,
+                    items: selectedItems,
+                    userId: session?.user?.id!
+                  })
+                } else if (reservationMode === 'days' && dateRange[0] && dateRange[1]) {
+                  const from = dateRange[0].toDate()
+                  const to = dateRange[1].toDate()
+                  logger.debug('Save reservation', from, to)
+                  saveResult = await saveReservationForMultipleItems({
+                    from: from.toISOString(),
+                    to: to.toISOString(),
+                    type: 'days',
+                    siteId: site.id!,
+                    items: selectedItems,
+                    userId: session?.user?.id!
+                  })
+                }
 
-            logger.debug('Save result', saveResult)
-            if (saveResult?.status === 'ok' && saveResult.id) {
-              dispatch(setValue({ 
-                reservationState: 'processing',
-                pendingReservationId: saveResult.id
-              }))
-            }
+                logger.debug('Save result', saveResult)
+                if (saveResult?.status === 'ok' && saveResult.id) {
+                  dispatch(setValue({ 
+                    reservationState: 'processing',
+                    pendingReservationId: saveResult.id
+                  }))
+                }
 
-          }
-        }>
-          {t('Reserve')}
-        </Button>
+              }
+            }>
+              {t('Reserve')}
+            </Button>
+          )
+      }
+      
     </div>
   )
 }

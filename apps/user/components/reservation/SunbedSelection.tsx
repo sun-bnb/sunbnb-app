@@ -16,6 +16,7 @@ import sunbedIcon from './sunbed-perforated-transparent.png'
 import sunshadeIcon from './sunshade-transparent.png'
 import beachTowelIcon from './beach-towel-transparent.png'
 import React from 'react'
+import { useSession } from 'next-auth/react'
 
 /** Helper: Check if the site is open on a given day and time range */
 function isSiteOpen(
@@ -209,6 +210,9 @@ export default function SunbedSelection({
   site: SiteProps
 }) {
 
+  const { session } = useSession()
+  const loggedIn = !!(session?.user?.id)
+  
   const dispatch = useDispatch()
   const sitesState = useSelector((state: RootState) => state.sites)
   const { reservationState, reservationMode, selectedItems } = sitesState

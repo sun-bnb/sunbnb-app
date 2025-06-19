@@ -32,10 +32,8 @@ const App = ({ children }: {
           {children}
         </div>
       )
-    } else if (status === 'authenticated' || pathname === '/privacy' || pathname === '/tos') {
+    } else {
       setContent(<AuthenticatedApp>{children}</AuthenticatedApp>)
-    } else if (status === 'unauthenticated') {
-      router.push('/api/auth/signin')
     }
   }, [status])
 

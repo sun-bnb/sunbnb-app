@@ -117,7 +117,7 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
             }
           </div>
           <div className="absolute inset-0 bg-gradient-to-b from-[#fff5e1] to-transparent via-transparent h-100"></div>
-          <div className="absolute top-[2px] left-[12px] text-2xl bg-black bg-opacity-30 px-2 py-1 rounded-lg text-white">
+          <div className="absolute top-[6px] left-[12px] text-2xl bg-black bg-opacity-30 px-2 py-1 rounded-lg text-white">
             { site.name }
           </div>
         </div>
