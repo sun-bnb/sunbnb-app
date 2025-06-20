@@ -47,6 +47,7 @@ export async function reserveItem(
   const reservation = await prisma.reservation.create({
     data: {
       userId: adminUser!.id,
+      type: 'days',
       from: dayjs().startOf('day').toDate(),
       to: dayjs().endOf('day').toDate(),
       siteId,

@@ -321,12 +321,13 @@ export async function saveReservationForMultipleItems(
     reservationUserId = user.id
   }
 
+  const from =  new Date(reservation.from)
   const to = reservation.type === 'days' ?
     dayjs(reservation.to).add(1, 'day').subtract(1, 'second').toDate() :
     new Date(reservation.to)
 
   const reservationData = {
-    from: new Date(reservation.from),
+    from:from,
     to: to,
     type: reservation.type,
     status: 'pending',
@@ -343,6 +344,9 @@ export async function saveReservationForMultipleItems(
     }
   }
 
+  const timeBetween = to.getTime() - from.getTime()
+  const daysBetween = Math.round(timeBetween / (1000 * 60 * 60 * 24))
+
   const site = await prisma.site.findUnique({ where: { id: reservation.siteId } })
   if (!site) return { status: 'error', errors: [ 'Site not found' ] }
   if (!site.price) return { status: 'error', errors: [ 'Site price not set' ] }
@@ -351,7 +355,7 @@ export async function saveReservationForMultipleItems(
     return sum + (item.price || site.price || 0)
   }, 0) ?? 0
 
-  reservationData.paymentAmount = totalPrice
+  reservationData.paymentAmount = totalPrice * daysBetween
 
   console.log('CREATE RES', reservationData)
   const newReservation = await prisma.reservation.create({

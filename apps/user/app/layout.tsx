@@ -24,6 +24,26 @@ export const metadata: Metadata = {
   icons: {
     icon: '/logo.ico',
     apple: '/logo-lila.png'
+  },
+  openGraph: {
+    title: 'Sunbnb - Your place under the sun',
+    description: 'Sunbed reservation made easy',
+    url: 'https://sunbnb.app',
+    siteName: 'Sunbnb',
+    images: [
+      {
+        url: 'https://sunbnb.app/sunbnb-thumbnail.png',
+        width: 561,
+        height: 348,
+      },
+    ],
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Sunbnb - Your place under the sun',
+    description: 'Sunbed reservation made easy',
+    images: ['https://sunbnb.app/sunbnb-thumbnail.png'],
   }
 }
 

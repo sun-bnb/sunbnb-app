@@ -23,7 +23,27 @@ export const metadata: Metadata = {
   icons: {
     icon: '/logo.ico',
     apple: '/logo-lila.png'
-  }
+  },
+  openGraph: {
+    title: 'Sunbnb - Partner portal',
+    description: 'Your partner in sunbed management',
+    url: 'https://sunbnb.app',
+    siteName: 'Sunbnb',
+    images: [
+      {
+        url: 'https://sunbnb.app/sunbnb-thumbnail.png',
+        width: 561,
+        height: 348,
+      },
+    ],
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Sunbnb - Partner portal',
+    description: 'Your partner in sunbed management',
+    images: ['https://sunbnb.app/sunbnb-thumbnail.png'],
+  },
 }
 
 export default async function RootLayout({

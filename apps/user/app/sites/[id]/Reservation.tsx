@@ -306,7 +306,7 @@ export default function ReservationView({
     skip: !pendingReservationId
   })
 
-  logger.debug('Reservation By Id', pendingReservationId, reservation)
+  logger.debug('Pending reservation', pendingReservationId, reservation)
 
   return (
     <>

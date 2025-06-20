@@ -17,9 +17,7 @@ const App = ({ children }: {
   const pathname = usePathname()
 
   const [ content, setContent ] = useState<ReactNode | null>(null)
-
-  logger.debug('root session', session)
-
+  
   useEffect(() => {
     if (
       pathname.includes('/pos') ||

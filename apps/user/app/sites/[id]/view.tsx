@@ -78,14 +78,12 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
   let inventoryItems = site.inventoryItems
   
   const itemCount = inventoryItems?.length
-  const availableCount = inventoryItems?.filter(item => item.status == 'available').length
+  const availableCount = inventoryItems?.filter(item => item.status === 'active').length
 
   let allReservations: Reservation[] = []
   if (inventoryItems) {
-    allReservations = inventoryItems.flatMap(item => item.reservations)
+    allReservations = inventoryItems.flatMap(item => (item.reservations || []))
   }
-
-  logger.debug('Site reservations', allReservations)
 
   const now = dayjs()
 

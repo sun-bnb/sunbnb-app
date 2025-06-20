@@ -309,8 +309,6 @@ export default function SunbedSelection({
         return { number: Number(parcelNumber), shape: shapeCoords }
     }))
 
-    console.log('Parcel shapes', parcelShapes)
-
   }, [availabilityResponse])
 
   // Calculate map bounds based on inventory item positions.
@@ -375,8 +373,6 @@ export default function SunbedSelection({
       />
     )
   })
-
-  console.log('PARCEL SJAPES', parcelShapes)
 
   // Helper: Compute the centroid of an array of lat/lng points.
   function getCentroid(points: google.maps.LatLngLiteral[]): google.maps.LatLngLiteral {
