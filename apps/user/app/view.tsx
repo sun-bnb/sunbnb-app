@@ -1,264 +1,79 @@
 'use client'
 
-import logger from '@/utils/logger'
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
-import ToggleButton from '@mui/material/ToggleButton'
-import Link from 'next/link'
 import Image from 'next/image'
-import RestaurantIcon from '@mui/icons-material/Restaurant'
-import WcIcon from '@mui/icons-material/Wc'
-import MapIcon from '@mui/icons-material/Map'
-import SurfingIcon from '@mui/icons-material/Surfing'
-import LocalBarIcon from '@mui/icons-material/LocalBar'
-import ListAltIcon from '@mui/icons-material/ListAlt'
-import { useTranslations } from 'next-intl'
-import { SiteGeography, SiteProps } from './sites/types'
-import { APIProvider, AdvancedMarker, Map } from '@vis.gl/react-google-maps'
-import { useState } from 'react'
-import { useSelector } from 'react-redux'
-import { RootState } from '@/store/store'
-import { useGetPlaceDetailsQuery } from '@/store/features/autocomplete/autocompleteSlice'
-import { useGetSitesByCoordsQuery } from '@/store/features/api/apiSlice'
+import SearchBar from '@/components/search/search-bar'
+import sunbnbHorizontalBlack from './sunbnb-horizontal-black.png'
 
-interface MapCenter {
-  lat: number;
-  lng: number;
-}
-
-interface MapBounds {
-  north: number;
-  south: number;
-  east: number;
-  west: number;
-}
-
-const serviceIcons: {
-  [key: string]: React.ReactElement
-} = {
-  'wc': <WcIcon />,
-  'food': <RestaurantIcon />,
-  'drinks': <LocalBarIcon />,
-  'rental': <SurfingIcon />
-}
-
-function Site({ site }: { site: SiteProps }) {
+export default function HomeView() {
   return (
-    <div className="mb-6" key={site.id}>
-      <div className="w-full max-h-[260px] mr-2 mt-1 overflow-hidden bg-gray-100 flex items-center relative">
-        { 
-          site.image && 
-          <Link className="w-full" href={`/sites/${site.id}`} prefetch={true}>
-            {
-              (site.imageWidth && site.imageHeight) &&
-                <Image width={site.imageWidth} height={site.imageHeight} alt={site.description || ''} src={site.image} />
-    }
-          </Link>
-        }
-        <div className="font-bold text-white px-2 py-1 absolute top-[6px] left-[6px] bg-black bg-opacity-30 rounded-xl">
-          <Link href={`/sites/${site.id}`} prefetch={true}>{site.name}</Link>
-        </div>
-      </div>
-      <div className="py-3">
-        <div className="px-1 flex justify-between">
-          <div className="flex">
-            <div className="mr-3 pl-1">
-              <span className="mr-1">&#x26F1;</span>
-              <span className={(site.availableCount || 0) > 0 ? 'text-green-600' : 'text-red-600'}>{site.availableCount}</span>
-              <span className="text-gray-400 mx-[1px]">/</span>
-              <span className="text-gray-400">{site.itemCount}</span>
-            </div>
-            {
-              site.distance &&
-                <div className="mr-3">
-                  <span className="mr-[2px]">{Math.round(site.distance)}</span>
-                  <span className="text-xs">KM</span>
-                </div>
-            }
-            {
-              site.price &&
-                <div className="mr-3">
-                  <span>&#8364;</span>
-                  <span>{site.price}</span>
-                </div>
-            }
-            
-          </div>
-          <div className="flex">
-            {
-              (site.services || []).map(service => {
-                return (
-                  <div key={`service-${service}`} className="mr-1 border border-gray-600 rounded-md pr-[5px] pl-[4px]">
-                    <div className="-mt-[2px]">
-                      { serviceIcons[service] }
-                    </div>
-                  </div>
-                )
-              })
-            }
+    <div className="bg-[#fff5e1] font-sans text-[#2d2d2d]">
+      <section className="h-[250px] flex flex-col items-center justify-center text-center px-4 bg-[#fff5e1]">
+        <Image src={sunbnbHorizontalBlack} alt="Sunbnb logo"/>
+      </section>
+      <section className="-mt-[40px] flex flex-col items-center justify-center text-center px-4 bg-[#fff5e1]">
+        <div className="rounded-lg p-2 w-full">
+          <h1 className="text-[34px] font-semibold mb-3" style={{ lineHeight: '36px' }}>Reserve Your Spot on the Beach</h1>
+          <p className="text-[18px] mb-4">
+            Plan ahead or book instantly on the beach. All from one app.
+          </p>
+          <div className="w-full">
+            <SearchBar />
           </div>
         </div>
-        <div className="px-1 py-2">
-          { site.description }
-        </div>
-      </div>
-    </div>
-  )
-}
+      </section>
 
-function SiteList({ sites }: { sites: SiteProps[] }) {
-
-  return (
-    <div className="mt-[12px]">
-      {
-        sites.map(site => (
-          <Site key={site.id} site={site} />
-        ))
-      }
-    </div>
-  )
-
-}
-
-function SiteMap({ sites, geography, apiKey }: { sites: SiteProps[], geography?: SiteGeography, apiKey: string }) {
-
-  const [selectedSite, setSelectedSite] = useState<SiteProps | null>(null)
-
-  const defaultBounds = geography?.bounds
-
-  return (
-    <div key={`${geography?.center.lat}-${geography?.center.lng}-${geography?.bounds?.north}-${geography?.bounds?.south}-${geography?.bounds?.east}-${geography?.bounds?.west}`}>
-      <div className="w-full h-[300px] mt-[12px]">
-        <APIProvider apiKey={apiKey}>
-          <Map mapId={'7a0196a7ba317ea5'}
-            defaultZoom={defaultBounds ? undefined : 8}
-            defaultCenter={geography ? geography.center : { lat: 35.5138298, lng: 24.0180367 }}
-            defaultBounds={defaultBounds}
-            gestureHandling={'greedy'}
-            disableDefaultUI={true}
-            onClick={(e) => {
-              setSelectedSite(null)
-            }}
-          >
-            {
-              (sites.map(site => (
-                (site.id !== selectedSite?.id) && <AdvancedMarker key={site.id}
-                  position={{ lat: Number(site.locationLat), lng: Number(site.locationLng) }}
-                  onClick={() => {
-                    setSelectedSite(site)
-                  }}>
-                  <div className="w-[40px] h-[40px] bg-yellow-200 rounded-full flex justify-center">
-                    <span className="text-4xl">&#x26F1;</span>
-                  </div>
-                </AdvancedMarker>)))
-            }
-            {
-              (selectedSite?.locationLat && selectedSite?.locationLng) &&
-                <AdvancedMarker position={{ lat: Number(selectedSite.locationLat), lng: Number(selectedSite.locationLng) }}>
-                  <div className="border border-[4px] border-red-800 w-[46px] h-[46px] bg-yellow-400 rounded-full flex justify-center">
-                    <span className="text-4xl">&#x26F1;</span>
-                  </div>
-                </AdvancedMarker>
-
-            }
-          </Map>
-        </APIProvider>
-      </div>
-      {
-        selectedSite &&
-          <div className="mt-2">
-            <Site site={selectedSite} />
+      {/* Use Case 1: Book Before You Go */}
+      <section className="flex flex-col md:flex-row items-center gap-6 px-5 py-12 bg-white max-w-4xl mx-auto mt-[60px]">
+        <div className="w-full md:w-1/2 flex flex-col items-center justify-center text-yellow-600">
+          <div className="bg-yellow-50 w-full h-40 rounded-md border border-yellow-200 flex items-center justify-center text-sm text-yellow-700">
+            Beach search interface preview
           </div>
-      }
-    </div>
-  )
+        </div>
+        <div className="md:w-1/2 text-center md:text-left">
+          <h2 className="text-xl font-semibold mb-2">🔍 Book Before You Go</h2>
+          <p className="text-sm leading-relaxed">
+            Search your beach, select a sunbed, and book it before you arrive. No stress, no surprises.
+          </p>
+        </div>
+      </section>
 
-}
-
-export default function Sites({ sites, geography, apiKey }: { 
-  sites: SiteProps[],
-  geography?: SiteGeography,
-  apiKey: string 
-} ) {
-
-  const [ viewMode, setViewMode ] = useState<string>('list')
-
-  const searchState = useSelector((state: RootState) => state.search)
-  const { selectedPlace } = searchState
-
-  const t = useTranslations('SitesView')
-
-  logger.debug('Selected place', selectedPlace)
-
-  const { data: placeDetails } = useGetPlaceDetailsQuery(selectedPlace?.placeId, {
-    skip: !selectedPlace
-  })
-
-  const { data: searchResponse } = useGetSitesByCoordsQuery({ lat: placeDetails?.lat, lng: placeDetails?.lng }, {
-    skip: !placeDetails
-  })
-
-  logger.debug('Search response', searchResponse)
-
-  return (
-    <div className="container mx-auto pt-[82px] bg-[#fff5e1]">
-      <div className="flex justify-between py-1 px-2">
-        <div>
-          <div className="text-sm text-gray-600">
-            <span className="mr-1 font-bold">{ searchResponse?.sites.length || sites.length }</span>
-            <span>{t('BEACHES')}</span>
+      {/* Use Case 2: Use Map or QR */}
+      <section className="flex flex-col md:flex-row-reverse items-center gap-6 px-5 py-12 bg-[#fdf8ea] max-w-4xl mx-auto">
+        <div className="w-full md:w-1/2 flex flex-col items-center justify-center text-blue-600">
+          <div className="bg-blue-50 w-full h-40 rounded-md border border-blue-200 flex items-center justify-center text-sm text-blue-700">
+            Interactive chair map / QR scan mockup
           </div>
-          {
-            !selectedPlace ? (
-              <div className="text-gray-600">
-                <span>{t('Showing all beaches')}</span>
-              </div>
-            ) : (
-              <div className="text-gray-600">
-                <span className="mr-1">near</span>
-                <span className="font-bold">{selectedPlace.mainText}</span>
-              </div>
-            )
-          }
         </div>
-        <div>
-          <ToggleButtonGroup
-            color="primary"
-            value={viewMode}
-            exclusive
-            onChange={(e, value) => {
-              setViewMode(value)
-            }}
-            aria-label="View selection"
-          >
-            <ToggleButton value="map" style={{ width: '42px', height: '42px' }}>
-              <div className="mt-[3px]">
-                <div style={{ fontSize: '10px' }}>
-                  {t('MAP')}
-                </div>
-                <MapIcon sx={{ fontSize: '24px', marginTop: '-12px' }}/>
-              </div>
-            </ToggleButton>
-            <ToggleButton value="list" style={{ width: '42px', height: '42px' }}>
-              <div className="mt-[3px]">
-                <div style={{ fontSize: '10px' }}>
-                  {t('LIST')}
-                </div>
-                <ListAltIcon sx={{ fontSize: '24px', marginTop: '-12px' }}/>
-              </div>
-            </ToggleButton>
-          </ToggleButtonGroup>
+        <div className="md:w-1/2 text-center md:text-left">
+          <h2 className="text-xl font-semibold mb-2">🪑 Book on the Beach</h2>
+          <p className="text-sm leading-relaxed">
+            Use the live map to pick a sunbed — or scan a QR code to instantly claim one, just like tossing down a towel.
+          </p>
         </div>
-      </div>
-      {
-        viewMode === 'list' ? (
-          <SiteList sites={(searchResponse?.sites || sites)} />
-        ) : (
-          <SiteMap sites={(searchResponse?.sites || sites)} 
-            geography={searchResponse?.geography || geography}
-            apiKey={apiKey} />
-        )
-      }
+      </section>
+
+      {/* Use Case 3: Order & Pay */}
+      <section className="flex flex-col md:flex-row items-center gap-6 px-5 py-12 bg-white max-w-4xl mx-auto">
+        <div className="w-full md:w-1/2 flex flex-col items-center justify-center text-green-600">
+          <div className="bg-green-50 w-full h-40 rounded-md border border-green-200 flex items-center justify-center text-sm text-green-700">
+            Food & drink menu + payment preview
+          </div>
+        </div>
+        <div className="md:w-1/2 text-center md:text-left">
+          <h2 className="text-xl font-semibold mb-2">🍹 Order & Pay with a Tap</h2>
+          <p className="text-sm leading-relaxed">
+            Order drinks, food, or rentals right to your chair — and pay online with just a few clicks.
+          </p>
+        </div>
+      </section>
+
+      {/* Final CTA */}
+      <section className="py-10 text-center bg-[#fff3d2]">
+        <h2 className="text-lg font-semibold mb-3">Your beach day, simplified.</h2>
+        <button className="bg-yellow-500 text-white px-5 py-2 rounded-md text-sm hover:bg-yellow-600">
+          Explore Beaches
+        </button>
+      </section>
     </div>
   )
-
 }

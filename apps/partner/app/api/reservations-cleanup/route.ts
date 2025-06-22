@@ -8,13 +8,22 @@ export async function GET(request: Request) {
 
   const session = await auth()
   
-  // delete any reservation still in "pending" created > 15 minutes ago:
-  const cutoff = new Date(Date.now() - 15 * 60 * 1000)
+  const cutoffPending = new Date(Date.now() - 15 * 60 * 1000)
+  const cutoffPaidInCash = dayjs().startOf('day').toDate()
+
   const result = await prisma.reservation.deleteMany({
     where: {
-      status: { in: [ 'pending', 'processing' ] },
-      createdAt: { lt: cutoff },
-    },
+      OR: [
+        { 
+          status: { in: [ 'pending', 'processing' ] },
+          createdAt: { lt: cutoffPending }
+        },
+        { 
+          status: { in: [ 'paid-in-cash' ] },
+          createdAt: { lt: cutoffPaidInCash }
+        }
+      ],
+    }
   })
 
   console.log('Deleted reservations older than 15 minutes:', result.count)

@@ -174,7 +174,7 @@ export default function CustomizedInputBase() {
                           mainText: suggestion.structured_formatting.main_text
                         }
                       }))
-                      router.push('/')
+                      router.push('/sites')
                     }}
                   >
                     {suggestion.description}
