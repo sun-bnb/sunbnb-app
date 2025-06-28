@@ -1,5 +1,6 @@
 import logger from '@/utils/logger'
 
+import { GoogleAnalytics } from '@next/third-parties/google'
 import type { Metadata } from 'next'
 import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages } from 'next-intl/server'
@@ -72,6 +73,7 @@ export default async function RootLayout({
           </NextAuthProvider>
         </body>
       </StoreProvider>
+      <GoogleAnalytics gaId="G-Y6CN4PSJX1" />
     </html>
   )
 }
