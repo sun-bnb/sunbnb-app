@@ -78,7 +78,7 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
   let inventoryItems = site.inventoryItems
   
   const itemCount = inventoryItems?.length
-  const availableCount = inventoryItems?.filter(item => item.status === 'active').length
+  const availableCount = inventoryItems?.filter(item => item.status === 'active' && (item.reservations || []).length === 0).length
 
   let allReservations: Reservation[] = []
   if (inventoryItems) {
