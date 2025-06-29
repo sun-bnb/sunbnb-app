@@ -10,6 +10,7 @@ export async function GET(request: Request) {
   
   const cutoffPending = new Date(Date.now() - 15 * 60 * 1000)
   const cutoffPaidInCash = dayjs().startOf('day').toDate()
+  const now = new Date()
 
   const result = await prisma.reservation.deleteMany({
     where: {
@@ -20,9 +21,14 @@ export async function GET(request: Request) {
         },
         { 
           status: { in: [ 'paid-in-cash' ] },
-          createdAt: { lt: cutoffPaidInCash }
+          createdAt: { 
+            lt: cutoffPaidInCash,
+          },
+          to: { 
+            lt: now,
+          }
         }
-      ],
+      ]
     }
   })
 

@@ -86,14 +86,8 @@ export async function unreserveItem(siteId: string, itemId: string) {
           id: itemId
         }
       },
-      siteId,
-      from: {
-        lte: dayjs().endOf('day').toDate(),
-      },
-      to: {
-        gte: dayjs().startOf('day').toDate(),
-      },
-    },
+      siteId
+    }
   });
 
   console.log('UNRESERVE RESULT', result.count)
