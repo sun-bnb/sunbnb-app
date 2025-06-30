@@ -37,7 +37,7 @@ export default function HomeView() {
       </section>
 
       {/* Use Case 1: Book Before You Go */}
-      <section className="flex flex-col md:flex-row items-center gap-6 bg-white pb-24 max-w-4xl mx-auto mt-[35px]">
+      <section className="flex flex-col md:flex-row items-center gap-6 bg-white pb-16 max-w-4xl mx-auto mt-[35px]">
         <div className="w-full md:w-1/2 flex flex-col items-center justify-center text-yellow-600">
           <div className="w-full h-40 flex items-center justify-center text-sm text-yellow-700">
             <Image 
@@ -51,6 +51,13 @@ export default function HomeView() {
           <p className="text-sm leading-relaxed">
             Search your beach, select a sunbed, and book it before you arrive. No stress, no surprises.
           </p>
+        </div>
+        <div>
+          <button onClick={() => {
+            router.push('/sites')
+          }} className="bg-yellow-500 text-white px-5 py-2 rounded-md text-sm hover:bg-yellow-600">
+            Explore Beaches
+          </button>
         </div>
       </section>
 
