@@ -197,6 +197,7 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
           zIndex: 11,
           bottom: !focused ? bottomOffset : '0px',
         }} className={`fixed left-0 w-full bg-[#fff5e1] text-white text-center px-2 pb-4 border-t transition-bottom duration-500`}>
+        
           {
             focused ? (
               <div className="text-black absolute w-[100px] bg-[#fff5e1] rounded-md border" style={{

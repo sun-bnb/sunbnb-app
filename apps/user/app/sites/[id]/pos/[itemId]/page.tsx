@@ -29,10 +29,16 @@ async function getInventoryItems(id: string) {
 
   const pair = item.pair || item.pairedBy
   if (pair) {
-    return [item, pair]    
+    return {
+      site: item.site,
+      items: [item, pair]
+    }    
   }
   
-  return [item]
+  return {
+    site: item.site,
+    items: [item] 
+  }
 
 }
 
@@ -44,6 +50,6 @@ export default async function Pos({ params }: { params: { itemId: string }}) {
 
   if (!items) return <div>Item {params.itemId} not found</div>
 
-  return <PosView items={items} apiKey={apiKey} stripePublicKey={STRIPE_PUBLIC_KEY}/>
+  return <PosView items={items.items} site={items.site} apiKey={apiKey} stripePublicKey={STRIPE_PUBLIC_KEY}/>
 
 }

@@ -228,6 +228,7 @@ function ReservationButton({
                     to: to.toISOString(),
                     type: 'hours',
                     siteId: site.id!,
+                    status: site.type === 'unpaid' ? 'complete' : 'pending',
                     items: selectedItems,
                     userId: session?.user?.id!
                   })
@@ -240,6 +241,7 @@ function ReservationButton({
                     to: to.toISOString(),
                     type: 'days',
                     siteId: site.id!,
+                    status: site.type === 'unpaid' ? 'complete' : 'pending',
                     items: selectedItems,
                     userId: session?.user?.id!
                   })
@@ -247,10 +249,17 @@ function ReservationButton({
 
                 logger.debug('Save result', saveResult)
                 if (saveResult?.status === 'ok' && saveResult.id) {
-                  dispatch(setValue({ 
-                    reservationState: 'processing',
-                    pendingReservationId: saveResult.id
-                  }))
+                  logger.debug('Site type', site.type)
+                  if (site.type === 'unpaid') {
+                    router.push(`/reservations/${saveResult.id}`)
+                  } else {
+                    dispatch(setValue({ 
+                      reservationState: site.type === 'unpaid' ? 'complete' : 'processing',
+                      pendingReservationId: saveResult.id
+                    }))
+                  }
+                } else {
+                  logger.debug('Save result error', saveResult)
                 }
 
               }

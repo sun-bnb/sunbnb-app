@@ -4,7 +4,7 @@ import logger from '@/utils/logger'
 
 import { v4 as uuidv4 } from 'uuid'
 import Image from 'next/image'
-import { InventoryItem } from '@/app/sites/types'
+import { InventoryItem, SiteProps } from '@/app/sites/types'
 import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
 import CheckIcon from '@mui/icons-material/Check'
@@ -24,6 +24,7 @@ import PaymentView from '@/app/payment/Payment'
 import sunbedIcon from './sunbed-icon-transparent.png'
 import sunbedPerfIcon from '@/components/reservation/sunbed-perforated-transparent.png'
 import sunshadeIcon from '@/components/reservation/sunshade-transparent.png'
+import { useRouter } from 'next/navigation'
 
 // A helper function that checks if an item is free for the current day
 function isItemAvailableToday(item: InventoryItem): boolean {
@@ -56,16 +57,19 @@ function isItemAvailableToday(item: InventoryItem): boolean {
 function ReservationButton({
   disabled,
   items,
+  site,
   dateRange
 }: {
   disabled: boolean,
   items: InventoryItem[],
+  site: SiteProps,
   dateRange: { from: string, to: string }
 }) {
 
   const { data: session } = useSession()
 
   const dispatch = useDispatch();
+  const router = useRouter()
   const sitesState = useSelector((state: RootState) => state.sites)
 
   let selectedItems = items
@@ -101,6 +105,7 @@ function ReservationButton({
               type: 'days',
               siteId: items[0]!.site?.id!,
               items: selectedItems,
+              status: site.type === 'unpaid' ? 'complete' : 'pending',
               userId: session?.user?.id,
               anonId
             })
@@ -108,10 +113,13 @@ function ReservationButton({
             logger.debug('Save result ITEM', saveResult)
             if (saveResult?.status === 'ok' && saveResult.id) {
               dispatch(setValue({ 
-                reservationState: 'processing',
+                reservationState: site.type === 'unpaid' ? 'complete' : 'processing',
                 pendingReservationId: saveResult.id,
                 panelBottom: 'bottom-[0px]'
               }))
+              if (site.type === 'unpaid') {
+                router.push(`/reservations/${saveResult.id}`)
+              }
             }
 
           }
@@ -126,11 +134,13 @@ export default function ReservationView({
   apiKey,
   stripePublicKey,
   items,
+  site,
   dateRange
 } : {
   apiKey: string
   stripePublicKey: string | undefined
   items: InventoryItem[],
+  site: SiteProps,
   dateRange: { from: string, to: string }
 }) {
 
@@ -180,7 +190,7 @@ export default function ReservationView({
           {
             !reservation ? 
               <div className="w-[200px]">
-                <ReservationButton disabled={!isAvailable || selectedItems.length === 0} items={items} dateRange={dateRange} /> 
+                <ReservationButton disabled={!isAvailable || selectedItems.length === 0} items={items} site={site} dateRange={dateRange} /> 
               </div>:
               <div className="block mt-[6px] ml-[6px]">
                 <div className="text-left">DATE: <b>{dateStr}</b></div>

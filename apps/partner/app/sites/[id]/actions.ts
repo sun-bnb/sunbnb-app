@@ -33,6 +33,7 @@ export async function submitForm(
   let price = Number(priceVal)
   const siteData = {
     name: formData.get('name') as string,
+    type: formData.get('type') as string || 'paid',
     price: price > 0 ? price : null,
     locationLat: formData.get('locationLat') as string,
     locationLng: formData.get('locationLng') as string,

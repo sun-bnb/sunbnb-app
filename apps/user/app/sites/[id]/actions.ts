@@ -309,6 +309,7 @@ export async function saveReservationForMultipleItems(
     siteId: string,
     items?: InventoryItem[],
     type: string,
+    status?: string,
     from: string, to: string
   }) {
   
@@ -330,7 +331,7 @@ export async function saveReservationForMultipleItems(
     from:from,
     to: to,
     type: reservation.type,
-    status: 'pending',
+    status: reservation.status || 'pending',
     paymentAmount: 0,
     anonId: reservation.anonId,
     items: {

@@ -1,70 +1,56 @@
-datasource db {
-  provider = "postgresql"
-  url      = env("POSTGRES_URL")
-}
- 
 generator client {
   provider = "prisma-client-js"
 }
 
+datasource db {
+  provider = "postgresql"
+  url      = env("POSTGRES_URL")
+}
+
 model Settings {
-
-  id            String          @id @default(cuid())
-  country       String?
-
-  vat           Float?
-  currency      String?
-
-  serviceFees   ServiceFee[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  id          String       @id @default(cuid())
+  country     String?
+  vat         Float?
+  currency    String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  serviceFees ServiceFee[]
 }
 
 model ServiceFee {
-  
-  id            String          @id @default(cuid())
-  settingsId    String          @map("settings_id")
-  siteId        String?         @map("site_id")
-  accountId     String?         @map("account_id")
-  
-  serviceCode   String          @map("service_code")
-  chargeType    String          @map("charge_type")
-
-  feeAmount     Float?          @map("fee_amount")
-  percentage    Float?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  settings Settings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
-  site Site? @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  account PartnerAccount? @relation(fields: [accountId], references: [userId], onDelete: Cascade)
-
+  id          String          @id @default(cuid())
+  settingsId  String          @map("settings_id")
+  siteId      String?         @map("site_id")
+  accountId   String?         @map("account_id")
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  chargeType  String          @map("charge_type")
+  feeAmount   Float?          @map("fee_amount")
+  percentage  Float?
+  serviceCode String          @map("service_code")
+  account     PartnerAccount? @relation(fields: [accountId], references: [userId], onDelete: Cascade)
+  settings    Settings        @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+  site        Site?           @relation(fields: [siteId], references: [id], onDelete: Cascade)
 }
 
 model User {
-  id            String          @id @default(cuid())
-  name          String?
-  email         String          @unique
-  password      String?
-  emailVerified DateTime?
-  image         String?
-  sudo          Boolean         @default(false)
-  accounts      Account[]
-  sessions      Session[]
-  sites         Site[]
-  inventoryItems         InventoryItem[]
-  reservations           Reservation[]
-  orders                 Order[]
+  id             String          @id @default(cuid())
+  name           String?
+  email          String          @unique
+  emailVerified  DateTime?
+  image          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  password       String?
+  sudo           Boolean         @default(false)
+  accounts       Account[]
+  Authenticator  Authenticator[]
+  inventoryItems InventoryItem[]
+  orders         Order[]
   partnerAccount PartnerAccount?
-  // Optional for WebAuthn support
-  Authenticator Authenticator[]
- 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  reservations   Reservation[]
+  sessions       Session[]
+  sites          Site[]
 }
 
 model Account {
@@ -79,337 +65,244 @@ model Account {
   scope             String?
   id_token          String?
   session_state     String?
- 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
- 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
- 
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@id([provider, providerAccountId])
 }
 
 model PartnerAccount {
-  
-  firstName         String @map("first_name")
-  lastName          String @map("last_name")
-  email             String
-  phoneNumber       String @map("phone_number")
-  company           String
-  businessId        String? @map("business_id")
-  websiteUrl        String? @map("website_url")
-  address           String
-  bankAccount       String? @map("bank_account")
-
-  invoices          Invoice[]
-  serviceFees       ServiceFee[]
- 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
- 
-  userId            String @unique @map("user_id")
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
- 
-  @@id([userId])
-
+  firstName   String       @map("first_name")
+  lastName    String       @map("last_name")
+  email       String
+  phoneNumber String       @map("phone_number")
+  company     String
+  websiteUrl  String?      @map("website_url")
+  address     String
+  bankAccount String?      @map("bank_account")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  userId      String       @id @unique @map("user_id")
+  businessId  String?      @map("business_id")
+  invoices    Invoice[]
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serviceFees ServiceFee[]
 }
 
 model Site {
+  id              String                   @id @unique @default(cuid())
+  userId          String                   @map("user_id")
+  name            String
+  locationLat     String                   @map("location_lat")
+  locationLng     String                   @map("location_lng")
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  description     String?
+  image           String?
+  coords          Unsupported("geometry")?
+  price           Float?
+  imageHeight     Int?                     @map("image_height")
+  imageWidth      Int?                     @map("image_width")
+  services        String[]                 @default([])
+  vat             Float?
+  status          String                   @default("active")
+  appSalesEnabled Boolean                  @default(false) @map("app_sales_enabled")
+  type            String?
+  inventoryItems  InventoryItem[]
+  orders          Order[]
+  products        Product[]
+  reservations    Reservation[]
+  serviceFees     ServiceFee[]
+  user            User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workingHours    SiteWorkingHours[]
 
-  id                String          @unique @id @default(cuid())
-
-  userId            String          @map("user_id")
-  name              String
-  locationLat       String          @map("location_lat")
-  locationLng       String          @map("location_lng")
-  coords            Unsupported("geometry(Point, 4326)")?
-
-  price             Float?
-  vat               Float?
-
-  image             String?
-  imageWidth        Int?            @map("image_width")
-  imageHeight       Int?            @map("image_height")
-
-  description       String?
-  status            String          @default("active")
-
-  services          String[]        @default([])
-
-  appSalesEnabled   Boolean         @map("app_sales_enabled") @default(false)
-
-  inventoryItems         InventoryItem[]
-  workingHours           SiteWorkingHours[]
-  reservations           Reservation[]
-  serviceFees            ServiceFee[]
-  products               Product[]
-  orders                 Order[]
- 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
- 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  @@index([coords], name: "site_coords_idx", type: Gist)
- 
+  @@index([coords], map: "site_coords_idx", type: Gist)
 }
 
 model SiteWorkingHours {
-
-  id                String          @unique @id @default(cuid())
-  siteId            String          @map("site_id")
-
-  day               Int
-  openTime          DateTime          @map("open_time")
-  closeTime         DateTime          @map("close_time")
-
+  id        String   @id @unique @default(cuid())
+  siteId    String   @map("site_id")
+  day       Int
+  openTime  DateTime @map("open_time")
+  closeTime DateTime @map("close_time")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
-
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 }
 
-model InventoryItem {               @map("inventory_item")
-
-  id                String          @unique @id @default(cuid())
-
-  userId            String          @map("user_id")
-  siteId            String          @map("site_id")
-  itemGroupId       String?         @map("item_group_id")
-
-  group             Int             @default(0)
-  number            Int
-  locationLat       String          @map("location_lat")
-  locationLng       String          @map("location_lng")
-  status            String
-  notes             String?
-  label             String?
-  image             String?
-  rotation          Int?
-
-  category          String?
-  price             Float?
- 
-  pairId        String?         @unique @map("pair_id") 
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  reservations           Reservation[]
-  orders                 Order[]
- 
-  pair          InventoryItem?  @relation("ItemPair", fields: [pairId], references: [id])
-  pairedBy      InventoryItem?  @relation("ItemPair")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  itemGroup ItemGroup? @relation(fields: [itemGroupId], references: [id])
- 
+model InventoryItem {
+  id           String         @id @unique @default(cuid())
+  userId       String         @map("user_id")
+  siteId       String         @map("site_id")
+  number       Int
+  locationLat  String         @map("location_lat")
+  locationLng  String         @map("location_lng")
+  status       String
+  notes        String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  image        String?
+  label        String?
+  rotation     Int?
+  category     String?
+  price        Float?
+  pairId       String?        @unique @map("pair_id")
+  group        Int            @default(0)
+  itemGroupId  String?        @map("item_group_id")
+  itemGroup    ItemGroup?     @relation(fields: [itemGroupId], references: [id])
+  pair         InventoryItem? @relation("ItemPair", fields: [pairId], references: [id])
+  pairedBy     InventoryItem? @relation("ItemPair")
+  site         Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders       Order[]
+  reservations Reservation[]  @relation("InventoryItemToReservation")
 }
 
-model ItemGroup {                   @map("item_group")
-
-  id                String          @unique @id @default(cuid())
-
-  number            Int             
-  label             String?         
-  rows              Int             
-  seatsPerRow       Int             @map("seats_per_row")
-  locationLat       String          @map("location_lat")
-  locationLng       String          @map("location_lng")
-  status            String          @default("active")
-  rotation          Int             @default(0)
-  horizontalGap     Float           @map("horizontal_gap")
-  verticalGap       Float           @map("vertical_gap")
-  pairGap           Float           @map("pair_gap")
-  category          String?
-  price             Float?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  items             InventoryItem[]
- 
+model ItemGroup {
+  id            String          @id @unique @default(cuid())
+  number        Int
+  label         String?
+  rows          Int
+  seatsPerRow   Int             @map("seats_per_row")
+  locationLat   String          @map("location_lat")
+  locationLng   String          @map("location_lng")
+  status        String          @default("active")
+  rotation      Int             @default(0)
+  horizontalGap Float           @map("horizontal_gap")
+  verticalGap   Float           @map("vertical_gap")
+  pairGap       Float           @map("pair_gap")
+  category      String?
+  price         Float?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  items         InventoryItem[]
 }
 
 model Reservation {
-
-  id                String          @unique @id @default(cuid())
-
-  userId            String          @map("user_id")
-  siteId            String          @map("site_id")
-  itemId            String?         @map("item_id")
-
-
-  anonId            String?          @map("anon_id")
-
-  invoiceId         String?         @unique @map("invoice_id")
-
-  from              DateTime        @map("from")
-  to                DateTime        @map("to")
-
-  status            String @default("pending")
-  type              String @default("hours")
-
-  paymentRef        String?         @map("payment_ref")
-  paymentAmount     Float?          @map("payment_amount")
- 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
- 
-  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  site      Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  invoice   Invoice? @relation(fields: [invoiceId], references: [id])
-
-  items InventoryItem[]
-  orders Order[]
- 
+  id            String          @id @unique @default(cuid())
+  userId        String          @map("user_id")
+  siteId        String          @map("site_id")
+  itemId        String?         @map("item_id")
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  status        String          @default("pending")
+  type          String          @default("hours")
+  from          DateTime        @map("from")
+  to            DateTime        @map("to")
+  paymentAmount Float?          @map("payment_amount")
+  paymentRef    String?         @map("payment_ref")
+  invoiceId     String?         @unique @map("invoice_id")
+  anonId        String?         @map("anon_id")
+  orders        Order[]
+  invoice       Invoice?        @relation(fields: [invoiceId], references: [id])
+  site          Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items         InventoryItem[] @relation("InventoryItemToReservation")
 }
 
 model Product {
-
-  id                String          @unique @id @default(cuid())
-  siteId            String          @map("site_id")
-
-  name              String          
-  description       String?          
-  imageUrl          String?         @map("image_url")
-  imageWidth        Int?            @map("image_width")
-  imageHeight       Int?            @map("image_height")
-
-  price             Float
-  tax               Float
-  totalPrice        Float
-
-  active            Boolean         @default(true)
-
-  site              Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
- 
+  id          String   @id @unique @default(cuid())
+  name        String
+  description String?
+  price       Float
+  tax         Float
+  totalPrice  Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  siteId      String   @map("site_id")
+  imageUrl    String?  @map("image_url")
+  active      Boolean  @default(true)
+  imageHeight Int?     @map("image_height")
+  imageWidth  Int?     @map("image_width")
+  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 }
 
 model Order {
-
-  id                String          @unique @id @default(cuid())
-
-  userId            String          @map("user_id")
-  invoiceId         String?         @unique @map("invoice_id")
-  siteId            String          @map("site_id")
-  reservationId     String?         @map("reservation_id")
-  seatId            String?         @map("seat_id")
-  
-  anonId            String?          @map("anon_id")
-
-  status            String          @default("created")
-
-  price             Float
-  tax               Float
-  totalPrice        Float
-
-  paymentRef        String?         @map("payment_ref")
-  paymentAmount     Float?          @map("payment_amount")
-
-  orderItems        OrderItem[]
-
-  invoice           Invoice? @relation(fields: [invoiceId], references: [id])
-  reservation       Reservation? @relation(fields: [reservationId], references: [id])
-  seat              InventoryItem? @relation(fields: [seatId], references: [id])
-  site              Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
- 
+  id            String         @id @unique @default(cuid())
+  invoiceId     String?        @unique @map("invoice_id")
+  price         Float
+  tax           Float
+  totalPrice    Float
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  siteId        String         @map("site_id")
+  status        String         @default("created")
+  anonId        String?        @map("anon_id")
+  paymentAmount Float?         @map("payment_amount")
+  paymentRef    String?        @map("payment_ref")
+  userId        String         @map("user_id")
+  reservationId String?        @map("reservation_id")
+  seatId        String?        @map("seat_id")
+  invoice       Invoice?       @relation(fields: [invoiceId], references: [id])
+  reservation   Reservation?   @relation(fields: [reservationId], references: [id])
+  seat          InventoryItem? @relation(fields: [seatId], references: [id])
+  site          Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderItems    OrderItem[]
 }
 
 model OrderItem {
-
-  id                String          @unique @id @default(cuid())
-  orderId           String          @map("order_id")
-  productId         String          @map("product_id")
-
-  quantity          Int
-
-  name              String
-  price             Float
-  tax               Float
-  totalPrice        Float
-
-  order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
- 
+  id         String   @id @unique @default(cuid())
+  orderId    String   @map("order_id")
+  productId  String   @map("product_id")
+  quantity   Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  name       String
+  price      Float
+  tax        Float
+  totalPrice Float
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 model Invoice {
-
-  id                String          @unique @id @default(cuid())
-
-  accountId         String          @map("account_id")
-
-  status            String          @default("created")
-
-  paymentRef        String?         @map("payment_ref")
-
-  totalCharge       Float           @map("total_charge")
-  totalTax          Float           @map("total_tax") @default(0)
-  totalAmount       Float           @map("total_amount")
-
-  invoiceLines      InvoiceLine[]
- 
-  invoicedAt DateTime               @map("invoiced_at") @default(now())
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
- 
-  reservation Reservation?
-  order       Order?
-
-  account PartnerAccount @relation(fields: [accountId], references: [userId], onDelete: Cascade)
- 
+  id           String         @id @unique @default(cuid())
+  accountId    String         @map("account_id")
+  status       String         @default("created")
+  paymentRef   String?        @map("payment_ref")
+  totalCharge  Float          @map("total_charge")
+  totalTax     Float          @default(0) @map("total_tax")
+  totalAmount  Float          @map("total_amount")
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  invoicedAt   DateTime       @default(now()) @map("invoiced_at")
+  account      PartnerAccount @relation(fields: [accountId], references: [userId], onDelete: Cascade)
+  invoiceLines InvoiceLine[]
+  order        Order?
+  reservation  Reservation?
 }
 
 model InvoiceLine {
-
-  id                String          @unique @id @default(cuid())
-
-  invoiceId         String          @map("invoice_id")
-
-  charge            Float
-  tax               Float           @default(0)
-  amount            Float
- 
-  productCode       String?
-  description       String?
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
- 
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
- 
+  id          String   @id @unique @default(cuid())
+  invoiceId   String   @map("invoice_id")
+  charge      Float
+  tax         Float    @default(0)
+  amount      Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  description String?
+  productCode String?
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 }
- 
+
 model Session {
   sessionToken String   @unique
   userId       String
   expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
- 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
- 
+
 model VerificationToken {
   identifier String
   token      String
   expires    DateTime
- 
+
   @@id([identifier, token])
 }
- 
-// Optional for WebAuthn support
+
 model Authenticator {
   credentialID         String  @unique
   userId               String
@@ -419,17 +312,25 @@ model Authenticator {
   credentialDeviceType String
   credentialBackedUp   Boolean
   transports           String?
- 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
- 
+  user                 User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@id([userId, credentialID])
 }
 
 model SecurityToken {
-  id                String          @unique @id @default(cuid())
-  userId            String          @map("user_id")
-  expires           DateTime
-  resources         String[]        @default([])
+  id        String   @id @unique @default(cuid())
+  expires   DateTime
+  resources String[] @default([])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  userId    String   @map("user_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model spatial_ref_sys {
+  srid      Int     @id
+  auth_name String? @db.VarChar(256)
+  auth_srid Int?
+  srtext    String? @db.VarChar(2048)
+  proj4text String? @db.VarChar(2048)
 }

@@ -19,6 +19,7 @@ import dayjs, { Dayjs } from 'dayjs'
 import SunbedSelection from '@/components/reservation/SunbedSelection'
 import { saveReservation, saveReservationForMultipleItems } from '../actions'
 import PaymentView from '@/app/payment/Payment'
+import { useRouter } from 'next/navigation'
 
 
 function ReservationButton({
@@ -34,6 +35,7 @@ function ReservationButton({
   const { data: session } = useSession()
 
   const dispatch = useDispatch();
+  const router = useRouter()
   const sitesState = useSelector((state: RootState) => state.sites)
   const { reservationState, reservationMode, selectedItems } = sitesState
 
@@ -67,16 +69,20 @@ function ReservationButton({
               siteId: site.id!,
               items: selectedItems,
               userId: session?.user?.id,
+              status: site.type === 'unpaid' ? 'complete' : 'pending',
               anonId
             })
 
             logger.debug('Save result POS', saveResult)
             if (saveResult?.status === 'ok' && saveResult.id) {
               dispatch(setValue({ 
-                reservationState: 'processing',
+                reservationState: site.type === 'unpaid' ? 'complete' : 'processing',
                 pendingReservationId: saveResult.id,
                 panelBottom: 'bottom-[0px]'
               }))
+              if (site.type === 'unpaid') {
+                router.push(`/reservations/${saveResult.id}`)
+              }
             }
 
           }

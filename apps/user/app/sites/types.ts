@@ -8,6 +8,7 @@ export interface SiteProps {
   image?: string | null
   imageWidth?: number | null
   imageHeight?: number | null
+  type?: string | null
   description?: string | null
   distance?: number | null
   price?: number | null

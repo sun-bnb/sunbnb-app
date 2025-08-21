@@ -103,12 +103,28 @@ export default function GeneralView() {
         />
         <TextField
           fullWidth
+          select
+          name="type"
+          label="Site Type"
+          defaultValue={site.type ?? ""}
+        >
+          <MenuItem value="">
+            <em>None</em>
+          </MenuItem>
+          <MenuItem value="paid">Paid</MenuItem>
+          <MenuItem value="unpaid">Unpaid</MenuItem>
+          {/* add more as needed */}
+        </TextField>
+        <TextField
+          fullWidth
+          disabled={site.type === 'unpaid'}
           name="price"
           label="Advertised Price"
           defaultValue={site.price?.toString()}
           type="number"
         />
       </Box>
+
 
       {/* Working hours */}
       <Divider>Working Hours</Divider>

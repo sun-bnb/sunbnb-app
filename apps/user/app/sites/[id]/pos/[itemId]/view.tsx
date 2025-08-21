@@ -2,12 +2,12 @@
 
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { InventoryItem } from '@/app/sites/types'
+import { InventoryItem, SiteProps } from '@/app/sites/types'
 import ReservationView from './Reservation'
 import { findAnonReservation, findUserReservation } from '../../actions'
 
 
-export default function PosView({ items, apiKey, stripePublicKey }: { items: InventoryItem[], apiKey: string, stripePublicKey: string | undefined }) {
+export default function PosView({ items, site, apiKey, stripePublicKey }: { items: InventoryItem[], site: SiteProps, apiKey: string, stripePublicKey: string | undefined }) {
 
   const router = useRouter()
 
@@ -58,6 +58,7 @@ export default function PosView({ items, apiKey, stripePublicKey }: { items: Inv
             apiKey={apiKey} 
             stripePublicKey={stripePublicKey} 
             items={items}
+            site={site}
             dateRange={{ from: availabilityFrom, to: availabilityTo }}
           />
         </div>
