@@ -27,6 +27,7 @@ export default function SiteView(
         }}>
           <Tab value="general" label="General" />
           <Tab value="content" label="Content" />
+          <Tab value="brand" label="Brand" />
           <Tab value="inventory" label="Inventory" />
           <Tab value="products" label="Products" />
           <Tab value="accounting" label="Accounting" />

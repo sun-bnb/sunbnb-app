@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { InventoryItem } from '@/types/shared'
+import { ToggleButton, ToggleButtonGroup } from '@mui/material'
 import {
   createInventoryItem,
   saveInventoryItemLocation,
@@ -12,14 +13,18 @@ import { useSite } from '@/app/sites/site-context'
 import { useSharedMap } from './SharedMapContext'
 import InventoryForm from './InventoryForm'
 import InventoryMap from './InventoryMap'
+import InventoryBackground from './InventoryBackground'
 import InventoryToolbar from './InventoryToolbar'
 import Reservations from './reservations'
+import BackgroundUploader from './BackgroundUploader'
 import ParcelForm from './ParcelForm'
 import { MapMouseEvent } from '@vis.gl/react-google-maps'
 import { ChairConfig } from './chair-util'
-import { syncChairsWithLayout, getItemGroup } from './actions'
+import { makeLocalProjector } from './map-geo'
+import { syncChairsWithLayout, getItemGroup, saveBgOption } from './actions'
 
 export default function InventoryView() {
+
   const { site, setSite, apiKey } = useSite()
   const { setValue, values } = useSharedMap()
 
@@ -34,6 +39,15 @@ export default function InventoryView() {
   const [editGroup, setEditGroup] = useState<number | null>(null)
   const [parcelLatLng, setParcelLatLng] = useState<{ lat: number; lng: number } | null>(null)
   const [parcelMoveTrigger, setParcelMoveTrigger] = useState(0)
+
+
+  const proj = useMemo(
+    () => makeLocalProjector({
+      lat: Number(site.locationLat),
+      lng: Number(site.locationLng),
+    }),
+    [site.locationLat, site.locationLng]
+  )
 
   const [parcelConfig, setParcelConfig] = useState<ChairConfig>({
     rows: 2,
@@ -54,9 +68,75 @@ export default function InventoryView() {
   const selectedItem = inventory.find((i) => i.id === selectedItemId)
 
   const [pairingMode, setPairingMode] = useState(false)
+  const [bgOption, setBgOption] = useState<string>(site.background || 'map')
   const [selectedPlace, setSelectedPlace] = useState<google.maps.places.PlaceResult | null>(null)
 
   const isParcelEditorActive = editorMode === 'create-parcel' || editorMode === 'edit-parcel'
+
+  function useSvgFromUrl(url: string | null) {
+    const [data, setData] = useState<{ inner: string; viewBox: string }>()
+    useEffect(() => {
+      let cancel = false
+      ;(async () => {
+        if (!url) return null
+        const res = await fetch(url, { cache: 'force-cache' })
+        const text = await res.text()
+        const doc = new DOMParser().parseFromString(text, 'image/svg+xml')
+        const svg = doc.querySelector('svg')
+        const viewBox =
+          svg?.getAttribute('viewBox') ||
+          `0 0 ${svg?.getAttribute('width') || 1000} ${svg?.getAttribute('height') || 700}`
+        const inner = svg ? svg.innerHTML : text
+        if (!cancel) setData({ inner, viewBox })
+      })()
+      return () => { cancel = true }
+    }, [url])
+    return data
+  }
+
+  
+  const handleBgClick = (world: { x: number; y: number }, e: React.MouseEvent<SVGSVGElement>) => {
+    const { lat, lng } = proj.worldToLl(world.x, world.y) // respects inverted Y
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+
+    if (editorMode === 'create-parcel') {
+      const newGroup = Math.max(0, ...inventory.map(i => i.group || 0)) + 1
+      const newConfig: ChairConfig = {
+        ...parcelConfig,
+        group: newGroup,
+        baseLat: lat,
+        baseLng: lng,
+      }
+      setParcelLatLng({ lat, lng })
+      setParcelConfig(newConfig)
+      syncChairsWithLayout(siteId, newConfig, 'create').then(async () => {
+        const updatedSite = await getSite(siteId)
+        if (updatedSite) setSite(updatedSite)
+        setEditorMode('none')
+        setParcelLatLng(null)
+      })
+      return
+    }
+
+    if (editorMode === 'edit-parcel') {
+      setParcelConfig({ ...parcelConfig, baseLat: lat, baseLng: lng })
+      setParcelMoveTrigger(Date.now())
+      return
+    }
+
+    if (editorMode === 'create-chair') {
+      createInventoryItem({ siteId }).then(async (result) => {
+        const newItem = result.item as InventoryItem
+        setSelectedItemId(newItem.id)
+        await saveInventoryItemLocation(newItem.id, {
+          locationLat: lat.toString(),
+          locationLng: lng.toString(),
+        })
+        setEditorMode('none')
+      })
+      return
+    }
+  }
 
   const handleMapClick = (e: MapMouseEvent) => {
     const lat = e?.detail.latLng?.lat
@@ -140,6 +220,10 @@ export default function InventoryView() {
     setEditGroup(null)
     setParcelLatLng(null)
   }
+
+  console.log('bgOptuon', bgOption)
+
+  const svg = useSvgFromUrl(site.bgImageUrl || null)
 
   return (
     <div className="container mx-auto p-4">
@@ -265,18 +349,58 @@ export default function InventoryView() {
             </div>
           )
         }
-        <InventoryMap
-          siteLat={siteLat}
-          siteLng={siteLng}
-          apiKey={apiKey}
-          selectedItemId={selectedItemId}
-          pairingMode={pairingMode}
-          onMapClick={handleMapClick}
-          onMarkerClick={handleMarkerClick}
-          onMarkerDragEnd={handleMarkerDragEnd}
-          onPlaceSelect={setSelectedPlace}
-          selectedPlace={selectedPlace}
-        />
+        <div className="flex justify-between mb-1">
+          {
+            bgOption === 'background' ?
+              <BackgroundUploader siteId={site.id!} /> : <div></div>
+          }
+          <ToggleButtonGroup
+            value={bgOption}
+            exclusive
+            onChange={(
+              _event: React.MouseEvent<HTMLElement>,
+              newMode: 'map' | 'background' | null
+            ) => {
+              if (newMode !== null) {
+                setBgOption(newMode);
+                saveBgOption(siteId, newMode).then(async () => {
+                  console.log('Saved background option:', newMode);
+                })
+              }
+            }}
+            aria-label="mode toggle"
+          >
+            <ToggleButton value="map" aria-label="map">
+              MAP
+            </ToggleButton>
+            <ToggleButton value="background" aria-label="background">
+              BACKGROUND
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </div>
+        {
+          bgOption === 'background' && site.bgImageUrl ?
+            <InventoryBackground 
+              backgroundSvg={svg?.inner || ''}
+              selectedItemId={selectedItemId}
+              pairingMode={pairingMode}
+              onMapClick={handleBgClick}
+              onMarkerClick={handleMarkerClick}
+              onMarkerDragEnd={handleMarkerDragEnd} /> : 
+            <InventoryMap
+              siteLat={siteLat}
+              siteLng={siteLng}
+              apiKey={apiKey}
+              selectedItemId={selectedItemId}
+              pairingMode={pairingMode}
+              onMapClick={handleMapClick}
+              onMarkerClick={handleMarkerClick}
+              onMarkerDragEnd={handleMarkerDragEnd}
+              onPlaceSelect={setSelectedPlace}
+              selectedPlace={selectedPlace}
+            />
+        }
+        
         <div className="w-full mt-4 text-sm md:text-base">
           {selectedItem && <Reservations reservations={selectedItem.reservations || []} />}
         </div>

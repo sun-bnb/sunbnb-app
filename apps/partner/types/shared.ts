@@ -13,6 +13,10 @@ export interface SiteProps {
   imageHeight?: number | null
   type?: string | null
   description?: string | null
+  background?: string | null
+  bgImageUrl?: string | null
+  bgImageWidth?: number | null
+  bgImageHeight?: number | null
   price?: number | null
   status?: string | null
   services: string[]

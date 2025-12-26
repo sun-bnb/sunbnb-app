@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import sharp from 'sharp'
+import { put } from '@vercel/blob'
 
 import { generateChairs, ChairConfig } from './chair-util'
 
@@ -171,4 +173,55 @@ export async function setItemStatusByGroup(itemGroupId: string, status: string) 
 
   return { status: 'ok' }
   
+}
+
+export async function saveBgOption(siteId: string, bgOption: string) {
+
+  const session = await auth()
+  if (!session?.user) throw new Error('Not authenticated')
+
+  await prisma.site.update({
+    where: { id: siteId },
+    data: {
+      background: bgOption
+    }
+  })
+
+  return { status: 'ok' }
+  
+}
+
+export async function uploadBackground(siteId: string, formData: FormData) {
+
+  const session = await auth()
+  if (!session?.user) throw new Error('Not authenticated')
+
+  const file = formData.get('image') as File | null
+  if (!file || file.size === 0) throw new Error('No file')
+
+  const buf = Buffer.from(await file.arrayBuffer())
+  const meta = await sharp(buf).metadata()
+
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+  const key = `site/${siteId}/background.${ext}`
+
+  console.log('Save bg image:', key, meta.width, meta.height);
+  // you can pass `file` directly too; using buffer lets you preprocess if needed
+  const blob = await put(key, buf, {
+    access: 'public',
+    contentType: file.type || 'image/jpeg',
+  })
+
+
+  console.log('Update site data');
+  await prisma.site.update({
+    where: { id: siteId },
+    data: {
+      bgImageUrl: blob.url,
+      bgImageWidth: meta.width ?? null,
+      bgImageHeight: meta.height ?? null,
+    },
+  })
+
+  return { url: blob.url, width: meta.width ?? null, height: meta.height ?? null }
 }

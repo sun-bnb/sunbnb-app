@@ -109,6 +109,11 @@ model Site {
   status          String                   @default("active")
   appSalesEnabled Boolean                  @default(false) @map("app_sales_enabled")
   type            String?
+  background      String?
+  bgImageUrl      String?                  @map("bg_image_url")
+  bgImageWidth    Int?                     @map("bg_image_width")
+  bgImageHeight   Int?                     @map("bg_image_height")
+  slug            String?
   inventoryItems  InventoryItem[]
   orders          Order[]
   products        Product[]
@@ -116,8 +121,21 @@ model Site {
   serviceFees     ServiceFee[]
   user            User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   workingHours    SiteWorkingHours[]
+  brand           SiteBrand?
 
   @@index([coords], map: "site_coords_idx", type: Gist)
+}
+
+model SiteBrand {
+  id              String                   @id @unique @default(cuid())
+  siteId          String                   @map("site_id") @unique
+  brandName       String
+  bgImageUrl      String?                  @map("bg_image_url")
+  bgImageWidth    Int?                     @map("bg_image_width")
+  bgImageHeight   Int?                     @map("bg_image_height")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  site            Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 }
 
 model SiteWorkingHours {
