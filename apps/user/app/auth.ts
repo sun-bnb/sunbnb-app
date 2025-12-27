@@ -160,8 +160,8 @@ const nextAuthResult: NextAuthResult = NextAuth({
   },
 });
 
-// Re-export handlers from NextAuth
-export const handlers = nextAuthResult.handlers;
-export const signIn = nextAuthResult.signIn;
-export const signOut = nextAuthResult.signOut;
+// Re-export handlers from NextAuth with explicit annotations to avoid deep inferred types
+export const handlers: typeof nextAuthResult.handlers = nextAuthResult.handlers;
+export const signIn: typeof nextAuthResult.signIn = nextAuthResult.signIn;
+export const signOut: typeof nextAuthResult.signOut = nextAuthResult.signOut;
 export const auth: any = nextAuthResult.auth; // (kept 'any' per original code)

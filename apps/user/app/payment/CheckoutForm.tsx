@@ -10,6 +10,7 @@ import {
   useStripe,
   useElements
 } from '@stripe/react-stripe-js'
+import type { ComponentType } from 'react'
 import { useTranslations } from 'next-intl'
 import ReservationItem from './ReservationItem'
 import { Reservation } from '../sites/types'
@@ -68,6 +69,7 @@ export default function CheckoutForm({
   }
 
   logger.debug('reservation (checkout)', reservation)
+  const SafePaymentElement = PaymentElement as unknown as ComponentType<any>
 
   return (
     <>
@@ -81,7 +83,7 @@ export default function CheckoutForm({
         }
       </div>
       <form id="payment-form" onSubmit={handleSubmit} className="mr-[6px] ml-[6px] mt-[6px] mb-[12px]">
-        <PaymentElement id="payment-element" options={paymentElementOptions} />
+        <SafePaymentElement id="payment-element" options={paymentElementOptions} />
         <div className="mt-[18px]">
           <div className="text-black text-[15px] mb-[4px] whitespace-nowrap">
             {t('Payment confirms acceptance of')} <a 

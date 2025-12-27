@@ -45,7 +45,7 @@ export async function checkSiteAuth(session: any, site: SiteProps): Promise<bool
   return true
 }
 
-export const handlers = nextAuthResult.handlers
-export const signIn = nextAuthResult.signIn
-export const signOut = nextAuthResult.signOut
+export const handlers: typeof nextAuthResult.handlers = nextAuthResult.handlers
+export const signIn: typeof nextAuthResult.signIn = nextAuthResult.signIn
+export const signOut: typeof nextAuthResult.signOut = nextAuthResult.signOut
 export const auth: any = nextAuthResult.auth

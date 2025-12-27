@@ -46,11 +46,13 @@ export default function InventoryMap({
 
   const [zoom, setZoom] = useState(20)
   const dynamicSize = getScaledSize(zoom)
+  const SafeAPIProvider = APIProvider as unknown as React.ComponentType<any>
+  const SafeMap = Map as unknown as React.ComponentType<any>
 
   return (
     <div className="w-full h-[400px] border border-2 border-gray-400">
-      <APIProvider apiKey={apiKey}>
-        <Map
+      <SafeAPIProvider apiKey={apiKey}>
+        <SafeMap
           mapId="7a0196a7ba317ea5"
           defaultZoom={18}
           defaultCenter={
@@ -60,7 +62,7 @@ export default function InventoryMap({
           }
           gestureHandling="greedy"
           disableDefaultUI
-          onZoomChanged={(mapInstance) => {
+          onZoomChanged={(mapInstance: any) => {
             const newZoom = mapInstance.map.getZoom()
             if (newZoom && newZoom !== zoom) {
               setZoom(newZoom)
@@ -99,13 +101,13 @@ export default function InventoryMap({
               />
             )
           })}
-        </Map>
+        </SafeMap>
         <CustomMapControl
           controlPosition={ControlPosition.TOP_LEFT}
           onPlaceSelect={onPlaceSelect}
         />
         <MapHandler place={selectedPlace} />
-      </APIProvider>
+      </SafeAPIProvider>
     </div>
   )
 }

@@ -124,24 +124,27 @@ function SiteMap({ sites, geography, apiKey }: { sites: SiteProps[], geography?:
   const [selectedSite, setSelectedSite] = useState<SiteProps | null>(null)
 
   const defaultBounds = geography?.bounds
+  const SafeAPIProvider = APIProvider as unknown as React.ComponentType<any>
+  const SafeMap = Map as unknown as React.ComponentType<any>
+  const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
 
   return (
     <div key={`${geography?.center.lat}-${geography?.center.lng}-${geography?.bounds?.north}-${geography?.bounds?.south}-${geography?.bounds?.east}-${geography?.bounds?.west}`}>
       <div className="w-full h-[300px] mt-[12px]">
-        <APIProvider apiKey={apiKey}>
-          <Map mapId={'7a0196a7ba317ea5'}
+        <SafeAPIProvider apiKey={apiKey}>
+          <SafeMap mapId={'7a0196a7ba317ea5'}
             defaultZoom={defaultBounds ? undefined : 8}
             defaultCenter={geography ? geography.center : { lat: 35.5138298, lng: 24.0180367 }}
             defaultBounds={defaultBounds}
             gestureHandling={'greedy'}
             disableDefaultUI={true}
-            onClick={(e) => {
+            onClick={(_e: unknown) => {
               setSelectedSite(null)
             }}
           >
             {
               (sites.map(site => (
-                (site.id !== selectedSite?.id) && <AdvancedMarker key={site.id}
+                (site.id !== selectedSite?.id) && <SafeAdvancedMarker key={site.id}
                   position={{ lat: Number(site.locationLat), lng: Number(site.locationLng) }}
                   onClick={() => {
                     setSelectedSite(site)
@@ -149,19 +152,19 @@ function SiteMap({ sites, geography, apiKey }: { sites: SiteProps[], geography?:
                   <div className="w-[40px] h-[40px] bg-yellow-200 rounded-full flex justify-center">
                     <span className="text-4xl">&#x26F1;</span>
                   </div>
-                </AdvancedMarker>)))
+                </SafeAdvancedMarker>)))
             }
             {
               (selectedSite?.locationLat && selectedSite?.locationLng) &&
-                <AdvancedMarker position={{ lat: Number(selectedSite.locationLat), lng: Number(selectedSite.locationLng) }}>
+                <SafeAdvancedMarker position={{ lat: Number(selectedSite.locationLat), lng: Number(selectedSite.locationLng) }}>
                   <div className="border border-[4px] border-red-800 w-[46px] h-[46px] bg-yellow-400 rounded-full flex justify-center">
                     <span className="text-4xl">&#x26F1;</span>
                   </div>
-                </AdvancedMarker>
+                </SafeAdvancedMarker>
 
             }
-          </Map>
-        </APIProvider>
+          </SafeMap>
+        </SafeAPIProvider>
       </div>
       {
         selectedSite &&

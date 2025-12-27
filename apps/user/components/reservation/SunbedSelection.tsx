@@ -71,6 +71,7 @@ const SiteSunbedMarker: React.FC<SiteSunbedMarkerProps> = ({
   available,
   onClick,
 }) => {
+  const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
 
   const beachTowelImage = <Image 
     src={beachTowelIcon} alt="Towel" height={dynamicSize / 2}
@@ -185,14 +186,14 @@ const SiteSunbedMarker: React.FC<SiteSunbedMarkerProps> = ({
   )
 
   return (
-    <AdvancedMarker
+    <SafeAdvancedMarker
       key={item.id}
       position={{ lat: Number(item.locationLat), lng: Number(item.locationLng) }}
       onClick={onClick}
       zIndex={isPaired && isPrimary ? 10 : 1}
     >
       {markerContent}
-    </AdvancedMarker>
+    </SafeAdvancedMarker>
   );
 };
 
@@ -391,10 +392,14 @@ export default function SunbedSelection({
     return parcelItems.filter(item => isAvailable(item)).length;
   }
 
+  const SafeAPIProvider = APIProvider as unknown as React.ComponentType<any>
+  const SafeMap = Map as unknown as React.ComponentType<any>
+  const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
+
   return (
     <>
-      <APIProvider apiKey={apiKey}>
-        <Map
+      <SafeAPIProvider apiKey={apiKey}>
+        <SafeMap
           mapId={'7a0196a7ba317ea5'}
           defaultZoom={defaultBounds ? undefined : 20}
           defaultCenter={{
@@ -404,17 +409,17 @@ export default function SunbedSelection({
           defaultBounds={defaultBounds}
           gestureHandling="greedy"
           disableDefaultUI={true}
-          onZoomChanged={mapInstance => {
+          onZoomChanged={(mapInstance: any) => {
             const newZoom = mapInstance.map.getZoom()
             console.log('Zoom changed', newZoom)
             setZoom(newZoom || 20)
           }}
-          onIdle={mapInstance => {
+          onIdle={(mapInstance: any) => {
             const newZoom = mapInstance.map.getZoom()
             console.log('Zoom set', newZoom)
             setZoom(newZoom || 20)
           }}
-          onClick={e => {
+          onClick={(e: any) => {
             console.log('Map click', e)
           }}
         >
@@ -431,7 +436,7 @@ export default function SunbedSelection({
                       key={idx}
                       paths={parcelShape.shape}
                     />
-                    <AdvancedMarker
+                    <SafeAdvancedMarker
                       key={`chip-${idx}`}
                       position={centroid}
                     >
@@ -441,14 +446,14 @@ export default function SunbedSelection({
                           sx={{ border: '1px solid black', backgroundColor: 'white', color: 'green' }}
                         />
                       </div>
-                    </AdvancedMarker>
+                    </SafeAdvancedMarker>
                   </React.Fragment>
                 )
               })
             
           }
-        </Map>
-      </APIProvider>
+        </SafeMap>
+      </SafeAPIProvider>
     </>
   )
 }

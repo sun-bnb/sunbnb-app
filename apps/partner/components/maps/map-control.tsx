@@ -12,12 +12,13 @@ export const CustomMapControl = ({
   controlPosition,
   onPlaceSelect
 }: CustomAutocompleteControlProps) => {
+  const SafeMapControl = MapControl as unknown as React.ComponentType<any>
   return (
-    <MapControl position={controlPosition}>
+    <SafeMapControl position={controlPosition}>
       <div className="autocomplete-control px-2 py-2">
         <PlaceAutocompleteClassic onPlaceSelect={onPlaceSelect} />
       </div>
-    </MapControl>
+    </SafeMapControl>
   )
 
 }

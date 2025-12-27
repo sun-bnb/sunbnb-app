@@ -73,6 +73,10 @@ export default function GeneralView() {
     return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
   }
 
+  const SafeAPIProvider = APIProvider as unknown as React.ComponentType<any>
+  const SafeMap = Map as unknown as React.ComponentType<any>
+  const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
+
   // Sorted working hours
   const sortedHours = useMemo(
     () => [...(site.workingHours ?? [])].sort((a, b) => a.day - b.day),
@@ -186,25 +190,25 @@ export default function GeneralView() {
       {/* Map */}
       <Divider>Site Location</Divider>
       <Box className="h-[500px] my-4 border border-gray-300">
-        <APIProvider apiKey={apiKey}>
-          <Map
+        <SafeAPIProvider apiKey={apiKey}>
+          <SafeMap
             mapId="site-map"
             defaultZoom={9}
             defaultCenter={{ lat: +site.locationLat!, lng: +site.locationLng! }}
             gestureHandling="greedy"
             disableDefaultUI
-            onClick={e => setMapCoords(e.detail.latLng!)}
+            onClick={(e: any) => setMapCoords(e.detail.latLng!)}
           >
             {mapCoords && (
-              <AdvancedMarker position={mapCoords} />
+              <SafeAdvancedMarker position={mapCoords} />
             )}
-          </Map>
+          </SafeMap>
           <CustomMapControl
             controlPosition={ControlPosition.TOP_LEFT}
             onPlaceSelect={setSelectedPlace}
           />
           <MapHandler place={selectedPlace} />
-        </APIProvider>
+        </SafeAPIProvider>
       </Box>
 
       {/* Actions */}

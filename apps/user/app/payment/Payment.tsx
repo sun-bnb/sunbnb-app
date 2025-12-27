@@ -80,19 +80,20 @@ export default function Payment({
     clientSecret,
     appearance
   };
+  const SafeElements = Elements as unknown as React.ComponentType<any>
 
   return (
     <div className="App">
       {
         clientSecret ? (
-          <Elements options={options} stripe={stripePromise}>
+          <SafeElements options={options} stripe={stripePromise}>
             {
                 <CheckoutForm dpmCheckerLink={dpmCheckerLink} 
                   reservation={reservation}
                   preview={preview}
                   completeUrl={completeUrl} />
             }
-          </Elements>
+          </SafeElements>
         ) : (
           <div className="flex justify-center mt-[24px]">
             <CircularProgress />

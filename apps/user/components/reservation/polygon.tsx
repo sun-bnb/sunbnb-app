@@ -66,7 +66,7 @@ function usePolygon(props: PolygonProps) {
     polygon.setOptions(polygonOptions);
   }, [polygon, polygonOptions]);
 
-  const map = useContext(GoogleMapsContext)?.map;
+  const map = (useContext as any)(GoogleMapsContext)?.map as google.maps.Map | null;
 
   // update the path with the encodedPath
   useMemo(() => {

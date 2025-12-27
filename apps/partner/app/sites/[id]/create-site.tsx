@@ -37,6 +37,10 @@ export default function CreateSite({ site, apiKey }: { site: SiteProps, apiKey: 
     }
   }, [formState])
 
+  const SafeAPIProvider = APIProvider as unknown as React.ComponentType<any>
+  const SafeMap = Map as unknown as React.ComponentType<any>
+  const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
+
   const generalTab = (
     <div>
         {
@@ -61,8 +65,8 @@ export default function CreateSite({ site, apiKey }: { site: SiteProps, apiKey: 
             Site location
           </div>
           <div className="h-[500px]">
-            <APIProvider apiKey={apiKey}>
-              <Map mapId={'7bd5d546975a15b5'}
+            <SafeAPIProvider apiKey={apiKey}>
+              <SafeMap mapId={'7bd5d546975a15b5'}
                 defaultZoom={9}
                 defaultCenter={(locationLat && locationLng) ? {
                   lat: Number(locationLat),
@@ -70,23 +74,23 @@ export default function CreateSite({ site, apiKey }: { site: SiteProps, apiKey: 
                 } : { lat: 35.5138298, lng: 24.0180367 }}
                 gestureHandling={'greedy'}
                 disableDefaultUI={true}
-                onClick={(e) => {
+                onClick={(e: any) => {
                   console.log('Map click', e)
                   setSiteLocation(e.detail.latLng)
                 }}
               >
                 {
                   (locationLat && locationLng) &&
-                    <AdvancedMarker position={{ lat: Number(locationLat), lng: Number(locationLng) }} />
+                    <SafeAdvancedMarker position={{ lat: Number(locationLat), lng: Number(locationLng) }} />
                 }
-              </Map>
+              </SafeMap>
               <CustomMapControl
                 controlPosition={ControlPosition.TOP_LEFT}
                 onPlaceSelect={setSelectedPlace}
               />
 
               <MapHandler place={selectedPlace} />
-            </APIProvider>
+            </SafeAPIProvider>
           </div>
           <div className="mt-4">
             <Button type="submit" variant="contained" fullWidth={true}>Save</Button>

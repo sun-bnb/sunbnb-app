@@ -82,19 +82,20 @@ export default function OrderPayment({
     clientSecret,
     appearance
   };
+  const SafeElements = Elements as unknown as React.ComponentType<any>
 
   return (
     <div className="App" style={{ paddingLeft: '8px', paddingRight: '8px' }}>
       {
         clientSecret ? (
-          <Elements options={options} stripe={stripePromise}>
+          <SafeElements options={options} stripe={stripePromise}>
             {
                 <CheckoutForm dpmCheckerLink={dpmCheckerLink} 
                   reservation={undefined}
                   preview={preview}
                   completeUrl={completeUrl} />
             }
-          </Elements>
+          </SafeElements>
         ) : (
           <div className="flex justify-center mt-[24px]">
             <CircularProgress />

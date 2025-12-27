@@ -30,6 +30,14 @@ export interface DashboardData {
 export default function DashboardView({ data }: { data: DashboardData}) {
 
   const theme = useTheme()
+  const SafeResponsiveContainer = ResponsiveContainer as unknown as React.ComponentType<any>
+  const SafeBarChart = BarChart as unknown as React.ComponentType<any>
+  const SafeCartesianGrid = CartesianGrid as unknown as React.ComponentType<any>
+  const SafeXAxis = XAxis as unknown as React.ComponentType<any>
+  const SafeYAxis = YAxis as unknown as React.ComponentType<any>
+  const SafeTooltip = Tooltip as unknown as React.ComponentType<any>
+  const SafeLegend = Legend as unknown as React.ComponentType<any>
+  const SafeBar = Bar as unknown as React.ComponentType<any>
 
   return (
     <Box p={4}>
@@ -133,30 +141,30 @@ export default function DashboardView({ data }: { data: DashboardData}) {
           <Typography variant="h6" gutterBottom>
             Revenue & Fees (Last 5 Months)
           </Typography>
-          <ResponsiveContainer width="100%" height="85%">
-            <BarChart
+          <SafeResponsiveContainer width="100%" height="85%">
+            <SafeBarChart
               data={data.revenueHistory}
               margin={{ top: 10, right: 20, bottom: 20, left: 0 }}
             >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip formatter={(value: number) => `€${value.toFixed(2)}`} />
-              <Legend verticalAlign="top" />
-              <Bar
+              <SafeCartesianGrid strokeDasharray="3 3" />
+              <SafeXAxis dataKey="month" />
+              <SafeYAxis />
+              <SafeTooltip formatter={(value: number) => `€${value.toFixed(2)}`} />
+              <SafeLegend verticalAlign="top" />
+              <SafeBar
                 dataKey="revenue"
                 name="Revenue"
                 fill={theme.palette.primary.main}
                 barSize={30}
               />
-              <Bar
+              <SafeBar
                 dataKey="fees"
                 name="Fees"
                 fill={theme.palette.error.main}
                 barSize={30}
               />
-            </BarChart>
-          </ResponsiveContainer>
+            </SafeBarChart>
+          </SafeResponsiveContainer>
         </Paper>
       </Box>
     </Box>

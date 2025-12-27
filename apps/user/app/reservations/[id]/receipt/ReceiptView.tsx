@@ -1,5 +1,6 @@
 'use client'
 
+import React, { ComponentType } from 'react'
 import { PDFDownloadLink } from '@react-pdf/renderer'
 import { ReceiptProps } from './ReceiptPage'
 import PdfReceipt from './PdfReceipt'
@@ -73,6 +74,7 @@ export default function ReceiptView({
 } : {
   receipt: ReceiptProps
 }) {
+  const SafePDFDownloadLink = PDFDownloadLink as unknown as ComponentType<any>
 
   return (
     <div>
@@ -81,12 +83,12 @@ export default function ReceiptView({
       </div>
       <div className="w-full text-center flex justify-center mt-[36px]">
         <div className="cursor-pointer bg-[#808080] text-white px-2">
-          <PDFDownloadLink document={<PdfReceipt receipt={receipt} />} fileName={`receipt-${new Date().toISOString()}.pdf`}>
+          <SafePDFDownloadLink document={<PdfReceipt receipt={receipt} />} fileName={`receipt-${new Date().toISOString()}.pdf`}>
             {
-              ({ blob, url, loading, error }) =>
+              ({ blob, url, loading, error }: { blob?: Blob, url?: string, loading: boolean, error?: Error }) =>
                 loading ? 'Loading document...' : 'Download receipt'
             }
-          </PDFDownloadLink>
+          </SafePDFDownloadLink>
         </div>
       </div>
     </div>

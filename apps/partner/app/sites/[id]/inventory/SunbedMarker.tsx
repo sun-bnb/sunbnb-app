@@ -54,6 +54,7 @@ export default function SunbedMarker({
   const width = dynamicSize / 2.5
   const height = dynamicSize
   const badgeFontSize = dynamicSize * 0.1
+  const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
 
   useEffect(() => {
     const el = svgRef.current
@@ -136,7 +137,7 @@ export default function SunbedMarker({
   }, [map, position, zoom, onClick, onDragEnd])
 
   return (
-    <AdvancedMarker position={(position || initialPosition)} style={{ pointerEvents: 'none' }}>
+    <SafeAdvancedMarker position={(position || initialPosition)} style={{ pointerEvents: 'none' }}>
       <svg
         ref={svgRef}
         width={width}
@@ -195,6 +196,6 @@ export default function SunbedMarker({
 
         </g>
       </svg>
-    </AdvancedMarker>
+    </SafeAdvancedMarker>
   )
 }
