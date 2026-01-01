@@ -23,6 +23,7 @@ const App = ({ children }: {
   
   useEffect(() => {
     if (
+      pathname.includes('/demo') ||
       pathname.includes('/pos') ||
       (pathname.includes('/reservations') && status === 'unauthenticated') ||
       pathname.includes('/receipt') || 
