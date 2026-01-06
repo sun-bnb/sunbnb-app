@@ -7,7 +7,8 @@ export async function updateReservation(
   reservation: {
     id: string,
     paymentRef?: string,
-    paymentAmount?: number 
+    paymentAmount?: number,
+    status?: string 
   }) {
   
   const session = await auth()
@@ -17,6 +18,7 @@ export async function updateReservation(
 
   const reservationData: {
     paymentRef?: string,
+    status?: string,
     paymentAmount?: number
   } = { 
   }
@@ -27,6 +29,10 @@ export async function updateReservation(
 
   if (reservation.paymentAmount) {
     reservationData.paymentAmount = reservation.paymentAmount
+  }
+
+  if (reservation.status) {
+    reservationData.status = reservation.status
   }
 
   console.log('UPDATE RES', reservationData)
@@ -74,6 +80,25 @@ export async function updateOrder(
   console.log('UPDATED ORDER', updatedOrder)
 
   return { status: 'ok', id: updatedOrder.id }
+  
+}
+
+export async function getReservationById({
+  id
+} : {
+  id: string 
+}) {
+  
+  const session = await auth()
+  console.log('GET RES', session)
+
+  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+
+  const reservation = await prisma.reservation.findFirst({ where: { id: id } })
+
+  console.log('reservation by id found', reservation)
+
+  return { reservation }
   
 }
 

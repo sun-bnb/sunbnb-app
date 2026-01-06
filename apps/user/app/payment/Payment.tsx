@@ -2,16 +2,19 @@
 
 import logger from '@/utils/logger'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, use } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements } from '@stripe/react-stripe-js'
 import CircularProgress from '@mui/material/CircularProgress'
-import { updateReservation } from './actions'
+import { updateReservation, getReservationById } from './actions'
+import { setValue } from '@/store/features/sites/sitesSlice'
+import { RootState } from '@/store/store'
+import { useDispatch, useSelector } from 'react-redux'
 import CheckoutForm from './CheckoutForm'
 import { Reservation } from '../sites/types'
 
 
-export default function Payment({ 
+export function StripePayment({ 
   stripePublicKey,
   reservation,
   preview,
@@ -102,4 +105,82 @@ export default function Payment({
       }
     </div>
   );
+}
+
+
+export function DemoPayment({
+  reservation,
+  preview,
+  completeUrl
+} : {
+  reservation: Reservation
+  preview?: React.ReactNode
+  completeUrl?: string
+}) {
+
+  const [currentReservation, setCurrentReservation] = useState<Reservation>(reservation)
+
+  logger.debug('Demo Payment for reservation', reservation)
+
+  useEffect(() => {
+
+    if (reservation.paymentRef) {
+      logger.debug('RESERVATION ALREADY HAS PAYMENT REF', reservation.paymentRef)
+      return
+    }
+
+    updateReservation({
+      id: reservation.id,
+      paymentRef: `pi_demo_${Date.now()}`,
+      status: 'paid'
+    })
+    .then((res) => {
+      logger.debug('Reservation updated', res)
+      return getReservationById({ id: reservation.id })
+    }).then((res) => {
+      if (res && res.reservation) {
+        setCurrentReservation(res.reservation)
+      }
+    })
+
+  }, [reservation.id]);
+
+  return (
+    <div className="App">
+      <CheckoutForm dpmCheckerLink={'httpd://demo-link'} 
+        reservation={currentReservation}
+        preview={preview}
+        completeUrl={completeUrl} demoMode={true} />
+    </div>
+  );
+}
+
+export default function Payment({ 
+  stripePublicKey,
+  reservation,
+  preview,
+  completeUrl
+} : { 
+  stripePublicKey: string | undefined 
+  reservation: Reservation
+  preview?: React.ReactNode
+  completeUrl?: string
+}) {
+
+
+  const dispatch = useDispatch()
+  const sitesState = useSelector((state: RootState) => state.sites)
+  //const { demoMode } = sitesState
+  const demoMode = window.localStorage.getItem('demoMode') === 'true'
+  
+  return demoMode ?
+    <DemoPayment
+      reservation={reservation}
+      preview={preview}
+      completeUrl={completeUrl} /> :
+    <StripePayment 
+      stripePublicKey={stripePublicKey} 
+      reservation={reservation}
+      preview={preview}
+      completeUrl={completeUrl} />
 }
