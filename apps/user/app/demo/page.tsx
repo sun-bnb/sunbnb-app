@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Image from 'next/image'
 import { setValue } from '@/store/features/sites/sitesSlice'
 import { RootState } from '@/store/store'
@@ -142,6 +142,7 @@ type DemoScenario = {
   path: string
   illustration: ReactNode
   content: ReactNode
+  introVideo?: string
 }
 
 const DEMO_SCENARIOS: DemoScenario[] = [
@@ -194,6 +195,7 @@ const DEMO_SCENARIOS: DemoScenario[] = [
     id: 'direct-qr',
     label: 'Direct QR Reservation',
     path: '/sites/cmbhmy2uu000012zrrzih3zzu/pos/cmblyd5aa006rzb3ye90up858',
+    introVideo: 'https://9vo2eopfbefycklx.public.blob.vercel-storage.com/POV_Video_Generation_From_QR_Code.mp4',
     illustration: <Image src={directQr} alt="Illustration of direct QR code beach chair reservation" className="h-auto w-[200px] max-w-full object-contain drop-shadow-[0_18px_32px_rgba(15,16,19,0.25)]" />,
     content: (
       <div className="flex flex-col gap-4">
@@ -238,6 +240,7 @@ const DEMO_SCENARIOS: DemoScenario[] = [
     id: 'remote-qr',
     label: 'Remote QR Reservation',
     path: '/sites/cmbhmy2uu000012zrrzih3zzu/pos',
+    introVideo: 'https://9vo2eopfbefycklx.public.blob.vercel-storage.com/Pov_video_from_202601181425_6llc7.mp4',
     illustration: <Image src={remoteQr} alt="Illustration of remote QR code beach chair reservation" className="h-auto w-[200px] max-w-full object-contain drop-shadow-[0_18px_32px_rgba(15,16,19,0.25)]" />,
     content: (
       <div className="flex flex-col gap-4">
@@ -290,6 +293,9 @@ export default function DemoPage() {
   }
 
   const [selectedDemoId, setSelectedDemoId] = useState<string>(firstDemo.id)
+  const [videoFinished, setVideoFinished] = useState(false)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const timeUpdateHandlerRef = useRef<(() => void) | null>(null)
 
   const activeDemo = DEMO_SCENARIOS.find((demo) => demo.id === selectedDemoId) ?? firstDemo
   
@@ -303,6 +309,28 @@ export default function DemoPage() {
     console.log('Setting demo mode true')
     window.localStorage.setItem('demoMode', 'true')
     dispatch(setValue({ demoMode: true }))         
+  }, [])
+
+  useEffect(() => {
+    setVideoFinished(false)
+    const videoEl = videoRef.current
+    if (videoEl) {
+      videoEl.currentTime = 0
+      if (timeUpdateHandlerRef.current) {
+        videoEl.removeEventListener('timeupdate', timeUpdateHandlerRef.current)
+        timeUpdateHandlerRef.current = null
+      }
+    }
+  }, [selectedDemoId])
+
+  useEffect(() => {
+    return () => {
+      const videoEl = videoRef.current
+      if (videoEl && timeUpdateHandlerRef.current) {
+        videoEl.removeEventListener('timeupdate', timeUpdateHandlerRef.current)
+        timeUpdateHandlerRef.current = null
+      }
+    }
   }, [])
 
   return (
@@ -382,29 +410,72 @@ export default function DemoPage() {
       </section>
 
       <aside className="flex flex-col items-center justify-start bg-[#fff5e1] lg:sticky lg:top-0 lg:ml-auto lg:h-full lg:flex-none">
-        <div
-          className="flex items-center justify-center"
-          style={{ height: `${PHONE_HEIGHT}px`, width: `${PHONE_WIDTH}px` }}
-        >
+        {activeDemo.introVideo && !videoFinished ? (
           <div
-            className="relative flex h-full w-full flex-col items-center overflow-hidden rounded-[2.8rem] bg-gradient-to-br from-[#0f1013] to-[#1b1c20] shadow-[0_40px_80px_-32px_rgba(0,0,0,0.7),0_0_0_2px_rgba(255,255,255,0.04)]"
-            style={{ padding: `${PHONE_VERTICAL_BEZEL}px ${PHONE_HORIZONTAL_BEZEL}px` }}
+            className="flex items-center justify-center"
+            style={{ height: `${PHONE_HEIGHT}px`, width: `${PHONE_WIDTH}px` }}
           >
-            <div className="pointer-events-none absolute left-1/2 top-[22px] flex h-[30px] w-[42%] -translate-x-1/2 items-center justify-center gap-[14px] rounded-[1.25rem] bg-black">
-              <span className="h-[14px] w-[14px] rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(81,132,255,0.6),rgba(20,30,50,0.9))]" />
-              <span className="h-[8px] w-[70px] rounded-full bg-slate-500/70" />
+            <div className="relative h-full w-full overflow-hidden rounded-[2.4rem] bg-[#fff5e1] drop-shadow-[0_26px_48px_-32px_rgba(15,16,19,0.35)]">
+              <video
+                key={`${activeDemo.id}-intro`}
+                src={activeDemo.introVideo}
+                ref={videoRef}
+                className="h-full w-full object-cover"
+                onLoadedMetadata={(event) => {
+                  const videoElement = event.currentTarget
+                  if (!videoElement.duration || videoElement.duration === Infinity) {
+                    return
+                  }
+
+                  const leadTimeSeconds = 1.5
+                  const cutoff = Math.max(videoElement.duration - leadTimeSeconds, 0)
+
+                  const handleTimeUpdate = () => {
+                    if (videoElement.currentTime >= cutoff) {
+                      setVideoFinished(true)
+                      videoElement.removeEventListener('timeupdate', handleTimeUpdate)
+                      timeUpdateHandlerRef.current = null
+                    }
+                  }
+
+                  videoElement.addEventListener('timeupdate', handleTimeUpdate)
+                  timeUpdateHandlerRef.current = handleTimeUpdate
+                }}
+                onEnded={() => setVideoFinished(true)}
+                style={{ backgroundColor: '#fff5e1' }}
+                autoPlay
+                muted
+                playsInline
+              />
+              <div className="pointer-events-none absolute left-0 right-0 top-0 h-[84px] bg-[#fff5e1]" />
+              <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[86px] bg-[#fff5e1]" />
             </div>
-            <iframe
-              key={activeDemo.id}
-              src={activeDemo.path}
-              title={`${activeDemo.label} preview`}
-              className="h-full w-full rounded-[1.6rem] border border-white/10 shadow-inner"
-              style={{ width: `${SCREEN_WIDTH}px`, height: `${SCREEN_HEIGHT}px` }}
-              loading="lazy"
-            />
-            <div className="pointer-events-none absolute bottom-6 left-1/2 h-[7px] w-[36%] -translate-x-1/2 rounded-full bg-white/60" />
           </div>
-        </div>
+        ) : (
+          <div
+            className="flex items-center justify-center"
+            style={{ height: `${PHONE_HEIGHT}px`, width: `${PHONE_WIDTH}px` }}
+          >
+            <div
+              className="relative flex h-full w-full flex-col items-center overflow-hidden rounded-[2.8rem] bg-gradient-to-br from-[#0f1013] to-[#1b1c20] shadow-[0_40px_80px_-32px_rgba(0,0,0,0.7),0_0_0_2px_rgba(255,255,255,0.04)]"
+              style={{ padding: `${PHONE_VERTICAL_BEZEL}px ${PHONE_HORIZONTAL_BEZEL}px` }}
+            >
+              <div className="pointer-events-none absolute left-1/2 top-[22px] flex h-[30px] w-[42%] -translate-x-1/2 items-center justify-center gap-[14px] rounded-[1.25rem] bg-black">
+                <span className="h-[14px] w-[14px] rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(81,132,255,0.6),rgba(20,30,50,0.9))]" />
+                <span className="h-[8px] w-[70px] rounded-full bg-slate-500/70" />
+              </div>
+              <iframe
+                key={activeDemo.id}
+                src={activeDemo.path}
+                title={`${activeDemo.label} preview`}
+                className="h-full w-full rounded-[1.6rem] border border-white/10 shadow-inner"
+                style={{ width: `${SCREEN_WIDTH}px`, height: `${SCREEN_HEIGHT}px` }}
+                loading="lazy"
+              />
+              <div className="pointer-events-none absolute bottom-6 left-1/2 h-[7px] w-[36%] -translate-x-1/2 rounded-full bg-white/60" />
+            </div>
+          </div>
+        )}
       </aside>
     </div>
   )
