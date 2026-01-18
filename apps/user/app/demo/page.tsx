@@ -135,6 +135,10 @@ const SCREEN_HEIGHT = PHONE_HEIGHT - PHONE_VERTICAL_BEZEL * 2
 const IDEAL_SCREEN_WIDTH = SCREEN_HEIGHT * DEVICE_RATIO
 const PHONE_HORIZONTAL_BEZEL = Math.max(0, Math.round((PHONE_WIDTH - IDEAL_SCREEN_WIDTH) / 2))
 const SCREEN_WIDTH = PHONE_WIDTH - PHONE_HORIZONTAL_BEZEL * 2
+const DIRECT_QR_URL = 'https://test.sunbnb.app/sites/cmbhmy2uu000012zrrzih3zzu/pos/cmblyd5aa006rzb3ye90up858'
+const DIRECT_QR_CODE_SRC = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(DIRECT_QR_URL)}`
+const REMOTE_QR_URL = 'https://test.sunbnb.app/sites/cmbhmy2uu000012zrrzih3zzu/pos'
+const REMOTE_QR_CODE_SRC = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(REMOTE_QR_URL)}`
 
 type DemoScenario = {
   id: string
@@ -194,14 +198,23 @@ const DEMO_SCENARIOS: DemoScenario[] = [
   {
     id: 'direct-qr',
     label: 'Direct QR Reservation',
-    path: '/sites/cmbhmy2uu000012zrrzih3zzu/pos/cmblyd5aa006rzb3ye90up858',
+    path: DIRECT_QR_URL,
     introVideo: 'https://9vo2eopfbefycklx.public.blob.vercel-storage.com/POV_Video_Generation_From_QR_Code.mp4',
     illustration: <Image src={directQr} alt="Illustration of direct QR code beach chair reservation" className="h-auto w-[200px] max-w-full object-contain drop-shadow-[0_18px_32px_rgba(15,16,19,0.25)]" />,
     content: (
-      <div className="flex flex-col gap-4">
+      <div className="relative flex flex-col gap-4">
+        <div className="absolute -top-16 right-4 z-10 flex w-[220px] flex-col items-center gap-4 rounded-3xl border border-[#f6ddad] bg-[#fffaf0] p-4 text-center shadow-[0_18px_36px_-28px_rgba(15,16,19,0.35)] rotate-3">
+          <span className="pointer-events-none absolute -top-3 left-1/2 h-3 w-16 -translate-x-1/2 rounded bg-[#f6ddad]/70 shadow-[0_4px_8px_-6px_rgba(15,16,19,0.45)]" />
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Try it yourself</p>
+          <div className="relative flex items-center justify-center rounded-2xl bg-white p-3 shadow-inner">
+            <img src={DIRECT_QR_CODE_SRC} alt="Direct QR reservation link" className="h-[160px] w-[160px] rounded-xl bg-white object-contain" />
+          </div>
+          <p className="text-xs leading-tight text-slate-500">Scan this code with your phone to jump into the live booking flow.</p>
+        </div>
+
         <div className="rounded-2xl bg-white/70 p-3 text-base leading-relaxed text-slate-600 lg:text-lg">
           <p>
-            Spot an empty chair, scan the QR on its arm, and it is yours. No cash, no lines, all done in a few taps.
+            Spot an empty chair, scan the QR on its arm, and it is yours. No cash, no lines, <br/>all done in a few taps.
           </p>
         </div>
         <ul className="space-y-3 text-base text-slate-700 lg:text-lg">
@@ -239,14 +252,22 @@ const DEMO_SCENARIOS: DemoScenario[] = [
   {
     id: 'remote-qr',
     label: 'Remote QR Reservation',
-    path: '/sites/cmbhmy2uu000012zrrzih3zzu/pos',
+    path: REMOTE_QR_URL,
     introVideo: 'https://9vo2eopfbefycklx.public.blob.vercel-storage.com/Pov_video_from_202601181425_6llc7.mp4',
     illustration: <Image src={remoteQr} alt="Illustration of remote QR code beach chair reservation" className="h-auto w-[200px] max-w-full object-contain drop-shadow-[0_18px_32px_rgba(15,16,19,0.25)]" />,
     content: (
-      <div className="flex flex-col gap-4">
+      <div className="relative flex flex-col gap-4">
+        <div className="absolute -top-16 right-4 z-10 flex w-[220px] flex-col items-center gap-4 rounded-3xl border border-[#f6ddad] bg-[#fffaf0] p-4 text-center shadow-[0_18px_36px_-28px_rgba(15,16,19,0.35)] -rotate-2">
+          <span className="pointer-events-none absolute -top-3 left-1/2 h-3 w-16 -translate-x-1/2 rounded bg-[#f6ddad]/70 shadow-[0_4px_8px_-6px_rgba(15,16,19,0.45)]" />
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Try it yourself</p>
+          <div className="relative flex items-center justify-center rounded-2xl bg-white p-3 shadow-inner">
+            <img src={REMOTE_QR_CODE_SRC} alt="Remote QR reservation link" className="h-[160px] w-[160px] rounded-xl bg-white object-contain" />
+          </div>
+          <p className="text-xs leading-tight text-slate-500">Scan this code with your phone to open the remote reservation flow.</p>
+        </div>
         <div className="rounded-2xl bg-white/70 p-3 text-base leading-relaxed text-slate-600 lg:text-lg">
           <p>
-            See a poster in a hotel lobby, beach bar, or city ad. Scan the QR to jump straight into that venue’s chair map
+            See a poster in a hotel lobby, beach bar, or city ad. Scan the QR to jump straight into<br/> that venue’s chair map
             and claim your spot before you walk over.
           </p>
         </div>
@@ -257,7 +278,7 @@ const DEMO_SCENARIOS: DemoScenario[] = [
             </span>
             <div className="leading-relaxed">
               <strong className="font-semibold text-slate-900">Go straight to the venue:</strong>{' '}
-              every QR points to a specific beach, so you are in the right place instantly.
+              every QR points to a specific beach, so you are in <br/>the right place instantly.
             </div>
           </li>
           <li className="flex items-start gap-3 rounded-2xl bg-white/60 px-4 py-3">
