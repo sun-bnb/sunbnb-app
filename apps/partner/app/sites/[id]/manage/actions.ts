@@ -80,7 +80,7 @@ export async function unreserveItem(siteId: string, itemId: string) {
   // Adjust logic to match your schema (maybe just delete the row, or set status)
   const result = await prisma.reservation.deleteMany({
     where: {
-      status: 'paid-in-cash',
+    //  status: 'paid-in-cash',
       items: {
         some: {
           id: itemId
