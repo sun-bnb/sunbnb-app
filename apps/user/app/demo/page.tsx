@@ -135,7 +135,7 @@ const SCREEN_HEIGHT = PHONE_HEIGHT - PHONE_VERTICAL_BEZEL * 2
 const IDEAL_SCREEN_WIDTH = SCREEN_HEIGHT * DEVICE_RATIO
 const PHONE_HORIZONTAL_BEZEL = Math.max(0, Math.round((PHONE_WIDTH - IDEAL_SCREEN_WIDTH) / 2))
 const SCREEN_WIDTH = PHONE_WIDTH - PHONE_HORIZONTAL_BEZEL * 2
-const DIRECT_QR_URL = 'https://test.sunbnb.app/sites/cmbhmy2uu000012zrrzih3zzu/pos/cmblyd5aa006rzb3ye90up858'
+const DIRECT_QR_URL = 'https://test.sunbnb.app/sites/cmbhmy2uu000012zrrzih3zzu/pos/cml3nu1r9000sf95miujpyzrd'
 const DIRECT_QR_CODE_SRC = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(DIRECT_QR_URL)}`
 const REMOTE_QR_URL = 'https://test.sunbnb.app/sites/cmbhmy2uu000012zrrzih3zzu/pos'
 const REMOTE_QR_CODE_SRC = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(REMOTE_QR_URL)}`
