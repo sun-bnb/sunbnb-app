@@ -11,7 +11,7 @@ import CheckoutForm from './CheckoutForm'
 import { Order } from '@/app/types/types'
 
 
-export default function OrderPayment({ 
+export function StripeOrderPayment({ 
   stripePublicKey,
   order,
   serviceFee,
@@ -104,4 +104,76 @@ export default function OrderPayment({
       }
     </div>
   );
+}
+
+export function DemoOrderPayment({
+  order,
+  preview,
+  completeUrl
+} : {
+  order: Order
+  preview?: React.ReactNode
+  completeUrl?: string
+}) {
+
+  logger.debug('Demo Payment for order', order)
+
+  useEffect(() => {
+
+    if (order.paymentRef) {
+      logger.debug('ORDER ALREADY HAS PAYMENT REF', order.paymentRef)
+      return
+    }
+
+    const paymentRef = `pi_demo_${Date.now()}`
+
+    updateOrder({
+      id: order.id,
+      paymentRef
+    })
+    .then((res) => {
+      logger.debug('Order updated', res)
+    })
+
+  }, [order.id])
+
+  return (
+    <div className="App" style={{ paddingLeft: '8px', paddingRight: '8px' }}>
+      <CheckoutForm dpmCheckerLink={'httpd://demo-link'} 
+        reservation={undefined}
+        preview={preview}
+        completeUrl={completeUrl} demoMode={true} />
+    </div>
+  );
+}
+
+export default function OrderPayment({ 
+  stripePublicKey,
+  order,
+  serviceFee,
+  preview,
+  completeUrl
+} : { 
+  stripePublicKey: string | undefined 
+  order: Order
+  serviceFee?: number
+  preview?: React.ReactNode
+  completeUrl?: string
+}) {
+
+  const demoMode = window.localStorage.getItem('demoMode') === 'true'
+
+  return demoMode ? (
+    <DemoOrderPayment
+      order={order}
+      preview={preview}
+      completeUrl={completeUrl} />
+  ) : (
+    <StripeOrderPayment
+      stripePublicKey={stripePublicKey}
+      order={order}
+      serviceFee={serviceFee}
+      preview={preview}
+      completeUrl={completeUrl} />
+  )
 }
