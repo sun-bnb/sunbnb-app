@@ -26,13 +26,16 @@ export default function HomeView() {
           <div className="w-full">
             <SearchBar />
           </div>
-          <div className="mt-[35px]">
-            <button onClick={() => {
-              router.push('/api/auth/signin')
-            }} className="bg-yellow-500 text-white px-5 py-2 rounded-md text-md hover:bg-yellow-600">
-              <b>REGISTER AND BOOK NOW!</b>
-            </button>
-          </div>
+          {
+            false &&
+              <div className="mt-[35px]">
+                <button onClick={() => {
+                  router.push('/api/auth/signin')
+                }} className="bg-yellow-500 text-white px-5 py-2 rounded-md text-md hover:bg-yellow-600">
+                  <b>REGISTER AND BOOK NOW!</b>
+                </button>
+              </div>
+          }
         </div>
       </section>
 
