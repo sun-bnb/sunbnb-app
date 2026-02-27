@@ -1,6 +1,5 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import sharp from 'sharp'
@@ -75,7 +74,6 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
         data: itemGroupData
       })
     } else {
-      console.log('save item group', existing[0]!.itemGroupId, itemGroupData)
       itemGroup = await prisma.itemGroup.update({
         where: { id: existing[0]!.itemGroupId! },
         data: itemGroupData
@@ -236,6 +234,60 @@ export async function moveParcel(
   return { status: 'ok' }
 }
 
+export async function moveItems(
+  siteId: string,
+  itemIds: string[],
+  deltaLat: number,
+  deltaLng: number
+) {
+  const session = await auth()
+  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+
+  if (itemIds.length === 0) return { status: 'ok' }
+
+  const items = await prisma.inventoryItem.findMany({
+    where: { id: { in: itemIds }, siteId },
+    select: { id: true, locationLat: true, locationLng: true },
+  })
+
+  await Promise.all(
+    items.map((item) =>
+      prisma.inventoryItem.update({
+        where: { id: item.id },
+        data: {
+          locationLat: String(parseFloat(item.locationLat) + deltaLat),
+          locationLng: String(parseFloat(item.locationLng) + deltaLng),
+        },
+      })
+    )
+  )
+
+  // If all moved items belong to the same group, update the ItemGroup anchor too
+  const fullItems = await prisma.inventoryItem.findMany({
+    where: { id: { in: itemIds }, siteId },
+    select: { group: true, itemGroupId: true },
+  })
+  const groups = new Set(fullItems.map(i => i.group))
+  const itemGroupIds = new Set(fullItems.map(i => i.itemGroupId).filter(Boolean))
+  if (groups.size === 1 && itemGroupIds.size === 1) {
+    const igId = fullItems.find(i => i.itemGroupId)?.itemGroupId
+    if (igId) {
+      const ig = await prisma.itemGroup.findUnique({ where: { id: igId } })
+      if (ig) {
+        await prisma.itemGroup.update({
+          where: { id: igId },
+          data: {
+            locationLat: String(parseFloat(ig.locationLat) + deltaLat),
+            locationLng: String(parseFloat(ig.locationLng) + deltaLng),
+          },
+        })
+      }
+    }
+  }
+
+  return { status: 'ok' }
+}
+
 export async function setItemStatusByGroup(itemGroupId: string, status: string) {
 
   const session = await auth()
@@ -282,15 +334,11 @@ export async function uploadBackground(siteId: string, formData: FormData) {
   const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
   const key = `site/${siteId}/background.${ext}`
 
-  console.log('Save bg image:', key, meta.width, meta.height);
-  // you can pass `file` directly too; using buffer lets you preprocess if needed
   const blob = await put(key, buf, {
     access: 'public',
     contentType: file.type || 'image/jpeg',
   })
 
-
-  console.log('Update site data');
   await prisma.site.update({
     where: { id: siteId },
     data: {

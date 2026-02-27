@@ -1,11 +1,11 @@
 // ParcelFormView.tsx
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef } from 'react'
 import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 import { useSite } from '@/app/sites/site-context'
-import { generateChairs, ChairConfig } from './chair-util'
+import { ChairConfig } from './chair-util'
 import { syncChairsWithLayout, setItemStatusByGroup } from './actions'
 import { deleteItemsByGroup, getSite } from '../actions'
 
@@ -15,7 +15,6 @@ interface ParcelFormProps {
   mode: 'create' | 'edit'
   config: ChairConfig
   setConfig: React.Dispatch<React.SetStateAction<ChairConfig>>
-  moveTrigger: number
   onCancel: () => void
   onDeleteParcel: (group: number) => void
 }
@@ -26,11 +25,9 @@ export default function ParcelFormView({
   mode,
   config,
   setConfig,
-  moveTrigger,
   onCancel,
   onDeleteParcel,
 }: ParcelFormProps) {
-  const [previewItems, setPreviewItems] = useState(generateChairs(config))
   const { site, setSite } = useSite()
 
   const configRef = useRef(config)
@@ -40,8 +37,7 @@ export default function ParcelFormView({
   const allDisabled = parcelItems.length > 0 && activeItems.length === 0
 
   useEffect(() => {
-    setPreviewItems(generateChairs(config))
-    configRef.current = config // Keep latest config for side effects
+    configRef.current = config
   }, [config])
 
   useEffect(() => {
@@ -49,17 +45,6 @@ export default function ParcelFormView({
       setConfig((prev) => ({ ...prev, group: editGroup }))
     }
   }, [mode, editGroup, setConfig])
-
-  useEffect(() => {
-    if (mode === 'edit' && moveTrigger) {
-      const latestConfig = configRef.current
-      console.log('Syncing chairs with layout due to move trigger:', latestConfig)
-      syncChairsWithLayout(siteId, latestConfig, 'rearrange').then(async () => {
-        const updatedSite = await getSite(siteId)
-        if (updatedSite) setSite(updatedSite)
-      })
-    }
-  }, [moveTrigger])
 
   const handleConfigChange = (field: keyof ChairConfig, value: number | boolean | string) => {
     setConfig((prev) => ({ ...prev, [field]: value }))
@@ -87,8 +72,8 @@ export default function ParcelFormView({
     <div className="mt-4 flex flex-col gap-3">
       <div className="flex gap-2">
         <TextField label="Group (Parcel #)" type="number" value={config.group} disabled={mode === 'edit'} onChange={(e) => handleConfigChange('group', Number(e.target.value))} />
-        <TextField label="Rows" type="number" value={config.rows} onChange={(e) => handleConfigChange('rows', Number(e.target.value))} />
-        <TextField label="Seats per Row" type="number" value={config.seatsPerRow} onChange={(e) => handleConfigChange('seatsPerRow', Number(e.target.value))} />
+        <TextField label="Rows" type="number" value={config.rows} disabled={mode === 'edit'} onChange={(e) => handleConfigChange('rows', Number(e.target.value))} />
+        <TextField label="Seats per Row" type="number" value={config.seatsPerRow} disabled={mode === 'edit'} onChange={(e) => handleConfigChange('seatsPerRow', Number(e.target.value))} />
       </div>
 
       <div className="flex gap-2">

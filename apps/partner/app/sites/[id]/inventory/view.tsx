@@ -21,25 +21,22 @@ import ParcelForm from './ParcelForm'
 import { MapMouseEvent } from '@vis.gl/react-google-maps'
 import { ChairConfig } from './chair-util'
 import { makeLocalProjector } from './map-geo'
-import { syncChairsWithLayout, getItemGroup, saveBgOption, moveParcel } from './actions'
+import { syncChairsWithLayout, getItemGroup, saveBgOption, moveParcel, moveItems } from './actions'
 
 export default function InventoryView() {
 
   const { site, setSite, apiKey } = useSite()
-  const { setValue, values } = useSharedMap()
+  const { setValue } = useSharedMap()
 
   const inventory: InventoryItem[] = site.inventoryItems || []
   const siteId = site.id || ''
   const siteLat = site.locationLat!
   const siteLng = site.locationLng!
 
-  const [deleteMode, setDeleteMode] = useState(false)
   const [editorMode, setEditorMode] = useState<'none' | 'create-chair' | 'edit-chair' | 'create-parcel' | 'edit-parcel'>('none')
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([])
 
   const [editGroup, setEditGroup] = useState<number | null>(null)
-  const [parcelLatLng, setParcelLatLng] = useState<{ lat: number; lng: number } | null>(null)
-  const [parcelMoveTrigger, setParcelMoveTrigger] = useState(0)
-
 
   const proj = useMemo(
     () => makeLocalProjector({
@@ -73,6 +70,142 @@ export default function InventoryView() {
 
   const isParcelEditorActive = editorMode === 'create-parcel' || editorMode === 'edit-parcel'
 
+  // Detect if all selected items belong to the same parcel group
+  const selectedParcelGroupNumber = useMemo(() => {
+    if (selectedItemIds.length < 2) return null
+    const items = inventory.filter(i => selectedItemIds.includes(i.id))
+    if (items.length === 0) return null
+    const groups = new Set(items.map(i => i.group))
+    if (groups.size !== 1) return null
+    return items[0]!.group || null
+  }, [selectedItemIds, inventory])
+
+  // Load parcel config when a single-group selection is detected
+  const [selectedParcelConfig, setSelectedParcelConfig] = useState<ChairConfig | null>(null)
+
+  useEffect(() => {
+    if (!selectedParcelGroupNumber) {
+      setSelectedParcelConfig(null)
+      return
+    }
+    const groupItems = inventory.filter(i => i.group === selectedParcelGroupNumber)
+    const firstWithGroup = groupItems.find(i => i.itemGroupId)
+    if (firstWithGroup?.itemGroupId) {
+      getItemGroup(firstWithGroup.itemGroupId).then(ig => {
+        if (ig) {
+          setSelectedParcelConfig({
+            itemGroupId: ig.id,
+            rows: Math.ceil(groupItems.length / ig.seatsPerRow),
+            seatsPerRow: ig.seatsPerRow,
+            horizontalGap: ig.horizontalGap,
+            verticalGap: ig.verticalGap,
+            rotation: ig.rotation,
+            group: ig.number,
+            category: ig.category || undefined,
+            price: ig.price || undefined,
+            pairSeats: ig.pairGap > 0,
+            intraPairGap: ig.pairGap,
+            baseLat: parseFloat(ig.locationLat),
+            baseLng: parseFloat(ig.locationLng),
+          })
+        }
+      })
+    } else {
+      // Derive from items
+      const avgLat = groupItems.reduce((s, i) => s + Number(i.locationLat), 0) / groupItems.length
+      const avgLng = groupItems.reduce((s, i) => s + Number(i.locationLng), 0) / groupItems.length
+      setSelectedParcelConfig({
+        rows: Math.ceil(groupItems.length / (parcelConfig.seatsPerRow || 4)),
+        seatsPerRow: parcelConfig.seatsPerRow || 4,
+        horizontalGap: parcelConfig.horizontalGap,
+        verticalGap: parcelConfig.verticalGap,
+        rotation: groupItems[0]?.rotation || 0,
+        group: selectedParcelGroupNumber,
+        pairSeats: true,
+        intraPairGap: parcelConfig.intraPairGap,
+        baseLat: avgLat,
+        baseLng: avgLng,
+      })
+    }
+  }, [selectedParcelGroupNumber])
+
+  // Quick-adjust parcel property from toolbar (rotate, spacing, etc.)
+  const handleParcelAdjust = async (field: keyof ChairConfig, delta: number) => {
+    if (!selectedParcelConfig || !selectedParcelGroupNumber) return
+
+    // Reload the ItemGroup anchor fresh from the DB — this is the true
+    // generation origin (position of seat row=0, col=0) and is kept in
+    // sync by moveItems / moveParcel.
+    const groupItems = inventory.filter(i => i.group === selectedParcelGroupNumber)
+    const firstWithGroup = groupItems.find(i => i.itemGroupId)
+    let freshBaseLat = selectedParcelConfig.baseLat
+    let freshBaseLng = selectedParcelConfig.baseLng
+    if (firstWithGroup?.itemGroupId) {
+      const ig = await getItemGroup(firstWithGroup.itemGroupId)
+      if (ig) {
+        freshBaseLat = parseFloat(ig.locationLat)
+        freshBaseLng = parseFloat(ig.locationLng)
+      }
+    }
+
+    const newVal = (selectedParcelConfig[field] as number) + delta
+    const newConfig = { ...selectedParcelConfig, baseLat: freshBaseLat, baseLng: freshBaseLng, [field]: newVal }
+    setSelectedParcelConfig(newConfig)
+    await syncChairsWithLayout(siteId, newConfig, 'rearrange')
+    const updatedSite = await getSite(siteId)
+    if (updatedSite) {
+      setSite(updatedSite)
+      const updatedGroupItems = (updatedSite.inventoryItems || []).filter((i: InventoryItem) => i.group === selectedParcelGroupNumber)
+      setSelectedItemIds(updatedGroupItems.map((i: InventoryItem) => i.id))
+    }
+  }
+
+  // Snap all chairs back to their grid positions using current config
+  const handleParcelReorder = async () => {
+    if (!selectedParcelConfig || !selectedParcelGroupNumber) return
+
+    const groupItems = inventory.filter(i => i.group === selectedParcelGroupNumber)
+    const firstWithGroup = groupItems.find(i => i.itemGroupId)
+    let freshBaseLat = selectedParcelConfig.baseLat
+    let freshBaseLng = selectedParcelConfig.baseLng
+    if (firstWithGroup?.itemGroupId) {
+      const ig = await getItemGroup(firstWithGroup.itemGroupId)
+      if (ig) {
+        freshBaseLat = parseFloat(ig.locationLat)
+        freshBaseLng = parseFloat(ig.locationLng)
+      }
+    }
+    const config = { ...selectedParcelConfig, baseLat: freshBaseLat, baseLng: freshBaseLng }
+    await syncChairsWithLayout(siteId, config, 'rearrange')
+    const updatedSite = await getSite(siteId)
+    if (updatedSite) {
+      setSite(updatedSite)
+      const updatedGroupItems = (updatedSite.inventoryItems || []).filter((i: InventoryItem) => i.group === selectedParcelGroupNumber)
+      setSelectedItemIds(updatedGroupItems.map((i: InventoryItem) => i.id))
+    }
+  }
+
+  // Open the full ParcelForm for detailed editing
+  const handleEditParcelFull = () => {
+    if (!selectedParcelConfig || !selectedParcelGroupNumber) return
+    setParcelConfig(selectedParcelConfig)
+    setEditGroup(selectedParcelGroupNumber)
+    setEditorMode('edit-parcel')
+    setSelectedItemId(null)
+    setSelectedItemIds([])
+  }
+
+  // Escape key clears multi-selection
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedItemIds([])
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
   function useSvgFromUrl(url: string | null) {
     const [data, setData] = useState<{ inner: string; viewBox: string }>()
     useEffect(() => {
@@ -95,7 +228,7 @@ export default function InventoryView() {
   }
 
   
-  const handleBgClick = (world: { x: number; y: number }, e: React.MouseEvent<SVGSVGElement>) => {
+  const handleBgClick = (world: { x: number; y: number }) => {
     const { lat, lng } = proj.worldToLl(world.x, world.y) // respects inverted Y
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
 
@@ -107,13 +240,15 @@ export default function InventoryView() {
         baseLat: lat,
         baseLng: lng,
       }
-      setParcelLatLng({ lat, lng })
       setParcelConfig(newConfig)
       syncChairsWithLayout(siteId, newConfig, 'create').then(async () => {
         const updatedSite = await getSite(siteId)
-        if (updatedSite) setSite(updatedSite)
+        if (updatedSite) {
+          setSite(updatedSite)
+          const newItems = (updatedSite.inventoryItems || []).filter((i: InventoryItem) => i.group === newGroup)
+          setSelectedItemIds(newItems.map((i: InventoryItem) => i.id))
+        }
         setEditorMode('none')
-        setParcelLatLng(null)
       })
       return
     }
@@ -148,6 +283,24 @@ export default function InventoryView() {
     const lng = e?.detail.latLng?.lng
     if (!lat || !lng) return
 
+    // If items are multi-selected, clicking the map moves them to the clicked location
+    if (selectedItemIds.length > 0 && editorMode === 'none') {
+      const selectedItems = inventory.filter(i => selectedItemIds.includes(i.id))
+      if (selectedItems.length === 0) return
+      // Anchor = center of bounding box
+      const lats = selectedItems.map(i => Number(i.locationLat))
+      const lngs = selectedItems.map(i => Number(i.locationLng))
+      const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2
+      const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2
+      const deltaLat = lat - centerLat
+      const deltaLng = lng - centerLng
+      moveItems(siteId, selectedItemIds, deltaLat, deltaLng).then(async () => {
+        const updatedSite = await getSite(siteId)
+        if (updatedSite) setSite(updatedSite)
+      })
+      return
+    }
+
     if (editorMode === 'create-parcel') {
       const newGroup = Math.max(0, ...inventory.map(i => i.group || 0)) + 1
       const newConfig: ChairConfig = {
@@ -156,13 +309,15 @@ export default function InventoryView() {
         baseLat: lat,
         baseLng: lng,
       }
-      setParcelLatLng({ lat, lng })
       setParcelConfig(newConfig)
       syncChairsWithLayout(siteId, newConfig, 'create').then(async () => {
         const updatedSite = await getSite(siteId)
-        if (updatedSite) setSite(updatedSite)
+        if (updatedSite) {
+          setSite(updatedSite)
+          const newItems = (updatedSite.inventoryItems || []).filter((i: InventoryItem) => i.group === newGroup)
+          setSelectedItemIds(newItems.map((i: InventoryItem) => i.id))
+        }
         setEditorMode('none')
-        setParcelLatLng(null)
       })
       return
     }
@@ -194,33 +349,36 @@ export default function InventoryView() {
   }
 
   const handleMarkerClick = (item: InventoryItem) => {
-    if (deleteMode) {
-      deleteInventoryItem(item.id)
-      getSite(siteId).then((updatedSite) => {
-        if (updatedSite) setSite(updatedSite)
-      })
-      return
-    }
-
     if (pairingMode && selectedItem && item.id !== selectedItem.id) {
       setValue('selectedItemPairId', item.id)
       setPairingMode(false)
     } else {
       setValue('selectedItemPairId', '')
       setSelectedItemId(prev => (prev === item.id ? null : item.id))
+      setSelectedItemIds([])
       setEditorMode('edit-chair')
     }
   }
 
+  const handleDeleteSelected = async () => {
+    if (selectedItemIds.length === 0) return
+    await Promise.all(selectedItemIds.map(id => deleteInventoryItem(id)))
+    setSelectedItemIds([])
+    const updatedSite = await getSite(siteId)
+    if (updatedSite) setSite(updatedSite)
+  }
+
   const handleMarkerDragEnd = (item: InventoryItem, e: any) => {
-    
     const lat = e.latLng?.lat()
     const lng = e.latLng?.lng()
-    console.log('Marker drag ended for item:', lat, lng)
     if (lat && lng) {
       saveInventoryItemLocation(item.id, {
         locationLat: lat.toString(),
         locationLng: lng.toString(),
+      }).then(() => {
+        getSite(siteId).then((updatedSite) => {
+          if (updatedSite) setSite(updatedSite)
+        })
       })
     }
   }
@@ -228,10 +386,7 @@ export default function InventoryView() {
   const handleCancelParcel = () => {
     setEditorMode('none')
     setEditGroup(null)
-    setParcelLatLng(null)
   }
-
-  console.log('bgOptuon', bgOption)
 
   const svg = useSvgFromUrl(site.bgImageUrl || null)
 
@@ -241,21 +396,28 @@ export default function InventoryView() {
         creating={editorMode === 'create-chair'}
         creatingParcel={editorMode === 'create-parcel'}
         selectedItemId={selectedItemId}
-        deleteMode={deleteMode}
-        onToggleDeleteMode={() => setDeleteMode(prev => !prev)}
+        selectedItemCount={selectedItemIds.length}
+        parcelConfig={selectedParcelConfig}
+        onClearSelection={() => setSelectedItemIds([])}
+        onDeleteSelected={handleDeleteSelected}
+        onParcelAdjust={handleParcelAdjust}
+        onParcelReorder={handleParcelReorder}
+        onEditParcelFull={handleEditParcelFull}
         onStartCreate={() => {
           setEditorMode('create-chair')
           setSelectedItemId(null)
+          setSelectedItemIds([])
         }}
         onStartParcel={() => {
           setEditorMode('create-parcel')
           setSelectedItemId(null)
+          setSelectedItemIds([])
         }}
         onCancel={() => {
           setEditorMode('none')
           setSelectedItemId(null)
+          setSelectedItemIds([])
         }}
-        onPrintAll={() => {}}
       />
 
       {isParcelEditorActive && (
@@ -265,12 +427,10 @@ export default function InventoryView() {
           editGroup={editGroup}
           config={parcelConfig}
           setConfig={setParcelConfig}
-          moveTrigger={parcelMoveTrigger}
           onCancel={handleCancelParcel}
-          onDeleteParcel={(group) => {
+          onDeleteParcel={() => {
             setEditorMode('none')
             setEditGroup(null)
-            setParcelLatLng(null)
             setSelectedItemId(null)
           }}
         />
@@ -288,9 +448,6 @@ export default function InventoryView() {
           }}
           onPair={() => setPairingMode(true)}
           onEditGroup={async (item: InventoryItem) => {
-
-            console.log('Edit group for item:', item)
-
             // Count ALL items in this group from the client-side inventory,
             // regardless of whether they have an itemGroupId or not.
             const groupNumber = item.group || 1
@@ -299,7 +456,6 @@ export default function InventoryView() {
 
             if (item.itemGroupId) {
               const itemGroup = await getItemGroup(item.itemGroupId)
-              console.log('Group', itemGroup)
               if (itemGroup) {
                 // Derive rows & seatsPerRow so the entire parcel is covered,
                 // not just the (possibly stale) values stored on the ItemGroup.
@@ -322,7 +478,6 @@ export default function InventoryView() {
                   baseLng: parseFloat(itemGroup.locationLng)
                 }
                 setParcelConfig(existingConfig)
-                setParcelLatLng({ lat: parseFloat(itemGroup.locationLat), lng: parseFloat(itemGroup.locationLng) })
                 setEditGroup(itemGroup.number)
                 setEditorMode('edit-parcel')
                 setSelectedItemId(null)
@@ -347,7 +502,6 @@ export default function InventoryView() {
               rotation: allGroupItems[0]?.rotation || 0,
             }))
 
-            setParcelLatLng({ lat: avgLat, lng: avgLng })
             setEditGroup(groupNumber)
             setEditorMode('edit-parcel')
             setSelectedItemId(null)
@@ -375,6 +529,7 @@ export default function InventoryView() {
             </div>
           )
         }
+
         <div className="flex justify-between mb-1">
           {
             bgOption === 'background' ?
@@ -389,9 +544,7 @@ export default function InventoryView() {
             ) => {
               if (newMode !== null) {
                 setBgOption(newMode);
-                saveBgOption(siteId, newMode).then(async () => {
-                  console.log('Saved background option:', newMode);
-                })
+                saveBgOption(siteId, newMode)
               }
             }}
             aria-label="mode toggle"
@@ -419,12 +572,14 @@ export default function InventoryView() {
               siteLng={siteLng}
               apiKey={apiKey}
               selectedItemId={selectedItemId}
+              selectedItemIds={selectedItemIds}
               selectedGroupNumber={editGroup}
               pairingMode={pairingMode}
               onMapClick={handleMapClick}
               onMarkerClick={handleMarkerClick}
               onMarkerDragEnd={handleMarkerDragEnd}
               onPlaceSelect={setSelectedPlace}
+              onSelectionChange={setSelectedItemIds}
               selectedPlace={selectedPlace}
             />
         }

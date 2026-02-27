@@ -42,6 +42,11 @@ export default function SunbedMarker({
 
   const [position, setPosition] = useState<google.maps.LatLngLiteral | null>(null)
 
+  // Reset local drag position when the authoritative position changes (e.g. reorder/move)
+  useEffect(() => {
+    setPosition(null)
+  }, [initialPosition.lat, initialPosition.lng])
+
   const isDraggingRef = useRef(false)
   const wasDraggedRef = useRef(false)
   const startClientRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
@@ -53,7 +58,6 @@ export default function SunbedMarker({
 
   const width = dynamicSize / 2.5
   const height = dynamicSize
-  const badgeFontSize = dynamicSize * 0.1
   const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
 
   useEffect(() => {
@@ -110,8 +114,6 @@ export default function SunbedMarker({
       map.setOptions({ draggable: true })
     
       if (wasDraggedRef.current) {
-        // Only call onDragEnd if it was actually dragged
-        console.log('SunbedMarker dragged to:', position || initialPosition)
         onDragEnd({
           latLng: new google.maps.LatLng((position || initialPosition).lat, (position || initialPosition).lng),
         } as google.maps.MapMouseEvent)
@@ -119,7 +121,7 @@ export default function SunbedMarker({
     }
     
 
-    const handleClick = () => {
+    const handleClick = (e: MouseEvent) => {
       if (!wasDraggedRef.current) onClick()
     }
 
@@ -140,6 +142,7 @@ export default function SunbedMarker({
     <SafeAdvancedMarker position={(position || initialPosition)} style={{ pointerEvents: 'none' }}>
       <svg
         ref={svgRef}
+        data-sunbed-marker
         width={width}
         height={height}
         style={{
