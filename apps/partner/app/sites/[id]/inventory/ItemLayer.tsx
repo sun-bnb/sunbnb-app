@@ -13,6 +13,7 @@ interface ItemLayerProps {
   siteLat: number
   siteLng: number
   selectedItemId: string | null
+  selectedGroupNumber?: number | null
   pairingMode: boolean
   clientToWorld: (e: React.MouseEvent) => Pt
   onMarkerClick: (item: InventoryItem) => void
@@ -20,14 +21,15 @@ interface ItemLayerProps {
 }
 
 export default function ItemLayer({
-  items, siteLat, siteLng, selectedItemId, pairingMode, clientToWorld, onMarkerClick, onMarkerDragEnd,
+  items, siteLat, siteLng, selectedItemId, selectedGroupNumber, pairingMode, clientToWorld, onMarkerClick, onMarkerDragEnd,
 }: ItemLayerProps) {
   const proj = React.useMemo(() => makeLocalProjector({ lat: siteLat, lng: siteLng }), [siteLat, siteLng])
 
   return (
     <g id="beds" vectorEffect="non-scaling-stroke">
       {items.map((item) => {
-        const isSelected = selectedItemId === item.id
+        const isSelected = selectedItemId === item.id ||
+          (selectedGroupNumber != null && item.group === selectedGroupNumber)
         const pairedSelected =
           pairingMode && selectedItemId
             ? item.id === items.find(i => i.id === selectedItemId)?.pairId ||

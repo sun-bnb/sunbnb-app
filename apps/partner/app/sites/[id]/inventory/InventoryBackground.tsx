@@ -12,6 +12,7 @@ type Point = { x: number; y: number }
 
 interface InventoryBackgroundProps {
   selectedItemId: string | null
+  selectedGroupNumber?: number | null
   pairingMode: boolean
   onMarkerClick: (item: InventoryItem) => void
   onMarkerDragEnd: (item: InventoryItem, e: { world: Point }) => void
@@ -26,6 +27,7 @@ interface InventoryBackgroundProps {
 
 export default function InventoryBackground({
   selectedItemId,
+  selectedGroupNumber,
   pairingMode,
   onMapClick,
   onMarkerClick,
@@ -64,6 +66,7 @@ export default function InventoryBackground({
             siteLat={Number(site.locationLat)}
             siteLng={Number(site.locationLng)}
             selectedItemId={selectedItemId}
+            selectedGroupNumber={selectedGroupNumber}
             pairingMode={pairingMode}
             clientToWorld={clientToWorld}
             onMarkerClick={onMarkerClick}

@@ -82,12 +82,16 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
       })
     }
 
-    // Update existing chairs in new layout
+    // Track which existing items get matched to a generated position
+    const matchedIds = new Set<string>()
+
+    // Update existing chairs that match a generated position by number
     await Promise.all(
       generated.map((item) => {
         const id = numberToId.get(item.number)
         if (!id) return Promise.resolve()
 
+        matchedIds.add(id)
         return prisma.inventoryItem.update({
           where: { id },
           data: {
@@ -100,6 +104,34 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
             category: config.category,
             price: config.price,
             pairId: null, // will be updated below
+          },
+        })
+      })
+    )
+
+    // Assign remaining unmatched existing items to any leftover generated
+    // positions so that every item in the group gets repositioned.
+    const unmatchedExisting = existing.filter((e) => !matchedIds.has(e.id))
+    const unmatchedGenerated = generated.filter((g) => !numberToId.has(g.number))
+
+    await Promise.all(
+      unmatchedExisting.map((existingItem, idx) => {
+        const gen = unmatchedGenerated[idx]
+        if (!gen) return Promise.resolve()
+
+        matchedIds.add(existingItem.id)
+        return prisma.inventoryItem.update({
+          where: { id: existingItem.id },
+          data: {
+            itemGroupId: itemGroup ? itemGroup.id : undefined,
+            locationLat: gen.locationLat,
+            locationLng: gen.locationLng,
+            rotation: gen.rotation,
+            number: gen.number,
+            group: gen.group,
+            category: config.category,
+            price: config.price,
+            pairId: null,
           },
         })
       })
@@ -157,6 +189,51 @@ export async function getItemGroup(id: string) {
       }
     }
   })
+}
+
+export async function moveParcel(
+  siteId: string,
+  group: number,
+  deltaLat: number,
+  deltaLng: number
+) {
+  const session = await auth()
+  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+
+  const items = await prisma.inventoryItem.findMany({
+    where: { siteId, group },
+    select: { id: true, locationLat: true, locationLng: true, itemGroupId: true },
+  })
+
+  // Offset every item in the group by the delta
+  await Promise.all(
+    items.map((item) =>
+      prisma.inventoryItem.update({
+        where: { id: item.id },
+        data: {
+          locationLat: String(parseFloat(item.locationLat) + deltaLat),
+          locationLng: String(parseFloat(item.locationLng) + deltaLng),
+        },
+      })
+    )
+  )
+
+  // Also update the ItemGroup's stored anchor point
+  const itemGroupId = items[0]?.itemGroupId
+  if (itemGroupId) {
+    const ig = await prisma.itemGroup.findUnique({ where: { id: itemGroupId } })
+    if (ig) {
+      await prisma.itemGroup.update({
+        where: { id: itemGroupId },
+        data: {
+          locationLat: String(parseFloat(ig.locationLat) + deltaLat),
+          locationLng: String(parseFloat(ig.locationLng) + deltaLng),
+        },
+      })
+    }
+  }
+
+  return { status: 'ok' }
 }
 
 export async function setItemStatusByGroup(itemGroupId: string, status: string) {

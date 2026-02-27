@@ -21,7 +21,7 @@ import ParcelForm from './ParcelForm'
 import { MapMouseEvent } from '@vis.gl/react-google-maps'
 import { ChairConfig } from './chair-util'
 import { makeLocalProjector } from './map-geo'
-import { syncChairsWithLayout, getItemGroup, saveBgOption } from './actions'
+import { syncChairsWithLayout, getItemGroup, saveBgOption, moveParcel } from './actions'
 
 export default function InventoryView() {
 
@@ -119,8 +119,13 @@ export default function InventoryView() {
     }
 
     if (editorMode === 'edit-parcel') {
+      const deltaLat = lat - parcelConfig.baseLat
+      const deltaLng = lng - parcelConfig.baseLng
       setParcelConfig({ ...parcelConfig, baseLat: lat, baseLng: lng })
-      setParcelMoveTrigger(Date.now())
+      moveParcel(siteId, parcelConfig.group, deltaLat, deltaLng).then(async () => {
+        const updatedSite = await getSite(siteId)
+        if (updatedSite) setSite(updatedSite)
+      })
       return
     }
 
@@ -163,8 +168,13 @@ export default function InventoryView() {
     }
 
     if (editorMode === 'edit-parcel') {
+      const deltaLat = lat - parcelConfig.baseLat
+      const deltaLng = lng - parcelConfig.baseLng
       setParcelConfig({ ...parcelConfig, baseLat: lat, baseLng: lng })
-      setParcelMoveTrigger(Date.now())
+      moveParcel(siteId, parcelConfig.group, deltaLat, deltaLng).then(async () => {
+        const updatedSite = await getSite(siteId)
+        if (updatedSite) setSite(updatedSite)
+      })
       return
     }
 
@@ -280,14 +290,26 @@ export default function InventoryView() {
           onEditGroup={async (item: InventoryItem) => {
 
             console.log('Edit group for item:', item)
+
+            // Count ALL items in this group from the client-side inventory,
+            // regardless of whether they have an itemGroupId or not.
+            const groupNumber = item.group || 1
+            const allGroupItems = inventory.filter(i => i.group === groupNumber)
+            const totalGroupItemCount = allGroupItems.length
+
             if (item.itemGroupId) {
               const itemGroup = await getItemGroup(item.itemGroupId)
               console.log('Group', itemGroup)
               if (itemGroup) {
+                // Derive rows & seatsPerRow so the entire parcel is covered,
+                // not just the (possibly stale) values stored on the ItemGroup.
+                let seatsPerRow = itemGroup.seatsPerRow
+                let rows = Math.ceil(totalGroupItemCount / seatsPerRow)
+
                 const existingConfig: ChairConfig = {
                   itemGroupId: itemGroup.id,
-                  rows: itemGroup.rows,
-                  seatsPerRow: itemGroup.seatsPerRow,
+                  rows,
+                  seatsPerRow,
                   horizontalGap: itemGroup.horizontalGap,
                   verticalGap: itemGroup.verticalGap,
                   rotation: itemGroup.rotation,
@@ -308,17 +330,21 @@ export default function InventoryView() {
               }
             }
 
-            let groupNumber = item.group || 1
-            const groupItems = inventory.filter(i => i.group === groupNumber)
-            const avgLat = groupItems.reduce((sum, i) => sum + parseFloat(i.locationLat!), 0) / groupItems.length
-            const avgLng = groupItems.reduce((sum, i) => sum + parseFloat(i.locationLng!), 0) / groupItems.length
+            const avgLat = allGroupItems.reduce((sum, i) => sum + parseFloat(i.locationLat!), 0) / allGroupItems.length
+            const avgLng = allGroupItems.reduce((sum, i) => sum + parseFloat(i.locationLng!), 0) / allGroupItems.length
+
+            // Derive rows from the actual number of items in the group
+            const seatsPerRow = parcelConfig.seatsPerRow || 4
+            const rows = Math.ceil(totalGroupItemCount / seatsPerRow)
 
             setParcelConfig(prev => ({
               ...prev,
               group: groupNumber,
+              rows,
+              seatsPerRow,
               baseLat: avgLat,
               baseLng: avgLng,
-              rotation: groupItems[0]?.rotation || 0,
+              rotation: allGroupItems[0]?.rotation || 0,
             }))
 
             setParcelLatLng({ lat: avgLat, lng: avgLng })
@@ -383,6 +409,7 @@ export default function InventoryView() {
             <InventoryBackground 
               backgroundSvg={svg?.inner || ''}
               selectedItemId={selectedItemId}
+              selectedGroupNumber={editGroup}
               pairingMode={pairingMode}
               onMapClick={handleBgClick}
               onMarkerClick={handleMarkerClick}
@@ -392,6 +419,7 @@ export default function InventoryView() {
               siteLng={siteLng}
               apiKey={apiKey}
               selectedItemId={selectedItemId}
+              selectedGroupNumber={editGroup}
               pairingMode={pairingMode}
               onMapClick={handleMapClick}
               onMarkerClick={handleMarkerClick}

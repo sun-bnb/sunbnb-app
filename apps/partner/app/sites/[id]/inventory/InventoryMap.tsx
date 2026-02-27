@@ -14,6 +14,7 @@ interface InventoryMapProps {
   siteLng: string
   apiKey: string
   selectedItemId: string | null
+  selectedGroupNumber?: number | null
   pairingMode: boolean
   onMarkerClick: (item: InventoryItem) => void
   onMarkerDragEnd: (item: InventoryItem, e: any) => void
@@ -33,6 +34,7 @@ export default function InventoryMap({
   siteLng,
   apiKey,
   selectedItemId,
+  selectedGroupNumber,
   pairingMode,
   onMapClick,
   onMarkerClick,
@@ -71,7 +73,8 @@ export default function InventoryMap({
           onClick={onMapClick}
         >
           {(site.inventoryItems || []).map((item) => {
-            const isSelected = selectedItemId === item.id
+            const isSelected = selectedItemId === item.id ||
+              (selectedGroupNumber != null && item.group === selectedGroupNumber)
             const pairedSelected =
               pairingMode && selectedItemId
                 ? item.id === (site.inventoryItems || []).find((i) => i.id === selectedItemId)?.pairId ||
