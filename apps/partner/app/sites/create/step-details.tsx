@@ -57,7 +57,7 @@ export default function StepDetails({
 
   const updateSlot = (index: number, field: 'openTime' | 'closeTime', value: string) => {
     const next = [...data.workingHours]
-    next[index] = { ...next[index], [field]: value }
+    next[index] = { day: next[index]!.day, openTime: next[index]!.openTime, closeTime: next[index]!.closeTime, [field]: value }
     update({ workingHours: next })
   }
 
