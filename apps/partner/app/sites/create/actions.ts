@@ -16,7 +16,6 @@ interface CreateSiteInput {
   workingHours: { day: string; openTime: string; closeTime: string }[]
   description: string
   services: string[]
-  siteId: string | null
 }
 
 export async function createSite(
