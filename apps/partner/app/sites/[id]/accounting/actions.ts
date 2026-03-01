@@ -6,25 +6,17 @@ import prisma from '@repo/data/PrismaCient'
 export async function getInvoicesByMonth(
   accountId: string,
   year: number,
-  month: number // 1-based (Jan = 1)
+  month: number
 ) {
-
   const session = await auth()
   if (!session?.user) throw new Error('Not authenticated')
-  
-  const userId = session.user.id
-  const partnerAccount = await prisma.partnerAccount.findUnique({
-    where: { userId: session.user.id }
-  })
-  
+
   const startDate = new Date(Date.UTC(year, month - 1, 1))
-  const endDate = new Date(Date.UTC(year, month, 1)) // first day of next month
+  const endDate = new Date(Date.UTC(year, month, 1))
 
-  console.log(`Fetching invoices for account ${accountId} from ${startDate.toISOString()} to ${endDate.toISOString()}`)
-
-  const invoices = await prisma.invoice.findMany({
+  return prisma.invoice.findMany({
     where: {
-      accountId: userId,
+      accountId: session.user.id,
       invoicedAt: {
         gte: startDate,
         lt: endDate,
@@ -35,8 +27,6 @@ export async function getInvoicesByMonth(
     },
     orderBy: { invoicedAt: 'desc' },
   })
-
-  return invoices
 }
 
 export async function getPaidItemsByMonth(siteId: string, year: number, month: number) {
@@ -49,30 +39,33 @@ export async function getPaidItemsByMonth(siteId: string, year: number, month: n
         siteId,
         status: 'paid',
         invoice: {
-          invoicedAt: {
-            gte: start,
-            lt: end,
-          }
-        }
+          invoicedAt: { gte: start, lt: end },
+        },
       },
-      include: { invoice: true }
+      include: {
+        invoice: true,
+        orderItems: true,
+        seat: { select: { number: true } },
+        user: { select: { email: true } },
+      },
+      orderBy: { createdAt: 'desc' },
     }),
     prisma.reservation.findMany({
       where: {
         siteId,
         status: 'paid',
         invoice: {
-          invoicedAt: {
-            gte: start,
-            lt: end,
-          }
-        }
+          invoicedAt: { gte: start, lt: end },
+        },
       },
-      include: { invoice: true }
+      include: {
+        invoice: true,
+        user: { select: { email: true } },
+        items: { select: { number: true } },
+      },
+      orderBy: { createdAt: 'desc' },
     }),
   ])
 
   return { orders, reservations }
 }
-
-

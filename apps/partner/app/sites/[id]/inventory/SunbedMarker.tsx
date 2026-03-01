@@ -16,9 +16,11 @@ interface SunbedMarkerProps {
   }
   zoom: number
   dynamicSize: number
-  selected?: boolean
+  isEditing?: boolean
+  isMultiSelected?: boolean
+  parcelColor?: string
   pairedSelected?: boolean
-  onClick: () => void
+  onClick: (modifiers: { metaKey: boolean; ctrlKey: boolean }) => void
   onDragEnd: (e: google.maps.MapMouseEvent) => void
 }
 
@@ -31,7 +33,9 @@ export default function SunbedMarker({
   initialPosition,
   zoom,
   dynamicSize,
-  selected = false,
+  isEditing = false,
+  isMultiSelected = false,
+  parcelColor,
   pairedSelected = false,
   onClick,
   onDragEnd,
@@ -53,8 +57,21 @@ export default function SunbedMarker({
   const startWorldRef = useRef<google.maps.Point | null>(null)
 
   const isPaired = Boolean(pairId || pairedBy?.id)
-  const borderThickness = selected || pairedSelected ? 4 : 2
-  const borderColor = isPaired ? 'gray' : 'black'
+  const isHighlighted = isEditing || isMultiSelected
+
+  // Fixed viewBox coordinate space for crisp rendering at any zoom
+  const VB_W = 40
+  const VB_H = 100
+
+  const strokeW = isHighlighted || pairedSelected ? 4.5 : 2.5
+  const strokeColor = isEditing ? '#f59e0b' : isMultiSelected ? '#3b82f6' : isPaired ? '#9ca3af' : '#374151'
+  const fillColor = isEditing
+    ? 'rgba(245, 158, 11, 0.30)'
+    : isMultiSelected
+      ? 'rgba(59, 130, 246, 0.30)'
+      : parcelColor
+        ? `${parcelColor}22`
+        : 'rgba(255,255,255,0.02)'
 
   const width = dynamicSize / 2.5
   const height = dynamicSize
@@ -122,7 +139,7 @@ export default function SunbedMarker({
     
 
     const handleClick = (e: MouseEvent) => {
-      if (!wasDraggedRef.current) onClick()
+      if (!wasDraggedRef.current) onClick({ metaKey: e.metaKey, ctrlKey: e.ctrlKey })
     }
 
     el.addEventListener('pointerdown', handlePointerDown)
@@ -145,6 +162,7 @@ export default function SunbedMarker({
         data-sunbed-marker
         width={width}
         height={height}
+        viewBox={`0 0 ${VB_W} ${VB_H}`}
         style={{
           pointerEvents: 'auto',
           touchAction: 'none',
@@ -152,50 +170,81 @@ export default function SunbedMarker({
           overflow: 'visible',
         }}
       >
-        <g transform={`rotate(${rotation}, ${width / 2}, ${height / 2})`}>
-          {/* Chair rectangle */}
+        <g transform={`rotate(${rotation}, ${VB_W / 2}, ${VB_H / 2})`}>
+          {/* Chair body */}
           <rect
-            x={0}
-            y={0}
-            width={width}
-            height={height}
-            fill={selected ? 'rgba(0, 0, 0, 0.3)' : 'rgba(255,255,255,0.01)'}
-            stroke={borderColor}
-            strokeWidth={borderThickness}
-            rx={zoom > 20 ? 4 : 0}
-            ry={zoom > 20 ? 4 : 0}
+            x={strokeW / 2}
+            y={strokeW / 2}
+            width={VB_W - strokeW}
+            height={VB_H - strokeW}
+            fill={fillColor}
+            stroke={strokeColor}
+            strokeWidth={strokeW}
+            rx={4}
+            ry={4}
+            shapeRendering="crispEdges"
           />
 
-          {/* Chair number, centered and rotated with chair */}
+          {/* Headrest separator */}
+          <line
+            x1={strokeW + 3}
+            y1={VB_H * 0.2}
+            x2={VB_W - strokeW - 3}
+            y2={VB_H * 0.2}
+            stroke={strokeColor}
+            strokeWidth={1.5}
+            strokeOpacity={0.35}
+            strokeLinecap="round"
+          />
+
+          {/* Parcel color accent bar */}
+          {parcelColor && !isHighlighted && (
+            <rect
+              x={strokeW / 2}
+              y={VB_H - strokeW / 2 - 5}
+              width={VB_W - strokeW}
+              height={5}
+              fill={parcelColor}
+              opacity={0.5}
+              rx={0}
+              ry={0}
+              style={{ pointerEvents: 'none' }}
+            />
+          )}
+
+          {/* Chair number */}
           {zoom > 20 && (
-            <g transform={`rotate(90, ${width / 2}, ${height / 2})`}>
+            <g transform={`rotate(90, ${VB_W / 2}, ${VB_H / 2})`}>
               <text
-                x={width / 2}
-                y={height / 2}
-                fill="black"
-                fontSize={dynamicSize * 0.15}
-                fontWeight="bold"
+                x={VB_W / 2}
+                y={VB_H / 2}
+                fill="#1f2937"
+                fontSize={14}
+                fontWeight="600"
+                fontFamily="system-ui, -apple-system, sans-serif"
                 textAnchor="middle"
                 dominantBaseline="central"
+                shapeRendering="geometricPrecision"
                 style={{ pointerEvents: 'none' }}
               >
                 {String(number).padStart(4, '0')}
               </text>
             </g>
           )}
-          {
-            status === 'disabled' &&  
-              <line
-                  x1={0}
-                  y1={0}
-                  x2={width}
-                  y2={height}          // ↘ top-left → bottom-right
-                  stroke="red"
-                  strokeWidth={Math.max(2, width * 0.05)} // thickness scales with size
-                  strokeLinecap="round"
-                  style={{ pointerEvents: 'none' }}
-                />
-          }
+
+          {/* Disabled strike-through */}
+          {status === 'disabled' && (
+            <line
+              x1={strokeW + 1}
+              y1={strokeW + 1}
+              x2={VB_W - strokeW - 1}
+              y2={VB_H - strokeW - 1}
+              stroke="#ef4444"
+              strokeWidth={3}
+              strokeLinecap="round"
+              style={{ pointerEvents: 'none' }}
+            />
+          )}
 
         </g>
       </svg>

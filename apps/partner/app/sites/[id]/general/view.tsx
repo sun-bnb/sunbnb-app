@@ -1,244 +1,478 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { useFormState } from 'react-dom'
 import {
   APIProvider,
   ControlPosition,
   Map,
   AdvancedMarker,
 } from '@vis.gl/react-google-maps'
-import {
-  Box,
-  Button,
-  TextField,
-  Divider,
-  Select,
-  MenuItem,
-  Chip,
-  FormControl,
-  InputLabel,
-} from '@mui/material'
+import Button from '@mui/material/Button'
+import TextField from '@mui/material/TextField'
+import Switch from '@mui/material/Switch'
+import IconButton from '@mui/material/IconButton'
+import Divider from '@mui/material/Divider'
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
+import DialogContentText from '@mui/material/DialogContentText'
+import DialogActions from '@mui/material/DialogActions'
+import CircularProgress from '@mui/material/CircularProgress'
+import AddIcon from '@mui/icons-material/Add'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import PaymentsIcon from '@mui/icons-material/Payments'
+import EventAvailableIcon from '@mui/icons-material/EventAvailable'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import CloudDoneIcon from '@mui/icons-material/CloudDone'
+import SyncIcon from '@mui/icons-material/Sync'
+import VisibilityIcon from '@mui/icons-material/Visibility'
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
+import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 
 import { useSite } from '@/app/sites/site-context'
-import { SiteProps, WorkingHours } from '@/types/shared'
 import MapHandler from '@/components/maps/map-handler'
 import { CustomMapControl } from '@/components/maps/map-control'
 import {
-  submitForm,
+  saveGeneral,
   addWorkingHours,
   deleteWorkingHours,
   deleteSite,
-  setSiteStatus
+  setSiteStatus,
 } from '../actions'
 
 const WEEK_DAYS = [
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-  'Sunday',
+  { key: '1', short: 'Mon', label: 'Monday' },
+  { key: '2', short: 'Tue', label: 'Tuesday' },
+  { key: '3', short: 'Wed', label: 'Wednesday' },
+  { key: '4', short: 'Thu', label: 'Thursday' },
+  { key: '5', short: 'Fri', label: 'Friday' },
+  { key: '6', short: 'Sat', label: 'Saturday' },
+  { key: '7', short: 'Sun', label: 'Sunday' },
 ]
+
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
 export default function GeneralView() {
   const { site, apiKey } = useSite()
   const router = useRouter()
 
-  // Form state
-  const [formState, formAction] = useFormState(
-    submitForm,
-    { status: '' }
-  )
+  const [selectedPlace, setSelectedPlace] =
+    useState<google.maps.places.PlaceResult | null>(null)
 
-  const [selectedPlace, setSelectedPlace] = useState<google.maps.places.PlaceResult | null>(null)
-
-  // Location state
-  const [mapCoords, setMapCoords] = useState<{ lat: number; lng: number } | null>(
+  const [name, setName] = useState(site.name || '')
+  const [siteType, setSiteType] = useState(site.type ?? 'paid')
+  const [price, setPrice] = useState(site.price?.toString() || '')
+  const [vat, setVat] = useState(site.vat?.toString() || '')
+  const [mapCoords, setMapCoords] = useState<{ lat: number; lng: number }>(
     { lat: +site.locationLat!, lng: +site.locationLng! }
   )
+  const [siteStatus, setSiteStatusLocal] = useState(site.status ?? 'hidden')
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
-  // Working hours state
-  const [newHours, setNewHours] = useState<WorkingHours>(
-    { day: '1', openTime: '', closeTime: '' }
-  )
+  const debounceRef = useRef<NodeJS.Timeout | null>(null)
+  const savedTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Derived lat/lng strings
-  const locationLat = mapCoords?.lat.toString() ?? site.locationLat
-  const locationLng = mapCoords?.lng.toString() ?? site.locationLng
+  const doSave = useCallback(async (overrides?: {
+    name?: string
+    type?: string
+    price?: string
+    vat?: string
+    lat?: string
+    lng?: string
+  }) => {
+    setSaveStatus('saving')
+    try {
+      const result = await saveGeneral({
+        id: site.id!,
+        name: overrides?.name ?? name,
+        type: overrides?.type ?? siteType,
+        price: overrides?.price ?? price,
+        vat: overrides?.vat ?? vat,
+        locationLat: overrides?.lat ?? mapCoords.lat.toString(),
+        locationLng: overrides?.lng ?? mapCoords.lng.toString(),
+      })
+      if (result.status === 'ok') {
+        setSaveStatus('saved')
+        if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+        savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 3000)
+      } else {
+        setSaveStatus('error')
+      }
+    } catch {
+      setSaveStatus('error')
+    }
+  }, [site.id, name, siteType, price, vat, mapCoords])
 
-  const formatTime = (date: Date) => {
-    return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
-  }
+  const scheduleSave = useCallback((overrides?: Parameters<typeof doSave>[0]) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => doSave(overrides), 2000)
+  }, [doSave])
+
+  // Immediate save (for clicks like type change, map click)
+  const immediateSave = useCallback((overrides?: Parameters<typeof doSave>[0]) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    doSave(overrides)
+  }, [doSave])
 
   const SafeAPIProvider = APIProvider as unknown as React.ComponentType<any>
   const SafeMap = Map as unknown as React.ComponentType<any>
   const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
 
-  // Sorted working hours
+  const formatTime = (date: Date) =>
+    `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+
   const sortedHours = useMemo(
     () => [...(site.workingHours ?? [])].sort((a, b) => a.day - b.day),
-    [site.workingHours]
+    [site.workingHours],
   )
 
+  const hoursForDay = (dayKey: string) =>
+    sortedHours.filter(h => h.day === Number(dayKey))
+
+  const isPaid = siteType === 'paid'
+
   return (
-    <Box component="form" action={formAction} className="p-4">
-      {/* Errors */}
-      {formState.errors?.map(err => (
-        <Box key={err} className="text-red-500 mb-2 text-center">
-          {err}
-        </Box>
-      ))}
+    <div className="p-4">
 
-      {/* Hidden fields */}
-      <input type="hidden" name="id" value={site.id} />
-      <input type="hidden" name="locationLat" value={locationLat} />
-      <input type="hidden" name="locationLng" value={locationLng} />
+      {/* Save status indicator — sticky top bar */}
+      <div className={`flex items-center justify-center gap-2 px-3 py-2 rounded mb-4 text-sm transition-all ${
+        saveStatus === 'saving' ? 'bg-blue-50 border border-blue-200 text-blue-600' :
+        saveStatus === 'saved' ? 'bg-green-50 border border-green-200 text-green-600' :
+        saveStatus === 'error' ? 'bg-red-50 border border-red-200 text-red-600' :
+        'bg-gray-50 border border-gray-200 text-gray-400'
+      }`}>
+        {saveStatus === 'saving' && <><SyncIcon fontSize="small" className="animate-spin" /> Saving…</>}
+        {saveStatus === 'saved' && <><CloudDoneIcon fontSize="small" /> All changes saved</>}
+        {saveStatus === 'error' && <><WarningAmberIcon fontSize="small" /> Error saving changes</>}
+        {saveStatus === 'idle' && <><CloudDoneIcon fontSize="small" /> Up to date</>}
+      </div>
 
-      {/* Site info */}
-      <Box className="flex gap-2 mb-4">
+      {/* Site name */}
+      <div className="mb-5">
+        <h3 className="text-sm font-medium text-gray-700 mb-2">Site name</h3>
         <TextField
           fullWidth
-          name="name"
-          label="Site Name"
-          defaultValue={site.name}
-        />
-        <TextField
-          fullWidth
-          select
-          name="type"
-          label="Site Type"
-          defaultValue={site.type ?? ""}
-        >
-          <MenuItem value="">
-            <em>None</em>
-          </MenuItem>
-          <MenuItem value="paid">Paid</MenuItem>
-          <MenuItem value="unpaid">Unpaid</MenuItem>
-          {/* add more as needed */}
-        </TextField>
-        <TextField
-          fullWidth
-          disabled={site.type === 'unpaid'}
-          name="price"
-          label="Advertised Price"
-          defaultValue={site.price?.toString()}
-          type="number"
-        />
-      </Box>
-
-
-      {/* Working hours */}
-      <Divider>Working Hours</Divider>
-      <Box className="flex flex-wrap gap-2 my-2">
-        {sortedHours.map(hours => (
-          <Chip
-            key={hours.id}
-            label={
-              `${WEEK_DAYS[Number(hours.day) - 1]}: ${formatTime(
-                hours.openTime
-              )} - ${formatTime(hours.closeTime)}`
-            }
-            onDelete={() => deleteWorkingHours(hours.id)}
-          />
-        ))}
-      </Box>
-      <Box className="flex flex-col md:flex-row gap-2 mb-6">
-        <FormControl sx={{ minWidth: 120 }}>
-          <InputLabel id="weekday-label">Day</InputLabel>
-          <Select
-            labelId="weekday-label"
-            value={newHours.day}
-            label="Day"
-            onChange={e =>
-              setNewHours({ ...newHours, day: e.target.value as string })
-            }
-          >
-            {WEEK_DAYS.map((day, idx) => (
-              <MenuItem key={day} value={(idx + 1).toString()}>
-                {day}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <TextField
-          label="Open"
-          placeholder="HH:MM"
-          value={newHours.openTime}
-          onChange={e =>
-            setNewHours({ ...newHours, openTime: e.target.value })
-          }
-        />
-        <TextField
-          label="Close"
-          placeholder="HH:MM"
-          value={newHours.closeTime}
-          onChange={e =>
-            setNewHours({ ...newHours, closeTime: e.target.value })
-          }
-        />
-        <Button
-          variant="outlined"
-          onClick={() => addWorkingHours(site.id!, newHours)}
-        >
-          + Add
-        </Button>
-      </Box>
-
-      {/* Map */}
-      <Divider>Site Location</Divider>
-      <Box className="h-[500px] my-4 border border-gray-300">
-        <SafeAPIProvider apiKey={apiKey}>
-          <SafeMap
-            mapId="site-map"
-            defaultZoom={9}
-            defaultCenter={{ lat: +site.locationLat!, lng: +site.locationLng! }}
-            gestureHandling="greedy"
-            disableDefaultUI
-            onClick={(e: any) => setMapCoords(e.detail.latLng!)}
-          >
-            {mapCoords && (
-              <SafeAdvancedMarker position={mapCoords} />
-            )}
-          </SafeMap>
-          <CustomMapControl
-            controlPosition={ControlPosition.TOP_LEFT}
-            onPlaceSelect={setSelectedPlace}
-          />
-          <MapHandler place={selectedPlace} />
-        </SafeAPIProvider>
-      </Box>
-
-      {/* Actions */}
-      <Box className="space-y-2 pb-6">
-        <Button type="submit" variant="contained" fullWidth>
-          Save
-        </Button>
-        <Button variant="outlined" fullWidth
-          onClick={async () => {
-            await setSiteStatus(site.id!, site.status === 'active' ? 'hidden' : 'active')
-              .then((result) => {{
-                if (result.status === 'ok') {
-                  site.status = site.status === 'active' ? 'hidden' : 'active'
-                }
-              }})
-          }}>
-          { site.status === 'active' ? 'Hide Site' : 'Activate Site' }
-        </Button>
-        <Button
-          variant="outlined"
-          color="error"
-          fullWidth
-          onClick={async () => {
-            await deleteSite(site.id!)
-            router.push('/sites')
+          required
+          value={name}
+          onChange={e => {
+            setName(e.target.value)
+            scheduleSave({ name: e.target.value })
           }}
-        >
-          Delete Site
-        </Button>
-      </Box>
-    </Box>
+          helperText="The name your customers will see"
+        />
+      </div>
+
+      <Divider sx={{ mb: 3 }} />
+
+      {/* Reservation type */}
+      <div className="mb-5">
+        <h3 className="text-sm font-medium text-gray-700 mb-2">Reservation type</h3>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setSiteType('paid')
+              immediateSave({ type: 'paid' })
+            }}
+            className={`flex-1 rounded-lg border-2 p-4 text-left transition-all ${
+              isPaid
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-gray-200 bg-white hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <PaymentsIcon fontSize="small" className={isPaid ? 'text-blue-600' : 'text-gray-400'} />
+              <span className={`font-medium text-sm ${isPaid ? 'text-blue-700' : 'text-gray-700'}`}>
+                Paid reservations
+              </span>
+            </div>
+            <p className="text-xs text-gray-500">
+              Customers pay when booking a sunbed. Payment is collected through the platform.
+            </p>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSiteType('unpaid')
+              setPrice('')
+              immediateSave({ type: 'unpaid', price: '' })
+            }}
+            className={`flex-1 rounded-lg border-2 p-4 text-left transition-all ${
+              !isPaid
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-gray-200 bg-white hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <EventAvailableIcon fontSize="small" className={!isPaid ? 'text-blue-600' : 'text-gray-400'} />
+              <span className={`font-medium text-sm ${!isPaid ? 'text-blue-700' : 'text-gray-700'}`}>
+                Availability only
+              </span>
+            </div>
+            <p className="text-xs text-gray-500">
+              No payment collected. Useful when billing is handled separately, e.g. hotel guests.
+            </p>
+          </button>
+        </div>
+      </div>
+
+      {/* Pricing — only for paid */}
+      {isPaid && (
+        <div className="mb-5 flex gap-3">
+          <TextField
+            fullWidth
+            label="Advertised price (€)"
+            type="number"
+            value={price}
+            onChange={e => {
+              setPrice(e.target.value)
+              scheduleSave({ price: e.target.value })
+            }}
+            placeholder="e.g. 15"
+            helperText="Base price shown on your site page"
+          />
+          <TextField
+            sx={{ width: 180, flexShrink: 0 }}
+            label="Tax rate (%)"
+            type="number"
+            value={vat}
+            onChange={e => {
+              setVat(e.target.value)
+              scheduleSave({ vat: e.target.value })
+            }}
+            placeholder="e.g. 21"
+            helperText="Applied to all sales"
+          />
+        </div>
+      )}
+
+      <Divider sx={{ mb: 3 }} />
+
+      {/* Booking hours */}
+      <div className="mb-5">
+        <h3 className="text-sm font-medium text-gray-700 mb-1">Booking hours</h3>
+        <p className="text-xs text-gray-500 mb-3">
+          Set when sunbeds are available for reservation each day.
+        </p>
+
+        <div className="flex flex-col gap-1">
+          {WEEK_DAYS.map(day => {
+            const slots = hoursForDay(day.key)
+            const isActive = slots.length > 0
+
+            return (
+              <div
+                key={day.key}
+                className={`rounded-lg border px-3 py-2 transition-all ${
+                  isActive ? 'border-gray-200 bg-white' : 'border-transparent bg-gray-50'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Switch
+                    size="small"
+                    checked={isActive}
+                    onChange={() => {
+                      if (isActive) {
+                        slots.forEach(s => deleteWorkingHours(s.id))
+                      } else {
+                        addWorkingHours(site.id!, { day: day.key, openTime: '09:00', closeTime: '18:00' })
+                      }
+                    }}
+                  />
+                  <span className={`text-sm w-12 ${isActive ? 'font-medium text-gray-800' : 'text-gray-400'}`}>
+                    {day.short}
+                  </span>
+
+                  {isActive ? (
+                    <div className="flex-1 flex flex-col gap-1">
+                      {slots.map(slot => (
+                        <div key={slot.id} className="flex items-center gap-2">
+                          <span className="text-sm text-gray-700">
+                            {formatTime(slot.openTime)}
+                          </span>
+                          <span className="text-xs text-gray-400">to</span>
+                          <span className="text-sm text-gray-700">
+                            {formatTime(slot.closeTime)}
+                          </span>
+                          <IconButton size="small" onClick={() => deleteWorkingHours(slot.id)}>
+                            <DeleteOutlineIcon fontSize="small" className="text-gray-400" />
+                          </IconButton>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-gray-400 italic">Closed</span>
+                  )}
+
+                  {isActive && (
+                    <Button
+                      size="small"
+                      startIcon={<AddIcon fontSize="small" />}
+                      onClick={() =>
+                        addWorkingHours(site.id!, { day: day.key, openTime: '09:00', closeTime: '18:00' })
+                      }
+                      sx={{ textTransform: 'none', fontSize: '0.7rem', minWidth: 0, ml: 1 }}
+                    >
+                      Split
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        <p className="text-xs text-gray-400 mt-2">
+          Use "Split" to add a break in the middle of the day, e.g. a lunch closure.
+        </p>
+      </div>
+
+      <Divider sx={{ mb: 3 }} />
+
+      {/* Site location */}
+      <div className="mb-5">
+        <h3 className="text-sm font-medium text-gray-700 mb-2">Site location</h3>
+        <p className="text-xs text-gray-500 mb-3">
+          Search or click the map to update the location pin.
+        </p>
+
+        <div className="flex items-center gap-2 px-3 py-2 rounded mb-3 text-sm bg-green-50 border border-green-200 text-green-700">
+          <CheckCircleIcon fontSize="small" />
+          <span>Location — {Number(mapCoords.lat).toFixed(5)}, {Number(mapCoords.lng).toFixed(5)}</span>
+        </div>
+
+        <div className="h-[400px] rounded overflow-hidden border-2 border-green-300">
+          <SafeAPIProvider apiKey={apiKey}>
+            <SafeMap
+              mapId="site-map"
+              defaultZoom={9}
+              defaultCenter={{ lat: +site.locationLat!, lng: +site.locationLng! }}
+              gestureHandling="greedy"
+              disableDefaultUI
+              onClick={(e: any) => {
+                if (e.detail.latLng) {
+                  const { lat, lng } = e.detail.latLng
+                  setMapCoords({ lat, lng })
+                  immediateSave({ lat: lat.toString(), lng: lng.toString() })
+                }
+              }}
+            >
+              <SafeAdvancedMarker position={mapCoords} />
+            </SafeMap>
+            <CustomMapControl
+              controlPosition={ControlPosition.TOP_LEFT}
+              onPlaceSelect={setSelectedPlace}
+            />
+            <MapHandler place={selectedPlace} />
+          </SafeAPIProvider>
+        </div>
+      </div>
+
+      <Divider sx={{ mb: 3 }} />
+
+      {/* Site visibility */}
+      <div className="mb-5">
+        <h3 className="text-sm font-medium text-gray-700 mb-2">Site visibility</h3>
+        <div className={`flex items-center justify-between rounded-lg border-2 p-4 transition-all ${
+          siteStatus === 'active'
+            ? 'border-green-300 bg-green-50'
+            : 'border-gray-200 bg-gray-50'
+        }`}>
+          <div className="flex items-center gap-3">
+            {siteStatus === 'active' ? (
+              <VisibilityIcon className="text-green-600" />
+            ) : (
+              <VisibilityOffIcon className="text-gray-400" />
+            )}
+            <div>
+              <div className={`text-sm font-medium ${siteStatus === 'active' ? 'text-green-700' : 'text-gray-700'}`}>
+                {siteStatus === 'active' ? 'Site is live' : 'Site is hidden'}
+              </div>
+              <div className="text-xs text-gray-500">
+                {siteStatus === 'active'
+                  ? 'Customers can find and book sunbeds at this site.'
+                  : 'This site is not visible to customers. Activate it when you\'re ready.'}
+              </div>
+            </div>
+          </div>
+          <Switch
+            checked={siteStatus === 'active'}
+            onChange={async () => {
+              const newStatus = siteStatus === 'active' ? 'hidden' : 'active'
+              const result = await setSiteStatus(site.id!, newStatus)
+              if (result.status === 'ok') {
+                setSiteStatusLocal(newStatus)
+              }
+            }}
+            color="success"
+          />
+        </div>
+      </div>
+
+      <Divider sx={{ mb: 3 }} />
+
+      {/* Danger zone */}
+      <div className="mb-4">
+        <h3 className="text-sm font-medium text-red-600 mb-2">Danger zone</h3>
+        <div className="rounded-lg border border-red-200 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium text-gray-700">Delete this site</div>
+              <div className="text-xs text-gray-500">
+                Permanently remove this site and all its data. This action cannot be undone.
+              </div>
+            </div>
+            <Button
+              variant="outlined"
+              color="error"
+              size="small"
+              onClick={() => setDeleteDialogOpen(true)}
+              sx={{ textTransform: 'none', whiteSpace: 'nowrap', ml: 2 }}
+            >
+              Delete site
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+        <DialogTitle>Delete site?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete <strong>{name}</strong>? This will permanently remove
+            the site, all inventory items, reservations, and associated data. This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setDeleteDialogOpen(false)}
+            disabled={deleting}
+            sx={{ textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            disabled={deleting}
+            onClick={async () => {
+              setDeleting(true)
+              await deleteSite(site.id!)
+              router.push('/sites')
+            }}
+            sx={{ textTransform: 'none' }}
+          >
+            {deleting ? (
+              <><CircularProgress size={16} color="inherit" sx={{ mr: 1 }} /> Deleting…</>
+            ) : (
+              'Delete permanently'
+            )}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </div>
   )
 }

@@ -9,6 +9,47 @@ import dayjs from 'dayjs'
 import { SiteProps } from '../../../types/shared'
 import { group } from 'console'
 
+export async function saveGeneral(input: {
+  id: string
+  name: string
+  type: string
+  price: string
+  vat: string
+  locationLat: string
+  locationLng: string
+}): Promise<{ status: string; errors?: string[] }> {
+
+  const session = await auth()
+  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+
+  const errors: string[] = []
+  if (!input.name?.trim()) errors.push('Site name is required')
+  if (!input.locationLat || !input.locationLng) errors.push('Location is required')
+  if (errors.length > 0) return { status: 'error', errors }
+
+  const price = Number(input.price)
+  const vat = Number(input.vat)
+
+  await prisma.site.update({
+    where: { id: input.id },
+    data: {
+      name: input.name.trim(),
+      type: input.type || 'paid',
+      price: price > 0 ? price : null,
+      vat: vat > 0 ? vat : null,
+      locationLat: input.locationLat,
+      locationLng: input.locationLng,
+    },
+  })
+
+  await prisma.$executeRaw`
+    UPDATE "Site" SET coords = ST_MakePoint(${input.locationLat}::double precision, ${input.locationLng}::double precision)
+    WHERE id = ${input.id}`
+
+  revalidatePath('/sites')
+  return { status: 'ok' }
+}
+
 export async function submitForm(
   previousState: { status: string, errors?: string[] },
   formData: FormData
@@ -194,6 +235,65 @@ export async function saveContent(
   
   }
   
+}
+
+export async function saveContentFields(input: {
+  id: string
+  description: string
+  services: string[]
+}): Promise<{ status: string; errors?: string[] }> {
+
+  const session = await auth()
+  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+
+  const site = await prisma.site.findFirst({ where: { id: input.id } })
+  if (!site) return { status: 'error', errors: ['Site not found'] }
+
+  await prisma.site.update({
+    where: { id: input.id },
+    data: {
+      description: input.description,
+      services: input.services,
+    },
+  })
+
+  revalidatePath('/sites')
+  return { status: 'ok' }
+}
+
+export async function uploadContentImage(
+  siteId: string,
+  formData: FormData
+): Promise<{ status: string; imageUrl?: string; errors?: string[] }> {
+
+  const session = await auth()
+  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+
+  const imageFile = formData.get('image') as File
+  if (!imageFile || imageFile.size === 0) {
+    return { status: 'error', errors: ['No image provided'] }
+  }
+
+  const buffer = Buffer.from(await imageFile.arrayBuffer())
+  const image = sharp(buffer)
+  const metadata = await image.metadata()
+
+  const siteData: any = {}
+  if (metadata.width && metadata.height) {
+    siteData.imageWidth = metadata.width
+    siteData.imageHeight = metadata.height
+  }
+
+  const blob = await put(imageFile.name, imageFile, { access: 'public' })
+  siteData.image = blob.url
+
+  await prisma.site.update({
+    data: siteData,
+    where: { id: siteId },
+  })
+
+  revalidatePath('/sites')
+  return { status: 'ok', imageUrl: blob.url }
 }
 
 export async function updateVat(

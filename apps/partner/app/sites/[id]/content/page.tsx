@@ -1,11 +1,11 @@
 import SitePage from '@/app/sites/site-page'
-import SecurityView from './view'
+import ContentView from './view'
 
-export default async function SecurityPage({ params }: { params: { id: string } }) {
+export default async function ContentPage({ params }: { params: { id: string } }) {
 
   return (
-    <SitePage params={params} tab="security">
-      <SecurityView />
+    <SitePage params={params} tab="content">
+      <ContentView />
     </SitePage>
   )
 

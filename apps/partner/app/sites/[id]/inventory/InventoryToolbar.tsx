@@ -1,211 +1,289 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
+import Menu from '@mui/material/Menu'
+import MenuItem from '@mui/material/MenuItem'
+import Divider from '@mui/material/Divider'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import RotateLeftIcon from '@mui/icons-material/RotateLeft'
 import RotateRightIcon from '@mui/icons-material/RotateRight'
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
 import SwapVertIcon from '@mui/icons-material/SwapVert'
-import EditIcon from '@mui/icons-material/Edit'
 import GridOnIcon from '@mui/icons-material/GridOn'
+import EditIcon from '@mui/icons-material/Edit'
 import QRPrintButton from './qr-print-button'
 import { useSite } from '@/app/sites/site-context'
-import { ChairConfig } from './chair-util'
+import { getParcelColor } from './chair-util'
 
 interface InventoryToolbarProps {
   creating: boolean
   creatingParcel: boolean
-  selectedItemId: string | null
   selectedItemCount: number
-  parcelConfig: ChairConfig | null
+  selectedParcelGroup: number | null
+  selectedParcelTotal: number
+  isCompleteParcelSelected: boolean
+  allParcelNumbers: number[]
   onStartCreate: () => void
   onStartParcel: () => void
   onCancel: () => void
   onDeleteSelected: () => void
   onClearSelection: () => void
-  onParcelAdjust: (field: keyof ChairConfig, delta: number) => void
+  onRotateSelected: (delta: number) => void
+  onAdjustSpacing: (axis: 'horizontal' | 'vertical', factor: number) => void
+  onAssignToParcel: (group: number) => void
+  onRemoveFromParcel: () => void
+  onSelectEntireParcel: (group: number) => void
   onParcelReorder: () => void
   onEditParcelFull: () => void
 }
 
-
 export default function InventoryToolbar({
   creating,
   creatingParcel,
-  selectedItemId,
   selectedItemCount,
-  parcelConfig,
+  selectedParcelGroup,
+  selectedParcelTotal,
+  isCompleteParcelSelected,
+  allParcelNumbers,
   onStartCreate,
   onStartParcel,
   onCancel,
   onDeleteSelected,
   onClearSelection,
-  onParcelAdjust,
+  onRotateSelected,
+  onAdjustSpacing,
+  onAssignToParcel,
+  onRemoveFromParcel,
+  onSelectEntireParcel,
   onParcelReorder,
   onEditParcelFull,
 }: InventoryToolbarProps) {
-
-  const isIdle = !creating && !creatingParcel && !selectedItemId
-
   const { site } = useSite()
+  const [assignMenuAnchor, setAssignMenuAnchor] = useState<null | HTMLElement>(null)
+  const nextGroup = allParcelNumbers.length > 0 ? Math.max(...allParcelNumbers) + 1 : 1
 
-  return (
-    <div className="flex flex-col gap-2 mt-4 mb-6">
-      <div className="flex justify-between items-center">
-        {isIdle ? (
-          <div className="flex gap-2 items-center">
-            <Button variant="outlined" onClick={onStartCreate}>
-              + Add Item
-            </Button>
-            <Button variant="outlined" onClick={onStartParcel}>
-              + Add Parcel
-            </Button>
-            <span className="text-xs text-gray-400 ml-2">
-              ⇧ Shift+drag to select
-            </span>
-          </div>
-        ) : (
-          <Button
-            startIcon={<CloseIcon />}
-            variant="text"
-            onClick={onCancel}
-          >
-            Cancel
-          </Button>
-        )}
-        <QRPrintButton siteId={site.id!} label="Print all QR Codes" items={site.inventoryItems!}/>
+  const parcelColor = selectedParcelGroup ? getParcelColor(selectedParcelGroup) : undefined
+
+  // Creating state — instruction + cancel
+  if (creating || creatingParcel) {
+    return (
+      <div className="flex items-center gap-3 px-3 py-2 bg-green-50 border border-green-200 rounded text-sm">
+        <span className="text-green-700 font-medium">
+          {creating ? 'Click on the map to place a new sunbed' : 'Click on the map to place the new parcel'}
+        </span>
+        <Button
+          size="small"
+          startIcon={<CloseIcon fontSize="small" />}
+          onClick={onCancel}
+          sx={{ textTransform: 'none', ml: 'auto' }}
+        >
+          Cancel
+        </Button>
       </div>
+    )
+  }
 
-      {selectedItemCount > 0 && (
-        <div className="flex flex-col gap-2">
-          {/* Selection info bar */}
-          <div className="flex items-center gap-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded">
-            <span className="text-sm font-medium text-blue-800">
-              {selectedItemCount} seat{selectedItemCount !== 1 ? 's' : ''} selected
-            </span>
-            <span className="text-blue-300">|</span>
-            <span className="text-xs text-blue-600">
-              Click map to move
-            </span>
-            <Button
-              size="small"
-              variant="outlined"
-              color="error"
-              startIcon={<DeleteOutlineIcon />}
-              onClick={onDeleteSelected}
-            >
-              Delete
-            </Button>
-            <button
-              className="ml-auto text-sm text-gray-500 hover:text-gray-700 underline"
-              onClick={onClearSelection}
-            >
-              Deselect
-            </button>
-          </div>
-
-          {/* Parcel controls — shown when all selected items are from one group */}
-          {parcelConfig && (
-            <div className="flex items-center gap-1 px-3 py-1.5 bg-purple-50 border border-purple-200 rounded flex-wrap">
-              <span className="text-xs font-medium text-purple-700 mr-1">
-                Parcel {parcelConfig.group}
+  // Selection state — unified single row
+  if (selectedItemCount > 0) {
+    return (
+      <div className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-200 rounded text-sm flex-wrap">
+        {/* Selection badge */}
+        <div className="flex items-center gap-1.5 mr-1">
+          {parcelColor && (
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: parcelColor }} />
+          )}
+          {selectedParcelGroup != null ? (
+            <>
+              <span className="font-medium text-blue-800">
+                Parcel {selectedParcelGroup}
               </span>
-
-              <span className="text-purple-300 mx-1">|</span>
-
-              <Tooltip title="Rotate −5°">
-                <IconButton size="small" onClick={() => onParcelAdjust('rotation', -5)}>
-                  <RotateLeftIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <span className="text-xs text-purple-600 min-w-[32px] text-center">
-                {parcelConfig.rotation}°
+              <span className="text-blue-400">·</span>
+              <span className="text-blue-600">
+                {isCompleteParcelSelected
+                  ? `${selectedItemCount} seat${selectedItemCount !== 1 ? 's' : ''}`
+                  : `${selectedItemCount} of ${selectedParcelTotal}`}
               </span>
-              <Tooltip title="Rotate +5°">
-                <IconButton size="small" onClick={() => onParcelAdjust('rotation', 5)}>
-                  <RotateRightIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-
-              <span className="text-purple-300 mx-1">|</span>
-
-              <Tooltip title="Decrease horizontal gap">
-                <IconButton size="small" onClick={() => onParcelAdjust('horizontalGap', -0.2)}>
-                  <SwapHorizIcon fontSize="small" sx={{ opacity: 0.5 }} />
-                </IconButton>
-              </Tooltip>
-              <span className="text-xs text-purple-600 min-w-[36px] text-center">
-                H {parcelConfig.horizontalGap.toFixed(1)}
-              </span>
-              <Tooltip title="Increase horizontal gap">
-                <IconButton size="small" onClick={() => onParcelAdjust('horizontalGap', 0.2)}>
-                  <SwapHorizIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-
-              <span className="text-purple-300 mx-1">|</span>
-
-              <Tooltip title="Decrease vertical gap">
-                <IconButton size="small" onClick={() => onParcelAdjust('verticalGap', -0.5)}>
-                  <SwapVertIcon fontSize="small" sx={{ opacity: 0.5 }} />
-                </IconButton>
-              </Tooltip>
-              <span className="text-xs text-purple-600 min-w-[36px] text-center">
-                V {parcelConfig.verticalGap.toFixed(1)}
-              </span>
-              <Tooltip title="Increase vertical gap">
-                <IconButton size="small" onClick={() => onParcelAdjust('verticalGap', 0.5)}>
-                  <SwapVertIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-
-              {parcelConfig.pairSeats && (
-                <>
-                  <span className="text-purple-300 mx-1">|</span>
-                  <Tooltip title="Decrease pair gap">
-                    <IconButton size="small" onClick={() => onParcelAdjust('intraPairGap', -0.2)}>
-                      <SwapHorizIcon fontSize="small" sx={{ opacity: 0.5, transform: 'scale(0.8)' }} />
-                    </IconButton>
-                  </Tooltip>
-                  <span className="text-xs text-purple-600 min-w-[36px] text-center">
-                    P {parcelConfig.intraPairGap.toFixed(1)}
-                  </span>
-                  <Tooltip title="Increase pair gap">
-                    <IconButton size="small" onClick={() => onParcelAdjust('intraPairGap', 0.2)}>
-                      <SwapHorizIcon fontSize="small" sx={{ transform: 'scale(0.8)' }} />
-                    </IconButton>
-                  </Tooltip>
-                </>
+              {!isCompleteParcelSelected && (
+                <Button
+                  size="small"
+                  variant="text"
+                  onClick={() => onSelectEntireParcel(selectedParcelGroup)}
+                  sx={{ textTransform: 'none', fontSize: '0.7rem', py: 0, px: 0.5, minWidth: 0, color: 'primary.main' }}
+                >
+                  Select all
+                </Button>
               )}
-
-              <span className="text-purple-300 mx-1">|</span>
-
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<GridOnIcon />}
-                onClick={onParcelReorder}
-                sx={{ textTransform: 'none', fontSize: '0.75rem' }}
-              >
-                Reorder
-              </Button>
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<EditIcon />}
-                onClick={onEditParcelFull}
-                sx={{ textTransform: 'none', fontSize: '0.75rem' }}
-              >
-                Edit Details
-              </Button>
-            </div>
+            </>
+          ) : (
+            <span className="font-medium text-blue-800">
+              {selectedItemCount} seat{selectedItemCount !== 1 ? 's' : ''}
+            </span>
           )}
         </div>
-      )}
+
+        <span className="text-blue-200">|</span>
+
+        {/* Rotate */}
+        <Tooltip title="Rotate −5°">
+          <IconButton size="small" onClick={() => onRotateSelected(-5)} sx={{ p: 0.5 }}>
+            <RotateLeftIcon sx={{ fontSize: '1rem' }} />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="Rotate +5°">
+          <IconButton size="small" onClick={() => onRotateSelected(5)} sx={{ p: 0.5 }}>
+            <RotateRightIcon sx={{ fontSize: '1rem' }} />
+          </IconButton>
+        </Tooltip>
+
+        {selectedItemCount > 1 && (
+          <>
+            <span className="text-blue-200">|</span>
+
+            {/* Horizontal spacing */}
+            <Tooltip title="Decrease horizontal spacing">
+              <IconButton size="small" onClick={() => onAdjustSpacing('horizontal', 0.9)} sx={{ p: 0.5 }}>
+                <SwapHorizIcon sx={{ fontSize: '1rem', opacity: 0.5 }} />
+              </IconButton>
+            </Tooltip>
+            <span className="text-[10px] text-blue-500">H</span>
+            <Tooltip title="Increase horizontal spacing">
+              <IconButton size="small" onClick={() => onAdjustSpacing('horizontal', 1.1)} sx={{ p: 0.5 }}>
+                <SwapHorizIcon sx={{ fontSize: '1rem' }} />
+              </IconButton>
+            </Tooltip>
+
+            <span className="text-blue-200">|</span>
+
+            {/* Vertical spacing */}
+            <Tooltip title="Decrease vertical spacing">
+              <IconButton size="small" onClick={() => onAdjustSpacing('vertical', 0.9)} sx={{ p: 0.5 }}>
+                <SwapVertIcon sx={{ fontSize: '1rem', opacity: 0.5 }} />
+              </IconButton>
+            </Tooltip>
+            <span className="text-[10px] text-blue-500">V</span>
+            <Tooltip title="Increase vertical spacing">
+              <IconButton size="small" onClick={() => onAdjustSpacing('vertical', 1.1)} sx={{ p: 0.5 }}>
+                <SwapVertIcon sx={{ fontSize: '1rem' }} />
+              </IconButton>
+            </Tooltip>
+          </>
+        )}
+
+        <span className="text-blue-200">|</span>
+
+        <span className="text-[10px] text-blue-400">Click map to move · ⌘+click toggle</span>
+
+        {/* Right side actions */}
+        <div className="ml-auto flex items-center gap-1">
+          {/* Complete parcel: restore order + edit */}
+          {isCompleteParcelSelected && selectedParcelGroup != null && (
+            <>
+              <Tooltip title="Restore grid formation">
+                <IconButton size="small" onClick={onParcelReorder} sx={{ p: 0.5 }}>
+                  <GridOnIcon sx={{ fontSize: '1rem' }} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Edit parcel config">
+                <IconButton size="small" onClick={onEditParcelFull} sx={{ p: 0.5 }}>
+                  <EditIcon sx={{ fontSize: '1rem' }} />
+                </IconButton>
+              </Tooltip>
+              <span className="text-blue-200">|</span>
+            </>
+          )}
+
+          {/* Non-complete parcel: assign / remove */}
+          {!isCompleteParcelSelected && (
+            <>
+              <Button
+                size="small"
+                variant="text"
+                onClick={(e) => setAssignMenuAnchor(e.currentTarget)}
+                sx={{ textTransform: 'none', fontSize: '0.7rem', py: 0, px: 0.5, minWidth: 0 }}
+              >
+                Assign ▾
+              </Button>
+              <Menu
+                anchorEl={assignMenuAnchor}
+                open={Boolean(assignMenuAnchor)}
+                onClose={() => setAssignMenuAnchor(null)}
+              >
+                {allParcelNumbers.map(num => (
+                  <MenuItem
+                    key={num}
+                    onClick={() => { onAssignToParcel(num); setAssignMenuAnchor(null) }}
+                    sx={{ fontSize: '0.8rem' }}
+                  >
+                    Parcel {num}
+                  </MenuItem>
+                ))}
+                {allParcelNumbers.length > 0 && <Divider />}
+                <MenuItem
+                  onClick={() => { onAssignToParcel(nextGroup); setAssignMenuAnchor(null) }}
+                  sx={{ fontSize: '0.8rem', color: 'primary.main' }}
+                >
+                  + New parcel ({nextGroup})
+                </MenuItem>
+              </Menu>
+              {selectedParcelGroup != null && (
+                <Button
+                  size="small"
+                  variant="text"
+                  onClick={onRemoveFromParcel}
+                  sx={{ textTransform: 'none', fontSize: '0.7rem', py: 0, px: 0.5, minWidth: 0, color: 'text.secondary' }}
+                >
+                  Ungroup
+                </Button>
+              )}
+              <span className="text-blue-200">|</span>
+            </>
+          )}
+
+          <Tooltip title="Delete selected">
+            <IconButton size="small" color="error" onClick={onDeleteSelected} sx={{ p: 0.5 }}>
+              <DeleteOutlineIcon sx={{ fontSize: '1rem' }} />
+            </IconButton>
+          </Tooltip>
+          <button
+            className="text-[10px] text-gray-400 hover:text-gray-600 underline ml-1"
+            onClick={onClearSelection}
+          >
+            Deselect
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Idle state — add buttons + hint
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <Button
+        variant="outlined"
+        size="small"
+        onClick={onStartParcel}
+        sx={{ textTransform: 'none' }}
+      >
+        + Add Parcel
+      </Button>
+      <Button
+        variant="text"
+        size="small"
+        onClick={onStartCreate}
+        sx={{ textTransform: 'none', color: 'text.secondary' }}
+      >
+        + Single item
+      </Button>
+      <span className="text-xs text-gray-400 ml-1">
+        ⇧ Shift+drag to select · ⌘+click to multi-select
+      </span>
+      <div className="ml-auto">
+        <QRPrintButton siteId={site.id!} label="Print QR Codes" items={site.inventoryItems!} />
+      </div>
     </div>
   )
 }

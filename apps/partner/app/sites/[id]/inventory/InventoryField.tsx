@@ -22,7 +22,8 @@ interface InventoryFieldProps {
 function getScaledSize(zoom: number): number {
   const physicalLength = 2.5 // meters
   const metersPerPixel = 156543.03392 / Math.pow(2, zoom)
-  return physicalLength / metersPerPixel
+  const size = physicalLength / metersPerPixel
+  return Math.max(size, 10)
 }
 
 export default function InventoryMap({

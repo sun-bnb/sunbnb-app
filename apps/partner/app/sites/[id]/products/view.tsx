@@ -1,176 +1,213 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
-import { addProduct, deleteProduct, getProducts } from './actions'
+import { useState, useRef } from 'react'
+import { addProduct, getProducts } from './actions'
 import { Product } from '@/types/shared'
-import {
-  Paper,
-  Table,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableBody,
-  TextField,
-  Button,
-  IconButton,
-  Box
-} from '@mui/material'
-import DeleteIcon from '@mui/icons-material/Delete'
+import Button from '@mui/material/Button'
+import TextField from '@mui/material/TextField'
+import Collapse from '@mui/material/Collapse'
+import AddIcon from '@mui/icons-material/Add'
+import CloseIcon from '@mui/icons-material/Close'
+import ImageIcon from '@mui/icons-material/Image'
+import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
 import { useSite } from '@/app/sites/site-context'
+import ProductItem from './ProductItem'
 
-export default function ProductManagementPage() {
+export default function ProductsView() {
 
   const { site } = useSite()
 
   const [productList, setProductList] = useState<Product[]>(site.products || [])
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [saving, setSaving] = useState(false)
 
-  const handleDelete = async (id: string) => {
-    await deleteProduct(id)
+  // Add form state
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [totalPrice, setTotalPrice] = useState('')
+  const [tax, setTax] = useState('21')
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const formRef = useRef<HTMLFormElement>(null)
+
+  const refreshProducts = async () => {
     const fetched = await getProducts(site.id!)
     setProductList(fetched)
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null
-    if (file) {
-      setPreviewUrl(URL.createObjectURL(file))
-    } else {
-      setPreviewUrl(null)
-    }
+    setPreviewUrl(file ? URL.createObjectURL(file) : null)
+  }
+
+  const resetForm = () => {
+    setName('')
+    setDescription('')
+    setTotalPrice('')
+    setTax('21')
+    setPreviewUrl(null)
+    formRef.current?.reset()
   }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    const formEl = e.currentTarget
-    const formData = new FormData(formEl)
+    setSaving(true)
+    const formData = new FormData(e.currentTarget)
     await addProduct(formData)
-    startTransition(async () => {
-      // reset UI
-      formEl.reset()
-      setPreviewUrl(null)
-      // re-fetch the list props for this page
-      getProducts(site.id!).then((fetched) => {
-        console.log('Fetched products:', fetched)
-        setProductList(fetched)
-      })
-    })
+    resetForm()
+    setShowAddForm(false)
+    setSaving(false)
+    await refreshProducts()
   }
 
+  const priceNum = parseFloat(totalPrice) || 0
+  const taxNum = parseFloat(tax) || 0
+  const priceBeforeTax = priceNum / (1 + taxNum / 100)
+
   return (
-    <Box maxWidth="800px" mx="auto" p={2}>
-      <Paper sx={{ p: 2, mb: 4 }}>
-        <form
-          onSubmit={handleSubmit}
-          encType="multipart/form-data"
-          className="flex flex-wrap gap-2 items-center"
+    <div className="container mx-auto p-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mt-4 mb-6">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-800">Products</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Items available for purchase at your beach — food, drinks, accessories.
+          </p>
+        </div>
+        <Button
+          size="small"
+          variant={showAddForm ? 'text' : 'outlined'}
+          startIcon={showAddForm ? <CloseIcon fontSize="small" /> : <AddIcon fontSize="small" />}
+          onClick={() => {
+            if (showAddForm) resetForm()
+            setShowAddForm(!showAddForm)
+          }}
+          sx={{ textTransform: 'none', borderColor: '#d1d5db', color: '#374151' }}
         >
-          <input type="hidden" name="siteId" value={site.id} />
+          {showAddForm ? 'Cancel' : 'Add product'}
+        </Button>
+      </div>
 
-          <TextField name="name" label="Name" required />
-          <TextField name="description" label="Description" />
+      {/* Add product form */}
+      <Collapse in={showAddForm}>
+        <div className="border border-gray-200 rounded-lg bg-white p-4 mb-6">
+          <form ref={formRef} onSubmit={handleSubmit} encType="multipart/form-data">
+            <input type="hidden" name="siteId" value={site.id} />
 
-          <TextField
-            name="totalPrice"
-            label="Total Price (with tax)"
-            type="number"
-            required
-            inputProps={{ step: '0.01' }}
-          />
+            <div className="flex gap-4">
+              {/* Image upload */}
+              <div
+                className="w-20 h-20 rounded-lg bg-gray-100 flex-shrink-0 flex items-center justify-center overflow-hidden cursor-pointer border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors"
+                onClick={() => fileRef.current?.click()}
+              >
+                {previewUrl ? (
+                  <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
+                ) : (
+                  <ImageIcon className="text-gray-300" fontSize="large" />
+                )}
+                <input
+                  ref={fileRef}
+                  type="file"
+                  name="image"
+                  accept="image/*"
+                  hidden
+                  onChange={handleFileChange}
+                />
+              </div>
 
-          <TextField
-            name="tax"
-            label="Tax %"
-            type="number"
-            required
-            inputProps={{ step: '0.01' }}
-          />
+              {/* Fields */}
+              <div className="flex-1 grid grid-cols-2 gap-3">
+                <TextField
+                  name="name"
+                  label="Product name"
+                  size="small"
+                  required
+                  fullWidth
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  sx={{ gridColumn: '1 / -1' }}
+                />
+                <TextField
+                  name="description"
+                  label="Description (optional)"
+                  size="small"
+                  fullWidth
+                  multiline
+                  minRows={1}
+                  maxRows={2}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  sx={{ gridColumn: '1 / -1' }}
+                />
+                <TextField
+                  name="totalPrice"
+                  label="Total price (€)"
+                  size="small"
+                  type="number"
+                  required
+                  value={totalPrice}
+                  onChange={(e) => setTotalPrice(e.target.value)}
+                  inputProps={{ step: '0.01' }}
+                />
+                <TextField
+                  name="tax"
+                  label="Tax %"
+                  size="small"
+                  type="number"
+                  required
+                  value={tax}
+                  onChange={(e) => setTax(e.target.value)}
+                  inputProps={{ step: '0.01' }}
+                />
+              </div>
+            </div>
 
-          <Button
-            component="label"
-            variant="outlined"
-          >
-            {previewUrl ? (
-              <Box
-                component="img"
-                src={previewUrl}
-                alt="Preview"
-                sx={{ width: '100px', height: '100px', objectFit: 'cover' }}
-              />
-            ) : (
-              'Select Image'
+            {priceNum > 0 && (
+              <div className="text-xs text-gray-400 mt-2 ml-24">
+                Price before tax: €{priceBeforeTax.toFixed(2)}
+              </div>
             )}
-            <input
-              type="file"
-              name="image"
-              accept="image/*"
-              hidden
-              onChange={handleFileChange}
+
+            <div className="flex justify-end mt-4">
+              <Button
+                type="submit"
+                variant="contained"
+                size="small"
+                disabled={saving || !name || !totalPrice}
+                sx={{ textTransform: 'none', backgroundColor: '#111827', '&:hover': { backgroundColor: '#374151' } }}
+              >
+                {saving ? 'Adding…' : 'Add product'}
+              </Button>
+            </div>
+          </form>
+        </div>
+      </Collapse>
+
+      {/* Product list */}
+      {productList.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+          <Inventory2OutlinedIcon sx={{ fontSize: 48, mb: 1, color: '#d1d5db' }} />
+          <p className="text-sm">No products yet</p>
+          <p className="text-xs mt-1">Add your first product to get started.</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {productList.map((product) => (
+            <ProductItem
+              key={product.id}
+              product={product}
+              onUpdated={refreshProducts}
             />
-          </Button>
+          ))}
+        </div>
+      )}
 
-          <Button type="submit" variant="contained" disabled={isPending}>
-            {isPending ? 'Adding…' : 'Add Product'}
-          </Button>
-        </form>
-      </Paper>
-
-      {/* Product List */}
-      <Paper>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Image</TableCell>
-              <TableCell>Name</TableCell>
-              <TableCell>Description</TableCell>
-              <TableCell align="right">Price<br/>(before tax)</TableCell>
-              <TableCell align="right">Tax (%)</TableCell>
-              <TableCell align="right">Total<br/>(after tax)</TableCell>
-              <TableCell align="center">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {productList.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} align="center">
-                  No products
-                </TableCell>
-              </TableRow>
-            ) : (
-              productList.map((prod) => (
-                <TableRow key={prod.id}>
-                  <TableCell>
-                    {prod.imageUrl && (
-                      <img src={prod.imageUrl} alt={prod.name} width={50} />
-                    )}
-                  </TableCell>
-                  <TableCell>{prod.name}</TableCell>
-                  <TableCell>{prod.description}</TableCell>
-                  <TableCell align="right">
-                    {prod.price.toFixed(2)}
-                  </TableCell>
-                  <TableCell align="right">
-                    {prod.tax.toFixed(2)}
-                  </TableCell>
-                  <TableCell align="right">
-                    {prod.totalPrice.toFixed(2)}
-                  </TableCell>
-                  <TableCell align="center">
-                    <IconButton
-                      color="error"
-                      onClick={() => handleDelete(prod.id)}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Paper>
-    </Box>
+      {/* Summary */}
+      {productList.length > 0 && (
+        <div className="mt-4 text-xs text-gray-400 text-right">
+          {productList.length} product{productList.length !== 1 ? 's' : ''}
+        </div>
+      )}
+    </div>
   )
 }

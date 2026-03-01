@@ -5,6 +5,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { APIProvider, Map, ControlPosition, MapMouseEvent, useMap } from '@vis.gl/react-google-maps'
 import SunbedMarker from './SunbedMarker'
 import { InventoryItem } from '@/types/shared'
+import { getParcelColor } from './chair-util'
 import MapHandler from '@/components/maps/map-handler'
 import { CustomMapControl } from '@/components/maps/map-control'
 import { useSite } from '@/app/sites/site-context'
@@ -17,7 +18,7 @@ interface InventoryMapProps {
   selectedItemIds: string[]
   selectedGroupNumber?: number | null
   pairingMode: boolean
-  onMarkerClick: (item: InventoryItem) => void
+  onMarkerClick: (item: InventoryItem, modifiers: { metaKey: boolean; ctrlKey: boolean }) => void
   onMarkerDragEnd: (item: InventoryItem, e: any) => void
   onPlaceSelect: (place: google.maps.places.PlaceResult | null) => void
   onMapClick: (event: MapMouseEvent) => void
@@ -28,7 +29,8 @@ interface InventoryMapProps {
 function getScaledSize(zoom: number): number {
   const physicalLength = 2.5 // meters
   const metersPerPixel = 156543.03392 / Math.pow(2, zoom)
-  return physicalLength / metersPerPixel
+  const size = physicalLength / metersPerPixel
+  return Math.max(size, 10) // minimum 10px for visibility at low zoom
 }
 
 /** Inner component that has access to the map instance via useMap() */
@@ -46,7 +48,7 @@ function MapContent({
   selectedItemIds: string[]
   selectedGroupNumber?: number | null
   pairingMode: boolean
-  onMarkerClick: (item: InventoryItem) => void
+  onMarkerClick: (item: InventoryItem, modifiers: { metaKey: boolean; ctrlKey: boolean }) => void
   onMarkerDragEnd: (item: InventoryItem, e: any) => void
   onSelectionChange: (ids: string[]) => void
   zoom: number
@@ -181,10 +183,11 @@ function MapContent({
   return (
     <>
       {(site.inventoryItems || []).map((item) => {
-        const isSelected =
-          selectedItemId === item.id ||
+        const isEditing = selectedItemId === item.id
+        const isMultiSelected =
           selectedSet.has(item.id) ||
           (selectedGroupNumber != null && item.group === selectedGroupNumber)
+        const itemParcelColor = getParcelColor(item.group)
         const pairedSelected =
           pairingMode && selectedItemId
             ? item.id === (site.inventoryItems || []).find((i) => i.id === selectedItemId)?.pairId ||
@@ -207,9 +210,11 @@ function MapContent({
             initialPosition={position}
             zoom={zoom}
             dynamicSize={dynamicSize}
-            selected={isSelected}
+            isEditing={isEditing}
+            isMultiSelected={isMultiSelected}
+            parcelColor={itemParcelColor}
             pairedSelected={pairedSelected}
-            onClick={() => onMarkerClick(item)}
+            onClick={(mods) => onMarkerClick(item, mods)}
             onDragEnd={(e) => onMarkerDragEnd(item, e)}
           />
         )
@@ -298,7 +303,7 @@ export default function InventoryMap({
 
   return (
     <div
-      className="w-full h-[400px] border border-2 border-gray-400"
+      className="w-full h-full"
       style={{ position: 'relative' }}
     >
       <SafeAPIProvider apiKey={apiKey}>
