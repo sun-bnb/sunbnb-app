@@ -13,9 +13,9 @@
     "lint": "eslint . --max-warnings 0",
     "generate:component": "turbo gen react-component",
     "postinstall": "npx prisma generate",
-    "migrate:local": "cp .env.local .env && source .env && npx prisma migrate dev",
-    "migrate:test": "cp .env.test .env && source .env && npx prisma migrate dev && cp .env.local .env && source .env",
-    "migrate:production": "cp .env.production .env && source .env && npx prisma migrate dev && cp .env.local .env && source .env"
+    "migrate:local": "cp .env.local .env && source .env && npx prisma migrate dev && npx prisma generate",
+    "migrate:test": "cp .env.test .env && source .env && npx prisma migrate dev && npx prisma generate && cp .env.local .env && source .env",
+    "migrate:production": "cp .env.production .env && source .env && npx prisma migrate dev && npx prisma generate && cp .env.local .env && source .env"
   },
   "devDependencies": {
     "@repo/eslint-config": "*",
@@ -23,6 +23,7 @@
     "@turbo/gen": "^1.12.4",
     "@types/eslint": "^8.56.5",
     "@types/node": "^20.11.24",
+    "@types/pg": "^8.18.0",
     "@types/react": "^18.2.61",
     "@types/react-dom": "^18.2.19",
     "eslint": "^8.57.0",
@@ -31,7 +32,10 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "prisma": "^5.18.0",
+    "@prisma/adapter-pg": "^7.4.2",
+    "dotenv": "^17.3.1",
+    "pg": "^8.19.0",
+    "prisma": "^7",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   }

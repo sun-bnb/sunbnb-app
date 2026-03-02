@@ -1,3 +1,8 @@
 import { PrismaClient } from '@prisma/client'
-const prisma = new PrismaClient()
+import { PrismaPg } from '@prisma/adapter-pg'
+
+const connectionString = process.env.POSTGRES_URL || ''
+
+const adapter = new PrismaPg({ connectionString })
+const prisma = new PrismaClient({ adapter })
 export default prisma

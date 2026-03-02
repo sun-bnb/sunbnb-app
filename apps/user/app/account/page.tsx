@@ -1,9 +1,7 @@
 import { auth } from '@/app/auth'
-import { PrismaClient } from '@prisma/client'
+import prisma from '@repo/data/PrismaCient'
 import { AccountProps } from './view'
 import AccountView from './view'
-
-const prisma = new PrismaClient()
   
   
 export default async function Account() {
