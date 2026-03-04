@@ -16,7 +16,7 @@
  */
 
 import prisma from '../index'
-import { BillingModel, ServiceFee } from '@prisma/client'
+import { BillingModel, PlatformVatConfig, ServiceFee } from '@prisma/client'
 
 // ─── Financial Utilities ────────────────────────────────────────────────────
 
@@ -81,6 +81,7 @@ export function calculateServiceFeeAmount(
 interface FeeContext {
   site: NonNullable<Awaited<ReturnType<typeof prisma.site.findUnique>>> & {
     serviceFees: ServiceFee[]
+    platformVatConfig: PlatformVatConfig | null
   }
   partnerAccount: (Awaited<ReturnType<typeof prisma.partnerAccount.findUnique>> & {
     serviceFees: ServiceFee[]
