@@ -11,9 +11,7 @@ import {
   Grid,
   Card,
   CardMedia,
-  CardContent,
   Typography,
-  CardActions,
   IconButton,
   Button,
   Badge,
@@ -371,9 +369,11 @@ export default function Menu({ siteId, reservationId, seatId, apiKey, serviceFee
             size="medium"
             color="primary"
             onClick={() => {
-              getOrders({ reservationId: reservationId }).then((orders) => {
-                logger.debug('Fetched orders', orders)
-                setCurrentOrders(orders)
+              getOrders({ reservationId: reservationId }).then((result) => {
+                if (Array.isArray(result)) {
+                  logger.debug('Fetched orders', result)
+                  setCurrentOrders(result)
+                }
               })
               setDrawerContent('orders')
               setDrawerOpen(true)

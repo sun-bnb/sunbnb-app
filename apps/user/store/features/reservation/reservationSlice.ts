@@ -1,31 +1,8 @@
 'use client'
 
-import { createSlice } from '@reduxjs/toolkit'
-import type { PayloadAction } from '@reduxjs/toolkit'
+import { createKeyValueSlice } from '../../createKeyValueSlice'
 
-interface ValueMap { 
-  [key: string]: any
-}
+const reservationSlice = createKeyValueSlice('reservation')
 
-export interface ValueMapState {
-  [key: string]: any
-}
-
-const initialState: ValueMapState = {
-}
-
-export const valueMapSlice = createSlice({
-  name: 'sites',
-  initialState,
-  reducers: {
-    setValue: (state, action: PayloadAction<{ [key: string]: any }>) => {
-      Object.keys(action.payload).forEach(key => {
-        state[key] = action.payload[key]
-      })
-    }
-  }
-})
-
-// Action creators are generated for each case reducer function
-export const { setValue } = valueMapSlice.actions
-export default valueMapSlice.reducer
+export const { setValue } = reservationSlice.actions
+export default reservationSlice.reducer

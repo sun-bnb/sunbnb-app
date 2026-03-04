@@ -10,7 +10,7 @@ import { SiteProps } from '@/types/shared'
 import { CustomMapControl } from '@/components/maps/map-control'
 import MapHandler from '@/components/maps/map-handler'
 
-import { submitForm } from './actions'
+import { submitForm } from './site-actions'
 import { useRouter } from 'next/navigation'
 
 
@@ -27,9 +27,6 @@ export default function CreateSite({ site, apiKey }: { site: SiteProps, apiKey: 
 
   let locationLat = siteLocation?.lat.toString() || site.locationLat
   let locationLng = siteLocation?.lng.toString() || site.locationLng
-
-  console.log('Location', locationLat, locationLng)
-  console.log('form state', formState)
 
   useEffect(() => {
     if (formState.status === 'ok' && formState.siteId) {
@@ -75,7 +72,6 @@ export default function CreateSite({ site, apiKey }: { site: SiteProps, apiKey: 
                 gestureHandling={'greedy'}
                 disableDefaultUI={true}
                 onClick={(e: any) => {
-                  console.log('Map click', e)
                   setSiteLocation(e.detail.latLng)
                 }}
               >

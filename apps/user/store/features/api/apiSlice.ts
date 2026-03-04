@@ -3,6 +3,15 @@ import { Order } from '@/app/types/types';
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 import { SiteGeography } from '@/app/sites/types';
 
+/**
+ * Get the anonymous user ID from localStorage (client-side only).
+ * Used to pass ownership proof to API routes for unauthenticated users.
+ */
+function getAnonId(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem('sunbnb-anonId')
+}
+
 export const httpApi = createApi({
   reducerPath: 'api',
   baseQuery: fetchBaseQuery({
@@ -34,15 +43,23 @@ export const httpApi = createApi({
       transformResponse: (response: { availability: { itemId: string, available: boolean }[] }) => response
     }),
     getReservationById: builder.query({
-      query: ({ id }) => ({
-        url: `reservations/${id}`
-      }),
+      query: ({ id }) => {
+        const anonId = getAnonId()
+        return {
+          url: `reservations/${id}`,
+          params: anonId ? { anonId } : undefined,
+        }
+      },
       transformResponse: (response: Reservation) => response
     }),
     getOrderById: builder.query({
-      query: ({ id }) => ({
-        url: `orders/${id}`
-      }),
+      query: ({ id }) => {
+        const anonId = getAnonId()
+        return {
+          url: `orders/${id}`,
+          params: anonId ? { anonId } : undefined,
+        }
+      },
       transformResponse: (response: Order) => response
     })
   }),

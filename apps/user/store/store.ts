@@ -1,21 +1,13 @@
-import { Dispatch, Middleware, UnknownAction, configureStore } from '@reduxjs/toolkit'
-import CounterSlice from './features/counter/CounterSlice'
+import { configureStore } from '@reduxjs/toolkit'
 import searchSlice from './features/search/searchSlice'
 import sitesSlice from './features/sites/sitesSlice'
 import reservationSlice from './features/reservation/reservationSlice'
 import { googlePlacesApi } from './features/autocomplete/autocompleteSlice'
 import { httpApi } from './features/api/apiSlice'
 
-export const unauthenticatedMiddleware: Middleware = ({
-  dispatch
- }) => (next) => (action) => {
-  return next(action);
- }
- 
 export const makeStore = () => {
   return configureStore({
     reducer: {
-      counter: CounterSlice,
       search: searchSlice,
       sites: sitesSlice,
       reservation: reservationSlice,

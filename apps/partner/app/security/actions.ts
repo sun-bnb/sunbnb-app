@@ -33,3 +33,18 @@ export async function createToken(expires: Date, resources: string[]) {
   return { status: 'ok', token: token.id }
   
 }
+
+export async function deleteToken(id: string) {
+
+  const session = await auth()
+  if (!session?.user) throw new Error('Not authenticated')
+
+  await prisma.securityToken.delete({
+    where: {
+      id,
+      userId: session.user.id,
+    }
+  })
+
+  return { status: 'ok' }
+}

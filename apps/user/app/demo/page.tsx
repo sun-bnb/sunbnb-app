@@ -323,11 +323,8 @@ export default function DemoPage() {
   const dispatch = useDispatch()
   const sitesState = useSelector((state: RootState) => state.sites)
   const { demoMode } = sitesState
-  
-  console.log('Demo page demo mode', demoMode)
 
   useEffect(() => {
-    console.log('Setting demo mode true')
     window.localStorage.setItem('demoMode', 'true')
     dispatch(setValue({ demoMode: true }))         
   }, [])

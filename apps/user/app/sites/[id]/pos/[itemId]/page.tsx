@@ -1,7 +1,5 @@
 import prisma from '@repo/data/PrismaCient'
-import { auth } from '@/app/auth'
 import PosView from './view'
-import ReservationView from '@/app/reservations/[id]/view'
 
 const { STRIPE_PUBLIC_KEY } = process.env
 

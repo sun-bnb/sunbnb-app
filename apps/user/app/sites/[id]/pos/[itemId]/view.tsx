@@ -19,7 +19,6 @@ export default function PosView({ items, site, apiKey, stripePublicKey }: { item
     findUserReservation(session?.user?.id, items[0]!.id)
       .then((reservation) => {
         if (reservation) {
-          console.log('Found user reservation', reservation)
           router.push(`/reservations/${reservation.id}`)
         }
       })
@@ -27,7 +26,6 @@ export default function PosView({ items, site, apiKey, stripePublicKey }: { item
     findAnonReservation(anonId, items[0]!.id)
       .then((reservation) => {
         if (reservation) {
-          console.log('Found anon reservation', reservation)
           router.push(`/reservations/${reservation.id}?anonId=${anonId}`)
         }
       })

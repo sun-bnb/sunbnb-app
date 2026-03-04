@@ -1,5 +1,4 @@
 import ReceiptView from './ReceiptView'
-import { Reservation } from '@/app/sites/types'
 
 export interface ReceiptProps {
   date: string

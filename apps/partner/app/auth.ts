@@ -15,15 +15,12 @@ const nextAuthResult: NextAuthResult = NextAuth({
   ],
   callbacks: {
     async session({ session, token, user }) {
-      // console.log('SESSION CALLBACK', session, token, user)
       return session
     },
     async signIn({ profile }) {
-      // console.log('SIGNIN CALLBACK', profile)
       return true
     },
     async jwt({ token, user }) {
-      console.log('JWT CALLBACK', token, user)
       return token;
     }
   },

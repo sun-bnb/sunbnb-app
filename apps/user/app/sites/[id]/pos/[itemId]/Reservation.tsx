@@ -105,7 +105,6 @@ function ReservationButton({
               type: 'days',
               siteId: items[0]!.site?.id!,
               items: selectedItems,
-              status: site.type === 'unpaid' ? 'complete' : 'pending',
               userId: session?.user?.id,
               anonId
             })

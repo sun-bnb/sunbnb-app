@@ -1,112 +1,132 @@
-import Link from 'next/link'
-import { useSession } from 'next-auth/react'
-import { useState } from "react"
-import { useTranslations } from 'next-intl'
+'use client'
 
-import * as React from 'react'
+import Link from 'next/link'
 import Image from 'next/image'
-import Paper from '@mui/material/Paper'
-import IconButton from '@mui/material/IconButton'
-import AppBar from '@mui/material/AppBar'
-import Box from '@mui/material/Box'
-import Tooltip from '@mui/material/Tooltip'
-import Avatar from '@mui/material/Avatar'
-import Menu from '@mui/material/Menu'
-import MenuItem from '@mui/material/MenuItem'
-import Typography from '@mui/material/Typography'
+import { useSession, signOut } from 'next-auth/react'
+import { usePathname } from 'next/navigation'
+import { useState, useRef, useEffect } from 'react'
 import sunbnbLogo from '@/app/sunbnb-logo.svg'
 
-
-import { useRouter } from 'next/navigation'
-
-const userNavigation = [
-  { name: 'Account', href: '/account' },
-  { name: 'Sign out', href: '/api/auth/signout' },
+const navItems = [
+  { label: 'Dashboard', href: '/' },
+  { label: 'Sites', href: '/sites' },
+  { label: 'Calendar', href: '/calendar' },
+  { label: 'Security', href: '/security' },
 ]
 
-export default function CustomizedInputBase() {
+function isActive(pathname: string, href: string) {
+  if (href === '/') return pathname === '/'
+  return pathname.startsWith(href)
+}
 
-  const { data: session, status } = useSession()
-  const router = useRouter()
+export default function Header() {
+  const { data: session } = useSession()
+  const pathname = usePathname()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
 
-  const [anchorElNav, setAnchorElNav] = React.useState<null | HTMLElement>(null);
-  const [anchorElUser, setAnchorElUser] = React.useState<null | HTMLElement>(null);
+  // Close menu on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    if (menuOpen) document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [menuOpen])
 
-  const handleOpenNavMenu = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorElNav(event.currentTarget);
-  };
-  const handleOpenUserMenu = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorElUser(event.currentTarget);
-  }
-
-  const handleCloseNavMenu = () => {
-    setAnchorElNav(null);
-  }
-
-  const handleCloseUserMenu = () => {
-    setAnchorElUser(null);
-  }
-
-  const t = useTranslations('HomePage')
+  const initials = session?.user?.name
+    ? session.user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+    : session?.user?.email?.[0]?.toUpperCase() || '?'
 
   return (
-    <div className="w-full">
-      <div className="w-full flex items-center justify-between">
-        <div className="flex items-center">
-          <Link href="/">
-            <Image alt="Sunbnb" src={sunbnbLogo} 
-              style={{ width: '40px', marginLeft: '10px' }} 
-            />
+    <header className="sticky top-0 z-40 bg-white border-b border-gray-200">
+      <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+
+        {/* Left: Logo + Nav */}
+        <div className="flex items-center gap-8">
+          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
+            <Image alt="Sunbnb" src={sunbnbLogo} className="w-8 h-8" />
+            <span className="text-sm font-bold text-gray-900 hidden md:inline">sunbnb</span>
           </Link>
-          <div className="flex ml-2">
-            <div className="ml-2 mr-2 font-bold">
-              <Link href="/">Dashboard</Link>
-            </div>
-            <div className="ml-2 mr-2 font-bold">
-              <Link href="/sites">Sites</Link>
-            </div>
-            <div className="ml-2 mr-2 font-bold">
-              <Link href="/calendar">Calendar</Link>
-            </div>
-            <div className="ml-2 mr-2 font-bold">
-              <Link href="/security">Security</Link>
-            </div>
-          </div>
+
+          <nav className="flex items-center gap-1">
+            {navItems.map(item => {
+              const active = isActive(pathname, item.href)
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                    active
+                      ? 'text-gray-900 font-semibold bg-gray-100'
+                      : 'text-gray-500 font-medium hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              )
+            })}
+          </nav>
         </div>
-        <div className="p-[10px]">
-          <Box sx={{ flexGrow: 0 }}>
-            <Tooltip title="Open settings">
-              <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
-                <Avatar alt="Remy Sharp" src={session?.user?.image!}  />
-              </IconButton>
-            </Tooltip>
-            <Menu
-              sx={{ mt: '45px' }}
-              id="menu-appbar"
-              anchorEl={anchorElUser}
-              anchorOrigin={{
-                vertical: 'top',
-                horizontal: 'right',
-              }}
-              keepMounted
-              transformOrigin={{
-                vertical: 'top',
-                horizontal: 'right',
-              }}
-              open={Boolean(anchorElUser)}
-              onClose={handleCloseUserMenu}
-            >
-              {userNavigation.map((navItem) => (
-                <MenuItem key={navItem.href} onClick={handleCloseUserMenu}>
-                  <Link href={navItem.href}>
-                    <Typography sx={{ textAlign: 'center' }}>{t(navItem.name)}</Typography>
-                  </Link>
-                </MenuItem>
-              ))}
-            </Menu>
-          </Box>
+
+        {/* Right: User menu */}
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="flex items-center gap-2 rounded-full p-0.5 hover:ring-2 hover:ring-gray-200 transition-all"
+          >
+            {session?.user?.image ? (
+              <img
+                src={session.user.image}
+                alt=""
+                className="w-8 h-8 rounded-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-gray-900 text-white flex items-center justify-center text-xs font-semibold">
+                {initials}
+              </div>
+            )}
+          </button>
+
+          {menuOpen && (
+            <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl border border-gray-200 shadow-lg py-1 z-50">
+              {/* User info */}
+              <div className="px-4 py-2.5 border-b border-gray-100">
+                <p className="text-sm font-medium text-gray-900 truncate">
+                  {session?.user?.name || 'Partner'}
+                </p>
+                <p className="text-xs text-gray-400 truncate">
+                  {session?.user?.email}
+                </p>
+              </div>
+
+              <Link
+                href="/account"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                </svg>
+                Account
+              </Link>
+
+              <button
+                onClick={() => { setMenuOpen(false); signOut() }}
+                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15m-3 0-3-3m0 0 3-3m-3 3H15" />
+                </svg>
+                Sign out
+              </button>
+            </div>
+          )}
         </div>
       </div>
-    </div>
+    </header>
   )
 }

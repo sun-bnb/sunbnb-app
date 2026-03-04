@@ -5,37 +5,40 @@ import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import dayjs from 'dayjs'
 
+// ─── Reserve Item (walk-in / cash) ──────────────────────────────────────────
+
 export async function reserveItem(
   siteId: string,
   itemId: string
 ) {
-  
   const session = await auth()
-  console.log('RESERVE ITEM', itemId, session)
+  if (!session?.user) {
+    return { status: 'error', errors: ['Not authenticated'] }
+  }
 
-  // if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
-
-  const adminUser = await prisma.user.findFirst({
-    where: {
-      email: 'vhalme@gmail.com'
-    }
+  // Verify the partner owns this site
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { userId: true },
   })
+  if (!site || site.userId !== session.user.id) {
+    return { status: 'error', errors: ['Not authorized'] }
+  }
 
   const item = await prisma.inventoryItem.findUnique({
     where: { id: itemId },
-    include: {
-      pairedBy: true
-    }
+    include: { pairedBy: true },
   })
 
   if (!item) {
     return { status: 'error', errors: ['Item not found'] }
   }
 
+  // Include paired item if applicable
   let pairItem = item.pairedBy
   if (!pairItem && item.pairId) {
     pairItem = await prisma.inventoryItem.findUnique({
-      where: { id: item.pairId }
+      where: { id: item.pairId },
     })
   }
 
@@ -44,54 +47,54 @@ export async function reserveItem(
     itemIds.push({ id: pairItem.id })
   }
 
-  const reservation = await prisma.reservation.create({
+  // Create a same-day walk-in reservation owned by the partner
+  await prisma.reservation.create({
     data: {
-      userId: adminUser!.id,
+      userId: session.user.id,
       type: 'days',
       from: dayjs().startOf('day').toDate(),
       to: dayjs().endOf('day').toDate(),
       siteId,
       status: 'paid-in-cash',
-      items: {
-        connect: itemIds
-      }
-    }
+      items: { connect: itemIds },
+    },
   })
-  
 
-  console.log('RESERVATION', reservation.to, reservation.from)
-  
-  revalidatePath(`/sites/${reservation?.siteId}/manage`)
-
+  revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok' }
-  
 }
 
+// ─── Unreserve Item ─────────────────────────────────────────────────────────
+
 export async function unreserveItem(siteId: string, itemId: string) {
+  const session = await auth()
+  if (!session?.user) {
+    return { status: 'error', errors: ['Not authenticated'] }
+  }
 
-  const session = await auth();
-  console.log('UNRESERVE ITEM', itemId, session);
+  // Verify the partner owns this site
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { userId: true },
+  })
+  if (!site || site.userId !== session.user.id) {
+    return { status: 'error', errors: ['Not authorized'] }
+  }
 
-  // if (!session?.user) {
-  //  return { status: 'error', errors: ['Not authenticated'] };
-  //}
+  // Only delete today's walk-in reservations for this item
+  const todayStart = dayjs().startOf('day').toDate()
+  const todayEnd = dayjs().endOf('day').toDate()
 
-  // Example: remove today's reservation for that item
-  // Adjust logic to match your schema (maybe just delete the row, or set status)
-  const result = await prisma.reservation.deleteMany({
+  await prisma.reservation.deleteMany({
     where: {
-    //  status: 'paid-in-cash',
-      items: {
-        some: {
-          id: itemId
-        }
-      },
-      siteId
-    }
-  });
+      siteId,
+      status: 'paid-in-cash',
+      from: { gte: todayStart },
+      to: { lte: todayEnd },
+      items: { some: { id: itemId } },
+    },
+  })
 
-  console.log('UNRESERVE RESULT', result.count)
-  revalidatePath(`/sites/${siteId}/manage`);
-
-  return { status: 'ok' };
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
 }

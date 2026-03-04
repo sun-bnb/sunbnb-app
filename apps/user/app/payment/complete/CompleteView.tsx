@@ -15,13 +15,17 @@ export default function CompleteView({
 }) {
 
   const [status, setStatus] = useState<string | undefined>('default')
+  const [anonId, setAnonId] = useState<string | null>(null)
   const router = useRouter()
   const { data: session } = useSession()
 
-  let anonId = null
-  if (!(session?.user?.id)) {
-    anonId = localStorage.getItem('sunbnb-anonId')
-  }
+  // Read anonId from localStorage inside useEffect to avoid SSR errors
+  useEffect(() => {
+    if (!session?.user?.id) {
+      const storedAnonId = localStorage.getItem('sunbnb-anonId')
+      setAnonId(storedAnonId)
+    }
+  }, [session?.user?.id])
 
   const { data: fetchedReservation, error: reservationFetchError } = useGetReservationByIdQuery({
     id: reservation.id,
@@ -35,12 +39,11 @@ export default function CompleteView({
   useEffect(() => {
     if (finalReservation?.status) {
       setStatus(finalReservation.status);
-      console.log('Final reservation status:', finalReservation.status)
       if (finalReservation.status === 'paid' || finalReservation.status === 'complete') {
         router.push(`/reservations/${finalReservation.id}?terms=true${anonId ? `&anonId=${anonId}` : ''}`)
       }
     }
-  }, [finalReservation?.status])
+  }, [finalReservation?.status, anonId])
 
   return (
     <div id="payment-status" className="bg-[#fff5e1] pt-[24px]" style={{ height: '100dvh' }}>

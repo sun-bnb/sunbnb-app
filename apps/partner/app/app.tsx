@@ -2,46 +2,46 @@
 
 import { useSession } from 'next-auth/react'
 import { useRouter, usePathname } from 'next/navigation'
-import { ReactNode, useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import Header from './header'
 
-const App = ({ children }: {
-  children: React.ReactNode;
-}) => {
+export default function App({ children }: { children: React.ReactNode }) {
 
-  const { data: session, status } = useSession()
+  const { status } = useSession()
   const router = useRouter()
   const pathname = usePathname()
 
-  const [ content, setContent ] = useState<ReactNode | null>(null)
-
   useEffect(() => {
-    if (pathname.endsWith('/info') || pathname.endsWith('/manage') || pathname.endsWith('/orders')) {
-      setContent(
-        <div>
-          {children}
-        </div>
-      )
-    } else if (status === 'authenticated') {
-      setContent(
-        <div>
-          { !(pathname.includes('/manage') || pathname.includes('/orders')) && <Header /> }
-          <div className="flex">
-            <div className="flex-grow">
-              {children}
-            </div>
-          </div>
-        </div>
-        
-      )
-      console.log(session)
-    } else if (status === 'unauthenticated') {
+    if (status === 'unauthenticated') {
       router.push('/api/auth/signin')
     }
-  }, [status])
+  }, [status, router])
 
-  return content
+  // Public routes that don't need auth shell
+  const isPublicRoute = pathname.endsWith('/info') || pathname.endsWith('/manage') || pathname.endsWith('/orders')
 
+  if (isPublicRoute) {
+    return <>{children}</>
+  }
+
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-gray-200 border-t-gray-600 rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (status !== 'authenticated') {
+    return null
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50/50">
+      <Header />
+      <main>
+        {children}
+      </main>
+    </div>
+  )
 }
-
-export default App

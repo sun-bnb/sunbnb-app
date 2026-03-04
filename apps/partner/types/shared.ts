@@ -1,3 +1,11 @@
+export interface ServiceFee {
+  id: string
+  chargeType: string
+  feeAmount?: number | null
+  percentage?: number | null
+  serviceCode: string
+}
+
 export interface SiteProps {
   id?: string | undefined
   name?: string | undefined
@@ -20,6 +28,7 @@ export interface SiteProps {
   price?: number | null
   status?: string | null
   services: string[]
+  serviceFees?: ServiceFee[]
 }
 
 export interface Product {

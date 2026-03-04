@@ -1,7 +1,5 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 
-const googlePlacesApiKey = 'YOUR_GOOGLE_API_KEY'; // Replace with your Google API key
-
 export const googlePlacesApi = createApi({
   reducerPath: 'googlePlacesApi',
   baseQuery: fetchBaseQuery({
@@ -22,7 +20,6 @@ export const googlePlacesApi = createApi({
         url: 'details',
         params: {
           placeId,
-          key: googlePlacesApiKey
         },
       }),
       transformResponse: (response: { data: { result: { geometry: { location: any } } } }) => response.data.result.geometry.location,

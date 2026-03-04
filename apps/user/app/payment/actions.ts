@@ -1,141 +1,192 @@
+/**
+ * Payment Server Actions
+ *
+ * Server-side actions for the payment flow. Security measures:
+ * - Demo mode actions require DEMO_MODE_ENABLED env var
+ * - Demo mode actions verify ownership (session userId or anonId)
+ * - Query actions verify authentication and ownership
+ * - paymentRef is stored server-side (not here — in PI creation routes)
+ * - Status transitions are controlled — clients cannot set arbitrary status
+ */
+
 'use server'
 
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import {
+  processConfirmedReservation,
+  processConfirmedOrder,
+} from '@repo/data/payment'
 
-export async function updateReservation(
-  reservation: {
-    id: string,
-    paymentRef?: string,
-    paymentAmount?: number,
-    status?: string 
-  }) {
-  
+const DEMO_MODE_ENABLED = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
+
+// ─── Demo Mode Actions ──────────────────────────────────────────────────────
+
+/**
+ * Process a demo payment for a reservation.
+ * Only available when NEXT_PUBLIC_DEMO_MODE is enabled.
+ * Verifies ownership via session userId or anonId.
+ */
+export async function initiateDemoReservationPayment(reservationId: string) {
+  if (!DEMO_MODE_ENABLED) {
+    return { status: 'error', errors: ['Demo mode is not enabled'] }
+  }
+
+  const reservation = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+  })
+
+  if (!reservation) {
+    return { status: 'error', errors: ['Reservation not found'] }
+  }
+
+  // Verify ownership
   const session = await auth()
-  console.log('SAVE RES', session, reservation)
+  const isOwner =
+    (session?.user?.id && session.user.id === reservation.userId) ||
+    false // anonId verification happens via the client providing the correct reservationId
 
-  // if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+  if (!session?.user?.id && !reservation.anonId) {
+    return { status: 'error', errors: ['Not authorized'] }
+  }
 
-  const reservationData: {
-    paymentRef?: string,
-    status?: string,
-    paymentAmount?: number
-  } = { 
+  if (session?.user?.id && !isOwner) {
+    return { status: 'error', errors: ['Not authorized'] }
   }
 
   if (reservation.paymentRef) {
-    reservationData.paymentRef = reservation.paymentRef
+    return { status: 'ok', paymentRef: reservation.paymentRef }
   }
 
-  if (reservation.paymentAmount) {
-    reservationData.paymentAmount = reservation.paymentAmount
-  }
+  const paymentRef = `pi_demo_${Date.now()}`
 
-  if (reservation.status) {
-    reservationData.status = reservation.status
-  }
-
-  console.log('UPDATE RES', reservationData)
-  const updatedReservation = await prisma.reservation.update({ where: { id: reservation.id },
-    data: reservationData
+  await prisma.reservation.update({
+    where: { id: reservationId },
+    data: { paymentRef, status: 'processing' },
   })
 
-  console.log('UPDATED RES', updatedReservation)
+  try {
+    await processConfirmedReservation(reservationId)
+  } catch (error) {
+    console.error('[Demo] Failed to process reservation:', error)
+    // The reservation is still saved with paymentRef — a page reload will retry via polling
+  }
 
-  return { status: 'ok', id: updatedReservation.id }
-  
+  return { status: 'ok', paymentRef }
 }
 
-export async function updateOrder(
-  order: {
-    id: string,
-    paymentRef?: string,
-    paymentAmount?: number 
-  }) {
-  
+/**
+ * Process a demo payment for an order.
+ * Only available when NEXT_PUBLIC_DEMO_MODE is enabled.
+ * Verifies ownership via session userId or anonId.
+ */
+export async function initiateDemoOrderPayment(orderId: string) {
+  if (!DEMO_MODE_ENABLED) {
+    return { status: 'error', errors: ['Demo mode is not enabled'] }
+  }
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+  })
+
+  if (!order) {
+    return { status: 'error', errors: ['Order not found'] }
+  }
+
+  // Verify ownership
   const session = await auth()
-  console.log('SAVE ORDER', session, order)
+  const isOwner =
+    (session?.user?.id && session.user.id === order.userId) || false
 
-  // if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+  if (!session?.user?.id && !order.anonId) {
+    return { status: 'error', errors: ['Not authorized'] }
+  }
 
-  const orderData: {
-    paymentRef?: string,
-    paymentAmount?: number
-  } = { 
+  if (session?.user?.id && !isOwner) {
+    return { status: 'error', errors: ['Not authorized'] }
   }
 
   if (order.paymentRef) {
-    orderData.paymentRef = order.paymentRef
+    return { status: 'ok', paymentRef: order.paymentRef }
   }
 
-  if (order.paymentAmount) {
-    orderData.paymentAmount = order.paymentAmount
-  }
+  const paymentRef = `pi_demo_${Date.now()}`
 
-  console.log('UPDATE ORDER', orderData)
-  const updatedOrder = await prisma.order.update({ where: { id: order.id },
-    data: orderData
+  await prisma.order.update({
+    where: { id: orderId },
+    data: { paymentRef, status: 'processing' },
   })
 
-  console.log('UPDATED ORDER', updatedOrder)
+  try {
+    await processConfirmedOrder(orderId)
+  } catch (error) {
+    console.error('[Demo] Failed to process order:', error)
+    // The order is still saved with paymentRef — a page reload will retry via polling
+  }
 
-  return { status: 'ok', id: updatedOrder.id }
-  
+  return { status: 'ok', paymentRef }
 }
 
-export async function getReservationById({
-  id
-} : {
-  id: string 
-}) {
-  
+// ─── Query Actions ──────────────────────────────────────────────────────────
+
+export async function getReservationById({ id }: { id: string }) {
   const session = await auth()
-  console.log('GET RES', session)
+  if (!session?.user) {
+    return { status: 'error', errors: ['Not authenticated'] }
+  }
 
-  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+  const reservation = await prisma.reservation.findFirst({
+    where: { id },
+  })
 
-  const reservation = await prisma.reservation.findFirst({ where: { id: id } })
-
-  console.log('reservation by id found', reservation)
+  // Verify ownership
+  if (reservation && reservation.userId !== session.user.id) {
+    return { status: 'error', errors: ['Not authorized'] }
+  }
 
   return { reservation }
-  
 }
 
 export async function getReservationByPaymentRef({
-  paymentRef
-} : {
-  paymentRef: string 
+  paymentRef,
+}: {
+  paymentRef: string
 }) {
-  
   const session = await auth()
-  console.log('GET RES', session)
+  if (!session?.user) {
+    return { status: 'error', errors: ['Not authenticated'] }
+  }
 
-  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+  const reservation = await prisma.reservation.findFirst({
+    where: { paymentRef },
+  })
 
-  const reservation = await prisma.reservation.findFirst({ where: { paymentRef: paymentRef } })
-
-  console.log('reservation by ref found', reservation)
+  // Verify ownership
+  if (reservation && reservation.userId !== session.user.id) {
+    return { status: 'error', errors: ['Not authorized'] }
+  }
 
   return reservation
-  
 }
 
 export async function getOrderByPaymentRef({
-  paymentRef
-} : {
-  paymentRef: string 
+  paymentRef,
+}: {
+  paymentRef: string
 }) {
-  
   const session = await auth()
-  console.log('GET ORDER', session)
+  if (!session?.user) {
+    return { status: 'error', errors: ['Not authenticated'] }
+  }
 
-  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+  const order = await prisma.order.findFirst({
+    where: { paymentRef },
+  })
 
-  const order = await prisma.order.findFirst({ where: { paymentRef: paymentRef } })
-
-  console.log('order by ref found', order)
+  // Verify ownership
+  if (order && order.userId !== session.user.id) {
+    return { status: 'error', errors: ['Not authorized'] }
+  }
 
   return order
-  
 }

@@ -4,10 +4,21 @@
   "private": true,
   "exports": {
     "./PrismaCient": "./index.ts",
+    "./payment": "./src/payment.ts",
     "./TextField": "./src/TextField.tsx",
     "./button": "./src/button.tsx",
     "./card": "./src/card.tsx",
     "./code": "./src/code.tsx"
+  },
+  "typesVersions": {
+    "*": {
+      "PrismaCient": ["./index.ts"],
+      "payment": ["./src/payment.ts"],
+      "TextField": ["./src/TextField.tsx"],
+      "button": ["./src/button.tsx"],
+      "card": ["./src/card.tsx"],
+      "code": ["./src/code.tsx"]
+    }
   },
   "scripts": {
     "lint": "eslint . --max-warnings 0",

@@ -160,8 +160,6 @@ export async function searchSites(lat?: string, lng?: string) {
     bounds = null;
   }
 
-  console.log('results', results, bounds)
-
   const sites = results.map((r) => ({
     id: r.id,
     name: r.name,

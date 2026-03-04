@@ -1,234 +1,109 @@
-import logger from '@/utils/logger'
+/**
+ * GET /api/orders/[id]
+ *
+ * Fetches an order and — if it's still processing — verifies the
+ * Stripe PaymentIntent status and triggers idempotent invoice creation.
+ *
+ * Security:
+ * - Authenticates via session or anonId query param
+ * - Verifies the requesting user owns the order
+ *
+ * Used by:
+ * - RTK Query polling on the order payment-complete page
+ * - Stripe webhook as a secondary confirmation path
+ * - Direct lookup for order details
+ */
 
 import prisma from '@repo/data/PrismaCient'
-import { Prisma, ServiceFee } from '@prisma/client'
-import Stripe from 'stripe'
-
+import { processConfirmedOrder } from '@repo/data/payment'
 import { NextRequest } from 'next/server'
-import { auth } from '@/app/auth'
-import { Order, Product } from '@/app/types/types'
+import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
+import { getStripePaymentStatus, isDemoPayment } from '@/app/api/_lib/stripe'
 
-function round(amount: number) {
-  return Math.round(amount * 100) / 100
-}
+// ─── Route Handler ──────────────────────────────────────────────────────────
 
-function computeVatAndBaseAmounts(finalAmount: number, vatRate: number) {
-  const baseAmount = round(finalAmount / (1 + vatRate / 100))
-  const vatAmount = round(finalAmount - baseAmount)
-  return { baseAmount, vatAmount }
-}
-
-function findServiceFee(
-  site: any,
-  partnerAccount: any,
-  settings: any,
-  serviceCode: string
-): ServiceFee | undefined {
-  return (
-    site?.serviceFees?.find((fee: any) => fee.serviceCode === serviceCode) ||
-    partnerAccount?.serviceFees?.find((fee: any) => fee.serviceCode === serviceCode) ||
-    settings?.serviceFees?.find((fee: any) => fee.serviceCode === serviceCode)
-  )
-}
-
-async function handleConfirmedOrder(order: Order) {
-
-  const orderSite = await prisma.site.findUnique({
-    where: { id: order.siteId },
-    include: { serviceFees: true }
-  })
-
-  let [site, partnerAccount, settings] = await Promise.all([
-    prisma.site.findUnique({
-      where: { id: order.siteId },
-      include: { serviceFees: true },
-    }),
-    prisma.partnerAccount.findUnique({
-      where: { userId: orderSite!.userId },
-      include: { serviceFees: true },
-    }),
-    prisma.settings.findFirst({
-      include: { serviceFees: true },
-    })
-  ])
-
-  if (!settings) {
-    
-    await prisma.settings.create({
-      data: {
-        country: 'FI',
-        currency: 'EUR',
-        vat: 25.5,
-      }
-    })
-    
-    settings = await prisma.settings.findFirst({
-      include: { serviceFees: true },
-    })
-
-    await prisma.serviceFee.create({
-      data: {
-        settingsId: settings?.id!,
-        serviceCode: 'food-and-beverage',
-        chargeType: 'fixed',
-        feeAmount: 1.00
-      }
-    })
-
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  // Authenticate: session user or anonymous user (anonId in query param)
+  const identity = await getRequestIdentity(request)
+  if (!identity) {
+    return Response.json(
+      { status: 'error', errors: ['Authentication required'] },
+      { status: 401 }
+    )
   }
 
-  const SERVICE_CODE = 'food-and-beverage';
-  let matchedServiceFee = findServiceFee(site, partnerAccount, settings, SERVICE_CODE);
-
-  if (!matchedServiceFee) {
-
-    await prisma.serviceFee.create({
-      data: {
-        settingsId: settings?.id!,
-        serviceCode: 'food-and-beverage',
-        chargeType: 'fixed',
-        feeAmount: 1.00
-      }
-    })
-
-    settings = await prisma.settings.findFirst({
-        include: { serviceFees: true }
-    })
-
-    matchedServiceFee = findServiceFee(site, partnerAccount, settings, SERVICE_CODE);
-
-  }
-
-  logger.debug('MATCHED SERVICE FEE', matchedServiceFee)
-
-  const totalFinalAmount = order.paymentAmount ?? 0;
-  const vatRate = site?.vat ?? 0;
-  const { baseAmount: totalBaseAmount, vatAmount: totalVatAmount } = 
-    computeVatAndBaseAmounts(totalFinalAmount, vatRate);
-
-  
-  const serviceFeeAmount = matchedServiceFee?.chargeType === 'fixed' ?
-    (matchedServiceFee?.feeAmount || 0) : matchedServiceFee?.percentage! * totalFinalAmount
-
-  const { baseAmount: serviceBaseAmount, vatAmount: serviceVatAmount } = computeVatAndBaseAmounts(serviceFeeAmount || 0, vatRate);
-
-
-  const invoice = await prisma.invoice.create({
-    data: {
-      accountId: partnerAccount?.userId || '',
-      totalCharge: totalBaseAmount,
-      totalTax: totalVatAmount,
-      totalAmount: totalFinalAmount + serviceFeeAmount
-    },
-  })
-
-  let invoiceLines = order.orderItems.map((item) => {
-
-    const finalAmount = item.totalPrice;
-    //const serviceFeeAmount = matchedServiceFee?.chargeType === 'fixed' ?
-    //  (matchedServiceFee?.feeAmount || 0) : matchedServiceFee?.percentage! * finalAmount
-    const serviceFeeAmount = 0
-    const itemAmount = finalAmount - (serviceFeeAmount || 0)
-
-    const { baseAmount: itemBaseAmount, vatAmount: itemVatAmount } = computeVatAndBaseAmounts(itemAmount, item.tax);
-    
-    return [
-      {
-        charge: itemBaseAmount,
-        tax: itemVatAmount,
-        amount: itemAmount,
-        invoiceId: invoice.id,
-        productCode: 'food-and-beverage',
-        description: `${item.name} x (${item.quantity})`
-      }
-    ]
-
-  });
-
-  const finalInvoiceLines = invoiceLines.flat()
-
-  const serviceFeeLine = {
-    charge: serviceBaseAmount,
-    tax: serviceVatAmount,
-    amount: serviceFeeAmount,
-    invoiceId: invoice.id,
-    productCode: 'sunbnb-service-fee',
-    description: `Srv. fee`
-  }
-
-  finalInvoiceLines.push(serviceFeeLine)
-
-  if (invoiceLines.length > 0) {
-    await prisma.invoiceLine.createMany({ data: finalInvoiceLines });
-    await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        invoiceId: invoice.id,
-        status: 'complete'
-      },
-    });
-  }
-}
-
-async function getPaymentIntentStatus(paymentRef: string) {
-
-  const { STRIPE_SECRET_KEY } = process.env
-  if (!STRIPE_SECRET_KEY) {
-    throw new Error('STRIPE_SECRET_KEY is not set')
-  }
-
-  const stripe = new Stripe(STRIPE_SECRET_KEY)
-  const paymentIntent = await stripe.paymentIntents.retrieve(paymentRef)
-
-  return paymentIntent.status
-
-}
-
-export async function GET(request: NextRequest, { params } : { params: { id: string } }) {
-
-  const session = await auth()
-  // if (!session?.user) return Response.json({ status: 'error', errors: [ 'Not authenticated' ] })
-  
-  let order = await prisma.order.findUnique({ 
+  let order = await prisma.order.findUnique({
     where: { id: params.id },
-    include: {
-      orderItems: true,
-      site: true
-    }
+    include: { orderItems: true, site: true },
   })
-  console.log('ORDER', order)
 
   if (!order) {
-    return Response.json({ status: 'error', errors: [ 'Reservation not found' ] })
+    return Response.json(
+      { status: 'error', errors: ['Order not found'] },
+      { status: 404 }
+    )
   }
+
+  // Verify ownership
+  if (!verifyOwnership(identity, order)) {
+    return Response.json(
+      { status: 'error', errors: ['Not authorized'] },
+      { status: 403 }
+    )
+  }
+
+  // ── Handle 'processing' state: verify Stripe and process ──────────────
 
   if (order.status === 'processing' && order.paymentRef) {
-    
-    const paymentStatus = await getPaymentIntentStatus(order.paymentRef)
+    try {
+      if (isDemoPayment(order.paymentRef)) {
+        // Demo mode: process immediately without Stripe verification
+        await processConfirmedOrder(order.id)
+      } else {
+        // Real payment: verify with Stripe
+        const paymentStatus = await getStripePaymentStatus(order.paymentRef)
 
-    console.log('PAYMENT STATUS', paymentStatus)
-
-    if (paymentStatus === 'succeeded') {
-      await prisma.order.update({ where: { id: order.id }, data: { status: 'paid' } })
-      await handleConfirmedOrder(order)
-    } else if (paymentStatus !== 'processing') {
-      await prisma.order.update({ where: { id: order.id }, data: { status: 'payment_failed' } })
-    }
-
-    if (paymentStatus !== 'processing') {
-      order = await prisma.order.findUnique({ 
-        where: { id: params.id },
-        include: {
-          orderItems: true,
-          site: true
+        if (paymentStatus === 'succeeded') {
+          await processConfirmedOrder(order.id)
+        } else if (paymentStatus !== 'processing') {
+          // Payment failed or was canceled
+          await prisma.order.update({
+            where: { id: order.id },
+            data: { status: 'payment_failed' },
+          })
         }
-      })
-    }
+      }
 
+      // Re-fetch to return current state
+      order = await prisma.order.findUnique({
+        where: { id: params.id },
+        include: { orderItems: true, site: true },
+      })
+    } catch (error) {
+      console.error('[Order] Payment verification error:', error)
+    }
   }
 
-  
+  // ── Handle 'paid' state without invoice (recovery from partial processing)
+
+  if (
+    order &&
+    order.status === 'paid' &&
+    !order.invoiceId
+  ) {
+    try {
+      await processConfirmedOrder(order.id)
+      order = await prisma.order.findUnique({
+        where: { id: params.id },
+        include: { orderItems: true, site: true },
+      })
+    } catch (error) {
+      console.error('[Order] Invoice creation recovery error:', error)
+    }
+  }
 
   return Response.json(order)
-
 }

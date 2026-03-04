@@ -1,13 +1,7 @@
-import { Middleware, configureStore } from '@reduxjs/toolkit'
+import { configureStore } from '@reduxjs/toolkit'
 import reservationSlice from './features/reservations/reservationsSlice'
 import { httpApi } from './features/api/apiSlice'
 
-export const unauthenticatedMiddleware: Middleware = ({
-  dispatch
- }) => (next) => (action) => {
-  return next(action);
- }
- 
 export const makeStore = () => {
   return configureStore({
     reducer: {

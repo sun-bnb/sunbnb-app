@@ -6,8 +6,8 @@ import {
   createInventoryItem,
   saveInventoryItemLocation,
   deleteInventoryItem,
-  getSite,
-} from '../actions'
+} from '../inventory-actions'
+import { getSite } from '../queries'
 import { useSite } from '@/app/sites/site-context'
 import { useSharedMap } from './SharedMapContext'
 import InventoryForm from './InventoryForm'

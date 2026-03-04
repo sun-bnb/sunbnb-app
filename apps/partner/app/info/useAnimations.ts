@@ -15,7 +15,6 @@ export function useFrameAnimation(
 
     (async () => {
       for (let i = 1; i <= delays.length; i++) {
-        console.log('state is now ' + (initialFrame + i))
         await sleep(delays[i - 1]!);
         if (isCancelled) break;
         setState(`frame${initialFrame + i}`);

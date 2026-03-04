@@ -34,7 +34,7 @@ export async function getRevenueAndFeesByMonth(
         SUM(revenue) AS revenue,
         SUM(fees)    AS fees
       FROM (
-        -- 3a) Each invoice’s total_amount (counted exactly once, no join)
+        -- 3a) Each invoice's total_amount (counted exactly once, no join)
         SELECT
           TO_CHAR(i.invoiced_at, 'YYYY-MM') AS month,
           i.total_amount                   AS revenue,
@@ -45,7 +45,7 @@ export async function getRevenueAndFeesByMonth(
 
         UNION ALL
 
-        -- 3b) Each fee‐line’s amount (only lines with description = fee)
+        -- 3b) Each fee‐line's amount (only lines with description = fee)
         SELECT
           TO_CHAR(i.invoiced_at, 'YYYY-MM') AS month,
           0                                AS revenue,
@@ -85,18 +85,23 @@ export async function getRevenueAndFeesByMonth(
 
 async function getDashboardData(userId: string): Promise<DashboardData> {
 
-  // 1) Fetch all site IDs for this user
+  // 1) Count sites for this user
+  const totalSites = await prisma.site.count({
+    where: { userId },
+  })
+
+  // 2) Fetch all site IDs for this user
   const siteIds = await prisma.site.findMany({
     where: { userId },
     select: { id: true },
   }).then(sites => sites.map(s => s.id))
 
-  // 2) Count total chairs (inventory items) across those sites
+  // 3) Count total chairs (inventory items) across those sites
   const totalChairs = await prisma.inventoryItem.count({
     where: { siteId: { in: siteIds } }
   })
 
-  // 3) Compute start/end of today in local time
+  // 4) Compute start/end of today in local time
   const now = new Date()
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const endOfToday = new Date(
@@ -106,7 +111,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
     23, 59, 59, 999
   )
 
-  // 4) Count reservations overlapping “today” for those sites
+  // 5) Count reservations overlapping "today" for those sites
   const reservationsToday = await prisma.reservation.count({
     where: {
       siteId: { in: siteIds },
@@ -115,16 +120,10 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
     }
   })
 
-  // 5) Compute revenue for this month and YTD, based on Invoice.invoicedAt
-  //    Invoices are tied to the partner’s accountId = your userId
-  //    (assuming each userId in PartnerAccount matches accountId in Invoice)
-
-  // Start of current month (local)
+  // 6) Revenue aggregation
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-  // Start of current year (local)
   const startOfYear = new Date(now.getFullYear(), 0, 1)
 
-  // 6) Sum totalAmount for invoices this month
   const monthAgg = await prisma.invoice.aggregate({
     where: {
       accountId: userId,
@@ -134,7 +133,6 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
   })
   const revenueThisMonth = monthAgg._sum.totalAmount ?? 0
 
-  // 7) Sum totalAmount for invoices year‐to‐date
   const yearAgg = await prisma.invoice.aggregate({
     where: {
       accountId: userId,
@@ -146,12 +144,44 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
 
   const revenueHistory = await getRevenueAndFeesByMonth(userId)
 
+  // 7) Upcoming reservations (next 7 days)
+  const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const upcomingRaw = await prisma.reservation.findMany({
+    where: {
+      siteId: { in: siteIds },
+      from: { gte: startOfToday, lte: sevenDaysFromNow },
+      status: { not: 'cancelled' },
+    },
+    orderBy: { from: 'asc' },
+    take: 8,
+    select: {
+      id: true,
+      from: true,
+      to: true,
+      status: true,
+      site: { select: { name: true, id: true } },
+      _count: { select: { items: true } },
+    },
+  })
+
+  const upcomingReservations = upcomingRaw.map(r => ({
+    id: r.id,
+    siteName: r.site.name,
+    siteId: r.site.id,
+    from: r.from.toISOString(),
+    to: r.to.toISOString(),
+    status: r.status,
+    itemCount: r._count.items,
+  }))
+
   return {
+    totalSites,
     totalChairs,
     reservationsToday,
     revenueThisMonth,
     revenueYearToDate,
-    revenueHistory
+    revenueHistory,
+    upcomingReservations,
   }
 }
 
@@ -163,8 +193,6 @@ export default async function DashboardPage() {
   if (!session?.user) return null
 
   const dashboardData = await getDashboardData(session.user.id)
-
-  console.log('DASHBOARD DATA', dashboardData)
 
   return (
     <DashboardView data={dashboardData} />

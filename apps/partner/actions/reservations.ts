@@ -9,8 +9,6 @@ export async function cancelReservation(
 ) {
   
   const session = await auth()
-  console.log('CANCEL RESERVATION', reservationId, session)
-
   if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
 
   await prisma.reservation.update({

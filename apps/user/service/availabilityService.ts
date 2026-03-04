@@ -23,7 +23,6 @@ function checkAvailability(
         dayjs(reservation.to).isBetween(from, to, null, '[]')
       )
       overlap = first || second || third
-      console.log('Overlap', first, second, third)        
     }
     return idMatch && overlap
   })
@@ -74,8 +73,6 @@ export async function getAvailability(siteId: string, from: Date, to: Date) {
       site: true
     },
   })
-
-  console.log('reservations', reservations)
 
   // For each item in the site, check if it's available or not
   const availabilityData = getAvailabilityData(reservations, itemIds, from, to)

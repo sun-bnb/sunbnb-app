@@ -37,7 +37,7 @@ export async function getPaidItemsByMonth(siteId: string, year: number, month: n
     prisma.order.findMany({
       where: {
         siteId,
-        status: 'paid',
+        status: { in: ['paid', 'complete'] },
         invoice: {
           invoicedAt: { gte: start, lt: end },
         },
@@ -53,7 +53,7 @@ export async function getPaidItemsByMonth(siteId: string, year: number, month: n
     prisma.reservation.findMany({
       where: {
         siteId,
-        status: 'paid',
+        status: { in: ['paid', 'complete'] },
         invoice: {
           invoicedAt: { gte: start, lt: end },
         },

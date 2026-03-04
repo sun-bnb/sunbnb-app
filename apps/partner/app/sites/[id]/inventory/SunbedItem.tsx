@@ -104,8 +104,6 @@ export default function SunbedItem({
       el.releasePointerCapture(e.pointerId)
     
       if (wasDraggedRef.current) {
-        // Only call onDragEnd if it was actually dragged
-        console.log('SunbedMarker dragged to:', position || initialPosition)
         onDragEnd({
           latLng: new google.maps.LatLng((position || initialPosition).lat, (position || initialPosition).lng),
         } as google.maps.MapMouseEvent)

@@ -12,7 +12,8 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { useSite } from '@/app/sites/site-context'
 import { ChairConfig } from './chair-util'
 import { syncChairsWithLayout, setItemStatusByGroup } from './actions'
-import { deleteItemsByGroup, getSite } from '../actions'
+import { deleteItemsByGroup } from '../inventory-actions'
+import { getSite } from '../queries'
 
 interface ParcelFormProps {
   siteId: string

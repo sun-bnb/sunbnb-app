@@ -6,9 +6,6 @@ import TermsFI from './TermsFI'
 export default function ReservationTosPage() {
 
   const t = useTranslations('TermsOfService')
-  const tosKey = t('tos')
-
-  console.log('tosKey', tosKey)
 
   const versions: {
     [key: string]: JSX.Element;

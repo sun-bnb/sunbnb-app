@@ -17,7 +17,7 @@ import {
 } from '@/store/features/api/apiSlice'
 import dayjs, { Dayjs } from 'dayjs'
 import SunbedSelection from '@/components/reservation/SunbedSelection'
-import { saveReservation, saveReservationForMultipleItems } from '../actions'
+import { saveReservationForMultipleItems } from '../actions'
 import PaymentView from '@/app/payment/Payment'
 import { useRouter } from 'next/navigation'
 
@@ -69,7 +69,6 @@ function ReservationButton({
               siteId: site.id!,
               items: selectedItems,
               userId: session?.user?.id,
-              status: site.type === 'unpaid' ? 'complete' : 'pending',
               anonId
             })
 

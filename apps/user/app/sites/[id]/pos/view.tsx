@@ -11,8 +11,6 @@ import {
   useGetSiteByIdQuery
 } from '@/store/features/api/apiSlice'
 import ReservationView from './Reservation'
-import { useRouter } from 'next/router'
-import { findAnonReservation } from '../actions'
 
 
 export default function PosView({ site, apiKey, stripePublicKey }: { site: SiteProps, apiKey: string, stripePublicKey: string | undefined }) {

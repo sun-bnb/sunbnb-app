@@ -19,8 +19,6 @@ const App = ({ children }: {
 
   const [ content, setContent ] = useState<ReactNode | null>(null)
 
-  console.log('App rendered with status:', status, 'and pathname:', pathname)
-  
   useEffect(() => {
     if (
       pathname.includes('/demo') ||

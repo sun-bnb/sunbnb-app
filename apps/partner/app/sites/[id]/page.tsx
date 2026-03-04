@@ -10,8 +10,6 @@ export default async function Site({ params }: { params: { id: string } }) {
 
   const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
 
-  console.log('SITE PAGE PARAMS', params)
-
   let site: SiteProps | null = {
     name: '',
     services: []

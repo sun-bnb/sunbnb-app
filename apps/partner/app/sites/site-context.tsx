@@ -23,7 +23,6 @@ export function SiteProvider(props: SiteContextProps & { children: React.ReactNo
   const [nonce, setNonce] = useState<number>(Math.random())
 
   const updateSite = (newSite: SiteProps) => {
-    console.log('Update site', newSite)
     setNonce(Math.random())
     setSite(newSite)
   }

@@ -4,7 +4,6 @@ import ReservationView from './view'
 
 export default async function Site({ params, searchParams }: { params: { id: string }, searchParams: URLSearchParams }) {
 
-  console.log('params', params)
   const session = await auth()
   if (!session?.user) return null
 

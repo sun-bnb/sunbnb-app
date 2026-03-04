@@ -4,8 +4,6 @@ import Image from 'next/image'
 import SearchBar from '@/components/search/search-bar'
 import sunbnbHorizontalBlack from './sunbnb-horizontal-black.png'
 import reservationScreen from './reservation-screen.png'
-import scanQrImage from './scan-qr-image.png'
-import beachProducts from './beach-products.png'
 import { useRouter } from 'next/navigation'
 
 export default function HomeView() {

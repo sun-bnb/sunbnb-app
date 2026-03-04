@@ -10,7 +10,6 @@ export async function submitForm(
 ) {
   
   const session = await auth()
-  console.log('SUBMIT', formData, session)
 
   if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
 

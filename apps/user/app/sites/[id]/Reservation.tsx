@@ -228,7 +228,6 @@ function ReservationButton({
                     to: to.toISOString(),
                     type: 'hours',
                     siteId: site.id!,
-                    status: site.type === 'unpaid' ? 'complete' : 'pending',
                     items: selectedItems,
                     userId: session?.user?.id!
                   })
@@ -241,7 +240,6 @@ function ReservationButton({
                     to: to.toISOString(),
                     type: 'days',
                     siteId: site.id!,
-                    status: site.type === 'unpaid' ? 'complete' : 'pending',
                     items: selectedItems,
                     userId: session?.user?.id!
                   })

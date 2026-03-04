@@ -1,6 +1,6 @@
 'use client'
 
-import { saveContentFields, uploadContentImage } from '../actions'
+import { saveContentFields, uploadContentImage } from '../content-actions'
 
 import React, { useRef, useState, useCallback } from 'react'
 import Button from '@mui/material/Button'

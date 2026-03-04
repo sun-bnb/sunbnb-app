@@ -1,5 +1,3 @@
-import logger from '@/utils/logger'
-
 import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
 import ReservationView from './view'
@@ -86,7 +84,6 @@ export default async function ReservationPage({ params, searchParams }: { params
       return <div className="h-screen flex items-center justify-center">Reservation not found</div>
     }
   } else {
-    console.log('Anon reservation check', anonId, reservation.anonId)
     if (!anonId || reservation.anonId !== anonId) {
       return <div className="h-screen flex items-center justify-center">No reservation found</div>
     }

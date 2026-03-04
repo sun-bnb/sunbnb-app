@@ -24,7 +24,6 @@ export async function GET(request: NextRequest, { params } : { params: { siteId:
     const dayStart = dayjs(date).startOf('day').toDate();
     // End of the day (23:59:59.999)
     const dayEnd = dayjs(date).endOf('day').toDate();
-    console.log('DATE', date, dayStart, dayEnd)
 
     const reservations = await prisma.reservation.findMany({ 
       where: { 
@@ -41,7 +40,6 @@ export async function GET(request: NextRequest, { params } : { params: { siteId:
       }
     })
 
-    console.log('RESERVATIONS', reservations)
     return Response.json({
       reservations
     })
@@ -50,8 +48,6 @@ export async function GET(request: NextRequest, { params } : { params: { siteId:
     
     const monthStart = dayjs(`${monthParam}-01`).startOf('month').toDate();
     const monthEnd = dayjs(`${monthParam}-01`).endOf('month').toDate();
-
-    console.log('MONTH', monthStart, monthEnd)
 
     const reservationsByDay = await prisma.$queryRaw<{ day: string, count: number }[]>`
       SELECT 
@@ -79,8 +75,6 @@ export async function GET(request: NextRequest, { params } : { params: { siteId:
       date: dayjs(reservation.day).format('YYYY-MM-DD'),
       count: reservation.count,
     }));
-
-    console.log('RES BY DAY', reservationsCountByDay);
 
     return Response.json({
       reservations: reservationsCountByDay

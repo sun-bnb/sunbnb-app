@@ -35,11 +35,10 @@ import MapHandler from '@/components/maps/map-handler'
 import { CustomMapControl } from '@/components/maps/map-control'
 import {
   saveGeneral,
-  addWorkingHours,
-  deleteWorkingHours,
   deleteSite,
   setSiteStatus,
-} from '../actions'
+} from '../site-actions'
+import { addWorkingHours, deleteWorkingHours } from '../working-hours-actions'
 
 const WEEK_DAYS = [
   { key: '1', short: 'Mon', label: 'Monday' },

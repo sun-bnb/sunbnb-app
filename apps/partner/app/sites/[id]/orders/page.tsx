@@ -29,8 +29,6 @@ export default async function OrdersPage({ params }: { params: { id: string } })
   })
   
   if (!site) return <div>Site {params.id} not found</div>
-
-  console.log('ORDERS', orders)
   
   return (
     <div className="w-screen max-w-[768px]">

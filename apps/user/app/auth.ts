@@ -15,9 +15,6 @@ async function validateOrCreateUser(
   password: string,
   credentials: { loginError?: string }
 ) {
-
-  console.log('validateOrCreateUser', email, password, credentials)
-
   let user = await prisma.user.findUnique({ where: { email } });
 
   // If no user, create one with a hashed password
@@ -27,8 +24,6 @@ async function validateOrCreateUser(
       data: { email, password: hashedPassword },
     });
   }
-
-  console.log('USER FOUND', user)
 
   // If the user has no password, it’s likely an OAuth-only account
   if (!user.password) {
@@ -54,11 +49,11 @@ const nextAuthResult: NextAuthResult = NextAuth({
     strategy: 'jwt',
   },
   events: {
-    async signIn(message) {
-      console.log('SIGN IN EVT', message)
+    async signIn(_message) {
+      // Event handler reserved for audit logging
     },
-    async linkAccount(message) {
-      console.log('LINK ACCOUNT EVT', message)
+    async linkAccount(_message) {
+      // Event handler reserved for audit logging
     }
   },
   providers: [
@@ -78,9 +73,6 @@ const nextAuthResult: NextAuthResult = NextAuth({
         password: { label: 'Password', type: 'password' },
       },
       authorize: async (rawCredentials) => {
-
-        console.log('AUTHORIZE', rawCredentials)
-
         // Cast to a type that includes our custom 'loginError' field
         const credentials = rawCredentials as {
           email: string;
@@ -109,13 +101,9 @@ const nextAuthResult: NextAuthResult = NextAuth({
      * or allow sign in to proceed.
      */
     async signIn({ credentials, profile, user }) {
-
-      console.log('Sign in', credentials, profile, user)
-
       // Check if our credentials flow set a custom loginError
       const loginError = credentials?.loginError;
       if (loginError) {
-        console.log('Login error', loginError)
         return `/api/auth/signin?error=${loginError}`;
       }
 

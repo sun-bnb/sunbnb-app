@@ -2,9 +2,8 @@
 
 import logger from '@/utils/logger'
 
-import React, { useState, useEffect, FormEvent } from 'react'
+import React, { useState, FormEvent } from 'react'
 import Button from '@mui/material/Button'
-import Divider from '@mui/material/Divider'
 import {
   PaymentElement,
   useStripe,
@@ -14,8 +13,6 @@ import type { ComponentType } from 'react'
 import { useTranslations } from 'next-intl'
 import ReservationItem from './ReservationItem'
 import { Reservation } from '../sites/types'
-import { useSelector } from 'react-redux'
-import { RootState } from '@/store/store'
 
 export function StripeCheckoutForm({
   reservation,

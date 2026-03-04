@@ -1,179 +1,166 @@
+/**
+ * Order Payment Component
+ *
+ * Renders either a Stripe payment form or a demo payment form for orders.
+ *
+ * Key design decisions:
+ * - Demo mode is controlled SERVER-SIDE via env var (not localStorage)
+ * - paymentRef is stored server-side in the order payment-intent route
+ * - Service fee is calculated server-side (not sent from client)
+ * - Demo mode uses a dedicated server action that processes immediately
+ */
+
 'use client'
 
-import logger from '@/utils/logger'
-
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements } from '@stripe/react-stripe-js'
 import CircularProgress from '@mui/material/CircularProgress'
-import { updateOrder } from './actions'
+import { initiateDemoOrderPayment } from './actions'
 import CheckoutForm from './CheckoutForm'
 import { Order } from '@/app/types/types'
 
+const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
 
-export function StripeOrderPayment({ 
+
+export function StripeOrderPayment({
   stripePublicKey,
   order,
-  serviceFee,
   preview,
-  completeUrl
-} : { 
-  stripePublicKey: string | undefined 
+  completeUrl,
+}: {
+  stripePublicKey: string | undefined
   order: Order
-  serviceFee?: number
   preview?: React.ReactNode
   completeUrl?: string
 }) {
-
-
-  const [clientSecret, setClientSecret] = useState("");
-  const [dpmCheckerLink, setDpmCheckerLink] = useState("");
+  const [clientSecret, setClientSecret] = useState('')
 
   if (!stripePublicKey) {
     console.error('STRIPE_PUBLIC_KEY is not set')
     return null
   }
 
-  const stripePromise = loadStripe(stripePublicKey)
-  logger.debug('Payment for order', order)
+  // Memoize Stripe instance to avoid re-loading on every render
+  const stripePromise = useMemo(() => loadStripe(stripePublicKey), [stripePublicKey])
 
   useEffect(() => {
-
     if (order.paymentRef) {
-      logger.debug('RESERVATION ALREADY HAS PAYMENT REF', order.paymentRef)
       return
     }
 
-    // Create PaymentIntent as soon as the page loads
+    // Create PaymentIntent — server calculates total (product + service fee)
+    // and stores paymentRef automatically. Include anonId for anonymous ownership.
+    const anonId = typeof window !== 'undefined'
+      ? localStorage.getItem('sunbnb-anonId')
+      : null
+
     fetch('/api/order-payment/stripe/payment-intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        orderId: order.id,
-        paymentAmount: (order.paymentAmount! + (serviceFee || 0)),
-      }),
+      body: JSON.stringify({ orderId: order.id, anonId }),
     })
       .then((res) => res.json())
       .then((data) => {
-        logger.debug('Payment intent result', data)
         if (data.error) {
+          console.error('[OrderPayment] PI creation error:', data.error)
           return
         }
         setClientSecret(data.clientSecret)
-        // [DEV] For demo purposes only
-        setDpmCheckerLink(data.dpmCheckerLink)
-        return updateOrder({
-          id: order.id,
-          paymentRef: data.paymentIntentId
-        })
       })
-      .then((res) => logger.debug('Reservation updated', res));
+      .catch((error) => {
+        console.error('[OrderPayment] PI creation failed:', error)
+      })
+  }, [order.id])
 
-  }, [order.id]);
-
-
-  const appearance: {
-    theme: 'stripe'
-  } = {
-    theme: 'stripe'
-  }
-
-  const options = {
-    clientSecret,
-    appearance
-  };
+  const appearance: { theme: 'stripe' } = { theme: 'stripe' }
+  const options = { clientSecret, appearance }
   const SafeElements = Elements as unknown as React.ComponentType<any>
 
   return (
     <div className="App" style={{ paddingLeft: '8px', paddingRight: '8px' }}>
-      {
-        clientSecret ? (
-          <SafeElements options={options} stripe={stripePromise}>
-            {
-                <CheckoutForm dpmCheckerLink={dpmCheckerLink} 
-                  reservation={undefined}
-                  preview={preview}
-                  completeUrl={completeUrl} />
-            }
-          </SafeElements>
-        ) : (
-          <div className="flex justify-center mt-[24px]">
-            <CircularProgress />
-          </div>
-        )
-      }
+      {clientSecret ? (
+        <SafeElements options={options} stripe={stripePromise}>
+          <CheckoutForm
+            dpmCheckerLink=""
+            reservation={undefined}
+            preview={preview}
+            completeUrl={completeUrl}
+          />
+        </SafeElements>
+      ) : (
+        <div className="flex justify-center mt-[24px]">
+          <CircularProgress />
+        </div>
+      )}
     </div>
-  );
+  )
 }
+
 
 export function DemoOrderPayment({
   order,
   preview,
-  completeUrl
-} : {
+  completeUrl,
+}: {
   order: Order
   preview?: React.ReactNode
   completeUrl?: string
 }) {
-
-  logger.debug('Demo Payment for order', order)
+  const [paymentRef, setPaymentRef] = useState<string | null>(order.paymentRef ?? null)
 
   useEffect(() => {
-
     if (order.paymentRef) {
-      logger.debug('ORDER ALREADY HAS PAYMENT REF', order.paymentRef)
       return
     }
 
-    const paymentRef = `pi_demo_${Date.now()}`
-
-    updateOrder({
-      id: order.id,
-      paymentRef
+    // Demo: process payment immediately on server, get back paymentRef
+    initiateDemoOrderPayment(order.id).then((result) => {
+      if (result.status === 'ok' && result.paymentRef) {
+        setPaymentRef(result.paymentRef)
+      }
     })
-    .then((res) => {
-      logger.debug('Order updated', res)
-    })
-
   }, [order.id])
 
   return (
     <div className="App" style={{ paddingLeft: '8px', paddingRight: '8px' }}>
-      <CheckoutForm dpmCheckerLink={'httpd://demo-link'} 
+      <CheckoutForm
+        dpmCheckerLink=""
         reservation={undefined}
         preview={preview}
-        completeUrl={completeUrl} demoMode={true} />
+        completeUrl={completeUrl}
+        demoMode={true}
+      />
     </div>
-  );
+  )
 }
 
-export default function OrderPayment({ 
+
+export default function OrderPayment({
   stripePublicKey,
   order,
   serviceFee,
   preview,
-  completeUrl
-} : { 
-  stripePublicKey: string | undefined 
+  completeUrl,
+}: {
+  stripePublicKey: string | undefined
   order: Order
   serviceFee?: number
   preview?: React.ReactNode
   completeUrl?: string
 }) {
-
-  const demoMode = window.localStorage.getItem('demoMode') === 'true'
-
-  return demoMode ? (
+  return DEMO_MODE ? (
     <DemoOrderPayment
       order={order}
       preview={preview}
-      completeUrl={completeUrl} />
+      completeUrl={completeUrl}
+    />
   ) : (
     <StripeOrderPayment
       stripePublicKey={stripePublicKey}
       order={order}
-      serviceFee={serviceFee}
       preview={preview}
-      completeUrl={completeUrl} />
+      completeUrl={completeUrl}
+    />
   )
 }

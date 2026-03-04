@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
 import LightHeader from './header/light-header'
 
 const UnauthenticatedApp = ({ children }: {

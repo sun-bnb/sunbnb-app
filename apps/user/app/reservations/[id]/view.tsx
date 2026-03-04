@@ -31,8 +31,6 @@ export default function ReservationView({ serviceFee, showTerms, signedIn, reser
   const serviceFeeAmount = serviceFee?.chargeType === 'fixed' ?
     (serviceFee?.feeAmount || 0) : serviceFee?.percentage! * (order?.totalPrice || 0)
 
-  console.log('order', order, serviceFeeAmount)
-
   const [page, setPage] = useState<0 | 1>(order ? 1 : 0)
   const [resScrollable, setResScrollable] = useState(false)
   const [orderStatus, setOrderStatus] = useState<string>(order?.status || 'processing')
@@ -51,15 +49,10 @@ export default function ReservationView({ serviceFee, showTerms, signedIn, reser
     const prevStatus = prevStatusRef.current
   
     if (fetchedReservation?.status && fetchedReservation.status !== prevStatus) {
-      // Do something with the previous value
-      console.log('Previous:', prevStatus)
-      console.log('Current:', fetchedReservation.status)
       setReservationStatus(fetchedReservation.status)
 
       if (prevStatus === 'processing' && (fetchedReservation.status === 'paid' || fetchedReservation.status === 'complete')) {
-        // If it was processing and now is paid, switch to menu page
         setDisplayTerms(true)
-        console.log('SHOW TERMS')
       }
 
     }
@@ -82,8 +75,6 @@ export default function ReservationView({ serviceFee, showTerms, signedIn, reser
       setOrderStatus(finalOrder.status);
     }
   }, [finalOrder?.status])
-
-  console.log('Final order:', finalOrder, orderStatus)
 
   // Measure whether reservation content overflows
   useLayoutEffect(() => {
@@ -126,7 +117,6 @@ export default function ReservationView({ serviceFee, showTerms, signedIn, reser
   }
 
   const seatId = (reservation.items || []).length > 0 ? reservation.items![0]!.id : undefined
-  console.log('signedIn', signedIn)
 
   const termsElement = (
     <div className="absolute top-0 left-0 w-full h-full bg-white z-50 text-[10px] flex flex-col">

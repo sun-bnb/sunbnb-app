@@ -411,16 +411,13 @@ export default function SunbedSelection({
           disableDefaultUI={true}
           onZoomChanged={(mapInstance: any) => {
             const newZoom = mapInstance.map.getZoom()
-            console.log('Zoom changed', newZoom)
             setZoom(newZoom || 20)
           }}
           onIdle={(mapInstance: any) => {
             const newZoom = mapInstance.map.getZoom()
-            console.log('Zoom set', newZoom)
             setZoom(newZoom || 20)
           }}
           onClick={(e: any) => {
-            console.log('Map click', e)
           }}
         >
           {
