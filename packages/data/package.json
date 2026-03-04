@@ -5,6 +5,7 @@
   "exports": {
     "./PrismaCient": "./index.ts",
     "./payment": "./src/payment.ts",
+    "./settlement": "./src/settlement.ts",
     "./TextField": "./src/TextField.tsx",
     "./button": "./src/button.tsx",
     "./card": "./src/card.tsx",
@@ -14,6 +15,7 @@
     "*": {
       "PrismaCient": ["./index.ts"],
       "payment": ["./src/payment.ts"],
+      "settlement": ["./src/settlement.ts"],
       "TextField": ["./src/TextField.tsx"],
       "button": ["./src/button.tsx"],
       "card": ["./src/card.tsx"],

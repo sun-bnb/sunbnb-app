@@ -13,7 +13,19 @@ function ReceiptDoc({ receipt }: { receipt: ReceiptProps }) {
         <div className="mb-[36px]">
           <div>{receipt.company}</div>
           <div>{receipt.businessId}</div>
-          <div>{receipt.phoneNumber}</div>
+          {receipt.phoneNumber && <div>{receipt.phoneNumber}</div>}
+          {receipt.issuerType === 'PLATFORM' && (
+            <div className="mt-2">
+              <span className="inline-block bg-purple-100 text-purple-700 text-[10px] font-semibold px-2 py-0.5 rounded-full">
+                Issued by platform
+              </span>
+            </div>
+          )}
+          {receipt.settlementId && (
+            <div className="text-[10px] text-gray-400 mt-1">
+              Settlement ref: {receipt.settlementId}
+            </div>
+          )}
         </div>
         <div>
           <table className="w-full text-left">

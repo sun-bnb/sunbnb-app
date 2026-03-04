@@ -6,6 +6,23 @@ datasource db {
   provider = "postgresql"
 }
 
+enum BillingModel {
+  INTERMEDIARY
+  DEEMED_PROVIDER
+}
+
+enum InvoiceIssuerType {
+  PARTNER
+  PLATFORM
+}
+
+enum SettlementStatus {
+  DRAFT
+  CLOSED
+  APPROVED
+  PAID
+}
+
 model Settings {
   id          String       @id @default(cuid())
   country     String?
@@ -85,6 +102,7 @@ model PartnerAccount {
   userId      String       @id @unique @map("user_id")
   businessId  String?      @map("business_id")
   invoices    Invoice[]
+  settlements Settlement[]
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   serviceFees ServiceFee[]
 }
@@ -113,12 +131,16 @@ model Site {
   bgImageWidth    Int?                     @map("bg_image_width")
   bgImageHeight   Int?                     @map("bg_image_height")
   slug            String?
+  billingModel    BillingModel             @default(DEEMED_PROVIDER) @map("billing_model")
+  platformVatConfigId String?              @map("platform_vat_config_id")
   inventoryItems  InventoryItem[]
   orders          Order[]
   products        Product[]
   reservations    Reservation[]
   serviceFees     ServiceFee[]
+  settlements     Settlement[]
   user            User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platformVatConfig PlatformVatConfig?     @relation(fields: [platformVatConfigId], references: [id], onDelete: SetNull)
   workingHours    SiteWorkingHours[]
   brand           SiteBrand?
 
@@ -283,11 +305,38 @@ model Invoice {
   totalAmount  Float          @map("total_amount")
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
-  invoicedAt   DateTime       @default(now()) @map("invoiced_at")
-  account      PartnerAccount @relation(fields: [accountId], references: [userId], onDelete: Cascade)
-  invoiceLines InvoiceLine[]
-  order        Order?
-  reservation  Reservation?
+  invoicedAt       DateTime          @default(now()) @map("invoiced_at")
+  issuerType       InvoiceIssuerType @default(PARTNER) @map("issuer_type")
+  issuerVatNumber  String?           @map("issuer_vat_number")
+  settlementId     String?           @map("settlement_id")
+  settlementBatchId String?          @map("settlement_batch_id")
+  account          PartnerAccount    @relation(fields: [accountId], references: [userId], onDelete: Cascade)
+  settlementBatch  Settlement?       @relation(fields: [settlementBatchId], references: [id])
+  invoiceLines     InvoiceLine[]
+  order            Order?
+  reservation      Reservation?
+}
+
+model Settlement {
+  id             String           @id @default(cuid())
+  accountId      String           @map("account_id")
+  siteId         String           @map("site_id")
+  periodStart    DateTime         @map("period_start")
+  periodEnd      DateTime         @map("period_end")
+  grossRevenue   Float            @map("gross_revenue")
+  totalTax       Float            @default(0) @map("total_tax")
+  commission     Float
+  netPayout      Float            @map("net_payout")
+  currency       String           @default("EUR")
+  status         SettlementStatus @default(DRAFT)
+  bankReference  String?          @map("bank_reference")
+  paidAt         DateTime?        @map("paid_at")
+  notes          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  account        PartnerAccount   @relation(fields: [accountId], references: [userId])
+  site           Site             @relation(fields: [siteId], references: [id])
+  invoices       Invoice[]
 }
 
 model InvoiceLine {
@@ -341,6 +390,18 @@ model SecurityToken {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   userId    String   @map("user_id")
+}
+
+model PlatformVatConfig {
+  id            String   @id @default(cuid())
+  countryCode   String   @unique @map("country_code")
+  vatNumber     String   @map("vat_number")
+  companyName   String   @map("company_name")
+  companyAddress String  @map("company_address")
+  ossRegistered Boolean  @default(false) @map("oss_registered")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  sites         Site[]
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.

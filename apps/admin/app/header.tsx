@@ -2,16 +2,15 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
+import sunbnbLogo from '@/app/sunbnb-logo.svg'
 import { useSession, signOut } from 'next-auth/react'
 import { usePathname } from 'next/navigation'
 import { useState, useRef, useEffect } from 'react'
-import sunbnbLogo from '@/app/sunbnb-logo.svg'
 
 const navItems = [
-  { label: 'Dashboard', href: '/' },
+  { label: 'Settlements', href: '/settlements' },
   { label: 'Sites', href: '/sites' },
-  { label: 'Calendar', href: '/calendar' },
-  { label: 'Security', href: '/security' },
+  { label: 'Platform', href: '/platform' },
 ]
 
 function isActive(pathname: string, href: string) {
@@ -25,7 +24,6 @@ export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  // Close menu on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -48,7 +46,9 @@ export default function Header() {
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center gap-2 flex-shrink-0">
             <Image alt="Sunbnb" src={sunbnbLogo} className="w-8 h-8" />
-            <span className="text-sm font-bold text-gray-900 hidden md:inline">sunbnb</span>
+            <span className="text-sm font-bold text-gray-900 hidden md:inline">
+              sunbnb <span className="text-purple-600 font-semibold">admin</span>
+            </span>
           </Link>
 
           <nav className="flex items-center gap-1">
@@ -60,7 +60,7 @@ export default function Header() {
                   href={item.href}
                   className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
                     active
-                      ? 'text-gray-900 font-semibold bg-gray-100'
+                      ? 'text-purple-700 font-semibold bg-purple-50'
                       : 'text-gray-500 font-medium hover:text-gray-900 hover:bg-gray-50'
                   }`}
                 >
@@ -68,7 +68,6 @@ export default function Header() {
                 </Link>
               )
             })}
-
           </nav>
         </div>
 
@@ -94,26 +93,14 @@ export default function Header() {
 
           {menuOpen && (
             <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl border border-gray-200 shadow-lg py-1 z-50">
-              {/* User info */}
               <div className="px-4 py-2.5 border-b border-gray-100">
                 <p className="text-sm font-medium text-gray-900 truncate">
-                  {session?.user?.name || 'Partner'}
+                  {session?.user?.name || 'Admin'}
                 </p>
                 <p className="text-xs text-gray-400 truncate">
                   {session?.user?.email}
                 </p>
               </div>
-
-              <Link
-                href="/account"
-                onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-                </svg>
-                Account
-              </Link>
 
               <button
                 onClick={() => { setMenuOpen(false); signOut() }}

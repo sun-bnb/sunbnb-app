@@ -54,6 +54,9 @@ export interface Invoice {
   totalCharge: number
   totalTax: number
   totalAmount: number
+  issuerType?: 'PARTNER' | 'PLATFORM'
+  issuerVatNumber?: string | null
+  settlementId?: string | null
   invoiceLines: {
     id: string
     description: string | null

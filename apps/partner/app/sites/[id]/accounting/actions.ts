@@ -27,6 +27,8 @@ export async function getInvoicesByMonth(
     },
     orderBy: { invoicedAt: 'desc' },
   })
+  // Note: issuerType, issuerVatNumber, settlementId are scalar fields on Invoice,
+  // so they are included by default in all invoice queries.
 }
 
 export async function getPaidItemsByMonth(siteId: string, year: number, month: number) {
@@ -43,7 +45,9 @@ export async function getPaidItemsByMonth(siteId: string, year: number, month: n
         },
       },
       include: {
-        invoice: true,
+        invoice: {
+          include: { invoiceLines: true },
+        },
         orderItems: true,
         seat: { select: { number: true } },
         user: { select: { email: true } },
@@ -59,7 +63,9 @@ export async function getPaidItemsByMonth(siteId: string, year: number, month: n
         },
       },
       include: {
-        invoice: true,
+        invoice: {
+          include: { invoiceLines: true },
+        },
         user: { select: { email: true } },
         items: { select: { number: true } },
       },

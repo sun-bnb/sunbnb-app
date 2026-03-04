@@ -16,6 +16,7 @@ export interface SiteProps {
   availableCount?: number
   appSalesEnabled?: boolean | undefined
   services: string[]
+  billingModel?: 'INTERMEDIARY' | 'DEEMED_PROVIDER'
 }
 
 export interface MapCenter {

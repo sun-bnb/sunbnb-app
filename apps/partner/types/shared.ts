@@ -29,6 +29,7 @@ export interface SiteProps {
   status?: string | null
   services: string[]
   serviceFees?: ServiceFee[]
+  billingModel?: 'INTERMEDIARY' | 'DEEMED_PROVIDER'
 }
 
 export interface Product {

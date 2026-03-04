@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Site" ALTER COLUMN "billing_model" SET DEFAULT 'DEEMED_PROVIDER';

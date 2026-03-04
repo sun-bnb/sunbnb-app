@@ -73,12 +73,20 @@ export default async function Receipt({ params }: { params: { id: string } }) {
 
   const receipt: ReceiptProps = {
     date,
-    businessId,
-    company,
-    phoneNumber,
+    // For deemed-provider invoices, show platform info instead of partner info
+    businessId: invoice.issuerType === 'PLATFORM'
+      ? invoice.issuerVatNumber ?? businessId
+      : businessId,
+    company: invoice.issuerType === 'PLATFORM'
+      ? 'SunBnB (Deemed Provider)'
+      : company,
+    phoneNumber: invoice.issuerType === 'PLATFORM' ? '' : phoneNumber,
     totalCharge,
     totalVat: totalTax,
     totalAmount,
+    issuerType: invoice.issuerType as ReceiptProps['issuerType'],
+    issuerVatNumber: invoice.issuerVatNumber,
+    settlementId: invoice.settlementId,
     invoiceLines
   }
 

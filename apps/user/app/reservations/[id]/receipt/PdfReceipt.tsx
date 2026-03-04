@@ -68,7 +68,17 @@ export default function PdfReceipt({ receipt }: { receipt: ReceiptProps }) {
         <SafeView style={styles.headerSection}>
           <SafeText>{receipt.company}</SafeText>
           <SafeText>{receipt.businessId}</SafeText>
-          <SafeText>{receipt.phoneNumber}</SafeText>
+          {receipt.phoneNumber ? <SafeText>{receipt.phoneNumber}</SafeText> : null}
+          {receipt.issuerType === 'PLATFORM' && (
+            <SafeText style={{ fontSize: 9, marginTop: 6, color: '#7c3aed' }}>
+              Issued by platform
+            </SafeText>
+          )}
+          {receipt.settlementId && (
+            <SafeText style={{ fontSize: 8, marginTop: 3, color: '#9ca3af' }}>
+              Settlement ref: {receipt.settlementId}
+            </SafeText>
+          )}
         </SafeView>
 
         {/* Table */}

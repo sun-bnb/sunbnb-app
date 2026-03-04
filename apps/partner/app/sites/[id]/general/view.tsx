@@ -23,6 +23,8 @@ import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import PaymentsIcon from '@mui/icons-material/Payments'
 import EventAvailableIcon from '@mui/icons-material/EventAvailable'
+import StorefrontIcon from '@mui/icons-material/Storefront'
+import HandshakeIcon from '@mui/icons-material/Handshake'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import CloudDoneIcon from '@mui/icons-material/CloudDone'
 import SyncIcon from '@mui/icons-material/Sync'
@@ -66,6 +68,7 @@ export default function GeneralView() {
   const [mapCoords, setMapCoords] = useState<{ lat: number; lng: number }>(
     { lat: +site.locationLat!, lng: +site.locationLng! }
   )
+  const [billingModel, setBillingModel] = useState<'INTERMEDIARY' | 'DEEMED_PROVIDER'>(site.billingModel ?? 'INTERMEDIARY')
   const [siteStatus, setSiteStatusLocal] = useState(site.status ?? 'hidden')
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -81,6 +84,7 @@ export default function GeneralView() {
     vat?: string
     lat?: string
     lng?: string
+    billingModel?: 'INTERMEDIARY' | 'DEEMED_PROVIDER'
   }) => {
     setSaveStatus('saving')
     try {
@@ -92,6 +96,7 @@ export default function GeneralView() {
         vat: overrides?.vat ?? vat,
         locationLat: overrides?.lat ?? mapCoords.lat.toString(),
         locationLng: overrides?.lng ?? mapCoords.lng.toString(),
+        billingModel: overrides?.billingModel ?? billingModel,
       })
       if (result.status === 'ok') {
         setSaveStatus('saved')
@@ -103,7 +108,7 @@ export default function GeneralView() {
     } catch {
       setSaveStatus('error')
     }
-  }, [site.id, name, siteType, price, vat, mapCoords])
+  }, [site.id, name, siteType, price, vat, mapCoords, billingModel])
 
   const scheduleSave = useCallback((overrides?: Parameters<typeof doSave>[0]) => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -245,6 +250,71 @@ export default function GeneralView() {
             placeholder="e.g. 21"
             helperText="Applied to all sales"
           />
+        </div>
+      )}
+
+      {/* Billing model — only for paid sites */}
+      {isPaid && (
+        <div className="mb-5">
+          <h3 className="text-sm font-medium text-gray-700 mb-1">Billing model</h3>
+          <p className="text-xs text-gray-500 mb-3">
+            Controls how invoices are issued and who is the seller of record.
+          </p>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setBillingModel('INTERMEDIARY')
+                immediateSave({ billingModel: 'INTERMEDIARY' })
+              }}
+              className={`flex-1 rounded-lg border-2 p-4 text-left transition-all ${
+                billingModel === 'INTERMEDIARY'
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <HandshakeIcon fontSize="small" className={billingModel === 'INTERMEDIARY' ? 'text-blue-600' : 'text-gray-400'} />
+                <span className={`font-medium text-sm ${billingModel === 'INTERMEDIARY' ? 'text-blue-700' : 'text-gray-700'}`}>
+                  Intermediary
+                </span>
+              </div>
+              <p className="text-xs text-gray-500">
+                You are the seller of record. SunBnB collects payment and forwards revenue minus a service fee. Invoices are issued in your name.
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setBillingModel('DEEMED_PROVIDER')
+                immediateSave({ billingModel: 'DEEMED_PROVIDER' })
+              }}
+              className={`flex-1 rounded-lg border-2 p-4 text-left transition-all ${
+                billingModel === 'DEEMED_PROVIDER'
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <StorefrontIcon fontSize="small" className={billingModel === 'DEEMED_PROVIDER' ? 'text-blue-600' : 'text-gray-400'} />
+                <span className={`font-medium text-sm ${billingModel === 'DEEMED_PROVIDER' ? 'text-blue-700' : 'text-gray-700'}`}>
+                  Deemed provider
+                </span>
+              </div>
+              <p className="text-xs text-gray-500">
+                SunBnB is the seller of record. Invoices are issued in the platform's name and VAT number. You receive a settlement payout minus commission.
+              </p>
+            </button>
+          </div>
+          {billingModel === 'DEEMED_PROVIDER' && (
+            <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+              <WarningAmberIcon fontSize="small" className="text-amber-500 mt-0.5" />
+              <p className="text-xs text-amber-700">
+                Under the deemed provider model, SunBnB handles VAT reporting for customer-facing invoices.
+                Your settlement statements will show the net amount after platform commission.
+              </p>
+            </div>
+          )}
         </div>
       )}
 

@@ -8,6 +8,9 @@ export interface ReceiptProps {
   totalCharge: number
   totalVat: number
   totalAmount: number
+  issuerType?: 'PARTNER' | 'PLATFORM' | null
+  issuerVatNumber?: string | null
+  settlementId?: string | null
   invoiceLines: {
     description: string | null
     charge: number
