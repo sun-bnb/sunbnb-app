@@ -48,13 +48,13 @@ const AuthenticatedApp = ({ children }: {
         className={`
           fixed top-0 left-0 right-0 z-50
           transition-transform duration-300
-          bg-white shadow-md
+          bg-white border-b border-subtle
           ${hideHeader ? '-translate-y-full' : 'translate-y-0'}
         `}
       >
         <Header />
       </div>
-      <div className="flex max-w-lg mx-auto bg-[#fff5e1]">
+      <div className="flex max-w-lg mx-auto bg-cream">
         <div className="flex-grow">
           {children}
         </div>

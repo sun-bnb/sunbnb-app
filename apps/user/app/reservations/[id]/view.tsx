@@ -136,7 +136,7 @@ export default function ReservationView({ serviceFee, showTerms, signedIn, reser
       ref={containerRef}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
-      className={`relative w-full overflow-hidden bg-[#fff5e1]`}
+      className={`relative w-full overflow-hidden bg-cream`}
       style={{ height: '100dvh' }}
     >
       {/* displayTerms && termsElement */}
@@ -162,7 +162,7 @@ export default function ReservationView({ serviceFee, showTerms, signedIn, reser
             serviceFee &&
               <button
                 onClick={() => goToPage(1)}
-                className="h-12 w-full bg-[#00cef1] text-[#fff5e1] font-bold text-lg"
+                className="h-12 w-full bg-brand-cyan text-cream font-semibold text-base tracking-wide"
               >
                 FOOD AND DRINKS
               </button>
@@ -190,7 +190,7 @@ export default function ReservationView({ serviceFee, showTerms, signedIn, reser
           </div>
           <button
             onClick={() => goToPage(0)}
-            className="h-12 w-full bg-[#00cef1] text-[#fff5e1] font-bold text-lg"
+            className="h-12 w-full bg-brand-cyan text-cream font-semibold text-base tracking-wide"
           >
             BACK TO RESERVATION
           </button>

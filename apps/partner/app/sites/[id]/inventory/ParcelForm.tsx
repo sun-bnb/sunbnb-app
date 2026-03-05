@@ -131,30 +131,10 @@ export default function ParcelFormView({
 
         {/* Spacing */}
         <div className="mb-4">
-          <label className="text-xs font-medium text-gray-600 mb-2 block">Spacing (meters)</label>
-          <div className="flex gap-2 mb-2">
-            <div className="flex-1">
-              <label className="text-xs text-gray-500 mb-0.5 block">Horizontal</label>
-              <TextField
-                fullWidth size="small" type="number"
-                value={config.horizontalGap}
-                inputProps={{ step: 0.1 }}
-                onChange={(e) => handleConfigChange('horizontalGap', Number(e.target.value))}
-              />
-            </div>
-            <div className="flex-1">
-              <label className="text-xs text-gray-500 mb-0.5 block">Vertical</label>
-              <TextField
-                fullWidth size="small" type="number"
-                value={config.verticalGap}
-                inputProps={{ step: 0.5 }}
-                onChange={(e) => handleConfigChange('verticalGap', Number(e.target.value))}
-              />
-            </div>
-          </div>
+          <label className="text-xs font-medium text-gray-600 mb-2 block">Gaps (meters)</label>
           {config.pairSeats && (
-            <div className="w-1/2 pr-1">
-              <label className="text-xs text-gray-500 mb-0.5 block">Pair gap</label>
+            <div className="w-1/2 pr-1 mb-2">
+              <label className="text-xs text-gray-500 mb-0.5 block">Between paired beds</label>
               <TextField
                 fullWidth size="small" type="number"
                 value={config.intraPairGap}
@@ -163,6 +143,26 @@ export default function ParcelFormView({
               />
             </div>
           )}
+          <div className="flex gap-2 mb-2">
+            <div className="flex-1">
+              <label className="text-xs text-gray-500 mb-0.5 block">{config.pairSeats ? 'Between pairs' : 'Horizontal'}</label>
+              <TextField
+                fullWidth size="small" type="number"
+                value={config.horizontalGap}
+                inputProps={{ step: 0.1 }}
+                onChange={(e) => handleConfigChange('horizontalGap', Number(e.target.value))}
+              />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs text-gray-500 mb-0.5 block">Between rows</label>
+              <TextField
+                fullWidth size="small" type="number"
+                value={config.verticalGap}
+                inputProps={{ step: 0.5 }}
+                onChange={(e) => handleConfigChange('verticalGap', Number(e.target.value))}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Rotation */}

@@ -43,8 +43,8 @@ const serviceIcons: {
 
 function Site({ site }: { site: SiteProps }) {
   return (
-    <div className="mb-6" key={site.id}>
-      <div className="w-full max-h-[260px] mr-2 mt-1 overflow-hidden bg-gray-100 flex items-center relative">
+    <div className="mb-4 bg-white rounded-xl overflow-hidden shadow-soft" key={site.id}>
+      <div className="w-full max-h-[260px] mr-2 overflow-hidden bg-gray-50 flex items-center relative">
         { 
           site.image && 
           <Link className="w-full" href={`/sites/${site.id}`} prefetch={true}>
@@ -54,41 +54,41 @@ function Site({ site }: { site: SiteProps }) {
     }
           </Link>
         }
-        <div className="font-bold text-white px-2 py-1 absolute top-[6px] left-[6px] bg-black bg-opacity-30 rounded-xl">
+        <div className="font-semibold text-white px-3 py-1 absolute top-2 left-2 bg-black/30 rounded-lg text-sm backdrop-blur-sm">
           <Link href={`/sites/${site.id}`} prefetch={true}>{site.name}</Link>
         </div>
       </div>
-      <div className="py-3">
-        <div className="px-1 flex justify-between">
-          <div className="flex">
-            <div className="mr-3 pl-1">
+      <div className="py-3 px-3">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-3 text-sm">
+            <div>
               <span className="mr-1">&#x26F1;</span>
-              <span className={(site.availableCount || 0) > 0 ? 'text-green-600' : 'text-red-600'}>{site.availableCount}</span>
-              <span className="text-gray-400 mx-[1px]">/</span>
+              <span className={(site.availableCount || 0) > 0 ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>{site.availableCount}</span>
+              <span className="text-gray-300 mx-px">/</span>
               <span className="text-gray-400">{site.itemCount}</span>
             </div>
             {
               site.distance &&
-                <div className="mr-3">
-                  <span className="mr-[2px]">{Math.round(site.distance)}</span>
-                  <span className="text-xs">KM</span>
+                <div className="text-gray-600">
+                  <span className="mr-px">{Math.round(site.distance)}</span>
+                  <span className="text-xs text-gray-400">KM</span>
                 </div>
             }
             {
               site.price &&
-                <div className="mr-3">
+                <div className="text-gray-700 font-medium">
                   <span>&#8364;</span>
                   <span>{site.price}</span>
                 </div>
             }
             
           </div>
-          <div className="flex">
+          <div className="flex gap-1">
             {
               (site.services || []).map(service => {
                 return (
-                  <div key={`service-${service}`} className="mr-1 border border-gray-600 rounded-md pr-[5px] pl-[4px]">
-                    <div className="-mt-[2px]">
+                  <div key={`service-${service}`} className="border border-gray-200 rounded-md px-1 py-px text-gray-500">
+                    <div className="-mt-px">
                       { serviceIcons[service] }
                     </div>
                   </div>
@@ -97,9 +97,13 @@ function Site({ site }: { site: SiteProps }) {
             }
           </div>
         </div>
-        <div className="px-1 py-2">
-          { site.description }
-        </div>
+        {
+          site.description && (
+            <div className="pt-2 text-sm text-gray-600 leading-relaxed">
+              { site.description }
+            </div>
+          )
+        }
       </div>
     </div>
   )
@@ -108,7 +112,7 @@ function Site({ site }: { site: SiteProps }) {
 function SiteList({ sites }: { sites: SiteProps[] }) {
 
   return (
-    <div className="mt-[12px]">
+    <div className="mt-3 px-2">
       {
         sites.map(site => (
           <Site key={site.id} site={site} />
@@ -149,7 +153,7 @@ function SiteMap({ sites, geography, apiKey }: { sites: SiteProps[], geography?:
                   onClick={() => {
                     setSelectedSite(site)
                   }}>
-                  <div className="w-[40px] h-[40px] bg-yellow-200 rounded-full flex justify-center">
+                  <div className="w-[40px] h-[40px] bg-yellow-100 rounded-full flex justify-center shadow-soft border border-yellow-200">
                     <span className="text-4xl">&#x26F1;</span>
                   </div>
                 </SafeAdvancedMarker>)))
@@ -203,8 +207,8 @@ export default function Sites({ sites, geography, apiKey }: {
   logger.debug('Search response', searchResponse)
 
   return (
-    <div className="container mx-auto pt-[82px] bg-[#fff5e1]">
-      <div className="flex justify-between py-1 px-2">
+    <div className="container mx-auto pt-[80px] bg-cream">
+      <div className="flex justify-between items-center py-2 px-3">
         <div>
           <div className="text-sm text-gray-600">
             <span className="mr-1 font-bold">{ searchResponse?.sites.length || sites.length }</span>

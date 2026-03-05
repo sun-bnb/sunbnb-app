@@ -19,8 +19,8 @@ export default function Reservations({ reservations }: { reservations: Reservati
     reservations.filter(reservation => reservation.to < now)
     
   return (
-    <div className="min-h-screen">
-      <div className="mt-[72px]">
+    <div className="min-h-screen bg-cream">
+      <div className="mt-[78px]">
         <Tabs variant="fullWidth" value={reservationType} onChange={(e, value) => {
           setReservationType(value)
         }} aria-label="Reservation type">
@@ -28,7 +28,7 @@ export default function Reservations({ reservations }: { reservations: Reservati
           <Tab value="history" label={t('History')} />
         </Tabs>
       </div> 
-      <div className="px-2 py-4">
+      <div className="px-3 py-4">
         {
           visibleReservations.map(reservation => {
             return (

@@ -15,13 +15,18 @@ const statusToChipColor: {
 }
 
 const statusToChipLabel: {
-  [key: string]: 'Pending' | 'Confirmed' | 'Canceled' | 'Paid'
+  [key: string]: 'Pending' | 'Confirmed' | 'Canceled' | 'Paid' | 'Reserved'
 } = {
   'pending': 'Pending',
   'confirmed': 'Confirmed',
   'paid': 'Paid',
   'complete': 'Paid',
   'canceled': 'Canceled'
+}
+
+function getChipLabel(reservation: Reservation): string {
+  if (reservation.status === 'complete' && !reservation.paymentAmount) return 'Reserved'
+  return statusToChipLabel[reservation.status] || 'Unknown'
 }
 
 
@@ -35,18 +40,18 @@ export default function ReservationItem({ reservation }: { reservation: Reservat
     const timeRangeTo = `${dayjs(reservation.to).format('HH:mm')}`
     return (
       <Link href={`/reservations/${reservation.id}`}>
-        <div className="flex px-1 justify-between align-center mt-2 mb-4 pb-1">
+        <div className="flex px-2 justify-between items-center mt-2 mb-3 pb-3 border-b border-subtle">
           <div className="flex text-sm">
-            <div className="mr-4">{formattedDate}</div>
-            <div className="flex text-gray-600">
+            <div className="mr-4 text-gray-700">{formattedDate}</div>
+            <div className="flex text-gray-500">
               <div className="mr-1">{timeRangeFrom}</div>
               <div>-</div>
               <div className="ml-1">{timeRangeTo}</div>
             </div>
           </div>
-          <div className="-mt-1">
+          <div>
             <Chip color={statusToChipColor[reservation.status]} 
-              label={t(statusToChipLabel[reservation.status] || 'Unknown') } 
+              label={t(getChipLabel(reservation)) } 
               sx={{ height: '26px' }} />
           </div>
         </div>
@@ -57,17 +62,17 @@ export default function ReservationItem({ reservation }: { reservation: Reservat
     const dateRangeTo = dayjs(reservation.to).format('ddd, D MMM YYYY')
     return (
       <Link href={`/reservations/${reservation.id}`}>
-        <div className="flex px-1 justify-between align-center mt-2 mb-4 pb-1">
+        <div className="flex px-2 justify-between items-center mt-2 mb-3 pb-3 border-b border-subtle">
           <div className="text-sm">
-            <div className="flex">
+            <div className="flex text-gray-700">
               <div className="mr-1">{dateRangeFrom}</div>
               <div>-</div>
               <div className="ml-1">{dateRangeTo}</div>
             </div>
           </div>
-          <div className="-mt-1">
+          <div>
             <Chip color={statusToChipColor[reservation.status]} 
-              label={t(statusToChipLabel[reservation.status] || 'Unknown') }
+              label={t(getChipLabel(reservation)) }
               sx={{ height: '26px' }} />
           </div>
         </div>

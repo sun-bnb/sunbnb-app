@@ -45,6 +45,15 @@ export function generateChairs(config: ChairConfig): ChairDefinition[] {
   const metersPerLat = 111320
   const metersPerLng = 111320 * Math.cos(baseLat * Math.PI / 180)
 
+  // Physical sunbed dimensions (must match getScaledSize physicalLength & aspect ratio)
+  const sunbedHeight = 3.5   // meters (vertical / along-row dimension)
+  const sunbedWidth = 3.5 / 2.5  // meters (horizontal dimension) = 1.4
+
+  // Convert user-facing gaps (visible space between edges) to center-to-center offsets
+  const pairCTC = intraPairGap + sunbedWidth         // center-to-center within a pair
+  const hGapCTC = horizontalGap + sunbedWidth         // center-to-center between pairs (or singles)
+  const vGapCTC = verticalGap + sunbedHeight          // center-to-center between rows
+
   for (let r = 0; r < rows; r++) {
     let c = 0
     while (c < seatsPerRow) {
@@ -53,13 +62,13 @@ export function generateChairs(config: ChairConfig): ChairDefinition[] {
       const seatNum1 = (c + 1).toString().padStart(2, '0')
       const seatNum2 = (c + 2).toString().padStart(2, '0')
 
-      // Calculate left-edge x offset of first chair in the current unit (chair or pair)
+      // Calculate x offset of first chair in the current unit (chair or pair)
       const unitIndex = pairSeats ? Math.floor(c / 2) : c
       const dx1 = unitIndex * (pairSeats
-        ? (intraPairGap + horizontalGap) // full pair width: inner gap + gap to next pair
-        : horizontalGap)
+        ? (pairCTC + hGapCTC) // pair width + gap to next pair (center-to-center)
+        : hGapCTC)
 
-      const dy1 = r * verticalGap
+      const dy1 = r * vGapCTC
       const offsetLat1 = (dy1 * Math.cos(rad) - dx1 * Math.sin(rad)) / metersPerLat
       const offsetLng1 = (dy1 * Math.sin(rad) + dx1 * Math.cos(rad)) / metersPerLng
 
@@ -80,8 +89,8 @@ export function generateChairs(config: ChairConfig): ChairDefinition[] {
       items.push(seatA)
 
       if (isPair) {
-        // Second chair in pair: intra-pair gap only (no horizontalGap)
-        const dx2 = dx1 + intraPairGap
+        // Second chair in pair: intra-pair gap only
+        const dx2 = dx1 + pairCTC
         const offsetLat2 = (dy1 * Math.cos(rad) - dx2 * Math.sin(rad)) / metersPerLat
         const offsetLng2 = (dy1 * Math.sin(rad) + dx2 * Math.cos(rad)) / metersPerLng
 

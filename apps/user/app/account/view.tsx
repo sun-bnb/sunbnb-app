@@ -34,7 +34,7 @@ export default function AccountView({ account } : { account: AccountProps }) {
 
   return (
     
-    <div className="container mx-auto px-4 pt-[72px] h-screen">
+    <div className="container mx-auto px-4 pt-[80px] min-h-screen bg-cream">
       <div className="mx-auto max-w-[800px]">
       <div className="grid mb-6 md:grid-cols-1">
           {

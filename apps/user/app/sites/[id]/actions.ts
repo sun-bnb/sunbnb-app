@@ -45,7 +45,7 @@ export async function saveReservationForMultipleItems(
 
   const site = await prisma.site.findUnique({ where: { id: reservation.siteId } })
   if (!site) return { status: 'error', errors: ['Site not found'] }
-  if (!site.price) return { status: 'error', errors: ['Site price not set'] }
+  if (site.type !== 'unpaid' && !site.price) return { status: 'error', errors: ['Site price not set'] }
 
   // Determine status server-side: unpaid sites skip payment flow
   const status = site.type === 'unpaid' ? 'complete' : 'pending'
@@ -53,9 +53,9 @@ export async function saveReservationForMultipleItems(
   const timeBetween = to.getTime() - from.getTime()
   const daysBetween = Math.round(timeBetween / (1000 * 60 * 60 * 24))
 
-  const totalPrice = reservation.items?.reduce((sum, item) => {
+  const totalPrice = site.type === 'unpaid' ? 0 : (reservation.items?.reduce((sum, item) => {
     return sum + (item.price || site.price || 0)
-  }, 0) ?? 0
+  }, 0) ?? 0)
 
   const paymentAmount = totalPrice * daysBetween
 

@@ -36,6 +36,12 @@ const STATUS_CONTENT_MAP: {
     bgColor: '#eeffee',
     borderColor: '#118811'
   },
+  reserved: {
+    text: 'RESERVED',
+    textColor: '#1e40af',
+    bgColor: '#eff6ff',
+    borderColor: '#3b82f6'
+  },
   processing: {
     text: 'Processing',
     textColor: '#111188',
@@ -79,9 +85,9 @@ function ReservationStatus ({
   const ts = useTranslations('Reservations')
 
   return (
-    <div className={
-      `flex border border-[1px]
-      px-[12px] py-[2px] rounded-[6px]`} style={{
+    <div className={`
+      flex border
+      px-3 py-1 rounded-lg`} style={{
         backgroundColor: statusMap?.bgColor,
         color: statusMap?.textColor,
         borderColor: statusMap?.borderColor,
@@ -136,7 +142,8 @@ export default function ReservationConfirmationView({
     ? validFrom 
     : `${validFrom} – ${validTo}`
     
-  let status = reservation.status
+  const isUnpaid = reservation.status === 'complete' && !reservation.paymentAmount
+  let status = isUnpaid ? 'reserved' : reservation.status
 
   const ticket = (  
     <div className="relative">
@@ -157,34 +164,34 @@ export default function ReservationConfirmationView({
               
             </div>
       }
-      <div className="w-full pt-[52px]">
+      <div className="w-full pt-12">
         <div className="text-center text-2xl w-full flex justify-center">
-          <div className="text-[rgb(142,114,49)] mt-[24px]">
+          <div className="text-brand-gold mt-6 font-semibold tracking-tight">
             { reservation.site?.name }
           </div>
         </div>
-        <div className="flex mx-[12px] mt-[48px]">
+        <div className="flex mx-3 mt-12">
           <div className="w-full flex justify-center">
-            <div className="text-[rgb(142,114,49)] pl-[8px]">
+            <div className="text-brand-gold">
               {t('SEATS')}: <b>{reservation.items?.map(item => String(item.number)).join(', ')}</b>
             </div>
           </div>
         </div>
-        <div className="flex mx-[12px] mt-[12px]">
+        <div className="flex mx-3 mt-3">
           <div className="w-full">
             <div>
               <ReservationStatus status={processingStatus || status} />
             </div>
           </div>
           {
-            (status === 'paid' || status === 'complete') && (
-              <div className="relative text-[rgb(142,114,49)] cursor-pointer -mt-[10px] -mr-[8px]" 
+            (status === 'paid' || status === 'complete' || status === 'reserved') && (
+              <div className="relative text-brand-gold cursor-pointer -mt-[10px] -mr-2" 
                 onClick={() => window.open(`/reservations/${reservation.id}/pass`, '_blank')}>
                 <QrCode2Icon style={{
                   fontSize: '85px'
                 }}>
                 </QrCode2Icon>
-                <LaunchIcon className="absolute bg-[#00cef1] top-[27px] left-[27px] border border-[#fff5e1] text-[#fff5e1] border-[2px]" sx={{ 
+                <LaunchIcon className="absolute bg-brand-cyan top-[27px] left-[27px] border border-cream text-cream border-2" sx={{ 
                   width: '30px',
                   height: '30px' 
                 }}/>
@@ -193,31 +200,29 @@ export default function ReservationConfirmationView({
           }
           
         </div>
-        <div className="flex justify-between mt-[4px] text-[rgb(142,114,49)] border border-[rgb(142,114,49)] mx-[12px]">
-          <div className="bg-[#fff5e1] text-[rgb(142,114,49)] pl-[6px]">
+        <div className="flex justify-between mt-1 text-brand-gold border border-brand-gold mx-3 rounded">
+          <div className="bg-cream text-brand-gold pl-2">
             {t('VALID')}:
           </div>
-          <div className="bg-[rgb(142,114,49)] text-[#fff5e1] pr-[6px] pl-[6px]">
+          <div className="bg-brand-gold text-cream pr-2 pl-2">
             <b>{validity}</b>
           </div>
         </div>
         {
-          (status === 'paid' || status === 'complete') && (
+          (status === 'paid' || status === 'complete') && !isUnpaid && (
             <div className="
               flex
               justify-center
-              text-[rgb(142,114,49)]
-              mt-[72px]
+              text-brand-gold
+              mt-16
               cursor-pointer"
               >
               
-              <div className="flex border border-[rgb(142,114,49)] px-[12px]" style={{
-                borderRadius: '6px'
-              }}
+              <div className="flex border border-brand-gold px-3 rounded-lg hover:bg-cream-dark"
                 
                 onClick={() => window.open(`/reservations/${reservation.id}/receipt`, '_blank')}>
-                <div className="text-[rgb(142,114,49)] mr-[4px]">{t('Open receipt')}</div>
-                <LaunchIcon className="bg-[#fff5e1] text-[rgb(142,114,49)] mt-[2px]" sx={{ 
+                <div className="text-brand-gold mr-1">{t('Open receipt')}</div>
+                <LaunchIcon className="bg-cream text-brand-gold mt-0.5" sx={{ 
                   width: '20px',
                   height: '20px' 
                 }}/>
@@ -231,11 +236,11 @@ export default function ReservationConfirmationView({
   )
 
   return (
-    <div id="payment-status" className="bg-[#fff5e1]">
+    <div id="payment-status" className="bg-cream">
       { ticket }
       {
         status === 'blah' &&
-          <div className="bg-[#00cef1] fixed bottom-0 h-[70px] w-full text-[#fff5e1] text-[24px] flex justify-center items-center">
+          <div className="bg-brand-cyan fixed bottom-0 h-[70px] w-full text-cream text-[24px] flex justify-center items-center">
             FOOD AND DRINK ORDERS
           </div>
       }

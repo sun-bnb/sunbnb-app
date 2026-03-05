@@ -2,16 +2,70 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    color: #2d2d2d;
+    letter-spacing: -0.011em;
+    line-height: 1.5;
+  }
+
+  /* Slightly warmer selection highlight to match the brand */
+  ::selection {
+    background-color: rgba(0, 206, 241, 0.18);
+  }
+
+  /* Better focus outlines for accessibility */
+  :focus-visible {
+    outline: 2px solid #00cef1;
+    outline-offset: 2px;
+  }
+
+  /* Smoother image rendering */
+  img {
+    image-rendering: auto;
+  }
+
+  /* Consistent heading weight */
+  h1, h2, h3 {
+    letter-spacing: -0.02em;
+    font-weight: 600;
+  }
+
+  /* Smooth transitions on interactive elements */
+  button, a {
+    transition: opacity 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease, background-color 0.2s ease;
+  }
+
+  button:active {
+    transform: scale(0.98);
+  }
+}
+
 @keyframes bubbleUp {
   0% {
     transform: scale(0);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.04);
+    opacity: 1;
   }
   100% {
     transform: scale(1);
+    opacity: 1;
   }
 }
 .animate-bubble-up {
-  transform: scale(0); /* ensures initial state is small */
-  animation: bubbleUp 0.5s ease-out forwards;
+  transform: scale(0);
+  opacity: 0;
+  animation: bubbleUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 

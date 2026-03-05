@@ -11,7 +11,7 @@ import { useGetAvailabilityBySiteAndTimeRangeQuery } from '@/store/features/api/
 import dayjs, { Dayjs } from 'dayjs'
 import { APIProvider, AdvancedMarker, Map } from '@vis.gl/react-google-maps'
 import { Polygon } from './polygon'
-import { getQuadragonEdges } from '@/utils/geometry'
+import { getPaddedConvexHull } from '@/utils/geometry'
 import sunbedIcon from './sunbed-perforated-transparent.png'
 import sunshadeIcon from './sunshade-transparent.png'
 import beachTowelIcon from './beach-towel-transparent.png'
@@ -303,10 +303,10 @@ export default function SunbedSelection({
       .filter(parcelNumber => sunbedParcels[parcelNumber])
       .map(parcelNumber => {
         const parcelItems = sunbedParcels[parcelNumber] || []
-        const shapeCoords = getQuadragonEdges(parcelItems.map(item => ({
+        const shapeCoords = getPaddedConvexHull(parcelItems.map(item => ({
           locationLat: Number(item.locationLat),
           locationLng: Number(item.locationLng)
-        })))
+        })), 2.5)
         return { number: Number(parcelNumber), shape: shapeCoords }
     }))
 
@@ -425,22 +425,45 @@ export default function SunbedSelection({
               (parcelShapes || []).map((parcelShape, idx) => {
                 // Compute the parcel centroid.
                 const centroid = getCentroid(parcelShape.shape);
-                // parcelGroups is assumed to be an array of InventoryItem[] for each parcel.
-                const availableCount = getAvailableCountForParcel(sunbedParcels[parcelShape.number] || []);
+                const parcelItems = sunbedParcels[parcelShape.number] || [];
+                const totalCount = parcelItems.length;
+                const availableCount = getAvailableCountForParcel(parcelItems);
+                const hasAvailability = availableCount > 0;
                 return (
                   <React.Fragment key={idx}>
                     <Polygon
                       key={idx}
                       paths={parcelShape.shape}
+                      strokeColor={hasAvailability ? '#16a34a' : '#9ca3af'}
+                      strokeOpacity={0.7}
+                      strokeWeight={2}
+                      fillColor={hasAvailability ? '#22c55e' : '#d1d5db'}
+                      fillOpacity={hasAvailability ? 0.15 : 0.12}
                     />
                     <SafeAdvancedMarker
                       key={`chip-${idx}`}
                       position={centroid}
                     >
-                      <div style={{ transform: 'translate(0%, 50%)' }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: 2,
+                        }}
+                      >
                         <Chip
-                          label={`${availableCount}`}
-                          sx={{ border: '1px solid black', backgroundColor: 'white', color: 'green' }}
+                          label={`${availableCount} / ${totalCount}`}
+                          size="small"
+                          sx={{
+                            fontWeight: 600,
+                            fontSize: '0.75rem',
+                            backgroundColor: hasAvailability ? '#f0fdf4' : '#f9fafb',
+                            color: hasAvailability ? '#16a34a' : '#6b7280',
+                            border: `1.5px solid ${hasAvailability ? '#86efac' : '#d1d5db'}`,
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.10)',
+                            '.MuiChip-label': { px: 1.5, py: 0.25 },
+                          }}
                         />
                       </div>
                     </SafeAdvancedMarker>

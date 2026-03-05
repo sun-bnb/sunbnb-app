@@ -47,11 +47,11 @@ export default function CustomizedInputBase() {
   const showSuggestions = (suggestions || []).length > 0 && searchText.length > 2
 
   return (
-    <div className="bg-[#fff5e1]">
+    <div className="bg-cream">
       <Paper
         component="form"
         elevation={0}
-        sx={{ p: '2px 4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: 'full', backgroundColor: '#fff5e1' }}
+        sx={{ p: '4px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: 'full', backgroundColor: '#fff5e1' }}
       >
         <Link href="/">
           <IconButton sx={{ p: '8px', marginTop: '-2px' }} aria-label="menu">
@@ -82,11 +82,11 @@ export default function CustomizedInputBase() {
       </Paper>
       {
         isMenuOpen && (
-          <div className="flex flex-wrap justify-center pb-4">
+          <div className="flex flex-wrap justify-center pb-4 gap-1.5">
             {
               userNavigation.map((item, index) => {
                 return (
-                  <div className="max-w-[300px] truncate font-bold mr-1 ml-1 mt-1 px-2 rounded-md bg-[#303030] text-[#fff5e1]" key={'userNavigation-'+index} 
+                  <div className="max-w-[300px] truncate font-semibold px-3 py-0.5 rounded-full bg-[#363636] text-cream text-sm" key={'userNavigation-'+index} 
                     onClick={() => {
                       setIsMenuOpen(false)
                       router.push(item.href)

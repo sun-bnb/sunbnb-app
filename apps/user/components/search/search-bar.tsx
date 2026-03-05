@@ -38,7 +38,7 @@ export default function SearchBar() {
 
   return (
     <div className="bg-white">
-      <div className="w-full flex rounded-lg border border-gray-200 p-2">
+      <div className="w-full flex rounded-xl border border-gray-200 p-2.5 shadow-soft">
         <InputBase
           fullWidth={true}
           sx={{ ml: 1, flex: 1 }}
@@ -67,13 +67,13 @@ export default function SearchBar() {
         
       { 
         (!selectedPlace && !isMenuOpen && showSuggestions) && (
-          <div className="bg-[#fff5e1] flex flex-wrap justify-center pt-2 pb-4">
+          <div className="bg-cream flex flex-wrap justify-center pt-2 pb-4 gap-1.5">
             {
               ((searchText.length > 2 && suggestions) || []).map((suggestion, index) => {
                 return (
                   <div
                     key={'suggestion-'+index}
-                    className="max-w-[300px] truncate font-bold mr-1 ml-1 mt-1 px-2 rounded-md bg-[#00cef1] text-[#fff5e1] animate-bubble-up"
+                    className="max-w-[300px] truncate font-semibold px-3 py-0.5 rounded-full bg-brand-cyan text-cream text-sm shadow-soft animate-bubble-up"
                     style={{ animationDelay: `${index * 0.1}s` }}
                     onClick={() => {
                       dispatch(setSelectedPlace({ 

@@ -20,7 +20,7 @@ interface InventoryFieldProps {
 }
 
 function getScaledSize(zoom: number): number {
-  const physicalLength = 2.5 // meters
+  const physicalLength = 3.5 // meters
   const metersPerPixel = 156543.03392 / Math.pow(2, zoom)
   const size = physicalLength / metersPerPixel
   return Math.max(size, 10)

@@ -11,14 +11,14 @@ export default function HomeView() {
   const router = useRouter()
 
   return (
-    <div className="bg-[#fff5e1] font-sans text-[#2d2d2d]">
-      <section className="h-[250px] flex flex-col items-center justify-center text-center px-4 bg-[#fff5e1]">
+    <div className="bg-cream font-sans text-[#2d2d2d]">
+      <section className="h-[220px] flex flex-col items-center justify-center text-center px-4 bg-cream">
         <Image src={sunbnbHorizontalBlack} alt="Sunbnb logo"/>
       </section>
-      <section className="-mt-[40px] flex flex-col items-center justify-center text-center px-4 bg-[#fff5e1]">
+      <section className="-mt-[32px] flex flex-col items-center justify-center text-center px-6 bg-cream">
         <div className="rounded-lg p-2 w-full">
-          <h1 className="text-[34px] font-semibold mb-3" style={{ lineHeight: '36px' }}>Reserve Your Spot on the Beach</h1>
-          <p className="text-[18px] mb-4">
+          <h1 className="text-[32px] font-semibold mb-3 leading-[38px] tracking-tight">Reserve Your Spot on the Beach</h1>
+          <p className="text-[17px] text-gray-600 mb-5 leading-relaxed">
             Plan ahead or book instantly on the beach. All from one app.
           </p>
           <div className="w-full">
@@ -38,7 +38,7 @@ export default function HomeView() {
       </section>
 
       {/* Use Case 1: Book Before You Go */}
-      <section className="flex flex-col md:flex-row items-center gap-6 bg-white pb-16 max-w-4xl mx-auto mt-[35px]">
+      <section className="flex flex-col md:flex-row items-center gap-6 bg-white pb-14 max-w-4xl mx-auto mt-10 rounded-t-2xl">
         <div className="w-full md:w-1/2 flex flex-col items-center justify-center text-yellow-600">
           <div className="w-full h-40 flex items-center justify-center text-sm text-yellow-700">
             <Image 
@@ -47,23 +47,23 @@ export default function HomeView() {
               alt="Reservation screen mockup" className="w-full h-full object-cover" />
           </div>
         </div>
-        <div className="md:w-1/2 text-center md:text-left px-5">
-          <h2 className="text-xl font-semibold mb-2">🔍 Book Before You Go</h2>
-          <p className="text-sm leading-relaxed">
+        <div className="md:w-1/2 text-center md:text-left px-6">
+          <h2 className="text-lg font-semibold mb-2 tracking-tight">🔍 Book Before You Go</h2>
+          <p className="text-sm text-gray-600 leading-relaxed">
             Search your beach, select a sunbed, and book it before you arrive. No stress, no surprises.
           </p>
         </div>
-        <div>
+        <div className="px-6 pb-2 md:pb-0">
           <button onClick={() => {
             router.push('/sites')
-          }} className="bg-yellow-500 text-white px-5 py-2 rounded-md text-sm hover:bg-yellow-600">
+          }} className="bg-yellow-500 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-yellow-600 shadow-soft hover:shadow-card">
             Explore Beaches
           </button>
         </div>
       </section>
 
       {/* Use Case 2: Use Map or QR */}
-      <section className="flex flex-col md:flex-row-reverse items-center gap-6 pb-24 max-w-4xl mx-auto">
+      <section className="flex flex-col md:flex-row-reverse items-center gap-6 pb-14 max-w-4xl mx-auto bg-white">
         <div className="w-full md:w-1/2 flex flex-col items-center justify-center text-blue-600">
           <div className="bg-blue-50 w-full h-40 flex items-center justify-center text-sm text-blue-700">
             <Image 
@@ -72,16 +72,16 @@ export default function HomeView() {
               alt="Reservation screen mockup" className="w-full h-full object-cover" />
           </div>
         </div>
-        <div className="md:w-1/2 text-center md:text-left px-5">
-          <h2 className="text-xl font-semibold mb-2">⛱️ Book on the Beach</h2>
-          <p className="text-sm leading-relaxed">
+        <div className="md:w-1/2 text-center md:text-left px-6">
+          <h2 className="text-lg font-semibold mb-2 tracking-tight">⛱️ Book on the Beach</h2>
+          <p className="text-sm text-gray-600 leading-relaxed">
             Use the live map to pick a sunbed — or scan a QR code to instantly claim one, just like tossing down a towel.
           </p>
         </div>
       </section>
 
       {/* Use Case 3: Order & Pay */}
-      <section className="flex flex-col md:flex-row items-center gap-6 pb-24 bg-white max-w-4xl mx-auto">
+      <section className="flex flex-col md:flex-row items-center gap-6 pb-14 bg-white max-w-4xl mx-auto rounded-b-2xl">
         <div className="w-full md:w-1/2 flex flex-col items-center justify-center text-green-600">
           <div className="w-full h-40 flex items-center justify-center text-sm text-green-700">
           <Image 
@@ -90,20 +90,20 @@ export default function HomeView() {
               alt="Reservation screen mockup" className="w-full h-full object-cover" />
           </div>
         </div>
-        <div className="md:w-1/2 text-center md:text-left px-5">
-          <h2 className="text-xl font-semibold mb-2">🍹 Order & Pay with a Tap</h2>
-          <p className="text-sm leading-relaxed">
+        <div className="md:w-1/2 text-center md:text-left px-6">
+          <h2 className="text-lg font-semibold mb-2 tracking-tight">🍹 Order & Pay with a Tap</h2>
+          <p className="text-sm text-gray-600 leading-relaxed">
             Order drinks, food, or rentals right to your chair — and pay online with just a few clicks.
           </p>
         </div>
       </section>
 
       {/* Final CTA */}
-      <section className="pt-24 pb-24 text-center bg-[#fff3d2]">
-        <h2 className="text-lg font-semibold mb-3">Your beach day, simplified.</h2>
+      <section className="pt-20 pb-20 text-center bg-cream-dark">
+        <h2 className="text-lg font-semibold mb-4 tracking-tight">Your beach day, simplified.</h2>
         <button onClick={() => {
           router.push('/sites')
-        }} className="bg-yellow-500 text-white px-5 py-2 rounded-md text-sm hover:bg-yellow-600">
+        }} className="bg-yellow-500 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-yellow-600 shadow-soft hover:shadow-card">
           Explore Beaches
         </button>
       </section>

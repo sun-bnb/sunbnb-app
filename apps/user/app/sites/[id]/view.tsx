@@ -96,7 +96,7 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
   const bottomOffset = pendingReservationId ? '-405px' : '-364px'
   
   return (
-    <div className="container mx-auto bg-[#fff5e1] pt-[78px]">
+    <div className="container mx-auto bg-cream pt-[80px]">
       {
         focused &&
           <Backdrop onClick={() => {
@@ -107,47 +107,47 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
         <div className="relative overflow-hidden" onClick={() => {
           dispatch(setValue({ focused: false }))
         }}>
-          <div className="w-full border-t-2 border-t-white">
+          <div className="w-full border-t border-cream">
             {
               (site.image && site.imageWidth && site.imageHeight) &&
                 <Image width={site.imageWidth} height={site.imageHeight} alt={site.description || ''} className="w-full h-auto" src={site.image} />
             }
           </div>
-          <div className="absolute inset-0 bg-gradient-to-b from-[#fff5e1] to-transparent via-transparent h-100"></div>
-          <div className="absolute top-[6px] left-[12px] text-2xl bg-black bg-opacity-30 px-2 py-1 rounded-lg text-white">
+          <div className="absolute inset-0 bg-gradient-to-b from-cream to-transparent via-transparent h-100"></div>
+          <div className="absolute top-2 left-3 text-2xl bg-black/30 px-3 py-1 rounded-lg text-white backdrop-blur-sm font-semibold">
             { site.name }
           </div>
         </div>
-        <div className="py-3 px-2">
-          <div className="px-1 flex justify-between">
-            <div className="flex">
-              <div className="mr-3 pl-1">
+        <div className="py-3 px-3">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3 text-sm">
+              <div>
                 <span className="mr-1">&#x26F1;</span>
-                <span className={(availableCount || 0) > 0 ? 'text-green-600' : 'text-red-600'}>{availableCount}</span>
-                <span className="text-gray-400 mx-[1px]">/</span>
+                <span className={(availableCount || 0) > 0 ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>{availableCount}</span>
+                <span className="text-gray-300 mx-px">/</span>
                 <span className="text-gray-400">{itemCount}</span>
               </div>
               {
                 site.distance &&
-                  <div className="mr-3">
-                    <span className="mr-[2px]">{Math.round(site.distance)}</span>
-                    <span className="text-xs">KM</span>
+                  <div className="text-gray-600">
+                    <span className="mr-px">{Math.round(site.distance)}</span>
+                    <span className="text-xs text-gray-400">KM</span>
                   </div>
               }
               {
                 site.price &&
-                  <div className="mr-3">
+                  <div className="text-gray-700 font-medium">
                     <span>&#8364;</span>
                     <span>{site.price}</span>
                   </div>
               }
             </div>
-            <div className="flex">
+            <div className="flex gap-1">
               {
                 (site.services || []).map(service => {
                   return (
-                    <div key={`service-${service}`} className="mr-1 border border-gray-600 rounded-md pr-[5px] pl-[4px]">
-                      <div className="-mt-[2px]">
+                    <div key={`service-${service}`} className="border border-gray-200 rounded-md px-1 py-px text-gray-500">
+                      <div className="-mt-px">
                         { serviceIcons[service] }
                       </div>
                     </div>
@@ -156,10 +156,10 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
               }
             </div>
           </div>
-          <div className="px-1 py-2">
+          <div className="pt-2 text-sm text-gray-600 leading-relaxed">
             { site.description }
           </div>
-          <div className={`px-1 py-2 ${whMaxHeight} overflow-hidden`}>
+          <div className={`pt-3 ${whMaxHeight} overflow-hidden`}>
             <Divider textAlign="left">
               <span className="text-sm font-bold">{t('OPENING HOURS')}</span>
             </Divider>
@@ -195,11 +195,11 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
         <div style={{ 
           zIndex: 11,
           bottom: !focused ? bottomOffset : '0px',
-        }} className={`fixed left-0 w-full bg-[#fff5e1] text-white text-center px-2 pb-4 border-t transition-bottom duration-500`}>
+        }} className={`fixed left-0 w-full bg-cream text-white text-center px-3 pb-4 border-t border-subtle transition-bottom duration-500`}>
         
           {
             focused ? (
-              <div className="text-black absolute w-[100px] bg-[#fff5e1] rounded-md border" style={{
+              <div className="text-black absolute w-[100px] bg-cream rounded-full border border-subtle shadow-soft" style={{
                 left: 'calc(50% - 50px)',
                 top: '-15px',
                 zIndex: 2
@@ -212,7 +212,7 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
             ) : (
               pendingReservationId &&
                 (
-                  <div className="text-black absolute w-[100px] bg-[#fff5e1] rounded-md border" style={{
+                  <div className="text-black absolute w-[100px] bg-cream rounded-full border border-subtle shadow-soft" style={{
                     left: 'calc(50% - 50px)',
                     top: '-15px',
                     zIndex: 2

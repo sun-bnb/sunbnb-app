@@ -46,7 +46,7 @@ export default function CompleteView({
   }, [finalReservation?.status, anonId])
 
   return (
-    <div id="payment-status" className="bg-[#fff5e1] pt-[24px]" style={{ height: '100dvh' }}>
+    <div id="payment-status" className="bg-cream pt-6" style={{ height: '100dvh' }}>
       <ReservationConfirmationView reservation={finalReservation} processingStatus={status} />
     </div>
   )

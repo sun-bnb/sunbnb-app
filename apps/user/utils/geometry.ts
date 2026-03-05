@@ -149,3 +149,64 @@ export function getQuadragonEdges(items: InventoryItem[]): Point[] {
   return minimumBoundingRectangle(hull);
 }
 
+/**
+ * Compute a padded convex hull that follows the actual shape of the parcel.
+ * The padding is specified in meters and adds a buffer around the outermost sunbed positions
+ * so the polygon visually wraps the markers rather than cutting through their centres.
+ */
+export function getPaddedConvexHull(items: InventoryItem[], paddingMeters: number = 2): Point[] {
+  const points = itemsToPoints(items);
+  if (points.length === 0) return [];
+  if (points.length === 1) {
+    // Single point — create a small diamond
+    const p = points[0]!;
+    const dLat = paddingMeters / 111320;
+    const dLng = paddingMeters / (111320 * Math.cos(p.lat * Math.PI / 180));
+    return [
+      { lat: p.lat + dLat, lng: p.lng },
+      { lat: p.lat, lng: p.lng + dLng },
+      { lat: p.lat - dLat, lng: p.lng },
+      { lat: p.lat, lng: p.lng - dLng },
+    ];
+  }
+
+  const hull = convexHull(points);
+  if (hull.length < 2) return hull;
+
+  // Compute centroid for outward direction
+  let cLat = 0, cLng = 0;
+  for (const p of hull) { cLat += p.lat; cLng += p.lng; }
+  cLat /= hull.length;
+  cLng /= hull.length;
+
+  const metersPerLat = 111320;
+  const metersPerLng = 111320 * Math.cos(cLat * Math.PI / 180);
+
+  // Expand each hull vertex outward from centroid by paddingMeters
+  const padded: Point[] = hull.map(p => {
+    const dx = (p.lng - cLng) * metersPerLng;
+    const dy = (p.lat - cLat) * metersPerLat;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist === 0) return p;
+    const scale = (dist + paddingMeters) / dist;
+    return {
+      lat: cLat + (p.lat - cLat) * scale,
+      lng: cLng + (p.lng - cLng) * scale,
+    };
+  });
+
+  // Smooth by inserting midpoints for a rounder appearance (one pass)
+  if (padded.length >= 3) {
+    const smoothed: Point[] = [];
+    for (let i = 0; i < padded.length; i++) {
+      const curr = padded[i]!;
+      const next = padded[(i + 1) % padded.length]!;
+      smoothed.push(curr);
+      smoothed.push({ lat: (curr.lat + next.lat) / 2, lng: (curr.lng + next.lng) / 2 });
+    }
+    return smoothed;
+  }
+
+  return padded;
+}
+

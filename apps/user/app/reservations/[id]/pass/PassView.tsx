@@ -57,7 +57,11 @@ export default function PassView({
                 </tbody>
               </table>
               <div className="mt-4">
-                <div>PAID: {reservation.paymentAmount} €</div>
+                {reservation.paymentAmount ? (
+                  <div>PAID: {reservation.paymentAmount} €</div>
+                ) : (
+                  <div>RESERVED</div>
+                )}
               </div>
             </div>
           )
