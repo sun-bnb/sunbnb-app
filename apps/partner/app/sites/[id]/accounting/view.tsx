@@ -103,7 +103,7 @@ export default function AccountingView() {
       )
       return s + commLines.reduce((ls: number, l: any) => ls + (l.amount || 0), 0)
     }, 0)
-    const partnerPayout = platformRevenue - platformCommission
+    const partnerPayout = platformRevenue - platformCommission - platformTax
 
     const partnerDirectRevenue = partnerInvoices.reduce((s, inv) => s + (inv?.totalAmount || 0), 0)
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Button from '@mui/material/Button'
 import TextField from '@mui/material/TextField'
 import Dialog from '@mui/material/Dialog'
@@ -117,7 +117,9 @@ export default function SettlementsView({
   const [genErrors, setGenErrors] = useState<string[]>([])
   const [selectedSiteId, setSelectedSiteId] = useState('')
   const [periodStart, setPeriodStart] = useState('')
-  const [periodEnd, setPeriodEnd] = useState('')
+  const [periodEnd, setPeriodEnd] = useState<string>(
+    () => new Date().toISOString().split('T')[0]!
+  )
   const [preview, setPreview] = useState<{
     invoiceCount: number
     grossRevenue: number
@@ -149,26 +151,6 @@ export default function SettlementsView({
     ? initialSettlements.filter((s) => s.status === statusFilter)
     : initialSettlements
 
-  // ── Preview handler ────────────────────────────────────────────────
-  const handlePreview = async () => {
-    if (!selectedSite) return
-    setPreviewing(true)
-    setGenErrors([])
-    setPreview(null)
-    const result = await previewSettlementAction({
-      accountId: selectedSite.accountId,
-      siteId: selectedSite.id,
-      periodStart,
-      periodEnd,
-    })
-    setPreviewing(false)
-    if (result.status === 'ok' && result.preview) {
-      setPreview(result.preview)
-    } else {
-      setGenErrors(result.errors ?? ['Unknown error'])
-    }
-  }
-
   // ── Generate handler ──────────────────────────────────────────────────
   const handleGenerate = async () => {
     if (!selectedSite) return
@@ -185,7 +167,7 @@ export default function SettlementsView({
       setShowGenerate(false)
       setSelectedSiteId('')
       setPeriodStart('')
-      setPeriodEnd('')
+      setPeriodEnd(new Date().toISOString().split('T')[0]!)
       setPreview(null)
       window.location.reload()
     } else {
@@ -193,22 +175,41 @@ export default function SettlementsView({
     }
   }
 
-  // Clear preview when inputs change
-  const handleSiteChange = (value: string) => {
-    setSelectedSiteId(value)
-    setPreview(null)
+  // Auto-generate preview when all inputs are set or change
+  const previewAbort = useRef<AbortController | null>(null)
+  useEffect(() => {
+    const site = deemedProviderSites.find((s) => s.id === selectedSiteId)
+    if (!site || !periodStart || !periodEnd) {
+      setPreview(null)
+      return
+    }
+
+    // Cancel any in-flight preview request
+    previewAbort.current?.abort()
+    const controller = new AbortController()
+    previewAbort.current = controller
+
+    setPreviewing(true)
     setGenErrors([])
-  }
-  const handlePeriodStartChange = (value: string) => {
-    setPeriodStart(value)
     setPreview(null)
-    setGenErrors([])
-  }
-  const handlePeriodEndChange = (value: string) => {
-    setPeriodEnd(value)
-    setPreview(null)
-    setGenErrors([])
-  }
+
+    previewSettlementAction({
+      accountId: site.accountId,
+      siteId: site.id,
+      periodStart,
+      periodEnd,
+    }).then((result) => {
+      if (controller.signal.aborted) return
+      setPreviewing(false)
+      if (result.status === 'ok' && result.preview) {
+        setPreview(result.preview)
+      } else {
+        setGenErrors(result.errors ?? ['Unknown error'])
+      }
+    })
+
+    return () => { controller.abort() }
+  }, [selectedSiteId, periodStart, periodEnd, deemedProviderSites])
 
   // ── Action handlers ───────────────────────────────────────────────────
   const openAction = (s: Settlement, type: 'close' | 'approve' | 'pay' | 'revert') => {
@@ -365,7 +366,7 @@ export default function SettlementsView({
               <Select
                 value={selectedSiteId}
                 label="Site"
-                onChange={(e) => handleSiteChange(e.target.value)}
+                onChange={(e) => setSelectedSiteId(e.target.value as string)}
                 sx={{ fontSize: '0.8rem' }}
               >
                 {deemedProviderSites.map((site) => (
@@ -395,7 +396,7 @@ export default function SettlementsView({
               type="date"
               size="small"
               value={periodStart}
-              onChange={(e) => handlePeriodStartChange(e.target.value)}
+              onChange={(e) => setPeriodStart(e.target.value)}
               InputLabelProps={{ shrink: true }}
             />
             <TextField
@@ -403,7 +404,7 @@ export default function SettlementsView({
               type="date"
               size="small"
               value={periodEnd}
-              onChange={(e) => handlePeriodEndChange(e.target.value)}
+              onChange={(e) => setPeriodEnd(e.target.value)}
               InputLabelProps={{ shrink: true }}
             />
           </div>
@@ -477,21 +478,12 @@ export default function SettlementsView({
           )}
 
           <div className="flex items-center gap-2">
-            {!preview ? (
-              <Button
-                variant="contained"
-                size="small"
-                onClick={handlePreview}
-                disabled={previewing || !selectedSiteId || !periodStart || !periodEnd}
-                sx={{ textTransform: 'none' }}
-              >
-                {previewing ? (
-                  <><CircularProgress size={14} color="inherit" sx={{ mr: 0.5 }} /> Loading preview…</>
-                ) : (
-                  'Preview'
-                )}
-              </Button>
-            ) : (
+            {previewing && (
+              <div className="flex items-center gap-1 text-xs text-gray-500">
+                <CircularProgress size={14} /> Loading preview…
+              </div>
+            )}
+            {preview && (
               <Button
                 variant="contained"
                 size="small"
