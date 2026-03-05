@@ -11,7 +11,6 @@ const httpsOptions = {
   cert: fs.readFileSync("./certificates/local.sunbnb.app.pem"),
 };
 
-
 app.prepare().then(() => {
   https
     .createServer(httpsOptions, (req, res) => {
