@@ -96,6 +96,7 @@ export async function POST(request: NextRequest) {
     })
     return Response.json({ error: 'Failed to create payment intent' }, { status: 500 })
   }
+  
 
   // Store paymentRef server-side (atomic — no client round-trip needed)
   await prisma.order.update({
