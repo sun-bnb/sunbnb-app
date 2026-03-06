@@ -4,6 +4,7 @@
   "private": true,
   "exports": {
     "./PrismaCient": "./index.ts",
+    "./auth": "./src/auth.ts",
     "./payment": "./src/payment.ts",
     "./settlement": "./src/settlement.ts",
     "./subscription": "./src/subscription.ts",
@@ -15,6 +16,7 @@
   "typesVersions": {
     "*": {
       "PrismaCient": ["./index.ts"],
+      "auth": ["./src/auth.ts"],
       "payment": ["./src/payment.ts"],
       "settlement": ["./src/settlement.ts"],
       "subscription": ["./src/subscription.ts"],

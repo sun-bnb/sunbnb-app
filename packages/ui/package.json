@@ -6,7 +6,8 @@
     "./TextField": "./src/TextField.tsx",
     "./button": "./src/button.tsx",
     "./card": "./src/card.tsx",
-    "./code": "./src/code.tsx"
+    "./code": "./src/code.tsx",
+    "./sign-in": "./src/sign-in/index.ts"
   },
   "scripts": {
     "lint": "eslint . --max-warnings 0",

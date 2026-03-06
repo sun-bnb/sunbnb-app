@@ -7,18 +7,44 @@ import prisma from '@repo/data/PrismaCient'
 async function resolveServiceFees(siteId: string, userId: string) {
   const [site, partnerAccount, settings] = await Promise.all([
     prisma.site.findUnique({ where: { id: siteId }, include: { serviceFees: true } }),
-    prisma.partnerAccount.findUnique({ where: { userId }, include: { serviceFees: true } }),
-    prisma.settings.findFirst({ include: { serviceFees: true } }),
+    prisma.partnerAccount.findUnique({
+      where: { userId },
+      include: {
+        serviceFees: true,
+        subscription: { include: { plan: { select: { tier: true } } } },
+      },
+    }),
+    prisma.settings.findFirst({
+      include: {
+        serviceFees: {
+          where: { siteId: null, accountId: null },
+        },
+      },
+    }),
   ])
 
+  const tier = partnerAccount?.subscription?.plan?.tier ?? null
   const serviceCodes = ['sunbed-rental', 'food-and-beverage']
   return serviceCodes
-    .map(
-      (code) =>
-        site?.serviceFees?.find((f) => f.serviceCode === code) ||
-        partnerAccount?.serviceFees?.find((f) => f.serviceCode === code) ||
-        settings?.serviceFees?.find((f) => f.serviceCode === code)
-    )
+    .map((code) => {
+      const siteFee = site?.serviceFees?.find((f) => f.serviceCode === code)
+      if (siteFee) return siteFee
+
+      const accountFee = partnerAccount?.serviceFees?.find((f) => f.serviceCode === code)
+      if (accountFee) return accountFee
+
+      // Platform fees: prefer tier-specific, fall back to default
+      if (tier) {
+        const tierFee = settings?.serviceFees?.find(
+          (f) => f.serviceCode === code && f.subscriptionTier === tier
+        )
+        if (tierFee) return tierFee
+      }
+
+      return settings?.serviceFees?.find(
+        (f) => f.serviceCode === code && f.subscriptionTier === null
+      )
+    })
     .filter(Boolean)
 }
 

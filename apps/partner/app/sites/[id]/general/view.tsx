@@ -33,6 +33,7 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 
 import { useSite } from '@/app/sites/site-context'
+import { ServiceFee, PaymentProcessingFee } from '@/types/shared'
 import MapHandler from '@/components/maps/map-handler'
 import { CustomMapControl } from '@/components/maps/map-control'
 import {
@@ -41,6 +42,105 @@ import {
   setSiteStatus,
 } from '../site-actions'
 import { addWorkingHours, deleteWorkingHours } from '../working-hours-actions'
+
+function round(amount: number) {
+  return Math.round(amount * 100) / 100
+}
+
+function PriceBreakdown({
+  price,
+  vat: vatStr,
+  billingModel,
+  serviceFees,
+  paymentProcessingFee,
+}: {
+  price: string
+  vat: string
+  billingModel: 'INTERMEDIARY' | 'DEEMED_PROVIDER'
+  serviceFees?: ServiceFee[]
+  paymentProcessingFee?: PaymentProcessingFee | null
+}) {
+  const priceNum = Number(price)
+  if (!priceNum || priceNum <= 0) return null
+
+  const vatRate = Number(vatStr) || 0
+  const isDeemedProvider = billingModel === 'DEEMED_PROVIDER'
+  const serviceFee = serviceFees?.find(f => f.serviceCode === 'sunbed-rental')
+
+  const feeAmount = serviceFee
+    ? serviceFee.chargeType === 'fixed'
+      ? (serviceFee.feeAmount ?? 0)
+      : round(((serviceFee.percentage ?? 0) / 100) * priceNum)
+    : 0
+
+  // Payment processing fee (fixed + percentage of price)
+  const procFixed = paymentProcessingFee?.fixedAmount ?? 0
+  const procPct = paymentProcessingFee?.percentage ?? 0
+  const procAmount = round(procFixed + (procPct / 100) * priceNum)
+
+  const totalVat = vatRate > 0 ? round(priceNum - round(priceNum / (1 + vatRate / 100))) : 0
+  const partnerGross = isDeemedProvider
+    ? round(priceNum - feeAmount - procAmount - totalVat)
+    : round(priceNum - feeAmount - procAmount)
+  const partnerBase = !isDeemedProvider && vatRate > 0
+    ? round(partnerGross / (1 + vatRate / 100))
+    : partnerGross
+  const partnerVat = !isDeemedProvider ? round(partnerGross - partnerBase) : 0
+
+  // Build processing fee label parts
+  const procParts: string[] = []
+  if (procFixed > 0) procParts.push(`${procFixed.toFixed(2)} \u20AC`)
+  if (procPct > 0) procParts.push(`${procPct}%`)
+  const procLabel = procParts.length > 0 ? ` (${procParts.join(' + ')})` : ''
+
+  return (
+    <div className="mt-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5 text-xs">
+      <div className="flex justify-between text-gray-500 mb-1">
+        <span>Customer pays</span>
+        <span>{priceNum.toFixed(2)} &euro;</span>
+      </div>
+      {feeAmount > 0 && (
+        <div className="flex justify-between text-gray-500 mb-1">
+          <span>
+            {isDeemedProvider ? 'Platform commission' : 'Service fee'}
+            {serviceFee?.chargeType === 'fixed'
+              ? ''
+              : ` (${(serviceFee?.percentage ?? 0).toFixed(0)}%)`}
+          </span>
+          <span className="text-red-500">&minus;{feeAmount.toFixed(2)} &euro;</span>
+        </div>
+      )}
+      {procAmount > 0 && (
+        <div className="flex justify-between text-gray-500 mb-1">
+          <span>Processing fee{procLabel}</span>
+          <span className="text-red-500">&minus;{procAmount.toFixed(2)} &euro;</span>
+        </div>
+      )}
+      {isDeemedProvider && totalVat > 0 && (
+        <div className="flex justify-between text-gray-500 mb-1">
+          <span>VAT {vatRate}% (remitted by platform)</span>
+          <span className="text-red-500">&minus;{totalVat.toFixed(2)} &euro;</span>
+        </div>
+      )}
+      <div className="border-t border-gray-200 my-1.5" />
+      <div className="flex justify-between font-medium text-gray-800 mb-1">
+        <span>You receive</span>
+        <span>{partnerGross.toFixed(2)} &euro;</span>
+      </div>
+      {!isDeemedProvider && vatRate > 0 && (
+        <div className="flex justify-between text-gray-400">
+          <span>incl. VAT {vatRate}%</span>
+          <span>{partnerVat.toFixed(2)} &euro;</span>
+        </div>
+      )}
+      {!serviceFee && (
+        <div className="flex justify-between text-gray-400 italic">
+          <span>No service fee configured for sunbed-rental</span>
+        </div>
+      )}
+    </div>
+  )
+}
 
 const WEEK_DAYS = [
   { key: '1', short: 'Mon', label: 'Monday' },
@@ -137,6 +237,8 @@ export default function GeneralView() {
     sortedHours.filter(h => h.day === Number(dayKey))
 
   const isPaid = siteType === 'paid'
+  const tier = site.subscriptionTier ?? 'STARTER'
+  const canUseAvailabilityOnly = tier === 'PRO' || tier === 'BUSINESS'
 
   return (
     <div className="p-4">
@@ -171,9 +273,9 @@ export default function GeneralView() {
 
       <Divider sx={{ mb: 3 }} />
 
-      {/* Reservation type */}
+      {/* Billing type */}
       <div className="mb-5">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">Reservation type</h3>
+        <h3 className="text-sm font-medium text-gray-700 mb-2">Billing type</h3>
         <div className="flex gap-3">
           <button
             type="button"
@@ -190,66 +292,76 @@ export default function GeneralView() {
             <div className="flex items-center gap-2 mb-1">
               <PaymentsIcon fontSize="small" className={isPaid ? 'text-blue-600' : 'text-gray-400'} />
               <span className={`font-medium text-sm ${isPaid ? 'text-blue-700' : 'text-gray-700'}`}>
-                Paid reservations
+                Integrated payments
               </span>
             </div>
             <p className="text-xs text-gray-500">
-              Customers pay when booking a sunbed. Payment is collected through the platform.
+              Customers pay when booking. Payment is collected and settled through the platform.
             </p>
           </button>
           <button
             type="button"
             onClick={() => {
+              if (!canUseAvailabilityOnly) return
               setSiteType('unpaid')
               setPrice('')
               immediateSave({ type: 'unpaid', price: '' })
             }}
+            disabled={!canUseAvailabilityOnly}
             className={`flex-1 rounded-lg border-2 p-4 text-left transition-all ${
-              !isPaid
-                ? 'border-blue-500 bg-blue-50'
-                : 'border-gray-200 bg-white hover:border-gray-300'
+              !canUseAvailabilityOnly
+                ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed'
+                : !isPaid
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
             }`}
           >
             <div className="flex items-center gap-2 mb-1">
-              <EventAvailableIcon fontSize="small" className={!isPaid ? 'text-blue-600' : 'text-gray-400'} />
-              <span className={`font-medium text-sm ${!isPaid ? 'text-blue-700' : 'text-gray-700'}`}>
-                Availability only
+              <EventAvailableIcon fontSize="small" className={!canUseAvailabilityOnly ? 'text-gray-300' : !isPaid ? 'text-blue-600' : 'text-gray-400'} />
+              <span className={`font-medium text-sm ${!canUseAvailabilityOnly ? 'text-gray-400' : !isPaid ? 'text-blue-700' : 'text-gray-700'}`}>
+                Off-platform billing
               </span>
             </div>
             <p className="text-xs text-gray-500">
-              No payment collected. Useful when billing is handled separately, e.g. hotel guests.
+              No payment collected on the platform. Ideal when billing is handled externally, e.g. hotel guests.
             </p>
+            {!canUseAvailabilityOnly && (
+              <p className="text-xs text-amber-600 mt-1.5 font-medium">Pro or Business plan required</p>
+            )}
           </button>
         </div>
       </div>
 
       {/* Pricing — only for paid */}
       {isPaid && (
-        <div className="mb-5 flex gap-3">
-          <TextField
-            fullWidth
-            label="Advertised price (€)"
-            type="number"
-            value={price}
-            onChange={e => {
-              setPrice(e.target.value)
-              scheduleSave({ price: e.target.value })
-            }}
-            placeholder="e.g. 15"
-            helperText="Base price shown on your site page"
-          />
-          <TextField
-            sx={{ width: 180, flexShrink: 0 }}
-            label="Tax rate (%)"
-            type="number"
-            value={vat}
-            onChange={e => {
-              setVat(e.target.value)
-              scheduleSave({ vat: e.target.value })
-            }}
-            placeholder="e.g. 21"
-            helperText="Applied to all sales"
-          />
+        <div className="mb-5">
+          <div className="flex gap-3">
+            <TextField
+              fullWidth
+              label="Base price (€)"
+              type="number"
+              value={price}
+              onChange={e => {
+                setPrice(e.target.value)
+                scheduleSave({ price: e.target.value })
+              }}
+              placeholder="e.g. 15"
+              helperText="The price your customers will pay"
+            />
+            <TextField
+              sx={{ width: 180, flexShrink: 0 }}
+              label="Tax rate (%)"
+              type="number"
+              value={vat}
+              onChange={e => {
+                setVat(e.target.value)
+                scheduleSave({ vat: e.target.value })
+              }}
+              placeholder="e.g. 21"
+              helperText="Applied to all sales"
+            />
+          </div>
+          <PriceBreakdown price={price} vat={vat} billingModel={billingModel} serviceFees={site.serviceFees} paymentProcessingFee={site.paymentProcessingFee} />
         </div>
       )}
 

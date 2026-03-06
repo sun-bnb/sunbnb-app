@@ -14,6 +14,7 @@ import { ChairConfig } from './chair-util'
 import { syncChairsWithLayout, setItemStatusByGroup } from './actions'
 import { deleteItemsByGroup } from '../inventory-actions'
 import { getSite } from '../queries'
+import PriceBreakdown from '@/components/PriceBreakdown'
 
 interface ParcelFormProps {
   siteId: string
@@ -132,17 +133,6 @@ export default function ParcelFormView({
         {/* Spacing */}
         <div className="mb-4">
           <label className="text-xs font-medium text-gray-600 mb-2 block">Gaps (meters)</label>
-          {config.pairSeats && (
-            <div className="w-1/2 pr-1 mb-2">
-              <label className="text-xs text-gray-500 mb-0.5 block">Between paired beds</label>
-              <TextField
-                fullWidth size="small" type="number"
-                value={config.intraPairGap}
-                inputProps={{ step: 0.1 }}
-                onChange={(e) => handleConfigChange('intraPairGap', Number(e.target.value))}
-              />
-            </div>
-          )}
           <div className="flex gap-2 mb-2">
             <div className="flex-1">
               <label className="text-xs text-gray-500 mb-0.5 block">{config.pairSeats ? 'Between pairs' : 'Horizontal'}</label>
@@ -165,15 +155,28 @@ export default function ParcelFormView({
           </div>
         </div>
 
-        {/* Rotation */}
-        <div className="mb-4">
-          <label className="text-xs text-gray-500 mb-0.5 block">Rotation (°)</label>
-          <TextField
-            fullWidth size="small" type="number"
-            value={config.rotation}
-            inputProps={{ step: 5 }}
-            onChange={(e) => handleConfigChange('rotation', Number(e.target.value))}
-          />
+        {/* Rotation & pair gap */}
+        <div className="flex gap-2 mb-4">
+          {config.pairSeats && (
+            <div className="flex-1">
+              <label className="text-xs text-gray-500 mb-0.5 block">Paired beds gap</label>
+              <TextField
+                fullWidth size="small" type="number"
+                value={config.intraPairGap}
+                inputProps={{ step: 0.1 }}
+                onChange={(e) => handleConfigChange('intraPairGap', Number(e.target.value))}
+              />
+            </div>
+          )}
+          <div className="flex-1">
+            <label className="text-xs text-gray-500 mb-0.5 block">Rotation (°)</label>
+            <TextField
+              fullWidth size="small" type="number"
+              value={config.rotation}
+              inputProps={{ step: 5 }}
+              onChange={(e) => handleConfigChange('rotation', Number(e.target.value))}
+            />
+          </div>
         </div>
 
         <Divider sx={{ mb: 2 }} />
@@ -201,6 +204,7 @@ export default function ParcelFormView({
               />
             </div>
           </div>
+          <PriceBreakdown price={String(config.price || '')} site={site} />
         </div>
 
         {mode === 'create' && (

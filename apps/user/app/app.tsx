@@ -26,6 +26,7 @@ const App = ({ children }: {
       (pathname.includes('/reservations') && status === 'unauthenticated') ||
       pathname.includes('/receipt') || 
       pathname.includes('/pass') || 
+      pathname.startsWith('/sign-in') ||
       (pathname.includes('/complete') && status !== 'authenticated')) {
       setContent(
         <div>

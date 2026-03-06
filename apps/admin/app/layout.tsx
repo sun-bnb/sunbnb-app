@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import localFont from 'next/font/local'
 import App from './app'
 import NextAuthProvider from './nextauth'
+import MuiThemeProvider from './mui-theme'
 import './globals.css'
 
 const geistSans = localFont({
@@ -28,13 +29,15 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
-        <NextAuthProvider>
-          <App>
-            {children}
-          </App>
-        </NextAuthProvider>
+        <MuiThemeProvider>
+          <NextAuthProvider>
+            <App>
+              {children}
+            </App>
+          </NextAuthProvider>
+        </MuiThemeProvider>
       </body>
     </html>
   )

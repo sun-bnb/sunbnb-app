@@ -1,46 +1,10 @@
 import NextAuth, { NextAuthResult } from 'next-auth';
-import { hash, compare } from 'bcryptjs';
 import GoogleProvider from 'next-auth/providers/google';
 import FacebookProvider from 'next-auth/providers/facebook';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import prisma from '@repo/data/PrismaCient';
-
-/**
- * Helper function that checks if a user exists,
- * creates one if necessary, and validates the password.
- */
-async function validateOrCreateUser(
-  email: string,
-  password: string,
-  credentials: { loginError?: string }
-) {
-  let user = await prisma.user.findUnique({ where: { email } });
-
-  // If no user, create one with a hashed password
-  if (!user) {
-    const hashedPassword = await hash(password, 12)
-    user = await prisma.user.create({
-      data: { email, password: hashedPassword },
-    });
-  }
-
-  // If the user has no password, it’s likely an OAuth-only account
-  if (!user.password) {
-    credentials.loginError = 'OAuthAccountNotLinked'
-    return user
-  }
-
-  // Validate password
-  const isValid = await compare(password, user.password)
-  if (!isValid) {
-    credentials.loginError = 'CredentialsSignin'
-    return null
-  }
-
-  return user
-
-}
+import { validateOrCreateUser } from '@repo/data/auth';
 
 const nextAuthResult: NextAuthResult = NextAuth({
   adapter: PrismaAdapter(prisma),
@@ -141,10 +105,8 @@ const nextAuthResult: NextAuthResult = NextAuth({
     },
   },
   pages: {
+    signIn: '/sign-in',
     newUser: '/',
-    // If you want a custom error/sign-in page:
-    // signIn: '/auth/api/signin',
-    // error: '/auth/api/signin',
   },
 });
 

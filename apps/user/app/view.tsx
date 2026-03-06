@@ -7,7 +7,6 @@ import reservationScreen from './reservation-screen.png'
 import scanQrImage from './scan-qr-image.png'
 import beachProducts from './beach-products.png'
 import { useRouter } from 'next/navigation'
-import { signIn } from 'next-auth/react'
 
 export default function HomeView() {
 
@@ -247,10 +246,10 @@ export default function HomeView() {
                 Explore beaches
               </button>
               <button
-                onClick={() => signIn('google')}
+                onClick={() => router.push('/sign-in')}
                 className="w-full sm:w-auto px-8 py-3 md:py-3.5 text-sm md:text-base font-medium text-gray-300 bg-white/10 rounded-xl hover:bg-white/15 border border-white/10 transition-colors"
               >
-                Sign in with Google
+                Sign in
               </button>
             </div>
             <p className="mt-6 md:mt-8 text-[12px] md:text-sm text-gray-500">

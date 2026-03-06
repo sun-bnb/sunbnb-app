@@ -86,10 +86,10 @@ function fmtDate(d: string | Date): string {
 }
 
 const STATUS_COLORS: Record<SettlementStatus, { bg: string; text: string }> = {
-  DRAFT: { bg: 'bg-gray-100', text: 'text-gray-600' },
-  CLOSED: { bg: 'bg-amber-100', text: 'text-amber-700' },
-  APPROVED: { bg: 'bg-blue-100', text: 'text-blue-700' },
-  PAID: { bg: 'bg-green-100', text: 'text-green-700' },
+  DRAFT: { bg: 'bg-gray-800', text: 'text-gray-400' },
+  CLOSED: { bg: 'bg-amber-400/10', text: 'text-amber-400' },
+  APPROVED: { bg: 'bg-blue-400/10', text: 'text-blue-400' },
+  PAID: { bg: 'bg-green-400/10', text: 'text-green-400' },
 }
 
 const STATUS_LABELS: Record<SettlementStatus, string> = {
@@ -274,7 +274,7 @@ export default function SettlementsView({
     <div className="p-4">
       {/* Header */}
       <div className="mt-4 mb-6">
-        <h2 className="text-lg font-semibold text-gray-800">Settlements</h2>
+        <h2 className="text-lg font-semibold text-gray-100">Settlements</h2>
         <p className="text-sm text-gray-500 mt-1">
           Manage partner payouts. Generate settlement batches, review, approve,
           and record bank transfers.
@@ -284,20 +284,20 @@ export default function SettlementsView({
       {/* Unsettled partners summary */}
       {unsettledPartners.length > 0 && (
         <div className="mb-6">
-          <h3 className="text-sm font-medium text-gray-700 mb-2">
+          <h3 className="text-sm font-medium text-gray-400 mb-2">
             Unsettled Invoices
           </h3>
           <div className="grid gap-3 sm:grid-cols-2">
             {unsettledPartners.map((p) => (
               <div
                 key={`${p.accountId}:${p.siteId}`}
-                className="border border-amber-200 rounded-lg bg-amber-50/50 p-3"
+                className="border border-amber-500/20 rounded-lg bg-amber-400/5 p-3"
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-gray-800">
+                  <span className="text-sm font-medium text-gray-200">
                     {p.company}
                   </span>
-                  <span className="text-xs font-semibold text-amber-700">
+                  <span className="text-xs font-semibold text-amber-400">
                     {fmt(p.totalAmount)}
                   </span>
                 </div>
@@ -316,7 +316,7 @@ export default function SettlementsView({
       {/* Toolbar */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <h3 className="text-sm font-medium text-gray-700">Settlement Batches</h3>
+          <h3 className="text-sm font-medium text-gray-400">Settlement Batches</h3>
           <FormControl size="small" sx={{ minWidth: 120 }}>
             <InputLabel sx={{ fontSize: '0.8rem' }}>Status</InputLabel>
             <Select
@@ -347,15 +347,15 @@ export default function SettlementsView({
 
       {/* Generate form */}
       {showGenerate && (
-        <div className="border-2 border-blue-300 rounded-lg bg-blue-50/30 p-4 mb-4">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">
+        <div className="border border-purple-500/30 rounded-lg bg-purple-400/5 p-4 mb-4">
+          <h3 className="text-sm font-semibold text-gray-200 mb-3">
             Generate New Settlement
           </h3>
 
           {genErrors.length > 0 && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 mb-3">
+            <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 mb-3">
               {genErrors.map((e, i) => (
-                <p key={i} className="text-xs text-red-600">{e}</p>
+                <p key={i} className="text-xs text-red-400">{e}</p>
               ))}
             </div>
           )}
@@ -380,9 +380,9 @@ export default function SettlementsView({
 
           {selectedSite && (
             <div className="text-xs text-gray-500 mb-3 flex items-center gap-3">
-              <span>Partner: <strong>{selectedSite.account.company}</strong></span>
+              <span>Partner: <strong className="text-gray-300">{selectedSite.account.company}</strong></span>
               {selectedSite.account.bankAccount && (
-                <span>IBAN: <strong>{selectedSite.account.bankAccount}</strong></span>
+                <span>IBAN: <strong className="text-gray-300">{selectedSite.account.bankAccount}</strong></span>
               )}
               {!selectedSite.account.bankAccount && (
                 <span className="text-red-500 font-medium">⚠ No IBAN on file</span>
@@ -411,9 +411,9 @@ export default function SettlementsView({
 
           {/* Preview result */}
           {preview && (
-            <div className="border border-gray-200 rounded-lg bg-white p-3 mb-3">
+            <div className="border border-gray-800 rounded-lg bg-gray-900 p-3 mb-3">
               <div className="flex items-center justify-between mb-2">
-                <h4 className="text-xs font-semibold text-gray-700">
+                <h4 className="text-xs font-semibold text-gray-300">
                   Settlement Preview
                 </h4>
                 <span className="text-xs text-gray-400">
@@ -424,28 +424,28 @@ export default function SettlementsView({
               {/* Totals */}
               <div className="grid grid-cols-4 gap-2 mb-3">
                 <div>
-                  <div className="text-[10px] text-gray-400 uppercase tracking-wide">Gross</div>
-                  <div className="text-sm font-medium text-gray-700">{fmt(preview.grossRevenue)}</div>
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wide">Gross</div>
+                  <div className="text-sm font-medium text-gray-300">{fmt(preview.grossRevenue)}</div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-gray-400 uppercase tracking-wide">Tax</div>
-                  <div className="text-sm font-medium text-gray-700">{fmt(preview.totalTax)}</div>
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wide">Tax</div>
+                  <div className="text-sm font-medium text-gray-300">{fmt(preview.totalTax)}</div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-gray-400 uppercase tracking-wide">Commission</div>
-                  <div className="text-sm font-medium text-gray-700">{fmt(preview.commission)}</div>
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wide">Commission</div>
+                  <div className="text-sm font-medium text-gray-300">{fmt(preview.commission)}</div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-gray-400 uppercase tracking-wide">Net Payout</div>
-                  <div className="text-sm font-semibold text-gray-900">{fmt(preview.netPayout)}</div>
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wide">Net Payout</div>
+                  <div className="text-sm font-semibold text-gray-100">{fmt(preview.netPayout)}</div>
                 </div>
               </div>
 
               {/* Invoice list */}
-              <div className="border-t border-gray-100 pt-2">
+              <div className="border-t border-gray-800 pt-2">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="text-[10px] text-gray-400 uppercase tracking-wide">
+                    <tr className="text-[10px] text-gray-500 uppercase tracking-wide">
                       <th className="text-left pb-1 font-medium">Date</th>
                       <th className="text-left pb-1 font-medium">Type</th>
                       <th className="text-left pb-1 font-medium">Description</th>
@@ -455,20 +455,20 @@ export default function SettlementsView({
                   </thead>
                   <tbody>
                     {preview.invoices.map((inv) => (
-                      <tr key={inv.id} className="border-t border-gray-50">
+                      <tr key={inv.id} className="border-t border-gray-800">
                         <td className="py-1 text-gray-500">{fmtDate(inv.invoicedAt)}</td>
                         <td className="py-1">
                           <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
                             inv.type === 'reservation'
-                              ? 'bg-blue-50 text-blue-600'
-                              : 'bg-orange-50 text-orange-600'
+                              ? 'bg-blue-400/10 text-blue-400'
+                              : 'bg-orange-400/10 text-orange-400'
                           }`}>
                             {inv.type === 'reservation' ? 'Reservation' : 'Order'}
                           </span>
                         </td>
-                        <td className="py-1 text-gray-700">{inv.description}</td>
+                        <td className="py-1 text-gray-300">{inv.description}</td>
                         <td className="py-1 text-gray-500 text-right">{fmt(inv.totalTax)}</td>
-                        <td className="py-1 text-gray-800 font-medium text-right">{fmt(inv.totalAmount)}</td>
+                        <td className="py-1 text-gray-200 font-medium text-right">{fmt(inv.totalAmount)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -513,8 +513,8 @@ export default function SettlementsView({
 
       {/* Settlements list */}
       {filteredSettlements.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-12 text-gray-400">
-          <svg className="w-12 h-12 mb-2 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+        <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+          <svg className="w-12 h-12 mb-2 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z" />
           </svg>
           <p className="text-sm">No settlements found</p>
@@ -532,12 +532,12 @@ export default function SettlementsView({
           return (
             <div
               key={s.id}
-              className="border border-gray-200 rounded-lg bg-white p-4"
+              className="border border-gray-800 rounded-lg bg-gray-900 p-4"
             >
               {/* Top row: partner + status */}
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <div className="text-sm font-medium text-gray-800">
+                  <div className="text-sm font-medium text-gray-200">
                     {s.partnerCompany}
                   </div>
                   <div className="text-xs text-gray-500">
@@ -557,28 +557,28 @@ export default function SettlementsView({
               {/* Amounts grid */}
               <div className="grid grid-cols-4 gap-2 mb-3">
                 <div>
-                  <div className="text-[10px] text-gray-400 uppercase tracking-wide">Gross</div>
-                  <div className="text-sm font-medium text-gray-700">{fmt(s.grossRevenue, s.currency)}</div>
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wide">Gross</div>
+                  <div className="text-sm font-medium text-gray-300">{fmt(s.grossRevenue, s.currency)}</div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-gray-400 uppercase tracking-wide">Tax</div>
-                  <div className="text-sm font-medium text-gray-700">{fmt(s.totalTax, s.currency)}</div>
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wide">Tax</div>
+                  <div className="text-sm font-medium text-gray-300">{fmt(s.totalTax, s.currency)}</div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-gray-400 uppercase tracking-wide">Commission</div>
-                  <div className="text-sm font-medium text-gray-700">{fmt(s.commission, s.currency)}</div>
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wide">Commission</div>
+                  <div className="text-sm font-medium text-gray-300">{fmt(s.commission, s.currency)}</div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-gray-400 uppercase tracking-wide">Net Payout</div>
-                  <div className="text-sm font-semibold text-gray-900">{fmt(s.netPayout, s.currency)}</div>
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wide">Net Payout</div>
+                  <div className="text-sm font-semibold text-gray-100">{fmt(s.netPayout, s.currency)}</div>
                 </div>
               </div>
 
               {/* Payment info (when paid) */}
               {s.status === 'PAID' && (
-                <div className="text-xs text-green-700 bg-green-50 rounded px-2 py-1.5 mb-3">
+                <div className="text-xs text-green-400 bg-green-400/5 border border-green-500/20 rounded px-2 py-1.5 mb-3">
                   Paid {s.paidAt ? fmtDate(s.paidAt) : ''} · Ref: {s.bankReference}
-                  {s.notes && <span className="text-green-600 block mt-0.5">{s.notes}</span>}
+                  {s.notes && <span className="text-green-500 block mt-0.5">{s.notes}</span>}
                 </div>
               )}
 
@@ -655,9 +655,9 @@ export default function SettlementsView({
         </DialogTitle>
         <DialogContent>
           {actionErrors.length > 0 && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 mb-3">
+            <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 mb-3">
               {actionErrors.map((e, i) => (
-                <p key={i} className="text-xs text-red-600">{e}</p>
+                <p key={i} className="text-xs text-red-400">{e}</p>
               ))}
             </div>
           )}
@@ -667,10 +667,10 @@ export default function SettlementsView({
           </DialogContentText>
 
           {actionTarget && (
-            <div className="text-xs text-gray-500 mb-3 space-y-0.5">
-              <div>Partner: <strong>{actionTarget.partnerCompany}</strong></div>
-              <div>Site: <strong>{actionTarget.siteName}</strong></div>
-              <div>Net payout: <strong>{fmt(actionTarget.netPayout, actionTarget.currency)}</strong></div>
+            <div className="text-xs text-gray-400 mb-3 space-y-0.5">
+              <div>Partner: <strong className="text-gray-200">{actionTarget.partnerCompany}</strong></div>
+              <div>Site: <strong className="text-gray-200">{actionTarget.siteName}</strong></div>
+              <div>Net payout: <strong className="text-gray-200">{fmt(actionTarget.netPayout, actionTarget.currency)}</strong></div>
             </div>
           )}
 
@@ -697,8 +697,8 @@ export default function SettlementsView({
                 placeholder="Any additional notes about this transfer"
               />
               {actionTarget?.partnerBankAccount && (
-                <div className="text-xs text-gray-500 bg-gray-50 rounded px-2 py-1.5">
-                  Transfer to IBAN: <strong>{actionTarget.partnerBankAccount}</strong>
+                <div className="text-xs text-gray-400 bg-gray-800 rounded px-2 py-1.5">
+                  Transfer to IBAN: <strong className="text-gray-200">{actionTarget.partnerBankAccount}</strong>
                 </div>
               )}
             </div>

@@ -25,12 +25,15 @@ const WEEK_DAYS = [
 export default function StepDetails({
   data,
   update,
+  tier,
 }: {
   data: WizardData
   update: (p: Partial<WizardData>) => void
+  tier: string
 }) {
 
   const isPaid = data.type === 'paid'
+  const canUseAvailabilityOnly = tier === 'PRO' || tier === 'BUSINESS'
 
   const hoursForDay = (dayKey: string) =>
     data.workingHours
@@ -97,9 +100,9 @@ export default function StepDetails({
 
       <Divider sx={{ mb: 3 }} />
 
-      {/* Reservation type */}
+      {/* Billing type */}
       <div className="mb-5">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">Reservation type</h3>
+        <h3 className="text-sm font-medium text-gray-700 mb-2">Billing type</h3>
         <div className="flex gap-3">
           <button
             type="button"
@@ -113,31 +116,37 @@ export default function StepDetails({
             <div className="flex items-center gap-2 mb-1">
               <PaymentsIcon fontSize="small" className={isPaid ? 'text-blue-600' : 'text-gray-400'} />
               <span className={`font-medium text-sm ${isPaid ? 'text-blue-700' : 'text-gray-700'}`}>
-                Paid reservations
+                Integrated payments
               </span>
             </div>
             <p className="text-xs text-gray-500">
-              Customers pay when booking a sunbed. Payment is collected through the platform.
+              Customers pay when booking. Payment is collected and settled through the platform.
             </p>
           </button>
           <button
             type="button"
+            disabled={!canUseAvailabilityOnly}
             onClick={() => update({ type: 'unpaid', price: '' })}
             className={`flex-1 rounded-lg border-2 p-4 text-left transition-all ${
-              !isPaid
-                ? 'border-blue-500 bg-blue-50'
-                : 'border-gray-200 bg-white hover:border-gray-300'
+              !canUseAvailabilityOnly
+                ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed'
+                : !isPaid
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
             }`}
           >
             <div className="flex items-center gap-2 mb-1">
-              <EventAvailableIcon fontSize="small" className={!isPaid ? 'text-blue-600' : 'text-gray-400'} />
-              <span className={`font-medium text-sm ${!isPaid ? 'text-blue-700' : 'text-gray-700'}`}>
-                Availability only
+              <EventAvailableIcon fontSize="small" className={!canUseAvailabilityOnly ? 'text-gray-400' : !isPaid ? 'text-blue-600' : 'text-gray-400'} />
+              <span className={`font-medium text-sm ${!canUseAvailabilityOnly ? 'text-gray-400' : !isPaid ? 'text-blue-700' : 'text-gray-700'}`}>
+                Off-platform billing
               </span>
             </div>
             <p className="text-xs text-gray-500">
-              No payment collected. Useful when billing is handled separately, e.g. hotel guests.
+              No payment collected on the platform. Ideal when billing is handled externally, e.g. hotel guests.
             </p>
+            {!canUseAvailabilityOnly && (
+              <p className="text-xs text-amber-600 mt-1.5 font-medium">Pro or Business plan required</p>
+            )}
           </button>
         </div>
       </div>
@@ -147,7 +156,7 @@ export default function StepDetails({
         <div className="flex gap-3 mb-4">
           <TextField
             fullWidth
-            label="Advertised price (€)"
+            label="Base price (€)"
             type="number"
             value={data.price}
             onChange={e => update({ price: e.target.value })}

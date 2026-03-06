@@ -16,8 +16,9 @@ import EditIcon from '@mui/icons-material/Edit'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import PublicIcon from '@mui/icons-material/Public'
+import CreditCardIcon from '@mui/icons-material/CreditCard'
 
-import { savePlatformVatConfig, deletePlatformVatConfig } from './actions'
+import { savePlatformVatConfig, deletePlatformVatConfig, savePaymentProcessingFee, deletePaymentProcessingFee } from './actions'
 
 interface VatConfig {
   id: string
@@ -45,10 +46,14 @@ const emptyForm: FormData = {
   ossRegistered: false,
 }
 
+type PaymentProcessingFee = { id: string; name: string; fixedAmount: number | null; percentage: number | null; currency: string }
+
 export default function PlatformView({
   initialConfigs,
+  paymentProcessingFee: initialProcessingFee,
 }: {
   initialConfigs: VatConfig[]
+  paymentProcessingFee: PaymentProcessingFee | null
 }) {
   const [configs] = useState<VatConfig[]>(initialConfigs)
   const [editing, setEditing] = useState(false)
@@ -57,6 +62,15 @@ export default function PlatformView({
   const [errors, setErrors] = useState<string[]>([])
   const [deleteTarget, setDeleteTarget] = useState<VatConfig | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  // Payment processing fee state (singleton)
+  const [processingFee, setProcessingFee] = useState<PaymentProcessingFee | null>(initialProcessingFee)
+  const [ppEditing, setPpEditing] = useState(false)
+  const [ppForm, setPpForm] = useState<{ id?: string; name: string; fixedAmount: string; percentage: string; currency: string }>({ name: '', fixedAmount: '', percentage: '', currency: 'EUR' })
+  const [ppSaving, setPpSaving] = useState(false)
+  const [ppErrors, setPpErrors] = useState<string[]>([])
+  const [ppConfirmDelete, setPpConfirmDelete] = useState(false)
+  const [ppDeleting, setPpDeleting] = useState(false)
 
   const openNew = () => {
     setForm(emptyForm)
@@ -100,10 +114,46 @@ export default function PlatformView({
     window.location.reload()
   }
 
+  // Payment processing fee handlers
+
+  const handlePpSave = async () => {
+    setPpSaving(true)
+    setPpErrors([])
+    const result = await savePaymentProcessingFee({
+      id: ppForm.id,
+      name: ppForm.name,
+      fixedAmount: ppForm.fixedAmount ? parseFloat(ppForm.fixedAmount) : null,
+      percentage: ppForm.percentage ? parseFloat(ppForm.percentage) : null,
+      currency: ppForm.currency,
+    })
+    setPpSaving(false)
+    if (result.status === 'ok') {
+      setPpEditing(false)
+      setProcessingFee({
+        id: result.id!,
+        name: ppForm.name.trim(),
+        fixedAmount: ppForm.fixedAmount ? parseFloat(ppForm.fixedAmount) : null,
+        percentage: ppForm.percentage ? parseFloat(ppForm.percentage) : null,
+        currency: ppForm.currency.trim().toUpperCase(),
+      })
+    } else {
+      setPpErrors(result.errors ?? ['Unknown error'])
+    }
+  }
+
+  const handlePpDelete = async () => {
+    if (!processingFee) return
+    setPpDeleting(true)
+    await deletePaymentProcessingFee(processingFee.id)
+    setPpDeleting(false)
+    setProcessingFee(null)
+    setPpConfirmDelete(false)
+  }
+
   return (
     <div className="p-4">
       <div className="mt-4 mb-6">
-        <h2 className="text-lg font-semibold text-gray-800">Platform Settings</h2>
+        <h2 className="text-lg font-semibold text-gray-100">Platform Settings</h2>
         <p className="text-sm text-gray-500 mt-1">
           Manage platform VAT registrations used for deemed-provider invoicing.
         </p>
@@ -112,7 +162,7 @@ export default function PlatformView({
       {/* Config list */}
       <div className="mb-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium text-gray-700">VAT Registrations</h3>
+          <h3 className="text-sm font-medium text-gray-400">VAT Registrations</h3>
           {!editing && (
             <Button
               size="small"
@@ -126,7 +176,7 @@ export default function PlatformView({
         </div>
 
         {configs.length === 0 && !editing && (
-          <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+          <div className="flex flex-col items-center justify-center py-12 text-gray-500">
             <PublicIcon sx={{ fontSize: 48, mb: 1, color: '#d1d5db' }} />
             <p className="text-sm">No VAT registrations configured</p>
             <p className="text-xs mt-1">
@@ -138,16 +188,16 @@ export default function PlatformView({
         {configs.map((config) => (
           <div
             key={config.id}
-            className="border border-gray-200 rounded-lg bg-white p-4 mb-3"
+            className="border border-gray-800 rounded-lg bg-gray-900 p-4 mb-3"
           >
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 text-blue-600 text-xs font-bold">
+                  <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-purple-400/10 text-purple-400 text-xs font-bold">
                     {config.countryCode}
                   </span>
                   <div>
-                    <div className="text-sm font-medium text-gray-800">
+                    <div className="text-sm font-medium text-gray-200">
                       {config.companyName}
                     </div>
                     <div className="text-xs text-gray-500">
@@ -155,13 +205,13 @@ export default function PlatformView({
                     </div>
                   </div>
                 </div>
-                <div className="text-xs text-gray-400 mt-1 ml-10">
+                <div className="text-xs text-gray-600 mt-1 ml-10">
                   {config.companyAddress}
                 </div>
                 {config.ossRegistered && (
                   <div className="flex items-center gap-1 mt-1 ml-10">
-                    <CheckCircleIcon sx={{ fontSize: 12 }} className="text-green-500" />
-                    <span className="text-[10px] text-green-600 font-medium">OSS registered</span>
+                    <CheckCircleIcon sx={{ fontSize: 12 }} className="text-green-400" />
+                    <span className="text-[10px] text-green-400 font-medium">OSS registered</span>
                   </div>
                 )}
               </div>
@@ -180,15 +230,15 @@ export default function PlatformView({
 
       {/* Edit / Create form */}
       {editing && (
-        <div className="border-2 border-blue-300 rounded-lg bg-blue-50/30 p-4 mb-4">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">
+        <div className="border border-purple-500/30 rounded-lg bg-purple-400/5 p-4 mb-4">
+          <h3 className="text-sm font-semibold text-gray-200 mb-3">
             {form.id ? 'Edit VAT Registration' : 'New VAT Registration'}
           </h3>
 
           {errors.length > 0 && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 mb-3">
+            <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 mb-3">
               {errors.map((e, i) => (
-                <p key={i} className="text-xs text-red-600">{e}</p>
+                <p key={i} className="text-xs text-red-400">{e}</p>
               ))}
             </div>
           )}
@@ -240,8 +290,8 @@ export default function PlatformView({
               onChange={(e) => setForm({ ...form, ossRegistered: e.target.checked })}
             />
             <div>
-              <span className="text-sm text-gray-700">OSS registered</span>
-              <p className="text-xs text-gray-400">
+              <span className="text-sm text-gray-300">OSS registered</span>
+              <p className="text-xs text-gray-500">
                 One-Stop Shop for cross-border EU VAT. Used as fallback when no exact country match exists.
               </p>
             </div>
@@ -300,6 +350,197 @@ export default function PlatformView({
           >
             {deleting ? (
               <><CircularProgress size={14} color="inherit" sx={{ mr: 0.5 }} /> Deleting…</>
+            ) : (
+              'Delete'
+            )}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Payment Processing Fee (singleton) */}
+      <div className="border-t border-gray-800 mt-6 pt-6 mb-8">
+        <div className="flex items-center gap-2 mb-1">
+          <CreditCardIcon sx={{ fontSize: 18 }} className="text-purple-400" />
+          <h3 className="text-sm font-semibold text-gray-200">Payment Processing Fee</h3>
+        </div>
+        <p className="text-xs text-gray-500 mb-3 ml-[26px]">
+          The payment processor cost applied to every transaction (e.g. 0.25&nbsp;&euro; + 1.5%).
+        </p>
+
+        {/* Missing warning + add button */}
+        {!processingFee && !ppEditing && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-4 flex items-start gap-3">
+            <CreditCardIcon sx={{ fontSize: 28, mt: 0.25 }} className="text-amber-400" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-300">Payment processing fee not configured</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                This setting is required for accurate fee calculations. Please configure it now.
+              </p>
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<AddIcon fontSize="small" />}
+                onClick={() => {
+                  setPpForm({ name: '', fixedAmount: '', percentage: '', currency: 'EUR' })
+                  setPpErrors([])
+                  setPpEditing(true)
+                }}
+                sx={{ textTransform: 'none', fontSize: '0.8rem', mt: 1.5 }}
+              >
+                Configure processing fee
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Existing fee card */}
+        {processingFee && !ppEditing && (() => {
+          const parts: string[] = []
+          if (processingFee.fixedAmount != null) parts.push(`${processingFee.fixedAmount} ${processingFee.currency}`)
+          if (processingFee.percentage != null) parts.push(`${processingFee.percentage}%`)
+          const display = parts.join(' + ') || '\u2014'
+
+          return (
+            <div className="border border-gray-800 rounded-lg bg-gray-900 p-4">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-purple-400/10 text-purple-400">
+                      <CreditCardIcon sx={{ fontSize: 16 }} />
+                    </span>
+                    <div>
+                      <div className="text-sm font-medium text-gray-200">{processingFee.name}</div>
+                      <div className="text-xs text-gray-500">{display}</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <IconButton
+                    size="small"
+                    onClick={() => {
+                      setPpForm({
+                        id: processingFee.id,
+                        name: processingFee.name,
+                        fixedAmount: processingFee.fixedAmount?.toString() ?? '',
+                        percentage: processingFee.percentage?.toString() ?? '',
+                        currency: processingFee.currency,
+                      })
+                      setPpErrors([])
+                      setPpEditing(true)
+                    }}
+                  >
+                    <EditIcon fontSize="small" className="text-gray-400" />
+                  </IconButton>
+                  <IconButton size="small" onClick={() => setPpConfirmDelete(true)}>
+                    <DeleteOutlineIcon fontSize="small" className="text-gray-400" />
+                  </IconButton>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Edit / Create form */}
+        {ppEditing && (
+          <div className="border border-purple-500/30 rounded-lg bg-purple-400/5 p-4 mb-4">
+            <h3 className="text-sm font-semibold text-gray-200 mb-3">
+              {ppForm.id ? 'Edit Processing Fee' : 'New Processing Fee'}
+            </h3>
+
+            {ppErrors.length > 0 && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 mb-3">
+                {ppErrors.map((e, i) => (
+                  <p key={i} className="text-xs text-red-400">{e}</p>
+                ))}
+              </div>
+            )}
+
+            <div className="grid grid-cols-4 gap-3 mb-3">
+              <TextField
+                label="Name"
+                size="small"
+                value={ppForm.name}
+                onChange={(e) => setPpForm({ ...ppForm, name: e.target.value })}
+                placeholder="e.g. Stripe"
+              />
+              <TextField
+                label="Fixed amount"
+                size="small"
+                type="number"
+                value={ppForm.fixedAmount}
+                onChange={(e) => setPpForm({ ...ppForm, fixedAmount: e.target.value })}
+                placeholder="e.g. 0.25"
+              />
+              <TextField
+                label="Percentage"
+                size="small"
+                type="number"
+                value={ppForm.percentage}
+                onChange={(e) => setPpForm({ ...ppForm, percentage: e.target.value })}
+                placeholder="e.g. 1.5"
+              />
+              <TextField
+                label="Currency"
+                size="small"
+                value={ppForm.currency}
+                onChange={(e) => setPpForm({ ...ppForm, currency: e.target.value })}
+                placeholder="EUR"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="contained"
+                size="small"
+                onClick={handlePpSave}
+                disabled={ppSaving}
+                sx={{ textTransform: 'none' }}
+              >
+                {ppSaving ? (
+                  <><CircularProgress size={14} color="inherit" sx={{ mr: 0.5 }} /> Saving&hellip;</>
+                ) : (
+                  ppForm.id ? 'Save changes' : 'Create'
+                )}
+              </Button>
+              <Button
+                size="small"
+                onClick={() => setPpEditing(false)}
+                disabled={ppSaving}
+                sx={{ textTransform: 'none' }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Delete payment processing fee confirmation */}
+      <Dialog open={ppConfirmDelete} onClose={() => setPpConfirmDelete(false)}>
+        <DialogTitle>Delete processing fee?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Remove the <strong>{processingFee?.name}</strong> payment processing fee configuration?
+            Fee calculations will not work correctly without this setting.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setPpConfirmDelete(false)}
+            disabled={ppDeleting}
+            sx={{ textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={handlePpDelete}
+            disabled={ppDeleting}
+            sx={{ textTransform: 'none' }}
+          >
+            {ppDeleting ? (
+              <><CircularProgress size={14} color="inherit" sx={{ mr: 0.5 }} /> Deleting&hellip;</>
             ) : (
               'Delete'
             )}

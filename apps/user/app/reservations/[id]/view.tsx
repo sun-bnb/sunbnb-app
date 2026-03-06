@@ -29,7 +29,7 @@ export default function ReservationView({ serviceFee, showTerms, signedIn, reser
   const touchStartY = useRef<number>(0)
 
   const serviceFeeAmount = serviceFee?.chargeType === 'fixed' ?
-    (serviceFee?.feeAmount || 0) : serviceFee?.percentage! * (order?.totalPrice || 0)
+    (serviceFee?.feeAmount || 0) : ((serviceFee?.percentage ?? 0) / 100) * (order?.totalPrice || 0)
 
   const [page, setPage] = useState<0 | 1>(order ? 1 : 0)
   const [resScrollable, setResScrollable] = useState(false)

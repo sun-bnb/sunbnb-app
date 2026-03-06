@@ -1,10 +1,11 @@
 'use client'
 
 import Image from 'next/image'
-import { signIn } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
 import sunbnbLogo from '@/app/sunbnb-logo.svg'
 
 export default function LandingPage() {
+  const router = useRouter()
   return (
     <div className="min-h-screen bg-white">
 
@@ -17,7 +18,7 @@ export default function LandingPage() {
             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider ml-1">Partner</span>
           </div>
           <button
-            onClick={() => signIn('google')}
+            onClick={() => router.push('/sign-in')}
             className="px-4 py-1.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
           >
             Sign in
@@ -43,7 +44,7 @@ export default function LandingPage() {
         </p>
         <div className="mt-8 flex items-center justify-center gap-3">
           <button
-            onClick={() => signIn('google')}
+            onClick={() => router.push('/sign-in')}
             className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors shadow-sm"
           >
             Get started free
@@ -155,7 +156,7 @@ export default function LandingPage() {
               </div>
               <p className="text-sm text-gray-500 mb-5 flex-1">{p.sites}</p>
               <button
-                onClick={() => signIn('google')}
+                onClick={() => router.push('/sign-in')}
                 className={`w-full py-2 text-sm font-medium rounded-lg transition-colors ${
                   p.highlight
                     ? 'bg-blue-600 text-white hover:bg-blue-700'
@@ -180,7 +181,7 @@ export default function LandingPage() {
             inventory, and payments.
           </p>
           <button
-            onClick={() => signIn('google')}
+            onClick={() => router.push('/sign-in')}
             className="mt-6 inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-gray-900 bg-white rounded-lg hover:bg-gray-100 transition-colors"
           >
             Sign up with Google

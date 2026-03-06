@@ -76,3 +76,49 @@ export async function deletePlatformVatConfig(
   revalidatePath('/platform')
   return { status: 'ok' }
 }
+
+// ─── Payment Processing Fee CRUD ────────────────────────────────────────────
+
+export async function savePaymentProcessingFee(input: {
+  id?: string
+  name: string
+  fixedAmount?: number | null
+  percentage?: number | null
+  currency: string
+}): Promise<{ status: string; id?: string; errors?: string[] }> {
+  await requireSudo()
+
+  const errors: string[] = []
+  if (!input.name?.trim()) errors.push('Name is required')
+  if (!input.currency?.trim()) errors.push('Currency is required')
+  if (input.fixedAmount == null && input.percentage == null) {
+    errors.push('At least one of fixed amount or percentage is required')
+  }
+  if (errors.length > 0) return { status: 'error', errors }
+
+  const data = {
+    name: input.name.trim(),
+    fixedAmount: input.fixedAmount ?? null,
+    percentage: input.percentage ?? null,
+    currency: input.currency.trim().toUpperCase(),
+  }
+
+  if (input.id) {
+    await prisma.paymentProcessingFee.update({ where: { id: input.id }, data })
+    revalidatePath('/platform')
+    return { status: 'ok', id: input.id }
+  } else {
+    const created = await prisma.paymentProcessingFee.create({ data })
+    revalidatePath('/platform')
+    return { status: 'ok', id: created.id }
+  }
+}
+
+export async function deletePaymentProcessingFee(
+  id: string
+): Promise<{ status: string; errors?: string[] }> {
+  await requireSudo()
+  await prisma.paymentProcessingFee.delete({ where: { id } })
+  revalidatePath('/platform')
+  return { status: 'ok' }
+}

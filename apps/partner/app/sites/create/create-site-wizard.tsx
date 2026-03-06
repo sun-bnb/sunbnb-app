@@ -44,7 +44,7 @@ const initialData: WizardData = {
   siteId: null,
 }
 
-export default function CreateSiteWizard({ apiKey }: { apiKey: string }) {
+export default function CreateSiteWizard({ apiKey, tier }: { apiKey: string; tier: string }) {
 
   const [activeStep, setActiveStep] = useState(0)
   const [data, setData] = useState<WizardData>(initialData)
@@ -109,7 +109,7 @@ export default function CreateSiteWizard({ apiKey }: { apiKey: string }) {
         <StepLocation data={data} update={update} apiKey={apiKey} />
       )}
       {activeStep === 1 && (
-        <StepDetails data={data} update={update} />
+        <StepDetails data={data} update={update} tier={tier} />
       )}
       {activeStep === 2 && (
         <StepContent data={data} update={update} />

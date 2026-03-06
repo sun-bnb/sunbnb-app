@@ -47,21 +47,36 @@ async function getServiceFee(siteId: string, userId: string): Promise<{
     }),
     prisma.partnerAccount.findUnique({
       where: { userId: userId },
-      include: { serviceFees: true },
+      include: {
+        serviceFees: true,
+        subscription: { include: { plan: { select: { tier: true } } } },
+      },
     }),
     prisma.settings.findFirst({
-      include: { serviceFees: true },
+      include: {
+        serviceFees: { where: { siteId: null, accountId: null } },
+      },
     })
   ])
 
   const serviceCode = 'food-and-beverage'
-  const matchedServiceFee = (
-    site?.serviceFees?.find((fee: any) => fee.serviceCode === serviceCode) ||
-    partnerAccount?.serviceFees?.find((fee: any) => fee.serviceCode === serviceCode) ||
-    settings?.serviceFees?.find((fee: any) => fee.serviceCode === serviceCode)
-  )
+  const tier = partnerAccount?.subscription?.plan?.tier ?? null
 
-  return matchedServiceFee
+  // 1. Site-level override
+  const siteFee = site?.serviceFees?.find((fee: any) => fee.serviceCode === serviceCode)
+  if (siteFee) return siteFee
+
+  // 2. Account-level override
+  const accountFee = partnerAccount?.serviceFees?.find((fee: any) => fee.serviceCode === serviceCode)
+  if (accountFee) return accountFee
+
+  // 3. Platform-level: prefer tier-specific, fall back to default (null tier)
+  const platformFees = settings?.serviceFees ?? []
+  if (tier) {
+    const tierFee = platformFees.find((f: any) => f.serviceCode === serviceCode && f.subscriptionTier === tier)
+    if (tierFee) return tierFee
+  }
+  return platformFees.find((f: any) => f.serviceCode === serviceCode && f.subscriptionTier === null)
 
 }
 

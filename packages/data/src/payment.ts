@@ -16,7 +16,7 @@
  */
 
 import prisma from '../index'
-import { BillingModel, PlatformVatConfig, ServiceFee } from '@prisma/client'
+import { BillingModel, PaymentProcessingFee, PlatformVatConfig, ServiceFee, SubscriptionTier } from '@prisma/client'
 
 // ─── Financial Utilities ────────────────────────────────────────────────────
 
@@ -44,18 +44,32 @@ export function computeVatAndBaseAmounts(
  * Resolve a service fee using three-tier cascade:
  * 1. Site-specific fee (highest priority)
  * 2. Partner account fee
- * 3. Global settings fee (lowest priority / default)
+ * 3. Global settings fee with tier preference (lowest priority / default)
+ *    - Prefers tier-specific platform fee, falls back to tier-null default
  */
 export function resolveServiceFee(
   siteFees: ServiceFee[],
   accountFees: ServiceFee[],
   settingsFees: ServiceFee[],
-  serviceCode: string
+  serviceCode: string,
+  tier?: SubscriptionTier | null
 ): ServiceFee | undefined {
-  return (
-    siteFees.find(f => f.serviceCode === serviceCode) ||
-    accountFees.find(f => f.serviceCode === serviceCode) ||
-    settingsFees.find(f => f.serviceCode === serviceCode)
+  const siteFee = siteFees.find(f => f.serviceCode === serviceCode)
+  if (siteFee) return siteFee
+
+  const accountFee = accountFees.find(f => f.serviceCode === serviceCode)
+  if (accountFee) return accountFee
+
+  // Platform fees: prefer tier-specific, fall back to tier-null default
+  if (tier) {
+    const tierFee = settingsFees.find(
+      f => f.serviceCode === serviceCode && f.subscriptionTier === tier
+    )
+    if (tierFee) return tierFee
+  }
+
+  return settingsFees.find(
+    f => f.serviceCode === serviceCode && f.subscriptionTier === null
   )
 }
 
@@ -72,8 +86,22 @@ export function calculateServiceFeeAmount(
   return round(
     fee.chargeType === 'fixed'
       ? (fee.feeAmount ?? 0)
-      : (fee.percentage ?? 0) * referenceAmount
+      : ((fee.percentage ?? 0) / 100) * referenceAmount
   )
+}
+
+/**
+ * Calculate the payment processing fee from the PaymentProcessingFee singleton.
+ * Combines a fixed amount + a percentage of the reference amount.
+ */
+export function calculateProcessingFeeAmount(
+  ppf: PaymentProcessingFee | null | undefined,
+  referenceAmount: number
+): number {
+  if (!ppf) return 0
+  const fixed = ppf.fixedAmount ?? 0
+  const pct = ppf.percentage ?? 0
+  return round(fixed + (pct / 100) * referenceAmount)
 }
 
 // ─── Fee Context Loading ────────────────────────────────────────────────────
@@ -85,10 +113,12 @@ interface FeeContext {
   }
   partnerAccount: (Awaited<ReturnType<typeof prisma.partnerAccount.findUnique>> & {
     serviceFees: ServiceFee[]
+    subscription: { plan: { tier: SubscriptionTier } } | null
   }) | null
   settings: (Awaited<ReturnType<typeof prisma.settings.findFirst>> & {
     serviceFees: ServiceFee[]
   }) | null
+  processingFee: PaymentProcessingFee | null
 }
 
 /**
@@ -112,10 +142,17 @@ async function loadFeeContext(
   const [partnerAccount, existingSettings] = await Promise.all([
     prisma.partnerAccount.findUnique({
       where: { userId: site.userId },
-      include: { serviceFees: true },
+      include: {
+        serviceFees: true,
+        subscription: { include: { plan: { select: { tier: true } } } },
+      },
     }),
     prisma.settings.findFirst({
-      include: { serviceFees: true },
+      include: {
+        serviceFees: {
+          where: { siteId: null, accountId: null },
+        },
+      },
     }),
   ])
 
@@ -141,23 +178,33 @@ async function loadFeeContext(
       })
     })
     settings = await prisma.settings.findFirst({
-      include: { serviceFees: true },
+      include: {
+        serviceFees: {
+          where: { siteId: null, accountId: null },
+        },
+      },
     })
   }
 
   // Bootstrap: create default service fee if not found at any level
   if (settings) {
+    const tier = partnerAccount?.subscription?.plan?.tier ?? null
     const existingFee = resolveServiceFee(
       site.serviceFees,
       partnerAccount?.serviceFees ?? [],
       settings.serviceFees,
-      serviceCode
+      serviceCode,
+      tier
     )
     if (!existingFee) {
       await prisma.$transaction(async (tx) => {
         // Re-check inside transaction to avoid duplicate fees
         const currentSettings = await tx.settings.findFirst({
-          include: { serviceFees: true },
+          include: {
+            serviceFees: {
+              where: { siteId: null, accountId: null },
+            },
+          },
         })
         if (!currentSettings) return
         const alreadyExists = currentSettings.serviceFees.some(
@@ -175,12 +222,19 @@ async function loadFeeContext(
         })
       })
       settings = await prisma.settings.findFirst({
-        include: { serviceFees: true },
+        include: {
+          serviceFees: {
+            where: { siteId: null, accountId: null },
+          },
+        },
       })
     }
   }
 
-  return { site: site as FeeContext['site'], partnerAccount, settings }
+  // Load global payment processing fee (singleton)
+  const processingFee = await prisma.paymentProcessingFee.findFirst()
+
+  return { site: site as FeeContext['site'], partnerAccount, settings, processingFee }
 }
 
 // ─── Platform VAT Config ────────────────────────────────────────────────────
@@ -269,16 +323,18 @@ export async function processConfirmedReservation(
     return
   }
 
-  const { site, partnerAccount, settings } = await loadFeeContext(
+  const { site, partnerAccount, settings, processingFee } = await loadFeeContext(
     reservation.siteId,
     'sunbed-rental'
   )
 
+  const tier = partnerAccount?.subscription?.plan?.tier ?? null
   const matchedFee = resolveServiceFee(
     site.serviceFees,
     partnerAccount?.serviceFees ?? [],
     settings?.serviceFees ?? [],
-    'sunbed-rental'
+    'sunbed-rental',
+    tier
   )
 
   const totalFinalAmount = round(reservation.paymentAmount ?? 0)
@@ -401,6 +457,23 @@ export async function processConfirmedReservation(
       })
     }
 
+      // Add payment processing fee line
+      const procFeeAmount = round(
+        calculateProcessingFeeAmount(processingFee, totalFinalAmount)
+      )
+      if (procFeeAmount > 0) {
+        const { baseAmount: procBase, vatAmount: procVat } =
+          computeVatAndBaseAmounts(procFeeAmount, vatRate)
+        invoiceLines.push({
+          charge: procBase,
+          tax: procVat,
+          amount: procFeeAmount,
+          invoiceId: invoice.id,
+          productCode: 'payment-processing-fee',
+          description: 'Processing fee',
+        })
+      }
+
     if (invoiceLines.length > 0) {
       await tx.invoiceLine.createMany({ data: invoiceLines })
     }
@@ -451,32 +524,37 @@ export async function processConfirmedOrder(
     return
   }
 
-  const { site, partnerAccount, settings } = await loadFeeContext(
+  const { site, partnerAccount, settings, processingFee } = await loadFeeContext(
     order.siteId,
     'food-and-beverage'
   )
 
+  const tier = partnerAccount?.subscription?.plan?.tier ?? null
   const matchedFee = resolveServiceFee(
     site.serviceFees,
     partnerAccount?.serviceFees ?? [],
     settings?.serviceFees ?? [],
-    'food-and-beverage'
+    'food-and-beverage',
+    tier
   )
 
   const totalProductAmount = order.paymentAmount ?? 0
   const vatRate = site.vat ?? 0
   const serviceFeeAmount = calculateServiceFeeAmount(matchedFee, totalProductAmount)
-  const totalAmount = round(totalProductAmount + serviceFeeAmount)
+  const procFeeAmount = round(calculateProcessingFeeAmount(processingFee, totalProductAmount))
+  const totalAmount = round(totalProductAmount + serviceFeeAmount + procFeeAmount)
 
   // Compute VAT split for products AND service fee
   const { baseAmount: productBase, vatAmount: productVat } =
     computeVatAndBaseAmounts(totalProductAmount, vatRate)
   const { baseAmount: feeBase, vatAmount: feeVat } =
     computeVatAndBaseAmounts(serviceFeeAmount, vatRate)
+  const { baseAmount: procBase, vatAmount: procVat } =
+    computeVatAndBaseAmounts(procFeeAmount, vatRate)
 
-  // Invoice header must reflect the full amount (products + service fee)
-  const invoiceTotalCharge = round(productBase + feeBase)
-  const invoiceTotalTax = round(productVat + feeVat)
+  // Invoice header must reflect the full amount (products + service fee + processing fee)
+  const invoiceTotalCharge = round(productBase + feeBase + procBase)
+  const invoiceTotalTax = round(productVat + feeVat + procVat)
 
   const billingModel = site.billingModel
 
@@ -553,10 +631,23 @@ export async function processConfirmedOrder(
           }
         : null
 
+    // Payment processing fee line
+    const procFeeLine = procFeeAmount > 0
+      ? {
+          charge: procBase,
+          tax: procVat,
+          amount: procFeeAmount,
+          invoiceId: invoice.id,
+          productCode: 'payment-processing-fee',
+          description: 'Processing fee',
+        }
+      : null
+
     const allLines = [
       ...itemLines,
       ...(commissionLine ? [commissionLine] : []),
       ...(serviceFeeLine ? [serviceFeeLine] : []),
+      ...(procFeeLine ? [procFeeLine] : []),
     ]
 
     await tx.invoiceLine.createMany({ data: allLines })
@@ -571,8 +662,8 @@ export async function processConfirmedOrder(
 // ─── Order Service Fee Calculation ──────────────────────────────────────────
 
 /**
- * Calculate the service fee for an order (used during payment-intent creation).
- * Returns the fee amount to add on top of order.paymentAmount.
+ * Calculate the total fee for an order (used during payment-intent creation).
+ * Returns service fee + payment processing fee to add on top of order.paymentAmount.
  */
 export async function calculateOrderServiceFee(
   orderId: string
@@ -582,17 +673,22 @@ export async function calculateOrderServiceFee(
   })
   if (!order) throw new Error(`Order not found: ${orderId}`)
 
-  const { site, partnerAccount, settings } = await loadFeeContext(
+  const { site, partnerAccount, settings, processingFee } = await loadFeeContext(
     order.siteId,
     'food-and-beverage'
   )
 
+  const tier = partnerAccount?.subscription?.plan?.tier ?? null
   const matchedFee = resolveServiceFee(
     site.serviceFees,
     partnerAccount?.serviceFees ?? [],
     settings?.serviceFees ?? [],
-    'food-and-beverage'
+    'food-and-beverage',
+    tier
   )
 
-  return calculateServiceFeeAmount(matchedFee, order.paymentAmount ?? 0)
+  const amount = order.paymentAmount ?? 0
+  const serviceFee = calculateServiceFeeAmount(matchedFee, amount)
+  const procFee = calculateProcessingFeeAmount(processingFee, amount)
+  return round(serviceFee + procFee)
 }

@@ -18,9 +18,13 @@ export default async function PlatformPage() {
     orderBy: { countryCode: 'asc' },
   })
 
+  const paymentProcessingFee = await prisma.paymentProcessingFee.findFirst({
+    orderBy: { name: 'asc' },
+  })
+
   return (
     <div className="container mx-auto max-w-[768px]">
-      <PlatformView initialConfigs={vatConfigs} />
+      <PlatformView initialConfigs={vatConfigs} paymentProcessingFee={paymentProcessingFee} />
     </div>
   )
 }

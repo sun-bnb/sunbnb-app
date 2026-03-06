@@ -14,80 +14,14 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import CloudDoneIcon from '@mui/icons-material/CloudDone'
 import SyncIcon from '@mui/icons-material/Sync'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
-import { InventoryItem, ServiceFee, SiteProps } from '@/types/shared'
+import { InventoryItem } from '@/types/shared'
 import { deleteInventoryItem, saveInventoryItemProperties } from '../inventory-actions'
 import { getSite } from '../queries'
 import { getParcelColor } from './chair-util'
 import QRPrintButton from './qr-print-button'
 import { useSite } from '@/app/sites/site-context'
 import ReservationListItem from '@/components/reservation/ReservationListItem'
-
-function round(amount: number) {
-  return Math.round(amount * 100) / 100
-}
-
-function PriceBreakdown({ price, site }: { price: string; site: SiteProps }) {
-  const priceNum = Number(price)
-  if (!priceNum || priceNum <= 0) return null
-
-  const vatRate = site.vat ?? 0
-  const isDeemedProvider = site.billingModel === 'DEEMED_PROVIDER'
-  const serviceFee = site.serviceFees?.find(f => f.serviceCode === 'sunbed-rental')
-
-  const feeAmount = serviceFee
-    ? serviceFee.chargeType === 'fixed'
-      ? (serviceFee.feeAmount ?? 0)
-      : round((serviceFee.percentage ?? 0) * priceNum)
-    : 0
-
-  // Deemed provider: platform retains VAT + commission; partner gets the rest
-  // Intermediary: fee deducted from partner share; partner handles own VAT
-  const totalVat = vatRate > 0 ? round(priceNum - round(priceNum / (1 + vatRate / 100))) : 0
-  const partnerGross = isDeemedProvider
-    ? round(priceNum - feeAmount - totalVat)
-    : round(priceNum - feeAmount)
-  const partnerBase = !isDeemedProvider && vatRate > 0
-    ? round(partnerGross / (1 + vatRate / 100))
-    : partnerGross
-  const partnerVat = !isDeemedProvider ? round(partnerGross - partnerBase) : 0
-
-  return (
-    <div className="mt-2 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5 text-xs">
-      <div className="flex justify-between text-gray-500 mb-1">
-        <span>Customer pays</span>
-        <span>{priceNum.toFixed(2)} &euro;</span>
-      </div>
-      {feeAmount > 0 && (
-        <div className="flex justify-between text-gray-500 mb-1">
-          <span>
-            {isDeemedProvider ? 'Platform commission' : 'Service fee'}
-            {serviceFee?.chargeType === 'fixed'
-              ? ''
-              : ` (${((serviceFee?.percentage ?? 0) * 100).toFixed(0)}%)`}
-          </span>
-          <span className="text-red-500">&minus;{feeAmount.toFixed(2)} &euro;</span>
-        </div>
-      )}
-      {isDeemedProvider && totalVat > 0 && (
-        <div className="flex justify-between text-gray-500 mb-1">
-          <span>VAT {vatRate}% (remitted by platform)</span>
-          <span className="text-red-500">&minus;{totalVat.toFixed(2)} &euro;</span>
-        </div>
-      )}
-      <div className="border-t border-gray-200 my-1.5" />
-      <div className="flex justify-between font-medium text-gray-800 mb-1">
-        <span>You receive</span>
-        <span>{partnerGross.toFixed(2)} &euro;</span>
-      </div>
-      {!isDeemedProvider && vatRate > 0 && (
-        <div className="flex justify-between text-gray-400">
-          <span>incl. VAT {vatRate}%</span>
-          <span>{partnerVat.toFixed(2)} &euro;</span>
-        </div>
-      )}
-    </div>
-  )
-}
+import PriceBreakdown from '@/components/PriceBreakdown'
 
 interface InventoryFormProps {
   selectedItem: InventoryItem

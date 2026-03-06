@@ -36,7 +36,7 @@ export default async function CreateSitePage() {
 
   return (
     <div className="container mx-auto max-w-[768px]">
-      <CreateSiteWizard apiKey={apiKey} />
+      <CreateSiteWizard apiKey={apiKey} tier={siteLimit.tier} />
     </div>
   )
 }

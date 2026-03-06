@@ -48,20 +48,48 @@ export default async function SitePage(
   
   if (!site) return <div>Site {params.id} not found</div>
 
-  // Resolve service fees: site → partnerAccount → global settings
+  // Load payment processing fee (singleton)
+  const paymentProcessingFee = await prisma.paymentProcessingFee.findFirst()
+  ;(site as any).paymentProcessingFee = paymentProcessingFee ?? null
+
+  // Resolve service fees: site → partnerAccount → global settings (tier-aware)
   if (site.userId) {
     const [siteWithFees, partnerAccount, settings] = await Promise.all([
       prisma.site.findUnique({ where: { id: params.id }, include: { serviceFees: true } }),
-      prisma.partnerAccount.findUnique({ where: { userId: site.userId }, include: { serviceFees: true } }),
-      prisma.settings.findFirst({ include: { serviceFees: true } }),
+      prisma.partnerAccount.findUnique({
+        where: { userId: site.userId },
+        include: {
+          serviceFees: true,
+          subscription: { include: { plan: true } },
+        },
+      }),
+      prisma.settings.findFirst({
+        include: {
+          serviceFees: { where: { siteId: null, accountId: null } },
+        },
+      }),
     ])
+
+    const tier = partnerAccount?.subscription?.plan?.tier ?? null
+    const platformFees = settings?.serviceFees ?? []
+    ;(site as any).subscriptionTier = tier
+
     const serviceCodes = ['sunbed-rental', 'food-and-beverage']
     site.serviceFees = serviceCodes
-      .map(code =>
-        siteWithFees?.serviceFees?.find(f => f.serviceCode === code) ||
-        partnerAccount?.serviceFees?.find(f => f.serviceCode === code) ||
-        settings?.serviceFees?.find(f => f.serviceCode === code)
-      )
+      .map(code => {
+        // 1. Site-level override
+        const siteFee = siteWithFees?.serviceFees?.find(f => f.serviceCode === code)
+        if (siteFee) return siteFee
+        // 2. Account-level override
+        const accountFee = partnerAccount?.serviceFees?.find(f => f.serviceCode === code)
+        if (accountFee) return accountFee
+        // 3. Platform-level: prefer tier-specific, fall back to default (null tier)
+        const tierFee = tier
+          ? platformFees.find(f => f.serviceCode === code && f.subscriptionTier === tier)
+          : null
+        if (tierFee) return tierFee
+        return platformFees.find(f => f.serviceCode === code && f.subscriptionTier === null)
+      })
       .filter(Boolean) as any
   }
 
