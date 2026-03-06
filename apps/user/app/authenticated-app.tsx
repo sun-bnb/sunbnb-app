@@ -54,10 +54,8 @@ const AuthenticatedApp = ({ children }: {
       >
         <Header />
       </div>
-      <div className="flex max-w-lg mx-auto bg-cream">
-        <div className="flex-grow">
-          {children}
-        </div>
+      <div className="bg-cream">
+        {children}
       </div>
     </div>  
   )

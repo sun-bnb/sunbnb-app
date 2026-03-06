@@ -50,7 +50,7 @@ export default async function Site({ params }: { params: { id: string }}) {
   if (!site) return <div>Site {params.id} not found</div>
 
   return (
-    <div className="container mx-auto lg:px-4">
+    <div>
       <SiteView site={site} apiKey={apiKey} stripePublicKey={STRIPE_PUBLIC_KEY}/>
     </div>
   )

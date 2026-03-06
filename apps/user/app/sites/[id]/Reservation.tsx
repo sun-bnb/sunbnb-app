@@ -279,7 +279,7 @@ function ItemSelection({ apiKey, site } : { apiKey: string, site: SiteProps }) {
   return (
     <>
       <ReservationTimerangeSelector />
-      <div className="w-full lg:w-1/2 h-[300px]">
+      <div className="w-full h-[300px]">
         <SunbedSelection apiKey={apiKey} site={site} />
       </div>
       

@@ -89,28 +89,30 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
   const siteWorkingHours = fetchedSite?.workingHours || site.workingHours || []
   const siteWeekDays = weekDaysOpen ? siteWorkingHours : siteWorkingHours?.filter(wh => wh.day === (now.day() === 0 ? 7 : now.day()))
 
-  const whMaxHeight = weekDaysOpen ? 'max-h-[260px]' : 'max-h-[72px]'
+  const whMaxHeight = weekDaysOpen ? 'max-h-[260px]' : 'max-h-[100px]'
 
   const t = useTranslations('SiteView')
 
   const bottomOffset = pendingReservationId ? '-405px' : '-364px'
   
   return (
-    <div className="container mx-auto bg-cream pt-[80px]">
+    <div className="mx-auto bg-cream pt-[80px] max-w-6xl min-h-screen">
       {
         focused &&
           <Backdrop onClick={() => {
             dispatch(setValue({ focused: false }))
           }} />
       }
-      <div>
-        <div className="relative overflow-hidden" onClick={() => {
+      <div className="lg:flex lg:gap-8 lg:px-6 lg:pt-4">
+        {/* Left column: site info */}
+        <div className="lg:flex-[3] lg:min-w-0">
+        <div className="relative overflow-hidden lg:rounded-xl" onClick={() => {
           dispatch(setValue({ focused: false }))
         }}>
           <div className="w-full border-t border-cream">
             {
               (site.image && site.imageWidth && site.imageHeight) &&
-                <Image width={site.imageWidth} height={site.imageHeight} alt={site.description || ''} className="w-full h-auto" src={site.image} />
+                <Image width={site.imageWidth} height={site.imageHeight} alt={site.description || ''} className="w-full h-auto lg:rounded-xl" src={site.image} />
             }
           </div>
           <div className="absolute inset-0 bg-gradient-to-b from-cream to-transparent via-transparent h-100"></div>
@@ -190,12 +192,38 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
             </Divider>
           </div>
         </div>
-        <div className="mt-[140px]">
+        </div>
+        {/* Right column: reservation panel — sticky sidebar on desktop, fixed drawer on mobile */}
+        <div className="hidden lg:block lg:flex-[2] lg:min-w-[360px] lg:max-w-[480px]">
+          <div className="lg:sticky lg:top-[80px] bg-cream px-3 pb-4 border border-subtle rounded-xl shadow-soft">
+            <div className="w-full">
+              {
+                withHours ?
+                  <div className="mb-4">
+                    <Tabs variant="fullWidth" value={reservationMode || 'days'} onChange={(e, value) => {
+                      dispatch(setValue({ 
+                        reservationMode: value,
+                        focused: true 
+                      }))
+                    }} aria-label="Reservation mode">
+                      <Tab value="days" label="Days" />
+                      <Tab value="hours" label="Hours" />
+                    </Tabs>
+                  </div> : 
+                  <div>&nbsp;</div>
+              }
+            </div>
+            <ReservationView apiKey={apiKey} stripePublicKey={stripePublicKey} site={fetchedSite || site} />
+          </div>
+        </div>
+      </div>
+        {/* Mobile spacer + fixed bottom drawer */}
+        <div className="mt-[140px] lg:hidden">
         </div>
         <div style={{ 
           zIndex: 11,
           bottom: !focused ? bottomOffset : '0px',
-        }} className={`fixed left-0 w-full bg-cream text-white text-center px-3 pb-4 border-t border-subtle transition-bottom duration-500`}>
+        }} className={`lg:hidden fixed left-0 w-full bg-cream text-white text-center px-3 pb-4 border-t border-subtle transition-bottom duration-500`}>
         
           {
             focused ? (
@@ -246,8 +274,6 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
               </div>
               <ReservationView apiKey={apiKey} stripePublicKey={stripePublicKey} site={fetchedSite || site} />
         </div>
-        
-      </div>
     </div>
   )
 

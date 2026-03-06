@@ -11,9 +11,10 @@ const Sidebar = () => {
   const { data: session, status } = useSession()
 
   const menuItems = [
-    { name: 'Home', path: '/' },
-    { name: 'Account', path: '/account' },
-    { name: 'Inventory', path: '/inventory' }
+    { name: 'Home', path: '/', indent: false },
+    { name: 'Account', path: '/account', indent: false },
+    { name: 'Subscription', path: '/account/subscription', indent: true },
+    { name: 'Inventory', path: '/inventory', indent: false }
   ]
 
   return (
@@ -23,7 +24,7 @@ const Sidebar = () => {
           menuItems.map((item) => (
             <div
               key={item.path}
-              className={`px-4 py-2 hover:text-black ${
+              className={`${item.indent ? 'pl-8' : 'px-4'} py-2 hover:text-black ${
                 pathname === item.path ? 'text-black font-bold' : ''
               }`}
             >

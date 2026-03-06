@@ -63,7 +63,7 @@ export default async function RootLayout({
   return (
     <html lang={locale}>
       <StoreProvider>
-        <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
+        <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-cream min-h-screen`}>
           <NextAuthProvider>
             <NextIntlClientProvider messages={messages}>
               <App>

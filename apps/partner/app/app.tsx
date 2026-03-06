@@ -1,21 +1,14 @@
 'use client'
 
 import { useSession } from 'next-auth/react'
-import { useRouter, usePathname } from 'next/navigation'
-import { useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import Header from './header'
+import LandingPage from './landing'
 
 export default function App({ children }: { children: React.ReactNode }) {
 
   const { status } = useSession()
-  const router = useRouter()
   const pathname = usePathname()
-
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/api/auth/signin')
-    }
-  }, [status, router])
 
   // Public routes that don't need auth shell
   const isPublicRoute = pathname.endsWith('/info') || pathname.endsWith('/manage') || pathname.endsWith('/orders')
@@ -32,8 +25,8 @@ export default function App({ children }: { children: React.ReactNode }) {
     )
   }
 
-  if (status !== 'authenticated') {
-    return null
+  if (status === 'unauthenticated') {
+    return <LandingPage />
   }
 
   return (

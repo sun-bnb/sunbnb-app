@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { canCreateSite } from '@repo/data/subscription'
 import { put } from '@vercel/blob'
 import sharp from 'sharp'
 
@@ -24,6 +25,15 @@ export async function createSite(
 
   const session = await auth()
   if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+
+  // Check subscription plan site limit
+  const siteLimit = await canCreateSite(session.user.id!)
+  if (!siteLimit.allowed) {
+    return {
+      status: 'error',
+      errors: [`Your ${siteLimit.tier} plan allows up to ${siteLimit.maxSites} site(s). Please upgrade to add more.`],
+    }
+  }
 
   // Validate required fields
   const errors: string[] = []

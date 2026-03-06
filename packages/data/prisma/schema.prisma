@@ -23,6 +23,46 @@ enum SettlementStatus {
   PAID
 }
 
+enum SubscriptionTier {
+  STARTER
+  PRO
+  BUSINESS
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+model SubscriptionPlan {
+  id              String           @id @default(cuid())
+  tier            SubscriptionTier @unique
+  name            String
+  monthlyPrice    Float            @map("monthly_price")
+  maxSites        Int              @map("max_sites")
+  stripeProductId String?          @map("stripe_product_id")
+  stripePriceId   String?          @map("stripe_price_id")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  subscriptions   Subscription[]
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  partnerAccountId     String             @unique @map("partner_account_id")
+  planId               String             @map("plan_id")
+  status               SubscriptionStatus @default(ACTIVE)
+  stripeSubscriptionId String?            @map("stripe_subscription_id")
+  stripeCustomerId     String?            @map("stripe_customer_id")
+  currentPeriodStart   DateTime?          @map("current_period_start")
+  currentPeriodEnd     DateTime?          @map("current_period_end")
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  partnerAccount       PartnerAccount     @relation(fields: [partnerAccountId], references: [userId], onDelete: Cascade)
+  plan                 SubscriptionPlan   @relation(fields: [planId], references: [id])
+}
+
 model Settings {
   id          String       @id @default(cuid())
   country     String?
@@ -101,10 +141,11 @@ model PartnerAccount {
   updatedAt   DateTime     @updatedAt
   userId      String       @id @unique @map("user_id")
   businessId  String?      @map("business_id")
-  invoices    Invoice[]
-  settlements Settlement[]
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  serviceFees ServiceFee[]
+  invoices     Invoice[]
+  settlements  Settlement[]
+  subscription Subscription?
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serviceFees  ServiceFee[]
 }
 
 model Site {

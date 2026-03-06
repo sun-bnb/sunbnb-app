@@ -59,7 +59,7 @@ export default function CustomizedInputBase() {
       <Paper
         component="form"
         elevation={0}
-        sx={{ p: '4px 6px', display: 'flex', alignItems: 'center', width: 'full', backgroundColor: '#fff5e1' }}
+        sx={{ p: '4px 6px', display: 'flex', alignItems: 'center', width: '100%', maxWidth: '1280px', mx: 'auto', backgroundColor: '#fff5e1' }}
       >
         <Link href="/">
           <IconButton sx={{ p: '8px', marginTop: '-2px' }} aria-label="menu">
