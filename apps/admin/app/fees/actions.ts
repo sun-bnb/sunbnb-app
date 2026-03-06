@@ -144,6 +144,17 @@ export async function getFeesByAccount(accountId: string) {
   })
 }
 
+// ─── Fetch platform-level fees ──────────────────────────────────────────────
+
+export async function getPlatformFees() {
+  await requireSudo()
+  return prisma.serviceFee.findMany({
+    where: { siteId: null, accountId: null },
+    include: feeInclude,
+    orderBy: { createdAt: 'desc' },
+  })
+}
+
 // ─── Delete a ServiceFee ────────────────────────────────────────────────────
 
 export async function deleteServiceFee(

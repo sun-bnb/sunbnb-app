@@ -34,6 +34,7 @@ import {
   searchAccounts,
   getFeesBySite,
   getFeesByAccount,
+  getPlatformFees,
   type FeeWithRelations,
 } from "./actions"
 
@@ -114,7 +115,7 @@ function FeeCard({
             <div>
               <div className="text-sm font-medium text-gray-200">{fee.serviceCode}</div>
               <div className="text-xs text-gray-500">
-                {fee.chargeType} \u00b7 {display}
+                {fee.chargeType} &middot; {display}
               </div>
             </div>
           </div>
@@ -283,7 +284,7 @@ export default function FeesView({
     [s.country, s.currency].filter(Boolean).join(" \u00b7 ") || s.id.slice(0, 8)
 
   // Platform fees state
-  const [platformFees] = useState<FeeWithRelations[]>(initialPlatformFees)
+  const [platformFees, setPlatformFees] = useState<FeeWithRelations[]>(initialPlatformFees)
   const [platformTierTab, setPlatformTierTab] = useState(0)
   const selectedTier = tierTabs[platformTierTab]?.value ?? ""
   const filteredPlatformFees = platformFees.filter(
@@ -411,9 +412,9 @@ export default function FeesView({
   }
 
   const handlePlatformSave = () =>
-    saveFee(platformForm, {}, setPlatformSaving, setPlatformErrors, () => {
+    saveFee(platformForm, {}, setPlatformSaving, setPlatformErrors, async () => {
       setPlatformEditing(false)
-      window.location.reload()
+      setPlatformFees(await getPlatformFees())
     })
 
   const handleSiteSave = () =>
@@ -443,7 +444,7 @@ export default function FeesView({
     setDeleting(false)
     setDeleteTarget(null)
     if (deleteContext === "platform") {
-      window.location.reload()
+      setPlatformFees(await getPlatformFees())
     } else if (deleteContext === "site" && selectedSite) {
       setSiteFees(await getFeesBySite(selectedSite.id))
     } else if (deleteContext === "account" && selectedAccount) {
