@@ -6,7 +6,11 @@ import { Reservation } from '@/app/sites/types'
 async function getReservations(userId: string): Promise<Reservation[]> {
   return await prisma.reservation.findMany({ 
     where: { userId: userId },
-    orderBy: { from: 'desc' }
+    orderBy: { from: 'desc' },
+    include: {
+      site: { select: { id: true, name: true } },
+      items: { select: { id: true, number: true } },
+    },
   })
 }
 

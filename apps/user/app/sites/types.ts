@@ -16,7 +16,6 @@ export interface SiteProps {
   availableCount?: number
   appSalesEnabled?: boolean | undefined
   services: string[]
-  billingModel?: 'INTERMEDIARY' | 'DEEMED_PROVIDER'
 }
 
 export interface MapCenter {
@@ -40,7 +39,7 @@ export interface Reservation {
   id: string
   userId: string
   anonId?: string | null
-  site?: { id: string, name?: string | null }
+  site?: { id: string, name?: string | null, type?: string | null }
   itemId?: string | null
   items?: { id: string, number: number }[] | null
   orders?: { 

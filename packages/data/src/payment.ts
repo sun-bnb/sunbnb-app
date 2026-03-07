@@ -4,10 +4,9 @@
  * Centralizes all payment business logic: service fee resolution, VAT calculation,
  * and idempotent invoice creation for both reservations and orders.
  *
- * Supports two billing models (per-site):
- * - INTERMEDIARY (default): Partner is seller of record. SunBnB earns a service fee.
- * - DEEMED_PROVIDER: SunBnB is seller of record (merchant of record). Partner
- *   receives a settlement payout. Invoices are issued in the platform's name.
+ * Billing model: INTERMEDIARY
+ *   Partner is the seller of record. SunBnB collects payment and forwards
+ *   revenue minus a service fee. Invoices are issued in the partner's name.
  *
  * Key design principles:
  * - Idempotent: safe to call multiple times (webhook + polling convergence)
@@ -16,7 +15,7 @@
  */
 
 import prisma from '../index'
-import { BillingModel, PaymentProcessingFee, PlatformVatConfig, ServiceFee, SubscriptionTier } from '@prisma/client'
+import { PaymentProcessingFee, ServiceFee, SubscriptionTier } from '@prisma/client'
 
 // ─── Financial Utilities ────────────────────────────────────────────────────
 
@@ -109,7 +108,6 @@ export function calculateProcessingFeeAmount(
 interface FeeContext {
   site: NonNullable<Awaited<ReturnType<typeof prisma.site.findUnique>>> & {
     serviceFees: ServiceFee[]
-    platformVatConfig: PlatformVatConfig | null
   }
   partnerAccount: (Awaited<ReturnType<typeof prisma.partnerAccount.findUnique>> & {
     serviceFees: ServiceFee[]
@@ -134,7 +132,6 @@ async function loadFeeContext(
     where: { id: siteId },
     include: {
       serviceFees: true,
-      platformVatConfig: true,
     },
   })
   if (!site) throw new Error(`Site not found: ${siteId}`)
@@ -237,72 +234,16 @@ async function loadFeeContext(
   return { site: site as FeeContext['site'], partnerAccount, settings, processingFee }
 }
 
-// ─── Platform VAT Config ────────────────────────────────────────────────────
-
-interface PlatformIssuer {
-  vatNumber: string
-  companyName: string
-  companyAddress: string
-}
-
-/**
- * Load the platform's VAT registration for deemed-provider invoicing.
- * Prefers the direct PlatformVatConfig linked to the site.
- * Falls back to country match, then OSS-registered config, then any config.
- */
-async function loadPlatformIssuer(
-  directConfig?: { vatNumber: string; companyName: string; companyAddress: string } | null,
-  countryCode?: string,
-): Promise<PlatformIssuer | null> {
-  // Use the direct link from Site.platformVatConfig if available
-  if (directConfig) {
-    return {
-      vatNumber: directConfig.vatNumber,
-      companyName: directConfig.companyName,
-      companyAddress: directConfig.companyAddress,
-    }
-  }
-
-  // Fallback: try exact country match, then OSS-registered, then any config
-  const config = countryCode
-    ? await prisma.platformVatConfig.findUnique({ where: { countryCode } })
-    : null
-
-  const resolved =
-    config ??
-    (await prisma.platformVatConfig.findFirst({
-      where: { ossRegistered: true },
-    })) ??
-    (await prisma.platformVatConfig.findFirst())
-
-  if (!resolved) return null
-
-  return {
-    vatNumber: resolved.vatNumber,
-    companyName: resolved.companyName,
-    companyAddress: resolved.companyAddress,
-  }
-}
-
 // ─── Idempotent Reservation Processing ──────────────────────────────────────
 
 /**
  * Process a confirmed reservation payment: create invoice + lines atomically.
  *
- * Billing model branching:
- *
- * INTERMEDIARY (default):
+ * INTERMEDIARY model:
  *   Fee is DEDUCTED from the partner's share.
  *   Customer pays: reservation.paymentAmount (VAT-inclusive, includes fee)
  *   Partner receives: paymentAmount − serviceFee per item
  *   Invoice issued by: Partner (issuerType = PARTNER)
- *
- * DEEMED_PROVIDER:
- *   SunBnB is the seller of record. Fee is embedded as platform commission.
- *   Customer pays: reservation.paymentAmount (same)
- *   Invoice issued by: Platform (issuerType = PLATFORM, with platform VAT number)
- *   Partner receives: settlement = paymentAmount − commission (per item)
- *   Invoice lines show full item prices (no fee deduction from line amounts)
  *
  * Safe to call multiple times — skips if invoice already exists.
  */
@@ -342,14 +283,6 @@ export async function processConfirmedReservation(
   const { baseAmount: totalBase, vatAmount: totalVat } =
     computeVatAndBaseAmounts(totalFinalAmount, vatRate)
 
-  const billingModel = site.billingModel
-
-  // Load platform issuer info for deemed-provider invoices
-  const platformIssuer =
-    billingModel === BillingModel.DEEMED_PROVIDER
-      ? await loadPlatformIssuer(site.platformVatConfig, settings?.country ?? undefined)
-      : null
-
   await prisma.$transaction(async (tx) => {
     // Double-check idempotency inside transaction (race-safe)
     const current = await tx.reservation.findUnique({
@@ -363,116 +296,62 @@ export async function processConfirmedReservation(
         totalCharge: totalBase,
         totalTax: totalVat,
         totalAmount: totalFinalAmount,
-        // Billing model fields
-        issuerType:
-          billingModel === BillingModel.DEEMED_PROVIDER ? 'PLATFORM' : 'PARTNER',
-        issuerVatNumber: platformIssuer?.vatNumber ?? null,
-        settlementId:
-          billingModel === BillingModel.DEEMED_PROVIDER
-            ? `STL-R-${reservationId}`
-            : null,
+        issuerType: 'PARTNER',
+        issuerVatNumber: partnerAccount?.businessId ?? null,
+        issuerCompanyName: partnerAccount?.company ?? null,
+        issuerCompanyAddress: partnerAccount?.address ?? null,
       },
     })
 
-    let invoiceLines: {
-      charge: number
-      tax: number
-      amount: number
-      invoiceId: string
-      productCode: string
-      description: string
-    }[]
-
-    if (billingModel === BillingModel.DEEMED_PROVIDER) {
-      // ── Deemed Provider: lines show full item prices, commission as separate line ──
-      invoiceLines = reservation.items.flatMap((item) => {
-        const itemPrice = round(item.price ?? site.price ?? 0)
-        const { baseAmount: itemBase, vatAmount: itemVat } =
-          computeVatAndBaseAmounts(itemPrice, vatRate)
-
-        return [
-          {
-            charge: itemBase,
-            tax: itemVat,
-            amount: itemPrice,
-            invoiceId: invoice.id,
-            productCode: 'sunbed-rental',
-            description: `Sunbed ${item.number} (${item.category})`,
-          },
-        ]
-      })
-
-      // Add a single commission line summarizing the platform's take
-      const totalItemPrices = reservation.items.reduce(
-        (sum, item) => sum + round(item.price ?? site.price ?? 0),
-        0
+    // ── Intermediary: fee deducted from partner revenue ──
+    const invoiceLines = reservation.items.flatMap((item) => {
+      const itemPrice = round(item.price ?? site.price ?? 0)
+      const feeAmount = round(
+        calculateServiceFeeAmount(matchedFee, itemPrice)
       )
-      const totalCommission = round(
-        calculateServiceFeeAmount(matchedFee, totalItemPrices)
-      )
-      if (totalCommission > 0) {
-        const { baseAmount: commBase, vatAmount: commVat } =
-          computeVatAndBaseAmounts(totalCommission, vatRate)
-        invoiceLines.push({
-          charge: commBase,
-          tax: commVat,
-          amount: totalCommission,
+      const partnerAmount = round(itemPrice - feeAmount)
+
+      const { baseAmount: itemBase, vatAmount: itemVat } =
+        computeVatAndBaseAmounts(partnerAmount, vatRate)
+      const { baseAmount: feeBase, vatAmount: feeVat } =
+        computeVatAndBaseAmounts(feeAmount, vatRate)
+
+      return [
+        {
+          charge: itemBase,
+          tax: itemVat,
+          amount: partnerAmount,
           invoiceId: invoice.id,
-          productCode: 'sunbnb-platform-commission',
-          description: 'Platform commission',
-        })
-      }
-    } else {
-      // ── Intermediary (default): fee deducted from partner revenue ──
-      invoiceLines = reservation.items.flatMap((item) => {
-        const itemPrice = round(item.price ?? site.price ?? 0)
-        const feeAmount = round(
-          calculateServiceFeeAmount(matchedFee, itemPrice)
-        )
-        const partnerAmount = round(itemPrice - feeAmount)
+          productCode: 'sunbed-rental',
+          description: `Sunbed ${item.number} (${item.category})`,
+        },
+        {
+          charge: feeBase,
+          tax: feeVat,
+          amount: feeAmount,
+          invoiceId: invoice.id,
+          productCode: 'sunbnb-service-fee',
+          description: 'Res. fee',
+        },
+      ]
+    })
 
-        const { baseAmount: itemBase, vatAmount: itemVat } =
-          computeVatAndBaseAmounts(partnerAmount, vatRate)
-        const { baseAmount: feeBase, vatAmount: feeVat } =
-          computeVatAndBaseAmounts(feeAmount, vatRate)
-
-        return [
-          {
-            charge: itemBase,
-            tax: itemVat,
-            amount: partnerAmount,
-            invoiceId: invoice.id,
-            productCode: 'sunbed-rental',
-            description: `Sunbed ${item.number} (${item.category})`,
-          },
-          {
-            charge: feeBase,
-            tax: feeVat,
-            amount: feeAmount,
-            invoiceId: invoice.id,
-            productCode: 'sunbnb-service-fee',
-            description: 'Res. fee',
-          },
-        ]
+    // Add payment processing fee line
+    const procFeeAmount = round(
+      calculateProcessingFeeAmount(processingFee, totalFinalAmount)
+    )
+    if (procFeeAmount > 0) {
+      const { baseAmount: procBase, vatAmount: procVat } =
+        computeVatAndBaseAmounts(procFeeAmount, vatRate)
+      invoiceLines.push({
+        charge: procBase,
+        tax: procVat,
+        amount: procFeeAmount,
+        invoiceId: invoice.id,
+        productCode: 'payment-processing-fee',
+        description: 'Processing fee',
       })
     }
-
-      // Add payment processing fee line
-      const procFeeAmount = round(
-        calculateProcessingFeeAmount(processingFee, totalFinalAmount)
-      )
-      if (procFeeAmount > 0) {
-        const { baseAmount: procBase, vatAmount: procVat } =
-          computeVatAndBaseAmounts(procFeeAmount, vatRate)
-        invoiceLines.push({
-          charge: procBase,
-          tax: procVat,
-          amount: procFeeAmount,
-          invoiceId: invoice.id,
-          productCode: 'payment-processing-fee',
-          description: 'Processing fee',
-        })
-      }
 
     if (invoiceLines.length > 0) {
       await tx.invoiceLine.createMany({ data: invoiceLines })
@@ -490,20 +369,14 @@ export async function processConfirmedReservation(
 /**
  * Process a confirmed order payment: create invoice + lines atomically.
  *
- * Billing model branching:
+ * Fee model: fees are INCLUDED in the product price.
+ * Customer pays exactly order.paymentAmount (the product total).
+ * Service fee + processing fee are deducted from the merchant's share at settlement.
  *
- * INTERMEDIARY (default):
- *   Fee is ADDED ON TOP of the product total.
- *   Customer pays: order.paymentAmount + serviceFee
- *   Partner receives: order.paymentAmount (full product amount)
+ * INTERMEDIARY model:
+ *   Customer pays: order.paymentAmount
+ *   Partner receives: order.paymentAmount − serviceFee − processingFee
  *   Invoice issued by: Partner (issuerType = PARTNER)
- *
- * DEEMED_PROVIDER:
- *   SunBnB is the seller of record.
- *   Customer pays: order.paymentAmount + serviceFee (same total)
- *   Invoice issued by: Platform (issuerType = PLATFORM, with platform VAT number)
- *   Partner receives: settlement = product amount − commission
- *   Invoice lines show full product prices; commission as separate line
  *
  * Safe to call multiple times — skips if invoice already exists.
  */
@@ -542,27 +415,24 @@ export async function processConfirmedOrder(
   const vatRate = site.vat ?? 0
   const serviceFeeAmount = calculateServiceFeeAmount(matchedFee, totalProductAmount)
   const procFeeAmount = round(calculateProcessingFeeAmount(processingFee, totalProductAmount))
-  const totalAmount = round(totalProductAmount + serviceFeeAmount + procFeeAmount)
 
-  // Compute VAT split for products AND service fee
+  // Fees are INCLUDED in the product price — customer pays exactly totalProductAmount.
+  // Fees are deducted from the merchant's share at settlement.
+  const totalAmount = totalProductAmount
+
+  // Compute VAT split for products (customer-facing total)
   const { baseAmount: productBase, vatAmount: productVat } =
     computeVatAndBaseAmounts(totalProductAmount, vatRate)
+
+  // Fee VAT splits — for internal settlement accounting only
   const { baseAmount: feeBase, vatAmount: feeVat } =
     computeVatAndBaseAmounts(serviceFeeAmount, vatRate)
   const { baseAmount: procBase, vatAmount: procVat } =
     computeVatAndBaseAmounts(procFeeAmount, vatRate)
 
-  // Invoice header must reflect the full amount (products + service fee + processing fee)
-  const invoiceTotalCharge = round(productBase + feeBase + procBase)
-  const invoiceTotalTax = round(productVat + feeVat + procVat)
-
-  const billingModel = site.billingModel
-
-  // Load platform issuer info for deemed-provider invoices
-  const platformIssuer =
-    billingModel === BillingModel.DEEMED_PROVIDER
-      ? await loadPlatformIssuer(site.platformVatConfig, settings?.country ?? undefined)
-      : null
+  // Invoice header reflects what the customer paid (product total only)
+  const invoiceTotalCharge = productBase
+  const invoiceTotalTax = productVat
 
   await prisma.$transaction(async (tx) => {
     // Double-check idempotency inside transaction (race-safe)
@@ -575,14 +445,10 @@ export async function processConfirmedOrder(
         totalCharge: invoiceTotalCharge,
         totalTax: invoiceTotalTax,
         totalAmount,
-        // Billing model fields
-        issuerType:
-          billingModel === BillingModel.DEEMED_PROVIDER ? 'PLATFORM' : 'PARTNER',
-        issuerVatNumber: platformIssuer?.vatNumber ?? null,
-        settlementId:
-          billingModel === BillingModel.DEEMED_PROVIDER
-            ? `STL-O-${orderId}`
-            : null,
+        issuerType: 'PARTNER',
+        issuerVatNumber: partnerAccount?.businessId ?? null,
+        issuerCompanyName: partnerAccount?.company ?? null,
+        issuerCompanyAddress: partnerAccount?.address ?? null,
       },
     })
 
@@ -599,37 +465,15 @@ export async function processConfirmedOrder(
       }
     })
 
-    let commissionLine: typeof itemLines[number] | null = null
-
-    if (billingModel === BillingModel.DEEMED_PROVIDER) {
-      // ── Deemed Provider: commission line instead of service fee ──
-      const commissionAmount = serviceFeeAmount
-      if (commissionAmount > 0) {
-        const { baseAmount: commBase, vatAmount: commVat } =
-          computeVatAndBaseAmounts(commissionAmount, vatRate)
-        commissionLine = {
-          charge: commBase,
-          tax: commVat,
-          amount: commissionAmount,
-          invoiceId: invoice.id,
-          productCode: 'sunbnb-platform-commission',
-          description: 'Platform commission',
-        }
-      }
+    // Service fee line
+    const serviceFeeLine = {
+      charge: feeBase,
+      tax: feeVat,
+      amount: serviceFeeAmount,
+      invoiceId: invoice.id,
+      productCode: 'sunbnb-service-fee',
+      description: 'Srv. fee',
     }
-
-    // Intermediary service fee line (unchanged from original)
-    const serviceFeeLine =
-      billingModel !== BillingModel.DEEMED_PROVIDER
-        ? {
-            charge: feeBase,
-            tax: feeVat,
-            amount: serviceFeeAmount,
-            invoiceId: invoice.id,
-            productCode: 'sunbnb-service-fee',
-            description: 'Srv. fee',
-          }
-        : null
 
     // Payment processing fee line
     const procFeeLine = procFeeAmount > 0
@@ -645,8 +489,7 @@ export async function processConfirmedOrder(
 
     const allLines = [
       ...itemLines,
-      ...(commissionLine ? [commissionLine] : []),
-      ...(serviceFeeLine ? [serviceFeeLine] : []),
+      serviceFeeLine,
       ...(procFeeLine ? [procFeeLine] : []),
     ]
 
@@ -662,8 +505,9 @@ export async function processConfirmedOrder(
 // ─── Order Service Fee Calculation ──────────────────────────────────────────
 
 /**
- * Calculate the total fee for an order (used during payment-intent creation).
- * Returns service fee + payment processing fee to add on top of order.paymentAmount.
+ * Calculate the total fee for an order (used for settlement/accounting).
+ * Returns service fee + payment processing fee deducted from the merchant's share.
+ * NOT added on top of order.paymentAmount — fees are included in the product price.
  */
 export async function calculateOrderServiceFee(
   orderId: string

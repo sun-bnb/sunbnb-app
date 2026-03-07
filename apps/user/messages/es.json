@@ -42,12 +42,16 @@
     "Cancelled": "Cancelada",
     "Payment received": "Pago recibido",
     "Processing": "Procesando",
-    "Payment failed": "Pago fallido"
+    "Payment failed": "Pago fallido",
+    "No active reservations": "Sin reservas activas",
+    "No past reservations": "Sin reservas anteriores"
   },
   "Reservation": {
     "SEATS": "ASIENTOS",
+    "Amount": "Importe",
     "VALID": "VÁLIDO",
-    "Open receipt": "Abrir factura"
+    "Open receipt": "Abrir factura",
+    "Tap to open pass": "Toca para abrir el pase"
   },
   "Payment": {
     "Payment confirms acceptance of": "El pago implica aceptación de",

@@ -11,8 +11,6 @@ import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
 import EventSeatIcon from '@mui/icons-material/EventSeat'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
-import StorefrontIcon from '@mui/icons-material/Storefront'
-import HandshakeIcon from '@mui/icons-material/Handshake'
 
 import { useSite } from '@/app/sites/site-context'
 import { getPaidItemsByMonth } from './actions'
@@ -82,42 +80,6 @@ export default function AccountingView() {
   }, [paidItems])
   const totalTransactions = paidItems.orders.length + paidItems.reservations.length
 
-  // Settlement summary for deemed-provider invoices
-  const settlementSummary = useMemo(() => {
-    const allInvoices = [
-      ...paidItems.orders.map(o => o.invoice),
-      ...paidItems.reservations.map(r => r.invoice),
-    ].filter(Boolean)
-
-    const platformInvoices = allInvoices.filter(inv => inv?.issuerType === 'PLATFORM')
-    const partnerInvoices = allInvoices.filter(inv => inv?.issuerType !== 'PLATFORM')
-
-    if (platformInvoices.length === 0) return null
-
-    const platformRevenue = platformInvoices.reduce((s, inv) => s + (inv?.totalAmount || 0), 0)
-    const platformTax = platformInvoices.reduce((s, inv) => s + (inv?.totalTax || 0), 0)
-    // Commission = sum of commission invoice lines
-    const platformCommission = platformInvoices.reduce((s, inv) => {
-      const commLines = (inv?.invoiceLines ?? []).filter(
-        (l: any) => l.productCode === 'sunbnb-platform-commission'
-      )
-      return s + commLines.reduce((ls: number, l: any) => ls + (l.amount || 0), 0)
-    }, 0)
-    const partnerPayout = platformRevenue - platformCommission - platformTax
-
-    const partnerDirectRevenue = partnerInvoices.reduce((s, inv) => s + (inv?.totalAmount || 0), 0)
-
-    return {
-      platformCount: platformInvoices.length,
-      platformRevenue,
-      platformTax,
-      platformCommission,
-      partnerPayout,
-      partnerDirectRevenue,
-      partnerDirectCount: partnerInvoices.length,
-    }
-  }, [paidItems])
-
   const formatDate = (d: string | Date) => {
     const date = new Date(d)
     return date.toLocaleDateString('default', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -183,50 +145,6 @@ export default function AccountingView() {
         </div>
       </div>
 
-      {/* Settlement summary — shown when deemed-provider invoices exist */}
-      {!loading && settlementSummary && (
-        <div className="border border-purple-200 rounded-lg bg-purple-50/50 p-4 mb-6">
-          <h3 className="text-sm font-semibold text-purple-700 mb-3 flex items-center gap-1.5">
-            <StorefrontIcon sx={{ fontSize: 16 }} />
-            Settlement Summary
-          </h3>
-          <div className="grid grid-cols-2 gap-4">
-            {/* Deemed provider column */}
-            <div>
-              <div className="text-xs text-purple-500 font-medium mb-1">
-                Deemed provider ({settlementSummary.platformCount} invoices)
-              </div>
-              <div className="space-y-1">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Gross revenue</span>
-                  <span className="font-medium text-gray-800">€{settlementSummary.platformRevenue.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Platform commission</span>
-                  <span className="font-medium text-red-500">−€{settlementSummary.platformCommission.toFixed(2)}</span>
-                </div>
-                <div className="border-t border-purple-200 pt-1 flex justify-between text-sm">
-                  <span className="font-semibold text-gray-700">Your payout</span>
-                  <span className="font-bold text-green-600">€{settlementSummary.partnerPayout.toFixed(2)}</span>
-                </div>
-              </div>
-            </div>
-            {/* Direct (intermediary) column */}
-            {settlementSummary.partnerDirectCount > 0 && (
-              <div>
-                <div className="text-xs text-gray-500 font-medium mb-1">
-                  Direct / intermediary ({settlementSummary.partnerDirectCount} invoices)
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Revenue</span>
-                  <span className="font-medium text-gray-800">€{settlementSummary.partnerDirectRevenue.toFixed(2)}</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {loading ? (
         <div className="flex justify-center py-12">
           <CircularProgress size={24} sx={{ color: '#9ca3af' }} />
@@ -267,22 +185,6 @@ export default function AccountingView() {
                           {order.user?.email && <span className="ml-2">· {order.user.email}</span>}
                           {order.seat?.number != null && <span className="ml-2">· Seat #{String(order.seat.number).padStart(4, '0')}</span>}
                         </div>
-                        {order.invoice?.issuerType && (
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-                              order.invoice.issuerType === 'PLATFORM'
-                                ? 'bg-purple-50 text-purple-600'
-                                : 'bg-gray-100 text-gray-500'
-                            }`}>
-                              {order.invoice.issuerType === 'PLATFORM'
-                                ? <><StorefrontIcon sx={{ fontSize: 10 }} /> Platform</>  
-                                : <><HandshakeIcon sx={{ fontSize: 10 }} /> Partner</>}
-                            </span>
-                            {order.invoice.settlementId && (
-                              <span className="text-[10px] text-gray-400">{order.invoice.settlementId}</span>
-                            )}
-                          </div>
-                        )}
                       </div>
                       <div className="text-right flex-shrink-0 ml-4">
                         <div className="text-sm font-semibold text-gray-900">€{order.invoice?.totalAmount?.toFixed(2)}</div>
@@ -330,22 +232,6 @@ export default function AccountingView() {
                           {formatDate(res.from)} — {formatDate(res.to)}
                           {res.user?.email && <span className="ml-2">· {res.user.email}</span>}
                         </div>
-                        {res.invoice?.issuerType && (
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-                              res.invoice.issuerType === 'PLATFORM'
-                                ? 'bg-purple-50 text-purple-600'
-                                : 'bg-gray-100 text-gray-500'
-                            }`}>
-                              {res.invoice.issuerType === 'PLATFORM'
-                                ? <><StorefrontIcon sx={{ fontSize: 10 }} /> Platform</>  
-                                : <><HandshakeIcon sx={{ fontSize: 10 }} /> Partner</>}
-                            </span>
-                            {res.invoice.settlementId && (
-                              <span className="text-[10px] text-gray-400">{res.invoice.settlementId}</span>
-                            )}
-                          </div>
-                        )}
                       </div>
                       <div className="text-right flex-shrink-0 ml-4">
                         <div className="text-sm font-semibold text-gray-900">€{res.invoice?.totalAmount?.toFixed(2)}</div>

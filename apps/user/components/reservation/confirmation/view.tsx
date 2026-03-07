@@ -2,116 +2,28 @@
 
 import logger from '@/utils/logger'
 
-import Image from 'next/image'
 import LaunchIcon from '@mui/icons-material/Launch'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
 import CircularProgress from '@mui/material/CircularProgress'
 import { useTranslations } from 'next-intl'
 import { Reservation } from '@/app/sites/types'
-import sunbedIcon from './sunbed-icon-transparent.png'
 
-const STATUS_CONTENT_MAP: {
+const STATUS_CONFIG: {
   [key: string]: {
     text: string
     textColor: string
-    bgColor: string
-    borderColor: string
+    dotColor: string
   }
 } = {
-  succeeded: {
-    text: 'Payment received',
-    textColor: '#118811',
-    bgColor: '#eeffee',
-    borderColor: '#118811'
-  },
-  paid: {
-    text: 'PAID',
-    textColor: '#118811',
-    bgColor: '#eeffee',
-    borderColor: '#118811'
-  },
-  complete: {
-    text: 'PAID',
-    textColor: '#118811',
-    bgColor: '#eeffee',
-    borderColor: '#118811'
-  },
-  reserved: {
-    text: 'RESERVED',
-    textColor: '#1e40af',
-    bgColor: '#eff6ff',
-    borderColor: '#3b82f6'
-  },
-  processing: {
-    text: 'Processing',
-    textColor: '#111188',
-    bgColor: '#eeeeff',
-    borderColor: '#111188'
-  },
-  confirmed: {
-    text: 'Confirmed',
-    textColor: '#111188',
-    bgColor: '#eeeeff',
-    borderColor: '#111188'
-  },
-  default: {
-    text: 'Pending',
-    textColor: '#111111',
-    bgColor: '#eeeeee',
-    borderColor: '#111111'
-  },
-  pending: {
-    text: 'Pending',
-    textColor: '#111111',
-    bgColor: '#eeeeee',
-    borderColor: '#111111'
-  },
-  payment_failed: {
-    text: 'Payment failed',
-    textColor: '#aa3333',
-    bgColor: '#ffcccc',
-    borderColor: '#aa3333'
-  }
-}
-
-function ReservationStatus ({
-  status
-} : {
-  status: string
-}) {
-
-  const statusMap = STATUS_CONTENT_MAP[status]
-
-  const ts = useTranslations('Reservations')
-
-  return (
-    <div className={`
-      flex border
-      px-3 py-1 rounded-lg`} style={{
-        backgroundColor: statusMap?.bgColor,
-        color: statusMap?.textColor,
-        borderColor: statusMap?.borderColor,
-      }}>
-      <div>
-        <Image src={sunbedIcon} alt="Sunbed icon" style={{
-          width: '75px',
-          height: '60px',
-          marginLeft: '-10px',
-          padding: '0px'
-        }} />
-      </div>
-      <div className="flex justify-center items-center flex-grow">
-        {
-          status !== 'processing' ? 
-            ts(statusMap?.text) :
-            <CircularProgress />
-                        
-        }
-      </div>
-
-    </div>
-  )
-
+  succeeded: { text: 'Payment received', textColor: '#118811', dotColor: '#22c55e' },
+  paid:      { text: 'PAID',             textColor: '#118811', dotColor: '#22c55e' },
+  complete:  { text: 'PAID',             textColor: '#118811', dotColor: '#22c55e' },
+  reserved:  { text: 'RESERVED',         textColor: '#1e40af', dotColor: '#3b82f6' },
+  processing:{ text: 'Processing',       textColor: '#6b7280', dotColor: '#9ca3af' },
+  confirmed: { text: 'Confirmed',        textColor: '#1e40af', dotColor: '#3b82f6' },
+  default:   { text: 'Pending',          textColor: '#6b7280', dotColor: '#9ca3af' },
+  pending:   { text: 'Pending',          textColor: '#6b7280', dotColor: '#9ca3af' },
+  payment_failed: { text: 'Payment failed', textColor: '#dc2626', dotColor: '#ef4444' },
 }
 
 export default function ReservationConfirmationView({
@@ -123,128 +35,108 @@ export default function ReservationConfirmationView({
 }) {
 
   const t = useTranslations('Reservation')
+  const ts = useTranslations('Reservations')
 
   logger.debug('Reservation confirmation', reservation)
 
-  const opts: Intl.DateTimeFormatOptions = {
-    year:   'numeric',
-    month:  '2-digit',
-    day:    '2-digit',
+  const fmtOpts: Intl.DateTimeFormatOptions = {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
   }
-  
-  // “en-CA” emits “YYYY-MM-DD” ordering:
-  const validFrom = new Date(reservation.from)
-    .toLocaleDateString('en-CA', opts)
-  const validTo   = new Date(reservation.to)
-    .toLocaleDateString('en-CA', opts)
-  
-  const validity = validFrom === validTo 
-    ? validFrom 
-    : `${validFrom} – ${validTo}`
-    
-  const isUnpaid = reservation.status === 'complete' && !reservation.paymentAmount
-  let status = isUnpaid ? 'reserved' : reservation.status
 
-  const ticket = (  
-    <div className="relative">
-      {
-        
-          !reservation &&
-            <div className="
-                absolute
-                top-[6px]
-                left-1/2
-                -translate-x-1/2
-                inline-block
-                z-[1]
-                py-[6px]
-                px-[8px]
-                w-[80%]
-            ">
-              
+  const validFrom = new Date(reservation.from).toLocaleDateString('en-US', fmtOpts)
+  const validTo = new Date(reservation.to).toLocaleDateString('en-US', fmtOpts)
+  const validity = validFrom === validTo ? validFrom : `${validFrom} – ${validTo}`
+
+  const isUnpaid = reservation.status === 'complete' && !reservation.paymentAmount
+  const status = isUnpaid ? 'reserved' : reservation.status
+  const effectiveStatus = processingStatus || status
+  const cfg = STATUS_CONFIG[effectiveStatus] ?? STATUS_CONFIG.default!
+
+  const seats = reservation.items?.map(item => String(item.number)).join(', ')
+  const showQr = status === 'paid' || status === 'complete' || status === 'reserved'
+  const showReceipt = (status === 'paid' || status === 'complete') && !isUnpaid
+
+  return (
+    <div id="payment-status" className="bg-cream min-h-full flex items-center justify-center px-5 py-8">
+      <div className="w-full max-w-xs rounded-2xl bg-white shadow-card overflow-hidden">
+
+        {/* ── Header: site + status ── */}
+        <div className="px-6 pt-8 pb-5 text-center">
+          <h1 className="text-xl font-bold tracking-tight text-brand-gold leading-snug">
+            {reservation.site?.name}
+          </h1>
+          <div className="mt-3 inline-flex items-center gap-1.5" style={{ color: cfg.textColor }}>
+            {effectiveStatus === 'processing' ? (
+              <CircularProgress size={12} thickness={5} sx={{ color: cfg.textColor }} />
+            ) : (
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: cfg.dotColor }} />
+            )}
+            <span className="text-xs font-semibold tracking-wide">{ts(cfg.text)}</span>
+          </div>
+        </div>
+
+        {/* ── Perforated divider ── */}
+        <div className="relative h-6 flex items-center">
+          <div className="absolute -left-3 w-6 h-6 rounded-full bg-cream" />
+          <div className="absolute -right-3 w-6 h-6 rounded-full bg-cream" />
+          <div className="w-full border-t-2 border-dashed border-neutral-200 mx-5" />
+        </div>
+
+        {/* ── Details ── */}
+        <div className="px-6 pt-3 pb-5 text-center space-y-3">
+          {/* Seats */}
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-neutral-400 mb-0.5">{t('SEATS')}</div>
+            <div className="text-2xl font-bold text-brand-gold tabular-nums">{seats}</div>
+          </div>
+          {/* Date */}
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-neutral-400 mb-0.5">{t('VALID')}</div>
+            <div className="text-sm font-medium text-neutral-700">{validity}</div>
+          </div>
+          {/* Amount */}
+          {reservation.paymentAmount && reservation.paymentAmount > 0 && (
+            <div className="text-sm text-neutral-500">
+              €{reservation.paymentAmount.toFixed(2)}
             </div>
-      }
-      <div className="w-full pt-12">
-        <div className="text-center text-2xl w-full flex justify-center">
-          <div className="text-brand-gold mt-6 font-semibold tracking-tight">
-            { reservation.site?.name }
-          </div>
+          )}
         </div>
-        <div className="flex mx-3 mt-12">
-          <div className="w-full flex justify-center">
-            <div className="text-brand-gold">
-              {t('SEATS')}: <b>{reservation.items?.map(item => String(item.number)).join(', ')}</b>
+
+        {/* ── QR section ── */}
+        {showQr && (
+          <>
+            <div className="relative h-6 flex items-center">
+              <div className="absolute -left-3 w-6 h-6 rounded-full bg-cream" />
+              <div className="absolute -right-3 w-6 h-6 rounded-full bg-cream" />
+              <div className="w-full border-t-2 border-dashed border-neutral-200 mx-5" />
             </div>
-          </div>
-        </div>
-        <div className="flex mx-3 mt-3">
-          <div className="w-full">
-            <div>
-              <ReservationStatus status={processingStatus || status} />
-            </div>
-          </div>
-          {
-            (status === 'paid' || status === 'complete' || status === 'reserved') && (
-              <div className="relative text-brand-gold cursor-pointer -mt-[10px] -mr-2" 
-                onClick={() => window.open(`/reservations/${reservation.id}/pass`, '_blank')}>
-                <QrCode2Icon style={{
-                  fontSize: '85px'
-                }}>
-                </QrCode2Icon>
-                <LaunchIcon className="absolute bg-brand-cyan top-[27px] left-[27px] border border-cream text-cream border-2" sx={{ 
-                  width: '30px',
-                  height: '30px' 
-                }}/>
-              </div>
-            )
-          }
-          
-        </div>
-        <div className="flex justify-between mt-1 text-brand-gold border border-brand-gold mx-3 rounded">
-          <div className="bg-cream text-brand-gold pl-2">
-            {t('VALID')}:
-          </div>
-          <div className="bg-brand-gold text-cream pr-2 pl-2">
-            <b>{validity}</b>
-          </div>
-        </div>
-        {
-          (status === 'paid' || status === 'complete') && !isUnpaid && (
-            <div className="
-              flex
-              justify-center
-              text-brand-gold
-              mt-16
-              cursor-pointer"
+            <div className="px-6 pt-4 pb-5 flex flex-col items-center">
+              <button
+                onClick={() => window.open(`/reservations/${reservation.id}/pass`, '_blank')}
+                className="text-brand-gold active:scale-95 transition-transform"
               >
-              
-              <div className="flex border border-brand-gold px-3 rounded-lg hover:bg-cream-dark"
-                
-                onClick={() => window.open(`/reservations/${reservation.id}/receipt`, '_blank')}>
-                <div className="text-brand-gold mr-1">{t('Open receipt')}</div>
-                <LaunchIcon className="bg-cream text-brand-gold mt-0.5" sx={{ 
-                  width: '20px',
-                  height: '20px' 
-                }}/>
-              </div>
+                <QrCode2Icon sx={{ fontSize: 72 }} />
+              </button>
+              <span className="mt-1 text-[10px] text-neutral-400 tracking-wide">{t('Tap to open pass')}</span>
             </div>
-          )
-        }
-        
+          </>
+        )}
+
+        {/* ── Receipt footer ── */}
+        {showReceipt && (
+          <button
+            onClick={() => window.open(`/reservations/${reservation.id}/receipt`, '_blank')}
+            className="w-full border-t border-neutral-100 px-6 py-3 flex items-center justify-center gap-1.5
+                       text-xs font-medium text-neutral-500 hover:bg-neutral-50 active:bg-neutral-100 transition-colors"
+          >
+            {t('Open receipt')}
+            <LaunchIcon sx={{ fontSize: 14 }} />
+          </button>
+        )}
+
       </div>
     </div>
   )
-
-  return (
-    <div id="payment-status" className="bg-cream">
-      { ticket }
-      {
-        status === 'blah' &&
-          <div className="bg-brand-cyan fixed bottom-0 h-[70px] w-full text-cream text-[24px] flex justify-center items-center">
-            FOOD AND DRINK ORDERS
-          </div>
-      }
-    </div>
-  );
-
 }

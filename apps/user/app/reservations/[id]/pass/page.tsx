@@ -5,6 +5,7 @@ async function getReservation(id: string) {
   const reservation = await prisma.reservation.findUnique({ 
     where: { id },
     include: {
+      site: { select: { id: true, name: true } },
       items: true
     }
   })

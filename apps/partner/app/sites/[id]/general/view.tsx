@@ -23,14 +23,12 @@ import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import PaymentsIcon from '@mui/icons-material/Payments'
 import EventAvailableIcon from '@mui/icons-material/EventAvailable'
-import StorefrontIcon from '@mui/icons-material/Storefront'
-import HandshakeIcon from '@mui/icons-material/Handshake'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import CloudDoneIcon from '@mui/icons-material/CloudDone'
 import SyncIcon from '@mui/icons-material/Sync'
+import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
-import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 
 import { useSite } from '@/app/sites/site-context'
 import { ServiceFee, PaymentProcessingFee } from '@/types/shared'
@@ -50,13 +48,11 @@ function round(amount: number) {
 function PriceBreakdown({
   price,
   vat: vatStr,
-  billingModel,
   serviceFees,
   paymentProcessingFee,
 }: {
   price: string
   vat: string
-  billingModel: 'INTERMEDIARY' | 'DEEMED_PROVIDER'
   serviceFees?: ServiceFee[]
   paymentProcessingFee?: PaymentProcessingFee | null
 }) {
@@ -64,7 +60,6 @@ function PriceBreakdown({
   if (!priceNum || priceNum <= 0) return null
 
   const vatRate = Number(vatStr) || 0
-  const isDeemedProvider = billingModel === 'DEEMED_PROVIDER'
   const serviceFee = serviceFees?.find(f => f.serviceCode === 'sunbed-rental')
 
   const feeAmount = serviceFee
@@ -78,14 +73,11 @@ function PriceBreakdown({
   const procPct = paymentProcessingFee?.percentage ?? 0
   const procAmount = round(procFixed + (procPct / 100) * priceNum)
 
-  const totalVat = vatRate > 0 ? round(priceNum - round(priceNum / (1 + vatRate / 100))) : 0
-  const partnerGross = isDeemedProvider
-    ? round(priceNum - feeAmount - procAmount - totalVat)
-    : round(priceNum - feeAmount - procAmount)
-  const partnerBase = !isDeemedProvider && vatRate > 0
+  const partnerGross = round(priceNum - feeAmount - procAmount)
+  const partnerBase = vatRate > 0
     ? round(partnerGross / (1 + vatRate / 100))
     : partnerGross
-  const partnerVat = !isDeemedProvider ? round(partnerGross - partnerBase) : 0
+  const partnerVat = round(partnerGross - partnerBase)
 
   // Build processing fee label parts
   const procParts: string[] = []
@@ -102,7 +94,7 @@ function PriceBreakdown({
       {feeAmount > 0 && (
         <div className="flex justify-between text-gray-500 mb-1">
           <span>
-            {isDeemedProvider ? 'Platform commission' : 'Service fee'}
+            Service fee
             {serviceFee?.chargeType === 'fixed'
               ? ''
               : ` (${(serviceFee?.percentage ?? 0).toFixed(0)}%)`}
@@ -116,18 +108,12 @@ function PriceBreakdown({
           <span className="text-red-500">&minus;{procAmount.toFixed(2)} &euro;</span>
         </div>
       )}
-      {isDeemedProvider && totalVat > 0 && (
-        <div className="flex justify-between text-gray-500 mb-1">
-          <span>VAT {vatRate}% (remitted by platform)</span>
-          <span className="text-red-500">&minus;{totalVat.toFixed(2)} &euro;</span>
-        </div>
-      )}
       <div className="border-t border-gray-200 my-1.5" />
       <div className="flex justify-between font-medium text-gray-800 mb-1">
         <span>You receive</span>
         <span>{partnerGross.toFixed(2)} &euro;</span>
       </div>
-      {!isDeemedProvider && vatRate > 0 && (
+      {vatRate > 0 && (
         <div className="flex justify-between text-gray-400">
           <span>incl. VAT {vatRate}%</span>
           <span>{partnerVat.toFixed(2)} &euro;</span>
@@ -168,7 +154,6 @@ export default function GeneralView() {
   const [mapCoords, setMapCoords] = useState<{ lat: number; lng: number }>(
     { lat: +site.locationLat!, lng: +site.locationLng! }
   )
-  const [billingModel, setBillingModel] = useState<'INTERMEDIARY' | 'DEEMED_PROVIDER'>(site.billingModel ?? 'INTERMEDIARY')
   const [siteStatus, setSiteStatusLocal] = useState(site.status ?? 'hidden')
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -184,7 +169,6 @@ export default function GeneralView() {
     vat?: string
     lat?: string
     lng?: string
-    billingModel?: 'INTERMEDIARY' | 'DEEMED_PROVIDER'
   }) => {
     setSaveStatus('saving')
     try {
@@ -196,7 +180,6 @@ export default function GeneralView() {
         vat: overrides?.vat ?? vat,
         locationLat: overrides?.lat ?? mapCoords.lat.toString(),
         locationLng: overrides?.lng ?? mapCoords.lng.toString(),
-        billingModel: overrides?.billingModel ?? billingModel,
       })
       if (result.status === 'ok') {
         setSaveStatus('saved')
@@ -208,7 +191,7 @@ export default function GeneralView() {
     } catch {
       setSaveStatus('error')
     }
-  }, [site.id, name, siteType, price, vat, mapCoords, billingModel])
+  }, [site.id, name, siteType, price, vat, mapCoords])
 
   const scheduleSave = useCallback((overrides?: Parameters<typeof doSave>[0]) => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -273,9 +256,9 @@ export default function GeneralView() {
 
       <Divider sx={{ mb: 3 }} />
 
-      {/* Billing type */}
+      {/* Billing type — Reservations */}
       <div className="mb-5">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">Billing type</h3>
+        <h3 className="text-sm font-medium text-gray-700 mb-2">Reservation billing</h3>
         <div className="flex gap-3">
           <button
             type="button"
@@ -361,72 +344,7 @@ export default function GeneralView() {
               helperText="Applied to all sales"
             />
           </div>
-          <PriceBreakdown price={price} vat={vat} billingModel={billingModel} serviceFees={site.serviceFees} paymentProcessingFee={site.paymentProcessingFee} />
-        </div>
-      )}
-
-      {/* Billing model — only for paid sites */}
-      {isPaid && (
-        <div className="mb-5">
-          <h3 className="text-sm font-medium text-gray-700 mb-1">Billing model</h3>
-          <p className="text-xs text-gray-500 mb-3">
-            Controls how invoices are issued and who is the seller of record.
-          </p>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                setBillingModel('INTERMEDIARY')
-                immediateSave({ billingModel: 'INTERMEDIARY' })
-              }}
-              className={`flex-1 rounded-lg border-2 p-4 text-left transition-all ${
-                billingModel === 'INTERMEDIARY'
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-200 bg-white hover:border-gray-300'
-              }`}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <HandshakeIcon fontSize="small" className={billingModel === 'INTERMEDIARY' ? 'text-blue-600' : 'text-gray-400'} />
-                <span className={`font-medium text-sm ${billingModel === 'INTERMEDIARY' ? 'text-blue-700' : 'text-gray-700'}`}>
-                  Intermediary
-                </span>
-              </div>
-              <p className="text-xs text-gray-500">
-                You are the seller of record. SunBnB collects payment and forwards revenue minus a service fee. Invoices are issued in your name.
-              </p>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setBillingModel('DEEMED_PROVIDER')
-                immediateSave({ billingModel: 'DEEMED_PROVIDER' })
-              }}
-              className={`flex-1 rounded-lg border-2 p-4 text-left transition-all ${
-                billingModel === 'DEEMED_PROVIDER'
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-200 bg-white hover:border-gray-300'
-              }`}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <StorefrontIcon fontSize="small" className={billingModel === 'DEEMED_PROVIDER' ? 'text-blue-600' : 'text-gray-400'} />
-                <span className={`font-medium text-sm ${billingModel === 'DEEMED_PROVIDER' ? 'text-blue-700' : 'text-gray-700'}`}>
-                  Deemed provider
-                </span>
-              </div>
-              <p className="text-xs text-gray-500">
-                SunBnB is the seller of record. Invoices are issued in the platform's name and VAT number. You receive a settlement payout minus commission.
-              </p>
-            </button>
-          </div>
-          {billingModel === 'DEEMED_PROVIDER' && (
-            <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-              <WarningAmberIcon fontSize="small" className="text-amber-500 mt-0.5" />
-              <p className="text-xs text-amber-700">
-                Under the deemed provider model, SunBnB handles VAT reporting for customer-facing invoices.
-                Your settlement statements will show the net amount after platform commission.
-              </p>
-            </div>
-          )}
+          <PriceBreakdown price={price} vat={vat} serviceFees={site.serviceFees} paymentProcessingFee={site.paymentProcessingFee} />
         </div>
       )}
 

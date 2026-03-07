@@ -8,6 +8,10 @@ import {
 } from '@react-pdf/renderer'
 import { ReceiptProps } from './ReceiptPage'
 
+function fmt(value: number): string {
+  return value.toFixed(2)
+}
+
 export default function PdfReceipt({ receipt }: { receipt: ReceiptProps }) {
 
   const SafeDocument = Document as unknown as React.ComponentType<any>
@@ -15,124 +19,230 @@ export default function PdfReceipt({ receipt }: { receipt: ReceiptProps }) {
   const SafeText = Text as unknown as React.ComponentType<any>
   const SafeView = View as unknown as React.ComponentType<any>
 
-  const styles = StyleSheet.create({
+  const s = StyleSheet.create({
     page: {
-      padding: 10,
-      fontSize: 12,
+      padding: 24,
+      fontSize: 10,
+      color: '#1f2937',
+      fontFamily: 'Helvetica',
     },
-
-    // For the "header" or business info
-    headerSection: {
+    header: {
       textAlign: 'center',
-      marginBottom: 36,
+      paddingBottom: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: '#e5e7eb',
+      marginBottom: 12,
     },
-
-    // For your table
+    companyName: {
+      fontSize: 14,
+      fontWeight: 'bold',
+      color: '#111827',
+    },
+    subText: {
+      fontSize: 8,
+      color: '#9ca3af',
+      marginTop: 2,
+    },
+    // Reservation info section
+    infoSection: {
+      paddingBottom: 10,
+      marginBottom: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: '#e5e7eb',
+      borderBottomStyle: 'dashed' as any,
+    },
+    infoRow: {
+      display: 'flex',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 3,
+    },
+    infoLabel: {
+      fontSize: 8,
+      color: '#9ca3af',
+    },
+    infoValue: {
+      fontSize: 8,
+      color: '#1f2937',
+      fontWeight: 'bold',
+    },
+    // Table
     table: {
       width: '100%',
-      marginBottom: 20,
+      marginBottom: 12,
+    },
+    tableHeaderRow: {
+      display: 'flex',
+      flexDirection: 'row',
+      borderBottomWidth: 1,
+      borderBottomColor: '#e5e7eb',
+      paddingBottom: 4,
+      marginBottom: 4,
     },
     tableRow: {
-      width: '100%',
       display: 'flex',
-      flexDirection: 'row'
+      flexDirection: 'row',
+      paddingVertical: 2,
     },
-    tableCell1: {
-      width: '55%'
+    tableRowAlt: {
+      backgroundColor: '#fafafa',
     },
-    tableCell2: {
-      width: '15%'
+    col1: { width: '46%' },
+    col2: { width: '18%', textAlign: 'right' },
+    col3: { width: '18%', textAlign: 'right' },
+    col4: { width: '18%', textAlign: 'right' },
+    headerText: {
+      fontSize: 8,
+      fontWeight: 'bold',
+      color: '#6b7280',
     },
-    tableCell3: {
-      width: '15%'
+    cellText: {
+      fontSize: 9,
+      color: '#374151',
     },
-    tableCell4: {
-      width: '15%',
-      textAlign: 'right'
+    cellBold: {
+      fontSize: 9,
+      color: '#111827',
+      fontWeight: 'bold',
     },
-
-    // Additional utility styling
-    totalRow: {
+    // Totals
+    totalsSection: {
+      borderTopWidth: 1,
+      borderTopColor: '#d1d5db',
+      paddingTop: 8,
     },
-    centerText: {
+    totalLine: {
+      display: 'flex',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 3,
+    },
+    totalLabel: {
+      fontSize: 9,
+      color: '#6b7280',
+    },
+    totalValue: {
+      fontSize: 9,
+      color: '#6b7280',
+    },
+    grandTotalLine: {
+      display: 'flex',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      borderTopWidth: 1,
+      borderTopColor: '#e5e7eb',
+      paddingTop: 5,
+      marginTop: 3,
+    },
+    grandTotalLabel: {
+      fontSize: 11,
+      fontWeight: 'bold',
+      color: '#111827',
+    },
+    grandTotalValue: {
+      fontSize: 11,
+      fontWeight: 'bold',
+      color: '#111827',
+    },
+    footer: {
       textAlign: 'center',
-    }
-
+      marginTop: 20,
+      fontSize: 8,
+      color: '#9ca3af',
+    },
   })
+
+  const hasInfo = receipt.siteName || receipt.reservationDate || receipt.seatNumbers
 
   return (
     <SafeDocument>
-      <SafePage size="A5" style={styles.page}>
+      <SafePage size="A5" style={s.page}>
 
-        {/* Header / Business Info */}
-        <SafeView style={styles.headerSection}>
-          <SafeText>{receipt.company}</SafeText>
-          <SafeText>{receipt.businessId}</SafeText>
-          {receipt.phoneNumber ? <SafeText>{receipt.phoneNumber}</SafeText> : null}
-          {receipt.issuerType === 'PLATFORM' && (
-            <SafeText style={{ fontSize: 9, marginTop: 6, color: '#7c3aed' }}>
-              Issued by platform
-            </SafeText>
-          )}
-          {receipt.settlementId && (
-            <SafeText style={{ fontSize: 8, marginTop: 3, color: '#9ca3af' }}>
-              Settlement ref: {receipt.settlementId}
-            </SafeText>
-          )}
+        {/* Header */}
+        <SafeView style={s.header}>
+          <SafeText style={s.companyName}>{receipt.company}</SafeText>
+          {receipt.businessId ? <SafeText style={s.subText}>{receipt.businessId}</SafeText> : null}
+          {receipt.companyAddress ? <SafeText style={s.subText}>{receipt.companyAddress}</SafeText> : null}
+          {receipt.phoneNumber ? <SafeText style={s.subText}>{receipt.phoneNumber}</SafeText> : null}
         </SafeView>
+
+        {/* Reservation info */}
+        {hasInfo && (
+          <SafeView style={s.infoSection}>
+            {receipt.siteName && (
+              <SafeView style={s.infoRow}>
+                <SafeText style={s.infoLabel}>Location</SafeText>
+                <SafeText style={s.infoValue}>{receipt.siteName}</SafeText>
+              </SafeView>
+            )}
+            {receipt.reservationDate && (
+              <SafeView style={s.infoRow}>
+                <SafeText style={s.infoLabel}>Date</SafeText>
+                <SafeText style={s.infoValue}>{receipt.reservationDate}</SafeText>
+              </SafeView>
+            )}
+            {receipt.seatNumbers && (
+              <SafeView style={s.infoRow}>
+                <SafeText style={s.infoLabel}>Seats</SafeText>
+                <SafeText style={s.infoValue}>{receipt.seatNumbers}</SafeText>
+              </SafeView>
+            )}
+          </SafeView>
+        )}
 
         {/* Table */}
-        <SafeView style={styles.table}>
-          {/* Table Header */}
-          <SafeView style={[styles.tableRow, { fontWeight: 'bold', paddingBottom: '8px'}]}>
-            <SafeText style={styles.tableCell1}>Item</SafeText>
-            <SafeText style={styles.tableCell2}>Charge</SafeText>
-            <SafeText style={styles.tableCell3}>VAT</SafeText>
-            <SafeText style={styles.tableCell4}>Price</SafeText>
+        <SafeView style={s.table}>
+          {/* Header row */}
+          <SafeView style={s.tableHeaderRow}>
+            <SafeText style={[s.col1, s.headerText]}>Item</SafeText>
+            <SafeText style={[s.col2, s.headerText]}>Charge</SafeText>
+            <SafeText style={[s.col3, s.headerText]}>VAT</SafeText>
+            <SafeText style={[s.col4, s.headerText]}>Price</SafeText>
           </SafeView>
 
-          {/* Table Body */}
+          {/* Body rows */}
           {receipt.invoiceLines.map((line, index) => {
-
             let description = line.description || ''
-
-            if (description.length > 50) {
-              description = description.substring(0, 50) + '...';
+            if (description.length > 40) {
+              description = description.substring(0, 40) + '...'
             }
-
             return (
-              <SafeView style={[styles.tableRow, { marginBottom: 5 }]} key={index}>
-                <SafeText style={[styles.tableCell1, { paddingRight: 20 }]}>
-                  {description}
-                </SafeText>
-                <SafeText style={styles.tableCell2}>{line.charge}</SafeText>
-                <SafeText style={styles.tableCell3}>{line.vat}</SafeText>
-                <SafeText style={styles.tableCell4}>{line.total} €</SafeText>
+              <SafeView
+                style={[s.tableRow, index % 2 === 0 ? s.tableRowAlt : {}]}
+                key={index}
+              >
+                <SafeText style={[s.col1, s.cellText]}>{description}</SafeText>
+                <SafeText style={[s.col2, s.cellText]}>{fmt(line.charge)}</SafeText>
+                <SafeText style={[s.col3, s.cellText]}>{fmt(line.vat)}</SafeText>
+                <SafeText style={[s.col4, s.cellBold]}>{fmt(line.total)} €</SafeText>
               </SafeView>
-            );
+            )
           })}
+        </SafeView>
 
-          {/* Extra row for spacing */}
-          <SafeView style={styles.tableRow}>
-            <SafeText style={styles.tableCell1} />
+        {/* Totals */}
+        <SafeView style={s.totalsSection}>
+          <SafeView style={s.totalLine}>
+            <SafeText style={s.totalLabel}>Subtotal</SafeText>
+            <SafeText style={s.totalValue}>{fmt(receipt.totalCharge)} €</SafeText>
           </SafeView>
-
-          {/* Totals Row */}
-          <SafeView style={[styles.tableRow, styles.totalRow, { marginTop: 10 } ]}>
-            <SafeText style={[styles.tableCell1, { paddingRight: '10px', fontWeight: 'bold' }]}>Total:</SafeText>
-            <SafeText style={styles.tableCell2}>{receipt.totalCharge}</SafeText>
-            <SafeText style={styles.tableCell3}>{receipt.totalVat}</SafeText>
-            <SafeText style={styles.tableCell4}>{receipt.totalAmount} €</SafeText>
+          <SafeView style={s.totalLine}>
+            <SafeText style={s.totalLabel}>VAT</SafeText>
+            <SafeText style={s.totalValue}>{fmt(receipt.totalVat)} €</SafeText>
+          </SafeView>
+          <SafeView style={s.grandTotalLine}>
+            <SafeText style={s.grandTotalLabel}>Total</SafeText>
+            <SafeText style={s.grandTotalValue}>{fmt(receipt.totalAmount)} €</SafeText>
           </SafeView>
         </SafeView>
 
-        {/* Footer / Date */}
-        <SafeView style={styles.centerText}>
+        {/* Footer */}
+        <SafeView style={s.footer}>
           <SafeText>{receipt.date}</SafeText>
         </SafeView>
+
       </SafePage>
     </SafeDocument>
   )
-
 
 }

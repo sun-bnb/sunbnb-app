@@ -11,7 +11,6 @@
  */
 
 import prisma from '@repo/data/PrismaCient'
-import { calculateOrderServiceFee } from '@repo/data/payment'
 import { NextRequest } from 'next/server'
 import type Stripe from 'stripe'
 import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
@@ -58,15 +57,14 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Payment intent already created' }, { status: 400 })
   }
 
-  // Calculate total amount from DB: product total + service fee
+  // Fees are included in the product price — customer pays exactly productAmount.
+  // Service fee + processing fee are deducted from the merchant's share at settlement.
   const productAmount = order.paymentAmount ?? 0
   if (productAmount <= 0) {
     return Response.json({ error: 'Invalid payment amount' }, { status: 400 })
   }
 
-  const serviceFee = await calculateOrderServiceFee(orderId)
-  const totalAmount = productAmount + serviceFee
-  const amountInCents = Math.round(totalAmount * 100)
+  const amountInCents = Math.round(productAmount * 100)
 
   // Create Stripe PaymentIntent with metadata for webhook identification
   const stripe = getStripeClient()

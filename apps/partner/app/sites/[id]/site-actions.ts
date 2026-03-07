@@ -14,7 +14,6 @@ export async function saveGeneral(input: {
   vat: string
   locationLat: string
   locationLng: string
-  billingModel?: 'INTERMEDIARY' | 'DEEMED_PROVIDER'
 }): Promise<{ status: string; errors?: string[] }> {
   const session = await auth()
   if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
@@ -36,7 +35,6 @@ export async function saveGeneral(input: {
       vat: vat > 0 ? vat : null,
       locationLat: input.locationLat,
       locationLng: input.locationLng,
-      ...(input.billingModel ? { billingModel: input.billingModel } : {}),
     },
   })
 

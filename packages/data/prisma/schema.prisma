@@ -6,15 +6,7 @@ datasource db {
   provider = "postgresql"
 }
 
-enum BillingModel {
-  INTERMEDIARY
-  DEEMED_PROVIDER
-}
 
-enum InvoiceIssuerType {
-  PARTNER
-  PLATFORM
-}
 
 enum SettlementStatus {
   DRAFT
@@ -186,13 +178,13 @@ model Site {
   status          String                   @default("active")
   appSalesEnabled Boolean                  @default(false) @map("app_sales_enabled")
   type            String?
+  orderPaymentType String?                 @map("order_payment_type")
   background      String?
   bgImageUrl      String?                  @map("bg_image_url")
   bgImageWidth    Int?                     @map("bg_image_width")
   bgImageHeight   Int?                     @map("bg_image_height")
   slug            String?
-  billingModel    BillingModel             @default(DEEMED_PROVIDER) @map("billing_model")
-  platformVatConfigId String?              @map("platform_vat_config_id")
+
   inventoryItems  InventoryItem[]
   orders          Order[]
   products        Product[]
@@ -200,7 +192,7 @@ model Site {
   serviceFees     ServiceFee[]
   settlements     Settlement[]
   user            User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  platformVatConfig PlatformVatConfig?     @relation(fields: [platformVatConfigId], references: [id], onDelete: SetNull)
+
   workingHours    SiteWorkingHours[]
   brand           SiteBrand?
 
@@ -366,8 +358,10 @@ model Invoice {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   invoicedAt       DateTime          @default(now()) @map("invoiced_at")
-  issuerType       InvoiceIssuerType @default(PARTNER) @map("issuer_type")
+  issuerType       String            @default("PARTNER") @map("issuer_type")
   issuerVatNumber  String?           @map("issuer_vat_number")
+  issuerCompanyName   String?        @map("issuer_company_name")
+  issuerCompanyAddress String?       @map("issuer_company_address")
   settlementId     String?           @map("settlement_id")
   settlementBatchId String?          @map("settlement_batch_id")
   account          PartnerAccount    @relation(fields: [accountId], references: [userId], onDelete: Cascade)
@@ -452,17 +446,7 @@ model SecurityToken {
   userId    String   @map("user_id")
 }
 
-model PlatformVatConfig {
-  id            String   @id @default(cuid())
-  countryCode   String   @unique @map("country_code")
-  vatNumber     String   @map("vat_number")
-  companyName   String   @map("company_name")
-  companyAddress String  @map("company_address")
-  ossRegistered Boolean  @default(false) @map("oss_registered")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  sites         Site[]
-}
+
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model spatial_ref_sys {

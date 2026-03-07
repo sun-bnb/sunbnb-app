@@ -109,9 +109,20 @@ export default async function ReservationPage({ params, searchParams }: { params
     order = await getOrder(payment_intent)
   }
 
-  const serviceFee = reservation.site.appSalesEnabled ?
-    await getServiceFee(reservation.site.id, reservation.site.userId) : undefined
+  // Only enable food & drinks if appSalesEnabled AND the site has active products
+  let serviceFee: Awaited<ReturnType<typeof getServiceFee>> | undefined
+  if (reservation.site.appSalesEnabled) {
+    const productCount = await prisma.product.count({
+      where: { siteId: reservation.site.id, active: true },
+    })
+    if (productCount > 0) {
+      serviceFee = await getServiceFee(reservation.site.id, reservation.site.userId)
+    }
+  }
 
-  return <ReservationView signedIn={signedIn} showTerms={terms === 'true'} serviceFee={serviceFee} reservation={reservation} apiKey={apiKey} stripePublicKey={STRIPE_PUBLIC_KEY} order={order} />
+  const siteType = reservation.site.type ?? 'paid'
+  const orderPaymentType = (reservation.site as any).orderPaymentType ?? siteType
+
+  return <ReservationView signedIn={signedIn} showTerms={terms === 'true'} serviceFee={serviceFee} siteType={siteType} orderPaymentType={orderPaymentType} reservation={reservation} apiKey={apiKey} stripePublicKey={STRIPE_PUBLIC_KEY} order={order} />
 
 }

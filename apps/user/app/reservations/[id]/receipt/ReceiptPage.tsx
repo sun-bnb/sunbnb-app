@@ -4,19 +4,24 @@ export interface ReceiptProps {
   date: string
   businessId: string | null
   company: string
+  companyAddress: string | null
   phoneNumber: string
+  siteName: string | null
+  reservationDate: string | null
+  seatNumbers: string | null
   totalCharge: number
   totalVat: number
   totalAmount: number
-  issuerType?: 'PARTNER' | 'PLATFORM' | null
-  issuerVatNumber?: string | null
-  settlementId?: string | null
   invoiceLines: {
     description: string | null
     charge: number
     vat: number
     total: number
   }[]
+}
+
+export function formatCurrency(value: number): string {
+  return value.toFixed(2)
 }
 
 export default function ReceiptPage({ 

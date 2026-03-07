@@ -14,17 +14,13 @@ export default async function PlatformPage() {
   })
   if (!user?.sudo) redirect('/')
 
-  const vatConfigs = await prisma.platformVatConfig.findMany({
-    orderBy: { countryCode: 'asc' },
-  })
-
   const paymentProcessingFee = await prisma.paymentProcessingFee.findFirst({
     orderBy: { name: 'asc' },
   })
 
   return (
     <div className="container mx-auto max-w-[768px]">
-      <PlatformView initialConfigs={vatConfigs} paymentProcessingFee={paymentProcessingFee} />
+      <PlatformView paymentProcessingFee={paymentProcessingFee} />
     </div>
   )
 }

@@ -14,6 +14,8 @@ interface ReservationViewProps {
   apiKey: string, stripePublicKey: string | undefined
   signedIn: boolean
   showTerms?: boolean
+  siteType?: string
+  orderPaymentType?: string
   serviceFee: {
     chargeType: string
     feeAmount?: number | null
@@ -21,15 +23,12 @@ interface ReservationViewProps {
   } | undefined
 }
 
-export default function ReservationView({ serviceFee, showTerms, signedIn, reservation, order, apiKey, stripePublicKey }: ReservationViewProps) {
+export default function ReservationView({ serviceFee, siteType, orderPaymentType, showTerms, signedIn, reservation, order, stripePublicKey }: ReservationViewProps) {
 
   const containerRef = useRef<HTMLDivElement>(null)
   const resRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const touchStartY = useRef<number>(0)
-
-  const serviceFeeAmount = serviceFee?.chargeType === 'fixed' ?
-    (serviceFee?.feeAmount || 0) : ((serviceFee?.percentage ?? 0) / 100) * (order?.totalPrice || 0)
 
   const [page, setPage] = useState<0 | 1>(order ? 1 : 0)
   const [resScrollable, setResScrollable] = useState(false)
@@ -136,12 +135,12 @@ export default function ReservationView({ serviceFee, showTerms, signedIn, reser
       ref={containerRef}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
-      className={`relative w-full overflow-hidden bg-cream`}
+      className="relative w-full overflow-hidden bg-cream"
       style={{ height: '100dvh' }}
     >
       {/* displayTerms && termsElement */}
       <div
-        className="transition-transform duration-500 ease-out"
+        className="transition-transform duration-500 ease-out will-change-transform"
         style={{
           height: '200dvh',
           width: '100vw',
@@ -150,24 +149,25 @@ export default function ReservationView({ serviceFee, showTerms, signedIn, reser
       >
         {/* Page 0: Reservation */}
         <div className="flex flex-col w-full" style={{ height: '100dvh', paddingTop: signedIn ? '80px' : '0px' }}>
-          {/* Content: only scroll if it overflows */}
           <div
             ref={resRef}
-            className={resScrollable ? 'overflow-y-auto flex-1' : 'overflow-hidden flex-1'}
+            className={`${resScrollable ? 'overflow-y-auto' : 'overflow-hidden'} flex-1`}
             style={{ overscrollBehavior: 'contain' }}
           >
             <ReservationConfirmationView reservation={reservation} />
           </div>
-          {
-            serviceFee &&
-              <button
-                onClick={() => goToPage(1)}
-                className="h-12 w-full bg-brand-cyan text-cream font-semibold text-base tracking-wide"
-              >
-                FOOD AND DRINKS
-              </button>
-          }
-          
+          {serviceFee && (
+            <button
+              onClick={() => goToPage(1)}
+              className="h-12 w-full bg-brand-cyan text-cream font-semibold text-sm tracking-widest uppercase
+                         active:bg-brand-cyan-dark transition-colors flex items-center justify-center gap-2"
+            >
+              <span>Food &amp; Drinks</span>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          )}
         </div>
 
         {/* Page 1: Menu */}
@@ -177,22 +177,25 @@ export default function ReservationView({ serviceFee, showTerms, signedIn, reser
             className="overflow-y-auto flex-1"
             style={{ overscrollBehavior: 'contain' }}
           >
-            <Menu 
-              serviceFee={serviceFeeAmount}
+            <Menu
               siteId={reservation.site!.id}
-              seatId={seatId}
-              apiKey={apiKey} 
-              stripePublicKey={stripePublicKey}
               reservationId={reservation.id}
+              seatId={seatId}
+              siteType={orderPaymentType ?? siteType}
+              stripePublicKey={stripePublicKey}
               orders={reservation.orders}
               showConfirmation={!!order}
             />
           </div>
           <button
             onClick={() => goToPage(0)}
-            className="h-12 w-full bg-brand-cyan text-cream font-semibold text-base tracking-wide"
+            className="h-12 w-full bg-brand-cyan text-cream font-semibold text-sm tracking-widest uppercase
+                       active:bg-brand-cyan-dark transition-colors flex items-center justify-center gap-2"
           >
-            BACK TO RESERVATION
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+            </svg>
+            <span>Back to Reservation</span>
           </button>
         </div>
       </div>

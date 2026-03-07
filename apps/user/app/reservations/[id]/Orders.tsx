@@ -1,195 +1,153 @@
 'use client'
 
 import { useState } from 'react'
-import {
-  TableContainer,
-  Table,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableBody,
-  Paper,
-  Chip,
-  Typography,
-  Box,
-  Button
-} from '@mui/material'
-
 import { Invoice } from '@/app/types/types'
 
-const statusColorMap: Record<string, 'default'|'primary'|'success'|'warning'|'error'> = {
-  pending:   'warning',
-  paid:      'success',
-  cancelled: 'error',
+const statusStyle: Record<string, string> = {
+  pending:   'bg-amber-50 text-amber-700',
+  paid:      'bg-emerald-50 text-emerald-700',
+  complete:  'bg-emerald-50 text-emerald-700',
+  cancelled: 'bg-red-50 text-red-700',
 }
 
-export default function Orders({ orders }: {
-  orders: {
+interface OrderData {
+  id: string
+  createdAt: Date
+  totalPrice: number
+  status: string
+  orderItems: {
     id: string
-    createdAt: Date
+    name: string
+    quantity: number
+    price: number
+    tax: number
     totalPrice: number
-    status: string
-    orderItems: {
-      id: string
-      name: string
-      quantity: number
-      price: number
-      tax: number
-      totalPrice: number
-    }[]
-    invoice?: Invoice | null
   }[]
-}) {
-  const [selected, setSelected] = useState<string | null>(null)
+  invoice?: Invoice | null
+}
 
-  // find the currently selected order
-  const order = orders.find(o => o.id === selected) || null
+export default function Orders({ orders }: { orders: OrderData[] }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const selected = orders.find(o => o.id === selectedId) ?? null
 
-  return (selected && order) ? (
-    // --- DETAILS VIEW ---
-    <Box>
-      {/* Header: date, status, and back button all in one line */}
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mt: 2,
-          mb: 2,
-          ml: 2
-        }}
-      >
-        <Typography variant="subtitle1">
-          {new Date(order.createdAt).toLocaleString(undefined, {
-            year:   'numeric',
-            month:  'short',
-            day:    '2-digit',
-            hour:   '2-digit',
-            minute: '2-digit',
-          })}
-        </Typography>
+  /* ── Detail view ── */
 
-        <Chip
-          label={order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-          color={statusColorMap[order.status] ?? 'default'}
-          size="small"
-        />
+  if (selected) {
+    const hasInvoice = !!selected.invoice
 
-        <Button size="small" onClick={() => setSelected(null)}>
-          Back
-        </Button>
-      </Box>
+    const rows = hasInvoice
+      ? selected.invoice!.invoiceLines.map(l => ({
+          key: l.id,
+          label: l.description ?? '—',
+          net: l.charge,
+          tax: l.tax,
+          gross: l.amount,
+        }))
+      : selected.orderItems.map(oi => ({
+          key: oi.id,
+          label: `${oi.name} × ${oi.quantity}`,
+          net: oi.price,
+          tax: oi.totalPrice - oi.price,
+          gross: oi.totalPrice,
+        }))
 
-      {
-        order.invoice &&
-          <TableContainer component={Paper} variant="outlined">
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ pl: 1, pr: 1 }}>Item × Qty</TableCell>
-                  <TableCell sx={{ pl: 1, pr: 1 }}align="right">Net (€)</TableCell>
-                  <TableCell sx={{ pl: 1, pr: 1 }}align="right">Tax (€)</TableCell>
-                  <TableCell sx={{ pl: 1, pr: 1 }}align="right">Gross (€)</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {order.invoice.invoiceLines.map(line => {
-                  const net      = line.charge
-                  const total    = line.amount
-                  const taxAmt   = line.tax
-                  return (
-                    <TableRow key={line.id}>
-                      <TableCell>{`${line.description}`}</TableCell>
-                      <TableCell align="right">{net.toFixed(2)}</TableCell>
-                      <TableCell align="right">{taxAmt.toFixed(2)}</TableCell>
-                      <TableCell align="right">{total.toFixed(2)}</TableCell>
-                    </TableRow>
-                  )
-                })}
+    const totals = hasInvoice
+      ? { net: selected.invoice!.totalCharge, tax: selected.invoice!.totalTax, gross: selected.invoice!.totalAmount }
+      : rows.reduce(
+          (a, r) => ({ net: a.net + r.net, tax: a.tax + r.tax, gross: a.gross + r.gross }),
+          { net: 0, tax: 0, gross: 0 },
+        )
 
-                {(() => {
-                  const sumNet   = order.invoice.totalCharge
-                  const sumTotal = order.invoice.totalAmount
-                  const sumTax   = order.invoice.totalTax
-                  return (
-                    <TableRow sx={{ borderTop: 1, borderColor: 'divider' }}>
-                      <TableCell>
-                        <strong>Total</strong>
-                      </TableCell>
-                      <TableCell align="right">
-                        <strong>{sumNet.toFixed(2)}</strong>
-                      </TableCell>
-                      <TableCell align="right">
-                        <strong>{sumTax.toFixed(2)}</strong>
-                      </TableCell>
-                      <TableCell align="right">
-                        <strong>{sumTotal.toFixed(2)}</strong>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })()}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        }
-    </Box>
+    return (
+      <div className="px-5 pt-4 pb-6">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-sm text-gray-500">
+              {new Date(selected.createdAt).toLocaleString(undefined, {
+                year: 'numeric', month: 'short', day: '2-digit',
+                hour: '2-digit', minute: '2-digit',
+              })}
+            </p>
+            <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle[selected.status] ?? 'bg-gray-100 text-gray-600'}`}>
+              {selected.status.charAt(0).toUpperCase() + selected.status.slice(1)}
+            </span>
+          </div>
+          <button onClick={() => setSelectedId(null)} className="text-sm font-medium text-gray-500 active:text-gray-800">
+            ← Back
+          </button>
+        </div>
 
+        {/* Items */}
+        <div className="rounded-xl border border-gray-200 overflow-hidden bg-white">
+          {/* Column headers */}
+          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-3 py-2 bg-gray-50 text-[11px] font-medium text-gray-400 uppercase tracking-wider">
+            <span>Item</span>
+            <span className="w-14 text-right">Net</span>
+            <span className="w-12 text-right">Tax</span>
+            <span className="w-14 text-right">Total</span>
+          </div>
 
-  ) : (
-        // --- LIST VIEW ---
-    <Box mt={2}>
-      <Typography variant="h5" gutterBottom ml={1}>
-        Your Orders
-      </Typography>
-      <TableContainer component={Paper} elevation={2}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Date &amp; Time</TableCell>
-              <TableCell align="right">Total</TableCell>
-              <TableCell align="right">Status</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {orders.map(o => (
-              <TableRow
-                key={o.id}
-                hover
-                sx={{ cursor: 'pointer' }}
-                onClick={() => setSelected(o.id)}
-              >
-                <TableCell>
+          {rows.map(r => (
+            <div key={r.key} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-3 py-2.5 border-t border-gray-100 text-[13px]">
+              <span className="text-gray-800 truncate">{r.label}</span>
+              <span className="w-14 text-right text-gray-500">{r.net.toFixed(2)}</span>
+              <span className="w-12 text-right text-gray-400">{r.tax.toFixed(2)}</span>
+              <span className="w-14 text-right font-medium text-gray-900">{r.gross.toFixed(2)}</span>
+            </div>
+          ))}
+
+          {/* Totals */}
+          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-3 py-2.5 border-t-2 border-gray-200 text-[13px] font-semibold">
+            <span className="text-gray-900">Total</span>
+            <span className="w-14 text-right text-gray-700">{totals.net.toFixed(2)}</span>
+            <span className="w-12 text-right text-gray-500">{totals.tax.toFixed(2)}</span>
+            <span className="w-14 text-right text-gray-900">{totals.gross.toFixed(2)}</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  /* ── List view ── */
+
+  return (
+    <div className="px-5 pt-4 pb-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Orders</h3>
+
+      {orders.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+          <p className="text-sm">No orders yet</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {orders.map(o => (
+            <button
+              key={o.id}
+              onClick={() => setSelectedId(o.id)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-white rounded-xl border border-gray-100
+                         shadow-sm active:bg-gray-50 transition-colors text-left"
+            >
+              <div>
+                <p className="text-sm text-gray-800">
                   {new Date(o.createdAt).toLocaleString(undefined, {
-                    year:   'numeric',
-                    month:  'short',
-                    day:    '2-digit',
-                    hour:   '2-digit',
-                    minute: '2-digit',
+                    month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit',
                   })}
-                </TableCell>
-                <TableCell align="right">
-                  €{o.totalPrice.toFixed(2)}
-                </TableCell>
-                <TableCell align="right">
-                  <Chip
-                    label={o.status.charAt(0).toUpperCase() + o.status.slice(1)}
-                    color={statusColorMap[o.status] ?? 'default'}
-                    size="small"
-                  />
-                </TableCell>
-              </TableRow>
-            ))}
-            {orders.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={3} align="center" sx={{ py: 4 }}>
-                  No orders found
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    </Box>
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {o.orderItems.length} item{o.orderItems.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <span className="text-sm font-semibold text-gray-900">{o.totalPrice.toFixed(2)}&nbsp;€</span>
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${statusStyle[o.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                  {o.status.charAt(0).toUpperCase() + o.status.slice(1)}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
-
 }

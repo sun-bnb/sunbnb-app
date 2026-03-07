@@ -42,12 +42,16 @@
     "Cancelled": "Cancelled",
     "Paymemnt received": "Payment received",
     "Processing": "Processing",
-    "Payment failed": "Payment failed"
+    "Payment failed": "Payment failed",
+    "No active reservations": "No active reservations",
+    "No past reservations": "No past reservations"
   },
   "Reservation": {
     "SEATS": "SEATS",
+    "Amount": "Amount",
     "VALID": "VALID",
-    "Open receipt": "Open receipt"
+    "Open receipt": "Open receipt",
+    "Tap to open pass": "Tap to open pass"
   },
   "Payment": {
     "Payment confirms acceptance of": "Payment confirms acceptance of",

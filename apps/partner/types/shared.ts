@@ -28,6 +28,7 @@ export interface SiteProps {
   imageWidth?: number | null
   imageHeight?: number | null
   type?: string | null
+  orderPaymentType?: string | null
   description?: string | null
   background?: string | null
   bgImageUrl?: string | null
@@ -38,8 +39,8 @@ export interface SiteProps {
   services: string[]
   serviceFees?: ServiceFee[]
   paymentProcessingFee?: PaymentProcessingFee | null
-  billingModel?: 'INTERMEDIARY' | 'DEEMED_PROVIDER'
   subscriptionTier?: 'STARTER' | 'PRO' | 'BUSINESS' | null
+  appSalesEnabled?: boolean
 }
 
 export interface Product {

@@ -2,19 +2,13 @@
  * Settlement Service
  *
  * Manages the outbound payment lifecycle for partner invoices.
- * Applies to both billing models:
- * - DEEMED_PROVIDER: SunBnB is the seller of record, customer payments land
- *   in SunBnB's Stripe account. Commission lines use 'sunbnb-platform-commission'.
- * - INTERMEDIARY: Partner is the seller but payments still flow through SunBnB.
- *   Fee lines use 'sunbnb-service-fee'.
  *
- * In both cases, SunBnB collects payment and owes the partner the net payout.
+ * INTERMEDIARY model: Partner is the seller but payments flow through SunBnB.
+ * Fee lines use 'sunbnb-service-fee'.
  *
- * Net payout differs by model:
- * - DEEMED_PROVIDER: netPayout = grossRevenue − commission − totalTax
- *   (platform retains VAT to remit to tax authorities)
- * - INTERMEDIARY: netPayout = grossRevenue − commission
- *   (partner handles their own VAT obligations)
+ * SunBnB collects payment and owes the partner the net payout.
+ * Net payout = grossRevenue − commission
+ * (partner handles their own VAT obligations)
  *
  * Settlement lifecycle:  DRAFT → CLOSED → APPROVED → PAID
  *
@@ -25,7 +19,7 @@
  */
 
 import prisma from '../index'
-import { BillingModel, SettlementStatus } from '@prisma/client'
+import { SettlementStatus } from '@prisma/client'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -112,13 +106,6 @@ export async function previewSettlement(input: {
 
   if (invoices.length === 0) return null
 
-  // Look up the site's billing model to determine VAT handling
-  const site = await prisma.site.findUnique({
-    where: { id: siteId },
-    select: { billingModel: true },
-  })
-  const isDeemedProvider = site?.billingModel === BillingModel.DEEMED_PROVIDER
-
   const grossRevenue = round(
     invoices.reduce((sum, inv) => sum + inv.totalAmount, 0)
   )
@@ -133,11 +120,8 @@ export async function previewSettlement(input: {
       return sum + feeLines.reduce((s, l) => s + l.amount, 0)
     }, 0)
   )
-  // Deemed provider: platform retains VAT to remit to tax authorities
-  // Intermediary: partner handles own VAT, receives gross minus commission
-  const netPayout = isDeemedProvider
-    ? round(grossRevenue - commission - totalTax)
-    : round(grossRevenue - commission)
+  // Partner handles own VAT, receives gross minus commission
+  const netPayout = round(grossRevenue - commission)
 
   const previewInvoices = invoices.map((inv) => {
     const productLines = inv.invoiceLines.filter(
@@ -189,7 +173,7 @@ export async function generateSettlement(input: {
 }): Promise<{ id: string; invoiceCount: number } | null> {
   const { accountId, siteId, periodStart, periodEnd } = input
 
-  // Find unsettled invoices in the period (both billing models)
+  // Find unsettled invoices in the period
   const invoices = await prisma.invoice.findMany({
     where: {
       accountId,
@@ -211,13 +195,6 @@ export async function generateSettlement(input: {
 
   if (invoices.length === 0) return null
 
-  // Look up the site's billing model to determine VAT handling
-  const site = await prisma.site.findUnique({
-    where: { id: siteId },
-    select: { billingModel: true },
-  })
-  const isDeemedProvider = site?.billingModel === BillingModel.DEEMED_PROVIDER
-
   // Compute totals
   const grossRevenue = round(
     invoices.reduce((sum, inv) => sum + inv.totalAmount, 0)
@@ -225,8 +202,7 @@ export async function generateSettlement(input: {
   const totalTax = round(
     invoices.reduce((sum, inv) => sum + inv.totalTax, 0)
   )
-  // Both fee types count as commission: deemed-provider uses
-  // 'sunbnb-platform-commission', intermediary uses 'sunbnb-service-fee'
+  // Fee lines use 'sunbnb-service-fee'
   const commission = round(
     invoices.reduce((sum, inv) => {
       const feeLines = inv.invoiceLines.filter(
@@ -235,11 +211,8 @@ export async function generateSettlement(input: {
       return sum + feeLines.reduce((s, l) => s + l.amount, 0)
     }, 0)
   )
-  // Deemed provider: platform retains VAT to remit to tax authorities
-  // Intermediary: partner handles own VAT, receives gross minus commission
-  const netPayout = isDeemedProvider
-    ? round(grossRevenue - commission - totalTax)
-    : round(grossRevenue - commission)
+  // Partner handles own VAT, receives gross minus commission
+  const netPayout = round(grossRevenue - commission)
 
   // Create settlement and link invoices atomically
   const invoiceIds = invoices.map((inv) => inv.id)

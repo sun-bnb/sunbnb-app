@@ -1,67 +1,20 @@
 'use client'
 
 import { useState } from 'react'
-import Select from '@mui/material/Select'
-import MenuItem from '@mui/material/MenuItem'
-import CircularProgress from '@mui/material/CircularProgress'
-import { updateBillingModel, updatePlatformVatConfig } from './actions'
-
-type BillingModel = 'INTERMEDIARY' | 'DEEMED_PROVIDER'
 
 interface SiteRow {
   id: string
   name: string
   status: string
-  billingModel: BillingModel
-  platformVatConfigId: string | null
   ownerName: string
-}
-
-interface VatConfig {
-  id: string
-  companyName: string
-  countryCode: string
 }
 
 export default function SitesView({
   sites,
-  vatConfigs,
 }: {
   sites: SiteRow[]
-  vatConfigs: VatConfig[]
 }) {
-  const [updating, setUpdating] = useState<string | null>(null)
-  const [localSites, setLocalSites] = useState(sites)
-  const [error, setError] = useState<string | null>(null)
-
-  const handleBillingModelChange = async (siteId: string, value: BillingModel) => {
-    setUpdating(siteId)
-    setError(null)
-    const result = await updateBillingModel(siteId, value)
-    setUpdating(null)
-    if (result.status === 'ok') {
-      setLocalSites((prev) =>
-        prev.map((s) => (s.id === siteId ? { ...s, billingModel: value } : s))
-      )
-    } else {
-      setError(result.errors?.[0] ?? 'Failed to update')
-    }
-  }
-
-  const handleVatConfigChange = async (siteId: string, value: string) => {
-    const configId = value || null
-    setUpdating(siteId)
-    setError(null)
-    const result = await updatePlatformVatConfig(siteId, configId)
-    setUpdating(null)
-    if (result.status === 'ok') {
-      setLocalSites((prev) =>
-        prev.map((s) => (s.id === siteId ? { ...s, platformVatConfigId: configId } : s))
-      )
-    } else {
-      setError(result.errors?.[0] ?? 'Failed to update')
-    }
-  }
+  const [localSites] = useState(sites)
 
   return (
     <div className="p-4">
@@ -72,12 +25,6 @@ export default function SitesView({
           transactions.
         </p>
       </div>
-
-      {error && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 mb-4">
-          <p className="text-xs text-red-400">{error}</p>
-        </div>
-      )}
 
       {localSites.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 text-gray-500">
@@ -92,8 +39,6 @@ export default function SitesView({
               <th className="text-left px-4 py-2.5 font-medium">Site</th>
               <th className="text-left px-4 py-2.5 font-medium">Partner</th>
               <th className="text-left px-4 py-2.5 font-medium">Status</th>
-              <th className="text-left px-4 py-2.5 font-medium">Billing Model</th>
-              <th className="text-left px-4 py-2.5 font-medium">Platform Entity</th>
             </tr>
           </thead>
           <tbody>
@@ -111,49 +56,6 @@ export default function SitesView({
                   }`}>
                     {site.status}
                   </span>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <Select
-                      value={site.billingModel}
-                      onChange={(e) => handleBillingModelChange(site.id, e.target.value as BillingModel)}
-                      size="small"
-                      disabled={updating === site.id}
-                      sx={{ fontSize: '0.8rem', height: 32, minWidth: 160 }}
-                    >
-                      <MenuItem value="DEEMED_PROVIDER" sx={{ fontSize: '0.8rem' }}>
-                        Deemed Provider
-                      </MenuItem>
-                      <MenuItem value="INTERMEDIARY" sx={{ fontSize: '0.8rem' }}>
-                        Intermediary
-                      </MenuItem>
-                    </Select>
-                    {updating === site.id && <CircularProgress size={16} />}
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <Select
-                    value={site.platformVatConfigId ?? ''}
-                    onChange={(e) => handleVatConfigChange(site.id, e.target.value)}
-                    size="small"
-                    displayEmpty
-                    disabled={updating === site.id || site.billingModel !== 'DEEMED_PROVIDER'}
-                    sx={{
-                      fontSize: '0.8rem',
-                      height: 32,
-                      minWidth: 180,
-                      ...(site.billingModel !== 'DEEMED_PROVIDER' && { opacity: 0.4 }),
-                    }}
-                  >
-                    <MenuItem value="" sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
-                      — Auto (fallback) —
-                    </MenuItem>
-                    {vatConfigs.map((vc) => (
-                      <MenuItem key={vc.id} value={vc.id} sx={{ fontSize: '0.8rem' }}>
-                        {vc.companyName} ({vc.countryCode})
-                      </MenuItem>
-                    ))}
-                  </Select>
                 </td>
               </tr>
             ))}

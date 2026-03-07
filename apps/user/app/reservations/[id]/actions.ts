@@ -84,36 +84,15 @@ export async function getProducts(siteId: string) {
  * trusted from the client.
  */
 export async function createOrder(order: {
-  userId?: string
   anonId?: string
   siteId?: string
   reservationId?: string
   seatId?: string
   items: { product: { id: string }, quantity: number }[]
 }) {
-  // Authenticate: require either a session user or an anonId
   const session = await auth()
-  let orderUserId = session?.user?.id ?? order.userId
 
-  if (!orderUserId) {
-    if (!order.anonId) {
-      return { status: 'error', errors: ['Authentication required'] }
-    }
-    // For anonymous orders: use the site owner's userId to satisfy the FK constraint.
-    // The anonId field identifies the actual anonymous customer.
-    const site = order.siteId
-      ? await prisma.site.findUnique({
-          where: { id: order.siteId },
-          select: { userId: true },
-        })
-      : null
-
-    if (!site?.userId) {
-      return { status: 'error', errors: ['Site not found'] }
-    }
-
-    orderUserId = site.userId
-  }
+  // ── Validate basic inputs ──────────────────────────────────────────────────
 
   if (!order.siteId) {
     return { status: 'error', errors: ['siteId is required'] }
@@ -123,36 +102,88 @@ export async function createOrder(order: {
     return { status: 'error', errors: ['At least one item is required'] }
   }
 
-  // Validate quantities are positive integers
+  if (order.items.length > 50) {
+    return { status: 'error', errors: ['Too many distinct items'] }
+  }
+
+  // Validate quantities are positive integers; cap total
+  let totalQty = 0
   for (const item of order.items) {
     if (!Number.isInteger(item.quantity) || item.quantity < 1) {
       return { status: 'error', errors: ['Invalid item quantity'] }
     }
+    totalQty += item.quantity
+    if (totalQty > 200) {
+      return { status: 'error', errors: ['Total quantity exceeds limit'] }
+    }
   }
 
-  // Look up product prices from the database (never trust client-supplied prices)
-  const productIds = order.items.map((item) => item.product.id)
+  // ── Verify site exists and has sales enabled ───────────────────────────────
+
+  const site = await prisma.site.findUnique({
+    where: { id: order.siteId },
+    select: { userId: true, appSalesEnabled: true },
+  })
+
+  if (!site) {
+    return { status: 'error', errors: ['Site not found'] }
+  }
+
+  if (!site.appSalesEnabled) {
+    return { status: 'error', errors: ['Product ordering is not available for this site'] }
+  }
+
+  // ── Determine authenticated user ──────────────────────────────────────────
+
+  let orderUserId = session?.user?.id
+
+  if (!orderUserId) {
+    if (!order.anonId) {
+      return { status: 'error', errors: ['Authentication required'] }
+    }
+    // For anonymous orders: use the site owner's userId to satisfy the FK constraint.
+    // The anonId field identifies the actual anonymous customer.
+    orderUserId = site.userId
+  }
+
+  // ── Verify reservation ownership (if provided) ────────────────────────────
+
+  if (order.reservationId) {
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: order.reservationId },
+      select: { userId: true, anonId: true, siteId: true },
+    })
+
+    if (!reservation || reservation.siteId !== order.siteId) {
+      return { status: 'error', errors: ['Reservation not found'] }
+    }
+
+    if (session?.user?.id) {
+      if (reservation.userId !== session.user.id) {
+        return { status: 'error', errors: ['Not authorized'] }
+      }
+    } else if (order.anonId && reservation.anonId !== order.anonId) {
+      return { status: 'error', errors: ['Not authorized'] }
+    }
+  }
+
+  // ── Look up product prices from DB (never trust client-supplied prices) ───
+
+  const productIds = order.items.map((i) => i.product.id)
   const products = await prisma.product.findMany({
-    where: {
-      id: { in: productIds },
-      siteId: order.siteId,
-      active: true,
-    },
+    where: { id: { in: productIds }, siteId: order.siteId, active: true },
   })
 
   const productMap = new Map(products.map((p) => [p.id, p]))
 
-  // Validate all requested products exist and are active
   for (const item of order.items) {
     if (!productMap.has(item.product.id)) {
-      return {
-        status: 'error',
-        errors: [`Product ${item.product.id} not found or not active`],
-      }
+      return { status: 'error', errors: [`Product ${item.product.id} not found or not active`] }
     }
   }
 
-  // Calculate totals from DB prices
+  // ── Calculate totals from DB prices ────────────────────────────────────────
+
   let sumPrice = 0
   let sumTotalPrice = 0
 
@@ -176,7 +207,8 @@ export async function createOrder(order: {
 
   const tax = sumTotalPrice - sumPrice
 
-  // Build the order data
+  // ── Create the order ──────────────────────────────────────────────────────
+
   const orderData: any = {
     status: 'pending',
     price: sumPrice,
@@ -200,6 +232,56 @@ export async function createOrder(order: {
   const newOrder = await prisma.order.create({ data: orderData })
 
   return { status: 'ok', id: newOrder.id }
+}
+
+// ─── Complete Off-Platform Order ────────────────────────────────────────────
+
+/**
+ * Complete an order without payment. Only allowed for sites using
+ * off-platform billing for food orders (site.orderPaymentType or site.type === 'unpaid').
+ */
+export async function completeUnpaidOrder(orderId: string) {
+  const session = await auth()
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { site: { select: { type: true, orderPaymentType: true } } },
+  })
+
+  if (!order) {
+    return { status: 'error', errors: ['Order not found'] }
+  }
+
+  // Only allow for off-platform billing sites (check orderPaymentType first, fall back to type)
+  const effectiveOrderPaymentType = order.site.orderPaymentType ?? order.site.type
+  if (effectiveOrderPaymentType !== 'unpaid') {
+    return { status: 'error', errors: ['Payment is required for this site'] }
+  }
+
+  // Verify ownership
+  if (session?.user?.id) {
+    if (order.userId !== session.user.id) {
+      return { status: 'error', errors: ['Not authorized'] }
+    }
+  } else {
+    // Anonymous: check anonId from the request
+    // Note: for server actions we can't read localStorage directly,
+    // but the order already has the anonId from createOrder
+    return { status: 'error', errors: ['Authentication required'] }
+  }
+
+  if (order.status !== 'pending') {
+    return { status: 'error', errors: ['Order is not in pending state'] }
+  }
+
+  await prisma.order.update({
+    where: { id: orderId },
+    data: { status: 'complete', paymentRef: `offplatform_${orderId}` },
+  })
+
+  revalidatePath(`/reservations/${order.reservationId}`)
+
+  return { status: 'ok' }
 }
 
 // ─── Query Actions ──────────────────────────────────────────────────────────

@@ -42,12 +42,16 @@
     "Cancelled": "Peruttu",
     "Payment received": "Maksu vastaanotettu",
     "Processing": "Käsittekyssä",
-    "Payment failed": "Maksu epäonnistui"
+    "Payment failed": "Maksu epäonnistui",
+    "No active reservations": "Ei aktiivisia varauksia",
+    "No past reservations": "Ei aiempia varauksia"
   },
   "Reservation": {
     "SEATS": "PAIKAT",
+    "Amount": "Summa",
     "VALID": "VOIMASSA",
-    "Open receipt": "Avaa kuitti"
+    "Open receipt": "Avaa kuitti",
+    "Tap to open pass": "Avaa kulkulupa napauttamalla"
   },
   "Payment": {
     "Payment confirms acceptance of": "Maksu vahvistaa suostumisen",

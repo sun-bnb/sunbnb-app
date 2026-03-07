@@ -1,10 +1,6 @@
 import prisma from '@repo/data/PrismaCient'
 import ReceiptPage, { ReceiptProps } from './ReceiptPage'
 
-interface SearchParams {
-  searchParams: { [key: string]: string }
-}
-
 async function getReservation(id: string) {
 
   const reservation = await prisma.reservation.findUnique({ 
@@ -71,22 +67,26 @@ export default async function Receipt({ params }: { params: { id: string } }) {
     invoice.invoicedAt.toISOString().substring(0, 10) + ' ' +
     invoice.invoicedAt.toISOString().substring(11, 19)
 
+  const seatNumbers = reservation.items?.map(item => String(item.number)).join(', ') ?? null
+
+  const reservationFrom = reservation.from.toISOString().substring(0, 10)
+  const reservationTo = reservation.to.toISOString().substring(0, 10)
+  const reservationDate = reservationFrom === reservationTo
+    ? reservationFrom
+    : `${reservationFrom} – ${reservationTo}`
+
   const receipt: ReceiptProps = {
     date,
-    // For deemed-provider invoices, show platform info instead of partner info
-    businessId: invoice.issuerType === 'PLATFORM'
-      ? invoice.issuerVatNumber ?? businessId
-      : businessId,
-    company: invoice.issuerType === 'PLATFORM'
-      ? 'SunBnB (Deemed Provider)'
-      : company,
-    phoneNumber: invoice.issuerType === 'PLATFORM' ? '' : phoneNumber,
+    businessId,
+    company,
+    companyAddress: partnerAccount.address,
+    phoneNumber,
+    siteName: reservation.site?.name ?? null,
+    reservationDate,
+    seatNumbers,
     totalCharge,
     totalVat: totalTax,
     totalAmount,
-    issuerType: invoice.issuerType as ReceiptProps['issuerType'],
-    issuerVatNumber: invoice.issuerVatNumber,
-    settlementId: invoice.settlementId,
     invoiceLines
   }
 

@@ -1,25 +1,31 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { addProduct, getProducts } from './actions'
+import { addProduct, getProducts, toggleAppSales, setOrderPaymentType } from './actions'
 import { Product } from '@/types/shared'
 import Button from '@mui/material/Button'
 import TextField from '@mui/material/TextField'
 import Collapse from '@mui/material/Collapse'
+import Switch from '@mui/material/Switch'
 import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
 import ImageIcon from '@mui/icons-material/Image'
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
+import PaymentsIcon from '@mui/icons-material/Payments'
+import EventAvailableIcon from '@mui/icons-material/EventAvailable'
 import { useSite } from '@/app/sites/site-context'
 import ProductItem from './ProductItem'
 
 export default function ProductsView() {
 
-  const { site } = useSite()
+  const { site, setSite } = useSite()
 
   const [productList, setProductList] = useState<Product[]>(site.products || [])
   const [showAddForm, setShowAddForm] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [salesEnabled, setSalesEnabled] = useState(site.appSalesEnabled ?? false)
+  const [togglingsales, setTogglingsales] = useState(false)
+  const [orderBillingType, setOrderBillingType] = useState(site.orderPaymentType ?? site.type ?? 'paid')
 
   // Add form state
   const [name, setName] = useState('')
@@ -64,8 +70,91 @@ export default function ProductsView() {
   const taxNum = parseFloat(tax) || 0
   const priceBeforeTax = priceNum / (1 + taxNum / 100)
 
+  const handleToggleSales = async (enabled: boolean) => {
+    setTogglingsales(true)
+    setSalesEnabled(enabled)
+    await toggleAppSales(site.id!, enabled)
+    setSite({ ...site, appSalesEnabled: enabled })
+    setTogglingsales(false)
+  }
+
   return (
     <div className="container mx-auto p-4">
+      {/* App sales toggle */}
+      <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 mt-4 mb-2">
+        <div>
+          <p className="text-sm font-medium text-gray-800">In-app product sales</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Allow guests to order food, drinks &amp; accessories from your beach through the app.
+          </p>
+        </div>
+        <Switch
+          checked={salesEnabled}
+          onChange={(e) => handleToggleSales(e.target.checked)}
+          disabled={togglingsales}
+          size="small"
+          sx={{
+            '& .MuiSwitch-switchBase.Mui-checked': { color: '#111827' },
+            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#111827' },
+          }}
+        />
+      </div>
+
+      {/* Food order billing — only visible when sales enabled */}
+      {salesEnabled && (
+        <div className="mt-3 mb-2">
+          <h3 className="text-sm font-medium text-gray-700 mb-2">Order billing</h3>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setOrderBillingType('paid')
+                setOrderPaymentType(site.id!, 'paid')
+                setSite({ ...site, orderPaymentType: 'paid' })
+              }}
+              className={`flex-1 rounded-lg border-2 p-4 text-left transition-all ${
+                orderBillingType === 'paid'
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <PaymentsIcon fontSize="small" className={orderBillingType === 'paid' ? 'text-blue-600' : 'text-gray-400'} />
+                <span className={`font-medium text-sm ${orderBillingType === 'paid' ? 'text-blue-700' : 'text-gray-700'}`}>
+                  Integrated payments
+                </span>
+              </div>
+              <p className="text-xs text-gray-500">
+                Customers pay for food orders through the platform.
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOrderBillingType('unpaid')
+                setOrderPaymentType(site.id!, 'unpaid')
+                setSite({ ...site, orderPaymentType: 'unpaid' })
+              }}
+              className={`flex-1 rounded-lg border-2 p-4 text-left transition-all ${
+                orderBillingType === 'unpaid'
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <EventAvailableIcon fontSize="small" className={orderBillingType === 'unpaid' ? 'text-blue-600' : 'text-gray-400'} />
+                <span className={`font-medium text-sm ${orderBillingType === 'unpaid' ? 'text-blue-700' : 'text-gray-700'}`}>
+                  Off-platform billing
+                </span>
+              </div>
+              <p className="text-xs text-gray-500">
+                No payment collected for food orders. Billing is handled at the venue, e.g. pay at counter or add to room tab.
+              </p>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between mt-4 mb-6">
         <div>

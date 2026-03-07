@@ -7,6 +7,32 @@ import { put } from '@vercel/blob'
 import sharp from 'sharp'
 import { Product } from '@/types/shared'
 
+export async function toggleAppSales(siteId: string, enabled: boolean) {
+  const session = await auth()
+  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+
+  await prisma.site.update({
+    where: { id: siteId },
+    data: { appSalesEnabled: enabled },
+  })
+
+  revalidatePath(`/sites/${siteId}`)
+  return { status: 'ok' }
+}
+
+export async function setOrderPaymentType(siteId: string, orderPaymentType: string) {
+  const session = await auth()
+  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+
+  await prisma.site.update({
+    where: { id: siteId },
+    data: { orderPaymentType },
+  })
+
+  revalidatePath(`/sites/${siteId}`)
+  return { status: 'ok' }
+}
+
 export async function addProduct(formData: FormData) {
   const session = await auth()
   if (!session?.user) {

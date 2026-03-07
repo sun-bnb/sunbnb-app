@@ -11,7 +11,6 @@ export default function PriceBreakdown({ price, site }: { price: string; site: S
   if (!priceNum || priceNum <= 0) return null
 
   const vatRate = site.vat ?? 0
-  const isDeemedProvider = site.billingModel === 'DEEMED_PROVIDER'
   const serviceFee = site.serviceFees?.find(f => f.serviceCode === 'sunbed-rental')
 
   const feeAmount = serviceFee
@@ -26,16 +25,12 @@ export default function PriceBreakdown({ price, site }: { price: string; site: S
   const procPct = ppf?.percentage ?? 0
   const procAmount = round(procFixed + (procPct / 100) * priceNum)
 
-  // Deemed provider: platform retains VAT + commission; partner gets the rest
-  // Intermediary: fee deducted from partner share; partner handles own VAT
-  const totalVat = vatRate > 0 ? round(priceNum - round(priceNum / (1 + vatRate / 100))) : 0
-  const partnerGross = isDeemedProvider
-    ? round(priceNum - feeAmount - procAmount - totalVat)
-    : round(priceNum - feeAmount - procAmount)
-  const partnerBase = !isDeemedProvider && vatRate > 0
+  // Fee deducted from partner share; partner handles own VAT
+  const partnerGross = round(priceNum - feeAmount - procAmount)
+  const partnerBase = vatRate > 0
     ? round(partnerGross / (1 + vatRate / 100))
     : partnerGross
-  const partnerVat = !isDeemedProvider ? round(partnerGross - partnerBase) : 0
+  const partnerVat = round(partnerGross - partnerBase)
 
   // Build processing fee label parts
   const procParts: string[] = []
@@ -52,7 +47,7 @@ export default function PriceBreakdown({ price, site }: { price: string; site: S
       {feeAmount > 0 && (
         <div className="flex justify-between text-gray-500 mb-1">
           <span>
-            {isDeemedProvider ? 'Platform commission' : 'Service fee'}
+            Service fee
             {serviceFee?.chargeType === 'fixed'
               ? ''
               : ` (${(serviceFee?.percentage ?? 0).toFixed(0)}%)`}
@@ -66,18 +61,12 @@ export default function PriceBreakdown({ price, site }: { price: string; site: S
           <span className="text-red-500">&minus;{procAmount.toFixed(2)} &euro;</span>
         </div>
       )}
-      {isDeemedProvider && totalVat > 0 && (
-        <div className="flex justify-between text-gray-500 mb-1">
-          <span>VAT {vatRate}% (remitted by platform)</span>
-          <span className="text-red-500">&minus;{totalVat.toFixed(2)} &euro;</span>
-        </div>
-      )}
       <div className="border-t border-gray-200 my-1.5" />
       <div className="flex justify-between font-medium text-gray-800 mb-1">
         <span>You receive</span>
         <span>{partnerGross.toFixed(2)} &euro;</span>
       </div>
-      {!isDeemedProvider && vatRate > 0 && (
+      {vatRate > 0 && (
         <div className="flex justify-between text-gray-400">
           <span>incl. VAT {vatRate}%</span>
           <span>{partnerVat.toFixed(2)} &euro;</span>
