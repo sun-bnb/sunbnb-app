@@ -301,7 +301,7 @@ export default function ReservationView({
   const sitesState = useSelector((state: RootState) => state.sites)
   const { reservationState, pendingReservationId } = sitesState
 
-  if (!stripePublicKey) {
+  if (!stripePublicKey && site.paymentProvider !== 'mollie') {
     return (
       <div className="flex flex-col items-center justify-center">
         <div>Payment gateway unavailable</div>
@@ -323,7 +323,7 @@ export default function ReservationView({
             <div className="flex justify-center mb-[12px] mt-[12px]">
               <CircularProgress />
             </div>
-          ) : <PaymentView stripePublicKey={stripePublicKey} reservation={reservation} />
+          ) : <PaymentView stripePublicKey={stripePublicKey} reservation={reservation} paymentProvider={site.paymentProvider} />
          ) : <ItemSelection apiKey={apiKey} site={site} />
       }
     </>

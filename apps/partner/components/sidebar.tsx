@@ -14,6 +14,7 @@ const Sidebar = () => {
     { name: 'Home', path: '/', indent: false },
     { name: 'Account', path: '/account', indent: false },
     { name: 'Subscription', path: '/account/subscription', indent: true },
+    { name: 'Mollie Payments', path: '/account/mollie', indent: true },
     { name: 'Inventory', path: '/inventory', indent: false }
   ]
 

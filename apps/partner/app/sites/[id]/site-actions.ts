@@ -124,3 +124,39 @@ export async function setSiteStatus(id: string, status: string) {
   revalidatePath('/sites')
   return { status: 'ok' }
 }
+
+// ─── Set Payment Provider ───────────────────────────────────────────────────
+
+export async function setPaymentProvider(
+  siteId: string,
+  paymentProvider: string,
+): Promise<{ status: string; errors?: string[] }> {
+  const session = await auth()
+  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+
+  if (!['stripe', 'mollie'].includes(paymentProvider)) {
+    return { status: 'error', errors: ['Invalid payment provider'] }
+  }
+
+  // If switching to Mollie, verify the partner has connected their Mollie account
+  if (paymentProvider === 'mollie') {
+    const account = await prisma.partnerAccount.findUnique({
+      where: { userId: session.user.id },
+      select: { mollieAccessToken: true },
+    })
+    if (!account?.mollieAccessToken) {
+      return {
+        status: 'error',
+        errors: ['Connect your Mollie account first (Account → Mollie Payments)'],
+      }
+    }
+  }
+
+  await prisma.site.update({
+    where: { id: siteId },
+    data: { paymentProvider },
+  })
+
+  revalidatePath('/sites')
+  return { status: 'ok' }
+}

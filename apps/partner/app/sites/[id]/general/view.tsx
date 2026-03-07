@@ -38,6 +38,7 @@ import {
   saveGeneral,
   deleteSite,
   setSiteStatus,
+  setPaymentProvider,
 } from '../site-actions'
 import { addWorkingHours, deleteWorkingHours } from '../working-hours-actions'
 
@@ -155,6 +156,9 @@ export default function GeneralView() {
     { lat: +site.locationLat!, lng: +site.locationLng! }
   )
   const [siteStatus, setSiteStatusLocal] = useState(site.status ?? 'hidden')
+  const [paymentProvider, setPaymentProviderLocal] = useState(site.paymentProvider ?? 'stripe')
+  const [providerSaving, setProviderSaving] = useState(false)
+  const [providerError, setProviderError] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -509,6 +513,93 @@ export default function GeneralView() {
           />
         </div>
       </div>
+
+      <Divider sx={{ mb: 3 }} />
+
+      {/* Payment provider */}
+      {isPaid && (
+        <div className="mb-5">
+          <h3 className="text-sm font-medium text-gray-700 mb-2">Payment provider</h3>
+          <p className="text-xs text-gray-500 mb-3">
+            Choose how customers pay for reservations and orders at this site.
+          </p>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              disabled={providerSaving}
+              onClick={async () => {
+                if (paymentProvider === 'stripe') return
+                setProviderSaving(true)
+                setProviderError(null)
+                const result = await setPaymentProvider(site.id!, 'stripe')
+                if (result.status === 'ok') {
+                  setPaymentProviderLocal('stripe')
+                } else {
+                  setProviderError(result.errors?.[0] ?? 'Failed to update')
+                }
+                setProviderSaving(false)
+              }}
+              className={`flex-1 rounded-lg border-2 p-4 text-left transition-all ${
+                paymentProvider === 'stripe'
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <PaymentsIcon fontSize="small" className={paymentProvider === 'stripe' ? 'text-blue-600' : 'text-gray-400'} />
+                <span className={`font-medium text-sm ${paymentProvider === 'stripe' ? 'text-blue-700' : 'text-gray-700'}`}>
+                  Stripe
+                </span>
+              </div>
+              <p className="text-xs text-gray-500">
+                Credit/debit cards. Requires platform Stripe configuration.
+              </p>
+            </button>
+            <button
+              type="button"
+              disabled={providerSaving}
+              onClick={async () => {
+                if (paymentProvider === 'mollie') return
+                setProviderSaving(true)
+                setProviderError(null)
+                const result = await setPaymentProvider(site.id!, 'mollie')
+                if (result.status === 'ok') {
+                  setPaymentProviderLocal('mollie')
+                } else {
+                  setProviderError(result.errors?.[0] ?? 'Failed to update')
+                }
+                setProviderSaving(false)
+              }}
+              className={`flex-1 rounded-lg border-2 p-4 text-left transition-all ${
+                paymentProvider === 'mollie'
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <PaymentsIcon fontSize="small" className={paymentProvider === 'mollie' ? 'text-blue-600' : 'text-gray-400'} />
+                <span className={`font-medium text-sm ${paymentProvider === 'mollie' ? 'text-blue-700' : 'text-gray-700'}`}>
+                  Mollie
+                </span>
+              </div>
+              <p className="text-xs text-gray-500">
+                iDEAL, cards &amp; more. Requires Mollie account connection.
+              </p>
+            </button>
+          </div>
+          {providerError && (
+            <div className="mt-2 text-xs text-red-600 flex items-center gap-1.5">
+              <WarningAmberIcon sx={{ fontSize: 14 }} />
+              {providerError}
+            </div>
+          )}
+          {providerSaving && (
+            <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
+              <CircularProgress size={12} /> Updating…
+            </div>
+          )}
+        </div>
+      )}
 
       <Divider sx={{ mb: 3 }} />
 

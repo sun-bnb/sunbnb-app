@@ -269,8 +269,11 @@ export default function HomeView() {
           alt="Sunbnb"
           className="mx-auto mb-3 w-[100px] md:w-[120px] opacity-30"
         />
-        <p className="text-[11px] md:text-xs text-gray-400">
-          © {new Date().getFullYear()} Sunbnb · <a href="/tos" className="underline hover:text-gray-600 transition-colors">Terms</a> · <a href="/privacy" className="underline hover:text-gray-600 transition-colors">Privacy</a> · <a href="https://partner.sunbnb.app" className="underline hover:text-gray-600 transition-colors">For partners</a>
+        <p className="text-[11px] md:text-xs text-gray-400 mb-2">
+          © {new Date().getFullYear()} Sunbnb · <a href="/tos" className="underline hover:text-gray-600 transition-colors">Terms</a> · <a href="/privacy" className="underline hover:text-gray-600 transition-colors">Privacy</a> · <a href="/cancellation-policy" className="underline hover:text-gray-600 transition-colors">Cancellation Policy</a> · <a href="https://partner.sunbnb.app" className="underline hover:text-gray-600 transition-colors">For partners</a>
+        </p>
+        <p className="text-[10px] md:text-[11px] text-gray-300">
+          Operated by Refactory DX Oy · Business ID 2940957-1 · Sturenkatu 37-41 B 16, 00550 Helsinki, Finland
         </p>
       </footer>
     </div>

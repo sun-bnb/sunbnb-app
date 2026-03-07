@@ -123,6 +123,6 @@ export default async function ReservationPage({ params, searchParams }: { params
   const siteType = reservation.site.type ?? 'paid'
   const orderPaymentType = (reservation.site as any).orderPaymentType ?? siteType
 
-  return <ReservationView signedIn={signedIn} showTerms={terms === 'true'} serviceFee={serviceFee} siteType={siteType} orderPaymentType={orderPaymentType} reservation={reservation} apiKey={apiKey} stripePublicKey={STRIPE_PUBLIC_KEY} order={order} />
+  return <ReservationView signedIn={signedIn} showTerms={terms === 'true'} serviceFee={serviceFee} siteType={siteType} orderPaymentType={orderPaymentType} paymentProvider={reservation.site.paymentProvider} reservation={reservation} apiKey={apiKey} stripePublicKey={STRIPE_PUBLIC_KEY} order={order} />
 
 }

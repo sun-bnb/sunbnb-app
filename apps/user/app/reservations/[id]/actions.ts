@@ -3,13 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
-import Stripe from 'stripe'
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-function isDemoPayment(paymentRef: string | null): boolean {
-  return paymentRef?.startsWith('pi_demo_') ?? false
-}
+import { isDemoPayment } from '@/app/api/_lib/stripe'
+import { issueRefund } from '@/app/api/_lib/payment-provider'
 
 // ─── Cancel Reservation ─────────────────────────────────────────────────────
 
@@ -37,21 +32,15 @@ export async function cancelReservation(reservationId: string) {
     return { status: 'ok' }
   }
 
-  // Issue a Stripe refund if this reservation was paid with a real payment
+  // Issue a refund (Stripe or Mollie) if this reservation was paid with a real payment
   const isPaid = ['paid', 'complete'].includes(reservation.status)
   const hasRealPayment = reservation.paymentRef && !isDemoPayment(reservation.paymentRef)
 
   if (isPaid && hasRealPayment) {
-    const { STRIPE_SECRET_KEY } = process.env
-    if (!STRIPE_SECRET_KEY) {
-      return { status: 'error', errors: ['Payment service not configured — cannot process refund'] }
-    }
-
     try {
-      const stripe = new Stripe(STRIPE_SECRET_KEY)
-      await stripe.refunds.create({ payment_intent: reservation.paymentRef! })
+      await issueRefund(reservation.paymentRef!)
     } catch (error) {
-      console.error(`[cancelReservation] Stripe refund failed for ${reservationId}:`, error)
+      console.error(`[cancelReservation] Refund failed for ${reservationId}:`, error)
       return { status: 'error', errors: ['Refund failed — please contact support'] }
     }
   }

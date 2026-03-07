@@ -1,12 +1,55 @@
 'use client'
 
 import { useState } from 'react'
+import { updatePaymentProvider } from './actions'
 
 interface SiteRow {
   id: string
   name: string
   status: string
+  paymentProvider: string
   ownerName: string
+  hasMollie: boolean
+}
+
+function ProviderSelect({ site }: { site: SiteRow }) {
+  const [value, setValue] = useState(site.paymentProvider)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleChange = async (newValue: string) => {
+    setSaving(true)
+    setError(null)
+    try {
+      const result = await updatePaymentProvider(site.id, newValue)
+      if (result.status === 'ok') {
+        setValue(newValue)
+      } else {
+        setError(result.error ?? 'Failed')
+      }
+    } catch {
+      setError('Failed')
+    }
+    setSaving(false)
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <select
+        value={value}
+        disabled={saving}
+        onChange={(e) => handleChange(e.target.value)}
+        className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none focus:border-gray-500 disabled:opacity-40"
+      >
+        <option value="stripe">Stripe</option>
+        <option value="mollie" disabled={!site.hasMollie}>
+          Mollie{!site.hasMollie ? ' (not connected)' : ''}
+        </option>
+      </select>
+      {saving && <span className="text-[10px] text-gray-500">saving…</span>}
+      {error && <span className="text-[10px] text-red-400" title={error}>⚠</span>}
+    </div>
+  )
 }
 
 export default function SitesView({
@@ -39,6 +82,7 @@ export default function SitesView({
               <th className="text-left px-4 py-2.5 font-medium">Site</th>
               <th className="text-left px-4 py-2.5 font-medium">Partner</th>
               <th className="text-left px-4 py-2.5 font-medium">Status</th>
+              <th className="text-left px-4 py-2.5 font-medium">Payment</th>
             </tr>
           </thead>
           <tbody>
@@ -56,6 +100,9 @@ export default function SitesView({
                   }`}>
                     {site.status}
                   </span>
+                </td>
+                <td className="px-4 py-3">
+                  <ProviderSelect site={site} />
                 </td>
               </tr>
             ))}

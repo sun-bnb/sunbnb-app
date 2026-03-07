@@ -41,6 +41,7 @@ export interface SiteProps {
   paymentProcessingFee?: PaymentProcessingFee | null
   subscriptionTier?: 'STARTER' | 'PRO' | 'BUSINESS' | null
   appSalesEnabled?: boolean
+  paymentProvider?: string
 }
 
 export interface Product {

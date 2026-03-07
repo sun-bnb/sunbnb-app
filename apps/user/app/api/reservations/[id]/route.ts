@@ -2,7 +2,7 @@
  * GET /api/reservations/[id]
  *
  * Fetches a reservation and — if it's still processing — verifies the
- * Stripe PaymentIntent status and triggers idempotent invoice creation.
+ * payment status (Stripe or Mollie) and triggers idempotent invoice creation.
  *
  * Security:
  * - Authenticates via session or anonId query param
@@ -10,7 +10,7 @@
  *
  * Used by:
  * - RTK Query polling on the payment-complete page
- * - Stripe webhook as a secondary confirmation path
+ * - Webhook (Stripe or Mollie) as primary confirmation, this as fallback
  * - Direct lookup for reservation details
  */
 
@@ -18,7 +18,8 @@ import prisma from '@repo/data/PrismaCient'
 import { processConfirmedReservation } from '@repo/data/payment'
 import { NextRequest } from 'next/server'
 import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
-import { getStripePaymentStatus, isDemoPayment } from '@/app/api/_lib/stripe'
+import { isDemoPayment } from '@/app/api/_lib/stripe'
+import { getPaymentStatus, isPaymentSucceeded, isPaymentFailed } from '@/app/api/_lib/payment-provider'
 
 // ─── Route Handler ──────────────────────────────────────────────────────────
 
@@ -60,21 +61,22 @@ export async function GET(
   if (reservation.status === 'processing' && reservation.paymentRef) {
     try {
       if (isDemoPayment(reservation.paymentRef)) {
-        // Demo mode: process immediately without Stripe verification
+        // Demo mode: process immediately without provider verification
         await processConfirmedReservation(reservation.id)
       } else {
-        // Real payment: verify with Stripe
-        const paymentStatus = await getStripePaymentStatus(reservation.paymentRef)
+        // Real payment: verify with correct provider (Stripe or Mollie)
+        const paymentStatus = await getPaymentStatus(reservation.paymentRef)
 
-        if (paymentStatus === 'succeeded') {
+        if (isPaymentSucceeded(paymentStatus)) {
           await processConfirmedReservation(reservation.id)
-        } else if (paymentStatus !== 'processing') {
-          // Payment failed or was canceled
+        } else if (isPaymentFailed(paymentStatus)) {
+          // Payment failed, canceled, or expired
           await prisma.reservation.update({
             where: { id: reservation.id },
             data: { status: 'payment_failed' },
           })
         }
+        // else: still processing (Stripe 'processing', Mollie 'open'/'pending') — wait
       }
 
       // Re-fetch to return current state

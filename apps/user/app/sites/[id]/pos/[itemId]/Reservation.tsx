@@ -151,7 +151,7 @@ export default function ReservationView({
   let focused = sitesState.focused
   let panelBottom = sitesState.panelBottom || '-bottom-[364px]'
 
-  if (!stripePublicKey) {
+  if (!stripePublicKey && site.paymentProvider !== 'mollie') {
     return (
       <div className="flex flex-col items-center justify-center">
         <div>Payment gateway unavailable</div>
@@ -219,7 +219,8 @@ export default function ReservationView({
       ) : <PaymentView 
             stripePublicKey={stripePublicKey}
             preview={previewElem}
-            reservation={reservation} />
+            reservation={reservation}
+            paymentProvider={site.paymentProvider} />
 
     ) : (
       <div className="mx-[4px] mt-[8px] h-[420px]">

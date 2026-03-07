@@ -18,12 +18,16 @@ export default async function SitesPage() {
       id: true,
       name: true,
       status: true,
+      paymentProvider: true,
       user: {
         select: {
           name: true,
           email: true,
           partnerAccount: {
-            select: { company: true },
+            select: {
+              company: true,
+              mollieAccessToken: true,
+            },
           },
         },
       },
@@ -35,7 +39,9 @@ export default async function SitesPage() {
     id: s.id,
     name: s.name,
     status: s.status,
+    paymentProvider: s.paymentProvider,
     ownerName: s.user.partnerAccount?.company ?? s.user.name ?? s.user.email,
+    hasMollie: !!s.user.partnerAccount?.mollieAccessToken,
   }))
 
   return (

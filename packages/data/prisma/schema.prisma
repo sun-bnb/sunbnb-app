@@ -147,11 +147,15 @@ model PartnerAccount {
   company     String
   websiteUrl  String?      @map("website_url")
   address     String
-  bankAccount String?      @map("bank_account")
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  userId      String       @id @unique @map("user_id")
-  businessId  String?      @map("business_id")
+  bankAccount          String?      @map("bank_account")
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  userId               String       @id @unique @map("user_id")
+  businessId           String?      @map("business_id")
+  mollieProfileId      String?      @map("mollie_profile_id")
+  mollieAccessToken    String?      @map("mollie_access_token")
+  mollieRefreshToken   String?      @map("mollie_refresh_token")
+  mollieOnboardingStatus String?    @map("mollie_onboarding_status")
   invoices     Invoice[]
   settlements  Settlement[]
   subscription Subscription?

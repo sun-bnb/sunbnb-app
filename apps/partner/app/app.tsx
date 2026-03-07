@@ -11,7 +11,7 @@ export default function App({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
 
   // Public routes that don't need auth shell
-  const isPublicRoute = pathname.endsWith('/info') || pathname.endsWith('/manage') || pathname.endsWith('/orders') || pathname.startsWith('/sign-in')
+  const isPublicRoute = pathname.endsWith('/info') || pathname.endsWith('/manage') || pathname.endsWith('/orders') || pathname.startsWith('/sign-in') || pathname.startsWith('/legal')
 
   if (isPublicRoute) {
     return <>{children}</>

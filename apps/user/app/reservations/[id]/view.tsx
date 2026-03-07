@@ -16,6 +16,7 @@ interface ReservationViewProps {
   showTerms?: boolean
   siteType?: string
   orderPaymentType?: string
+  paymentProvider?: string
   serviceFee: {
     chargeType: string
     feeAmount?: number | null
@@ -23,7 +24,7 @@ interface ReservationViewProps {
   } | undefined
 }
 
-export default function ReservationView({ serviceFee, siteType, orderPaymentType, showTerms, signedIn, reservation, order, stripePublicKey }: ReservationViewProps) {
+export default function ReservationView({ serviceFee, siteType, orderPaymentType, showTerms, signedIn, reservation, order, stripePublicKey, paymentProvider }: ReservationViewProps) {
 
   const containerRef = useRef<HTMLDivElement>(null)
   const resRef = useRef<HTMLDivElement>(null)
@@ -183,6 +184,7 @@ export default function ReservationView({ serviceFee, siteType, orderPaymentType
               seatId={seatId}
               siteType={orderPaymentType ?? siteType}
               stripePublicKey={stripePublicKey}
+              paymentProvider={paymentProvider}
               orders={reservation.orders}
               showConfirmation={!!order}
             />

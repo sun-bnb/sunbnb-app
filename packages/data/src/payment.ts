@@ -124,7 +124,7 @@ interface FeeContext {
  * Creates default settings and service fee if none exist (bootstrapping).
  * Uses a transaction to prevent duplicate settings from concurrent requests.
  */
-async function loadFeeContext(
+export async function loadFeeContext(
   siteId: string,
   serviceCode: string
 ): Promise<FeeContext> {

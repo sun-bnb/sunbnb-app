@@ -1,13 +1,14 @@
 /**
  * Order Payment Component
  *
- * Renders either a Stripe payment form or a demo payment form for orders.
+ * Renders a Stripe payment form, Mollie redirect payment, or a demo payment form for orders.
  *
  * Key design decisions:
  * - Demo mode is controlled SERVER-SIDE via env var (not localStorage)
- * - paymentRef is stored server-side in the order payment-intent route
+ * - paymentRef is stored server-side in the order payment-intent / create-payment route
  * - Service fee is calculated server-side (not sent from client)
  * - Demo mode uses a dedicated server action that processes immediately
+ * - Mollie uses redirect-based checkout (no embedded elements)
  */
 
 'use client'
@@ -16,6 +17,8 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements } from '@stripe/react-stripe-js'
 import CircularProgress from '@mui/material/CircularProgress'
+import Button from '@mui/material/Button'
+import { useTranslations } from 'next-intl'
 import { initiateDemoOrderPayment } from './actions'
 import CheckoutForm from './CheckoutForm'
 import { Order } from '@/app/types/types'
@@ -136,26 +139,127 @@ export function DemoOrderPayment({
 }
 
 
+export function MollieOrderPayment({
+  order,
+  preview,
+  completeUrl,
+}: {
+  order: Order
+  preview?: React.ReactNode
+  completeUrl?: string
+}) {
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const t = useTranslations('Payment')
+
+  const handlePay = async () => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const anonId = typeof window !== 'undefined'
+        ? localStorage.getItem('sunbnb-anonId')
+        : null
+
+      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}${completeUrl || '/payment/complete'}?orderId=${order.id}`
+
+      const res = await fetch('/api/order-payment/mollie/create-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: order.id,
+          anonId,
+          redirectUrl,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (data.error) {
+        setError(data.error)
+        setIsLoading(false)
+        return
+      }
+
+      // Redirect to Mollie's hosted checkout page
+      window.location.href = data.checkoutUrl
+    } catch (err) {
+      console.error('[MollieOrderPayment] Error:', err)
+      setError('Payment failed — please try again')
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div className="App" style={{ paddingLeft: '8px', paddingRight: '8px' }}>
+      <div className="mt-[6px]">
+        {preview}
+      </div>
+      <div className="mr-[6px] ml-[6px] mt-[6px] mb-[12px]">
+        <div className="text-black text-[15px] mb-[4px] whitespace-nowrap">
+          {t('Payment confirms acceptance of')}{' '}
+          <a
+            className="text-[#1976d2]"
+            href="/tos/reservation"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {t('terms of service')}
+          </a>
+        </div>
+        <Button
+          variant="contained"
+          fullWidth
+          onClick={handlePay}
+          disabled={isLoading || !!order.paymentRef}
+        >
+          {isLoading ? <CircularProgress size={24} color="inherit" /> : t('Pay now')}
+        </Button>
+        {error && (
+          <div className="text-red-600 text-sm mt-2">{error}</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+
 export default function OrderPayment({
   stripePublicKey,
   order,
   serviceFee,
   preview,
   completeUrl,
+  paymentProvider,
 }: {
   stripePublicKey: string | undefined
   order: Order
   serviceFee?: number
   preview?: React.ReactNode
   completeUrl?: string
+  paymentProvider?: string
 }) {
-  return DEMO_MODE ? (
-    <DemoOrderPayment
-      order={order}
-      preview={preview}
-      completeUrl={completeUrl}
-    />
-  ) : (
+  if (DEMO_MODE) {
+    return (
+      <DemoOrderPayment
+        order={order}
+        preview={preview}
+        completeUrl={completeUrl}
+      />
+    )
+  }
+
+  if (paymentProvider === 'mollie') {
+    return (
+      <MollieOrderPayment
+        order={order}
+        preview={preview}
+        completeUrl={completeUrl}
+      />
+    )
+  }
+
+  return (
     <StripeOrderPayment
       stripePublicKey={stripePublicKey}
       order={order}

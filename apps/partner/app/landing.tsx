@@ -194,14 +194,22 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-gray-100 mt-8">
-        <div className="max-w-5xl mx-auto px-6 py-8 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Image alt="Sunbnb" src={sunbnbLogo} className="w-5 h-5 opacity-50" />
-            <span className="text-xs text-gray-400">© {new Date().getFullYear()} Sunbnb</span>
+        <div className="max-w-5xl mx-auto px-6 py-8">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+            <div className="flex items-center gap-2">
+              <Image alt="Sunbnb" src={sunbnbLogo} className="w-5 h-5 opacity-50" />
+              <span className="text-xs text-gray-400">© {new Date().getFullYear()} Sunbnb</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-400">
+              <a href="/legal/onboarding" className="hover:text-gray-600 transition-colors">Onboarding Guide</a>
+              <a href="/legal/merchant-agreement" className="hover:text-gray-600 transition-colors">Merchant Agreement</a>
+              <a href="/legal/verifactu" className="hover:text-gray-600 transition-colors">Veri*factu Compliance</a>
+              <a href="mailto:partners@sunbnb.app" className="hover:text-gray-600 transition-colors">Contact</a>
+            </div>
           </div>
-          <div className="flex items-center gap-4 text-xs text-gray-400">
-            <a href="mailto:hello@sunbnb.app" className="hover:text-gray-600 transition-colors">Contact</a>
-          </div>
+          <p className="mt-4 text-[10px] text-gray-300">
+            Operated by Refactory DX Oy · Business ID 2940957-1 · VAT FI29409571 · Sturenkatu 37-41 B 16, 00550 Helsinki, Finland
+          </p>
         </div>
       </footer>
     </div>
