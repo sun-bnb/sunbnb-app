@@ -184,6 +184,7 @@ model Site {
   bgImageWidth    Int?                     @map("bg_image_width")
   bgImageHeight   Int?                     @map("bg_image_height")
   slug            String?
+  paymentProvider String                   @default("stripe") @map("payment_provider")
 
   inventoryItems  InventoryItem[]
   orders          Order[]
