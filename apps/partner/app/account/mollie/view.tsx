@@ -342,7 +342,7 @@ function ClientLinkTab({ partnerData, onSwitchToExisting }: { partnerData: Partn
       const data = await res.json()
 
       if (!res.ok) {
-        if (data.code === 'client_links_unavailable') {
+        if (data.code === 'client_links_unavailable' || data.code === 'partner_status_required') {
           setUnavailable(true)
         }
         setFormError(data.error || 'Something went wrong')
@@ -452,11 +452,10 @@ function ClientLinkTab({ partnerData, onSwitchToExisting }: { partnerData: Partn
 
         {/* Address */}
         <div>
-          <label htmlFor="cl-street" className={labelCls}>Street and number *</label>
+          <label htmlFor="cl-street" className={labelCls}>Street and number</label>
           <input
             id="cl-street"
             name="streetAndNumber"
-            required
             defaultValue={partnerData?.address ?? ''}
             placeholder="e.g. Keizersgracht 126"
             className={inputCls}
@@ -465,21 +464,19 @@ function ClientLinkTab({ partnerData, onSwitchToExisting }: { partnerData: Partn
 
         <div className="grid grid-cols-3 gap-3">
           <div>
-            <label htmlFor="cl-postalCode" className={labelCls}>Postal code *</label>
+            <label htmlFor="cl-postalCode" className={labelCls}>Postal code</label>
             <input
               id="cl-postalCode"
               name="postalCode"
-              required
               placeholder="1015 AA"
               className={inputCls}
             />
           </div>
           <div>
-            <label htmlFor="cl-city" className={labelCls}>City *</label>
+            <label htmlFor="cl-city" className={labelCls}>City</label>
             <input
               id="cl-city"
               name="city"
-              required
               placeholder="Amsterdam"
               className={inputCls}
             />

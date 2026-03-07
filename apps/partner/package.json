@@ -12,6 +12,7 @@
     "@auth/prisma-adapter": "^2.4.2",
     "@headlessui/react": "^2.1.2",
     "@heroicons/react": "^2.1.5",
+    "@mollie/api-client": "^4.4.0",
     "@mui/x-date-pickers": "^6.0.0",
     "@prisma/client": "^7",
     "@repo/data": "file:../../packages/data",
@@ -31,7 +32,8 @@
     "react-dom": "^18.3.1",
     "recharts": "^2.15.3",
     "sharp": "^0.33.1",
-    "stripe": "^20.4.0"
+    "stripe": "^20.4.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@repo/eslint-config": "*",

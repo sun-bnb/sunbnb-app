@@ -135,30 +135,16 @@ export async function refreshAccessToken(refreshToken: string): Promise<MollieTo
 
 // ── Client Links API ────────────────────────────────────────────────────────
 
+import createMollieClient from '@mollie/api-client'
+
 /**
- * Get a platform-level access token via OAuth client_credentials grant.
- * Required for the Client Links API (organizations.write scope).
+ * Get the Organization Access Token from environment.
+ * This is a long-lived token created in the Mollie Dashboard under
+ * Developers → Organization access tokens. It replaces the
+ * client_credentials grant (which requires special Mollie approval).
  */
-export async function getAppAccessToken(): Promise<string> {
-  const res = await fetch(MOLLIE_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: getMollieClientId(),
-      client_secret: getMollieClientSecret(),
-      scope: 'organizations.write',
-    }),
-  })
-
-  if (!res.ok) {
-    const body = await res.text()
-    console.error('[Mollie] App token request failed:', res.status, body)
-    throw new Error(`Mollie app token request failed (${res.status})`)
-  }
-
-  const data = await res.json()
-  return data.access_token
+export function getOrgAccessToken(): string {
+  return requireEnv('MOLLIE_ORG_TOKEN')
 }
 
 export interface ClientLinkData {
@@ -170,10 +156,10 @@ export interface ClientLinkData {
   }
   name: string // organization name
   address: {
-    streetAndNumber: string
-    postalCode: string
-    city: string
     country: string
+    streetAndNumber?: string
+    postalCode?: string
+    city?: string
   }
   registrationNumber?: string
   vatNumber?: string
@@ -183,50 +169,69 @@ export interface ClientLinkData {
  * Create a Client Link via Mollie's Client Links API.
  * Returns the clientLink URL that the partner should be redirected to.
  *
+ * Uses the @mollie/api-client SDK initialized with an Organization
+ * Access Token (`access_…`) so no client_credentials grant is needed.
+ *
  * This creates a pre-filled Mollie account signup that automatically
  * connects back to our platform after the partner sets their password.
  *
  * @see https://docs.mollie.com/reference/create-client-link
  */
 export async function createClientLink(data: ClientLinkData): Promise<string> {
-  const appToken = await getAppAccessToken()
+  const orgToken = getOrgAccessToken()
 
-  const body: Record<string, unknown> = {
+  // Sanity-check: Organisation Access Tokens always start with "access_"
+  if (!orgToken.startsWith('access_')) {
+    console.error(
+      '[Mollie] MOLLIE_ORG_TOKEN does not start with "access_". ' +
+      'Client Links require an Organization Access Token, not a standard API key.',
+    )
+    throw new Error(
+      'MOLLIE_ORG_TOKEN must be an Organization Access Token (starts with access_)',
+    )
+  }
+
+  const mollieClient = createMollieClient({ accessToken: orgToken })
+
+  const params: Parameters<typeof mollieClient.clientLinks.create>[0] = {
     owner: {
       email: data.owner.email,
       givenName: data.owner.givenName,
       familyName: data.owner.familyName,
-      locale: data.owner.locale || 'en_US',
+      locale: (data.owner.locale as any) || 'en_US',
     },
     name: data.name,
     address: {
-      streetAndNumber: data.address.streetAndNumber,
-      postalCode: data.address.postalCode,
-      city: data.address.city,
       country: data.address.country,
+      ...(data.address.streetAndNumber && { streetAndNumber: data.address.streetAndNumber }),
+      ...(data.address.postalCode && { postalCode: data.address.postalCode }),
+      ...(data.address.city && { city: data.address.city }),
     },
+    ...(data.registrationNumber && { registrationNumber: data.registrationNumber }),
+    ...(data.vatNumber && { vatNumber: data.vatNumber }),
   }
 
-  if (data.registrationNumber) body.registrationNumber = data.registrationNumber
-  if (data.vatNumber) body.vatNumber = data.vatNumber
+  try {
+    const clientLink = await mollieClient.clientLinks.create(params)
 
-  const res = await fetch('https://api.mollie.com/v2/client-links', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${appToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  })
+    // The SDK returns the resource — extract the clientLink URL from _links
+    const linkHref = (clientLink as any)._links?.clientLink?.href
+    if (!linkHref) {
+      throw new Error('Mollie client link response did not contain a clientLink URL')
+    }
 
-  if (!res.ok) {
-    const errBody = await res.text()
-    console.error('[Mollie] Client link creation failed:', res.status, errBody)
-    throw new Error(`Mollie client link creation failed (${res.status})`)
+    return linkHref
+  } catch (err: any) {
+    // Log Mollie-specific error fields for easier debugging
+    console.error('[Mollie] clientLinks.create failed:', {
+      title: err?.title,
+      detail: err?.detail,
+      field: err?.field,
+      statusCode: err?.statusCode,
+      message: err?.message,
+    })
+    throw err
   }
-
-  const result = await res.json()
-  return result._links.clientLink.href
 }
 
 // ── Profile / Onboarding Helpers ────────────────────────────────────────────
