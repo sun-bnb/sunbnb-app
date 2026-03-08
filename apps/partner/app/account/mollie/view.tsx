@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { disconnectMollie, refreshMollieTokens } from './actions'
 
 interface PartnerData {
@@ -37,6 +37,176 @@ function StatusBadge({ status }: { status: string | null }) {
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${cfg.bg} ${cfg.text}`}>
       {cfg.label}
     </span>
+  )
+}
+
+/* ── Readiness panel ─────────────────────────────────────────────────────── */
+
+interface ReadinessReport {
+  tokenValid: boolean
+  profileActive: boolean
+  profileId: string | null
+  onboardingStatus: string | null
+  enabledMethods: string[]
+  ready: boolean
+}
+
+function ReadinessPanel() {
+  const [report, setReport] = useState<ReadinessReport | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [rerunning, setRerunning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchReadiness = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/mollie/readiness-check')
+      if (!res.ok) throw new Error('Failed to fetch')
+      setReport(await res.json())
+    } catch {
+      setError('Could not check readiness')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchReadiness() }, [fetchReadiness])
+
+  const handleRerun = async () => {
+    setRerunning(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/mollie/setup-test-merchant', { method: 'POST' })
+      if (!res.ok) throw new Error('Setup failed')
+      // Refresh readiness after re-run
+      await fetchReadiness()
+    } catch {
+      setError('Re-run failed. Please try again.')
+    } finally {
+      setRerunning(false)
+    }
+  }
+
+  const checkIcon = (ok: boolean) =>
+    ok ? (
+      <svg className="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+      </svg>
+    ) : (
+      <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    )
+
+  if (loading) {
+    return (
+      <div className="mt-4 bg-gray-50 rounded-lg border border-gray-200 p-4">
+        <div className="flex items-center gap-2 text-sm text-gray-400">
+          <div className="w-3.5 h-3.5 border-2 border-gray-300/30 border-t-gray-400 rounded-full animate-spin" />
+          Checking payment readiness…
+        </div>
+      </div>
+    )
+  }
+
+  if (!report) {
+    return error ? (
+      <div className="mt-4 bg-red-50 rounded-lg border border-red-200 p-3">
+        <p className="text-sm text-red-700">{error}</p>
+      </div>
+    ) : null
+  }
+
+  return (
+    <div className="mt-4 bg-gray-50 rounded-lg border border-gray-200 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Payment readiness</h3>
+        {report.ready ? (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-full px-2 py-0.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            Ready
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 rounded-full px-2 py-0.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            Not ready
+          </span>
+        )}
+      </div>
+
+      <ul className="space-y-2 text-sm">
+        <li className="flex items-center gap-2">
+          {checkIcon(report.tokenValid)}
+          <span className={report.tokenValid ? 'text-gray-700' : 'text-gray-400'}>API token valid</span>
+        </li>
+        <li className="flex items-center gap-2">
+          {checkIcon(report.profileActive)}
+          <span className={report.profileActive ? 'text-gray-700' : 'text-gray-400'}>
+            Website profile active
+            {report.profileId && <span className="ml-1 text-xs text-gray-400 font-mono">({report.profileId})</span>}
+          </span>
+        </li>
+        <li className="flex items-center gap-2">
+          {report.onboardingStatus === 'completed' ? checkIcon(true) : (
+            <svg className="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+            </svg>
+          )}
+          <span className="text-gray-700">
+            Onboarding {report.onboardingStatus === 'completed' ? 'completed' : report.onboardingStatus === 'in-review' ? 'in review' : 'incomplete'}
+            {report.onboardingStatus === 'needs-data' && <span className="text-xs text-gray-400 ml-1">(not required for test mode)</span>}
+          </span>
+        </li>
+        <li className="flex items-center gap-2">
+          {checkIcon(report.enabledMethods.length > 0)}
+          <span className={report.enabledMethods.length > 0 ? 'text-gray-700' : 'text-gray-400'}>
+            {report.enabledMethods.length > 0
+              ? `${report.enabledMethods.length} payment method${report.enabledMethods.length > 1 ? 's' : ''} enabled`
+              : 'No payment methods enabled'}
+          </span>
+        </li>
+      </ul>
+
+      {report.enabledMethods.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {report.enabledMethods.map((m) => (
+            <span key={m} className="inline-block bg-white border border-gray-200 rounded px-2 py-0.5 text-xs text-gray-600 font-medium">
+              {m}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {error && (
+        <div className="mt-3 text-xs text-red-600">{error}</div>
+      )}
+
+      {!report.ready && (
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            onClick={handleRerun}
+            disabled={rerunning}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
+          >
+            {rerunning ? (
+              <>
+                <div className="w-3 h-3 border-2 border-gray-300/30 border-t-gray-400 rounded-full animate-spin" />
+                Running setup…
+              </>
+            ) : (
+              'Re-run setup'
+            )}
+          </button>
+          <button
+            onClick={fetchReadiness}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            Refresh
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -202,6 +372,9 @@ export default function MollieView({ isConnected, profileId, onboardingStatus, s
                 )}
               </button>
             </div>
+
+            {/* Payment readiness checklist */}
+            <ReadinessPanel />
           </>
         ) : (
           <>

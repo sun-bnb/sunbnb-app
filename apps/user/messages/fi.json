@@ -56,7 +56,9 @@
   "Payment": {
     "Payment confirms acceptance of": "Maksu vahvistaa suostumisen",
     "terms of service": "palveluehtoihin",
-    "Pay now": "Maksa nyt"
+    "Pay now": "Maksa nyt",
+    "Secure checkout": "Turvallinen maksu",
+    "You will be redirected to complete payment": "Sinut ohjataan viimeistelemään maksu"
   },
   "TermsOfService": {
     "tos": "terms-fi"

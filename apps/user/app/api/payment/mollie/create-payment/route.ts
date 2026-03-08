@@ -22,9 +22,10 @@ import {
   calculateServiceFeeAmount,
   round,
 } from '@repo/data/payment'
+import { isTestMode } from '@repo/data/env'
 import { NextRequest } from 'next/server'
 import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
-import { getMollieClientForPartner } from '@/app/api/_lib/mollie'
+import { getMollieClientForPartner, getValidMollieToken } from '@/app/api/_lib/mollie'
 import { isValidEntityId } from '@/app/api/_lib/stripe'
 
 export async function POST(request: NextRequest) {
@@ -90,6 +91,22 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // ── Ensure the access token is valid (auto-refresh if expired) ───────────
+  let validAccessToken: string
+  try {
+    validAccessToken = await getValidMollieToken(
+      partnerAccount.userId,
+      partnerAccount.mollieAccessToken,
+      partnerAccount.mollieRefreshToken,
+    )
+  } catch (err) {
+    console.error('[MolliePayment] Token refresh failed:', err)
+    return Response.json(
+      { error: 'Partner Mollie session has expired. Please ask the merchant to reconnect their Mollie account.' },
+      { status: 401 }
+    )
+  }
+
   // ── Compute application fee (our platform commission) ────────────────────
   const tier = partnerAccount.subscription?.plan?.tier ?? null
   const matchedFee = resolveServiceFee(
@@ -105,19 +122,43 @@ export async function POST(request: NextRequest) {
   const amountValue = paymentAmount.toFixed(2)
   const feeValue = applicationFeeAmount.toFixed(2)
 
-  // Build webhook URL
-  const origin = request.headers.get('origin') || request.headers.get('x-forwarded-host')
-  const protocol = request.headers.get('x-forwarded-proto') || 'https'
-  const webhookUrl = origin
-    ? `${protocol}://${origin.replace(/^https?:\/\//, '')}/api/webhooks/mollie`
-    : `${process.env.NEXT_PUBLIC_BASE_URL}/api/webhooks/mollie`
+  // Build webhook URL using WHATWG URL API (avoids DEP0169 url.parse warning)
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
+    || `${request.headers.get('x-forwarded-proto') || 'https'}://${request.headers.get('x-forwarded-host') || request.headers.get('host') || 'localhost:3002'}`
+  const webhookUrl = new URL('/api/webhooks/mollie', baseUrl).toString()
 
   // Create payment on the PARTNER's Mollie account (partner = Merchant of Record)
-  const mollie = getMollieClientForPartner(partnerAccount.mollieAccessToken)
+  const mollie = getMollieClientForPartner(validAccessToken)
+
+  // ── Resolve profile ID dynamically ───────────────────────────────────────
+  let profileId = partnerAccount.mollieProfileId
+  if (!profileId) {
+    try {
+      const profiles = await mollie.profiles.page()
+      const active = profiles.find((p: any) => p.status === 'verified' || p.status === 'unverified')
+      if (!active) {
+        return Response.json(
+          { error: 'Merchant has no active website profile. Please create one in the Mollie Dashboard.' },
+          { status: 400 }
+        )
+      }
+      profileId = active.id
+    } catch (err) {
+      console.error('[MolliePayment] Failed to fetch profiles:', err)
+      return Response.json(
+        { error: 'Failed to retrieve merchant website profiles' },
+        { status: 500 }
+      )
+    }
+  }
+
+  // When using OAuth tokens, Mollie defaults to live mode. In development/test
+  // environments we must pass testmode: true so that pending-boarding methods work.
 
   let payment
   try {
     payment = await mollie.payments.create({
+      profileId: profileId!,
       amount: {
         value: amountValue,
         currency: 'EUR',
@@ -140,13 +181,33 @@ export async function POST(request: NextRequest) {
           description: 'Platform fee',
         },
       }),
+      ...(isTestMode() && { testmode: true }),
     })
-  } catch (error) {
-    console.error('[MolliePayment] Mollie error:', error)
+  } catch (error: any) {
+    console.error('[MolliePayment] Mollie error:', {
+      title: error?.title,
+      detail: error?.detail,
+      field: error?.field,
+      statusCode: error?.statusCode,
+      message: error?.message,
+    })
     await prisma.reservation.update({
       where: { id: reservationId },
       data: { status: 'error' },
     })
+
+    // 422 — typically "payment method not activated" or missing profile
+    if (error?.statusCode === 422) {
+      return Response.json(
+        {
+          error: 'Payment could not be processed. The merchant may need to activate payment methods in their Mollie Dashboard.',
+          detail: error?.detail || error?.message,
+          field: error?.field,
+        },
+        { status: 422 }
+      )
+    }
+
     return Response.json({ error: 'Failed to create payment' }, { status: 500 })
   }
 

@@ -6,6 +6,7 @@ import { useSession, signOut } from 'next-auth/react'
 import { usePathname } from 'next/navigation'
 import { useState, useRef, useEffect } from 'react'
 import sunbnbLogo from '@/app/sunbnb-logo.svg'
+import { getEnvLabel } from '@repo/data/env'
 
 const navItems = [
   { label: 'Dashboard', href: '/' },
@@ -47,7 +48,14 @@ export default function Header() {
         {/* Left: Logo + Nav */}
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-            <Image alt="Sunbnb" src={sunbnbLogo} className="w-8 h-8" />
+            <span className="relative">
+              <Image alt="Sunbnb" src={sunbnbLogo} className="w-8 h-8" />
+              {getEnvLabel() && (
+                <span className="absolute top-0 right-0 translate-x-1/4 -translate-y-1/4 text-[7px] font-extrabold tracking-wide px-1 py-[1px] rounded bg-amber-400 text-amber-900 leading-none whitespace-nowrap shadow-sm pointer-events-none z-10">
+                  {getEnvLabel()}
+                </span>
+              )}
+            </span>
             <span className="text-sm font-bold text-gray-900 hidden md:inline">sunbnb</span>
           </Link>
 

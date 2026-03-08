@@ -12,6 +12,9 @@ const nextConfig = {
         port: ''
       },
     ],
+  },
+  env: {
+    NEXT_PUBLIC_APP_ENV: process.env.VERCEL_ENV || 'development'
   }
 };
 

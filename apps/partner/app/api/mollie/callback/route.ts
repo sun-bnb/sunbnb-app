@@ -17,6 +17,7 @@ import prisma from '@repo/data/PrismaCient'
 import {
   exchangeCodeForTokens,
   fetchMollieProfile,
+  bootstrapMollieAccount,
 } from '@/app/api/_lib/mollie'
 
 export async function GET(request: NextRequest) {
@@ -70,6 +71,38 @@ export async function GET(request: NextRequest) {
         mollieOnboardingStatus: profile.onboardingStatus,
       },
     })
+
+    // ── Auto-bootstrap: submit onboarding data + enable payment methods ──
+    // This runs after tokens are stored. Failures are logged but never
+    // prevent the success redirect — the partner can re-run manually.
+    try {
+      const bootstrap = await bootstrapMollieAccount(
+        tokens.accessToken,
+        session.user.id!,
+        {
+          email: session.user.email ?? undefined,
+          profileId: profile.profileId || null,
+        },
+      )
+      console.log('[Mollie OAuth] Auto-bootstrap result:', JSON.stringify(bootstrap))
+
+      // Persist the updated onboarding status from bootstrap
+      if (bootstrap.onboardingStatus || bootstrap.profileId) {
+        await prisma.partnerAccount.update({
+          where: { userId: session.user.id },
+          data: {
+            ...(bootstrap.onboardingStatus && {
+              mollieOnboardingStatus: bootstrap.onboardingStatus,
+            }),
+            ...(bootstrap.profileId && !profile.profileId && {
+              mollieProfileId: bootstrap.profileId,
+            }),
+          },
+        })
+      }
+    } catch (err) {
+      console.error('[Mollie OAuth] Auto-bootstrap error (non-fatal):', err)
+    }
 
     // Clear the state cookie and redirect to success page
     const response = NextResponse.redirect(new URL('/account/mollie?success=true', baseUrl))

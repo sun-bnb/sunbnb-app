@@ -39,7 +39,9 @@ export const OAUTH_SCOPES = [
   'payments.read',
   'payments.write',
   'profiles.read',
+  'profiles.write',
   'onboarding.read',
+  'onboarding.write',
 ].join('+')
 
 // ── Authorization URL ───────────────────────────────────────────────────────
@@ -232,6 +234,175 @@ export async function createClientLink(data: ClientLinkData): Promise<string> {
     })
     throw err
   }
+}
+
+// ── Post-Connect Bootstrap ──────────────────────────────────────────────────
+
+/** Payment methods to enable automatically after connecting. */
+const DEFAULT_METHODS = [
+  'creditcard',
+  'ideal',
+  'bancontact',
+  'banktransfer',
+  'applepay',
+] as const
+
+export interface BootstrapResult {
+  onboardingStatus: string | null
+  onboardingSubmitted: boolean
+  profileId: string | null
+  profileResolved: boolean
+  methods: Record<string, string>
+}
+
+/**
+ * Bootstrap a newly-connected Mollie account:
+ *  1. Check onboarding — submit minimal data if status is "needs-data"
+ *  2. Resolve profile ID (fetch first profile if not already stored)
+ *  3. Enable default payment methods on the profile
+ *
+ * This is called automatically from the OAuth callback and can also be
+ * triggered manually via the setup-test-merchant endpoint.
+ *
+ * Failures in any step are logged but never bubble — the caller always
+ * gets a structured result object.
+ */
+export async function bootstrapMollieAccount(
+  accessToken: string,
+  userId: string,
+  opts?: { email?: string; profileId?: string | null },
+): Promise<BootstrapResult> {
+  console.log('[Mollie Bootstrap] Starting bootstrap for user:', userId)
+  console.log('[Mollie Bootstrap] Access token prefix:', accessToken.substring(0, 12) + '…')
+  console.log('[Mollie Bootstrap] Provided profileId:', opts?.profileId ?? '(none)')
+
+  const mollie = createMollieClient({ accessToken })
+  const result: BootstrapResult = {
+    onboardingStatus: null,
+    onboardingSubmitted: false,
+    profileId: opts?.profileId ?? null,
+    profileResolved: false,
+    methods: {},
+  }
+
+  // ── Step 1: Onboarding ──────────────────────────────────────────────────
+
+  try {
+    console.log('[Mollie Bootstrap] Fetching onboarding status…')
+    const onboarding = await mollie.onboarding.get()
+    result.onboardingStatus = (onboarding as any).status
+    console.log('[Mollie Bootstrap] Onboarding status:', result.onboardingStatus)
+
+    if ((onboarding as any).status === 'needs-data') {
+      console.log('[Mollie Bootstrap] Submitting onboarding data via raw fetch…')
+      // The SDK fails on onboarding.submit() because Mollie returns 204 No Content
+      // which the SDK can't parse as JSON. Use raw fetch instead.
+      const submitRes = await fetch('https://api.mollie.com/v2/onboarding/me', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          organization: {
+            name: 'SunBnB Test Merchant',
+            address: {
+              streetAndNumber: 'Keizersgracht 126',
+              postalCode: '1015 AA',
+              city: 'Amsterdam',
+              country: 'NL',
+            },
+          },
+          profile: {
+            name: 'SunBnB Beach Club',
+            url: 'https://sunbnb.app',
+            email: opts?.email || 'test@sunbnb.app',
+            description: 'Beach club sunbed rentals, food & beverages',
+            categoryCode: 5499,
+          },
+        }),
+      })
+      console.log('[Mollie Bootstrap] Onboarding submit response:', submitRes.status)
+      if (!submitRes.ok) {
+        const errBody = await submitRes.text()
+        console.error('[Mollie Bootstrap] Onboarding submit error body:', errBody)
+      } else {
+        result.onboardingSubmitted = true
+        console.log('[Mollie Bootstrap] Onboarding data submitted successfully')
+
+        // Re-check onboarding status after submit
+        try {
+          const onboarding2 = await mollie.onboarding.get()
+          result.onboardingStatus = (onboarding2 as any).status
+          console.log('[Mollie Bootstrap] Onboarding status after submit:', result.onboardingStatus)
+        } catch (e) {
+          console.error('[Mollie Bootstrap] Failed to re-check onboarding:', e)
+        }
+      }
+    } else {
+      console.log('[Mollie Bootstrap] Onboarding does not need data, skipping submit')
+    }
+  } catch (err: any) {
+    console.error('[Mollie Bootstrap] Onboarding error:', {
+      title: err?.title, detail: err?.detail, field: err?.field,
+      statusCode: err?.statusCode, message: err?.message,
+    })
+  }
+
+  // ── Step 2: Resolve profile ID ──────────────────────────────────────────
+
+  if (!result.profileId) {
+    try {
+      console.log('[Mollie Bootstrap] No profileId — fetching profiles…')
+      const profiles = await mollie.profiles.page()
+      console.log('[Mollie Bootstrap] Profiles returned:', profiles.length)
+      const first = profiles[0]
+      if (first) {
+        console.log('[Mollie Bootstrap] Using profile:', first.id, 'status:', (first as any).status, 'mode:', (first as any).mode)
+        result.profileId = first.id
+        result.profileResolved = true
+        const prisma = (await import('@repo/data/PrismaCient')).default
+        await prisma.partnerAccount.update({
+          where: { userId },
+          data: { mollieProfileId: first.id },
+        })
+      } else {
+        console.warn('[Mollie Bootstrap] No profiles found on this Mollie account')
+      }
+    } catch (err: any) {
+      console.error('[Mollie Bootstrap] Profile fetch error:', err?.message)
+    }
+  } else {
+    console.log('[Mollie Bootstrap] Using existing profileId:', result.profileId)
+  }
+
+  // ── Step 3: Enable payment methods ──────────────────────────────────────
+
+  if (result.profileId) {
+    console.log('[Mollie Bootstrap] Enabling payment methods on profile:', result.profileId)
+    for (const methodId of DEFAULT_METHODS) {
+      try {
+        console.log(`[Mollie Bootstrap] Enabling ${methodId}…`)
+        const enableResult = await mollie.profileMethods.enable({
+          profileId: result.profileId,
+          id: methodId as any,
+        })
+        console.log(`[Mollie Bootstrap] ${methodId} → enabled`, JSON.stringify(enableResult))
+        result.methods[methodId] = 'enabled'
+      } catch (err: any) {
+        console.error(`[Mollie Bootstrap] Failed to enable ${methodId}:`, {
+          title: err?.title, detail: err?.detail, field: err?.field,
+          statusCode: err?.statusCode, message: err?.message,
+        })
+        result.methods[methodId] = err?.detail || err?.message || 'failed'
+      }
+    }
+  } else {
+    console.warn('[Mollie Bootstrap] No profileId available — skipping method enablement')
+  }
+
+  console.log('[Mollie Bootstrap] Final result:', JSON.stringify(result))
+  return result
 }
 
 // ── Profile / Onboarding Helpers ────────────────────────────────────────────

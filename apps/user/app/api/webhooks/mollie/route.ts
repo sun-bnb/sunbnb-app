@@ -27,6 +27,7 @@ import {
   processConfirmedReservation,
   processConfirmedOrder,
 } from '@repo/data/payment'
+import { isTestMode } from '@repo/data/env'
 import { NextRequest } from 'next/server'
 import { getMollieClientForPartner } from '@/app/api/_lib/mollie'
 
@@ -156,10 +157,11 @@ export async function POST(request: NextRequest) {
   }
 
   // Fetch the full payment object from Mollie (partner's account)
+  // In non-production, test payments require testmode: true with OAuth tokens
   const mollie = getMollieClientForPartner(accessToken)
   let payment
   try {
-    payment = await mollie.payments.get(paymentId)
+    payment = await mollie.payments.get(paymentId, { testmode: isTestMode() } as any)
   } catch (error) {
     console.error('[Mollie Webhook] Failed to fetch payment:', paymentId, error)
     // Return 500 so Mollie retries

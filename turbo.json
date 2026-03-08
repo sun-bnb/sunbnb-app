@@ -20,7 +20,9 @@
     "AUTH_FACEBOOK_ID",
     "AUTH_FACEBOOK_SECRET",
     "BLOB_READ_WRITE_TOKEN",
-    "NEXT_PUBLIC_DEMO_MODE"
+    "NEXT_PUBLIC_DEMO_MODE",
+    "VERCEL_ENV",
+    "NEXT_PUBLIC_APP_ENV"
   ],
   "tasks": {
     "build": {

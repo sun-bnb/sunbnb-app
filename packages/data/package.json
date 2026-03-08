@@ -11,7 +11,8 @@
     "./TextField": "./src/TextField.tsx",
     "./button": "./src/button.tsx",
     "./card": "./src/card.tsx",
-    "./code": "./src/code.tsx"
+    "./code": "./src/code.tsx",
+    "./env": "./src/env.ts"
   },
   "typesVersions": {
     "*": {
@@ -23,7 +24,8 @@
       "TextField": ["./src/TextField.tsx"],
       "button": ["./src/button.tsx"],
       "card": ["./src/card.tsx"],
-      "code": ["./src/code.tsx"]
+      "code": ["./src/code.tsx"],
+      "env": ["./src/env.ts"]
     }
   },
   "scripts": {

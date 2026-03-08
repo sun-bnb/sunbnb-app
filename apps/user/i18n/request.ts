@@ -68,13 +68,11 @@ export default getRequestConfig(async ({ requestLocale }) => {
   let locale = 'en'
 
   const nextlIntLocale = await requestLocale
-  console.log('nextlIntLocale', nextlIntLocale)
   if (!nextlIntLocale) {
     const headersList = await headers()
     const acceptLanguage = headersList.get('accept-language')
     if (acceptLanguage) {
       const acceptedLanguages = parseAcceptLanguage(acceptLanguage)
-      console.log('acceptLanguages', acceptedLanguages)
       for (const { language } of acceptedLanguages) {
         // If you only care about the 2-letter code, parse it:
         const shortCode = language.split('-')[0];

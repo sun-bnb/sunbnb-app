@@ -58,8 +58,6 @@ export default async function RootLayout({
   const locale = await getLocale()
   const messages = await getMessages()
 
-  logger.debug('locale', locale, messages)
-
   return (
     <html lang={locale}>
       <StoreProvider>

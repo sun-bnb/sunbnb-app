@@ -56,7 +56,9 @@
   "Payment": {
     "Payment confirms acceptance of": "El pago implica aceptación de",
     "terms of service": "términos del servicio",
-    "Pay now": "Pagar ahora"
+    "Pay now": "Pagar ahora",
+    "Secure checkout": "Pago seguro",
+    "You will be redirected to complete payment": "Serás redirigido para completar el pago"
   },
   "TermsOfService": {
     "tos": "terms-es"

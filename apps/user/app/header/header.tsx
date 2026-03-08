@@ -22,6 +22,7 @@ import { useGetAutocompleteSuggestionsQuery } from '@/store/features/autocomplet
 import { useRouter } from 'next/navigation'
 
 import logoIcon from './logo.svg'
+import { getEnvLabel } from '@repo/data/env'
 
 const userNavigation = [
   { name: 'Profile', href: '/account' },
@@ -61,10 +62,15 @@ export default function CustomizedInputBase() {
         elevation={0}
         sx={{ p: '4px 6px', display: 'flex', alignItems: 'center', width: '100%', maxWidth: '1280px', mx: 'auto', backgroundColor: '#fff5e1' }}
       >
-        <Link href="/">
+        <Link href="/" className="relative">
           <IconButton sx={{ p: '8px', marginTop: '-2px' }} aria-label="menu">
             <Image src={logoIcon} alt="logo" width={30} height={30} />
           </IconButton>
+          {getEnvLabel() && (
+            <span className="absolute top-0 right-0 translate-x-1/4 -translate-y-1/4 text-[7px] font-extrabold tracking-wide px-1 py-[1px] rounded bg-amber-400 text-amber-900 leading-none whitespace-nowrap shadow-sm pointer-events-none z-10">
+              {getEnvLabel()}
+            </span>
+          )}
         </Link>
         {
 

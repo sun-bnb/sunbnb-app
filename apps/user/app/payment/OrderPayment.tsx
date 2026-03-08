@@ -161,7 +161,9 @@ export function MollieOrderPayment({
         ? localStorage.getItem('sunbnb-anonId')
         : null
 
-      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}${completeUrl || '/payment/complete'}?orderId=${order.id}`
+      const baseUrl = `${process.env.NEXT_PUBLIC_APP_URL}${completeUrl || '/payment/complete'}`
+      const separator = baseUrl.includes('?') ? '&' : '?'
+      const redirectUrl = `${baseUrl}${separator}orderId=${order.id}`
 
       const res = await fetch('/api/order-payment/mollie/create-payment', {
         method: 'POST',
@@ -191,34 +193,41 @@ export function MollieOrderPayment({
   }
 
   return (
-    <div className="App" style={{ paddingLeft: '8px', paddingRight: '8px' }}>
-      <div className="mt-[6px]">
-        {preview}
-      </div>
-      <div className="mr-[6px] ml-[6px] mt-[6px] mb-[12px]">
-        <div className="text-black text-[15px] mb-[4px] whitespace-nowrap">
-          {t('Payment confirms acceptance of')}{' '}
-          <a
-            className="text-[#1976d2]"
-            href="/tos/reservation"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {t('terms of service')}
-          </a>
+    <div className="px-3 pt-1 pb-3">
+      {preview && <div className="mb-1">{preview}</div>}
+      <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 mb-2">
+        <div className="flex items-center gap-2 mb-1.5">
+          <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          <span className="text-sm font-medium text-gray-700">{t('Secure checkout')}</span>
         </div>
-        <Button
-          variant="contained"
-          fullWidth
-          onClick={handlePay}
-          disabled={isLoading || !!order.paymentRef}
-        >
-          {isLoading ? <CircularProgress size={24} color="inherit" /> : t('Pay now')}
-        </Button>
-        {error && (
-          <div className="text-red-600 text-sm mt-2">{error}</div>
-        )}
+        <p className="text-xs text-gray-500">{t('You will be redirected to complete payment')}</p>
       </div>
+      <Button
+        variant="contained"
+        fullWidth
+        onClick={handlePay}
+        disabled={isLoading || !!order.paymentRef}
+        sx={{ textTransform: 'none', fontWeight: 600, py: 1.2 }}
+      >
+        {isLoading ? <CircularProgress size={20} color="inherit" /> : t('Pay now')}
+      </Button>
+      <div className="text-gray-400 text-[11px] text-center mt-1.5">
+        {t('Payment confirms acceptance of')}{' '}
+        <a
+          className="text-[#1976d2]"
+          href="/tos/reservation"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {t('terms of service')}
+        </a>
+      </div>
+      {error && (
+        <div className="text-red-600 text-xs text-center mt-1.5">{error}</div>
+      )}
     </div>
   )
 }

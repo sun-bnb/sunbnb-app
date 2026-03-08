@@ -78,10 +78,9 @@ export async function issueRefund(paymentRef: string): Promise<void> {
       break
     }
     case 'mollie': {
-      const { getMollieClient } = await import('./mollie')
-      const mollie = getMollieClient()
-      const payment = await mollie.payments.get(paymentRef)
-      await mollie.paymentRefunds.create({
+      const { getMolliePaymentForRefund } = await import('./mollie')
+      const { client, payment } = await getMolliePaymentForRefund(paymentRef)
+      await client.paymentRefunds.create({
         paymentId: paymentRef,
         amount: payment.amount,
       })
