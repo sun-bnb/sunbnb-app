@@ -210,7 +210,7 @@ export default function AccountView({ account, mollieStatus }: { account: Accoun
               <Field name="websiteUrl" label="Website" type="url" placeholder="https://sunbnb.com" defaultValue={account.websiteUrl || ''} />
             </div>
             <div className="md:col-span-2">
-              <Field name="address" label="Address" placeholder="Sturenkatu 37-41 B 16, 00550 Helsinki, Finland" defaultValue={account.address || ''} required />
+              <Field name="address" label="Address" placeholder="Paseo Marítimo 12, 29602 Marbella, Spain" defaultValue={account.address || ''} required />
             </div>
           </div>
         </div>

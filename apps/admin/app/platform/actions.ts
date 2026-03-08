@@ -17,48 +17,40 @@ async function requireSudo() {
   return session
 }
 
-// ─── Payment Processing Fee CRUD ────────────────────────────────────────────
+// ─── Business Entity ────────────────────────────────────────────────────────
 
-export async function savePaymentProcessingFee(input: {
-  id?: string
-  name: string
-  fixedAmount?: number | null
-  percentage?: number | null
-  currency: string
-}): Promise<{ status: string; id?: string; errors?: string[] }> {
+export async function saveBusinessEntity(input: {
+  companyName: string
+  companyAddress: string
+  businessId: string
+  vatId: string
+  contactEmail: string
+  contactPhone: string
+}): Promise<{ status: string; errors?: string[] }> {
   await requireSudo()
 
   const errors: string[] = []
-  if (!input.name?.trim()) errors.push('Name is required')
-  if (!input.currency?.trim()) errors.push('Currency is required')
-  if (input.fixedAmount == null && input.percentage == null) {
-    errors.push('At least one of fixed amount or percentage is required')
-  }
+  if (!input.companyName?.trim()) errors.push('Company name is required')
   if (errors.length > 0) return { status: 'error', errors }
 
+  // Upsert into the singleton Settings row
+  const existing = await prisma.settings.findFirst()
+
   const data = {
-    name: input.name.trim(),
-    fixedAmount: input.fixedAmount ?? null,
-    percentage: input.percentage ?? null,
-    currency: input.currency.trim().toUpperCase(),
+    companyName: input.companyName.trim(),
+    companyAddress: input.companyAddress.trim(),
+    businessId: input.businessId.trim(),
+    vatId: input.vatId.trim(),
+    contactEmail: input.contactEmail.trim(),
+    contactPhone: input.contactPhone.trim(),
   }
 
-  if (input.id) {
-    await prisma.paymentProcessingFee.update({ where: { id: input.id }, data })
-    revalidatePath('/platform')
-    return { status: 'ok', id: input.id }
+  if (existing) {
+    await prisma.settings.update({ where: { id: existing.id }, data })
   } else {
-    const created = await prisma.paymentProcessingFee.create({ data })
-    revalidatePath('/platform')
-    return { status: 'ok', id: created.id }
+    await prisma.settings.create({ data })
   }
-}
 
-export async function deletePaymentProcessingFee(
-  id: string
-): Promise<{ status: string; errors?: string[] }> {
-  await requireSudo()
-  await prisma.paymentProcessingFee.delete({ where: { id } })
   revalidatePath('/platform')
   return { status: 'ok' }
 }

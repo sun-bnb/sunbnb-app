@@ -23,7 +23,7 @@ interface OrderData {
     tax: number
     totalPrice: number
   }[]
-  invoice?: Invoice | null
+  invoices?: Invoice[]
 }
 
 export default function Orders({ orders }: { orders: OrderData[] }) {
@@ -33,10 +33,14 @@ export default function Orders({ orders }: { orders: OrderData[] }) {
   /* ── Detail view ── */
 
   if (selected) {
-    const hasInvoice = !!selected.invoice
+    const hasInvoice = !!(selected.invoices && selected.invoices.length > 0)
 
-    const rows = hasInvoice
-      ? selected.invoice!.invoiceLines.map(l => ({
+    // Use the PARTNER invoice for line-item display
+    const partnerInvoice = selected.invoices?.find(i => i.issuerType === 'PARTNER')
+    const displayInvoice = partnerInvoice ?? selected.invoices?.[0]
+
+    const rows = hasInvoice && displayInvoice
+      ? displayInvoice.invoiceLines.map(l => ({
           key: l.id,
           label: l.description ?? '—',
           net: l.charge,
@@ -51,8 +55,8 @@ export default function Orders({ orders }: { orders: OrderData[] }) {
           gross: oi.totalPrice,
         }))
 
-    const totals = hasInvoice
-      ? { net: selected.invoice!.totalCharge, tax: selected.invoice!.totalTax, gross: selected.invoice!.totalAmount }
+    const totals = hasInvoice && displayInvoice
+      ? { net: displayInvoice.totalCharge, tax: displayInvoice.totalTax, gross: displayInvoice.totalAmount }
       : rows.reduce(
           (a, r) => ({ net: a.net + r.net, tax: a.tax + r.tax, gross: a.gross + r.gross }),
           { net: 0, tax: 0, gross: 0 },

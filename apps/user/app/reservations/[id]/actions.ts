@@ -321,7 +321,7 @@ export async function getOrders({
     where: { reservationId },
     include: {
       orderItems: true,
-      invoice: {
+      invoices: {
         include: { invoiceLines: true },
       },
     },

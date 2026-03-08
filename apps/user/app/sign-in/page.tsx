@@ -73,8 +73,8 @@ function SignInContent() {
       </div>
 
       <div className="text-center lg:text-left">
-        <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Welcome back</h2>
-        <p className="mt-1.5 text-sm text-gray-500">Sign in to continue to Sunbnb.</p>
+        <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Sign in or create account</h2>
+        <p className="mt-1.5 text-sm text-gray-500">Use your email to sign in — a new account is created automatically on first login.</p>
       </div>
 
       <SignInError errorCode={errorParam} theme="light" className="mt-5" />
@@ -98,7 +98,7 @@ function SignInContent() {
       </div>
 
       <p className="mt-2 text-xs text-gray-400 text-center">
-        Don&apos;t have an account? Just enter your email and password to create one.
+        No separate registration needed — just sign in and you&apos;re all set.
       </p>
 
       <p className="mt-8 text-[11px] text-gray-400 text-center leading-relaxed">

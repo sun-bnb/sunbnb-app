@@ -10,7 +10,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import AddIcon from '@mui/icons-material/Add'
 import PaymentsIcon from '@mui/icons-material/Payments'
 import EventAvailableIcon from '@mui/icons-material/EventAvailable'
-import { WizardData } from './create-site-wizard'
+import { WizardData, WizardFeeData } from './create-site-wizard'
 
 const WEEK_DAYS = [
   { key: '1', short: 'Mon', label: 'Monday' },
@@ -22,14 +22,89 @@ const WEEK_DAYS = [
   { key: '7', short: 'Sun', label: 'Sunday' },
 ]
 
+function round(amount: number) {
+  return Math.round(amount * 100) / 100
+}
+
+const TIER_ORDER = ['STARTER', 'PRO', 'BUSINESS'] as const
+const TIER_LABELS: Record<string, string> = { STARTER: 'Starter', PRO: 'Pro', BUSINESS: 'Business' }
+const TIER_FEES: Record<string, string> = { STARTER: '5%', PRO: '2%', BUSINESS: '0%' }
+
+function WizardPriceBreakdown({
+  price,
+  vat: vatStr,
+  serviceFee,
+  tier,
+}: {
+  price: string
+  vat: string
+  serviceFee?: WizardFeeData | null
+  tier: string
+}) {
+  const priceNum = Number(price)
+  if (!priceNum || priceNum <= 0) return null
+
+  const vatRate = Number(vatStr) || 0
+
+  const feeAmount = serviceFee
+    ? serviceFee.chargeType === 'fixed'
+      ? (serviceFee.feeAmount ?? 0)
+      : round(((serviceFee.percentage ?? 0) / 100) * priceNum)
+    : 0
+
+  const partnerGross = round(priceNum - feeAmount)
+  const partnerBase = vatRate > 0 ? round(partnerGross / (1 + vatRate / 100)) : partnerGross
+  const partnerVat = round(partnerGross - partnerBase)
+
+  // Find next tier with a better fee
+  const tierIdx = TIER_ORDER.indexOf(tier as typeof TIER_ORDER[number])
+  const nextTier = tierIdx >= 0 && tierIdx < TIER_ORDER.length - 1 ? TIER_ORDER[tierIdx + 1] : null
+
+  return (
+    <div className="mt-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5 text-xs">
+      <div className="flex justify-between text-gray-500 mb-1">
+        <span>Customer pays</span>
+        <span>{priceNum.toFixed(2)} &euro;</span>
+      </div>
+      {feeAmount > 0 && (
+        <div className="flex justify-between text-gray-500 mb-1">
+          <span>
+            Service fee
+            {serviceFee?.chargeType === 'fixed' ? '' : ` (${(serviceFee?.percentage ?? 0).toFixed(0)}%)`}
+          </span>
+          <span className="text-red-500">&minus;{feeAmount.toFixed(2)} &euro;</span>
+        </div>
+      )}
+      {feeAmount > 0 && nextTier && (
+        <div className="text-[11px] text-indigo-500 mb-1">
+          Upgrade to {TIER_LABELS[nextTier]} for {TIER_FEES[nextTier]} service fee
+        </div>
+      )}
+      <div className="border-t border-gray-200 my-1.5" />
+      <div className="flex justify-between font-medium text-gray-800 mb-1">
+        <span>You receive</span>
+        <span>{partnerGross.toFixed(2)} &euro;</span>
+      </div>
+      {vatRate > 0 && (
+        <div className="flex justify-between text-gray-400">
+          <span>incl. VAT {vatRate}%</span>
+          <span>{partnerVat.toFixed(2)} &euro;</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function StepDetails({
   data,
   update,
   tier,
+  serviceFee,
 }: {
   data: WizardData
   update: (p: Partial<WizardData>) => void
   tier: string
+  serviceFee?: WizardFeeData | null
 }) {
 
   const isPaid = data.type === 'paid'
@@ -153,27 +228,35 @@ export default function StepDetails({
 
       {/* Pricing — only for paid */}
       {isPaid && (
-        <div className="flex gap-3 mb-4">
-          <TextField
-            fullWidth
-            label="Base price (€)"
-            type="number"
-            value={data.price}
-            onChange={e => update({ price: e.target.value })}
-            placeholder="e.g. 15"
-            helperText="Base price shown on your site page"
+        <>
+          <div className="flex gap-3 mb-4">
+            <TextField
+              fullWidth
+              label="Base price (€)"
+              type="number"
+              value={data.price}
+              onChange={e => update({ price: e.target.value })}
+              placeholder="e.g. 15"
+              helperText="Base price shown on your site page"
+            />
+            <TextField
+              sx={{ width: 180, flexShrink: 0 }}
+              required
+              label="Tax rate (%)"
+              type="number"
+              value={data.vat}
+              onChange={e => update({ vat: e.target.value })}
+              placeholder="e.g. 21"
+              helperText="Applied to all sales"
+            />
+          </div>
+          <WizardPriceBreakdown
+            price={data.price}
+            vat={data.vat}
+            serviceFee={serviceFee}
+            tier={tier}
           />
-          <TextField
-            sx={{ width: 180, flexShrink: 0 }}
-            required
-            label="Tax rate (%)"
-            type="number"
-            value={data.vat}
-            onChange={e => update({ vat: e.target.value })}
-            placeholder="e.g. 21"
-            helperText="Applied to all sales"
-          />
-        </div>
+        </>
       )}
 
       <Divider sx={{ mb: 3 }} />

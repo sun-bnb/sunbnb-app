@@ -19,24 +19,12 @@ export default function PriceBreakdown({ price, site }: { price: string; site: S
       : round(((serviceFee.percentage ?? 0) / 100) * priceNum)
     : 0
 
-  // Payment processing fee (fixed + percentage of price)
-  const ppf = site.paymentProcessingFee
-  const procFixed = ppf?.fixedAmount ?? 0
-  const procPct = ppf?.percentage ?? 0
-  const procAmount = round(procFixed + (procPct / 100) * priceNum)
-
   // Fee deducted from partner share; partner handles own VAT
-  const partnerGross = round(priceNum - feeAmount - procAmount)
+  const partnerGross = round(priceNum - feeAmount)
   const partnerBase = vatRate > 0
     ? round(partnerGross / (1 + vatRate / 100))
     : partnerGross
   const partnerVat = round(partnerGross - partnerBase)
-
-  // Build processing fee label parts
-  const procParts: string[] = []
-  if (procFixed > 0) procParts.push(`${procFixed.toFixed(2)} \u20AC`)
-  if (procPct > 0) procParts.push(`${procPct}%`)
-  const procLabel = procParts.length > 0 ? ` (${procParts.join(' + ')})` : ''
 
   return (
     <div className="mt-2 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5 text-xs">
@@ -53,12 +41,6 @@ export default function PriceBreakdown({ price, site }: { price: string; site: S
               : ` (${(serviceFee?.percentage ?? 0).toFixed(0)}%)`}
           </span>
           <span className="text-red-500">&minus;{feeAmount.toFixed(2)} &euro;</span>
-        </div>
-      )}
-      {procAmount > 0 && (
-        <div className="flex justify-between text-gray-500 mb-1">
-          <span>Processing fee{procLabel}</span>
-          <span className="text-red-500">&minus;{procAmount.toFixed(2)} &euro;</span>
         </div>
       )}
       <div className="border-t border-gray-200 my-1.5" />

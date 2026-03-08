@@ -31,7 +31,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
 
 import { useSite } from '@/app/sites/site-context'
-import { ServiceFee, PaymentProcessingFee } from '@/types/shared'
+import { ServiceFee } from '@/types/shared'
 import MapHandler from '@/components/maps/map-handler'
 import { CustomMapControl } from '@/components/maps/map-control'
 import {
@@ -45,16 +45,20 @@ function round(amount: number) {
   return Math.round(amount * 100) / 100
 }
 
+const TIER_ORDER = ['STARTER', 'PRO', 'BUSINESS'] as const
+const TIER_LABELS: Record<string, string> = { STARTER: 'Starter', PRO: 'Pro', BUSINESS: 'Business' }
+const TIER_FEES: Record<string, string> = { STARTER: '5%', PRO: '2%', BUSINESS: '0%' }
+
 function PriceBreakdown({
   price,
   vat: vatStr,
   serviceFees,
-  paymentProcessingFee,
+  tier,
 }: {
   price: string
   vat: string
   serviceFees?: ServiceFee[]
-  paymentProcessingFee?: PaymentProcessingFee | null
+  tier: string
 }) {
   const priceNum = Number(price)
   if (!priceNum || priceNum <= 0) return null
@@ -68,12 +72,7 @@ function PriceBreakdown({
       : round(((serviceFee.percentage ?? 0) / 100) * priceNum)
     : 0
 
-  // Payment processing fee (fixed + percentage of price)
-  const procFixed = paymentProcessingFee?.fixedAmount ?? 0
-  const procPct = paymentProcessingFee?.percentage ?? 0
-  const procAmount = round(procFixed + (procPct / 100) * priceNum)
-
-  const partnerGross = round(priceNum - feeAmount - procAmount)
+  const partnerGross = round(priceNum - feeAmount)
   const partnerBase = vatRate > 0
     ? round(partnerGross / (1 + vatRate / 100))
     : partnerGross
@@ -81,9 +80,7 @@ function PriceBreakdown({
 
   // Build processing fee label parts
   const procParts: string[] = []
-  if (procFixed > 0) procParts.push(`${procFixed.toFixed(2)} \u20AC`)
-  if (procPct > 0) procParts.push(`${procPct}%`)
-  const procLabel = procParts.length > 0 ? ` (${procParts.join(' + ')})` : ''
+  const procLabel = ''
 
   return (
     <div className="mt-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5 text-xs">
@@ -102,12 +99,15 @@ function PriceBreakdown({
           <span className="text-red-500">&minus;{feeAmount.toFixed(2)} &euro;</span>
         </div>
       )}
-      {procAmount > 0 && (
-        <div className="flex justify-between text-gray-500 mb-1">
-          <span>Processing fee{procLabel}</span>
-          <span className="text-red-500">&minus;{procAmount.toFixed(2)} &euro;</span>
-        </div>
-      )}
+      {feeAmount > 0 && (() => {
+        const tierIdx = TIER_ORDER.indexOf(tier as typeof TIER_ORDER[number])
+        const nextTier = tierIdx >= 0 && tierIdx < TIER_ORDER.length - 1 ? TIER_ORDER[tierIdx + 1] : null
+        return nextTier ? (
+          <div className="text-[11px] text-indigo-500 mb-1">
+            Upgrade to {TIER_LABELS[nextTier]} for {TIER_FEES[nextTier]} service fee
+          </div>
+        ) : null
+      })()}
       <div className="border-t border-gray-200 my-1.5" />
       <div className="flex justify-between font-medium text-gray-800 mb-1">
         <span>You receive</span>
@@ -344,7 +344,7 @@ export default function GeneralView() {
               helperText="Applied to all sales"
             />
           </div>
-          <PriceBreakdown price={price} vat={vat} serviceFees={site.serviceFees} paymentProcessingFee={site.paymentProcessingFee} />
+          <PriceBreakdown price={price} vat={vat} serviceFees={site.serviceFees} tier={tier} />
         </div>
       )}
 

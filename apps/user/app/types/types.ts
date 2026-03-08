@@ -15,8 +15,6 @@ export interface Order {
 
   id: string
 
-  invoiceId?: string | null
-
   userId?: string | null
   anonId?: string | null
   siteId: string
@@ -51,14 +49,19 @@ interface OrderItem {
 
 export interface Invoice {
   id: string
+  issuerType?: string
   totalCharge: number
   totalTax: number
   totalAmount: number
   issuerVatNumber?: string | null
+  issuerCompanyName?: string | null
+  issuerCompanyAddress?: string | null
+  invoiceNumber?: string | null
   invoiceLines: {
     id: string
     description: string | null
     charge: number
+    vatRate: number | null
     tax: number
     amount: number
   }[]

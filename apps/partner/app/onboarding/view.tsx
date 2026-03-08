@@ -207,7 +207,7 @@ function AccountStep({
               <Field name="websiteUrl" label="Website" type="url" placeholder="https://sunbnb.com" defaultValue={defaultAccount.websiteUrl || ''} />
             </div>
             <div className="md:col-span-2">
-              <Field name="address" label="Address" placeholder="Sturenkatu 37-41 B 16, 00550 Helsinki, Finland" defaultValue={defaultAccount.address || ''} required />
+              <Field name="address" label="Address" placeholder="Paseo Marítimo 12, 29602 Marbella, Spain" defaultValue={defaultAccount.address || ''} required />
             </div>
           </div>
         </div>

@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages } from 'next-intl/server'
 import localFont from 'next/font/local'
+import { getBusinessEntity } from '@repo/data/business-entity'
 import App from './app'
 import NextAuthProvider from './nextauth'
 import StoreProvider from './StoreProvider'
@@ -54,6 +55,7 @@ export default async function RootLayout({
 
   const locale = await getLocale()
   const messages = await getMessages()
+  const businessEntity = await getBusinessEntity()
 
   return (
     <html lang={locale}>
@@ -61,7 +63,7 @@ export default async function RootLayout({
         <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
           <NextAuthProvider>
             <NextIntlClientProvider messages={messages}>
-              <App>
+              <App businessEntity={businessEntity}>
                 {children}
               </App>
             </NextIntlClientProvider>

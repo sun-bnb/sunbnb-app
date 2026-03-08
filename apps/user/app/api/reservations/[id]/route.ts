@@ -94,8 +94,7 @@ export async function GET(
 
   if (
     reservation &&
-    reservation.status === 'paid' &&
-    !reservation.invoiceId
+    reservation.status === 'paid'
   ) {
     try {
       await processConfirmedReservation(reservation.id)

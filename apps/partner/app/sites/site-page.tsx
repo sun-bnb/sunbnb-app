@@ -48,10 +48,6 @@ export default async function SitePage(
   
   if (!site) return <div>Site {params.id} not found</div>
 
-  // Load payment processing fee (singleton)
-  const paymentProcessingFee = await prisma.paymentProcessingFee.findFirst()
-  ;(site as any).paymentProcessingFee = paymentProcessingFee ?? null
-
   // Resolve service fees: site → partnerAccount → global settings (tier-aware)
   if (site.userId) {
     const [siteWithFees, partnerAccount, settings] = await Promise.all([

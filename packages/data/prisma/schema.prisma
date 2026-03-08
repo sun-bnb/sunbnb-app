@@ -56,13 +56,19 @@ model Subscription {
 }
 
 model Settings {
-  id          String       @id @default(cuid())
-  country     String?
-  vat         Float?
-  currency    String?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  serviceFees ServiceFee[]
+  id             String       @id @default(cuid())
+  country        String?
+  vat            Float?
+  currency       String?
+  companyName    String?      @map("company_name")
+  companyAddress String?      @map("company_address")
+  businessId     String?      @map("business_id")
+  vatId          String?      @map("vat_id")
+  contactEmail   String?      @map("contact_email")
+  contactPhone   String?      @map("contact_phone")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  serviceFees    ServiceFee[]
 }
 
 model ServiceCode {
@@ -288,10 +294,9 @@ model Reservation {
   to            DateTime        @map("to")
   paymentAmount Float?          @map("payment_amount")
   paymentRef    String?         @map("payment_ref")
-  invoiceId     String?         @unique @map("invoice_id")
   anonId        String?         @map("anon_id")
   orders        Order[]
-  invoice       Invoice?        @relation(fields: [invoiceId], references: [id])
+  invoices      Invoice[]
   site          Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
   user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   items         InventoryItem[] @relation("InventoryItemToReservation")
@@ -316,7 +321,6 @@ model Product {
 
 model Order {
   id            String         @id @unique @default(cuid())
-  invoiceId     String?        @unique @map("invoice_id")
   price         Float
   tax           Float
   totalPrice    Float
@@ -330,7 +334,7 @@ model Order {
   userId        String         @map("user_id")
   reservationId String?        @map("reservation_id")
   seatId        String?        @map("seat_id")
-  invoice       Invoice?       @relation(fields: [invoiceId], references: [id])
+  invoices      Invoice[]
   reservation   Reservation?   @relation(fields: [reservationId], references: [id])
   seat          InventoryItem? @relation(fields: [seatId], references: [id])
   site          Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
@@ -369,11 +373,16 @@ model Invoice {
   issuerCompanyAddress String?       @map("issuer_company_address")
   settlementId     String?           @map("settlement_id")
   settlementBatchId String?          @map("settlement_batch_id")
+  reservationId    String?           @map("reservation_id")
+  orderId          String?           @map("order_id")
+  invoiceNumber    String?           @map("invoice_number")
+  previousHash     String?           @map("previous_hash")
+  hash             String?
   account          PartnerAccount    @relation(fields: [accountId], references: [userId], onDelete: Cascade)
   settlementBatch  Settlement?       @relation(fields: [settlementBatchId], references: [id])
+  reservation      Reservation?      @relation(fields: [reservationId], references: [id])
+  order            Order?            @relation(fields: [orderId], references: [id])
   invoiceLines     InvoiceLine[]
-  order            Order?
-  reservation      Reservation?
 }
 
 model Settlement {
@@ -404,6 +413,7 @@ model InvoiceLine {
   charge      Float
   tax         Float    @default(0)
   amount      Float
+  vatRate     Float?   @map("vat_rate")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   description String?

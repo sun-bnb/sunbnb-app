@@ -14,13 +14,22 @@ export default async function PlatformPage() {
   })
   if (!user?.sudo) redirect('/')
 
-  const paymentProcessingFee = await prisma.paymentProcessingFee.findFirst({
-    orderBy: { name: 'asc' },
+  const settings = await prisma.settings.findFirst({
+    select: {
+      companyName: true,
+      companyAddress: true,
+      businessId: true,
+      vatId: true,
+      contactEmail: true,
+      contactPhone: true,
+    },
   })
 
   return (
     <div className="container mx-auto max-w-[768px]">
-      <PlatformView paymentProcessingFee={paymentProcessingFee} />
+      <PlatformView
+        businessEntity={settings ?? undefined}
+      />
     </div>
   )
 }

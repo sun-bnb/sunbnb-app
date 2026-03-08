@@ -16,7 +16,7 @@ export default function App({ children }: { children: React.ReactNode }) {
     if (status === 'unauthenticated' && !isPublicRoute) {
       router.push('/sign-in')
     }
-  }, [status, router, isPublicRoute])
+  }, [status, isPublicRoute]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isPublicRoute) {
     return <>{children}</>

@@ -51,7 +51,7 @@ export default function Menu({
       tax: number
       totalPrice: number
     }[]
-    invoice?: Invoice | null
+    invoices?: Invoice[]
   }[] | null
   showConfirmation?: boolean
 }) {

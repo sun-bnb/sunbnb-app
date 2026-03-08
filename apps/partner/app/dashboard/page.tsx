@@ -34,7 +34,7 @@ export async function getRevenueAndFeesByMonth(
         SUM(revenue) AS revenue,
         SUM(fees)    AS fees
       FROM (
-        -- 3a) Each invoice's total_amount (counted exactly once, no join)
+        -- 3a) PARTNER invoices = gross revenue
         SELECT
           TO_CHAR(i.invoiced_at, 'YYYY-MM') AS month,
           i.total_amount                   AS revenue,
@@ -42,20 +42,19 @@ export async function getRevenueAndFeesByMonth(
         FROM "Invoice" AS i
         WHERE i.account_id = ${userId}
           AND i.invoiced_at >= ${startOfFirstMonth}
+          AND i.issuer_type = 'PARTNER'
 
         UNION ALL
 
-        -- 3b) Each fee‐line's amount (only lines with description = fee)
+        -- 3b) PLATFORM invoices = service fees / commission
         SELECT
           TO_CHAR(i.invoiced_at, 'YYYY-MM') AS month,
           0                                AS revenue,
-          il.amount                        AS fees
-        FROM "InvoiceLine" AS il
-        JOIN "Invoice" AS i
-          ON il.invoice_id = i.id
+          i.total_amount                   AS fees
+        FROM "Invoice" AS i
         WHERE i.account_id = ${userId}
           AND i.invoiced_at >= ${startOfFirstMonth}
-          AND il.description IN ('Res. fee', 'Srv. fee')
+          AND i.issuer_type = 'PLATFORM'
       ) AS combined
       GROUP BY month
       ORDER BY month;
@@ -127,6 +126,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
   const monthAgg = await prisma.invoice.aggregate({
     where: {
       accountId: userId,
+      issuerType: 'PARTNER',
       invoicedAt: { gte: startOfMonth, lte: now },
     },
     _sum: { totalAmount: true },
@@ -136,6 +136,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
   const yearAgg = await prisma.invoice.aggregate({
     where: {
       accountId: userId,
+      issuerType: 'PARTNER',
       invoicedAt: { gte: startOfYear, lte: now },
     },
     _sum: { totalAmount: true },

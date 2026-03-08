@@ -14,7 +14,7 @@ async function getReservation(id: string) {
       orders: {
         include: {
           orderItems: true,
-          invoice: {
+          invoices: {
             include: {
               invoiceLines: true
             }

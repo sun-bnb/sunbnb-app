@@ -17,6 +17,7 @@ export async function getInvoicesByMonth(
   return prisma.invoice.findMany({
     where: {
       accountId: session.user.id,
+      issuerType: 'PARTNER',
       invoicedAt: {
         gte: startDate,
         lt: endDate,
@@ -27,8 +28,6 @@ export async function getInvoicesByMonth(
     },
     orderBy: { invoicedAt: 'desc' },
   })
-  // Note: issuerType, issuerVatNumber, settlementId are scalar fields on Invoice,
-  // so they are included by default in all invoice queries.
 }
 
 export async function getPaidItemsByMonth(siteId: string, year: number, month: number) {
@@ -40,12 +39,16 @@ export async function getPaidItemsByMonth(siteId: string, year: number, month: n
       where: {
         siteId,
         status: { in: ['paid', 'complete'] },
-        invoice: {
-          invoicedAt: { gte: start, lt: end },
+        invoices: {
+          some: {
+            issuerType: 'PARTNER',
+            invoicedAt: { gte: start, lt: end },
+          },
         },
       },
       include: {
-        invoice: {
+        invoices: {
+          where: { issuerType: 'PARTNER' },
           include: { invoiceLines: true },
         },
         orderItems: true,
@@ -58,12 +61,16 @@ export async function getPaidItemsByMonth(siteId: string, year: number, month: n
       where: {
         siteId,
         status: { in: ['paid', 'complete'] },
-        invoice: {
-          invoicedAt: { gte: start, lt: end },
+        invoices: {
+          some: {
+            issuerType: 'PARTNER',
+            invoicedAt: { gte: start, lt: end },
+          },
         },
       },
       include: {
-        invoice: {
+        invoices: {
+          where: { issuerType: 'PARTNER' },
           include: { invoiceLines: true },
         },
         user: { select: { email: true } },

@@ -35,6 +35,18 @@ export async function submitForm(
     await prisma.partnerAccount.create({
       data: accountData
     })
+
+    // Auto-assign STARTER subscription to new partner accounts
+    const starterPlan = await prisma.subscriptionPlan.findUnique({ where: { tier: 'STARTER' } })
+    if (starterPlan) {
+      await prisma.subscription.create({
+        data: {
+          partnerAccountId: session.user.id,
+          planId: starterPlan.id,
+          status: 'ACTIVE',
+        },
+      })
+    }
     
     revalidatePath('/account')
     return { status: 'ok' }

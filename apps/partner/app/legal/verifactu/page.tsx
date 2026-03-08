@@ -1,4 +1,8 @@
-export default function VerifactuNoticePage() {
+import { getBusinessEntity } from '@repo/data/business-entity'
+
+export default async function VerifactuNoticePage() {
+  const co = await getBusinessEntity()
+
   return (
     <div className="min-h-screen bg-white">
       <div className="max-w-3xl mx-auto px-6 py-12 text-sm text-gray-700 leading-relaxed">
@@ -82,18 +86,24 @@ export default function VerifactuNoticePage() {
         <section className="mb-8">
           <h2 className="text-base font-semibold text-gray-900 mb-2">Disclaimer</h2>
           <p>
-            Refactory DX Oy provides the Veri*factu-compliant receipt generation feature as a technology service to assist partners in meeting their regulatory obligations. This does not constitute tax advice. Refactory DX Oy expressly disclaims liability for any tax penalties, interest, or sanctions arising from a partner&rsquo;s failure to comply with Spanish tax law. Partners are strongly advised to engage a qualified Spanish tax professional (asesor fiscal) for guidance on their specific obligations.
+            {co.companyName} provides the Veri*factu-compliant receipt generation feature as a technology service to assist partners in meeting their regulatory obligations. This does not constitute tax advice. {co.companyName} expressly disclaims liability for any tax penalties, interest, or sanctions arising from a partner&rsquo;s failure to comply with Spanish tax law. Partners are strongly advised to engage a qualified Spanish tax professional (asesor fiscal) for guidance on their specific obligations.
           </p>
         </section>
 
         <section>
           <h2 className="text-base font-semibold text-gray-900 mb-2">Contact</h2>
           <ul className="space-y-1 text-gray-600">
-            <li><strong>Refactory DX Oy</strong></li>
-            <li>Sturenkatu 37-41 B 16, 00550 Helsinki, Finland</li>
-            <li>Business ID: 2940957-1 &middot; VAT: FI29409571</li>
-            <li>Email: partners@sunbnb.app</li>
-            <li>Phone: +358 44 522 3555</li>
+            <li><strong>{co.companyName}</strong></li>
+            {co.companyAddress && <li>{co.companyAddress}</li>}
+            {(co.businessId || co.vatId) && (
+              <li>
+                {co.businessId ? `Business ID: ${co.businessId}` : ''}
+                {co.businessId && co.vatId ? ' · ' : ''}
+                {co.vatId ? `VAT: ${co.vatId}` : ''}
+              </li>
+            )}
+            {co.contactEmail && <li>Email: {co.contactEmail}</li>}
+            {co.contactPhone && <li>Phone: {co.contactPhone}</li>}
           </ul>
         </section>
 

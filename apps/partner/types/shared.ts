@@ -6,14 +6,6 @@ export interface ServiceFee {
   serviceCode: string
 }
 
-export interface PaymentProcessingFee {
-  id: string
-  name: string
-  fixedAmount?: number | null
-  percentage?: number | null
-  currency: string
-}
-
 export interface SiteProps {
   id?: string | undefined
   name?: string | undefined
@@ -38,7 +30,6 @@ export interface SiteProps {
   status?: string | null
   services: string[]
   serviceFees?: ServiceFee[]
-  paymentProcessingFee?: PaymentProcessingFee | null
   subscriptionTier?: 'STARTER' | 'PRO' | 'BUSINESS' | null
   appSalesEnabled?: boolean
   paymentProvider?: string
@@ -100,7 +91,6 @@ export interface Order {
 
   id: string
 
-  invoiceId?: string | null
   seat?: InventoryItem | null
 
   userId?: string | null

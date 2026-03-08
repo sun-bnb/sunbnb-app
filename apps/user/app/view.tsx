@@ -8,7 +8,16 @@ import scanQrImage from './scan-qr-image.png'
 import beachProducts from './beach-products.png'
 import { useRouter } from 'next/navigation'
 
-export default function HomeView() {
+interface BusinessEntity {
+  companyName: string
+  companyAddress: string | null
+  businessId: string | null
+  vatId: string | null
+  contactEmail: string | null
+  contactPhone: string | null
+}
+
+export default function HomeView({ businessEntity }: { businessEntity: BusinessEntity }) {
 
   const router = useRouter()
 
@@ -273,7 +282,9 @@ export default function HomeView() {
           © {new Date().getFullYear()} Sunbnb · <a href="/tos" className="underline hover:text-gray-600 transition-colors">Terms</a> · <a href="/privacy" className="underline hover:text-gray-600 transition-colors">Privacy</a> · <a href="/cancellation-policy" className="underline hover:text-gray-600 transition-colors">Cancellation Policy</a> · <a href="https://partner.sunbnb.app" className="underline hover:text-gray-600 transition-colors">For partners</a>
         </p>
         <p className="text-[10px] md:text-[11px] text-gray-300">
-          Operated by Refactory DX Oy · Business ID 2940957-1 · Sturenkatu 37-41 B 16, 00550 Helsinki, Finland
+          Operated by {businessEntity.companyName}
+          {businessEntity.businessId ? ` · Business ID ${businessEntity.businessId}` : ''}
+          {businessEntity.companyAddress ? ` · ${businessEntity.companyAddress}` : ''}
         </p>
       </footer>
     </div>

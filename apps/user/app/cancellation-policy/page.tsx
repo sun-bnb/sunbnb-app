@@ -1,4 +1,7 @@
+import { getBusinessEntity } from '@repo/data/business-entity'
+
 export default async function CancellationPolicy() {
+  const co = await getBusinessEntity()
 
   return (
     <div className="max-w-3xl mx-auto px-6 py-12 text-sm text-gray-700 leading-relaxed">
@@ -9,14 +12,14 @@ export default async function CancellationPolicy() {
       <section className="mb-8">
         <h2 className="text-base font-semibold text-gray-900 mb-2">1. Scope</h2>
         <p>
-          This policy applies to all sunbed reservations and ancillary service bookings (&ldquo;Bookings&rdquo;) made through the SunBnB platform operated by <strong>Refactory DX Oy</strong> (Business ID: 2940957-1). It defines the cancellation and refund rules applicable to consumers (&ldquo;Guests&rdquo;) and the respective obligations of Refactory DX Oy and the Beach Club.
+          This policy applies to all sunbed reservations and ancillary service bookings (&ldquo;Bookings&rdquo;) made through the SunBnB platform operated by <strong>{co.companyName}</strong>{co.businessId ? ` (Business ID: ${co.businessId})` : ''}. It defines the cancellation and refund rules applicable to consumers (&ldquo;Guests&rdquo;) and the respective obligations of {co.companyName} and the Beach Club.
         </p>
       </section>
 
       <section className="mb-8">
-        <h2 className="text-base font-semibold text-gray-900 mb-2">2. Role of Refactory DX Oy</h2>
+        <h2 className="text-base font-semibold text-gray-900 mb-2">2. Role of {co.companyName}</h2>
         <p>
-          Refactory DX Oy acts as a <strong>commercial intermediary</strong>. The contractual relationship for the delivery of sunbed and beach services exists directly between you and the Beach Club (the &ldquo;Seller of Record&rdquo;). Refactory DX Oy facilitates the booking and payment process only.
+          {co.companyName} acts as a <strong>commercial intermediary</strong>. The contractual relationship for the delivery of sunbed and beach services exists directly between you and the Beach Club (the &ldquo;Seller of Record&rdquo;). {co.companyName} facilitates the booking and payment process only.
         </p>
       </section>
 
@@ -57,7 +60,7 @@ export default async function CancellationPolicy() {
           If a Beach Club cancels a confirmed Booking (e.g., due to weather closure, equipment failure, or force majeure), you are entitled to a <strong>full refund (100%)</strong>. The Beach Club bears sole responsibility for such cancellations.
         </p>
         <p className="mt-2">
-          Refactory DX Oy will process the refund to your original payment method within 5–10 business days of the cancellation being confirmed.
+          {co.companyName} will process the refund to your original payment method within 5–10 business days of the cancellation being confirmed.
         </p>
       </section>
 
@@ -71,7 +74,7 @@ export default async function CancellationPolicy() {
           <li>iDEAL / bank transfers: 2–5 business days</li>
         </ul>
         <p className="mt-2">
-          Refactory DX Oy initiates refunds promptly. Delays beyond our control (e.g., bank processing times) are the responsibility of the Guest&rsquo;s financial institution.
+          {co.companyName} initiates refunds promptly. Delays beyond our control (e.g., bank processing times) are the responsibility of the Guest&rsquo;s financial institution.
         </p>
       </section>
 
@@ -85,25 +88,31 @@ export default async function CancellationPolicy() {
       <section className="mb-8">
         <h2 className="text-base font-semibold text-gray-900 mb-2">7. EU Consumer Rights</h2>
         <p>
-          Under EU Directive 2011/83/EU, the statutory 14-day withdrawal right does <strong>not apply</strong> to leisure services where a specific date or period of performance is agreed upon (Article 16(l)). Sunbed bookings fall under this exemption. However, Refactory DX Oy honours the cancellation windows defined above as a voluntary customer protection measure.
+          Under EU Directive 2011/83/EU, the statutory 14-day withdrawal right does <strong>not apply</strong> to leisure services where a specific date or period of performance is agreed upon (Article 16(l)). Sunbed bookings fall under this exemption. However, {co.companyName} honours the cancellation windows defined above as a voluntary customer protection measure.
         </p>
       </section>
 
       <section className="mb-8">
         <h2 className="text-base font-semibold text-gray-900 mb-2">8. Disputes</h2>
         <p>
-          If you believe a refund has been unjustly denied, please contact us at <a href="mailto:info@sunbnb.app" className="text-blue-600 underline hover:text-blue-800">info@sunbnb.app</a>. We will mediate between you and the Beach Club to reach a fair resolution. If the dispute cannot be resolved amicably, the laws of Finland apply and the competent court is the District Court of Helsinki, subject to mandatory consumer protection provisions in your country of residence.
+          If you believe a refund has been unjustly denied, please contact us at <a href={`mailto:${co.contactEmail}`} className="text-blue-600 underline hover:text-blue-800">{co.contactEmail}</a>. We will mediate between you and the Beach Club to reach a fair resolution. If the dispute cannot be resolved amicably, the laws of Finland apply and the competent court is the District Court of Helsinki, subject to mandatory consumer protection provisions in your country of residence.
         </p>
       </section>
 
       <section>
         <h2 className="text-base font-semibold text-gray-900 mb-2">9. Contact</h2>
         <ul className="space-y-1 text-gray-600">
-          <li><strong>Refactory DX Oy</strong></li>
-          <li>Sturenkatu 37-41 B 16, 00550 Helsinki, Finland</li>
-          <li>Business ID: 2940957-1 &middot; VAT: FI29409571</li>
-          <li>Email: info@sunbnb.app</li>
-          <li>Phone: +358 44 522 3555</li>
+          <li><strong>{co.companyName}</strong></li>
+          {co.companyAddress && <li>{co.companyAddress}</li>}
+          {(co.businessId || co.vatId) && (
+            <li>
+              {co.businessId ? `Business ID: ${co.businessId}` : ''}
+              {co.businessId && co.vatId ? ' \u00b7 ' : ''}
+              {co.vatId ? `VAT: ${co.vatId}` : ''}
+            </li>
+          )}
+          {co.contactEmail && <li>Email: {co.contactEmail}</li>}
+          {co.contactPhone && <li>Phone: {co.contactPhone}</li>}
         </ul>
       </section>
 

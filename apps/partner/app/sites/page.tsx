@@ -1,5 +1,6 @@
 import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
+import { canCreateSite } from '@repo/data/subscription'
 import Link from 'next/link'
 import Image from 'next/image'
 
@@ -27,6 +28,51 @@ function StatusBadge({ status }: { status: string | null | undefined }) {
       <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-500' : 'bg-gray-400'}`} />
       {isActive ? 'Active' : status || 'Draft'}
     </span>
+  )
+}
+
+function AddSiteCard({ allowed, tier, currentCount, maxSites }: {
+  allowed: boolean
+  tier: string
+  currentCount: number
+  maxSites: number
+}) {
+  if (allowed) {
+    return (
+      <Link
+        href="/sites/create"
+        className="group flex flex-col items-center justify-center bg-white rounded-xl border-2 border-dashed border-gray-300 hover:border-gray-400 hover:bg-gray-50 transition-all duration-200 min-h-[260px]"
+      >
+        <div className="w-12 h-12 rounded-full bg-gray-100 group-hover:bg-gray-200 flex items-center justify-center mb-3 transition-colors">
+          <svg className="w-6 h-6 text-gray-400 group-hover:text-gray-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+        </div>
+        <span className="text-sm font-medium text-gray-500 group-hover:text-gray-700 transition-colors">
+          Add site
+        </span>
+      </Link>
+    )
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 min-h-[260px] opacity-60">
+      <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+        <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+        </svg>
+      </div>
+      <span className="text-sm font-medium text-gray-400 mb-1">Site limit reached</span>
+      <span className="text-xs text-gray-400 mb-3">
+        {tier} plan — {currentCount}/{maxSites} site{maxSites !== 1 ? 's' : ''}
+      </span>
+      <Link
+        href="/account/subscription"
+        className="text-xs font-medium text-indigo-500 hover:text-indigo-600 transition-colors"
+      >
+        Upgrade plan
+      </Link>
+    </div>
   )
 }
 
@@ -103,71 +149,54 @@ export default async function Sites() {
   const session = await auth()
   if (!session?.user) return null
 
-  const sites = await prisma.site.findMany({
-    where: { userId: session.user.id },
-    orderBy: { createdAt: 'desc' },
-    select: {
-      id: true,
-      name: true,
-      description: true,
-      image: true,
-      imageWidth: true,
-      imageHeight: true,
-      status: true,
-      type: true,
-      price: true,
-      _count: {
-        select: {
-          inventoryItems: true,
-          products: true,
-          reservations: true,
+  const [sites, siteLimit] = await Promise.all([
+    prisma.site.findMany({
+      where: { userId: session.user.id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        image: true,
+        imageWidth: true,
+        imageHeight: true,
+        status: true,
+        type: true,
+        price: true,
+        _count: {
+          select: {
+            inventoryItems: true,
+            products: true,
+            reservations: true,
+          }
         }
       }
-    }
-  })
+    }),
+    canCreateSite(session.user.id!),
+  ])
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-5xl">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">Sites</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {sites.length} {sites.length === 1 ? 'site' : 'sites'}
-          </p>
-        </div>
-        <Link
-          href="/sites/create"
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          Add site
-        </Link>
+      <div className="mb-6">
+        <h1 className="text-lg font-semibold text-gray-900">Sites</h1>
+        <p className="text-sm text-gray-500 mt-0.5">
+          {sites.length} {sites.length === 1 ? 'site' : 'sites'}
+        </p>
       </div>
 
-      {/* Grid */}
-      {sites.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {sites.map(site => (
-            <SiteCard key={site.id} site={site} />
-          ))}
-        </div>
-      ) : (
-        <div className="text-center py-16 border border-dashed border-gray-300 rounded-xl">
-          <svg className="mx-auto w-10 h-10 text-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0 0 12 9.75c-2.551 0-5.056.2-7.5.582V21" />
-          </svg>
-          <p className="text-sm text-gray-500 mb-4">No sites yet</p>
-          <Link
-            href="/sites/create"
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
-          >
-            Create your first site
-          </Link>
-        </div>
-      )}
+      {/* Grid — Add-site card is always the first element */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <AddSiteCard
+          allowed={siteLimit.allowed}
+          tier={siteLimit.tier}
+          currentCount={siteLimit.currentCount}
+          maxSites={siteLimit.maxSites}
+        />
+        {sites.map(site => (
+          <SiteCard key={site.id} site={site} />
+        ))}
+      </div>
     </div>
   )
 }

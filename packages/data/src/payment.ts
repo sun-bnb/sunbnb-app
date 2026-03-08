@@ -4,18 +4,24 @@
  * Centralizes all payment business logic: service fee resolution, VAT calculation,
  * and idempotent invoice creation for both reservations and orders.
  *
- * Billing model: INTERMEDIARY
- *   Partner is the seller of record. SunBnB collects payment and forwards
- *   revenue minus a service fee. Invoices are issued in the partner's name.
+ * Billing model: SPLIT MERCHANT
+ *   Two invoices per transaction:
+ *   1. PARTNER invoice — product/service lines, taxed at the partner site's VAT rate.
+ *      Merchant of record: the partner company.
+ *   2. PLATFORM invoice — service fee line, taxed at the platform's default VAT rate.
+ *      Merchant of record: SunBnB (business entity from Settings).
  *
  * Key design principles:
  * - Idempotent: safe to call multiple times (webhook + polling convergence)
- * - Transactional: invoice + lines + status update in a single $transaction
+ * - Transactional: invoices + lines + status update in a single $transaction
  * - Three-tier fee cascade: site → partnerAccount → global settings
+ * - Veri*factu ready: sequential invoice numbering and hash chaining per issuer
  */
 
+import crypto from 'crypto'
 import prisma from '../index'
-import { PaymentProcessingFee, ServiceFee, SubscriptionTier } from '@prisma/client'
+import { ServiceFee, SubscriptionTier } from '@prisma/client'
+import { getBusinessEntity } from './business-entity'
 
 // ─── Financial Utilities ────────────────────────────────────────────────────
 
@@ -89,18 +95,72 @@ export function calculateServiceFeeAmount(
   )
 }
 
+// ─── Invoice Numbering & Hashing (Veri*factu) ───────────────────────────────
+
 /**
- * Calculate the payment processing fee from the PaymentProcessingFee singleton.
- * Combines a fixed amount + a percentage of the reference amount.
+ * Generate the next sequential invoice number for a given issuer type.
+ * Format: PARTNER-YYYY-NNNNN or PLATFORM-YYYY-NNNNN
  */
-export function calculateProcessingFeeAmount(
-  ppf: PaymentProcessingFee | null | undefined,
-  referenceAmount: number
-): number {
-  if (!ppf) return 0
-  const fixed = ppf.fixedAmount ?? 0
-  const pct = ppf.percentage ?? 0
-  return round(fixed + (pct / 100) * referenceAmount)
+async function nextInvoiceNumber(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  issuerType: string
+): Promise<string> {
+  const year = new Date().getFullYear()
+  const prefix = `${issuerType}-${year}-`
+
+  const lastInvoice = await tx.invoice.findFirst({
+    where: {
+      issuerType,
+      invoiceNumber: { startsWith: prefix },
+    },
+    orderBy: { invoiceNumber: 'desc' },
+    select: { invoiceNumber: true },
+  })
+
+  let seq = 1
+  if (lastInvoice?.invoiceNumber) {
+    const parts = lastInvoice.invoiceNumber.split('-')
+    const lastSeq = parseInt(parts[parts.length - 1] ?? '0', 10)
+    if (!isNaN(lastSeq)) seq = lastSeq + 1
+  }
+
+  return `${prefix}${String(seq).padStart(5, '0')}`
+}
+
+/**
+ * Compute SHA-256 hash for Veri*factu chain.
+ * Hash input: invoiceNumber|invoicedAt|totalAmount|issuerVatNumber|previousHash
+ */
+function computeInvoiceHash(
+  invoiceNumber: string,
+  invoicedAt: Date,
+  totalAmount: number,
+  issuerVatNumber: string | null,
+  previousHash: string | null
+): string {
+  const input = [
+    invoiceNumber,
+    invoicedAt.toISOString(),
+    totalAmount.toFixed(2),
+    issuerVatNumber ?? '',
+    previousHash ?? '',
+  ].join('|')
+  return crypto.createHash('sha256').update(input).digest('hex')
+}
+
+/**
+ * Get the hash of the last invoice in the chain for this issuer type.
+ */
+async function getLastHash(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  issuerType: string
+): Promise<string | null> {
+  const last = await tx.invoice.findFirst({
+    where: { issuerType, hash: { not: null } },
+    orderBy: { invoicedAt: 'desc' },
+    select: { hash: true },
+  })
+  return last?.hash ?? null
 }
 
 // ─── Fee Context Loading ────────────────────────────────────────────────────
@@ -116,7 +176,6 @@ interface FeeContext {
   settings: (Awaited<ReturnType<typeof prisma.settings.findFirst>> & {
     serviceFees: ServiceFee[]
   }) | null
-  processingFee: PaymentProcessingFee | null
 }
 
 /**
@@ -158,7 +217,6 @@ export async function loadFeeContext(
   // Bootstrap: create default settings + fee in a transaction to prevent duplicates
   if (!settings) {
     await prisma.$transaction(async (tx) => {
-      // Re-check inside transaction to avoid race condition
       const existing = await tx.settings.findFirst()
       if (existing) return
 
@@ -195,7 +253,6 @@ export async function loadFeeContext(
     )
     if (!existingFee) {
       await prisma.$transaction(async (tx) => {
-        // Re-check inside transaction to avoid duplicate fees
         const currentSettings = await tx.settings.findFirst({
           include: {
             serviceFees: {
@@ -228,31 +285,30 @@ export async function loadFeeContext(
     }
   }
 
-  // Load global payment processing fee (singleton)
-  const processingFee = await prisma.paymentProcessingFee.findFirst()
-
-  return { site: site as FeeContext['site'], partnerAccount, settings, processingFee }
+  return { site: site as FeeContext['site'], partnerAccount, settings }
 }
 
 // ─── Idempotent Reservation Processing ──────────────────────────────────────
 
 /**
- * Process a confirmed reservation payment: create invoice + lines atomically.
+ * Process a confirmed reservation payment: create two invoices atomically.
  *
- * INTERMEDIARY model:
- *   Fee is DEDUCTED from the partner's share.
- *   Customer pays: reservation.paymentAmount (VAT-inclusive, includes fee)
- *   Partner receives: paymentAmount − serviceFee per item
- *   Invoice issued by: Partner (issuerType = PARTNER)
+ * SPLIT MERCHANT model:
+ *   1. PARTNER invoice — product lines (sunbed rental per item)
+ *      Taxed at the partner site's VAT rate.
+ *      Merchant of record: partner company.
+ *   2. PLATFORM invoice — service fee line
+ *      Taxed at the platform's default VAT rate (from Settings.vat).
+ *      Merchant of record: SunBnB business entity.
  *
- * Safe to call multiple times — skips if invoice already exists.
+ * Safe to call multiple times — skips if already processed.
  */
 export async function processConfirmedReservation(
   reservationId: string
 ): Promise<void> {
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
-    include: { items: true },
+    include: { items: true, invoices: true },
   })
 
   if (!reservation) {
@@ -260,11 +316,11 @@ export async function processConfirmedReservation(
   }
 
   // Idempotency guard: already processed
-  if (reservation.invoiceId || reservation.status === 'complete') {
+  if (reservation.status === 'complete' || reservation.invoices.length > 0) {
     return
   }
 
-  const { site, partnerAccount, settings, processingFee } = await loadFeeContext(
+  const { site, partnerAccount, settings } = await loadFeeContext(
     reservation.siteId,
     'sunbed-rental'
   )
@@ -278,88 +334,132 @@ export async function processConfirmedReservation(
     tier
   )
 
-  const totalFinalAmount = round(reservation.paymentAmount ?? 0)
-  const vatRate = site.vat ?? 0
-  const { baseAmount: totalBase, vatAmount: totalVat } =
-    computeVatAndBaseAmounts(totalFinalAmount, vatRate)
+  const totalPayment = round(reservation.paymentAmount ?? 0)
+  const siteVatRate = site.vat ?? 0
+
+  // Calculate total service fee across all items
+  let totalServiceFee = 0
+  for (const item of reservation.items) {
+    const itemPrice = round(item.price ?? site.price ?? 0)
+    totalServiceFee += calculateServiceFeeAmount(matchedFee, itemPrice)
+  }
+  totalServiceFee = round(totalServiceFee)
+
+  // Partner amount = total payment minus service fee
+  const partnerAmount = round(totalPayment - totalServiceFee)
+
+  // Load platform business entity for the PLATFORM invoice
+  const businessEntity = await getBusinessEntity()
+  const platformVatRate = businessEntity.vatRate
 
   await prisma.$transaction(async (tx) => {
     // Double-check idempotency inside transaction (race-safe)
     const current = await tx.reservation.findUnique({
       where: { id: reservationId },
+      include: { invoices: true },
     })
-    if (current?.invoiceId || current?.status === 'complete') return
+    if (current?.status === 'complete' || (current?.invoices?.length ?? 0) > 0) return
 
-    const invoice = await tx.invoice.create({
+    const invoicedAt = new Date()
+
+    // ── 1. PARTNER Invoice (product lines) ──
+
+    const { baseAmount: partnerBase, vatAmount: partnerVat } =
+      computeVatAndBaseAmounts(partnerAmount, siteVatRate)
+
+    const partnerInvoiceNumber = await nextInvoiceNumber(tx, 'PARTNER')
+    const partnerPrevHash = await getLastHash(tx, 'PARTNER')
+
+    const partnerInvoice = await tx.invoice.create({
       data: {
         accountId: partnerAccount?.userId ?? '',
-        totalCharge: totalBase,
-        totalTax: totalVat,
-        totalAmount: totalFinalAmount,
+        reservationId,
+        totalCharge: partnerBase,
+        totalTax: partnerVat,
+        totalAmount: partnerAmount,
+        invoicedAt,
         issuerType: 'PARTNER',
         issuerVatNumber: partnerAccount?.businessId ?? null,
         issuerCompanyName: partnerAccount?.company ?? null,
         issuerCompanyAddress: partnerAccount?.address ?? null,
+        invoiceNumber: partnerInvoiceNumber,
+        previousHash: partnerPrevHash,
+        hash: computeInvoiceHash(
+          partnerInvoiceNumber, invoicedAt, partnerAmount,
+          partnerAccount?.businessId ?? null, partnerPrevHash
+        ),
       },
     })
 
-    // ── Intermediary: fee deducted from partner revenue ──
-    const invoiceLines = reservation.items.flatMap((item) => {
+    // Product lines — one per sunbed item
+    const partnerLines = reservation.items.map((item) => {
       const itemPrice = round(item.price ?? site.price ?? 0)
-      const feeAmount = round(
-        calculateServiceFeeAmount(matchedFee, itemPrice)
-      )
-      const partnerAmount = round(itemPrice - feeAmount)
+      const itemFee = calculateServiceFeeAmount(matchedFee, itemPrice)
+      const itemPartnerAmount = round(itemPrice - itemFee)
+      const { baseAmount: lineBase, vatAmount: lineVat } =
+        computeVatAndBaseAmounts(itemPartnerAmount, siteVatRate)
 
-      const { baseAmount: itemBase, vatAmount: itemVat } =
-        computeVatAndBaseAmounts(partnerAmount, vatRate)
-      const { baseAmount: feeBase, vatAmount: feeVat } =
-        computeVatAndBaseAmounts(feeAmount, vatRate)
-
-      return [
-        {
-          charge: itemBase,
-          tax: itemVat,
-          amount: partnerAmount,
-          invoiceId: invoice.id,
-          productCode: 'sunbed-rental',
-          description: `Sunbed ${item.number} (${item.category})`,
-        },
-        {
-          charge: feeBase,
-          tax: feeVat,
-          amount: feeAmount,
-          invoiceId: invoice.id,
-          productCode: 'sunbnb-service-fee',
-          description: 'Res. fee',
-        },
-      ]
+      return {
+        charge: lineBase,
+        tax: lineVat,
+        amount: itemPartnerAmount,
+        vatRate: siteVatRate,
+        invoiceId: partnerInvoice.id,
+        productCode: 'sunbed-rental',
+        description: `Sunbed ${item.number} (${item.category})`,
+      }
     })
 
-    // Add payment processing fee line
-    const procFeeAmount = round(
-      calculateProcessingFeeAmount(processingFee, totalFinalAmount)
-    )
-    if (procFeeAmount > 0) {
-      const { baseAmount: procBase, vatAmount: procVat } =
-        computeVatAndBaseAmounts(procFeeAmount, vatRate)
-      invoiceLines.push({
-        charge: procBase,
-        tax: procVat,
-        amount: procFeeAmount,
-        invoiceId: invoice.id,
-        productCode: 'payment-processing-fee',
-        description: 'Processing fee',
-      })
+    if (partnerLines.length > 0) {
+      await tx.invoiceLine.createMany({ data: partnerLines })
     }
 
-    if (invoiceLines.length > 0) {
-      await tx.invoiceLine.createMany({ data: invoiceLines })
+    // ── 2. PLATFORM Invoice (service fee) ──
+
+    if (totalServiceFee > 0) {
+      const { baseAmount: feeBase, vatAmount: feeVat } =
+        computeVatAndBaseAmounts(totalServiceFee, platformVatRate)
+
+      const platformInvoiceNumber = await nextInvoiceNumber(tx, 'PLATFORM')
+      const platformPrevHash = await getLastHash(tx, 'PLATFORM')
+
+      const platformInvoice = await tx.invoice.create({
+        data: {
+          accountId: partnerAccount?.userId ?? '',
+          reservationId,
+          totalCharge: feeBase,
+          totalTax: feeVat,
+          totalAmount: totalServiceFee,
+          invoicedAt,
+          issuerType: 'PLATFORM',
+          issuerVatNumber: businessEntity.vatId || null,
+          issuerCompanyName: businessEntity.companyName,
+          issuerCompanyAddress: businessEntity.companyAddress || null,
+          invoiceNumber: platformInvoiceNumber,
+          previousHash: platformPrevHash,
+          hash: computeInvoiceHash(
+            platformInvoiceNumber, invoicedAt, totalServiceFee,
+            businessEntity.vatId || null, platformPrevHash
+          ),
+        },
+      })
+
+      await tx.invoiceLine.create({
+        data: {
+          charge: feeBase,
+          tax: feeVat,
+          amount: totalServiceFee,
+          vatRate: platformVatRate,
+          invoiceId: platformInvoice.id,
+          productCode: 'sunbnb-service-fee',
+          description: 'Reservation service fee',
+        },
+      })
     }
 
     await tx.reservation.update({
       where: { id: reservationId },
-      data: { invoiceId: invoice.id, status: 'complete' },
+      data: { status: 'complete' },
     })
   })
 }
@@ -367,25 +467,28 @@ export async function processConfirmedReservation(
 // ─── Idempotent Order Processing ────────────────────────────────────────────
 
 /**
- * Process a confirmed order payment: create invoice + lines atomically.
+ * Process a confirmed order payment: create two invoices atomically.
+ *
+ * SPLIT MERCHANT model:
+ *   1. PARTNER invoice — product item lines (food & beverage)
+ *      Taxed at the partner site's VAT rate.
+ *      Merchant of record: partner company.
+ *   2. PLATFORM invoice — service fee line
+ *      Taxed at the platform's default VAT rate (from Settings.vat).
+ *      Merchant of record: SunBnB business entity.
  *
  * Fee model: fees are INCLUDED in the product price.
  * Customer pays exactly order.paymentAmount (the product total).
- * Service fee + processing fee are deducted from the merchant's share at settlement.
+ * Service fee is deducted and invoiced separately by the platform.
  *
- * INTERMEDIARY model:
- *   Customer pays: order.paymentAmount
- *   Partner receives: order.paymentAmount − serviceFee − processingFee
- *   Invoice issued by: Partner (issuerType = PARTNER)
- *
- * Safe to call multiple times — skips if invoice already exists.
+ * Safe to call multiple times — skips if already processed.
  */
 export async function processConfirmedOrder(
   orderId: string
 ): Promise<void> {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    include: { orderItems: true },
+    include: { orderItems: true, invoices: true },
   })
 
   if (!order) {
@@ -393,11 +496,11 @@ export async function processConfirmedOrder(
   }
 
   // Idempotency guard: already processed
-  if (order.invoiceId || order.status === 'complete') {
+  if (order.status === 'complete' || order.invoices.length > 0) {
     return
   }
 
-  const { site, partnerAccount, settings, processingFee } = await loadFeeContext(
+  const { site, partnerAccount, settings } = await loadFeeContext(
     order.siteId,
     'food-and-beverage'
   )
@@ -412,43 +515,53 @@ export async function processConfirmedOrder(
   )
 
   const totalProductAmount = order.paymentAmount ?? 0
-  const vatRate = site.vat ?? 0
+  const siteVatRate = site.vat ?? 0
   const serviceFeeAmount = calculateServiceFeeAmount(matchedFee, totalProductAmount)
-  const procFeeAmount = round(calculateProcessingFeeAmount(processingFee, totalProductAmount))
 
-  // Fees are INCLUDED in the product price — customer pays exactly totalProductAmount.
-  // Fees are deducted from the merchant's share at settlement.
-  const totalAmount = totalProductAmount
+  // Partner amount = total product amount minus service fee
+  const partnerAmount = round(totalProductAmount - serviceFeeAmount)
 
-  // Compute VAT split for products (customer-facing total)
-  const { baseAmount: productBase, vatAmount: productVat } =
-    computeVatAndBaseAmounts(totalProductAmount, vatRate)
+  // Load platform business entity for the PLATFORM invoice
+  const businessEntity = await getBusinessEntity()
+  const platformVatRate = businessEntity.vatRate
 
-  // Fee VAT splits — for internal settlement accounting only
-  const { baseAmount: feeBase, vatAmount: feeVat } =
-    computeVatAndBaseAmounts(serviceFeeAmount, vatRate)
-  const { baseAmount: procBase, vatAmount: procVat } =
-    computeVatAndBaseAmounts(procFeeAmount, vatRate)
-
-  // Invoice header reflects what the customer paid (product total only)
-  const invoiceTotalCharge = productBase
-  const invoiceTotalTax = productVat
+  // Compute partner VAT split
+  const { baseAmount: partnerBase, vatAmount: partnerVat } =
+    computeVatAndBaseAmounts(partnerAmount, siteVatRate)
 
   await prisma.$transaction(async (tx) => {
     // Double-check idempotency inside transaction (race-safe)
-    const current = await tx.order.findUnique({ where: { id: orderId } })
-    if (current?.invoiceId || current?.status === 'complete') return
+    const current = await tx.order.findUnique({
+      where: { id: orderId },
+      include: { invoices: true },
+    })
+    if (current?.status === 'complete' || (current?.invoices?.length ?? 0) > 0) return
 
-    const invoice = await tx.invoice.create({
+    const invoicedAt = new Date()
+
+    // ── 1. PARTNER Invoice (product lines) ──
+
+    const partnerInvoiceNumber = await nextInvoiceNumber(tx, 'PARTNER')
+    const partnerPrevHash = await getLastHash(tx, 'PARTNER')
+
+    const partnerInvoice = await tx.invoice.create({
       data: {
         accountId: partnerAccount?.userId ?? '',
-        totalCharge: invoiceTotalCharge,
-        totalTax: invoiceTotalTax,
-        totalAmount,
+        orderId,
+        totalCharge: partnerBase,
+        totalTax: partnerVat,
+        totalAmount: partnerAmount,
+        invoicedAt,
         issuerType: 'PARTNER',
         issuerVatNumber: partnerAccount?.businessId ?? null,
         issuerCompanyName: partnerAccount?.company ?? null,
         issuerCompanyAddress: partnerAccount?.address ?? null,
+        invoiceNumber: partnerInvoiceNumber,
+        previousHash: partnerPrevHash,
+        hash: computeInvoiceHash(
+          partnerInvoiceNumber, invoicedAt, partnerAmount,
+          partnerAccount?.businessId ?? null, partnerPrevHash
+        ),
       },
     })
 
@@ -459,45 +572,63 @@ export async function processConfirmedOrder(
         charge: itemBase,
         tax: itemVat,
         amount: item.totalPrice,
-        invoiceId: invoice.id,
+        vatRate: item.tax,
+        invoiceId: partnerInvoice.id,
         productCode: 'food-and-beverage',
         description: `${item.name} x (${item.quantity})`,
       }
     })
 
-    // Service fee line
-    const serviceFeeLine = {
-      charge: feeBase,
-      tax: feeVat,
-      amount: serviceFeeAmount,
-      invoiceId: invoice.id,
-      productCode: 'sunbnb-service-fee',
-      description: 'Srv. fee',
+    if (itemLines.length > 0) {
+      await tx.invoiceLine.createMany({ data: itemLines })
     }
 
-    // Payment processing fee line
-    const procFeeLine = procFeeAmount > 0
-      ? {
-          charge: procBase,
-          tax: procVat,
-          amount: procFeeAmount,
-          invoiceId: invoice.id,
-          productCode: 'payment-processing-fee',
-          description: 'Processing fee',
-        }
-      : null
+    // ── 2. PLATFORM Invoice (service fee) ──
 
-    const allLines = [
-      ...itemLines,
-      serviceFeeLine,
-      ...(procFeeLine ? [procFeeLine] : []),
-    ]
+    if (serviceFeeAmount > 0) {
+      const { baseAmount: feeBase, vatAmount: feeVat } =
+        computeVatAndBaseAmounts(serviceFeeAmount, platformVatRate)
 
-    await tx.invoiceLine.createMany({ data: allLines })
+      const platformInvoiceNumber = await nextInvoiceNumber(tx, 'PLATFORM')
+      const platformPrevHash = await getLastHash(tx, 'PLATFORM')
+
+      const platformInvoice = await tx.invoice.create({
+        data: {
+          accountId: partnerAccount?.userId ?? '',
+          orderId,
+          totalCharge: feeBase,
+          totalTax: feeVat,
+          totalAmount: serviceFeeAmount,
+          invoicedAt,
+          issuerType: 'PLATFORM',
+          issuerVatNumber: businessEntity.vatId || null,
+          issuerCompanyName: businessEntity.companyName,
+          issuerCompanyAddress: businessEntity.companyAddress || null,
+          invoiceNumber: platformInvoiceNumber,
+          previousHash: platformPrevHash,
+          hash: computeInvoiceHash(
+            platformInvoiceNumber, invoicedAt, serviceFeeAmount,
+            businessEntity.vatId || null, platformPrevHash
+          ),
+        },
+      })
+
+      await tx.invoiceLine.create({
+        data: {
+          charge: feeBase,
+          tax: feeVat,
+          amount: serviceFeeAmount,
+          vatRate: platformVatRate,
+          invoiceId: platformInvoice.id,
+          productCode: 'sunbnb-service-fee',
+          description: 'Order service fee',
+        },
+      })
+    }
 
     await tx.order.update({
       where: { id: orderId },
-      data: { invoiceId: invoice.id, status: 'complete' },
+      data: { status: 'complete' },
     })
   })
 }
@@ -505,9 +636,8 @@ export async function processConfirmedOrder(
 // ─── Order Service Fee Calculation ──────────────────────────────────────────
 
 /**
- * Calculate the total fee for an order (used for settlement/accounting).
- * Returns service fee + payment processing fee deducted from the merchant's share.
- * NOT added on top of order.paymentAmount — fees are included in the product price.
+ * Calculate the service fee for an order (used for settlement/accounting).
+ * Returns the service fee deducted from the merchant's share.
  */
 export async function calculateOrderServiceFee(
   orderId: string
@@ -517,7 +647,7 @@ export async function calculateOrderServiceFee(
   })
   if (!order) throw new Error(`Order not found: ${orderId}`)
 
-  const { site, partnerAccount, settings, processingFee } = await loadFeeContext(
+  const { site, partnerAccount, settings } = await loadFeeContext(
     order.siteId,
     'food-and-beverage'
   )
@@ -532,7 +662,5 @@ export async function calculateOrderServiceFee(
   )
 
   const amount = order.paymentAmount ?? 0
-  const serviceFee = calculateServiceFeeAmount(matchedFee, amount)
-  const procFee = calculateProcessingFeeAmount(processingFee, amount)
-  return round(serviceFee + procFee)
+  return calculateServiceFeeAmount(matchedFee, amount)
 }

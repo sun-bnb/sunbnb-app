@@ -3,12 +3,13 @@
  *
  * Manages the outbound payment lifecycle for partner invoices.
  *
- * INTERMEDIARY model: Partner is the seller but payments flow through SunBnB.
- * Fee lines use 'sunbnb-service-fee'.
+ * SPLIT MERCHANT model:
+ *   Each transaction produces two invoices:
+ *   - PARTNER invoice: product/service revenue (partner is merchant of record)
+ *   - PLATFORM invoice: service fee (SunBnB is merchant of record)
  *
- * SunBnB collects payment and owes the partner the net payout.
- * Net payout = grossRevenue − commission
- * (partner handles their own VAT obligations)
+ *   SunBnB collects full payment and owes the partner the net payout.
+ *   Net payout = grossRevenue (PARTNER invoices) − commission (PLATFORM invoices)
  *
  * Settlement lifecycle:  DRAFT → CLOSED → APPROVED → PAID
  *
@@ -51,8 +52,6 @@ function round(amount: number): number {
   return Math.round(amount * 100) / 100
 }
 
-const FEE_CODES = ['sunbnb-platform-commission', 'sunbnb-service-fee']
-
 // ─── Preview Settlement ─────────────────────────────────────────────────────
 
 export interface SettlementPreview {
@@ -68,6 +67,7 @@ export interface SettlementPreview {
     totalTax: number
     description: string
     type: 'reservation' | 'order'
+    issuerType: string
   }[]
 }
 
@@ -106,26 +106,24 @@ export async function previewSettlement(input: {
 
   if (invoices.length === 0) return null
 
+  // Split by issuer type for clean accounting
+  const partnerInvoices = invoices.filter(inv => inv.issuerType === 'PARTNER')
+  const platformInvoices = invoices.filter(inv => inv.issuerType === 'PLATFORM')
+
   const grossRevenue = round(
-    invoices.reduce((sum, inv) => sum + inv.totalAmount, 0)
+    partnerInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0)
   )
   const totalTax = round(
-    invoices.reduce((sum, inv) => sum + inv.totalTax, 0)
+    partnerInvoices.reduce((sum, inv) => sum + inv.totalTax, 0)
   )
   const commission = round(
-    invoices.reduce((sum, inv) => {
-      const feeLines = inv.invoiceLines.filter(
-        (l) => l.productCode && FEE_CODES.includes(l.productCode)
-      )
-      return sum + feeLines.reduce((s, l) => s + l.amount, 0)
-    }, 0)
+    platformInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0)
   )
-  // Partner handles own VAT, receives gross minus commission
   const netPayout = round(grossRevenue - commission)
 
   const previewInvoices = invoices.map((inv) => {
     const productLines = inv.invoiceLines.filter(
-      (l) => !l.productCode || !FEE_CODES.includes(l.productCode)
+      (l) => l.productCode !== 'sunbnb-service-fee'
     )
     const description = productLines.map((l) => l.description).filter(Boolean).join(', ') || 'Invoice'
     const type: 'reservation' | 'order' = inv.reservation ? 'reservation' : 'order'
@@ -137,6 +135,7 @@ export async function previewSettlement(input: {
       totalTax: inv.totalTax,
       description,
       type,
+      issuerType: inv.issuerType,
     }
   })
 
@@ -155,13 +154,13 @@ export async function previewSettlement(input: {
 /**
  * Generate a DRAFT settlement for a partner + site over a given period.
  *
- * Finds all invoices that:
+ * Finds all invoices (both PARTNER and PLATFORM) that:
  * - belong to the given account + site
  * - fall within the period (by invoicedAt)
  * - are not yet assigned to any settlement batch
  *
- * Computes gross revenue, commission/fees (from fee invoice lines), tax,
- * and net payout. Creates a Settlement record and links the invoices.
+ * Computes gross revenue (PARTNER invoices), commission (PLATFORM invoices),
+ * tax, and net payout. Creates a Settlement record and links the invoices.
  *
  * Returns null if no unsettled invoices exist for the period.
  */
@@ -182,7 +181,6 @@ export async function generateSettlement(input: {
         gte: periodStart,
         lt: periodEnd,
       },
-      // Only include invoices linked to this site
       OR: [
         { reservation: { siteId } },
         { order: { siteId } },
@@ -195,23 +193,19 @@ export async function generateSettlement(input: {
 
   if (invoices.length === 0) return null
 
-  // Compute totals
+  // Split by issuer type
+  const partnerInvoices = invoices.filter(inv => inv.issuerType === 'PARTNER')
+  const platformInvoices = invoices.filter(inv => inv.issuerType === 'PLATFORM')
+
   const grossRevenue = round(
-    invoices.reduce((sum, inv) => sum + inv.totalAmount, 0)
+    partnerInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0)
   )
   const totalTax = round(
-    invoices.reduce((sum, inv) => sum + inv.totalTax, 0)
+    partnerInvoices.reduce((sum, inv) => sum + inv.totalTax, 0)
   )
-  // Fee lines use 'sunbnb-service-fee'
   const commission = round(
-    invoices.reduce((sum, inv) => {
-      const feeLines = inv.invoiceLines.filter(
-        (l) => l.productCode && FEE_CODES.includes(l.productCode)
-      )
-      return sum + feeLines.reduce((s, l) => s + l.amount, 0)
-    }, 0)
+    platformInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0)
   )
-  // Partner handles own VAT, receives gross minus commission
   const netPayout = round(grossRevenue - commission)
 
   // Create settlement and link invoices atomically
@@ -414,6 +408,7 @@ export async function listSettlements(filters?: {
 /**
  * List partner+site combinations that have unsettled invoices.
  * Used by the admin UI to show which partners need a settlement generated.
+ * Only counts PARTNER invoices (the revenue side) to avoid double-counting.
  */
 export async function listUnsettledPartners(): Promise<
   {
@@ -427,10 +422,11 @@ export async function listUnsettledPartners(): Promise<
     newestInvoice: Date
   }[]
 > {
-  // Find all invoices not yet assigned to a settlement batch
+  // Find all PARTNER invoices not yet assigned to a settlement batch
   const unsettled = await prisma.invoice.findMany({
     where: {
       settlementBatchId: null,
+      issuerType: 'PARTNER',
     },
     include: {
       account: { select: { company: true } },

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { addAdminUser, removeAdminUser, searchUsers, deleteUser, type UserSearchResult } from './actions'
 
 interface AdminUser {
@@ -49,23 +49,37 @@ export default function UsersView({ initialUsers }: { initialUsers: AdminUser[] 
     setRemovingId(null)
   }
 
-  const handleSearch = useCallback(async () => {
-    if (!searchQuery.trim()) {
+  const handleSearch = useCallback(async (query: string) => {
+    if (!query.trim() || query.trim().length < 2) {
       setSearchResults([])
+      setSearching(false)
       return
     }
     setSearching(true)
     setDeleteError(null)
     setDeleteSuccess(null)
-    const results = await searchUsers(searchQuery)
+    const results = await searchUsers(query)
     setSearchResults(results)
     setSearching(false)
-  }, [searchQuery])
+  }, [])
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    handleSearch()
-  }
+  // Debounced auto-search
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (!searchQuery.trim() || searchQuery.trim().length < 2) {
+      setSearchResults([])
+      setSearching(false)
+      return
+    }
+    setSearching(true)
+    debounceRef.current = setTimeout(() => {
+      handleSearch(searchQuery)
+    }, 300)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [searchQuery, handleSearch])
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return
@@ -202,37 +216,27 @@ export default function UsersView({ initialUsers }: { initialUsers: AdminUser[] 
         </p>
       </div>
 
-      {/* Search form */}
-      <form onSubmit={handleSearchSubmit} className="mb-6">
-        <div className="flex gap-2">
+      {/* Search input with auto-search */}
+      <div className="mb-6">
+        <div className="relative">
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by email or name"
-            className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+            placeholder="Search by email or name (min 2 characters)"
+            className="w-full bg-gray-900 border border-gray-700 rounded-lg pl-10 pr-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
           />
-          <button
-            type="submit"
-            disabled={searching || !searchQuery.trim()}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-500 disabled:opacity-40 transition-colors"
-          >
+          <div className="absolute left-3 top-1/2 -translate-y-1/2">
             {searching ? (
-              <>
-                <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Searching…
-              </>
+              <div className="w-4 h-4 border-2 border-gray-600 border-t-purple-400 rounded-full animate-spin" />
             ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-                </svg>
-                Search
-              </>
+              <svg className="w-4 h-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+              </svg>
             )}
-          </button>
+          </div>
         </div>
-      </form>
+      </div>
 
       {/* Status messages */}
       {deleteSuccess && (

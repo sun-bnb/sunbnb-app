@@ -12,7 +12,8 @@
     "./button": "./src/button.tsx",
     "./card": "./src/card.tsx",
     "./code": "./src/code.tsx",
-    "./env": "./src/env.ts"
+    "./env": "./src/env.ts",
+    "./business-entity": "./src/business-entity.ts"
   },
   "typesVersions": {
     "*": {
@@ -25,7 +26,8 @@
       "button": ["./src/button.tsx"],
       "card": ["./src/card.tsx"],
       "code": ["./src/code.tsx"],
-      "env": ["./src/env.ts"]
+      "env": ["./src/env.ts"],
+      "business-entity": ["./src/business-entity.ts"]
     }
   },
   "scripts": {

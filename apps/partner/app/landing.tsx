@@ -4,7 +4,16 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import sunbnbLogo from '@/app/sunbnb-logo.svg'
 
-export default function LandingPage() {
+interface BusinessEntity {
+  companyName: string
+  companyAddress: string | null
+  businessId: string | null
+  vatId: string | null
+  contactEmail: string | null
+  contactPhone: string | null
+}
+
+export default function LandingPage({ businessEntity }: { businessEntity: BusinessEntity }) {
   const router = useRouter()
   return (
     <div className="min-h-screen bg-white">
@@ -208,7 +217,10 @@ export default function LandingPage() {
             </div>
           </div>
           <p className="mt-4 text-[10px] text-gray-300">
-            Operated by Refactory DX Oy · Business ID 2940957-1 · VAT FI29409571 · Sturenkatu 37-41 B 16, 00550 Helsinki, Finland
+            Operated by {businessEntity.companyName}
+            {businessEntity.businessId ? ` · Business ID ${businessEntity.businessId}` : ''}
+            {businessEntity.vatId ? ` · VAT ${businessEntity.vatId}` : ''}
+            {businessEntity.companyAddress ? ` · ${businessEntity.companyAddress}` : ''}
           </p>
         </div>
       </footer>

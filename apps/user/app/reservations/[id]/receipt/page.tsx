@@ -1,9 +1,8 @@
 import prisma from '@repo/data/PrismaCient'
-import ReceiptPage, { ReceiptProps } from './ReceiptPage'
+import ReceiptPage, { ReceiptProps, InvoiceSection } from './ReceiptPage'
 
 async function getReservation(id: string) {
-
-  const reservation = await prisma.reservation.findUnique({ 
+  return prisma.reservation.findUnique({
     where: { id },
     include: {
       items: true,
@@ -11,25 +10,56 @@ async function getReservation(id: string) {
         include: {
           user: {
             include: {
-              partnerAccount: true
-            }
-          }
-        }
+              partnerAccount: true,
+            },
+          },
+        },
       },
-      invoice: {
+      invoices: {
         include: {
-          invoiceLines: true
-        }
-      }
-    }
+          invoiceLines: true,
+        },
+      },
+    },
   })
+}
 
-  return reservation
-
+function buildSection(invoice: {
+  invoiceNumber: string | null
+  issuerCompanyName: string | null
+  issuerVatNumber: string | null
+  issuerCompanyAddress: string | null
+  totalCharge: number
+  totalTax: number
+  totalAmount: number
+  invoiceLines: {
+    description: string | null
+    charge: number
+    vatRate: number | null
+    tax: number
+    amount: number
+  }[]
+}, fallbackName: string, fallbackPhone?: string | null): InvoiceSection {
+  return {
+    invoiceNumber: invoice.invoiceNumber,
+    merchantName: invoice.issuerCompanyName ?? fallbackName,
+    merchantVatId: invoice.issuerVatNumber,
+    merchantAddress: invoice.issuerCompanyAddress,
+    merchantPhone: fallbackPhone ?? null,
+    lines: invoice.invoiceLines.map((l) => ({
+      description: l.description,
+      charge: l.charge,
+      vatRate: l.vatRate,
+      vat: l.tax,
+      total: l.amount,
+    })),
+    subtotalCharge: invoice.totalCharge,
+    subtotalVat: invoice.totalTax,
+    subtotalAmount: invoice.totalAmount,
+  }
 }
 
 export default async function Receipt({ params }: { params: { id: string } }) {
-
   const reservation = await getReservation(params.id)
 
   if (!reservation) {
@@ -37,60 +67,53 @@ export default async function Receipt({ params }: { params: { id: string } }) {
     return <div>Reservation not found</div>
   }
 
+  const partnerInvoice = reservation.invoices.find((i) => i.issuerType === 'PARTNER')
+  const platformInvoice = reservation.invoices.find((i) => i.issuerType === 'PLATFORM')
+
+  if (!partnerInvoice) {
+    console.error('Partner invoice not found')
+    return <div>Invoice not found</div>
+  }
+
   const { partnerAccount } = reservation.site.user
-  const { invoice } = reservation
 
-  if (!partnerAccount || !invoice) {
-    console.error('Partner account or invoice not found')
-    return <div>Partner account or invoice not found</div>
-  }
+  const date =
+    partnerInvoice.invoicedAt.toISOString().substring(0, 10) +
+    ' ' +
+    partnerInvoice.invoicedAt.toISOString().substring(11, 19)
 
-  const { businessId, company, phoneNumber } = partnerAccount
-
-  const { totalCharge, totalTax, totalAmount } = invoice
-
-  const invoiceLines = reservation?.invoice?.invoiceLines.map(line => {
-    return {
-      description: line.description,
-      charge: line.charge,
-      vat: line.tax,
-      total: line.amount
-    }
-  })
-
-  if (!invoiceLines || invoiceLines.length === 0) {
-    console.error('No invoice lines found')
-    return <div>No invoice lines found</div>
-  }
-
-  const date = 
-    invoice.invoicedAt.toISOString().substring(0, 10) + ' ' +
-    invoice.invoicedAt.toISOString().substring(11, 19)
-
-  const seatNumbers = reservation.items?.map(item => String(item.number)).join(', ') ?? null
+  const seatNumbers =
+    reservation.items?.map((item) => String(item.number)).join(', ') ?? null
 
   const reservationFrom = reservation.from.toISOString().substring(0, 10)
   const reservationTo = reservation.to.toISOString().substring(0, 10)
-  const reservationDate = reservationFrom === reservationTo
-    ? reservationFrom
-    : `${reservationFrom} – ${reservationTo}`
+  const reservationDate =
+    reservationFrom === reservationTo
+      ? reservationFrom
+      : `${reservationFrom} – ${reservationTo}`
+
+  const partnerSection = buildSection(
+    partnerInvoice,
+    partnerAccount?.company ?? 'Partner',
+    partnerAccount?.phoneNumber
+  )
+
+  const platformSection = platformInvoice
+    ? buildSection(platformInvoice, 'SunBnB')
+    : null
+
+  const grandTotal =
+    partnerInvoice.totalAmount + (platformInvoice?.totalAmount ?? 0)
 
   const receipt: ReceiptProps = {
     date,
-    businessId,
-    company,
-    companyAddress: partnerAccount.address,
-    phoneNumber,
     siteName: reservation.site?.name ?? null,
     reservationDate,
     seatNumbers,
-    totalCharge,
-    totalVat: totalTax,
-    totalAmount,
-    invoiceLines
+    partnerSection,
+    platformSection,
+    grandTotal,
   }
 
-  return (
-    <ReceiptPage receipt={receipt} />
-  )
+  return <ReceiptPage receipt={receipt} />
 }

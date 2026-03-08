@@ -2,27 +2,90 @@
 
 import React, { ComponentType } from 'react'
 import { PDFDownloadLink } from '@react-pdf/renderer'
-import { ReceiptProps, formatCurrency } from './ReceiptPage'
+import { ReceiptProps, InvoiceSection, formatCurrency } from './ReceiptPage'
 import PdfReceipt from './PdfReceipt'
 
-function ReceiptDoc({ receipt }: { receipt: ReceiptProps }) {
-
+function SectionBlock({ section, label }: { section: InvoiceSection; label?: string }) {
   return (
-    <div className="max-w-md mx-auto bg-white text-gray-800">
-      {/* Header */}
-      <div className="bg-gray-50 border-b border-gray-200 px-5 py-5 text-center">
-        <div className="text-lg font-bold text-gray-900">{receipt.company}</div>
-        {receipt.businessId && (
-          <div className="text-xs text-gray-500 mt-0.5">{receipt.businessId}</div>
+    <div className="mb-2">
+      {/* Merchant header */}
+      <div className="bg-gray-50 border-b border-gray-200 px-5 py-4 text-center">
+        {label && (
+          <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">{label}</div>
         )}
-        {receipt.companyAddress && (
-          <div className="text-xs text-gray-500 mt-0.5">{receipt.companyAddress}</div>
+        <div className="text-sm font-bold text-gray-900">{section.merchantName}</div>
+        {section.merchantVatId && (
+          <div className="text-xs text-gray-500 mt-0.5">{section.merchantVatId}</div>
         )}
-        {receipt.phoneNumber && (
-          <div className="text-xs text-gray-500 mt-0.5">{receipt.phoneNumber}</div>
+        {section.merchantAddress && (
+          <div className="text-xs text-gray-500 mt-0.5">{section.merchantAddress}</div>
+        )}
+        {section.merchantPhone && (
+          <div className="text-xs text-gray-500 mt-0.5">{section.merchantPhone}</div>
+        )}
+        {section.invoiceNumber && (
+          <div className="text-[10px] text-gray-400 mt-1">Invoice {section.invoiceNumber}</div>
         )}
       </div>
 
+      {/* Line items */}
+      <div className="px-5 py-3">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-gray-200">
+              <th className="text-left py-2 font-semibold text-gray-600">Item</th>
+              <th className="text-right py-2 font-semibold text-gray-600 w-16">Charge</th>
+              <th className="text-right py-2 font-semibold text-gray-600 w-14">VAT</th>
+              <th className="text-right py-2 font-semibold text-gray-600 w-16">Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            {section.lines.map((line, index) => {
+              let description = line.description || ''
+              if (description.length > 40) {
+                description = description.substring(0, 40) + '...'
+              }
+              return (
+                <tr key={index} className={index % 2 === 0 ? 'bg-gray-50/50' : ''}>
+                  <td className="py-1.5 text-gray-700">{description}</td>
+                  <td className="text-right py-1.5 text-gray-600 tabular-nums">
+                    {formatCurrency(line.charge)}
+                  </td>
+                  <td className="text-right py-1.5 text-gray-600 tabular-nums">
+                    {formatCurrency(line.vat)}
+                  </td>
+                  <td className="text-right py-1.5 text-gray-800 font-medium tabular-nums">
+                    {formatCurrency(line.total)} &euro;
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Section subtotals */}
+      <div className="mx-5 border-t border-gray-300 pt-2 pb-3">
+        <div className="flex justify-between text-xs text-gray-600 mb-1">
+          <span>Subtotal</span>
+          <span className="tabular-nums">{formatCurrency(section.subtotalCharge)} &euro;</span>
+        </div>
+        <div className="flex justify-between text-xs text-gray-600 mb-1">
+          <span>VAT</span>
+          <span className="tabular-nums">{formatCurrency(section.subtotalVat)} &euro;</span>
+        </div>
+        <div className="flex justify-between text-xs font-semibold text-gray-800 border-t border-gray-200 pt-1">
+          <span>Total</span>
+          <span className="tabular-nums">{formatCurrency(section.subtotalAmount)} &euro;</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ReceiptDoc({ receipt }: { receipt: ReceiptProps }) {
+  return (
+    <div className="max-w-md mx-auto bg-white text-gray-800">
       {/* Reservation info */}
       {(receipt.siteName || receipt.reservationDate || receipt.seatNumbers) && (
         <div className="px-5 py-3 border-b border-dashed border-gray-200">
@@ -47,49 +110,19 @@ function ReceiptDoc({ receipt }: { receipt: ReceiptProps }) {
         </div>
       )}
 
-      {/* Items table */}
-      <div className="px-5 py-3">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b border-gray-200">
-              <th className="text-left py-2 font-semibold text-gray-600">Item</th>
-              <th className="text-right py-2 font-semibold text-gray-600 w-16">Charge</th>
-              <th className="text-right py-2 font-semibold text-gray-600 w-14">VAT</th>
-              <th className="text-right py-2 font-semibold text-gray-600 w-16">Price</th>
-            </tr>
-          </thead>
-          <tbody>
-            {receipt.invoiceLines.map((line, index) => {
-              let description = line.description || ''
-              if (description.length > 40) {
-                description = description.substring(0, 40) + '...'
-              }
-              return (
-                <tr key={index} className={index % 2 === 0 ? 'bg-gray-50/50' : ''}>
-                  <td className="py-1.5 text-gray-700">{description}</td>
-                  <td className="text-right py-1.5 text-gray-600 tabular-nums">{formatCurrency(line.charge)}</td>
-                  <td className="text-right py-1.5 text-gray-600 tabular-nums">{formatCurrency(line.vat)}</td>
-                  <td className="text-right py-1.5 text-gray-800 font-medium tabular-nums">{formatCurrency(line.total)} &euro;</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+      {/* Partner section — products/services */}
+      <SectionBlock section={receipt.partnerSection} label="Service Provider" />
 
-      {/* Totals */}
-      <div className="mx-5 border-t border-gray-300 pt-3 pb-4">
-        <div className="flex justify-between text-xs text-gray-600 mb-1">
-          <span>Subtotal</span>
-          <span className="tabular-nums">{formatCurrency(receipt.totalCharge)} &euro;</span>
-        </div>
-        <div className="flex justify-between text-xs text-gray-600 mb-2">
-          <span>VAT</span>
-          <span className="tabular-nums">{formatCurrency(receipt.totalVat)} &euro;</span>
-        </div>
-        <div className="flex justify-between text-sm font-bold text-gray-900 border-t border-gray-200 pt-2">
-          <span>Total</span>
-          <span className="tabular-nums">{formatCurrency(receipt.totalAmount)} &euro;</span>
+      {/* Platform section — service fee */}
+      {receipt.platformSection && (
+        <SectionBlock section={receipt.platformSection} label="Platform Fee" />
+      )}
+
+      {/* Grand total */}
+      <div className="mx-5 border-t-2 border-gray-400 pt-3 pb-4">
+        <div className="flex justify-between text-sm font-bold text-gray-900">
+          <span>Total Paid</span>
+          <span className="tabular-nums">{formatCurrency(receipt.grandTotal)} &euro;</span>
         </div>
       </div>
 
@@ -99,14 +132,9 @@ function ReceiptDoc({ receipt }: { receipt: ReceiptProps }) {
       </div>
     </div>
   )
-
 }
 
-export default function ReceiptView({
-  receipt
-} : {
-  receipt: ReceiptProps
-}) {
+export default function ReceiptView({ receipt }: { receipt: ReceiptProps }) {
   const SafePDFDownloadLink = PDFDownloadLink as unknown as ComponentType<any>
 
   return (
@@ -116,15 +144,16 @@ export default function ReceiptView({
       </div>
       <div className="w-full text-center flex justify-center mt-6 mb-8">
         <div className="cursor-pointer bg-gray-700 hover:bg-gray-600 transition-colors text-white text-sm px-5 py-2 rounded-lg">
-          <SafePDFDownloadLink document={<PdfReceipt receipt={receipt} />} fileName={`receipt-${new Date().toISOString()}.pdf`}>
-            {
-              ({ blob, url, loading, error }: { blob?: Blob, url?: string, loading: boolean, error?: Error }) =>
-                loading ? 'Preparing PDF...' : 'Download receipt'
+          <SafePDFDownloadLink
+            document={<PdfReceipt receipt={receipt} />}
+            fileName={`receipt-${new Date().toISOString()}.pdf`}
+          >
+            {({ blob, url, loading, error }: { blob?: Blob; url?: string; loading: boolean; error?: Error }) =>
+              loading ? 'Preparing PDF...' : 'Download receipt'
             }
           </SafePDFDownloadLink>
         </div>
       </div>
     </div>
   )
-
 }

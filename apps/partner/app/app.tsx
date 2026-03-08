@@ -6,7 +6,16 @@ import { useEffect, useState } from 'react'
 import Header from './header'
 import LandingPage from './landing'
 
-export default function App({ children }: { children: React.ReactNode }) {
+interface BusinessEntity {
+  companyName: string
+  companyAddress: string | null
+  businessId: string | null
+  vatId: string | null
+  contactEmail: string | null
+  contactPhone: string | null
+}
+
+export default function App({ children, businessEntity }: { children: React.ReactNode; businessEntity: BusinessEntity }) {
 
   const { status } = useSession()
   const pathname = usePathname()
@@ -54,7 +63,7 @@ export default function App({ children }: { children: React.ReactNode }) {
   }
 
   if (status === 'unauthenticated') {
-    return <LandingPage />
+    return <LandingPage businessEntity={businessEntity} />
   }
 
   // Show onboarding without header chrome

@@ -65,17 +65,17 @@ export default function AccountingView() {
 
   // Summary totals
   const orderTotal = useMemo(() =>
-    paidItems.orders.reduce((s, o) => s + (o.invoice?.totalAmount || 0), 0),
+    paidItems.orders.reduce((s, o) => s + (o.invoices?.[0]?.totalAmount || 0), 0),
     [paidItems.orders]
   )
   const reservationTotal = useMemo(() =>
-    paidItems.reservations.reduce((s, r) => s + (r.invoice?.totalAmount || 0), 0),
+    paidItems.reservations.reduce((s, r) => s + (r.invoices?.[0]?.totalAmount || 0), 0),
     [paidItems.reservations]
   )
   const grandTotal = orderTotal + reservationTotal
   const totalTax = useMemo(() => {
-    const orderTax = paidItems.orders.reduce((s, o) => s + (o.invoice?.totalTax || 0), 0)
-    const resTax = paidItems.reservations.reduce((s, r) => s + (r.invoice?.totalTax || 0), 0)
+    const orderTax = paidItems.orders.reduce((s, o) => s + (o.invoices?.[0]?.totalTax || 0), 0)
+    const resTax = paidItems.reservations.reduce((s, r) => s + (r.invoices?.[0]?.totalTax || 0), 0)
     return orderTax + resTax
   }, [paidItems])
   const totalTransactions = paidItems.orders.length + paidItems.reservations.length
@@ -187,9 +187,9 @@ export default function AccountingView() {
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0 ml-4">
-                        <div className="text-sm font-semibold text-gray-900">€{order.invoice?.totalAmount?.toFixed(2)}</div>
-                        {order.invoice?.totalTax > 0 && (
-                          <div className="text-xs text-gray-400">tax €{order.invoice.totalTax.toFixed(2)}</div>
+                        <div className="text-sm font-semibold text-gray-900">€{order.invoices?.[0]?.totalAmount?.toFixed(2)}</div>
+                        {(order.invoices?.[0]?.totalTax ?? 0) > 0 && (
+                          <div className="text-xs text-gray-400">tax €{order.invoices[0].totalTax.toFixed(2)}</div>
                         )}
                       </div>
                     </div>
@@ -234,9 +234,9 @@ export default function AccountingView() {
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0 ml-4">
-                        <div className="text-sm font-semibold text-gray-900">€{res.invoice?.totalAmount?.toFixed(2)}</div>
-                        {res.invoice?.totalTax > 0 && (
-                          <div className="text-xs text-gray-400">tax €{res.invoice.totalTax.toFixed(2)}</div>
+                        <div className="text-sm font-semibold text-gray-900">€{res.invoices?.[0]?.totalAmount?.toFixed(2)}</div>
+                        {(res.invoices?.[0]?.totalTax ?? 0) > 0 && (
+                          <div className="text-xs text-gray-400">tax €{res.invoices[0].totalTax.toFixed(2)}</div>
                         )}
                       </div>
                     </div>

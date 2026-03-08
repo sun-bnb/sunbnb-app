@@ -56,7 +56,7 @@ export interface Reservation {
       tax: number
       totalPrice: number
     }[],
-    invoice?: Invoice | null
+    invoices?: Invoice[]
   }[] | null
   status: string
   type: string
@@ -68,6 +68,7 @@ export interface Reservation {
 
 export interface Invoice {
   id: string
+  issuerType?: string
   totalCharge: number
   totalTax: number
   totalAmount: number
@@ -75,6 +76,7 @@ export interface Invoice {
     id: string
     description: string | null
     charge: number
+    vatRate: number | null
     tax: number
     amount: number
   }[]

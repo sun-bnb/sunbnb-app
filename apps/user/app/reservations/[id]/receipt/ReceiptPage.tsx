@@ -1,23 +1,31 @@
 import ReceiptView from './ReceiptView'
 
-export interface ReceiptProps {
-  date: string
-  businessId: string | null
-  company: string
-  companyAddress: string | null
-  phoneNumber: string
-  siteName: string | null
-  reservationDate: string | null
-  seatNumbers: string | null
-  totalCharge: number
-  totalVat: number
-  totalAmount: number
-  invoiceLines: {
+export interface InvoiceSection {
+  invoiceNumber: string | null
+  merchantName: string
+  merchantVatId: string | null
+  merchantAddress: string | null
+  merchantPhone: string | null
+  lines: {
     description: string | null
     charge: number
+    vatRate: number | null
     vat: number
     total: number
   }[]
+  subtotalCharge: number
+  subtotalVat: number
+  subtotalAmount: number
+}
+
+export interface ReceiptProps {
+  date: string
+  siteName: string | null
+  reservationDate: string | null
+  seatNumbers: string | null
+  partnerSection: InvoiceSection
+  platformSection: InvoiceSection | null
+  grandTotal: number
 }
 
 export function formatCurrency(value: number): string {
@@ -34,5 +42,4 @@ export default function ReceiptPage({
       <ReceiptView receipt={receipt} />
     </div>
   )
-
 }

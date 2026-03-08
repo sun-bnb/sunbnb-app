@@ -54,6 +54,15 @@ const nextAuthResult: NextAuthResult = NextAuth({
       }
       const email = profile?.email || user?.email
       if (!email) return false
+
+      // Block sign-in for emails not in the admin user list
+      const adminUser = await prisma.adminUser.findUnique({
+        where: { email: email.toLowerCase() },
+      })
+      if (!adminUser) {
+        return '/api/auth/signin?error=AccessDenied'
+      }
+
       const existingUser = await prisma.user.findUnique({ where: { email } })
       if (!existingUser) {
         await prisma.user.create({

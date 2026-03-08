@@ -93,8 +93,7 @@ export async function GET(
 
   if (
     order &&
-    order.status === 'paid' &&
-    !order.invoiceId
+    order.status === 'paid'
   ) {
     try {
       await processConfirmedOrder(order.id)

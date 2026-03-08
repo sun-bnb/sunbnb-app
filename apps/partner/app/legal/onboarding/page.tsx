@@ -1,4 +1,8 @@
-export default function OnboardingGuidePage() {
+import { getBusinessEntity } from '@repo/data/business-entity'
+
+export default async function OnboardingGuidePage() {
+  const co = await getBusinessEntity()
+
   return (
     <div className="min-h-screen bg-white">
       <div className="max-w-3xl mx-auto px-6 py-12 text-sm text-gray-700 leading-relaxed">
@@ -9,19 +13,21 @@ export default function OnboardingGuidePage() {
         <section className="mb-8">
           <h2 className="text-base font-semibold text-gray-900 mb-2">Welcome to SunBnB</h2>
           <p>
-            SunBnB is a marketplace platform operated by <strong>Refactory DX Oy</strong> (Business ID: 2940957-1, Helsinki, Finland). We connect travellers with beach venues across the Mediterranean. As a Beach Club partner, you retain full control of your business — SunBnB provides the technology to modernise your booking, payment, and operations workflow.
+            SunBnB is a marketplace platform operated by <strong>{co.companyName}</strong>
+            {co.businessId ? ` (Business ID: ${co.businessId}` : ''}
+            {co.businessId && co.companyAddress ? `, ${co.companyAddress})` : co.businessId ? ')' : co.companyAddress ? ` (${co.companyAddress})` : ''}. We connect travellers with beach venues across the Mediterranean. As a Beach Club partner, you retain full control of your business — SunBnB provides the technology to modernise your booking, payment, and operations workflow.
           </p>
         </section>
 
         <section className="mb-8">
           <h2 className="text-base font-semibold text-gray-900 mb-2">You Are the Seller of Record</h2>
           <p>
-            Refactory DX Oy facilitates the technology platform. <strong>Your Beach Club remains the Seller of Record</strong> for all customer transactions. This means:
+            {co.companyName} facilitates the technology platform. <strong>Your Beach Club remains the Seller of Record</strong> for all customer transactions. This means:
           </p>
           <ul className="mt-2 list-disc list-inside text-gray-600 space-y-1.5">
             <li>You are responsible for issuing invoices and receipts to customers.</li>
             <li>You bear the VAT/tax obligations for services rendered at your venue.</li>
-            <li>The customer&rsquo;s contractual relationship is with your business, not with Refactory DX Oy.</li>
+            <li>The customer&rsquo;s contractual relationship is with your business, not with {co.companyName}.</li>
             <li>SunBnB generates tax-compliant receipts on your behalf through its platform, but the legal obligation remains yours.</li>
           </ul>
         </section>
@@ -40,7 +46,7 @@ export default function OnboardingGuidePage() {
                 <li>Confirm your business bank account (IBAN)</li>
               </ul>
               <p className="mt-1.5 ml-5 text-gray-500">
-                Refactory DX Oy does not store or process your KYC documents — all verification is handled directly by Mollie under their own data processing agreements and regulatory obligations.
+                {co.companyName} does not store or process your KYC documents — all verification is handled directly by Mollie under their own data processing agreements and regulatory obligations.
               </p>
             </li>
             <li>
@@ -62,7 +68,7 @@ export default function OnboardingGuidePage() {
           </p>
           <ul className="mt-2 list-disc list-inside text-gray-600 space-y-1.5">
             <li><strong>You (the Beach Club)</strong> receive the service amount directly to your Mollie account.</li>
-            <li><strong>Refactory DX Oy</strong> receives a platform service fee, deducted at the time of payment.</li>
+            <li><strong>{co.companyName}</strong> receives a platform service fee, deducted at the time of payment.</li>
           </ul>
           <p className="mt-2">
             This split-payment model is handled by Mollie&rsquo;s Application Fees mechanism. The exact fee percentage is defined in your partner agreement and is visible in your settlement reports.
@@ -72,18 +78,24 @@ export default function OnboardingGuidePage() {
         <section className="mb-8">
           <h2 className="text-base font-semibold text-gray-900 mb-2">Data Protection</h2>
           <p>
-            Refactory DX Oy processes partner data in accordance with the EU General Data Protection Regulation (GDPR). We act as a data processor for transaction data and as a data controller for account management. Full details are available in our Privacy Policy.
+            {co.companyName} processes partner data in accordance with the EU General Data Protection Regulation (GDPR). We act as a data processor for transaction data and as a data controller for account management. Full details are available in our Privacy Policy.
           </p>
         </section>
 
         <section>
           <h2 className="text-base font-semibold text-gray-900 mb-2">Questions?</h2>
           <ul className="space-y-1 text-gray-600">
-            <li><strong>Refactory DX Oy</strong></li>
-            <li>Sturenkatu 37-41 B 16, 00550 Helsinki, Finland</li>
-            <li>Business ID: 2940957-1 &middot; VAT: FI29409571</li>
-            <li>Email: partners@sunbnb.app</li>
-            <li>Phone: +358 44 522 3555</li>
+            <li><strong>{co.companyName}</strong></li>
+            {co.companyAddress && <li>{co.companyAddress}</li>}
+            {(co.businessId || co.vatId) && (
+              <li>
+                {co.businessId ? `Business ID: ${co.businessId}` : ''}
+                {co.businessId && co.vatId ? ' · ' : ''}
+                {co.vatId ? `VAT: ${co.vatId}` : ''}
+              </li>
+            )}
+            {co.contactEmail && <li>Email: {co.contactEmail}</li>}
+            {co.contactPhone && <li>Phone: {co.contactPhone}</li>}
           </ul>
         </section>
 

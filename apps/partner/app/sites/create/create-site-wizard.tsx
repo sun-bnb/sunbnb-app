@@ -12,6 +12,13 @@ import StepDone from './step-done'
 
 const STEPS = ['Location', 'Details', 'Content', 'Done']
 
+export interface WizardFeeData {
+  chargeType: string
+  feeAmount?: number | null
+  percentage?: number | null
+  serviceCode: string
+}
+
 export interface WizardData {
   // Step 1 — location
   name: string
@@ -44,7 +51,15 @@ const initialData: WizardData = {
   siteId: null,
 }
 
-export default function CreateSiteWizard({ apiKey, tier }: { apiKey: string; tier: string }) {
+export default function CreateSiteWizard({
+  apiKey,
+  tier,
+  serviceFee,
+}: {
+  apiKey: string
+  tier: string
+  serviceFee?: WizardFeeData | null
+}) {
 
   const [activeStep, setActiveStep] = useState(0)
   const [data, setData] = useState<WizardData>(initialData)
@@ -109,7 +124,12 @@ export default function CreateSiteWizard({ apiKey, tier }: { apiKey: string; tie
         <StepLocation data={data} update={update} apiKey={apiKey} />
       )}
       {activeStep === 1 && (
-        <StepDetails data={data} update={update} tier={tier} />
+        <StepDetails
+          data={data}
+          update={update}
+          tier={tier}
+          serviceFee={serviceFee}
+        />
       )}
       {activeStep === 2 && (
         <StepContent data={data} update={update} />
