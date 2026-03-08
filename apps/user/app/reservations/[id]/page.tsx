@@ -84,7 +84,7 @@ export default async function ReservationPage({ params, searchParams }: { params
 
   const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
 
-  const { payment_intent, payment_intent_client_secret, redirect_status, anonId, terms } = searchParams
+  const { payment_intent, payment_intent_client_secret, redirect_status, anonId, terms, orderId } = searchParams
   
   const session = await auth()
   const signedIn = !!(session?.user)
@@ -106,7 +106,14 @@ export default async function ReservationPage({ params, searchParams }: { params
 
   let order: Order | null = null
   if (redirect_status === 'succeeded' && payment_intent) {
+    // Stripe redirect: look up order by paymentRef
     order = await getOrder(payment_intent)
+  } else if (orderId) {
+    // Mollie redirect: look up order by ID
+    order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { orderItems: true },
+    }) as Order | null
   }
 
   // Only enable food & drinks if appSalesEnabled AND the site has active products

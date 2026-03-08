@@ -71,7 +71,7 @@ function SectionBlock({ section, label }: { section: InvoiceSection; label?: str
           <span className="tabular-nums">{formatCurrency(section.subtotalCharge)} &euro;</span>
         </div>
         <div className="flex justify-between text-xs text-gray-600 mb-1">
-          <span>VAT</span>
+          <span>VAT{section.vatCountryCode ? ` (${section.vatCountryCode})` : ''}</span>
           <span className="tabular-nums">{formatCurrency(section.subtotalVat)} &euro;</span>
         </div>
         <div className="flex justify-between text-xs font-semibold text-gray-800 border-t border-gray-200 pt-1">

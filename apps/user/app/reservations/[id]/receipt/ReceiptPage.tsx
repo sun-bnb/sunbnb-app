@@ -6,6 +6,7 @@ export interface InvoiceSection {
   merchantVatId: string | null
   merchantAddress: string | null
   merchantPhone: string | null
+  vatCountryCode?: string | null
   lines: {
     description: string | null
     charge: number

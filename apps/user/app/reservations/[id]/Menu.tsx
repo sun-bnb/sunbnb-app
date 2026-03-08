@@ -379,7 +379,7 @@ export default function Menu({
         PaperProps={{ sx: { borderTopLeftRadius: 16, borderTopRightRadius: 16 } }}
       >
         <div className="w-12 h-1 rounded-full bg-gray-300 mx-auto mt-2 mb-1" />
-        {drawerContent === 'new-order' ? paymentContent : <Orders orders={currentOrders} />}
+        {drawerContent === 'new-order' ? paymentContent : <Orders orders={currentOrders} reservationId={reservationId} />}
       </Drawer>
     </div>
   )

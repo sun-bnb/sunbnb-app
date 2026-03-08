@@ -24,6 +24,40 @@ async function getReservation(id: string) {
   })
 }
 
+async function getOrder(orderId: string) {
+  return prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      orderItems: true,
+      site: {
+        include: {
+          user: {
+            include: {
+              partnerAccount: true,
+            },
+          },
+        },
+      },
+      invoices: {
+        include: {
+          invoiceLines: true,
+        },
+      },
+    },
+  })
+}
+
+/**
+ * Extract country code from a service fee description like "Reservation service fee (FI)".
+ */
+function extractCountryCode(lines: { description: string | null }[]): string | null {
+  for (const line of lines) {
+    const match = line.description?.match(/\(([A-Z]{2,3})\)\s*$/)
+    if (match) return match[1]!
+  }
+  return null
+}
+
 function buildSection(invoice: {
   invoiceNumber: string | null
   issuerCompanyName: string | null
@@ -46,6 +80,7 @@ function buildSection(invoice: {
     merchantVatId: invoice.issuerVatNumber,
     merchantAddress: invoice.issuerCompanyAddress,
     merchantPhone: fallbackPhone ?? null,
+    vatCountryCode: extractCountryCode(invoice.invoiceLines),
     lines: invoice.invoiceLines.map((l) => ({
       description: l.description,
       charge: l.charge,
@@ -59,7 +94,58 @@ function buildSection(invoice: {
   }
 }
 
-export default async function Receipt({ params }: { params: { id: string } }) {
+export default async function Receipt({ params, searchParams }: { params: { id: string }, searchParams: { [key: string]: string } }) {
+  const { orderId } = searchParams
+
+  // ── Order receipt ──────────────────────────────────────────────────────────
+  if (orderId) {
+    const order = await getOrder(orderId)
+
+    if (!order) {
+      return <div>Order not found</div>
+    }
+
+    const partnerInvoice = order.invoices.find((i) => i.issuerType === 'PARTNER')
+    const platformInvoice = order.invoices.find((i) => i.issuerType === 'PLATFORM')
+
+    if (!partnerInvoice) {
+      return <div>Invoice not found</div>
+    }
+
+    const { partnerAccount } = order.site.user
+
+    const date =
+      partnerInvoice.invoicedAt.toISOString().substring(0, 10) +
+      ' ' +
+      partnerInvoice.invoicedAt.toISOString().substring(11, 19)
+
+    const partnerSection = buildSection(
+      partnerInvoice,
+      partnerAccount?.company ?? 'Partner',
+      partnerAccount?.phoneNumber
+    )
+
+    const platformSection = platformInvoice
+      ? buildSection(platformInvoice, 'SunBnB')
+      : null
+
+    const grandTotal =
+      partnerInvoice.totalAmount + (platformInvoice?.totalAmount ?? 0)
+
+    const receipt: ReceiptProps = {
+      date,
+      siteName: order.site?.name ?? null,
+      reservationDate: null,
+      seatNumbers: null,
+      partnerSection,
+      platformSection,
+      grandTotal,
+    }
+
+    return <ReceiptPage receipt={receipt} />
+  }
+
+  // ── Reservation receipt ────────────────────────────────────────────────────
   const reservation = await getReservation(params.id)
 
   if (!reservation) {

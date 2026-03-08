@@ -14,21 +14,28 @@ export default async function PlatformPage() {
   })
   if (!user?.sudo) redirect('/')
 
-  const settings = await prisma.settings.findFirst({
-    select: {
-      companyName: true,
-      companyAddress: true,
-      businessId: true,
-      vatId: true,
-      contactEmail: true,
-      contactPhone: true,
-    },
-  })
+  const [settings, allSettings] = await Promise.all([
+    prisma.settings.findFirst({
+      select: {
+        companyName: true,
+        companyAddress: true,
+        businessId: true,
+        vatId: true,
+        contactEmail: true,
+        contactPhone: true,
+      },
+    }),
+    prisma.settings.findMany({
+      select: { id: true, country: true, vat: true, currency: true },
+      orderBy: { country: 'asc' },
+    }),
+  ])
 
   return (
     <div className="container mx-auto max-w-[768px]">
       <PlatformView
         businessEntity={settings ?? undefined}
+        initialSettings={allSettings}
       />
     </div>
   )

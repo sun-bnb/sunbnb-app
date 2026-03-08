@@ -298,7 +298,7 @@ export async function loadFeeContext(
  *      Taxed at the partner site's VAT rate.
  *      Merchant of record: partner company.
  *   2. PLATFORM invoice — service fee line
- *      Taxed at the platform's default VAT rate (from Settings.vat).
+ *      Taxed at the VAT rate from the fee's associated Settings entry.
  *      Merchant of record: SunBnB business entity.
  *
  * Safe to call multiple times — skips if already processed.
@@ -350,7 +350,16 @@ export async function processConfirmedReservation(
 
   // Load platform business entity for the PLATFORM invoice
   const businessEntity = await getBusinessEntity()
-  const platformVatRate = businessEntity.vatRate
+
+  // Use the VAT rate & country from the fee's associated settings
+  const feeSettings = matchedFee
+    ? await prisma.settings.findUnique({
+        where: { id: matchedFee.settingsId },
+        select: { vat: true, country: true },
+      })
+    : null
+  const platformVatRate = feeSettings?.vat ?? businessEntity.vatRate
+  const feeCountry = feeSettings?.country ?? ''
 
   await prisma.$transaction(async (tx) => {
     // Double-check idempotency inside transaction (race-safe)
@@ -452,7 +461,7 @@ export async function processConfirmedReservation(
           vatRate: platformVatRate,
           invoiceId: platformInvoice.id,
           productCode: 'sunbnb-service-fee',
-          description: 'Reservation service fee',
+          description: `Reservation service fee${feeCountry ? ` (${feeCountry})` : ''}`,
         },
       })
     }
@@ -474,7 +483,7 @@ export async function processConfirmedReservation(
  *      Taxed at the partner site's VAT rate.
  *      Merchant of record: partner company.
  *   2. PLATFORM invoice — service fee line
- *      Taxed at the platform's default VAT rate (from Settings.vat).
+ *      Taxed at the VAT rate from the fee's associated Settings entry.
  *      Merchant of record: SunBnB business entity.
  *
  * Fee model: fees are INCLUDED in the product price.
@@ -515,19 +524,41 @@ export async function processConfirmedOrder(
   )
 
   const totalProductAmount = order.paymentAmount ?? 0
-  const siteVatRate = site.vat ?? 0
   const serviceFeeAmount = calculateServiceFeeAmount(matchedFee, totalProductAmount)
 
-  // Partner amount = total product amount minus service fee
-  const partnerAmount = round(totalProductAmount - serviceFeeAmount)
+  // Compute per-item fee distribution and partner line amounts
+  // (mirrors reservation processing: fee deducted per line)
+  let totalPartnerCharge = 0
+  let totalPartnerVat = 0
+  let totalPartnerAmount = 0
+
+  const itemCalcs = order.orderItems.map((item) => {
+    const itemFee = calculateServiceFeeAmount(matchedFee, item.totalPrice)
+    const itemPartnerAmount = round(item.totalPrice - itemFee)
+    const { baseAmount: lineBase, vatAmount: lineVat } =
+      computeVatAndBaseAmounts(itemPartnerAmount, item.tax)
+    totalPartnerCharge += lineBase
+    totalPartnerVat += lineVat
+    totalPartnerAmount += itemPartnerAmount
+    return { lineBase, lineVat, itemPartnerAmount, item }
+  })
+
+  totalPartnerCharge = round(totalPartnerCharge)
+  totalPartnerVat = round(totalPartnerVat)
+  totalPartnerAmount = round(totalPartnerAmount)
 
   // Load platform business entity for the PLATFORM invoice
   const businessEntity = await getBusinessEntity()
-  const platformVatRate = businessEntity.vatRate
 
-  // Compute partner VAT split
-  const { baseAmount: partnerBase, vatAmount: partnerVat } =
-    computeVatAndBaseAmounts(partnerAmount, siteVatRate)
+  // Use the VAT rate & country from the fee's associated settings
+  const feeSettings = matchedFee
+    ? await prisma.settings.findUnique({
+        where: { id: matchedFee.settingsId },
+        select: { vat: true, country: true },
+      })
+    : null
+  const platformVatRate = feeSettings?.vat ?? businessEntity.vatRate
+  const feeCountry = feeSettings?.country ?? ''
 
   await prisma.$transaction(async (tx) => {
     // Double-check idempotency inside transaction (race-safe)
@@ -548,9 +579,9 @@ export async function processConfirmedOrder(
       data: {
         accountId: partnerAccount?.userId ?? '',
         orderId,
-        totalCharge: partnerBase,
-        totalTax: partnerVat,
-        totalAmount: partnerAmount,
+        totalCharge: totalPartnerCharge,
+        totalTax: totalPartnerVat,
+        totalAmount: totalPartnerAmount,
         invoicedAt,
         issuerType: 'PARTNER',
         issuerVatNumber: partnerAccount?.businessId ?? null,
@@ -559,19 +590,17 @@ export async function processConfirmedOrder(
         invoiceNumber: partnerInvoiceNumber,
         previousHash: partnerPrevHash,
         hash: computeInvoiceHash(
-          partnerInvoiceNumber, invoicedAt, partnerAmount,
+          partnerInvoiceNumber, invoicedAt, totalPartnerAmount,
           partnerAccount?.businessId ?? null, partnerPrevHash
         ),
       },
     })
 
-    const itemLines = order.orderItems.map((item) => {
-      const { baseAmount: itemBase, vatAmount: itemVat } =
-        computeVatAndBaseAmounts(item.totalPrice, item.tax)
+    const itemLines = itemCalcs.map(({ lineBase, lineVat, itemPartnerAmount, item }) => {
       return {
-        charge: itemBase,
-        tax: itemVat,
-        amount: item.totalPrice,
+        charge: lineBase,
+        tax: lineVat,
+        amount: itemPartnerAmount,
         vatRate: item.tax,
         invoiceId: partnerInvoice.id,
         productCode: 'food-and-beverage',
@@ -621,7 +650,7 @@ export async function processConfirmedOrder(
           vatRate: platformVatRate,
           invoiceId: platformInvoice.id,
           productCode: 'sunbnb-service-fee',
-          description: 'Order service fee',
+          description: `Order service fee${feeCountry ? ` (${feeCountry})` : ''}`,
         },
       })
     }

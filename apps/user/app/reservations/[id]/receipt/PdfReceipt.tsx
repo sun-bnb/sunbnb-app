@@ -252,7 +252,7 @@ function SectionPdf({
           <SafeText style={s.subtotalValue}>{fmt(section.subtotalCharge)} €</SafeText>
         </SafeView>
         <SafeView style={s.subtotalLine}>
-          <SafeText style={s.subtotalLabel}>VAT</SafeText>
+          <SafeText style={s.subtotalLabel}>VAT{section.vatCountryCode ? ` (${section.vatCountryCode})` : ''}</SafeText>
           <SafeText style={s.subtotalValue}>{fmt(section.subtotalVat)} €</SafeText>
         </SafeView>
         <SafeView style={s.sectionTotalLine}>

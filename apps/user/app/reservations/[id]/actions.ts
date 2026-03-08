@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { processConfirmedOrder } from '@repo/data/payment'
 import { isDemoPayment } from '@/app/api/_lib/stripe'
 import { issueRefund } from '@/app/api/_lib/payment-provider'
 
@@ -263,10 +264,23 @@ export async function completeUnpaidOrder(orderId: string) {
     return { status: 'error', errors: ['Order is not in pending state'] }
   }
 
+  // Set paymentRef first so the order is identifiable, then create invoices
   await prisma.order.update({
     where: { id: orderId },
-    data: { status: 'complete', paymentRef: `offplatform_${orderId}` },
+    data: { paymentRef: `offplatform_${orderId}` },
   })
+
+  try {
+    // processConfirmedOrder creates PARTNER + PLATFORM invoices and sets status to 'complete'
+    await processConfirmedOrder(orderId)
+  } catch (error) {
+    console.error('[completeUnpaidOrder] Invoice creation failed:', error)
+    // Fall back to just setting complete so the order isn't stuck
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { status: 'complete' },
+    })
+  }
 
   revalidatePath(`/reservations/${order.reservationId}`)
 

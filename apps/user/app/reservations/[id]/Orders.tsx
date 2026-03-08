@@ -26,7 +26,7 @@ interface OrderData {
   invoices?: Invoice[]
 }
 
-export default function Orders({ orders }: { orders: OrderData[] }) {
+export default function Orders({ orders, reservationId }: { orders: OrderData[], reservationId: string }) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selected = orders.find(o => o.id === selectedId) ?? null
 
@@ -35,18 +35,30 @@ export default function Orders({ orders }: { orders: OrderData[] }) {
   if (selected) {
     const hasInvoice = !!(selected.invoices && selected.invoices.length > 0)
 
-    // Use the PARTNER invoice for line-item display
+    // Use the PARTNER invoice for product lines and PLATFORM invoice for service fee
     const partnerInvoice = selected.invoices?.find(i => i.issuerType === 'PARTNER')
+    const platformInvoice = selected.invoices?.find(i => i.issuerType === 'PLATFORM')
     const displayInvoice = partnerInvoice ?? selected.invoices?.[0]
 
     const rows = hasInvoice && displayInvoice
-      ? displayInvoice.invoiceLines.map(l => ({
-          key: l.id,
-          label: l.description ?? '—',
-          net: l.charge,
-          tax: l.tax,
-          gross: l.amount,
-        }))
+      ? [
+          ...displayInvoice.invoiceLines.map(l => ({
+            key: l.id,
+            label: l.description ?? '—',
+            net: l.charge,
+            tax: l.tax,
+            gross: l.amount,
+          })),
+          ...(platformInvoice && platformInvoice !== displayInvoice
+            ? platformInvoice.invoiceLines.map(l => ({
+                key: l.id,
+                label: (l.description ?? 'Service fee').replace(/\s*\([A-Z]{2,3}\)\s*$/, ''),
+                net: l.charge,
+                tax: l.tax,
+                gross: l.amount,
+              }))
+            : []),
+        ]
       : selected.orderItems.map(oi => ({
           key: oi.id,
           label: `${oi.name} × ${oi.quantity}`,
@@ -55,8 +67,11 @@ export default function Orders({ orders }: { orders: OrderData[] }) {
           gross: oi.totalPrice,
         }))
 
-    const totals = hasInvoice && displayInvoice
-      ? { net: displayInvoice.totalCharge, tax: displayInvoice.totalTax, gross: displayInvoice.totalAmount }
+    const totals = hasInvoice
+      ? (selected.invoices ?? []).reduce(
+          (a, inv) => ({ net: a.net + inv.totalCharge, tax: a.tax + inv.totalTax, gross: a.gross + inv.totalAmount }),
+          { net: 0, tax: 0, gross: 0 },
+        )
       : rows.reduce(
           (a, r) => ({ net: a.net + r.net, tax: a.tax + r.tax, gross: a.gross + r.gross }),
           { net: 0, tax: 0, gross: 0 },
@@ -109,6 +124,22 @@ export default function Orders({ orders }: { orders: OrderData[] }) {
             <span className="w-14 text-right text-gray-900">{totals.gross.toFixed(2)}</span>
           </div>
         </div>
+
+        {/* Receipt link */}
+        {hasInvoice && (
+          <a
+            href={`/reservations/${reservationId}/receipt?orderId=${selected.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 flex items-center justify-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl
+                       text-sm font-medium text-gray-700 bg-white active:bg-gray-50 transition-colors"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+            </svg>
+            View Receipt
+          </a>
+        )}
       </div>
     )
   }
