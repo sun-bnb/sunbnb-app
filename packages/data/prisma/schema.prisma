@@ -188,7 +188,7 @@ model Site {
   bgImageWidth    Int?                     @map("bg_image_width")
   bgImageHeight   Int?                     @map("bg_image_height")
   slug            String?
-  paymentProvider String                   @default("stripe") @map("payment_provider")
+  paymentProvider String                   @default("mollie") @map("payment_provider")
 
   inventoryItems  InventoryItem[]
   orders          Order[]
@@ -450,6 +450,13 @@ model SecurityToken {
   updatedAt DateTime @updatedAt
   userId    String   @map("user_id")
 }
+
+model AdminUser {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+}
+
 
 
 

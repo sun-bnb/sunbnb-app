@@ -234,12 +234,9 @@ export function MollieOrderPayment({
 
 
 export default function OrderPayment({
-  stripePublicKey,
   order,
-  serviceFee,
   preview,
   completeUrl,
-  paymentProvider,
 }: {
   stripePublicKey: string | undefined
   order: Order
@@ -258,19 +255,10 @@ export default function OrderPayment({
     )
   }
 
-  if (paymentProvider === 'mollie') {
-    return (
-      <MollieOrderPayment
-        order={order}
-        preview={preview}
-        completeUrl={completeUrl}
-      />
-    )
-  }
-
+  // Mollie is the default payment provider for orders.
+  // Stripe payment code is retained but not active for new orders.
   return (
-    <StripeOrderPayment
-      stripePublicKey={stripePublicKey}
+    <MollieOrderPayment
       order={order}
       preview={preview}
       completeUrl={completeUrl}

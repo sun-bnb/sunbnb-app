@@ -10,9 +10,25 @@ export default async function Account() {
   if (!session) return null
   const { user } = session
 
-  let account: AccountProps | null = await prisma.partnerAccount.findUnique({ where: { userId: user.id } })
+  const dbAccount = await prisma.partnerAccount.findUnique({
+    where: { userId: user.id },
+    select: {
+      firstName: true,
+      lastName: true,
+      email: true,
+      phoneNumber: true,
+      company: true,
+      businessId: true,
+      websiteUrl: true,
+      address: true,
+      bankAccount: true,
+      mollieAccessToken: true,
+      mollieOnboardingStatus: true,
+    },
+  })
 
-  if (!account) {
+  let account: AccountProps
+  if (!dbAccount) {
     const [ firstName, lastName ] = user.name.split(' ')
     account = {
       firstName,
@@ -25,9 +41,25 @@ export default async function Account() {
       address: '',
       bankAccount: ''
     }
-
+  } else {
+    account = {
+      firstName: dbAccount.firstName,
+      lastName: dbAccount.lastName,
+      email: dbAccount.email,
+      phoneNumber: dbAccount.phoneNumber,
+      company: dbAccount.company,
+      businessId: dbAccount.businessId,
+      websiteUrl: dbAccount.websiteUrl,
+      address: dbAccount.address,
+      bankAccount: dbAccount.bankAccount,
+    }
   }
 
-  return <AccountView account={account} />
+  const mollieStatus = {
+    isConnected: !!dbAccount?.mollieAccessToken,
+    onboardingStatus: dbAccount?.mollieOnboardingStatus ?? null,
+  }
+
+  return <AccountView account={account} mollieStatus={mollieStatus} />
 
 }

@@ -240,11 +240,9 @@ export function MolliePayment({
 
 
 export default function Payment({
-  stripePublicKey,
   reservation,
   preview,
   completeUrl,
-  paymentProvider,
 }: {
   stripePublicKey: string | undefined
   reservation: Reservation
@@ -262,19 +260,10 @@ export default function Payment({
     )
   }
 
-  if (paymentProvider === 'mollie') {
-    return (
-      <MolliePayment
-        reservation={reservation}
-        preview={preview}
-        completeUrl={completeUrl}
-      />
-    )
-  }
-
+  // Mollie is the default payment provider for reservations.
+  // Stripe payment code is retained but not active for new reservations.
   return (
-    <StripePayment
-      stripePublicKey={stripePublicKey}
+    <MolliePayment
       reservation={reservation}
       preview={preview}
       completeUrl={completeUrl}

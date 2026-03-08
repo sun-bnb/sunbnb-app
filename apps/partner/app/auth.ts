@@ -71,7 +71,7 @@ const nextAuthResult: NextAuthResult = NextAuth({
   },
   pages: {
     signIn: '/sign-in',
-    newUser: '/new-user',
+    newUser: '/onboarding',
   },
 })
 

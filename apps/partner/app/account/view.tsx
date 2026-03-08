@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { submitForm } from './actions'
 import { useFormState, useFormStatus } from 'react-dom'
 
@@ -13,6 +14,11 @@ export interface AccountProps {
   websiteUrl: string | null
   address: string
   bankAccount: string | null
+}
+
+export interface MollieStatus {
+  isConnected: boolean
+  onboardingStatus: string | null
 }
 
 /* ── Input component ───────────────────────────────────────── */
@@ -72,9 +78,74 @@ function SubmitButton() {
   )
 }
 
+/* ── Mollie status card ────────────────────────────────────── */
+
+function MollieStatusCard({ mollieStatus }: { mollieStatus: MollieStatus }) {
+  const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
+    'completed':  { bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Verified' },
+    'in-review':  { bg: 'bg-amber-50',   text: 'text-amber-700',   label: 'In review' },
+    'needs-data': { bg: 'bg-orange-50',  text: 'text-orange-700',  label: 'Needs data' },
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold text-gray-900">Mollie Payments</h2>
+        <Link
+          href="/account/mollie"
+          className="text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+        >
+          Manage &rarr;
+        </Link>
+      </div>
+
+      <div className="flex items-center gap-3">
+        {mollieStatus.isConnected ? (
+          <>
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              Connected
+            </span>
+            {mollieStatus.onboardingStatus && (() => {
+              const cfg = statusConfig[mollieStatus.onboardingStatus] ?? { bg: 'bg-gray-50', text: 'text-gray-600', label: mollieStatus.onboardingStatus }
+              return (
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${cfg.bg} ${cfg.text}`}>
+                  {cfg.label}
+                </span>
+              )
+            })()}
+          </>
+        ) : (
+          <div className="flex items-center justify-between w-full">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400">
+              <span className="w-2 h-2 rounded-full bg-gray-300" />
+              Not connected
+            </span>
+            <Link
+              href="/account/mollie"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
+            >
+              Connect Mollie
+            </Link>
+          </div>
+        )}
+      </div>
+
+      {mollieStatus.isConnected && mollieStatus.onboardingStatus === 'needs-data' && (
+        <p className="mt-3 text-xs text-amber-700 bg-amber-50 rounded-lg p-2.5">
+          Your Mollie account requires additional information.{' '}
+          <a href="https://my.mollie.com/dashboard" target="_blank" rel="noopener noreferrer" className="font-medium underline">
+            Complete onboarding at Mollie
+          </a>
+        </p>
+      )}
+    </div>
+  )
+}
+
 /* ── Main view ─────────────────────────────────────────────── */
 
-export default function AccountView({ account }: { account: AccountProps }) {
+export default function AccountView({ account, mollieStatus }: { account: AccountProps; mollieStatus: MollieStatus }) {
 
   const [formState, formAction] = useFormState(submitForm, { status: '' })
 
@@ -112,6 +183,9 @@ export default function AccountView({ account }: { account: AccountProps }) {
           </ul>
         </div>
       )}
+
+      {/* Mollie payment status */}
+      <MollieStatusCard mollieStatus={mollieStatus} />
 
       <form action={formAction}>
 
