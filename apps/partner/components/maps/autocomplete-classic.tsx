@@ -1,42 +1,49 @@
-import React, { useRef, useEffect, useState } from 'react'
+import React, { useRef, useEffect } from 'react'
 import { useMapsLibrary } from '@vis.gl/react-google-maps'
 
 interface Props {
   onPlaceSelect: (place: google.maps.places.PlaceResult | null) => void
 }
 
-// This is an example of the classic "Place Autocomplete" widget.
-// https://developers.google.com/maps/documentation/javascript/place-autocomplete
+// Migrated to PlaceAutocompleteElement (new API replacing deprecated Autocomplete widget)
+// https://developers.google.com/maps/documentation/javascript/place-autocomplete-element
 export const PlaceAutocompleteClassic = ({onPlaceSelect}: Props) => {
-  const [placeAutocomplete, setPlaceAutocomplete] =
-    useState<google.maps.places.Autocomplete | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const places = useMapsLibrary('places')
 
   useEffect(() => {
-    if (!places || !inputRef.current) return
+    if (!places || !containerRef.current) return
 
-    const options = {
-      fields: ['geometry', 'name', 'formatted_address']
-    };
+    // Clear any previous element
+    containerRef.current.innerHTML = ''
 
-    setPlaceAutocomplete(new places.Autocomplete(inputRef.current, options))
-  }, [places])
-
-  useEffect(() => {
-    if (!placeAutocomplete) return
-
-    placeAutocomplete.addListener('place_changed', () => {
-      onPlaceSelect(placeAutocomplete.getPlace())
+    const autocomplete = new places.PlaceAutocompleteElement({
+      componentRestrictions: undefined,
     })
-  }, [onPlaceSelect, placeAutocomplete]);
+
+    // Style the element to match the previous input
+    autocomplete.style.width = '100%'
+
+    autocomplete.addEventListener('gmp-placeselect', async (event: any) => {
+      const place = event.place
+      if (place) {
+        // Fetch full details (geometry, name, formatted_address) to match old API shape
+        await place.fetchFields({ fields: ['location', 'displayName', 'formattedAddress'] })
+        // Convert to PlaceResult-like shape for compatibility
+        onPlaceSelect({
+          geometry: {
+            location: place.location,
+          },
+          name: place.displayName,
+          formatted_address: place.formattedAddress,
+        } as google.maps.places.PlaceResult)
+      }
+    })
+
+    containerRef.current.appendChild(autocomplete as unknown as Node)
+  }, [places, onPlaceSelect])
 
   return (
-    <div className="autocomplete-container">
-      <input className="rounded w-full py-2 px-3 text-gray-700 border focus:outline-none focus:ring-0 focus:border-black"
-        placeholder="Search site location"
-        defaultValue={''}
-        ref={inputRef} />
-    </div>
+    <div className="autocomplete-container" ref={containerRef} />
   )
 }
