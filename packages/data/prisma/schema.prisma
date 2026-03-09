@@ -107,23 +107,36 @@ model PaymentProcessingFee {
 }
 
 model User {
-  id             String          @id @default(cuid())
+  id             String               @id @default(cuid())
   name           String?
-  email          String          @unique
+  email          String               @unique
   emailVerified  DateTime?
   image          String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
   password       String?
-  sudo           Boolean         @default(false)
+  sudo           Boolean              @default(false)
   accounts       Account[]
   Authenticator  Authenticator[]
   inventoryItems InventoryItem[]
   orders         Order[]
   partnerAccount PartnerAccount?
+  passwordResetTokens PasswordResetToken[]
   reservations   Reservation[]
   sessions       Session[]
   sites          Site[]
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String    @map("user_id")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_token")
 }
 
 model Account {

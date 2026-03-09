@@ -1,49 +1,136 @@
-import React, { useRef, useEffect } from 'react'
+import React, { useRef, useCallback, useEffect } from 'react'
 import { useMapsLibrary } from '@vis.gl/react-google-maps'
 
 interface Props {
   onPlaceSelect: (place: google.maps.places.PlaceResult | null) => void
 }
 
-// Migrated to PlaceAutocompleteElement (new API replacing deprecated Autocomplete widget)
-// https://developers.google.com/maps/documentation/javascript/place-autocomplete-element
+// Inject global styles for the autocomplete web component
+const STYLE_ID = 'gmpac-custom-styles'
+function ensureStyles() {
+  if (typeof document === 'undefined') return
+  if (document.getElementById(STYLE_ID)) return
+  const style = document.createElement('style')
+  style.id = STYLE_ID
+  style.textContent = `
+    gmp-place-autocomplete {
+      --gmpac-color-surface: #ffffff !important;
+      --gmpac-color-outline: #e5e7eb !important;
+      --gmpac-color-on-surface: #111827 !important;
+      --gmpac-color-on-surface-variant: #6b7280 !important;
+      --gmpac-color-primary: #3b82f6 !important;
+      --gmpac-font-family-base: inherit !important;
+      --gmpac-height-input: 36px !important;
+      background: #ffffff !important;
+      border-radius: 8px !important;
+      color-scheme: light only !important;
+    }
+    /* Dropdown suggestions panel (appended to body) */
+    .pac-container {
+      background: #ffffff !important;
+      border: 1px solid #e5e7eb !important;
+      border-radius: 8px !important;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+      margin-top: 4px !important;
+    }
+    .pac-item {
+      background: #ffffff !important;
+      color: #374151 !important;
+      border-top: 1px solid #f3f4f6 !important;
+      padding: 8px 12px !important;
+      cursor: pointer !important;
+    }
+    .pac-item:first-child {
+      border-top: none !important;
+    }
+    .pac-item:hover {
+      background: #f3f4f6 !important;
+    }
+    .pac-item-query {
+      color: #111827 !important;
+      font-size: 14px !important;
+    }
+    .pac-matched {
+      color: #111827 !important;
+      font-weight: 600 !important;
+    }
+    .pac-item span {
+      color: #6b7280 !important;
+      font-size: 13px !important;
+    }
+    .pac-icon {
+      filter: none !important;
+    }
+    /* New API dropdown overlay */
+    [class*="gmpac"] {
+      background: #ffffff !important;
+      color: #111827 !important;
+    }
+  `
+  document.head.appendChild(style)
+}
+
 export const PlaceAutocompleteClassic = ({onPlaceSelect}: Props) => {
-  const containerRef = useRef<HTMLDivElement>(null)
+  const acRef = useRef<google.maps.places.PlaceAutocompleteElement | null>(null)
+  const onPlaceSelectRef = useRef(onPlaceSelect)
+  onPlaceSelectRef.current = onPlaceSelect
+
+  // Ensure places library is loaded so the web component registers
   const places = useMapsLibrary('places')
 
   useEffect(() => {
-    if (!places || !containerRef.current) return
+    ensureStyles()
+  }, [])
 
-    // Clear any previous element
-    containerRef.current.innerHTML = ''
+  const setRef = useCallback((el: google.maps.places.PlaceAutocompleteElement | null) => {
+    if (acRef.current) return
+    if (!el) return
+    acRef.current = el
 
-    const autocomplete = new places.PlaceAutocompleteElement({
-      componentRestrictions: undefined,
-    })
-
-    // Style the element to match the previous input
-    autocomplete.style.width = '100%'
-
-    autocomplete.addEventListener('gmp-placeselect', async (event: any) => {
-      const place = event.place
-      if (place) {
-        // Fetch full details (geometry, name, formatted_address) to match old API shape
-        await place.fetchFields({ fields: ['location', 'displayName', 'formattedAddress'] })
-        // Convert to PlaceResult-like shape for compatibility
-        onPlaceSelect({
+    const handler = async (event: any) => {
+      // New API: gmp-select event with placePrediction
+      if (event.placePrediction) {
+        const place = event.placePrediction.toPlace()
+        await place.fetchFields({ fields: ['location', 'displayName', 'formattedAddress', 'viewport'] })
+        onPlaceSelectRef.current({
           geometry: {
             location: place.location,
+            viewport: place.viewport,
+          },
+          name: place.displayName,
+          formatted_address: place.formattedAddress,
+        } as google.maps.places.PlaceResult)
+        return
+      }
+
+      // Fallback: event.place (older API)
+      if (event.place && typeof event.place.fetchFields === 'function') {
+        const place = event.place
+        await place.fetchFields({ fields: ['location', 'displayName', 'formattedAddress', 'viewport'] })
+        onPlaceSelectRef.current({
+          geometry: {
+            location: place.location,
+            viewport: place.viewport,
           },
           name: place.displayName,
           formatted_address: place.formattedAddress,
         } as google.maps.places.PlaceResult)
       }
-    })
+    }
 
-    containerRef.current.appendChild(autocomplete as unknown as Node)
-  }, [places, onPlaceSelect])
+    el.addEventListener('gmp-placeselect', handler as EventListener)
+    el.addEventListener('gmp-select', handler as EventListener)
+  }, [])
+
+  if (!places) return null
 
   return (
-    <div className="autocomplete-container" ref={containerRef} />
+    <div className="autocomplete-container" style={{ width: '100%' }}>
+      {/* @ts-ignore — gmp-place-autocomplete JSX intrinsic from @vis.gl/react-google-maps */}
+      <gmp-place-autocomplete
+        ref={setRef}
+        style={{ width: '100%' } as React.CSSProperties}
+      />
+    </div>
   )
 }

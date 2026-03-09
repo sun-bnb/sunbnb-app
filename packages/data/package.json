@@ -13,21 +13,45 @@
     "./card": "./src/card.tsx",
     "./code": "./src/code.tsx",
     "./env": "./src/env.ts",
-    "./business-entity": "./src/business-entity.ts"
+    "./business-entity": "./src/business-entity.ts",
+    "./email": "./src/email.ts",
+    "./password-reset": "./src/password-reset.ts"
   },
   "typesVersions": {
     "*": {
-      "PrismaCient": ["./index.ts"],
-      "auth": ["./src/auth.ts"],
-      "payment": ["./src/payment.ts"],
-      "settlement": ["./src/settlement.ts"],
-      "subscription": ["./src/subscription.ts"],
-      "TextField": ["./src/TextField.tsx"],
-      "button": ["./src/button.tsx"],
-      "card": ["./src/card.tsx"],
-      "code": ["./src/code.tsx"],
-      "env": ["./src/env.ts"],
-      "business-entity": ["./src/business-entity.ts"]
+      "PrismaCient": [
+        "./index.ts"
+      ],
+      "auth": [
+        "./src/auth.ts"
+      ],
+      "payment": [
+        "./src/payment.ts"
+      ],
+      "settlement": [
+        "./src/settlement.ts"
+      ],
+      "subscription": [
+        "./src/subscription.ts"
+      ],
+      "TextField": [
+        "./src/TextField.tsx"
+      ],
+      "button": [
+        "./src/button.tsx"
+      ],
+      "card": [
+        "./src/card.tsx"
+      ],
+      "code": [
+        "./src/code.tsx"
+      ],
+      "env": [
+        "./src/env.ts"
+      ],
+      "business-entity": [
+        "./src/business-entity.ts"
+      ]
     }
   },
   "scripts": {
@@ -58,6 +82,7 @@
     "pg": "^8.19.0",
     "prisma": "^7",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "resend": "^6.9.3"
   }
 }

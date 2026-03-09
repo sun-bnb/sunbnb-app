@@ -10,10 +10,12 @@ interface CredentialsFormProps {
   inputFocusClassName?: string
   /** Custom button color class (e.g. 'bg-brand-cyan hover:bg-brand-cyan-dark') */
   buttonClassName?: string
+  /** Href for "Forgot password?" link (defaults to /forgot-password) */
+  forgotPasswordHref?: string
   className?: string
 }
 
-export function CredentialsForm({ onSubmit, theme = 'light', inputFocusClassName, buttonClassName: customButtonClassName, className }: CredentialsFormProps) {
+export function CredentialsForm({ onSubmit, theme = 'light', inputFocusClassName, buttonClassName: customButtonClassName, forgotPasswordHref = '/forgot-password', className }: CredentialsFormProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -77,6 +79,11 @@ export function CredentialsForm({ onSubmit, theme = 'light', inputFocusClassName
           required
           className={inputClass}
         />
+        <div className="mt-1.5 text-right">
+          <a href={forgotPasswordHref} className={`text-xs ${isDark ? 'text-gray-500 hover:text-gray-400' : 'text-gray-400 hover:text-gray-600'} transition-colors`}>
+            Forgot password?
+          </a>
+        </div>
       </div>
       <button type="submit" disabled={isLoading} className={buttonClass}>
         {isLoading ? (

@@ -12,7 +12,10 @@ const MapHandler = ({place}: Props) => {
     if (!map || !place) return;
 
     if (place.geometry?.viewport) {
-      map.fitBounds(place.geometry?.viewport)
+      map.fitBounds(place.geometry.viewport)
+    } else if (place.geometry?.location) {
+      map.panTo(place.geometry.location)
+      map.setZoom(15)
     }
   }, [map, place])
 

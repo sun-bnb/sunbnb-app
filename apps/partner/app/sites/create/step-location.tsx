@@ -88,12 +88,12 @@ export default function StepLocation({
                 }}
               />
             )}
+            <CustomMapControl
+              controlPosition={ControlPosition.TOP_LEFT}
+              onPlaceSelect={setSelectedPlace}
+            />
+            <MapHandler place={selectedPlace} />
           </SafeMap>
-          <CustomMapControl
-            controlPosition={ControlPosition.TOP_LEFT}
-            onPlaceSelect={setSelectedPlace}
-          />
-          <MapHandler place={selectedPlace} />
         </SafeAPIProvider>
       </div>
     </div>

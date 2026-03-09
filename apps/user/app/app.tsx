@@ -27,6 +27,8 @@ const App = ({ children }: {
       pathname.includes('/receipt') || 
       pathname.includes('/pass') || 
       pathname.startsWith('/sign-in') ||
+      pathname.startsWith('/forgot-password') ||
+      pathname.startsWith('/reset-password') ||
       pathname.startsWith('/s/') ||
       (pathname.includes('/complete') && status !== 'authenticated')) {
       setContent(

@@ -459,12 +459,12 @@ export default function GeneralView() {
               }}
             >
               <SafeAdvancedMarker position={mapCoords} />
+              <CustomMapControl
+                controlPosition={ControlPosition.TOP_LEFT}
+                onPlaceSelect={setSelectedPlace}
+              />
+              <MapHandler place={selectedPlace} />
             </SafeMap>
-            <CustomMapControl
-              controlPosition={ControlPosition.TOP_LEFT}
-              onPlaceSelect={setSelectedPlace}
-            />
-            <MapHandler place={selectedPlace} />
           </SafeAPIProvider>
         </div>
       </div>

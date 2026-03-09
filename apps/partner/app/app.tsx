@@ -24,7 +24,7 @@ export default function App({ children, businessEntity }: { children: React.Reac
   const [needsOnboarding, setNeedsOnboarding] = useState(false)
 
   // Public routes that don't need auth shell
-  const isPublicRoute = pathname.endsWith('/info') || pathname.endsWith('/manage') || pathname.endsWith('/orders') || pathname.startsWith('/sign-in') || pathname.startsWith('/legal')
+  const isPublicRoute = pathname.endsWith('/info') || pathname.endsWith('/manage') || pathname.endsWith('/orders') || pathname.startsWith('/sign-in') || pathname.startsWith('/forgot-password') || pathname.startsWith('/reset-password') || pathname.startsWith('/legal')
 
   // Routes where the onboarding guard should not redirect
   const isOnboardingRoute = pathname.startsWith('/onboarding')
@@ -41,6 +41,8 @@ export default function App({ children, businessEntity }: { children: React.Reac
         if (!data.hasAccount) {
           setNeedsOnboarding(true)
           router.replace('/onboarding')
+        } else {
+          setNeedsOnboarding(false)
         }
         setOnboardingChecked(true)
       })

@@ -10,7 +10,9 @@ export default function App({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
 
-  const isPublicRoute = pathname.startsWith('/sign-in')
+  const isPublicRoute = pathname.startsWith('/sign-in') ||
+    pathname.startsWith('/forgot-password') ||
+    pathname.startsWith('/reset-password')
 
   useEffect(() => {
     if (status === 'unauthenticated' && !isPublicRoute) {
