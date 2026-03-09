@@ -1,12 +1,13 @@
 import logger from '@/utils/logger'
 
-import { GoogleAnalytics } from '@next/third-parties/google'
 import type { Metadata } from 'next'
+import { ConsentAwareAnalytics } from '@/components/consent-analytics'
 import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages } from 'next-intl/server'
 import localFont from 'next/font/local'
 import App from './app'
 import NextAuthProvider from './nextauth'
+import { CookieConsent } from '@repo/ui/cookie-consent'
 import './globals.css'
 import StoreProvider from "./StoreProvider"
 
@@ -67,11 +68,12 @@ export default async function RootLayout({
               <App>
                 {children}
               </App>
+              <CookieConsent hasAnalytics />
+              <ConsentAwareAnalytics />
             </NextIntlClientProvider>
           </NextAuthProvider>
         </body>
       </StoreProvider>
-      <GoogleAnalytics gaId="G-Y6CN4PSJX1" />
     </html>
   )
 }

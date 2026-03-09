@@ -6,6 +6,7 @@ import { getBusinessEntity } from '@repo/data/business-entity'
 import App from './app'
 import NextAuthProvider from './nextauth'
 import StoreProvider from './StoreProvider'
+import { CookieConsent } from '@repo/ui/cookie-consent'
 import './globals.css'
 
 
@@ -66,6 +67,7 @@ export default async function RootLayout({
               <App businessEntity={businessEntity}>
                 {children}
               </App>
+              <CookieConsent />
             </NextIntlClientProvider>
           </NextAuthProvider>
         </body>

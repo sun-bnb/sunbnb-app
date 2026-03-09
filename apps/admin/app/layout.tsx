@@ -3,6 +3,7 @@ import localFont from 'next/font/local'
 import App from './app'
 import NextAuthProvider from './nextauth'
 import MuiThemeProvider from './mui-theme'
+import { CookieConsent } from '@repo/ui/cookie-consent'
 import './globals.css'
 
 const geistSans = localFont({
@@ -36,6 +37,7 @@ export default function RootLayout({
             <App>
               {children}
             </App>
+            <CookieConsent privacyHref=\"#\" />
           </NextAuthProvider>
         </MuiThemeProvider>
       </body>
