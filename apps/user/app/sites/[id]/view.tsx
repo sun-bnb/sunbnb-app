@@ -123,8 +123,13 @@ export default function SiteView({ site, apiKey, stripePublicKey, brand }: { sit
         }}>
           <div className={`w-full leading-[0] ${brand ? '' : 'border-t border-cream'}`}>
             {
-              (site.image && site.imageWidth && site.imageHeight) &&
-                <Image width={site.imageWidth} height={site.imageHeight} alt={site.description || ''} className="block w-full h-auto lg:rounded-xl" src={site.image} />
+              (site.image && site.imageWidth && site.imageHeight) && (
+                brand ? (
+                  <img width={site.imageWidth} height={site.imageHeight} alt={site.description || ''} className="block w-full h-auto" src={site.image} />
+                ) : (
+                  <Image width={site.imageWidth} height={site.imageHeight} alt={site.description || ''} className="block w-full h-auto lg:rounded-xl" src={site.image} />
+                )
+              )
             }
           </div>
           {brand ? (

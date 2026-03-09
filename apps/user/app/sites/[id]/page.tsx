@@ -1,6 +1,7 @@
 import logger from '@/utils/logger'
 
 import prisma from '@repo/data/PrismaCient'
+import { Metadata } from 'next'
 import { auth } from '@/app/auth'
 import SiteView from './view'
 
@@ -34,6 +35,33 @@ async function getSite(id: string, userId: string) {
 
   return site
 
+}
+
+export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
+  const site = await prisma.site.findFirst({
+    where: { id: params.id },
+    select: { name: true, description: true, image: true },
+  })
+
+  const title = site?.name || 'Sunbnb'
+  const description = site?.description || ''
+  const image = site?.image || undefined
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      ...(image && { images: [{ url: image }] }),
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      ...(image && { images: [image] }),
+    },
+  }
 }
 
 export default async function Site({ params }: { params: { id: string }}) {
