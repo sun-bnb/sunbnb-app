@@ -40,6 +40,7 @@ export default function CustomizedInputBase() {
   const router = useRouter()
 
   const [ isMenuOpen, setIsMenuOpen ] = useState<boolean>(false)
+  const [ menuOpenCount, setMenuOpenCount ] = useState<number>(0)
   const [ inputIntervals, setInputIntervals ] = useState<number[]>([])
   const [ lastInputTime, setLastInputTime ] = useState<number>(0)
 
@@ -125,7 +126,10 @@ export default function CustomizedInputBase() {
               {
                 loggedIn ? (
                   <MenuButton className="relative flex max-w-xs items-center rounded-full bg-gray-100 text-sm hover:outline-none hover:ring-2 hover:ring-offset-gray-100"
-                    onClick={() => setIsMenuOpen(!isMenuOpen)}>
+                    onClick={() => {
+                      setMenuOpenCount(c => c + 1)
+                      setIsMenuOpen(!isMenuOpen)
+                    }}>
                     <img alt="" src={session?.user?.image!} className="h-8 w-8 rounded-full" />
                   </MenuButton>
                 ) : (
@@ -141,15 +145,17 @@ export default function CustomizedInputBase() {
         </div>
       </Paper>
       <div className="-mt-4">
-        <Glow state={searchText} />
+        <Glow state={searchText + menuOpenCount} />
       </div>
       {
         isMenuOpen && (
-          <div className="flex flex-wrap justify-center pb-4 gap-1.5">
+          <div className="flex flex-wrap justify-center pb-4 gap-1.5 animate-slide-down-fade border-b border-black/10 shadow-sm">
             {
               userNavigation.map((item, index) => {
                 return (
-                  <div className="max-w-[300px] truncate font-semibold px-3 py-0.5 rounded-full bg-[#363636] text-cream text-sm" key={'userNavigation-'+index} 
+                  <div className="max-w-[300px] truncate font-semibold px-3 py-0.5 rounded-full bg-[#363636] text-cream text-sm animate-bubble-up" 
+                    key={'userNavigation-'+index}
+                    style={{ animationDelay: `${index * 0.06}s` }}
                     onClick={() => {
                       setIsMenuOpen(false)
                       router.push(item.href)
