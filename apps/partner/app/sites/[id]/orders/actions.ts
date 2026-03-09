@@ -5,8 +5,35 @@ import { requireSiteOwner } from '@/lib/auth-helpers'
 import { isValidOrderStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 
-export async function setOrderStatus(siteId: string, orderId: string, status: string) {
+// ─── Status Transitions ─────────────────────────────────────────────────────
 
+/**
+ * Valid status transitions for the kitchen workflow:
+ *   paid → accepted → preparing → ready → delivered → completed
+ *   paid|accepted|preparing → rejected (with reason)
+ *   any active status → discarded
+ */
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  paid:      ['accepted', 'rejected', 'discarded'],
+  complete:  ['accepted', 'rejected', 'discarded'],
+  accepted:  ['preparing', 'rejected', 'discarded'],
+  preparing: ['ready', 'rejected', 'discarded'],
+  ready:     ['delivered', 'discarded'],
+  delivered: ['completed', 'discarded'],
+}
+
+function isValidTransition(from: string, to: string): boolean {
+  return VALID_TRANSITIONS[from]?.includes(to) ?? false
+}
+
+// ─── Set Order Status ────────────────────────────────────────────────────────
+
+export async function setOrderStatus(
+  siteId: string,
+  orderId: string,
+  status: string,
+  reason?: string,
+) {
   const { error } = await requireSiteOwner(siteId)
   if (error) return { status: 'error', errors: [error] }
 
@@ -14,35 +41,87 @@ export async function setOrderStatus(siteId: string, orderId: string, status: st
     return { status: 'error', errors: ['Invalid order status'] }
   }
 
-  await prisma.order.update({
-    where: {
-      id: orderId
-    },
-    data: {
-      status: status
-    }
-  });
-  revalidatePath(`/sites/${siteId}/orders`);
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { status: true, siteId: true },
+  })
 
-  return { status: 'ok' };
+  if (!order || order.siteId !== siteId) {
+    return { status: 'error', errors: ['Order not found'] }
+  }
+
+  if (!isValidTransition(order.status, status)) {
+    return { status: 'error', errors: [`Cannot transition from '${order.status}' to '${status}'`] }
+  }
+
+  const data: Record<string, any> = { status }
+
+  if (status === 'accepted')  data.acceptedAt = new Date()
+  if (status === 'ready')     data.readyAt = new Date()
+  if (status === 'delivered') data.deliveredAt = new Date()
+  if (status === 'rejected' && reason) data.rejectReason = reason
+
+  await prisma.order.update({ where: { id: orderId }, data })
+  revalidatePath(`/sites/${siteId}/orders`)
+
+  return { status: 'ok' }
 }
 
-export async function getOrders(siteId: string): Promise<{ status: string, errors?: string[], orders?: any[] }> {
+// ─── Get Orders ──────────────────────────────────────────────────────────────
+
+export type OrderTab = 'incoming' | 'active' | 'ready' | 'history'
+
+const TAB_STATUSES: Record<OrderTab, string[]> = {
+  incoming: ['paid', 'complete'],
+  active:   ['accepted', 'preparing'],
+  ready:    ['ready', 'delivered'],
+  history:  ['completed', 'rejected', 'discarded'],
+}
+
+export async function getOrders(
+  siteId: string,
+  tab: OrderTab = 'incoming',
+): Promise<{ status: string; errors?: string[]; orders?: any[] }> {
 
   const { error } = await requireSiteOwner(siteId)
   if (error) return { status: 'error', errors: [error] }
 
-  const orders = await prisma.order.findMany({ 
-    where: { 
-      siteId: siteId,
-      status: { in: [ 'paid', 'complete' ] }
+  const statuses = TAB_STATUSES[tab] ?? TAB_STATUSES.incoming
+
+  const orders = await prisma.order.findMany({
+    where: {
+      siteId,
+      status: { in: statuses },
     },
     include: {
       seat: true,
-      orderItems: true
-    }
+      orderItems: true,
+    },
+    orderBy: { createdAt: 'asc' },
   })
 
   return { status: 'ok', orders }
+}
 
+// ─── Toggle Product Sold Out ─────────────────────────────────────────────────
+
+export async function toggleProductSoldOut(siteId: string, productId: string, soldOut: boolean) {
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
+
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { siteId: true },
+  })
+
+  if (!product || product.siteId !== siteId) {
+    return { status: 'error', errors: ['Product not found'] }
+  }
+
+  await prisma.product.update({
+    where: { id: productId },
+    data: { soldOut },
+  })
+
+  return { status: 'ok' }
 }

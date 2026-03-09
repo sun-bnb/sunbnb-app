@@ -32,6 +32,8 @@ export default function ProductsView() {
   const [description, setDescription] = useState('')
   const [totalPrice, setTotalPrice] = useState('')
   const [tax, setTax] = useState('21')
+  const [category, setCategory] = useState('food')
+  const [prepTime, setPrepTime] = useState('')
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const formRef = useRef<HTMLFormElement>(null)
@@ -51,6 +53,8 @@ export default function ProductsView() {
     setDescription('')
     setTotalPrice('')
     setTax('21')
+    setCategory('food')
+    setPrepTime('')
     setPreviewUrl(null)
     formRef.current?.reset()
   }
@@ -247,6 +251,29 @@ export default function ProductsView() {
                   value={tax}
                   onChange={(e) => setTax(e.target.value)}
                   inputProps={{ step: '0.01' }}
+                />
+                <TextField
+                  name="category"
+                  label="Category"
+                  size="small"
+                  select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  SelectProps={{ native: true }}
+                >
+                  <option value="food">Food</option>
+                  <option value="drink">Drink</option>
+                  <option value="snack">Snack</option>
+                  <option value="accessory">Accessory</option>
+                </TextField>
+                <TextField
+                  name="prepTime"
+                  label="Prep time (min)"
+                  size="small"
+                  type="number"
+                  value={prepTime}
+                  onChange={(e) => setPrepTime(e.target.value)}
+                  inputProps={{ min: 0, step: 1 }}
                 />
               </div>
             </div>

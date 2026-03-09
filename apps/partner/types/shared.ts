@@ -33,6 +33,7 @@ export interface SiteProps {
   subscriptionTier?: 'STARTER' | 'PRO' | 'BUSINESS' | null
   appSalesEnabled?: boolean
   paymentProvider?: string
+  noShowDeadlineMinutes?: number | null
 }
 
 export interface Product {
@@ -45,6 +46,9 @@ export interface Product {
   price: number
   tax: number
   totalPrice: number
+  category?: string | null
+  soldOut?: boolean
+  prepTime?: number | null
 }
 
 export interface Reservation {
@@ -53,8 +57,15 @@ export interface Reservation {
   itemId?: string | null
   type: string
   status: string
+  operationalStatus: string
   from: Date
   to: Date
+  checkedInAt?: Date | null
+  departedAt?: Date | null
+  guestName?: string | null
+  guestContact?: string | null
+  internalNotes?: string | null
+  paymentAmount?: number | null
   user: {
     id: string
     email: string
@@ -106,6 +117,12 @@ export interface Order {
   paymentRef?: string | null
   paymentAmount?: number | null
 
+  notes?: string | null
+  rejectReason?: string | null
+  acceptedAt?: Date | null
+  readyAt?: Date | null
+  deliveredAt?: Date | null
+
   orderItems: OrderItem[]
 
   createdAt: Date
@@ -124,5 +141,7 @@ interface OrderItem {
   price: number
   tax: number
   totalPrice: number
+  notes?: string | null
+  category?: string | null
 
 }

@@ -28,6 +28,12 @@ export async function cancelReservation(
       id: reservationId
     }
   })
+
+  // Send cancellation email (non-blocking)
+  try {
+    const { sendCancellationEmail } = await import('@repo/data/reservation-emails')
+    sendCancellationEmail(reservationId).catch(() => {})
+  } catch {}
   
   revalidatePath('/reservations')
   revalidatePath(`/reservations/${reservationId}`)

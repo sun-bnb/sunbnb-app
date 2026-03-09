@@ -59,12 +59,12 @@ export async function getAvailability(siteId: string, from: Date, to: Date) {
   const itemIds = items.map(item => item.id)
 
   // Find all reservations overlapping [from, to]
-  // Important: You likely need to include { items: true } so each
-  // reservation has its array of items loaded.
+  // Exclude no-show and departed reservations — those beds are available again.
   const reservations = await prisma.reservation.findMany({
     where: {
       siteId,
       status: { in: ['pending', 'processing', 'paid', 'complete', 'paid-in-cash'] },
+      operationalStatus: { notIn: ['no-show', 'departed'] },
       from: { lte: to },
       to: { gte: from },
     },

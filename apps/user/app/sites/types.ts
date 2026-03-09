@@ -59,11 +59,13 @@ export interface Reservation {
     invoices?: Invoice[]
   }[] | null
   status: string
+  operationalStatus?: string
   type: string
   from: Date
   to: Date
   paymentRef?: string | null
   paymentAmount?: number | null
+  guestName?: string | null
 }
 
 export interface Invoice {

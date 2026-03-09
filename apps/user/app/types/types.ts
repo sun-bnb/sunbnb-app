@@ -8,6 +8,9 @@ export interface Product {
   price: number
   tax: number
   totalPrice: number
+  category?: string | null
+  soldOut?: boolean
+  prepTime?: number | null
 
 }
 
@@ -28,6 +31,12 @@ export interface Order {
   paymentRef?: string | null
   paymentAmount?: number | null
 
+  notes?: string | null
+  rejectReason?: string | null
+  acceptedAt?: Date | string | null
+  readyAt?: Date | string | null
+  deliveredAt?: Date | string | null
+
   orderItems: OrderItem[]
 
 }
@@ -44,6 +53,8 @@ interface OrderItem {
   price: number
   tax: number
   totalPrice: number
+  notes?: string | null
+  category?: string | null
 
 }
 

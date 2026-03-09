@@ -51,6 +51,12 @@ export async function cancelReservation(reservationId: string) {
     where: { id: reservationId },
   })
 
+  // Send cancellation email (non-blocking)
+  try {
+    const { sendCancellationEmail } = await import('@repo/data/reservation-emails')
+    sendCancellationEmail(reservationId).catch(() => {})
+  } catch {}
+
   revalidatePath('/reservations')
   revalidatePath(`/reservations/${reservationId}`)
 
@@ -78,7 +84,8 @@ export async function createOrder(order: {
   siteId?: string
   reservationId?: string
   seatId?: string
-  items: { product: { id: string }, quantity: number }[]
+  notes?: string
+  items: { product: { id: string }, quantity: number, notes?: string }[]
 }) {
   const session = await auth()
 
@@ -167,8 +174,12 @@ export async function createOrder(order: {
   const productMap = new Map(products.map((p) => [p.id, p]))
 
   for (const item of order.items) {
-    if (!productMap.has(item.product.id)) {
+    const dbProduct = productMap.get(item.product.id)
+    if (!dbProduct) {
       return { status: 'error', errors: [`Product ${item.product.id} not found or not active`] }
+    }
+    if (dbProduct.soldOut) {
+      return { status: 'error', errors: [`${dbProduct.name} is currently sold out`] }
     }
   }
 
@@ -192,6 +203,8 @@ export async function createOrder(order: {
       price: linePrice,
       tax: product.tax,
       totalPrice: lineTotalPrice,
+      category: product.category ?? 'food',
+      notes: item.notes?.slice(0, 200) || null,
     }
   })
 
@@ -206,6 +219,7 @@ export async function createOrder(order: {
     totalPrice: sumTotalPrice,
     paymentAmount: sumTotalPrice,
     anonId: order.anonId,
+    notes: order.notes?.slice(0, 500) || null,
     orderItems: { create: orderItemsData },
     site: { connect: { id: order.siteId } },
     user: { connect: { id: orderUserId } },

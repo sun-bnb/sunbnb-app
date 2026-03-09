@@ -8,7 +8,26 @@ const statusStyle: Record<string, string> = {
   pending:   'bg-amber-50 text-amber-700',
   paid:      'bg-emerald-50 text-emerald-700',
   complete:  'bg-emerald-50 text-emerald-700',
+  accepted:  'bg-blue-50 text-blue-700',
+  preparing: 'bg-orange-50 text-orange-700',
+  ready:     'bg-green-50 text-green-800',
+  delivered: 'bg-teal-50 text-teal-700',
+  completed: 'bg-gray-50 text-gray-600',
+  rejected:  'bg-red-50 text-red-700',
   cancelled: 'bg-red-50 text-red-700',
+}
+
+const statusLabel: Record<string, string> = {
+  pending:   'Pending',
+  paid:      'Received',
+  complete:  'Received',
+  accepted:  'Accepted',
+  preparing: 'Preparing',
+  ready:     'Ready!',
+  delivered: 'Delivered',
+  completed: 'Done',
+  rejected:  'Rejected',
+  cancelled: 'Cancelled',
 }
 
 interface OrderData {
@@ -105,7 +124,7 @@ export default function Orders({ orders, reservationId }: { orders: OrderData[],
               })}
             </p>
             <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle[selected.status] ?? 'bg-gray-100 text-gray-600'}`}>
-              {selected.status.charAt(0).toUpperCase() + selected.status.slice(1)}
+              {statusLabel[selected.status] ?? selected.status.charAt(0).toUpperCase() + selected.status.slice(1)}
             </span>
           </div>
           <button onClick={() => setSelectedId(null)} className="text-sm font-medium text-gray-500 active:text-gray-800">
@@ -192,7 +211,7 @@ export default function Orders({ orders, reservationId }: { orders: OrderData[],
               <div className="flex items-center gap-2.5">
                 <span className="text-sm font-semibold text-gray-900">{o.totalPrice.toFixed(2)}&nbsp;€</span>
                 <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${statusStyle[o.status] ?? 'bg-gray-100 text-gray-600'}`}>
-                  {o.status.charAt(0).toUpperCase() + o.status.slice(1)}
+                  {statusLabel[o.status] ?? o.status.charAt(0).toUpperCase() + o.status.slice(1)}
                 </span>
               </div>
             </button>

@@ -1,78 +1,72 @@
 'use client'
 
-import React, { useTransition } from 'react'
-import { reserveItem, unreserveItem } from './actions'
+import React from 'react'
 import { InventoryItem, Reservation } from '@/types/shared'
 
-function isReservedToday(item: InventoryItem): boolean {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return (
-    item.reservations?.some((res: Reservation) => {
-      const fromDate = new Date(res.from)
-      const toDate = new Date(res.to)
-      fromDate.setHours(0, 0, 0, 0)
-      toDate.setHours(0, 0, 0, 0)
-      return today >= fromDate && today <= toDate
-    }) ?? false
-  )
+type BedState = 'available' | 'expected' | 'checked-in' | 'walked-in' | 'blocked'
+
+function getActiveReservation(item: InventoryItem): Reservation | null {
+  if (!item.reservations?.length) return null
+  return item.reservations.find(r =>
+    !['departed', 'no-show'].includes(r.operationalStatus)
+  ) || null
 }
 
-function isReservedTodayByUser(item: InventoryItem): boolean {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return (
-    item.reservations?.some((res: Reservation) => {
-      const fromDate = new Date(res.from)
-      const toDate = new Date(res.to)
-      fromDate.setHours(0, 0, 0, 0)
-      toDate.setHours(0, 0, 0, 0)
-      return today >= fromDate && today <= toDate
-    }) ?? false
-  )
+function getBedState(item: InventoryItem): BedState {
+  const res = getActiveReservation(item)
+  if (!res) return 'available'
+  switch (res.operationalStatus) {
+    case 'expected': return 'expected'
+    case 'checked-in': return 'checked-in'
+    case 'walked-in': return 'walked-in'
+    case 'blocked': return 'blocked'
+    default: return 'available'
+  }
+}
+
+// High-contrast colors for outdoor sunlight + simple icons
+const stateStyles: Record<BedState, { bg: string; icon: string }> = {
+  'available':  { bg: 'bg-green-300 border-green-500', icon: '' },
+  'expected':   { bg: 'bg-yellow-300 border-yellow-500 animate-pulse-slow', icon: '⏳' },
+  'checked-in': { bg: 'bg-blue-400 border-blue-600 text-white', icon: '✓' },
+  'walked-in':  { bg: 'bg-orange-400 border-orange-600 text-white', icon: '●' },
+  'blocked':    { bg: 'bg-gray-400 border-gray-600 text-white', icon: '✕' },
 }
 
 export default function SunbedItem({
   siteId,
-  item
+  item,
+  onSelect,
 }: {
   siteId: string
   item: InventoryItem
+  onSelect: () => void
 }) {
-  const reservedByAnyone = isReservedToday(item)
-  const reservedByMe     = isReservedTodayByUser(item)
-  const [isPending, startTransition] = useTransition()
-
-  const handleToggle = () => {
-    startTransition(async () => {
-      if (reservedByMe) await unreserveItem(siteId, item.id)
-      else              await reserveItem(siteId, item.id)
-    })
-  }
-
-  let bgColor = 'bg-green-200'
-  if (reservedByAnyone) {
-    bgColor = reservedByMe ? 'bg-red-200' : 'bg-gray-200'
-  }
-
-  // Render an empty spacer if item is disabled
   if (item.status === 'disabled') {
     return <div className="basis-0 flex-1 p-2" />
   }
 
+  const state = getBedState(item)
+  const { bg, icon } = stateStyles[state]
+
+  // Extract short display number (last 2 digits) for compact phone view
+  const shortNum = item.number % 100
+
   return (
     <button
-      disabled={(!reservedByMe && reservedByAnyone) || isPending}
-      onClick={handleToggle}
+      onClick={onSelect}
       className={`
-        ${bgColor} border rounded 
-        basis-0 flex-1 min-w-0  /* allow squeezing below content width */
-        p-4 flex items-center justify-center ${item.number % 2 !== 0 ? 'mr-[6px]' : 'ml-[6px]'}
+        ${bg} border-2 rounded-lg
+        min-w-0 min-h-[44px]
+        py-2 sm:py-3 px-0.5 flex flex-col items-center justify-center
+        ${item.number % 2 !== 0 ? 'mr-[3px] sm:mr-[6px]' : 'ml-[3px] sm:ml-[6px]'}
+        active:brightness-90 transition-colors select-none
       `}
     >
-      <div style={{
-        transform: 'rotate(-90deg)',
-      }}>{isPending ? '...' : item.number}</div>
+      {icon && <span className="text-[9px] sm:text-[10px] leading-none">{icon}</span>}
+      <span className="text-[11px] sm:text-xs font-bold leading-tight">
+        {shortNum}
+      </span>
     </button>
   )
 }

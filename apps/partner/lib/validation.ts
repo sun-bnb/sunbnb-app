@@ -75,7 +75,8 @@ export function validatePassword(
 
 const VALID_SITE_STATUSES = new Set(['active', 'hidden'])
 const VALID_PAYMENT_PROVIDERS = new Set(['stripe', 'mollie'])
-const VALID_ORDER_STATUSES = new Set(['pending', 'paid', 'complete', 'completed', 'canceled', 'refunded', 'discarded'])
+const VALID_ORDER_STATUSES = new Set(['pending', 'paid', 'complete', 'completed', 'accepted', 'preparing', 'ready', 'delivered', 'rejected', 'canceled', 'refunded', 'discarded'])
+const VALID_PRODUCT_CATEGORIES = new Set(['food', 'drink', 'snack', 'accessory'])
 const VALID_ORDER_PAYMENT_TYPES = new Set(['paid', 'unpaid'])
 const VALID_BG_OPTIONS = new Set(['satellite', 'blank', 'custom'])
 const VALID_ITEM_STATUSES = new Set(['active', 'disabled'])
@@ -102,4 +103,8 @@ export function isValidBgOption(s: string): boolean {
 
 export function isValidItemStatus(s: string): boolean {
   return VALID_ITEM_STATUSES.has(s)
+}
+
+export function isValidProductCategory(s: string): boolean {
+  return VALID_PRODUCT_CATEGORIES.has(s)
 }

@@ -478,6 +478,12 @@ export async function processConfirmedReservation(
       data: { status: 'complete' },
     })
   })
+
+  // Send confirmation email (non-blocking, non-throwing)
+  try {
+    const { sendConfirmationEmail } = await import('./reservation-emails')
+    sendConfirmationEmail(reservationId).catch(() => {})
+  } catch {}
 }
 
 // ─── Idempotent Order Processing ────────────────────────────────────────────

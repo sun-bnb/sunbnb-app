@@ -18,7 +18,14 @@ import CloseIcon from '@mui/icons-material/Close'
 import CheckIcon from '@mui/icons-material/Check'
 import ImageIcon from '@mui/icons-material/Image'
 import { Product } from '@/types/shared'
-import { updateProduct, updateProductImage, deleteProduct } from './actions'
+import { updateProduct, updateProductImage, deleteProduct, toggleProductSoldOut } from './actions'
+
+const CATEGORY_LABELS: Record<string, string> = {
+  food: '🍽️ Food',
+  drink: '🥤 Drink',
+  snack: '🍿 Snack',
+  accessory: '🏖️ Accessory',
+}
 
 interface ProductItemProps {
   product: Product
@@ -35,6 +42,9 @@ export default function ProductItem({ product, onUpdated }: ProductItemProps) {
   const [description, setDescription] = useState(product.description || '')
   const [totalPrice, setTotalPrice] = useState(product.totalPrice)
   const [tax, setTax] = useState(product.tax)
+  const [category, setCategory] = useState(product.category || 'food')
+  const [prepTime, setPrepTime] = useState<number | ''>(product.prepTime ?? '')
+  const [soldOut, setSoldOut] = useState(product.soldOut ?? false)
 
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -45,6 +55,8 @@ export default function ProductItem({ product, onUpdated }: ProductItemProps) {
       description: description || null,
       totalPrice,
       tax,
+      category,
+      prepTime: prepTime === '' ? null : prepTime,
     })
     setSaving(false)
     setEditing(false)
@@ -56,6 +68,8 @@ export default function ProductItem({ product, onUpdated }: ProductItemProps) {
     setDescription(product.description || '')
     setTotalPrice(product.totalPrice)
     setTax(product.tax)
+    setCategory(product.category || 'food')
+    setPrepTime(product.prepTime ?? '')
     setEditing(false)
   }
 
@@ -74,10 +88,17 @@ export default function ProductItem({ product, onUpdated }: ProductItemProps) {
     onUpdated()
   }
 
+  const handleToggleSoldOut = async () => {
+    const next = !soldOut
+    setSoldOut(next)
+    await toggleProductSoldOut(product.id, next)
+    onUpdated()
+  }
+
   const priceBeforeTax = totalPrice / (1 + tax / 100)
 
   return (
-    <div className="border border-gray-200 rounded-lg bg-white overflow-hidden">
+    <div className={`border rounded-lg bg-white overflow-hidden ${soldOut ? 'border-red-200 opacity-60' : 'border-gray-200'}`}>
       <div className="flex items-start gap-4 p-4">
         {/* Image */}
         <div
@@ -85,46 +106,44 @@ export default function ProductItem({ product, onUpdated }: ProductItemProps) {
           onClick={() => fileRef.current?.click()}
         >
           {product.imageUrl ? (
-            <img
-              src={product.imageUrl}
-              alt={product.name}
-              className="w-full h-full object-cover"
-            />
+            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
           ) : (
             <ImageIcon className="text-gray-300" fontSize="large" />
           )}
           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
             <CameraAltIcon className="text-white" fontSize="small" />
           </div>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={handleImageChange}
-          />
+          <input ref={fileRef} type="file" accept="image/*" hidden onChange={handleImageChange} />
         </div>
 
         {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-gray-900 truncate">{product.name}</h3>
+            {soldOut && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700">SOLD OUT</span>
+            )}
           </div>
           {product.description && (
             <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{product.description}</p>
           )}
           <div className="flex items-baseline gap-3 mt-1.5">
-            <span className="text-sm font-semibold text-gray-900">
-              €{product.totalPrice.toFixed(2)}
-            </span>
-            <span className="text-xs text-gray-400">
-              €{product.price.toFixed(2)} + {product.tax}% tax
-            </span>
+            <span className="text-sm font-semibold text-gray-900">€{product.totalPrice.toFixed(2)}</span>
+            <span className="text-xs text-gray-400">€{product.price.toFixed(2)} + {product.tax}% tax</span>
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-[10px] text-gray-400">{CATEGORY_LABELS[product.category ?? 'food'] ?? product.category}</span>
+            {product.prepTime && <span className="text-[10px] text-gray-400">· ~{product.prepTime}min</span>}
           </div>
         </div>
 
         {/* Actions */}
         <div className="flex items-center gap-0.5 flex-shrink-0">
+          <Tooltip title={soldOut ? 'Mark available' : 'Mark sold out'}>
+            <IconButton size="small" onClick={handleToggleSoldOut}>
+              <span className="text-sm">{soldOut ? '✅' : '🚫'}</span>
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Edit">
             <IconButton size="small" onClick={() => setEditing(!editing)}>
               <EditIcon fontSize="small" className="text-gray-400" />
@@ -142,41 +161,27 @@ export default function ProductItem({ product, onUpdated }: ProductItemProps) {
       <Collapse in={editing}>
         <div className="px-4 pb-4 pt-1 border-t border-gray-100">
           <div className="grid grid-cols-2 gap-3 mt-3">
+            <TextField label="Name" size="small" fullWidth value={name}
+              onChange={(e) => setName(e.target.value)} sx={{ gridColumn: '1 / -1' }} />
+            <TextField label="Description" size="small" fullWidth multiline minRows={1} maxRows={3}
+              value={description} onChange={(e) => setDescription(e.target.value)} sx={{ gridColumn: '1 / -1' }} />
+            <TextField label="Total price (€)" size="small" type="number" value={totalPrice}
+              onChange={(e) => setTotalPrice(parseFloat(e.target.value) || 0)} inputProps={{ step: '0.01' }} />
+            <TextField label="Tax %" size="small" type="number" value={tax}
+              onChange={(e) => setTax(parseFloat(e.target.value) || 0)} inputProps={{ step: '0.01' }} />
             <TextField
-              label="Name"
-              size="small"
-              fullWidth
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              sx={{ gridColumn: '1 / -1' }}
-            />
-            <TextField
-              label="Description"
-              size="small"
-              fullWidth
-              multiline
-              minRows={1}
-              maxRows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              sx={{ gridColumn: '1 / -1' }}
-            />
-            <TextField
-              label="Total price (€)"
-              size="small"
-              type="number"
-              value={totalPrice}
-              onChange={(e) => setTotalPrice(parseFloat(e.target.value) || 0)}
-              inputProps={{ step: '0.01' }}
-            />
-            <TextField
-              label="Tax %"
-              size="small"
-              type="number"
-              value={tax}
-              onChange={(e) => setTax(parseFloat(e.target.value) || 0)}
-              inputProps={{ step: '0.01' }}
-            />
+              label="Category" size="small" select value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              SelectProps={{ native: true }}
+            >
+              <option value="food">Food</option>
+              <option value="drink">Drink</option>
+              <option value="snack">Snack</option>
+              <option value="accessory">Accessory</option>
+            </TextField>
+            <TextField label="Prep time (min)" size="small" type="number" value={prepTime}
+              onChange={(e) => setPrepTime(e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
+              inputProps={{ min: 0, step: 1 }} />
           </div>
           <div className="text-xs text-gray-400 mt-2">
             Price before tax: €{priceBeforeTax.toFixed(2)}

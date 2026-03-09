@@ -15,6 +15,7 @@
     "./env": "./src/env.ts",
     "./business-entity": "./src/business-entity.ts",
     "./email": "./src/email.ts",
+    "./reservation-emails": "./src/reservation-emails.ts",
     "./password-reset": "./src/password-reset.ts",
     "./rate-limit": "./src/rate-limit.ts"
   },

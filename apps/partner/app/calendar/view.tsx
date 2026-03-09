@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import CreateReservationModal from './CreateReservationModal'
 
 /* ── Types ──────────────────────────────────────────────────── */
 
@@ -107,6 +108,7 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
   const [dayReservations, setDayReservations] = useState<DayReservation[]>([])
   const [loadingMonth, setLoadingMonth] = useState(false)
   const [loadingDay, setLoadingDay] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
 
   const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`
   const selectedSite = sites.find(s => s.id === siteId)
@@ -351,14 +353,25 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
                   {dayReservations.length} {dayReservations.length === 1 ? 'reservation' : 'reservations'}
                 </p>
               </div>
-              <button
-                onClick={() => setSelectedDay(null)}
-                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-400"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+                  title="Create reservation"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setSelectedDay(null)}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-400"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             {/* Reservation list */}
@@ -408,6 +421,19 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
         )}
       </div>
 
+      {/* Create Reservation Modal */}
+      {showCreateModal && selectedDay && (
+        <CreateReservationModal
+          siteId={siteId}
+          initialDate={selectedDay}
+          onClose={() => setShowCreateModal(false)}
+          onCreated={() => {
+            fetchMonthCounts()
+            if (selectedDay) fetchDayReservations(selectedDay)
+          }}
+        />
+      )}
+
       {/* Mobile day detail (below the calendar) */}
       {selectedDay && (
         <div className="lg:hidden mt-4 bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -420,14 +446,25 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
                 {dayReservations.length} {dayReservations.length === 1 ? 'reservation' : 'reservations'}
               </p>
             </div>
-            <button
-              onClick={() => setSelectedDay(null)}
-              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-400"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+                title="Create reservation"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setSelectedDay(null)}
+                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-400"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
           {loadingDay ? (
             <div className="flex items-center justify-center py-8">

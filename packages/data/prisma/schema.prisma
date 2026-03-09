@@ -208,6 +208,7 @@ model Site {
   bgImageHeight   Int?                     @map("bg_image_height")
   slug            String?
   paymentProvider String                   @default("mollie") @map("payment_provider")
+  noShowDeadlineMinutes Int?                @map("no_show_deadline_minutes")
 
   inventoryItems  InventoryItem[]
   orders          Order[]
@@ -301,24 +302,31 @@ model ItemGroup {
 }
 
 model Reservation {
-  id            String          @id @unique @default(cuid())
-  userId        String          @map("user_id")
-  siteId        String          @map("site_id")
-  itemId        String?         @map("item_id")
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  status        String          @default("pending")
-  type          String          @default("hours")
-  from          DateTime        @map("from")
-  to            DateTime        @map("to")
-  paymentAmount Float?          @map("payment_amount")
-  paymentRef    String?         @map("payment_ref")
-  anonId        String?         @map("anon_id")
-  orders        Order[]
-  invoices      Invoice[]
-  site          Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items         InventoryItem[] @relation("InventoryItemToReservation")
+  id                String          @id @unique @default(cuid())
+  userId            String          @map("user_id")
+  siteId            String          @map("site_id")
+  itemId            String?         @map("item_id")
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  status            String          @default("pending")
+  operationalStatus String          @default("expected") @map("operational_status")
+  type              String          @default("hours")
+  from              DateTime        @map("from")
+  to                DateTime        @map("to")
+  paymentAmount     Float?          @map("payment_amount")
+  paymentRef        String?         @map("payment_ref")
+  anonId            String?         @map("anon_id")
+  checkedInAt       DateTime?       @map("checked_in_at")
+  departedAt        DateTime?       @map("departed_at")
+  guestName         String?         @map("guest_name")
+  guestContact      String?         @map("guest_contact")
+  internalNotes     String?         @map("internal_notes")
+  reminderSentAt    DateTime?       @map("reminder_sent_at")
+  orders            Order[]
+  invoices          Invoice[]
+  site              Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items             InventoryItem[] @relation("InventoryItemToReservation")
 }
 
 model Product {
@@ -335,6 +343,9 @@ model Product {
   active      Boolean  @default(true)
   imageHeight Int?     @map("image_height")
   imageWidth  Int?     @map("image_width")
+  category    String?  @default("food")
+  soldOut     Boolean  @default(false) @map("sold_out")
+  prepTime    Int?     @map("prep_time")
   site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 }
 
@@ -353,6 +364,11 @@ model Order {
   userId        String         @map("user_id")
   reservationId String?        @map("reservation_id")
   seatId        String?        @map("seat_id")
+  notes         String?
+  rejectReason  String?        @map("reject_reason")
+  acceptedAt    DateTime?      @map("accepted_at")
+  readyAt       DateTime?      @map("ready_at")
+  deliveredAt   DateTime?      @map("delivered_at")
   invoices      Invoice[]
   reservation   Reservation?   @relation(fields: [reservationId], references: [id])
   seat          InventoryItem? @relation(fields: [seatId], references: [id])
@@ -372,6 +388,8 @@ model OrderItem {
   price      Float
   tax        Float
   totalPrice Float
+  notes      String?
+  category   String?
   order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 

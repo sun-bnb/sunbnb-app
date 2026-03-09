@@ -36,7 +36,23 @@
 
 ---
 
-## Code-Level Improvements (Non-Blocking)
+## Cron & Reservation Emails
+
+### 6. `CRON_SECRET` — Protect Reminder Cron Endpoint
+
+- **App(s):** user
+- **Urgency: High — set before production launch.**
+  The `/api/cron/send-reminders` endpoint sends reminder emails for today's reservations. Without `CRON_SECRET`, the endpoint is unprotected and anyone who discovers the URL can trigger mass emails.
+- **How to complete:**
+  1. Generate a strong secret: `openssl rand -base64 32`
+  2. In Vercel → user app → Settings → Environment Variables, add `CRON_SECRET` for production.
+  3. Vercel Cron automatically sends this as `Authorization: Bearer <CRON_SECRET>` when configured in the same project.
+
+### 7. Cron Schedule Timezone
+
+- **File:** `apps/user/vercel.json`
+- **Urgency: Low — adjust when you know your primary market.**
+  The cron is set to `0 7 * * *` (7:00 UTC). In Spain/Mediterranean (CEST, UTC+2), this fires at 9:00 AM local time. Verify this is the desired reminder time for your target market, and adjust the hour if needed. Vercel Cron schedules are always in UTC.
 
 ### 4. OAuth Account Linking — Password Verification on First Link
 
