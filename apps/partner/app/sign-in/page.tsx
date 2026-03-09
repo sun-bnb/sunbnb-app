@@ -63,7 +63,9 @@ function PartnerBrandingPanel() {
 function SignInContent() {
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
-  const errorParam = searchParams.get('error')
+  // NextAuth v5 puts custom error codes in ?code=, default is 'credentials'
+  const codeParam = searchParams.get('code')
+  const errorParam = codeParam && codeParam !== 'credentials' ? codeParam : searchParams.get('error')
 
   const handleCredentialsSignIn = async (email: string, password: string) => {
     await signIn('credentials', { email, password, callbackUrl, redirect: true })

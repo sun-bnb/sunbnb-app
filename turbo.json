@@ -22,7 +22,8 @@
     "BLOB_READ_WRITE_TOKEN",
     "NEXT_PUBLIC_DEMO_MODE",
     "VERCEL_ENV",
-    "NEXT_PUBLIC_APP_ENV"
+    "NEXT_PUBLIC_APP_ENV",
+    "RESEND_API_KEY"
   ],
   "tasks": {
     "build": {

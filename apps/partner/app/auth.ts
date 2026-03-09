@@ -1,4 +1,4 @@
-import NextAuth, { NextAuthResult } from 'next-auth'
+import NextAuth, { NextAuthResult, CredentialsSignin } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
 import FacebookProvider from 'next-auth/providers/facebook'
 import CredentialsProvider from 'next-auth/providers/credentials'
@@ -41,7 +41,13 @@ const nextAuthResult: NextAuthResult = NextAuth({
           loginError?: string
         }
         const { email, password } = credentials
-        return await validateOrCreateUser(email, password, credentials)
+        const user = await validateOrCreateUser(email, password, credentials)
+        if (!user) {
+          const error = new CredentialsSignin()
+          error.code = credentials.loginError || 'CredentialsSignin'
+          throw error
+        }
+        return user
       },
     }),
   ],
