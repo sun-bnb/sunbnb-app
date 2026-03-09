@@ -121,7 +121,7 @@ export default function SiteView({ site, apiKey, stripePublicKey, brand }: { sit
         <div className="relative overflow-hidden lg:rounded-xl" onClick={() => {
           dispatch(setValue({ focused: false }))
         }}>
-          <div className={`w-full ${brand ? '' : 'border-t border-cream'}`}>
+          <div className={`w-full leading-[0] ${brand ? '' : 'border-t border-cream'}`}>
             {
               (site.image && site.imageWidth && site.imageHeight) &&
                 <Image width={site.imageWidth} height={site.imageHeight} alt={site.description || ''} className="block w-full h-auto lg:rounded-xl" src={site.image} />
@@ -156,7 +156,7 @@ export default function SiteView({ site, apiKey, stripePublicKey, brand }: { sit
             </>
           )}
         </div>
-        <div className={brand ? 'px-3 -mt-px' : 'py-3 px-3'}>
+        <div className={brand ? 'px-3' : 'py-3 px-3'}>
           <div className={`flex justify-between items-center ${brand ? 'bg-black/30 -mx-3 px-3 py-2' : ''}`}>
             <div className="flex items-center gap-3 text-sm">
               <div>

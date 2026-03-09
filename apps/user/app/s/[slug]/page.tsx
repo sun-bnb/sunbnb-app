@@ -1,5 +1,6 @@
 import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
+import { Metadata } from 'next'
 import BrandedSiteView from './view'
 
 const { STRIPE_PUBLIC_KEY } = process.env
@@ -30,6 +31,33 @@ async function getSiteBySlug(slug: string, userId?: string) {
   })
 
   return site
+}
+
+export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+  const site = await prisma.site.findFirst({
+    where: { slug: params.slug },
+    include: { brand: true },
+  })
+
+  const title = site?.brand?.brandName || site?.name || 'Book'
+  const description = site?.brand?.tagline || site?.description || ''
+  const image = site?.image || undefined
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      ...(image && { images: [{ url: image }] }),
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      ...(image && { images: [image] }),
+    },
+  }
 }
 
 export default async function BrandedSitePage({ params }: { params: { slug: string } }) {
