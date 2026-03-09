@@ -1,11 +1,13 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import logger from '@/utils/logger'
 
 import LaunchIcon from '@mui/icons-material/Launch'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
 import CircularProgress from '@mui/material/CircularProgress'
 import { useTranslations } from 'next-intl'
+import { useSession } from 'next-auth/react'
 import { Reservation } from '@/app/sites/types'
 
 const STATUS_CONFIG: {
@@ -36,6 +38,22 @@ export default function ReservationConfirmationView({
 
   const t = useTranslations('Reservation')
   const ts = useTranslations('Reservations')
+  const { data: session } = useSession()
+
+  // Read anonId from localStorage for anonymous users (pass/receipt link auth)
+  const [anonId, setAnonId] = useState<string | null>(null)
+  useEffect(() => {
+    if (!session?.user?.id) {
+      const stored = localStorage.getItem('sunbnb-anonId')
+      setAnonId(stored)
+    }
+  }, [session?.user?.id])
+
+  /** Build a pass/receipt URL with anonId for anonymous users */
+  const authUrl = (path: string) => {
+    if (session?.user?.id) return path
+    return anonId ? `${path}?anonId=${anonId}` : path
+  }
 
   logger.debug('Reservation confirmation', reservation)
 
@@ -114,7 +132,7 @@ export default function ReservationConfirmationView({
             </div>
             <div className="px-6 pt-4 pb-5 flex flex-col items-center">
               <button
-                onClick={() => window.open(`/reservations/${reservation.id}/pass`, '_blank')}
+                onClick={() => window.open(authUrl(`/reservations/${reservation.id}/pass`), '_blank')}
                 className="text-brand-gold active:scale-95 transition-transform"
               >
                 <QrCode2Icon sx={{ fontSize: 72 }} />
@@ -127,7 +145,7 @@ export default function ReservationConfirmationView({
         {/* ── Receipt footer ── */}
         {showReceipt && (
           <button
-            onClick={() => window.open(`/reservations/${reservation.id}/receipt`, '_blank')}
+            onClick={() => window.open(authUrl(`/reservations/${reservation.id}/receipt`), '_blank')}
             className="w-full border-t border-neutral-100 px-6 py-3 flex items-center justify-center gap-1.5
                        text-xs font-medium text-neutral-500 hover:bg-neutral-50 active:bg-neutral-100 transition-colors"
           >

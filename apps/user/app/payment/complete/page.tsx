@@ -1,4 +1,5 @@
 import prisma from '@repo/data/PrismaCient'
+import { auth } from '@/app/auth'
 import CompletePage from './CompletePage'
 
 interface SearchParams {
@@ -25,9 +26,30 @@ async function getReservationById(id: string) {
   })
 }
 
+/**
+ * Verify that the requesting user owns the reservation.
+ * Supports both authenticated (session) and anonymous (anonId) users.
+ */
+function verifyOwner(
+  reservation: { userId: string; anonId?: string | null },
+  sessionUserId: string | undefined,
+  anonId: string | undefined
+): boolean {
+  if (sessionUserId) {
+    return reservation.userId === sessionUserId
+  }
+  if (anonId && reservation.anonId) {
+    return reservation.anonId === anonId
+  }
+  return false
+}
+
 export default async function Complete({ searchParams }: SearchParams) {
 
-  const { payment_intent, payment_intent_client_secret, reservationId } = searchParams
+  const { payment_intent, payment_intent_client_secret, reservationId, anonId } = searchParams
+
+  const session = await auth()
+  const sessionUserId = session?.user?.id
 
   // Mollie redirect: look up by reservationId
   if (reservationId) {
@@ -36,6 +58,11 @@ export default async function Complete({ searchParams }: SearchParams) {
       console.error('[Complete] Reservation not found for id:', reservationId)
       return <div>Reservation not found</div>
     }
+
+    if (!verifyOwner(reservation, sessionUserId, anonId)) {
+      return <div>Not authorized</div>
+    }
+
     return <CompletePage reservation={reservation} />
   }
 
@@ -50,6 +77,13 @@ export default async function Complete({ searchParams }: SearchParams) {
   if (!reservation) {
     console.error('Reservation not found')
     return <div>Reservation not found</div>
+  }
+
+  // For Stripe redirects, the payment_intent_client_secret serves as proof
+  // of ownership (only the payment initiator receives it from Stripe).
+  // Additionally verify session/anonId ownership when available.
+  if (sessionUserId && reservation.userId !== sessionUserId) {
+    return <div>Not authorized</div>
   }
 
   return (

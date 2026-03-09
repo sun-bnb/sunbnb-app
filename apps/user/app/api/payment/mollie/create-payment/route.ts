@@ -44,6 +44,18 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'redirectUrl is required' }, { status: 400 })
   }
 
+  // Validate redirectUrl — must be on our own domain to prevent open redirect
+  const allowedOrigin = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || ''
+  try {
+    const parsed = new URL(redirectUrl)
+    const expected = new URL(allowedOrigin)
+    if (parsed.origin !== expected.origin) {
+      return Response.json({ error: 'Invalid redirectUrl' }, { status: 400 })
+    }
+  } catch {
+    return Response.json({ error: 'Invalid redirectUrl' }, { status: 400 })
+  }
+
   // Authenticate: session user or anonymous user
   const identity = await getRequestIdentity(request, bodyAnonId)
   if (!identity) {

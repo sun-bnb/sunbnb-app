@@ -22,7 +22,8 @@ async function getSite(id: string) {
 
 export default async function SitePos({ params }: { params: { id: string }}) {
 
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY
+    || process.env.GOOGLE_MAPS_API_KEY as string
 
   const site = await getSite(params.id)
 

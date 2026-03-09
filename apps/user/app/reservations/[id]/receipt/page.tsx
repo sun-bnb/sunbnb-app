@@ -1,4 +1,5 @@
 import prisma from '@repo/data/PrismaCient'
+import { auth } from '@/app/auth'
 import ReceiptPage, { ReceiptProps, InvoiceSection } from './ReceiptPage'
 
 async function getReservation(id: string) {
@@ -95,7 +96,10 @@ function buildSection(invoice: {
 }
 
 export default async function Receipt({ params, searchParams }: { params: { id: string }, searchParams: { [key: string]: string } }) {
-  const { orderId } = searchParams
+  const { orderId, anonId: anonIdParam } = searchParams
+
+  // ── Verify ownership ─────────────────────────────────────────────────────
+  const session = await auth()
 
   // ── Order receipt ──────────────────────────────────────────────────────────
   if (orderId) {
@@ -103,6 +107,17 @@ export default async function Receipt({ params, searchParams }: { params: { id: 
 
     if (!order) {
       return <div>Order not found</div>
+    }
+
+    // Ownership check
+    if (session?.user?.id) {
+      if (order.userId !== session.user.id) {
+        return <div>Not authorized</div>
+      }
+    } else {
+      if (!anonIdParam || order.anonId !== anonIdParam) {
+        return <div>Not authorized</div>
+      }
     }
 
     const partnerInvoice = order.invoices.find((i) => i.issuerType === 'PARTNER')
@@ -151,6 +166,17 @@ export default async function Receipt({ params, searchParams }: { params: { id: 
   if (!reservation) {
     console.error('Reservation not found')
     return <div>Reservation not found</div>
+  }
+
+  // Ownership check
+  if (session?.user?.id) {
+    if (reservation.userId !== session.user.id) {
+      return <div>Not authorized</div>
+    }
+  } else {
+    if (!anonIdParam || reservation.anonId !== anonIdParam) {
+      return <div>Not authorized</div>
+    }
   }
 
   const partnerInvoice = reservation.invoices.find((i) => i.issuerType === 'PARTNER')

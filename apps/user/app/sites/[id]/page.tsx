@@ -70,7 +70,8 @@ export default async function Site({ params }: { params: { id: string }}) {
   
   const session = await auth()
 
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY
+    || process.env.GOOGLE_MAPS_API_KEY as string
 
   const appUrl = process.env.APP_URL as string
 

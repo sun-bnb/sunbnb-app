@@ -118,7 +118,12 @@ export function DemoOrderPayment({
     }
 
     // Demo: process payment immediately on server, get back paymentRef
-    initiateDemoOrderPayment(order.id).then((result) => {
+    // Include anonId for anonymous user ownership verification
+    const anonId = typeof window !== 'undefined'
+      ? localStorage.getItem('sunbnb-anonId') ?? undefined
+      : undefined
+
+    initiateDemoOrderPayment(order.id, anonId).then((result) => {
       if (result.status === 'ok' && result.paymentRef) {
         setPaymentRef(result.paymentRef)
       }

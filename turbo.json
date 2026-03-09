@@ -23,7 +23,8 @@
     "NEXT_PUBLIC_DEMO_MODE",
     "VERCEL_ENV",
     "NEXT_PUBLIC_APP_ENV",
-    "RESEND_API_KEY"
+    "RESEND_API_KEY",
+    "NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY"
   ],
   "tasks": {
     "build": {

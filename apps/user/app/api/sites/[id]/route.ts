@@ -1,15 +1,18 @@
+/**
+ * GET /api/sites/[id]
+ *
+ * Returns site details with inventory items. Reservations are only included
+ * for the authenticated user to prevent leaking other users' booking data.
+ */
 
 import prisma from '@repo/data/PrismaCient'
-import { Prisma } from '@prisma/client'
 import { NextRequest } from 'next/server'
 import { auth } from '@/app/auth'
-import { getAvailability } from '@/service/availabilityService'
-import { format } from 'path'
 
 export async function GET(request: NextRequest, { params } : { params: { id: string } }) {
 
   const session = await auth()
-  // if (!session?.user) return Response.json({ status: 'error', errors: [ 'Not authenticated' ] })
+  const userId = session?.user?.id
 
   const site = await prisma.site.findUnique({ 
     where: { id: params.id },
@@ -20,9 +23,13 @@ export async function GET(request: NextRequest, { params } : { params: { id: str
           status: 'active'
         },
         include: {
-          reservations: {
-            orderBy: { from: 'desc' }
-          },
+          // Only include reservations for the authenticated user
+          ...(userId && {
+            reservations: {
+              where: { userId },
+              orderBy: { from: 'desc' as const }
+            }
+          }),
           pair: true,
           pairedBy: true
         }

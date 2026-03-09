@@ -27,7 +27,7 @@ const DEMO_MODE_ENABLED = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
  * Only available when NEXT_PUBLIC_DEMO_MODE is enabled.
  * Verifies ownership via session userId or anonId.
  */
-export async function initiateDemoReservationPayment(reservationId: string) {
+export async function initiateDemoReservationPayment(reservationId: string, anonId?: string) {
   if (!DEMO_MODE_ENABLED) {
     return { status: 'error', errors: ['Demo mode is not enabled'] }
   }
@@ -40,17 +40,18 @@ export async function initiateDemoReservationPayment(reservationId: string) {
     return { status: 'error', errors: ['Reservation not found'] }
   }
 
-  // Verify ownership
+  // Verify ownership: session user or matching anonId
   const session = await auth()
-  const isOwner =
-    (session?.user?.id && session.user.id === reservation.userId) ||
-    false // anonId verification happens via the client providing the correct reservationId
 
-  if (!session?.user?.id && !reservation.anonId) {
-    return { status: 'error', errors: ['Not authorized'] }
-  }
-
-  if (session?.user?.id && !isOwner) {
+  if (session?.user?.id) {
+    if (session.user.id !== reservation.userId) {
+      return { status: 'error', errors: ['Not authorized'] }
+    }
+  } else if (reservation.anonId) {
+    if (!anonId || anonId !== reservation.anonId) {
+      return { status: 'error', errors: ['Not authorized'] }
+    }
+  } else {
     return { status: 'error', errors: ['Not authorized'] }
   }
 
@@ -80,7 +81,7 @@ export async function initiateDemoReservationPayment(reservationId: string) {
  * Only available when NEXT_PUBLIC_DEMO_MODE is enabled.
  * Verifies ownership via session userId or anonId.
  */
-export async function initiateDemoOrderPayment(orderId: string) {
+export async function initiateDemoOrderPayment(orderId: string, anonId?: string) {
   if (!DEMO_MODE_ENABLED) {
     return { status: 'error', errors: ['Demo mode is not enabled'] }
   }
@@ -93,16 +94,18 @@ export async function initiateDemoOrderPayment(orderId: string) {
     return { status: 'error', errors: ['Order not found'] }
   }
 
-  // Verify ownership
+  // Verify ownership: session user or matching anonId
   const session = await auth()
-  const isOwner =
-    (session?.user?.id && session.user.id === order.userId) || false
 
-  if (!session?.user?.id && !order.anonId) {
-    return { status: 'error', errors: ['Not authorized'] }
-  }
-
-  if (session?.user?.id && !isOwner) {
+  if (session?.user?.id) {
+    if (session.user.id !== order.userId) {
+      return { status: 'error', errors: ['Not authorized'] }
+    }
+  } else if (order.anonId) {
+    if (!anonId || anonId !== order.anonId) {
+      return { status: 'error', errors: ['Not authorized'] }
+    }
+  } else {
     return { status: 'error', errors: ['Not authorized'] }
   }
 

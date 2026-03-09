@@ -67,7 +67,8 @@ export default async function BrandedSitePage({ params }: { params: { slug: stri
   const site = await getSiteBySlug(params.slug, session?.user?.id)
   if (!site) return <div className="flex items-center justify-center min-h-screen text-gray-500">Site not found</div>
 
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY
+    || process.env.GOOGLE_MAPS_API_KEY as string
 
   return (
     <BrandedSiteView

@@ -82,7 +82,8 @@ async function getServiceFee(siteId: string, userId: string): Promise<{
 
 export default async function ReservationPage({ params, searchParams }: { params: { id: string }, searchParams: { [key: string]: string } }) {
 
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY
+    || process.env.GOOGLE_MAPS_API_KEY as string
 
   const { payment_intent, payment_intent_client_secret, redirect_status, anonId, terms, orderId } = searchParams
   

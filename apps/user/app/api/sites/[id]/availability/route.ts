@@ -1,18 +1,35 @@
 import { NextRequest } from 'next/server'
-import { auth } from '@/app/auth'
 import { getAvailability } from '@/service/availabilityService'
+
+/** Max date range allowed (90 days) to prevent expensive queries. */
+const MAX_RANGE_MS = 90 * 24 * 60 * 60 * 1000
 
 export async function GET(request: NextRequest, { params } : { params: { id: string } }) {
 
-  const session = await auth()
-  // if (!session?.user) return Response.json({ status: 'error', errors: [ 'Not authenticated' ] })
-  
+  // Intentionally public — anonymous users need availability data before booking
+
   const searchParams = request.nextUrl.searchParams
-  const fromParam = searchParams.get('from') as string
-  const toParam = searchParams.get('to') as string
-  
+  const fromParam = searchParams.get('from')
+  const toParam = searchParams.get('to')
+
+  if (!fromParam || !toParam) {
+    return Response.json({ error: 'from and to query parameters are required' }, { status: 400 })
+  }
+
   const from = new Date(fromParam)
   const to = new Date(toParam)
+
+  if (isNaN(from.getTime()) || isNaN(to.getTime())) {
+    return Response.json({ error: 'Invalid date format' }, { status: 400 })
+  }
+
+  if (to <= from) {
+    return Response.json({ error: 'to must be after from' }, { status: 400 })
+  }
+
+  if (to.getTime() - from.getTime() > MAX_RANGE_MS) {
+    return Response.json({ error: 'Date range too large (max 90 days)' }, { status: 400 })
+  }
 
   const availability = await getAvailability(params.id, from, to)
   const availabilityResponse = {

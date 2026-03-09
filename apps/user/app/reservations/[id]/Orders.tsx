@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSession } from 'next-auth/react'
 import { Invoice } from '@/app/types/types'
 
 const statusStyle: Record<string, string> = {
@@ -27,8 +28,23 @@ interface OrderData {
 }
 
 export default function Orders({ orders, reservationId }: { orders: OrderData[], reservationId: string }) {
+  const { data: session } = useSession()
+  const [anonId, setAnonId] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selected = orders.find(o => o.id === selectedId) ?? null
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      const stored = localStorage.getItem('sunbnb-anonId')
+      setAnonId(stored)
+    }
+  }, [session?.user?.id])
+
+  /** Append anonId for anonymous users */
+  const receiptUrl = (base: string) => {
+    if (session?.user?.id) return base
+    return anonId ? `${base}&anonId=${anonId}` : base
+  }
 
   /* ── Detail view ── */
 
@@ -128,7 +144,7 @@ export default function Orders({ orders, reservationId }: { orders: OrderData[],
         {/* Receipt link */}
         {hasInvoice && (
           <a
-            href={`/reservations/${reservationId}/receipt?orderId=${selected.id}`}
+            href={receiptUrl(`/reservations/${reservationId}/receipt?orderId=${selected.id}`)}
             target="_blank"
             rel="noopener noreferrer"
             className="mt-3 flex items-center justify-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl

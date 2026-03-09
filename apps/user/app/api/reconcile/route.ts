@@ -39,13 +39,16 @@ async function getStripePaymentStatus(paymentRef: string): Promise<string> {
 // ─── Route Handler ──────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
-  // Auth: check secret (supports both cron and manual calls)
+  // Auth: always require RECONCILIATION_SECRET — never allow unauthenticated access
   const { RECONCILIATION_SECRET } = process.env
-  if (RECONCILIATION_SECRET) {
-    const authHeader = request.headers.get('authorization')
-    if (authHeader !== `Bearer ${RECONCILIATION_SECRET}`) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+  if (!RECONCILIATION_SECRET) {
+    console.error('[Reconcile] RECONCILIATION_SECRET is not configured')
+    return Response.json({ error: 'Reconciliation not configured' }, { status: 503 })
+  }
+
+  const authHeader = request.headers.get('authorization')
+  if (authHeader !== `Bearer ${RECONCILIATION_SECRET}`) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const cutoff = new Date(Date.now() - STALE_THRESHOLD_MINUTES * 60 * 1000)

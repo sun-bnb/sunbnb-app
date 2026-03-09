@@ -118,7 +118,12 @@ export function DemoPayment({
       return
     }
 
-    initiateDemoReservationPayment(reservation.id).then((result) => {
+    // Include anonId for anonymous user ownership verification
+    const anonId = typeof window !== 'undefined'
+      ? localStorage.getItem('sunbnb-anonId') ?? undefined
+      : undefined
+
+    initiateDemoReservationPayment(reservation.id, anonId).then((result) => {
       if (result.status === 'ok' && result.paymentRef) {
         setCurrentReservation({
           ...reservation,

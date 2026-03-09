@@ -18,7 +18,8 @@ const nextConfig = {
     APP_URL: process.env.APP_URL,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_DEMO_MODE: process.env.NEXT_PUBLIC_DEMO_MODE,
-    NEXT_PUBLIC_APP_ENV: process.env.VERCEL_ENV || 'development'
+    NEXT_PUBLIC_APP_ENV: process.env.VERCEL_ENV || 'development',
+    NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY: process.env.NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY,
   },
   async headers() {
     return [

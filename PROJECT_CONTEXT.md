@@ -16,7 +16,7 @@
 | Database | PostgreSQL + PostGIS (spatial queries) |
 | ORM | Prisma 7 with `@prisma/adapter-pg` driver adapter |
 | Auth | NextAuth v5 (beta) — JWT strategy |
-| Payments | Stripe (+ demo mode) |
+| Payments | Stripe + Mollie for Platforms (+ demo mode) |
 | State | Redux Toolkit + RTK Query |
 | Styling | Tailwind CSS 3 + MUI 5 (progressive migration to pure Tailwind) |
 | i18n | next-intl (EN, ES, FI) |
@@ -35,7 +35,8 @@ sunbnb-app/                    # Root — Turborepo
 │   ├── admin/                 # Platform admin (port 3003)
 │   └── docs/                  # Docs (unused)
 ├── packages/
-│   ├── data/                  # @repo/data — Prisma client, schema, migrations
+│   ├── data/                  # @repo/data — Prisma client, schema, migrations, payment, auth
+│   ├── docs/                  # Security follow-up TODO
 │   ├── ui/                    # @repo/ui — Shared UI components (Button, TextField, Card, Code)
 │   ├── eslint-config/         # @repo/eslint-config
 │   └── typescript-config/     # @repo/typescript-config
@@ -55,10 +56,17 @@ Both apps use custom HTTPS servers with local mkcert certificates (`./certificat
 
 - `POSTGRES_URL` — Database connection string
 - `STRIPE_SECRET_KEY`, `STRIPE_PUBLIC_KEY` — Stripe credentials
-- `GOOGLE_MAPS_API_KEY` — Maps + Places
+- `STRIPE_WEBHOOK_SECRET` — Stripe webhook signature verification
+- `MOLLIE_CLIENT_ID`, `MOLLIE_CLIENT_SECRET`, `MOLLIE_REDIRECT_URI` — Mollie OAuth (partner app)
+- `GOOGLE_MAPS_API_KEY` — Server-side Maps + Places API proxy
+- `NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY` — Client-side Maps (HTTP-referrer-restricted; falls back to `GOOGLE_MAPS_API_KEY`)
 - `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` — NextAuth
 - `AUTH_FACEBOOK_ID`, `AUTH_FACEBOOK_SECRET` — Facebook OAuth (user app only)
 - `BLOB_READ_WRITE_TOKEN` — Vercel Blob storage
+- `RECONCILIATION_SECRET` — Protects `/api/reconcile` endpoint (required; 503 if unset)
+- `ALLOWED_ORIGINS` — Comma-separated origins for password reset email links
+- `RESEND_API_KEY` — Resend email service (password reset emails)
+- `NEXT_PUBLIC_DEMO_MODE` — Enables demo payment mode (server-controlled)
 
 ---
 
@@ -157,6 +165,21 @@ Product codes used: `"sunbed-rental"`, `"food-and-beverage"`, `"sunbnb-service-f
    - Update reservation status to 'complete', attach invoiceId
 9. Client detects 'paid'/'complete' → redirect to /reservations/[id]
 ```
+
+### Mollie Flow (Reservations & Orders)
+
+```
+1. POST /api/payment/mollie/create-payment (or /api/order-payment/mollie/create-payment)
+2. Payment created on PARTNER's Mollie account (OAuth access token)
+3. Platform commission collected as applicationFee (Mollie routes to platform)
+4. User redirected to Mollie checkout → redirect back to /payment/complete
+5. Mollie sends POST /api/webhooks/mollie with payment ID (form-encoded)
+6. Webhook fetches payment from partner's account, processes based on status
+7. Polling routes serve as fallback confirmation
+```
+
+- **redirectUrl validation**: Mollie payment creation routes validate `redirectUrl` origin against `APP_URL`/`NEXT_PUBLIC_APP_URL` to prevent open redirect.
+- **Partner tokens**: Stored as `mollieAccessToken` on PartnerAccount, refreshed via OAuth.
 
 ### Stripe Flow (Orders / Food & Beverage)
 
@@ -305,19 +328,24 @@ The inventory editor (`/sites/[id]/inventory`) is the most complex component:
 | Route | Method | Purpose |
 |---|---|---|
 | `/api/auth/[...nextauth]` | GET, POST | NextAuth handlers |
+| `/api/auth/forgot-password` | POST | Request password reset email (IP rate-limited) |
+| `/api/auth/reset-password` | POST | Reset password with token (IP rate-limited, token hashed) |
 | `/api/sites` | GET | Search sites by coordinates (PostGIS distance query) |
-| `/api/sites/[id]` | GET | Single site with inventory + working hours |
-| `/api/sites/[id]/availability` | GET | Check item availability for date range |
-| `/api/reservations/[id]` | GET | Fetch reservation + verify Stripe payment + create invoice |
+| `/api/sites/[id]` | GET | Single site with inventory + working hours (auth-protected) |
+| `/api/sites/[id]/availability` | GET | Check item availability for date range (public, date-validated) |
+| `/api/reservations/[id]` | GET | Fetch reservation + verify payment + create invoice (ownership-verified) |
 | `/api/reservations/[id]/find` | GET | Find reservation by paymentRef |
-| `/api/orders/[id]` | GET | Fetch order + verify Stripe payment + create invoice |
+| `/api/orders/[id]` | GET | Fetch order + verify payment + create invoice (ownership-verified) |
 | `/api/orders/[id]/find` | GET | Find order by paymentRef |
-| `/api/payment/stripe/payment-intent` | POST | Create Stripe PI for reservation (with UUID validation) |
-| `/api/order-payment/stripe/payment-intent` | POST | Create Stripe PI for order (with UUID validation) |
-| `/api/webhooks/stripe` | POST | Stripe webhook — payment succeeded/failed/refunded |
-| `/api/reconcile` | POST | Reconcile stuck payments (cron or manual, secret-protected) |
-| `/api/places/autocomplete` | GET | Google Places proxy |
-| `/api/places/details` | GET | Google Places details proxy |
+| `/api/payment/stripe/payment-intent` | POST | Create Stripe PI for reservation (entity ID validated) |
+| `/api/payment/mollie/create-payment` | POST | Create Mollie payment for reservation (redirectUrl origin-validated) |
+| `/api/order-payment/stripe/payment-intent` | POST | Create Stripe PI for order (entity ID validated) |
+| `/api/order-payment/mollie/create-payment` | POST | Create Mollie payment for order (redirectUrl origin-validated) |
+| `/api/webhooks/stripe` | POST | Stripe webhook — signature-verified, payment succeeded/failed/refunded |
+| `/api/webhooks/mollie` | POST | Mollie webhook — paymentId format-validated, status-driven processing |
+| `/api/reconcile` | POST | Reconcile stuck payments (RECONCILIATION_SECRET required, 503 if unset) |
+| `/api/places/autocomplete` | GET | Google Places proxy (input length-limited) |
+| `/api/places/details` | GET | Google Places proxy (placeId regex-validated) |
 
 ### Key Server Actions (User)
 
@@ -334,17 +362,17 @@ The inventory editor (`/sites/[id]/inventory`) is the most complex component:
 - `getOrders(reservationId)` — orders with items + invoices (with auth)
 
 **`apps/user/app/payment/actions.ts`**:
-- `initiateDemoReservationPayment(id)` — demo payment for reservation (ownership-verified, server-controlled)
-- `initiateDemoOrderPayment(id)` — demo payment for order
+- `initiateDemoReservationPayment(id, anonId?)` — demo payment for reservation (ownership-verified via session or anonId)
+- `initiateDemoOrderPayment(id, anonId?)` — demo payment for order (ownership-verified via session or anonId)
 - `getReservationById(id)` — fetch reservation (with auth)
 - `getReservationByPaymentRef(ref)` — lookup by Stripe PI (with auth)
 - `getOrderByPaymentRef(ref)` — lookup order by Stripe PI (with auth)
 
 ### Services
 
-**`siteService.ts`**: PostGIS spatial queries — `findSitesByCoords()` uses `ST_DistanceSphere`, `ST_MakePoint`, `ST_Centroid`, `ST_Collect`, `ST_Extent` for site discovery with distance calculation and bounding box.
+**`siteService.ts`**: PostGIS spatial queries — `searchSites(lat?, lng?)` uses `ST_DistanceSphere`, `ST_MakePoint`, `ST_Centroid`, `ST_Collect`, `ST_Extent` for site discovery with distance calculation and bounding box. Validates lat/lng are finite numbers in range before querying.
 
-**`availabilityService.ts`**: Per-item availability check — for each active inventory item, queries overlapping reservations (statuses: pending, processing, paid, complete, paid-in-cash) using dayjs date range comparison.
+**`availabilityService.ts`**: Per-item availability check — for each active inventory item, queries overlapping reservations (statuses: pending, processing, paid, complete, paid-in-cash) using dayjs date range comparison. Also used server-side during reservation creation to prevent double-booking.
 
 ### State Management (User)
 
@@ -398,6 +426,57 @@ The inventory editor (`/sites/[id]/inventory`) is the most complex component:
 
 ---
 
+## Security Hardening
+
+Comprehensive security audit and hardening completed across all apps (March 2026).
+
+### Partner App (5 phases)
+- All server actions protected by `auth()` + `authorizeSite()` ownership checks
+- Site mutations require sudo or owner verification
+- Input validation on all form submissions
+- Security token management with proper scoping
+
+### Shared Packages (9 fixes)
+- SHA-256 token hashing for password reset tokens (never store plaintext)
+- `ALLOWED_ORIGINS` validation on password reset email links
+- IP-based rate limiting on reset-password endpoint
+- Prisma singleton pattern to prevent connection pool exhaustion
+- Secure cookie flags in production
+- Password minimum length enforcement (6 chars)
+- Invoice uniqueness constraints + `FOR UPDATE` locking
+
+### User App (4 phases, 15 findings)
+
+**Phase 1 — Critical Auth:**
+- `/api/sites/[id]` — re-enabled auth, scoped reservations to authenticated user
+- `/api/places/autocomplete` — input validation + 200-char length limit
+- `/api/places/details` — placeId regex validation
+- `/api/reconcile` — `RECONCILIATION_SECRET` now mandatory (503 if unset)
+
+**Phase 2 — IDOR & Access Control:**
+- `/reservations/[id]/pass` — auth + ownership check (session or anonId)
+- `/reservations/[id]/receipt` — auth + ownership for both reservation/order paths
+- `/payment/complete` — ownership verification for Mollie/Stripe redirects
+- Mollie payment creation — redirectUrl origin validation against `APP_URL`
+
+**Phase 3 — Input Validation & Data Integrity:**
+- Client Maps API key separation (`NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY`)
+- `searchSites()` — lat/lng numeric validation + range check
+- Account form — trim + length limits + email format validation
+- Reservation creation — server-side availability check before insert
+
+**Phase 4 — Edge Cases & Defence-in-Depth:**
+- Availability endpoint — date validation (required, parseable, ordered, max 90-day range)
+- Forgot-password — IP-based rate limiting (5 attempts / 15 min)
+- Demo payment actions — anonId parameter + verification for anonymous users
+- Mollie webhook — paymentId format validation (`/^tr_[A-Za-z0-9]{1,50}$/`)
+
+### Follow-up Items
+
+See `packages/docs/TODO.md` for remaining environment variable setup and future improvement tasks.
+
+---
+
 ## Known Quirks
 
 - `@repo/data` package exports both Prisma client AND duplicated UI components (TextField, Button, etc.) — same components also exist in `@repo/ui`
@@ -419,12 +498,29 @@ The inventory editor (`/sites/[id]/inventory`) is the most complex component:
 - `getStripeClient()` — creates Stripe instance (throws if STRIPE_SECRET_KEY missing)
 - `getStripePaymentStatus(paymentRef)` — retrieves PI status from Stripe
 - `isDemoPayment(paymentRef)` — checks `pi_demo_` prefix
-- `isValidUUID(value)` — validates UUID v4 format
+- `isValidEntityId(value)` — validates CUID or UUID v4 format
+
+### Mollie Helpers (`apps/user/app/api/_lib/mollie.ts`)
+- `getMollieClientForPartner(accessToken)` — creates Mollie client with partner's OAuth token
+- `getValidMollieToken(partnerAccount)` — returns/refreshes Mollie access token
+
+### Payment Provider Abstraction (`apps/user/app/api/_lib/payment-provider.ts`)
+- `getPaymentStatus(paymentRef, entity)` — resolves payment status from Stripe or Mollie
+- `isPaymentSucceeded(status)` / `isPaymentFailed(status)` — provider-agnostic status checks
+- `issueRefund(paymentRef)` — issues refund via correct provider (Stripe or Mollie)
+
+### Password Reset (`packages/data/src/password-reset.ts`)
+- `requestPasswordReset(email, origin)` — generates token (SHA-256 hashed in DB), validates origin against `ALLOWED_ORIGINS`, per-email rate limit, sends email via Resend
+- `resetPassword(token, password)` — verifies hashed token, enforces expiry, updates password (bcrypt), invalidates token
+
+### Rate Limiter (`packages/data/src/rate-limit.ts`)
+- `rateLimit(key, { maxAttempts, windowMs })` — in-memory sliding-window rate limiter with periodic cleanup. Used by forgot-password and reset-password routes.
 
 ### Payment Service (`packages/data/src/payment.ts`)
 - `processConfirmedReservation(id)` — idempotent: creates invoice + lines for completed reservation
 - `processConfirmedOrder(id)` — idempotent: creates invoice + lines for completed order
-- `resolveServiceFee(siteId, serviceCode)` — three-tier cascade: site → partnerAccount → settings
-- `calculateOrderServiceFee(orderId)` — computes total service fee for an order
+- `loadFeeContext(siteId)` — loads site + partner account + settings for fee resolution
+- `resolveServiceFee(context, serviceCode)` — three-tier cascade: site → partnerAccount → settings
+- `calculateServiceFeeAmount(fee, price)` — applies fixed or percentage fee
 - `computeVatAndBaseAmounts(gross, vatRate)` — reverse VAT calculation with rounding
 - `round(value)` — financial rounding to 2 decimal places

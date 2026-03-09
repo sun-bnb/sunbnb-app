@@ -42,7 +42,8 @@ async function getInventoryItems(id: string) {
 
 export default async function Pos({ params }: { params: { itemId: string }}) {
 
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY
+    || process.env.GOOGLE_MAPS_API_KEY as string
 
   const items = await getInventoryItems(params.itemId)
 

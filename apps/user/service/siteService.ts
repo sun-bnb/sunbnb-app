@@ -63,6 +63,18 @@ export function parseMapData(data: { center: string; bounding_box: string }): Si
 
 export async function searchSites(lat?: string, lng?: string) {
 
+  // Validate lat/lng are finite numbers to prevent unexpected Postgres behavior
+  if (lat !== undefined && lng !== undefined) {
+    const latNum = Number(lat)
+    const lngNum = Number(lng)
+    if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) {
+      return { sites: [], geography: undefined }
+    }
+    if (latNum < -90 || latNum > 90 || lngNum < -180 || lngNum > 180) {
+      return { sites: [], geography: undefined }
+    }
+  }
+
   // Prepare partial SQL snippets for the optional distance logic
   const distanceColumn = lat && lng
   ? Prisma.sql`

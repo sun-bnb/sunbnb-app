@@ -136,6 +136,9 @@ async function handlePaymentFailed(meta: MollieMetadata): Promise<void> {
 
 // ─── Route Handler ──────────────────────────────────────────────────────────
 
+/** Mollie payment IDs: tr_ prefix followed by alphanumeric chars. */
+const MOLLIE_PAYMENT_ID_PATTERN = /^tr_[A-Za-z0-9]{1,50}$/
+
 export async function POST(request: NextRequest) {
   // Mollie sends a form-encoded body with `id=tr_...`
   const formData = await request.formData()
@@ -144,6 +147,11 @@ export async function POST(request: NextRequest) {
   if (!paymentId) {
     console.warn('[Mollie Webhook] Missing payment id in body')
     return Response.json({ error: 'Missing payment id' }, { status: 400 })
+  }
+
+  if (!MOLLIE_PAYMENT_ID_PATTERN.test(paymentId)) {
+    console.warn('[Mollie Webhook] Invalid payment id format:', paymentId)
+    return Response.json({ error: 'Invalid payment id format' }, { status: 400 })
   }
 
   console.log('[Mollie Webhook] Received webhook for payment:', paymentId)

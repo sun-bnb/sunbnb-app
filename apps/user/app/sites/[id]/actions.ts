@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import dayjs from 'dayjs'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { getAvailability } from '@/service/availabilityService'
 import { InventoryItem } from '../types'
 
 // ─── Reservations ───────────────────────────────────────────────────────────
@@ -46,6 +47,22 @@ export async function saveReservationForMultipleItems(
   const site = await prisma.site.findUnique({ where: { id: reservation.siteId } })
   if (!site) return { status: 'error', errors: ['Site not found'] }
   if (site.type !== 'unpaid' && !site.price) return { status: 'error', errors: ['Site price not set'] }
+
+  // ── Server-side availability check ─────────────────────────────────────
+  if (reservation.items?.length) {
+    const availability = await getAvailability(reservation.siteId, from, to)
+    const requestedIds = new Set(reservation.items.map(i => i.id))
+    const unavailable = availability
+      .filter(a => requestedIds.has(a.itemId) && !a.available)
+      .map(a => a.itemId)
+
+    if (unavailable.length > 0) {
+      return {
+        status: 'error',
+        errors: [`Some items are not available for the requested dates`],
+      }
+    }
+  }
 
   // Determine status server-side: unpaid sites skip payment flow
   const status = site.type === 'unpaid' ? 'complete' : 'pending'
