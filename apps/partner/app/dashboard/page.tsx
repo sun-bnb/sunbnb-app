@@ -2,6 +2,7 @@ import prisma from '@repo/data/PrismaCient'
 import DashboardView, { DashboardData } from './view'
 import { auth } from '@/app/auth'
 
+
 export interface MonthTotals {
   month: string    // e.g. "2025-01"
   revenue: number  // sum of invoice.totalAmount for that month
