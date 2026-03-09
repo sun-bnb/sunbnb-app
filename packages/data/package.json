@@ -15,7 +15,8 @@
     "./env": "./src/env.ts",
     "./business-entity": "./src/business-entity.ts",
     "./email": "./src/email.ts",
-    "./password-reset": "./src/password-reset.ts"
+    "./password-reset": "./src/password-reset.ts",
+    "./rate-limit": "./src/rate-limit.ts"
   },
   "typesVersions": {
     "*": {
@@ -51,6 +52,9 @@
       ],
       "business-entity": [
         "./src/business-entity.ts"
+      ],
+      "rate-limit": [
+        "./src/rate-limit.ts"
       ]
     }
   },

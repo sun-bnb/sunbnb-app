@@ -9,6 +9,15 @@ export async function GET(request: NextRequest, { params } : { params: { siteId:
 
   const session = await auth()
   if (!session?.user) return Response.json({ status: 'error', errors: [ 'Not authenticated' ] })
+
+  // Verify the partner owns this site
+  const site = await prisma.site.findUnique({
+    where: { id: params.siteId },
+    select: { userId: true },
+  })
+  if (!site || site.userId !== session.user.id) {
+    return Response.json({ status: 'error', errors: ['Not authorized'] }, { status: 403 })
+  }
   
   const { searchParams } = new URL(request.url)
   const dateParam = searchParams.get('date') as string
@@ -35,7 +44,7 @@ export async function GET(request: NextRequest, { params } : { params: { siteId:
         ]
       },
       include: {
-        user: true,
+        user: { select: { id: true, email: true } },
         items: true
       }
     })

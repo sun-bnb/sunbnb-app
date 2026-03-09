@@ -1,6 +1,8 @@
 'use server'
 
 import { auth } from '@/app/auth'
+import { requireSiteOwner } from '@/lib/auth-helpers'
+import { validateImageFile, isValidBgOption, isValidItemStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 import sharp from 'sharp'
 import { put } from '@vercel/blob'
@@ -11,8 +13,8 @@ type Mode = 'create' | 'rearrange'
 
 export async function syncChairsWithLayout(siteId: string, config: ChairConfig, mode: Mode) {
 
-  const session = await auth()
-  if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
+  const { session, error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
 
   const generated = generateChairs(config)
   const group = config.group
@@ -179,6 +181,19 @@ export async function getItemGroup(id: string) {
   const session = await auth()
   if (!session?.user) throw new Error('Not authenticated')
 
+  const group = await prisma.itemGroup.findUnique({
+    where: { id },
+    include: {
+      items: {
+        orderBy: { number: 'asc' },
+        select: { site: { select: { userId: true } } }
+      }
+    }
+  })
+  if (!group || !group.items[0] || group.items[0].site.userId !== session.user.id) {
+    throw new Error('Not authorized')
+  }
+
   return await prisma.itemGroup.findUnique({
     where: { id },
     include: {
@@ -195,8 +210,8 @@ export async function moveParcel(
   deltaLat: number,
   deltaLng: number
 ) {
-  const session = await auth()
-  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
 
   const items = await prisma.inventoryItem.findMany({
     where: { siteId, group },
@@ -240,8 +255,8 @@ export async function moveItems(
   deltaLat: number,
   deltaLng: number
 ) {
-  const session = await auth()
-  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
 
   if (itemIds.length === 0) return { status: 'ok' }
 
@@ -293,6 +308,15 @@ export async function setItemStatusByGroup(itemGroupId: string, status: string) 
   const session = await auth()
   if (!session?.user) throw new Error('Not authenticated')
 
+  if (!isValidItemStatus(status)) throw new Error('Invalid item status')
+
+  // Verify ownership via an item in this group
+  const item = await prisma.inventoryItem.findFirst({
+    where: { itemGroupId },
+    select: { site: { select: { userId: true } } },
+  })
+  if (!item || item.site.userId !== session.user.id) throw new Error('Not authorized')
+
   await prisma.inventoryItem.updateMany({
     where: { itemGroupId },
     data: {
@@ -306,8 +330,10 @@ export async function setItemStatusByGroup(itemGroupId: string, status: string) 
 
 export async function saveBgOption(siteId: string, bgOption: string) {
 
-  const session = await auth()
-  if (!session?.user) throw new Error('Not authenticated')
+  const { error } = await requireSiteOwner(siteId)
+  if (error) throw new Error(error)
+
+  if (!isValidBgOption(bgOption)) throw new Error('Invalid background option')
 
   await prisma.site.update({
     where: { id: siteId },
@@ -322,16 +348,19 @@ export async function saveBgOption(siteId: string, bgOption: string) {
 
 export async function uploadBackground(siteId: string, formData: FormData) {
 
-  const session = await auth()
-  if (!session?.user) throw new Error('Not authenticated')
+  const { error } = await requireSiteOwner(siteId)
+  if (error) throw new Error(error)
 
   const file = formData.get('image') as File | null
   if (!file || file.size === 0) throw new Error('No file')
 
+  const fileCheck = validateImageFile(file)
+  if (!fileCheck.ok) throw new Error(fileCheck.error)
+
   const buf = Buffer.from(await file.arrayBuffer())
   const meta = await sharp(buf).metadata()
 
-  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+  const ext = ({'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','image/svg+xml':'svg'}[file.type]) || 'jpg'
   const key = `site/${siteId}/background.${ext}`
 
   const blob = await put(key, buf, {
@@ -356,8 +385,8 @@ export async function rotateSelection(
   itemIds: string[],
   deltaDegrees: number
 ) {
-  const session = await auth()
-  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
   if (itemIds.length === 0) return { status: 'ok' }
 
   const items = await prisma.inventoryItem.findMany({
@@ -455,8 +484,8 @@ export async function adjustItemSpacing(
   axis: 'horizontal' | 'vertical',
   factor: number
 ) {
-  const session = await auth()
-  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
   if (itemIds.length < 2) return { status: 'ok' }
 
   const items = await prisma.inventoryItem.findMany({
@@ -558,8 +587,8 @@ export async function assignItemsToGroup(
   itemIds: string[],
   group: number
 ) {
-  const session = await auth()
-  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
 
   if (itemIds.length === 0) return { status: 'ok' }
 
@@ -575,8 +604,8 @@ export async function removeItemsFromGroup(
   siteId: string,
   itemIds: string[]
 ) {
-  const session = await auth()
-  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
 
   if (itemIds.length === 0) return { status: 'ok' }
 

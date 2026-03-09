@@ -2,13 +2,14 @@
 
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
+import { requireSiteOwner } from '@/lib/auth-helpers'
 import prisma from '@repo/data/PrismaCient'
 
 // ─── Create Inventory Item ──────────────────────────────────────────────────
 
 export async function createInventoryItem(inventoryItem: { siteId: string }) {
-  const session = await auth()
-  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+  const { session, error } = await requireSiteOwner(inventoryItem.siteId)
+  if (error) return { status: 'error', errors: [error] }
 
   const lastItem = await prisma.inventoryItem.findFirst({
     where: { siteId: inventoryItem.siteId },
@@ -36,6 +37,14 @@ export async function deleteInventoryItem(id: string) {
   const session = await auth()
   if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
 
+  const item = await prisma.inventoryItem.findUnique({
+    where: { id },
+    select: { site: { select: { userId: true } } },
+  })
+  if (!item || item.site.userId !== session.user.id) {
+    return { status: 'error', errors: ['Not authorized'] }
+  }
+
   await prisma.inventoryItem.delete({ where: { id } })
   revalidatePath('/sites')
   return { status: 'ok' }
@@ -49,6 +58,14 @@ export async function saveInventoryItemLocation(
 ) {
   const session = await auth()
   if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+
+  const item = await prisma.inventoryItem.findUnique({
+    where: { id },
+    select: { site: { select: { userId: true } } },
+  })
+  if (!item || item.site.userId !== session.user.id) {
+    return { status: 'error', errors: ['Not authorized'] }
+  }
 
   await prisma.inventoryItem.update({
     where: { id },
@@ -81,6 +98,14 @@ export async function saveInventoryItemProperties(
   const session = await auth()
   if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
 
+  const item = await prisma.inventoryItem.findUnique({
+    where: { id },
+    select: { site: { select: { userId: true } } },
+  })
+  if (!item || item.site.userId !== session.user.id) {
+    return { status: 'error', errors: ['Not authorized'] }
+  }
+
   const pairItem = inventoryItem.pairId
     ? await prisma.inventoryItem.findUnique({ where: { id: inventoryItem.pairId } })
     : undefined
@@ -106,6 +131,9 @@ export async function saveInventoryItemProperties(
 // ─── Delete Parcel (all items in a group) ───────────────────────────────────
 
 export async function deleteItemsByGroup(siteId: string, group: number) {
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
+
   const items = await prisma.inventoryItem.deleteMany({
     where: { siteId, group },
   })

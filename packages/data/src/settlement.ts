@@ -17,6 +17,14 @@
  * - CLOSED:   Period finalized, amounts locked. No more invoices can be added.
  * - APPROVED: Reviewed by admin, ready for bank transfer.
  * - PAID:     Bank transfer executed, reference recorded.
+ *
+ * SECURITY / TRUST BOUNDARY:
+ *   All functions in this module accept raw IDs and perform no caller
+ *   authorisation. They are designed to be called exclusively from the
+ *   admin app which already enforces admin-session authentication.
+ *   If any of these functions are ever exposed to partner- or user-facing
+ *   surfaces, each call MUST verify that the authenticated user owns the
+ *   referenced settlement / account.
  */
 
 import prisma from '../index'

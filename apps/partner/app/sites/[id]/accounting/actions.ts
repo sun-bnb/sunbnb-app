@@ -31,6 +31,13 @@ export async function getInvoicesByMonth(
 }
 
 export async function getPaidItemsByMonth(siteId: string, year: number, month: number) {
+  const session = await auth()
+  if (!session?.user) throw new Error('Not authenticated')
+
+  // Verify the site belongs to this user
+  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
+  if (!site || site.userId !== session.user.id) throw new Error('Not authorized')
+
   const start = new Date(Date.UTC(year, month - 1, 1))
   const end = new Date(Date.UTC(year, month, 1))
 

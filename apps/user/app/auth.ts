@@ -24,12 +24,17 @@ const nextAuthResult: NextAuthResult = NextAuth({
     GoogleProvider({
       clientId: process.env.GOOGLE_OAUTH_ID!,
       clientSecret: process.env.GOOGLE_OAUTH_SECRET!,
+      // SECURITY NOTE: allows OAuth sign-in to link with existing credentials
+      // accounts sharing the same email. Required for smooth UX where accounts
+      // are auto-created. Risk: attacker with OAuth control of an email could
+      // access a credentials-only account. Mitigated by Google/Facebook's own
+      // account security. TODO: add password verification on first link.
       allowDangerousEmailAccountLinking: true
     }),
     FacebookProvider({
       clientId: process.env.FACEBOOK_APP_ID!,
       clientSecret: process.env.FACEBOOK_APP_SECRET!,
-      allowDangerousEmailAccountLinking: true
+      allowDangerousEmailAccountLinking: true // see note on GoogleProvider
     }),
     CredentialsProvider({
       credentials: {

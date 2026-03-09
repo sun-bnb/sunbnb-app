@@ -2,14 +2,16 @@
 
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
+import { requireSiteOwner } from '@/lib/auth-helpers'
+import { validateImageFile, isValidOrderPaymentType } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 import { put } from '@vercel/blob'
 import sharp from 'sharp'
 import { Product } from '@/types/shared'
 
 export async function toggleAppSales(siteId: string, enabled: boolean) {
-  const session = await auth()
-  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
 
   await prisma.site.update({
     where: { id: siteId },
@@ -21,8 +23,12 @@ export async function toggleAppSales(siteId: string, enabled: boolean) {
 }
 
 export async function setOrderPaymentType(siteId: string, orderPaymentType: string) {
-  const session = await auth()
-  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
+
+  if (!isValidOrderPaymentType(orderPaymentType)) {
+    return { status: 'error', errors: ['Invalid order payment type'] }
+  }
 
   await prisma.site.update({
     where: { id: siteId },
@@ -40,6 +46,10 @@ export async function addProduct(formData: FormData) {
   }
 
   const siteId      = formData.get('siteId') as string
+
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
+
   const name        = formData.get('name') as string
   const description = (formData.get('description') as string) || undefined
   const totalPrice  = parseFloat(formData.get('totalPrice') as string)
@@ -59,9 +69,12 @@ export async function addProduct(formData: FormData) {
   }
 
   if (file && file.size > 0) {
+    const fileCheck = validateImageFile(file)
+    if (!fileCheck.ok) return { status: 'error', errors: [fileCheck.error] }
+
     const buffer = Buffer.from(await file.arrayBuffer())
     const meta   = await sharp(buffer).metadata()
-    const ext    = file.type.split('/')[1]
+    const ext    = ({'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','image/svg+xml':'svg'}[file.type]) || 'bin'
     const key    = `sites/${siteId}/products/${crypto.randomUUID()}.${ext}`
     const blob   = await put(key, buffer, {
       access: 'public',
@@ -93,6 +106,14 @@ export async function updateProduct(
 ) {
   const session = await auth()
   if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+
+  const product = await prisma.product.findUnique({
+    where: { id },
+    select: { siteId: true, site: { select: { userId: true } } },
+  })
+  if (!product || product.site.userId !== session.user.id) {
+    return { status: 'error', errors: ['Not authorized'] }
+  }
 
   const updateData: Record<string, any> = {}
   if (data.name !== undefined) updateData.name = data.name
@@ -127,12 +148,20 @@ export async function updateProductImage(id: string, formData: FormData) {
   const file = formData.get('image') as File | null
   if (!file || file.size === 0) return { status: 'error', errors: ['No image'] }
 
-  const product = await prisma.product.findUnique({ where: { id } })
-  if (!product) return { status: 'error', errors: ['Product not found'] }
+  const fileCheck = validateImageFile(file)
+  if (!fileCheck.ok) return { status: 'error', errors: [fileCheck.error] }
+
+  const product = await prisma.product.findUnique({
+    where: { id },
+    select: { siteId: true, site: { select: { userId: true } } },
+  })
+  if (!product || product.site.userId !== session.user.id) {
+    return { status: 'error', errors: ['Not authorized'] }
+  }
 
   const buffer = Buffer.from(await file.arrayBuffer())
   const meta   = await sharp(buffer).metadata()
-  const ext    = file.type.split('/')[1]
+  const ext    = ({'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','image/svg+xml':'svg'}[file.type]) || 'bin'
   const key    = `sites/${product.siteId}/products/${crypto.randomUUID()}.${ext}`
   const blob   = await put(key, buffer, {
     access: 'public',
@@ -156,6 +185,14 @@ export async function deleteProduct(id: string) {
   const session = await auth()
   if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
 
+  const product = await prisma.product.findUnique({
+    where: { id },
+    select: { site: { select: { userId: true } } },
+  })
+  if (!product || product.site.userId !== session.user.id) {
+    return { status: 'error', errors: ['Not authorized'] }
+  }
+
   await prisma.product.update({
     where: { id },
     data: { active: false },
@@ -165,8 +202,8 @@ export async function deleteProduct(id: string) {
 }
 
 export async function getProducts(siteId: string): Promise<Product[]> {
-  const session = await auth()
-  if (!session?.user) return []
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return []
 
   return prisma.product.findMany({
     where: { siteId, active: true },

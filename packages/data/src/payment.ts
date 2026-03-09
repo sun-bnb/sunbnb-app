@@ -100,6 +100,10 @@ export function calculateServiceFeeAmount(
 /**
  * Generate the next sequential invoice number for a given issuer type.
  * Format: PARTNER-YYYY-NNNNN or PLATFORM-YYYY-NNNNN
+ *
+ * Uses a raw query with FOR UPDATE to lock the row and prevent concurrent
+ * transactions from generating duplicate numbers. The invoiceNumber column
+ * also has a unique constraint as a safety net.
  */
 async function nextInvoiceNumber(
   tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
@@ -108,18 +112,21 @@ async function nextInvoiceNumber(
   const year = new Date().getFullYear()
   const prefix = `${issuerType}-${year}-`
 
-  const lastInvoice = await tx.invoice.findFirst({
-    where: {
-      issuerType,
-      invoiceNumber: { startsWith: prefix },
-    },
-    orderBy: { invoiceNumber: 'desc' },
-    select: { invoiceNumber: true },
-  })
+  // Lock the latest row for this issuer type to serialise number generation
+  const rows = await tx.$queryRawUnsafe<{ invoice_number: string | null }[]>(
+    `SELECT invoice_number FROM "Invoice"
+     WHERE issuer_type = $1 AND invoice_number LIKE $2
+     ORDER BY invoice_number DESC
+     LIMIT 1
+     FOR UPDATE`,
+    issuerType,
+    `${prefix}%`
+  )
 
   let seq = 1
-  if (lastInvoice?.invoiceNumber) {
-    const parts = lastInvoice.invoiceNumber.split('-')
+  const lastNumber = rows[0]?.invoice_number
+  if (lastNumber) {
+    const parts = lastNumber.split('-')
     const lastSeq = parseInt(parts[parts.length - 1] ?? '0', 10)
     if (!isNaN(lastSeq)) seq = lastSeq + 1
   }

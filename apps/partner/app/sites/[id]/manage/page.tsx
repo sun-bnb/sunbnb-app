@@ -1,13 +1,9 @@
 import prisma from '@repo/data/PrismaCient'
-import { auth } from '@/app/auth'
 import { SiteProps } from '@/types/shared'
 import ManagementView from './view'
 
 
 export default async function ManagePage({ params, searchParams }: { params: { id: string }, searchParams: { [key: string]: string } }) {
-
-  const session = await auth()
-  // if (!session?.user) return null
 
   const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
 
@@ -43,7 +39,7 @@ export default async function ManagePage({ params, searchParams }: { params: { i
         include: {
           reservations: {
             include: {
-              user: true
+              user: { select: { id: true, email: true } }
             },
             orderBy: { from: 'asc' }
           },
@@ -54,6 +50,11 @@ export default async function ManagePage({ params, searchParams }: { params: { i
     } 
   })
   if (!site) return <div>Site {params.id} not found</div>
+
+  // Verify the token belongs to the site's owner
+  if (site.userId !== securityToken.userId) {
+    return <div>Not authorized</div>
+  }
 
   return (
     <div className="w-screen min-w-[768px]">

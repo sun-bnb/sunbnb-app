@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
+import { requireSiteOwner } from '@/lib/auth-helpers'
+import { isValidSiteStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 
 // ─── Save General Settings ──────────────────────────────────────────────────
@@ -15,8 +17,8 @@ export async function saveGeneral(input: {
   locationLat: string
   locationLng: string
 }): Promise<{ status: string; errors?: string[] }> {
-  const session = await auth()
-  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+  const { error } = await requireSiteOwner(input.id)
+  if (error) return { status: 'error', errors: [error] }
 
   const errors: string[] = []
   if (!input.name?.trim()) errors.push('Site name is required')
@@ -55,6 +57,12 @@ export async function submitForm(
   const session = await auth()
   if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
 
+  const siteId = formData.get('id') as string
+  if (siteId) {
+    const { error } = await requireSiteOwner(siteId)
+    if (error) return { status: 'error', errors: [error] }
+  }
+
   const requiredFields = ['name', 'locationLat', 'locationLng']
   const errors = requiredFields
     .filter((field) => !formData.get(field))
@@ -67,7 +75,6 @@ export async function submitForm(
 
   if (errors.length > 0) return { status: 'error', errors }
 
-  const siteId = formData.get('id') as string
   const price = Number(priceVal)
 
   const siteData = {
@@ -106,8 +113,8 @@ export async function submitForm(
 // ─── Delete Site ────────────────────────────────────────────────────────────
 
 export async function deleteSite(id: string) {
-  const session = await auth()
-  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+  const { error } = await requireSiteOwner(id)
+  if (error) return { status: 'error', errors: [error] }
 
   await prisma.site.delete({ where: { id } })
   revalidatePath('/sites')
@@ -117,8 +124,12 @@ export async function deleteSite(id: string) {
 // ─── Toggle Site Status ─────────────────────────────────────────────────────
 
 export async function setSiteStatus(id: string, status: string) {
-  const session = await auth()
-  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+  const { error } = await requireSiteOwner(id)
+  if (error) return { status: 'error', errors: [error] }
+
+  if (!isValidSiteStatus(status)) {
+    return { status: 'error', errors: ['Invalid site status'] }
+  }
 
   await prisma.site.update({ where: { id }, data: { status } })
   revalidatePath('/sites')
@@ -131,8 +142,8 @@ export async function setPaymentProvider(
   siteId: string,
   paymentProvider: string,
 ): Promise<{ status: string; errors?: string[] }> {
-  const session = await auth()
-  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+  const { session, error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
 
   if (!['stripe', 'mollie'].includes(paymentProvider)) {
     return { status: 'error', errors: ['Invalid payment provider'] }
@@ -241,8 +252,8 @@ export async function saveBrand(input: {
   bgColor: string
   fgColor: string
 }): Promise<{ status: string; errors?: string[] }> {
-  const session = await auth()
-  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+  const { error } = await requireSiteOwner(input.siteId)
+  if (error) return { status: 'error', errors: [error] }
 
   const errors: string[] = []
   if (!input.brandName?.trim()) errors.push('Brand name is required')

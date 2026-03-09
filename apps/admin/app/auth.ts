@@ -16,6 +16,7 @@ const nextAuthResult: NextAuthResult = NextAuth({
     GoogleProvider({
       clientId: process.env.GOOGLE_OAUTH_ID!,
       clientSecret: process.env.GOOGLE_OAUTH_SECRET!,
+      // SECURITY NOTE: see partner/app/auth.ts for explanation
       allowDangerousEmailAccountLinking: true,
     }),
     FacebookProvider({

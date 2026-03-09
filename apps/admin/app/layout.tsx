@@ -37,7 +37,7 @@ export default function RootLayout({
             <App>
               {children}
             </App>
-            <CookieConsent privacyHref=\"#\" />
+            <CookieConsent privacyHref="#" />
           </NextAuthProvider>
         </MuiThemeProvider>
       </body>

@@ -11,6 +11,15 @@ export async function cancelReservation(
   const session = await auth()
   if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
 
+  // Verify the reservation belongs to a site owned by this user
+  const reservation = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    select: { site: { select: { userId: true } } },
+  })
+  if (!reservation || reservation.site.userId !== session.user.id) {
+    return { status: 'error', errors: ['Not authorized'] }
+  }
+
   await prisma.reservation.update({
     data: {
       status: 'canceled'

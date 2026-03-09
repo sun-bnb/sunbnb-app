@@ -13,6 +13,8 @@ interface SignInErrorProps {
 const defaultMessages: Record<string, string> = {
   OAuthAccountNotLinked: 'This email is already associated with another sign-in method.',
   CredentialsSignin: 'Invalid email or password. Please try again.',
+  TooManyAttempts: 'Too many sign-in attempts. Please wait a few minutes and try again.',
+  WeakPassword: 'Password must be at least 8 characters with an uppercase letter, a lowercase letter, and a number.',
   AccessDenied: 'Access denied. Please contact support.',
   Default: 'Something went wrong. Please try again.',
 }

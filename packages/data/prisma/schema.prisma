@@ -394,7 +394,7 @@ model Invoice {
   settlementBatchId String?          @map("settlement_batch_id")
   reservationId    String?           @map("reservation_id")
   orderId          String?           @map("order_id")
-  invoiceNumber    String?           @map("invoice_number")
+  invoiceNumber    String?           @unique @map("invoice_number")
   previousHash     String?           @map("previous_hash")
   hash             String?
   account          PartnerAccount    @relation(fields: [accountId], references: [userId], onDelete: Cascade)

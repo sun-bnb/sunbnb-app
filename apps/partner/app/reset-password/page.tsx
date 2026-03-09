@@ -18,8 +18,12 @@ function ResetPasswordContent() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters')
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters')
+      return
+    }
+    if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
+      setError('Password must contain uppercase, lowercase, and a number')
       return
     }
     if (password !== confirmPassword) {
@@ -100,7 +104,7 @@ function ResetPasswordContent() {
             placeholder="••••••••"
             autoComplete="new-password"
             required
-            minLength={6}
+            minLength={8}
             className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 transition-all placeholder:text-gray-300 text-gray-900"
           />
         </div>
@@ -114,7 +118,7 @@ function ResetPasswordContent() {
             placeholder="••••••••"
             autoComplete="new-password"
             required
-            minLength={6}
+            minLength={8}
             className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400 transition-all placeholder:text-gray-300 text-gray-900"
           />
         </div>

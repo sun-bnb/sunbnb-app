@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
+import { requireSiteOwner } from '@/lib/auth-helpers'
+import { validateImageFile, safeBlobKey } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 import { put } from '@vercel/blob'
 import sharp from 'sharp'
@@ -13,8 +15,8 @@ export async function saveContentFields(input: {
   description: string
   services: string[]
 }): Promise<{ status: string; errors?: string[] }> {
-  const session = await auth()
-  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+  const { error } = await requireSiteOwner(input.id)
+  if (error) return { status: 'error', errors: [error] }
 
   const site = await prisma.site.findFirst({ where: { id: input.id } })
   if (!site) return { status: 'error', errors: ['Site not found'] }
@@ -37,13 +39,16 @@ export async function uploadContentImage(
   siteId: string,
   formData: FormData
 ): Promise<{ status: string; imageUrl?: string; errors?: string[] }> {
-  const session = await auth()
-  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
 
   const imageFile = formData.get('image') as File
   if (!imageFile || imageFile.size === 0) {
     return { status: 'error', errors: ['No image provided'] }
   }
+
+  const fileCheck = validateImageFile(imageFile)
+  if (!fileCheck.ok) return { status: 'error', errors: [fileCheck.error] }
 
   const buffer = Buffer.from(await imageFile.arrayBuffer())
   const image = sharp(buffer)
@@ -55,7 +60,7 @@ export async function uploadContentImage(
     siteData.imageHeight = metadata.height
   }
 
-  const blob = await put(imageFile.name, imageFile, { access: 'public' })
+  const blob = await put(safeBlobKey(`sites/${siteId}/content`, imageFile), imageFile, { access: 'public' })
   siteData.image = blob.url
 
   await prisma.site.update({ data: siteData, where: { id: siteId } })

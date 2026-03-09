@@ -59,7 +59,7 @@ export async function getSite(siteId: string) {
         orderBy: { number: 'asc' },
         include: {
           reservations: {
-            include: { user: true },
+            include: { user: { select: { id: true, email: true } } },
             orderBy: { from: 'asc' },
           },
           pair: true,

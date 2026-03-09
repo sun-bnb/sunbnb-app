@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto'
+import { randomBytes, createHash } from 'crypto'
 import { hash } from 'bcryptjs'
 import prisma from '@repo/data/PrismaCient'
 import { sendEmail } from './email'
@@ -7,10 +7,28 @@ const TOKEN_EXPIRY_HOURS = 1
 const MAX_REQUESTS_PER_HOUR = 3
 
 /**
+ * Derive a SHA-256 hex digest from a raw token.
+ * Only the hash is stored in the database — the plaintext is sent to the user's email.
+ */
+function hashToken(raw: string): string {
+  return createHash('sha256').update(raw).digest('hex')
+}
+
+/**
  * Request a password reset for the given email.
  * Always returns success to avoid leaking whether the email exists.
  */
 export async function requestPasswordReset(email: string, appBaseUrl: string) {
+  // Validate appBaseUrl against allowed origins to prevent email link injection
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean)
+  if (allowedOrigins.length > 0 && !allowedOrigins.includes(appBaseUrl)) {
+    console.warn(`[PasswordReset] Rejected unrecognised origin: ${appBaseUrl}`)
+    return { ok: true } // Silent — don't reveal validation
+  }
+
   const user = await prisma.user.findUnique({ where: { email } })
 
   // If no user or OAuth-only (no password), silently succeed
@@ -37,13 +55,14 @@ export async function requestPasswordReset(email: string, appBaseUrl: string) {
     data: { usedAt: new Date() },
   })
 
-  // Generate a new token
+  // Generate a new token — store only the SHA-256 hash in the DB
   const token = randomBytes(32).toString('hex')
+  const tokenHash = hashToken(token)
   const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_HOURS * 60 * 60 * 1000)
 
   await prisma.passwordResetToken.create({
     data: {
-      token,
+      token: tokenHash,
       userId: user.id,
       expiresAt,
     },
@@ -70,8 +89,24 @@ export async function requestPasswordReset(email: string, appBaseUrl: string) {
  * Consume a reset token and set a new password.
  */
 export async function resetPassword(token: string, newPassword: string) {
+  // Server-side password strength check
+  if (!newPassword || newPassword.length < 8) {
+    return { ok: false, error: 'Password must be at least 8 characters' }
+  }
+  if (!/[a-z]/.test(newPassword)) {
+    return { ok: false, error: 'Password must contain at least one lowercase letter' }
+  }
+  if (!/[A-Z]/.test(newPassword)) {
+    return { ok: false, error: 'Password must contain at least one uppercase letter' }
+  }
+  if (!/[0-9]/.test(newPassword)) {
+    return { ok: false, error: 'Password must contain at least one number' }
+  }
+
+  // Hash the incoming token and look up by hash (plaintext is never stored)
+  const tokenHash = hashToken(token)
   const resetToken = await prisma.passwordResetToken.findUnique({
-    where: { token },
+    where: { token: tokenHash },
     include: { user: true },
   })
 

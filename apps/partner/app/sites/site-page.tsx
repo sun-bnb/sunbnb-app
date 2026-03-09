@@ -32,7 +32,7 @@ export default async function SitePage(
         include: {
           reservations: {
             include: {
-              user: true
+              user: { select: { id: true, email: true } }
             },
             orderBy: { from: 'asc' }
           },

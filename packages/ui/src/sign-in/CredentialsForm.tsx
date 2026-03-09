@@ -77,6 +77,7 @@ export function CredentialsForm({ onSubmit, theme = 'light', inputFocusClassName
           placeholder="••••••••"
           autoComplete="current-password"
           required
+          minLength={8}
           className={inputClass}
         />
         <div className="mt-1.5 text-right">

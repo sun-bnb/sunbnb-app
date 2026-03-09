@@ -1,14 +1,17 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { auth } from '@/app/auth'
+import { requireSiteOwner } from '@/lib/auth-helpers'
+import { isValidOrderStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 
 export async function setOrderStatus(siteId: string, orderId: string, status: string) {
 
-  const session = await auth();
-  if (!session?.user) {
-    return { status: 'error', errors: ['Not authenticated'] };
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
+
+  if (!isValidOrderStatus(status)) {
+    return { status: 'error', errors: ['Invalid order status'] }
   }
 
   await prisma.order.update({
@@ -26,10 +29,8 @@ export async function setOrderStatus(siteId: string, orderId: string, status: st
 
 export async function getOrders(siteId: string): Promise<{ status: string, errors?: string[], orders?: any[] }> {
 
-  const session = await auth();
-  if (!session?.user) {
-    return { status: 'error', errors: ['Not authenticated'] };
-  }
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
 
   const orders = await prisma.order.findMany({ 
     where: { 

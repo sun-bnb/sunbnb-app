@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
+import { requireSiteOwner } from '@/lib/auth-helpers'
+import { validateImageFile, safeBlobKey } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 import { canCreateSite } from '@repo/data/subscription'
 import { put } from '@vercel/blob'
@@ -87,13 +89,16 @@ export async function uploadSiteImage(
   formData: FormData
 ): Promise<{ status: string; errors?: string[] }> {
 
-  const session = await auth()
-  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
 
   const imageFile = formData.get('image') as File
   if (!imageFile || imageFile.size === 0) {
     return { status: 'ok' } // no image, nothing to do
   }
+
+  const fileCheck = validateImageFile(imageFile)
+  if (!fileCheck.ok) return { status: 'error', errors: [fileCheck.error] }
 
   const buffer = Buffer.from(await imageFile.arrayBuffer())
   const image = sharp(buffer)
@@ -105,7 +110,7 @@ export async function uploadSiteImage(
     siteData.imageHeight = metadata.height
   }
 
-  const blob = await put(imageFile.name, imageFile, { access: 'public' })
+  const blob = await put(safeBlobKey(`sites/${siteId}/content`, imageFile), imageFile, { access: 'public' })
   siteData.image = blob.url
 
   await prisma.site.update({

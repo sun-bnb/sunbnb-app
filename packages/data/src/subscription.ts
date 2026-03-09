@@ -3,6 +3,13 @@
  *
  * Provides helpers to query a partner's subscription and enforce plan limits
  * (currently: max number of sites).
+ *
+ * SECURITY / TRUST BOUNDARY:
+ *   `syncStripeSubscription` and `handleSubscriptionCanceled` mutate
+ *   subscription state and MUST only be called from Stripe webhook handlers
+ *   that have already verified the webhook signature via
+ *   `stripe.webhooks.constructEvent()`. Never call these from user-facing
+ *   API routes directly.
  */
 
 import prisma from '../index'

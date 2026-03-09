@@ -16,6 +16,7 @@ export default async function OrdersPage({ params }: { params: { id: string } })
   })
 
   if (!site) return <div>Site {params.id} not found</div>
+  if (site.userId !== session.user.id) return <div>Not authorized</div>
 
   const orders = await prisma.order.findMany({ 
     where: { 

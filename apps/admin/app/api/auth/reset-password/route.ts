@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { resetPassword } from '@repo/data/password-reset'
+import { rateLimit } from '@repo/data/rate-limit'
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate-limit by IP to prevent brute-force token guessing
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+    const rl = rateLimit(`reset-password:${ip}`, { maxAttempts: 5, windowMs: 15 * 60 * 1000 })
+    if (!rl.allowed) {
+      return NextResponse.json({ ok: false, error: 'Too many attempts. Please try again later.' }, { status: 429 })
+    }
+
     const { token, password } = await req.json()
 
     if (!token || typeof token !== 'string') {

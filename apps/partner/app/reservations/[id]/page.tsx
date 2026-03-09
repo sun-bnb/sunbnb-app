@@ -10,11 +10,13 @@ export default async function Site({ params, searchParams }: { params: { id: str
   const reservation = await prisma.reservation.findUnique({ 
     where: { id: params.id },
     include: {
-      user: true
+      user: { select: { id: true, email: true } },
+      site: { select: { userId: true } }
     }
   })
   
   if (!reservation) return <div>Reservation {params.id} not found</div>
+  if (reservation.site.userId !== session.user.id) return <div>Not authorized</div>
 
   return <ReservationView reservation={reservation} />
 
