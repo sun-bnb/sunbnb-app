@@ -29,7 +29,11 @@ export default function BrandedSiteView({
   useEffect(() => {
     const bg = viewBrand.bgColor || '#faf9f6'
     document.body.style.backgroundColor = bg
-    return () => { document.body.style.backgroundColor = '' }
+    document.body.style.margin = '0'
+    return () => {
+      document.body.style.backgroundColor = ''
+      document.body.style.margin = ''
+    }
   }, [viewBrand.bgColor])
 
   return (

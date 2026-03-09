@@ -156,7 +156,7 @@ export default function SiteView({ site, apiKey, stripePublicKey, brand }: { sit
             </>
           )}
         </div>
-        <div className={brand ? 'px-3' : 'py-3 px-3'}>
+        <div className={brand ? 'px-3 -mt-px' : 'py-3 px-3'}>
           <div className={`flex justify-between items-center ${brand ? 'bg-black/30 -mx-3 px-3 py-2' : ''}`}>
             <div className="flex items-center gap-3 text-sm">
               <div>
