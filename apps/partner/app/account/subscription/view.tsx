@@ -16,7 +16,7 @@ interface SubscriptionData {
 const TIER_FEATURES: Record<string, string[]> = {
   STARTER: ['1 site', '5% service fee', 'Integrated payments', 'Community support'],
   PRO: ['1 site', '2% service fee', 'Integrated payments', 'Off-platform billing', 'Priority support'],
-  BUSINESS: ['Unlimited sites', 'No service fee', 'Integrated payments', 'Off-platform billing', 'Dedicated support'],
+  BUSINESS: ['Unlimited sites', 'No service fee', 'Integrated payments', 'Off-platform billing', 'Branded booking page', 'Dedicated support'],
 }
 
 const DEFAULT_COLORS = {
