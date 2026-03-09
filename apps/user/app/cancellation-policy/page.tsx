@@ -12,7 +12,7 @@ export default async function CancellationPolicy() {
       <section className="mb-8">
         <h2 className="text-base font-semibold text-gray-900 mb-2">1. Scope</h2>
         <p>
-          This policy applies to all sunbed reservations and ancillary service bookings (&ldquo;Bookings&rdquo;) made through the SunBnB platform operated by <strong>{co.companyName}</strong>{co.businessId ? ` (Business ID: ${co.businessId})` : ''}. It defines the cancellation and refund rules applicable to consumers (&ldquo;Guests&rdquo;) and the respective obligations of {co.companyName} and the Beach Club.
+          This policy applies to all sunbed reservations and ancillary service bookings (&ldquo;Bookings&rdquo;) made through the Sunbnb platform operated by <strong>{co.companyName}</strong>{co.businessId ? ` (Business ID: ${co.businessId})` : ''}. It defines the cancellation and refund rules applicable to consumers (&ldquo;Guests&rdquo;) and the respective obligations of {co.companyName} and the Beach Club.
         </p>
       </section>
 

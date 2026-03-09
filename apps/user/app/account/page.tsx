@@ -28,6 +28,6 @@ export default async function Account() {
 
   }
   
-  return <AccountView account={account} />
+  return <AccountView account={account} userImage={user.image} />
 
 }

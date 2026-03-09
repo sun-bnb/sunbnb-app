@@ -12,7 +12,7 @@ export default async function TermsOfService() {
       <section className="mb-8">
         <h2 className="text-base font-semibold text-gray-900 mb-2">1. Platform Operator</h2>
         <p>
-          SunBnB (&ldquo;the Platform&rdquo;) is operated by <strong>{co.companyName}</strong>, a limited liability company registered in Finland.
+          Sunbnb (&ldquo;the Platform&rdquo;) is operated by <strong>{co.companyName}</strong>, a limited liability company registered in Finland.
         </p>
         <ul className="mt-2 space-y-1 text-gray-600">
           <li><strong>Legal Name:</strong> {co.companyName}</li>
@@ -27,10 +27,10 @@ export default async function TermsOfService() {
       <section className="mb-8">
         <h2 className="text-base font-semibold text-gray-900 mb-2">2. Nature of the Service</h2>
         <p>
-          SunBnB acts solely as a <strong>commercial intermediary</strong> between consumers (&ldquo;you&rdquo; or &ldquo;the Guest&rdquo;) and independent beach venue operators (&ldquo;Beach Clubs&rdquo; or &ldquo;Partners&rdquo;). {co.companyName} does not own, manage, or operate any beach venues and is not a party to the rental agreement between you and the Beach Club.
+          Sunbnb acts solely as a <strong>commercial intermediary</strong> between consumers (&ldquo;you&rdquo; or &ldquo;the Guest&rdquo;) and independent beach venue operators (&ldquo;Beach Clubs&rdquo; or &ldquo;Partners&rdquo;). {co.companyName} does not own, manage, or operate any beach venues and is not a party to the rental agreement between you and the Beach Club.
         </p>
         <p className="mt-2">
-          When you make a booking through SunBnB, you are entering into a direct contractual relationship with the Beach Club that is the <strong>Seller of Record</strong> for that transaction. The Beach Club is solely responsible for delivering the booked services, including sunbed availability, on-site conditions, and compliance with local regulations.
+          When you make a booking through Sunbnb, you are entering into a direct contractual relationship with the Beach Club that is the <strong>Seller of Record</strong> for that transaction. The Beach Club is solely responsible for delivering the booked services, including sunbed availability, on-site conditions, and compliance with local regulations.
         </p>
       </section>
 

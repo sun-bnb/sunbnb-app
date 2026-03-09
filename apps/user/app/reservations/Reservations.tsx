@@ -38,7 +38,7 @@ export default function Reservations({ reservations }: { reservations: Reservati
           ))}
         </div>
       </div>
-      <div className="px-4 py-3 space-y-5">
+      <div className="px-4 py-3 flex flex-col gap-1">
         {visibleReservations.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-brand-gold/50">
             <EventBusyIcon sx={{ fontSize: 48, mb: 1 }} />

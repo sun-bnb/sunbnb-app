@@ -506,7 +506,7 @@ export default function OnboardingView({
 
         {/* Header */}
         <div className="mb-2">
-          <h1 className="text-xl font-bold text-gray-900">Welcome to SunBnB</h1>
+          <h1 className="text-xl font-bold text-gray-900">Welcome to Sunbnb</h1>
           <p className="text-sm text-gray-500 mt-1">
             Let&apos;s get your partner account set up in a few quick steps.
           </p>

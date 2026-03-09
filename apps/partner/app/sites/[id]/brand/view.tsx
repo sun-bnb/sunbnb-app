@@ -1,16 +1,22 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
-import Switch from '@mui/material/Switch'
-import FormControlLabel from '@mui/material/FormControlLabel'
 import Divider from '@mui/material/Divider'
 import PaletteIcon from '@mui/icons-material/Palette'
 import ImageIcon from '@mui/icons-material/Image'
 import LanguageIcon from '@mui/icons-material/Language'
 import OpenInNewIcon from '@mui/icons-material/OpenInNew'
+import CircularProgress from '@mui/material/CircularProgress'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import ErrorIcon from '@mui/icons-material/Error'
+import Alert from '@mui/material/Alert'
+import InputAdornment from '@mui/material/InputAdornment'
 import { useSite } from '@/app/sites/site-context'
+import { getBrand, saveBrand, checkSlug, generateSlug } from '@/app/sites/[id]/site-actions'
+
+type SlugStatus = 'idle' | 'checking' | 'available' | 'taken' | 'too-short'
 
 export default function BrandView() {
 
@@ -19,15 +25,117 @@ export default function BrandView() {
   const [brandName, setBrandName] = useState(site.name || '')
   const [slug, setSlug] = useState('')
   const [tagline, setTagline] = useState('')
-  const [primaryColor, setPrimaryColor] = useState('#0ea5e9')
-  const [accentColor, setAccentColor] = useState('#f59e0b')
-  const [showMap, setShowMap] = useState(true)
-  const [showPrices, setShowPrices] = useState(true)
-  const [customDomain, setCustomDomain] = useState('')
+  const [bgColor, setBgColor] = useState('#faf9f6')
+  const [fgColor, setFgColor] = useState('#111827')
+
+  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [slugStatus, setSlugStatus] = useState<SlugStatus>('idle')
+
+  const slugCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Debounced slug availability check
+  const debouncedCheckSlug = useCallback((value: string) => {
+    if (slugCheckTimer.current) clearTimeout(slugCheckTimer.current)
+
+    const normalized = value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '')
+    if (!normalized) {
+      setSlugStatus('idle')
+      return
+    }
+    if (normalized.length < 3) {
+      setSlugStatus('too-short')
+      return
+    }
+
+    setSlugStatus('checking')
+    slugCheckTimer.current = setTimeout(async () => {
+      try {
+        const result = await checkSlug(normalized, site.id!)
+        setSlugStatus(result.available ? 'available' : 'taken')
+      } catch {
+        setSlugStatus('idle')
+      }
+    }, 500)
+  }, [site.id])
+
+  // Load persisted brand on mount
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await getBrand(site.id!)
+        if (data) {
+          if (data.slug) {
+            setSlug(data.slug)
+            setSlugStatus('available')
+          } else {
+            // Auto-generate slug from site name
+            const generated = await generateSlug(data.name || site.name || '', site.id!)
+            if (generated) {
+              setSlug(generated)
+              setSlugStatus('available')
+            }
+          }
+          if (data.brand) {
+            setBrandName(data.brand.brandName || site.name || '')
+            setTagline(data.brand.tagline || '')
+            setBgColor(data.brand.bgColor || '#faf9f6')
+            setFgColor(data.brand.fgColor || '#111827')
+          }
+        }
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [site.id])
+
+  const handleSlugChange = (value: string) => {
+    const normalized = value.toLowerCase().replace(/[^a-z0-9-]/g, '')
+    setSlug(normalized)
+    debouncedCheckSlug(normalized)
+  }
+
+  const handleSave = async () => {
+    if (slugStatus === 'taken') {
+      setMessage({ type: 'error', text: 'Slug is already taken — pick a different one' })
+      return
+    }
+    setSaving(true)
+    setMessage(null)
+    try {
+      const result = await saveBrand({
+        siteId: site.id!,
+        brandName,
+        slug,
+        tagline,
+        bgColor,
+        fgColor,
+      })
+      if (result.status === 'ok') {
+        setMessage({ type: 'success', text: 'Brand settings saved' })
+      } else {
+        setMessage({ type: 'error', text: result.errors?.join(', ') || 'Save failed' })
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Unexpected error' })
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const bookingUrl = slug
-    ? `https://sunbnb.app/b/${slug}`
+    ? `https://sunbnb.app/s/${slug}`
     : `https://sunbnb.app/sites/${site.id}`
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-20">
+        <CircularProgress size={28} />
+      </div>
+    )
+  }
 
   return (
     <div className="container mx-auto p-4">
@@ -75,10 +183,28 @@ export default function BrandView() {
               label="URL slug"
               fullWidth
               value={slug}
-              onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+              onChange={(e) => handleSlugChange(e.target.value)}
               placeholder="my-beach"
-              helperText={slug ? `sunbnb.app/b/${slug}` : 'Leave empty to use the default site URL'}
+              helperText={
+                slugStatus === 'checking' ? 'Checking availability…'
+                  : slugStatus === 'available' ? `✓ sunbnb.app/s/${slug} is available`
+                  : slugStatus === 'taken' ? 'This slug is already taken'
+                  : slugStatus === 'too-short' ? 'Slug must be at least 3 characters'
+                  : slug ? `sunbnb.app/s/${slug}` : 'Auto-generated from site name'
+              }
+              error={slugStatus === 'taken' || slugStatus === 'too-short'}
+              color={slugStatus === 'available' ? 'success' : undefined}
               size="small"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    {slugStatus === 'checking' && <CircularProgress size={16} />}
+                    {slugStatus === 'available' && <CheckCircleIcon fontSize="small" sx={{ color: '#16a34a' }} />}
+                    {slugStatus === 'taken' && <ErrorIcon fontSize="small" color="error" />}
+                  </InputAdornment>
+                ),
+              }}
+              FormHelperTextProps={slugStatus === 'available' ? { sx: { color: '#16a34a' } } : undefined}
             />
             <TextField
               label="Tagline"
@@ -91,27 +217,27 @@ export default function BrandView() {
             />
             <div className="flex gap-4">
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-500">Primary color</label>
+                <label className="text-xs text-gray-500">Background</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
-                    value={primaryColor}
-                    onChange={(e) => setPrimaryColor(e.target.value)}
+                    value={bgColor}
+                    onChange={(e) => setBgColor(e.target.value)}
                     className="w-10 h-10 rounded border border-gray-300 cursor-pointer"
                   />
-                  <span className="text-sm text-gray-600 font-mono">{primaryColor}</span>
+                  <span className="text-sm text-gray-600 font-mono">{bgColor}</span>
                 </div>
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-500">Accent color</label>
+                <label className="text-xs text-gray-500">Text color</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
-                    value={accentColor}
-                    onChange={(e) => setAccentColor(e.target.value)}
+                    value={fgColor}
+                    onChange={(e) => setFgColor(e.target.value)}
                     className="w-10 h-10 rounded border border-gray-300 cursor-pointer"
                   />
-                  <span className="text-sm text-gray-600 font-mono">{accentColor}</span>
+                  <span className="text-sm text-gray-600 font-mono">{fgColor}</span>
                 </div>
               </div>
             </div>
@@ -145,93 +271,67 @@ export default function BrandView() {
 
         <Divider />
 
-        {/* Booking page options */}
-        <section>
-          <h3 className="font-medium text-gray-700 mb-3">Booking Page Options</h3>
-          <div className="flex flex-col gap-2">
-            <FormControlLabel
-              control={<Switch checked={showMap} onChange={(e) => setShowMap(e.target.checked)} />}
-              label={<span className="text-sm">Show interactive map on booking page</span>}
-            />
-            <FormControlLabel
-              control={<Switch checked={showPrices} onChange={(e) => setShowPrices(e.target.checked)} />}
-              label={<span className="text-sm">Show prices before checkout</span>}
-            />
-          </div>
-        </section>
-
-        <Divider />
-
-        {/* Custom domain */}
-        <section>
-          <h3 className="font-medium text-gray-700 mb-3">Custom Domain</h3>
-          <p className="text-sm text-gray-500 mb-3">
-            Point your own domain to this booking page (e.g. <code className="text-xs bg-gray-100 px-1 rounded">book.mybeach.com</code>).
-          </p>
-          <TextField
-            label="Custom domain"
-            fullWidth
-            value={customDomain}
-            onChange={(e) => setCustomDomain(e.target.value)}
-            placeholder="book.mybeach.com"
-            size="small"
-          />
-        </section>
-
-        <Divider />
-
-        {/* Live preview mockup */}
+        {/* Live preview */}
         <section>
           <h3 className="font-medium text-gray-700 mb-4">Preview</h3>
-          <div className="rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-            {/* Header bar */}
-            <div
-              className="px-6 py-4"
-              style={{ backgroundColor: primaryColor }}
-            >
-              <h4 className="text-white font-bold text-lg">{brandName || 'Your Beach'}</h4>
-              {tagline && <p className="text-white/80 text-sm mt-0.5">{tagline}</p>}
+          <div className="rounded-lg border border-gray-200 overflow-hidden shadow-sm" style={{ maxWidth: 420 }}>
+            {/* Hero image with gradient + brand name */}
+            <div className="relative">
+              {site.image ? (
+                <img src={site.image} alt="" className="w-full h-[140px] object-cover" />
+              ) : (
+                <div className="w-full h-[140px] bg-gray-300" />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/40 to-transparent" style={{ height: '60%' }} />
+              <div className="absolute top-3 left-4 right-4">
+                <div className="text-white font-bold text-base drop-shadow-lg">{brandName || 'Your Beach'}</div>
+                {tagline && <div className="text-white/80 text-xs mt-0.5 drop-shadow-md">{tagline}</div>}
+              </div>
+            </div>
+            {/* Status bar */}
+            <div className="flex justify-between items-center px-3 py-1.5 bg-black/30 text-white text-xs">
+              <div className="flex items-center gap-2">
+                <span>&#x26F1; <span className="text-green-400">4</span><span className="text-white/40">/</span><span className="text-white/50">12</span></span>
+                <span>&#8364;25</span>
+              </div>
+              <div className="flex gap-1 text-white/60 text-[10px]">
+                <span className="border border-white/20 rounded px-1">&#x1F374;</span>
+                <span className="border border-white/20 rounded px-1">&#x1F3C4;</span>
+              </div>
             </div>
             {/* Body */}
-            <div className="px-6 py-5 bg-white">
-              {site.image && (
-                <div className="rounded overflow-hidden mb-4" style={{ maxHeight: 160 }}>
-                  <img src={site.image} alt="" className="w-full h-full object-cover" />
-                </div>
-              )}
-              <div className="flex gap-3 mb-4">
-                {showMap && (
-                  <div className="flex-1 h-24 bg-gray-100 rounded flex items-center justify-center text-xs text-gray-400">
-                    Map
-                  </div>
-                )}
-                <div className="flex-1 flex flex-col gap-2">
-                  <div className="h-8 bg-gray-100 rounded flex items-center px-3 text-xs text-gray-400">
-                    Select date
-                  </div>
-                  <div className="h-8 bg-gray-100 rounded flex items-center px-3 text-xs text-gray-400">
-                    Select sunbed
-                  </div>
-                  {showPrices && (
-                    <div className="h-8 bg-gray-100 rounded flex items-center px-3 text-xs text-gray-400">
-                      Price: —
-                    </div>
-                  )}
-                </div>
+            <div className="px-4 py-3" style={{ backgroundColor: bgColor, color: fgColor }}>
+              <div className="text-xs leading-relaxed mb-3 opacity-70">
+                {site.description || 'Your beach description will appear here.'}
               </div>
-              <div
-                className="w-full py-2 rounded text-center text-white text-sm font-medium"
-                style={{ backgroundColor: accentColor }}
-              >
-                Reserve Now
+              {/* Reservation panel mockup */}
+              <div className="rounded-lg border p-3" style={{ borderColor: `${fgColor}15` }}>
+                <div className="flex flex-col gap-1.5 mb-2">
+                  <div className="h-7 rounded flex items-center px-2 text-[10px]" style={{ backgroundColor: `${fgColor}08`, color: `${fgColor}99` }}>Select dates</div>
+                  <div className="h-7 rounded flex items-center px-2 text-[10px]" style={{ backgroundColor: `${fgColor}08`, color: `${fgColor}99` }}>Select sunbed</div>
+                </div>
+                <div className="h-8 rounded flex items-center justify-center text-xs font-medium text-white bg-blue-600">
+                  Reserve
+                </div>
               </div>
             </div>
           </div>
         </section>
 
         {/* Save */}
+        {message && (
+          <Alert severity={message.type} onClose={() => setMessage(null)} sx={{ mb: 1 }}>
+            {message.text}
+          </Alert>
+        )}
         <div className="flex justify-end pb-4">
-          <Button variant="contained" sx={{ textTransform: 'none' }}>
+          <Button
+            variant="contained"
+            onClick={handleSave}
+            disabled={saving}
+            sx={{ textTransform: 'none' }}
+          >
+            {saving ? <CircularProgress size={20} sx={{ mr: 1, color: 'white' }} /> : null}
             Save Brand Settings
           </Button>
         </div>

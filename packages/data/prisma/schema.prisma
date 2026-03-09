@@ -214,6 +214,12 @@ model SiteBrand {
   id              String                   @id @unique @default(cuid())
   siteId          String                   @map("site_id") @unique
   brandName       String
+  tagline         String?
+  primaryColor    String?                  @map("primary_color")
+  accentColor     String?                  @map("accent_color")
+  bgColor         String?                  @map("bg_color")
+  fgColor         String?                  @map("fg_color")
+  logoUrl         String?                  @map("logo_url")
   bgImageUrl      String?                  @map("bg_image_url")
   bgImageWidth    Int?                     @map("bg_image_width")
   bgImageHeight   Int?                     @map("bg_image_height")

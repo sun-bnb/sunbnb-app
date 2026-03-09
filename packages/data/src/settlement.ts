@@ -6,9 +6,9 @@
  * SPLIT MERCHANT model:
  *   Each transaction produces two invoices:
  *   - PARTNER invoice: product/service revenue (partner is merchant of record)
- *   - PLATFORM invoice: service fee (SunBnB is merchant of record)
+ *   - PLATFORM invoice: service fee (Sunbnb is merchant of record)
  *
- *   SunBnB collects full payment and owes the partner the net payout.
+ *   Sunbnb collects full payment and owes the partner the net payout.
  *   Net payout = grossRevenue (PARTNER invoices) − commission (PLATFORM invoices)
  *
  * Settlement lifecycle:  DRAFT → CLOSED → APPROVED → PAID

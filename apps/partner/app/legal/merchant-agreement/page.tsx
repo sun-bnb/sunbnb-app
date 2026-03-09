@@ -8,13 +8,13 @@ export default async function MerchantAgreementPage() {
       <div className="max-w-3xl mx-auto px-6 py-12 text-sm text-gray-700 leading-relaxed">
 
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Merchant Agreement &amp; Split Payments</h1>
-        <p className="text-xs text-gray-400 mb-8">SunBnB Partner Programme &middot; Effective: 7 March 2026</p>
+        <p className="text-xs text-gray-400 mb-8">Sunbnb Partner Programme &middot; Effective: 7 March 2026</p>
 
         {/* Split payment clause */}
         <section className="mb-8">
           <h2 className="text-base font-semibold text-gray-900 mb-2">1. Payment Flow &amp; Fund Distribution</h2>
           <p>
-            SunBnB, operated by <strong>{co.companyName}</strong>{co.businessId ? ` (Business ID: ${co.businessId})` : ''}, facilitates payments between consumers (&ldquo;Guests&rdquo;) and Beach Club partners (&ldquo;Merchants&rdquo;) via the Mollie payment platform under the Mollie for Platforms (intermediary) model.
+            Sunbnb, operated by <strong>{co.companyName}</strong>{co.businessId ? ` (Business ID: ${co.businessId})` : ''}, facilitates payments between consumers (&ldquo;Guests&rdquo;) and Beach Club partners (&ldquo;Merchants&rdquo;) via the Mollie payment platform under the Mollie for Platforms (intermediary) model.
           </p>
           <div className="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4">
             <p className="font-semibold text-gray-900 mb-2">When a customer completes a payment:</p>
@@ -38,7 +38,7 @@ export default async function MerchantAgreementPage() {
         <section className="mb-8">
           <h2 className="text-base font-semibold text-gray-900 mb-2">2. Platform Service Fee</h2>
           <p>
-            The platform service fee compensates {co.companyName} for providing the SunBnB technology platform, including: booking management, consumer-facing app, real-time inventory, settlement reporting, tax-compliant receipt generation, and customer support infrastructure.
+            The platform service fee compensates {co.companyName} for providing the Sunbnb technology platform, including: booking management, consumer-facing app, real-time inventory, settlement reporting, tax-compliant receipt generation, and customer support infrastructure.
           </p>
           <p className="mt-2">
             The fee rate is defined in the individual partner agreement and may vary by site configuration. The fee is deducted at the transaction level and is itemised in each settlement report. The fee is inclusive of the standard Mollie payment processing cost unless otherwise agreed.
@@ -61,7 +61,7 @@ export default async function MerchantAgreementPage() {
         <section className="mb-8">
           <h2 className="text-base font-semibold text-gray-900 mb-2">4. Refund Responsibility</h2>
           <p>
-            Refunds to Guests are initiated through the SunBnB platform and processed via the Merchant&rsquo;s Mollie account. The Merchant bears the economic cost of refunds for cancellations attributable to the Merchant (e.g., venue closure, overbooking). Where a refund results from a platform error, {co.companyName} will bear the cost.
+            Refunds to Guests are initiated through the Sunbnb platform and processed via the Merchant&rsquo;s Mollie account. The Merchant bears the economic cost of refunds for cancellations attributable to the Merchant (e.g., venue closure, overbooking). Where a refund results from a platform error, {co.companyName} will bear the cost.
           </p>
         </section>
 
@@ -81,7 +81,7 @@ export default async function MerchantAgreementPage() {
 
           <h3 className="text-sm font-semibold text-gray-800 mt-4 mb-1">6.1 Search Ranking &amp; Listing Criteria</h3>
           <p>
-            Venue listings on the SunBnB consumer app are ranked based on the following parameters:
+            Venue listings on the Sunbnb consumer app are ranked based on the following parameters:
           </p>
           <ul className="mt-1.5 list-disc list-inside text-gray-600 space-y-1">
             <li><strong>Geographic proximity</strong> to the Guest&rsquo;s search location (primary factor)</li>

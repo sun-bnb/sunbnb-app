@@ -8,7 +8,7 @@ export default async function VerifactuNoticePage() {
       <div className="max-w-3xl mx-auto px-6 py-12 text-sm text-gray-700 leading-relaxed">
 
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Veri*factu Compliance Notice for Spanish Partners</h1>
-        <p className="text-xs text-gray-400 mb-8">SunBnB Partner Programme &middot; Effective: 7 March 2026</p>
+        <p className="text-xs text-gray-400 mb-8">Sunbnb Partner Programme &middot; Effective: 7 March 2026</p>
 
         <section className="mb-8 bg-amber-50 border border-amber-200 rounded-lg p-5">
           <h2 className="text-base font-semibold text-gray-900 mb-2">Important: Spanish Tax Mandate — Veri*factu (January 2026)</h2>
@@ -16,7 +16,7 @@ export default async function VerifactuNoticePage() {
             The Kingdom of Spain has enacted <strong>Real Decreto 1007/2023</strong>, establishing the <strong>Veri*factu</strong> system as the mandatory framework for electronic invoicing and receipt generation for all businesses operating within Spanish territory. Compliance became obligatory from <strong>1 January 2026</strong>.
           </p>
           <p className="mt-2">
-            As your Beach Club is the <strong>Seller of Record</strong> for all customer transactions processed through SunBnB, these obligations apply directly to your business.
+            As your Beach Club is the <strong>Seller of Record</strong> for all customer transactions processed through Sunbnb, these obligations apply directly to your business.
           </p>
         </section>
 
@@ -34,9 +34,9 @@ export default async function VerifactuNoticePage() {
         </section>
 
         <section className="mb-8">
-          <h2 className="text-base font-semibold text-gray-900 mb-2">How SunBnB Supports Your Compliance</h2>
+          <h2 className="text-base font-semibold text-gray-900 mb-2">How Sunbnb Supports Your Compliance</h2>
           <p>
-            The SunBnB platform generates <strong>Veri*factu-compliant receipts</strong> for all transactions occurring at Spanish partner venues. Our system implements:
+            The Sunbnb platform generates <strong>Veri*factu-compliant receipts</strong> for all transactions occurring at Spanish partner venues. Our system implements:
           </p>
           <div className="mt-3 space-y-3">
             <div className="flex items-start gap-3 bg-gray-50 rounded-lg p-3 border border-gray-100">
@@ -73,10 +73,10 @@ export default async function VerifactuNoticePage() {
         <section className="mb-8">
           <h2 className="text-base font-semibold text-gray-900 mb-2">Your Obligations</h2>
           <p>
-            While SunBnB automates the receipt generation process, the <strong>legal responsibility for tax compliance rests with you</strong> as the Seller of Record. You are responsible for:
+            While Sunbnb automates the receipt generation process, the <strong>legal responsibility for tax compliance rests with you</strong> as the Seller of Record. You are responsible for:
           </p>
           <ul className="mt-2 list-disc list-inside text-gray-600 space-y-1.5">
-            <li>Ensuring your NIF/CIF and business details are accurate in the SunBnB partner dashboard</li>
+            <li>Ensuring your NIF/CIF and business details are accurate in the Sunbnb partner dashboard</li>
             <li>Declaring and remitting IVA to the Agencia Tributaria</li>
             <li>Keeping your own copies of all receipts for the statutory retention period</li>
             <li>Consulting with your tax advisor regarding your specific obligations under Spanish tax law</li>

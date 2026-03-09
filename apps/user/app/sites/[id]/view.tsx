@@ -14,6 +14,7 @@ import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrow
 import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import EventNoteIcon from '@mui/icons-material/EventNote'
 import Image from 'next/image'
 import { useTranslations } from 'next-intl'
 import { useState } from 'react'
@@ -26,7 +27,7 @@ import {
 } from '@/store/features/api/apiSlice'
 
 import ReservationView from './Reservation'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 
 const serviceIcons: {
   [key: string]: React.ReactElement
@@ -58,9 +59,18 @@ const Backdrop = ({ onClick }: { onClick?: () => void }) => {
   );
 }
 
-export default function SiteView({ site, apiKey, stripePublicKey  }: { site: SiteProps, apiKey: string, stripePublicKey: string | undefined }) {
+export interface SiteViewBrand {
+  brandName: string
+  tagline?: string | null
+  bgColor?: string | null
+  fgColor?: string | null
+  logoUrl?: string | null
+}
+
+export default function SiteView({ site, apiKey, stripePublicKey, brand }: { site: SiteProps, apiKey: string, stripePublicKey: string | undefined, brand?: SiteViewBrand }) {
 
   const router = useRouter()
+  const pathname = usePathname()
 
   const dispatch = useDispatch()
   const sitesState = useSelector((state: RootState) => state.sites)
@@ -96,7 +106,9 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
   const bottomOffset = pendingReservationId ? '-405px' : '-364px'
   
   return (
-    <div className="mx-auto bg-cream pt-[80px] max-w-6xl min-h-screen">
+    <div className={`mx-auto max-w-6xl min-h-screen ${brand ? '' : 'bg-cream pt-[80px]'}`}
+      style={brand ? { backgroundColor: brand.bgColor || '#faf9f6', color: brand.fgColor || '#111827' } : undefined}
+    >
       {
         focused &&
           <Backdrop onClick={() => {
@@ -109,36 +121,60 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
         <div className="relative overflow-hidden lg:rounded-xl" onClick={() => {
           dispatch(setValue({ focused: false }))
         }}>
-          <div className="w-full border-t border-cream">
+          <div className={`w-full ${brand ? '' : 'border-t border-cream'}`}>
             {
               (site.image && site.imageWidth && site.imageHeight) &&
                 <Image width={site.imageWidth} height={site.imageHeight} alt={site.description || ''} className="w-full h-auto lg:rounded-xl" src={site.image} />
             }
           </div>
-          <div className="absolute inset-0 bg-gradient-to-b from-cream to-transparent via-transparent h-100"></div>
-          <div className="absolute top-2 left-3 text-2xl bg-black/30 px-3 py-1 rounded-lg text-white backdrop-blur-sm font-semibold">
-            { site.name }
-          </div>
+          {brand ? (
+            <>
+              <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/40 to-transparent" style={{ height: '60%' }}></div>
+              <div className="absolute top-3 left-3 right-14">
+                <h1 className="text-2xl font-bold text-white drop-shadow-lg">{brand.brandName}</h1>
+                {brand.tagline && (
+                  <p className="text-sm text-white/85 mt-0.5 drop-shadow-md">{brand.tagline}</p>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  const slugMatch = pathname.match(/^\/s\/([^/]+)/)
+                  const target = slugMatch ? `/s/${slugMatch[1]}/reservations` : '/reservations'
+                  router.push(target)
+                }}
+                className="absolute bottom-3 right-3 flex items-center justify-center w-9 h-9 rounded-full bg-black/40 backdrop-blur-sm text-white hover:bg-black/60 transition-colors"
+              >
+                <EventNoteIcon style={{ fontSize: 20 }} />
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="absolute inset-0 bg-gradient-to-b from-cream to-transparent via-transparent h-100"></div>
+              <div className="absolute top-2 left-3 text-2xl bg-black/30 px-3 py-1 rounded-lg text-white backdrop-blur-sm font-semibold">
+                { site.name }
+              </div>
+            </>
+          )}
         </div>
-        <div className="py-3 px-3">
-          <div className="flex justify-between items-center">
+        <div className={brand ? 'px-3' : 'py-3 px-3'}>
+          <div className={`flex justify-between items-center ${brand ? 'bg-black/30 -mx-3 px-3 py-2' : ''}`}>
             <div className="flex items-center gap-3 text-sm">
               <div>
                 <span className="mr-1">&#x26F1;</span>
-                <span className={(availableCount || 0) > 0 ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>{availableCount}</span>
-                <span className="text-gray-300 mx-px">/</span>
-                <span className="text-gray-400">{itemCount}</span>
+                <span className={brand ? 'text-green-400 font-medium' : (availableCount || 0) > 0 ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>{availableCount}</span>
+                <span className={brand ? 'text-white/50 mx-px' : 'text-gray-300 mx-px'}>/</span>
+                <span className={brand ? 'text-white/60' : 'text-gray-400'}>{itemCount}</span>
               </div>
               {
                 site.distance &&
-                  <div className="text-gray-600">
+                  <div className={brand ? 'text-white/90' : 'text-gray-600'}>
                     <span className="mr-px">{Math.round(site.distance)}</span>
-                    <span className="text-xs text-gray-400">KM</span>
+                    <span className={`text-xs ${brand ? 'text-white/60' : 'text-gray-400'}`}>KM</span>
                   </div>
               }
               {
                 site.price &&
-                  <div className="text-gray-700 font-medium">
+                  <div className={brand ? 'text-white font-medium' : 'text-gray-700 font-medium'}>
                     <span>&#8364;</span>
                     <span>{site.price}</span>
                   </div>
@@ -148,7 +184,7 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
               {
                 (site.services || []).map(service => {
                   return (
-                    <div key={`service-${service}`} className="border border-gray-200 rounded-md px-1 py-px text-gray-500">
+                    <div key={`service-${service}`} className={brand ? 'border border-white/30 rounded-md px-1 py-px text-white/80' : 'border border-gray-200 rounded-md px-1 py-px text-gray-500'}>
                       <div className="-mt-px">
                         { serviceIcons[service] }
                       </div>
@@ -158,7 +194,7 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
               }
             </div>
           </div>
-          <div className="pt-2 text-sm text-gray-600 leading-relaxed">
+          <div className={`pt-2 text-sm leading-relaxed ${brand ? 'mt-2' : 'text-gray-600'}`}>
             { site.description }
           </div>
           <div className={`pt-3 ${whMaxHeight} overflow-hidden`}>
@@ -195,7 +231,9 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
         </div>
         {/* Right column: reservation panel — sticky sidebar on desktop, fixed drawer on mobile */}
         <div className="hidden lg:block lg:flex-[2] lg:min-w-[360px] lg:max-w-[480px]">
-          <div className="lg:sticky lg:top-[80px] bg-cream px-3 pb-4 border border-subtle rounded-xl shadow-soft">
+          <div className={`lg:sticky lg:top-[80px] px-3 pb-4 border rounded-xl shadow-soft ${brand ? '' : 'bg-cream border-subtle'}`}
+            style={brand ? { backgroundColor: brand.bgColor || '#faf9f6', borderColor: `${brand.fgColor || '#111827'}15` } : undefined}
+          >
             <div className="w-full">
               {
                 withHours ?
@@ -220,17 +258,19 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
         {/* Mobile spacer + fixed bottom drawer */}
         <div className="mt-[140px] lg:hidden">
         </div>
-        <div style={{ 
+        <div style={{
           zIndex: 11,
           bottom: !focused ? bottomOffset : '0px',
-        }} className={`lg:hidden fixed left-0 w-full bg-cream text-white text-center px-3 pb-4 border-t border-subtle transition-bottom duration-500`}>
+          ...(brand ? { backgroundColor: brand.bgColor || '#faf9f6', color: brand.fgColor || '#111827', borderColor: `${brand.fgColor || '#111827'}15` } : {}),
+        }} className={`lg:hidden fixed left-0 w-full text-center px-3 pb-4 border-t transition-bottom duration-500 ${brand ? '' : 'bg-cream text-white border-subtle'}`}>
         
           {
             focused ? (
-              <div className="text-black absolute w-[100px] bg-cream rounded-full border border-subtle shadow-soft" style={{
+              <div className="text-black absolute w-[100px] rounded-full border shadow-soft" style={{
                 left: 'calc(50% - 50px)',
                 top: '-15px',
-                zIndex: 2
+                zIndex: 2,
+                ...(brand ? { backgroundColor: brand.bgColor || '#faf9f6', borderColor: `${brand.fgColor || '#111827'}15`, color: brand.fgColor || '#111827' } : { backgroundColor: 'var(--color-cream, #faf9f6)', borderColor: 'var(--color-subtle, #e5e7eb)' }),
               }}
               onClick={() => {
                 dispatch(setValue({ focused: false }))
@@ -240,10 +280,11 @@ export default function SiteView({ site, apiKey, stripePublicKey  }: { site: Sit
             ) : (
               pendingReservationId &&
                 (
-                  <div className="text-black absolute w-[100px] bg-cream rounded-full border border-subtle shadow-soft" style={{
+                  <div className="text-black absolute w-[100px] rounded-full border shadow-soft" style={{
                     left: 'calc(50% - 50px)',
                     top: '-15px',
-                    zIndex: 2
+                    zIndex: 2,
+                    ...(brand ? { backgroundColor: brand.bgColor || '#faf9f6', borderColor: `${brand.fgColor || '#111827'}15`, color: brand.fgColor || '#111827' } : { backgroundColor: 'var(--color-cream, #faf9f6)', borderColor: 'var(--color-subtle, #e5e7eb)' }),
                   }}
                   onClick={() => {
                     dispatch(setValue({ focused: true }))

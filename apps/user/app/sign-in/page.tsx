@@ -82,7 +82,6 @@ function SignInContent() {
       {/* OAuth providers */}
       <div className="mt-8 space-y-3">
         <OAuthButton provider="google" onClick={() => signIn('google', { callbackUrl })} className="bg-cream-light border-cream-dark hover:bg-cream-muted" />
-        <OAuthButton provider="facebook" onClick={() => signIn('facebook', { callbackUrl })} className="bg-cream-light border-cream-dark hover:bg-cream-muted" />
       </div>
 
       <div className="mt-6">

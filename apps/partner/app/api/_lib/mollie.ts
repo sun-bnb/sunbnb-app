@@ -305,7 +305,7 @@ export async function bootstrapMollieAccount(
         },
         body: JSON.stringify({
           organization: {
-            name: 'SunBnB Test Merchant',
+            name: 'Sunbnb Test Merchant',
             address: {
               streetAndNumber: 'Keizersgracht 126',
               postalCode: '1015 AA',
@@ -314,7 +314,7 @@ export async function bootstrapMollieAccount(
             },
           },
           profile: {
-            name: 'SunBnB Beach Club',
+            name: 'Sunbnb Beach Club',
             url: 'https://sunbnb.app',
             email: opts?.email || 'test@sunbnb.app',
             description: 'Beach club sunbed rentals, food & beverages',

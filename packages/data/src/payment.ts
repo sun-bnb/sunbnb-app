@@ -9,7 +9,7 @@
  *   1. PARTNER invoice — product/service lines, taxed at the partner site's VAT rate.
  *      Merchant of record: the partner company.
  *   2. PLATFORM invoice — service fee line, taxed at the platform's default VAT rate.
- *      Merchant of record: SunBnB (business entity from Settings).
+ *      Merchant of record: Sunbnb (business entity from Settings).
  *
  * Key design principles:
  * - Idempotent: safe to call multiple times (webhook + polling convergence)
@@ -299,7 +299,7 @@ export async function loadFeeContext(
  *      Merchant of record: partner company.
  *   2. PLATFORM invoice — service fee line
  *      Taxed at the VAT rate from the fee's associated Settings entry.
- *      Merchant of record: SunBnB business entity.
+ *      Merchant of record: Sunbnb business entity.
  *
  * Safe to call multiple times — skips if already processed.
  */
@@ -484,7 +484,7 @@ export async function processConfirmedReservation(
  *      Merchant of record: partner company.
  *   2. PLATFORM invoice — service fee line
  *      Taxed at the VAT rate from the fee's associated Settings entry.
- *      Merchant of record: SunBnB business entity.
+ *      Merchant of record: Sunbnb business entity.
  *
  * Fee model: fees are INCLUDED in the product price.
  * Customer pays exactly order.paymentAmount (the product total).

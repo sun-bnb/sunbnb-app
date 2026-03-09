@@ -160,3 +160,131 @@ export async function setPaymentProvider(
   revalidatePath('/sites')
   return { status: 'ok' }
 }
+
+// ─── Get Brand Settings ─────────────────────────────────────────────────────
+
+export async function getBrand(siteId: string) {
+  const session = await auth()
+  if (!session?.user) return null
+
+  const site = await prisma.site.findFirst({
+    where: { id: siteId, userId: session.user.id },
+    select: { slug: true, name: true, brand: true },
+  })
+
+  return site
+}
+
+// ─── Check Slug Availability ────────────────────────────────────────────────
+
+export async function checkSlug(
+  slug: string,
+  siteId: string,
+): Promise<{ available: boolean }> {
+  const session = await auth()
+  if (!session?.user) return { available: false }
+
+  const normalized = slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '')
+  if (!normalized || normalized.length < 3) return { available: false }
+
+  const existing = await prisma.site.findFirst({
+    where: { slug: normalized, id: { not: siteId } },
+  })
+
+  return { available: !existing }
+}
+
+// ─── Generate Unique Slug From Site Name ────────────────────────────────────
+
+export async function generateSlug(
+  siteName: string,
+  siteId: string,
+): Promise<string> {
+  const session = await auth()
+  if (!session?.user) return ''
+
+  const base = siteName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+
+  if (!base) return ''
+
+  // Check if base slug is free
+  const existing = await prisma.site.findFirst({
+    where: { slug: base, id: { not: siteId } },
+  })
+  if (!existing) return base
+
+  // Try base-1, base-2, etc.
+  for (let i = 1; i <= 100; i++) {
+    const candidate = `${base}-${i}`
+    const taken = await prisma.site.findFirst({
+      where: { slug: candidate, id: { not: siteId } },
+    })
+    if (!taken) return candidate
+  }
+
+  return `${base}-${Date.now()}`
+}
+
+// ─── Save Brand Settings ────────────────────────────────────────────────────
+
+export async function saveBrand(input: {
+  siteId: string
+  brandName: string
+  slug: string
+  tagline: string
+  bgColor: string
+  fgColor: string
+}): Promise<{ status: string; errors?: string[] }> {
+  const session = await auth()
+  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+
+  const errors: string[] = []
+  if (!input.brandName?.trim()) errors.push('Brand name is required')
+
+  // Validate slug format
+  const slug = input.slug?.trim().toLowerCase().replace(/[^a-z0-9-]/g, '') || null
+  if (slug) {
+    if (slug.length < 3) errors.push('Slug must be at least 3 characters')
+    if (slug.length > 60) errors.push('Slug must be at most 60 characters')
+    // Check uniqueness
+    const existing = await prisma.site.findFirst({
+      where: { slug, id: { not: input.siteId } },
+    })
+    if (existing) errors.push('This URL slug is already taken')
+  }
+
+  if (errors.length > 0) return { status: 'error', errors }
+
+  // Update slug on the Site itself
+  await prisma.site.update({
+    where: { id: input.siteId },
+    data: { slug },
+  })
+
+  // Upsert the brand record
+  await prisma.siteBrand.upsert({
+    where: { siteId: input.siteId },
+    create: {
+      siteId: input.siteId,
+      brandName: input.brandName.trim(),
+      tagline: input.tagline?.trim() || null,
+      bgColor: input.bgColor || '#faf9f6',
+      fgColor: input.fgColor || '#111827',
+    },
+    update: {
+      brandName: input.brandName.trim(),
+      tagline: input.tagline?.trim() || null,
+      bgColor: input.bgColor || '#faf9f6',
+      fgColor: input.fgColor || '#111827',
+    },
+  })
+
+  revalidatePath('/sites')
+  return { status: 'ok' }
+}

@@ -31,7 +31,7 @@ import dayjs from 'dayjs'
 import SunbedSelection from '@/components/reservation/SunbedSelection'
 import { saveReservationForMultipleItems } from './actions'
 import PaymentView from '@/app/payment/Payment'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 
 function PaymentMethodSelection() {
 
@@ -145,6 +145,12 @@ function ReservationTimerangeSelector() {
               width: '100%',
               input: {
                 textAlign: 'center'
+              },
+              '& .MuiInputLabel-root': {
+                backgroundColor: 'white',
+                px: '6px',
+                borderRadius: '4px',
+                border: '1px solid rgba(0,0,0,0.23)',
               }
             }}
             onOpen={() => {
@@ -179,6 +185,7 @@ function ReservationButton({
 
   const { data: session } = useSession()
   const router = useRouter()
+  const pathname = usePathname()
   const loggedIn = !!(session?.user?.id)
 
   const dispatch = useDispatch();
@@ -198,7 +205,8 @@ function ReservationButton({
         !loggedIn ? (
           <Button variant="contained" 
             fullWidth={true} onClick={() => {
-              router.push('/api/auth/signin?callbackUrl=' + `/sites/${site.id}`)
+              const callbackUrl = pathname.startsWith('/s/') ? pathname : `/sites/${site.id}`
+              router.push('/api/auth/signin?callbackUrl=' + callbackUrl)
             }}>
               {t('Login to reserve')}
           </Button>

@@ -126,7 +126,7 @@ export default async function Receipt({ params, searchParams }: { params: { id: 
     )
 
     const platformSection = platformInvoice
-      ? buildSection(platformInvoice, 'SunBnB')
+      ? buildSection(platformInvoice, 'Sunbnb')
       : null
 
     const grandTotal =
@@ -185,7 +185,7 @@ export default async function Receipt({ params, searchParams }: { params: { id: 
   )
 
   const platformSection = platformInvoice
-    ? buildSection(platformInvoice, 'SunBnB')
+    ? buildSection(platformInvoice, 'Sunbnb')
     : null
 
   const grandTotal =

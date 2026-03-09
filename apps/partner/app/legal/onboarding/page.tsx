@@ -8,14 +8,14 @@ export default async function OnboardingGuidePage() {
       <div className="max-w-3xl mx-auto px-6 py-12 text-sm text-gray-700 leading-relaxed">
 
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Onboarding Guide for Beach Clubs</h1>
-        <p className="text-xs text-gray-400 mb-8">SunBnB Partner Programme &middot; Effective: 7 March 2026</p>
+        <p className="text-xs text-gray-400 mb-8">Sunbnb Partner Programme &middot; Effective: 7 March 2026</p>
 
         <section className="mb-8">
-          <h2 className="text-base font-semibold text-gray-900 mb-2">Welcome to SunBnB</h2>
+          <h2 className="text-base font-semibold text-gray-900 mb-2">Welcome to Sunbnb</h2>
           <p>
-            SunBnB is a marketplace platform operated by <strong>{co.companyName}</strong>
+            Sunbnb is a marketplace platform operated by <strong>{co.companyName}</strong>
             {co.businessId ? ` (Business ID: ${co.businessId}` : ''}
-            {co.businessId && co.companyAddress ? `, ${co.companyAddress})` : co.businessId ? ')' : co.companyAddress ? ` (${co.companyAddress})` : ''}. We connect travellers with beach venues across the Mediterranean. As a Beach Club partner, you retain full control of your business — SunBnB provides the technology to modernise your booking, payment, and operations workflow.
+            {co.businessId && co.companyAddress ? `, ${co.companyAddress})` : co.businessId ? ')' : co.companyAddress ? ` (${co.companyAddress})` : ''}. We connect travellers with beach venues across the Mediterranean. As a Beach Club partner, you retain full control of your business — Sunbnb provides the technology to modernise your booking, payment, and operations workflow.
           </p>
         </section>
 
@@ -28,7 +28,7 @@ export default async function OnboardingGuidePage() {
             <li>You are responsible for issuing invoices and receipts to customers.</li>
             <li>You bear the VAT/tax obligations for services rendered at your venue.</li>
             <li>The customer&rsquo;s contractual relationship is with your business, not with {co.companyName}.</li>
-            <li>SunBnB generates tax-compliant receipts on your behalf through its platform, but the legal obligation remains yours.</li>
+            <li>Sunbnb generates tax-compliant receipts on your behalf through its platform, but the legal obligation remains yours.</li>
           </ul>
         </section>
 
@@ -50,13 +50,13 @@ export default async function OnboardingGuidePage() {
               </p>
             </li>
             <li>
-              <strong>Connect Payments</strong> — Link your Mollie account to SunBnB via our secure OAuth integration (Mollie Connect). This authorises SunBnB to create payments on your behalf. Customer funds are deposited directly into your Mollie account.
+              <strong>Connect Payments</strong> — Link your Mollie account to Sunbnb via our secure OAuth integration (Mollie Connect). This authorises Sunbnb to create payments on your behalf. Customer funds are deposited directly into your Mollie account.
             </li>
             <li>
               <strong>Configure Your Site</strong> — Use the partner dashboard to set up your beach layout, inventory (sunbeds, umbrellas, VIP zones), pricing, and operating hours.
             </li>
             <li>
-              <strong>Go Live</strong> — Your venue listing becomes available to guests on the SunBnB consumer app. You can manage bookings, view real-time analytics, and handle orders from your dashboard.
+              <strong>Go Live</strong> — Your venue listing becomes available to guests on the Sunbnb consumer app. You can manage bookings, view real-time analytics, and handle orders from your dashboard.
             </li>
           </ol>
         </section>
