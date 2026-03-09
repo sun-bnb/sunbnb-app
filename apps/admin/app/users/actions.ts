@@ -1,16 +1,31 @@
 'use server'
 
+import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+
+// ─── Auth guard ─────────────────────────────────────────────
+
+async function requireSudo() {
+  const session = await auth()
+  if (!session?.user) throw new Error('Not authenticated')
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { sudo: true },
+  })
+  if (!user?.sudo) throw new Error('Unauthorized — sudo required')
+}
 
 // ── Admin users ─────────────────────────────────────────────
 
 export async function getAdminUsers() {
+  await requireSudo()
   return prisma.adminUser.findMany({
     orderBy: { createdAt: 'desc' },
   })
 }
 
 export async function addAdminUser(email: string) {
+  await requireSudo()
   const trimmed = email.trim().toLowerCase()
   if (!trimmed || !trimmed.includes('@')) {
     return { status: 'error', error: 'Please enter a valid email address' }
@@ -29,6 +44,7 @@ export async function addAdminUser(email: string) {
 }
 
 export async function removeAdminUser(id: string) {
+  await requireSudo()
   await prisma.adminUser.delete({ where: { id } })
   return { status: 'ok' }
 }
@@ -48,6 +64,7 @@ export interface UserSearchResult {
 }
 
 export async function searchUsers(query: string): Promise<UserSearchResult[]> {
+  await requireSudo()
   const trimmed = query.trim()
   if (!trimmed) return []
 
@@ -79,6 +96,7 @@ export async function searchUsers(query: string): Promise<UserSearchResult[]> {
 }
 
 export async function deleteUser(userId: string) {
+  await requireSudo()
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {

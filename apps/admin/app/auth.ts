@@ -16,12 +16,16 @@ const nextAuthResult: NextAuthResult = NextAuth({
     GoogleProvider({
       clientId: process.env.GOOGLE_OAUTH_ID!,
       clientSecret: process.env.GOOGLE_OAUTH_SECRET!,
-      // SECURITY NOTE: see partner/app/auth.ts for explanation
+      // SECURITY: allowDangerousEmailAccountLinking lets an OAuth account link
+      // to an existing credentials-based user by email match. The risk (OAuth
+      // account takeover) is mitigated here because the signIn callback below
+      // enforces an adminUser allowlist — only pre-approved emails can sign in.
       allowDangerousEmailAccountLinking: true,
     }),
     FacebookProvider({
       clientId: process.env.FACEBOOK_APP_ID!,
       clientSecret: process.env.FACEBOOK_APP_SECRET!,
+      // See GoogleProvider note above
       allowDangerousEmailAccountLinking: true,
     }),
     CredentialsProvider({

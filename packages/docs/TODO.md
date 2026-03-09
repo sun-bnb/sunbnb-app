@@ -2,22 +2,67 @@
 
 ## Environment Variables (Vercel)
 
-| Variable | App(s) | Priority | Action |
-|---|---|---|---|
-| `NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY` | user | High | Create an HTTP-referrer-restricted Google Maps API key and set it in Vercel. The server-side `GOOGLE_MAPS_API_KEY` is used as a fallback until this is configured. |
-| `RECONCILIATION_SECRET` | user | High | Generate with `openssl rand -base64 32` and set in Vercel. The `/api/reconcile` endpoint returns 503 without it. |
-| `ALLOWED_ORIGINS` | all (via packages/data) | Medium | Comma-separated list of app origins (e.g. `https://app.sunbnb.com,https://partner.sunbnb.com`). Password reset silently refuses unrecognised origins. |
+### 1. `NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY`
+
+- **App(s):** user
+- **Urgency: High — deploy before production launch.**
+  Without this, the server-side `GOOGLE_MAPS_API_KEY` (which has no HTTP-referrer restriction) is exposed to the browser as a fallback. An attacker can extract it from client JS and use it for unrestricted Maps/Places billing against your account.
+- **How to complete:**
+  1. Go to [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials).
+  2. Create a new API key. Under "Application restrictions", choose **HTTP referrers** and add your production domain(s) (e.g. `https://app.sunbnb.com/*`).
+  3. Under "API restrictions", limit to **Maps JavaScript API** and **Places API**.
+  4. In Vercel → user app → Settings → Environment Variables, add `NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY` with the new key.
+  5. Redeploy. The 6 pages that reference `process.env.NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY` will pick it up.
+
+### 2. `RECONCILIATION_SECRET`
+
+- **App(s):** user
+- **Urgency: High — required for payment reconciliation to work.**
+  The `/api/reconcile` endpoint returns 503 ("Reconciliation not configured") if this is missing. This means Stripe/Mollie cannot trigger reconciliation jobs.
+- **How to complete:**
+  1. Generate a strong secret: `openssl rand -base64 32`
+  2. In Vercel → user app → Settings → Environment Variables, add `RECONCILIATION_SECRET` for all environments (production, preview, development).
+  3. Configure your Stripe/Mollie webhook or cron job caller to pass this secret in the `Authorization: Bearer <secret>` header (or as the query/body parameter used by `apps/user/app/api/reconcile/route.ts`).
+
+### 3. `ALLOWED_ORIGINS`
+
+- **App(s):** all (consumed by `packages/data/src/password-reset.ts`)
+- **Urgency: Medium — important before production, not blocking development.**
+  Without this, password-reset emails accept any `Origin` header value, meaning an attacker could craft a request with a malicious origin and the reset link would point to their domain. When set, unrecognised origins are silently rejected.
+- **How to complete:**
+  1. Determine all legitimate app origins: `https://app.sunbnb.com`, `https://partner.sunbnb.com`, `https://admin.sunbnb.com` (plus any preview/staging URLs).
+  2. In Vercel → each app → Settings → Environment Variables, add `ALLOWED_ORIGINS` as a comma-separated string, e.g.: `https://app.sunbnb.com,https://partner.sunbnb.com,https://admin.sunbnb.com`
+  3. Alternatively, set it once in a shared Vercel environment-variable group if you use one.
+
+---
 
 ## Code-Level Improvements (Non-Blocking)
 
-### 1. OAuth Account Linking — Password Verification on First Link
+### 4. OAuth Account Linking — Password Verification on First Link
 
-- **File:** `apps/user/app/auth.ts` (GoogleProvider, FacebookProvider)
-- **Issue:** `allowDangerousEmailAccountLinking: true` lets OAuth sign-in link to existing credentials-only accounts by matching email. An attacker with OAuth control of an email address could access a credentials-only account.
-- **Mitigation:** Add a password verification step when an OAuth provider first links to an account that only has credentials. This is a UX/security tradeoff — the current setting is required for smooth onboarding.
+- **File:** `apps/user/app/auth.ts`, `apps/partner/app/auth.ts` (GoogleProvider, FacebookProvider)
+- **Urgency: Low — nice-to-have, not a launch blocker.**
+  `allowDangerousEmailAccountLinking: true` lets OAuth sign-in auto-link to an existing credentials-only account by email match. An attacker who controls a Google/Facebook account with the victim's email could gain access. In practice, this requires the attacker to already own a verified Google/Facebook account with the target email — a rare scenario — and the admin app mitigates this further with an `adminUser` allowlist.
+- **How to complete:**
+  1. In the `signIn` callback, detect when an OAuth sign-in would link to a user that has a `password` field set but no existing `Account` record for that provider.
+  2. Instead of auto-linking, redirect to a page asking the user to confirm by entering their existing password.
+  3. Upon successful password verification, programmatically create the `Account` link and continue the sign-in flow.
+  4. This is a non-trivial UX change — consider implementing it as a future feature sprint.
 
-### 2. Rate Limiter — Upgrade to Redis/Upstash
+### 5. Rate Limiter — Upgrade to Redis/Upstash
 
 - **File:** `packages/data/src/rate-limit.ts`
-- **Issue:** The current rate limiter is in-memory per serverless instance. Each Vercel cold start gets a fresh map, so sustained distributed attacks can bypass it.
-- **Recommendation:** Swap to a Redis or Upstash-backed rate limiter for durable, cross-instance enforcement. The current implementation is sufficient for single-instance burst protection.
+- **Urgency: Low — current implementation works for moderate traffic.**
+  The in-memory `Map`-based rate limiter resets on each Vercel serverless cold start. Under sustained distributed attacks, each new instance starts with a clean slate, effectively bypassing the limit. For normal usage and burst protection, it works fine.
+- **How to complete:**
+  1. Install `@upstash/ratelimit` and `@upstash/redis` in `packages/data`.
+  2. Create an Upstash Redis database at [upstash.com](https://upstash.com) (free tier is sufficient).
+  3. Replace the `rateLimit()` function body with Upstash's sliding-window algorithm:
+     ```ts
+     import { Ratelimit } from '@upstash/ratelimit'
+     import { Redis } from '@upstash/redis'
+     const redis = Redis.fromEnv()  // reads UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+     const limiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(5, '15 m') })
+     ```
+  4. Keep the existing in-memory implementation as a fallback when `UPSTASH_REDIS_REST_URL` is not set, so local dev continues to work without Redis.
+  5. Add `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` to Vercel env vars.

@@ -1,32 +1,50 @@
 import prisma from '@repo/data/PrismaCient'
+import { auth } from '@/app/auth'
 import { NextResponse } from 'next/server'
 
 export async function GET() {
+  // Check if caller is an authenticated sudo user
+  let isSudo = false
+  try {
+    const session = await auth()
+    if (session?.user?.id) {
+      const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { sudo: true },
+      })
+      isSudo = !!user?.sudo
+    }
+  } catch {
+    // Not authenticated — continue with minimal response
+  }
+
   const start = Date.now()
   let dbStatus = 'unreachable'
   let dbLatency = 0
-  let siteCount = 0
-  let userCount = 0
 
   try {
     await prisma.$queryRaw`SELECT 1`
     dbLatency = Date.now() - start
     dbStatus = 'connected'
-
-    const [sites, users] = await Promise.all([
-      prisma.site.count(),
-      prisma.user.count(),
-    ])
-    siteCount = sites
-    userCount = users
   } catch {
     dbLatency = Date.now() - start
   }
 
-  return NextResponse.json({
+  // Public response: only connectivity status
+  const response: Record<string, unknown> = {
     status: dbStatus === 'connected' ? 'healthy' : 'degraded',
-    db: { status: dbStatus, latency: `${dbLatency}ms` },
-    records: { sites: siteCount, users: userCount },
     timestamp: new Date().toISOString(),
-  })
+  }
+
+  // Sudo users get full operational details
+  if (isSudo) {
+    const [siteCount, userCount] = await Promise.all([
+      prisma.site.count(),
+      prisma.user.count(),
+    ])
+    response.db = { status: dbStatus, latency: `${dbLatency}ms` }
+    response.records = { sites: siteCount, users: userCount }
+  }
+
+  return NextResponse.json(response)
 }
