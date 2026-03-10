@@ -30,6 +30,8 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
 
+import SurfingIcon from '@mui/icons-material/Surfing'
+
 import { useSite } from '@/app/sites/site-context'
 import { ServiceFee } from '@/types/shared'
 import MapHandler from '@/components/maps/map-handler'
@@ -40,6 +42,7 @@ import {
   setSiteStatus,
 } from '../site-actions'
 import { addWorkingHours, deleteWorkingHours } from '../working-hours-actions'
+import { toggleSiteFeature } from '../rentals/actions'
 
 function round(amount: number) {
   return Math.round(amount * 100) / 100
@@ -158,6 +161,7 @@ export default function GeneralView() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [features, setFeatures] = useState<string[]>(site.features || ['sunbeds'])
 
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
   const savedTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -527,6 +531,66 @@ export default function GeneralView() {
           </div>
         </div>
       )}
+
+      <Divider sx={{ mb: 3 }} />
+
+      {/* Site features */}
+      <div className="mb-5">
+        <h3 className="text-sm font-medium text-gray-700 mb-2">Site features</h3>
+        <p className="text-xs text-gray-500 mb-3">
+          Choose what this site offers. Customers will see the enabled features.
+        </p>
+        <div className="space-y-2">
+          <div className={`flex items-center justify-between rounded-lg border-2 p-3 transition-all ${
+            features.includes('sunbeds')
+              ? 'border-blue-300 bg-blue-50'
+              : 'border-gray-200 bg-gray-50'
+          }`}>
+            <div className="flex items-center gap-3">
+              <span className="text-xl">⛱️</span>
+              <div>
+                <div className="text-sm font-medium text-gray-700">Sunbed reservations</div>
+                <div className="text-xs text-gray-500">Customers can reserve sunbeds on a map</div>
+              </div>
+            </div>
+            <Switch
+              checked={features.includes('sunbeds')}
+              onChange={async () => {
+                const enabled = !features.includes('sunbeds')
+                const result = await toggleSiteFeature(site.id!, 'sunbeds', enabled)
+                if (result.status === 'ok' && result.features) {
+                  setFeatures(result.features)
+                }
+              }}
+              color="primary"
+            />
+          </div>
+          <div className={`flex items-center justify-between rounded-lg border-2 p-3 transition-all ${
+            features.includes('rentals')
+              ? 'border-blue-300 bg-blue-50'
+              : 'border-gray-200 bg-gray-50'
+          }`}>
+            <div className="flex items-center gap-3">
+              <SurfingIcon className={features.includes('rentals') ? 'text-blue-600' : 'text-gray-400'} />
+              <div>
+                <div className="text-sm font-medium text-gray-700">Equipment rental</div>
+                <div className="text-xs text-gray-500">Rent out surfboards, kayaks, umbrellas, and more</div>
+              </div>
+            </div>
+            <Switch
+              checked={features.includes('rentals')}
+              onChange={async () => {
+                const enabled = !features.includes('rentals')
+                const result = await toggleSiteFeature(site.id!, 'rentals', enabled)
+                if (result.status === 'ok' && result.features) {
+                  setFeatures(result.features)
+                }
+              }}
+              color="primary"
+            />
+          </div>
+        </div>
+      </div>
 
       <Divider sx={{ mb: 3 }} />
 

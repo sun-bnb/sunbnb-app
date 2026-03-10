@@ -4,18 +4,57 @@ import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Reservation } from '@/app/sites/types'
 import ReservationItem from '@/components/reservation/ReservationItem'
+import RentalBookingItem from '@/components/reservation/RentalBookingItem'
 import EventBusyIcon from '@mui/icons-material/EventBusy'
 
-export default function Reservations({ reservations }: { reservations: Reservation[] }) {
+export type RentalBookingListItem = {
+  id: string
+  siteId: string
+  rentalItemId: string
+  userId: string
+  from: Date
+  to: Date
+  quantity: number
+  durationType: string
+  totalPrice: number
+  status: string
+  operationalStatus: string
+  guestName: string | null
+  pickedUpAt: Date | null
+  returnedAt: Date | null
+  site: { id: string; name: string | null } | null
+  rentalItem: { id: string; name: string } | null
+}
+
+type ListEntry =
+  | { kind: 'reservation'; data: Reservation }
+  | { kind: 'rental'; data: RentalBookingListItem }
+
+export default function Reservations({
+  reservations,
+  rentalBookings,
+}: {
+  reservations: Reservation[]
+  rentalBookings: RentalBookingListItem[]
+}) {
 
   const [reservationType, setReservationType] = useState<string>('active')
 
   const t = useTranslations('Reservations')
 
   const now = new Date()
-  const visibleReservations = reservationType === 'active' ?
-    reservations.filter(reservation => reservation.to >= now) :
-    reservations.filter(reservation => reservation.to < now)
+
+  // Merge reservations + rental bookings into a single sorted list
+  const allEntries: ListEntry[] = [
+    ...reservations.map(r => ({ kind: 'reservation' as const, data: r })),
+    ...rentalBookings.map(r => ({ kind: 'rental' as const, data: r })),
+  ]
+
+  const visible = allEntries
+    .filter(entry =>
+      reservationType === 'active' ? entry.data.to >= now : entry.data.to < now
+    )
+    .sort((a, b) => new Date(b.data.from).getTime() - new Date(a.data.from).getTime())
     
   return (
     <div className="min-h-screen bg-cream">
@@ -39,7 +78,7 @@ export default function Reservations({ reservations }: { reservations: Reservati
         </div>
       </div>
       <div className="px-4 py-3 flex flex-col gap-1">
-        {visibleReservations.length === 0 && (
+        {visible.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-brand-gold/50">
             <EventBusyIcon sx={{ fontSize: 48, mb: 1 }} />
             <p className="text-sm font-medium">
@@ -47,13 +86,13 @@ export default function Reservations({ reservations }: { reservations: Reservati
             </p>
           </div>
         )}
-        {
-          visibleReservations.map(reservation => {
-            return (
-              <ReservationItem key={reservation.id} reservation={reservation} />
-            )
-          })
-        }
+        {visible.map(entry =>
+          entry.kind === 'reservation' ? (
+            <ReservationItem key={`r-${entry.data.id}`} reservation={entry.data} />
+          ) : (
+            <RentalBookingItem key={`rb-${entry.data.id}`} booking={entry.data} />
+          )
+        )}
       </div>
     </div>
   )

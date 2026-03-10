@@ -33,6 +33,10 @@ export async function GET(request: NextRequest, { params } : { params: { id: str
           pair: true,
           pairedBy: true
         }
+      },
+      rentalItems: {
+        where: { active: true },
+        orderBy: { name: 'asc' }
       }
     }
   })

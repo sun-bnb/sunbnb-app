@@ -61,6 +61,12 @@ export const httpApi = createApi({
         }
       },
       transformResponse: (response: Order) => response
+    }),
+    getRentalBookingById: builder.query({
+      query: ({ id }) => ({
+        url: `rental-bookings/${id}`,
+      }),
+      transformResponse: (response: any) => response
     })
   }),
 });
@@ -70,6 +76,7 @@ export const {
   useGetAvailabilityBySiteAndTimeRangeQuery,
   useGetReservationByIdQuery,
   useGetOrderByIdQuery,
+  useGetRentalBookingByIdQuery,
   useGetSiteByIdQuery,
   useLazyGetSiteByIdQuery
 } = httpApi;

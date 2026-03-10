@@ -101,6 +101,104 @@ export async function saveReservationForMultipleItems(
   return { status: 'ok', id: newReservation.id }
 }
 
+// ─── Rental Bookings ────────────────────────────────────────────────────────
+
+export async function saveRentalBooking(input: {
+  siteId: string
+  items: { rentalItemId: string; quantity: number }[]
+  durationType: string
+  from: string
+  to: string
+}) {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return { status: 'error', errors: ['Authentication required'] }
+  }
+
+  const site = await prisma.site.findUnique({ where: { id: input.siteId } })
+  if (!site) return { status: 'error', errors: ['Site not found'] }
+
+  const from = new Date(input.from)
+  const to = input.durationType === 'days'
+    ? dayjs(input.to).add(1, 'day').subtract(1, 'second').toDate()
+    : new Date(input.to)
+
+  // Load rental items to calculate pricing
+  const rentalItemIds = input.items.map(i => i.rentalItemId)
+  const rentalItems = await prisma.rentalItem.findMany({
+    where: { id: { in: rentalItemIds }, siteId: input.siteId, active: true },
+  })
+
+  if (rentalItems.length !== rentalItemIds.length) {
+    return { status: 'error', errors: ['Some items are not available'] }
+  }
+
+  // TODO: Check availability (compare booked quantities for the time range)
+  // For each item, count how many are already booked (excluding returned) in the overlapping time window
+  for (const cartItem of input.items) {
+    const rentalItem = rentalItems.find(ri => ri.id === cartItem.rentalItemId)
+    if (!rentalItem) continue
+
+    const bookedQty = await prisma.rentalBooking.aggregate({
+      where: {
+        rentalItemId: cartItem.rentalItemId,
+        siteId: input.siteId,
+        operationalStatus: { notIn: ['returned', 'cancelled'] },
+        from: { lt: to },
+        to: { gt: from },
+      },
+      _sum: { quantity: true },
+    })
+
+    const inUse = bookedQty._sum.quantity || 0
+    const available = rentalItem.totalQuantity - inUse
+    if (cartItem.quantity > available) {
+      return {
+        status: 'error',
+        errors: [`Only ${available} of "${rentalItem.name}" available (${inUse} already booked)`],
+      }
+    }
+  }
+
+  // Create one booking per item type
+  const bookings = []
+  for (const cartItem of input.items) {
+    const rentalItem = rentalItems.find(ri => ri.id === cartItem.rentalItemId)
+    if (!rentalItem) continue
+
+    const hours = (to.getTime() - from.getTime()) / (1000 * 60 * 60)
+    const days = Math.max(1, Math.ceil(hours / 24))
+
+    let totalPrice = 0
+    if (input.durationType === 'hours' && rentalItem.pricePerHour) {
+      totalPrice = rentalItem.pricePerHour * Math.ceil(hours) * cartItem.quantity
+    } else if (rentalItem.pricePerDay) {
+      totalPrice = rentalItem.pricePerDay * days * cartItem.quantity
+    } else if (rentalItem.pricePerHour) {
+      totalPrice = rentalItem.pricePerHour * Math.ceil(hours) * cartItem.quantity
+    }
+
+    const booking = await prisma.rentalBooking.create({
+      data: {
+        siteId: input.siteId,
+        rentalItemId: cartItem.rentalItemId,
+        userId: session.user.id,
+        from,
+        to,
+        quantity: cartItem.quantity,
+        durationType: input.durationType,
+        totalPrice,
+        paymentAmount: totalPrice,
+        status: site.type === 'unpaid' ? 'complete' : 'pending',
+      },
+    })
+    bookings.push(booking)
+  }
+
+  revalidatePath('/sites')
+  return { status: 'ok', bookingIds: bookings.map(b => b.id) }
+}
+
 // ─── Queries ────────────────────────────────────────────────────────────────
 
 export async function findAnonReservation(

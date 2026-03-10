@@ -7,6 +7,9 @@ import Menu from './Menu'
 import { Order } from '@/app/types/types'
 import { useGetOrderByIdQuery, useGetReservationByIdQuery } from '@/store/features/api/apiSlice'
 import TermsES from '@/app/tos/reservation/TermsES'
+import Link from 'next/link'
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'
+import { useTranslations } from 'next-intl'
 
 interface ReservationViewProps {
   reservation: Reservation,
@@ -26,6 +29,7 @@ interface ReservationViewProps {
 
 export default function ReservationView({ serviceFee, siteType, orderPaymentType, showTerms, signedIn, reservation, order, stripePublicKey, paymentProvider }: ReservationViewProps) {
 
+  const t = useTranslations('Reservations')
   const containerRef = useRef<HTMLDivElement>(null)
   const resRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -150,6 +154,12 @@ export default function ReservationView({ serviceFee, siteType, orderPaymentType
       >
         {/* Page 0: Reservation */}
         <div className="flex flex-col w-full" style={{ height: '100dvh', paddingTop: signedIn ? '80px' : '0px' }}>
+          {signedIn && (
+            <Link href="/reservations" className="ml-5 mt-2 mb-1 flex items-center gap-1 text-sm text-brand-gold self-start">
+              <ArrowBackIcon sx={{ fontSize: 18 }} />
+              <span>{t('Reservations')}</span>
+            </Link>
+          )}
           <div
             ref={resRef}
             className={`${resScrollable ? 'overflow-y-auto' : 'overflow-hidden'} flex-1`}

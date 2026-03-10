@@ -486,6 +486,194 @@ export async function processConfirmedReservation(
   } catch {}
 }
 
+// ─── Idempotent Rental Booking Processing ───────────────────────────────────
+
+/**
+ * Process confirmed payment for a group of rental bookings (shared paymentRef).
+ *
+ * SPLIT MERCHANT model (same as reservations):
+ *   1. PARTNER invoice — one line per booking (equipment rental items)
+ *      Taxed at the partner site's rentalVat rate.
+ *   2. PLATFORM invoice — service fee line
+ *      Taxed at the VAT rate from the fee's associated Settings entry.
+ *
+ * Fee model: fees are INCLUDED in the item price.
+ *
+ * Safe to call multiple times — skips if already processed.
+ *
+ * @param paymentRef - The shared payment reference across all bookings in this payment
+ */
+export async function processConfirmedRentalBooking(
+  paymentRef: string
+): Promise<void> {
+  const bookings = await prisma.rentalBooking.findMany({
+    where: { paymentRef },
+    include: { rentalItem: true },
+  })
+
+  if (bookings.length === 0) {
+    throw new Error(`No rental bookings found for paymentRef: ${paymentRef}`)
+  }
+
+  // Idempotency guard: if all bookings are already complete, skip
+  if (bookings.every(b => b.status === 'complete')) {
+    return
+  }
+
+  const siteId = bookings[0]!.siteId
+
+  const { site, partnerAccount, settings } = await loadFeeContext(
+    siteId,
+    'equipment-rental'
+  )
+
+  const tier = partnerAccount?.subscription?.plan?.tier ?? null
+  const matchedFee = resolveServiceFee(
+    site.serviceFees,
+    partnerAccount?.serviceFees ?? [],
+    settings?.serviceFees ?? [],
+    'equipment-rental',
+    tier
+  )
+
+  const totalPayment = round(
+    bookings.reduce((sum, b) => sum + (b.paymentAmount ?? b.totalPrice ?? 0), 0)
+  )
+  const siteVatRate = site.rentalVat ?? site.vat ?? 0
+
+  // Calculate total service fee across all bookings
+  let totalServiceFee = 0
+  for (const booking of bookings) {
+    const bookingPrice = round(booking.paymentAmount ?? booking.totalPrice ?? 0)
+    totalServiceFee += calculateServiceFeeAmount(matchedFee, bookingPrice)
+  }
+  totalServiceFee = round(totalServiceFee)
+
+  const partnerAmount = round(totalPayment - totalServiceFee)
+
+  const businessEntity = await getBusinessEntity()
+
+  const feeSettings = matchedFee
+    ? await prisma.settings.findUnique({
+        where: { id: matchedFee.settingsId },
+        select: { vat: true, country: true },
+      })
+    : null
+  const platformVatRate = feeSettings?.vat ?? businessEntity.vatRate
+  const feeCountry = feeSettings?.country ?? ''
+
+  await prisma.$transaction(async (tx) => {
+    // Double-check idempotency inside transaction
+    const current = await tx.rentalBooking.findMany({
+      where: { paymentRef },
+    })
+    if (current.every(b => b.status === 'complete')) return
+
+    const invoicedAt = new Date()
+
+    // ── 1. PARTNER Invoice (equipment lines) ──
+
+    const { baseAmount: partnerBase, vatAmount: partnerVat } =
+      computeVatAndBaseAmounts(partnerAmount, siteVatRate)
+
+    const partnerInvoiceNumber = await nextInvoiceNumber(tx, 'PARTNER')
+    const partnerPrevHash = await getLastHash(tx, 'PARTNER')
+
+    const partnerInvoice = await tx.invoice.create({
+      data: {
+        accountId: partnerAccount?.userId ?? '',
+        paymentRef,
+        totalCharge: partnerBase,
+        totalTax: partnerVat,
+        totalAmount: partnerAmount,
+        invoicedAt,
+        issuerType: 'PARTNER',
+        issuerVatNumber: partnerAccount?.businessId ?? null,
+        issuerCompanyName: partnerAccount?.company ?? null,
+        issuerCompanyAddress: partnerAccount?.address ?? null,
+        invoiceNumber: partnerInvoiceNumber,
+        previousHash: partnerPrevHash,
+        hash: computeInvoiceHash(
+          partnerInvoiceNumber, invoicedAt, partnerAmount,
+          partnerAccount?.businessId ?? null, partnerPrevHash
+        ),
+      },
+    })
+
+    // One line per booking
+    const partnerLines = bookings.map((booking) => {
+      const bookingPrice = round(booking.paymentAmount ?? booking.totalPrice ?? 0)
+      const itemFee = calculateServiceFeeAmount(matchedFee, bookingPrice)
+      const itemPartnerAmount = round(bookingPrice - itemFee)
+      const { baseAmount: lineBase, vatAmount: lineVat } =
+        computeVatAndBaseAmounts(itemPartnerAmount, siteVatRate)
+
+      return {
+        charge: lineBase,
+        tax: lineVat,
+        amount: itemPartnerAmount,
+        vatRate: siteVatRate,
+        invoiceId: partnerInvoice.id,
+        productCode: 'equipment-rental',
+        description: `${booking.rentalItem?.name ?? 'Equipment'} × ${booking.quantity}`,
+      }
+    })
+
+    if (partnerLines.length > 0) {
+      await tx.invoiceLine.createMany({ data: partnerLines })
+    }
+
+    // ── 2. PLATFORM Invoice (service fee) ──
+
+    if (totalServiceFee > 0) {
+      const { baseAmount: feeBase, vatAmount: feeVat } =
+        computeVatAndBaseAmounts(totalServiceFee, platformVatRate)
+
+      const platformInvoiceNumber = await nextInvoiceNumber(tx, 'PLATFORM')
+      const platformPrevHash = await getLastHash(tx, 'PLATFORM')
+
+      const platformInvoice = await tx.invoice.create({
+        data: {
+          accountId: partnerAccount?.userId ?? '',
+          paymentRef,
+          totalCharge: feeBase,
+          totalTax: feeVat,
+          totalAmount: totalServiceFee,
+          invoicedAt,
+          issuerType: 'PLATFORM',
+          issuerVatNumber: businessEntity.vatId || null,
+          issuerCompanyName: businessEntity.companyName,
+          issuerCompanyAddress: businessEntity.companyAddress || null,
+          invoiceNumber: platformInvoiceNumber,
+          previousHash: platformPrevHash,
+          hash: computeInvoiceHash(
+            platformInvoiceNumber, invoicedAt, totalServiceFee,
+            businessEntity.vatId || null, platformPrevHash
+          ),
+        },
+      })
+
+      await tx.invoiceLine.create({
+        data: {
+          charge: feeBase,
+          tax: feeVat,
+          amount: totalServiceFee,
+          vatRate: platformVatRate,
+          invoiceId: platformInvoice.id,
+          productCode: 'sunbnb-service-fee',
+          description: `Equipment rental service fee${feeCountry ? ` (${feeCountry})` : ''}`,
+        },
+      })
+    }
+
+    // Mark all bookings as complete
+    await tx.rentalBooking.updateMany({
+      where: { paymentRef },
+      data: { status: 'complete' },
+    })
+  })
+}
+
 // ─── Idempotent Order Processing ────────────────────────────────────────────
 
 /**

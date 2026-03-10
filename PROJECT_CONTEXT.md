@@ -1,6 +1,6 @@
 # Sunbnb — Project Context
 
-> Beach booking platform: discover sites, reserve sunbeds, order food & drinks, pay via Stripe. Two apps (consumer + partner portal) in a Turborepo monorepo.
+> Beach booking platform: discover sites, reserve sunbeds, rent equipment, order food & drinks, pay via Stripe. Two apps (consumer + partner portal) in a Turborepo monorepo.
 
 ---
 
@@ -65,7 +65,8 @@ Both apps use custom HTTPS servers with local mkcert certificates (`./certificat
 - `BLOB_READ_WRITE_TOKEN` — Vercel Blob storage
 - `RECONCILIATION_SECRET` — Protects `/api/reconcile` endpoint (required; 503 if unset)
 - `ALLOWED_ORIGINS` — Comma-separated origins for password reset email links
-- `RESEND_API_KEY` — Resend email service (password reset emails)
+- `RESEND_API_KEY` — Resend email service (password reset + reservation emails)
+- `CRON_SECRET` — Protects `/api/cron/send-reminders` endpoint (Vercel Cron auto-sends as `Authorization: Bearer`)
 - `NEXT_PUBLIC_DEMO_MODE` — Enables demo payment mode (server-controlled)
 
 ---
@@ -74,7 +75,7 @@ Both apps use custom HTTPS servers with local mkcert certificates (`./certificat
 
 ### Auth & Users
 
-**User** — `id`, `name?`, `email` (unique), `emailVerified?`, `image?`, `password?`, `sudo` (bool, default false). Relations: Account[], PartnerAccount?, Site[], InventoryItem[], Reservation[], Order[], Session[], Authenticator[].
+**User** — `id`, `name?`, `email` (unique), `emailVerified?`, `image?`, `password?`, `sudo` (bool, default false). Relations: Account[], PartnerAccount?, Site[], InventoryItem[], Reservation[], Order[], Session[], Authenticator[], RentalBooking[].
 
 **Account** — OAuth provider accounts. Composite PK `[provider, providerAccountId]`. FK → User (cascade).
 
@@ -92,7 +93,7 @@ Both apps use custom HTTPS servers with local mkcert certificates (`./certificat
 
 ### Sites & Inventory
 
-**Site** — `id`, `userId`, `name`, `locationLat/Lng`, `coords` (PostGIS geometry with GiST index), `description?`, `image?`, `imageWidth/Height?`, `type?`, `price?`, `vat?` (Float), `status` (default "active"), `services[]` (string array), `appSalesEnabled` (bool), `background?`, `bgImageUrl?`, `bgImageWidth/Height?`, `slug?`. FK → User. Has InventoryItem[], Product[], Reservation[], Order[], ServiceFee[], SiteWorkingHours[], SiteBrand?.
+**Site** — `id`, `userId`, `name`, `locationLat/Lng`, `coords` (PostGIS geometry with GiST index), `description?`, `image?`, `imageWidth/Height?`, `type?`, `price?`, `vat?` (Float), `status` (default "active"), `services[]` (string array), `appSalesEnabled` (bool), `background?`, `bgImageUrl?`, `bgImageWidth/Height?`, `slug?`, `features[]` (string array, default `["sunbeds"]`), `noShowDeadlineMinutes?` (Int). FK → User. Has InventoryItem[], Product[], Reservation[], Order[], ServiceFee[], SiteWorkingHours[], SiteBrand?, RentalItem[], RentalBooking[].
 
 **SiteBrand** — `id`, `siteId` (unique), `brandName`, `bgImageUrl?`, `bgImageWidth/Height?`. FK → Site (cascade).
 
@@ -104,7 +105,7 @@ Both apps use custom HTTPS servers with local mkcert certificates (`./certificat
 
 ### Bookings
 
-**Reservation** — `id`, `userId`, `siteId`, `itemId?`, `status` (default "pending"), `type` (default "hours"), `from`, `to` (DateTime), `paymentAmount?` (Float), `paymentRef?`, `invoiceId?` (unique), `anonId?`. FK → User, Site, Invoice?. Has Order[], InventoryItem[] (M:N via implicit join table `InventoryItemToReservation`).
+**Reservation** — `id`, `userId`, `siteId`, `itemId?`, `status` (default "pending"), `operationalStatus` (default "expected"), `type` (default "hours"), `from`, `to` (DateTime), `paymentAmount?` (Float), `paymentRef?`, `invoiceId?` (unique), `anonId?`, `checkedInAt?`, `departedAt?`, `guestName?`, `guestContact?`, `internalNotes?`. FK → User, Site, Invoice?. Has Order[], InventoryItem[] (M:N via implicit join table `InventoryItemToReservation`). Operational status flow: `expected` → `checked-in` → `departed` (also: `walked-in`, `blocked`, `no-show`).
 
 **Product** — `id`, `name`, `description?`, `price` (Float, net), `tax` (Float, rate), `totalPrice` (Float, gross), `siteId`, `imageUrl?`, `imageWidth/Height?`, `active` (bool, default true). FK → Site.
 
@@ -119,6 +120,14 @@ Both apps use custom HTTPS servers with local mkcert certificates (`./certificat
 **InvoiceLine** — `id`, `invoiceId`, `charge` (Float, net), `tax` (Float, default 0, VAT amount), `amount` (Float, gross), `description?`, `productCode?`. FK → Invoice (cascade).
 
 Product codes used: `"sunbed-rental"`, `"food-and-beverage"`, `"sunbnb-service-fee"`.
+
+### Equipment Rentals
+
+**RentalItem** — `id`, `siteId`, `name`, `description?`, `imageUrl?`, `category?`, `pricePerHour?` (Float), `pricePerDay?` (Float), `totalQuantity` (Int, default 1), `active` (bool, default true). FK → Site (cascade). Has RentalBooking[].
+
+**RentalBooking** — `id`, `siteId`, `rentalItemId`, `userId`, `from`, `to` (DateTime), `quantity` (Int, default 1), `durationType` (default "hours"), `totalPrice` (Float), `status` (default "pending"), `operationalStatus` (default "reserved"), `guestName?`, `paymentRef?`, `paymentAmount?` (Float), `pickedUpAt?`, `returnedAt?`. FK → Site (cascade), RentalItem (cascade), User (cascade). Operational status flow: `reserved` → `picked-up` → `returned`.
+
+Sites enable/disable the rental feature via the `features[]` array (`["sunbeds"]` by default; add `"rentals"` to enable). The user app shows a tab toggle between sunbeds and equipment when rentals are enabled. Availability is checked by aggregating booked quantities (excluding `returned`/`cancelled`) for overlapping time windows.
 
 ### Service Fees & Settings
 
@@ -250,7 +259,8 @@ else fee = percentage × price
 | `/sites/[id]/products` | F&B product management — add/edit/delete with images | ✓ |
 | `/sites/[id]/accounting` | Monthly accounting — revenue, tax, order/reservation breakdowns | ✓ |
 | `/sites/[id]/orders` | Real-time order dashboard — live polling, complete/discard actions | Public |
-| `/sites/[id]/manage` | On-site sunbed management — token-gated, reserve/unreserve for day | Public |
+| `/sites/[id]/manage` | On-site management — token-gated, sunbed grid + rental bookings | Public |
+| `/sites/[id]/rentals` | Equipment rental item CRUD — name, category, pricing, quantity | ✓ |
 | `/calendar` | Monthly reservation calendar — site selector, day detail panel | ✓ |
 | `/account` | Partner account settings — personal info, company, billing (IBAN) | ✓ |
 | `/security` | API token management — create, list, delete | ✓ |
@@ -277,7 +287,9 @@ else fee = percentage × price
 
 **`apps/partner/app/sites/[id]/queries.ts`**: `getSite` (exported), `resolveServiceFees` (private helper)
 
-**`apps/partner/app/sites/[id]/manage/actions.ts`**: `reserveItem`, `unreserveItem` (token-gated, with auth + ownership checks)
+**`apps/partner/app/sites/[id]/manage/actions.ts`**: `reserveItem`, `unreserveItem`, `checkInReservation`, `markDeparted`, `markNoShow`, `updateReservationNotes`, `moveReservation`, `blockBed`, `unblockBed`, `markRentalPickedUp`, `markRentalReturned`, `createWalkInRental` (token-gated, with auth + ownership checks)
+
+**`apps/partner/app/sites/[id]/rentals/actions.ts`**: `getRentalItems`, `createRentalItem`, `updateRentalItem`, `deleteRentalItem`, `toggleSiteFeature`
 
 ### Inventory System
 
@@ -322,6 +334,8 @@ The inventory editor (`/sites/[id]/inventory`) is the most complex component:
 | `/demo` | Demo mode activation + interactive showcase | Public |
 | `/privacy` | Privacy policy | Public |
 | `/tos` | Terms of service (locale-aware: EN/ES/FI) | Public |
+| `/s/[slug]` | Branded site page — site detail via slug | Public |
+| `/s/[slug]/reservations` | Branded reservations page | Mixed |
 
 ### API Routes (User)
 
@@ -351,6 +365,7 @@ The inventory editor (`/sites/[id]/inventory`) is the most complex component:
 
 **`apps/user/app/sites/[id]/actions.ts`**:
 - `saveReservationForMultipleItems(data)` — multi-item reservation (auth/anonId required, status determined server-side from site.type, price calculated from DB)
+- `saveRentalBooking(data)` — equipment rental booking (auth required, availability-checked against overlapping bookings, per-item pricing by duration type)
 - `findAnonReservation(anonId, itemId)` — find active reservation by anonymous ID
 - `findUserReservation(userId, itemId)` — find active reservation by user ID
 
@@ -418,6 +433,14 @@ The inventory editor (`/sites/[id]/inventory`) is the most complex component:
 
 ### Cron Jobs
 - `/api/reservations-cleanup` (partner): Runs every 15 min (Vercel cron), cleans up stale pending/processing reservations older than 15 min and expired paid-in-cash reservations
+- `/api/cron/send-reminders` (user): Runs daily at 07:00 UTC (Vercel cron), sends reminder emails for today's reservations. Protected by `CRON_SECRET`
+
+### Reservation Emails
+
+Implemented in `packages/data/src/reservation-emails.ts` using Resend:
+- **Confirmation email** — sent automatically after payment confirmation (triggered from `processConfirmedReservation`)
+- **Reminder email** — sent morning-of via cron job (`sendDueReminders`)
+- **Cancellation email** — sent when user or partner cancels a reservation
 
 ### PostGIS
 - Site coordinates stored as `geometry` type with GiST index

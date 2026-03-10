@@ -14,7 +14,10 @@ export interface SiteProps {
   locationLng?: string | undefined
   inventoryItems?: InventoryItem[]
   products?: Product[]
+  rentalItems?: RentalItemProps[]
+  rentalBookings?: RentalBookingProps[]
   vat?: number | null
+  rentalVat?: number | null
   workingHours?: { id: string, day: number, openTime: Date, closeTime: Date }[]
   image?: string | null
   imageWidth?: number | null
@@ -34,6 +37,7 @@ export interface SiteProps {
   appSalesEnabled?: boolean
   paymentProvider?: string
   noShowDeadlineMinutes?: number | null
+  features?: string[]
 }
 
 export interface Product {
@@ -144,4 +148,36 @@ interface OrderItem {
   notes?: string | null
   category?: string | null
 
+}
+
+export interface RentalItemProps {
+  id: string
+  siteId: string
+  name: string
+  description?: string | null
+  imageUrl?: string | null
+  category?: string | null
+  pricePerHour?: number | null
+  pricePerDay?: number | null
+  totalQuantity: number
+  active: boolean
+}
+
+export interface RentalBookingProps {
+  id: string
+  siteId: string
+  rentalItemId: string
+  userId: string
+  from: Date
+  to: Date
+  quantity: number
+  durationType: string
+  totalPrice: number
+  status: string
+  operationalStatus: string
+  guestName?: string | null
+  pickedUpAt?: Date | null
+  returnedAt?: Date | null
+  rentalItem: RentalItemProps
+  user: { id: string; email: string }
 }

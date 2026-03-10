@@ -206,6 +206,36 @@ async function findPartnerTokenForPayment(paymentRef: string): Promise<{
     }
   }
 
+  // Check rental bookings
+  const rentalBooking = await prisma.rentalBooking.findFirst({
+    where: { paymentRef },
+    select: {
+      site: {
+        select: {
+          user: {
+            select: {
+              partnerAccount: {
+                select: {
+                  userId: true,
+                  mollieAccessToken: true,
+                  mollieRefreshToken: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+  const rbPA = rentalBooking?.site?.user?.partnerAccount
+  if (rbPA?.mollieAccessToken) {
+    return {
+      accessToken: rbPA.mollieAccessToken,
+      refreshToken: rbPA.mollieRefreshToken,
+      partnerAccountId: rbPA.userId,
+    }
+  }
+
   return null
 }
 

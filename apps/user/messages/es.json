@@ -18,6 +18,8 @@
     "To": "Hasta",
     "Login to reserve": "Inicia sesión para reservar",
     "Reserve": "Reservar",
+    "Booking confirmed": "Reserva confirmada",
+    "Check your reservations for details": "Consulta tus reservas para más detalles",
     "OK": "Aceptar",
     "Cancel": "Cancelar"
   },
@@ -30,6 +32,7 @@
     "Saved": "Guardado"
   },
   "Reservations": {
+    "Reservations": "Reservas",
     "Active": "Activa",
     "History": "Historial",
     "Paid": "Pagada",
@@ -44,7 +47,9 @@
     "Processing": "Procesando",
     "Payment failed": "Pago fallido",
     "No active reservations": "Sin reservas activas",
-    "No past reservations": "Sin reservas anteriores"
+    "No past reservations": "Sin reservas anteriores",
+    "In use": "En uso",
+    "Returned": "Devuelto"
   },
   "Reservation": {
     "SEATS": "ASIENTOS",

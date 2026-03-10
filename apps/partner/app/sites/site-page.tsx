@@ -70,7 +70,7 @@ export default async function SitePage(
     const platformFees = settings?.serviceFees ?? []
     ;(site as any).subscriptionTier = tier
 
-    const serviceCodes = ['sunbed-rental', 'food-and-beverage']
+    const serviceCodes = ['sunbed-rental', 'food-and-beverage', 'equipment-rental']
     site.serviceFees = serviceCodes
       .map(code => {
         // 1. Site-level override

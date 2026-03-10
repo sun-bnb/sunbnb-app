@@ -6,7 +6,7 @@
 
 ## 1. System Overview
 
-Sunbnb is a beach booking platform that connects consumers (find and reserve sunbeds, order food & drinks) with site partners (manage inventory, track revenue, fulfil orders). The platform collects a configurable service fee on every transaction.
+Sunbnb is a beach booking platform that connects consumers (find and reserve sunbeds, rent equipment, order food & drinks) with site partners (manage inventory, track rentals, track revenue, fulfil orders). The platform collects a configurable service fee on every transaction.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -148,6 +148,7 @@ The Prisma schema (`packages/data/prisma/schema.prisma`) defines all models in a
 - **Partner Management** — PartnerAccount, SecurityToken, Subscription, SubscriptionPlan
 - **Sites & Inventory** — Site, SiteBrand, SiteWorkingHours, InventoryItem, ItemGroup, Product
 - **Bookings** — Reservation (M:N with InventoryItem), Order, OrderItem
+- **Equipment Rentals** — RentalItem, RentalBooking (with operational status tracking)
 - **Billing** — Invoice, InvoiceLine, ServiceFee, Settings
 
 ### PostGIS
@@ -289,6 +290,7 @@ Promotion scripts are simple shell scripts that merge between branches and push.
 | Job | App | Schedule | Purpose |
 |---|---|---|---|
 | `/api/reservations-cleanup` | Partner | Every 15 min | Deletes stale pending/processing reservations older than 15 min |
+| `/api/cron/send-reminders` | User | Daily 07:00 UTC | Sends reminder emails for today's reservations (protected by `CRON_SECRET`) |
 
 ### Environment Configuration
 
@@ -312,6 +314,20 @@ Comprehensive hardening applied across all apps (documented in `PROJECT_CONTEXT.
 - Webhook signature verification (Stripe) and payload format validation (Mollie)
 - SHA-256 token hashing for password reset tokens
 - IDOR protection on all user-facing data access paths
+
+### Equipment Rental System
+
+Sites can enable an equipment rental feature (surfboards, kayaks, etc.) alongside sunbed bookings. Controlled by a `features` string array on Site (`["sunbeds", "rentals"]`).
+
+- **RentalItem** — inventory definition: name, category, dual pricing (per hour + per day), total quantity, active toggle
+- **RentalBooking** — individual booking: quantity, time range, duration type, total price, payment status
+- **Operational status flow**: `reserved` → `picked-up` → `returned` (tracked via `operationalStatus`, `pickedUpAt`, `returnedAt`)
+- **Availability check** — aggregates booked quantities (excluding returned/cancelled) for overlapping time windows against `totalQuantity`
+- **Partner manage page** — staff see active rental bookings with one-tap status buttons ("Give 🤝" / "Back ✓"), plus a walk-in rental modal
+- **User booking flow** — tab toggle between ⛱️ Sunbeds and 🏄 Equipment, cart with quantity steppers, hourly/daily pricing
+- **Walk-in rentals** — partner creates on-site rentals with 2-tap flow: tap item → tap GO. Duration quick-pick (1h/2h/3h/all day), optional guest name and cash/free payment hidden behind "More options"
+
+Design optimised for outdoor staff (surf instructors) on low-end phones: huge touch targets, high-contrast colors, emoji-based actions, minimal reading.
 
 ### Auto-Save Pattern
 

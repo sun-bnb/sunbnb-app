@@ -56,6 +56,7 @@ export default function SiteView(
           <Tab value="brand" label="Brand" sx={tabStyle} />
           <Tab value="inventory" label="Inventory" sx={tabStyle} />
           <Tab value="products" label="Products" sx={tabStyle} />
+          <Tab value="rentals" label="Rentals" sx={tabStyle} />
           <Tab value="accounting" label="Accounting" sx={tabStyle} />
         </Tabs>
         { children }

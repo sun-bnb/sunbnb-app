@@ -26,6 +26,7 @@ import prisma from '@repo/data/PrismaCient'
 import {
   processConfirmedReservation,
   processConfirmedOrder,
+  processConfirmedRentalBooking,
 } from '@repo/data/payment'
 import { isTestMode } from '@repo/data/env'
 import { NextRequest } from 'next/server'
@@ -34,9 +35,10 @@ import { getMollieClientForPartner } from '@/app/api/_lib/mollie'
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 interface MollieMetadata {
-  type: 'reservation' | 'order'
+  type: 'reservation' | 'order' | 'rental-booking'
   entityId: string
   siteId: string
+  bookingIds?: string[]
 }
 
 /**
@@ -105,22 +107,44 @@ async function findPartnerAccessToken(paymentId: string): Promise<string | null>
     return order.site.user.partnerAccount.mollieAccessToken
   }
 
+  // Check rental bookings
+  const rentalBooking = await prisma.rentalBooking.findFirst({
+    where: { paymentRef: paymentId },
+    select: {
+      site: {
+        select: {
+          user: {
+            select: {
+              partnerAccount: {
+                select: { mollieAccessToken: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+  if (rentalBooking?.site?.user?.partnerAccount?.mollieAccessToken) {
+    return rentalBooking.site.user.partnerAccount.mollieAccessToken
+  }
+
   return null
 }
 
-async function handlePaymentPaid(meta: MollieMetadata): Promise<void> {
+async function handlePaymentPaid(meta: MollieMetadata, paymentId: string): Promise<void> {
   if (meta.type === 'reservation') {
     await processConfirmedReservation(meta.entityId)
   } else if (meta.type === 'order') {
     await processConfirmedOrder(meta.entityId)
+  } else if (meta.type === 'rental-booking') {
+    // Use the paymentRef (Mollie payment ID) to find all bookings in this group
+    await processConfirmedRentalBooking(paymentId)
   } else {
     console.warn('[Mollie Webhook] Unknown payment type in metadata:', meta.type)
   }
 }
 
 async function handlePaymentFailed(meta: MollieMetadata): Promise<void> {
-  // Use updateMany to silently succeed on 0 rows (avoids RecordNotFound
-  // which would cause Mollie to retry the webhook indefinitely)
   if (meta.type === 'reservation') {
     await prisma.reservation.updateMany({
       where: { id: meta.entityId },
@@ -129,6 +153,13 @@ async function handlePaymentFailed(meta: MollieMetadata): Promise<void> {
   } else if (meta.type === 'order') {
     await prisma.order.updateMany({
       where: { id: meta.entityId },
+      data: { status: 'payment_failed' },
+    })
+  } else if (meta.type === 'rental-booking') {
+    // Update all bookings that share this payment group
+    const bookingIds = meta.bookingIds ?? [meta.entityId]
+    await prisma.rentalBooking.updateMany({
+      where: { id: { in: bookingIds } },
       data: { status: 'payment_failed' },
     })
   }
@@ -189,7 +220,7 @@ export async function POST(request: NextRequest) {
     switch (payment.status) {
       case 'paid': {
         console.log('[Mollie Webhook] Payment paid:', paymentId, meta.type, meta.entityId)
-        await handlePaymentPaid(meta)
+        await handlePaymentPaid(meta, paymentId)
         break
       }
 

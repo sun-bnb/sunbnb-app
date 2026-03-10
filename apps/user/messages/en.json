@@ -18,6 +18,8 @@
     "To": "To",
     "Login to reserve": "Login to reserve",
     "Reserve": "Reserve",
+    "Booking confirmed": "Booking confirmed",
+    "Check your reservations for details": "Check your reservations for details",
     "OK": "OK",
     "Cancel": "Cancel"
   },
@@ -30,6 +32,7 @@
     "Saved": "Saved"
   },
   "Reservations": {
+    "Reservations": "Reservations",
     "Active": "Active",
     "History": "History",
     "Paid": "Paid",
@@ -44,7 +47,9 @@
     "Processing": "Processing",
     "Payment failed": "Payment failed",
     "No active reservations": "No active reservations",
-    "No past reservations": "No past reservations"
+    "No past reservations": "No past reservations",
+    "In use": "In use",
+    "Returned": "Returned"
   },
   "Reservation": {
     "SEATS": "SEATS",

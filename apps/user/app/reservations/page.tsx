@@ -14,13 +14,27 @@ async function getReservations(userId: string): Promise<Reservation[]> {
   })
 }
 
+async function getRentalBookings(userId: string) {
+  return await prisma.rentalBooking.findMany({
+    where: { userId },
+    orderBy: { from: 'desc' },
+    include: {
+      site: { select: { id: true, name: true } },
+      rentalItem: { select: { id: true, name: true } },
+    },
+  })
+}
+
 export default async function ReservationsPage() {
 
   const session = await auth()
   if (!session?.user) return null
 
-  const reservations = await getReservations(session.user.id)
+  const [reservations, rentalBookings] = await Promise.all([
+    getReservations(session.user.id),
+    getRentalBookings(session.user.id),
+  ])
 
-  return <Reservations reservations={reservations} />
+  return <Reservations reservations={reservations} rentalBookings={rentalBookings} />
 
 }

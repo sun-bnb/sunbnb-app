@@ -298,3 +298,162 @@ export async function unblockBed(siteId: string, itemId: string) {
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok' }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RENTAL BOOKING ACTIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Mark rental picked up ──────────────────────────────────────────────────
+
+export async function markRentalPickedUp(siteId: string, bookingId: string) {
+  const ownership = await verifySiteOwnership(siteId)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const booking = await prisma.rentalBooking.findUnique({
+    where: { id: bookingId },
+    select: { siteId: true, operationalStatus: true },
+  })
+  if (!booking || booking.siteId !== siteId) {
+    return { status: 'error', errors: ['Booking not found'] }
+  }
+  if (booking.operationalStatus !== 'reserved') {
+    return { status: 'error', errors: [`Cannot pick up from status: ${booking.operationalStatus}`] }
+  }
+
+  await prisma.rentalBooking.update({
+    where: { id: bookingId },
+    data: {
+      operationalStatus: 'picked-up',
+      pickedUpAt: new Date(),
+    },
+  })
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
+}
+
+// ─── Mark rental returned ───────────────────────────────────────────────────
+
+export async function markRentalReturned(siteId: string, bookingId: string) {
+  const ownership = await verifySiteOwnership(siteId)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const booking = await prisma.rentalBooking.findUnique({
+    where: { id: bookingId },
+    select: { siteId: true, operationalStatus: true },
+  })
+  if (!booking || booking.siteId !== siteId) {
+    return { status: 'error', errors: ['Booking not found'] }
+  }
+  if (booking.operationalStatus !== 'picked-up') {
+    return { status: 'error', errors: [`Cannot return from status: ${booking.operationalStatus}`] }
+  }
+
+  await prisma.rentalBooking.update({
+    where: { id: bookingId },
+    data: {
+      operationalStatus: 'returned',
+      returnedAt: new Date(),
+    },
+  })
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
+}
+
+// ─── Create walk-in rental ──────────────────────────────────────────────────
+
+export async function createWalkInRental(input: {
+  siteId: string
+  items: { rentalItemId: string; quantity: number }[]
+  durationType: 'hours' | 'days'
+  hours?: number
+  guestName?: string
+  paymentType: 'cash' | 'free'
+}) {
+  const ownership = await verifySiteOwnership(input.siteId)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const now = new Date()
+  const from = now
+  const to = input.durationType === 'days'
+    ? dayjs(now).endOf('day').toDate()
+    : dayjs(now).add(input.hours || 1, 'hour').toDate()
+
+  // Load rental items to calculate pricing
+  const rentalItemIds = input.items.map(i => i.rentalItemId)
+  const rentalItems = await prisma.rentalItem.findMany({
+    where: { id: { in: rentalItemIds }, siteId: input.siteId, active: true },
+  })
+
+  if (rentalItems.length !== rentalItemIds.length) {
+    return { status: 'error', errors: ['Some items are not available'] }
+  }
+
+  // Check availability
+  for (const cartItem of input.items) {
+    const rentalItem = rentalItems.find(ri => ri.id === cartItem.rentalItemId)
+    if (!rentalItem) continue
+
+    const bookedQty = await prisma.rentalBooking.aggregate({
+      where: {
+        rentalItemId: cartItem.rentalItemId,
+        siteId: input.siteId,
+        operationalStatus: { notIn: ['returned', 'cancelled'] },
+        from: { lt: to },
+        to: { gt: from },
+      },
+      _sum: { quantity: true },
+    })
+
+    const inUse = bookedQty._sum?.quantity || 0
+    const available = rentalItem.totalQuantity - inUse
+    if (cartItem.quantity > available) {
+      return {
+        status: 'error',
+        errors: [`Only ${available} of "${rentalItem.name}" available`],
+      }
+    }
+  }
+
+  // Create bookings
+  const bookings = []
+  for (const cartItem of input.items) {
+    const rentalItem = rentalItems.find(ri => ri.id === cartItem.rentalItemId)!
+
+    const hours = (to.getTime() - from.getTime()) / (1000 * 60 * 60)
+    const days = Math.max(1, Math.ceil(hours / 24))
+
+    let totalPrice = 0
+    if (input.paymentType === 'free') {
+      totalPrice = 0
+    } else if (input.durationType === 'hours' && rentalItem.pricePerHour) {
+      totalPrice = rentalItem.pricePerHour * Math.ceil(hours) * cartItem.quantity
+    } else if (rentalItem.pricePerDay) {
+      totalPrice = rentalItem.pricePerDay * days * cartItem.quantity
+    } else if (rentalItem.pricePerHour) {
+      totalPrice = rentalItem.pricePerHour * Math.ceil(hours) * cartItem.quantity
+    }
+
+    const booking = await prisma.rentalBooking.create({
+      data: {
+        siteId: input.siteId,
+        rentalItemId: cartItem.rentalItemId,
+        userId: ownership.userId,
+        from,
+        to,
+        quantity: cartItem.quantity,
+        durationType: input.durationType,
+        totalPrice,
+        status: input.paymentType === 'cash' ? 'paid-in-cash' : 'complete',
+        operationalStatus: 'picked-up',
+        pickedUpAt: new Date(),
+        guestName: input.guestName?.slice(0, 200) || null,
+      },
+    })
+    bookings.push(booking)
+  }
+
+  revalidatePath(`/sites/${input.siteId}/manage`)
+  return { status: 'ok', bookingIds: bookings.map(b => b.id) }
+}

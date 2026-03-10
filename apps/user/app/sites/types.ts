@@ -17,6 +17,8 @@ export interface SiteProps {
   appSalesEnabled?: boolean | undefined
   services: string[]
   paymentProvider?: string
+  features?: string[]
+  rentalItems?: RentalItemProps[]
 }
 
 export interface MapCenter {
@@ -105,4 +107,15 @@ export interface WorkingHours {
   day: number
   openTime: Date
   closeTime: Date
+}
+
+export interface RentalItemProps {
+  id: string
+  name: string
+  description: string | null
+  category: string | null
+  pricePerHour: number | null
+  pricePerDay: number | null
+  totalQuantity: number
+  availableQuantity?: number
 }

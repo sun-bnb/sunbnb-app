@@ -2,9 +2,11 @@
 
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { InventoryItem, Reservation, SiteProps } from '@/types/shared'
+import { InventoryItem, Reservation, RentalBookingProps, SiteProps } from '@/types/shared'
 import Item from './Item'
 import BedDetail from './BedDetail'
+import RentalBookingCard from './RentalBookingCard'
+import CreateRentalModal from './CreateRentalModal'
 
 function parseSunbedNumber(num: number) {
   const str = String(num)
@@ -44,6 +46,7 @@ export default function ManageView({
 }) {
   const router = useRouter()
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
+  const [showRentalModal, setShowRentalModal] = useState(false)
 
   // Auto-refresh every 30 seconds so Carlos sees new bookings
   useEffect(() => {
@@ -125,12 +128,69 @@ export default function ManageView({
         </div>
       ))}
 
+      {/* ── Rental Bookings Section ── */}
+      {site.features?.includes('rentals') && (
+        <div className="mt-6 mb-4">
+          {/* Header — big + button, glanceable counters */}
+          <div className="flex items-center justify-between mb-3 px-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xl font-black">🏄</span>
+              {(site.rentalBookings?.length ?? 0) > 0 && (
+                <span className="text-base font-black text-gray-600">
+                  {site.rentalBookings!.filter(b => b.operationalStatus === 'picked-up').length} out
+                  {site.rentalBookings!.filter(b => b.operationalStatus === 'reserved').length > 0 && (
+                    <span className="text-yellow-600 ml-2">
+                      {site.rentalBookings!.filter(b => b.operationalStatus === 'reserved').length} waiting
+                    </span>
+                  )}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => setShowRentalModal(true)}
+              className="bg-green-600 text-white text-base font-black px-5 py-3 rounded-xl active:bg-green-700 select-none"
+            >
+              + Rent Out
+            </button>
+          </div>
+
+          {(site.rentalBookings?.length ?? 0) === 0 ? (
+            <div className="text-center py-6 text-gray-300 text-lg font-bold">
+              No rentals out
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {site.rentalBookings!.map(booking => (
+                <RentalBookingCard
+                  key={booking.id}
+                  siteId={site.id!}
+                  booking={booking}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Detail Modal ── */}
       {selectedItem && (
         <BedDetail
           siteId={site.id!}
           item={selectedItem}
           onClose={() => setSelectedItem(null)}
+        />
+      )}
+
+      {/* ── Walk-in Rental Modal ── */}
+      {showRentalModal && site.rentalItems && (
+        <CreateRentalModal
+          siteId={site.id!}
+          rentalItems={site.rentalItems}
+          onClose={() => setShowRentalModal(false)}
+          onCreated={() => {
+            setShowRentalModal(false)
+            router.refresh()
+          }}
         />
       )}
     </div>

@@ -46,7 +46,23 @@ export default async function ManagePage({ params, searchParams }: { params: { i
           pair: true,
           pairedBy: true
         }
-      }
+      },
+      rentalItems: {
+        where: { active: true },
+        orderBy: { name: 'asc' },
+      },
+      rentalBookings: {
+        where: {
+          from: { lte: todayEnd },
+          to: { gte: todayStart },
+          operationalStatus: { notIn: ['returned', 'cancelled'] },
+        },
+        include: {
+          rentalItem: true,
+          user: { select: { id: true, email: true } },
+        },
+        orderBy: { createdAt: 'asc' },
+      },
     } 
   })
   if (!site) return <div>Site {params.id} not found</div>

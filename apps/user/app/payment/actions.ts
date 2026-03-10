@@ -16,6 +16,7 @@ import prisma from '@repo/data/PrismaCient'
 import {
   processConfirmedReservation,
   processConfirmedOrder,
+  processConfirmedRentalBooking,
 } from '@repo/data/payment'
 
 const DEMO_MODE_ENABLED = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
@@ -125,6 +126,59 @@ export async function initiateDemoOrderPayment(orderId: string, anonId?: string)
   } catch (error) {
     console.error('[Demo] Failed to process order:', error)
     // The order is still saved with paymentRef — a page reload will retry via polling
+  }
+
+  return { status: 'ok', paymentRef }
+}
+
+/**
+ * Process a demo payment for rental bookings.
+ * Only available when NEXT_PUBLIC_DEMO_MODE is enabled.
+ * Verifies ownership via session userId.
+ */
+export async function initiateDemoRentalPayment(rentalBookingIds: string[]) {
+  if (!DEMO_MODE_ENABLED) {
+    return { status: 'error', errors: ['Demo mode is not enabled'] }
+  }
+
+  if (!rentalBookingIds.length) {
+    return { status: 'error', errors: ['No booking IDs provided'] }
+  }
+
+  const bookings = await prisma.rentalBooking.findMany({
+    where: { id: { in: rentalBookingIds } },
+  })
+
+  if (bookings.length !== rentalBookingIds.length) {
+    return { status: 'error', errors: ['Some bookings not found'] }
+  }
+
+  // Verify ownership
+  const session = await auth()
+  if (!session?.user?.id) {
+    return { status: 'error', errors: ['Not authenticated'] }
+  }
+
+  if (bookings.some(b => b.userId !== session.user!.id)) {
+    return { status: 'error', errors: ['Not authorized'] }
+  }
+
+  // Skip if already has paymentRef
+  if (bookings.some(b => b.paymentRef)) {
+    return { status: 'ok', paymentRef: bookings.find(b => b.paymentRef)!.paymentRef }
+  }
+
+  const paymentRef = `pi_demo_${Date.now()}`
+
+  await prisma.rentalBooking.updateMany({
+    where: { id: { in: rentalBookingIds } },
+    data: { paymentRef, status: 'processing' },
+  })
+
+  try {
+    await processConfirmedRentalBooking(paymentRef)
+  } catch (error) {
+    console.error('[Demo] Failed to process rental booking:', error)
   }
 
   return { status: 'ok', paymentRef }

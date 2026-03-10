@@ -122,6 +122,7 @@ model User {
   orders         Order[]
   partnerAccount PartnerAccount?
   passwordResetTokens PasswordResetToken[]
+  rentalBookings RentalBooking[]
   reservations   Reservation[]
   sessions       Session[]
   sites          Site[]
@@ -198,6 +199,7 @@ model Site {
   imageWidth      Int?                     @map("image_width")
   services        String[]                 @default([])
   vat             Float?
+  rentalVat       Float?                   @map("rental_vat")
   status          String                   @default("active")
   appSalesEnabled Boolean                  @default(false) @map("app_sales_enabled")
   type            String?
@@ -209,10 +211,13 @@ model Site {
   slug            String?
   paymentProvider String                   @default("mollie") @map("payment_provider")
   noShowDeadlineMinutes Int?                @map("no_show_deadline_minutes")
+  features        String[]                 @default(["sunbeds"])
 
   inventoryItems  InventoryItem[]
   orders          Order[]
   products        Product[]
+  rentalItems     RentalItem[]
+  rentalBookings  RentalBooking[]
   reservations    Reservation[]
   serviceFees     ServiceFee[]
   settlements     Settlement[]
@@ -496,6 +501,47 @@ model SecurityToken {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   userId    String   @map("user_id")
+}
+
+model RentalItem {
+  id            String          @id @unique @default(cuid())
+  siteId        String          @map("site_id")
+  name          String
+  description   String?
+  imageUrl      String?         @map("image_url")
+  category      String?
+  pricePerHour  Float?          @map("price_per_hour")
+  pricePerDay   Float?          @map("price_per_day")
+  totalQuantity Int             @default(1) @map("total_quantity")
+  active        Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  site          Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  bookings      RentalBooking[]
+}
+
+model RentalBooking {
+  id                String     @id @unique @default(cuid())
+  siteId            String     @map("site_id")
+  rentalItemId      String     @map("rental_item_id")
+  userId            String     @map("user_id")
+  from              DateTime
+  to                DateTime
+  quantity          Int        @default(1)
+  durationType      String     @default("hours") @map("duration_type")
+  totalPrice        Float      @map("total_price")
+  status            String     @default("pending")
+  operationalStatus String     @default("reserved") @map("operational_status")
+  guestName         String?    @map("guest_name")
+  paymentRef        String?    @map("payment_ref")
+  paymentAmount     Float?     @map("payment_amount")
+  pickedUpAt        DateTime?  @map("picked_up_at")
+  returnedAt        DateTime?  @map("returned_at")
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  site              Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  rentalItem        RentalItem @relation(fields: [rentalItemId], references: [id], onDelete: Cascade)
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model AdminUser {

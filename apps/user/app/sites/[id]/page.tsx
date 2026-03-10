@@ -29,6 +29,10 @@ async function getSite(id: string, userId: string) {
           pair: true,
           pairedBy: true
         }
+      },
+      rentalItems: {
+        where: { active: true },
+        orderBy: { name: 'asc' }
       }
     }
   })

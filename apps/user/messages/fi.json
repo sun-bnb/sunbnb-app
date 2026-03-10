@@ -18,6 +18,8 @@
     "To": "Mihin",
     "Login to reserve": "Kirjaudu sisään varataksesi",
     "Reserve": "Varaa",
+    "Booking confirmed": "Varaus vahvistettu",
+    "Check your reservations for details": "Tarkista varauksesi tiedot",
     "OK": "OK",
     "Cancel": "Peruuta"
   },
@@ -30,6 +32,7 @@
     "Saved": "Tallennetu"
   },
   "Reservations": {
+    "Reservations": "Varaukset",
     "Active": "Aktiiviset",
     "History": "Historia",
     "Paid": "Maksettu",
@@ -44,7 +47,9 @@
     "Processing": "Käsittekyssä",
     "Payment failed": "Maksu epäonnistui",
     "No active reservations": "Ei aktiivisia varauksia",
-    "No past reservations": "Ei aiempia varauksia"
+    "No past reservations": "Ei aiempia varauksia",
+    "In use": "Käytössä",
+    "Returned": "Palautettu"
   },
   "Reservation": {
     "SEATS": "PAIKAT",
