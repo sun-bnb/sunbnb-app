@@ -186,6 +186,7 @@ export default function ManageView({
         <CreateRentalModal
           siteId={site.id!}
           rentalItems={site.rentalItems}
+          activeBookings={site.rentalBookings}
           onClose={() => setShowRentalModal(false)}
           onCreated={() => {
             setShowRentalModal(false)

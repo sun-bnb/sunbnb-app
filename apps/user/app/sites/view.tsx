@@ -333,7 +333,7 @@ export default function Sites({ sites, geography, apiKey }: {
         <div className="flex justify-between items-center py-3 px-3 md:px-4 lg:px-6">
           <div>
             <div className="text-xs font-medium tracking-wide uppercase text-gray-400">
-              <span className="font-bold text-gray-700 mr-1">{ searchResponse?.sites.length || sites.length }</span>
+              <span className="font-bold text-gray-700 mr-1">{ searchResponse?.sites?.length || sites.length }</span>
               <span>{t('BEACHES')}</span>
             </div>
             {
@@ -377,10 +377,10 @@ export default function Sites({ sites, geography, apiKey }: {
       </div>
       {
         viewMode === 'list' ? (
-          <SiteList sites={(searchResponse?.sites || sites)} />
+          <SiteList sites={searchResponse?.sites ?? sites} />
         ) : (
-          <SiteMap sites={(searchResponse?.sites || sites)} 
-            geography={searchResponse?.geography || geography}
+          <SiteMap sites={searchResponse?.sites ?? sites} 
+            geography={searchResponse?.geography ?? geography}
             apiKey={apiKey} />
         )
       }

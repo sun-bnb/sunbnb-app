@@ -1,13 +1,13 @@
 'use client'
 
 import React, { useTransition } from 'react'
+import dayjs from 'dayjs'
 import { RentalBookingProps } from '@/types/shared'
 import { markRentalPickedUp, markRentalReturned } from './actions'
 
 function formatTime(date: Date | string | null | undefined): string {
   if (!date) return ''
-  const d = new Date(date)
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return dayjs(date).format('HH:mm')
 }
 
 /**

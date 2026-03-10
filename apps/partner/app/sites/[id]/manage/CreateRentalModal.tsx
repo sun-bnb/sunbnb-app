@@ -17,20 +17,33 @@ import { createWalkInRental } from './actions'
 export default function CreateRentalModal({
   siteId,
   rentalItems,
+  activeBookings,
   onClose,
   onCreated,
 }: {
   siteId: string
   rentalItems: RentalItemProps[]
+  activeBookings?: { rentalItemId: string; quantity: number }[]
   onClose: () => void
   onCreated: () => void
 }) {
+  // Compute available stock per item (totalQuantity minus currently rented out)
+  const rentedOut: Record<string, number> = {}
+  for (const b of activeBookings ?? []) {
+    rentedOut[b.rentalItemId] = (rentedOut[b.rentalItemId] || 0) + b.quantity
+  }
   const [durationType, setDurationType] = useState<'hours' | 'days'>('hours')
   const [hours, setHours] = useState(1)
   const [paymentType, setPaymentType] = useState<'cash' | 'free'>('cash')
   const [guestName, setGuestName] = useState('')
   const [showMore, setShowMore] = useState(false)
-  const [cart, setCart] = useState<Record<string, number>>({})
+  // Pre-select the first item with qty 1 if there's only one equipment type
+  const [cart, setCart] = useState<Record<string, number>>(() => {
+    if (rentalItems.length === 1 && rentalItems[0]!.totalQuantity - (rentedOut[rentalItems[0]!.id] || 0) > 0) {
+      return { [rentalItems[0]!.id]: 1 }
+    }
+    return {}
+  })
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -125,14 +138,14 @@ export default function CreateRentalModal({
                 >
                   {/* Tappable area — tap anywhere to add 1 */}
                   <button
-                    onClick={() => addOne(item.id, item.totalQuantity)}
+                    onClick={() => addOne(item.id, item.totalQuantity - (rentedOut[item.id] || 0))}
                     className="w-full text-left px-4 py-4 active:bg-gray-50"
                   >
                     <div className="flex items-center justify-between">
                       <div className="min-w-0">
                         <div className="text-lg font-black truncate">{item.name}</div>
                         <div className="text-sm font-bold text-gray-400">
-                          {item.totalQuantity} in stock
+                          {item.totalQuantity - (rentedOut[item.id] || 0)} available
                         </div>
                       </div>
                       {selected ? (
@@ -153,8 +166,8 @@ export default function CreateRentalModal({
                         className="flex-1 py-3 text-xl font-black text-red-500 active:bg-red-50 border-r border-green-200"
                       >−</button>
                       <button
-                        onClick={() => addOne(item.id, item.totalQuantity)}
-                        disabled={qty >= item.totalQuantity}
+                        onClick={() => addOne(item.id, item.totalQuantity - (rentedOut[item.id] || 0))}
+                        disabled={qty >= item.totalQuantity - (rentedOut[item.id] || 0)}
                         className="flex-1 py-3 text-xl font-black text-green-600 active:bg-green-100 disabled:opacity-30"
                       >+</button>
                     </div>
