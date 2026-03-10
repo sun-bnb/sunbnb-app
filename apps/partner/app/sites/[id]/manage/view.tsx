@@ -7,6 +7,10 @@ import Item from './Item'
 import BedDetail from './BedDetail'
 import RentalBookingCard from './RentalBookingCard'
 import CreateRentalModal from './CreateRentalModal'
+import {
+  OP_EXPECTED, OP_CHECKED_IN, OP_WALKED_IN, OP_DEPARTED, OP_NO_SHOW,
+  OP_PICKED_UP, OP_RESERVED,
+} from '@repo/data/reservation-status'
 
 function parseSunbedNumber(num: number) {
   const str = String(num)
@@ -21,7 +25,7 @@ type BedState = 'available' | 'expected' | 'checked-in' | 'walked-in' | 'blocked
 function getActiveReservation(item: InventoryItem): Reservation | null {
   if (!item.reservations?.length) return null
   return item.reservations.find(r =>
-    !['departed', 'no-show'].includes(r.operationalStatus)
+    !([OP_DEPARTED, OP_NO_SHOW] as string[]).includes(r.operationalStatus)
   ) || null
 }
 
@@ -29,9 +33,9 @@ function getBedState(item: InventoryItem): BedState {
   const res = getActiveReservation(item)
   if (!res) return 'available'
   switch (res.operationalStatus) {
-    case 'expected': return 'expected'
-    case 'checked-in': return 'checked-in'
-    case 'walked-in': return 'walked-in'
+    case OP_EXPECTED: return 'expected'
+    case OP_CHECKED_IN: return 'checked-in'
+    case OP_WALKED_IN: return 'walked-in'
     case 'blocked': return 'blocked'
     default: return 'available'
   }
@@ -137,10 +141,10 @@ export default function ManageView({
               <span className="text-xl font-black">🏄</span>
               {(site.rentalBookings?.length ?? 0) > 0 && (
                 <span className="text-base font-black text-gray-600">
-                  {site.rentalBookings!.filter(b => b.operationalStatus === 'picked-up').length} out
-                  {site.rentalBookings!.filter(b => b.operationalStatus === 'reserved').length > 0 && (
+                  {site.rentalBookings!.filter(b => b.operationalStatus === OP_PICKED_UP).length} out
+                  {site.rentalBookings!.filter(b => b.operationalStatus === OP_RESERVED).length > 0 && (
                     <span className="text-yellow-600 ml-2">
-                      {site.rentalBookings!.filter(b => b.operationalStatus === 'reserved').length} waiting
+                      {site.rentalBookings!.filter(b => b.operationalStatus === OP_RESERVED).length} waiting
                     </span>
                   )}
                 </span>

@@ -6,31 +6,41 @@ import CalendarTodayIcon from '@mui/icons-material/CalendarToday'
 import AccessTimeIcon from '@mui/icons-material/AccessTime'
 import SurfingIcon from '@mui/icons-material/Surfing'
 import type { RentalBookingListItem } from '@/app/reservations/Reservations'
+import {
+  RENTAL_PENDING,
+  RENTAL_COMPLETE,
+  RENTAL_CANCELED,
+  RENTAL_PAYMENT_FAILED,
+  OP_PICKED_UP,
+  OP_RETURNED,
+} from '@repo/data/reservation-status'
 
 const statusColor: Record<string, 'default' | 'success' | 'error' | 'warning'> = {
-  pending: 'default',
-  complete: 'success',
-  cancelled: 'error',
+  [RENTAL_PENDING]: 'default',
+  [RENTAL_COMPLETE]: 'success',
+  [RENTAL_CANCELED]: 'error',
+  [RENTAL_PAYMENT_FAILED]: 'error',
 }
 
 const opStatusColor: Record<string, 'default' | 'success' | 'error' | 'warning'> = {
   reserved: 'warning',
-  'picked-up': 'success',
-  returned: 'default',
+  [OP_PICKED_UP]: 'success',
+  [OP_RETURNED]: 'default',
 }
 
 function chipLabel(booking: RentalBookingListItem): string {
-  if (booking.operationalStatus === 'picked-up') return 'In use'
-  if (booking.operationalStatus === 'returned') return 'Returned'
-  if (booking.status === 'complete' && !booking.totalPrice) return 'Reserved'
-  if (booking.status === 'complete' || booking.status === 'paid') return 'Paid'
-  if (booking.status === 'cancelled') return 'Cancelled'
+  if (booking.operationalStatus === OP_PICKED_UP) return 'In use'
+  if (booking.operationalStatus === OP_RETURNED) return 'Returned'
+  if (booking.status === RENTAL_COMPLETE && !booking.totalPrice) return 'Reserved'
+  if (booking.status === RENTAL_COMPLETE) return 'Paid'
+  if (booking.status === RENTAL_CANCELED) return 'Canceled'
+  if (booking.status === RENTAL_PAYMENT_FAILED) return 'Payment failed'
   return 'Pending'
 }
 
 function chipColor(booking: RentalBookingListItem) {
-  if (booking.operationalStatus === 'picked-up') return opStatusColor['picked-up']
-  if (booking.operationalStatus === 'returned') return opStatusColor['returned']
+  if (booking.operationalStatus === OP_PICKED_UP) return opStatusColor[OP_PICKED_UP]
+  if (booking.operationalStatus === OP_RETURNED) return opStatusColor[OP_RETURNED]
   return statusColor[booking.status] || 'default'
 }
 

@@ -14,6 +14,11 @@
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import {
+  RESERVATION_PROCESSING,
+  ORDER_PROCESSING,
+  RENTAL_PROCESSING,
+} from '@repo/data/reservation-status'
+import {
   processConfirmedReservation,
   processConfirmedOrder,
   processConfirmedRentalBooking,
@@ -64,7 +69,7 @@ export async function initiateDemoReservationPayment(reservationId: string, anon
 
   await prisma.reservation.update({
     where: { id: reservationId },
-    data: { paymentRef, status: 'processing' },
+    data: { paymentRef, status: RESERVATION_PROCESSING },
   })
 
   try {
@@ -118,7 +123,7 @@ export async function initiateDemoOrderPayment(orderId: string, anonId?: string)
 
   await prisma.order.update({
     where: { id: orderId },
-    data: { paymentRef, status: 'processing' },
+    data: { paymentRef, status: ORDER_PROCESSING },
   })
 
   try {
@@ -172,7 +177,7 @@ export async function initiateDemoRentalPayment(rentalBookingIds: string[]) {
 
   await prisma.rentalBooking.updateMany({
     where: { id: { in: rentalBookingIds } },
-    data: { paymentRef, status: 'processing' },
+    data: { paymentRef, status: RENTAL_PROCESSING },
   })
 
   try {

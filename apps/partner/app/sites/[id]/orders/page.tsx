@@ -1,6 +1,13 @@
 import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
 import OrdersView from './view'
+import {
+  ORDER_COMPLETE,
+  ORDER_ACCEPTED,
+  ORDER_PREPARING,
+  ORDER_READY,
+  ORDER_DELIVERED,
+} from '@repo/data/reservation-status'
 
 
 export default async function OrdersPage({ params }: { params: { id: string } }) {
@@ -19,7 +26,7 @@ export default async function OrdersPage({ params }: { params: { id: string } })
   const orders = await prisma.order.findMany({ 
     where: { 
       siteId: site.id,
-      status: { in: ['paid', 'complete', 'accepted', 'preparing', 'ready', 'delivered'] }
+      status: { in: [ORDER_COMPLETE, ORDER_ACCEPTED, ORDER_PREPARING, ORDER_READY, ORDER_DELIVERED] }
     },
     include: {
       seat: true,

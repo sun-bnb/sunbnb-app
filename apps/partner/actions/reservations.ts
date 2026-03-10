@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { RESERVATION_CANCELED } from '@repo/data/reservation-status'
 
 export async function cancelReservation(
   reservationId: string
@@ -22,7 +23,7 @@ export async function cancelReservation(
 
   await prisma.reservation.update({
     data: {
-      status: 'canceled'
+      status: RESERVATION_CANCELED
     },
     where: {
       id: reservationId

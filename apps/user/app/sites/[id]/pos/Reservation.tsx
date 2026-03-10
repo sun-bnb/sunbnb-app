@@ -18,6 +18,7 @@ import {
 import dayjs, { Dayjs } from 'dayjs'
 import SunbedSelection from '@/components/reservation/SunbedSelection'
 import { saveReservationForMultipleItems } from '../actions'
+import { RESERVATION_PROCESSING } from '@repo/data/reservation-status'
 import PaymentView from '@/app/payment/Payment'
 import { useRouter } from 'next/navigation'
 
@@ -146,7 +147,7 @@ export default function ReservationView({
   )
 
   const paymentElem =
-    (reservationState === 'processing' || reservationState === 'payment_in_progress') ? (
+    (reservationState === RESERVATION_PROCESSING || reservationState === 'payment_in_progress') ? (
       !reservation ? (
         <div className="flex justify-center mb-[12px] mt-[24px]">
           <CircularProgress />

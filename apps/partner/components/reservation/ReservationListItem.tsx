@@ -4,21 +4,31 @@ import Chip from '@mui/material/Chip'
 import Button from '@mui/material/Button'
 import MailOutlineIcon from '@mui/icons-material/MailOutline'
 import dayjs, { Dayjs } from 'dayjs'
+import {
+  RESERVATION_PENDING,
+  RESERVATION_COMPLETE,
+  RESERVATION_CANCELED,
+  RESERVATION_PAYMENT_FAILED,
+} from '@repo/data/reservation-status'
 
 const statusToChipColor: {
   [key: string]: 'default' | 'success' | 'error'
 } = {
-  'pending': 'default',
+  [RESERVATION_PENDING]: 'default',
   'confirmed': 'success',
-  'canceled': 'error'
+  [RESERVATION_COMPLETE]: 'success',
+  [RESERVATION_CANCELED]: 'error',
+  [RESERVATION_PAYMENT_FAILED]: 'error'
 }
 
 const statusToChipLabel: {
-  [key: string]: 'Pending' | 'Confirmed' | 'Canceled'
+  [key: string]: string
 } = {
-  'pending': 'Pending',
+  [RESERVATION_PENDING]: 'Pending',
   'confirmed': 'Confirmed',
-  'canceled': 'Canceled'
+  [RESERVATION_COMPLETE]: 'Paid',
+  [RESERVATION_CANCELED]: 'Canceled',
+  [RESERVATION_PAYMENT_FAILED]: 'Payment failed'
 }
 
 export default function ReservationListItem({ reservation }: { reservation: Reservation }) {
@@ -30,7 +40,7 @@ export default function ReservationListItem({ reservation }: { reservation: Rese
     <div className="flex justify-between">
       <div className="">
         {
-          reservation.status !== 'canceled' &&
+          reservation.status !== RESERVATION_CANCELED &&
             <Button size="small" variant="outlined" color="error" onClick={() => {
               cancelReservation(reservation.id)
             }}>Cancel</Button>

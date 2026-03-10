@@ -23,6 +23,7 @@ import {
   round,
 } from '@repo/data/payment'
 import { isTestMode } from '@repo/data/env'
+import { RESERVATION_PENDING, RESERVATION_PROCESSING } from '@repo/data/reservation-status'
 import { NextRequest } from 'next/server'
 import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
 import { getMollieClientForPartner, getValidMollieToken } from '@/app/api/_lib/mollie'
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Payment already created' }, { status: 400 })
   }
 
-  if (reservation.status !== 'pending') {
+  if (reservation.status !== RESERVATION_PENDING) {
     return Response.json({ error: 'Reservation is not in pending state' }, { status: 400 })
   }
 
@@ -228,7 +229,7 @@ export async function POST(request: NextRequest) {
     where: { id: reservationId },
     data: {
       paymentRef: payment.id,
-      status: 'processing',
+      status: RESERVATION_PROCESSING,
     },
   })
 

@@ -10,6 +10,7 @@ import TermsES from '@/app/tos/reservation/TermsES'
 import Link from 'next/link'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import { useTranslations } from 'next-intl'
+import { RESERVATION_PROCESSING, RESERVATION_COMPLETE, ORDER_COMPLETE, ORDER_PROCESSING } from '@repo/data/reservation-status'
 
 interface ReservationViewProps {
   reservation: Reservation,
@@ -37,14 +38,14 @@ export default function ReservationView({ serviceFee, siteType, orderPaymentType
 
   const [page, setPage] = useState<0 | 1>(order ? 1 : 0)
   const [resScrollable, setResScrollable] = useState(false)
-  const [orderStatus, setOrderStatus] = useState<string>(order?.status || 'processing')
-  const [reservationStatus, setReservationStatus] = useState<string>(reservation?.status || 'processing')
+  const [orderStatus, setOrderStatus] = useState<string>(order?.status || ORDER_PROCESSING)
+  const [reservationStatus, setReservationStatus] = useState<string>(reservation?.status || RESERVATION_PROCESSING)
   const [displayTerms, setDisplayTerms] = useState<boolean>(showTerms || false)
 
   const { data: fetchedReservation, error: reservationFetchError } = useGetReservationByIdQuery({
     id: reservation.id,
   }, {
-    pollingInterval: !(reservationStatus === 'paid' || reservationStatus === 'complete') ? 1000 : 0
+    pollingInterval: reservationStatus === RESERVATION_PROCESSING ? 1000 : 0
   })
 
   const prevStatusRef = useRef<string | undefined>();
@@ -55,7 +56,7 @@ export default function ReservationView({ serviceFee, siteType, orderPaymentType
     if (fetchedReservation?.status && fetchedReservation.status !== prevStatus) {
       setReservationStatus(fetchedReservation.status)
 
-      if (prevStatus === 'processing' && (fetchedReservation.status === 'paid' || fetchedReservation.status === 'complete')) {
+      if (prevStatus === RESERVATION_PROCESSING && fetchedReservation.status === RESERVATION_COMPLETE) {
         setDisplayTerms(true)
       }
 
@@ -68,8 +69,8 @@ export default function ReservationView({ serviceFee, siteType, orderPaymentType
   const { data: fetchedOrder, error: orderFetchError } = useGetOrderByIdQuery({
     id: order?.id,
   }, {
-    skip: !order || (orderStatus === 'paid' || orderStatus === 'complete'),
-    pollingInterval: orderStatus === 'processing' ? 1000 : 0
+    skip: !order || orderStatus === ORDER_COMPLETE,
+    pollingInterval: orderStatus === ORDER_PROCESSING ? 1000 : 0
   })
   
   const finalOrder = fetchedOrder || order

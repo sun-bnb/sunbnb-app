@@ -2,13 +2,16 @@
 
 import React from 'react'
 import { InventoryItem, Reservation } from '@/types/shared'
+import {
+  OP_EXPECTED, OP_CHECKED_IN, OP_WALKED_IN, OP_DEPARTED, OP_NO_SHOW,
+} from '@repo/data/reservation-status'
 
 type BedState = 'available' | 'expected' | 'checked-in' | 'walked-in' | 'blocked'
 
 function getActiveReservation(item: InventoryItem): Reservation | null {
   if (!item.reservations?.length) return null
   return item.reservations.find(r =>
-    !['departed', 'no-show'].includes(r.operationalStatus)
+    !([OP_DEPARTED, OP_NO_SHOW] as string[]).includes(r.operationalStatus)
   ) || null
 }
 
@@ -16,9 +19,9 @@ function getBedState(item: InventoryItem): BedState {
   const res = getActiveReservation(item)
   if (!res) return 'available'
   switch (res.operationalStatus) {
-    case 'expected': return 'expected'
-    case 'checked-in': return 'checked-in'
-    case 'walked-in': return 'walked-in'
+    case OP_EXPECTED: return 'expected'
+    case OP_CHECKED_IN: return 'checked-in'
+    case OP_WALKED_IN: return 'walked-in'
     case 'blocked': return 'blocked'
     default: return 'available'
   }

@@ -4,6 +4,16 @@ import { revalidatePath } from 'next/cache'
 import { requireSiteOwner } from '@/lib/auth-helpers'
 import { isValidOrderStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
+import {
+  ORDER_COMPLETE,
+  ORDER_ACCEPTED,
+  ORDER_PREPARING,
+  ORDER_READY,
+  ORDER_DELIVERED,
+  ORDER_COMPLETED,
+  ORDER_REJECTED,
+  ORDER_DISCARDED,
+} from '@repo/data/reservation-status'
 
 // ─── Status Transitions ─────────────────────────────────────────────────────
 
@@ -14,12 +24,12 @@ import prisma from '@repo/data/PrismaCient'
  *   any active status → discarded
  */
 const VALID_TRANSITIONS: Record<string, string[]> = {
-  paid:      ['accepted', 'rejected', 'discarded'],
-  complete:  ['accepted', 'rejected', 'discarded'],
-  accepted:  ['preparing', 'rejected', 'discarded'],
-  preparing: ['ready', 'rejected', 'discarded'],
-  ready:     ['delivered', 'discarded'],
-  delivered: ['completed', 'discarded'],
+  paid:              [ORDER_ACCEPTED, ORDER_REJECTED, ORDER_DISCARDED],
+  [ORDER_COMPLETE]:  [ORDER_ACCEPTED, ORDER_REJECTED, ORDER_DISCARDED],
+  [ORDER_ACCEPTED]:  [ORDER_PREPARING, ORDER_REJECTED, ORDER_DISCARDED],
+  [ORDER_PREPARING]: [ORDER_READY, ORDER_REJECTED, ORDER_DISCARDED],
+  [ORDER_READY]:     [ORDER_DELIVERED, ORDER_DISCARDED],
+  [ORDER_DELIVERED]: [ORDER_COMPLETED, ORDER_DISCARDED],
 }
 
 function isValidTransition(from: string, to: string): boolean {
@@ -56,10 +66,10 @@ export async function setOrderStatus(
 
   const data: Record<string, any> = { status }
 
-  if (status === 'accepted')  data.acceptedAt = new Date()
-  if (status === 'ready')     data.readyAt = new Date()
-  if (status === 'delivered') data.deliveredAt = new Date()
-  if (status === 'rejected' && reason) data.rejectReason = reason
+  if (status === ORDER_ACCEPTED)  data.acceptedAt = new Date()
+  if (status === ORDER_READY)     data.readyAt = new Date()
+  if (status === ORDER_DELIVERED) data.deliveredAt = new Date()
+  if (status === ORDER_REJECTED && reason) data.rejectReason = reason
 
   await prisma.order.update({ where: { id: orderId }, data })
   revalidatePath(`/sites/${siteId}/orders`)
@@ -72,10 +82,10 @@ export async function setOrderStatus(
 export type OrderTab = 'incoming' | 'active' | 'ready' | 'history'
 
 const TAB_STATUSES: Record<OrderTab, string[]> = {
-  incoming: ['paid', 'complete'],
-  active:   ['accepted', 'preparing'],
-  ready:    ['ready', 'delivered'],
-  history:  ['completed', 'rejected', 'discarded'],
+  incoming: [ORDER_COMPLETE],
+  active:   [ORDER_ACCEPTED, ORDER_PREPARING],
+  ready:    [ORDER_READY, ORDER_DELIVERED],
+  history:  [ORDER_COMPLETED, ORDER_REJECTED, ORDER_DISCARDED],
 }
 
 export async function getOrders(

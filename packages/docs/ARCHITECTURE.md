@@ -151,6 +151,8 @@ The Prisma schema (`packages/data/prisma/schema.prisma`) defines all models in a
 - **Equipment Rentals** — RentalItem, RentalBooking (with operational status tracking)
 - **Billing** — Invoice, InvoiceLine, ServiceFee, Settings
 
+All status fields (`Reservation.status`, `Order.status`, `RentalBooking.status`, `Reservation.operationalStatus`, `RentalBooking.operationalStatus`) are plain `String` columns — not Prisma enums — allowing status changes to be deployed without database migrations. Valid values are defined in the shared status constants module (see **§ 11 Status Constants**).
+
 ### PostGIS
 
 Site locations are stored as `geometry` columns with GiST indexes. Spatial queries use raw SQL via Prisma's `$queryRaw`:
@@ -321,7 +323,7 @@ Sites can enable an equipment rental feature (surfboards, kayaks, etc.) alongsid
 
 - **RentalItem** — inventory definition: name, category, dual pricing (per hour + per day), total quantity, active toggle
 - **RentalBooking** — individual booking: quantity, time range, duration type, total price, payment status
-- **Operational status flow**: `reserved` → `picked-up` → `returned` (tracked via `operationalStatus`, `pickedUpAt`, `returnedAt`)
+- **Operational status flow**: `reserved` → `picked-up` → `returned` (tracked via `operationalStatus`, `pickedUpAt`, `returnedAt`). All status values imported from `@repo/data/reservation-status` (see **§ 11**)
 - **Availability check** — aggregates booked quantities (excluding returned/cancelled) for overlapping time windows against `totalQuantity`
 - **Partner manage page** — staff see active rental bookings with one-tap status buttons ("Give 🤝" / "Back ✓"), plus a walk-in rental modal
 - **User booking flow** — tab toggle between ⛱️ Sunbeds and 🏄 Equipment, cart with quantity steppers, hourly/daily pricing
@@ -336,3 +338,96 @@ The partner app uses a debounced auto-save pattern (1.5–2s delay) for form fie
 ### Image Handling
 
 All image uploads go through server actions → Vercel Blob. Remote image domains are whitelisted in `next.config.mjs`. Images are stored with dimensions for responsive rendering.
+
+---
+
+## 11. Status Constants
+
+All reservation, order, and rental booking status values are centralised in a single shared module:
+
+```typescript
+import { RESERVATION_COMPLETE, ORDER_ACCEPTED, OP_CHECKED_IN } from '@repo/data/reservation-status'
+```
+
+**File**: `packages/data/src/reservation-status.ts`
+
+### Why
+
+Status fields are plain `String` columns in Prisma (not enums), so there is no schema-level enforcement. The constants module provides:
+
+- **Single source of truth** — every status value defined once, imported everywhere
+- **Refactor safety** — renaming a value is a find-all-references operation, not a grep-and-pray
+- **Type narrowing** — constants use `as const` so TypeScript infers literal types (`'pending'` not `string`), enabling exhaustive `switch` checks and typed record keys
+
+### Constant Naming Conventions
+
+| Prefix | Domain | Example |
+|---|---|---|
+| `RESERVATION_` | Sunbed booking payment status | `RESERVATION_PENDING`, `RESERVATION_COMPLETE` |
+| `ORDER_` | Food & drink order status | `ORDER_ACCEPTED`, `ORDER_PREPARING` |
+| `RENTAL_` | Equipment rental payment status | `RENTAL_PENDING`, `RENTAL_COMPLETE` |
+| `OP_` | Operational status (orthogonal to payment) | `OP_EXPECTED`, `OP_CHECKED_IN` |
+
+### Status Lifecycles
+
+**Reservation (online payment):**
+```
+pending → processing → complete
+pending → processing → payment_failed
+complete → canceled → refunded
+```
+
+**Reservation (off-platform):**
+```
+→ complete       (free site)
+→ paid-in-cash   (cash site / walk-in)
+```
+
+**Order (payment + kitchen fulfillment):**
+```
+pending → processing → complete
+complete → accepted → preparing → ready → delivered → completed
+complete → rejected  (with reason)
+any active → discarded
+```
+
+**Rental Booking:**
+```
+pending → processing → complete
+pending → processing → payment_failed
+```
+
+**Operational Status — Reservations:**
+```
+expected → checked-in → departed
+expected → no-show
+(walk-in: → walked-in → departed)
+```
+
+**Operational Status — Rentals:**
+```
+reserved → picked-up → returned
+```
+
+### Semantic Groupings
+
+The module also exports pre-built arrays for common queries:
+
+| Export | Values | Usage |
+|---|---|---|
+| `BLOCKING_STATUSES` | pending, processing, complete, paid-in-cash | Availability checks — these statuses occupy a seat |
+| `PAID_STATUSES` | complete | Revenue calculations |
+| `TERMINAL_STATUSES` | payment_failed, canceled, refunded | Cleanup — no further transitions expected |
+| `RESERVATION_STATUSES` | (all 7) | Validation allowlists |
+
+### TypeScript Considerations
+
+Constants are declared with `as const` to get literal types:
+
+```typescript
+export const RESERVATION_PENDING = 'pending' as const  // type: 'pending'
+```
+
+This enables `type ReservationStatus = (typeof RESERVATION_STATUSES)[number]` to produce the union `'pending' | 'processing' | ...` rather than `string`.
+
+**Known limitation**: `.includes()` on an array of `as const` values rejects a plain `string` argument because TypeScript narrows the array element type. Where needed, arrays are cast: `([OP_DEPARTED, OP_NO_SHOW] as string[]).includes(status)`.

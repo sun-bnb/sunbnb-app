@@ -6,6 +6,12 @@ import prisma from '@repo/data/PrismaCient'
 import { processConfirmedOrder } from '@repo/data/payment'
 import { isDemoPayment } from '@/app/api/_lib/stripe'
 import { issueRefund } from '@/app/api/_lib/payment-provider'
+import {
+  RESERVATION_CANCELED,
+  RESERVATION_COMPLETE,
+  ORDER_PENDING,
+  ORDER_COMPLETE,
+} from '@repo/data/reservation-status'
 
 // ─── Cancel Reservation ─────────────────────────────────────────────────────
 
@@ -29,12 +35,12 @@ export async function cancelReservation(reservationId: string) {
     return { status: 'error', errors: ['Not authorized'] }
   }
 
-  if (reservation.status === 'canceled') {
+  if (reservation.status === RESERVATION_CANCELED) {
     return { status: 'ok' }
   }
 
   // Issue a refund (Stripe or Mollie) if this reservation was paid with a real payment
-  const isPaid = ['paid', 'complete'].includes(reservation.status)
+  const isPaid = reservation.status === RESERVATION_COMPLETE
   const hasRealPayment = reservation.paymentRef && !isDemoPayment(reservation.paymentRef)
 
   if (isPaid && hasRealPayment) {
@@ -47,7 +53,7 @@ export async function cancelReservation(reservationId: string) {
   }
 
   await prisma.reservation.update({
-    data: { status: 'canceled' },
+    data: { status: RESERVATION_CANCELED },
     where: { id: reservationId },
   })
 
@@ -213,7 +219,7 @@ export async function createOrder(order: {
   // ── Create the order ──────────────────────────────────────────────────────
 
   const orderData: any = {
-    status: 'pending',
+    status: ORDER_PENDING,
     price: sumPrice,
     tax,
     totalPrice: sumTotalPrice,
@@ -274,7 +280,7 @@ export async function completeUnpaidOrder(orderId: string) {
     return { status: 'error', errors: ['Authentication required'] }
   }
 
-  if (order.status !== 'pending') {
+  if (order.status !== ORDER_PENDING) {
     return { status: 'error', errors: ['Order is not in pending state'] }
   }
 
@@ -292,7 +298,7 @@ export async function completeUnpaidOrder(orderId: string) {
     // Fall back to just setting complete so the order isn't stuck
     await prisma.order.update({
       where: { id: orderId },
-      data: { status: 'complete' },
+      data: { status: ORDER_COMPLETE },
     })
   }
 

@@ -9,6 +9,14 @@ import CircularProgress from '@mui/material/CircularProgress'
 import { useTranslations } from 'next-intl'
 import { useSession } from 'next-auth/react'
 import { Reservation } from '@/app/sites/types'
+import {
+  RESERVATION_COMPLETE,
+  RESERVATION_PROCESSING,
+  RESERVATION_PENDING,
+  RESERVATION_PAYMENT_FAILED,
+  RESERVATION_CANCELED,
+  RESERVATION_REFUNDED,
+} from '@repo/data/reservation-status'
 
 const STATUS_CONFIG: {
   [key: string]: {
@@ -17,15 +25,15 @@ const STATUS_CONFIG: {
     dotColor: string
   }
 } = {
-  succeeded: { text: 'Payment received', textColor: '#118811', dotColor: '#22c55e' },
-  paid:      { text: 'PAID',             textColor: '#118811', dotColor: '#22c55e' },
-  complete:  { text: 'PAID',             textColor: '#118811', dotColor: '#22c55e' },
+  [RESERVATION_COMPLETE]:  { text: 'PAID',             textColor: '#118811', dotColor: '#22c55e' },
   reserved:  { text: 'RESERVED',         textColor: '#1e40af', dotColor: '#3b82f6' },
-  processing:{ text: 'Processing',       textColor: '#6b7280', dotColor: '#9ca3af' },
+  [RESERVATION_PROCESSING]:{ text: 'Processing',       textColor: '#6b7280', dotColor: '#9ca3af' },
   confirmed: { text: 'Confirmed',        textColor: '#1e40af', dotColor: '#3b82f6' },
   default:   { text: 'Pending',          textColor: '#6b7280', dotColor: '#9ca3af' },
-  pending:   { text: 'Pending',          textColor: '#6b7280', dotColor: '#9ca3af' },
-  payment_failed: { text: 'Payment failed', textColor: '#dc2626', dotColor: '#ef4444' },
+  [RESERVATION_PENDING]:   { text: 'Pending',          textColor: '#6b7280', dotColor: '#9ca3af' },
+  [RESERVATION_PAYMENT_FAILED]: { text: 'Payment failed', textColor: '#dc2626', dotColor: '#ef4444' },
+  [RESERVATION_CANCELED]:  { text: 'Canceled',         textColor: '#dc2626', dotColor: '#ef4444' },
+  [RESERVATION_REFUNDED]:  { text: 'Refunded',         textColor: '#6b7280', dotColor: '#9ca3af' },
 }
 
 export default function ReservationConfirmationView({
@@ -67,14 +75,14 @@ export default function ReservationConfirmationView({
   const validTo = new Date(reservation.to).toLocaleDateString('en-US', fmtOpts)
   const validity = validFrom === validTo ? validFrom : `${validFrom} – ${validTo}`
 
-  const isUnpaid = reservation.status === 'complete' && !reservation.paymentAmount
+  const isUnpaid = reservation.status === RESERVATION_COMPLETE && !reservation.paymentAmount
   const status = isUnpaid ? 'reserved' : reservation.status
   const effectiveStatus = processingStatus || status
   const cfg = STATUS_CONFIG[effectiveStatus] ?? STATUS_CONFIG.default!
 
   const seats = reservation.items?.map(item => String(item.number)).join(', ')
-  const showQr = status === 'paid' || status === 'complete' || status === 'reserved'
-  const showReceipt = (status === 'paid' || status === 'complete') && !isUnpaid
+  const showQr = status === RESERVATION_COMPLETE || status === 'reserved'
+  const showReceipt = status === RESERVATION_COMPLETE && !isUnpaid
 
   return (
     <div id="payment-status" className="bg-cream min-h-full flex items-center justify-center px-5 py-8">
@@ -86,7 +94,7 @@ export default function ReservationConfirmationView({
             {reservation.site?.name}
           </h1>
           <div className="mt-3 inline-flex items-center gap-1.5" style={{ color: cfg.textColor }}>
-            {effectiveStatus === 'processing' ? (
+            {effectiveStatus === RESERVATION_PROCESSING ? (
               <CircularProgress size={12} thickness={5} sx={{ color: cfg.textColor }} />
             ) : (
               <span className="h-2 w-2 rounded-full" style={{ backgroundColor: cfg.dotColor }} />

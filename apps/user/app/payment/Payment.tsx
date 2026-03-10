@@ -21,6 +21,7 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Button from '@mui/material/Button'
 import { useTranslations } from 'next-intl'
 import { initiateDemoReservationPayment } from './actions'
+import { RESERVATION_COMPLETE } from '@repo/data/reservation-status'
 import CheckoutForm from './CheckoutForm'
 import ReservationItem from './ReservationItem'
 import { Reservation } from '../sites/types'
@@ -128,7 +129,7 @@ export function DemoPayment({
         setCurrentReservation({
           ...reservation,
           paymentRef: result.paymentRef,
-          status: 'complete',
+          status: RESERVATION_COMPLETE,
         })
       }
     })

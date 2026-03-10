@@ -6,29 +6,38 @@ import { useTranslations } from 'next-intl'
 import EventSeatIcon from '@mui/icons-material/EventSeat'
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday'
 import AccessTimeIcon from '@mui/icons-material/AccessTime'
+import {
+  RESERVATION_PENDING,
+  RESERVATION_COMPLETE,
+  RESERVATION_CANCELED,
+  RESERVATION_PAYMENT_FAILED,
+  RESERVATION_REFUNDED,
+} from '@repo/data/reservation-status'
 
 const statusToChipColor: {
   [key: string]: 'default' | 'success' | 'error'
 } = {
-  'pending': 'default',
+  [RESERVATION_PENDING]: 'default',
   'confirmed': 'success',
-  'paid': 'success',
-  'complete': 'success',
-  'canceled': 'error'
+  [RESERVATION_COMPLETE]: 'success',
+  [RESERVATION_CANCELED]: 'error',
+  [RESERVATION_PAYMENT_FAILED]: 'error',
+  [RESERVATION_REFUNDED]: 'default'
 }
 
 const statusToChipLabel: {
-  [key: string]: 'Pending' | 'Confirmed' | 'Canceled' | 'Paid' | 'Reserved'
+  [key: string]: string
 } = {
-  'pending': 'Pending',
+  [RESERVATION_PENDING]: 'Pending',
   'confirmed': 'Confirmed',
-  'paid': 'Paid',
-  'complete': 'Paid',
-  'canceled': 'Canceled'
+  [RESERVATION_COMPLETE]: 'Paid',
+  [RESERVATION_CANCELED]: 'Canceled',
+  [RESERVATION_PAYMENT_FAILED]: 'Payment failed',
+  [RESERVATION_REFUNDED]: 'Refunded'
 }
 
 function getChipLabel(reservation: Reservation): string {
-  if (reservation.status === 'complete' && !reservation.paymentAmount) return 'Reserved'
+  if (reservation.status === RESERVATION_COMPLETE && !reservation.paymentAmount) return 'Reserved'
   return statusToChipLabel[reservation.status] || 'Unknown'
 }
 

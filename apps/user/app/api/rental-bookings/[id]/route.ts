@@ -13,6 +13,7 @@ import { NextRequest } from 'next/server'
 import { getRequestIdentity } from '@/app/api/_lib/auth'
 import { isDemoPayment } from '@/app/api/_lib/stripe'
 import { getPaymentStatus, isPaymentSucceeded, isPaymentFailed } from '@/app/api/_lib/payment-provider'
+import { RENTAL_PROCESSING, RENTAL_PAYMENT_FAILED } from '@repo/data/reservation-status'
 
 export async function GET(
   request: NextRequest,
@@ -48,7 +49,7 @@ export async function GET(
 
   // ── Handle 'processing' state: verify payment and process ─────────────
 
-  if (booking.status === 'processing' && booking.paymentRef) {
+  if (booking.status === RENTAL_PROCESSING && booking.paymentRef) {
     try {
       if (isDemoPayment(booking.paymentRef)) {
         await processConfirmedRentalBooking(booking.paymentRef)
@@ -60,7 +61,7 @@ export async function GET(
         } else if (isPaymentFailed(paymentStatus)) {
           await prisma.rentalBooking.updateMany({
             where: { paymentRef: booking.paymentRef },
-            data: { status: 'payment_failed' },
+            data: { status: RENTAL_PAYMENT_FAILED },
           })
         }
       }

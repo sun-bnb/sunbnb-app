@@ -4,6 +4,7 @@ import React, { useTransition } from 'react'
 import dayjs from 'dayjs'
 import { RentalBookingProps } from '@/types/shared'
 import { markRentalPickedUp, markRentalReturned } from './actions'
+import { OP_RESERVED, OP_PICKED_UP } from '@repo/data/reservation-status'
 
 function formatTime(date: Date | string | null | undefined): string {
   if (!date) return ''
@@ -27,8 +28,8 @@ export default function RentalBookingCard({
   booking: RentalBookingProps
 }) {
   const [isPending, startTransition] = useTransition()
-  const isReserved = booking.operationalStatus === 'reserved'
-  const isOut = booking.operationalStatus === 'picked-up'
+  const isReserved = booking.operationalStatus === OP_RESERVED
+  const isOut = booking.operationalStatus === OP_PICKED_UP
 
   function runAction(fn: () => Promise<{ status: string }>) {
     startTransition(async () => { await fn() })

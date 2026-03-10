@@ -17,7 +17,8 @@
     "./email": "./src/email.ts",
     "./reservation-emails": "./src/reservation-emails.ts",
     "./password-reset": "./src/password-reset.ts",
-    "./rate-limit": "./src/rate-limit.ts"
+    "./rate-limit": "./src/rate-limit.ts",
+    "./reservation-status": "./src/reservation-status.ts"
   },
   "typesVersions": {
     "*": {
@@ -56,6 +57,9 @@
       ],
       "rate-limit": [
         "./src/rate-limit.ts"
+      ],
+      "reservation-status": [
+        "./src/reservation-status.ts"
       ]
     }
   },

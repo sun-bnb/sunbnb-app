@@ -3,6 +3,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { setOrderStatus, getOrders, type OrderTab } from './actions'
 import { Order } from '@/types/shared'
+import {
+  ORDER_COMPLETE,
+  ORDER_ACCEPTED,
+  ORDER_PREPARING,
+  ORDER_READY,
+  ORDER_DELIVERED,
+  ORDER_COMPLETED,
+  ORDER_REJECTED,
+  ORDER_DISCARDED,
+} from '@repo/data/reservation-status'
 
 // ─── Audio Alert ─────────────────────────────────────────────────────────────
 
@@ -83,15 +93,15 @@ const TABS: { key: OrderTab; label: string }[] = [
 // ─── Status Colours & Labels ─────────────────────────────────────────────────
 
 const STATUS_STYLE: Record<string, { bg: string; text: string; label: string }> = {
-  paid:      { bg: 'bg-amber-100',   text: 'text-amber-800',   label: 'NEW' },
-  complete:  { bg: 'bg-amber-100',   text: 'text-amber-800',   label: 'NEW' },
-  accepted:  { bg: 'bg-blue-100',    text: 'text-blue-800',    label: 'ACCEPTED' },
-  preparing: { bg: 'bg-orange-100',  text: 'text-orange-800',  label: 'PREPARING' },
-  ready:     { bg: 'bg-emerald-100', text: 'text-emerald-800', label: 'READY' },
-  delivered: { bg: 'bg-teal-100',    text: 'text-teal-800',    label: 'DELIVERED' },
-  completed: { bg: 'bg-gray-100',    text: 'text-gray-600',    label: 'COMPLETED' },
-  rejected:  { bg: 'bg-red-100',     text: 'text-red-700',     label: 'REJECTED' },
-  discarded: { bg: 'bg-gray-100',    text: 'text-gray-500',    label: 'DISCARDED' },
+  paid:              { bg: 'bg-amber-100',   text: 'text-amber-800',   label: 'NEW' },
+  [ORDER_COMPLETE]:  { bg: 'bg-amber-100',   text: 'text-amber-800',   label: 'NEW' },
+  [ORDER_ACCEPTED]:  { bg: 'bg-blue-100',    text: 'text-blue-800',    label: 'ACCEPTED' },
+  [ORDER_PREPARING]: { bg: 'bg-orange-100',  text: 'text-orange-800',  label: 'PREPARING' },
+  [ORDER_READY]:     { bg: 'bg-emerald-100', text: 'text-emerald-800', label: 'READY' },
+  [ORDER_DELIVERED]: { bg: 'bg-teal-100',    text: 'text-teal-800',    label: 'DELIVERED' },
+  [ORDER_COMPLETED]: { bg: 'bg-gray-100',    text: 'text-gray-600',    label: 'COMPLETED' },
+  [ORDER_REJECTED]:  { bg: 'bg-red-100',     text: 'text-red-700',     label: 'REJECTED' },
+  [ORDER_DISCARDED]: { bg: 'bg-gray-100',    text: 'text-gray-500',    label: 'DISCARDED' },
 }
 
 // ─── Action Buttons Per Status ───────────────────────────────────────────────
@@ -137,7 +147,7 @@ function OrderActions({
             CANCEL
           </button>
           <button
-            onClick={() => act('rejected', rejectReason || undefined)}
+            onClick={() => act(ORDER_REJECTED, rejectReason || undefined)}
             disabled={busy}
             className="flex-1 py-2.5 rounded-lg bg-red-600 text-white font-semibold text-sm disabled:opacity-50"
           >
@@ -152,7 +162,7 @@ function OrderActions({
   const actions: Record<string, React.ReactNode> = {
     paid: (
       <div className="flex gap-2 mt-3">
-        <button onClick={() => act('accepted')} disabled={busy}
+        <button onClick={() => act(ORDER_ACCEPTED)} disabled={busy}
           className="flex-1 py-3 rounded-lg bg-blue-600 text-white font-bold text-base disabled:opacity-50 active:bg-blue-700">
           ACCEPT
         </button>
@@ -162,9 +172,9 @@ function OrderActions({
         </button>
       </div>
     ),
-    complete: (
+    [ORDER_COMPLETE]: (
       <div className="flex gap-2 mt-3">
-        <button onClick={() => act('accepted')} disabled={busy}
+        <button onClick={() => act(ORDER_ACCEPTED)} disabled={busy}
           className="flex-1 py-3 rounded-lg bg-blue-600 text-white font-bold text-base disabled:opacity-50 active:bg-blue-700">
           ACCEPT
         </button>
@@ -174,33 +184,33 @@ function OrderActions({
         </button>
       </div>
     ),
-    accepted: (
+    [ORDER_ACCEPTED]: (
       <div className="flex gap-2 mt-3">
-        <button onClick={() => act('preparing')} disabled={busy}
+        <button onClick={() => act(ORDER_PREPARING)} disabled={busy}
           className="flex-1 py-3 rounded-lg bg-orange-500 text-white font-bold text-base disabled:opacity-50 active:bg-orange-600">
           START PREPARING
         </button>
       </div>
     ),
-    preparing: (
+    [ORDER_PREPARING]: (
       <div className="flex gap-2 mt-3">
-        <button onClick={() => act('ready')} disabled={busy}
+        <button onClick={() => act(ORDER_READY)} disabled={busy}
           className="flex-1 py-3 rounded-lg bg-emerald-600 text-white font-bold text-base disabled:opacity-50 active:bg-emerald-700">
           READY
         </button>
       </div>
     ),
-    ready: (
+    [ORDER_READY]: (
       <div className="flex gap-2 mt-3">
-        <button onClick={() => act('delivered')} disabled={busy}
+        <button onClick={() => act(ORDER_DELIVERED)} disabled={busy}
           className="flex-1 py-3 rounded-lg bg-teal-600 text-white font-bold text-base disabled:opacity-50 active:bg-teal-700">
           DELIVERED
         </button>
       </div>
     ),
-    delivered: (
+    [ORDER_DELIVERED]: (
       <div className="flex gap-2 mt-3">
-        <button onClick={() => act('completed')} disabled={busy}
+        <button onClick={() => act(ORDER_COMPLETED)} disabled={busy}
           className="flex-1 py-3 rounded-lg bg-gray-800 text-white font-bold text-base disabled:opacity-50 active:bg-gray-900">
           COMPLETE
         </button>
@@ -324,10 +334,10 @@ export default function Orders({ siteId, orders: initialOrders }: { siteId: stri
 
   // Filter current tab's orders from the full set
   const tabStatuses: Record<OrderTab, string[]> = {
-    incoming: ['paid', 'complete'],
-    active:   ['accepted', 'preparing'],
-    ready:    ['ready', 'delivered'],
-    history:  ['completed', 'rejected', 'discarded'],
+    incoming: [ORDER_COMPLETE],
+    active:   [ORDER_ACCEPTED, ORDER_PREPARING],
+    ready:    [ORDER_READY, ORDER_DELIVERED],
+    history:  [ORDER_COMPLETED, ORDER_REJECTED, ORDER_DISCARDED],
   }
 
   const tabOrders = useMemo(

@@ -4,6 +4,20 @@ import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import dayjs from 'dayjs'
+import {
+  RESERVATION_PAID_IN_CASH,
+  RESERVATION_COMPLETE,
+  RENTAL_COMPLETE,
+  RENTAL_CANCELED,
+  OP_EXPECTED,
+  OP_CHECKED_IN,
+  OP_WALKED_IN,
+  OP_DEPARTED,
+  OP_NO_SHOW,
+  OP_RESERVED,
+  OP_RETURNED,
+  OP_PICKED_UP,
+} from '@repo/data/reservation-status'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -51,8 +65,8 @@ export async function reserveItem(
       from: dayjs().startOf('day').toDate(),
       to: dayjs().endOf('day').toDate(),
       siteId,
-      status: 'paid-in-cash',
-      operationalStatus: 'walked-in',
+      status: RESERVATION_PAID_IN_CASH,
+      operationalStatus: OP_WALKED_IN,
       checkedInAt: new Date(),
       guestName: guestName?.slice(0, 200) || null,
       internalNotes: internalNotes?.slice(0, 500) || null,
@@ -77,8 +91,8 @@ export async function unreserveItem(siteId: string, itemId: string) {
   await prisma.reservation.deleteMany({
     where: {
       siteId,
-      status: 'paid-in-cash',
-      operationalStatus: 'walked-in',
+      status: RESERVATION_PAID_IN_CASH,
+      operationalStatus: OP_WALKED_IN,
       from: { gte: todayStart },
       to: { lte: todayEnd },
       items: { some: { id: itemId } },
@@ -102,14 +116,14 @@ export async function checkInReservation(siteId: string, reservationId: string) 
   if (!reservation || reservation.siteId !== siteId) {
     return { status: 'error', errors: ['Reservation not found'] }
   }
-  if (reservation.operationalStatus !== 'expected') {
+  if (reservation.operationalStatus !== OP_EXPECTED) {
     return { status: 'error', errors: [`Cannot check in from status: ${reservation.operationalStatus}`] }
   }
 
   await prisma.reservation.update({
     where: { id: reservationId },
     data: {
-      operationalStatus: 'checked-in',
+      operationalStatus: OP_CHECKED_IN,
       checkedInAt: new Date(),
     },
   })
@@ -131,14 +145,14 @@ export async function markDeparted(siteId: string, reservationId: string) {
   if (!reservation || reservation.siteId !== siteId) {
     return { status: 'error', errors: ['Reservation not found'] }
   }
-  if (!['checked-in', 'walked-in'].includes(reservation.operationalStatus)) {
+  if (!([OP_CHECKED_IN, OP_WALKED_IN] as string[]).includes(reservation.operationalStatus)) {
     return { status: 'error', errors: [`Cannot mark departed from: ${reservation.operationalStatus}`] }
   }
 
   await prisma.reservation.update({
     where: { id: reservationId },
     data: {
-      operationalStatus: 'departed',
+      operationalStatus: OP_DEPARTED,
       departedAt: new Date(),
     },
   })
@@ -160,13 +174,13 @@ export async function markNoShow(siteId: string, reservationId: string) {
   if (!reservation || reservation.siteId !== siteId) {
     return { status: 'error', errors: ['Reservation not found'] }
   }
-  if (reservation.operationalStatus !== 'expected') {
+  if (reservation.operationalStatus !== OP_EXPECTED) {
     return { status: 'error', errors: [`Cannot mark no-show from: ${reservation.operationalStatus}`] }
   }
 
   await prisma.reservation.update({
     where: { id: reservationId },
-    data: { operationalStatus: 'no-show' },
+    data: { operationalStatus: OP_NO_SHOW },
   })
 
   revalidatePath(`/sites/${siteId}/manage`)
@@ -217,7 +231,7 @@ export async function moveReservation(
   if (!reservation || reservation.siteId !== siteId) {
     return { status: 'error', errors: ['Reservation not found'] }
   }
-  if (['no-show', 'departed'].includes(reservation.operationalStatus)) {
+  if (([OP_NO_SHOW, OP_DEPARTED] as string[]).includes(reservation.operationalStatus)) {
     return { status: 'error', errors: ['Cannot move a completed reservation'] }
   }
 
@@ -265,7 +279,7 @@ export async function blockBed(
       from: dayjs().startOf('day').toDate(),
       to: dayjs().endOf('day').toDate(),
       siteId,
-      status: 'paid-in-cash',
+      status: RESERVATION_PAID_IN_CASH,
       operationalStatus: 'blocked',
       internalNotes: notes?.slice(0, 500) || null,
       items: { connect: itemIds },
@@ -316,14 +330,14 @@ export async function markRentalPickedUp(siteId: string, bookingId: string) {
   if (!booking || booking.siteId !== siteId) {
     return { status: 'error', errors: ['Booking not found'] }
   }
-  if (booking.operationalStatus !== 'reserved') {
+  if (booking.operationalStatus !== OP_RESERVED) {
     return { status: 'error', errors: [`Cannot pick up from status: ${booking.operationalStatus}`] }
   }
 
   await prisma.rentalBooking.update({
     where: { id: bookingId },
     data: {
-      operationalStatus: 'picked-up',
+      operationalStatus: OP_PICKED_UP,
       pickedUpAt: new Date(),
     },
   })
@@ -345,14 +359,14 @@ export async function markRentalReturned(siteId: string, bookingId: string) {
   if (!booking || booking.siteId !== siteId) {
     return { status: 'error', errors: ['Booking not found'] }
   }
-  if (booking.operationalStatus !== 'picked-up') {
+  if (booking.operationalStatus !== OP_PICKED_UP) {
     return { status: 'error', errors: [`Cannot return from status: ${booking.operationalStatus}`] }
   }
 
   await prisma.rentalBooking.update({
     where: { id: bookingId },
     data: {
-      operationalStatus: 'returned',
+      operationalStatus: OP_RETURNED,
       returnedAt: new Date(),
     },
   })
@@ -399,7 +413,7 @@ export async function createWalkInRental(input: {
       where: {
         rentalItemId: cartItem.rentalItemId,
         siteId: input.siteId,
-        operationalStatus: { notIn: ['returned', 'cancelled'] },
+        operationalStatus: { notIn: [OP_RETURNED, RENTAL_CANCELED] },
         from: { lt: to },
         to: { gt: from },
       },
@@ -445,8 +459,8 @@ export async function createWalkInRental(input: {
         quantity: cartItem.quantity,
         durationType: input.durationType,
         totalPrice,
-        status: input.paymentType === 'cash' ? 'paid-in-cash' : 'complete',
-        operationalStatus: 'picked-up',
+        status: input.paymentType === 'cash' ? RESERVATION_PAID_IN_CASH : RENTAL_COMPLETE,
+        operationalStatus: OP_PICKED_UP,
         pickedUpAt: new Date(),
         guestName: input.guestName?.slice(0, 200) || null,
       },

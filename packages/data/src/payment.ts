@@ -22,6 +22,11 @@ import crypto from 'crypto'
 import prisma from '../index'
 import { ServiceFee, SubscriptionTier } from '@prisma/client'
 import { getBusinessEntity } from './business-entity'
+import {
+  RESERVATION_COMPLETE,
+  RENTAL_COMPLETE,
+  ORDER_COMPLETE,
+} from './reservation-status'
 
 // ─── Financial Utilities ────────────────────────────────────────────────────
 
@@ -323,7 +328,7 @@ export async function processConfirmedReservation(
   }
 
   // Idempotency guard: already processed
-  if (reservation.status === 'complete' || reservation.invoices.length > 0) {
+  if (reservation.status === RESERVATION_COMPLETE || reservation.invoices.length > 0) {
     return
   }
 
@@ -374,7 +379,7 @@ export async function processConfirmedReservation(
       where: { id: reservationId },
       include: { invoices: true },
     })
-    if (current?.status === 'complete' || (current?.invoices?.length ?? 0) > 0) return
+    if (current?.status === RESERVATION_COMPLETE || (current?.invoices?.length ?? 0) > 0) return
 
     const invoicedAt = new Date()
 
@@ -475,7 +480,7 @@ export async function processConfirmedReservation(
 
     await tx.reservation.update({
       where: { id: reservationId },
-      data: { status: 'complete' },
+      data: { status: RESERVATION_COMPLETE },
     })
   })
 
@@ -516,7 +521,7 @@ export async function processConfirmedRentalBooking(
   }
 
   // Idempotency guard: if all bookings are already complete, skip
-  if (bookings.every(b => b.status === 'complete')) {
+  if (bookings.every(b => b.status === RENTAL_COMPLETE)) {
     return
   }
 
@@ -567,7 +572,7 @@ export async function processConfirmedRentalBooking(
     const current = await tx.rentalBooking.findMany({
       where: { paymentRef },
     })
-    if (current.every(b => b.status === 'complete')) return
+    if (current.every(b => b.status === RENTAL_COMPLETE)) return
 
     const invoicedAt = new Date()
 
@@ -669,7 +674,7 @@ export async function processConfirmedRentalBooking(
     // Mark all bookings as complete
     await tx.rentalBooking.updateMany({
       where: { paymentRef },
-      data: { status: 'complete' },
+      data: { status: RENTAL_COMPLETE },
     })
   })
 }
@@ -706,7 +711,7 @@ export async function processConfirmedOrder(
   }
 
   // Idempotency guard: already processed
-  if (order.status === 'complete' || order.invoices.length > 0) {
+  if (order.status === ORDER_COMPLETE || order.invoices.length > 0) {
     return
   }
 
@@ -767,7 +772,7 @@ export async function processConfirmedOrder(
       where: { id: orderId },
       include: { invoices: true },
     })
-    if (current?.status === 'complete' || (current?.invoices?.length ?? 0) > 0) return
+    if (current?.status === ORDER_COMPLETE || (current?.invoices?.length ?? 0) > 0) return
 
     const invoicedAt = new Date()
 
@@ -858,7 +863,7 @@ export async function processConfirmedOrder(
 
     await tx.order.update({
       where: { id: orderId },
-      data: { status: 'complete' },
+      data: { status: ORDER_COMPLETE },
     })
   })
 }

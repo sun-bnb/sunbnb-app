@@ -24,6 +24,12 @@ import {
 import { NextRequest } from 'next/server'
 import Stripe from 'stripe'
 import { getStripeClient } from '@/app/api/_lib/stripe'
+import {
+  RESERVATION_PAYMENT_FAILED,
+  RESERVATION_REFUNDED,
+  ORDER_PAYMENT_FAILED,
+  ORDER_REFUNDED,
+} from '@repo/data/reservation-status'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -67,12 +73,12 @@ async function handlePaymentFailed(
   if (type === 'reservation') {
     await prisma.reservation.updateMany({
       where: { id: entityId },
-      data: { status: 'payment_failed' },
+      data: { status: RESERVATION_PAYMENT_FAILED },
     })
   } else if (type === 'order') {
     await prisma.order.updateMany({
       where: { id: entityId },
-      data: { status: 'payment_failed' },
+      data: { status: ORDER_PAYMENT_FAILED },
     })
   }
 }
@@ -93,12 +99,12 @@ async function handleChargeRefunded(
   // Mark matching reservation or order as refunded
   const updatedReservations = await prisma.reservation.updateMany({
     where: { paymentRef: paymentIntentId },
-    data: { status: 'refunded' },
+    data: { status: RESERVATION_REFUNDED },
   })
 
   const updatedOrders = await prisma.order.updateMany({
     where: { paymentRef: paymentIntentId },
-    data: { status: 'refunded' },
+    data: { status: ORDER_REFUNDED },
   })
 
   if (updatedReservations.count === 0 && updatedOrders.count === 0) {

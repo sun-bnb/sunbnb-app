@@ -19,6 +19,7 @@ import {
   round,
 } from '@repo/data/payment'
 import { isTestMode } from '@repo/data/env'
+import { RENTAL_PENDING, RENTAL_PROCESSING } from '@repo/data/reservation-status'
 import { NextRequest } from 'next/server'
 import { getRequestIdentity } from '@/app/api/_lib/auth'
 import { getMollieClientForPartner, getValidMollieToken } from '@/app/api/_lib/mollie'
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Payment already created for some bookings' }, { status: 400 })
   }
 
-  if (bookings.some(b => b.status !== 'pending')) {
+  if (bookings.some(b => b.status !== RENTAL_PENDING)) {
     return Response.json({ error: 'Some bookings are not in pending state' }, { status: 400 })
   }
 
@@ -235,7 +236,7 @@ export async function POST(request: NextRequest) {
     where: { id: { in: rentalBookingIds } },
     data: {
       paymentRef: payment.id,
-      status: 'processing',
+      status: RENTAL_PROCESSING,
     },
   })
 

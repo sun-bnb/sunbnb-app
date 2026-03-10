@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import Link from 'next/link'
+import { RESERVATION_CANCELED } from '@repo/data/reservation-status'
 
 export interface UpcomingReservation {
   id: string
@@ -109,7 +110,7 @@ function ReservationStatus({ status }: { status: string }) {
   const styles: Record<string, string> = {
     confirmed: 'bg-emerald-50 text-emerald-700',
     pending: 'bg-amber-50 text-amber-700',
-    cancelled: 'bg-red-50 text-red-600',
+    [RESERVATION_CANCELED]: 'bg-red-50 text-red-600',
   }
   return (
     <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${styles[status] || 'bg-gray-100 text-gray-500'}`}>

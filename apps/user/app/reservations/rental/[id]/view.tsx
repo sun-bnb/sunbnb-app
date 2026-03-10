@@ -6,6 +6,15 @@ import SurfingIcon from '@mui/icons-material/Surfing'
 import LaunchIcon from '@mui/icons-material/Launch'
 import Link from 'next/link'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
+import {
+  RENTAL_PENDING,
+  RENTAL_COMPLETE,
+  RENTAL_CANCELED,
+  RENTAL_PAYMENT_FAILED,
+  OP_RESERVED,
+  OP_PICKED_UP,
+  OP_RETURNED,
+} from '@repo/data/reservation-status'
 
 type Booking = {
   id: string
@@ -28,12 +37,13 @@ type Booking = {
 }
 
 const STATUS_CONFIG: Record<string, { text: string; textColor: string; dotColor: string }> = {
-  reserved:    { text: 'Reserved',  textColor: '#d97706', dotColor: '#f59e0b' },
-  'picked-up': { text: 'In use',   textColor: '#059669', dotColor: '#10b981' },
-  returned:    { text: 'Returned',  textColor: '#6b7280', dotColor: '#9ca3af' },
-  pending:     { text: 'Pending',   textColor: '#6b7280', dotColor: '#9ca3af' },
-  complete:    { text: 'Paid',      textColor: '#118811', dotColor: '#22c55e' },
-  cancelled:   { text: 'Cancelled', textColor: '#dc2626', dotColor: '#ef4444' },
+  [OP_RESERVED]:    { text: 'Reserved',       textColor: '#d97706', dotColor: '#f59e0b' },
+  [OP_PICKED_UP]: { text: 'In use',         textColor: '#059669', dotColor: '#10b981' },
+  [OP_RETURNED]:    { text: 'Returned',       textColor: '#6b7280', dotColor: '#9ca3af' },
+  [RENTAL_PENDING]:     { text: 'Pending',        textColor: '#6b7280', dotColor: '#9ca3af' },
+  [RENTAL_COMPLETE]:    { text: 'Paid',           textColor: '#118811', dotColor: '#22c55e' },
+  [RENTAL_CANCELED]:    { text: 'Canceled',       textColor: '#dc2626', dotColor: '#ef4444' },
+  [RENTAL_PAYMENT_FAILED]: { text: 'Payment failed', textColor: '#dc2626', dotColor: '#ef4444' },
 }
 
 export default function RentalBookingDetail({ booking }: { booking: Booking }) {
@@ -41,18 +51,18 @@ export default function RentalBookingDetail({ booking }: { booking: Booking }) {
   const t = useTranslations('Reservations')
   const tr = useTranslations('Reservation')
 
-  const isUnpaid = booking.status === 'complete' && !booking.totalPrice
-  const showReceipt = (booking.status === 'complete') && !isUnpaid && !!booking.paymentRef
+  const isUnpaid = booking.status === RENTAL_COMPLETE && !booking.totalPrice
+  const showReceipt = (booking.status === RENTAL_COMPLETE) && !isUnpaid && !!booking.paymentRef
 
   const siteName = booking.site?.name
   const itemName = booking.rentalItem?.name || 'Equipment'
   const category = booking.rentalItem?.category
 
   // Determine display status — prefer operational status if meaningful
-  const displayStatus = booking.operationalStatus !== 'reserved'
+  const displayStatus = booking.operationalStatus !== OP_RESERVED
     ? booking.operationalStatus
-    : booking.status === 'complete' && !booking.totalPrice
-      ? 'reserved'
+    : booking.status === RENTAL_COMPLETE && !booking.totalPrice
+      ? OP_RESERVED
       : booking.status
   const cfg = STATUS_CONFIG[displayStatus] ?? STATUS_CONFIG.pending!
 

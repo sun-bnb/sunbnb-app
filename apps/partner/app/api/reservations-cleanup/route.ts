@@ -3,6 +3,12 @@ import { Prisma } from '@prisma/client'
 import dayjs from 'dayjs'
 import { NextRequest } from 'next/server'
 import { auth } from '@/app/auth'
+import {
+  RESERVATION_PENDING,
+  RESERVATION_PROCESSING,
+  RESERVATION_PAYMENT_FAILED,
+  RESERVATION_PAID_IN_CASH,
+} from '@repo/data/reservation-status'
 
 const CRON_SECRET = process.env.CRON_SECRET
 
@@ -20,6 +26,7 @@ export async function GET(request: Request) {
   }
 
   const cutoffPending = new Date(Date.now() - 15 * 60 * 1000)
+  const cutoffPaymentFailed = new Date(Date.now() - 24 * 60 * 60 * 1000)
   const cutoffPaidInCash = dayjs().startOf('day').toDate()
   const now = new Date()
 
@@ -27,11 +34,15 @@ export async function GET(request: Request) {
     where: {
       OR: [
         { 
-          status: { in: [ 'pending', 'processing' ] },
+          status: { in: [ RESERVATION_PENDING, RESERVATION_PROCESSING ] },
           createdAt: { lt: cutoffPending }
         },
+        {
+          status: RESERVATION_PAYMENT_FAILED,
+          createdAt: { lt: cutoffPaymentFailed }
+        },
         { 
-          status: { in: [ 'paid-in-cash' ] },
+          status: { in: [ RESERVATION_PAID_IN_CASH ] },
           createdAt: { 
             lt: cutoffPaidInCash,
           },

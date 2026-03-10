@@ -3,31 +3,40 @@
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { Invoice } from '@/app/types/types'
+import {
+  ORDER_PENDING,
+  ORDER_COMPLETE,
+  ORDER_ACCEPTED,
+  ORDER_PREPARING,
+  ORDER_READY,
+  ORDER_DELIVERED,
+  ORDER_COMPLETED,
+  ORDER_REJECTED,
+  ORDER_CANCELED,
+} from '@repo/data/reservation-status'
 
 const statusStyle: Record<string, string> = {
-  pending:   'bg-amber-50 text-amber-700',
-  paid:      'bg-emerald-50 text-emerald-700',
-  complete:  'bg-emerald-50 text-emerald-700',
-  accepted:  'bg-blue-50 text-blue-700',
-  preparing: 'bg-orange-50 text-orange-700',
-  ready:     'bg-green-50 text-green-800',
-  delivered: 'bg-teal-50 text-teal-700',
-  completed: 'bg-gray-50 text-gray-600',
-  rejected:  'bg-red-50 text-red-700',
-  cancelled: 'bg-red-50 text-red-700',
+  [ORDER_PENDING]:   'bg-amber-50 text-amber-700',
+  [ORDER_COMPLETE]:  'bg-emerald-50 text-emerald-700',
+  [ORDER_ACCEPTED]:  'bg-blue-50 text-blue-700',
+  [ORDER_PREPARING]: 'bg-orange-50 text-orange-700',
+  [ORDER_READY]:     'bg-green-50 text-green-800',
+  [ORDER_DELIVERED]: 'bg-teal-50 text-teal-700',
+  [ORDER_COMPLETED]: 'bg-gray-50 text-gray-600',
+  [ORDER_REJECTED]:  'bg-red-50 text-red-700',
+  [ORDER_CANCELED]:  'bg-red-50 text-red-700',
 }
 
 const statusLabel: Record<string, string> = {
-  pending:   'Pending',
-  paid:      'Received',
-  complete:  'Received',
-  accepted:  'Accepted',
-  preparing: 'Preparing',
-  ready:     'Ready!',
-  delivered: 'Delivered',
-  completed: 'Done',
-  rejected:  'Rejected',
-  cancelled: 'Cancelled',
+  [ORDER_PENDING]:   'Pending',
+  [ORDER_COMPLETE]:  'Received',
+  [ORDER_ACCEPTED]:  'Accepted',
+  [ORDER_PREPARING]: 'Preparing',
+  [ORDER_READY]:     'Ready!',
+  [ORDER_DELIVERED]: 'Delivered',
+  [ORDER_COMPLETED]: 'Done',
+  [ORDER_REJECTED]:  'Rejected',
+  [ORDER_CANCELED]:  'Canceled',
 }
 
 interface OrderData {

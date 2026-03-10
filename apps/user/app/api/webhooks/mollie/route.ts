@@ -31,6 +31,14 @@ import {
 import { isTestMode } from '@repo/data/env'
 import { NextRequest } from 'next/server'
 import { getMollieClientForPartner } from '@/app/api/_lib/mollie'
+import {
+  RESERVATION_PAYMENT_FAILED,
+  RESERVATION_REFUNDED,
+  ORDER_PAYMENT_FAILED,
+  ORDER_REFUNDED,
+  RENTAL_PAYMENT_FAILED,
+  RENTAL_REFUNDED,
+} from '@repo/data/reservation-status'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -148,19 +156,39 @@ async function handlePaymentFailed(meta: MollieMetadata): Promise<void> {
   if (meta.type === 'reservation') {
     await prisma.reservation.updateMany({
       where: { id: meta.entityId },
-      data: { status: 'payment_failed' },
+      data: { status: RESERVATION_PAYMENT_FAILED },
     })
   } else if (meta.type === 'order') {
     await prisma.order.updateMany({
       where: { id: meta.entityId },
-      data: { status: 'payment_failed' },
+      data: { status: ORDER_PAYMENT_FAILED },
     })
   } else if (meta.type === 'rental-booking') {
     // Update all bookings that share this payment group
     const bookingIds = meta.bookingIds ?? [meta.entityId]
     await prisma.rentalBooking.updateMany({
       where: { id: { in: bookingIds } },
-      data: { status: 'payment_failed' },
+      data: { status: RENTAL_PAYMENT_FAILED },
+    })
+  }
+}
+
+async function handlePaymentRefunded(meta: MollieMetadata): Promise<void> {
+  if (meta.type === 'reservation') {
+    await prisma.reservation.updateMany({
+      where: { id: meta.entityId },
+      data: { status: RESERVATION_REFUNDED },
+    })
+  } else if (meta.type === 'order') {
+    await prisma.order.updateMany({
+      where: { id: meta.entityId },
+      data: { status: ORDER_REFUNDED },
+    })
+  } else if (meta.type === 'rental-booking') {
+    const bookingIds = meta.bookingIds ?? [meta.entityId]
+    await prisma.rentalBooking.updateMany({
+      where: { id: { in: bookingIds } },
+      data: { status: RENTAL_REFUNDED },
     })
   }
 }
@@ -216,8 +244,9 @@ export async function POST(request: NextRequest) {
   }
 
   // Handle based on payment status
+  const status = payment.status as string
   try {
-    switch (payment.status) {
+    switch (status) {
       case 'paid': {
         console.log('[Mollie Webhook] Payment paid:', paymentId, meta.type, meta.entityId)
         await handlePaymentPaid(meta, paymentId)
@@ -227,17 +256,23 @@ export async function POST(request: NextRequest) {
       case 'failed':
       case 'canceled':
       case 'expired': {
-        console.log(`[Mollie Webhook] Payment ${payment.status}:`, paymentId, meta.type, meta.entityId)
+        console.log(`[Mollie Webhook] Payment ${status}:`, paymentId, meta.type, meta.entityId)
         await handlePaymentFailed(meta)
+        break
+      }
+
+      case 'refunded': {
+        console.log('[Mollie Webhook] Payment refunded:', paymentId, meta.type, meta.entityId)
+        await handlePaymentRefunded(meta)
         break
       }
 
       default:
         // open, pending, authorized — not terminal, ignore for now
-        console.log('[Mollie Webhook] Non-terminal status:', payment.status, paymentId)
+        console.log('[Mollie Webhook] Non-terminal status:', status, paymentId)
     }
   } catch (error) {
-    console.error(`[Mollie Webhook] Error handling status ${payment.status}:`, error)
+    console.error(`[Mollie Webhook] Error handling status ${status}:`, error)
     // Return 500 so Mollie retries
     return Response.json({ error: 'Webhook handler failed' }, { status: 500 })
   }

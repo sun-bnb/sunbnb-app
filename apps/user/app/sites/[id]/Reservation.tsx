@@ -33,6 +33,7 @@ import EquipmentSelection from '@/components/reservation/EquipmentSelection'
 import { saveReservationForMultipleItems, saveRentalBooking } from './actions'
 import PaymentView from '@/app/payment/Payment'
 import { initiateDemoRentalPayment } from '@/app/payment/actions'
+import { RESERVATION_PROCESSING } from '@repo/data/reservation-status'
 import { useRouter, usePathname } from 'next/navigation'
 
 function PaymentMethodSelection() {
@@ -104,7 +105,7 @@ function ReservationTimerangeSelector() {
               textAlign: 'center'
             }
           }}
-            disabled={reservationState === 'processing'}
+            disabled={reservationState === RESERVATION_PROCESSING}
             label="Date"
             format='YYYY-MM-DD'
             value={dayjs(reservationDay)}
@@ -125,7 +126,7 @@ function ReservationTimerangeSelector() {
             }
           }}
             label="Time"
-            disabled={reservationState === 'processing'}
+            disabled={reservationState === RESERVATION_PROCESSING}
             ampm={false}
             fullWidth={true}
             value={[dayjs(timeRange[0]), dayjs(timeRange[1])]}
@@ -159,7 +160,7 @@ function ReservationTimerangeSelector() {
               dispatch(setValue({ focused: true }))
             }}
             value={[dayjs(dateRange[0]), dayjs(dateRange[1])]}
-            disabled={reservationState === 'processing'}
+            disabled={reservationState === RESERVATION_PROCESSING}
             format='YYYY-MM-DD'
             selectedSections={null}
             label={`${t('From')} - ${t('To')}`}
@@ -617,7 +618,7 @@ export default function ReservationView({
   return (
     <>
       {
-        (reservationState === 'processing' || reservationState === 'payment_in_progress') ? (
+        (reservationState === RESERVATION_PROCESSING || reservationState === 'payment_in_progress') ? (
           !reservation ? (
             <div className="flex justify-center mb-[12px] mt-[12px]">
               <CircularProgress />

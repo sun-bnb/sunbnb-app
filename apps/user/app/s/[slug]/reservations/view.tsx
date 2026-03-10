@@ -13,23 +13,32 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime'
 import Link from 'next/link'
 import type { Reservation } from '@/app/sites/types'
 import type { SiteViewBrand } from '@/app/sites/[id]/view'
+import {
+  RESERVATION_PENDING,
+  RESERVATION_COMPLETE,
+  RESERVATION_CANCELED,
+  RESERVATION_PAYMENT_FAILED,
+  RESERVATION_REFUNDED,
+} from '@repo/data/reservation-status'
 
 const statusToChipColor: Record<string, 'default' | 'success' | 'error'> = {
-  pending: 'default',
+  [RESERVATION_PENDING]: 'default',
   confirmed: 'success',
-  paid: 'success',
-  complete: 'success',
-  canceled: 'error',
+  [RESERVATION_COMPLETE]: 'success',
+  [RESERVATION_CANCELED]: 'error',
+  [RESERVATION_PAYMENT_FAILED]: 'error',
+  [RESERVATION_REFUNDED]: 'default',
 }
 
 function getChipLabel(reservation: Reservation): string {
-  if (reservation.status === 'complete' && !reservation.paymentAmount) return 'Reserved'
+  if (reservation.status === RESERVATION_COMPLETE && !reservation.paymentAmount) return 'Reserved'
   const map: Record<string, string> = {
-    pending: 'Pending',
+    [RESERVATION_PENDING]: 'Pending',
     confirmed: 'Confirmed',
-    paid: 'Paid',
-    complete: 'Paid',
-    canceled: 'Canceled',
+    [RESERVATION_COMPLETE]: 'Paid',
+    [RESERVATION_CANCELED]: 'Canceled',
+    [RESERVATION_PAYMENT_FAILED]: 'Payment failed',
+    [RESERVATION_REFUNDED]: 'Refunded',
   }
   return map[reservation.status] || 'Unknown'
 }

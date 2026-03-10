@@ -2,6 +2,22 @@
  * Shared server-side validation helpers for the partner app.
  */
 
+import {
+  ORDER_PENDING,
+  ORDER_PROCESSING,
+  ORDER_COMPLETE,
+  ORDER_ACCEPTED,
+  ORDER_PREPARING,
+  ORDER_READY,
+  ORDER_DELIVERED,
+  ORDER_COMPLETED,
+  ORDER_REJECTED,
+  ORDER_CANCELED,
+  ORDER_REFUNDED,
+  ORDER_PAYMENT_FAILED,
+  ORDER_DISCARDED,
+} from '@repo/data/reservation-status'
+
 // ─── File Upload Validation ─────────────────────────────────────────────────
 
 const ALLOWED_IMAGE_TYPES = new Set([
@@ -75,7 +91,12 @@ export function validatePassword(
 
 const VALID_SITE_STATUSES = new Set(['active', 'hidden'])
 const VALID_PAYMENT_PROVIDERS = new Set(['stripe', 'mollie'])
-const VALID_ORDER_STATUSES = new Set(['pending', 'paid', 'complete', 'completed', 'accepted', 'preparing', 'ready', 'delivered', 'rejected', 'canceled', 'refunded', 'discarded'])
+const VALID_ORDER_STATUSES: Set<string> = new Set([
+  ORDER_PENDING, ORDER_PROCESSING, ORDER_COMPLETE, ORDER_COMPLETED,
+  ORDER_ACCEPTED, ORDER_PREPARING, ORDER_READY, ORDER_DELIVERED,
+  ORDER_REJECTED, ORDER_CANCELED, ORDER_REFUNDED, ORDER_PAYMENT_FAILED,
+  ORDER_DISCARDED,
+])
 const VALID_PRODUCT_CATEGORIES = new Set(['food', 'drink', 'snack', 'accessory'])
 const VALID_ORDER_PAYMENT_TYPES = new Set(['paid', 'unpaid'])
 const VALID_BG_OPTIONS = new Set(['satellite', 'blank', 'custom'])

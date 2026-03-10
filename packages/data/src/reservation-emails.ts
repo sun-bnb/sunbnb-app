@@ -12,6 +12,11 @@
 
 import prisma from '../index'
 import { sendEmail } from './email'
+import {
+  RESERVATION_COMPLETE,
+  RESERVATION_PROCESSING,
+  OP_EXPECTED,
+} from './reservation-status'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -264,8 +269,8 @@ export async function sendDueReminders(): Promise<number> {
 
   const dueReservations = await prisma.reservation.findMany({
     where: {
-      operationalStatus: 'expected',
-      status: { in: ['paid', 'complete', 'processing'] },
+      operationalStatus: OP_EXPECTED,
+      status: { in: [RESERVATION_COMPLETE, RESERVATION_PROCESSING] },
       from: { gte: today, lt: tomorrow },
       reminderSentAt: null,
     },

@@ -1,6 +1,6 @@
 
 import prisma from '@repo/data/PrismaCient'
-import { Prisma } from '@prisma/client'
+import { RESERVATION_CANCELED } from '@repo/data/reservation-status'
 import dayjs from 'dayjs'
 import { NextRequest } from 'next/server'
 import { auth } from '@/app/auth'
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest, { params } : { params: { siteId:
     const reservations = await prisma.reservation.findMany({ 
       where: { 
         siteId: params.siteId,
-        status: { not: 'canceled' },
+        status: { not: RESERVATION_CANCELED },
         AND: [
           { from: { lte: dayEnd } },
           { to: { gte: dayStart } }
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest, { params } : { params: { siteId:
         ) AS day
       WHERE 
         "site_id" = ${params.siteId} AND
-        "status" != 'canceled' AND
+        "status" != ${RESERVATION_CANCELED} AND
         "from" >= ${monthStart} AND
         "to" <= ${monthEnd}
       GROUP BY 

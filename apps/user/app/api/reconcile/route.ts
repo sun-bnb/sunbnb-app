@@ -20,6 +20,12 @@ import {
   processConfirmedReservation,
   processConfirmedOrder,
 } from '@repo/data/payment'
+import {
+  RESERVATION_PROCESSING,
+  RESERVATION_PAYMENT_FAILED,
+  ORDER_PROCESSING,
+  ORDER_PAYMENT_FAILED,
+} from '@repo/data/reservation-status'
 import { NextRequest } from 'next/server'
 import { getStripeClient, isDemoPayment } from '@/app/api/_lib/stripe'
 
@@ -61,7 +67,7 @@ export async function POST(request: NextRequest) {
 
   const stuckReservations = await prisma.reservation.findMany({
     where: {
-      status: 'processing',
+      status: RESERVATION_PROCESSING,
       paymentRef: { not: null },
       updatedAt: { lt: cutoff },
     },
@@ -83,7 +89,7 @@ export async function POST(request: NextRequest) {
       } else if (status !== 'processing' && status !== 'requires_action') {
         await prisma.reservation.update({
           where: { id: reservation.id },
-          data: { status: 'payment_failed' },
+          data: { status: RESERVATION_PAYMENT_FAILED },
         })
         results.reservations.failed++
       }
@@ -100,7 +106,7 @@ export async function POST(request: NextRequest) {
 
   const stuckOrders = await prisma.order.findMany({
     where: {
-      status: 'processing',
+      status: ORDER_PROCESSING,
       paymentRef: { not: null },
       updatedAt: { lt: cutoff },
     },
@@ -122,7 +128,7 @@ export async function POST(request: NextRequest) {
       } else if (status !== 'processing' && status !== 'requires_action') {
         await prisma.order.update({
           where: { id: order.id },
-          data: { status: 'payment_failed' },
+          data: { status: ORDER_PAYMENT_FAILED },
         })
         results.orders.failed++
       }

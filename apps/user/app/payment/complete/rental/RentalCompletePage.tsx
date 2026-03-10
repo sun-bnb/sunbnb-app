@@ -4,6 +4,11 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useGetRentalBookingByIdQuery } from '@/store/features/api/apiSlice'
 import CircularProgress from '@mui/material/CircularProgress'
+import {
+  RENTAL_PROCESSING,
+  RENTAL_COMPLETE,
+  RENTAL_PAYMENT_FAILED,
+} from '@repo/data/reservation-status'
 
 export default function RentalCompletePage({
   bookingId,
@@ -17,13 +22,13 @@ export default function RentalCompletePage({
 
   const { data: fetchedBooking } = useGetRentalBookingByIdQuery(
     { id: bookingId },
-    { pollingInterval: status === 'processing' ? 1000 : 0 }
+    { pollingInterval: status === RENTAL_PROCESSING ? 1000 : 0 }
   )
 
   useEffect(() => {
     if (fetchedBooking?.status) {
       setStatus(fetchedBooking.status)
-      if (fetchedBooking.status === 'complete') {
+      if (fetchedBooking.status === RENTAL_COMPLETE) {
         router.push(`/reservations/rental/${bookingId}`)
       }
     }
@@ -31,18 +36,18 @@ export default function RentalCompletePage({
 
   return (
     <div className="flex flex-col items-center justify-center pt-12" style={{ height: '100dvh' }}>
-      {status === 'processing' ? (
+      {status === RENTAL_PROCESSING ? (
         <>
           <CircularProgress size={40} />
           <p className="text-sm text-gray-500 mt-4">Processing payment…</p>
         </>
-      ) : status === 'complete' ? (
+      ) : status === RENTAL_COMPLETE ? (
         <>
           <span className="text-4xl mb-2">✅</span>
           <p className="text-lg font-semibold text-gray-900">Payment confirmed</p>
           <p className="text-sm text-gray-500 mt-1">Redirecting to your booking…</p>
         </>
-      ) : status === 'payment_failed' ? (
+      ) : status === RENTAL_PAYMENT_FAILED ? (
         <>
           <span className="text-4xl mb-2">❌</span>
           <p className="text-lg font-semibold text-gray-900">Payment failed</p>

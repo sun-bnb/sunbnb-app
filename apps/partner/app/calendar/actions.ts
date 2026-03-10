@@ -4,6 +4,14 @@ import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import dayjs from 'dayjs'
+import {
+  RESERVATION_COMPLETE,
+  RESERVATION_PAID_IN_CASH,
+  RESERVATION_CANCELED,
+  OP_EXPECTED,
+  OP_NO_SHOW,
+  OP_DEPARTED,
+} from '@repo/data/reservation-status'
 
 /**
  * Create a partner-initiated reservation (phone booking, walk-in pre-reserve, VIP hold).
@@ -73,8 +81,8 @@ export async function createPartnerReservation(data: {
   const conflicting = await prisma.reservation.findFirst({
     where: {
       siteId: data.siteId,
-      status: { notIn: ['canceled'] },
-      operationalStatus: { notIn: ['no-show', 'departed'] },
+      status: { notIn: [RESERVATION_CANCELED] },
+      operationalStatus: { notIn: [OP_NO_SHOW, OP_DEPARTED] },
       from: { lte: toDate },
       to: { gte: fromDate },
       items: { some: { id: { in: data.itemIds } } },
@@ -103,7 +111,7 @@ export async function createPartnerReservation(data: {
   // Deduplicate
   const uniqueItemIds = [...new Map(allItemIds.map(i => [i.id, i])).values()]
 
-  const status = data.paymentType === 'free' ? 'complete' : 'paid-in-cash'
+  const status = data.paymentType === 'free' ? RESERVATION_COMPLETE : RESERVATION_PAID_IN_CASH
 
   await prisma.reservation.create({
     data: {
@@ -113,7 +121,7 @@ export async function createPartnerReservation(data: {
       to: toDate,
       siteId: data.siteId,
       status,
-      operationalStatus: 'expected',
+      operationalStatus: OP_EXPECTED,
       guestName: data.guestName?.slice(0, 200) || null,
       guestContact: data.guestContact?.slice(0, 200) || null,
       internalNotes: data.internalNotes?.slice(0, 500) || null,
@@ -164,8 +172,8 @@ export async function getAvailableSunbeds(
   const reservedItems = await prisma.reservation.findMany({
     where: {
       siteId,
-      status: { notIn: ['canceled'] },
-      operationalStatus: { notIn: ['no-show', 'departed'] },
+      status: { notIn: [RESERVATION_CANCELED] },
+      operationalStatus: { notIn: [OP_NO_SHOW, OP_DEPARTED] },
       from: { lte: toDate },
       to: { gte: fromDate },
     },

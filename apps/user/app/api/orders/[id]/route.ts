@@ -20,6 +20,7 @@ import { NextRequest } from 'next/server'
 import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
 import { isDemoPayment } from '@/app/api/_lib/stripe'
 import { getPaymentStatus, isPaymentSucceeded, isPaymentFailed } from '@/app/api/_lib/payment-provider'
+import { ORDER_PROCESSING, ORDER_PAYMENT_FAILED } from '@repo/data/reservation-status'
 
 // ─── Route Handler ──────────────────────────────────────────────────────────
 
@@ -58,7 +59,7 @@ export async function GET(
 
   // ── Handle 'processing' state: verify Stripe and process ──────────────
 
-  if (order.status === 'processing' && order.paymentRef) {
+  if (order.status === ORDER_PROCESSING && order.paymentRef) {
     try {
       if (isDemoPayment(order.paymentRef)) {
         // Demo mode: process immediately without provider verification
@@ -73,7 +74,7 @@ export async function GET(
           // Payment failed, canceled, or expired
           await prisma.order.update({
             where: { id: order.id },
-            data: { status: 'payment_failed' },
+            data: { status: ORDER_PAYMENT_FAILED },
           })
         }
         // else: still processing (Stripe 'processing', Mollie 'open'/'pending') — wait
@@ -86,23 +87,6 @@ export async function GET(
       })
     } catch (error) {
       console.error('[Order] Payment verification error:', error)
-    }
-  }
-
-  // ── Handle 'paid' state without invoice (recovery from partial processing)
-
-  if (
-    order &&
-    order.status === 'paid'
-  ) {
-    try {
-      await processConfirmedOrder(order.id)
-      order = await prisma.order.findUnique({
-        where: { id: params.id },
-        include: { orderItems: true, site: true },
-      })
-    } catch (error) {
-      console.error('[Order] Invoice creation recovery error:', error)
     }
   }
 

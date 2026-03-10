@@ -15,6 +15,7 @@ import { NextRequest } from 'next/server'
 import type Stripe from 'stripe'
 import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
 import { getStripeClient, isValidEntityId } from '@/app/api/_lib/stripe'
+import { ORDER_PROCESSING } from '@repo/data/reservation-status'
 
 export async function POST(request: NextRequest) {
   const { STRIPE_SECRET_KEY } = process.env
@@ -100,7 +101,7 @@ export async function POST(request: NextRequest) {
     where: { id: orderId },
     data: {
       paymentRef: paymentIntent.id,
-      status: 'processing',
+      status: ORDER_PROCESSING,
     },
   })
 

@@ -23,6 +23,7 @@ import {
   round,
 } from '@repo/data/payment'
 import { isTestMode } from '@repo/data/env'
+import { ORDER_PROCESSING } from '@repo/data/reservation-status'
 import { NextRequest } from 'next/server'
 import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
 import { getMollieClientForPartner, getValidMollieToken } from '@/app/api/_lib/mollie'
@@ -225,7 +226,7 @@ export async function POST(request: NextRequest) {
     where: { id: orderId },
     data: {
       paymentRef: payment.id,
-      status: 'processing',
+      status: ORDER_PROCESSING,
     },
   })
 

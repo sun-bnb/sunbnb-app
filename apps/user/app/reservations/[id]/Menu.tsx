@@ -18,6 +18,7 @@ import { RootState } from '@/store/store'
 import { setValue } from '@/store/features/reservation/reservationSlice'
 import { useGetOrderByIdQuery } from '@/store/features/api/apiSlice'
 import OrderPaymentView from '@/app/payment/OrderPayment'
+import { ORDER_PROCESSING } from '@repo/data/reservation-status'
 import Orders from './Orders'
 
 const MAX_ITEM_QTY = 99
@@ -266,7 +267,7 @@ export default function Menu({
   )
 
   const paymentContent =
-    orderState === 'processing' || orderState === 'payment_in_progress' ? (
+    orderState === ORDER_PROCESSING || orderState === 'payment_in_progress' ? (
       !order ? (
         <div className="flex justify-center py-12">
           <CircularProgress size={32} />

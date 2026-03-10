@@ -2,6 +2,10 @@
 
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import {
+  RESERVATION_COMPLETE,
+  ORDER_COMPLETE,
+} from '@repo/data/reservation-status'
 
 export async function getInvoicesByMonth(
   accountId: string,
@@ -45,7 +49,7 @@ export async function getPaidItemsByMonth(siteId: string, year: number, month: n
     prisma.order.findMany({
       where: {
         siteId,
-        status: { in: ['paid', 'complete'] },
+        status: ORDER_COMPLETE,
         invoices: {
           some: {
             issuerType: 'PARTNER',
@@ -67,7 +71,7 @@ export async function getPaidItemsByMonth(siteId: string, year: number, month: n
     prisma.reservation.findMany({
       where: {
         siteId,
-        status: { in: ['paid', 'complete'] },
+        status: RESERVATION_COMPLETE,
         invoices: {
           some: {
             issuerType: 'PARTNER',

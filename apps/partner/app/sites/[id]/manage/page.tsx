@@ -2,6 +2,7 @@ import dayjs from 'dayjs'
 import prisma from '@repo/data/PrismaCient'
 import { SiteProps } from '@/types/shared'
 import ManagementView from './view'
+import { OP_RETURNED, RENTAL_CANCELED } from '@repo/data/reservation-status'
 
 
 export default async function ManagePage({ params, searchParams }: { params: { id: string }, searchParams: { [key: string]: string } }) {
@@ -55,7 +56,7 @@ export default async function ManagePage({ params, searchParams }: { params: { i
         where: {
           from: { lte: todayEnd },
           to: { gte: todayStart },
-          operationalStatus: { notIn: ['returned', 'cancelled'] },
+          operationalStatus: { notIn: [OP_RETURNED, RENTAL_CANCELED] },
         },
         include: {
           rentalItem: true,

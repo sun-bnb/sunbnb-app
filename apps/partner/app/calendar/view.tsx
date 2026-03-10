@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import CreateReservationModal from './CreateReservationModal'
+import { RESERVATION_CANCELED, RESERVATION_PENDING } from '@repo/data/reservation-status'
 
 /* ── Types ──────────────────────────────────────────────────── */
 
@@ -69,9 +70,8 @@ function daysBetween(from: string, to: string) {
 function statusColor(status: string) {
   switch (status) {
     case 'confirmed': return 'bg-emerald-500'
-    case 'pending': return 'bg-amber-400'
-    case 'cancelled':
-    case 'canceled': return 'bg-red-400'
+    case RESERVATION_PENDING: return 'bg-amber-400'
+    case RESERVATION_CANCELED: return 'bg-red-400'
     default: return 'bg-gray-400'
   }
 }
@@ -79,9 +79,8 @@ function statusColor(status: string) {
 function statusBadge(status: string) {
   const styles: Record<string, string> = {
     confirmed: 'bg-emerald-50 text-emerald-700',
-    pending: 'bg-amber-50 text-amber-700',
-    cancelled: 'bg-red-50 text-red-600',
-    canceled: 'bg-red-50 text-red-600',
+    [RESERVATION_PENDING]: 'bg-amber-50 text-amber-700',
+    [RESERVATION_CANCELED]: 'bg-red-50 text-red-600',
   }
   return styles[status] || 'bg-gray-100 text-gray-500'
 }

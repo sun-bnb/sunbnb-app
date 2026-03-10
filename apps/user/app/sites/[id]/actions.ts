@@ -6,6 +6,14 @@ import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { getAvailability } from '@/service/availabilityService'
 import { InventoryItem } from '../types'
+import {
+  RESERVATION_PENDING,
+  RESERVATION_COMPLETE,
+  RENTAL_PENDING,
+  RENTAL_COMPLETE,
+  RENTAL_CANCELED,
+  OP_RETURNED,
+} from '@repo/data/reservation-status'
 
 // ─── Reservations ───────────────────────────────────────────────────────────
 
@@ -65,7 +73,7 @@ export async function saveReservationForMultipleItems(
   }
 
   // Determine status server-side: unpaid sites skip payment flow
-  const status = site.type === 'unpaid' ? 'complete' : 'pending'
+  const status = site.type === 'unpaid' ? RESERVATION_COMPLETE : RESERVATION_PENDING
 
   const timeBetween = to.getTime() - from.getTime()
   const daysBetween = Math.round(timeBetween / (1000 * 60 * 60 * 24))
@@ -143,7 +151,7 @@ export async function saveRentalBooking(input: {
       where: {
         rentalItemId: cartItem.rentalItemId,
         siteId: input.siteId,
-        operationalStatus: { notIn: ['returned', 'cancelled'] },
+        operationalStatus: { notIn: [OP_RETURNED, RENTAL_CANCELED] },
         from: { lt: to },
         to: { gt: from },
       },
@@ -189,7 +197,7 @@ export async function saveRentalBooking(input: {
         durationType: input.durationType,
         totalPrice,
         paymentAmount: totalPrice,
-        status: site.type === 'unpaid' ? 'complete' : 'pending',
+        status: site.type === 'unpaid' ? RENTAL_COMPLETE : RENTAL_PENDING,
       },
     })
     bookings.push(booking)
@@ -211,7 +219,7 @@ export async function findAnonReservation(
   const reservation = await prisma.reservation.findFirst({
     where: {
       anonId: anonId,
-      status: { in: ['paid', 'complete'] },
+      status: RESERVATION_COMPLETE,
       from: { lte: now },
       to: { gte: now },
       items: {
@@ -241,7 +249,7 @@ export async function findUserReservation(
   const reservation = await prisma.reservation.findFirst({
     where: {
       userId: userId,
-      status: { in: ['paid', 'complete'] },
+      status: RESERVATION_COMPLETE,
       from: { lte: now },
       to: { gte: now },
       items: {

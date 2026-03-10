@@ -20,6 +20,7 @@ import { NextRequest } from 'next/server'
 import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
 import { isDemoPayment } from '@/app/api/_lib/stripe'
 import { getPaymentStatus, isPaymentSucceeded, isPaymentFailed } from '@/app/api/_lib/payment-provider'
+import { RESERVATION_PROCESSING, RESERVATION_PAYMENT_FAILED } from '@repo/data/reservation-status'
 
 // ─── Route Handler ──────────────────────────────────────────────────────────
 
@@ -58,7 +59,7 @@ export async function GET(
 
   // ── Handle 'processing' state: verify Stripe and process ──────────────
 
-  if (reservation.status === 'processing' && reservation.paymentRef) {
+  if (reservation.status === RESERVATION_PROCESSING && reservation.paymentRef) {
     try {
       if (isDemoPayment(reservation.paymentRef)) {
         // Demo mode: process immediately without provider verification
@@ -73,7 +74,7 @@ export async function GET(
           // Payment failed, canceled, or expired
           await prisma.reservation.update({
             where: { id: reservation.id },
-            data: { status: 'payment_failed' },
+            data: { status: RESERVATION_PAYMENT_FAILED },
           })
         }
         // else: still processing (Stripe 'processing', Mollie 'open'/'pending') — wait
@@ -87,23 +88,6 @@ export async function GET(
     } catch (error) {
       console.error('[Reservation] Payment verification error:', error)
       // Return current state — webhook or next poll will retry
-    }
-  }
-
-  // ── Handle 'paid' state without invoice (recovery from partial processing)
-
-  if (
-    reservation &&
-    reservation.status === 'paid'
-  ) {
-    try {
-      await processConfirmedReservation(reservation.id)
-      reservation = await prisma.reservation.findUnique({
-        where: { id: params.id },
-        include: { items: true, site: true },
-      })
-    } catch (error) {
-      console.error('[Reservation] Invoice creation recovery error:', error)
     }
   }
 

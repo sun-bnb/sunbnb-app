@@ -6,6 +6,7 @@ import { useGetReservationByIdQuery } from '@/store/features/api/apiSlice'
 import { Reservation } from '@/app/sites/types'
 import ReservationConfirmationView from '@/components/reservation/confirmation/view'
 import { useSession } from 'next-auth/react'
+import { RESERVATION_PROCESSING, RESERVATION_COMPLETE } from '@repo/data/reservation-status'
 
 
 export default function CompleteView({
@@ -30,7 +31,7 @@ export default function CompleteView({
   const { data: fetchedReservation, error: reservationFetchError } = useGetReservationByIdQuery({
     id: reservation.id,
   }, {
-    pollingInterval: status === 'processing' ? 1000 : 0
+    pollingInterval: (status === RESERVATION_PROCESSING || status === 'default') ? 1000 : 0
   })
 
   const finalReservation = fetchedReservation || reservation
@@ -39,7 +40,7 @@ export default function CompleteView({
   useEffect(() => {
     if (finalReservation?.status) {
       setStatus(finalReservation.status);
-      if (finalReservation.status === 'paid' || finalReservation.status === 'complete') {
+      if (finalReservation.status === RESERVATION_COMPLETE) {
         router.push(`/reservations/${finalReservation.id}?terms=true${anonId ? `&anonId=${anonId}` : ''}`)
       }
     }

@@ -36,7 +36,7 @@ sunbnb-app/                    # Root — Turborepo
 │   └── docs/                  # Docs (unused)
 ├── packages/
 │   ├── data/                  # @repo/data — Prisma client, schema, migrations, payment, auth
-│   ├── docs/                  # Security follow-up TODO
+│   ├── docs/                  # Architecture docs + security TODO
 │   ├── ui/                    # @repo/ui — Shared UI components (Button, TextField, Card, Code)
 │   ├── eslint-config/         # @repo/eslint-config
 │   └── typescript-config/     # @repo/typescript-config
@@ -105,7 +105,7 @@ Both apps use custom HTTPS servers with local mkcert certificates (`./certificat
 
 ### Bookings
 
-**Reservation** — `id`, `userId`, `siteId`, `itemId?`, `status` (default "pending"), `operationalStatus` (default "expected"), `type` (default "hours"), `from`, `to` (DateTime), `paymentAmount?` (Float), `paymentRef?`, `invoiceId?` (unique), `anonId?`, `checkedInAt?`, `departedAt?`, `guestName?`, `guestContact?`, `internalNotes?`. FK → User, Site, Invoice?. Has Order[], InventoryItem[] (M:N via implicit join table `InventoryItemToReservation`). Operational status flow: `expected` → `checked-in` → `departed` (also: `walked-in`, `blocked`, `no-show`).
+**Reservation** — `id`, `userId`, `siteId`, `itemId?`, `status` (default "pending"), `operationalStatus` (default "expected"), `type` (default "hours"), `from`, `to` (DateTime), `paymentAmount?` (Float), `paymentRef?`, `invoiceId?` (unique), `anonId?`, `checkedInAt?`, `departedAt?`, `guestName?`, `guestContact?`, `internalNotes?`. FK → User, Site, Invoice?. Has Order[], InventoryItem[] (M:N via implicit join table `InventoryItemToReservation`). Payment status flow: `pending` → `processing` → `complete` (or `payment_failed` / `canceled` / `refunded`). Operational status flow: `expected` → `checked-in` → `departed` (also: `walked-in`, `blocked`, `no-show`). All status values defined in `@repo/data/reservation-status` (see **Shared Status Constants** below).
 
 **Product** — `id`, `name`, `description?`, `price` (Float, net), `tax` (Float, rate), `totalPrice` (Float, gross), `siteId`, `imageUrl?`, `imageWidth/Height?`, `active` (bool, default true). FK → Site.
 
@@ -125,7 +125,7 @@ Product codes used: `"sunbed-rental"`, `"food-and-beverage"`, `"sunbnb-service-f
 
 **RentalItem** — `id`, `siteId`, `name`, `description?`, `imageUrl?`, `category?`, `pricePerHour?` (Float), `pricePerDay?` (Float), `totalQuantity` (Int, default 1), `active` (bool, default true). FK → Site (cascade). Has RentalBooking[].
 
-**RentalBooking** — `id`, `siteId`, `rentalItemId`, `userId`, `from`, `to` (DateTime), `quantity` (Int, default 1), `durationType` (default "hours"), `totalPrice` (Float), `status` (default "pending"), `operationalStatus` (default "reserved"), `guestName?`, `paymentRef?`, `paymentAmount?` (Float), `pickedUpAt?`, `returnedAt?`. FK → Site (cascade), RentalItem (cascade), User (cascade). Operational status flow: `reserved` → `picked-up` → `returned`.
+**RentalBooking** — `id`, `siteId`, `rentalItemId`, `userId`, `from`, `to` (DateTime), `quantity` (Int, default 1), `durationType` (default "hours"), `totalPrice` (Float), `status` (default "pending"), `operationalStatus` (default "reserved"), `guestName?`, `paymentRef?`, `paymentAmount?` (Float), `pickedUpAt?`, `returnedAt?`. FK → Site (cascade), RentalItem (cascade), User (cascade). Payment status flow: `pending` → `processing` → `complete` (or `payment_failed` / `canceled` / `refunded`). Operational status flow: `reserved` → `picked-up` → `returned`. All status values defined in `@repo/data/reservation-status`.
 
 Sites enable/disable the rental feature via the `features[]` array (`["sunbeds"]` by default; add `"rentals"` to enable). The user app shows a tab toggle between sunbeds and equipment when rentals are enabled. Availability is checked by aggregating booked quantities (excluding `returned`/`cancelled`) for overlapping time windows.
 
@@ -169,10 +169,9 @@ Sites enable/disable the rental feature via the `features[]` array (`["sunbeds"]
 6. User confirms → stripe.confirmPayment() → redirect to /payment/complete
 7. VerifyPayment polls GET /api/reservations/[id]
 8. API verifies Stripe PI status → if 'succeeded':
-   - Update reservation status to 'paid'
    - processConfirmedReservation() creates Invoice + InvoiceLines
    - Update reservation status to 'complete', attach invoiceId
-9. Client detects 'paid'/'complete' → redirect to /reservations/[id]
+9. Client detects 'complete' → redirect to /reservations/[id]
 ```
 
 ### Mollie Flow (Reservations & Orders)
@@ -387,7 +386,7 @@ The inventory editor (`/sites/[id]/inventory`) is the most complex component:
 
 **`siteService.ts`**: PostGIS spatial queries — `searchSites(lat?, lng?)` uses `ST_DistanceSphere`, `ST_MakePoint`, `ST_Centroid`, `ST_Collect`, `ST_Extent` for site discovery with distance calculation and bounding box. Validates lat/lng are finite numbers in range before querying.
 
-**`availabilityService.ts`**: Per-item availability check — for each active inventory item, queries overlapping reservations (statuses: pending, processing, paid, complete, paid-in-cash) using dayjs date range comparison. Also used server-side during reservation creation to prevent double-booking.
+**`availabilityService.ts`**: Per-item availability check — for each active inventory item, queries overlapping reservations with blocking statuses (pending, processing, complete, paid-in-cash) using dayjs date range comparison. Uses `BLOCKING_STATUSES` from `@repo/data/reservation-status`. Also used server-side during reservation creation to prevent double-booking.
 
 ### State Management (User)
 
@@ -441,6 +440,20 @@ Implemented in `packages/data/src/reservation-emails.ts` using Resend:
 - **Confirmation email** — sent automatically after payment confirmation (triggered from `processConfirmedReservation`)
 - **Reminder email** — sent morning-of via cron job (`sendDueReminders`)
 - **Cancellation email** — sent when user or partner cancels a reservation
+
+### Shared Status Constants (`packages/data/src/reservation-status.ts`)
+
+Single source of truth for all reservation, order, and rental booking status values. Imported as `@repo/data/reservation-status` across all apps. Status fields are plain `String` columns in Prisma (not enums), so this module provides application-level enforcement.
+
+**Exports:**
+- `RESERVATION_*` — payment statuses: `PENDING`, `PROCESSING`, `COMPLETE`, `PAID_IN_CASH`, `PAYMENT_FAILED`, `CANCELED`, `REFUNDED`
+- `ORDER_*` — payment + fulfillment: `PENDING`, `PROCESSING`, `COMPLETE`, `ACCEPTED`, `PREPARING`, `READY`, `DELIVERED`, `COMPLETED`, `REJECTED`, `DISCARDED`, `CANCELED`, `REFUNDED`, `PAYMENT_FAILED`
+- `RENTAL_*` — payment statuses: `PENDING`, `PROCESSING`, `COMPLETE`, `PAYMENT_FAILED`, `CANCELED`, `REFUNDED`
+- `OP_*` — operational statuses: `EXPECTED`, `CHECKED_IN`, `WALKED_IN`, `DEPARTED`, `NO_SHOW`, `RESERVED`, `PICKED_UP`, `RETURNED`
+- Semantic groupings: `BLOCKING_STATUSES`, `PAID_STATUSES`, `TERMINAL_STATUSES`, `RESERVATION_STATUSES`
+- Type: `ReservationStatus` (union of all reservation status literals)
+
+All constants use `as const` for TypeScript literal type narrowing.
 
 ### PostGIS
 - Site coordinates stored as `geometry` type with GiST index

@@ -1,6 +1,7 @@
 import prisma from '@repo/data/PrismaCient'
 import DashboardView, { DashboardData } from './view'
 import { auth } from '@/app/auth'
+import { RESERVATION_CANCELED } from '@repo/data/reservation-status'
 
 
 export interface MonthTotals {
@@ -152,7 +153,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
     where: {
       siteId: { in: siteIds },
       from: { gte: startOfToday, lte: sevenDaysFromNow },
-      status: { not: 'cancelled' },
+      status: { not: RESERVATION_CANCELED },
     },
     orderBy: { from: 'asc' },
     take: 8,

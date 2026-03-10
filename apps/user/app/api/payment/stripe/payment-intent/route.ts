@@ -15,6 +15,7 @@ import { NextRequest } from 'next/server'
 import type Stripe from 'stripe'
 import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
 import { getStripeClient, isValidEntityId } from '@/app/api/_lib/stripe'
+import { RESERVATION_PENDING, RESERVATION_PROCESSING } from '@repo/data/reservation-status'
 
 export async function POST(request: NextRequest) {
   const { STRIPE_SECRET_KEY } = process.env
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Payment intent already created' }, { status: 400 })
   }
 
-  if (reservation.status !== 'pending') {
+  if (reservation.status !== RESERVATION_PENDING) {
     return Response.json({ error: 'Reservation is not in pending state' }, { status: 400 })
   }
 
@@ -103,7 +104,7 @@ export async function POST(request: NextRequest) {
     where: { id: reservationId },
     data: {
       paymentRef: paymentIntent.id,
-      status: 'processing',
+      status: RESERVATION_PROCESSING,
     },
   })
 
