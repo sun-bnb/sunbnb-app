@@ -13,12 +13,11 @@ import React, { useState } from 'react'
 
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
-import { SingleInputTimeRangeField } from '@mui/x-date-pickers-pro/SingleInputTimeRangeField'
 import { useSession } from 'next-auth/react'
 
 import { MobileDatePicker } from '@mui/x-date-pickers/MobileDatePicker'
-import { MobileDateRangePicker } from '@mui/x-date-pickers-pro/MobileDateRangePicker'
-import { SingleInputDateRangeField } from '@mui/x-date-pickers-pro/SingleInputDateRangeField'
+import DateRangeSelector from '@/components/reservation/DateRangeSelector'
+import TimeRangeSelector from '@/components/reservation/TimeRangeSelector'
 
 import { setValue } from '@/store/features/sites/sitesSlice'
 import { RootState } from '@/store/store'
@@ -75,7 +74,7 @@ function PaymentMethodSelection() {
 
 }
 
-function ReservationTimerangeSelector() {
+function ReservationTimerangeSelector({ onDatePickerOpenChange }: { onDatePickerOpenChange?: (open: boolean) => void }) {
 
   const dispatch = useDispatch()
   const sitesState = useSelector((state: RootState) => state.sites)
@@ -120,20 +119,11 @@ function ReservationTimerangeSelector() {
               }))
             }}
           />
-          <SingleInputTimeRangeField sx={{
-            input: {
-              textAlign: 'center'
-            }
-          }}
-            label="Time"
-            disabled={reservationState === RESERVATION_PROCESSING}
-            ampm={false}
-            fullWidth={true}
+          <TimeRangeSelector
             value={[dayjs(timeRange[0]), dayjs(timeRange[1])]}
+            disabled={reservationState === RESERVATION_PROCESSING}
             onFocus={() => {
               dispatch(setValue({ focused: true }))
-            }}
-            onBlur={() => {
             }}
             onChange={(newValue) => {
               dispatch(setValue({ timeRange: [newValue[0]?.toDate(), newValue[1]?.endOf('day').toDate()] }))
@@ -142,36 +132,19 @@ function ReservationTimerangeSelector() {
         </LocalizationProvider>
       </div>
     ) : (
-      <div className="mb-2 bg-white">
-        <LocalizationProvider dateAdapter={AdapterDayjs}>
-          <MobileDateRangePicker sx={{ 
-              width: '100%',
-              input: {
-                textAlign: 'center'
-              },
-              '& .MuiInputLabel-root': {
-                backgroundColor: 'white',
-                px: '6px',
-                borderRadius: '4px',
-                border: '1px solid rgba(0,0,0,0.23)',
-              }
-            }}
-            onOpen={() => {
-              dispatch(setValue({ focused: true }))
-            }}
-            value={[dayjs(dateRange[0]), dayjs(dateRange[1])]}
-            disabled={reservationState === RESERVATION_PROCESSING}
-            format='YYYY-MM-DD'
-            selectedSections={null}
-            label={`${t('From')} - ${t('To')}`}
-            slots={{ 
-              field: SingleInputDateRangeField
-            }}
-            onChange={(newValue) => {
-              dispatch(setValue({ dateRange: [newValue[0]?.toISOString(), newValue[1]?.toISOString()] }))
-            }}
-          />
-        </LocalizationProvider>
+      <div className="mb-2">
+        <DateRangeSelector
+          value={[dateRange[0], dateRange[1]]}
+          disabled={reservationState === RESERVATION_PROCESSING}
+          label={`${t('From')} – ${t('To')}`}
+          onOpen={() => {
+            dispatch(setValue({ focused: true }))
+          }}
+          onOpenChange={onDatePickerOpenChange}
+          onChange={(newValue) => {
+            dispatch(setValue({ dateRange: [newValue[0], newValue[1]] }))
+          }}
+        />
       </div>
     )
   )
@@ -286,15 +259,19 @@ function ItemSelection({ apiKey, site } : { apiKey: string, site: SiteProps }) {
 
   const sitesState = useSelector((state: RootState) => state.sites)
   const { selectedItems } = sitesState
+  const [datePickerOpen, setDatePickerOpen] = useState(false)
 
   return (
     <>
-      <ReservationTimerangeSelector />
-      <div className="w-full h-[300px]">
-        <SunbedSelection apiKey={apiKey} site={site} />
-      </div>
-      
-      <ReservationButton disabled={!selectedItems || selectedItems.length === 0} site={site} />
+      <ReservationTimerangeSelector onDatePickerOpenChange={setDatePickerOpen} />
+      {!datePickerOpen && (
+        <>
+          <div className="w-full h-[300px]">
+            <SunbedSelection apiKey={apiKey} site={site} />
+          </div>
+          <ReservationButton disabled={!selectedItems || selectedItems.length === 0} site={site} />
+        </>
+      )}
     </>
   )
 }
@@ -312,10 +289,12 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
   const [cart, setCart] = useState<{ rentalItemId: string; quantity: number }[]>([])
   const [booking, setBooking] = useState(false)
   const [bookingComplete, setBookingComplete] = useState(false)
-  const [pendingBookingIds, setPendingBookingIds] = useState<string[] | null>(null)
-  const [pendingTotalAmount, setPendingTotalAmount] = useState(0)
+  const [showConfirmation, setShowConfirmation] = useState(false)
+  const [confirmationCart, setConfirmationCart] = useState<{ rentalItemId: string; quantity: number }[]>([])
+  const [confirmationTotal, setConfirmationTotal] = useState(0)
   const [rentalPaymentLoading, setRentalPaymentLoading] = useState(false)
   const [rentalPaymentError, setRentalPaymentError] = useState<string | null>(null)
+  const [datePickerOpen, setDatePickerOpen] = useState(false)
 
   const t = useTranslations('SiteView')
   const tp = useTranslations('Payment')
@@ -323,8 +302,8 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
   const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
 
   let reservationDay = dayjs(sitesState.reservationDay)
-  let timeRange = sitesState.timeRange ? [dayjs(sitesState.timeRange[0]), dayjs(sitesState.timeRange[1])] : []
-  let dateRange = sitesState.dateRange ? [dayjs(sitesState.dateRange[0]), dayjs(sitesState.dateRange[1])] : []
+  let timeRange = sitesState.timeRange ? [dayjs(sitesState.timeRange[0]), dayjs(sitesState.timeRange[1])] : [dayjs().add(2, 'hour'), dayjs().add(4, 'hour')]
+  let dateRange = sitesState.dateRange ? [dayjs(sitesState.dateRange[0]), dayjs(sitesState.dateRange[1])] : [dayjs().startOf('day'), dayjs().add(1, 'day')]
 
   const totalItems = cart.reduce((sum, c) => sum + c.quantity, 0)
 
@@ -337,18 +316,28 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
       return sum + item.pricePerHour * hours * cartItem.quantity
     }
     if (item.pricePerDay) {
-      const days = (dateRange.length === 2 && dateRange[1]) ? Math.max(1, dateRange[1].diff(dateRange[0], 'day') + 1) : 1
+      const days = (dateRange.length === 2 && dateRange[1]) ? Math.max(1, dateRange[1].diff(dateRange[0], 'day')) : 1
       return sum + item.pricePerDay * days * cartItem.quantity
     }
     return sum
   }, 0)
 
-  const isPaidSite = site.type !== 'unpaid'
+  const isPaidSite = (site.rentalPaymentType ?? site.type) !== 'unpaid'
 
-  const handleBook = async () => {
+  const [bookingError, setBookingError] = useState<string | null>(null)
+
+  const handleBook = () => {
     if (!session?.user?.id) return
-    setBooking(true)
+    if (totalItems === 0) return
+    setBookingError(null)
+    setRentalPaymentError(null)
+    // Snapshot the cart & total for the confirmation view
+    setConfirmationCart([...cart])
+    setConfirmationTotal(totalPrice)
+    setShowConfirmation(true)
+  }
 
+  const getBookingDates = () => {
     let from: string
     let to: string
 
@@ -359,45 +348,66 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
       from = dateRange[0].toDate().toISOString()
       to = dateRange[1].toDate().toISOString()
     } else {
-      setBooking(false)
-      return
+      return null
     }
+    return { from, to }
+  }
 
-    const result = await saveRentalBooking({
-      siteId: site.id!,
-      items: cart,
-      durationType: reservationMode,
-      from,
-      to,
-    })
+  const handleConfirmBooking = async () => {
+    if (!session?.user?.id) return
+    setBooking(true)
+    setBookingError(null)
 
-    setBooking(false)
-    if (result.status === 'ok' && result.bookingIds) {
-      if (isPaidSite) {
-        // Enter payment flow
-        setPendingBookingIds(result.bookingIds)
-        setPendingTotalAmount(totalPrice)
-        setCart([])
+    const dates = getBookingDates()
+    if (!dates) { setBooking(false); return }
+
+    try {
+      const result = await saveRentalBooking({
+        siteId: site.id!,
+        items: confirmationCart,
+        durationType: reservationMode,
+        from: dates.from,
+        to: dates.to,
+      })
+
+      setBooking(false)
+      if (result.status === 'ok' && result.bookingIds) {
+        if (isPaidSite) {
+          // For paid sites, proceed to payment immediately
+          await handleRentalPayment(result.bookingIds)
+        } else {
+          // For unpaid sites, booking is done — show completed and navigate
+          setShowConfirmation(false)
+          setBookingComplete(true)
+          setCart([])
+          setTimeout(() => {
+            setBookingComplete(false)
+            router.push(`/reservations/rental/${result.bookingIds![0]}`)
+          }, 2000)
+        }
       } else {
-        // Unpaid site — booking is immediately complete
-        setBookingComplete(true)
-        setCart([])
-        setTimeout(() => setBookingComplete(false), 4000)
+        console.error('[RentalBooking] Error:', result)
+        setBookingError(result.errors?.[0] || 'Booking failed — please try again')
       }
+    } catch (err) {
+      console.error('[RentalBooking] Exception:', err)
+      setBooking(false)
+      setBookingError('Booking failed — please try again')
     }
   }
 
-  const handleRentalPayment = async () => {
-    if (!pendingBookingIds?.length) return
+  const handleRentalPayment = async (bookingIds: string[]) => {
+    if (!bookingIds?.length) return
     setRentalPaymentLoading(true)
     setRentalPaymentError(null)
 
     try {
       if (DEMO_MODE) {
-        const result = await initiateDemoRentalPayment(pendingBookingIds)
+        const result = await initiateDemoRentalPayment(bookingIds)
         if (result.status === 'ok') {
-          setPendingBookingIds(null)
+          setShowConfirmation(false)
           setBookingComplete(true)
+          setCart([])
           setTimeout(() => setBookingComplete(false), 4000)
         } else {
           setRentalPaymentError(result.errors?.[0] || 'Payment failed')
@@ -407,13 +417,13 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
       }
 
       // Mollie payment
-      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/payment/complete/rental?rentalBookingId=${pendingBookingIds[0]}`
+      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/payment/complete/rental?rentalBookingId=${bookingIds[0]}`
 
       const res = await fetch('/api/payment/mollie/create-rental-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          rentalBookingIds: pendingBookingIds,
+          rentalBookingIds: bookingIds,
           redirectUrl,
         }),
       })
@@ -445,47 +455,100 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
     )
   }
 
-  // Payment view for pending rental bookings
-  if (pendingBookingIds && isPaidSite) {
+  // Pre-booking confirmation / order summary view
+  if (showConfirmation) {
+    const dates = getBookingDates()
     return (
       <div className="px-1.5 pt-1 pb-2">
         <div className="mb-3 rounded-lg border border-gray-200 bg-white px-3 py-2.5">
-          <p className="text-sm font-medium text-gray-900 mb-1">🏄 Equipment rental</p>
-          <p className="text-lg font-semibold text-gray-900">€{pendingTotalAmount.toFixed(2)}</p>
-          <p className="text-xs text-gray-500">{pendingBookingIds.length} item{pendingBookingIds.length !== 1 ? 's' : ''}</p>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 mb-2">
-          <div className="flex items-center gap-2 mb-1.5">
-            <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-            <span className="text-sm font-medium text-gray-700">{tp('Secure checkout')}</span>
+          <p className="text-sm font-medium text-gray-900 mb-2">🏄 {t('Order summary')}</p>
+          {confirmationCart.map((cartItem) => {
+            const item = site.rentalItems?.find(ri => ri.id === cartItem.rentalItemId)
+            if (!item) return null
+            const unitPrice = reservationMode === 'hours' ? (item.pricePerHour ?? 0) : (item.pricePerDay ?? 0)
+            let duration = 1
+            if (reservationMode === 'hours' && timeRange.length === 2 && timeRange[1]) {
+              duration = Math.ceil(timeRange[1].diff(timeRange[0], 'hour', true))
+            } else if (dateRange.length === 2 && dateRange[1]) {
+              duration = Math.max(1, dateRange[1].diff(dateRange[0], 'day'))
+            }
+            const lineTotal = unitPrice * duration * cartItem.quantity
+            return (
+              <div key={cartItem.rentalItemId} className="flex justify-between items-center text-xs text-gray-700 mb-1">
+                <span>{item.name} × {cartItem.quantity}</span>
+                <span className="font-medium">€{lineTotal.toFixed(2)}</span>
+              </div>
+            )
+          })}
+          {dates && (
+            <div className="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-100">
+              {reservationMode === 'hours'
+                ? `${dayjs(dates.from).format('D MMM YYYY, HH:mm')} – ${dayjs(dates.to).format('HH:mm')}`
+                : `${dayjs(dates.from).format('D MMM YYYY')} – ${dayjs(dates.to).format('D MMM YYYY')}`}
+            </div>
+          )}
+          <div className="flex justify-between items-center text-sm font-semibold text-gray-900 mt-2 pt-2 border-t border-gray-100">
+            <span>{t('Total')}</span>
+            <span>€{confirmationTotal.toFixed(2)}</span>
           </div>
-          <p className="text-xs text-gray-500">{tp('You will be redirected to complete payment')}</p>
         </div>
-        <Button
-          variant="contained"
-          fullWidth
-          onClick={handleRentalPayment}
-          disabled={rentalPaymentLoading}
-          sx={{ textTransform: 'none', fontWeight: 600, py: 1.2 }}
-        >
-          {rentalPaymentLoading ? <CircularProgress size={20} color="inherit" /> : tp('Pay now')}
-        </Button>
-        <div className="text-gray-400 text-[11px] text-center mt-1.5">
-          {tp('Payment confirms acceptance of')}{' '}
-          <a
-            className="text-[#1976d2]"
-            href="/tos/reservation"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {tp('terms of service')}
-          </a>
-        </div>
-        {rentalPaymentError && (
-          <div className="text-red-600 text-xs text-center mt-1.5">{rentalPaymentError}</div>
+        {isPaidSite ? (
+          <>
+            <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 mb-2">
+              <div className="flex items-center gap-2 mb-1.5">
+                <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+                <span className="text-sm font-medium text-gray-700">{tp('Secure checkout')}</span>
+              </div>
+              <p className="text-xs text-gray-500">{tp('You will be redirected to complete payment')}</p>
+            </div>
+            {bookingError && (
+              <div className="text-red-600 text-xs text-center mb-1.5">{bookingError}</div>
+            )}
+            {rentalPaymentError && (
+              <div className="text-red-600 text-xs text-center mb-1.5">{rentalPaymentError}</div>
+            )}
+            <Button
+              variant="contained"
+              fullWidth
+              onClick={handleConfirmBooking}
+              disabled={booking || rentalPaymentLoading}
+              sx={{ textTransform: 'none', fontWeight: 600, py: 1.2 }}
+            >
+              {(booking || rentalPaymentLoading) ? <CircularProgress size={20} color="inherit" /> : tp('Pay now')}
+            </Button>
+            <div className="text-gray-400 text-[11px] text-center mt-1.5">
+              {tp('Payment confirms acceptance of')}{' '}
+              <a
+                className="text-[#1976d2]"
+                href="/tos/reservation"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {tp('terms of service')}
+              </a>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 mb-2">
+              <p className="text-xs text-gray-600">{t('Pay at the venue when you pick up your equipment')}</p>
+            </div>
+            {bookingError && (
+              <div className="text-red-600 text-xs text-center mb-1.5">{bookingError}</div>
+            )}
+            <Button
+              variant="contained"
+              fullWidth
+              onClick={handleConfirmBooking}
+              disabled={booking}
+              sx={{ textTransform: 'none', fontWeight: 600, py: 1.2 }}
+            >
+              {booking ? <CircularProgress size={20} color="inherit" /> : t('Confirm booking')}
+            </Button>
+          </>
         )}
       </div>
     )
@@ -493,44 +556,51 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
 
   return (
     <>
-      <ReservationTimerangeSelector />
-      <div className="w-full h-[300px]">
-        <EquipmentSelection
-          items={site.rentalItems || []}
-          cart={cart}
-          onCartChange={setCart}
-          durationType={reservationMode}
-        />
-      </div>
-      <div className="mt-[10px]">
-        {!loggedIn ? (
-          <Button
-            variant="contained"
-            fullWidth
-            onClick={() => {
-              const callbackUrl = pathname.startsWith('/s/') ? pathname : `/sites/${site.id}`
-              router.push('/api/auth/signin?callbackUrl=' + callbackUrl)
-            }}
-          >
-            {t('Login to reserve')}
-          </Button>
-        ) : (
-          <Button
-            variant="contained"
-            fullWidth
-            disabled={totalItems === 0 || booking}
-            onClick={handleBook}
-          >
-            {booking ? (
-              <CircularProgress size={20} color="inherit" />
-            ) : totalItems > 0 ? (
-              `${t('Reserve')} · ${totalItems} item${totalItems !== 1 ? 's' : ''} · €${totalPrice.toFixed(2)}`
-            ) : (
-              t('Reserve')
+      <ReservationTimerangeSelector onDatePickerOpenChange={setDatePickerOpen} />
+      {!datePickerOpen && (
+        <>
+          <div className="w-full h-[300px]">
+            <EquipmentSelection
+              items={site.rentalItems || []}
+              cart={cart}
+              onCartChange={setCart}
+              durationType={reservationMode}
+            />
+          </div>
+          <div className="mt-[10px]">
+            {bookingError && (
+              <div className="text-red-600 text-xs text-center mb-1.5">{bookingError}</div>
             )}
-          </Button>
-        )}
-      </div>
+            {!loggedIn ? (
+              <Button
+                variant="contained"
+                fullWidth
+                onClick={() => {
+                  const callbackUrl = pathname.startsWith('/s/') ? pathname : `/sites/${site.id}`
+                  router.push('/api/auth/signin?callbackUrl=' + callbackUrl)
+                }}
+              >
+                {t('Login to reserve')}
+              </Button>
+            ) : (
+              <Button
+                variant="contained"
+                fullWidth
+                disabled={totalItems === 0 || booking}
+                onClick={handleBook}
+              >
+                {booking ? (
+                  <CircularProgress size={20} color="inherit" />
+                ) : totalItems > 0 ? (
+                  `${t('Reserve')} · ${totalItems} item${totalItems !== 1 ? 's' : ''} · €${totalPrice.toFixed(2)}`
+                ) : (
+                  t('Reserve')
+                )}
+              </Button>
+            )}
+          </div>
+        </>
+      )}
     </>
   )
 }
@@ -551,7 +621,7 @@ function ViewModeSelector({
   if (!hasSunbeds || !hasRentals) return null
 
   return (
-    <div className="flex rounded-lg bg-gray-100 p-0.5 mb-3">
+    <div className="flex rounded-lg bg-gray-100 p-0.5 mb-1.5 mt-1.5">
       <button
         type="button"
         onClick={() => onChange('sunbeds')}

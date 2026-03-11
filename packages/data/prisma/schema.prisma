@@ -200,6 +200,7 @@ model Site {
   services        String[]                 @default([])
   vat             Float?
   rentalVat       Float?                   @map("rental_vat")
+  rentalPaymentType String?                @map("rental_payment_type")
   status          String                   @default("active")
   appSalesEnabled Boolean                  @default(false) @map("app_sales_enabled")
   type            String?

@@ -103,7 +103,7 @@ export default function SiteView({ site, apiKey, stripePublicKey, brand }: { sit
 
   const t = useTranslations('SiteView')
 
-  const bottomOffset = pendingReservationId ? '-405px' : '-364px'
+  const bottomOffset = pendingReservationId ? '-395px' : '-354px'
   
   return (
     <div className={`mx-auto max-w-6xl min-h-screen ${brand ? '' : 'bg-cream pt-[80px]'}`}
@@ -239,9 +239,10 @@ export default function SiteView({ site, apiKey, stripePublicKey, brand }: { sit
           <div className={`lg:sticky lg:top-[80px] px-3 pb-4 border rounded-xl shadow-soft ${brand ? '' : 'bg-cream border-subtle'}`}
             style={brand ? { backgroundColor: brand.bgColor || '#faf9f6', borderColor: `${brand.fgColor || '#111827'}15` } : undefined}
           >
-            <div className="w-full">
-              {
+            {
                 withHours ?
+            <div className="w-full">
+              
                   <div className="mb-4">
                     <Tabs variant="fullWidth" value={reservationMode || 'days'} onChange={(e, value) => {
                       dispatch(setValue({ 
@@ -252,10 +253,10 @@ export default function SiteView({ site, apiKey, stripePublicKey, brand }: { sit
                       <Tab value="days" label="Days" />
                       <Tab value="hours" label="Hours" />
                     </Tabs>
-                  </div> : 
-                  <div>&nbsp;</div>
-              }
-            </div>
+                  </div> 
+              
+            </div> : null
+            } 
             <ReservationView apiKey={apiKey} stripePublicKey={stripePublicKey} site={fetchedSite || site} />
           </div>
         </div>
@@ -270,7 +271,7 @@ export default function SiteView({ site, apiKey, stripePublicKey, brand }: { sit
         }} className={`lg:hidden fixed left-0 w-full text-center px-3 pb-4 border-t transition-bottom duration-500 ${brand ? '' : 'bg-cream text-white border-subtle'}`}>
         
           {
-            focused ? (
+            focused ? (<>
               <div className="text-black absolute w-[100px] rounded-full border shadow-soft" style={{
                 left: 'calc(50% - 50px)',
                 top: '-15px',
@@ -282,7 +283,8 @@ export default function SiteView({ site, apiKey, stripePublicKey, brand }: { sit
               }}>
                 <KeyboardDoubleArrowDownIcon />
               </div>
-            ) : (
+              <div className="h-4" />
+            </>) : (
               pendingReservationId &&
                 (
                   <div className="text-black absolute w-[100px] rounded-full border shadow-soft" style={{
@@ -300,10 +302,10 @@ export default function SiteView({ site, apiKey, stripePublicKey, brand }: { sit
             )
               
           }
-          
-              <div className="w-full">
-                {
+          {
                   withHours ?
+              <div className="w-full">
+                
                     <div className="mb-4">
                       <Tabs variant="fullWidth" value={reservationMode || 'days'} onChange={(e, value) => {
                         dispatch(setValue({ 
@@ -314,10 +316,9 @@ export default function SiteView({ site, apiKey, stripePublicKey, brand }: { sit
                         <Tab value="days" label="Days" />
                         <Tab value="hours" label="Hours" />
                       </Tabs>
-                    </div> : 
-                    <div>&nbsp;</div>
+                    </div>                
+              </div> : null
                 }
-              </div>
               <ReservationView apiKey={apiKey} stripePublicKey={stripePublicKey} site={fetchedSite || site} />
         </div>
     </div>

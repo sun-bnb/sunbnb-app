@@ -48,9 +48,7 @@ export async function saveReservationForMultipleItems(
   }
 
   const from = new Date(reservation.from)
-  const to = reservation.type === 'days' ?
-    dayjs(reservation.to).add(1, 'day').subtract(1, 'second').toDate() :
-    new Date(reservation.to)
+  const to = new Date(reservation.to)
 
   const site = await prisma.site.findUnique({ where: { id: reservation.siteId } })
   if (!site) return { status: 'error', errors: ['Site not found'] }
@@ -127,9 +125,7 @@ export async function saveRentalBooking(input: {
   if (!site) return { status: 'error', errors: ['Site not found'] }
 
   const from = new Date(input.from)
-  const to = input.durationType === 'days'
-    ? dayjs(input.to).add(1, 'day').subtract(1, 'second').toDate()
-    : new Date(input.to)
+  const to = new Date(input.to)
 
   // Load rental items to calculate pricing
   const rentalItemIds = input.items.map(i => i.rentalItemId)
@@ -197,7 +193,7 @@ export async function saveRentalBooking(input: {
         durationType: input.durationType,
         totalPrice,
         paymentAmount: totalPrice,
-        status: site.type === 'unpaid' ? RENTAL_COMPLETE : RENTAL_PENDING,
+        status: (site.rentalPaymentType ?? site.type) === 'unpaid' ? RENTAL_COMPLETE : RENTAL_PENDING,
       },
     })
     bookings.push(booking)

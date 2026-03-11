@@ -17,6 +17,9 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EditIcon from '@mui/icons-material/Edit'
 import SurfingIcon from '@mui/icons-material/Surfing'
 
+import PaymentsIcon from '@mui/icons-material/Payments'
+import EventAvailableIcon from '@mui/icons-material/EventAvailable'
+
 import { useSite } from '@/app/sites/site-context'
 import {
   getRentalItems,
@@ -24,6 +27,8 @@ import {
   updateRentalItem,
   deleteRentalItem,
   saveRentalVat,
+  toggleSiteFeature,
+  setRentalPaymentType,
 } from './actions'
 
 interface RentalItemData {
@@ -161,7 +166,7 @@ function ItemForm({
 }
 
 export default function RentalsView() {
-  const { site } = useSite()
+  const { site, setSite } = useSite()
   const siteId = site.id!
 
   const [items, setItems] = useState<RentalItemData[]>([])
@@ -172,6 +177,10 @@ export default function RentalsView() {
   const [deleteTarget, setDeleteTarget] = useState<RentalItemData | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [rentalVat, setRentalVat] = useState(site.rentalVat?.toString() || '')
+
+  const rentalsEnabled = (site.features || []).includes('rentals')
+  const [togglingRentals, setTogglingRentals] = useState(false)
+  const [rentalBillingType, setRentalBillingType] = useState(site.rentalPaymentType ?? site.type ?? 'paid')
 
   // Debounced VAT save
   useEffect(() => {
@@ -257,22 +266,24 @@ export default function RentalsView() {
     )
   }
 
-  const hasRentalsFeature = (site.features || []).includes('rentals')
+  const handleToggleRentals = async (enabled: boolean) => {
+    setTogglingRentals(true)
+    const result = await toggleSiteFeature(siteId, 'rentals', enabled)
+    if (result.status === 'ok' && result.features) {
+      setSite({ ...site, features: result.features })
+    }
+    setTogglingRentals(false)
+  }
 
   return (
     <div className="p-4">
-      {!hasRentalsFeature && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <strong>Equipment rental is not enabled</strong> for this site.
-          Enable it in the <strong>General</strong> tab under "Site features" to make rentals visible to customers.
-        </div>
-      )}
-
-      {/* Rental VAT setting */}
-      <div className="mb-6 flex items-center gap-4">
-        <div>
-          <h3 className="text-sm font-medium text-gray-700">Equipment rental VAT</h3>
-          <p className="text-xs text-gray-400">Applied to rental invoices</p>
+      {/* Rentals toggle + VAT on same row */}
+      <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 mt-4 mb-4 gap-4">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-800">Equipment rental</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Allow guests to rent surfboards, kayaks, umbrellas and other equipment through the app.
+          </p>
         </div>
         <TextField
           label="VAT %"
@@ -280,13 +291,80 @@ export default function RentalsView() {
           type="number"
           value={rentalVat}
           onChange={e => setRentalVat(e.target.value)}
+          disabled={!rentalsEnabled}
           size="small"
-          sx={{ width: 130 }}
+          sx={{ width: 100, flexShrink: 0 }}
           InputProps={{
             endAdornment: <InputAdornment position="end">%</InputAdornment>,
           }}
         />
+        <Switch
+          checked={rentalsEnabled}
+          onChange={(e) => handleToggleRentals(e.target.checked)}
+          disabled={togglingRentals}
+          size="small"
+          sx={{
+            flexShrink: 0,
+            '& .MuiSwitch-switchBase.Mui-checked': { color: '#111827' },
+            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#111827' },
+          }}
+        />
       </div>
+
+      {/* Rental billing type — only visible when rentals enabled */}
+      {rentalsEnabled && (
+        <div className="mb-4">
+          <h3 className="text-sm font-medium text-gray-700 mb-2">Rental billing</h3>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setRentalBillingType('paid')
+                setRentalPaymentType(site.id!, 'paid')
+                setSite({ ...site, rentalPaymentType: 'paid' })
+              }}
+              className={`flex-1 rounded-lg border-2 p-4 text-left transition-all ${
+                rentalBillingType === 'paid'
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <PaymentsIcon fontSize="small" className={rentalBillingType === 'paid' ? 'text-blue-600' : 'text-gray-400'} />
+                <span className={`font-medium text-sm ${rentalBillingType === 'paid' ? 'text-blue-700' : 'text-gray-700'}`}>
+                  Integrated payments
+                </span>
+              </div>
+              <p className="text-xs text-gray-500">
+                Customers pay for equipment rentals through the platform.
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setRentalBillingType('unpaid')
+                setRentalPaymentType(site.id!, 'unpaid')
+                setSite({ ...site, rentalPaymentType: 'unpaid' })
+              }}
+              className={`flex-1 rounded-lg border-2 p-4 text-left transition-all ${
+                rentalBillingType === 'unpaid'
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <EventAvailableIcon fontSize="small" className={rentalBillingType === 'unpaid' ? 'text-blue-600' : 'text-gray-400'} />
+                <span className={`font-medium text-sm ${rentalBillingType === 'unpaid' ? 'text-blue-700' : 'text-gray-700'}`}>
+                  Off-platform billing
+                </span>
+              </div>
+              <p className="text-xs text-gray-500">
+                No payment collected for rentals. Billing is handled at the venue, e.g. pay at counter or charge to room.
+              </p>
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between mb-4">
         <div>

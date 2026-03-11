@@ -2,6 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
+@import "react-day-picker/style.css";
+
+/* Restore react-day-picker styles that Tailwind Preflight strips */
+.rdp-root {
+  color: #1f2937;
+  width: 100%;
+  --rdp-day-height: 2.75rem;
+  --rdp-day-width: 100%; /* let table-layout: fixed handle sizing */
+  --rdp-day_button-width: 2.5rem;
+  --rdp-day_button-height: 2.5rem;
+}
+.rdp-root .rdp-months {
+  width: 100%;
+  max-width: 100%; /* override fit-content */
+}
+.rdp-root .rdp-month {
+  width: 100%;
+}
+.rdp-root .rdp-month_grid {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.rdp-root button {
+  color: #1f2937;
+  background-color: transparent;
+  cursor: pointer;
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;

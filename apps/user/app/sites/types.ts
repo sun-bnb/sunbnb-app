@@ -18,6 +18,7 @@ export interface SiteProps {
   services: string[]
   paymentProvider?: string
   features?: string[]
+  rentalPaymentType?: string | null
   rentalItems?: RentalItemProps[]
 }
 

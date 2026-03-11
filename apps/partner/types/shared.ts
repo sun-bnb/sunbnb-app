@@ -18,6 +18,7 @@ export interface SiteProps {
   rentalBookings?: RentalBookingProps[]
   vat?: number | null
   rentalVat?: number | null
+  rentalPaymentType?: string | null
   workingHours?: { id: string, day: number, openTime: Date, closeTime: Date }[]
   image?: string | null
   imageWidth?: number | null

@@ -1,13 +1,25 @@
 import prisma from '@repo/data/PrismaCient'
-import DashboardView, { DashboardData } from './view'
+import DashboardView, { type DashboardData } from './view'
 import { auth } from '@/app/auth'
-import { RESERVATION_CANCELED } from '@repo/data/reservation-status'
+import {
+  RESERVATION_CANCELED,
+  RESERVATION_PAYMENT_FAILED,
+  RESERVATION_COMPLETE,
+  RESERVATION_PAID_IN_CASH,
+  BLOCKING_STATUSES,
+  OP_CHECKED_IN,
+  OP_WALKED_IN,
+  ORDER_COMPLETE,
+  ORDER_ACCEPTED,
+  ORDER_PREPARING,
+  ORDER_READY,
+} from '@repo/data/reservation-status'
 
 
 export interface MonthTotals {
-  month: string    // e.g. "2025-01"
-  revenue: number  // sum of invoice.totalAmount for that month
-  fees: number     // sum of invoiceLine.amount for fee‐lines in that month
+  month: string
+  revenue: number
+  fees: number
 }
 
 export async function getRevenueAndFeesByMonth(
@@ -16,7 +28,6 @@ export async function getRevenueAndFeesByMonth(
   const now = new Date()
   const months: string[] = []
 
-  // 1) Build the last five months (YYYY-MM), oldest first
   for (let i = 4; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
     const year = d.getFullYear()
@@ -24,11 +35,9 @@ export async function getRevenueAndFeesByMonth(
     months.push(`${year}-${month}`)
   }
 
-  // 2) Figure out the earliest date (start of the first of those five months)
   const [firstYear, firstMonth] = months[0]!.split('-').map(Number)
   const startOfFirstMonth = new Date(firstYear!, firstMonth! - 1, 1, 0, 0, 0, 0)
 
-  // 3) Run a single grouped query that returns rows for months that have data
   const rawRows: { month: string; revenue: number; fees: number }[] =
     await prisma.$queryRaw`
       SELECT
@@ -36,7 +45,6 @@ export async function getRevenueAndFeesByMonth(
         SUM(revenue) AS revenue,
         SUM(fees)    AS fees
       FROM (
-        -- 3a) PARTNER invoices = gross revenue
         SELECT
           TO_CHAR(i.invoiced_at, 'YYYY-MM') AS month,
           i.total_amount                   AS revenue,
@@ -48,7 +56,6 @@ export async function getRevenueAndFeesByMonth(
 
         UNION ALL
 
-        -- 3b) PLATFORM invoices = service fees / commission
         SELECT
           TO_CHAR(i.invoiced_at, 'YYYY-MM') AS month,
           0                                AS revenue,
@@ -62,7 +69,6 @@ export async function getRevenueAndFeesByMonth(
       ORDER BY month;
     `
 
-  // 4) Build a map from month string → { revenue, fees }
   const resultMap: Record<string, { revenue: number; fees: number }> = {}
   for (const row of rawRows) {
     resultMap[row.month] = {
@@ -71,7 +77,6 @@ export async function getRevenueAndFeesByMonth(
     }
   }
 
-  // 5) Fill in any months with no data (default to 0)
   return months.map((m) => {
     const entry = resultMap[m]
     return {
@@ -83,89 +88,189 @@ export async function getRevenueAndFeesByMonth(
 }
 
 
-
 async function getDashboardData(userId: string): Promise<DashboardData> {
 
-  // 1) Count sites for this user
-  const totalSites = await prisma.site.count({
-    where: { userId },
-  })
-
-  // 2) Fetch all site IDs for this user
-  const siteIds = await prisma.site.findMany({
-    where: { userId },
-    select: { id: true },
-  }).then(sites => sites.map(s => s.id))
-
-  // 3) Count total chairs (inventory items) across those sites
-  const totalChairs = await prisma.inventoryItem.count({
-    where: { siteId: { in: siteIds } }
-  })
-
-  // 4) Compute start/end of today in local time
   const now = new Date()
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const endOfToday = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    23, 59, 59, 999
-  )
-
-  // 5) Count reservations overlapping "today" for those sites
-  const reservationsToday = await prisma.reservation.count({
-    where: {
-      siteId: { in: siteIds },
-      from: { lte: endOfToday },
-      to:   { gte: startOfToday },
-    }
-  })
-
-  // 6) Revenue aggregation
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
   const startOfYear = new Date(now.getFullYear(), 0, 1)
-
-  const monthAgg = await prisma.invoice.aggregate({
-    where: {
-      accountId: userId,
-      issuerType: 'PARTNER',
-      invoicedAt: { gte: startOfMonth, lte: now },
-    },
-    _sum: { totalAmount: true },
-  })
-  const revenueThisMonth = monthAgg._sum.totalAmount ?? 0
-
-  const yearAgg = await prisma.invoice.aggregate({
-    where: {
-      accountId: userId,
-      issuerType: 'PARTNER',
-      invoicedAt: { gte: startOfYear, lte: now },
-    },
-    _sum: { totalAmount: true },
-  })
-  const revenueYearToDate = yearAgg._sum.totalAmount ?? 0
-
-  const revenueHistory = await getRevenueAndFeesByMonth(userId)
-
-  // 7) Upcoming reservations (next 7 days)
+  const twoHoursFromNow = new Date(now.getTime() + 2 * 60 * 60 * 1000)
   const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-  const upcomingRaw = await prisma.reservation.findMany({
-    where: {
-      siteId: { in: siteIds },
-      from: { gte: startOfToday, lte: sevenDaysFromNow },
-      status: { not: RESERVATION_CANCELED },
-    },
-    orderBy: { from: 'asc' },
-    take: 8,
-    select: {
-      id: true,
-      from: true,
-      to: true,
-      status: true,
-      site: { select: { name: true, id: true } },
-      _count: { select: { items: true } },
-    },
+
+  // Fetch site IDs
+  const sites = await prisma.site.findMany({
+    where: { userId },
+    select: { id: true, features: true },
   })
+  const siteIds = sites.map(s => s.id)
+  const hasFnb = sites.some(s => s.features.includes('orders') || s.features.includes('food'))
+
+  // ── Run all independent queries in parallel ───────────────────────────
+
+  const [
+    totalInventory,
+    todaysReservations,
+    checkedInCount,
+    revenueToday,
+    monthAgg,
+    yearAgg,
+    feesYtd,
+    revenueHistory,
+    pendingOrders,
+    upcomingRaw,
+    arrivingSoonRaw,
+    canceledThisMonth,
+    totalReservationsThisMonth,
+  ] = await Promise.all([
+
+    // Total inventory
+    prisma.inventoryItem.count({
+      where: { siteId: { in: siteIds } },
+    }),
+
+    // Today's reservations (blocking statuses = actually happening)
+    prisma.reservation.count({
+      where: {
+        siteId: { in: siteIds },
+        from: { lte: endOfToday },
+        to: { gte: startOfToday },
+        status: { in: [...BLOCKING_STATUSES] },
+      },
+    }),
+
+    // Checked in today
+    prisma.reservation.count({
+      where: {
+        siteId: { in: siteIds },
+        from: { lte: endOfToday },
+        to: { gte: startOfToday },
+        status: { in: [...BLOCKING_STATUSES] },
+        operationalStatus: { in: [OP_CHECKED_IN, OP_WALKED_IN] },
+      },
+    }),
+
+    // Revenue today
+    prisma.invoice.aggregate({
+      where: {
+        accountId: userId,
+        issuerType: 'PARTNER',
+        invoicedAt: { gte: startOfToday, lte: endOfToday },
+      },
+      _sum: { totalAmount: true },
+    }),
+
+    // Revenue this month
+    prisma.invoice.aggregate({
+      where: {
+        accountId: userId,
+        issuerType: 'PARTNER',
+        invoicedAt: { gte: startOfMonth, lte: now },
+      },
+      _sum: { totalAmount: true },
+    }),
+
+    // Revenue year to date
+    prisma.invoice.aggregate({
+      where: {
+        accountId: userId,
+        issuerType: 'PARTNER',
+        invoicedAt: { gte: startOfYear, lte: now },
+      },
+      _sum: { totalAmount: true },
+    }),
+
+    // Platform fees year to date
+    prisma.invoice.aggregate({
+      where: {
+        accountId: userId,
+        issuerType: 'PLATFORM',
+        invoicedAt: { gte: startOfYear, lte: now },
+      },
+      _sum: { totalAmount: true },
+    }),
+
+    // Revenue history (5 months)
+    getRevenueAndFeesByMonth(userId),
+
+    // Pending orders needing attention
+    hasFnb
+      ? prisma.order.count({
+          where: {
+            siteId: { in: siteIds },
+            status: { in: [ORDER_COMPLETE, ORDER_ACCEPTED, ORDER_PREPARING, ORDER_READY] },
+          },
+        })
+      : Promise.resolve(0),
+
+    // Upcoming reservations (next 7 days)
+    prisma.reservation.findMany({
+      where: {
+        siteId: { in: siteIds },
+        from: { gte: startOfToday, lte: sevenDaysFromNow },
+        status: { not: RESERVATION_CANCELED },
+      },
+      orderBy: { from: 'asc' },
+      take: 8,
+      select: {
+        id: true,
+        from: true,
+        to: true,
+        status: true,
+        operationalStatus: true,
+        guestName: true,
+        site: { select: { name: true, id: true } },
+        _count: { select: { items: true } },
+      },
+    }),
+
+    // Arriving in next 2 hours (expected but not checked in)
+    prisma.reservation.findMany({
+      where: {
+        siteId: { in: siteIds },
+        from: { gte: now, lte: twoHoursFromNow },
+        status: { in: [...BLOCKING_STATUSES] },
+        operationalStatus: 'expected',
+      },
+      orderBy: { from: 'asc' },
+      take: 6,
+      select: {
+        id: true,
+        from: true,
+        to: true,
+        guestName: true,
+        site: { select: { name: true, id: true } },
+        _count: { select: { items: true } },
+      },
+    }),
+
+    // Canceled reservations this month (for cancellation rate)
+    prisma.reservation.count({
+      where: {
+        siteId: { in: siteIds },
+        createdAt: { gte: startOfMonth },
+        status: RESERVATION_CANCELED,
+      },
+    }),
+
+    // Total reservations this month (for cancellation rate)
+    prisma.reservation.count({
+      where: {
+        siteId: { in: siteIds },
+        createdAt: { gte: startOfMonth },
+      },
+    }),
+  ])
+
+  // ── Derived metrics ───────────────────────────────────────────────────
+
+  const occupancyPct = totalInventory > 0
+    ? Math.round((todaysReservations / totalInventory) * 100)
+    : 0
+
+  const cancellationPct = totalReservationsThisMonth > 0
+    ? Math.round((canceledThisMonth / totalReservationsThisMonth) * 100)
+    : 0
 
   const upcomingReservations = upcomingRaw.map(r => ({
     id: r.id,
@@ -174,30 +279,50 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
     from: r.from.toISOString(),
     to: r.to.toISOString(),
     status: r.status,
+    operationalStatus: r.operationalStatus,
+    guestName: r.guestName,
+    itemCount: r._count.items,
+  }))
+
+  const arrivingSoon = arrivingSoonRaw.map(r => ({
+    id: r.id,
+    siteName: r.site.name,
+    siteId: r.site.id,
+    from: r.from.toISOString(),
+    to: r.to.toISOString(),
+    guestName: r.guestName,
     itemCount: r._count.items,
   }))
 
   return {
-    totalSites,
-    totalChairs,
-    reservationsToday,
-    revenueThisMonth,
-    revenueYearToDate,
+    // Today snapshot
+    totalInventory,
+    occupancyPct,
+    todaysReservations,
+    checkedInCount,
+    pendingOrders,
+    hasFnb,
+
+    // Financial
+    revenueToday: revenueToday._sum.totalAmount ?? 0,
+    revenueThisMonth: monthAgg._sum.totalAmount ?? 0,
+    revenueYearToDate: yearAgg._sum.totalAmount ?? 0,
+    feesYearToDate: feesYtd._sum.totalAmount ?? 0,
     revenueHistory,
+
+    // Activity
+    cancellationPct,
+    arrivingSoon,
     upcomingReservations,
   }
 }
 
 
-
 export default async function DashboardPage() {
-
   const session = await auth()
   if (!session?.user) return null
 
   const dashboardData = await getDashboardData(session.user.id)
 
-  return (
-    <DashboardView data={dashboardData} />
-  )
+  return <DashboardView data={dashboardData} />
 }

@@ -11,7 +11,16 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import Link from 'next/link'
-import { RESERVATION_CANCELED } from '@repo/data/reservation-status'
+import {
+  RESERVATION_CANCELED,
+  RESERVATION_PAYMENT_FAILED,
+  RESERVATION_COMPLETE,
+  RESERVATION_PAID_IN_CASH,
+  OP_CHECKED_IN,
+  OP_WALKED_IN,
+} from '@repo/data/reservation-status'
+
+/* ── Types ─────────────────────────────────────────────────── */
 
 export interface UpcomingReservation {
   id: string
@@ -20,16 +29,40 @@ export interface UpcomingReservation {
   from: string
   to: string
   status: string
+  operationalStatus: string
+  guestName: string | null
+  itemCount: number
+}
+
+export interface ArrivingSoon {
+  id: string
+  siteName: string
+  siteId: string
+  from: string
+  to: string
+  guestName: string | null
   itemCount: number
 }
 
 export interface DashboardData {
-  totalSites: number
-  totalChairs: number
-  reservationsToday: number
+  // Today
+  totalInventory: number
+  occupancyPct: number
+  todaysReservations: number
+  checkedInCount: number
+  pendingOrders: number
+  hasFnb: boolean
+
+  // Financial
+  revenueToday: number
   revenueThisMonth: number
   revenueYearToDate: number
+  feesYearToDate: number
   revenueHistory: { month: string; revenue: number; fees: number }[]
+
+  // Activity
+  cancellationPct: number
+  arrivingSoon: ArrivingSoon[]
   upcomingReservations: UpcomingReservation[]
 }
 
@@ -50,14 +83,19 @@ function formatMonth(month: string) {
   return date.toLocaleString('en', { month: 'short' })
 }
 
-function formatDate(dateStr: string) {
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('en', { day: 'numeric', month: 'short' })
-}
-
 function formatTime(dateStr: string) {
   const d = new Date(dateStr)
   return d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
+function timeUntil(dateStr: string) {
+  const diff = new Date(dateStr).getTime() - Date.now()
+  const mins = Math.round(diff / 60000)
+  if (mins < 1) return 'now'
+  if (mins < 60) return `${mins}m`
+  const hrs = Math.floor(mins / 60)
+  const rem = mins % 60
+  return rem > 0 ? `${hrs}h ${rem}m` : `${hrs}h`
 }
 
 /* ── Stat Card ─────────────────────────────────────────────── */
@@ -65,23 +103,37 @@ function formatTime(dateStr: string) {
 function StatCard({
   label,
   value,
+  subtitle,
   icon,
   accent,
 }: {
   label: string
   value: string | number
+  subtitle?: string
   icon: React.ReactNode
   accent?: string
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col gap-3">
+    <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="text-sm text-gray-500">{label}</span>
-        <span className={`w-8 h-8 rounded-lg flex items-center justify-center ${accent || 'bg-gray-100 text-gray-500'}`}>
+        <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</span>
+        <span className={`w-7 h-7 rounded-lg flex items-center justify-center ${accent || 'bg-gray-100 text-gray-500'}`}>
           {icon}
         </span>
       </div>
       <span className="text-2xl font-semibold text-gray-900">{value}</span>
+      {subtitle && <span className="text-xs text-gray-400">{subtitle}</span>}
+    </div>
+  )
+}
+
+/* ── Occupancy bar ─────────────────────────────────────────── */
+
+function OccupancyBar({ pct }: { pct: number }) {
+  const color = pct >= 80 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-400' : 'bg-gray-300'
+  return (
+    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+      <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${Math.min(pct, 100)}%` }} />
     </div>
   )
 }
@@ -97,7 +149,7 @@ function ChartTooltip({ active, payload, label }: any) {
         <div key={entry.dataKey} className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full" style={{ background: entry.color }} />
           <span className="text-gray-500">{entry.name}</span>
-          <span className="ml-auto font-medium text-gray-900">€{Number(entry.value).toFixed(0)}</span>
+          <span className="ml-auto font-medium text-gray-900">{formatCurrency(Number(entry.value))}</span>
         </div>
       ))}
     </div>
@@ -106,17 +158,69 @@ function ChartTooltip({ active, payload, label }: any) {
 
 /* ── Reservation status badge ──────────────────────────────── */
 
-function ReservationStatus({ status }: { status: string }) {
+function StatusBadge({ status, opStatus }: { status: string; opStatus?: string }) {
+  // Operational status takes priority for active reservations
+  if (opStatus === OP_CHECKED_IN || opStatus === OP_WALKED_IN) {
+    return (
+      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+        {opStatus === OP_WALKED_IN ? 'walk-in' : 'checked in'}
+      </span>
+    )
+  }
+
   const styles: Record<string, string> = {
-    confirmed: 'bg-emerald-50 text-emerald-700',
+    complete: 'bg-emerald-50 text-emerald-700',
+    paid_in_cash: 'bg-emerald-50 text-emerald-700',
     pending: 'bg-amber-50 text-amber-700',
+    processing: 'bg-blue-50 text-blue-600',
+    payment_failed: 'bg-red-50 text-red-600',
     [RESERVATION_CANCELED]: 'bg-red-50 text-red-600',
   }
+
+  const labels: Record<string, string> = {
+    complete: 'paid',
+    paid_in_cash: 'cash',
+    pending: 'pending',
+    processing: 'processing',
+    payment_failed: 'failed',
+    [RESERVATION_CANCELED]: 'canceled',
+  }
+
   return (
     <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${styles[status] || 'bg-gray-100 text-gray-500'}`}>
-      {status}
+      {labels[status] || status}
     </span>
   )
+}
+
+/* ── Icons (inline SVG) ────────────────────────────────────── */
+
+const icons = {
+  occupancy: (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+    </svg>
+  ),
+  checkIn: (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+    </svg>
+  ),
+  revenue: (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+    </svg>
+  ),
+  orders: (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+    </svg>
+  ),
+  calendar: (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+    </svg>
+  ),
 }
 
 /* ── Main View ─────────────────────────────────────────────── */
@@ -137,61 +241,107 @@ export default function DashboardView({ data }: { data: DashboardData }) {
     net: d.revenue - d.fees,
   }))
 
+  const availableSpots = data.totalInventory - data.todaysReservations
+
   return (
     <div className="container mx-auto px-4 py-6 max-w-5xl">
 
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-lg font-semibold text-gray-900">Dashboard</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Overview of your business</p>
+        <p className="text-sm text-gray-500 mt-0.5">
+          {new Date().toLocaleDateString('en', { weekday: 'long', day: 'numeric', month: 'long' })}
+        </p>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      {/* ── Today's Snapshot ─────────────────────────────────── */}
+
+      <div className={`grid gap-4 mb-6 ${data.hasFnb ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-2 lg:grid-cols-3'}`}>
+
+        {/* Occupancy */}
+        <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Occupancy</span>
+            <span className="w-7 h-7 rounded-lg flex items-center justify-center bg-blue-50 text-blue-600">
+              {icons.occupancy}
+            </span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-semibold text-gray-900">{data.occupancyPct}%</span>
+            <span className="text-sm text-gray-400">
+              {data.todaysReservations}/{data.totalInventory}
+            </span>
+          </div>
+          <OccupancyBar pct={data.occupancyPct} />
+          <span className="text-xs text-gray-400">
+            {availableSpots > 0 ? `${availableSpots} spots available` : 'Fully booked'}
+          </span>
+        </div>
+
+        {/* Check-ins */}
         <StatCard
-          label="Sites"
-          value={data.totalSites}
-          accent="bg-blue-50 text-blue-600"
-          icon={
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0 0 12 9.75c-2.551 0-5.056.2-7.5.582V21" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="Inventory"
-          value={data.totalChairs}
-          accent="bg-violet-50 text-violet-600"
-          icon={
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 21v-4.875c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125V21m0 0h4.5V3.545M12.75 21h7.5M10.5 21V8.94a.75.75 0 0 0-.82-.747l-7.5.856A.75.75 0 0 0 1.5 9.848V21" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="Today"
-          value={data.reservationsToday}
+          label="Check-ins"
+          value={`${data.checkedInCount}/${data.todaysReservations}`}
+          subtitle={data.todaysReservations > 0
+            ? `${Math.round((data.checkedInCount / data.todaysReservations) * 100)}% arrived`
+            : 'No reservations today'}
+          icon={icons.checkIn}
           accent="bg-amber-50 text-amber-600"
-          icon={
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
-            </svg>
-          }
         />
+
+        {/* Revenue today */}
         <StatCard
-          label="Revenue MTD"
-          value={formatCurrency(data.revenueThisMonth)}
+          label="Revenue today"
+          value={formatCurrency(data.revenueToday)}
+          subtitle={`MTD ${formatCurrency(data.revenueThisMonth)}`}
+          icon={icons.revenue}
           accent="bg-emerald-50 text-emerald-600"
-          icon={
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z" />
-            </svg>
-          }
         />
+
+        {/* Active orders (only if site has F&B) */}
+        {data.hasFnb && (
+          <StatCard
+            label="Active orders"
+            value={data.pendingOrders}
+            subtitle={data.pendingOrders > 0 ? 'Need attention' : 'All clear'}
+            icon={icons.orders}
+            accent={data.pendingOrders > 0 ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-400'}
+          />
+        )}
       </div>
 
-      {/* Two-column: Chart + Upcoming */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+      {/* ── Arriving Soon ────────────────────────────────────── */}
+
+      {data.arrivingSoon.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <h2 className="text-sm font-semibold text-amber-900">Arriving soon</h2>
+            <span className="text-xs text-amber-600 ml-auto">{data.arrivingSoon.length} expected in next 2h</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {data.arrivingSoon.map((r) => (
+              <Link
+                key={r.id}
+                href={`/reservations/${r.id}`}
+                className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 hover:shadow-sm transition-shadow"
+              >
+                <div className="flex-shrink-0 text-center w-10">
+                  <span className="text-sm font-semibold text-amber-700">{timeUntil(r.from)}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-900 truncate">{r.guestName || 'Guest'}</p>
+                  <p className="text-xs text-gray-400">{formatTime(r.from)} · {r.itemCount} {r.itemCount === 1 ? 'item' : 'items'}</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Revenue Chart + Upcoming ─────────────────────────── */}
+
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-6">
 
         {/* Revenue chart */}
         <div className="lg:col-span-3 bg-white rounded-xl border border-gray-200 p-5">
@@ -211,9 +361,15 @@ export default function DashboardView({ data }: { data: DashboardData }) {
           </div>
 
           {/* YTD callout */}
-          <div className="mb-4 px-3 py-2.5 bg-gray-50 rounded-lg inline-flex items-baseline gap-2">
-            <span className="text-xs text-gray-500">Year to date</span>
-            <span className="text-lg font-semibold text-gray-900">{formatCurrency(data.revenueYearToDate)}</span>
+          <div className="mb-4 flex items-baseline gap-4">
+            <div className="px-3 py-2 bg-gray-50 rounded-lg inline-flex items-baseline gap-2">
+              <span className="text-xs text-gray-500">YTD gross</span>
+              <span className="text-lg font-semibold text-gray-900">{formatCurrency(data.revenueYearToDate)}</span>
+            </div>
+            <div className="px-3 py-2 bg-gray-50 rounded-lg inline-flex items-baseline gap-2">
+              <span className="text-xs text-gray-500">YTD net</span>
+              <span className="text-lg font-semibold text-emerald-700">{formatCurrency(data.revenueYearToDate - data.feesYearToDate)}</span>
+            </div>
           </div>
 
           <div className="h-[220px]">
@@ -238,6 +394,13 @@ export default function DashboardView({ data }: { data: DashboardData }) {
               </SafeBarChart>
             </SafeResponsiveContainer>
           </div>
+
+          {/* Cancellation rate footnote */}
+          {data.cancellationPct > 0 && (
+            <p className="text-xs text-gray-400 mt-3">
+              <span className="text-red-400">{data.cancellationPct}%</span> cancellation rate this month
+            </p>
+          )}
         </div>
 
         {/* Upcoming reservations */}
@@ -267,13 +430,13 @@ export default function DashboardView({ data }: { data: DashboardData }) {
 
                   {/* Details */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900 truncate">{r.siteName}</p>
+                    <p className="text-sm text-gray-900 truncate">{r.guestName || r.siteName}</p>
                     <p className="text-xs text-gray-400">
                       {formatTime(r.from)}–{formatTime(r.to)} · {r.itemCount} {r.itemCount === 1 ? 'item' : 'items'}
                     </p>
                   </div>
 
-                  <ReservationStatus status={r.status} />
+                  <StatusBadge status={r.status} opStatus={r.operationalStatus} />
                 </Link>
               ))}
             </div>

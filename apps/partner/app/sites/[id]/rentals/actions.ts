@@ -2,7 +2,27 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireSiteOwner } from '@/lib/auth-helpers'
+import { isValidRentalPaymentType } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
+
+// ─── Set Rental Payment Type ────────────────────────────────────────────────
+
+export async function setRentalPaymentType(siteId: string, rentalPaymentType: string) {
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
+
+  if (!isValidRentalPaymentType(rentalPaymentType)) {
+    return { status: 'error', errors: ['Invalid rental payment type'] }
+  }
+
+  await prisma.site.update({
+    where: { id: siteId },
+    data: { rentalPaymentType },
+  })
+
+  revalidatePath(`/sites/${siteId}`)
+  return { status: 'ok' }
+}
 
 // ─── Get Rental Items ───────────────────────────────────────────────────────
 

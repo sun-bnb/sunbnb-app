@@ -99,6 +99,7 @@ const VALID_ORDER_STATUSES: Set<string> = new Set([
 ])
 const VALID_PRODUCT_CATEGORIES = new Set(['food', 'drink', 'snack', 'accessory'])
 const VALID_ORDER_PAYMENT_TYPES = new Set(['paid', 'unpaid'])
+const VALID_RENTAL_PAYMENT_TYPES = new Set(['paid', 'unpaid'])
 const VALID_BG_OPTIONS = new Set(['satellite', 'blank', 'custom'])
 const VALID_ITEM_STATUSES = new Set(['active', 'disabled'])
 
@@ -116,6 +117,10 @@ export function isValidOrderStatus(s: string): boolean {
 
 export function isValidOrderPaymentType(s: string): boolean {
   return VALID_ORDER_PAYMENT_TYPES.has(s)
+}
+
+export function isValidRentalPaymentType(s: string): boolean {
+  return VALID_RENTAL_PAYMENT_TYPES.has(s)
 }
 
 export function isValidBgOption(s: string): boolean {
