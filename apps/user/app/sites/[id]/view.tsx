@@ -103,7 +103,15 @@ export default function SiteView({ site, apiKey, stripePublicKey, brand }: { sit
 
   const t = useTranslations('SiteView')
 
-  const bottomOffset = pendingReservationId ? '-395px' : '-354px'
+  // ── Mobile drawer: peek height = visible portion when minimized ──
+  // Accounts for: date range field (~56px) + padding + view mode tabs if both sunbeds & rentals are available (~44px)
+  const activeSite = fetchedSite || site
+  const features = activeSite.features || ['sunbeds']
+  const hasSunbeds = features.includes('sunbeds')
+  const hasRentals = features.includes('rentals') && (activeSite.rentalItems?.length ?? 0) > 0
+  const hasViewModeTabs = hasSunbeds && hasRentals
+  const BASE_PEEK = withHours ? 120 : 75
+  const PEEK_HEIGHT = BASE_PEEK + (hasViewModeTabs ? 44 : 0)
   
   return (
     <div className={`mx-auto max-w-6xl min-h-screen ${brand ? '' : 'bg-cream pt-[80px]'}`}
@@ -261,65 +269,51 @@ export default function SiteView({ site, apiKey, stripePublicKey, brand }: { sit
           </div>
         </div>
       </div>
-        {/* Mobile spacer + fixed bottom drawer */}
-        <div className="mt-[140px] lg:hidden">
-        </div>
-        <div style={{
-          zIndex: 11,
-          bottom: !focused ? bottomOffset : '0px',
-          ...(brand ? { backgroundColor: brand.bgColor || '#faf9f6', color: brand.fgColor || '#111827', borderColor: `${brand.fgColor || '#111827'}15` } : {}),
-        }} className={`lg:hidden fixed left-0 w-full text-center px-3 pb-4 border-t transition-bottom duration-500 ${brand ? '' : 'bg-cream text-white border-subtle'}`}>
-        
-          {
-            focused ? (<>
-              <div className="text-black absolute w-[100px] rounded-full border shadow-soft" style={{
+        {/* Mobile spacer to prevent content from hiding behind the fixed drawer */}
+        <div className="lg:hidden" style={{ height: `${PEEK_HEIGHT + 16}px` }} />
+
+        {/* ── Mobile reservation drawer ── */}
+        <div
+          className={`lg:hidden fixed left-0 w-full text-center border-t transition-transform duration-500 ease-in-out ${brand ? '' : 'bg-cream text-white border-subtle'}`}
+          style={{
+            zIndex: 11,
+            bottom: 0,
+            transform: focused ? 'translateY(0)' : `translateY(calc(100% - ${PEEK_HEIGHT}px))`,
+            ...(brand ? { backgroundColor: brand.bgColor || '#faf9f6', color: brand.fgColor || '#111827', borderColor: `${brand.fgColor || '#111827'}15` } : {}),
+          }}
+        >
+          {/* Minimize / maximize pill button */}
+          {(focused || pendingReservationId) && (
+            <div
+              className="text-black absolute w-[100px] rounded-full border shadow-soft cursor-pointer"
+              style={{
                 left: 'calc(50% - 50px)',
                 top: '-15px',
                 zIndex: 2,
-                ...(brand ? { backgroundColor: brand.bgColor || '#faf9f6', borderColor: `${brand.fgColor || '#111827'}15`, color: brand.fgColor || '#111827' } : { backgroundColor: 'var(--color-cream, #faf9f6)', borderColor: 'var(--color-subtle, #e5e7eb)' }),
+                ...(brand
+                  ? { backgroundColor: brand.bgColor || '#faf9f6', borderColor: `${brand.fgColor || '#111827'}15`, color: brand.fgColor || '#111827' }
+                  : { backgroundColor: 'var(--color-cream, #faf9f6)', borderColor: 'var(--color-subtle, #e5e7eb)' }),
               }}
-              onClick={() => {
-                dispatch(setValue({ focused: false }))
-              }}>
-                <KeyboardDoubleArrowDownIcon />
+              onClick={() => dispatch(setValue({ focused: !focused }))}
+            >
+              {focused ? <KeyboardDoubleArrowDownIcon /> : <KeyboardDoubleArrowUpIcon />}
+            </div>
+          )}
+
+          {/* Drawer content: date range field stays visible as peek, rest scrolls off */}
+          <div className={`px-3 ${focused ? 'pt-4 pb-4' : 'pt-0 pb-1'}`}>
+            {withHours && (
+              <div className="w-full mb-4">
+                <Tabs variant="fullWidth" value={reservationMode || 'days'} onChange={(e, value) => {
+                  dispatch(setValue({ reservationMode: value, focused: true }))
+                }} aria-label="Reservation mode">
+                  <Tab value="days" label="Days" />
+                  <Tab value="hours" label="Hours" />
+                </Tabs>
               </div>
-              <div className="h-4" />
-            </>) : (
-              pendingReservationId &&
-                (
-                  <div className="text-black absolute w-[100px] rounded-full border shadow-soft" style={{
-                    left: 'calc(50% - 50px)',
-                    top: '-15px',
-                    zIndex: 2,
-                    ...(brand ? { backgroundColor: brand.bgColor || '#faf9f6', borderColor: `${brand.fgColor || '#111827'}15`, color: brand.fgColor || '#111827' } : { backgroundColor: 'var(--color-cream, #faf9f6)', borderColor: 'var(--color-subtle, #e5e7eb)' }),
-                  }}
-                  onClick={() => {
-                    dispatch(setValue({ focused: true }))
-                  }}>
-                    <KeyboardDoubleArrowUpIcon />
-                  </div>
-                )
-            )
-              
-          }
-          {
-                  withHours ?
-              <div className="w-full">
-                
-                    <div className="mb-4">
-                      <Tabs variant="fullWidth" value={reservationMode || 'days'} onChange={(e, value) => {
-                        dispatch(setValue({ 
-                          reservationMode: value,
-                          focused: true 
-                        }))
-                      }} aria-label="Reservation mode">
-                        <Tab value="days" label="Days" />
-                        <Tab value="hours" label="Hours" />
-                      </Tabs>
-                    </div>                
-              </div> : null
-                }
-              <ReservationView apiKey={apiKey} stripePublicKey={stripePublicKey} site={fetchedSite || site} />
+            )}
+            <ReservationView apiKey={apiKey} stripePublicKey={stripePublicKey} site={fetchedSite || site} />
+          </div>
         </div>
     </div>
   )

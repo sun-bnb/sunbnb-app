@@ -20,7 +20,6 @@ import { getSite } from '../queries'
 import { getParcelColor } from './chair-util'
 import QRPrintButton from './qr-print-button'
 import { useSite } from '@/app/sites/site-context'
-import ReservationListItem from '@/components/reservation/ReservationListItem'
 import PriceBreakdown from '@/components/PriceBreakdown'
 
 interface InventoryFormProps {
@@ -98,10 +97,6 @@ export default function InventoryForm({
     await deleteInventoryItem(selectedItem.id)
     onDelete()
   }
-
-  const reservations = selectedItem.reservations || []
-  const now = new Date()
-  const activeReservations = reservations.filter(r => r.to >= now)
 
   return (
     <div className="flex flex-col h-full">
@@ -255,22 +250,6 @@ export default function InventoryForm({
         </Collapse>
 
         <Divider sx={{ mb: 2 }} />
-
-        {/* Reservations */}
-        {activeReservations.length > 0 && (
-          <div className="mb-4">
-            <h4 className="text-xs font-medium text-gray-600 mb-2">
-              Active reservations ({activeReservations.length})
-            </h4>
-            <div className="flex flex-col gap-1">
-              {activeReservations.map(r => (
-                <div key={r.id} className="border-b border-gray-100">
-                  <ReservationListItem reservation={r} />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Danger zone */}
         <div className="mt-2">

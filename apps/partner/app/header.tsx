@@ -10,6 +10,7 @@ import { getEnvLabel } from '@repo/data/env'
 
 const navItems = [
   { label: 'Dashboard', href: '/' },
+  { label: 'Frontdesk', href: '/frontdesk' },
   { label: 'Sites', href: '/sites' },
   { label: 'Calendar', href: '/calendar' },
   { label: 'Security', href: '/security' },

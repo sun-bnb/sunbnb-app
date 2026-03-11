@@ -67,10 +67,10 @@ export default function DateRangeSelector({
             ${disabled
               ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
               : 'bg-white text-gray-900 border-gray-300 hover:border-gray-900 cursor-pointer'}
-            focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+            focus:outline-none
           `}
         >
-          <span className={from ? 'text-gray-900' : 'text-gray-500'}>
+          <span className={`pointer-events-none ${from ? 'text-gray-900' : 'text-gray-500'}`}>
             {displayText}
           </span>
         </button>
