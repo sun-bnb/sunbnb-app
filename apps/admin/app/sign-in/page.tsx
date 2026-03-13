@@ -9,8 +9,8 @@ import sunbnbLogo from '@/app/sunbnb-logo.svg'
 
 type HealthData = {
   status: string
-  db: { status: string; latency: string }
-  records: { sites: number; users: number }
+  db?: { status: string; latency: string }
+  records?: { sites: number; users: number }
   timestamp: string
 }
 
@@ -40,6 +40,7 @@ function AdminHealthPanel() {
               <span className={`w-1.5 h-1.5 rounded-full ${health.status === 'healthy' ? 'bg-green-400' : 'bg-yellow-400'}`} />
               <span className="text-gray-400">{health.status === 'healthy' ? 'All systems operational' : 'Degraded'}</span>
             </div>
+            {health.db && (
             <div className="border-t border-gray-800 pt-3 space-y-1.5">
               <div className="flex justify-between">
                 <span>database</span>
@@ -49,6 +50,8 @@ function AdminHealthPanel() {
                 <span>latency</span>
                 <span className="text-gray-400">{health.db.latency}</span>
               </div>
+              {health.records && (
+              <>
               <div className="flex justify-between">
                 <span>sites</span>
                 <span className="text-gray-400">{health.records.sites.toLocaleString()}</span>
@@ -57,7 +60,10 @@ function AdminHealthPanel() {
                 <span>users</span>
                 <span className="text-gray-400">{health.records.users.toLocaleString()}</span>
               </div>
+              </>
+              )}
             </div>
+            )}
             <div className="border-t border-gray-800 pt-3">
               <div className="flex justify-between">
                 <span>checked</span>
