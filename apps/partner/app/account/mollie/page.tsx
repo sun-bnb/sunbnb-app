@@ -14,6 +14,9 @@ export default async function MolliePage({ searchParams }: { searchParams: { [ke
       email: true,
       company: true,
       address: true,
+      city: true,
+      postalCode: true,
+      country: true,
       mollieProfileId: true,
       mollieAccessToken: true,
       mollieOnboardingStatus: true,
@@ -33,6 +36,9 @@ export default async function MolliePage({ searchParams }: { searchParams: { [ke
         email: account.email,
         company: account.company,
         address: account.address,
+        city: account.city,
+        postalCode: account.postalCode,
+        country: account.country,
       } : null}
     />
   )

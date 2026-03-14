@@ -295,6 +295,34 @@ export async function bootstrapMollieAccount(
 
     if ((onboarding as any).status === 'needs-data') {
       console.log('[Mollie Bootstrap] Submitting onboarding data via raw fetch…')
+
+      // Load real partner account data from DB
+      let orgData: { name: string; streetAndNumber: string; postalCode: string; city: string; country: string }
+      let profileData: { name: string; url: string; email: string }
+      try {
+        const prismaCl = (await import('@repo/data/PrismaCient')).default
+        const partnerAccount = await prismaCl.partnerAccount.findUnique({
+          where: { userId },
+          select: { company: true, address: true, city: true, postalCode: true, country: true, websiteUrl: true, email: true },
+        })
+        orgData = {
+          name: partnerAccount?.company || 'Platform Operator',
+          streetAndNumber: partnerAccount?.address || '',
+          postalCode: partnerAccount?.postalCode || '',
+          city: partnerAccount?.city || '',
+          country: partnerAccount?.country || 'NL',
+        }
+        profileData = {
+          name: partnerAccount?.company || 'Beach Club',
+          url: partnerAccount?.websiteUrl || 'https://sunbnb.app',
+          email: opts?.email || partnerAccount?.email || 'info@sunbnb.app',
+        }
+      } catch (dbErr) {
+        console.error('[Mollie Bootstrap] Failed to load partner account from DB, using fallback:', dbErr)
+        orgData = { name: 'Platform Operator', streetAndNumber: '', postalCode: '', city: '', country: 'NL' }
+        profileData = { name: 'Beach Club', url: 'https://sunbnb.app', email: opts?.email || 'info@sunbnb.app' }
+      }
+
       // The SDK fails on onboarding.submit() because Mollie returns 204 No Content
       // which the SDK can't parse as JSON. Use raw fetch instead.
       const submitRes = await fetch('https://api.mollie.com/v2/onboarding/me', {
@@ -305,18 +333,18 @@ export async function bootstrapMollieAccount(
         },
         body: JSON.stringify({
           organization: {
-            name: 'Sunbnb Test Merchant',
+            name: orgData.name,
             address: {
-              streetAndNumber: 'Keizersgracht 126',
-              postalCode: '1015 AA',
-              city: 'Amsterdam',
-              country: 'NL',
+              streetAndNumber: orgData.streetAndNumber,
+              postalCode: orgData.postalCode,
+              city: orgData.city,
+              country: orgData.country,
             },
           },
           profile: {
-            name: 'Sunbnb Beach Club',
-            url: 'https://sunbnb.app',
-            email: opts?.email || 'test@sunbnb.app',
+            name: profileData.name,
+            url: profileData.url,
+            email: profileData.email,
             description: 'Beach club sunbed rentals, food & beverages',
             categoryCode: 5499,
           },

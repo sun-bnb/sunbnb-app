@@ -117,7 +117,7 @@ export default async function MerchantAgreementPage() {
         <section className="mb-8">
           <h2 className="text-base font-semibold text-gray-900 mb-2">7. Governing Law</h2>
           <p>
-            This agreement is governed by the laws of Finland. Disputes shall be resolved in the District Court of Helsinki, unless mandatory local law in the Merchant&rsquo;s jurisdiction provides otherwise.
+            This agreement is governed by the laws of Spain. Disputes shall be resolved in the Courts of Malaga, unless mandatory local law in the Merchant&rsquo;s jurisdiction provides otherwise.
           </p>
         </section>
 

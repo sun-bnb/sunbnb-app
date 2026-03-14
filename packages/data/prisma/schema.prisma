@@ -167,6 +167,9 @@ model PartnerAccount {
   company     String
   websiteUrl  String?      @map("website_url")
   address     String
+  city        String?
+  postalCode  String?      @map("postal_code")
+  country     String?
   bankAccount          String?      @map("bank_account")
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt

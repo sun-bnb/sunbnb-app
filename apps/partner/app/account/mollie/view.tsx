@@ -9,6 +9,9 @@ interface PartnerData {
   email: string
   company: string
   address: string
+  city: string | null
+  postalCode: string | null
+  country: string | null
 }
 
 interface MollieViewProps {
@@ -642,6 +645,7 @@ function ClientLinkTab({ partnerData, onSwitchToExisting }: { partnerData: Partn
               id="cl-postalCode"
               name="postalCode"
               placeholder="1015 AA"
+              defaultValue={partnerData?.postalCode ?? ''}
               className={inputCls}
             />
           </div>
@@ -651,6 +655,7 @@ function ClientLinkTab({ partnerData, onSwitchToExisting }: { partnerData: Partn
               id="cl-city"
               name="city"
               placeholder="Amsterdam"
+              defaultValue={partnerData?.city ?? ''}
               className={inputCls}
             />
           </div>
@@ -660,9 +665,10 @@ function ClientLinkTab({ partnerData, onSwitchToExisting }: { partnerData: Partn
               id="cl-country"
               name="country"
               required
-              defaultValue="NL"
+              defaultValue={partnerData?.country ?? 'NL'}
               className={inputCls}
             >
+              <option value="">Select country…</option>
               {COUNTRY_OPTIONS.map((c) => (
                 <option key={c.code} value={c.code}>{c.label}</option>
               ))}
@@ -677,7 +683,7 @@ function ClientLinkTab({ partnerData, onSwitchToExisting }: { partnerData: Partn
             <input
               id="cl-reg"
               name="registrationNumber"
-              placeholder="Chamber of Commerce"
+              placeholder="12345678"
               className={inputCls}
             />
           </div>

@@ -13,6 +13,9 @@ export interface AccountProps {
   businessId: string | null
   websiteUrl: string | null
   address: string
+  city: string | null
+  postalCode: string | null
+  country: string | null
   bankAccount: string | null
 }
 
@@ -52,6 +55,53 @@ function Field({
         required={required}
         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 transition-colors"
       />
+    </div>
+  )
+}
+
+/* ── Select field component ────────────────────────────────── */
+
+const COUNTRY_OPTIONS = [
+  { code: 'AT', label: 'Austria' }, { code: 'BE', label: 'Belgium' },
+  { code: 'HR', label: 'Croatia' }, { code: 'CY', label: 'Cyprus' },
+  { code: 'CZ', label: 'Czech Republic' }, { code: 'DK', label: 'Denmark' },
+  { code: 'EE', label: 'Estonia' }, { code: 'FI', label: 'Finland' },
+  { code: 'FR', label: 'France' }, { code: 'DE', label: 'Germany' },
+  { code: 'GR', label: 'Greece' }, { code: 'HU', label: 'Hungary' },
+  { code: 'IT', label: 'Italy' }, { code: 'LV', label: 'Latvia' },
+  { code: 'LT', label: 'Lithuania' }, { code: 'LU', label: 'Luxembourg' },
+  { code: 'MT', label: 'Malta' }, { code: 'NL', label: 'Netherlands' },
+  { code: 'NO', label: 'Norway' }, { code: 'PL', label: 'Poland' },
+  { code: 'PT', label: 'Portugal' }, { code: 'RO', label: 'Romania' },
+  { code: 'SK', label: 'Slovakia' }, { code: 'SI', label: 'Slovenia' },
+  { code: 'ES', label: 'Spain' }, { code: 'SE', label: 'Sweden' },
+  { code: 'CH', label: 'Switzerland' }, { code: 'GB', label: 'United Kingdom' },
+]
+
+function SelectField({
+  name, label, defaultValue, required = false,
+  options,
+}: {
+  name: string; label: string; defaultValue?: string; required?: boolean
+  options: { code: string; label: string }[]
+}) {
+  return (
+    <div>
+      <label htmlFor={name} className="block text-xs font-medium text-gray-500 mb-1.5">
+        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
+      </label>
+      <select
+        id={name}
+        name={name}
+        required={required}
+        defaultValue={defaultValue ?? ''}
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 transition-colors"
+      >
+        <option value="">Select country…</option>
+        {options.map(o => (
+          <option key={o.code} value={o.code}>{o.label}</option>
+        ))}
+      </select>
     </div>
   )
 }
@@ -205,12 +255,17 @@ export default function AccountView({ account, mollieStatus }: { account: Accoun
           <h2 className="text-sm font-semibold text-gray-900 mb-4">Company</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field name="company" label="Company name" placeholder="Sunbnb Oy" defaultValue={account.company || ''} required />
-            <Field name="businessId" label="Business ID" placeholder="FI12345678" defaultValue={account.businessId || ''} />
+            <Field name="businessId" label="Business ID" placeholder="FI12345678" defaultValue={account.businessId || ''} required />
             <div className="md:col-span-2">
               <Field name="websiteUrl" label="Website" type="url" placeholder="https://sunbnb.com" defaultValue={account.websiteUrl || ''} />
             </div>
             <div className="md:col-span-2">
-              <Field name="address" label="Address" placeholder="Paseo Marítimo 12, 29602 Marbella, Spain" defaultValue={account.address || ''} required />
+              <Field name="address" label="Street address" placeholder="Paseo Marítimo 12" defaultValue={account.address || ''} required />
+            </div>
+            <Field name="postalCode" label="Postal code" placeholder="29602" defaultValue={account.postalCode || ''} required />
+            <Field name="city" label="City" placeholder="Marbella" defaultValue={account.city || ''} required />
+            <div className="md:col-span-2">
+              <SelectField name="country" label="Country" defaultValue={account.country || ''} required options={COUNTRY_OPTIONS} />
             </div>
           </div>
         </div>

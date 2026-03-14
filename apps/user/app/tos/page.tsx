@@ -82,7 +82,7 @@ export default async function TermsOfService() {
       <section className="mb-8">
         <h2 className="text-base font-semibold text-gray-900 mb-2">9. Governing Law &amp; Disputes</h2>
         <p>
-          These Terms are governed by the laws of Finland. Any dispute arising from or in connection with these Terms shall be resolved in the District Court of Helsinki, Finland, unless mandatory consumer protection legislation in your country of residence provides otherwise.
+          These Terms are governed by the laws of Spain. Any dispute arising from or in connection with these Terms shall be resolved in the Courts of Malaga, Spain, unless mandatory consumer protection legislation in your country of residence provides otherwise.
         </p>
       </section>
 

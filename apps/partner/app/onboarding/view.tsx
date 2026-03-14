@@ -16,6 +16,9 @@ interface AccountData {
   businessId: string | null
   websiteUrl: string | null
   address: string
+  city: string | null
+  postalCode: string | null
+  country: string | null
   bankAccount: string | null
 }
 
@@ -25,6 +28,9 @@ interface PartnerData {
   email: string
   company: string
   address: string
+  city: string | null
+  postalCode: string | null
+  country: string | null
 }
 
 interface OnboardingViewProps {
@@ -67,6 +73,53 @@ function Field({
         required={required}
         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 transition-colors"
       />
+    </div>
+  )
+}
+
+/* ── Country options & select field ─────────────────────────────────────── */
+
+const COUNTRY_OPTIONS = [
+  { code: 'AT', label: 'Austria' }, { code: 'BE', label: 'Belgium' },
+  { code: 'HR', label: 'Croatia' }, { code: 'CY', label: 'Cyprus' },
+  { code: 'CZ', label: 'Czech Republic' }, { code: 'DK', label: 'Denmark' },
+  { code: 'EE', label: 'Estonia' }, { code: 'FI', label: 'Finland' },
+  { code: 'FR', label: 'France' }, { code: 'DE', label: 'Germany' },
+  { code: 'GR', label: 'Greece' }, { code: 'HU', label: 'Hungary' },
+  { code: 'IT', label: 'Italy' }, { code: 'LV', label: 'Latvia' },
+  { code: 'LT', label: 'Lithuania' }, { code: 'LU', label: 'Luxembourg' },
+  { code: 'MT', label: 'Malta' }, { code: 'NL', label: 'Netherlands' },
+  { code: 'NO', label: 'Norway' }, { code: 'PL', label: 'Poland' },
+  { code: 'PT', label: 'Portugal' }, { code: 'RO', label: 'Romania' },
+  { code: 'SK', label: 'Slovakia' }, { code: 'SI', label: 'Slovenia' },
+  { code: 'ES', label: 'Spain' }, { code: 'SE', label: 'Sweden' },
+  { code: 'CH', label: 'Switzerland' }, { code: 'GB', label: 'United Kingdom' },
+]
+
+function SelectField({
+  name, label, defaultValue, required = false,
+  options,
+}: {
+  name: string; label: string; defaultValue?: string; required?: boolean
+  options: { code: string; label: string }[]
+}) {
+  return (
+    <div>
+      <label htmlFor={name} className="block text-xs font-medium text-gray-500 mb-1.5">
+        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
+      </label>
+      <select
+        id={name}
+        name={name}
+        required={required}
+        defaultValue={defaultValue ?? ''}
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 transition-colors"
+      >
+        <option value="">Select country…</option>
+        {options.map(o => (
+          <option key={o.code} value={o.code}>{o.label}</option>
+        ))}
+      </select>
     </div>
   )
 }
@@ -202,12 +255,17 @@ function AccountStep({
           <h3 className="text-sm font-semibold text-gray-900 mb-4">Company</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field name="company" label="Company name" placeholder="Sunbnb Oy" defaultValue={defaultAccount.company || ''} required />
-            <Field name="businessId" label="Business ID" placeholder="FI12345678" defaultValue={defaultAccount.businessId || ''} />
+            <Field name="businessId" label="Business ID" placeholder="FI12345678" defaultValue={defaultAccount.businessId || ''} required />
             <div className="md:col-span-2">
               <Field name="websiteUrl" label="Website" type="url" placeholder="https://sunbnb.com" defaultValue={defaultAccount.websiteUrl || ''} />
             </div>
             <div className="md:col-span-2">
-              <Field name="address" label="Address" placeholder="Paseo Marítimo 12, 29602 Marbella, Spain" defaultValue={defaultAccount.address || ''} required />
+              <Field name="address" label="Street address" placeholder="Paseo Marítimo 12" defaultValue={defaultAccount.address || ''} required />
+            </div>
+            <Field name="postalCode" label="Postal code" placeholder="29602" defaultValue={defaultAccount.postalCode || ''} required />
+            <Field name="city" label="City" placeholder="Marbella" defaultValue={defaultAccount.city || ''} required />
+            <div className="md:col-span-2">
+              <SelectField name="country" label="Country" defaultValue={defaultAccount.country || ''} required options={COUNTRY_OPTIONS} />
             </div>
           </div>
         </div>
@@ -229,25 +287,6 @@ function AccountStep({
 }
 
 /* ── Step 2: Mollie connect ──────────────────────────────────────────────── */
-
-const COUNTRY_OPTIONS = [
-  { code: 'NL', label: 'Netherlands' },
-  { code: 'BE', label: 'Belgium' },
-  { code: 'DE', label: 'Germany' },
-  { code: 'FR', label: 'France' },
-  { code: 'GB', label: 'United Kingdom' },
-  { code: 'AT', label: 'Austria' },
-  { code: 'CH', label: 'Switzerland' },
-  { code: 'ES', label: 'Spain' },
-  { code: 'IT', label: 'Italy' },
-  { code: 'PT', label: 'Portugal' },
-  { code: 'FI', label: 'Finland' },
-  { code: 'SE', label: 'Sweden' },
-  { code: 'DK', label: 'Denmark' },
-  { code: 'NO', label: 'Norway' },
-  { code: 'PL', label: 'Poland' },
-  { code: 'IE', label: 'Ireland' },
-]
 
 function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
   const router = useRouter()
@@ -423,15 +462,16 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label htmlFor="ob-postalCode" className={labelCls}>Postal code</label>
-                  <input id="ob-postalCode" name="postalCode" placeholder="1015 AA" className={inputCls} />
+                  <input id="ob-postalCode" name="postalCode" placeholder="1015 AA" defaultValue={partnerData?.postalCode ?? ''} className={inputCls} />
                 </div>
                 <div>
                   <label htmlFor="ob-city" className={labelCls}>City</label>
-                  <input id="ob-city" name="city" placeholder="Amsterdam" className={inputCls} />
+                  <input id="ob-city" name="city" placeholder="Amsterdam" defaultValue={partnerData?.city ?? ''} className={inputCls} />
                 </div>
                 <div>
                   <label htmlFor="ob-country" className={labelCls}>Country *</label>
-                  <select id="ob-country" name="country" required defaultValue="NL" className={inputCls}>
+                  <select id="ob-country" name="country" required defaultValue={partnerData?.country ?? 'NL'} className={inputCls}>
+                    <option value="">Select country…</option>
                     {COUNTRY_OPTIONS.map((c) => (
                       <option key={c.code} value={c.code}>{c.label}</option>
                     ))}
@@ -442,7 +482,7 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label htmlFor="ob-reg" className={labelCls}>Registration number</label>
-                  <input id="ob-reg" name="registrationNumber" placeholder="Chamber of Commerce" className={inputCls} />
+                  <input id="ob-reg" name="registrationNumber" placeholder="12345678" className={inputCls} />
                 </div>
                 <div>
                   <label htmlFor="ob-vat" className={labelCls}>VAT number</label>

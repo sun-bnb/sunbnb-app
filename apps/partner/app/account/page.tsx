@@ -21,6 +21,9 @@ export default async function Account() {
       businessId: true,
       websiteUrl: true,
       address: true,
+      city: true,
+      postalCode: true,
+      country: true,
       bankAccount: true,
       mollieAccessToken: true,
       mollieOnboardingStatus: true,
@@ -39,6 +42,9 @@ export default async function Account() {
       businessId: '',
       websiteUrl: '',
       address: '',
+      city: '',
+      postalCode: '',
+      country: '',
       bankAccount: ''
     }
   } else {
@@ -51,6 +57,9 @@ export default async function Account() {
       businessId: dbAccount.businessId,
       websiteUrl: dbAccount.websiteUrl,
       address: dbAccount.address,
+      city: dbAccount.city,
+      postalCode: dbAccount.postalCode,
+      country: dbAccount.country,
       bankAccount: dbAccount.bankAccount,
     }
   }

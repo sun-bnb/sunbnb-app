@@ -13,8 +13,14 @@ export async function submitForm(
 
   if (!session?.user) return { status: 'error', errors: [ 'Not authenticated' ] }
 
-  const requiredFields = ['firstName', 'lastName', 'email', 'phoneNumber', 'company', 'address']
-  const errors = requiredFields.filter(field => !formData.get(field)).map(field => `${field} is required`)
+  const requiredFields = ['firstName', 'lastName', 'email', 'phoneNumber', 'company', 'address', 'city', 'postalCode', 'country', 'businessId']
+  const fieldLabels: Record<string, string> = {
+    firstName: 'First name', lastName: 'Last name', email: 'Email',
+    phoneNumber: 'Phone number', company: 'Company name', address: 'Address',
+    city: 'City', postalCode: 'Postal code', country: 'Country',
+    businessId: 'Business ID',
+  }
+  const errors = requiredFields.filter(field => !formData.get(field)).map(field => `${fieldLabels[field] ?? field} is required`)
   if (errors.length > 0) return { status: 'error', errors }
 
   const accountData = {
@@ -27,6 +33,9 @@ export async function submitForm(
     businessId: formData.get('businessId') as string,
     websiteUrl: formData.get('websiteUrl') as string,
     address: formData.get('address') as string,
+    city: formData.get('city') as string,
+    postalCode: formData.get('postalCode') as string,
+    country: formData.get('country') as string,
     bankAccount: formData.get('bankAccount') as string
   }
 

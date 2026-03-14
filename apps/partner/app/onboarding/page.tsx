@@ -18,6 +18,9 @@ export default async function OnboardingPage() {
       businessId: true,
       websiteUrl: true,
       address: true,
+      city: true,
+      postalCode: true,
+      country: true,
       bankAccount: true,
       mollieAccessToken: true,
       mollieProfileId: true,
@@ -43,6 +46,9 @@ export default async function OnboardingPage() {
         businessId: account.businessId,
         websiteUrl: account.websiteUrl,
         address: account.address,
+        city: account.city,
+        postalCode: account.postalCode,
+        country: account.country,
         bankAccount: account.bankAccount,
       }
     : {
@@ -54,6 +60,9 @@ export default async function OnboardingPage() {
         businessId: '',
         websiteUrl: '',
         address: '',
+        city: '',
+        postalCode: '',
+        country: '',
         bankAccount: '',
       }
 
@@ -72,6 +81,9 @@ export default async function OnboardingPage() {
               email: account.email,
               company: account.company,
               address: account.address,
+              city: account.city,
+              postalCode: account.postalCode,
+              country: account.country,
             }
           : null
       }
