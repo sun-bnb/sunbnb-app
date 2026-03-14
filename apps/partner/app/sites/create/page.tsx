@@ -1,6 +1,5 @@
 import { auth } from '@/app/auth'
 import { canCreateSite } from '@repo/data/subscription'
-import { redirect } from 'next/navigation'
 import prisma from '@repo/data/PrismaCient'
 import CreateSiteWizard from './create-site-wizard'
 
@@ -12,9 +11,9 @@ export default async function CreateSitePage() {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY as string
   const siteLimit = await canCreateSite(session.user.id!)
 
-  if (!siteLimit.allowed) {
-    redirect('/sites')
-  }
+  // Do not hard-redirect here — doing so also fires when the server re-renders
+  // after the createSite action (the site was just created, limit now reached),
+  // which would dismiss the Done step. Guard is enforced in the wizard instead.
 
   // Fetch service fees for price breakdown preview
   const [partnerAccount, settings] = await Promise.all([
@@ -57,6 +56,7 @@ export default async function CreateSitePage() {
         apiKey={apiKey}
         tier={tier}
         serviceFee={feeData}
+        allowed={siteLimit.allowed}
       />
     </div>
   )

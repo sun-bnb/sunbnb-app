@@ -55,10 +55,12 @@ export default function CreateSiteWizard({
   apiKey,
   tier,
   serviceFee,
+  allowed = true,
 }: {
   apiKey: string
   tier: string
   serviceFee?: WizardFeeData | null
+  allowed?: boolean
 }) {
 
   const [activeStep, setActiveStep] = useState(0)
@@ -101,6 +103,19 @@ export default function CreateSiteWizard({
 
   const isLastContentStep = activeStep === 2
   const isDone = activeStep === 3
+
+  // Show limit-reached guard only when the user hasn't just finished creating a site
+  if (!allowed && !data.siteId) {
+    return (
+      <div className="flex flex-col items-center py-12 text-center">
+        <p className="text-gray-700 font-medium mb-2">Site limit reached</p>
+        <p className="text-sm text-gray-500 mb-4">
+          Your current plan does not allow creating more sites. Upgrade your plan to add more.
+        </p>
+        <a href="/sites" className="text-sm text-blue-600 underline">Back to sites</a>
+      </div>
+    )
+  }
 
   return (
     <div className="px-4 py-6">

@@ -53,7 +53,7 @@ export default function ParcelFormView({
     }
   }, [mode, editGroup, setConfig])
 
-  const handleConfigChange = (field: keyof ChairConfig, value: number | boolean | string) => {
+  const handleConfigChange = (field: keyof ChairConfig, value: number | boolean | string | undefined) => {
     setConfig((prev) => ({ ...prev, [field]: value }))
   }
 
@@ -198,9 +198,9 @@ export default function ParcelFormView({
               <label className="text-xs text-gray-500 mb-0.5 block">Price (€)</label>
               <TextField
                 fullWidth size="small" type="number"
-                value={config.price || ''}
+                value={config.price ?? ''}
                 placeholder="9"
-                onChange={(e) => handleConfigChange('price', Number(e.target.value))}
+                onChange={(e) => handleConfigChange('price', e.target.value === '' ? undefined : Number(e.target.value))}
               />
             </div>
           </div>

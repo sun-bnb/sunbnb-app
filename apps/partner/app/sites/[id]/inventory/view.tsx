@@ -42,7 +42,7 @@ export default function InventoryView() {
     rotation: 0,
     group: 1,
     category: 'PRICE1',
-    price: 9,
+    price: site.price || 9,
     pairSeats: true,
     intraPairGap: 0.4,
     baseLat: Number(siteLat),

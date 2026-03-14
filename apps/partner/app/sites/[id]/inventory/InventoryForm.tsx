@@ -163,7 +163,9 @@ export default function InventoryForm({
             placeholder="e.g. 15"
             onChange={e => {
               setPrice(e.target.value)
-              scheduleSave({ price: Number(e.target.value) || undefined })
+              if (e.target.value !== '') {
+                scheduleSave({ price: parseFloat(e.target.value) })
+              }
             }}
           />
           <PriceBreakdown price={price} site={site} />

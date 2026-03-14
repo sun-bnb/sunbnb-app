@@ -134,7 +134,7 @@ export async function searchSites(lat?: string, lng?: string) {
       FROM "Site"
       ${whereClause}
       ${orderByClause}
-      LIMIT 10
+      LIMIT 20
     `
   );
 
