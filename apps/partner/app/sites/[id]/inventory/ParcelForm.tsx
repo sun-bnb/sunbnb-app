@@ -1,7 +1,7 @@
 // ParcelFormView.tsx
 'use client'
 
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 import Switch from '@mui/material/Switch'
@@ -38,6 +38,27 @@ export default function ParcelFormView({
   const { site, setSite } = useSite()
 
   const configRef = useRef(config)
+
+  // String states so numeric fields can be cleared during editing
+  const [rowsStr, setRowsStr] = useState(String(config.rows))
+  const [seatsPerRowStr, setSeatsPerRowStr] = useState(String(config.seatsPerRow))
+  const [horizontalGapStr, setHorizontalGapStr] = useState(String(config.horizontalGap))
+  const [verticalGapStr, setVerticalGapStr] = useState(String(config.verticalGap))
+  const [intraPairGapStr, setIntraPairGapStr] = useState(String(config.intraPairGap))
+  const [rotationStr, setRotationStr] = useState(String(config.rotation))
+  const [groupStr, setGroupStr] = useState(String(config.group))
+
+  // Sync string states when a different parcel is loaded (editGroup changes)
+  useEffect(() => {
+    setRowsStr(String(config.rows))
+    setSeatsPerRowStr(String(config.seatsPerRow))
+    setHorizontalGapStr(String(config.horizontalGap))
+    setVerticalGapStr(String(config.verticalGap))
+    setIntraPairGapStr(String(config.intraPairGap))
+    setRotationStr(String(config.rotation))
+    setGroupStr(String(config.group))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editGroup])
 
   const parcelItems = site.inventoryItems?.filter(item => item.group === config.group) || []
   const activeItems = parcelItems?.filter(item => item.status !== 'disabled') || []
@@ -94,18 +115,18 @@ export default function ParcelFormView({
               <label className="text-xs text-gray-500 mb-0.5 block">Rows</label>
               <TextField
                 fullWidth size="small" type="number"
-                value={config.rows}
+                value={rowsStr}
                 disabled={mode === 'edit'}
-                onChange={(e) => handleConfigChange('rows', Number(e.target.value))}
+                onChange={(e) => { setRowsStr(e.target.value); if (e.target.value !== '') handleConfigChange('rows', Number(e.target.value)) }}
               />
             </div>
             <div className="flex-1">
               <label className="text-xs text-gray-500 mb-0.5 block">Seats/row</label>
               <TextField
                 fullWidth size="small" type="number"
-                value={config.seatsPerRow}
+                value={seatsPerRowStr}
                 disabled={mode === 'edit'}
-                onChange={(e) => handleConfigChange('seatsPerRow', Number(e.target.value))}
+                onChange={(e) => { setSeatsPerRowStr(e.target.value); if (e.target.value !== '') handleConfigChange('seatsPerRow', Number(e.target.value)) }}
               />
             </div>
           </div>
@@ -138,18 +159,18 @@ export default function ParcelFormView({
               <label className="text-xs text-gray-500 mb-0.5 block">{config.pairSeats ? 'Between pairs' : 'Horizontal'}</label>
               <TextField
                 fullWidth size="small" type="number"
-                value={config.horizontalGap}
+                value={horizontalGapStr}
                 inputProps={{ step: 0.1 }}
-                onChange={(e) => handleConfigChange('horizontalGap', Number(e.target.value))}
+                onChange={(e) => { setHorizontalGapStr(e.target.value); if (e.target.value !== '') handleConfigChange('horizontalGap', Number(e.target.value)) }}
               />
             </div>
             <div className="flex-1">
               <label className="text-xs text-gray-500 mb-0.5 block">Between rows</label>
               <TextField
                 fullWidth size="small" type="number"
-                value={config.verticalGap}
+                value={verticalGapStr}
                 inputProps={{ step: 0.5 }}
-                onChange={(e) => handleConfigChange('verticalGap', Number(e.target.value))}
+                onChange={(e) => { setVerticalGapStr(e.target.value); if (e.target.value !== '') handleConfigChange('verticalGap', Number(e.target.value)) }}
               />
             </div>
           </div>
@@ -162,9 +183,9 @@ export default function ParcelFormView({
               <label className="text-xs text-gray-500 mb-0.5 block">Paired beds gap</label>
               <TextField
                 fullWidth size="small" type="number"
-                value={config.intraPairGap}
+                value={intraPairGapStr}
                 inputProps={{ step: 0.1 }}
-                onChange={(e) => handleConfigChange('intraPairGap', Number(e.target.value))}
+                onChange={(e) => { setIntraPairGapStr(e.target.value); if (e.target.value !== '') handleConfigChange('intraPairGap', Number(e.target.value)) }}
               />
             </div>
           )}
@@ -172,9 +193,9 @@ export default function ParcelFormView({
             <label className="text-xs text-gray-500 mb-0.5 block">Rotation (°)</label>
             <TextField
               fullWidth size="small" type="number"
-              value={config.rotation}
+              value={rotationStr}
               inputProps={{ step: 5 }}
-              onChange={(e) => handleConfigChange('rotation', Number(e.target.value))}
+              onChange={(e) => { setRotationStr(e.target.value); if (e.target.value !== '') handleConfigChange('rotation', Number(e.target.value)) }}
             />
           </div>
         </div>
@@ -212,8 +233,8 @@ export default function ParcelFormView({
             <label className="text-xs text-gray-500 mb-0.5 block">Group number</label>
             <TextField
               fullWidth size="small" type="number"
-              value={config.group}
-              onChange={(e) => handleConfigChange('group', Number(e.target.value))}
+              value={groupStr}
+              onChange={(e) => { setGroupStr(e.target.value); if (e.target.value !== '') handleConfigChange('group', Number(e.target.value)) }}
             />
           </div>
         )}

@@ -228,19 +228,19 @@ export default function InventoryForm({
               <div className="flex-1">
                 <label className="text-xs text-gray-500 mb-0.5 block">Number</label>
                 <TextField fullWidth size="small" type="number" value={itemNumber}
-                  onChange={e => { setItemNumber(e.target.value); scheduleSave({ number: Number(e.target.value) }) }} />
+                  onChange={e => { setItemNumber(e.target.value); if (e.target.value !== '') scheduleSave({ number: Number(e.target.value) }) }} />
               </div>
               <div className="flex-1">
                 <label className="text-xs text-gray-500 mb-0.5 block">Group</label>
                 <TextField fullWidth size="small" type="number" value={itemGroup}
-                  onChange={e => { setItemGroup(e.target.value); scheduleSave({ group: Number(e.target.value) }) }} />
+                  onChange={e => { setItemGroup(e.target.value); if (e.target.value !== '') scheduleSave({ group: Number(e.target.value) }) }} />
               </div>
             </div>
             <div className="flex gap-2">
               <div className="flex-1">
                 <label className="text-xs text-gray-500 mb-0.5 block">Rotation</label>
                 <TextField fullWidth size="small" type="number" value={rotation}
-                  onChange={e => { setRotation(e.target.value); scheduleSave({ rotation: Number(e.target.value) }) }} />
+                  onChange={e => { setRotation(e.target.value); if (e.target.value !== '') scheduleSave({ rotation: Number(e.target.value) }) }} />
               </div>
               <div className="flex-1">
                 <label className="text-xs text-gray-500 mb-0.5 block">Category</label>

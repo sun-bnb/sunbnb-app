@@ -102,24 +102,23 @@ export async function getValidMollieToken(
   currentAccessToken: string,
   currentRefreshToken: string | null,
 ): Promise<string> {
-  // Quick check: try the current token with a lightweight API call
+  // Quick probe: check whether the current access token is still valid.
+  // On ANY failure (expired → 401, scope → 403, network error → no statusCode,
+  // etc.) we fall through to the refresh path rather than rethrowing.
   try {
     const testClient = createMollieClient({ accessToken: currentAccessToken })
     await testClient.profiles.page()
-    return currentAccessToken
-  } catch (err: any) {
-    // If it's not a 401, the token is valid but something else is wrong — rethrow
-    if (err?.statusCode !== 401) {
-      throw err
-    }
+    return currentAccessToken // still valid
+  } catch {
+    // Probe failed for any reason — attempt token refresh below.
   }
 
-  // Token expired — refresh it
+  // Token appears invalid — try to refresh it.
   if (!currentRefreshToken) {
     throw new Error('Mollie access token expired and no refresh token available. Partner must reconnect.')
   }
 
-  console.log('[Mollie] Access token expired, refreshing…')
+  console.log('[Mollie] Access token probe failed, refreshing…')
   const tokens = await refreshAccessToken(currentRefreshToken)
 
   // Persist new tokens
