@@ -38,7 +38,7 @@ export default function UsersView({ initialUsers }: { initialUsers: AdminUser[] 
       setUsers([result.user, ...users])
       setEmail('')
     } else {
-      setError(result.error ?? 'Failed to add user')
+      setError(result.errors?.[0] ?? 'Failed to add user')
     }
   }
 
@@ -94,7 +94,7 @@ export default function UsersView({ initialUsers }: { initialUsers: AdminUser[] 
       setSearchResults(searchResults.filter((u) => u.id !== deleteTarget.id))
       setDeleteTarget(null)
     } else {
-      setDeleteError(result.error ?? 'Failed to delete user')
+      setDeleteError(result.errors?.[0] ?? 'Failed to delete user')
       setDeleteTarget(null)
     }
   }

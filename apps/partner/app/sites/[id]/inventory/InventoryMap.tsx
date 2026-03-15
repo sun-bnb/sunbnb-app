@@ -297,7 +297,7 @@ export default function InventoryMap({
   selectedPlace,
 }: InventoryMapProps) {
 
-  const [zoom, setZoom] = useState(20)
+  const [zoom, setZoom] = useState(18)
   const SafeAPIProvider = APIProvider as unknown as React.ComponentType<any>
   const SafeMap = Map as unknown as React.ComponentType<any>
 

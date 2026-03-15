@@ -25,7 +25,7 @@ function ProviderSelect({ site }: { site: SiteRow }) {
       if (result.status === 'ok') {
         setValue(newValue)
       } else {
-        setError(result.error ?? 'Failed')
+        setError(result.errors?.[0] ?? 'Failed')
       }
     } catch {
       setError('Failed')
