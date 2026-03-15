@@ -60,8 +60,6 @@ describe('saveReservationForMultipleItems', () => {
 
   it('returns error when site not found (authenticated path)', async () => {
     mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
-    // First findUnique for anonymous userId lookup won't be called (has session)
-    // Second findUnique for site lookup returns null
     vi.mocked(prisma.site.findUnique).mockResolvedValue(null)
 
     const res = await saveReservationForMultipleItems({
@@ -201,6 +199,76 @@ describe('saveReservationForMultipleItems', () => {
         }),
       })
     )
+  })
+
+  // ── BUG-REVEALING TESTS ──────────────────────────────────────────────────
+
+  // BUG: Client-supplied userId is trusted without session verification.
+  // Line 32: `let reservationUserId = session?.user?.id ?? reservation.userId`
+  // An unauthenticated attacker can pass `userId: 'victim-id'` and create
+  // reservations under another user's account.
+  it('rejects client-supplied userId when no session (prevents impersonation)', async () => {
+    // No session, but passing someone else's userId
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      id: 'site-1',
+      type: 'unpaid',
+      price: null,
+    } as any)
+    vi.mocked(prisma.reservation.create).mockResolvedValue({ id: 'res-1' } as any)
+
+    const res = await saveReservationForMultipleItems({
+      userId: 'victim-user-id', // client-supplied — should NOT be trusted
+      siteId: 'site-1',
+      type: 'days',
+      from: '2025-07-01',
+      to: '2025-07-02',
+    })
+
+    // Should require auth or anonId — not accept bare userId from client
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Authentication required')
+  })
+
+  // BUG: No date validation — from >= to produces zero or negative paymentAmount
+  it('rejects reservation where from >= to', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      id: 'site-1',
+      type: 'paid',
+      price: 10,
+    } as any)
+
+    const res = await saveReservationForMultipleItems({
+      siteId: 'site-1',
+      items: [{ id: 'item-1' } as any],
+      type: 'days',
+      from: '2025-07-03',
+      to: '2025-07-01', // before from
+    })
+    expect(res.status).toBe('error')
+  })
+
+  // BUG: Empty items on a paid site creates reservation with paymentAmount: 0
+  // This effectively bypasses payment for a paid site
+  it('rejects reservation with no items on a paid site', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      id: 'site-1',
+      type: 'paid',
+      price: 10,
+    } as any)
+    vi.mocked(prisma.reservation.create).mockResolvedValue({ id: 'res-1' } as any)
+
+    const res = await saveReservationForMultipleItems({
+      siteId: 'site-1',
+      // No items — totalPrice will be 0 on a paid site
+      type: 'days',
+      from: '2025-07-01',
+      to: '2025-07-02',
+    })
+
+    // A paid site should not allow zero-amount reservations
+    expect(res.status).toBe('error')
   })
 })
 
@@ -371,6 +439,33 @@ describe('saveRentalBooking', () => {
         }),
       })
     )
+  })
+
+  // ── BUG-REVEALING TESTS ──────────────────────────────────────────────────
+
+  // BUG: No date validation — from >= to should be rejected
+  it('rejects rental booking where from >= to', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      id: 'site-1',
+      type: 'paid',
+      rentalPaymentType: null,
+    } as any)
+    vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
+      { id: 'ri-1', totalQuantity: 10, pricePerDay: 20 } as any,
+    ])
+    vi.mocked(prisma.rentalBooking.aggregate).mockResolvedValue({
+      _sum: { quantity: 0 },
+    } as any)
+
+    const res = await saveRentalBooking({
+      siteId: 'site-1',
+      items: [{ rentalItemId: 'ri-1', quantity: 1 }],
+      durationType: 'days',
+      from: '2025-07-03T10:00:00Z',
+      to: '2025-07-01T10:00:00Z', // before from
+    })
+    expect(res.status).toBe('error')
   })
 })
 

@@ -28,8 +28,9 @@ export async function saveReservationForMultipleItems(
   }) {
 
   // Authenticate: require either a session user or an anonId
+  // Never trust client-supplied userId — always derive from session
   const session = await auth()
-  let reservationUserId = session?.user?.id ?? reservation.userId
+  let reservationUserId = session?.user?.id
 
   if (!reservationUserId) {
     if (!reservation.anonId) {
@@ -50,9 +51,17 @@ export async function saveReservationForMultipleItems(
   const from = new Date(reservation.from)
   const to = new Date(reservation.to)
 
+  if (from >= to) {
+    return { status: 'error', errors: ['End date must be after start date'] }
+  }
+
   const site = await prisma.site.findUnique({ where: { id: reservation.siteId } })
   if (!site) return { status: 'error', errors: ['Site not found'] }
   if (site.type !== 'unpaid' && !site.price) return { status: 'error', errors: ['Site price not set'] }
+
+  if (site.type !== 'unpaid' && (!reservation.items || reservation.items.length === 0)) {
+    return { status: 'error', errors: ['At least one item is required'] }
+  }
 
   // ── Server-side availability check ─────────────────────────────────────
   if (reservation.items?.length) {
@@ -126,6 +135,10 @@ export async function saveRentalBooking(input: {
 
   const from = new Date(input.from)
   const to = new Date(input.to)
+
+  if (from >= to) {
+    return { status: 'error', errors: ['End date must be after start date'] }
+  }
 
   // Load rental items to calculate pricing
   const rentalItemIds = input.items.map(i => i.rentalItemId)

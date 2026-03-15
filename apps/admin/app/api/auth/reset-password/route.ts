@@ -16,8 +16,8 @@ export async function POST(req: NextRequest) {
     if (!token || typeof token !== 'string') {
       return NextResponse.json({ ok: false, error: 'Invalid reset link' }, { status: 400 })
     }
-    if (!password || typeof password !== 'string' || password.length < 6) {
-      return NextResponse.json({ ok: false, error: 'Password must be at least 6 characters' }, { status: 400 })
+    if (!password || typeof password !== 'string' || password.length < 8) {
+      return NextResponse.json({ ok: false, error: 'Password must be at least 8 characters' }, { status: 400 })
     }
 
     const result = await resetPassword(token, password)

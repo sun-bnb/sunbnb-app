@@ -31,6 +31,7 @@ export async function saveBusinessEntity(input: {
 
   const errors: string[] = []
   if (!input.companyName?.trim()) errors.push('Company name is required')
+  if (!input.contactEmail?.trim()) errors.push('Contact email is required')
   if (errors.length > 0) return { status: 'error', errors }
 
   // Upsert into the singleton Settings row
@@ -88,9 +89,24 @@ export async function saveSettings(input: {
   if (vatNum !== null && !isNaN(vatNum!) && (vatNum! < 0 || vatNum! > 100)) errors.push('Tax rate must be 0–100')
   if (errors.length > 0) return { status: 'error', errors }
 
+  const country = input.country.trim().toUpperCase()
+  const currency = input.currency.trim().toUpperCase()
+
+  // Check for duplicate country (only on create)
+  if (!input.id) {
+    const existing = await prisma.settings.findMany({
+      where: { country },
+      select: { id: true },
+      take: 1,
+    })
+    if (existing.length > 0) {
+      return { status: 'error', errors: [`Settings for country "${country}" already exists`] }
+    }
+  }
+
   const data = {
-    country: input.country.trim().toUpperCase(),
-    currency: input.currency.trim().toUpperCase(),
+    country,
+    currency,
     vat: vatNum,
   }
 

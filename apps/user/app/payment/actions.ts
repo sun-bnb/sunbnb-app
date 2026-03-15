@@ -228,7 +228,7 @@ export async function getReservationByPaymentRef({
     return { status: 'error', errors: ['Not authorized'] }
   }
 
-  return reservation
+  return { reservation }
 }
 
 export async function getOrderByPaymentRef({
@@ -250,5 +250,5 @@ export async function getOrderByPaymentRef({
     return { status: 'error', errors: ['Not authorized'] }
   }
 
-  return order
+  return { order }
 }

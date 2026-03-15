@@ -346,7 +346,18 @@ describe('getReservationByPaymentRef', () => {
     vi.mocked(prisma.reservation.findFirst).mockResolvedValue(reservation as any)
 
     const res = await getReservationByPaymentRef({ paymentRef: 'pi_test' })
-    expect(res).toEqual(reservation)
+    expect(res).toEqual({ reservation })
+  })
+
+  // BUG: Returns bare entity on success but { status, errors } on error.
+  // getReservationById wraps in { reservation } — this should too for consistency.
+  it('wraps successful result in { reservation } like getReservationById', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
+    const reservation = { id: 'res-1', userId: 'user-1', paymentRef: 'pi_test' }
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(reservation as any)
+
+    const res = await getReservationByPaymentRef({ paymentRef: 'pi_test' })
+    expect(res).toHaveProperty('reservation')
   })
 })
 
@@ -362,6 +373,17 @@ describe('getOrderByPaymentRef (payment actions)', () => {
     vi.mocked(prisma.order.findFirst).mockResolvedValue(order as any)
 
     const res = await getOrderByPaymentRef({ paymentRef: 'pi_test' })
-    expect(res).toEqual(order)
+    expect(res).toEqual({ order })
+  })
+
+  // BUG: Returns bare entity on success but { status, errors } on error.
+  // Should wrap in { order } like getReservationById wraps in { reservation }.
+  it('wraps successful result in { order } for consistency', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
+    const order = { id: 'order-1', userId: 'user-1', paymentRef: 'pi_test' }
+    vi.mocked(prisma.order.findFirst).mockResolvedValue(order as any)
+
+    const res = await getOrderByPaymentRef({ paymentRef: 'pi_test' })
+    expect(res).toHaveProperty('order')
   })
 })

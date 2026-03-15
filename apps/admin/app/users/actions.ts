@@ -13,6 +13,7 @@ async function requireSudo() {
     select: { sudo: true },
   })
   if (!user?.sudo) throw new Error('Unauthorized — sudo required')
+  return session
 }
 
 // ── Admin users ─────────────────────────────────────────────
@@ -27,13 +28,13 @@ export async function getAdminUsers() {
 export async function addAdminUser(email: string) {
   await requireSudo()
   const trimmed = email.trim().toLowerCase()
-  if (!trimmed || !trimmed.includes('@')) {
-    return { status: 'error', error: 'Please enter a valid email address' }
+  if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    return { status: 'error', errors: ['Please enter a valid email address'] }
   }
 
   const existing = await prisma.adminUser.findUnique({ where: { email: trimmed } })
   if (existing) {
-    return { status: 'error', error: 'This email is already in the admin list' }
+    return { status: 'error', errors: ['This email is already in the admin list'] }
   }
 
   const user = await prisma.adminUser.create({
@@ -44,7 +45,19 @@ export async function addAdminUser(email: string) {
 }
 
 export async function removeAdminUser(id: string) {
-  await requireSudo()
+  const session = await requireSudo()
+
+  // Self-removal protection
+  const currentUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { email: true },
+  })
+  const target = await prisma.adminUser.findUnique({ where: { id } })
+  if (currentUser?.email && target?.email &&
+      currentUser.email.toLowerCase() === target.email.toLowerCase()) {
+    return { status: 'error', errors: ['Cannot remove your own admin access'] }
+  }
+
   await prisma.adminUser.delete({ where: { id } })
   return { status: 'ok' }
 }
@@ -102,6 +115,7 @@ export async function deleteUser(userId: string) {
     select: {
       id: true,
       email: true,
+      sudo: true,
       partnerAccount: { select: { userId: true } },
       sites: { select: { id: true } },
       accounts: { select: { provider: true, providerAccountId: true } },
@@ -109,16 +123,12 @@ export async function deleteUser(userId: string) {
   })
 
   if (!user) {
-    return { status: 'error', error: 'User not found' }
+    return { status: 'error', errors: ['User not found'] }
   }
 
   // Prevent deleting sudo users
-  const sudoUser = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { sudo: true },
-  })
-  if (sudoUser?.sudo) {
-    return { status: 'error', error: 'Cannot delete a sudo user' }
+  if (user.sudo) {
+    return { status: 'error', errors: ['Cannot delete a sudo user'] }
   }
 
   const siteIds = user.sites.map((s) => s.id)

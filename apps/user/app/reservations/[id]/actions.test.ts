@@ -492,6 +492,27 @@ describe('completeUnpaidOrder', () => {
     })
   })
 
+  // BUG: completeUnpaidOrder doesn't accept anonId, so anonymous orders created via
+  // createOrder (which supports anonId) can never be completed without payment.
+  // The function should accept anonId and check order.anonId like createOrder does.
+  it('allows anonymous user to complete their unpaid order via anonId', async () => {
+    // No session — anonymous user
+    vi.mocked(prisma.order.findUnique).mockResolvedValue({
+      id: 'order-1',
+      userId: 'owner-1', // site owner's userId (FK constraint from createOrder)
+      anonId: 'anon-1',
+      status: 'pending',
+      reservationId: 'res-1',
+      site: { type: 'unpaid', orderPaymentType: null },
+    } as any)
+    vi.mocked(prisma.order.update).mockResolvedValue({} as any)
+
+    // This should succeed when anonId matches order.anonId
+    // Bug: completeUnpaidOrder didn't accept anonId — always returned "Authentication required"
+    const res = await completeUnpaidOrder('order-1', 'anon-1')
+    expect(res.status).not.toBe('error')
+  })
+
   it('uses orderPaymentType over site.type', async () => {
     mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
     vi.mocked(prisma.order.findUnique).mockResolvedValue({
@@ -533,7 +554,19 @@ describe('getOrderByPaymentRef', () => {
     vi.mocked(prisma.order.findFirst).mockResolvedValue(order as any)
 
     const res = await getOrderByPaymentRef({ paymentRef: 'pi_test' })
-    expect(res).toEqual(order)
+    expect(res).toEqual({ order })
+  })
+
+  // BUG: Returns bare entity on success but { status, errors } on error — inconsistent
+  // Should wrap in { order } or { status: 'ok', order } like getReservationById wraps in { reservation }
+  it('wraps successful result consistently (not bare entity)', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
+    const order = { id: 'order-1', userId: 'user-1', paymentRef: 'pi_test' }
+    vi.mocked(prisma.order.findFirst).mockResolvedValue(order as any)
+
+    const res = await getOrderByPaymentRef({ paymentRef: 'pi_test' })
+    // Should have a wrapper property, not be a bare entity
+    expect(res).toHaveProperty('order')
   })
 })
 
@@ -564,6 +597,21 @@ describe('getOrders', () => {
     vi.mocked(prisma.order.findMany).mockResolvedValue(orders as any)
 
     const res = await getOrders({ reservationId: 'res-1' })
-    expect(res).toEqual(orders)
+    expect(res).toEqual({ orders })
+  })
+
+  // BUG: Returns bare array on success but { status, errors } on error — inconsistent
+  // Should wrap in { orders } or { status: 'ok', orders } for consistent return type
+  it('wraps successful result consistently (not bare array)', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      userId: 'user-1',
+    } as any)
+    const orders = [{ id: 'order-1', orderItems: [], invoices: [] }]
+    vi.mocked(prisma.order.findMany).mockResolvedValue(orders as any)
+
+    const res = await getOrders({ reservationId: 'res-1' })
+    // Should have a wrapper property, not be a bare array
+    expect(res).toHaveProperty('orders')
   })
 })

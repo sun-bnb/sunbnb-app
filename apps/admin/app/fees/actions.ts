@@ -36,11 +36,26 @@ export async function saveServiceFee(input: {
   if (!input.settingsId?.trim()) errors.push('Settings is required')
   if (!input.chargeType?.trim()) errors.push('Charge type is required')
   if (!input.serviceCode?.trim()) errors.push('Service code is required')
+  if (input.chargeType && !['fixed', 'percentage'].includes(input.chargeType.trim())) {
+    errors.push('Charge type must be "fixed" or "percentage"')
+  }
   if (input.chargeType === 'fixed' && input.feeAmount == null) {
     errors.push('Fee amount is required for fixed charge type')
   }
   if (input.chargeType === 'percentage' && input.percentage == null) {
     errors.push('Percentage is required for percentage charge type')
+  }
+  if (input.chargeType === 'fixed' && input.percentage != null) {
+    errors.push('Percentage must not be set for fixed charge type')
+  }
+  if (input.chargeType === 'percentage' && input.feeAmount != null) {
+    errors.push('Fee amount must not be set for percentage charge type')
+  }
+  if (input.feeAmount != null && input.feeAmount < 0) {
+    errors.push('Fee amount must not be negative')
+  }
+  if (input.percentage != null && (input.percentage < 0 || input.percentage > 100)) {
+    errors.push('Percentage must be between 0 and 100')
   }
   if (errors.length > 0) return { status: 'error', errors }
 
@@ -184,6 +199,12 @@ export async function saveServiceCode(input: {
   const code = input.code.trim().toLowerCase()
   const description = input.description?.trim() || null
 
+  // Check for duplicate code (on both create and update)
+  const existing = await prisma.serviceCode.findUnique({ where: { code } })
+  if (existing && existing.id !== input.id) {
+    return { status: 'error', errors: [`Code "${code}" already exists`] }
+  }
+
   if (input.id) {
     await prisma.serviceCode.update({
       where: { id: input.id },
@@ -192,8 +213,6 @@ export async function saveServiceCode(input: {
     revalidatePath('/fees')
     return { status: 'ok', id: input.id }
   } else {
-    const existing = await prisma.serviceCode.findUnique({ where: { code } })
-    if (existing) return { status: 'error', errors: [`Code "${code}" already exists`] }
     const created = await prisma.serviceCode.create({ data: { code, description } })
     revalidatePath('/fees')
     return { status: 'ok', id: created.id }
@@ -204,6 +223,16 @@ export async function deleteServiceCode(
   id: string
 ): Promise<{ status: string; errors?: string[] }> {
   await requireSudo()
+
+  // Check for referencing service fees
+  const code = await prisma.serviceCode.findUnique({ where: { id }, select: { code: true } })
+  if (code) {
+    const feeCount = await prisma.serviceFee.count({ where: { serviceCode: code.code } })
+    if (feeCount > 0) {
+      return { status: 'error', errors: [`Cannot delete: ${feeCount} service fee(s) reference this code. Remove them first.`] }
+    }
+  }
+
   await prisma.serviceCode.delete({ where: { id } })
   revalidatePath('/fees')
   return { status: 'ok' }

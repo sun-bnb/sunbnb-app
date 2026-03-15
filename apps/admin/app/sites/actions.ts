@@ -19,11 +19,15 @@ async function requireSudo() {
 export async function updatePaymentProvider(
   siteId: string,
   paymentProvider: string,
-): Promise<{ status: string; error?: string }> {
+): Promise<{ status: string; errors?: string[] }> {
   await requireSudo()
 
+  if (!siteId?.trim()) {
+    return { status: 'error', errors: ['Site ID is required'] }
+  }
+
   if (!['stripe', 'mollie'].includes(paymentProvider)) {
-    return { status: 'error', error: 'Invalid payment provider' }
+    return { status: 'error', errors: ['Invalid payment provider'] }
   }
 
   // If switching to Mollie, verify the site owner has connected Mollie
@@ -41,7 +45,7 @@ export async function updatePaymentProvider(
       },
     })
     if (!site?.user?.partnerAccount?.mollieAccessToken) {
-      return { status: 'error', error: 'Partner has not connected Mollie' }
+      return { status: 'error', errors: ['Partner has not connected Mollie'] }
     }
   }
 

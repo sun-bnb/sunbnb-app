@@ -250,7 +250,7 @@ export async function createOrder(order: {
  * Complete an order without payment. Only allowed for sites using
  * off-platform billing for food orders (site.orderPaymentType or site.type === 'unpaid').
  */
-export async function completeUnpaidOrder(orderId: string) {
+export async function completeUnpaidOrder(orderId: string, anonId?: string) {
   const session = await auth()
 
   const order = await prisma.order.findUnique({
@@ -273,10 +273,12 @@ export async function completeUnpaidOrder(orderId: string) {
     if (order.userId !== session.user.id) {
       return { status: 'error', errors: ['Not authorized'] }
     }
+  } else if (anonId) {
+    // Anonymous: verify the anonId matches the order's anonId
+    if (!order.anonId || order.anonId !== anonId) {
+      return { status: 'error', errors: ['Not authorized'] }
+    }
   } else {
-    // Anonymous: check anonId from the request
-    // Note: for server actions we can't read localStorage directly,
-    // but the order already has the anonId from createOrder
     return { status: 'error', errors: ['Authentication required'] }
   }
 
@@ -328,7 +330,7 @@ export async function getOrderByPaymentRef({
     return { status: 'error', errors: ['Not authorized'] }
   }
 
-  return order
+  return { order }
 }
 
 export async function getOrders({
@@ -361,5 +363,5 @@ export async function getOrders({
     },
   })
 
-  return orders
+  return { orders }
 }

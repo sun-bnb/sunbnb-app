@@ -53,6 +53,37 @@ Google OAuth only. `app.tsx` checks session; redirects unauthenticated to `/api/
 
 Redux slices: `reservationsSlice` (key-value store). RTK Query (`apiSlice`): `getReservations`, `getReservationsByDay`, `getReservationsByMonth`. Context: `SiteContext` provides `site`, `setSite`, `apiKey`, `nonce` to site sub-routes.
 
+## Testing
+
+```bash
+npm run test              # unit tests (159 tests, Prisma mocked)
+npm run test:watch        # vitest in watch mode
+npm run test:coverage     # unit tests with Istanbul coverage report
+```
+
+### Unit tests (`vitest.config.ts`)
+
+- Path aliases redirect `@repo/data/PrismaCient` → mock, `@repo/data/password-reset` → mock, `@repo/data/rate-limit` → mock, `@repo/data/subscription` → mock
+- **Mock modules** (`__mocks__/@repo/data/`): `PrismaCient.ts`, `password-reset.ts`, `rate-limit.ts`, `subscription.ts`, `reservation-emails.ts`
+- `lib/validation.test.ts` — validateImageFile, validatePassword, enum validators (25 tests)
+- `app/sites/[id]/site-actions.test.ts` — saveGeneral, submitForm, deleteSite, setSiteStatus, setPaymentProvider, checkSlug, saveBrand (25 tests)
+- `app/sites/[id]/inventory-actions.test.ts` — CRUD, auto-increment, ownership checks (10 tests)
+- `app/sites/[id]/products/actions.test.ts` — toggleAppSales, setOrderPaymentType, updateProduct VAT recalc, soft-delete, soldOut (13 tests)
+- `app/sites/[id]/orders/actions.test.ts` — order status transitions (complete→accepted→preparing→ready→delivered), rejection, discard (13 tests)
+- `app/sites/[id]/manage/actions.test.ts` — walk-in reserveItem, checkIn/departure/noShow state machine, moveReservation, blockBed, rental pickup/return, createWalkInRental availability (30 tests)
+- `app/calendar/actions.test.ts` — createPartnerReservation (auth, availability, double-booking, paired items), getAvailableSunbeds (11 tests)
+- `app/api/reservations-cleanup/route.test.ts` — cron auth, stale reservation cleanup (5 tests)
+- `app/api/subscription/webhook/route.test.ts` — Stripe signature verification, subscription events, status mapping (7 tests)
+- `app/api/auth/forgot-password/route.test.ts` — rate limiting, email validation, enumeration protection (7 tests)
+- `app/api/auth/reset-password/route.test.ts` — rate limiting, token/password validation (7 tests)
+- `app/api/reservations/[siteId]/route.test.ts` — ownership, date/month queries (6 tests)
+
+### Mocking patterns
+
+- Use `vi.mock()` with `vi.fn()` in factory (never reference external variables — hoisting), then `vi.mocked(importedFn)` after import for typed references
+- Always call `mockAuth.mockResolvedValue(null)` in `beforeEach` — `vi.clearAllMocks()` clears call history but not implementations, so auth leaks between tests if not reset
+- For env vars captured at module load time, use `vi.hoisted()`
+
 ## Key Patterns
 
 - Site ownership: all mutations go through `requireSiteOwner()` or `verifySiteOwnership()` which check `session.user.id === site.userId` (sudo users bypass)
