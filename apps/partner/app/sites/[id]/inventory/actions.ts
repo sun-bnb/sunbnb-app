@@ -366,6 +366,7 @@ export async function uploadBackground(siteId: string, formData: FormData) {
   const blob = await put(key, buf, {
     access: 'public',
     contentType: file.type || 'image/jpeg',
+    allowOverwrite: true,
   })
 
   await prisma.site.update({
