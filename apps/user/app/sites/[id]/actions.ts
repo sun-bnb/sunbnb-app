@@ -85,9 +85,20 @@ export async function saveReservationForMultipleItems(
   const timeBetween = to.getTime() - from.getTime()
   const daysBetween = Math.round(timeBetween / (1000 * 60 * 60 * 24))
 
-  const totalPrice = site.type === 'unpaid' ? 0 : (reservation.items?.reduce((sum, item) => {
-    return sum + (item.price || site.price || 0)
-  }, 0) ?? 0)
+  // Fetch item prices from DB — never trust client-supplied prices
+  let totalPrice = 0
+  if (site.type !== 'unpaid' && reservation.items?.length) {
+    const itemIds = reservation.items.map(i => i.id)
+    const dbItems = await prisma.inventoryItem.findMany({
+      where: { id: { in: itemIds }, siteId: reservation.siteId },
+      select: { id: true, price: true },
+    })
+    const dbItemMap = new Map(dbItems.map(i => [i.id, i]))
+    totalPrice = reservation.items.reduce((sum, item) => {
+      const dbItem = dbItemMap.get(item.id)
+      return sum + ((dbItem?.price ?? null) || site.price || 0)
+    }, 0)
+  }
 
   const paymentAmount = totalPrice * daysBetween
 

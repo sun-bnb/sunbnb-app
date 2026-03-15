@@ -31,6 +31,13 @@ describe('GET /api/reservations/[siteId]', () => {
     expect(data.errors).toContain('Not authenticated')
   })
 
+  // BUG-REVEALING: route.ts line 11 returns 200 instead of 401 for unauthenticated requests
+  it('returns HTTP 401 status code when not authenticated', async () => {
+    const request = makeRequest('?date=2025-07-01')
+    const response = await GET(request, { params: { siteId: SITE_ID } })
+    expect(response.status).toBe(401)
+  })
+
   it('returns 403 when user does not own site', async () => {
     mockAuth.mockResolvedValue({ user: { id: 'other-user' } } as any)
     vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)

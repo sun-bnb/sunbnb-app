@@ -23,10 +23,19 @@ export async function saveGeneral(input: {
   const errors: string[] = []
   if (!input.name?.trim()) errors.push('Site name is required')
   if (!input.locationLat || !input.locationLng) errors.push('Location is required')
-  if (errors.length > 0) return { status: 'error', errors }
+
+  const validTypes = ['paid', 'unpaid']
+  if (input.type && !validTypes.includes(input.type)) {
+    errors.push('Invalid site type')
+  }
 
   const price = Number(input.price)
   const vat = Number(input.vat)
+
+  if (input.price && isNaN(price)) errors.push('Invalid price')
+  if (input.vat && isNaN(vat)) errors.push('Invalid VAT')
+
+  if (errors.length > 0) return { status: 'error', errors }
 
   await prisma.site.update({
     where: { id: input.id },

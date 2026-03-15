@@ -459,6 +459,7 @@ export async function createWalkInRental(input: {
         quantity: cartItem.quantity,
         durationType: input.durationType,
         totalPrice,
+        paymentAmount: totalPrice,
         status: input.paymentType === 'cash' ? RESERVATION_PAID_IN_CASH : RENTAL_COMPLETE,
         operationalStatus: OP_PICKED_UP,
         pickedUpAt: new Date(),

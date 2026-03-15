@@ -122,6 +122,57 @@ describe('saveGeneral', () => {
     expect(updateCall.data.price).toBeNull()
     expect(updateCall.data.vat).toBeNull()
   })
+
+  // BUG: saveGeneral does not validate the `type` field against known values.
+  // Any arbitrary string (e.g. 'hacked') is written directly to the DB.
+  // This test expects the function to reject invalid types — it will FAIL against current code.
+  it('rejects invalid site type', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.$executeRaw).mockResolvedValue(1 as any)
+
+    const res = await saveGeneral({
+      id: SITE_ID,
+      name: 'Beach Club',
+      type: 'hacked',
+      price: '25',
+      vat: '21',
+      locationLat: '40.0',
+      locationLng: '3.0',
+    })
+
+    expect(res.status).toBe('error')
+    expect(res.errors).toBeDefined()
+    expect(res.errors!.length).toBeGreaterThan(0)
+    // The DB should never be called with an invalid type
+    expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
+  })
+
+  // BUG: When type is 'paid' and price is non-numeric (e.g. 'abc'), Number('abc') → NaN,
+  // and NaN > 0 is false, so price becomes null. This silently leaves a paid site
+  // with no price — an inconsistent state. The function should return an error.
+  // This test will FAIL against current code.
+  it('rejects non-numeric price when type is paid', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.$executeRaw).mockResolvedValue(1 as any)
+
+    const res = await saveGeneral({
+      id: SITE_ID,
+      name: 'Beach Club',
+      type: 'paid',
+      price: 'abc',
+      vat: '21',
+      locationLat: '40.0',
+      locationLng: '3.0',
+    })
+
+    expect(res.status).toBe('error')
+    expect(res.errors).toBeDefined()
+    expect(res.errors!.some((e) => /price/i.test(e))).toBe(true)
+    // The DB should never be updated with NaN/null price for a paid site
+    expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
+  })
 })
 
 // ─── submitForm ─────────────────────────────────────────────────────────────

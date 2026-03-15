@@ -112,7 +112,7 @@ describe('saveReservationForMultipleItems', () => {
     expect(res.errors?.[0]).toContain('not available')
   })
 
-  it('creates reservation with correct payment amount for paid site', async () => {
+  it('creates reservation with correct payment amount using DB item prices', async () => {
     mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
     vi.mocked(prisma.site.findUnique).mockResolvedValue({
       id: 'site-1',
@@ -123,11 +123,17 @@ describe('saveReservationForMultipleItems', () => {
       { itemId: 'item-1', available: true },
       { itemId: 'item-2', available: true },
     ] as any)
+    // DB prices — item-1 has its own price, item-2 has no price (falls back to site price)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([
+      { id: 'item-1', price: 15 },
+      { id: 'item-2', price: null },
+    ] as any)
     vi.mocked(prisma.reservation.create).mockResolvedValue({ id: 'res-1' } as any)
 
     const res = await saveReservationForMultipleItems({
       siteId: 'site-1',
-      items: [{ id: 'item-1', price: 15 } as any, { id: 'item-2' } as any],
+      // Client-supplied prices are irrelevant — source must ignore them
+      items: [{ id: 'item-1', price: 1 } as any, { id: 'item-2', price: 1 } as any],
       type: 'days',
       from: '2025-07-01',
       to: '2025-07-03', // 2 days
@@ -136,7 +142,7 @@ describe('saveReservationForMultipleItems', () => {
     expect(res.status).toBe('ok')
     expect(res.id).toBe('res-1')
 
-    // item-1 has price 15, item-2 falls back to site price 10 → 25 per day × 2 days = 50
+    // item-1 DB price 15, item-2 falls back to site price 10 → 25 per day × 2 days = 50
     expect(prisma.reservation.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({

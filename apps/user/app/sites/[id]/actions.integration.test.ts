@@ -67,7 +67,7 @@ describe('saveReservationForMultipleItems', () => {
     expect(created!.status).toBe('pending')
   })
 
-  it('calculates payment amount from site price × days', async () => {
+  it('calculates payment amount from site price × items × days', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id, { price: 20.0 })
     const item1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
@@ -93,10 +93,13 @@ describe('saveReservationForMultipleItems', () => {
     expect(created!.paymentAmount).toBe(120)
   })
 
-  it('uses item-specific price over site price', async () => {
+  // BUG: source reads item.price from client input, not from DB.
+  // Client can send price: 1.0 while DB item has price: 30.0.
+  // Payment amount should always be calculated from DB prices.
+  it('uses DB item price — rejects client-supplied price override', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id, { price: 10.0 })
-    // Item with its own price of 30
+    // DB price is 30 — client will attempt to send price: 1 to underpay
     const item = await createTestInventoryItem(user.id, site.id, { price: 30.0 })
 
     mockAuth.mockResolvedValue({ user: { id: user.id } } as any)
@@ -104,7 +107,7 @@ describe('saveReservationForMultipleItems', () => {
 
     const res = await saveReservationForMultipleItems({
       siteId: site.id,
-      items: [{ id: item.id, price: 30.0 } as any],
+      items: [{ id: item.id, price: 1.0 } as any], // client tries to underpay
       type: 'days',
       from: '2025-07-01',
       to: '2025-07-02', // 1 day
@@ -112,7 +115,7 @@ describe('saveReservationForMultipleItems', () => {
 
     expect(res.status).toBe('ok')
     const created = await prisma.reservation.findUnique({ where: { id: res.id! } })
-    // item price 30 × 1 day = 30
+    // Must use DB price 30, not client price 1
     expect(created!.paymentAmount).toBe(30)
   })
 
@@ -161,6 +164,68 @@ describe('saveReservationForMultipleItems', () => {
     expect(created!.userId).toBe(owner.id) // site owner's userId as FK
   })
 
+  it('rejects client-supplied userId when no session — prevents impersonation', async () => {
+    const victim = await createTestUser()
+    const site = await createTestSite(victim.id, { type: 'unpaid', price: null })
+    const item = await createTestInventoryItem(victim.id, site.id)
+
+    // No session, no anonId — only a client-supplied userId (impersonation attempt)
+    mockGetAvailability.mockResolvedValue([{ itemId: item.id, available: true }] as any)
+
+    const res = await saveReservationForMultipleItems({
+      userId: victim.id, // should never be trusted
+      siteId: site.id,
+      items: [{ id: item.id } as any],
+      type: 'days',
+      from: '2025-07-01',
+      to: '2025-07-02',
+    })
+
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Authentication required')
+    const count = await prisma.reservation.count({ where: { siteId: site.id } })
+    expect(count).toBe(0)
+  })
+
+  it('rejects reservation where from >= to — no backwards date range', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id)
+
+    mockAuth.mockResolvedValue({ user: { id: user.id } } as any)
+
+    const res = await saveReservationForMultipleItems({
+      siteId: site.id,
+      items: [{ id: item.id } as any],
+      type: 'days',
+      from: '2025-07-03',
+      to: '2025-07-01', // backwards
+    })
+
+    expect(res.status).toBe('error')
+    const count = await prisma.reservation.count({ where: { siteId: site.id } })
+    expect(count).toBe(0)
+  })
+
+  it('rejects reservation with no items on a paid site', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { price: 15.0 })
+
+    mockAuth.mockResolvedValue({ user: { id: user.id } } as any)
+
+    const res = await saveReservationForMultipleItems({
+      siteId: site.id,
+      items: [],
+      type: 'days',
+      from: '2025-07-01',
+      to: '2025-07-02',
+    })
+
+    expect(res.status).toBe('error')
+    const count = await prisma.reservation.count({ where: { siteId: site.id } })
+    expect(count).toBe(0)
+  })
+
   it('returns error when requested item is not available', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id)
@@ -179,7 +244,6 @@ describe('saveReservationForMultipleItems', () => {
 
     expect(res.status).toBe('error')
     expect(res.errors?.[0]).toContain('not available')
-    // Verify nothing was written to DB
     const count = await prisma.reservation.count({ where: { siteId: site.id } })
     expect(count).toBe(0)
   })
@@ -243,7 +307,7 @@ describe('saveRentalBooking', () => {
       quantity: 2,
       from: new Date('2025-07-01T10:00:00Z'),
       to: new Date('2025-07-03T10:00:00Z'),
-      operationalStatus: 'reserved', // non-null so it's counted by the notIn filter
+      operationalStatus: 'reserved',
     })
 
     mockAuth.mockResolvedValue({ user: { id: user.id } } as any)
@@ -259,7 +323,6 @@ describe('saveRentalBooking', () => {
 
     expect(res.status).toBe('error')
     expect(res.errors?.[0]).toContain('Only 1')
-    // Nothing new should be created
     const count = await prisma.rentalBooking.count({ where: { siteId: site.id } })
     expect(count).toBe(1) // only the pre-existing booking
   })
@@ -287,5 +350,25 @@ describe('saveRentalBooking', () => {
     const booking = await prisma.rentalBooking.findUnique({ where: { id: res.bookingIds![0] } })
     // 5 per hour × 3 hours × 1 qty = 15
     expect(booking!.totalPrice).toBe(15)
+  })
+
+  it('rejects rental booking where from >= to — no backwards date range', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestRentalItem(site.id, { totalQuantity: 5 })
+
+    mockAuth.mockResolvedValue({ user: { id: user.id } } as any)
+
+    const res = await saveRentalBooking({
+      siteId: site.id,
+      items: [{ rentalItemId: item.id, quantity: 1 }],
+      durationType: 'days',
+      from: '2025-07-03T10:00:00Z',
+      to: '2025-07-01T10:00:00Z', // backwards
+    })
+
+    expect(res.status).toBe('error')
+    const count = await prisma.rentalBooking.count({ where: { siteId: site.id } })
+    expect(count).toBe(0)
   })
 })

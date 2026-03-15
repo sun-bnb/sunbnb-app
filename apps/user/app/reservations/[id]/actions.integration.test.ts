@@ -20,9 +20,16 @@ vi.mock('@repo/data/reservation-emails', () => ({
   sendCancellationEmail: vi.fn().mockResolvedValue(undefined),
 }))
 
-import { createOrder, cancelReservation } from './actions'
+// processConfirmedOrder is mocked — invoice creation is covered by unit tests.
+// Integration focus here is DB state (ownership, status transitions, anonId).
+vi.mock('@repo/data/payment', () => ({
+  processConfirmedOrder: vi.fn().mockResolvedValue(undefined),
+}))
+
+import { createOrder, cancelReservation, completeUnpaidOrder } from './actions'
 import { auth } from '@/app/auth'
 import { issueRefund } from '@/app/api/_lib/payment-provider'
+import { processConfirmedOrder } from '@repo/data/payment'
 import { cleanDatabase, disconnectDatabase, prisma } from '@/app/test/setup'
 import {
   createTestUser,
@@ -31,9 +38,11 @@ import {
   createTestReservation,
   createTestInventoryItem,
 } from '@/app/test/fixtures'
+import { ORDER_PENDING } from '@repo/data/reservation-status'
 
 const mockAuth = vi.mocked(auth)
 const mockIssueRefund = vi.mocked(issueRefund)
+const mockProcessConfirmedOrder = vi.mocked(processConfirmedOrder)
 
 beforeEach(async () => {
   vi.clearAllMocks()
@@ -159,6 +168,113 @@ describe('createOrder', () => {
   })
 })
 
+// ─── completeUnpaidOrder ──────────────────────────────────────────────────
+
+describe('completeUnpaidOrder', () => {
+  async function createPendingOrder(
+    userId: string,
+    siteId: string,
+    overrides: Record<string, any> = {}
+  ) {
+    return prisma.order.create({
+      data: {
+        userId,
+        siteId,
+        status: ORDER_PENDING,
+        price: 10,
+        tax: 1,
+        totalPrice: 11,
+        paymentAmount: 11,
+        ...overrides,
+      },
+    })
+  }
+
+  it('sets paymentRef and processes invoice for authenticated user', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { type: 'unpaid' })
+    const order = await createPendingOrder(user.id, site.id)
+
+    mockAuth.mockResolvedValue({ user: { id: user.id } } as any)
+
+    const res = await completeUnpaidOrder(order.id)
+
+    expect(res.status).toBe('ok')
+    const updated = await prisma.order.findUnique({ where: { id: order.id } })
+    expect(updated!.paymentRef).toBe(`offplatform_${order.id}`)
+    expect(mockProcessConfirmedOrder).toHaveBeenCalledWith(order.id)
+  })
+
+  it('allows anonymous user to complete their unpaid order via anonId', async () => {
+    const owner = await createTestUser()
+    const site = await createTestSite(owner.id, { type: 'unpaid' })
+    // Anonymous order: userId is site owner (FK constraint), anonId identifies customer
+    const order = await createPendingOrder(owner.id, site.id, { anonId: 'anon-cust-1' })
+
+    // No session — anonymous user provides their anonId
+    const res = await completeUnpaidOrder(order.id, 'anon-cust-1')
+
+    expect(res.status).toBe('ok')
+    const updated = await prisma.order.findUnique({ where: { id: order.id } })
+    expect(updated!.paymentRef).toBe(`offplatform_${order.id}`)
+  })
+
+  it('rejects anonymous user when anonId does not match order', async () => {
+    const owner = await createTestUser()
+    const site = await createTestSite(owner.id, { type: 'unpaid' })
+    const order = await createPendingOrder(owner.id, site.id, { anonId: 'anon-real' })
+
+    const res = await completeUnpaidOrder(order.id, 'anon-wrong')
+
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authorized')
+    // Order must remain unchanged
+    const unchanged = await prisma.order.findUnique({ where: { id: order.id } })
+    expect(unchanged!.paymentRef).toBeNull()
+    expect(unchanged!.status).toBe(ORDER_PENDING)
+  })
+
+  it('rejects unauthenticated user with no anonId', async () => {
+    const owner = await createTestUser()
+    const site = await createTestSite(owner.id, { type: 'unpaid' })
+    const order = await createPendingOrder(owner.id, site.id, { anonId: 'anon-123' })
+
+    // No session, no anonId passed
+    const res = await completeUnpaidOrder(order.id)
+
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Authentication required')
+  })
+
+  it('rejects when site requires payment', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { type: 'paid' })
+    const order = await createPendingOrder(user.id, site.id)
+
+    mockAuth.mockResolvedValue({ user: { id: user.id } } as any)
+
+    const res = await completeUnpaidOrder(order.id)
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Payment is required')
+    const unchanged = await prisma.order.findUnique({ where: { id: order.id } })
+    expect(unchanged!.paymentRef).toBeNull()
+  })
+
+  it('rejects when order is not in pending state', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { type: 'unpaid' })
+    const order = await createPendingOrder(user.id, site.id, { status: 'complete' })
+
+    mockAuth.mockResolvedValue({ user: { id: user.id } } as any)
+
+    const res = await completeUnpaidOrder(order.id)
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('not in pending state')
+  })
+})
+
 // ─── cancelReservation ────────────────────────────────────────────────────
 
 describe('cancelReservation', () => {
@@ -232,8 +348,28 @@ describe('cancelReservation', () => {
     const res = await cancelReservation(reservation.id)
 
     expect(res.status).toBe('ok')
-    // Status unchanged
     const unchanged = await prisma.reservation.findUnique({ where: { id: reservation.id } })
     expect(unchanged!.status).toBe('canceled')
+  })
+
+  it('does not cancel a reservation owned by a different user', async () => {
+    const owner = await createTestUser()
+    const attacker = await createTestUser()
+    const site = await createTestSite(owner.id)
+    const item = await createTestInventoryItem(owner.id, site.id)
+    const reservation = await createTestReservation(owner.id, site.id, [item.id], {
+      status: 'pending',
+      paymentRef: null,
+    })
+
+    // Attacker tries to cancel owner's reservation
+    mockAuth.mockResolvedValue({ user: { id: attacker.id } } as any)
+
+    const res = await cancelReservation(reservation.id)
+
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authorized')
+    const unchanged = await prisma.reservation.findUnique({ where: { id: reservation.id } })
+    expect(unchanged!.status).toBe('pending')
   })
 })

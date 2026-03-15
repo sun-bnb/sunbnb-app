@@ -147,7 +147,7 @@ describe('reserveItem', () => {
 // ─── checkInReservation ─────────────────────────────────────────────────────
 
 describe('checkInReservation', () => {
-  it('transitions expected → checked-in', async () => {
+  it('transitions expected -> checked-in', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
@@ -191,7 +191,7 @@ describe('checkInReservation', () => {
 // ─── markDeparted ───────────────────────────────────────────────────────────
 
 describe('markDeparted', () => {
-  it('transitions checked-in → departed', async () => {
+  it('transitions checked-in -> departed', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
@@ -204,7 +204,7 @@ describe('markDeparted', () => {
     expect(vi.mocked(prisma.reservation.update).mock.calls[0][0].data.operationalStatus).toBe('departed')
   })
 
-  it('transitions walked-in → departed', async () => {
+  it('transitions walked-in -> departed', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
@@ -232,7 +232,7 @@ describe('markDeparted', () => {
 // ─── markNoShow ─────────────────────────────────────────────────────────────
 
 describe('markNoShow', () => {
-  it('transitions expected → no-show', async () => {
+  it('transitions expected -> no-show', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
@@ -339,7 +339,7 @@ describe('moveReservation', () => {
 // ─── Rental Operations ──────────────────────────────────────────────────────
 
 describe('markRentalPickedUp', () => {
-  it('transitions reserved → picked-up', async () => {
+  it('transitions reserved -> picked-up', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.rentalBooking.findUnique).mockResolvedValue({
       siteId: SITE_ID,
@@ -365,7 +365,7 @@ describe('markRentalPickedUp', () => {
 })
 
 describe('markRentalReturned', () => {
-  it('transitions picked-up → returned', async () => {
+  it('transitions picked-up -> returned', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.rentalBooking.findUnique).mockResolvedValue({
       siteId: SITE_ID,
@@ -467,5 +467,30 @@ describe('createWalkInRental', () => {
 
     expect(res.status).toBe('error')
     expect(res.errors?.[0]).toContain('Only 1')
+  })
+
+  it('BUG: sets paymentAmount equal to totalPrice on booking creation', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
+      { id: 'ri-1', siteId: SITE_ID, active: true, totalQuantity: 10, pricePerDay: 20, pricePerHour: null },
+    ] as any)
+    vi.mocked(prisma.rentalBooking.aggregate).mockResolvedValue({ _sum: { quantity: 0 } } as any)
+    vi.mocked(prisma.rentalBooking.create).mockResolvedValue({ id: 'booking-1' } as any)
+
+    const res = await createWalkInRental({
+      siteId: SITE_ID,
+      items: [{ rentalItemId: 'ri-1', quantity: 3 }],
+      durationType: 'days',
+      paymentType: 'cash',
+    })
+
+    expect(res.status).toBe('ok')
+
+    const createCall = vi.mocked(prisma.rentalBooking.create).mock.calls[0][0]
+    // totalPrice should be 20 (pricePerDay) * 1 (day) * 3 (quantity) = 60
+    expect(createCall.data.totalPrice).toBe(60)
+    // paymentAmount must match totalPrice — without it, payment reconciliation
+    // and invoicing will see null and potentially break downstream processing
+    expect(createCall.data.paymentAmount).toBe(60)
   })
 })

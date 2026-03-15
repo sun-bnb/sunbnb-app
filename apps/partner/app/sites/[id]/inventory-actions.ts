@@ -107,8 +107,19 @@ export async function saveInventoryItemProperties(
   }
 
   const pairItem = inventoryItem.pairId
-    ? await prisma.inventoryItem.findUnique({ where: { id: inventoryItem.pairId } })
+    ? await prisma.inventoryItem.findUnique({ where: { id: inventoryItem.pairId }, select: { id: true, siteId: true } })
     : undefined
+
+  if (pairItem) {
+    // Verify the pair item belongs to the same site
+    const currentItem = await prisma.inventoryItem.findUnique({
+      where: { id },
+      select: { siteId: true },
+    })
+    if (pairItem.siteId !== currentItem?.siteId) {
+      return { status: 'error', errors: ['Pair item must belong to the same site'] }
+    }
+  }
 
   await prisma.inventoryItem.update({
     where: { id },
@@ -139,5 +150,5 @@ export async function deleteItemsByGroup(siteId: string, group: number) {
   })
 
   revalidatePath(`/sites/${siteId}/inventory`)
-  return items
+  return { status: 'ok' }
 }

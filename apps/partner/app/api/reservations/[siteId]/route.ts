@@ -8,7 +8,7 @@ import { auth } from '@/app/auth'
 export async function GET(request: NextRequest, { params } : { params: { siteId: string } }) {
 
   const session = await auth()
-  if (!session?.user) return Response.json({ status: 'error', errors: [ 'Not authenticated' ] })
+  if (!session?.user) return Response.json({ status: 'error', errors: [ 'Not authenticated' ] }, { status: 401 })
 
   // Verify the partner owns this site
   const site = await prisma.site.findUnique({

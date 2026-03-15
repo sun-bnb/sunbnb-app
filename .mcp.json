@@ -1,0 +1,40 @@
+{
+  "mcpServers": {
+    "postgres": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgres://postgres:sunbnb@localhost:5432/postgres"
+      ],
+      "env": {}
+    },
+    "prisma": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "prisma@latest",
+        "mcp"
+      ],
+      "env": {}
+    },
+    "stripe": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@stripe/mcp",
+        "--tools=all"
+      ],
+      "env": {
+        "STRIPE_SECRET_KEY": ""
+      }
+    },
+    "vercel": {
+      "type": "http",
+      "url": "https://mcp.vercel.com"
+    }
+  }
+}

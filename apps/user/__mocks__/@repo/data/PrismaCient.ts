@@ -33,6 +33,9 @@ const prisma = {
   rentalItem: {
     findMany: vi.fn(),
   },
+  inventoryItem: {
+    findMany: vi.fn(),
+  },
 }
 
 export default prisma
