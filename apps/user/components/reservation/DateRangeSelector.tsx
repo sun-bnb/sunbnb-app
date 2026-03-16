@@ -118,7 +118,7 @@ export default function DateRangeSelector({
       <div className="w-full">
         <div className="flex items-stretch gap-2 mb-3">
           <div className={`flex-1 rounded-lg border px-3 py-2 transition-colors ${picking ? 'border-gray-900 bg-white' : 'border-gray-200 bg-white'}`}>
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-0.5">{label.split('–')[0].trim()}</div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-0.5">{(label.split('–')[0] ?? '').trim()}</div>
             {displayFrom ? (
               <>
                 <div className="text-sm font-semibold text-gray-900 leading-tight">{dayjs(displayFrom).format('D MMM YYYY')}</div>
