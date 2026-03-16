@@ -197,8 +197,12 @@ export default async function Receipt({ params, searchParams }: { params: { id: 
   const seatNumbers =
     reservation.items?.map((item) => String(item.number)).join(', ') ?? null
 
-  const reservationFrom = reservation.from.toISOString().substring(0, 10)
-  const reservationTo = reservation.to.toISOString().substring(0, 10)
+  // from/to are stored as UTC from startOf/endOf('day') in the user's local timezone.
+  // Adding 12h to from and subtracting 12h from to normalises both to the correct
+  // calendar date regardless of UTC offset (covers UTC-12 to UTC+12).
+  const halfDay = 12 * 60 * 60 * 1000
+  const reservationFrom = new Date(reservation.from.getTime() + halfDay).toISOString().substring(0, 10)
+  const reservationTo = new Date(reservation.to.getTime() - halfDay).toISOString().substring(0, 10)
   const reservationDate =
     reservationFrom === reservationTo
       ? reservationFrom
