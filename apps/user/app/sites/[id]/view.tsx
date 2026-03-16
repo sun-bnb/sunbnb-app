@@ -244,28 +244,28 @@ export default function SiteView({ site, apiKey, stripePublicKey, brand }: { sit
         </div>
         {/* Right column: reservation panel — sticky sidebar on desktop, fixed drawer on mobile */}
         <div className="hidden lg:block lg:flex-[2] lg:min-w-[360px] lg:max-w-[480px]">
-          <div className={`lg:sticky lg:top-[80px] px-3 pb-4 border rounded-xl shadow-soft ${brand ? '' : 'bg-cream border-subtle'}`}
-            style={brand ? { backgroundColor: brand.bgColor || '#faf9f6', borderColor: `${brand.fgColor || '#111827'}15` } : undefined}
+          <div className={`lg:sticky lg:top-[80px] px-3 pb-4 ${brand ? '' : 'bg-cream'}`}
+            style={brand ? { backgroundColor: brand.bgColor || '#faf9f6' } : undefined}
           >
             {
                 withHours ?
             <div className="w-full">
-              
+
                   <div className="mb-4">
                     <Tabs variant="fullWidth" value={reservationMode || 'days'} onChange={(e, value) => {
-                      dispatch(setValue({ 
+                      dispatch(setValue({
                         reservationMode: value,
-                        focused: true 
+                        focused: true
                       }))
                     }} aria-label="Reservation mode">
                       <Tab value="days" label="Days" />
                       <Tab value="hours" label="Hours" />
                     </Tabs>
-                  </div> 
-              
+                  </div>
+
             </div> : null
-            } 
-            <ReservationView apiKey={apiKey} stripePublicKey={stripePublicKey} site={fetchedSite || site} />
+            }
+            <ReservationView apiKey={apiKey} stripePublicKey={stripePublicKey} site={fetchedSite || site} wide={true} />
           </div>
         </div>
       </div>

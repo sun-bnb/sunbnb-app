@@ -48,6 +48,7 @@
     "Pending": "Odottaa",
     "Confirmed": "Vahvistettu",
     "Unknown": "Tuntematon",
+    "Canceled": "Peruttu",
     "Cancelled": "Peruttu",
     "Payment received": "Maksu vastaanotettu",
     "Processing": "Käsittekyssä",
@@ -69,7 +70,8 @@
     "terms of service": "palveluehtoihin",
     "Pay now": "Maksa nyt",
     "Secure checkout": "Turvallinen maksu",
-    "You will be redirected to complete payment": "Sinut ohjataan viimeistelemään maksu"
+    "You will be redirected to complete payment": "Sinut ohjataan viimeistelemään maksu",
+    "Cancel reservation": "Peruuta varaus"
   },
   "TermsOfService": {
     "tos": "terms-fi"

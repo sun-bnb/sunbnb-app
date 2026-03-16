@@ -58,7 +58,7 @@ export default function Reservations({
     
   return (
     <div className="min-h-screen bg-cream">
-      <div className="mt-[78px] px-4 pt-4 pb-1">
+      <div className="mt-[78px] px-4 pt-4 pb-1 max-w-4xl mx-auto">
         <div className="flex rounded-full bg-cream-dark/60 p-1">
           {(['active', 'history'] as const).map((tab) => (
             <button
@@ -77,7 +77,7 @@ export default function Reservations({
           ))}
         </div>
       </div>
-      <div className="px-4 py-3 flex flex-col gap-1">
+      <div className="px-4 py-3 max-w-4xl mx-auto">
         {visible.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-brand-gold/50">
             <EventBusyIcon sx={{ fontSize: 48, mb: 1 }} />
@@ -86,13 +86,15 @@ export default function Reservations({
             </p>
           </div>
         )}
-        {visible.map(entry =>
-          entry.kind === 'reservation' ? (
-            <ReservationItem key={`r-${entry.data.id}`} reservation={entry.data} />
-          ) : (
-            <RentalBookingItem key={`rb-${entry.data.id}`} booking={entry.data} />
-          )
-        )}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+          {visible.map(entry =>
+            entry.kind === 'reservation' ? (
+              <ReservationItem key={`r-${entry.data.id}`} reservation={entry.data} />
+            ) : (
+              <RentalBookingItem key={`rb-${entry.data.id}`} booking={entry.data} />
+            )
+          )}
+        </div>
       </div>
     </div>
   )

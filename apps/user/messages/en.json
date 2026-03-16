@@ -48,6 +48,7 @@
     "Pending": "Pending",
     "Confirmed": "Confirmed",
     "Unknown": "Unknown",
+    "Canceled": "Canceled",
     "Cancelled": "Cancelled",
     "Paymemnt received": "Payment received",
     "Processing": "Processing",
@@ -69,7 +70,8 @@
     "terms of service": "terms of service",
     "Pay now": "Pay now",
     "Secure checkout": "Secure checkout",
-    "You will be redirected to complete payment": "You will be redirected to complete payment"
+    "You will be redirected to complete payment": "You will be redirected to complete payment",
+    "Cancel reservation": "Cancel reservation"
   },
   "TermsOfService": {
     "tos": "terms-en"

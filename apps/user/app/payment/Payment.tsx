@@ -153,12 +153,15 @@ export function MolliePayment({
   reservation,
   preview,
   completeUrl,
+  onCancel,
 }: {
   reservation: Reservation
   preview?: React.ReactNode
   completeUrl?: string
+  onCancel?: () => Promise<void>
 }) {
   const [isLoading, setIsLoading] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const t = useTranslations('Payment')
 
@@ -221,7 +224,7 @@ export function MolliePayment({
         variant="contained"
         fullWidth
         onClick={handlePay}
-        disabled={isLoading || !!reservation.paymentRef}
+        disabled={isLoading || isCancelling || !!reservation.paymentRef}
         sx={{ textTransform: 'none', fontWeight: 600, py: 1.2 }}
       >
         {isLoading ? <CircularProgress size={20} color="inherit" /> : t('Pay now')}
@@ -237,6 +240,22 @@ export function MolliePayment({
           {t('terms of service')}
         </a>
       </div>
+      {onCancel && (
+        <div className="text-center mt-2">
+          <button
+            type="button"
+            disabled={isLoading || isCancelling}
+            onClick={async () => {
+              setIsCancelling(true)
+              await onCancel()
+              setIsCancelling(false)
+            }}
+            className="text-xs text-gray-400 hover:text-gray-600 disabled:opacity-50 transition-colors"
+          >
+            {isCancelling ? <CircularProgress size={12} color="inherit" /> : t('Cancel reservation')}
+          </button>
+        </div>
+      )}
       {error && (
         <div className="text-red-600 text-xs text-center mt-1.5">{error}</div>
       )}
@@ -249,12 +268,14 @@ export default function Payment({
   reservation,
   preview,
   completeUrl,
+  onCancel,
 }: {
   stripePublicKey: string | undefined
   reservation: Reservation
   preview?: React.ReactNode
   completeUrl?: string
   paymentProvider?: string
+  onCancel?: () => Promise<void>
 }) {
   if (DEMO_MODE) {
     return (
@@ -273,6 +294,7 @@ export default function Payment({
       reservation={reservation}
       preview={preview}
       completeUrl={completeUrl}
+      onCancel={onCancel}
     />
   )
 }

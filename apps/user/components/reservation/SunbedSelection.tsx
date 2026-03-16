@@ -230,7 +230,7 @@ export default function SunbedSelection({
   ]
   const dateRange = sitesState.dateRange || [
     dayjs().startOf('day').toISOString(),
-    dayjs().add(1, 'day').endOf('day').toISOString().substring(0, 10),
+    dayjs().add(1, 'day').endOf('day').toISOString(),
   ]
   let availabilityFrom = dateRange[0]
   let availabilityTo = dateRange[1]

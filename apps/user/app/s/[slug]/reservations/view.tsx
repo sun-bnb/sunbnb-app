@@ -75,7 +75,7 @@ export default function BrandedReservationsView({
   return (
     <div className="min-h-screen" style={{ backgroundColor: bgColor, color: fgColor }}>
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 pt-4 pb-2">
+      <div className="flex items-center gap-3 px-4 pt-4 pb-2 max-w-4xl mx-auto">
         <button
           onClick={() => router.push(`/s/${slug}`)}
           className="flex items-center justify-center w-8 h-8 rounded-full hover:opacity-70 transition-opacity"
@@ -87,7 +87,7 @@ export default function BrandedReservationsView({
       </div>
 
       {/* Tabs */}
-      <div className="px-4 pb-1">
+      <div className="px-4 pb-1 max-w-4xl mx-auto">
         <div className="flex rounded-full p-1" style={{ backgroundColor: `${fgColor}10` }}>
           {(['active', 'history'] as const).map((t2) => (
             <button
@@ -107,7 +107,7 @@ export default function BrandedReservationsView({
       </div>
 
       {/* List */}
-      <div className="px-4 py-3 flex flex-col gap-1">
+      <div className="px-4 py-3 max-w-4xl mx-auto">
         {visible.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16" style={{ color: `${fgColor}50` }}>
             <EventBusyIcon sx={{ fontSize: 48, mb: 1 }} />
@@ -116,13 +116,15 @@ export default function BrandedReservationsView({
             </p>
           </div>
         )}
-        {visible.map((reservation) => (
-          <BrandedReservationCard
-            key={reservation.id}
-            reservation={reservation}
-            fgColor={fgColor}
-          />
-        ))}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+          {visible.map((reservation) => (
+            <BrandedReservationCard
+              key={reservation.id}
+              reservation={reservation}
+              fgColor={fgColor}
+            />
+          ))}
+        </div>
       </div>
     </div>
   )

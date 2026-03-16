@@ -30,6 +30,7 @@ import dayjs from 'dayjs'
 import SunbedSelection from '@/components/reservation/SunbedSelection'
 import EquipmentSelection from '@/components/reservation/EquipmentSelection'
 import { saveReservationForMultipleItems, saveRentalBooking } from './actions'
+import { deleteReservation } from '@/app/reservations/[id]/actions'
 import PaymentView from '@/app/payment/Payment'
 import { initiateDemoRentalPayment } from '@/app/payment/actions'
 import { RESERVATION_PROCESSING } from '@repo/data/reservation-status'
@@ -74,7 +75,7 @@ function PaymentMethodSelection() {
 
 }
 
-function ReservationTimerangeSelector({ onDatePickerOpenChange }: { onDatePickerOpenChange?: (open: boolean) => void }) {
+function ReservationTimerangeSelector({ onDatePickerOpenChange, alwaysOpen }: { onDatePickerOpenChange?: (open: boolean) => void, alwaysOpen?: boolean }) {
 
   const dispatch = useDispatch()
   const sitesState = useSelector((state: RootState) => state.sites)
@@ -91,7 +92,7 @@ function ReservationTimerangeSelector({ onDatePickerOpenChange }: { onDatePicker
 
   let dateRange = sitesState.dateRange || [
     dayjs().startOf('day').toISOString(),
-    dayjs().add(1, 'day').endOf('day').toISOString().substring(0, 10)
+    dayjs().add(1, 'day').endOf('day').toISOString()
   ]
 
   return (
@@ -137,6 +138,7 @@ function ReservationTimerangeSelector({ onDatePickerOpenChange }: { onDatePicker
           value={[dateRange[0], dateRange[1]]}
           disabled={reservationState === RESERVATION_PROCESSING}
           label={`${t('From')} – ${t('To')}`}
+          alwaysOpen={alwaysOpen}
           onOpen={() => {
             dispatch(setValue({ focused: true }))
           }}
@@ -255,7 +257,7 @@ function ReservationButton({
   )
 }
 
-function ItemSelection({ apiKey, site } : { apiKey: string, site: SiteProps }) {
+function ItemSelection({ apiKey, site, wide } : { apiKey: string, site: SiteProps, wide?: boolean }) {
 
   const sitesState = useSelector((state: RootState) => state.sites)
   const { selectedItems } = sitesState
@@ -263,8 +265,11 @@ function ItemSelection({ apiKey, site } : { apiKey: string, site: SiteProps }) {
 
   return (
     <>
-      <ReservationTimerangeSelector onDatePickerOpenChange={setDatePickerOpen} />
-      {!datePickerOpen && (
+      <ReservationTimerangeSelector
+        onDatePickerOpenChange={wide ? undefined : setDatePickerOpen}
+        alwaysOpen={wide}
+      />
+      {(wide || !datePickerOpen) && (
         <>
           <div className="w-full h-[300px]">
             <SunbedSelection apiKey={apiKey} site={site} />
@@ -653,13 +658,16 @@ function ViewModeSelector({
 export default function ReservationView({
   apiKey,
   stripePublicKey,
-  site
+  site,
+  wide,
 } : {
   apiKey: string
   stripePublicKey: string | undefined
   site: SiteProps
+  wide?: boolean
 }) {
 
+  const dispatch = useDispatch()
   const sitesState = useSelector((state: RootState) => state.sites)
   const { reservationState, pendingReservationId } = sitesState
 
@@ -685,6 +693,12 @@ export default function ReservationView({
 
   logger.debug('Pending reservation', pendingReservationId, reservation)
 
+  const handleCancelReservation = async () => {
+    if (!pendingReservationId) return
+    await deleteReservation(pendingReservationId)
+    dispatch(setValue({ reservationState: null, pendingReservationId: null }))
+  }
+
   return (
     <>
       {
@@ -693,7 +707,7 @@ export default function ReservationView({
             <div className="flex justify-center mb-[12px] mt-[12px]">
               <CircularProgress />
             </div>
-          ) : <PaymentView stripePublicKey={stripePublicKey} reservation={reservation} paymentProvider={site.paymentProvider} />
+          ) : <PaymentView stripePublicKey={stripePublicKey} reservation={reservation} paymentProvider={site.paymentProvider} onCancel={handleCancelReservation} />
          ) : (
           <>
             <ViewModeSelector
@@ -703,11 +717,11 @@ export default function ReservationView({
               hasRentals={hasRentals}
             />
             {viewMode === 'sunbeds' && hasSunbeds ? (
-              <ItemSelection apiKey={apiKey} site={site} />
+              <ItemSelection apiKey={apiKey} site={site} wide={wide} />
             ) : hasRentals ? (
               <EquipmentBookingSection site={site} />
             ) : (
-              <ItemSelection apiKey={apiKey} site={site} />
+              <ItemSelection apiKey={apiKey} site={site} wide={wide} />
             )}
           </>
          )

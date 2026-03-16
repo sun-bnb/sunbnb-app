@@ -69,6 +69,39 @@ export async function cancelReservation(reservationId: string) {
   return { status: 'ok' }
 }
 
+// ─── Delete Reservation ─────────────────────────────────────────────────────
+
+export async function deleteReservation(reservationId: string) {
+  const session = await auth()
+  if (!session?.user) {
+    return { status: 'error', errors: ['Not authenticated'] }
+  }
+
+  const reservation = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    select: { userId: true, status: true, paymentRef: true },
+  })
+
+  if (!reservation) {
+    return { status: 'ok' }  // already gone
+  }
+
+  if (reservation.userId !== session.user.id) {
+    return { status: 'error', errors: ['Not authorized'] }
+  }
+
+  // Only delete unpaid reservations — paid ones must go through cancelReservation for refunds
+  if (reservation.status === RESERVATION_COMPLETE) {
+    return { status: 'error', errors: ['Cannot delete a paid reservation'] }
+  }
+
+  await prisma.reservation.delete({ where: { id: reservationId } })
+
+  revalidatePath('/reservations')
+
+  return { status: 'ok' }
+}
+
 // ─── Get Products ───────────────────────────────────────────────────────────
 
 export async function getProducts(siteId: string) {
