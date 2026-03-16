@@ -56,18 +56,10 @@ const nextAuthResult: NextAuthResult = NextAuth({
       session.user.id = token.id as string
       return session
     },
-    async signIn({ credentials, profile, user }) {
+    async signIn({ credentials }) {
       const loginError = credentials?.loginError
       if (loginError) {
         return `/api/auth/signin?error=${loginError}`
-      }
-      const email = profile?.email || user?.email
-      if (!email) return false
-      const existingUser = await prisma.user.findUnique({ where: { email } })
-      if (!existingUser) {
-        await prisma.user.create({
-          data: { email, name: user?.name, image: user?.image },
-        })
       }
       return true
     },
