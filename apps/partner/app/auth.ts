@@ -65,7 +65,12 @@ const nextAuthResult: NextAuthResult = NextAuth({
     },
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id
+        // user.id from OAuth providers may be the provider's sub (e.g. Google numeric ID),
+        // not the Prisma-generated CUID. Look up the DB record by email to get the real id.
+        const dbUser = user.email
+          ? await prisma.user.findUnique({ where: { email: user.email } })
+          : null
+        token.id = dbUser?.id ?? user.id
         token.name = user.name
         token.email = user.email
       }
