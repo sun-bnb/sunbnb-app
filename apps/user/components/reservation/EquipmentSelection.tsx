@@ -5,6 +5,7 @@ import { RentalItemProps } from '@/app/sites/types'
 import AddIcon from '@mui/icons-material/Add'
 import RemoveIcon from '@mui/icons-material/Remove'
 import IconButton from '@mui/material/IconButton'
+import { useTranslations } from 'next-intl'
 
 const CATEGORY_EMOJI: Record<string, string> = {
   surfboard: '🏄',
@@ -31,6 +32,8 @@ export default function EquipmentSelection({
   onCartChange: (cart: RentalCartItem[]) => void
   durationType: string
 }) {
+  const t = useTranslations('SiteView')
+
   const getQuantity = (itemId: string) =>
     cart.find(c => c.rentalItemId === itemId)?.quantity || 0
 
@@ -53,9 +56,9 @@ export default function EquipmentSelection({
   }
 
   const getPrice = (item: RentalItemProps) => {
-    if (durationType === 'hours' && item.pricePerHour) return `€${item.pricePerHour}/hr`
-    if (item.pricePerDay) return `€${item.pricePerDay}/day`
-    if (item.pricePerHour) return `€${item.pricePerHour}/hr`
+    if (durationType === 'hours' && item.pricePerHour) return `€${item.pricePerHour} ${t('per hour')}`
+    if (item.pricePerDay) return `€${item.pricePerDay} ${t('per day')}`
+    if (item.pricePerHour) return `€${item.pricePerHour} ${t('per hour')}`
     return ''
   }
 
@@ -63,7 +66,7 @@ export default function EquipmentSelection({
     return (
       <div className="flex flex-col items-center justify-center h-full text-gray-400">
         <span className="text-3xl mb-2">🏄</span>
-        <p className="text-sm">No equipment available</p>
+        <p className="text-sm">{t('No equipment available')}</p>
       </div>
     )
   }
@@ -90,7 +93,7 @@ export default function EquipmentSelection({
               <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
                 <span className="font-medium text-gray-700">{getPrice(item)}</span>
                 <span>·</span>
-                <span>{available} left</span>
+                <span>{available} {t('left')}</span>
               </div>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">

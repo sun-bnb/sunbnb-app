@@ -3,6 +3,7 @@
 import { useState, FormEvent } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import sunbnbLogo from '@/app/sunbnb-horizontal-black.png'
 
 export default function ForgotPasswordPage() {
@@ -10,6 +11,8 @@ export default function ForgotPasswordPage() {
   const [submitted, setSubmitted] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const t = useTranslations('ForgotPassword')
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -26,10 +29,10 @@ export default function ForgotPasswordPage() {
       if (data.ok) {
         setSubmitted(true)
       } else {
-        setError(data.error || 'Something went wrong')
+        setError(data.error || t('Something went wrong'))
       }
     } catch {
-      setError('Something went wrong. Please try again.')
+      setError(t('Something went wrong. Please try again.'))
     } finally {
       setIsLoading(false)
     }
@@ -49,19 +52,19 @@ export default function ForgotPasswordPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-gray-900">Check your inbox</h2>
+            <h2 className="text-xl font-bold text-gray-900">{t('Check your inbox')}</h2>
             <p className="mt-2 text-sm text-gray-500 leading-relaxed">
-              If an account exists for <strong className="text-gray-700">{email}</strong>, we&apos;ve sent a password reset link. It expires in 1 hour.
+              {t('If an account exists we\'ve sent a reset link. It expires in 1 hour.')}
             </p>
             <Link href="/sign-in" className="inline-block mt-6 text-sm text-brand-cyan hover:text-brand-cyan-dark font-medium transition-colors">
-              Back to sign in
+              {t('Back to sign in')}
             </Link>
           </div>
         ) : (
           <>
             <div className="text-center">
-              <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Forgot your password?</h2>
-              <p className="mt-1.5 text-sm text-gray-500">Enter your email and we&apos;ll send you a reset link.</p>
+              <h2 className="text-2xl font-bold text-gray-900 tracking-tight">{t('Forgot your password')}</h2>
+              <p className="mt-1.5 text-sm text-gray-500">{t('Enter your email and we\'ll send you a reset link')}</p>
             </div>
 
             {error && (
@@ -72,13 +75,13 @@ export default function ForgotPasswordPage() {
 
             <form onSubmit={handleSubmit} className="mt-8 space-y-3">
               <div>
-                <label htmlFor="reset-email" className="block text-xs font-medium text-gray-600 mb-1.5">Email</label>
+                <label htmlFor="reset-email" className="block text-xs font-medium text-gray-600 mb-1.5">{t('Email')}</label>
                 <input
                   id="reset-email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
+                  placeholder={t('you@example.com')}
                   autoComplete="email"
                   required
                   className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-cyan/30 focus:border-brand-cyan transition-all placeholder:text-gray-300 text-gray-900"
@@ -92,17 +95,17 @@ export default function ForgotPasswordPage() {
                 {isLoading ? (
                   <span className="inline-flex items-center gap-2">
                     <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Sending…
+                    {t('Sending')}
                   </span>
                 ) : (
-                  'Send reset link'
+                  t('Send reset link')
                 )}
               </button>
             </form>
 
             <div className="mt-6 text-center">
               <Link href="/sign-in" className="text-sm text-gray-400 hover:text-gray-600 transition-colors">
-                Back to sign in
+                {t('Back to sign in')}
               </Link>
             </div>
           </>

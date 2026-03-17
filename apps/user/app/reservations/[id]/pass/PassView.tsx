@@ -1,6 +1,7 @@
 'use client'
 
 import QRCodeLib from 'react-qr-code'
+import { useTranslations } from 'next-intl'
 import { Reservation } from '@/app/sites/types'
 
 // Workaround: react-qr-code class component types are incompatible with React 18+ JSX
@@ -17,6 +18,9 @@ export default function PassView({
 } : {
   reservation: Reservation
 }) {
+
+  const t = useTranslations('Pass')
+  const tr = useTranslations('Reservations')
 
   const fmtOpts: Intl.DateTimeFormatOptions = {
     year: 'numeric',
@@ -39,7 +43,7 @@ export default function PassView({
 
         {/* ── Header ── */}
         <div className="bg-brand-gold px-6 pt-6 pb-5 text-center">
-          <div className="text-[10px] uppercase tracking-[0.2em] text-cream/70">Seating Pass</div>
+          <div className="text-[10px] uppercase tracking-[0.2em] text-cream/70">{t('Seating Pass')}</div>
           {reservation.site?.name && (
             <h1 className="mt-1.5 text-lg font-bold tracking-tight text-cream leading-snug">
               {reservation.site.name}
@@ -70,12 +74,12 @@ export default function PassView({
         {/* ── Details ── */}
         <div className="px-6 pt-3 pb-6 text-center space-y-3">
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-neutral-400 mb-0.5">Seats</div>
+            <div className="text-[10px] uppercase tracking-widest text-neutral-400 mb-0.5">{t('Seats')}</div>
             <div className="text-2xl font-bold text-brand-gold tabular-nums">{seats}</div>
-            <div className="text-[11px] text-neutral-400">{seatCount} {seatCount === 1 ? 'seat' : 'seats'}</div>
+            <div className="text-[11px] text-neutral-400">{seatCount} {seatCount === 1 ? t('seat') : t('seats')}</div>
           </div>
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-neutral-400 mb-0.5">Valid</div>
+            <div className="text-[10px] uppercase tracking-widest text-neutral-400 mb-0.5">{t('Valid')}</div>
             <div className="text-sm font-medium text-neutral-700">{validity}</div>
           </div>
         </div>
@@ -85,7 +89,7 @@ export default function PassView({
           <span className="text-xs font-semibold tracking-wide" style={{
             color: isPaid ? '#118811' : '#1e40af'
           }}>
-            {isPaid ? 'PAID' : 'RESERVED'}
+            {isPaid ? tr('PAID') : tr('RESERVED')}
           </span>
         </div>
 

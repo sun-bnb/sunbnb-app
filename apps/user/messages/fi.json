@@ -27,7 +27,20 @@
     "Back": "Takaisin",
     "Check your reservations for details": "Tarkista varauksesi tiedot",
     "OK": "OK",
-    "Cancel": "Peruuta"
+    "Cancel": "Peruuta",
+    "Days": "Päivät",
+    "Hours": "Tunnit",
+    "Sunbeds": "Aurinkotuolit",
+    "Equipment": "Välineet",
+    "Booking failed — please try again": "Varaus epäonnistui — yritä uudelleen",
+    "Payment gateway unavailable": "Maksupalvelu ei saatavilla",
+    "item": "tuote",
+    "items": "tuotetta",
+    "No equipment available": "Ei välineitä saatavilla",
+    "per hour": "per tunti",
+    "per day": "per päivä",
+    "left": "jäljellä",
+    "Select one or more sunbeds": "Valitse yksi tai useampi aurinkotuoli"
   },
   "Account": {
     "First name": "Etunimi",
@@ -35,7 +48,8 @@
     "E-mail": "Sähköposti",
     "Phone number": "Puhelinnumero",
     "Save": "Tallenna",
-    "Saved": "Tallennetu"
+    "Saved": "Tallennetu",
+    "Your Account": "Tilisi"
   },
   "Reservations": {
     "Reservations": "Varaukset",
@@ -51,19 +65,25 @@
     "Canceled": "Peruttu",
     "Cancelled": "Peruttu",
     "Payment received": "Maksu vastaanotettu",
+    "Refunded": "Palautettu",
     "Processing": "Käsittekyssä",
     "Payment failed": "Maksu epäonnistui",
     "No active reservations": "Ei aktiivisia varauksia",
     "No past reservations": "Ei aiempia varauksia",
     "In use": "Käytössä",
-    "Returned": "Palautettu"
+    "Returned": "Palautettu",
+    "Food & Drinks": "Ruoka ja juomat",
+    "Back to Reservation": "Takaisin varaukseen"
   },
   "Reservation": {
     "SEATS": "PAIKAT",
     "Amount": "Summa",
     "VALID": "VOIMASSA",
     "Open receipt": "Avaa kuitti",
-    "Tap to open pass": "Avaa kulkulupa napauttamalla"
+    "Tap to open pass": "Avaa kulkulupa napauttamalla",
+    "EQUIPMENT": "VARUSTEET",
+    "Picked up": "Noudettu",
+    "Returned at": "Palautettu"
   },
   "Payment": {
     "Payment confirms acceptance of": "Maksu vahvistaa suostumisen",
@@ -71,7 +91,97 @@
     "Pay now": "Maksa nyt",
     "Secure checkout": "Turvallinen maksu",
     "You will be redirected to complete payment": "Sinut ohjataan viimeistelemään maksu",
-    "Cancel reservation": "Peruuta varaus"
+    "Cancel reservation": "Peruuta varaus",
+    "Payment failed — please try again": "Maksu epäonnistui — yritä uudelleen",
+    "An unexpected error occurred": "Tapahtui odottamaton virhe",
+    "Demo mode — click Pay now to simulate payment": "Demotila — klikkaa Maksa nyt simuloidaksesi maksun"
+  },
+  "ForgotPassword": {
+    "Forgot your password": "Unohditko salasanasi?",
+    "Enter your email and we'll send you a reset link": "Syötä sähköpostiosoitteesi ja lähetämme sinulle palautuslinkin.",
+    "Email": "Sähköposti",
+    "you@example.com": "sinä@esimerkki.fi",
+    "Sending": "Lähetetään...",
+    "Send reset link": "Lähetä palautuslinkki",
+    "Check your inbox": "Tarkista saapuneet",
+    "If an account exists we've sent a reset link. It expires in 1 hour.": "Jos tiliä löytyy kyseiselle sähköpostille, olemme lähettäneet palautuslinkin. Se vanhenee tunnissa.",
+    "Back to sign in": "Takaisin kirjautumiseen",
+    "Something went wrong": "Jokin meni pieleen",
+    "Something went wrong. Please try again.": "Jokin meni pieleen. Ole hyvä ja yritä uudelleen."
+  },
+  "ResetPassword": {
+    "Set new password": "Aseta uusi salasana",
+    "Choose a new password for your account": "Valitse uusi salasana tilillesi.",
+    "New password": "Uusi salasana",
+    "Confirm password": "Vahvista salasana",
+    "Resetting": "Nollataan...",
+    "Reset password": "Nollaa salasana",
+    "Back to sign in": "Takaisin kirjautumiseen",
+    "Password updated": "Salasana päivitetty",
+    "Your password has been reset successfully": "Salasanasi on nollattu onnistuneesti.",
+    "Sign in": "Kirjaudu sisään",
+    "Invalid reset link": "Virheellinen palautuslinkki",
+    "This link is missing or malformed": "Tämä linkki puuttuu tai on virheellinen.",
+    "Request a new link": "Pyydä uusi linkki",
+    "Password must be at least 8 characters": "Salasanan tulee olla vähintään 8 merkkiä",
+    "Password must contain uppercase, lowercase, and a number": "Salasanassa tulee olla isoja kirjaimia, pieniä kirjaimia ja numero",
+    "Passwords do not match": "Salasanat eivät täsmää",
+    "Something went wrong": "Jokin meni pieleen",
+    "Something went wrong. Please try again.": "Jokin meni pieleen. Ole hyvä ja yritä uudelleen."
+  },
+  "Receipt": {
+    "Location": "Sijainti",
+    "Date": "Päivämäärä",
+    "Seats": "Paikat",
+    "Invoice": "Lasku",
+    "Item": "Tuote",
+    "Charge": "Netto",
+    "VAT": "ALV",
+    "Price": "Hinta",
+    "Subtotal": "Välisumma",
+    "Total": "Yhteensä",
+    "Service Provider": "Palveluntarjoaja",
+    "Platform Fee": "Alustan maksu",
+    "Total Paid": "Maksettu yhteensä",
+    "Preparing PDF": "Valmistellaan PDF:ää...",
+    "Download receipt": "Lataa kuitti"
+  },
+  "Pass": {
+    "Seating Pass": "Paikkalippu",
+    "Seats": "Paikat",
+    "seat": "paikka",
+    "seats": "paikkaa",
+    "Valid": "Voimassa"
+  },
+  "Menu": {
+    "Confirm your order": "Vahvista tilaus",
+    "Review your order": "Tarkista tilaus",
+    "Special instructions (optional)": "Erityisohjeet (valinnainen)",
+    "Notes for the kitchen (optional)": "Huomioita keittiölle (valinnainen)",
+    "Total": "Yhteensä",
+    "Placing order": "Tilataan...",
+    "Confirm Order": "Vahvista tilaus",
+    "Place Order": "Tee tilaus",
+    "Order payment": "Tilauksen maksu",
+    "Payment gateway unavailable": "Maksupalvelu ei saatavilla",
+    "No products available": "Ei tuotteita saatavilla",
+    "Order": "Tilaa",
+    "Checkout": "Kassalle",
+    "Order received": "Tilaus vastaanotettu",
+    "Food": "Ruoka",
+    "Drinks": "Juomat",
+    "Snacks": "Naposteltavat",
+    "Accessories": "Tarvikkeet",
+    "item": "tuote",
+    "items": "tuotetta"
+  },
+  "PaymentComplete": {
+    "Processing payment": "Käsitellään maksua...",
+    "Payment confirmed": "Maksu vahvistettu",
+    "Redirecting to your booking": "Ohjataan varauksellesi...",
+    "Payment failed": "Maksu epäonnistui",
+    "Please try again or contact support": "Ole hyvä ja yritä uudelleen tai ota yhteyttä tukeen.",
+    "Verifying payment": "Tarkistetaan maksua..."
   },
   "TermsOfService": {
     "tos": "terms-fi"

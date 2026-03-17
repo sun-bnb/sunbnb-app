@@ -47,7 +47,7 @@ export default function AccountView({ account, userImage } : { account: AccountP
             <AccountCircleIcon sx={{ fontSize: 80 }} className="text-gray-300 mb-3" />
           )}
           <h1 className="text-xl font-semibold text-gray-800">
-            {[account.firstName, account.lastName].filter(Boolean).join(' ') || 'Your Account'}
+            {[account.firstName, account.lastName].filter(Boolean).join(' ') || t('Your Account')}
           </h1>
           <p className="text-sm text-gray-500">{account.email}</p>
         </div>

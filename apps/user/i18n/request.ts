@@ -1,5 +1,5 @@
 import { getRequestConfig } from 'next-intl/server'
-import { headers } from 'next/headers'
+import { headers, cookies } from 'next/headers'
 
 /**
  * Parses an Accept-Language string into an array of
@@ -49,22 +49,28 @@ export default getRequestConfig(async ({ requestLocale }) => {
   let locale = 'en'
 
   const nextlIntLocale = await requestLocale
-  if (!nextlIntLocale) {
-    const headersList = await headers()
-    const acceptLanguage = headersList.get('accept-language')
-    if (acceptLanguage) {
-      const acceptedLanguages = parseAcceptLanguage(acceptLanguage)
-      for (const { language } of acceptedLanguages) {
-        // If you only care about the 2-letter code, parse it:
-        const shortCode = language.split('-')[0];
-        if (shortCode && availableLocales.includes(shortCode)) {
-          locale = shortCode;
-          break;
+  if (nextlIntLocale && availableLocales.includes(nextlIntLocale)) {
+    locale = nextlIntLocale
+  } else {
+    // Cookie takes priority over Accept-Language
+    const cookieStore = await cookies()
+    const cookieLocale = cookieStore.get('NEXT_LOCALE')?.value
+    if (cookieLocale && availableLocales.includes(cookieLocale)) {
+      locale = cookieLocale
+    } else {
+      const headersList = await headers()
+      const acceptLanguage = headersList.get('accept-language')
+      if (acceptLanguage) {
+        const acceptedLanguages = parseAcceptLanguage(acceptLanguage)
+        for (const { language } of acceptedLanguages) {
+          const shortCode = language.split('-')[0]
+          if (shortCode && availableLocales.includes(shortCode)) {
+            locale = shortCode
+            break
+          }
         }
       }
     }
-  } else {
-    locale = nextlIntLocale
   }
 
   return {

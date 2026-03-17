@@ -4,6 +4,7 @@ import { useState, FormEvent, Suspense } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import sunbnbLogo from '@/app/sunbnb-horizontal-black.png'
 
 function ResetPasswordContent() {
@@ -16,18 +17,20 @@ function ResetPasswordContent() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
 
+  const t = useTranslations('ResetPassword')
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (password.length < 8) {
-      setError('Password must be at least 8 characters')
+      setError(t('Password must be at least 8 characters'))
       return
     }
     if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
-      setError('Password must contain uppercase, lowercase, and a number')
+      setError(t('Password must contain uppercase, lowercase, and a number'))
       return
     }
     if (password !== confirmPassword) {
-      setError('Passwords do not match')
+      setError(t('Passwords do not match'))
       return
     }
     setIsLoading(true)
@@ -42,10 +45,10 @@ function ResetPasswordContent() {
       if (data.ok) {
         setSuccess(true)
       } else {
-        setError(data.error || 'Something went wrong')
+        setError(data.error || t('Something went wrong'))
       }
     } catch {
-      setError('Something went wrong. Please try again.')
+      setError(t('Something went wrong. Please try again.'))
     } finally {
       setIsLoading(false)
     }
@@ -54,10 +57,10 @@ function ResetPasswordContent() {
   if (!token) {
     return (
       <div className="text-center">
-        <h2 className="text-xl font-bold text-gray-900">Invalid reset link</h2>
-        <p className="mt-2 text-sm text-gray-500">This link is missing or malformed.</p>
+        <h2 className="text-xl font-bold text-gray-900">{t('Invalid reset link')}</h2>
+        <p className="mt-2 text-sm text-gray-500">{t('This link is missing or malformed')}</p>
         <Link href="/forgot-password" className="inline-block mt-6 text-sm text-brand-cyan hover:text-brand-cyan-dark font-medium transition-colors">
-          Request a new link
+          {t('Request a new link')}
         </Link>
       </div>
     )
@@ -71,10 +74,10 @@ function ResetPasswordContent() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
           </svg>
         </div>
-        <h2 className="text-xl font-bold text-gray-900">Password updated</h2>
-        <p className="mt-2 text-sm text-gray-500">Your password has been reset successfully.</p>
+        <h2 className="text-xl font-bold text-gray-900">{t('Password updated')}</h2>
+        <p className="mt-2 text-sm text-gray-500">{t('Your password has been reset successfully')}</p>
         <Link href="/sign-in" className="inline-block mt-6 text-sm font-semibold text-white bg-gray-900 rounded-xl hover:bg-gray-800 px-6 py-2.5 transition-colors shadow-sm">
-          Sign in
+          {t('Sign in')}
         </Link>
       </div>
     )
@@ -83,8 +86,8 @@ function ResetPasswordContent() {
   return (
     <>
       <div className="text-center">
-        <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Set new password</h2>
-        <p className="mt-1.5 text-sm text-gray-500">Choose a new password for your account.</p>
+        <h2 className="text-2xl font-bold text-gray-900 tracking-tight">{t('Set new password')}</h2>
+        <p className="mt-1.5 text-sm text-gray-500">{t('Choose a new password for your account')}</p>
       </div>
 
       {error && (
@@ -95,7 +98,7 @@ function ResetPasswordContent() {
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-3">
         <div>
-          <label htmlFor="new-password" className="block text-xs font-medium text-gray-600 mb-1.5">New password</label>
+          <label htmlFor="new-password" className="block text-xs font-medium text-gray-600 mb-1.5">{t('New password')}</label>
           <input
             id="new-password"
             type="password"
@@ -109,7 +112,7 @@ function ResetPasswordContent() {
           />
         </div>
         <div>
-          <label htmlFor="confirm-password" className="block text-xs font-medium text-gray-600 mb-1.5">Confirm password</label>
+          <label htmlFor="confirm-password" className="block text-xs font-medium text-gray-600 mb-1.5">{t('Confirm password')}</label>
           <input
             id="confirm-password"
             type="password"
@@ -130,17 +133,17 @@ function ResetPasswordContent() {
           {isLoading ? (
             <span className="inline-flex items-center gap-2">
               <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Resetting…
+              {t('Resetting')}
             </span>
           ) : (
-            'Reset password'
+            t('Reset password')
           )}
         </button>
       </form>
 
       <div className="mt-6 text-center">
         <Link href="/sign-in" className="text-sm text-gray-400 hover:text-gray-600 transition-colors">
-          Back to sign in
+          {t('Back to sign in')}
         </Link>
       </div>
     </>

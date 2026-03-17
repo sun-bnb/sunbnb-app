@@ -27,7 +27,20 @@
     "Back": "Volver",
     "Check your reservations for details": "Consulta tus reservas para más detalles",
     "OK": "Aceptar",
-    "Cancel": "Cancelar"
+    "Cancel": "Cancelar",
+    "Days": "Días",
+    "Hours": "Horas",
+    "Sunbeds": "Tumbonas",
+    "Equipment": "Equipamiento",
+    "Booking failed — please try again": "Reserva fallida — inténtalo de nuevo",
+    "Payment gateway unavailable": "Pasarela de pago no disponible",
+    "item": "artículo",
+    "items": "artículos",
+    "No equipment available": "No hay equipamiento disponible",
+    "per hour": "por hora",
+    "per day": "por día",
+    "left": "disponible",
+    "Select one or more sunbeds": "Selecciona una o más tumbonas"
   },
   "Account": {
     "First name": "Nombre",
@@ -35,7 +48,8 @@
     "E-mail": "Correo electrónico",
     "Phone number": "Número de teléfono",
     "Save": "Guardar",
-    "Saved": "Guardado"
+    "Saved": "Guardado",
+    "Your Account": "Tu cuenta"
   },
   "Reservations": {
     "Reservations": "Reservas",
@@ -51,19 +65,25 @@
     "Canceled": "Cancelada",
     "Cancelled": "Cancelada",
     "Payment received": "Pago recibido",
+    "Refunded": "Reembolsada",
     "Processing": "Procesando",
     "Payment failed": "Pago fallido",
     "No active reservations": "Sin reservas activas",
     "No past reservations": "Sin reservas anteriores",
     "In use": "En uso",
-    "Returned": "Devuelto"
+    "Returned": "Devuelto",
+    "Food & Drinks": "Comida y Bebidas",
+    "Back to Reservation": "Volver a la reserva"
   },
   "Reservation": {
     "SEATS": "ASIENTOS",
     "Amount": "Importe",
     "VALID": "VÁLIDO",
     "Open receipt": "Abrir factura",
-    "Tap to open pass": "Toca para abrir el pase"
+    "Tap to open pass": "Toca para abrir el pase",
+    "EQUIPMENT": "EQUIPAMIENTO",
+    "Picked up": "Recogido",
+    "Returned at": "Devuelto el"
   },
   "Payment": {
     "Payment confirms acceptance of": "El pago implica aceptación de",
@@ -71,7 +91,97 @@
     "Pay now": "Pagar ahora",
     "Secure checkout": "Pago seguro",
     "You will be redirected to complete payment": "Serás redirigido para completar el pago",
-    "Cancel reservation": "Cancelar reserva"
+    "Cancel reservation": "Cancelar reserva",
+    "Payment failed — please try again": "Pago fallido — inténtalo de nuevo",
+    "An unexpected error occurred": "Se ha producido un error inesperado",
+    "Demo mode — click Pay now to simulate payment": "Modo demo — haz clic en Pagar ahora para simular el pago"
+  },
+  "ForgotPassword": {
+    "Forgot your password": "¿Olvidaste tu contraseña?",
+    "Enter your email and we'll send you a reset link": "Introduce tu email y te enviaremos un enlace de recuperación.",
+    "Email": "Correo electrónico",
+    "you@example.com": "tu@ejemplo.com",
+    "Sending": "Enviando...",
+    "Send reset link": "Enviar enlace",
+    "Check your inbox": "Revisa tu bandeja de entrada",
+    "If an account exists we've sent a reset link. It expires in 1 hour.": "Si existe una cuenta para ese email, hemos enviado un enlace. Caduca en 1 hora.",
+    "Back to sign in": "Volver al inicio de sesión",
+    "Something went wrong": "Algo salió mal",
+    "Something went wrong. Please try again.": "Algo salió mal. Por favor, inténtalo de nuevo."
+  },
+  "ResetPassword": {
+    "Set new password": "Nueva contraseña",
+    "Choose a new password for your account": "Elige una nueva contraseña para tu cuenta.",
+    "New password": "Nueva contraseña",
+    "Confirm password": "Confirmar contraseña",
+    "Resetting": "Restableciendo...",
+    "Reset password": "Restablecer contraseña",
+    "Back to sign in": "Volver al inicio de sesión",
+    "Password updated": "Contraseña actualizada",
+    "Your password has been reset successfully": "Tu contraseña se ha restablecido correctamente.",
+    "Sign in": "Iniciar sesión",
+    "Invalid reset link": "Enlace no válido",
+    "This link is missing or malformed": "Este enlace falta o está mal formado.",
+    "Request a new link": "Solicitar un nuevo enlace",
+    "Password must be at least 8 characters": "La contraseña debe tener al menos 8 caracteres",
+    "Password must contain uppercase, lowercase, and a number": "La contraseña debe contener mayúsculas, minúsculas y un número",
+    "Passwords do not match": "Las contraseñas no coinciden",
+    "Something went wrong": "Algo salió mal",
+    "Something went wrong. Please try again.": "Algo salió mal. Por favor, inténtalo de nuevo."
+  },
+  "Receipt": {
+    "Location": "Ubicación",
+    "Date": "Fecha",
+    "Seats": "Asientos",
+    "Invoice": "Factura",
+    "Item": "Artículo",
+    "Charge": "Neto",
+    "VAT": "IVA",
+    "Price": "Precio",
+    "Subtotal": "Subtotal",
+    "Total": "Total",
+    "Service Provider": "Proveedor de servicios",
+    "Platform Fee": "Tarifa de plataforma",
+    "Total Paid": "Total pagado",
+    "Preparing PDF": "Preparando PDF...",
+    "Download receipt": "Descargar factura"
+  },
+  "Pass": {
+    "Seating Pass": "Pase de acceso",
+    "Seats": "Asientos",
+    "seat": "asiento",
+    "seats": "asientos",
+    "Valid": "Válido"
+  },
+  "Menu": {
+    "Confirm your order": "Confirmar pedido",
+    "Review your order": "Revisar pedido",
+    "Special instructions (optional)": "Instrucciones especiales (opcional)",
+    "Notes for the kitchen (optional)": "Notas para la cocina (opcional)",
+    "Total": "Total",
+    "Placing order": "Realizando pedido...",
+    "Confirm Order": "Confirmar pedido",
+    "Place Order": "Realizar pedido",
+    "Order payment": "Pago del pedido",
+    "Payment gateway unavailable": "Pasarela de pago no disponible",
+    "No products available": "No hay productos disponibles",
+    "Order": "Pedir",
+    "Checkout": "Pagar",
+    "Order received": "Pedido recibido",
+    "Food": "Comida",
+    "Drinks": "Bebidas",
+    "Snacks": "Snacks",
+    "Accessories": "Accesorios",
+    "item": "artículo",
+    "items": "artículos"
+  },
+  "PaymentComplete": {
+    "Processing payment": "Procesando pago...",
+    "Payment confirmed": "Pago confirmado",
+    "Redirecting to your booking": "Redirigiendo a tu reserva...",
+    "Payment failed": "Pago fallido",
+    "Please try again or contact support": "Por favor inténtalo de nuevo o contacta con soporte.",
+    "Verifying payment": "Verificando pago..."
   },
   "TermsOfService": {
     "tos": "terms-es"

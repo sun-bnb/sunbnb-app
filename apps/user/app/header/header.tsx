@@ -6,7 +6,8 @@ import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react'
 
 
 import * as React from 'react'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
+import { setLocale } from '@/app/locale/actions'
 import Paper from '@mui/material/Paper'
 import InputBase from '@mui/material/InputBase'
 import IconButton from '@mui/material/IconButton'
@@ -31,9 +32,16 @@ const userNavigation = [
   { name: 'Sign out', href: '/api/auth/signout' },
 ]
 
+const LOCALES = [
+  { code: 'en', label: 'EN' },
+  { code: 'es', label: 'ES' },
+  { code: 'fi', label: 'FI' },
+]
+
 export default function CustomizedInputBase() {
 
   const { data: session, status } = useSession()
+  const currentLocale = useLocale()
 
   const loggedIn = !!(session?.user?.id)
 
@@ -149,22 +157,40 @@ export default function CustomizedInputBase() {
       </div>
       {
         isMenuOpen && (
-          <div className="flex flex-wrap justify-center pb-4 gap-1.5 animate-slide-down-fade border-b border-black/10 shadow-sm">
-            {
-              userNavigation.map((item, index) => {
-                return (
-                  <div className="max-w-[300px] truncate font-semibold px-3 py-0.5 rounded-full bg-[#363636] text-cream text-sm animate-bubble-up" 
-                    key={'userNavigation-'+index}
-                    style={{ animationDelay: `${index * 0.06}s` }}
-                    onClick={() => {
-                      setIsMenuOpen(false)
-                      router.push(item.href)
-                    }}>
-                    { t(item.name) }
-                  </div>
-                )
-              })
-            }
+          <div className="animate-slide-down-fade border-b border-black/10 shadow-sm">
+            <div className="flex flex-wrap justify-center pt-4 pb-2 gap-1.5">
+              {userNavigation.map((item, index) => (
+                <div className="max-w-[300px] truncate font-semibold px-3 py-0.5 rounded-full bg-[#363636] text-cream text-sm animate-bubble-up"
+                  key={'userNavigation-'+index}
+                  style={{ animationDelay: `${index * 0.06}s` }}
+                  onClick={() => {
+                    setIsMenuOpen(false)
+                    router.push(item.href)
+                  }}>
+                  { t(item.name) }
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-center pb-4 gap-1.5">
+              {LOCALES.map((loc, index) => (
+                <div
+                  key={loc.code}
+                  className={`font-semibold px-3 py-0.5 rounded-full text-sm animate-bubble-up cursor-pointer ${
+                    currentLocale === loc.code
+                      ? 'bg-brand-cyan text-cream'
+                      : 'bg-[#363636] text-cream opacity-50 hover:opacity-100'
+                  }`}
+                  style={{ animationDelay: `${(userNavigation.length + index) * 0.06}s` }}
+                  onClick={async () => {
+                    await setLocale(loc.code)
+                    setIsMenuOpen(false)
+                    router.refresh()
+                  }}
+                >
+                  {loc.label}
+                </div>
+              ))}
+            </div>
           </div>
         )
       }

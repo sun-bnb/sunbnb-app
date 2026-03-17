@@ -198,7 +198,7 @@ export function MolliePayment({
       window.location.href = data.checkoutUrl
     } catch (err) {
       console.error('[MolliePayment] Error:', err)
-      setError('Payment failed — please try again')
+      setError(t('Payment failed — please try again'))
       setIsLoading(false)
     }
   }

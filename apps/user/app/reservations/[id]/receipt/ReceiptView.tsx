@@ -2,10 +2,12 @@
 
 import React, { ComponentType } from 'react'
 import { PDFDownloadLink } from '@react-pdf/renderer'
+import { useTranslations } from 'next-intl'
 import { ReceiptProps, InvoiceSection, formatCurrency } from './ReceiptPage'
 import PdfReceipt from './PdfReceipt'
 
 function SectionBlock({ section, label }: { section: InvoiceSection; label?: string }) {
+  const t = useTranslations('Receipt')
   return (
     <div className="mb-2">
       {/* Merchant header */}
@@ -24,7 +26,7 @@ function SectionBlock({ section, label }: { section: InvoiceSection; label?: str
           <div className="text-xs text-gray-500 mt-0.5">{section.merchantPhone}</div>
         )}
         {section.invoiceNumber && (
-          <div className="text-[10px] text-gray-400 mt-1">Invoice {section.invoiceNumber}</div>
+          <div className="text-[10px] text-gray-400 mt-1">{t('Invoice')} {section.invoiceNumber}</div>
         )}
       </div>
 
@@ -33,10 +35,10 @@ function SectionBlock({ section, label }: { section: InvoiceSection; label?: str
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-gray-200">
-              <th className="text-left py-2 font-semibold text-gray-600">Item</th>
-              <th className="text-right py-2 font-semibold text-gray-600 w-16">Charge</th>
-              <th className="text-right py-2 font-semibold text-gray-600 w-14">VAT</th>
-              <th className="text-right py-2 font-semibold text-gray-600 w-16">Price</th>
+              <th className="text-left py-2 font-semibold text-gray-600">{t('Item')}</th>
+              <th className="text-right py-2 font-semibold text-gray-600 w-16">{t('Charge')}</th>
+              <th className="text-right py-2 font-semibold text-gray-600 w-14">{t('VAT')}</th>
+              <th className="text-right py-2 font-semibold text-gray-600 w-16">{t('Price')}</th>
             </tr>
           </thead>
           <tbody>
@@ -67,15 +69,15 @@ function SectionBlock({ section, label }: { section: InvoiceSection; label?: str
       {/* Section subtotals */}
       <div className="mx-5 border-t border-gray-300 pt-2 pb-3">
         <div className="flex justify-between text-xs text-gray-600 mb-1">
-          <span>Subtotal</span>
+          <span>{t('Subtotal')}</span>
           <span className="tabular-nums">{formatCurrency(section.subtotalCharge)} &euro;</span>
         </div>
         <div className="flex justify-between text-xs text-gray-600 mb-1">
-          <span>VAT{section.vatCountryCode ? ` (${section.vatCountryCode})` : ''}</span>
+          <span>{t('VAT')}{section.vatCountryCode ? ` (${section.vatCountryCode})` : ''}</span>
           <span className="tabular-nums">{formatCurrency(section.subtotalVat)} &euro;</span>
         </div>
         <div className="flex justify-between text-xs font-semibold text-gray-800 border-t border-gray-200 pt-1">
-          <span>Total</span>
+          <span>{t('Total')}</span>
           <span className="tabular-nums">{formatCurrency(section.subtotalAmount)} &euro;</span>
         </div>
       </div>
@@ -84,6 +86,7 @@ function SectionBlock({ section, label }: { section: InvoiceSection; label?: str
 }
 
 function ReceiptDoc({ receipt }: { receipt: ReceiptProps }) {
+  const t = useTranslations('Receipt')
   return (
     <div className="max-w-md mx-auto bg-white text-gray-800">
       {/* Reservation info */}
@@ -91,19 +94,19 @@ function ReceiptDoc({ receipt }: { receipt: ReceiptProps }) {
         <div className="px-5 py-3 border-b border-dashed border-gray-200">
           {receipt.siteName && (
             <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Location</span>
+              <span className="text-gray-500">{t('Location')}</span>
               <span className="font-medium text-gray-800">{receipt.siteName}</span>
             </div>
           )}
           {receipt.reservationDate && (
             <div className="flex justify-between text-xs mt-1">
-              <span className="text-gray-500">Date</span>
+              <span className="text-gray-500">{t('Date')}</span>
               <span className="font-medium text-gray-800">{receipt.reservationDate}</span>
             </div>
           )}
           {receipt.seatNumbers && (
             <div className="flex justify-between text-xs mt-1">
-              <span className="text-gray-500">Seats</span>
+              <span className="text-gray-500">{t('Seats')}</span>
               <span className="font-medium text-gray-800">{receipt.seatNumbers}</span>
             </div>
           )}
@@ -111,17 +114,17 @@ function ReceiptDoc({ receipt }: { receipt: ReceiptProps }) {
       )}
 
       {/* Partner section — products/services */}
-      <SectionBlock section={receipt.partnerSection} label="Service Provider" />
+      <SectionBlock section={receipt.partnerSection} label={t('Service Provider')} />
 
       {/* Platform section — service fee */}
       {receipt.platformSection && (
-        <SectionBlock section={receipt.platformSection} label="Platform Fee" />
+        <SectionBlock section={receipt.platformSection} label={t('Platform Fee')} />
       )}
 
       {/* Grand total */}
       <div className="mx-5 border-t-2 border-gray-400 pt-3 pb-4">
         <div className="flex justify-between text-sm font-bold text-gray-900">
-          <span>Total Paid</span>
+          <span>{t('Total Paid')}</span>
           <span className="tabular-nums">{formatCurrency(receipt.grandTotal)} &euro;</span>
         </div>
       </div>
@@ -135,6 +138,7 @@ function ReceiptDoc({ receipt }: { receipt: ReceiptProps }) {
 }
 
 export default function ReceiptView({ receipt }: { receipt: ReceiptProps }) {
+  const t = useTranslations('Receipt')
   const SafePDFDownloadLink = PDFDownloadLink as unknown as ComponentType<any>
 
   return (
@@ -149,7 +153,7 @@ export default function ReceiptView({ receipt }: { receipt: ReceiptProps }) {
             fileName={`receipt-${new Date().toISOString()}.pdf`}
           >
             {({ blob, url, loading, error }: { blob?: Blob; url?: string; loading: boolean; error?: Error }) =>
-              loading ? 'Preparing PDF...' : 'Download receipt'
+              loading ? t('Preparing PDF') : t('Download receipt')
             }
           </SafePDFDownloadLink>
         </div>

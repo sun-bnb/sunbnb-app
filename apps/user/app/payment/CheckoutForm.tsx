@@ -57,7 +57,7 @@ export function StripeCheckoutForm({
     if (error.type === "card_error" || error.type === "validation_error") {
       setMessage(error.message || null)
     } else {
-      setMessage("An unexpected error occurred.")
+      setMessage(t('An unexpected error occurred'))
     }
 
     setIsLoading(false)
@@ -128,7 +128,7 @@ export function DemoCheckoutForm({
         }
       </div>
       <form id="payment-form" className="mr-[6px] ml-[6px] mt-[6px] mb-[12px]">
-        <div className="text-[#1976d2] text-[15px] font-bold">Demo mode. Click "Pay now" to simulate payment.</div>
+        <div className="text-[#1976d2] text-[15px] font-bold">{t('Demo mode — click Pay now to simulate payment')}</div>
         <div className="mt-[18px]">
           <Button variant="contained" fullWidth={true} onClick={() => {
             const returnUrl = `${process.env.NEXT_PUBLIC_APP_URL}${completeUrl || '/payment/complete'}`

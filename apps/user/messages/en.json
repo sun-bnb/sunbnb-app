@@ -27,7 +27,20 @@
     "Confirm booking": "Confirm booking",
     "Back": "Back",
     "OK": "OK",
-    "Cancel": "Cancel"
+    "Cancel": "Cancel",
+    "Days": "Days",
+    "Hours": "Hours",
+    "Sunbeds": "Sunbeds",
+    "Equipment": "Equipment",
+    "Booking failed — please try again": "Booking failed — please try again",
+    "Payment gateway unavailable": "Payment gateway unavailable",
+    "item": "item",
+    "items": "items",
+    "No equipment available": "No equipment available",
+    "per hour": "per hour",
+    "per day": "per day",
+    "left": "left",
+    "Select one or more sunbeds": "Select one or more sunbeds"
   },
   "Account": {
     "First name": "First name",
@@ -35,7 +48,8 @@
     "E-mail": "E-mail",
     "Phone number": "Phone number",
     "Save": "Save",
-    "Saved": "Saved"
+    "Saved": "Saved",
+    "Your Account": "Your Account"
   },
   "Reservations": {
     "Reservations": "Reservations",
@@ -51,19 +65,26 @@
     "Canceled": "Canceled",
     "Cancelled": "Cancelled",
     "Paymemnt received": "Payment received",
+    "Payment received": "Payment received",
+    "Refunded": "Refunded",
     "Processing": "Processing",
     "Payment failed": "Payment failed",
     "No active reservations": "No active reservations",
     "No past reservations": "No past reservations",
     "In use": "In use",
-    "Returned": "Returned"
+    "Returned": "Returned",
+    "Food & Drinks": "Food & Drinks",
+    "Back to Reservation": "Back to Reservation"
   },
   "Reservation": {
     "SEATS": "SEATS",
     "Amount": "Amount",
     "VALID": "VALID",
     "Open receipt": "Open receipt",
-    "Tap to open pass": "Tap to open pass"
+    "Tap to open pass": "Tap to open pass",
+    "EQUIPMENT": "EQUIPMENT",
+    "Picked up": "Picked up",
+    "Returned at": "Returned at"
   },
   "Payment": {
     "Payment confirms acceptance of": "Payment confirms acceptance of",
@@ -71,7 +92,97 @@
     "Pay now": "Pay now",
     "Secure checkout": "Secure checkout",
     "You will be redirected to complete payment": "You will be redirected to complete payment",
-    "Cancel reservation": "Cancel reservation"
+    "Cancel reservation": "Cancel reservation",
+    "Payment failed — please try again": "Payment failed — please try again",
+    "An unexpected error occurred": "An unexpected error occurred",
+    "Demo mode — click Pay now to simulate payment": "Demo mode — click Pay now to simulate payment"
+  },
+  "ForgotPassword": {
+    "Forgot your password": "Forgot your password?",
+    "Enter your email and we'll send you a reset link": "Enter your email and we'll send you a reset link.",
+    "Email": "Email",
+    "you@example.com": "you@example.com",
+    "Sending": "Sending…",
+    "Send reset link": "Send reset link",
+    "Check your inbox": "Check your inbox",
+    "If an account exists we've sent a reset link. It expires in 1 hour.": "If an account exists for that email, we've sent a password reset link. It expires in 1 hour.",
+    "Back to sign in": "Back to sign in",
+    "Something went wrong": "Something went wrong",
+    "Something went wrong. Please try again.": "Something went wrong. Please try again."
+  },
+  "ResetPassword": {
+    "Set new password": "Set new password",
+    "Choose a new password for your account": "Choose a new password for your account.",
+    "New password": "New password",
+    "Confirm password": "Confirm password",
+    "Resetting": "Resetting…",
+    "Reset password": "Reset password",
+    "Back to sign in": "Back to sign in",
+    "Password updated": "Password updated",
+    "Your password has been reset successfully": "Your password has been reset successfully.",
+    "Sign in": "Sign in",
+    "Invalid reset link": "Invalid reset link",
+    "This link is missing or malformed": "This link is missing or malformed.",
+    "Request a new link": "Request a new link",
+    "Password must be at least 8 characters": "Password must be at least 8 characters",
+    "Password must contain uppercase, lowercase, and a number": "Password must contain uppercase, lowercase, and a number",
+    "Passwords do not match": "Passwords do not match",
+    "Something went wrong": "Something went wrong",
+    "Something went wrong. Please try again.": "Something went wrong. Please try again."
+  },
+  "Receipt": {
+    "Location": "Location",
+    "Date": "Date",
+    "Seats": "Seats",
+    "Invoice": "Invoice",
+    "Item": "Item",
+    "Charge": "Charge",
+    "VAT": "VAT",
+    "Price": "Price",
+    "Subtotal": "Subtotal",
+    "Total": "Total",
+    "Service Provider": "Service Provider",
+    "Platform Fee": "Platform Fee",
+    "Total Paid": "Total Paid",
+    "Preparing PDF": "Preparing PDF…",
+    "Download receipt": "Download receipt"
+  },
+  "Pass": {
+    "Seating Pass": "Seating Pass",
+    "Seats": "Seats",
+    "seat": "seat",
+    "seats": "seats",
+    "Valid": "Valid"
+  },
+  "Menu": {
+    "Confirm your order": "Confirm your order",
+    "Review your order": "Review your order",
+    "Special instructions (optional)": "Special instructions (optional)",
+    "Notes for the kitchen (optional)": "Notes for the kitchen (optional)",
+    "Total": "Total",
+    "Placing order": "Placing order…",
+    "Confirm Order": "Confirm Order",
+    "Place Order": "Place Order",
+    "Order payment": "Order payment",
+    "Payment gateway unavailable": "Payment gateway unavailable",
+    "No products available": "No products available",
+    "Order": "Order",
+    "Checkout": "Checkout",
+    "Order received": "Order received",
+    "Food": "Food",
+    "Drinks": "Drinks",
+    "Snacks": "Snacks",
+    "Accessories": "Accessories",
+    "item": "item",
+    "items": "items"
+  },
+  "PaymentComplete": {
+    "Processing payment": "Processing payment…",
+    "Payment confirmed": "Payment confirmed",
+    "Redirecting to your booking": "Redirecting to your booking…",
+    "Payment failed": "Payment failed",
+    "Please try again or contact support": "Please try again or contact support.",
+    "Verifying payment": "Verifying payment…"
   },
   "TermsOfService": {
     "tos": "terms-en"

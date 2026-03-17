@@ -174,7 +174,7 @@ export default function ReservationView({ serviceFee, siteType, orderPaymentType
               className="h-12 w-full bg-brand-cyan text-cream font-semibold text-sm tracking-widest uppercase
                          active:bg-brand-cyan-dark transition-colors flex items-center justify-center gap-2"
             >
-              <span>Food &amp; Drinks</span>
+              <span>{t('Food & Drinks')}</span>
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
               </svg>
@@ -208,7 +208,7 @@ export default function ReservationView({ serviceFee, siteType, orderPaymentType
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
             </svg>
-            <span>Back to Reservation</span>
+            <span>{t('Back to Reservation')}</span>
           </button>
         </div>
       </div>

@@ -20,16 +20,11 @@ import { useGetOrderByIdQuery } from '@/store/features/api/apiSlice'
 import OrderPaymentView from '@/app/payment/OrderPayment'
 import { ORDER_PROCESSING } from '@repo/data/reservation-status'
 import Orders from './Orders'
+import { useTranslations } from 'next-intl'
 
 const MAX_ITEM_QTY = 99
 
 const CATEGORY_ORDER = ['food', 'drink', 'snack', 'accessory'] as const
-const CATEGORY_LABELS: Record<string, string> = {
-  food: '🍽️ Food',
-  drink: '🥤 Drinks',
-  snack: '🍿 Snacks',
-  accessory: '🏖️ Accessories',
-}
 
 export default function Menu({
   siteId,
@@ -66,6 +61,15 @@ export default function Menu({
 }) {
 
   const isUnpaid = siteType === 'unpaid'
+
+  const t = useTranslations('Menu')
+
+  const CATEGORY_LABELS: Record<string, string> = {
+    food: `🍽️ ${t('Food')}`,
+    drink: `🥤 ${t('Drinks')}`,
+    snack: `🍿 ${t('Snacks')}`,
+    accessory: `🏖️ ${t('Accessories')}`,
+  }
 
   const { data: session } = useSession()
   const dispatch = useDispatch()
@@ -106,7 +110,7 @@ export default function Menu({
   if (!isUnpaid && !stripePublicKey && paymentProvider !== 'mollie') {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-        <p className="text-sm">Payment gateway unavailable</p>
+        <p className="text-sm">{t('Payment gateway unavailable')}</p>
       </div>
     )
   }
@@ -195,7 +199,7 @@ export default function Menu({
     <div className="flex flex-col" style={{ height: '50dvh' }}>
       {/* Header */}
       <div className="px-5 pt-5 pb-3">
-        <h3 className="text-lg font-semibold text-gray-900">{isUnpaid ? 'Confirm your order' : 'Review your order'}</h3>
+        <h3 className="text-lg font-semibold text-gray-900">{isUnpaid ? t('Confirm your order') : t('Review your order')}</h3>
       </div>
 
       {/* Items */}
@@ -216,7 +220,7 @@ export default function Menu({
             <div className="ml-9 mt-1">
               <input
                 type="text"
-                placeholder="Special instructions (optional)"
+                placeholder={t('Special instructions (optional)')}
                 value={item.notes ?? ''}
                 onChange={(e) => updateItemNotes(item.product.id, e.target.value)}
                 maxLength={200}
@@ -229,7 +233,7 @@ export default function Menu({
         {/* Order-level notes */}
         <div className="mt-3">
           <textarea
-            placeholder="Notes for the kitchen (optional)"
+            placeholder={t('Notes for the kitchen (optional)')}
             value={orderNotes}
             onChange={(e) => setOrderNotes(e.target.value)}
             maxLength={500}
@@ -242,7 +246,7 @@ export default function Menu({
       {/* Footer */}
       <div className="border-t border-gray-200 px-5 pb-5 pt-3 space-y-3">
         <div className="flex justify-between items-center">
-          <span className="text-base font-semibold text-gray-900">Total</span>
+          <span className="text-base font-semibold text-gray-900">{t('Total')}</span>
           <span className="text-base font-semibold text-gray-900">
             {totalPrice.toFixed(2)}&nbsp;€
           </span>
@@ -253,13 +257,13 @@ export default function Menu({
           className="w-full py-3 rounded-xl bg-gray-900 text-white text-sm font-semibold
                      disabled:opacity-40 active:bg-gray-800 transition-colors"
         >
-          {placing ? 'Placing order…' : isUnpaid ? 'Confirm Order' : 'Place Order'}
+          {placing ? t('Placing order') : isUnpaid ? t('Confirm Order') : t('Place Order')}
         </button>
       </div>
     </div>
   ) : (
     <div className="flex items-center justify-between px-5 py-4">
-      <h3 className="text-lg font-semibold text-gray-900">Order payment</h3>
+      <h3 className="text-lg font-semibold text-gray-900">{t('Order payment')}</h3>
       <span className="text-lg font-semibold text-gray-900">
         {totalPrice.toFixed(2)}&nbsp;€
       </span>
@@ -296,7 +300,7 @@ export default function Menu({
         </div>
       ) : products.filter(p => !p.soldOut).length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-          <p className="text-sm">No products available</p>
+          <p className="text-sm">{t('No products available')}</p>
         </div>
       ) : (
         <div className="space-y-6">
@@ -382,7 +386,7 @@ export default function Menu({
         sx={{ bottom: 112 }}
       >
         <Alert onClose={() => setOpenConfirmation(false)} severity="success" sx={{ width: '100%' }}>
-          Order received
+          {t('Order received')}
         </Alert>
       </Snackbar>
 
@@ -401,7 +405,7 @@ export default function Menu({
           >
             <ShoppingCartIcon sx={{ fontSize: 18 }} />
           </Badge>
-          <span>{isUnpaid ? 'Order' : 'Checkout'}&ensp;–&ensp;{totalPrice.toFixed(2)}&nbsp;€</span>
+          <span>{isUnpaid ? t('Order') : t('Checkout')}&ensp;–&ensp;{totalPrice.toFixed(2)}&nbsp;€</span>
         </button>
 
         <button

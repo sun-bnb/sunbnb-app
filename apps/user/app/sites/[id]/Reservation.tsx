@@ -392,12 +392,12 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
         }
       } else {
         console.error('[RentalBooking] Error:', result)
-        setBookingError(result.errors?.[0] || 'Booking failed — please try again')
+        setBookingError(result.errors?.[0] || t('Booking failed — please try again'))
       }
     } catch (err) {
       console.error('[RentalBooking] Exception:', err)
       setBooking(false)
-      setBookingError('Booking failed — please try again')
+      setBookingError(t('Booking failed — please try again'))
     }
   }
 
@@ -445,7 +445,7 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
       window.location.href = data.checkoutUrl
     } catch (err) {
       console.error('[RentalPayment] Error:', err)
-      setRentalPaymentError('Payment failed — please try again')
+      setRentalPaymentError(t('Booking failed — please try again'))
       setRentalPaymentLoading(false)
     }
   }
@@ -597,7 +597,7 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
                 {booking ? (
                   <CircularProgress size={20} color="inherit" />
                 ) : totalItems > 0 ? (
-                  `${t('Reserve')} · ${totalItems} item${totalItems !== 1 ? 's' : ''} · €${totalPrice.toFixed(2)}`
+                  `${t('Reserve')} · ${totalItems} ${totalItems !== 1 ? t('items') : t('item')} · €${totalPrice.toFixed(2)}`
                 ) : (
                   t('Reserve')
                 )}
@@ -623,6 +623,8 @@ function ViewModeSelector({
   hasSunbeds: boolean
   hasRentals: boolean
 }) {
+  const t = useTranslations('SiteView')
+
   if (!hasSunbeds || !hasRentals) return null
 
   return (
@@ -637,7 +639,7 @@ function ViewModeSelector({
         }`}
       >
         <span>⛱️</span>
-        <span>Sunbeds</span>
+        <span>{t('Sunbeds')}</span>
       </button>
       <button
         type="button"
@@ -649,7 +651,7 @@ function ViewModeSelector({
         }`}
       >
         <span>🏄</span>
-        <span>Equipment</span>
+        <span>{t('Equipment')}</span>
       </button>
     </div>
   )
@@ -679,10 +681,12 @@ export default function ReservationView({
   const defaultMode: ViewMode = hasSunbeds ? 'sunbeds' : 'equipment'
   const [viewMode, setViewMode] = useState<ViewMode>(defaultMode)
 
+  const t = useTranslations('SiteView')
+
   if (!stripePublicKey && site.paymentProvider !== 'mollie') {
     return (
       <div className="flex flex-col items-center justify-center">
-        <div>Payment gateway unavailable</div>
+        <div>{t('Payment gateway unavailable')}</div>
       </div>
     )
   }

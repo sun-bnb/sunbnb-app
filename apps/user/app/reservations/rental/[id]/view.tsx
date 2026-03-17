@@ -115,7 +115,7 @@ export default function RentalBookingDetail({ booking }: { booking: Booking }) {
 
           {/* Item */}
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-neutral-400 mb-1">EQUIPMENT</div>
+            <div className="text-[10px] uppercase tracking-widest text-neutral-400 mb-1">{tr('EQUIPMENT')}</div>
             <div className="flex items-center justify-center gap-2">
               <SurfingIcon sx={{ fontSize: 28 }} className="text-brand-gold" />
               <div className="text-lg font-bold text-brand-gold">
@@ -144,12 +144,12 @@ export default function RentalBookingDetail({ booking }: { booking: Booking }) {
           {/* Operational timestamps */}
           {booking.pickedUpAt && (
             <div className="text-xs text-neutral-400">
-              Picked up: {dayjs(booking.pickedUpAt).format('HH:mm, D MMM')}
+              {tr('Picked up')}: {dayjs(booking.pickedUpAt).format('HH:mm, D MMM')}
             </div>
           )}
           {booking.returnedAt && (
             <div className="text-xs text-neutral-400">
-              Returned: {dayjs(booking.returnedAt).format('HH:mm, D MMM')}
+              {tr('Returned at')}: {dayjs(booking.returnedAt).format('HH:mm, D MMM')}
             </div>
           )}
         </div>

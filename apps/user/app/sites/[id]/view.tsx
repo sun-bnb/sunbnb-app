@@ -258,8 +258,8 @@ export default function SiteView({ site, apiKey, stripePublicKey, brand }: { sit
                         focused: true
                       }))
                     }} aria-label="Reservation mode">
-                      <Tab value="days" label="Days" />
-                      <Tab value="hours" label="Hours" />
+                      <Tab value="days" label={t('Days')} />
+                      <Tab value="hours" label={t('Hours')} />
                     </Tabs>
                   </div>
 
@@ -307,8 +307,8 @@ export default function SiteView({ site, apiKey, stripePublicKey, brand }: { sit
                 <Tabs variant="fullWidth" value={reservationMode || 'days'} onChange={(e, value) => {
                   dispatch(setValue({ reservationMode: value, focused: true }))
                 }} aria-label="Reservation mode">
-                  <Tab value="days" label="Days" />
-                  <Tab value="hours" label="Hours" />
+                  <Tab value="days" label={t('Days')} />
+                  <Tab value="hours" label={t('Hours')} />
                 </Tabs>
               </div>
             )}
