@@ -23,6 +23,35 @@ export async function submitForm(
   const errors = requiredFields.filter(field => !formData.get(field)).map(field => `${fieldLabels[field] ?? field} is required`)
   if (errors.length > 0) return { status: 'error', errors }
 
+  // Length caps
+  const STRING_LIMITS: Record<string, number> = {
+    firstName: 100, lastName: 100, email: 320, phoneNumber: 50,
+    company: 200, businessId: 50, websiteUrl: 2000,
+    address: 300, city: 100, postalCode: 20, country: 100, bankAccount: 50,
+  }
+  for (const [field, max] of Object.entries(STRING_LIMITS)) {
+    const val = formData.get(field) as string | null
+    if (val && val.length > max) {
+      return { status: 'error', errors: [`${fieldLabels[field] ?? field} is too long (max ${max} characters)`] }
+    }
+  }
+
+  // Email format
+  const email = formData.get('email') as string
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { status: 'error', errors: ['Invalid email format'] }
+  }
+
+  // URL format (if provided)
+  const websiteUrl = formData.get('websiteUrl') as string
+  if (websiteUrl) {
+    try {
+      new URL(websiteUrl)
+    } catch {
+      return { status: 'error', errors: ['Invalid website URL'] }
+    }
+  }
+
   const accountData = {
     userId: session.user.id,
     firstName: formData.get('firstName') as string,

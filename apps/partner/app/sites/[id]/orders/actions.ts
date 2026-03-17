@@ -44,6 +44,10 @@ export async function setOrderStatus(
   status: string,
   reason?: string,
 ) {
+  if (reason !== undefined && typeof reason === 'string' && reason.length > 500) {
+    return { status: 'error', errors: ['Reason is too long (max 500 characters)'] }
+  }
+
   const { error } = await requireSiteOwner(siteId)
   if (error) return { status: 'error', errors: [error] }
 
@@ -93,10 +97,15 @@ export async function getOrders(
   tab: OrderTab = 'incoming',
 ): Promise<{ status: string; errors?: string[]; orders?: any[] }> {
 
+  const validTabs: OrderTab[] = ['incoming', 'active', 'ready', 'history']
+  if (!validTabs.includes(tab)) {
+    return { status: 'error', errors: ['Invalid tab'] }
+  }
+
   const { error } = await requireSiteOwner(siteId)
   if (error) return { status: 'error', errors: [error] }
 
-  const statuses = TAB_STATUSES[tab] ?? TAB_STATUSES.incoming
+  const statuses = TAB_STATUSES[tab]
 
   const orders = await prisma.order.findMany({
     where: {

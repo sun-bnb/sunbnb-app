@@ -57,8 +57,13 @@ export async function createRentalItem(input: {
 
   const errors: string[] = []
   if (!input.name?.trim()) errors.push('Name is required')
-  if (input.totalQuantity < 1) errors.push('Quantity must be at least 1')
+  if (input.name && input.name.length > 200) errors.push('Name is too long (max 200)')
+  if (input.description && input.description.length > 1000) errors.push('Description is too long (max 1000)')
+  if (input.category && input.category.length > 100) errors.push('Category is too long (max 100)')
+  if (input.totalQuantity < 1 || input.totalQuantity > 10000) errors.push('Quantity must be 1–10,000')
   if (!input.pricePerHour && !input.pricePerDay) errors.push('At least one price is required')
+  if (input.pricePerHour !== undefined && input.pricePerHour !== null && (isNaN(Number(input.pricePerHour)) || Number(input.pricePerHour) < 0 || Number(input.pricePerHour) > 100000)) errors.push('Hourly price must be 0–100,000')
+  if (input.pricePerDay !== undefined && input.pricePerDay !== null && (isNaN(Number(input.pricePerDay)) || Number(input.pricePerDay) < 0 || Number(input.pricePerDay) > 100000)) errors.push('Daily price must be 0–100,000')
   if (errors.length > 0) return { status: 'error', errors }
 
   const item = await prisma.rentalItem.create({
@@ -95,8 +100,13 @@ export async function updateRentalItem(input: {
 
   const errors: string[] = []
   if (!input.name?.trim()) errors.push('Name is required')
-  if (input.totalQuantity < 1) errors.push('Quantity must be at least 1')
+  if (input.name && input.name.length > 200) errors.push('Name is too long (max 200)')
+  if (input.description && input.description.length > 1000) errors.push('Description is too long (max 1000)')
+  if (input.category && input.category.length > 100) errors.push('Category is too long (max 100)')
+  if (input.totalQuantity < 1 || input.totalQuantity > 10000) errors.push('Quantity must be 1–10,000')
   if (!input.pricePerHour && !input.pricePerDay) errors.push('At least one price is required')
+  if (input.pricePerHour !== undefined && input.pricePerHour !== null && (isNaN(Number(input.pricePerHour)) || Number(input.pricePerHour) < 0 || Number(input.pricePerHour) > 100000)) errors.push('Hourly price must be 0–100,000')
+  if (input.pricePerDay !== undefined && input.pricePerDay !== null && (isNaN(Number(input.pricePerDay)) || Number(input.pricePerDay) < 0 || Number(input.pricePerDay) > 100000)) errors.push('Daily price must be 0–100,000')
   if (errors.length > 0) return { status: 'error', errors }
 
   // Verify item belongs to this site
@@ -146,6 +156,9 @@ export async function saveRentalVat(siteId: string, rentalVat: string) {
   if (error) return { status: 'error', errors: [error] }
 
   const value = Number(rentalVat)
+  if (isNaN(value) || value < 0 || value > 100) {
+    return { status: 'error', errors: ['VAT must be 0–100'] }
+  }
 
   await prisma.site.update({
     where: { id: siteId },
@@ -161,6 +174,11 @@ export async function saveRentalVat(siteId: string, rentalVat: string) {
 export async function toggleSiteFeature(siteId: string, feature: string, enabled: boolean) {
   const { error } = await requireSiteOwner(siteId)
   if (error) return { status: 'error', errors: [error] }
+
+  const VALID_FEATURES = ['rentals']
+  if (!VALID_FEATURES.includes(feature)) {
+    return { status: 'error', errors: ['Invalid feature'] }
+  }
 
   const site = await prisma.site.findUnique({ where: { id: siteId }, select: { features: true } })
   if (!site) return { status: 'error', errors: ['Site not found'] }

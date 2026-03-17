@@ -11,6 +11,16 @@ export async function addWorkingHours(
   siteId: string,
   workingHours: { day: string; openTime: string; closeTime: string }
 ) {
+  // Input validation
+  const dayNum = Number(workingHours.day)
+  if (isNaN(dayNum) || !Number.isInteger(dayNum) || dayNum < 0 || dayNum > 6) {
+    return { status: 'error', errors: ['Day must be 0–6 (Sunday–Saturday)'] }
+  }
+  const timeRegex = /^\d{2}:\d{2}$/
+  if (!timeRegex.test(workingHours.openTime) || !timeRegex.test(workingHours.closeTime)) {
+    return { status: 'error', errors: ['Time must be in HH:MM format'] }
+  }
+
   const { error } = await requireSiteOwner(siteId)
   if (error) return { status: 'error', errors: [error] }
 

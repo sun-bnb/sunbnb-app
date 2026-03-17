@@ -1,10 +1,55 @@
 'use client'
 
-import { useState, FormEvent } from 'react'
+import { useState, useEffect, useRef, FormEvent } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import sunbnbLogo from '@/app/sunbnb-horizontal-black.png'
+
+// ─── Validation helpers ───────────────────────────────────────────────────────
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+type ValidationState = 'idle' | 'valid' | 'invalid'
+
+function useDebouncedState(value: string, validate: (v: string) => boolean, delayMs = 500): ValidationState {
+  const [state, setState] = useState<ValidationState>('idle')
+  const timer = useRef<ReturnType<typeof setTimeout>>()
+
+  useEffect(() => {
+    if (!value) { setState('idle'); return }
+    clearTimeout(timer.current)
+    if (validate(value)) { setState('valid'); return }
+    timer.current = setTimeout(() => setState(validate(value) ? 'valid' : 'invalid'), delayMs)
+    return () => clearTimeout(timer.current)
+  }, [value, validate, delayMs])
+
+  return state
+}
+
+function CheckIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 6L9 17l-5-5" />
+    </svg>
+  )
+}
+
+function XIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 6L6 18M6 6l12 12" />
+    </svg>
+  )
+}
+
+function inputBorder(state: ValidationState) {
+  if (state === 'valid') return 'border-emerald-400/60 focus:border-emerald-400'
+  if (state === 'invalid') return 'border-red-300 focus:border-red-400'
+  return 'border-gray-200 focus:border-brand-cyan'
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
@@ -13,6 +58,8 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState('')
 
   const t = useTranslations('ForgotPassword')
+
+  const emailState = useDebouncedState(email, (v) => EMAIL_RE.test(v))
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -76,16 +123,29 @@ export default function ForgotPasswordPage() {
             <form onSubmit={handleSubmit} className="mt-8 space-y-3">
               <div>
                 <label htmlFor="reset-email" className="block text-xs font-medium text-gray-600 mb-1.5">{t('Email')}</label>
-                <input
-                  id="reset-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder={t('you@example.com')}
-                  autoComplete="email"
-                  required
-                  className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-cyan/30 focus:border-brand-cyan transition-all placeholder:text-gray-300 text-gray-900"
-                />
+                <div className="relative">
+                  <input
+                    id="reset-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder={t('you@example.com')}
+                    autoComplete="email"
+                    required
+                    className={`w-full px-3.5 py-2.5 text-sm bg-white border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-cyan/30 transition-all placeholder:text-gray-300 text-gray-900 pr-9 ${inputBorder(emailState)}`}
+                  />
+                  {emailState !== 'idle' && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                      {emailState === 'valid'
+                        ? <span className="text-emerald-500"><CheckIcon /></span>
+                        : <span className="text-red-400"><XIcon /></span>
+                      }
+                    </span>
+                  )}
+                </div>
+                {emailState === 'invalid' && (
+                  <p className="mt-1 text-[11px] text-red-500">Enter a valid email address</p>
+                )}
               </div>
               <button
                 type="submit"

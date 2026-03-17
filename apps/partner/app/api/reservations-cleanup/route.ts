@@ -14,9 +14,13 @@ const CRON_SECRET = process.env.CRON_SECRET
 
 export async function GET(request: Request) {
 
+  if (!CRON_SECRET) {
+    return Response.json({ error: 'CRON_SECRET not configured' }, { status: 503 })
+  }
+
   // Require either a valid cron secret or an authenticated session
   const authHeader = request.headers.get('authorization')
-  const hasCronAuth = CRON_SECRET && authHeader === `Bearer ${CRON_SECRET}`
+  const hasCronAuth = authHeader === `Bearer ${CRON_SECRET}`
 
   if (!hasCronAuth) {
     const session = await auth()

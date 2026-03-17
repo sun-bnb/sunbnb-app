@@ -15,6 +15,17 @@ export async function saveContentFields(input: {
   description: string
   services: string[]
 }): Promise<{ status: string; errors?: string[] }> {
+  // Input validation
+  if (input.description && input.description.length > 5000) {
+    return { status: 'error', errors: ['Description is too long (max 5000 characters)'] }
+  }
+  if (input.services && input.services.length > 20) {
+    return { status: 'error', errors: ['Too many services (max 20)'] }
+  }
+  if (input.services?.some(s => typeof s !== 'string' || s.length > 100)) {
+    return { status: 'error', errors: ['Each service must be a string of max 100 characters'] }
+  }
+
   const { error } = await requireSiteOwner(input.id)
   if (error) return { status: 'error', errors: [error] }
 

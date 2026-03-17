@@ -8,14 +8,20 @@
 import prisma from '@repo/data/PrismaCient'
 import { NextRequest } from 'next/server'
 import { auth } from '@/app/auth'
+import { isValidEntityId } from '@/app/api/_lib/stripe'
 
 export async function GET(request: NextRequest, { params } : { params: { id: string } }) {
+
+  const { id } = params
+  if (!isValidEntityId(id)) {
+    return Response.json({ error: 'Invalid ID format' }, { status: 400 })
+  }
 
   const session = await auth()
   const userId = session?.user?.id
 
-  const site = await prisma.site.findUnique({ 
-    where: { id: params.id },
+  const site = await prisma.site.findUnique({
+    where: { id },
     include: {
       workingHours: true,
       inventoryItems: {

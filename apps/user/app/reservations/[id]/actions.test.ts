@@ -10,6 +10,7 @@ vi.mock('next/cache', () => ({
 
 vi.mock('@/app/api/_lib/stripe', () => ({
   isDemoPayment: (ref: string | null) => ref?.startsWith('pi_demo_') ?? false,
+  isValidEntityId: () => true,
 }))
 
 vi.mock('@/app/api/_lib/payment-provider', () => ({

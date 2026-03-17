@@ -26,15 +26,15 @@ function makeRequest(body: Record<string, any>, ip?: string): NextRequest {
 
 describe('POST /api/auth/reset-password', () => {
   it('resets password successfully', async () => {
-    const request = makeRequest({ token: 'valid-token', password: 'NewPass1' })
+    const request = makeRequest({ token: 'valid-token', password: 'NewPass12' })
     const response = await POST(request)
     const data = await response.json()
     expect(data.ok).toBe(true)
-    expect(mockResetPassword).toHaveBeenCalledWith('valid-token', 'NewPass1')
+    expect(mockResetPassword).toHaveBeenCalledWith('valid-token', 'NewPass12')
   })
 
   it('returns 400 when token is missing', async () => {
-    const request = makeRequest({ password: 'NewPass1' })
+    const request = makeRequest({ password: 'NewPass12' })
     const response = await POST(request)
     expect(response.status).toBe(400)
     const data = await response.json()
@@ -46,20 +46,20 @@ describe('POST /api/auth/reset-password', () => {
     const response = await POST(request)
     expect(response.status).toBe(400)
     const data = await response.json()
-    expect(data.error).toContain('at least 6')
+    expect(data.error).toContain('at least 8')
   })
 
   it('returns 429 when rate limited', async () => {
     mockRateLimit.mockReturnValue({ allowed: false } as any)
 
-    const request = makeRequest({ token: 'tok', password: 'NewPass1' })
+    const request = makeRequest({ token: 'tok', password: 'NewPass12' })
     const response = await POST(request)
     expect(response.status).toBe(429)
     expect(mockResetPassword).not.toHaveBeenCalled()
   })
 
   it('rate limits by IP address', async () => {
-    const request = makeRequest({ token: 'tok', password: 'NewPass1' }, '5.6.7.8')
+    const request = makeRequest({ token: 'tok', password: 'NewPass12' }, '5.6.7.8')
     await POST(request)
 
     expect(mockRateLimit).toHaveBeenCalledWith(
@@ -71,7 +71,7 @@ describe('POST /api/auth/reset-password', () => {
   it('returns 400 when resetPassword returns not ok', async () => {
     mockResetPassword.mockResolvedValue({ ok: false, error: 'Token expired' } as any)
 
-    const request = makeRequest({ token: 'expired-tok', password: 'NewPass1' })
+    const request = makeRequest({ token: 'expired-tok', password: 'NewPass12' })
     const response = await POST(request)
     expect(response.status).toBe(400)
   })
@@ -79,7 +79,7 @@ describe('POST /api/auth/reset-password', () => {
   it('returns 500 on unexpected error', async () => {
     mockResetPassword.mockRejectedValue(new Error('DB down'))
 
-    const request = makeRequest({ token: 'tok', password: 'NewPass1' })
+    const request = makeRequest({ token: 'tok', password: 'NewPass12' })
     const response = await POST(request)
     expect(response.status).toBe(500)
   })

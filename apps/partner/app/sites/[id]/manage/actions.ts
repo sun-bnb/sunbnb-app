@@ -221,6 +221,13 @@ export async function moveReservation(
   reservationId: string,
   newItemIds: string[]
 ) {
+  if (!newItemIds.length) {
+    return { status: 'error', errors: ['Select at least one sunbed'] }
+  }
+  if (newItemIds.length > 20) {
+    return { status: 'error', errors: ['Too many items (max 20)'] }
+  }
+
   const ownership = await verifySiteOwnership(siteId)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
@@ -385,6 +392,28 @@ export async function createWalkInRental(input: {
   guestName?: string
   paymentType: 'cash' | 'free'
 }) {
+  // Input validation
+  if (!input.items.length) {
+    return { status: 'error', errors: ['Select at least one item'] }
+  }
+  if (input.items.length > 20) {
+    return { status: 'error', errors: ['Too many items (max 20)'] }
+  }
+  if (!['hours', 'days'].includes(input.durationType)) {
+    return { status: 'error', errors: ['Invalid duration type'] }
+  }
+  if (!['cash', 'free'].includes(input.paymentType)) {
+    return { status: 'error', errors: ['Invalid payment type'] }
+  }
+  for (const item of input.items) {
+    if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 100) {
+      return { status: 'error', errors: ['Quantity must be 1–100'] }
+    }
+  }
+  if (input.hours !== undefined && (isNaN(Number(input.hours)) || Number(input.hours) < 1 || Number(input.hours) > 24)) {
+    return { status: 'error', errors: ['Hours must be 1–24'] }
+  }
+
   const ownership = await verifySiteOwnership(input.siteId)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 

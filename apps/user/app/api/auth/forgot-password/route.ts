@@ -18,8 +18,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Email is required' }, { status: 400 })
     }
 
+    // Normalize before validation so trimmed whitespace doesn't cause false negatives
+    const normalizedEmail = email.toLowerCase().trim()
+
+    if (normalizedEmail.length > 320) {
+      return NextResponse.json({ ok: false, error: 'Invalid email address' }, { status: 400 })
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return NextResponse.json({ ok: false, error: 'Invalid email address' }, { status: 400 })
+    }
+
     const origin = req.headers.get('origin') || req.nextUrl.origin
-    const result = await requestPasswordReset(email.toLowerCase().trim(), origin)
+    const result = await requestPasswordReset(normalizedEmail, origin)
 
     return NextResponse.json(result)
   } catch (error) {

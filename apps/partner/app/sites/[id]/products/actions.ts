@@ -63,6 +63,23 @@ export async function addProduct(formData: FormData) {
     return { status: 'error', errors: ['Invalid product category'] }
   }
 
+  // Input validation
+  if (!name || name.length > 200) {
+    return { status: 'error', errors: ['Product name is required and must be max 200 characters'] }
+  }
+  if (description !== undefined && description !== null && String(description).length > 1000) {
+    return { status: 'error', errors: ['Description must be max 1000 characters'] }
+  }
+  if (isNaN(totalPrice) || totalPrice <= 0 || totalPrice > 100000) {
+    return { status: 'error', errors: ['Price must be a positive number (max 100,000)'] }
+  }
+  if (isNaN(taxPercent) || taxPercent < 0 || taxPercent > 100) {
+    return { status: 'error', errors: ['Tax percent must be between 0 and 100'] }
+  }
+  if (prepTime !== null && prepTime !== undefined && (isNaN(Number(prepTime)) || Number(prepTime) < 0)) {
+    return { status: 'error', errors: ['Prep time must be a non-negative number'] }
+  }
+
   const priceBeforeTax = totalPrice / (1 + taxPercent / 100)
   const price          = +priceBeforeTax.toFixed(2)
 
@@ -117,6 +134,26 @@ export async function updateProduct(
 ) {
   const session = await auth()
   if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+
+  // Input validation
+  if (data.name !== undefined && (typeof data.name !== 'string' || data.name.length === 0 || data.name.length > 200)) {
+    return { status: 'error', errors: ['Product name must be 1–200 characters'] }
+  }
+  if (data.description !== undefined && data.description !== null && String(data.description).length > 1000) {
+    return { status: 'error', errors: ['Description must be max 1000 characters'] }
+  }
+  if (data.totalPrice !== undefined && (isNaN(data.totalPrice) || data.totalPrice <= 0 || data.totalPrice > 100000)) {
+    return { status: 'error', errors: ['Price must be a positive number (max 100,000)'] }
+  }
+  if (data.tax !== undefined && (isNaN(data.tax) || data.tax < 0 || data.tax > 100)) {
+    return { status: 'error', errors: ['Tax percent must be between 0 and 100'] }
+  }
+  if (data.prepTime !== undefined && data.prepTime !== null && (isNaN(Number(data.prepTime)) || Number(data.prepTime) < 0)) {
+    return { status: 'error', errors: ['Prep time must be a non-negative number'] }
+  }
+  if (data.category !== undefined && !isValidProductCategory(data.category)) {
+    return { status: 'error', errors: ['Invalid product category'] }
+  }
 
   const product = await prisma.product.findUnique({
     where: { id },

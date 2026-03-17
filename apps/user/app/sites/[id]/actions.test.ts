@@ -12,6 +12,11 @@ vi.mock('@/service/availabilityService', () => ({
   getAvailability: vi.fn().mockResolvedValue([]),
 }))
 
+vi.mock('@/app/api/_lib/stripe', () => ({
+  isValidEntityId: vi.fn().mockReturnValue(true),
+  isDemoPayment: vi.fn().mockReturnValue(false),
+}))
+
 import {
   saveReservationForMultipleItems,
   saveRentalBooking,
@@ -21,13 +26,16 @@ import {
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { getAvailability } from '@/service/availabilityService'
+import { isValidEntityId } from '@/app/api/_lib/stripe'
 
 const mockAuth = vi.mocked(auth)
 const mockGetAvailability = vi.mocked(getAvailability)
+const mockIsValidEntityId = vi.mocked(isValidEntityId)
 
 beforeEach(() => {
   vi.clearAllMocks()
   mockAuth.mockResolvedValue(null)
+  mockIsValidEntityId.mockReturnValue(true)
 })
 
 // ─── saveReservationForMultipleItems ───────────────────────────────────────
@@ -205,6 +213,96 @@ describe('saveReservationForMultipleItems', () => {
         }),
       })
     )
+  })
+
+  // ── Input validation tests ────────────────────────────────────────────────
+
+  it('returns error when siteId has invalid format', async () => {
+    mockIsValidEntityId.mockReturnValueOnce(false)
+
+    const res = await saveReservationForMultipleItems({
+      siteId: '../etc/passwd',
+      type: 'days',
+      from: '2025-07-01',
+      to: '2025-07-02',
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Invalid site ID')
+  })
+
+  it('returns error when items array exceeds 20', async () => {
+    const items = Array.from({ length: 21 }, (_, i) => ({ id: `item-${i}` }) as any)
+
+    const res = await saveReservationForMultipleItems({
+      siteId: 'site-1',
+      items,
+      type: 'days',
+      from: '2025-07-01',
+      to: '2025-07-02',
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toBe('Too many items')
+  })
+
+  it('returns error when an item ID has invalid format', async () => {
+    mockIsValidEntityId
+      .mockReturnValueOnce(true)  // siteId passes
+      .mockReturnValueOnce(false) // first item fails
+
+    const res = await saveReservationForMultipleItems({
+      siteId: 'site-1',
+      items: [{ id: '<script>' } as any],
+      type: 'days',
+      from: '2025-07-01',
+      to: '2025-07-02',
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Invalid item ID')
+  })
+
+  it('returns error when reservation type is invalid', async () => {
+    const res = await saveReservationForMultipleItems({
+      siteId: 'site-1',
+      type: 'weekly',
+      from: '2025-07-01',
+      to: '2025-07-02',
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Invalid reservation type')
+  })
+
+  it('returns error when anonId exceeds 36 characters', async () => {
+    const res = await saveReservationForMultipleItems({
+      anonId: 'a'.repeat(37),
+      siteId: 'site-1',
+      type: 'days',
+      from: '2025-07-01',
+      to: '2025-07-02',
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Invalid anonymous ID')
+  })
+
+  it('returns error when date range exceeds 90 days', async () => {
+    const res = await saveReservationForMultipleItems({
+      siteId: 'site-1',
+      type: 'days',
+      from: '2025-07-01',
+      to: '2025-10-05', // 96 days
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('90 days')
+  })
+
+  it('returns error when dates are invalid strings', async () => {
+    const res = await saveReservationForMultipleItems({
+      siteId: 'site-1',
+      type: 'days',
+      from: 'not-a-date',
+      to: '2025-07-02',
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Invalid date format')
   })
 
   // ── BUG-REVEALING TESTS ──────────────────────────────────────────────────
@@ -445,6 +543,88 @@ describe('saveRentalBooking', () => {
         }),
       })
     )
+  })
+
+  // ── Input validation tests ────────────────────────────────────────────────
+
+  it('returns error when rental siteId has invalid format', async () => {
+    mockIsValidEntityId.mockReturnValueOnce(false)
+
+    const res = await saveRentalBooking({
+      siteId: '../etc/passwd',
+      items: [{ rentalItemId: 'ri-1', quantity: 1 }],
+      durationType: 'days',
+      from: '2025-07-01T10:00:00Z',
+      to: '2025-07-02T10:00:00Z',
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Invalid site ID')
+  })
+
+  it('returns error when rental items array exceeds 20', async () => {
+    const items = Array.from({ length: 21 }, (_, i) => ({ rentalItemId: `ri-${i}`, quantity: 1 }))
+
+    const res = await saveRentalBooking({
+      siteId: 'site-1',
+      items,
+      durationType: 'days',
+      from: '2025-07-01T10:00:00Z',
+      to: '2025-07-02T10:00:00Z',
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toBe('Too many items')
+  })
+
+  it('returns error when durationType is invalid', async () => {
+    const res = await saveRentalBooking({
+      siteId: 'site-1',
+      items: [{ rentalItemId: 'ri-1', quantity: 1 }],
+      durationType: 'weeks',
+      from: '2025-07-01T10:00:00Z',
+      to: '2025-07-02T10:00:00Z',
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Invalid duration type')
+  })
+
+  it('returns error when a rental item ID has invalid format', async () => {
+    mockIsValidEntityId
+      .mockReturnValueOnce(true)  // siteId passes
+      .mockReturnValueOnce(false) // rentalItemId fails
+
+    const res = await saveRentalBooking({
+      siteId: 'site-1',
+      items: [{ rentalItemId: '<script>', quantity: 1 }],
+      durationType: 'days',
+      from: '2025-07-01T10:00:00Z',
+      to: '2025-07-02T10:00:00Z',
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Invalid rental item ID')
+  })
+
+  it('returns error when quantity is zero', async () => {
+    const res = await saveRentalBooking({
+      siteId: 'site-1',
+      items: [{ rentalItemId: 'ri-1', quantity: 0 }],
+      durationType: 'days',
+      from: '2025-07-01T10:00:00Z',
+      to: '2025-07-02T10:00:00Z',
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Invalid quantity')
+  })
+
+  it('returns error when quantity is a non-integer', async () => {
+    const res = await saveRentalBooking({
+      siteId: 'site-1',
+      items: [{ rentalItemId: 'ri-1', quantity: 1.5 }],
+      durationType: 'days',
+      from: '2025-07-01T10:00:00Z',
+      to: '2025-07-02T10:00:00Z',
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Invalid quantity')
   })
 
   // ── BUG-REVEALING TESTS ──────────────────────────────────────────────────

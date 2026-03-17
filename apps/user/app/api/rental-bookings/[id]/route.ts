@@ -10,8 +10,8 @@
 import prisma from '@repo/data/PrismaCient'
 import { processConfirmedRentalBooking } from '@repo/data/payment'
 import { NextRequest } from 'next/server'
-import { getRequestIdentity } from '@/app/api/_lib/auth'
-import { isDemoPayment } from '@/app/api/_lib/stripe'
+import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
+import { isDemoPayment, isValidEntityId } from '@/app/api/_lib/stripe'
 import { getPaymentStatus, isPaymentSucceeded, isPaymentFailed } from '@/app/api/_lib/payment-provider'
 import { RENTAL_PROCESSING, RENTAL_PAYMENT_FAILED } from '@repo/data/reservation-status'
 
@@ -19,6 +19,11 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const { id } = params
+  if (!isValidEntityId(id)) {
+    return Response.json({ error: 'Invalid ID format' }, { status: 400 })
+  }
+
   const identity = await getRequestIdentity(request)
   if (!identity) {
     return Response.json(
@@ -28,7 +33,7 @@ export async function GET(
   }
 
   let booking = await prisma.rentalBooking.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: { rentalItem: true, site: true },
   })
 
@@ -40,7 +45,7 @@ export async function GET(
   }
 
   // Verify ownership
-  if (identity.userId && booking.userId !== identity.userId) {
+  if (!verifyOwnership(identity, booking)) {
     return Response.json(
       { status: 'error', errors: ['Not authorized'] },
       { status: 403 }
@@ -68,7 +73,7 @@ export async function GET(
 
       // Re-fetch
       booking = await prisma.rentalBooking.findUnique({
-        where: { id: params.id },
+        where: { id },
         include: { rentalItem: true, site: true },
       })
     } catch (error) {

@@ -7,6 +7,7 @@ vi.mock('@/app/auth', () => ({
 
 vi.mock('@/app/api/_lib/stripe', () => ({
   isDemoPayment: (ref: string | null) => ref?.startsWith('pi_demo_') ?? false,
+  isValidEntityId: () => true,
 }))
 
 vi.mock('@/app/api/_lib/payment-provider', () => ({
@@ -87,15 +88,16 @@ describe('GET /api/reservations/[id]', () => {
 
   it('supports anonymous auth via anonId query param', async () => {
     mockAuth.mockResolvedValue(null) // no session
+    const anonId = '550e8400-e29b-41d4-a716-446655440000'
     const reservation = {
       id: 'res-1',
       userId: 'user-1',
-      anonId: 'anon-123',
+      anonId,
       status: 'complete',
     }
     mockFindUnique.mockResolvedValue(reservation as any)
 
-    const res = await GET(makeRequest('res-1', 'anon-123'), {
+    const res = await GET(makeRequest('res-1', anonId), {
       params: { id: 'res-1' },
     })
     expect(res.status).toBe(200)

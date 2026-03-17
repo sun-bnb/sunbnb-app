@@ -22,6 +22,7 @@ export async function saveGeneral(input: {
 
   const errors: string[] = []
   if (!input.name?.trim()) errors.push('Site name is required')
+  if (input.name && input.name.length > 200) errors.push('Site name is too long (max 200)')
   if (!input.locationLat || !input.locationLng) errors.push('Location is required')
 
   const validTypes = ['paid', 'unpaid']
@@ -33,7 +34,15 @@ export async function saveGeneral(input: {
   const vat = Number(input.vat)
 
   if (input.price && isNaN(price)) errors.push('Invalid price')
+  if (input.price && !isNaN(price) && (price < 0 || price > 100000)) errors.push('Price must be 0–100,000')
   if (input.vat && isNaN(vat)) errors.push('Invalid VAT')
+  if (input.vat && !isNaN(vat) && (vat < 0 || vat > 100)) errors.push('VAT must be 0–100')
+
+  // Validate lat/lng are numeric
+  const lat = Number(input.locationLat)
+  const lng = Number(input.locationLng)
+  if (isNaN(lat) || lat < -90 || lat > 90) errors.push('Invalid latitude')
+  if (isNaN(lng) || lng < -180 || lng > 180) errors.push('Invalid longitude')
 
   if (errors.length > 0) return { status: 'error', errors }
 
@@ -77,10 +86,22 @@ export async function submitForm(
     .filter((field) => !formData.get(field))
     .map((field) => `${field} is required`)
 
+  const nameVal = formData.get('name') as string
+  if (nameVal && nameVal.length > 200) errors.push('Site name is too long (max 200)')
+
   const priceVal = formData.get('price') as string
   if (priceVal && isNaN(Number(priceVal))) {
     errors.push(`Invalid price ${priceVal}`)
   }
+  if (priceVal && !isNaN(Number(priceVal)) && (Number(priceVal) < 0 || Number(priceVal) > 100000)) {
+    errors.push('Price must be 0–100,000')
+  }
+
+  // Validate lat/lng
+  const latVal = formData.get('locationLat') as string
+  const lngVal = formData.get('locationLng') as string
+  if (latVal && (isNaN(Number(latVal)) || Number(latVal) < -90 || Number(latVal) > 90)) errors.push('Invalid latitude')
+  if (lngVal && (isNaN(Number(lngVal)) || Number(lngVal) < -180 || Number(lngVal) > 180)) errors.push('Invalid longitude')
 
   if (errors.length > 0) return { status: 'error', errors }
 
@@ -204,6 +225,7 @@ export async function checkSlug(
   const session = await auth()
   if (!session?.user) return { available: false }
 
+  if (slug.length > 100) return { available: false }
   const normalized = slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '')
   if (!normalized || normalized.length < 3) return { available: false }
 
@@ -222,6 +244,8 @@ export async function generateSlug(
 ): Promise<string> {
   const session = await auth()
   if (!session?.user) return ''
+
+  if (siteName.length > 200) return ''
 
   const base = siteName
     .trim()
@@ -266,6 +290,10 @@ export async function saveBrand(input: {
 
   const errors: string[] = []
   if (!input.brandName?.trim()) errors.push('Brand name is required')
+  if (input.brandName && input.brandName.length > 200) errors.push('Brand name is too long (max 200)')
+  if (input.tagline && input.tagline.length > 500) errors.push('Tagline is too long (max 500)')
+  if (input.bgColor && !/^#[0-9a-fA-F]{3,8}$/.test(input.bgColor)) errors.push('Invalid background color')
+  if (input.fgColor && !/^#[0-9a-fA-F]{3,8}$/.test(input.fgColor)) errors.push('Invalid foreground color')
 
   // Validate slug format
   const slug = input.slug?.trim().toLowerCase().replace(/[^a-z0-9-]/g, '') || null

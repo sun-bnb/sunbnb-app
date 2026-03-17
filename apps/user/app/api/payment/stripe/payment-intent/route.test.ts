@@ -190,10 +190,11 @@ describe('POST /api/payment/stripe/payment-intent', () => {
 
   it('supports anonymous auth via anonId in body', async () => {
     mockAuth.mockResolvedValue(null) // no session
+    const anonId = '550e8400-e29b-41d4-a716-446655440000'
     mockFindUnique.mockResolvedValue({
       id: 'cm1234567890abcdefghijklmn',
       userId: 'user-1',
-      anonId: 'anon-123',
+      anonId,
       status: 'pending',
       paymentAmount: 10,
       paymentRef: null,
@@ -208,7 +209,7 @@ describe('POST /api/payment/stripe/payment-intent', () => {
     const res = await POST(
       makeRequest({
         reservationId: 'cm1234567890abcdefghijklmn',
-        anonId: 'anon-123',
+        anonId,
       })
     )
     expect(res.status).toBe(200)

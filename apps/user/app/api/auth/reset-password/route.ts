@@ -13,11 +13,17 @@ export async function POST(req: NextRequest) {
 
     const { token, password } = await req.json()
 
-    if (!token || typeof token !== 'string') {
+    if (!token || typeof token !== 'string' || token.length > 256) {
       return NextResponse.json({ ok: false, error: 'Invalid reset link' }, { status: 400 })
     }
-    if (!password || typeof password !== 'string' || password.length < 6) {
-      return NextResponse.json({ ok: false, error: 'Password must be at least 6 characters' }, { status: 400 })
+    if (!password || typeof password !== 'string' || password.length < 8) {
+      return NextResponse.json({ ok: false, error: 'Password must be at least 8 characters' }, { status: 400 })
+    }
+    if (password.length > 128) {
+      return NextResponse.json({ ok: false, error: 'Password must be at least 8 characters' }, { status: 400 })
+    }
+    if (!(/[a-z]/.test(password) && /[A-Z]/.test(password) && /\d/.test(password))) {
+      return NextResponse.json({ ok: false, error: 'Password must contain uppercase, lowercase, and a number' }, { status: 400 })
     }
 
     const result = await resetPassword(token, password)

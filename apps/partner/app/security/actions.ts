@@ -22,6 +22,20 @@ export async function createToken(expires: Date, resources: string[]) {
   const session = await auth()
   if (!session?.user) throw new Error('Not authenticated')
 
+  // Input validation
+  if (!expires || isNaN(new Date(expires).getTime())) {
+    return { status: 'error', errors: ['Invalid expiry date'] }
+  }
+  if (new Date(expires) < new Date()) {
+    return { status: 'error', errors: ['Expiry date must be in the future'] }
+  }
+  if (!Array.isArray(resources) || resources.length > 50) {
+    return { status: 'error', errors: ['Too many resources (max 50)'] }
+  }
+  if (resources.some(r => typeof r !== 'string' || r.length > 200)) {
+    return { status: 'error', errors: ['Each resource must be a string of max 200 characters'] }
+  }
+
   const token = await prisma.securityToken.create({
     data: {
       userId: session.user.id,

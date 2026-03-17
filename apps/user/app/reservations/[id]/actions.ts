@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { processConfirmedOrder } from '@repo/data/payment'
-import { isDemoPayment } from '@/app/api/_lib/stripe'
+import { isDemoPayment, isValidEntityId } from '@/app/api/_lib/stripe'
 import { issueRefund } from '@/app/api/_lib/payment-provider'
 import {
   RESERVATION_CANCELED,
@@ -16,6 +16,10 @@ import {
 // ─── Cancel Reservation ─────────────────────────────────────────────────────
 
 export async function cancelReservation(reservationId: string) {
+  if (!isValidEntityId(reservationId)) {
+    return { status: 'error', errors: ['Invalid reservation ID'] }
+  }
+
   const session = await auth()
   if (!session?.user) {
     return { status: 'error', errors: ['Not authenticated'] }
@@ -72,6 +76,10 @@ export async function cancelReservation(reservationId: string) {
 // ─── Delete Reservation ─────────────────────────────────────────────────────
 
 export async function deleteReservation(reservationId: string) {
+  if (!isValidEntityId(reservationId)) {
+    return { status: 'error', errors: ['Invalid reservation ID'] }
+  }
+
   const session = await auth()
   if (!session?.user) {
     return { status: 'error', errors: ['Not authenticated'] }
@@ -151,6 +159,26 @@ export async function createOrder(order: {
     totalQty += item.quantity
     if (totalQty > 200) {
       return { status: 'error', errors: ['Total quantity exceeds limit'] }
+    }
+  }
+
+  // ── Validate entity IDs ────────────────────────────────────────────────────
+
+  if (!isValidEntityId(order.siteId)) {
+    return { status: 'error', errors: ['Invalid site ID'] }
+  }
+
+  if (order.reservationId && !isValidEntityId(order.reservationId)) {
+    return { status: 'error', errors: ['Invalid reservation ID'] }
+  }
+
+  if (order.seatId && !isValidEntityId(order.seatId)) {
+    return { status: 'error', errors: ['Invalid seat ID'] }
+  }
+
+  for (const item of order.items) {
+    if (!isValidEntityId(item.product.id)) {
+      return { status: 'error', errors: ['Invalid product ID'] }
     }
   }
 
@@ -284,6 +312,10 @@ export async function createOrder(order: {
  * off-platform billing for food orders (site.orderPaymentType or site.type === 'unpaid').
  */
 export async function completeUnpaidOrder(orderId: string, anonId?: string) {
+  if (!isValidEntityId(orderId)) {
+    return { status: 'error', errors: ['Invalid order ID'] }
+  }
+
   const session = await auth()
 
   const order = await prisma.order.findUnique({
@@ -349,6 +381,10 @@ export async function getOrderByPaymentRef({
 }: {
   paymentRef: string
 }) {
+  if (paymentRef.length > 200) {
+    return { status: 'error', errors: ['Invalid payment reference'] }
+  }
+
   const session = await auth()
   if (!session?.user) {
     return { status: 'error', errors: ['Not authenticated'] }
@@ -371,6 +407,10 @@ export async function getOrders({
 }: {
   reservationId: string
 }) {
+  if (!isValidEntityId(reservationId)) {
+    return { status: 'error', errors: ['Invalid reservation ID'] }
+  }
+
   const session = await auth()
   if (!session?.user) {
     return { status: 'error', errors: ['Not authenticated'] }

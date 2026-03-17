@@ -33,6 +33,10 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'rentalBookingIds is required' }, { status: 400 })
   }
 
+  if (rentalBookingIds.length > 20) {
+    return Response.json({ error: 'Too many booking IDs' }, { status: 400 })
+  }
+
   for (const id of rentalBookingIds) {
     if (!isValidEntityId(id)) {
       return Response.json({ error: 'Invalid booking ID format' }, { status: 400 })

@@ -28,6 +28,9 @@ export async function GET(request: NextRequest, { params } : { params: { siteId:
   }
 
   if (dateParam) {
+    if (isNaN(Date.parse(dateParam))) {
+      return Response.json({ error: 'Invalid date format' }, { status: 400 })
+    }
     const date = new Date(dateParam)
     // Start of the day (00:00:00)
     const dayStart = dayjs(date).startOf('day').toDate();
@@ -54,7 +57,9 @@ export async function GET(request: NextRequest, { params } : { params: { siteId:
     })
 
   } else if (monthParam) {
-    
+    if (!/^\d{4}-\d{2}$/.test(monthParam)) {
+      return Response.json({ error: 'Invalid month format (expected YYYY-MM)' }, { status: 400 })
+    }
     const monthStart = dayjs(`${monthParam}-01`).startOf('month').toDate();
     const monthEnd = dayjs(`${monthParam}-01`).endOf('month').toDate();
 

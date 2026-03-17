@@ -18,7 +18,7 @@ import prisma from '@repo/data/PrismaCient'
 import { processConfirmedReservation } from '@repo/data/payment'
 import { NextRequest } from 'next/server'
 import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
-import { isDemoPayment } from '@/app/api/_lib/stripe'
+import { isDemoPayment, isValidEntityId } from '@/app/api/_lib/stripe'
 import { getPaymentStatus, isPaymentSucceeded, isPaymentFailed } from '@/app/api/_lib/payment-provider'
 import { RESERVATION_PROCESSING, RESERVATION_PAYMENT_FAILED } from '@repo/data/reservation-status'
 
@@ -28,6 +28,11 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const { id } = params
+  if (!isValidEntityId(id)) {
+    return Response.json({ error: 'Invalid ID format' }, { status: 400 })
+  }
+
   // Authenticate: session user or anonymous user (anonId in query param)
   const identity = await getRequestIdentity(request)
   if (!identity) {
@@ -38,7 +43,7 @@ export async function GET(
   }
 
   let reservation = await prisma.reservation.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: { items: true, site: true },
   })
 
@@ -82,7 +87,7 @@ export async function GET(
 
       // Re-fetch to return current state
       reservation = await prisma.reservation.findUnique({
-        where: { id: params.id },
+        where: { id },
         include: { items: true, site: true },
       })
     } catch (error) {

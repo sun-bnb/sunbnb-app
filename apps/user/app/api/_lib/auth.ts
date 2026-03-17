@@ -32,9 +32,14 @@ export async function getRequestIdentity(
   }
 
   // For anonymous users: check body param first, then query param
-  const anonId = bodyAnonId ?? request.nextUrl.searchParams.get('anonId')
-  if (anonId) {
-    return { anonId }
+  const rawAnonId = bodyAnonId ?? request.nextUrl.searchParams.get('anonId')
+  if (rawAnonId) {
+    // Validate UUID format (max 36 chars, standard UUID v4 pattern)
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (rawAnonId.length <= 36 && UUID_REGEX.test(rawAnonId)) {
+      return { anonId: rawAnonId }
+    }
+    // Invalid anonId format — treat as unauthenticated
   }
 
   return null

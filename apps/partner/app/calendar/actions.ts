@@ -43,17 +43,18 @@ export async function createPartnerReservation(data: {
     return { status: 'error', errors: ['Not authenticated'] }
   }
 
-  // Verify the partner owns this site
-  const site = await prisma.site.findUnique({
-    where: { id: data.siteId },
-    select: { userId: true },
-  })
-  if (!site || site.userId !== session.user.id) {
-    return { status: 'error', errors: ['Not authorized'] }
-  }
-
+  // Input validation
   if (!data.itemIds.length) {
     return { status: 'error', errors: ['Select at least one sunbed'] }
+  }
+  if (data.itemIds.length > 50) {
+    return { status: 'error', errors: ['Too many sunbeds (max 50)'] }
+  }
+  if (!['cash', 'free'].includes(data.paymentType)) {
+    return { status: 'error', errors: ['Invalid payment type'] }
+  }
+  if (!data.from || !data.to || isNaN(Date.parse(data.from)) || isNaN(Date.parse(data.to))) {
+    return { status: 'error', errors: ['Invalid date format'] }
   }
 
   const fromDate = dayjs(data.from).startOf('day').toDate()
@@ -61,6 +62,21 @@ export async function createPartnerReservation(data: {
 
   if (fromDate > toDate) {
     return { status: 'error', errors: ['From date must be before to date'] }
+  }
+
+  // Max 365-day range
+  const diffDays = dayjs(data.to).diff(dayjs(data.from), 'day')
+  if (diffDays > 365) {
+    return { status: 'error', errors: ['Date range cannot exceed 365 days'] }
+  }
+
+  // Verify the partner owns this site
+  const site = await prisma.site.findUnique({
+    where: { id: data.siteId },
+    select: { userId: true },
+  })
+  if (!site || site.userId !== session.user.id) {
+    return { status: 'error', errors: ['Not authorized'] }
   }
 
   // Verify items belong to this site and are active

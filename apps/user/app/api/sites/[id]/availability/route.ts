@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { getAvailability } from '@/service/availabilityService'
+import { isValidEntityId } from '@/app/api/_lib/stripe'
 
 /** Max date range allowed (90 days) to prevent expensive queries. */
 const MAX_RANGE_MS = 90 * 24 * 60 * 60 * 1000
@@ -7,6 +8,11 @@ const MAX_RANGE_MS = 90 * 24 * 60 * 60 * 1000
 export async function GET(request: NextRequest, { params } : { params: { id: string } }) {
 
   // Intentionally public — anonymous users need availability data before booking
+
+  const { id } = params
+  if (!isValidEntityId(id)) {
+    return Response.json({ error: 'Invalid ID format' }, { status: 400 })
+  }
 
   const searchParams = request.nextUrl.searchParams
   const fromParam = searchParams.get('from')
@@ -31,9 +37,9 @@ export async function GET(request: NextRequest, { params } : { params: { id: str
     return Response.json({ error: 'Date range too large (max 90 days)' }, { status: 400 })
   }
 
-  const availability = await getAvailability(params.id, from, to)
+  const availability = await getAvailability(id, from, to)
   const availabilityResponse = {
-    siteId: params.id,
+    siteId: id,
     from,
     to,
     availability

@@ -321,7 +321,7 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
       return sum + item.pricePerHour * hours * cartItem.quantity
     }
     if (item.pricePerDay) {
-      const days = (dateRange.length === 2 && dateRange[1]) ? Math.max(1, dateRange[1].diff(dateRange[0], 'day')) : 1
+      const days = (dateRange.length === 2 && dateRange[1]) ? Math.max(1, dateRange[1].diff(dateRange[0], 'day') + 1) : 1
       return sum + item.pricePerDay * days * cartItem.quantity
     }
     return sum
@@ -351,7 +351,7 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
       to = reservationDay.hour(timeRange[1].hour()).minute(timeRange[1].minute()).toDate().toISOString()
     } else if (dateRange[0] && dateRange[1]) {
       from = dateRange[0].toDate().toISOString()
-      to = dateRange[1].toDate().toISOString()
+      to = dateRange[1].endOf('day').toDate().toISOString()
     } else {
       return null
     }
@@ -475,7 +475,7 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
             if (reservationMode === 'hours' && timeRange.length === 2 && timeRange[1]) {
               duration = Math.ceil(timeRange[1].diff(timeRange[0], 'hour', true))
             } else if (dateRange.length === 2 && dateRange[1]) {
-              duration = Math.max(1, dateRange[1].diff(dateRange[0], 'day'))
+              duration = Math.max(1, dateRange[1].diff(dateRange[0], 'day') + 1)
             }
             const lineTotal = unitPrice * duration * cartItem.quantity
             return (

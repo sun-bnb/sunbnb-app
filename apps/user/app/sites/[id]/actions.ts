@@ -5,6 +5,7 @@ import dayjs from 'dayjs'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { getAvailability } from '@/service/availabilityService'
+import { isValidEntityId } from '@/app/api/_lib/stripe'
 import { InventoryItem } from '../types'
 import {
   RESERVATION_PENDING,
@@ -15,10 +16,12 @@ import {
   OP_RETURNED,
 } from '@repo/data/reservation-status'
 
+const VALID_RESERVATION_TYPES = ['days', 'hours'] as const
+
 // ─── Reservations ───────────────────────────────────────────────────────────
 
 export async function saveReservationForMultipleItems(
-  reservation: { 
+  reservation: {
     userId?: string,
     anonId?: string,
     siteId: string,
@@ -26,6 +29,43 @@ export async function saveReservationForMultipleItems(
     type: string,
     from: string, to: string
   }) {
+
+  // ── Input validation ────────────────────────────────────────────────────
+  if (!isValidEntityId(reservation.siteId)) {
+    return { status: 'error', errors: ['Invalid site ID'] }
+  }
+
+  if (reservation.items && reservation.items.length > 20) {
+    return { status: 'error', errors: ['Too many items'] }
+  }
+
+  if (reservation.items) {
+    for (const item of reservation.items) {
+      if (!isValidEntityId(item.id)) {
+        return { status: 'error', errors: ['Invalid item ID'] }
+      }
+    }
+  }
+
+  if (!VALID_RESERVATION_TYPES.includes(reservation.type as any)) {
+    return { status: 'error', errors: ['Invalid reservation type'] }
+  }
+
+  if (reservation.anonId && reservation.anonId.length > 36) {
+    return { status: 'error', errors: ['Invalid anonymous ID'] }
+  }
+
+  const fromDate = new Date(reservation.from)
+  const toDate = new Date(reservation.to)
+
+  if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+    return { status: 'error', errors: ['Invalid date format'] }
+  }
+
+  const daysDiff = (toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)
+  if (daysDiff > 90) {
+    return { status: 'error', errors: ['Date range cannot exceed 90 days'] }
+  }
 
   // Authenticate: require either a session user or an anonId
   // Never trust client-supplied userId — always derive from session
@@ -136,6 +176,28 @@ export async function saveRentalBooking(input: {
   from: string
   to: string
 }) {
+  // ── Input validation ────────────────────────────────────────────────────
+  if (!isValidEntityId(input.siteId)) {
+    return { status: 'error', errors: ['Invalid site ID'] }
+  }
+
+  if (input.items.length > 20) {
+    return { status: 'error', errors: ['Too many items'] }
+  }
+
+  if (!['hours', 'days'].includes(input.durationType)) {
+    return { status: 'error', errors: ['Invalid duration type'] }
+  }
+
+  for (const cartItem of input.items) {
+    if (!isValidEntityId(cartItem.rentalItemId)) {
+      return { status: 'error', errors: ['Invalid rental item ID'] }
+    }
+    if (!Number.isInteger(cartItem.quantity) || cartItem.quantity < 1) {
+      return { status: 'error', errors: ['Invalid quantity'] }
+    }
+  }
+
   const session = await auth()
   if (!session?.user?.id) {
     return { status: 'error', errors: ['Authentication required'] }
