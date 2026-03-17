@@ -70,7 +70,7 @@ export default function SecurityView() {
       const date = new Date(expires)
       const resourceArray = resources.split(',').map(r => r.trim()).filter(Boolean)
       const res = await createToken(date, resourceArray)
-      setCreatedToken(res.token)
+      setCreatedToken(res.token ?? null)
       const updated = await getTokens()
       setTokens(updated)
       setResources('')
