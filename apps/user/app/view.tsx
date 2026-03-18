@@ -7,6 +7,7 @@ import reservationScreen from './reservation-screen.png'
 import scanQrImage from './scan-qr-image.png'
 import beachProducts from './beach-products.png'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 
 interface BusinessEntity {
   companyName: string
@@ -20,6 +21,7 @@ interface BusinessEntity {
 export default function HomeView({ businessEntity }: { businessEntity: BusinessEntity }) {
 
   const router = useRouter()
+  const t = useTranslations('LandingPage')
 
   return (
     <div className="bg-cream font-sans text-[#2d2d2d] pt-14 overflow-x-hidden">
@@ -36,27 +38,25 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
           <div className="lg:flex-1 text-center lg:text-left">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/70 backdrop-blur-sm rounded-full border border-white/80 shadow-soft mb-5 md:mb-7 animate-fade-in">
               <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
-              <span className="text-[11px] md:text-xs font-medium text-gray-500 tracking-wide">Live availability across 100+ beaches</span>
+              <span className="text-[11px] md:text-xs font-medium text-gray-500 tracking-wide">{t('badge')}</span>
             </div>
 
             <h1 className="text-[32px] md:text-5xl lg:text-[56px] font-extrabold leading-[1.1] tracking-tight mb-4 md:mb-5 animate-fade-in-up">
-              Your place
+              {t('heroLine1')}
               <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-cyan via-cyan-400 to-brand-cyan animate-shimmer">
-                under the sun
+                {t('heroLine2')}
               </span>
             </h1>
 
             <p className="text-[15px] md:text-lg lg:text-xl text-gray-500 leading-relaxed mb-7 md:mb-9 max-w-[320px] md:max-w-lg mx-auto lg:mx-0 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-              Find a beach, pick your sunbed, and book in seconds.
-              <br className="hidden md:block" />
-              No app download needed.
+              {t('heroDesc')}
             </p>
 
             <div className="relative z-10 w-full max-w-md mx-auto lg:mx-0 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
               <SearchBar />
               <p className="mt-3 text-[11px] md:text-xs text-gray-400">
-                Try <button onClick={() => router.push('/sites')} className="text-brand-cyan hover:text-brand-cyan-dark font-medium underline underline-offset-2">browsing all beaches</button> or search by destination
+                {t('searchHint')} <button onClick={() => router.push('/sites')} className="text-brand-cyan hover:text-brand-cyan-dark font-medium underline underline-offset-2">{t('browseAll')}</button> {t('searchOr')}
               </p>
             </div>
           </div>
@@ -79,8 +79,8 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">⛱️</span>
                   <div>
-                    <p className="text-xs font-bold text-gray-800">Sunbed #12</p>
-                    <p className="text-[10px] text-emerald-500 font-medium">Booked — enjoy!</p>
+                    <p className="text-xs font-bold text-gray-800">{t('sunbedNumber')}</p>
+                    <p className="text-[10px] text-emerald-500 font-medium">{t('sunbedBooked')}</p>
                   </div>
                 </div>
               </div>
@@ -95,12 +95,12 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
 
       {/* ─── How It Works ─── */}
       <section className="px-5 md:px-8 pt-4 md:pt-8 pb-2 max-w-4xl mx-auto">
-        <p className="text-[11px] md:text-xs font-semibold uppercase tracking-[0.2em] text-gray-400 mb-5 md:mb-8 text-center">How it works</p>
+        <p className="text-[11px] md:text-xs font-semibold uppercase tracking-[0.2em] text-gray-400 mb-5 md:mb-8 text-center">{t('howItWorks')}</p>
         <div className="flex gap-3 md:gap-6">
           {[
-            { step: '1', emoji: '🔍', title: 'Find a beach', desc: 'Browse by location or search your destination' },
-            { step: '2', emoji: '⛱️', title: 'Pick a sunbed', desc: 'Choose from the live map with real-time availability' },
-            { step: '3', emoji: '✅', title: 'Book & enjoy', desc: 'Confirm in seconds — your spot is guaranteed' },
+            { step: '1', emoji: '🔍', titleKey: 'step1Title', descKey: 'step1Desc' },
+            { step: '2', emoji: '⛱️', titleKey: 'step2Title', descKey: 'step2Desc' },
+            { step: '3', emoji: '✅', titleKey: 'step3Title', descKey: 'step3Desc' },
           ].map((s, i) => (
             <div
               key={s.step}
@@ -110,8 +110,8 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
               <div className="w-10 h-10 md:w-12 md:h-12 bg-cream-dark rounded-xl flex items-center justify-center mx-auto mb-2.5 md:mb-3">
                 <span className="text-xl md:text-2xl">{s.emoji}</span>
               </div>
-              <p className="text-[13px] md:text-[15px] font-bold text-gray-800 mb-1">{s.title}</p>
-              <p className="text-[11px] md:text-xs text-gray-400 leading-relaxed hidden md:block">{s.desc}</p>
+              <p className="text-[13px] md:text-[15px] font-bold text-gray-800 mb-1">{t(s.titleKey as Parameters<typeof t>[0])}</p>
+              <p className="text-[11px] md:text-xs text-gray-400 leading-relaxed hidden md:block">{t(s.descKey as Parameters<typeof t>[0])}</p>
             </div>
           ))}
         </div>
@@ -135,26 +135,26 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
           </div>
           <div className="md:flex-1 p-6 md:p-10 lg:p-14 flex flex-col justify-center">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-brand-cyan/10 rounded-full text-[10px] md:text-xs font-semibold text-brand-cyan w-fit mb-3 md:mb-4">
-              🔍 PLAN AHEAD
+              {t('feature1Badge')}
             </span>
             <h2 className="text-xl md:text-2xl lg:text-3xl font-bold tracking-tight mb-2 md:mb-3">
-              Book before you go
+              {t('feature1Title')}
             </h2>
             <p className="text-sm md:text-base text-gray-500 leading-relaxed mb-4 md:mb-6">
-              Search your destination, browse the interactive beach layout, and reserve the perfect spot — all before you leave home. No surprises when you arrive.
+              {t('feature1Desc')}
             </p>
             <button
               onClick={() => router.push('/sites')}
               className="w-fit px-5 py-2 text-sm font-semibold text-white bg-gray-900 rounded-xl hover:bg-gray-800 shadow-soft transition-colors"
             >
-              Browse beaches →
+              {t('feature1Button')}
             </button>
           </div>
         </div>
 
         {/* Feature 2 + 3 side by side on desktop */}
         <div className="md:grid md:grid-cols-2 md:gap-6 md:pt-6 space-y-6 md:space-y-0">
-          
+
           {/* Feature 2 */}
           <div className="bg-white rounded-2xl overflow-hidden shadow-card hover:shadow-lg transition-shadow duration-300">
             <div className="relative h-48 md:h-56 overflow-hidden">
@@ -169,11 +169,11 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
             </div>
             <div className="p-5 md:p-6">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 rounded-full text-[10px] md:text-xs font-semibold text-amber-600 w-fit mb-2.5">
-                ⛱️ ON THE BEACH
+                {t('feature2Badge')}
               </span>
-              <h3 className="text-lg md:text-xl font-bold tracking-tight mb-1.5">Scan & claim your sunbed</h3>
+              <h3 className="text-lg md:text-xl font-bold tracking-tight mb-1.5">{t('feature2Title')}</h3>
               <p className="text-[13px] md:text-sm text-gray-500 leading-relaxed">
-                Already there? Use the live map to pick a free spot, or scan the QR code right on the lounger. Instant booking, no queues.
+                {t('feature2Desc')}
               </p>
             </div>
           </div>
@@ -192,11 +192,11 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
             </div>
             <div className="p-5 md:p-6">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 rounded-full text-[10px] md:text-xs font-semibold text-emerald-600 w-fit mb-2.5">
-                🍹 FROM YOUR CHAIR
+                {t('feature3Badge')}
               </span>
-              <h3 className="text-lg md:text-xl font-bold tracking-tight mb-1.5">Order & pay with a tap</h3>
+              <h3 className="text-lg md:text-xl font-bold tracking-tight mb-1.5">{t('feature3Title')}</h3>
               <p className="text-[13px] md:text-sm text-gray-500 leading-relaxed">
-                Drinks, snacks, beach gear — order anything straight to your sunbed and pay online. No waving down waiters.
+                {t('feature3Desc')}
               </p>
             </div>
           </div>
@@ -208,14 +208,14 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
         <div className="bg-white/60 backdrop-blur-sm rounded-2xl border border-white/80 shadow-soft p-6 md:p-10">
           <div className="flex items-center justify-center gap-6 md:gap-16 text-center">
             {[
-              { value: '100+', label: 'Beaches', icon: '🏖️' },
-              { value: '10k+', label: 'Bookings', icon: '📋' },
-              { value: '4.8★', label: 'Rating', icon: '⭐' },
+              { value: '100+', labelKey: 'statBeaches', icon: '🏖️' },
+              { value: '10k+', labelKey: 'statBookings', icon: '📋' },
+              { value: '4.8★', labelKey: 'statRating', icon: '⭐' },
             ].map((stat, i) => (
-              <div key={stat.label} className="flex-1 animate-fade-in-up" style={{ animationDelay: `${0.1 * i}s` }}>
+              <div key={stat.labelKey} className="flex-1 animate-fade-in-up" style={{ animationDelay: `${0.1 * i}s` }}>
                 <span className="text-xl md:text-2xl block mb-1">{stat.icon}</span>
                 <p className="text-xl md:text-3xl font-extrabold text-gray-800">{stat.value}</p>
-                <p className="text-[11px] md:text-sm text-gray-400 font-medium mt-0.5">{stat.label}</p>
+                <p className="text-[11px] md:text-sm text-gray-400 font-medium mt-0.5">{t(stat.labelKey as Parameters<typeof t>[0])}</p>
               </div>
             ))}
           </div>
@@ -225,10 +225,10 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
       {/* ─── Testimonial / Quote ─── */}
       <section className="px-5 md:px-8 pt-10 md:pt-16 max-w-3xl mx-auto text-center">
         <blockquote className="text-lg md:text-2xl lg:text-[28px] font-semibold text-gray-700 leading-snug tracking-tight italic">
-          &ldquo;We arrived, walked to our sunbeds, and they were
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-cyan to-cyan-400 not-italic"> already waiting for us.</span>&rdquo;
+          &ldquo;{t('quoteStart')}
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-cyan to-cyan-400 not-italic"> {t('quoteHighlight')}</span>&rdquo;
         </blockquote>
-        <p className="mt-4 text-xs md:text-sm text-gray-400">— Happy beachgoer, Heraklion</p>
+        <p className="mt-4 text-xs md:text-sm text-gray-400">— {t('quoteAttribution')}</p>
       </section>
 
       {/* ─── CTA ─── */}
@@ -237,34 +237,34 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
           {/* Decorative circles */}
           <div className="absolute -top-12 -right-12 w-40 h-40 bg-brand-cyan/10 rounded-full blur-2xl" />
           <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-cyan-400/8 rounded-full blur-2xl" />
-          
+
           <div className="relative">
             <p className="text-xl md:text-3xl lg:text-4xl font-extrabold text-white leading-snug mb-2 md:mb-4 tracking-tight">
-              Your beach day,
+              {t('ctaTitle')}
               <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-cyan to-cyan-300">simplified.</span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-cyan to-cyan-300">{t('ctaHighlight')}</span>
             </p>
             <p className="text-[13px] md:text-base text-gray-400 mb-6 md:mb-9 max-w-md mx-auto">
-              Works in your browser. Book a sunbed in under 30 seconds — we timed it.
+              {t('ctaDesc')}
             </p>
             <div className="flex flex-col sm:flex-row sm:justify-center gap-3 md:gap-4">
               <button
                 onClick={() => router.push('/sites')}
                 className="w-full sm:w-auto px-8 py-3 md:py-3.5 text-sm md:text-base font-semibold text-gray-900 bg-white rounded-xl hover:bg-gray-50 shadow-soft transition-colors"
               >
-                Explore beaches
+                {t('ctaExplore')}
               </button>
               <button
                 onClick={() => router.push('/sign-in')}
                 className="w-full sm:w-auto px-8 py-3 md:py-3.5 text-sm md:text-base font-medium text-gray-300 bg-white/10 rounded-xl hover:bg-white/15 border border-white/10 transition-colors"
               >
-                Sign in
+                {t('ctaSignIn')}
               </button>
             </div>
             <p className="mt-6 md:mt-8 text-[12px] md:text-sm text-gray-500">
-              Own a beach business?{' '}
+              {t('ctaPartner')}{' '}
               <a href="https://partner.sunbnb.app" className="text-brand-cyan hover:text-cyan-300 underline underline-offset-2 font-medium transition-colors">
-                Become a partner
+                {t('ctaBecomePartner')}
               </a>
             </p>
           </div>
@@ -279,11 +279,11 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
           className="mx-auto mb-3 w-[100px] md:w-[120px] opacity-30"
         />
         <p className="text-[11px] md:text-xs text-gray-400 mb-2">
-          © {new Date().getFullYear()} Sunbnb · <a href="/tos" className="underline hover:text-gray-600 transition-colors">Terms</a> · <a href="/privacy" className="underline hover:text-gray-600 transition-colors">Privacy</a> · <a href="/cancellation-policy" className="underline hover:text-gray-600 transition-colors">Cancellation Policy</a> · <a href="https://partner.sunbnb.app" className="underline hover:text-gray-600 transition-colors">For partners</a>
+          © {new Date().getFullYear()} Sunbnb · <a href="/tos" className="underline hover:text-gray-600 transition-colors">{t('footerTerms')}</a> · <a href="/privacy" className="underline hover:text-gray-600 transition-colors">{t('footerPrivacy')}</a> · <a href="/cancellation-policy" className="underline hover:text-gray-600 transition-colors">{t('footerCancellation')}</a> · <a href="https://partner.sunbnb.app" className="underline hover:text-gray-600 transition-colors">{t('footerPartners')}</a>
         </p>
         <p className="text-[10px] md:text-[11px] text-gray-300">
-          Operated by {businessEntity.companyName}
-          {businessEntity.businessId ? ` · Business ID ${businessEntity.businessId}` : ''}
+          {t('operatedBy')} {businessEntity.companyName}
+          {businessEntity.businessId ? ` · ${t('businessId')} ${businessEntity.businessId}` : ''}
           {businessEntity.companyAddress ? ` · ${businessEntity.companyAddress}` : ''}
         </p>
       </footer>
