@@ -228,7 +228,7 @@ export default function GeneralView() {
   const canUseAvailabilityOnly = tier === 'PRO' || tier === 'BUSINESS'
 
   return (
-    <div className="p-4">
+    <div className="pt-2">
 
       {/* Save status indicator — sticky top bar */}
       <div className={`flex items-center justify-center gap-2 px-3 py-2 rounded mb-4 text-sm transition-all ${

@@ -39,6 +39,8 @@ export interface SiteProps {
   paymentProvider?: string
   noShowDeadlineMinutes?: number | null
   features?: string[]
+  mollieOnboardingStatus?: string | null
+  hasMollieToken?: boolean
 }
 
 export interface Product {

@@ -6,6 +6,7 @@ import Tab from '@mui/material/Tab'
 import { SiteProps } from '@/types/shared'
 import { useRouter } from 'next/navigation'
 import { SiteProvider } from '@/app/sites/site-context'
+import ReadinessChecklist from './readiness-checklist'
 
 const tabStyle = {
   textTransform: 'none',
@@ -21,8 +22,8 @@ const tabStyle = {
 } as const
 
 export default function SiteView(
-  { tab, site, apiKey, children }: 
-  { 
+  { tab, site, apiKey, children }:
+  {
     site: SiteProps,
     apiKey: string,
     tab: string,
@@ -34,7 +35,7 @@ export default function SiteView(
 
   return (
     <SiteProvider site={site} apiKey={apiKey}>
-      <div className="container mx-auto mt-2">
+      <div className="mt-2">
         <Tabs
           variant="fullWidth"
           value={tab}
@@ -59,6 +60,12 @@ export default function SiteView(
           <Tab value="rentals" label="Rentals" sx={tabStyle} />
           <Tab value="accounting" label="Accounting" sx={tabStyle} />
         </Tabs>
+        {tab !== 'inventory' && (
+          <ReadinessChecklist
+            site={site}
+            onNavigate={(path) => router.push(path.startsWith('/') ? path : `/sites/${site.id}/${path}`)}
+          />
+        )}
         { children }
       </div>
     </SiteProvider>

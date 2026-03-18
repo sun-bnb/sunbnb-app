@@ -83,7 +83,7 @@ export default function ProductsView() {
   }
 
   return (
-    <div className="container mx-auto p-4">
+    <div className="pt-2">
       {/* App sales toggle */}
       <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 mt-4 mb-2">
         <div>

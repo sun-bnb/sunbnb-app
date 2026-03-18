@@ -3,6 +3,7 @@
 import { useSession } from 'next-auth/react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import Header from './header'
 import LandingPage from './landing'
 
@@ -15,6 +16,139 @@ interface BusinessEntity {
   contactPhone: string | null
 }
 
+// ─── Mollie banner ────────────────────────────────────────────────────────────
+
+type MollieOnboardingStatus = 'completed' | 'in-review' | 'needs-data' | null
+
+function MollieBanner({
+  hasMollie,
+  mollieOnboardingStatus,
+}: {
+  hasMollie: boolean
+  mollieOnboardingStatus: MollieOnboardingStatus
+}) {
+  const [dismissed, setDismissed] = useState(true) // start hidden to avoid flash
+
+  useEffect(() => {
+    const key = 'mollie-banner-dismissed'
+    if (sessionStorage.getItem(key)) {
+      setDismissed(true)
+    } else {
+      setDismissed(false)
+    }
+  }, [])
+
+  if (dismissed) return null
+
+  // No banner needed when Mollie is fully set up
+  if (hasMollie && mollieOnboardingStatus === 'completed') return null
+
+  const handleDismiss = () => {
+    sessionStorage.setItem('mollie-banner-dismissed', '1')
+    setDismissed(true)
+  }
+
+  // Not connected at all
+  if (!hasMollie) {
+    return (
+      <div className="bg-amber-50 border-b border-amber-200">
+        <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-400/20 flex items-center justify-center">
+              <svg className="w-3 h-3 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+              </svg>
+            </span>
+            <p className="text-sm text-amber-800 truncate">
+              <span className="font-medium">Mollie Payments not connected.</span>
+              {' '}Connect your Mollie account to accept online payments.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <Link
+              href="/account/mollie"
+              className="text-xs font-semibold text-white bg-amber-500 hover:bg-amber-600 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              Set up Mollie
+            </Link>
+            <button onClick={handleDismiss} className="text-amber-500 hover:text-amber-700 transition-colors" aria-label="Dismiss">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Connected but needs-data
+  if (mollieOnboardingStatus === 'needs-data') {
+    return (
+      <div className="bg-orange-50 border-b border-orange-200">
+        <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-orange-400/20 flex items-center justify-center">
+              <svg className="w-3 h-3 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+              </svg>
+            </span>
+            <p className="text-sm text-orange-800 truncate">
+              <span className="font-medium">Mollie onboarding incomplete.</span>
+              {' '}Your account needs additional information before you can accept payments.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <a
+              href="https://my.mollie.com/dashboard"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              Complete at Mollie ↗
+            </a>
+            <button onClick={handleDismiss} className="text-orange-500 hover:text-orange-700 transition-colors" aria-label="Dismiss">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // in-review — informational only, lower urgency
+  if (mollieOnboardingStatus === 'in-review') {
+    return (
+      <div className="bg-blue-50 border-b border-blue-200">
+        <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-400/20 flex items-center justify-center">
+              <svg className="w-3 h-3 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+              </svg>
+            </span>
+            <p className="text-sm text-blue-800 truncate">
+              <span className="font-medium">Mollie account under review.</span>
+              {' '}Payments will be enabled once your account is verified. No action needed.
+            </p>
+          </div>
+          <button onClick={handleDismiss} className="flex-shrink-0 text-blue-400 hover:text-blue-600 transition-colors" aria-label="Dismiss">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return null
+}
+
+// ─── App shell ────────────────────────────────────────────────────────────────
+
 export default function App({ children, businessEntity }: { children: React.ReactNode; businessEntity: BusinessEntity }) {
 
   const { status } = useSession()
@@ -22,12 +156,17 @@ export default function App({ children, businessEntity }: { children: React.Reac
   const router = useRouter()
   const [onboardingChecked, setOnboardingChecked] = useState(false)
   const [needsOnboarding, setNeedsOnboarding] = useState(false)
+  const [hasMollie, setHasMollie] = useState(false)
+  const [mollieOnboardingStatus, setMollieOnboardingStatus] = useState<MollieOnboardingStatus>(null)
 
   // Public routes that don't need auth shell
   const isPublicRoute = pathname.endsWith('/info') || pathname.endsWith('/manage') || pathname.endsWith('/orders') || pathname.startsWith('/sign-in') || pathname.startsWith('/forgot-password') || pathname.startsWith('/reset-password') || pathname.startsWith('/legal')
 
   // Routes where the onboarding guard should not redirect
   const isOnboardingRoute = pathname.startsWith('/onboarding')
+
+  // Don't show the banner when the user is already on the Mollie setup page
+  const isMolliePage = pathname.startsWith('/account/mollie')
 
   useEffect(() => {
     if (status !== 'authenticated' || isPublicRoute || isOnboardingRoute) {
@@ -43,11 +182,12 @@ export default function App({ children, businessEntity }: { children: React.Reac
           router.replace('/onboarding')
         } else {
           setNeedsOnboarding(false)
+          setHasMollie(!!data.hasMollie)
+          setMollieOnboardingStatus(data.mollieOnboardingStatus ?? null)
         }
         setOnboardingChecked(true)
       })
       .catch(() => {
-        // If the check fails, don't block the user
         setOnboardingChecked(true)
       })
   }, [status, pathname])
@@ -85,6 +225,9 @@ export default function App({ children, businessEntity }: { children: React.Reac
   return (
     <div className="min-h-screen bg-gray-50/50">
       <Header />
+      {!isMolliePage && (
+        <MollieBanner hasMollie={hasMollie} mollieOnboardingStatus={mollieOnboardingStatus} />
+      )}
       <main>
         {children}
       </main>

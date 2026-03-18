@@ -276,7 +276,7 @@ export default function RentalsView() {
   }
 
   return (
-    <div className="p-4">
+    <div className="pt-2">
       {/* Rentals toggle + VAT on same row */}
       <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 mt-4 mb-4 gap-4">
         <div className="flex-1 min-w-0">

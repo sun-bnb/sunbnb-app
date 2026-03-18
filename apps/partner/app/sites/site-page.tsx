@@ -69,6 +69,8 @@ export default async function SitePage(
     const tier = partnerAccount?.subscription?.plan?.tier ?? null
     const platformFees = settings?.serviceFees ?? []
     ;(site as any).subscriptionTier = tier
+    ;(site as any).mollieOnboardingStatus = partnerAccount?.mollieOnboardingStatus ?? null
+    ;(site as any).hasMollieToken = !!partnerAccount?.mollieAccessToken
 
     const serviceCodes = ['sunbed-rental', 'food-and-beverage', 'equipment-rental']
     site.serviceFees = serviceCodes

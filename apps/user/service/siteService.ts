@@ -96,7 +96,43 @@ export async function searchSites(lat?: string, lng?: string) {
   : Prisma.sql``;
   */
 
-  const whereClause = Prisma.sql`WHERE status = 'active'`;
+  const whereClause = Prisma.sql`
+    WHERE status = 'active'
+      -- Must have a name
+      AND name IS NOT NULL AND name != ''
+      -- Must have a valid location
+      AND location_lat IS NOT NULL AND location_lng IS NOT NULL
+      AND location_lat != '0' AND location_lng != '0'
+      -- Must have at least one active inventory item
+      AND EXISTS (
+        SELECT 1 FROM "InventoryItem"
+        WHERE site_id = "Site".id AND status = 'active'
+      )
+      -- Must have at least one working hours entry
+      AND EXISTS (
+        SELECT 1 FROM "SiteWorkingHours"
+        WHERE site_id = "Site".id
+      )
+      -- Must have a cover image
+      AND image IS NOT NULL
+      -- Paid-site-specific checks
+      AND (
+        type IS DISTINCT FROM 'paid'
+        OR (
+          -- Must have a price set
+          price IS NOT NULL AND price > 0
+          -- Must have VAT set
+          AND vat IS NOT NULL
+          -- Must have Mollie onboarding completed
+          AND EXISTS (
+            SELECT 1 FROM "PartnerAccount"
+            WHERE user_id = "Site".user_id
+              AND mollie_access_token IS NOT NULL
+              AND mollie_onboarding_status = 'completed'
+          )
+        )
+      )
+  `;
 
   const orderByClause = lat && lng
   ? Prisma.sql`ORDER BY dist_km`

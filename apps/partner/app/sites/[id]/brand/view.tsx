@@ -194,7 +194,7 @@ export default function BrandView() {
   }
 
   return (
-    <div className="container mx-auto p-4">
+    <div className="pt-2">
       <div className="mt-4 mb-6 flex items-start justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-800">Branded Booking Page</h2>

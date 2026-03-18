@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { InventoryItem } from '@/types/shared'
 import {
   createInventoryItem,
@@ -9,6 +10,7 @@ import {
 } from '../inventory-actions'
 import { getSite } from '../queries'
 import { useSite } from '@/app/sites/site-context'
+import ReadinessChecklist from '@/app/sites/readiness-checklist'
 import { useSharedMap } from './SharedMapContext'
 import InventoryForm from './InventoryForm'
 import InventoryMap from './InventoryMap'
@@ -23,6 +25,7 @@ export default function InventoryView() {
 
   const { site, setSite, apiKey } = useSite()
   const { setValue } = useSharedMap()
+  const router = useRouter()
 
   const inventory: InventoryItem[] = site.inventoryItems || []
   const siteId = site.id || ''
@@ -35,8 +38,8 @@ export default function InventoryView() {
   const [editGroup, setEditGroup] = useState<number | null>(null)
 
   const [parcelConfig, setParcelConfig] = useState<ChairConfig>({
-    rows: 2,
-    seatsPerRow: 4,
+    rows: 6,
+    seatsPerRow: 10,
     horizontalGap: 1,
     verticalGap: 1.5,
     rotation: 0,
@@ -468,7 +471,7 @@ export default function InventoryView() {
   const showPanel = showItemPanel || showParcelPanel
 
   return (
-    <div className="flex flex-col -mx-4 -mt-2">
+    <div className="flex flex-col -mt-2">
       {/* Summary strip */}
       <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs text-gray-500">
         <span className="font-medium text-gray-700">{totalSunbeds}</span>
@@ -484,6 +487,13 @@ export default function InventoryView() {
           </>
         )}
       </div>
+
+      {/* Readiness checklist */}
+      <ReadinessChecklist
+        site={site}
+        onNavigate={(path) => router.push(path.startsWith('/') ? path : `/sites/${site.id}/${path}`)}
+        className="mt-2 mb-0"
+      />
 
       {/* Parcel list */}
       <ParcelList

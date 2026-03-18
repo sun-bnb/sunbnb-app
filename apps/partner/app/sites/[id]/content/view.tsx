@@ -134,7 +134,7 @@ export default function Content() {
   const displayImage = preview || site.image
 
   return (
-    <div className="p-4">
+    <div className="pt-2">
 
       {/* Save status indicator */}
       <div className={`flex items-center justify-center gap-2 px-3 py-2 rounded mb-4 text-sm transition-all ${

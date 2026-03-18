@@ -14,6 +14,10 @@ interface SiteCardProps {
   status?: string | null
   type?: string | null
   price?: number | null
+  vat?: number | null
+  workingHoursCount: number
+  activeInventoryCount: number
+  mollieReady: boolean
   _count: { inventoryItems: number; products: number; reservations: number }
 }
 
@@ -27,6 +31,31 @@ function StatusBadge({ status }: { status: string | null | undefined }) {
     }`}>
       <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-500' : 'bg-gray-400'}`} />
       {isActive ? 'Active' : status || 'Draft'}
+    </span>
+  )
+}
+
+function countMissing(site: SiteCardProps): number {
+  let missing = 0
+  if (!site.name || !site.name.trim()) missing++
+  if (site.type === 'paid' && (!site.price || site.price <= 0)) missing++
+  if (site.type === 'paid' && site.vat == null) missing++
+  if (site.type === 'paid' && !site.mollieReady) missing++
+  if (site.activeInventoryCount === 0) missing++
+  if (site.workingHoursCount === 0) missing++
+  if (!site.image) missing++
+  return missing
+}
+
+function SetupBadge({ site }: { site: SiteCardProps }) {
+  const missing = countMissing(site)
+  if (missing === 0) return null
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+      </svg>
+      {missing} to do
     </span>
   )
 }
@@ -106,7 +135,10 @@ function SiteCard({ site }: { site: SiteCardProps }) {
       <div className="p-4">
         <div className="flex items-start justify-between gap-2 mb-2">
           <h3 className="text-sm font-semibold text-gray-900 truncate">{site.name}</h3>
-          <StatusBadge status={site.status} />
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <SetupBadge site={site} />
+            <StatusBadge status={site.status} />
+          </div>
         </div>
 
         {site.description && (
@@ -149,7 +181,7 @@ export default async function Sites() {
   const session = await auth()
   if (!session?.user) return null
 
-  const [sites, siteLimit] = await Promise.all([
+  const [sites, siteLimit, partnerAccount] = await Promise.all([
     prisma.site.findMany({
       where: { userId: session.user.id },
       orderBy: { createdAt: 'desc' },
@@ -163,17 +195,30 @@ export default async function Sites() {
         status: true,
         type: true,
         price: true,
+        vat: true,
+        inventoryItems: { where: { status: 'active' }, select: { id: true } },
         _count: {
           select: {
             inventoryItems: true,
             products: true,
             reservations: true,
+            workingHours: true,
           }
         }
       }
-    }),
+    }).then(sites => sites.map(({ inventoryItems: activeItems, ...s }) => ({
+      ...s,
+      workingHoursCount: s._count.workingHours,
+      activeInventoryCount: activeItems.length,
+    }))),
     canCreateSite(session.user.id!),
+    prisma.partnerAccount.findUnique({
+      where: { userId: session.user.id! },
+      select: { mollieAccessToken: true, mollieOnboardingStatus: true },
+    }),
   ])
+
+  const mollieReady = !!partnerAccount?.mollieAccessToken && partnerAccount?.mollieOnboardingStatus === 'completed'
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-5xl">
@@ -194,7 +239,7 @@ export default async function Sites() {
           maxSites={siteLimit.maxSites}
         />
         {sites.map(site => (
-          <SiteCard key={site.id} site={site} />
+          <SiteCard key={site.id} site={{ ...site, mollieReady }} />
         ))}
       </div>
     </div>

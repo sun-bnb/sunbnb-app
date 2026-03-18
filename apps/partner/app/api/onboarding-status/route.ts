@@ -13,11 +13,13 @@ export async function GET() {
     select: {
       company: true,
       mollieAccessToken: true,
+      mollieOnboardingStatus: true,
     },
   })
 
   return NextResponse.json({
     hasAccount: !!account?.company,
     hasMollie: !!account?.mollieAccessToken,
+    mollieOnboardingStatus: account?.mollieOnboardingStatus ?? null,
   })
 }

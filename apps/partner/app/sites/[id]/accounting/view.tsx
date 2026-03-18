@@ -86,7 +86,7 @@ export default function AccountingView() {
   }
 
   return (
-    <div className="container mx-auto p-4">
+    <div className="pt-2">
       {/* Header */}
       <div className="mt-4 mb-6">
         <h2 className="text-lg font-semibold text-gray-800">Accounting</h2>
