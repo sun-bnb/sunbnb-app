@@ -121,7 +121,7 @@ function ResetPasswordContent() {
         setError(data.error || t('Something went wrong'))
       }
     } catch {
-      setError(t('Something went wrong. Please try again.'))
+      setError(t('somethingWentWrongRetry'))
     } finally {
       setIsLoading(false)
     }

@@ -553,6 +553,9 @@ export default function InventoryView() {
             selectedItemIds={selectedItemIds}
             selectedGroupNumber={editGroup}
             pairingMode={pairingMode}
+            creatingParcel={editorMode === 'create-parcel'}
+            parcelSummary={editorMode === 'create-parcel' ? `${parcelConfig.rows} rows × ${parcelConfig.seatsPerRow} seats = ${parcelConfig.rows * parcelConfig.seatsPerRow} sunbeds` : undefined}
+            repositionMode={(selectedParcelGroupNumber != null && editorMode === 'none') || editorMode === 'edit-parcel'}
             onMapClick={handleMapClick}
             onMarkerClick={handleMarkerClick}
             onMarkerDragEnd={handleMarkerDragEnd}
@@ -600,6 +603,8 @@ export default function InventoryView() {
           </div>
         )}
       </div>
+
+      <div className="pb-8" />
     </div>
   )
 }

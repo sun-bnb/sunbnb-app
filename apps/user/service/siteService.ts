@@ -115,21 +115,22 @@ export async function searchSites(lat?: string, lng?: string) {
       )
       -- Must have a cover image
       AND image IS NOT NULL
-      -- Paid-site-specific checks
+      -- Paid reservations require price, VAT, and Mollie
       AND (
         type IS DISTINCT FROM 'paid'
         OR (
-          -- Must have a price set
           price IS NOT NULL AND price > 0
-          -- Must have VAT set
           AND vat IS NOT NULL
-          -- Must have Mollie onboarding completed
-          AND EXISTS (
-            SELECT 1 FROM "PartnerAccount"
-            WHERE user_id = "Site".user_id
-              AND mollie_access_token IS NOT NULL
-              AND mollie_onboarding_status = 'completed'
-          )
+        )
+      )
+      -- Any service using integrated payments requires Mollie onboarding
+      AND (
+        (type IS DISTINCT FROM 'paid' AND order_payment_type IS DISTINCT FROM 'paid' AND rental_payment_type IS DISTINCT FROM 'paid')
+        OR EXISTS (
+          SELECT 1 FROM "PartnerAccount"
+          WHERE user_id = "Site".user_id
+            AND mollie_access_token IS NOT NULL
+            AND mollie_onboarding_status = 'completed'
         )
       )
   `;

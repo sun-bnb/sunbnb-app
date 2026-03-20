@@ -15,6 +15,8 @@ interface SiteCardProps {
   type?: string | null
   price?: number | null
   vat?: number | null
+  orderPaymentType?: string | null
+  rentalPaymentType?: string | null
   workingHoursCount: number
   activeInventoryCount: number
   mollieReady: boolean
@@ -40,7 +42,10 @@ function countMissing(site: SiteCardProps): number {
   if (!site.name || !site.name.trim()) missing++
   if (site.type === 'paid' && (!site.price || site.price <= 0)) missing++
   if (site.type === 'paid' && site.vat == null) missing++
-  if (site.type === 'paid' && !site.mollieReady) missing++
+  const hasIntegratedPayments = site.type === 'paid'
+    || site.orderPaymentType === 'paid'
+    || site.rentalPaymentType === 'paid'
+  if (hasIntegratedPayments && !site.mollieReady) missing++
   if (site.activeInventoryCount === 0) missing++
   if (site.workingHoursCount === 0) missing++
   if (!site.image) missing++
@@ -196,6 +201,8 @@ export default async function Sites() {
         type: true,
         price: true,
         vat: true,
+        orderPaymentType: true,
+        rentalPaymentType: true,
         inventoryItems: { where: { status: 'active' }, select: { id: true } },
         _count: {
           select: {

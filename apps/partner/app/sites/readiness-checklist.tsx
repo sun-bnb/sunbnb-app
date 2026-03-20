@@ -68,7 +68,14 @@ function computeMissing(site: SiteProps): ReadinessItem[] {
       tab: 'general',
       hint: 'Set the VAT rate for invoicing',
     })
-    // Mollie onboarding required for paid sites using platform payments
+  }
+
+  // Mollie onboarding required when any service uses integrated payments
+  const hasIntegratedPayments = isPaid
+    || site.orderPaymentType === 'paid'
+    || site.rentalPaymentType === 'paid'
+
+  if (hasIntegratedPayments) {
     const mollieReady = site.hasMollieToken && site.mollieOnboardingStatus === 'completed'
     all.push({
       key: 'mollie',

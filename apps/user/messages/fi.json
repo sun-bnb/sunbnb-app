@@ -100,14 +100,14 @@
     "Forgot your password": "Unohditko salasanasi?",
     "Enter your email and we'll send you a reset link": "Syötä sähköpostiosoitteesi ja lähetämme sinulle palautuslinkin.",
     "Email": "Sähköposti",
-    "you@example.com": "sinä@esimerkki.fi",
+    "emailPlaceholder": "sinä@esimerkki.fi",
     "Sending": "Lähetetään...",
     "Send reset link": "Lähetä palautuslinkki",
     "Check your inbox": "Tarkista saapuneet",
-    "If an account exists we've sent a reset link. It expires in 1 hour.": "Jos tiliä löytyy kyseiselle sähköpostille, olemme lähettäneet palautuslinkin. Se vanhenee tunnissa.",
+    "resetLinkSent": "Jos tiliä löytyy kyseiselle sähköpostille, olemme lähettäneet palautuslinkin. Se vanhenee tunnissa.",
     "Back to sign in": "Takaisin kirjautumiseen",
     "Something went wrong": "Jokin meni pieleen",
-    "Something went wrong. Please try again.": "Jokin meni pieleen. Ole hyvä ja yritä uudelleen."
+    "somethingWentWrongRetry": "Jokin meni pieleen. Ole hyvä ja yritä uudelleen."
   },
   "ResetPassword": {
     "Set new password": "Aseta uusi salasana",
@@ -127,7 +127,7 @@
     "Password must contain uppercase, lowercase, and a number": "Salasanassa tulee olla isoja kirjaimia, pieniä kirjaimia ja numero",
     "Passwords do not match": "Salasanat eivät täsmää",
     "Something went wrong": "Jokin meni pieleen",
-    "Something went wrong. Please try again.": "Jokin meni pieleen. Ole hyvä ja yritä uudelleen."
+    "somethingWentWrongRetry": "Jokin meni pieleen. Ole hyvä ja yritä uudelleen."
   },
   "Receipt": {
     "Location": "Sijainti",

@@ -94,7 +94,7 @@ export default function ParcelFormView({
           </h3>
           <span className="text-xs text-gray-500">
             {mode === 'create'
-              ? 'Configure layout, then click map to place'
+              ? `${config.rows} rows × ${config.seatsPerRow} seats = ${config.rows * config.seatsPerRow} sunbeds`
               : `${parcelItems.length} sunbed${parcelItems.length !== 1 ? 's' : ''}`
             }
           </span>
@@ -252,15 +252,6 @@ export default function ParcelFormView({
           </Button>
         )}
 
-        {/* Create instruction */}
-        {mode === 'create' && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4 text-center">
-            <p className="text-sm text-green-700 font-medium">Click on the map to place</p>
-            <p className="text-xs text-green-600 mt-0.5">
-              {config.rows} rows × {config.seatsPerRow} seats = {config.rows * config.seatsPerRow} sunbeds
-            </p>
-          </div>
-        )}
 
         {/* Edit mode actions */}
         {mode === 'edit' && editGroup && (

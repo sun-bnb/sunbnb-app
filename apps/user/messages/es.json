@@ -100,14 +100,14 @@
     "Forgot your password": "¿Olvidaste tu contraseña?",
     "Enter your email and we'll send you a reset link": "Introduce tu email y te enviaremos un enlace de recuperación.",
     "Email": "Correo electrónico",
-    "you@example.com": "tu@ejemplo.com",
+    "emailPlaceholder": "tu@ejemplo.com",
     "Sending": "Enviando...",
     "Send reset link": "Enviar enlace",
     "Check your inbox": "Revisa tu bandeja de entrada",
-    "If an account exists we've sent a reset link. It expires in 1 hour.": "Si existe una cuenta para ese email, hemos enviado un enlace. Caduca en 1 hora.",
+    "resetLinkSent": "Si existe una cuenta para ese email, hemos enviado un enlace. Caduca en 1 hora.",
     "Back to sign in": "Volver al inicio de sesión",
     "Something went wrong": "Algo salió mal",
-    "Something went wrong. Please try again.": "Algo salió mal. Por favor, inténtalo de nuevo."
+    "somethingWentWrongRetry": "Algo salió mal. Por favor, inténtalo de nuevo."
   },
   "ResetPassword": {
     "Set new password": "Nueva contraseña",
@@ -127,7 +127,7 @@
     "Password must contain uppercase, lowercase, and a number": "La contraseña debe contener mayúsculas, minúsculas y un número",
     "Passwords do not match": "Las contraseñas no coinciden",
     "Something went wrong": "Algo salió mal",
-    "Something went wrong. Please try again.": "Algo salió mal. Por favor, inténtalo de nuevo."
+    "somethingWentWrongRetry": "Algo salió mal. Por favor, inténtalo de nuevo."
   },
   "Receipt": {
     "Location": "Ubicación",

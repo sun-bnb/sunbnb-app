@@ -15,13 +15,16 @@ function ensureStyles() {
   style.textContent = `
     gmp-place-autocomplete {
       --gmpac-color-surface: #ffffff !important;
-      --gmpac-color-outline: #e5e7eb !important;
+      --gmpac-color-outline: #d1d5db !important;
       --gmpac-color-on-surface: #111827 !important;
       --gmpac-color-on-surface-variant: #6b7280 !important;
       --gmpac-color-primary: #3b82f6 !important;
       --gmpac-font-family-base: inherit !important;
       --gmpac-height-input: 36px !important;
+      width: 100% !important;
+      max-width: none !important;
       background: #ffffff !important;
+      border: 1px solid #d1d5db !important;
       border-radius: 8px !important;
       color-scheme: light only !important;
     }
@@ -32,6 +35,7 @@ function ensureStyles() {
       border-radius: 8px !important;
       box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
       margin-top: 4px !important;
+      z-index: 1000 !important;
     }
     .pac-item {
       background: #ffffff !important;
@@ -65,6 +69,7 @@ function ensureStyles() {
     [class*="gmpac"] {
       background: #ffffff !important;
       color: #111827 !important;
+      z-index: 1000 !important;
     }
   `
   document.head.appendChild(style)
@@ -100,6 +105,7 @@ export const PlaceAutocompleteClassic = ({onPlaceSelect}: Props) => {
           name: place.displayName,
           formatted_address: place.formattedAddress,
         } as google.maps.places.PlaceResult)
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
         return
       }
 
@@ -115,6 +121,7 @@ export const PlaceAutocompleteClassic = ({onPlaceSelect}: Props) => {
           name: place.displayName,
           formatted_address: place.formattedAddress,
         } as google.maps.places.PlaceResult)
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
       }
     }
 

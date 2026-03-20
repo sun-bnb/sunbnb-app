@@ -101,14 +101,14 @@
     "Forgot your password": "Forgot your password?",
     "Enter your email and we'll send you a reset link": "Enter your email and we'll send you a reset link.",
     "Email": "Email",
-    "you@example.com": "you@example.com",
+    "emailPlaceholder": "you@example.com",
     "Sending": "Sending…",
     "Send reset link": "Send reset link",
     "Check your inbox": "Check your inbox",
-    "If an account exists we've sent a reset link. It expires in 1 hour.": "If an account exists for that email, we've sent a password reset link. It expires in 1 hour.",
+    "resetLinkSent": "If an account exists for that email, we've sent a password reset link. It expires in 1 hour.",
     "Back to sign in": "Back to sign in",
     "Something went wrong": "Something went wrong",
-    "Something went wrong. Please try again.": "Something went wrong. Please try again."
+    "somethingWentWrongRetry": "Something went wrong. Please try again."
   },
   "ResetPassword": {
     "Set new password": "Set new password",
@@ -128,7 +128,7 @@
     "Password must contain uppercase, lowercase, and a number": "Password must contain uppercase, lowercase, and a number",
     "Passwords do not match": "Passwords do not match",
     "Something went wrong": "Something went wrong",
-    "Something went wrong. Please try again.": "Something went wrong. Please try again."
+    "somethingWentWrongRetry": "Something went wrong. Please try again."
   },
   "Receipt": {
     "Location": "Location",

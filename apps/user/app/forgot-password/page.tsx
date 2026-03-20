@@ -79,7 +79,7 @@ export default function ForgotPasswordPage() {
         setError(data.error || t('Something went wrong'))
       }
     } catch {
-      setError(t('Something went wrong. Please try again.'))
+      setError(t('somethingWentWrongRetry'))
     } finally {
       setIsLoading(false)
     }
@@ -101,7 +101,7 @@ export default function ForgotPasswordPage() {
             </div>
             <h2 className="text-xl font-bold text-gray-900">{t('Check your inbox')}</h2>
             <p className="mt-2 text-sm text-gray-500 leading-relaxed">
-              {t('If an account exists we\'ve sent a reset link. It expires in 1 hour.')}
+              {t('resetLinkSent')}
             </p>
             <Link href="/sign-in" className="inline-block mt-6 text-sm text-brand-cyan hover:text-brand-cyan-dark font-medium transition-colors">
               {t('Back to sign in')}
@@ -129,7 +129,7 @@ export default function ForgotPasswordPage() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder={t('you@example.com')}
+                    placeholder={t('emailPlaceholder')}
                     autoComplete="email"
                     required
                     className={`w-full px-3.5 py-2.5 text-sm bg-white border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-cyan/30 transition-all placeholder:text-gray-300 text-gray-900 pr-9 ${inputBorder(emailState)}`}
