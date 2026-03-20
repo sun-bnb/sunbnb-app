@@ -64,6 +64,10 @@ const prisma = {
   subscriptionPlan: {
     findUnique: vi.fn(),
   },
+  user: {
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+  },
   $executeRaw: vi.fn(),
   $executeRawUnsafe: vi.fn(),
   $queryRaw: vi.fn(),

@@ -97,9 +97,9 @@ export async function saveReservationForMultipleItems(
 
   const site = await prisma.site.findUnique({ where: { id: reservation.siteId } })
   if (!site) return { status: 'error', errors: ['Site not found'] }
-  if (site.type !== 'unpaid' && !site.price) return { status: 'error', errors: ['Site price not set'] }
+  if (site.type === 'paid' && !site.price) return { status: 'error', errors: ['Site price not set'] }
 
-  if (site.type !== 'unpaid' && (!reservation.items || reservation.items.length === 0)) {
+  if (site.type === 'paid' && (!reservation.items || reservation.items.length === 0)) {
     return { status: 'error', errors: ['At least one item is required'] }
   }
 
@@ -119,15 +119,15 @@ export async function saveReservationForMultipleItems(
     }
   }
 
-  // Determine status server-side: unpaid sites skip payment flow
-  const status = site.type === 'unpaid' ? RESERVATION_COMPLETE : RESERVATION_PENDING
+  // Determine status server-side: only explicitly 'paid' sites enter the payment flow
+  const status = site.type === 'paid' ? RESERVATION_PENDING : RESERVATION_COMPLETE
 
   const timeBetween = to.getTime() - from.getTime()
   const daysBetween = Math.round(timeBetween / (1000 * 60 * 60 * 24))
 
   // Fetch item prices from DB — never trust client-supplied prices
   let totalPrice = 0
-  if (site.type !== 'unpaid' && reservation.items?.length) {
+  if (site.type === 'paid' && reservation.items?.length) {
     const itemIds = reservation.items.map(i => i.id)
     const dbItems = await prisma.inventoryItem.findMany({
       where: { id: { in: itemIds }, siteId: reservation.siteId },
@@ -279,7 +279,7 @@ export async function saveRentalBooking(input: {
         durationType: input.durationType,
         totalPrice,
         paymentAmount: totalPrice,
-        status: (site.rentalPaymentType ?? site.type) === 'unpaid' ? RENTAL_COMPLETE : RENTAL_PENDING,
+        status: (site.rentalPaymentType ?? site.type) === 'paid' ? RENTAL_PENDING : RENTAL_COMPLETE,
       },
     })
     bookings.push(booking)

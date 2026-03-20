@@ -195,6 +195,9 @@ export default function BrandView() {
 
   return (
     <div className="pt-2">
+      <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        Brand customization is coming soon. Changes made here are preview only and won&apos;t be saved.
+      </div>
       <div className="mt-4 mb-6 flex items-start justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-800">Branded Booking Page</h2>

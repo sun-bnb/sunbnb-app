@@ -234,11 +234,11 @@ function ReservationButton({
                 logger.debug('Save result', saveResult)
                 if (saveResult?.status === 'ok' && saveResult.id) {
                   logger.debug('Site type', site.type)
-                  if (site.type === 'unpaid') {
+                  if (site.type !== 'paid') {
                     router.push(`/reservations/${saveResult.id}`)
                   } else {
-                    dispatch(setValue({ 
-                      reservationState: site.type === 'unpaid' ? 'complete' : 'processing',
+                    dispatch(setValue({
+                      reservationState: site.type !== 'paid' ? 'complete' : 'processing',
                       pendingReservationId: saveResult.id
                     }))
                   }
@@ -327,7 +327,7 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
     return sum
   }, 0)
 
-  const isPaidSite = (site.rentalPaymentType ?? site.type) !== 'unpaid'
+  const isPaidSite = (site.rentalPaymentType ?? site.type) === 'paid'
 
   const [bookingError, setBookingError] = useState<string | null>(null)
 

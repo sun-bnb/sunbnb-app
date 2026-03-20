@@ -76,11 +76,11 @@ function ReservationButton({
             logger.debug('Save result POS', saveResult)
             if (saveResult?.status === 'ok' && saveResult.id) {
               dispatch(setValue({ 
-                reservationState: site.type === 'unpaid' ? 'complete' : 'processing',
+                reservationState: site.type !== 'paid' ? 'complete' : 'processing',
                 pendingReservationId: saveResult.id,
                 panelBottom: 'bottom-[0px]'
               }))
-              if (site.type === 'unpaid') {
+              if (site.type !== 'paid') {
                 router.push(`/reservations/${saveResult.id}`)
               }
             }

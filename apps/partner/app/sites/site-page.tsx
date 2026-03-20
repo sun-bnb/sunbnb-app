@@ -2,6 +2,7 @@ import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
 import { SiteProps } from '@/types/shared'
 import SiteView from './site-view'
+import ErrorCard from '@/components/ErrorCard'
 
 
 export default async function SitePage(
@@ -46,7 +47,7 @@ export default async function SitePage(
     } 
   })
   
-  if (!site) return <div>Site {params.id} not found</div>
+  if (!site) return <ErrorCard title="Site not found" message="This site does not exist or has been removed." />
 
   // Resolve service fees: site → partnerAccount → global settings (tier-aware)
   if (site.userId) {
@@ -102,7 +103,7 @@ export default async function SitePage(
     (site.userId && site.userId !== session.user.id) &&
     !sudoUserEmails.includes(session.user.email)
   ) {
-    return <div>Site not found</div>
+    return <ErrorCard title="Not authorized" message="You don't have access to this site." />
   }
   
   return (

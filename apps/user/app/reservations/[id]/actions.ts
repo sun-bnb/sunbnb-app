@@ -243,7 +243,7 @@ export async function createOrder(order: {
   for (const item of order.items) {
     const dbProduct = productMap.get(item.product.id)
     if (!dbProduct) {
-      return { status: 'error', errors: [`Product ${item.product.id} not found or not active`] }
+      return { status: 'error', errors: ['One or more products are unavailable'] }
     }
     if (dbProduct.soldOut) {
       return { status: 'error', errors: [`${dbProduct.name} is currently sold out`] }
@@ -329,7 +329,7 @@ export async function completeUnpaidOrder(orderId: string, anonId?: string) {
 
   // Only allow for off-platform billing sites (check orderPaymentType first, fall back to type)
   const effectiveOrderPaymentType = order.site.orderPaymentType ?? order.site.type
-  if (effectiveOrderPaymentType !== 'unpaid') {
+  if (effectiveOrderPaymentType === 'paid') {
     return { status: 'error', errors: ['Payment is required for this site'] }
   }
 

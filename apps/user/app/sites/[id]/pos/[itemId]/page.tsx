@@ -1,5 +1,6 @@
 import prisma from '@repo/data/PrismaCient'
 import PosView from './view'
+import ErrorCard from '@/components/ErrorCard'
 
 const { STRIPE_PUBLIC_KEY } = process.env
 
@@ -47,7 +48,7 @@ export default async function Pos({ params }: { params: { itemId: string }}) {
 
   const items = await getInventoryItems(params.itemId)
 
-  if (!items) return <div>Item {params.itemId} not found</div>
+  if (!items) return <ErrorCard title="Item not found" message="We couldn't find the sunbed you're looking for." />
 
   return <PosView items={items.items} site={items.site} apiKey={apiKey} stripePublicKey={STRIPE_PUBLIC_KEY}/>
 

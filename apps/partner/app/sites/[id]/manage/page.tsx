@@ -2,13 +2,14 @@ import dayjs from 'dayjs'
 import prisma from '@repo/data/PrismaCient'
 import { SiteProps } from '@/types/shared'
 import ManagementView from './view'
+import ErrorCard from '@/components/ErrorCard'
 import { OP_RETURNED, RENTAL_CANCELED } from '@repo/data/reservation-status'
 
 
 export default async function ManagePage({ params, searchParams }: { params: { id: string }, searchParams: { [key: string]: string } }) {
 
   const { key } = searchParams
-  if (!key) return <div>Missing access key</div>
+  if (!key) return <ErrorCard title="Missing access key" message="No access key was provided. Please use the link given to you by the site operator." showBackLink={false} />
 
   const securityToken = await prisma.securityToken.findUnique({
     where: { 
@@ -21,7 +22,7 @@ export default async function ManagePage({ params, searchParams }: { params: { i
   })
 
   if (!securityToken) {
-    return <div>Invalid or expired access key</div>
+    return <ErrorCard title="Invalid or expired access key" message="This access key is no longer valid. Please contact the site operator to get a new link." showBackLink={false} />
   }
 
   const todayStart = dayjs().startOf('day').toDate()
@@ -66,11 +67,11 @@ export default async function ManagePage({ params, searchParams }: { params: { i
       },
     } 
   })
-  if (!site) return <div>Site {params.id} not found</div>
+  if (!site) return <ErrorCard title="Site not found" message="This site does not exist or has been removed. Please contact the site operator." showBackLink={false} />
 
   // Verify the access key belongs to the site's owner
   if (site.userId !== securityToken.userId) {
-    return <div>Not authorized</div>
+    return <ErrorCard title="Not authorized" message="This access key is not valid for this site. Please contact the site operator." showBackLink={false} />
   }
 
   return (

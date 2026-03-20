@@ -1,6 +1,7 @@
 import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
 import OrdersView from './view'
+import ErrorCard from '@/components/ErrorCard'
 import {
   ORDER_COMPLETE,
   ORDER_ACCEPTED,
@@ -19,8 +20,8 @@ export default async function OrdersPage({ params }: { params: { id: string } })
     where: { id: params.id }
   })
 
-  if (!site) return <div>Site {params.id} not found</div>
-  if (site.userId !== session.user.id) return <div>Not authorized</div>
+  if (!site) return <ErrorCard title="Site not found" message="This site does not exist or has been removed." />
+  if (site.userId !== session.user.id) return <ErrorCard title="Not authorized" message="You don't have access to this site." />
 
   // Fetch incoming + active + ready orders for initial render
   const orders = await prisma.order.findMany({ 

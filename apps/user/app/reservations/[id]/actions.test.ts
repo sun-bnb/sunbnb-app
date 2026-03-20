@@ -292,7 +292,7 @@ describe('createOrder', () => {
       items: [{ product: { id: 'p-1' }, quantity: 1 }],
     })
     expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('not found or not active')
+    expect(res.errors?.[0]).toContain('One or more products are unavailable')
   })
 
   it('creates order with DB prices (ignores client prices)', async () => {

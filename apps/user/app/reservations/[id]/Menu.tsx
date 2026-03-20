@@ -60,7 +60,7 @@ export default function Menu({
   showConfirmation?: boolean
 }) {
 
-  const isUnpaid = siteType === 'unpaid'
+  const isUnpaid = siteType !== 'paid'
 
   const t = useTranslations('Menu')
 

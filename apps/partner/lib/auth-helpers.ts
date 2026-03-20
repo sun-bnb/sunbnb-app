@@ -13,6 +13,13 @@ export async function requireSiteOwner(
   const session = await auth()
   if (!session?.user) return { session: null, error: 'Not authenticated' }
 
+  // Sudo users bypass ownership check
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { sudo: true },
+  })
+  if (user?.sudo) return { session, error: null }
+
   const site = await prisma.site.findUnique({
     where: { id: siteId },
     select: { userId: true },

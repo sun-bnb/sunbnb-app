@@ -224,9 +224,7 @@ export async function POST(request: NextRequest) {
     if (error?.statusCode === 422) {
       return Response.json(
         {
-          error: 'Payment could not be processed. The merchant may need to activate payment methods in their Mollie Dashboard.',
-          detail: error?.detail || error?.message,
-          field: error?.field,
+          error: 'Payment could not be processed. Please try again or contact support.',
         },
         { status: 422 }
       )

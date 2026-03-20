@@ -4,6 +4,7 @@ import prisma from '@repo/data/PrismaCient'
 import { Metadata } from 'next'
 import { auth } from '@/app/auth'
 import SiteView from './view'
+import ErrorCard from '@/components/ErrorCard'
 
 const { STRIPE_PUBLIC_KEY } = process.env
 
@@ -80,7 +81,7 @@ export default async function Site({ params }: { params: { id: string }}) {
   const appUrl = process.env.APP_URL as string
 
   const site = await getSite(params.id, session?.user?.id)
-  if (!site) return <div>Site {params.id} not found</div>
+  if (!site) return <ErrorCard title="Beach not found" message={`We couldn't find the beach you're looking for.`} showHomeLink />
 
   return (
     <div>

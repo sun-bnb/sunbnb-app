@@ -1,5 +1,6 @@
 import prisma from '@repo/data/PrismaCient'
 import PosView from './view'
+import ErrorCard from '@/components/ErrorCard'
 
 const { STRIPE_PUBLIC_KEY } = process.env
 
@@ -27,7 +28,7 @@ export default async function SitePos({ params }: { params: { id: string }}) {
 
   const site = await getSite(params.id)
 
-  if (!site) return <div>Site {params.id} not found</div>
+  if (!site) return <ErrorCard title="Beach not found" message="We couldn't find the beach you're looking for." />
 
   return <PosView site={site} apiKey={apiKey} stripePublicKey={STRIPE_PUBLIC_KEY}/>
 
