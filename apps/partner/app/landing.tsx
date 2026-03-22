@@ -48,15 +48,14 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
           </span>
         </h1>
         <p className="mt-5 text-lg text-gray-500 max-w-2xl mx-auto leading-relaxed">
-          Sunbnb gives beach venues a modern booking system, real-time inventory management,
-          and mobile-first reservation experience — so you can focus on hospitality.
+          One tool to manage your sunbeds, take bookings, and accept payments. Set up your sunbeds, products and services here, and start taking reservations in minutes. Simple for you, easy for your guests.
         </p>
         <div className="mt-8 flex items-center justify-center gap-3">
           <button
             onClick={() => router.push('/sign-in')}
             className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors shadow-sm"
           >
-            Get started free
+            Get started now
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
             </svg>
@@ -146,9 +145,18 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-3xl mx-auto">
           {[
-            { name: 'Starter', price: 'Free', note: 'forever', sites: '1 site', cta: 'Get started', highlight: false },
-            { name: 'Pro', price: '€29', note: '/month', sites: '1 site + all features', cta: 'Get started', highlight: true },
-            { name: 'Business', price: '€79', note: '/month', sites: 'Unlimited sites', cta: 'Get started', highlight: false },
+            {
+              name: 'Starter', price: 'Free', note: 'forever', highlight: false,
+              features: ['1 site', 'Integrated payments', '5% service fee', 'Community support'],
+            },
+            {
+              name: 'Pro', price: '€29', note: '/month', highlight: true,
+              features: ['1 site', 'Integrated payments', 'Off-platform billing', '2% service fee', 'Priority support'],
+            },
+            {
+              name: 'Business', price: '€79', note: '/month', highlight: false,
+              features: ['Unlimited sites', 'Integrated payments', 'Off-platform billing', 'No service fee', 'Branded booking page', 'Dedicated support'],
+            },
           ].map((p) => (
             <div
               key={p.name}
@@ -162,8 +170,20 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
               <div className="mt-2 mb-4">
                 <span className="text-2xl font-bold text-gray-900">{p.price}</span>
                 <span className="text-sm text-gray-400 ml-1">{p.note}</span>
+                {p.name === 'Starter' && (
+                  <p className="text-xs text-gray-400 mt-1">* Service fees apply per transaction</p>
+                )}
               </div>
-              <p className="text-sm text-gray-500 mb-5 flex-1">{p.sites}</p>
+              <ul className="space-y-2 mb-5 flex-1">
+                {p.features.map((f) => (
+                  <li key={f} className="flex items-center gap-2 text-sm text-gray-500">
+                    <svg className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                    </svg>
+                    {f}
+                  </li>
+                ))}
+              </ul>
               <button
                 onClick={() => router.push('/sign-in')}
                 className={`w-full py-2 text-sm font-medium rounded-lg transition-colors ${
@@ -172,7 +192,7 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                {p.cta}
+                Get started
               </button>
             </div>
           ))}

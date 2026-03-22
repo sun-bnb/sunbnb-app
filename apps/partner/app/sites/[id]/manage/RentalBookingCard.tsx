@@ -23,9 +23,11 @@ function formatTime(date: Date | string | null | undefined): string {
 export default function RentalBookingCard({
   siteId,
   booking,
+  accessKey,
 }: {
   siteId: string
   booking: RentalBookingProps
+  accessKey?: string
 }) {
   const [isPending, startTransition] = useTransition()
   const isReserved = booking.operationalStatus === OP_RESERVED
@@ -70,7 +72,7 @@ export default function RentalBookingCard({
       {isReserved && (
         <button
           disabled={isPending}
-          onClick={() => runAction(() => markRentalPickedUp(siteId, booking.id))}
+          onClick={() => runAction(() => markRentalPickedUp(siteId, booking.id, accessKey))}
           className="w-full bg-blue-500 text-white font-black text-xl py-5 active:bg-blue-600 disabled:opacity-50 select-none"
         >
           {isPending ? '...' : 'Give 🤝'}
@@ -80,7 +82,7 @@ export default function RentalBookingCard({
       {isOut && (
         <button
           disabled={isPending}
-          onClick={() => runAction(() => markRentalReturned(siteId, booking.id))}
+          onClick={() => runAction(() => markRentalReturned(siteId, booking.id, accessKey))}
           className="w-full bg-green-600 text-white font-black text-xl py-5 active:bg-green-700 disabled:opacity-50 select-none"
         >
           {isPending ? '...' : 'Back ✓'}

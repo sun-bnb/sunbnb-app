@@ -18,12 +18,14 @@ export default function CreateRentalModal({
   siteId,
   rentalItems,
   activeBookings,
+  accessKey,
   onClose,
   onCreated,
 }: {
   siteId: string
   rentalItems: RentalItemProps[]
   activeBookings?: { rentalItemId: string; quantity: number }[]
+  accessKey?: string
   onClose: () => void
   onCreated: () => void
 }) {
@@ -98,6 +100,7 @@ export default function CreateRentalModal({
         hours: durationType === 'hours' ? hours : undefined,
         guestName: guestName || undefined,
         paymentType,
+        accessKey,
       })
       if (result.status === 'ok') {
         onCreated()

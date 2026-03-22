@@ -169,6 +169,7 @@ export default function ManageView({
                   key={booking.id}
                   siteId={site.id!}
                   booking={booking}
+                  accessKey={accessKey}
                 />
               ))}
             </div>
@@ -181,6 +182,7 @@ export default function ManageView({
         <BedDetail
           siteId={site.id!}
           item={selectedItem}
+          accessKey={accessKey}
           onClose={() => setSelectedItem(null)}
         />
       )}
@@ -191,6 +193,7 @@ export default function ManageView({
           siteId={site.id!}
           rentalItems={site.rentalItems}
           activeBookings={site.rentalBookings}
+          accessKey={accessKey}
           onClose={() => setShowRentalModal(false)}
           onCreated={() => {
             setShowRentalModal(false)

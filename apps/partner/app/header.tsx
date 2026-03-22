@@ -43,7 +43,7 @@ export default function Header() {
     : session?.user?.email?.[0]?.toUpperCase() || '?'
 
   return (
-    <header className="sticky top-0 z-40 bg-white border-b border-gray-200">
+    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b border-gray-200">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
 
         {/* Left: Logo + Nav */}

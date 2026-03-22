@@ -21,7 +21,27 @@ import {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-async function verifySiteOwnership(siteId: string) {
+async function verifySiteOwnership(siteId: string, accessKey?: string) {
+  // Token-gated access for manage page (staff without login)
+  if (accessKey) {
+    const token = await prisma.securityToken.findUnique({
+      where: {
+        id: accessKey,
+        expires: { gt: new Date() },
+        resources: { hasSome: ['all', 'manage_site'] },
+      },
+    })
+    if (!token) return { error: 'Invalid or expired access key' }
+    // Verify the token belongs to this site's owner
+    const site = await prisma.site.findUnique({
+      where: { id: siteId },
+      select: { userId: true },
+    })
+    if (!site || site.userId !== token.userId) return { error: 'Not authorized' }
+    return { userId: site.userId }
+  }
+
+  // Session-based access for logged-in partners
   const session = await auth()
   if (!session?.user) return { error: 'Not authenticated' }
   const site = await prisma.site.findUnique({
@@ -49,9 +69,10 @@ export async function reserveItem(
   siteId: string,
   itemId: string,
   guestName?: string,
-  internalNotes?: string
+  internalNotes?: string,
+  accessKey?: string
 ) {
-  const ownership = await verifySiteOwnership(siteId)
+  const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
   const itemIds = [{ id: itemId }]
@@ -80,8 +101,8 @@ export async function reserveItem(
 
 // ─── Release bed: walk-in departs or no-show ────────────────────────────────
 
-export async function unreserveItem(siteId: string, itemId: string) {
-  const ownership = await verifySiteOwnership(siteId)
+export async function unreserveItem(siteId: string, itemId: string, accessKey?: string) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
   const todayStart = dayjs().startOf('day').toDate()
@@ -105,8 +126,8 @@ export async function unreserveItem(siteId: string, itemId: string) {
 
 // ─── Check-in: customer arrived for their booking ───────────────────────────
 
-export async function checkInReservation(siteId: string, reservationId: string) {
-  const ownership = await verifySiteOwnership(siteId)
+export async function checkInReservation(siteId: string, reservationId: string, accessKey?: string) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
   const reservation = await prisma.reservation.findUnique({
@@ -134,8 +155,8 @@ export async function checkInReservation(siteId: string, reservationId: string) 
 
 // ─── Mark departed: customer left ───────────────────────────────────────────
 
-export async function markDeparted(siteId: string, reservationId: string) {
-  const ownership = await verifySiteOwnership(siteId)
+export async function markDeparted(siteId: string, reservationId: string, accessKey?: string) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
   const reservation = await prisma.reservation.findUnique({
@@ -163,8 +184,8 @@ export async function markDeparted(siteId: string, reservationId: string) {
 
 // ─── Mark no-show: customer didn't arrive ───────────────────────────────────
 
-export async function markNoShow(siteId: string, reservationId: string) {
-  const ownership = await verifySiteOwnership(siteId)
+export async function markNoShow(siteId: string, reservationId: string, accessKey?: string) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
   const reservation = await prisma.reservation.findUnique({
@@ -192,9 +213,10 @@ export async function markNoShow(siteId: string, reservationId: string) {
 export async function updateReservationNotes(
   siteId: string,
   reservationId: string,
-  notes: string
+  notes: string,
+  accessKey?: string
 ) {
-  const ownership = await verifySiteOwnership(siteId)
+  const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
   const reservation = await prisma.reservation.findUnique({
@@ -219,7 +241,8 @@ export async function updateReservationNotes(
 export async function moveReservation(
   siteId: string,
   reservationId: string,
-  newItemIds: string[]
+  newItemIds: string[],
+  accessKey?: string
 ) {
   if (!newItemIds.length) {
     return { status: 'error', errors: ['Select at least one sunbed'] }
@@ -228,7 +251,7 @@ export async function moveReservation(
     return { status: 'error', errors: ['Too many items (max 20)'] }
   }
 
-  const ownership = await verifySiteOwnership(siteId)
+  const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
   const reservation = await prisma.reservation.findUnique({
@@ -270,9 +293,10 @@ export async function moveReservation(
 export async function blockBed(
   siteId: string,
   itemId: string,
-  notes?: string
+  notes?: string,
+  accessKey?: string
 ) {
-  const ownership = await verifySiteOwnership(siteId)
+  const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
   const itemIds = [{ id: itemId }]
@@ -299,8 +323,8 @@ export async function blockBed(
 
 // ─── Unblock bed ────────────────────────────────────────────────────────────
 
-export async function unblockBed(siteId: string, itemId: string) {
-  const ownership = await verifySiteOwnership(siteId)
+export async function unblockBed(siteId: string, itemId: string, accessKey?: string) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
   const todayStart = dayjs().startOf('day').toDate()
@@ -326,8 +350,8 @@ export async function unblockBed(siteId: string, itemId: string) {
 
 // ─── Mark rental picked up ──────────────────────────────────────────────────
 
-export async function markRentalPickedUp(siteId: string, bookingId: string) {
-  const ownership = await verifySiteOwnership(siteId)
+export async function markRentalPickedUp(siteId: string, bookingId: string, accessKey?: string) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
   const booking = await prisma.rentalBooking.findUnique({
@@ -355,8 +379,8 @@ export async function markRentalPickedUp(siteId: string, bookingId: string) {
 
 // ─── Mark rental returned ───────────────────────────────────────────────────
 
-export async function markRentalReturned(siteId: string, bookingId: string) {
-  const ownership = await verifySiteOwnership(siteId)
+export async function markRentalReturned(siteId: string, bookingId: string, accessKey?: string) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
   const booking = await prisma.rentalBooking.findUnique({
@@ -391,6 +415,7 @@ export async function createWalkInRental(input: {
   hours?: number
   guestName?: string
   paymentType: 'cash' | 'free'
+  accessKey?: string
 }) {
   // Input validation
   if (!input.items.length) {
@@ -414,7 +439,7 @@ export async function createWalkInRental(input: {
     return { status: 'error', errors: ['Hours must be 1–24'] }
   }
 
-  const ownership = await verifySiteOwnership(input.siteId)
+  const ownership = await verifySiteOwnership(input.siteId, input.accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
   const now = new Date()

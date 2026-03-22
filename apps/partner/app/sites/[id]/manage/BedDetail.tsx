@@ -67,10 +67,12 @@ function formatTime(date: Date | string | null | undefined): string {
 export default function BedDetail({
   siteId,
   item,
+  accessKey,
   onClose,
 }: {
   siteId: string
   item: InventoryItem
+  accessKey?: string
   onClose: () => void
 }) {
   const [isPending, startTransition] = useTransition()
@@ -123,7 +125,7 @@ export default function BedDetail({
             />
             <button
               disabled={isPending}
-              onClick={() => runAction(() => reserveItem(siteId, item.id, guestName || undefined))}
+              onClick={() => runAction(() => reserveItem(siteId, item.id, guestName || undefined, undefined, accessKey))}
               className="w-full bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50"
             >
               {isPending ? '...' : 'Seat Customer Here'}
@@ -144,7 +146,7 @@ export default function BedDetail({
             <div className="flex gap-3">
               <button
                 disabled={isPending}
-                onClick={() => runAction(() => blockBed(siteId, item.id))}
+                onClick={() => runAction(() => blockBed(siteId, item.id, undefined, accessKey))}
                 className="flex-1 bg-gray-600 text-white font-bold text-lg py-4 rounded-xl active:bg-gray-700 disabled:opacity-50"
               >
                 {isPending ? '...' : 'Yes, Block'}
@@ -176,7 +178,7 @@ export default function BedDetail({
             </div>
             <button
               disabled={isPending}
-              onClick={() => runAction(() => checkInReservation(siteId, reservation.id))}
+              onClick={() => runAction(() => checkInReservation(siteId, reservation.id, accessKey))}
               className="w-full bg-blue-500 text-white font-bold text-lg py-4 rounded-xl active:bg-blue-600 disabled:opacity-50"
             >
               {isPending ? '...' : 'Guest Arrived ✓'}
@@ -191,7 +193,7 @@ export default function BedDetail({
             ) : (
               <button
                 disabled={isPending}
-                onClick={() => runAction(() => markNoShow(siteId, reservation.id))}
+                onClick={() => runAction(() => markNoShow(siteId, reservation.id, accessKey))}
                 className="w-full bg-red-500 text-white font-bold text-lg py-4 rounded-xl active:bg-red-600 disabled:opacity-50"
               >
                 {isPending ? '...' : 'Mark No-Show'}
@@ -212,7 +214,7 @@ export default function BedDetail({
             </div>
             <button
               disabled={isPending}
-              onClick={() => runAction(() => markDeparted(siteId, reservation.id))}
+              onClick={() => runAction(() => markDeparted(siteId, reservation.id, accessKey))}
               className="w-full bg-gray-700 text-white font-bold text-lg py-4 rounded-xl active:bg-gray-800 disabled:opacity-50"
             >
               {isPending ? '...' : 'Guest Left \uD83D\uDC4B'}
@@ -231,14 +233,14 @@ export default function BedDetail({
             </div>
             <button
               disabled={isPending}
-              onClick={() => runAction(() => markDeparted(siteId, reservation.id))}
+              onClick={() => runAction(() => markDeparted(siteId, reservation.id, accessKey))}
               className="w-full bg-gray-700 text-white font-bold text-lg py-4 rounded-xl active:bg-gray-800 disabled:opacity-50"
             >
               {isPending ? '...' : 'Guest Left \uD83D\uDC4B'}
             </button>
             <button
               disabled={isPending}
-              onClick={() => runAction(() => unreserveItem(siteId, item.id))}
+              onClick={() => runAction(() => unreserveItem(siteId, item.id, accessKey))}
               className="w-full text-red-500 text-sm py-2 active:text-red-700"
             >
               Remove (added by mistake)
@@ -256,7 +258,7 @@ export default function BedDetail({
             )}
             <button
               disabled={isPending}
-              onClick={() => runAction(() => unblockBed(siteId, item.id))}
+              onClick={() => runAction(() => unblockBed(siteId, item.id, accessKey))}
               className="w-full bg-green-500 text-white font-bold text-lg py-4 rounded-xl active:bg-green-600 disabled:opacity-50"
             >
               {isPending ? '...' : 'Unblock ✓'}
