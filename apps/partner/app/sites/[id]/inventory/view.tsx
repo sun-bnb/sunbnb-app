@@ -396,14 +396,28 @@ export default function InventoryView() {
     const lat = e.latLng?.lat()
     const lng = e.latLng?.lng()
     if (lat && lng) {
-      saveInventoryItemLocation(item.id, {
-        locationLat: lat.toString(),
-        locationLng: lng.toString(),
-      }).then(() => {
-        getSite(siteId).then((updatedSite) => {
-          if (updatedSite) setSite(updatedSite)
+      const origLat = Number(item.locationLat)
+      const origLng = Number(item.locationLng)
+
+      if (item.group > 0) {
+        // Move entire parcel by the drag delta
+        const deltaLat = lat - origLat
+        const deltaLng = lng - origLng
+        moveParcel(siteId, item.group, deltaLat, deltaLng).then(() => {
+          getSite(siteId).then((updatedSite) => {
+            if (updatedSite) setSite(updatedSite)
+          })
         })
-      })
+      } else {
+        saveInventoryItemLocation(item.id, {
+          locationLat: lat.toString(),
+          locationLng: lng.toString(),
+        }).then(() => {
+          getSite(siteId).then((updatedSite) => {
+            if (updatedSite) setSite(updatedSite)
+          })
+        })
+      }
     }
   }
 

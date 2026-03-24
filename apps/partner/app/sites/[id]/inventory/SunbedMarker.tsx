@@ -20,8 +20,10 @@ interface SunbedMarkerProps {
   isMultiSelected?: boolean
   parcelColor?: string
   pairedSelected?: boolean
+  positionOverride?: { lat: number; lng: number } | null
   onClick: (modifiers: { metaKey: boolean; ctrlKey: boolean }) => void
   onDragEnd: (e: google.maps.MapMouseEvent) => void
+  onDragMove?: (deltaLat: number, deltaLng: number) => void
 }
 
 export default function SunbedMarker({
@@ -37,8 +39,10 @@ export default function SunbedMarker({
   isMultiSelected = false,
   parcelColor,
   pairedSelected = false,
+  positionOverride,
   onClick,
   onDragEnd,
+  onDragMove,
 }: SunbedMarkerProps) {
 
   const map = useMap()
@@ -119,7 +123,11 @@ export default function SunbedMarker({
 
       const newLatLng = projection!.fromPointToLatLng(newWorldPoint)
       if (newLatLng) {
-        setPosition({ lat: newLatLng.lat(), lng: newLatLng.lng() })
+        const newPos = { lat: newLatLng.lat(), lng: newLatLng.lng() }
+        setPosition(newPos)
+        if (onDragMove) {
+          onDragMove(newPos.lat - initialPosition.lat, newPos.lng - initialPosition.lng)
+        }
       }
     }
 
@@ -153,10 +161,10 @@ export default function SunbedMarker({
       el.removeEventListener('pointerup', handlePointerUp)
       el.removeEventListener('click', handleClick)
     }
-  }, [map, position, zoom, onClick, onDragEnd])
+  }, [map, position, zoom, onClick, onDragEnd, onDragMove])
 
   return (
-    <SafeAdvancedMarker position={(position || initialPosition)} style={{ pointerEvents: 'none' }}>
+    <SafeAdvancedMarker position={(positionOverride ?? position ?? initialPosition)} style={{ pointerEvents: 'none' }}>
       <svg
         ref={svgRef}
         data-sunbed-marker

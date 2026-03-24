@@ -30,7 +30,7 @@ interface InventoryMapProps {
 }
 
 function getScaledSize(zoom: number): number {
-  const physicalLength = 3.5 // meters
+  const physicalLength = 2.1 // meters
   const metersPerPixel = 156543.03392 / Math.pow(2, zoom)
   const size = physicalLength / metersPerPixel
   return Math.max(size, 10) // minimum 10px for visibility at low zoom
@@ -60,6 +60,19 @@ function MapContent({
   const { site } = useSite()
 
   const dynamicSize = getScaledSize(zoom)
+
+  // Group drag state — tracks which item is being dragged and the lat/lng delta
+  const [groupDrag, setGroupDrag] = useState<{
+    draggedItemId: string
+    group: number
+    deltaLat: number
+    deltaLng: number
+  } | null>(null)
+
+  // Clear group drag when site data refreshes (positions updated from server)
+  useEffect(() => {
+    setGroupDrag(null)
+  }, [site.inventoryItems])
 
   // Marquee state
   const [marquee, setMarquee] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null)
@@ -202,6 +215,17 @@ function MapContent({
           lng: Number(item.locationLng),
         }
 
+        // Group drag: sibling markers get a position override to move in formation
+        const isGroupDragSibling =
+          groupDrag &&
+          item.group > 0 &&
+          item.group === groupDrag.group &&
+          item.id !== groupDrag.draggedItemId
+
+        const positionOverride = isGroupDragSibling
+          ? { lat: position.lat + groupDrag.deltaLat, lng: position.lng + groupDrag.deltaLng }
+          : null
+
         return (
           <SunbedMarker
             key={item.id}
@@ -217,8 +241,12 @@ function MapContent({
             isMultiSelected={isMultiSelected}
             parcelColor={itemParcelColor}
             pairedSelected={pairedSelected}
+            positionOverride={positionOverride}
             onClick={(mods) => onMarkerClick(item, mods)}
             onDragEnd={(e) => onMarkerDragEnd(item, e)}
+            onDragMove={item.group > 0 ? (deltaLat, deltaLng) => {
+              setGroupDrag({ draggedItemId: item.id, group: item.group, deltaLat, deltaLng })
+            } : undefined}
           />
         )
       })}
@@ -322,7 +350,7 @@ export default function InventoryMap({
             <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
             </svg>
-            <div>Click on the map to reposition the parcel</div>
+            <div>Drag any sunbed to move the parcel, or click to reposition</div>
           </div>
         </div>
       )}

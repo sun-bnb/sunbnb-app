@@ -46,8 +46,8 @@ export function generateChairs(config: ChairConfig): ChairDefinition[] {
   const metersPerLng = 111320 * Math.cos(baseLat * Math.PI / 180)
 
   // Physical sunbed dimensions (must match getScaledSize physicalLength & aspect ratio)
-  const sunbedHeight = 3.5   // meters (vertical / along-row dimension)
-  const sunbedWidth = 3.5 / 2.5  // meters (horizontal dimension) = 1.4
+  const sunbedHeight = 2.1   // meters (vertical / along-row dimension)
+  const sunbedWidth = 2.1 / 2.5  // meters (horizontal dimension) = 0.84
 
   // Convert user-facing gaps (visible space between edges) to center-to-center offsets
   const pairCTC = intraPairGap + sunbedWidth         // center-to-center within a pair
