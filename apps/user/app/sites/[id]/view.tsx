@@ -121,7 +121,7 @@ export default function SiteView({ site, apiKey, stripePublicKey, brand }: { sit
   const isEquipmentTab = viewMode === 'equipment'
   const BASE_PEEK = isEquipmentTab && hasHourlyEquipment
     ? (isHourly ? 100 : 108)
-    : 72
+    : 66
   const PEEK_HEIGHT = BASE_PEEK + (hasViewModeTabs ? 52 : 0)
   
   return (

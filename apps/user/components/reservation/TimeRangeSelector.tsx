@@ -86,7 +86,7 @@ export default function TimeRangeSelector({
             <option key={h} value={h}>{fmtHour(h)}</option>
           ))}
         </select>
-        <span className="text-gray-400 -mt-[3px]mx-1">–</span>
+        <span className="text-gray-400 -mt-[3px] mx-1">–</span>
         <select
           value={toHour}
           onChange={handleToChange}
