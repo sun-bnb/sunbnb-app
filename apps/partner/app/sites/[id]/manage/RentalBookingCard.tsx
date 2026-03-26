@@ -63,8 +63,20 @@ export default function RentalBookingCard({
             </span>
           )}
         </div>
+        <div className="flex items-center justify-between mt-0.5">
+          <span className="text-sm font-semibold text-gray-500">
+            {booking.durationType === 'hours'
+              ? `${formatTime(booking.from)} – ${formatTime(booking.to)}`
+              : 'All day'}
+          </span>
+          {isOut && booking.durationType === 'hours' && (
+            <span className={`text-xs font-bold flex-shrink-0 ${dayjs().isAfter(dayjs(booking.to)) ? 'text-red-500' : 'text-gray-400'}`}>
+              {dayjs().isAfter(dayjs(booking.to)) ? 'overdue' : `due ${formatTime(booking.to)}`}
+            </span>
+          )}
+        </div>
         {booking.guestName && (
-          <div className="text-base font-medium text-gray-600 truncate">{booking.guestName}</div>
+          <div className="text-sm font-medium text-gray-600 truncate">{booking.guestName}</div>
         )}
       </div>
 
