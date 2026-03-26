@@ -235,15 +235,17 @@ export default function SunbedSelection({
   let availabilityFrom = dateRange[0]
   let availabilityTo = dateRange[1]
   if (reservationMode === 'hours') {
+    const t0 = dayjs(timeRange[0])
+    const t1 = dayjs(timeRange[1])
     availabilityFrom = dayjs(reservationDay)
-      .hour(timeRange[0].getHours())
-      .minute(timeRange[0].getMinutes())
-      .second(timeRange[0].getSeconds())
+      .hour(t0.hour())
+      .minute(t0.minute())
+      .second(t0.second())
       .toISOString()
     availabilityTo = dayjs(reservationDay)
-      .hour(timeRange[1].getHours())
-      .minute(timeRange[1].getMinutes())
-      .second(timeRange[1].getSeconds())
+      .hour(t1.hour())
+      .minute(t1.minute())
+      .second(t1.second())
       .toISOString()
   }
 

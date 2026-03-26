@@ -11,7 +11,7 @@ const CATEGORY_EMOJI: Record<string, string> = {
   surfboard: '🏄',
   paddleboard: '🏄‍♂️',
   kayak: '🛶',
-  umbrella: '⛱️',
+  pedalboat: '🚤',
   snorkel: '🤿',
   other: '📦',
 }

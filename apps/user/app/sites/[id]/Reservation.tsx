@@ -24,7 +24,8 @@ import { RootState } from '@/store/store'
 import { useDispatch, useSelector } from 'react-redux'
 import { useTranslations } from 'next-intl'
 import {
-  useGetReservationByIdQuery
+  useGetReservationByIdQuery,
+  useGetRentalAvailabilityQuery,
 } from '@/store/features/api/apiSlice'
 import dayjs from 'dayjs'
 import SunbedSelection from '@/components/reservation/SunbedSelection'
@@ -75,19 +76,34 @@ function PaymentMethodSelection() {
 
 }
 
-function ReservationTimerangeSelector({ onDatePickerOpenChange, alwaysOpen }: { onDatePickerOpenChange?: (open: boolean) => void, alwaysOpen?: boolean }) {
+import { WorkingHours } from '@/app/sites/types'
+
+/** Derive open/close hours for a given day from the site's working hours */
+function getOpenCloseHours(reservationDay: dayjs.Dayjs, workingHours?: WorkingHours[]): { openHour: number; closeHour: number } {
+  const dow = reservationDay.day() === 0 ? 7 : reservationDay.day()
+  const wh = (workingHours || []).find(w => w.day === dow)
+  if (!wh) return { openHour: 8, closeHour: 20 }
+  const open = new Date(wh.openTime)
+  const close = new Date(wh.closeTime)
+  return { openHour: open.getHours(), closeHour: close.getHours() }
+}
+
+function ReservationTimerangeSelector({ onDatePickerOpenChange, alwaysOpen, workingHours, mode }: { onDatePickerOpenChange?: (open: boolean) => void, alwaysOpen?: boolean, workingHours?: WorkingHours[], mode?: string }) {
 
   const dispatch = useDispatch()
   const sitesState = useSelector((state: RootState) => state.sites)
 
   const t = useTranslations('SiteView')
 
-  const { reservationState, reservationMode } = sitesState
+  const { reservationState } = sitesState
+  const reservationMode = mode || sitesState.reservationMode || 'days'
 
   let reservationDay = sitesState.reservationDay || dayjs().toDate()
+  const { openHour, closeHour } = getOpenCloseHours(dayjs(reservationDay), workingHours)
+
   let timeRange = sitesState.timeRange || [
-    dayjs().add(2, 'hour').toDate().toISOString(),
-    dayjs().add(4, 'hour').toDate().toISOString()
+    dayjs().hour(openHour).minute(0).second(0).toDate(),
+    dayjs().hour(Math.min(openHour + 2, closeHour)).minute(0).second(0).toDate(),
   ]
 
   let dateRange = sitesState.dateRange || [
@@ -97,12 +113,16 @@ function ReservationTimerangeSelector({ onDatePickerOpenChange, alwaysOpen }: { 
 
   return (
     reservationMode === 'hours' ? (
-      <div className="mb-2 flex">
+      <div className="mb-2 pt-[6px] flex">
         <LocalizationProvider dateAdapter={AdapterDayjs}>
           <MobileDatePicker sx={{ 
             marginRight: '4px',
+            '& .MuiInputBase-root': {
+              height: '44px',
+            },
             input: {
-              textAlign: 'center'
+              textAlign: 'center',
+              padding: '8px 14px',
             }
           }}
             disabled={reservationState === RESERVATION_PROCESSING}
@@ -122,12 +142,14 @@ function ReservationTimerangeSelector({ onDatePickerOpenChange, alwaysOpen }: { 
           />
           <TimeRangeSelector
             value={[dayjs(timeRange[0]), dayjs(timeRange[1])]}
+            openHour={openHour}
+            closeHour={closeHour}
             disabled={reservationState === RESERVATION_PROCESSING}
             onFocus={() => {
               dispatch(setValue({ focused: true }))
             }}
             onChange={(newValue) => {
-              dispatch(setValue({ timeRange: [newValue[0]?.toDate(), newValue[1]?.endOf('day').toDate()] }))
+              dispatch(setValue({ timeRange: [newValue[0]?.toDate(), newValue[1]?.toDate()] }))
             }}
           />
         </LocalizationProvider>
@@ -268,6 +290,8 @@ function ItemSelection({ apiKey, site, wide } : { apiKey: string, site: SiteProp
       <ReservationTimerangeSelector
         onDatePickerOpenChange={wide ? undefined : setDatePickerOpen}
         alwaysOpen={wide}
+        workingHours={site.workingHours}
+        mode="days"
       />
       {(wide || !datePickerOpen) && (
         <>
@@ -288,8 +312,12 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
   const pathname = usePathname()
   const loggedIn = !!(session?.user?.id)
 
+  const dispatch = useDispatch()
   const sitesState = useSelector((state: RootState) => state.sites)
-  const reservationMode = sitesState.reservationMode || 'days'
+  const reservationMode = sitesState.reservationMode || 'hours'
+
+  // Show hours/days toggle only when at least one rental item has hourly pricing
+  const hasHourlyPricing = (site.rentalItems || []).some(ri => ri.pricePerHour != null && ri.pricePerHour > 0)
 
   const [cart, setCart] = useState<{ rentalItemId: string; quantity: number }[]>([])
   const [booking, setBooking] = useState(false)
@@ -309,6 +337,28 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
   let reservationDay = dayjs(sitesState.reservationDay)
   let timeRange = sitesState.timeRange ? [dayjs(sitesState.timeRange[0]), dayjs(sitesState.timeRange[1])] : [dayjs().add(2, 'hour'), dayjs().add(4, 'hour')]
   let dateRange = sitesState.dateRange ? [dayjs(sitesState.dateRange[0]), dayjs(sitesState.dateRange[1])] : [dayjs().startOf('day'), dayjs().add(1, 'day')]
+
+  // Compute time window for availability query (mirrors getBookingDates logic)
+  let availFrom: string | null = null
+  let availTo: string | null = null
+  if (reservationMode === 'hours' && reservationDay && timeRange[0] && timeRange[1]) {
+    availFrom = reservationDay.hour(timeRange[0].hour()).minute(timeRange[0].minute()).second(0).toISOString()
+    availTo = reservationDay.hour(timeRange[1].hour()).minute(timeRange[1].minute()).second(0).toISOString()
+  } else if (dateRange[0] && dateRange[1]) {
+    availFrom = dateRange[0].startOf('day').toISOString()
+    availTo = dateRange[1].endOf('day').toISOString()
+  }
+
+  const { data: rentalAvailability } = useGetRentalAvailabilityQuery(
+    { siteId: site.id!, from: availFrom!, to: availTo! },
+    { skip: !site.id || !availFrom || !availTo }
+  )
+
+  // Merge live availability into rental items
+  const itemsWithAvailability = (site.rentalItems || []).map(item => {
+    const avail = rentalAvailability?.availability?.find(a => a.rentalItemId === item.id)
+    return avail ? { ...item, availableQuantity: avail.availableQuantity } : item
+  })
 
   const totalItems = cart.reduce((sum, c) => sum + c.quantity, 0)
 
@@ -561,12 +611,38 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
 
   return (
     <>
-      <ReservationTimerangeSelector onDatePickerOpenChange={setDatePickerOpen} />
+      {hasHourlyPricing && (
+        <div className="flex rounded-lg bg-gray-100 mb-2">
+          <button
+            type="button"
+            onClick={() => dispatch(setValue({ reservationMode: 'hours' }))}
+            className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-all ${
+              reservationMode === 'hours'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {t('Hours')}
+          </button>
+          <button
+            type="button"
+            onClick={() => dispatch(setValue({ reservationMode: 'days' }))}
+            className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-all ${
+              reservationMode === 'days'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {t('Days')}
+          </button>
+        </div>
+      )}
+      <ReservationTimerangeSelector onDatePickerOpenChange={setDatePickerOpen} workingHours={site.workingHours} />
       {!datePickerOpen && (
         <>
           <div className="w-full h-[300px]">
             <EquipmentSelection
-              items={site.rentalItems || []}
+              items={itemsWithAvailability}
               cart={cart}
               onCartChange={setCart}
               durationType={reservationMode}
@@ -679,7 +755,8 @@ export default function ReservationView({
 
   // Default to sunbeds if available, otherwise equipment
   const defaultMode: ViewMode = hasSunbeds ? 'sunbeds' : 'equipment'
-  const [viewMode, setViewMode] = useState<ViewMode>(defaultMode)
+  const viewMode: ViewMode = (sitesState.viewMode as ViewMode) || defaultMode
+  const setViewMode = (mode: ViewMode) => dispatch(setValue({ viewMode: mode }))
 
   const t = useTranslations('SiteView')
 
@@ -716,7 +793,14 @@ export default function ReservationView({
           <>
             <ViewModeSelector
               mode={viewMode}
-              onChange={setViewMode}
+              onChange={(mode) => {
+                setViewMode(mode)
+                if (mode === 'sunbeds') {
+                  dispatch(setValue({ reservationMode: 'days', focused: true }))
+                } else if (mode === 'equipment') {
+                  dispatch(setValue({ reservationMode: 'hours', focused: true }))
+                }
+              }}
               hasSunbeds={hasSunbeds}
               hasRentals={hasRentals}
             />

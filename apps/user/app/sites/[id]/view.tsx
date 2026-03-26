@@ -104,14 +104,25 @@ export default function SiteView({ site, apiKey, stripePublicKey, brand }: { sit
   const t = useTranslations('SiteView')
 
   // ── Mobile drawer: peek height = visible portion when minimized ──
-  // Accounts for: date range field (~56px) + padding + view mode tabs if both sunbeds & rentals are available (~44px)
+  // Heights: date range ~56px, date+time row ~48px, hours/days toggle ~36px, view mode tabs ~44px, padding ~16px
   const activeSite = fetchedSite || site
   const features = activeSite.features || ['sunbeds']
   const hasSunbeds = features.includes('sunbeds')
   const hasRentals = features.includes('rentals') && (activeSite.rentalItems?.length ?? 0) > 0
   const hasViewModeTabs = hasSunbeds && hasRentals
-  const BASE_PEEK = withHours ? 120 : 75
-  const PEEK_HEIGHT = BASE_PEEK + (hasViewModeTabs ? 44 : 0)
+  const hasHourlyEquipment = hasRentals && (activeSite.rentalItems || []).some((ri: any) => ri.pricePerHour != null && ri.pricePerHour > 0)
+  const viewMode = sitesState.viewMode || (hasSunbeds ? 'sunbeds' : 'equipment')
+  // Sunbeds tab: date range picker (56) + padding (16) = 72
+  // Equipment tab with hourly pricing, hours mode: hours/days toggle (36) + date+time picker (48) + padding (16) = 100
+  // Equipment tab with hourly pricing, days mode: toggle (36) + date range (56) + padding (16) = 108
+  // Equipment tab without hourly pricing: date range picker (56) + padding (16) = 72
+  const currentMode = reservationMode || 'days'
+  const isHourly = currentMode === 'hours'
+  const isEquipmentTab = viewMode === 'equipment'
+  const BASE_PEEK = isEquipmentTab && hasHourlyEquipment
+    ? (isHourly ? 100 : 108)
+    : 72
+  const PEEK_HEIGHT = BASE_PEEK + (hasViewModeTabs ? 52 : 0)
   
   return (
     <div className={`mx-auto max-w-6xl min-h-screen ${brand ? '' : 'bg-cream pt-[80px]'}`}

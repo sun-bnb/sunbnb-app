@@ -47,7 +47,7 @@ const CATEGORIES = [
   { value: 'surfboard', label: '🏄 Surfboard' },
   { value: 'paddleboard', label: '🏄‍♂️ Paddleboard' },
   { value: 'kayak', label: '🛶 Kayak' },
-  { value: 'umbrella', label: '⛱️ Umbrella' },
+  { value: 'pedalboat', label: '🚤 Pedal boat' },
   { value: 'snorkel', label: '🤿 Snorkel set' },
   { value: 'other', label: '📦 Other' },
 ]
