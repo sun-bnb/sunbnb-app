@@ -65,7 +65,7 @@ export default function SunbedItem({
     >
       {icon && <span className="text-[9px] sm:text-[10px] leading-none">{icon}</span>}
       <span className="text-[8px] leading-none opacity-70">
-        {item.number}
+        {parseInt(String(item.number).substring(1))}
       </span>
     </button>
   )
