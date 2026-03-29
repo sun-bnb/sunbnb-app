@@ -52,9 +52,6 @@ export default function SunbedItem({
   const state = getBedState(item)
   const { bg, icon } = stateStyles[state]
 
-  // Extract short display number (last 2 digits) for compact phone view
-  const shortNum = item.number % 100
-
   return (
     <button
       onClick={onSelect}
@@ -67,8 +64,8 @@ export default function SunbedItem({
       `}
     >
       {icon && <span className="text-[9px] sm:text-[10px] leading-none">{icon}</span>}
-      <span className="text-[11px] sm:text-xs font-bold leading-tight">
-        {shortNum}
+      <span className="text-[8px] leading-none opacity-70">
+        {item.number}
       </span>
     </button>
   )

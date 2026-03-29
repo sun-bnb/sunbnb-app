@@ -71,7 +71,7 @@ Google, Facebook, Credentials (email/password with bcrypt). Anonymous support vi
 Redux slices (via `createKeyValueSlice` factory):
 - `searchSlice` — `searchText`, `selectedPlace`, `searchSuggestions`
 - `reservationSlice` — `selectedItems`, `seatCategory`, `reservationType`, `from`, `to`, `orderState`, `pendingOrderId`, `panelBottom`, `panelHeight`, `panelFocused`
-- `sitesSlice` — `selectedSiteId`, `selectedItemId`, `mapCenter`, `reservationDay`
+- `sitesSlice` — `selectedSiteId`, `selectedItemId`, `mapCenter`, `reservationDay`, `viewMode` ('sunbeds' | 'equipment'), `reservationMode` ('days' | 'hours'), `focused` (drawer open state)
 
 RTK Query: `reservationApi` (getReservation, getReservationByDate, etc.), `placesApi` (getAutocomplete, getPlaceDetails)
 
@@ -117,4 +117,7 @@ Requires local Docker Postgres with `sunbnb_test` DB (same DB as `packages/data`
 - Payment verification: GET `/api/reservations/[id]` serves as polling fallback if webhook missed — checks provider status and processes if succeeded
 - Anonymous flow: POS/QR users get `anonId` in localStorage, passed to server actions and API routes for ownership without requiring login
 - Reservation creation: server-side availability check → create with DB prices (never trust client prices)
-- Error handling: server actions return `{ status: 'ok' | 'error', errors?: string[] }`
+- Default-deny payment logic: use `=== 'paid'` (not `!== 'unpaid'`) to prevent unknown payment types from bypassing payment
+- Equipment rentals: supports hourly and daily bookings. `viewMode` (sunbeds/equipment) stored in Redux so the mobile drawer can adapt its peek height to content. Tab switching opens the drawer automatically
+- Mobile reservation drawer: fixed bottom panel with peek (minimized) and expanded states. Peek height varies by tab — sunbeds shows date range only, equipment shows hours/days toggle + time picker. Drawer opens on tab switch
+- Error handling: server actions return `{ status: 'ok' | 'error', errors?: string[] }`. API error responses use generic messages (no internal details leaked)

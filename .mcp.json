@@ -1,12 +1,23 @@
 {
   "mcpServers": {
-    "postgres": {
+    "postgres-local": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@crystaldba/postgres-mcp",
+        "--access-mode=unrestricted",
+        "postgres://postgres:sunbnb@localhost:5432/postgres"
+      ],
+      "env": {}
+    },
+    "postgres-test": {
       "type": "stdio",
       "command": "npx",
       "args": [
         "-y",
         "@modelcontextprotocol/server-postgres",
-        "postgres://postgres:sunbnb@localhost:5432/postgres"
+        "postgres://default:dE5fyV2Xwzku@ep-steep-sunset-a2oj986g-pooler.eu-central-1.aws.neon.tech/verceldb?sslmode=require"
       ],
       "env": {}
     },
@@ -35,6 +46,11 @@
     "vercel": {
       "type": "http",
       "url": "https://mcp.vercel.com"
+    },
+    "obsidian": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "obsidian-mcp", "/Users/vhalme/sunbnb-brain"]
     }
   }
 }

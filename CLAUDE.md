@@ -159,7 +159,7 @@ Vercel-managed via git branches: `main` → preview, `test` → test.sunbnb.app,
 - **Error handling**: Server actions return `{ status: 'ok' | 'error', errors?: string[] }`; UI shows auto-dismissing banners
 - **i18n**: `next-intl` with `getRequestConfig()` from `Accept-Language` header. Message files in `messages/{en,es,fi}.json`
 - **Cron jobs**: `/api/reservations-cleanup` (partner, every 15 min) cleans stale bookings; `/api/cron/send-reminders` (user, daily 07:00 UTC) sends reminder emails
-- **Equipment rentals**: Sites enable via `features[]` array (add `"rentals"`). Availability checked by aggregating booked quantities for overlapping time windows
+- **Equipment rentals**: Sites enable via `features[]` array (add `"rentals"`). Supports hourly and daily bookings (`durationType: 'hours' | 'days'`). Availability checked by aggregating booked quantities for overlapping time windows. Categories: surfboard, paddleboard, kayak, pedal boat, snorkel, other
 
 ## Known Quirks
 
@@ -168,4 +168,4 @@ Vercel-managed via git branches: `main` → preview, `test` → test.sunbnb.app,
 - `messages/en.json` in partner app has typo: `"Acccount"` (triple 'c')
 - MUI and Tailwind coexist — progressive migration toward pure Tailwind in partner app
 - Brand page (`/sites/[id]/brand`) is partially implemented — client state only, not persisted
-- Reservation types include "hours" and "days" but hours mode is mostly disabled in user app UI
+- Reservation types include "hours" and "days" — hours mode is fully supported for equipment rentals across all apps; sunbed reservations use days mode only
