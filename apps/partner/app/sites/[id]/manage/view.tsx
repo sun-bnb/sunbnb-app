@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { InventoryItem, Reservation, RentalBookingProps, SiteProps } from '@/types/shared'
 import Item from './Item'
 import BedDetail from './BedDetail'
@@ -48,6 +49,7 @@ export default function ManageView({
   site: SiteProps
   accessKey: string
 }) {
+  const t = useTranslations('SiteManage')
   const router = useRouter()
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
   const [showRentalModal, setShowRentalModal] = useState(false)
@@ -87,20 +89,20 @@ export default function ManageView({
         <span className="text-gray-900 text-base sm:text-lg col-span-2 sm:col-span-1">{occupied}/{total}</span>
         <span className="flex items-center gap-1.5 text-green-700">
           <span className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded bg-green-300 border-2 border-green-500 flex-shrink-0" />
-          {summary['available'] || 0} free
+          {summary['available'] || 0} {t('free')}
         </span>
         <span className="flex items-center gap-1.5 text-yellow-700">
           <span className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded bg-yellow-300 border-2 border-yellow-500 flex-shrink-0" />
-          {(summary['expected'] || 0)} booked
+          {(summary['expected'] || 0)} {t('expected')}
         </span>
         <span className="flex items-center gap-1.5 text-blue-700">
           <span className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded bg-blue-400 border-2 border-blue-600 flex-shrink-0" />
-          {(summary['checked-in'] || 0) + (summary['walked-in'] || 0)} here
+          {(summary['checked-in'] || 0) + (summary['walked-in'] || 0)} {t('checkedIn')}
         </span>
         {(summary['blocked'] || 0) > 0 && (
           <span className="flex items-center gap-1.5 text-gray-500">
             <span className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded bg-gray-400 border-2 border-gray-600 flex-shrink-0" />
-            {summary['blocked']} blocked
+            {summary['blocked']} {t('blocked')}
           </span>
         )}
       </div>
@@ -108,7 +110,7 @@ export default function ManageView({
       {/* ── Grid — phone: fixed columns, tablet: auto-fit ── */}
       {Object.entries(grouped).map(([parcel, rows]) => (
         <div key={parcel} className="mb-4">
-          <h2 className="text-base sm:text-lg font-bold mb-2 px-1">Parcel {parcel}</h2>
+          <h2 className="text-base sm:text-lg font-bold mb-2 px-1">{t('parcel', { n: parcel })}</h2>
 
           {Object.entries(rows).map(([row, positions]) => {
             const items = Object.entries(positions).reverse()
@@ -141,10 +143,10 @@ export default function ManageView({
               <span className="text-xl font-black">🏄</span>
               {(site.rentalBookings?.length ?? 0) > 0 && (
                 <span className="text-base font-black text-gray-600">
-                  {site.rentalBookings!.filter(b => b.operationalStatus === OP_PICKED_UP).length} out
+                  {site.rentalBookings!.filter(b => b.operationalStatus === OP_PICKED_UP).length} {t('out')}
                   {site.rentalBookings!.filter(b => b.operationalStatus === OP_RESERVED).length > 0 && (
                     <span className="text-yellow-600 ml-2">
-                      {site.rentalBookings!.filter(b => b.operationalStatus === OP_RESERVED).length} waiting
+                      {site.rentalBookings!.filter(b => b.operationalStatus === OP_RESERVED).length} {t('waiting')}
                     </span>
                   )}
                 </span>
@@ -154,13 +156,13 @@ export default function ManageView({
               onClick={() => setShowRentalModal(true)}
               className="bg-green-600 text-white text-base font-black px-5 py-3 rounded-xl active:bg-green-700 select-none"
             >
-              + Rent Out
+              {t('rentOut')}
             </button>
           </div>
 
           {(site.rentalBookings?.length ?? 0) === 0 ? (
             <div className="text-center py-6 text-gray-300 text-lg font-bold">
-              No rentals out
+              {t('noRentals')}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useTransition } from 'react'
+import { useTranslations } from 'next-intl'
 import { RentalItemProps } from '@/types/shared'
 import { createWalkInRental } from './actions'
 
@@ -48,6 +49,7 @@ export default function CreateRentalModal({
   })
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const t = useTranslations('CreateRentalModal')
 
   function addOne(itemId: string, max: number) {
     setCart(prev => {
@@ -84,7 +86,7 @@ export default function CreateRentalModal({
 
   function handleSubmit() {
     if (totalItems === 0) {
-      setError('Tap an item first')
+      setError(t('tapItemFirst'))
       return
     }
     setError(null)
@@ -105,7 +107,7 @@ export default function CreateRentalModal({
       if (result.status === 'ok') {
         onCreated()
       } else {
-        setError(result.errors?.[0] || 'Failed')
+        setError(result.errors?.[0] || t('failed'))
       }
     })
   }
@@ -118,7 +120,7 @@ export default function CreateRentalModal({
       <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl overflow-hidden max-h-[92vh] sm:max-h-[90vh] flex flex-col">
         {/* Header — big close target */}
         <div className="flex items-center justify-between px-5 py-3 border-b-2 border-gray-200">
-          <h2 className="text-xl font-black text-gray-900">🏄 Rent Out</h2>
+          <h2 className="text-xl font-black text-gray-900">🏄 {t('title')}</h2>
           <button onClick={onClose} className="text-gray-400 text-4xl leading-none p-3 -mr-2">&times;</button>
         </div>
 
@@ -148,7 +150,7 @@ export default function CreateRentalModal({
                       <div className="min-w-0">
                         <div className="text-lg font-black truncate">{item.name}</div>
                         <div className="text-sm font-bold text-gray-400">
-                          {item.totalQuantity - (rentedOut[item.id] || 0)} available
+                          {t('available', { n: item.totalQuantity - (rentedOut[item.id] || 0) })}
                         </div>
                       </div>
                       {selected ? (
@@ -207,7 +209,7 @@ export default function CreateRentalModal({
                 }
               `}
             >
-              All day
+              {t('allDay')}
             </button>
           </div>
 
@@ -216,7 +218,7 @@ export default function CreateRentalModal({
             onClick={() => setShowMore(v => !v)}
             className="w-full text-sm font-bold text-gray-400 py-1 active:text-gray-600 select-none"
           >
-            {showMore ? 'Less options ▲' : 'More options ▼'}
+            {showMore ? t('lessOptions') : t('moreOptions')}
           </button>
 
           {showMore && (
@@ -226,7 +228,7 @@ export default function CreateRentalModal({
                 type="text"
                 value={guestName}
                 onChange={e => setGuestName(e.target.value)}
-                placeholder="Guest name (optional)"
+                placeholder={t('guestNameOptional')}
                 className="w-full border-2 rounded-xl px-4 py-3.5 text-base"
               />
 
@@ -255,7 +257,7 @@ export default function CreateRentalModal({
                       : 'bg-white text-gray-600 border-gray-300'
                   }`}
                 >
-                  💵 Cash
+                  💵 {t('cash')}
                 </button>
                 <button
                   onClick={() => setPaymentType('free')}
@@ -265,7 +267,7 @@ export default function CreateRentalModal({
                       : 'bg-white text-gray-600 border-gray-300'
                   }`}
                 >
-                  🆓 Free
+                  🆓 {t('free')}
                 </button>
               </div>
             </div>
@@ -295,10 +297,10 @@ export default function CreateRentalModal({
             `}
           >
             {isPending ? '...' : totalItems === 0
-              ? 'Tap an item ☝️'
+              ? t('tapItem')
               : paymentType === 'free'
-                ? `GO — ${totalItems} item${totalItems !== 1 ? 's' : ''} free`
-                : `GO — €${totalPrice.toFixed(2)}`
+                ? t('goFree', { n: totalItems })
+                : t('goPrice', { price: totalPrice.toFixed(2) })
             }
           </button>
         </div>

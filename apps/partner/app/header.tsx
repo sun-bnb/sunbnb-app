@@ -3,17 +3,17 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { useSession, signOut } from 'next-auth/react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useState, useRef, useEffect } from 'react'
+import { useTranslations, useLocale } from 'next-intl'
 import sunbnbLogo from '@/app/sunbnb-logo.svg'
 import { getEnvLabel } from '@repo/data/env'
+import { setLocale } from '@/app/locale/actions'
 
-const navItems = [
-  { label: 'Dashboard', href: '/' },
-  { label: 'Frontdesk', href: '/frontdesk' },
-  { label: 'Sites', href: '/sites' },
-  { label: 'Calendar', href: '/calendar' },
-  { label: 'Security', href: '/security' },
+const LOCALES = [
+  { code: 'en', label: 'EN' },
+  { code: 'es', label: 'ES' },
+  { code: 'fi', label: 'FI' },
 ]
 
 function isActive(pathname: string, href: string) {
@@ -24,8 +24,19 @@ function isActive(pathname: string, href: string) {
 export default function Header() {
   const { data: session } = useSession()
   const pathname = usePathname()
+  const router = useRouter()
+  const t = useTranslations('Header')
+  const currentLocale = useLocale()
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+
+  const navItems = [
+    { label: t('dashboard'), href: '/' },
+    { label: t('frontdesk'), href: '/frontdesk' },
+    { label: t('sites'), href: '/sites' },
+    { label: t('calendar'), href: '/calendar' },
+    { label: t('security'), href: '/security' },
+  ]
 
   // Close menu on outside click
   useEffect(() => {
@@ -121,7 +132,7 @@ export default function Header() {
                 <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
                 </svg>
-                Account
+                {t('account')}
               </Link>
 
               <Link
@@ -132,8 +143,32 @@ export default function Header() {
                 <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z" />
                 </svg>
-                Subscription
+                {t('subscription')}
               </Link>
+
+              {/* Language switcher */}
+              <div className="px-4 py-2 border-t border-gray-100">
+                <p className="text-xs text-gray-400 mb-1.5">{t('language')}</p>
+                <div className="flex gap-1">
+                  {LOCALES.map(loc => (
+                    <button
+                      key={loc.code}
+                      onClick={async () => {
+                        await setLocale(loc.code)
+                        setMenuOpen(false)
+                        router.refresh()
+                      }}
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${
+                        currentLocale === loc.code
+                          ? 'bg-gray-900 text-white'
+                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      }`}
+                    >
+                      {loc.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               <button
                 onClick={() => { setMenuOpen(false); signOut() }}
@@ -142,7 +177,7 @@ export default function Header() {
                 <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15m-3 0-3-3m0 0 3-3m-3 3H15" />
                 </svg>
-                Sign out
+                {t('signOut')}
               </button>
             </div>
           )}

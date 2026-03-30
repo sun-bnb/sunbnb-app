@@ -5,11 +5,9 @@
       "command": "npx",
       "args": [
         "-y",
-        "@crystaldba/postgres-mcp",
-        "--access-mode=unrestricted",
-        "postgres://postgres:sunbnb@localhost:5432/postgres"
-      ],
-      "env": {}
+        "@modelcontextprotocol/server-postgres",
+        "${POSTGRES_LOCAL_URL}"
+      ]
     },
     "postgres-test": {
       "type": "stdio",
@@ -17,9 +15,17 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-postgres",
-        "postgres://default:dE5fyV2Xwzku@ep-steep-sunset-a2oj986g-pooler.eu-central-1.aws.neon.tech/verceldb?sslmode=require"
-      ],
-      "env": {}
+        "${POSTGRES_TEST_URL}"
+      ]
+    },
+    "postgres-production": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "${POSTGRES_PRODUCTION_URL}"
+      ]
     },
     "prisma": {
       "type": "stdio",
@@ -28,8 +34,7 @@
         "-y",
         "prisma@latest",
         "mcp"
-      ],
-      "env": {}
+      ]
     },
     "stripe": {
       "type": "stdio",
@@ -40,12 +45,15 @@
         "--tools=all"
       ],
       "env": {
-        "STRIPE_SECRET_KEY": ""
+        "STRIPE_SECRET_KEY": "${STRIPE_SECRET_KEY}"
       }
     },
     "vercel": {
       "type": "http",
-      "url": "https://mcp.vercel.com"
+      "url": "https://mcp.vercel.com",
+      "headers": {
+        "Authorization": "Bearer ${VERCEL_API_TOKEN}"
+      }
     },
     "obsidian": {
       "type": "stdio",

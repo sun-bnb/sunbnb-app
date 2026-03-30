@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useTransition } from 'react'
+import { useTranslations } from 'next-intl'
 import { InventoryItem, Reservation } from '@/types/shared'
 import {
   reserveItem,
@@ -39,14 +40,7 @@ function getBedState(item: InventoryItem): BedState {
   }
 }
 
-// Plain language labels — no jargon
-const stateLabels: Record<BedState, string> = {
-  'available': 'Free',
-  'expected': 'Booked',
-  'checked-in': 'Here',
-  'walked-in': 'Walk-in',
-  'blocked': 'Blocked',
-}
+// stateLabels built dynamically inside component using translations
 
 const stateBadgeColors: Record<BedState, string> = {
   'available': 'bg-green-200 text-green-900',
@@ -75,10 +69,19 @@ export default function BedDetail({
   accessKey?: string
   onClose: () => void
 }) {
+  const t = useTranslations('BedDetail')
   const [isPending, startTransition] = useTransition()
   const [guestName, setGuestName] = useState('')
   const [showBlock, setShowBlock] = useState(false)
   const [showNoShow, setShowNoShow] = useState(false)
+
+  const stateLabels: Record<BedState, string> = {
+    'available': t('free'),
+    'expected': t('booked'),
+    'checked-in': t('here'),
+    'walked-in': t('walkIn'),
+    'blocked': t('blocked'),
+  }
 
   const reservation = getActiveReservation(item)
   const state = getBedState(item)
@@ -117,7 +120,7 @@ export default function BedDetail({
           <div className="space-y-3">
             <input
               type="text"
-              placeholder="Guest name (optional)"
+              placeholder={t('guestName')}
               value={guestName}
               onChange={e => setGuestName(e.target.value)}
               className="w-full border-2 rounded-xl px-4 py-3.5 text-base"
@@ -128,13 +131,13 @@ export default function BedDetail({
               onClick={() => runAction(() => reserveItem(siteId, item.id, guestName || undefined, undefined, accessKey))}
               className="w-full bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50"
             >
-              {isPending ? '...' : 'Seat Customer Here'}
+              {isPending ? '...' : t('reserve')}
             </button>
             <button
               onClick={() => setShowBlock(true)}
               className="w-full text-gray-400 text-sm py-2 active:text-gray-600"
             >
-              Block this bed
+              {t('block')}
             </button>
           </div>
         )}
@@ -142,20 +145,20 @@ export default function BedDetail({
         {/* Block confirmation (hidden behind tap) */}
         {state === 'available' && showBlock && (
           <div className="space-y-3">
-            <p className="text-base text-gray-600">Block bed #{item.number}?</p>
+            <p className="text-base text-gray-600">{t('sunbedNumber', { n: item.number })}?</p>
             <div className="flex gap-3">
               <button
                 disabled={isPending}
                 onClick={() => runAction(() => blockBed(siteId, item.id, undefined, accessKey))}
                 className="flex-1 bg-gray-600 text-white font-bold text-lg py-4 rounded-xl active:bg-gray-700 disabled:opacity-50"
               >
-                {isPending ? '...' : 'Yes, Block'}
+                {isPending ? '...' : t('confirm')}
               </button>
               <button
                 onClick={() => setShowBlock(false)}
                 className="flex-1 bg-gray-100 text-gray-600 font-bold text-lg py-4 rounded-xl active:bg-gray-200"
               >
-                Cancel
+                {t('cancel')}
               </button>
             </div>
           </div>
@@ -181,14 +184,14 @@ export default function BedDetail({
               onClick={() => runAction(() => checkInReservation(siteId, reservation.id, accessKey))}
               className="w-full bg-blue-500 text-white font-bold text-lg py-4 rounded-xl active:bg-blue-600 disabled:opacity-50"
             >
-              {isPending ? '...' : 'Guest Arrived ✓'}
+              {isPending ? '...' : t('checkIn')}
             </button>
             {!showNoShow ? (
               <button
                 onClick={() => setShowNoShow(true)}
                 className="w-full text-gray-400 text-sm py-2 active:text-gray-600"
               >
-                Didn&apos;t show up?
+                {t('markNoShow')}
               </button>
             ) : (
               <button
@@ -196,7 +199,7 @@ export default function BedDetail({
                 onClick={() => runAction(() => markNoShow(siteId, reservation.id, accessKey))}
                 className="w-full bg-red-500 text-white font-bold text-lg py-4 rounded-xl active:bg-red-600 disabled:opacity-50"
               >
-                {isPending ? '...' : 'Mark No-Show'}
+                {isPending ? '...' : t('confirm')}
               </button>
             )}
           </div>
@@ -210,14 +213,14 @@ export default function BedDetail({
                 <div className="font-bold text-lg">{reservation.guestName}</div>
               )}
               <div className="text-gray-600">{reservation.user.email}</div>
-              <div className="text-gray-500">Arrived at {formatTime(reservation.checkedInAt)}</div>
+              <div className="text-gray-500">{formatTime(reservation.checkedInAt)}</div>
             </div>
             <button
               disabled={isPending}
               onClick={() => runAction(() => markDeparted(siteId, reservation.id, accessKey))}
               className="w-full bg-gray-700 text-white font-bold text-lg py-4 rounded-xl active:bg-gray-800 disabled:opacity-50"
             >
-              {isPending ? '...' : 'Guest Left \uD83D\uDC4B'}
+              {isPending ? '...' : t('markDeparted')}
             </button>
           </div>
         )}
@@ -229,21 +232,21 @@ export default function BedDetail({
               {reservation.guestName && (
                 <div className="font-bold text-lg">{reservation.guestName}</div>
               )}
-              <div className="text-gray-500">Arrived at {formatTime(reservation.checkedInAt)}</div>
+              <div className="text-gray-500">{formatTime(reservation.checkedInAt)}</div>
             </div>
             <button
               disabled={isPending}
               onClick={() => runAction(() => markDeparted(siteId, reservation.id, accessKey))}
               className="w-full bg-gray-700 text-white font-bold text-lg py-4 rounded-xl active:bg-gray-800 disabled:opacity-50"
             >
-              {isPending ? '...' : 'Guest Left \uD83D\uDC4B'}
+              {isPending ? '...' : t('markDeparted')}
             </button>
             <button
               disabled={isPending}
               onClick={() => runAction(() => unreserveItem(siteId, item.id, accessKey))}
               className="w-full text-red-500 text-sm py-2 active:text-red-700"
             >
-              Remove (added by mistake)
+              {t('unreserve')}
             </button>
           </div>
         )}
@@ -261,7 +264,7 @@ export default function BedDetail({
               onClick={() => runAction(() => unblockBed(siteId, item.id, accessKey))}
               className="w-full bg-green-500 text-white font-bold text-lg py-4 rounded-xl active:bg-green-600 disabled:opacity-50"
             >
-              {isPending ? '...' : 'Unblock ✓'}
+              {isPending ? '...' : t('unblock')}
             </button>
           </div>
         )}

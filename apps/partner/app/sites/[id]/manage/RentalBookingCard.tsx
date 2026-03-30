@@ -2,6 +2,7 @@
 
 import React, { useTransition } from 'react'
 import dayjs from 'dayjs'
+import { useTranslations } from 'next-intl'
 import { RentalBookingProps } from '@/types/shared'
 import { markRentalPickedUp, markRentalReturned } from './actions'
 import { OP_RESERVED, OP_PICKED_UP } from '@repo/data/reservation-status'
@@ -30,6 +31,7 @@ export default function RentalBookingCard({
   accessKey?: string
 }) {
   const [isPending, startTransition] = useTransition()
+  const t = useTranslations('RentalBookingCard')
   const isReserved = booking.operationalStatus === OP_RESERVED
   const isOut = booking.operationalStatus === OP_PICKED_UP
 
@@ -59,7 +61,7 @@ export default function RentalBookingCard({
           </span>
           {isOut && booking.pickedUpAt && (
             <span className="text-sm font-bold text-blue-600 flex-shrink-0">
-              since {formatTime(booking.pickedUpAt)}
+              {t('since')} {formatTime(booking.pickedUpAt)}
             </span>
           )}
         </div>
@@ -67,11 +69,11 @@ export default function RentalBookingCard({
           <span className="text-sm font-semibold text-gray-500">
             {booking.durationType === 'hours'
               ? `${formatTime(booking.from)} – ${formatTime(booking.to)}`
-              : 'All day'}
+              : t('allDay')}
           </span>
           {isOut && booking.durationType === 'hours' && (
             <span className={`text-xs font-bold flex-shrink-0 ${dayjs().isAfter(dayjs(booking.to)) ? 'text-red-500' : 'text-gray-400'}`}>
-              {dayjs().isAfter(dayjs(booking.to)) ? 'overdue' : `due ${formatTime(booking.to)}`}
+              {dayjs().isAfter(dayjs(booking.to)) ? t('overdue') : `${t('due')} ${formatTime(booking.to)}`}
             </span>
           )}
         </div>
@@ -87,7 +89,7 @@ export default function RentalBookingCard({
           onClick={() => runAction(() => markRentalPickedUp(siteId, booking.id, accessKey))}
           className="w-full bg-blue-500 text-white font-black text-xl py-5 active:bg-blue-600 disabled:opacity-50 select-none"
         >
-          {isPending ? '...' : 'Give 🤝'}
+          {isPending ? '...' : `${t('give')} 🤝`}
         </button>
       )}
 
@@ -97,7 +99,7 @@ export default function RentalBookingCard({
           onClick={() => runAction(() => markRentalReturned(siteId, booking.id, accessKey))}
           className="w-full bg-green-600 text-white font-black text-xl py-5 active:bg-green-700 disabled:opacity-50 select-none"
         >
-          {isPending ? '...' : 'Back ✓'}
+          {isPending ? '...' : `${t('back')} ✓`}
         </button>
       )}
     </div>
