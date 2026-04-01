@@ -4,6 +4,7 @@ import Image from 'next/image'
 import { signIn } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
+import { useTranslations } from 'next-intl'
 import { SignInLayout, OAuthButton, CredentialsForm, SignInError, SignInDivider } from '@repo/ui/sign-in'
 import sunbnbLogo from '@/app/sunbnb-logo.svg'
 
@@ -61,6 +62,7 @@ function PartnerBrandingPanel() {
 }
 
 function SignInContent() {
+  const t = useTranslations('SignIn')
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
   // NextAuth v5 puts custom error codes in ?code=, default is 'credentials'
@@ -81,8 +83,8 @@ function SignInContent() {
       </div>
 
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Sign in or create account</h2>
-        <p className="mt-1.5 text-sm text-gray-500">Use your email to sign in — a new account is created automatically on first login.</p>
+        <h2 className="text-2xl font-bold text-gray-900 tracking-tight">{t('title')}</h2>
+        <p className="mt-1.5 text-sm text-gray-500">{t('subtitle')}</p>
       </div>
 
       <SignInError errorCode={errorParam} theme="light" className="mt-5" />

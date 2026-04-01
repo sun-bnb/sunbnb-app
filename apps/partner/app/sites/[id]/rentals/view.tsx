@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { useTranslations } from 'next-intl'
 import Button from '@mui/material/Button'
 import TextField from '@mui/material/TextField'
 import InputAdornment from '@mui/material/InputAdornment'
@@ -63,6 +64,7 @@ function ItemForm({
   onCancel: () => void
   saving: boolean
 }) {
+  const t = useTranslations('SiteRentals')
   const [name, setName] = useState(initial?.name || '')
   const [description, setDescription] = useState(initial?.description || '')
   const [category, setCategory] = useState(initial?.category || 'other')
@@ -74,7 +76,7 @@ function ItemForm({
     <div className="space-y-4">
       <TextField
         fullWidth
-        label="Item name"
+        label={t('itemName')}
         value={name}
         onChange={e => setName(e.target.value)}
         placeholder="e.g. Stand-up paddleboard"
@@ -82,7 +84,7 @@ function ItemForm({
       />
       <TextField
         fullWidth
-        label="Description (optional)"
+        label={t('descriptionOptional')}
         value={description}
         onChange={e => setDescription(e.target.value)}
         placeholder="e.g. Inflatable SUP with paddle and leash"
@@ -91,7 +93,7 @@ function ItemForm({
         rows={2}
       />
       <div>
-        <label className="text-sm font-medium text-gray-700 block mb-2">Category</label>
+        <label className="text-sm font-medium text-gray-700 block mb-2">{t('category')}</label>
         <div className="flex flex-wrap gap-2">
           {CATEGORIES.map(cat => (
             <button
@@ -112,7 +114,7 @@ function ItemForm({
       <div className="flex gap-3">
         <TextField
           fullWidth
-          label="Price per hour (€)"
+          label={t('pricePerHour')}
           type="number"
           value={pricePerHour}
           onChange={e => setPricePerHour(e.target.value)}
@@ -121,7 +123,7 @@ function ItemForm({
         />
         <TextField
           fullWidth
-          label="Price per day (€)"
+          label={t('pricePerDay')}
           type="number"
           value={pricePerDay}
           onChange={e => setPricePerDay(e.target.value)}
@@ -131,13 +133,13 @@ function ItemForm({
       </div>
       <TextField
         fullWidth
-        label="Available quantity"
+        label={t('availableQuantity')}
         type="number"
         value={totalQuantity}
         onChange={e => setTotalQuantity(e.target.value)}
         placeholder="e.g. 5"
         size="small"
-        helperText="How many units of this item you have"
+        helperText={t('availableQuantityHelper')}
       />
       <div className="flex gap-2 pt-2">
         <Button
@@ -155,10 +157,10 @@ function ItemForm({
           }
           sx={{ textTransform: 'none' }}
         >
-          {saving ? <CircularProgress size={18} color="inherit" /> : initial ? 'Save changes' : 'Add item'}
+          {saving ? <CircularProgress size={18} color="inherit" /> : initial ? t('saveChanges') : t('addItem')}
         </Button>
         <Button onClick={onCancel} sx={{ textTransform: 'none' }}>
-          Cancel
+          {t('cancel')}
         </Button>
       </div>
     </div>
@@ -167,6 +169,7 @@ function ItemForm({
 
 export default function RentalsView() {
   const { site, setSite } = useSite()
+  const t = useTranslations('SiteRentals')
   const siteId = site.id!
 
   const [items, setItems] = useState<RentalItemData[]>([])
@@ -280,9 +283,9 @@ export default function RentalsView() {
       {/* Rentals toggle + VAT on same row */}
       <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 mt-4 mb-4 gap-4">
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-800">Equipment rental</p>
+          <p className="text-sm font-medium text-gray-800">{t('title')}</p>
           <p className="text-xs text-gray-500 mt-0.5">
-            Allow guests to rent surfboards, kayaks, umbrellas and other equipment through the app.
+            {t('equipmentRentalDesc')}
           </p>
         </div>
         <TextField
@@ -314,7 +317,7 @@ export default function RentalsView() {
       {/* Rental billing type — only visible when rentals enabled */}
       {rentalsEnabled && (
         <div className="mb-4">
-          <h3 className="text-sm font-medium text-gray-700 mb-2">Rental billing</h3>
+          <h3 className="text-sm font-medium text-gray-700 mb-2">{t('rentalBilling')}</h3>
           <div className="flex gap-3">
             <button
               type="button"
@@ -332,11 +335,11 @@ export default function RentalsView() {
               <div className="flex items-center gap-2 mb-1">
                 <PaymentsIcon fontSize="small" className={rentalBillingType === 'paid' ? 'text-blue-600' : 'text-gray-400'} />
                 <span className={`font-medium text-sm ${rentalBillingType === 'paid' ? 'text-blue-700' : 'text-gray-700'}`}>
-                  Integrated payments
+                  {t('integratedPayments')}
                 </span>
               </div>
               <p className="text-xs text-gray-500">
-                Customers pay for equipment rentals through the platform.
+                {t('integratedPaymentsRentalDesc')}
               </p>
             </button>
             <button

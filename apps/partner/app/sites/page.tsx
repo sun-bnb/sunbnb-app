@@ -3,6 +3,7 @@ import { auth } from '@/app/auth'
 import { canCreateSite } from '@repo/data/subscription'
 import Link from 'next/link'
 import Image from 'next/image'
+import { getTranslations } from 'next-intl/server'
 
 interface SiteCardProps {
   id: string
@@ -23,7 +24,9 @@ interface SiteCardProps {
   _count: { inventoryItems: number; products: number; reservations: number }
 }
 
-function StatusBadge({ status }: { status: string | null | undefined }) {
+type T = (key: string, values?: Record<string, string | number>) => string
+
+function StatusBadge({ status, t }: { status: string | null | undefined; t: T }) {
   const isActive = status === 'active'
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
@@ -32,7 +35,7 @@ function StatusBadge({ status }: { status: string | null | undefined }) {
         : 'bg-gray-100 text-gray-500'
     }`}>
       <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-500' : 'bg-gray-400'}`} />
-      {isActive ? 'Active' : status || 'Draft'}
+      {isActive ? t('active') : (status || t('draft'))}
     </span>
   )
 }
@@ -52,7 +55,7 @@ function countMissing(site: SiteCardProps): number {
   return missing
 }
 
-function SetupBadge({ site }: { site: SiteCardProps }) {
+function SetupBadge({ site, t }: { site: SiteCardProps; t: T }) {
   const missing = countMissing(site)
   if (missing === 0) return null
   return (
@@ -60,16 +63,17 @@ function SetupBadge({ site }: { site: SiteCardProps }) {
       <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
       </svg>
-      {missing} to do
+      {missing} {t('toDo')}
     </span>
   )
 }
 
-function AddSiteCard({ allowed, tier, currentCount, maxSites }: {
+function AddSiteCard({ allowed, tier, currentCount, maxSites, t }: {
   allowed: boolean
   tier: string
   currentCount: number
   maxSites: number
+  t: T
 }) {
   if (allowed) {
     return (
@@ -83,7 +87,7 @@ function AddSiteCard({ allowed, tier, currentCount, maxSites }: {
           </svg>
         </div>
         <span className="text-sm font-medium text-gray-500 group-hover:text-gray-700 transition-colors">
-          Add site
+          {t('addSite')}
         </span>
       </Link>
     )
@@ -96,21 +100,21 @@ function AddSiteCard({ allowed, tier, currentCount, maxSites }: {
           <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
         </svg>
       </div>
-      <span className="text-sm font-medium text-gray-400 mb-1">Site limit reached</span>
+      <span className="text-sm font-medium text-gray-400 mb-1">{t('siteLimitReached')}</span>
       <span className="text-xs text-gray-400 mb-3">
-        {tier} plan — {currentCount}/{maxSites} site{maxSites !== 1 ? 's' : ''}
+        {tier} — {currentCount}/{maxSites} {t('siteCount', { count: maxSites })}
       </span>
       <Link
         href="/account/subscription"
         className="text-xs font-medium text-indigo-500 hover:text-indigo-600 transition-colors"
       >
-        Upgrade plan
+        {t('upgradePlan')}
       </Link>
     </div>
   )
 }
 
-function SiteCard({ site }: { site: SiteCardProps }) {
+function SiteCard({ site, t }: { site: SiteCardProps; t: T }) {
   return (
     <Link
       href={`/sites/${site.id}/general`}
@@ -141,8 +145,8 @@ function SiteCard({ site }: { site: SiteCardProps }) {
         <div className="flex items-start justify-between gap-2 mb-2">
           <h3 className="text-sm font-semibold text-gray-900 truncate">{site.name}</h3>
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <SetupBadge site={site} />
-            <StatusBadge status={site.status} />
+            <SetupBadge site={site} t={t} />
+            <StatusBadge status={site.status} t={t} />
           </div>
         </div>
 
@@ -186,7 +190,7 @@ export default async function Sites() {
   const session = await auth()
   if (!session?.user) return null
 
-  const [sites, siteLimit, partnerAccount] = await Promise.all([
+  const [sites, siteLimit, partnerAccount, t] = await Promise.all([
     prisma.site.findMany({
       where: { userId: session.user.id },
       orderBy: { createdAt: 'desc' },
@@ -223,6 +227,7 @@ export default async function Sites() {
       where: { userId: session.user.id! },
       select: { mollieAccessToken: true, mollieOnboardingStatus: true },
     }),
+    getTranslations('Sites'),
   ])
 
   const mollieReady = !!partnerAccount?.mollieAccessToken && partnerAccount?.mollieOnboardingStatus === 'completed'
@@ -231,9 +236,9 @@ export default async function Sites() {
     <div className="container mx-auto px-4 py-6 max-w-5xl">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-lg font-semibold text-gray-900">Sites</h1>
+        <h1 className="text-lg font-semibold text-gray-900">{t('title')}</h1>
         <p className="text-sm text-gray-500 mt-0.5">
-          {sites.length} {sites.length === 1 ? 'site' : 'sites'}
+          {t('siteCount', { count: sites.length })}
         </p>
       </div>
 
@@ -244,9 +249,10 @@ export default async function Sites() {
           tier={siteLimit.tier}
           currentCount={siteLimit.currentCount}
           maxSites={siteLimit.maxSites}
+          t={t as unknown as T}
         />
         {sites.map(site => (
-          <SiteCard key={site.id} site={{ ...site, mollieReady }} />
+          <SiteCard key={site.id} site={{ ...site, mollieReady }} t={t as unknown as T} />
         ))}
       </div>
     </div>

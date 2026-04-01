@@ -1,10 +1,11 @@
 'use client'
 
-import React, { ReactElement, useState } from 'react'
+import React from 'react'
 import Tabs from '@mui/material/Tabs'
 import Tab from '@mui/material/Tab'
 import { SiteProps } from '@/types/shared'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { SiteProvider } from '@/app/sites/site-context'
 import ReadinessChecklist from './readiness-checklist'
 
@@ -32,6 +33,7 @@ export default function SiteView(
 ) {
 
   const router = useRouter()
+  const t = useTranslations('SiteView')
 
   return (
     <SiteProvider site={site} apiKey={apiKey}>
@@ -52,13 +54,13 @@ export default function SiteView(
             },
           }}
         >
-          <Tab value="general" label="General" sx={tabStyle} />
-          <Tab value="content" label="Content" sx={tabStyle} />
-          <Tab value="brand" label="Brand" sx={tabStyle} />
-          <Tab value="inventory" label="Inventory" sx={tabStyle} />
-          <Tab value="products" label="Products" sx={tabStyle} />
-          <Tab value="rentals" label="Rentals" sx={tabStyle} />
-          <Tab value="accounting" label="Accounting" sx={tabStyle} />
+          <Tab value="general" label={t('general')} sx={tabStyle} />
+          <Tab value="content" label={t('content')} sx={tabStyle} />
+          <Tab value="brand" label={t('brand')} sx={tabStyle} />
+          <Tab value="inventory" label={t('inventory')} sx={tabStyle} />
+          <Tab value="products" label={t('products')} sx={tabStyle} />
+          <Tab value="rentals" label={t('rentals')} sx={tabStyle} />
+          <Tab value="accounting" label={t('accounting')} sx={tabStyle} />
         </Tabs>
         {tab !== 'inventory' && (
           <ReadinessChecklist

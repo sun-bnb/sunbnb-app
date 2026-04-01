@@ -4,6 +4,7 @@ import { useSession } from 'next-auth/react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import Header from './header'
 import LandingPage from './landing'
 
@@ -29,13 +30,15 @@ function MollieBanner({
   mollieOnboardingStatus: MollieOnboardingStatus
   hasIntegratedPayments: boolean
 }) {
+  const t = useTranslations('App')
+
   // Only show when at least one site uses integrated payments
   if (!hasIntegratedPayments) return null
 
   // No banner needed when Mollie is fully set up
   if (hasMollie && mollieOnboardingStatus === 'completed') return null
 
-  const reason = 'One or more of your sites has integrated payments enabled for reservations, orders, or equipment rentals.'
+  const reason = t('mollieIntegratedReason')
 
   // Not connected at all
   if (!hasMollie) {
@@ -49,10 +52,7 @@ function MollieBanner({
               </svg>
             </span>
             <div className="min-w-0">
-              <p className="text-sm text-amber-800">
-                <span className="font-medium">Mollie Payments not connected.</span>
-                {' '}Connect your Mollie account to accept online payments.
-              </p>
+              <p className="text-sm text-amber-800">{t('mollieNotConnected')}</p>
               <p className="text-xs text-amber-600 mt-0.5">{reason}</p>
             </div>
           </div>
@@ -60,7 +60,7 @@ function MollieBanner({
             href="/account/mollie"
             className="flex-shrink-0 text-xs font-semibold text-white bg-amber-500 hover:bg-amber-600 px-3 py-1.5 rounded-lg transition-colors"
           >
-            Set up Mollie
+            {t('connectMollie')}
           </Link>
         </div>
       </div>
@@ -79,10 +79,7 @@ function MollieBanner({
               </svg>
             </span>
             <div className="min-w-0">
-              <p className="text-sm text-orange-800">
-                <span className="font-medium">Mollie onboarding incomplete.</span>
-                {' '}Your account needs additional information before you can accept payments.
-              </p>
+              <p className="text-sm text-orange-800">{t('mollieNeedsData')}</p>
               <p className="text-xs text-orange-600 mt-0.5">{reason}</p>
             </div>
           </div>
@@ -92,7 +89,7 @@ function MollieBanner({
             rel="noopener noreferrer"
             className="flex-shrink-0 text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded-lg transition-colors"
           >
-            Complete at Mollie ↗
+            {t('completeMollie')}
           </a>
         </div>
       </div>
@@ -111,10 +108,7 @@ function MollieBanner({
               </svg>
             </span>
             <div className="min-w-0">
-              <p className="text-sm text-blue-800">
-                <span className="font-medium">Mollie account under review.</span>
-                {' '}Payments will be enabled once your account is verified. No action needed.
-              </p>
+              <p className="text-sm text-blue-800">{t('mollieInReview')}</p>
               <p className="text-xs text-blue-500 mt-0.5">{reason}</p>
             </div>
           </div>

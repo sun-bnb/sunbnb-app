@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, FormEvent, Suspense } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import sunbnbLogo from '@/app/sunbnb-logo.svg'
 
 // ─── Validation helpers ───────────────────────────────────────────────────────
@@ -81,6 +82,7 @@ function inputBorder(state: ValidationState) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 function ResetPasswordContent() {
+  const t = useTranslations('ResetPassword')
   const searchParams = useSearchParams()
   const token = searchParams.get('token')
 
@@ -97,11 +99,11 @@ function ResetPasswordContent() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!isPasswordValid(pwChecks)) {
-      setError('Password must be at least 8 characters with uppercase, lowercase, and a number')
+      setError(t('errorWeakPassword'))
       return
     }
     if (password !== confirmPassword) {
-      setError('Passwords do not match')
+      setError(t('passwordsDoNotMatch'))
       return
     }
     setIsLoading(true)
@@ -116,10 +118,10 @@ function ResetPasswordContent() {
       if (data.ok) {
         setSuccess(true)
       } else {
-        setError(data.error || 'Something went wrong')
+        setError(data.error || t('errorGeneral'))
       }
     } catch {
-      setError('Something went wrong. Please try again.')
+      setError(t('errorGeneral'))
     } finally {
       setIsLoading(false)
     }
@@ -128,10 +130,10 @@ function ResetPasswordContent() {
   if (!token) {
     return (
       <div className="text-center">
-        <h2 className="text-xl font-bold text-gray-900">Invalid reset link</h2>
-        <p className="mt-2 text-sm text-gray-500">This link is missing or malformed.</p>
+        <h2 className="text-xl font-bold text-gray-900">{t('invalidLinkTitle')}</h2>
+        <p className="mt-2 text-sm text-gray-500">{t('invalidLinkBody')}</p>
         <Link href="/forgot-password" className="inline-block mt-6 text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors">
-          Request a new link
+          {t('requestNewLink')}
         </Link>
       </div>
     )
@@ -145,10 +147,10 @@ function ResetPasswordContent() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
           </svg>
         </div>
-        <h2 className="text-xl font-bold text-gray-900">Password updated</h2>
-        <p className="mt-2 text-sm text-gray-500">Your password has been reset successfully.</p>
+        <h2 className="text-xl font-bold text-gray-900">{t('successTitle')}</h2>
+        <p className="mt-2 text-sm text-gray-500">{t('successBody')}</p>
         <Link href="/sign-in" className="inline-block mt-6 text-sm font-semibold text-white bg-gray-900 rounded-xl hover:bg-gray-800 px-6 py-2.5 transition-colors shadow-sm">
-          Sign in
+          {t('signIn')}
         </Link>
       </div>
     )
@@ -157,8 +159,8 @@ function ResetPasswordContent() {
   return (
     <>
       <div className="text-center">
-        <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Set new password</h2>
-        <p className="mt-1.5 text-sm text-gray-500">Choose a new password for your account.</p>
+        <h2 className="text-2xl font-bold text-gray-900 tracking-tight">{t('title')}</h2>
+        <p className="mt-1.5 text-sm text-gray-500">{t('subtitle')}</p>
       </div>
 
       {error && (
@@ -170,7 +172,7 @@ function ResetPasswordContent() {
       <form onSubmit={handleSubmit} className="mt-8 space-y-3">
         {/* New password */}
         <div>
-          <label htmlFor="new-password" className="block text-xs font-medium text-gray-600 mb-1.5">New password</label>
+          <label htmlFor="new-password" className="block text-xs font-medium text-gray-600 mb-1.5">{t('newPassword')}</label>
           <div className="relative">
             <input
               id="new-password"
@@ -190,17 +192,17 @@ function ResetPasswordContent() {
           </div>
           {password.length > 0 && pwState !== 'valid' && (
             <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
-              <ValidationDot ok={pwChecks.length} label="8+ chars" />
-              <ValidationDot ok={pwChecks.uppercase} label="A-Z" />
-              <ValidationDot ok={pwChecks.lowercase} label="a-z" />
-              <ValidationDot ok={pwChecks.digit} label="0-9" />
+              <ValidationDot ok={pwChecks.length} label={t('validationChars')} />
+              <ValidationDot ok={pwChecks.uppercase} label={t('validationUpper')} />
+              <ValidationDot ok={pwChecks.lowercase} label={t('validationLower')} />
+              <ValidationDot ok={pwChecks.digit} label={t('validationDigit')} />
             </div>
           )}
         </div>
 
         {/* Confirm password */}
         <div>
-          <label htmlFor="confirm-password" className="block text-xs font-medium text-gray-600 mb-1.5">Confirm password</label>
+          <label htmlFor="confirm-password" className="block text-xs font-medium text-gray-600 mb-1.5">{t('confirmPassword')}</label>
           <div className="relative">
             <input
               id="confirm-password"
@@ -219,7 +221,7 @@ function ResetPasswordContent() {
             )}
           </div>
           {confirmState === 'invalid' && (
-            <p className="mt-1 text-[11px] text-red-500">Passwords do not match</p>
+            <p className="mt-1 text-[11px] text-red-500">{t('passwordsDoNotMatch')}</p>
           )}
         </div>
 
@@ -231,17 +233,17 @@ function ResetPasswordContent() {
           {isLoading ? (
             <span className="inline-flex items-center gap-2">
               <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Resetting…
+              {t('resetting')}
             </span>
           ) : (
-            'Reset password'
+            t('resetPassword')
           )}
         </button>
       </form>
 
       <div className="mt-6 text-center">
         <Link href="/sign-in" className="text-sm text-gray-400 hover:text-gray-600 transition-colors">
-          Back to sign in
+          {t('backToSignIn')}
         </Link>
       </div>
     </>

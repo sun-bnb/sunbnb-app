@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import CreateReservationModal from './CreateReservationModal'
 import { RESERVATION_CANCELED, RESERVATION_PENDING } from '@repo/data/reservation-status'
 
@@ -85,18 +86,19 @@ function statusBadge(status: string) {
   return styles[status] || 'bg-gray-100 text-gray-500'
 }
 
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-]
+const MONTH_KEYS = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+] as const
 
-const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const WEEKDAY_KEYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const
 
 /* ── Component ──────────────────────────────────────────────── */
 
 export default function CalendarView({ sites }: { sites: SiteData[] }) {
 
   const router = useRouter()
+  const t = useTranslations('Calendar')
 
   // State
   const [siteId, setSiteId] = useState(sites[0]?.id || '')
@@ -195,8 +197,8 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-lg font-semibold text-gray-900">Calendar</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Reservation overview</p>
+          <h1 className="text-lg font-semibold text-gray-900">{t('title')}</h1>
+          <p className="text-sm text-gray-500 mt-0.5">{t('subtitle')}</p>
         </div>
 
         {/* Site selector */}
@@ -227,7 +229,7 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <div className="flex items-center gap-3">
               <h2 className="text-base font-semibold text-gray-900">
-                {MONTH_NAMES[month]} {year}
+                {t(MONTH_KEYS[month])} {year}
               </h2>
               {loadingMonth && (
                 <div className="w-4 h-4 border-2 border-gray-200 border-t-gray-500 rounded-full animate-spin" />
@@ -238,7 +240,7 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
                 onClick={goToToday}
                 className="px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
               >
-                Today
+                {t('today')}
               </button>
               <button
                 onClick={prevMonth}
@@ -261,9 +263,9 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
 
           {/* Weekday headers */}
           <div className="grid grid-cols-7 border-b border-gray-100">
-            {WEEKDAYS.map(d => (
-              <div key={d} className="py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wider">
-                {d}
+            {WEEKDAY_KEYS.map(k => (
+              <div key={k} className="py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wider">
+                {t(k)}
               </div>
             ))}
           </div>
@@ -311,7 +313,7 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
                   )}
                   {count > 0 && (
                     <span className="text-[10px] text-gray-400 mt-0.5 block">
-                      {count} {count === 1 ? 'res.' : 'res.'}
+                      {count} {t('res')}
                     </span>
                   )}
                 </button>
@@ -328,12 +330,12 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
           {selectedSite && (
             <div className="flex items-center gap-4 px-5 py-3 border-t border-gray-100 text-[11px] text-gray-400">
               <span className="flex items-center gap-1.5">
-                <span className="w-3 h-1.5 rounded-full bg-emerald-400" /> Available
+                <span className="w-3 h-1.5 rounded-full bg-emerald-400" /> {t('legendAvailable')}
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-3 h-1.5 rounded-full bg-amber-400" /> At capacity
+                <span className="w-3 h-1.5 rounded-full bg-amber-400" /> {t('legendAtCapacity')}
               </span>
-              <span className="ml-auto">{selectedSite.itemCount} sunbeds total</span>
+              <span className="ml-auto">{t('sunbedsTotal', { count: selectedSite.itemCount })}</span>
             </div>
           )}
         </div>
@@ -349,14 +351,14 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
                   {new Date(selectedDay + 'T12:00:00').toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short' })}
                 </h3>
                 <p className="text-[11px] text-gray-400 mt-0.5">
-                  {dayReservations.length} {dayReservations.length === 1 ? 'reservation' : 'reservations'}
+                  {t('reservations', { count: dayReservations.length })}
                 </p>
               </div>
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setShowCreateModal(true)}
                   className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
-                  title="Create reservation"
+                  title={t('createReservation')}
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -396,11 +398,11 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
                       <div className="flex items-center gap-3 text-xs text-gray-400">
                         <span>{formatDateRange(r.from, r.to)}</span>
                         <span>·</span>
-                        <span>{daysBetween(r.from, r.to)} {daysBetween(r.from, r.to) === 1 ? 'day' : 'days'}</span>
+                        <span>{t('days', { count: daysBetween(r.from, r.to) })}</span>
                         {r.itemCount > 0 && (
                           <>
                             <span>·</span>
-                            <span>{r.itemCount} {r.itemCount === 1 ? 'item' : 'items'}</span>
+                            <span>{t('items', { count: r.itemCount })}</span>
                           </>
                         )}
                       </div>
@@ -412,7 +414,7 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
                   <svg className="w-8 h-8 text-gray-200 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
                   </svg>
-                  <p className="text-xs text-gray-400">No reservations</p>
+                  <p className="text-xs text-gray-400">{t('noReservations')}</p>
                 </div>
               )}
             </div>
@@ -499,7 +501,7 @@ export default function CalendarView({ sites }: { sites: SiteData[] }) {
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-8 text-center">
-              <p className="text-xs text-gray-400">No reservations this day</p>
+              <p className="text-xs text-gray-400">{t('noReservations')}</p>
             </div>
           )}
         </div>

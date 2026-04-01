@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 
 export default function ErrorPage({
   error,
@@ -10,6 +11,8 @@ export default function ErrorPage({
   error: Error & { digest?: string }
   reset: () => void
 }) {
+  const t = useTranslations('Error')
+
   useEffect(() => {
     console.error(error)
   }, [error])
@@ -22,20 +25,20 @@ export default function ErrorPage({
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
           </svg>
         </div>
-        <h1 className="text-lg font-semibold text-gray-900 mb-2">Something went wrong</h1>
-        <p className="text-sm text-gray-500 mb-6">An unexpected error occurred. You can try again or return to your sites.</p>
+        <h1 className="text-lg font-semibold text-gray-900 mb-2">{t('title')}</h1>
+        <p className="text-sm text-gray-500 mb-6">{t('body')}</p>
         <div className="flex items-center justify-center gap-4">
           <button
             onClick={reset}
             className="px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-700 transition-colors"
           >
-            Try again
+            {t('tryAgain')}
           </button>
           <Link
             href="/sites"
             className="text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
           >
-            Back to sites
+            {t('backToSites')}
           </Link>
         </div>
       </div>

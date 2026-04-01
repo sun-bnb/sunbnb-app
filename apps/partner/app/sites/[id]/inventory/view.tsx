@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
+import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import { InventoryItem } from '@/types/shared'
 import {
@@ -23,6 +24,7 @@ import { syncChairsWithLayout, getItemGroup, moveParcel, moveItems, rotateSelect
 
 export default function InventoryView() {
 
+  const t = useTranslations('SiteInventory')
   const { site, setSite, apiKey } = useSite()
   const { setValue } = useSharedMap()
   const router = useRouter()
@@ -489,15 +491,15 @@ export default function InventoryView() {
       {/* Summary strip */}
       <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs text-gray-500">
         <span className="font-medium text-gray-700">{totalSunbeds}</span>
-        <span>sunbed{totalSunbeds !== 1 ? 's' : ''}</span>
+        <span>{t('sunbedsLabel', { count: totalSunbeds })}</span>
         <span className="text-gray-300">·</span>
         <span className="font-medium text-gray-700">{totalParcels}</span>
-        <span>parcel{totalParcels !== 1 ? 's' : ''}</span>
+        <span>{t('parcelsLabel', { count: totalParcels })}</span>
         {disabledCount > 0 && (
           <>
             <span className="text-gray-300">·</span>
             <span className="font-medium text-amber-600">{disabledCount}</span>
-            <span className="text-amber-600">disabled</span>
+            <span className="text-amber-600">{t('disabled')}</span>
           </>
         )}
       </div>

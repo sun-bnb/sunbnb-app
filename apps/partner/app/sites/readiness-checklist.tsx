@@ -1,14 +1,15 @@
 'use client'
 
 import React, { useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { SiteProps } from '@/types/shared'
 
 interface ReadinessItem {
   key: string
-  label: string
+  labelKey: string
   met: boolean
   tab: string
-  hint: string
+  hintKey: string
 }
 
 function computeMissing(site: SiteProps): ReadinessItem[] {
@@ -18,55 +19,55 @@ function computeMissing(site: SiteProps): ReadinessItem[] {
   const all: ReadinessItem[] = [
     {
       key: 'name',
-      label: 'Site name',
+      labelKey: 'siteName',
       met: !!site.name && site.name.trim().length > 0,
       tab: 'general',
-      hint: 'Set a name for your site',
+      hintKey: 'siteNameHint',
     },
     {
       key: 'location',
-      label: 'Location',
+      labelKey: 'addLocation',
       met: !!site.locationLat && !!site.locationLng && site.locationLat !== '0' && site.locationLng !== '0',
       tab: 'general',
-      hint: 'Set the map location so customers can find you',
+      hintKey: 'addLocationHint',
     },
     {
       key: 'working-hours',
-      label: 'Working hours',
+      labelKey: 'addWorkingHours',
       met: (site.workingHours?.length ?? 0) > 0,
       tab: 'general',
-      hint: 'Set at least one day of working hours',
+      hintKey: 'addWorkingHoursHint',
     },
     {
       key: 'inventory',
-      label: 'Active inventory',
+      labelKey: 'addInventory',
       met: activeItems.length > 0,
       tab: 'inventory',
-      hint: 'Add sunbeds and set them to active',
+      hintKey: 'addInventoryHint',
     },
     {
       key: 'image',
-      label: 'Cover image',
+      labelKey: 'addCoverPhoto',
       met: !!site.image,
       tab: 'content',
-      hint: 'Upload a cover photo for your site listing',
+      hintKey: 'addCoverPhotoHint',
     },
   ]
 
   if (isPaid) {
     all.splice(2, 0, {
       key: 'price',
-      label: 'Base price',
+      labelKey: 'basePrice',
       met: !!site.price && site.price > 0,
       tab: 'general',
-      hint: 'Set a base price for sunbed reservations',
+      hintKey: 'basePriceHint',
     })
     all.splice(3, 0, {
       key: 'vat',
-      label: 'VAT rate',
+      labelKey: 'vatRate',
       met: site.vat != null && site.vat >= 0,
       tab: 'general',
-      hint: 'Set the VAT rate for invoicing',
+      hintKey: 'vatRateHint',
     })
   }
 
@@ -79,12 +80,10 @@ function computeMissing(site: SiteProps): ReadinessItem[] {
     const mollieReady = site.hasMollieToken && site.mollieOnboardingStatus === 'completed'
     all.push({
       key: 'mollie',
-      label: 'Payment setup',
+      labelKey: 'connectPayments',
       met: !!mollieReady,
       tab: '', // navigates to /account/mollie, handled specially
-      hint: !site.hasMollieToken
-        ? 'Connect your Mollie account to accept payments'
-        : 'Complete Mollie onboarding to accept payments',
+      hintKey: !site.hasMollieToken ? 'paymentHintConnect' : 'paymentHintComplete',
     })
   }
 
@@ -96,6 +95,7 @@ export default function ReadinessChecklist({ site, onNavigate, className }: {
   onNavigate: (path: string) => void
   className?: string
 }) {
+  const t = useTranslations('ReadinessChecklist')
   const [collapsed, setCollapsed] = useState(false)
   const missing = computeMissing(site)
 
@@ -113,7 +113,7 @@ export default function ReadinessChecklist({ site, onNavigate, className }: {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
           </svg>
           <span className="text-sm font-medium text-amber-800">
-            {missing.length} {missing.length === 1 ? 'thing' : 'things'} to complete before going live
+            {t('pendingCount', { count: missing.length })}
           </span>
         </div>
         <svg
@@ -137,8 +137,8 @@ export default function ReadinessChecklist({ site, onNavigate, className }: {
                 <circle cx="12" cy="12" r="9" />
               </svg>
               <div className="min-w-0 flex-1">
-                <span className="text-sm text-gray-800 font-medium">{item.label}</span>
-                <span className="text-xs text-gray-400 ml-2">{item.hint}</span>
+                <span className="text-sm text-gray-800 font-medium">{t(item.labelKey)}</span>
+                <span className="text-xs text-gray-400 ml-2">{t(item.hintKey)}</span>
               </div>
               <svg className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />

@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import {
   RESERVATION_CANCELED,
   RESERVATION_PAYMENT_FAILED,
@@ -20,7 +21,7 @@ import {
   OP_WALKED_IN,
 } from '@repo/data/reservation-status'
 
-/* ── Types ─────────────────────────────────────────────────── */
+/* ── Types ─────────────────────────────────────────────────────────────────── */
 
 export interface UpcomingReservation {
   id: string
@@ -66,7 +67,7 @@ export interface DashboardData {
   upcomingReservations: UpcomingReservation[]
 }
 
-/* ── Helpers ───────────────────────────────────────────────── */
+/* ── Helpers ───────────────────────────────────────────────────────────────── */
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('en-EU', {
@@ -98,7 +99,7 @@ function timeUntil(dateStr: string) {
   return rem > 0 ? `${hrs}h ${rem}m` : `${hrs}h`
 }
 
-/* ── Stat Card ─────────────────────────────────────────────── */
+/* ── Stat Card ─────────────────────────────────────────────────────────────── */
 
 function StatCard({
   label,
@@ -127,7 +128,7 @@ function StatCard({
   )
 }
 
-/* ── Occupancy bar ─────────────────────────────────────────── */
+/* ── Occupancy bar ─────────────────────────────────────────────────────────── */
 
 function OccupancyBar({ pct }: { pct: number }) {
   const color = pct >= 80 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-400' : 'bg-gray-300'
@@ -138,7 +139,7 @@ function OccupancyBar({ pct }: { pct: number }) {
   )
 }
 
-/* ── Custom Tooltip ────────────────────────────────────────── */
+/* ── Custom Tooltip ────────────────────────────────────────────────────────── */
 
 function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
@@ -156,14 +157,13 @@ function ChartTooltip({ active, payload, label }: any) {
   )
 }
 
-/* ── Reservation status badge ──────────────────────────────── */
+/* ── Reservation status badge ──────────────────────────────────────────────── */
 
-function StatusBadge({ status, opStatus }: { status: string; opStatus?: string }) {
-  // Operational status takes priority for active reservations
+function StatusBadge({ status, opStatus, t }: { status: string; opStatus?: string; t: (key: string) => string }) {
   if (opStatus === OP_CHECKED_IN || opStatus === OP_WALKED_IN) {
     return (
       <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
-        {opStatus === OP_WALKED_IN ? 'walk-in' : 'checked in'}
+        {opStatus === OP_WALKED_IN ? t('statusWalkIn') : t('statusCheckedIn')}
       </span>
     )
   }
@@ -178,12 +178,12 @@ function StatusBadge({ status, opStatus }: { status: string; opStatus?: string }
   }
 
   const labels: Record<string, string> = {
-    complete: 'paid',
-    paid_in_cash: 'cash',
-    pending: 'pending',
-    processing: 'processing',
-    payment_failed: 'failed',
-    [RESERVATION_CANCELED]: 'canceled',
+    complete: t('statusPaid'),
+    paid_in_cash: t('statusCash'),
+    pending: t('statusPending'),
+    processing: t('statusProcessing'),
+    payment_failed: t('statusFailed'),
+    [RESERVATION_CANCELED]: t('statusCanceled'),
   }
 
   return (
@@ -193,7 +193,7 @@ function StatusBadge({ status, opStatus }: { status: string; opStatus?: string }
   )
 }
 
-/* ── Icons (inline SVG) ────────────────────────────────────── */
+/* ── Icons (inline SVG) ────────────────────────────────────────────────────── */
 
 const icons = {
   occupancy: (
@@ -223,9 +223,10 @@ const icons = {
   ),
 }
 
-/* ── Main View ─────────────────────────────────────────────── */
+/* ── Main View ─────────────────────────────────────────────────────────────── */
 
 export default function DashboardView({ data }: { data: DashboardData }) {
+  const t = useTranslations('Dashboard')
 
   const SafeResponsiveContainer = ResponsiveContainer as unknown as React.ComponentType<any>
   const SafeBarChart = BarChart as unknown as React.ComponentType<any>
@@ -248,20 +249,20 @@ export default function DashboardView({ data }: { data: DashboardData }) {
 
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-lg font-semibold text-gray-900">Dashboard</h1>
+        <h1 className="text-lg font-semibold text-gray-900">{t('title')}</h1>
         <p className="text-sm text-gray-500 mt-0.5">
           {new Date().toLocaleDateString('en', { weekday: 'long', day: 'numeric', month: 'long' })}
         </p>
       </div>
 
-      {/* ── Today's Snapshot ─────────────────────────────────── */}
+      {/* ── Today's Snapshot ──────────────────────────────────────────────────── */}
 
       <div className={`grid gap-4 mb-6 ${data.hasFnb ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-2 lg:grid-cols-3'}`}>
 
         {/* Occupancy */}
         <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Occupancy</span>
+            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t('occupancy')}</span>
             <span className="w-7 h-7 rounded-lg flex items-center justify-center bg-blue-50 text-blue-600">
               {icons.occupancy}
             </span>
@@ -274,26 +275,28 @@ export default function DashboardView({ data }: { data: DashboardData }) {
           </div>
           <OccupancyBar pct={data.occupancyPct} />
           <span className="text-xs text-gray-400">
-            {availableSpots > 0 ? `${availableSpots} spots available` : 'Fully booked'}
+            {availableSpots > 0
+              ? t('spotsAvailable', { count: availableSpots })
+              : t('fullyBooked')}
           </span>
         </div>
 
         {/* Check-ins */}
         <StatCard
-          label="Check-ins"
+          label={t('checkIns')}
           value={`${data.checkedInCount}/${data.todaysReservations}`}
           subtitle={data.todaysReservations > 0
-            ? `${Math.round((data.checkedInCount / data.todaysReservations) * 100)}% arrived`
-            : 'No reservations today'}
+            ? t('arrivedPct', { pct: Math.round((data.checkedInCount / data.todaysReservations) * 100) })
+            : t('noReservationsToday')}
           icon={icons.checkIn}
           accent="bg-amber-50 text-amber-600"
         />
 
         {/* Revenue today */}
         <StatCard
-          label="Revenue today"
+          label={t('revenueToday')}
           value={formatCurrency(data.revenueToday)}
-          subtitle={`MTD ${formatCurrency(data.revenueThisMonth)}`}
+          subtitle={t('mtd', { amount: formatCurrency(data.revenueThisMonth) })}
           icon={icons.revenue}
           accent="bg-emerald-50 text-emerald-600"
         />
@@ -301,23 +304,23 @@ export default function DashboardView({ data }: { data: DashboardData }) {
         {/* Active orders (only if site has F&B) */}
         {data.hasFnb && (
           <StatCard
-            label="Active orders"
+            label={t('activeOrders')}
             value={data.pendingOrders}
-            subtitle={data.pendingOrders > 0 ? 'Need attention' : 'All clear'}
+            subtitle={data.pendingOrders > 0 ? t('needAttention') : t('allClear')}
             icon={icons.orders}
             accent={data.pendingOrders > 0 ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-400'}
           />
         )}
       </div>
 
-      {/* ── Arriving Soon ────────────────────────────────────── */}
+      {/* ── Arriving Soon ──────────────────────────────────────────────────────── */}
 
       {data.arrivingSoon.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
           <div className="flex items-center gap-2 mb-3">
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-            <h2 className="text-sm font-semibold text-amber-900">Arriving soon</h2>
-            <span className="text-xs text-amber-600 ml-auto">{data.arrivingSoon.length} expected in next 2h</span>
+            <h2 className="text-sm font-semibold text-amber-900">{t('arrivingSoon')}</h2>
+            <span className="text-xs text-amber-600 ml-auto">{t('expectedSoon', { count: data.arrivingSoon.length })}</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {data.arrivingSoon.map((r) => (
@@ -331,7 +334,7 @@ export default function DashboardView({ data }: { data: DashboardData }) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-gray-900 truncate">{r.guestName || 'Guest'}</p>
-                  <p className="text-xs text-gray-400">{formatTime(r.from)} · {r.itemCount} {r.itemCount === 1 ? 'item' : 'items'}</p>
+                  <p className="text-xs text-gray-400">{formatTime(r.from)} · {t('items', { count: r.itemCount })}</p>
                 </div>
               </Link>
             ))}
@@ -339,7 +342,7 @@ export default function DashboardView({ data }: { data: DashboardData }) {
         </div>
       )}
 
-      {/* ── Revenue Chart + Upcoming ─────────────────────────── */}
+      {/* ── Revenue Chart + Upcoming ───────────────────────────────────────────── */}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-6">
 
@@ -347,15 +350,15 @@ export default function DashboardView({ data }: { data: DashboardData }) {
         <div className="lg:col-span-3 bg-white rounded-xl border border-gray-200 p-5">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-sm font-semibold text-gray-900">Revenue & Fees</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Last 5 months</p>
+              <h2 className="text-sm font-semibold text-gray-900">{t('revenueAndFees')}</h2>
+              <p className="text-xs text-gray-400 mt-0.5">{t('last5Months')}</p>
             </div>
             <div className="flex items-center gap-4 text-xs text-gray-400">
               <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-sm bg-gray-900" /> Revenue
+                <span className="w-2.5 h-2.5 rounded-sm bg-gray-900" /> {t('revenue')}
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-sm bg-red-400" /> Fees
+                <span className="w-2.5 h-2.5 rounded-sm bg-red-400" /> {t('fees')}
               </span>
             </div>
           </div>
@@ -363,11 +366,11 @@ export default function DashboardView({ data }: { data: DashboardData }) {
           {/* YTD callout */}
           <div className="mb-4 flex items-baseline gap-4">
             <div className="px-3 py-2 bg-gray-50 rounded-lg inline-flex items-baseline gap-2">
-              <span className="text-xs text-gray-500">YTD gross</span>
+              <span className="text-xs text-gray-500">{t('ytdGross')}</span>
               <span className="text-lg font-semibold text-gray-900">{formatCurrency(data.revenueYearToDate)}</span>
             </div>
             <div className="px-3 py-2 bg-gray-50 rounded-lg inline-flex items-baseline gap-2">
-              <span className="text-xs text-gray-500">YTD net</span>
+              <span className="text-xs text-gray-500">{t('ytdNet')}</span>
               <span className="text-lg font-semibold text-emerald-700">{formatCurrency(data.revenueYearToDate - data.feesYearToDate)}</span>
             </div>
           </div>
@@ -389,16 +392,16 @@ export default function DashboardView({ data }: { data: DashboardData }) {
                   tickFormatter={(v: number) => `€${v}`}
                 />
                 <SafeTooltip content={<ChartTooltip />} cursor={{ fill: '#f9fafb' }} />
-                <SafeBar dataKey="revenue" name="Revenue" fill="#111827" radius={[4, 4, 0, 0]} barSize={24} />
-                <SafeBar dataKey="fees" name="Fees" fill="#f87171" radius={[4, 4, 0, 0]} barSize={24} />
+                <SafeBar dataKey="revenue" name={t('revenue')} fill="#111827" radius={[4, 4, 0, 0]} barSize={24} />
+                <SafeBar dataKey="fees" name={t('fees')} fill="#f87171" radius={[4, 4, 0, 0]} barSize={24} />
               </SafeBarChart>
             </SafeResponsiveContainer>
           </div>
 
           {/* Cancellation rate footnote */}
           {data.cancellationPct > 0 && (
-            <p className="text-xs text-gray-400 mt-3">
-              <span className="text-red-400">{data.cancellationPct}%</span> cancellation rate this month
+            <p className="text-xs text-red-400 mt-3">
+              {t('cancellationRate', { pct: data.cancellationPct })}
             </p>
           )}
         </div>
@@ -406,8 +409,8 @@ export default function DashboardView({ data }: { data: DashboardData }) {
         {/* Upcoming reservations */}
         <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5 flex flex-col">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-gray-900">Upcoming</h2>
-            <span className="text-xs text-gray-400">{data.upcomingReservations.length} reservations</span>
+            <h2 className="text-sm font-semibold text-gray-900">{t('upcoming')}</h2>
+            <span className="text-xs text-gray-400">{t('upcomingCount', { count: data.upcomingReservations.length })}</span>
           </div>
 
           {data.upcomingReservations.length > 0 ? (
@@ -432,17 +435,17 @@ export default function DashboardView({ data }: { data: DashboardData }) {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-900 truncate">{r.guestName || r.siteName}</p>
                     <p className="text-xs text-gray-400">
-                      {formatTime(r.from)}–{formatTime(r.to)} · {r.itemCount} {r.itemCount === 1 ? 'item' : 'items'}
+                      {formatTime(r.from)}–{formatTime(r.to)} · {t('items', { count: r.itemCount })}
                     </p>
                   </div>
 
-                  <StatusBadge status={r.status} opStatus={r.operationalStatus} />
+                  <StatusBadge status={r.status} opStatus={r.operationalStatus} t={t} />
                 </Link>
               ))}
             </div>
           ) : (
             <div className="flex-1 flex items-center justify-center">
-              <p className="text-sm text-gray-400">No upcoming reservations</p>
+              <p className="text-sm text-gray-400">{t('noUpcomingReservations')}</p>
             </div>
           )}
         </div>

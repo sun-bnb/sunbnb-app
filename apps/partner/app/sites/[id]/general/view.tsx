@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import {
   APIProvider,
   ControlPosition,
@@ -63,6 +64,7 @@ function PriceBreakdown({
   serviceFees?: ServiceFee[]
   tier: string
 }) {
+  const t = useTranslations('SiteGeneral')
   const priceNum = Number(price)
   if (!priceNum || priceNum <= 0) return null
 
@@ -88,13 +90,13 @@ function PriceBreakdown({
   return (
     <div className="mt-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5 text-xs">
       <div className="flex justify-between text-gray-500 mb-1">
-        <span>Customer pays</span>
+        <span>{t('customerPays')}</span>
         <span>{priceNum.toFixed(2)} &euro;</span>
       </div>
       {feeAmount > 0 && (
         <div className="flex justify-between text-gray-500 mb-1">
           <span>
-            Service fee
+            {t('serviceFee')}
             {serviceFee?.chargeType === 'fixed'
               ? ''
               : ` (${(serviceFee?.percentage ?? 0).toFixed(0)}%)`}
@@ -107,24 +109,24 @@ function PriceBreakdown({
         const nextTier = tierIdx >= 0 && tierIdx < TIER_ORDER.length - 1 ? TIER_ORDER[tierIdx + 1] : null
         return nextTier ? (
           <div className="text-[11px] text-indigo-500 mb-1">
-            Upgrade to {TIER_LABELS[nextTier]} for {TIER_FEES[nextTier]} service fee
+            {t('upgradeTier', { tier: TIER_LABELS[nextTier], fee: TIER_FEES[nextTier] })}
           </div>
         ) : null
       })()}
       <div className="border-t border-gray-200 my-1.5" />
       <div className="flex justify-between font-medium text-gray-800 mb-1">
-        <span>You receive</span>
+        <span>{t('youReceive')}</span>
         <span>{partnerGross.toFixed(2)} &euro;</span>
       </div>
       {vatRate > 0 && (
         <div className="flex justify-between text-gray-400">
-          <span>incl. VAT {vatRate}%</span>
+          <span>{t('inclVat', { rate: vatRate })}</span>
           <span>{partnerVat.toFixed(2)} &euro;</span>
         </div>
       )}
       {!serviceFee && (
         <div className="flex justify-between text-gray-400 italic">
-          <span>No service fee configured for sunbed-rental</span>
+          <span>{t('noServiceFee')}</span>
         </div>
       )}
     </div>
@@ -146,6 +148,7 @@ type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 export default function GeneralView() {
   const { site, apiKey } = useSite()
   const router = useRouter()
+  const t = useTranslations('SiteGeneral')
 
   const [selectedPlace, setSelectedPlace] =
     useState<google.maps.places.PlaceResult | null>(null)
@@ -237,15 +240,15 @@ export default function GeneralView() {
         saveStatus === 'error' ? 'bg-red-50 border border-red-200 text-red-600' :
         'bg-gray-50 border border-gray-200 text-gray-400'
       }`}>
-        {saveStatus === 'saving' && <><SyncIcon fontSize="small" className="animate-spin" /> Saving…</>}
-        {saveStatus === 'saved' && <><CloudDoneIcon fontSize="small" /> All changes saved</>}
-        {saveStatus === 'error' && <><WarningAmberIcon fontSize="small" /> Error saving changes</>}
-        {saveStatus === 'idle' && <><CloudDoneIcon fontSize="small" /> Up to date</>}
+        {saveStatus === 'saving' && <><SyncIcon fontSize="small" className="animate-spin" /> {t('saving')}</>}
+        {saveStatus === 'saved' && <><CloudDoneIcon fontSize="small" /> {t('allChangesSaved')}</>}
+        {saveStatus === 'error' && <><WarningAmberIcon fontSize="small" /> {t('errorSaving')}</>}
+        {saveStatus === 'idle' && <><CloudDoneIcon fontSize="small" /> {t('upToDate')}</>}
       </div>
 
       {/* Site name */}
       <div className="mb-5">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">Site name</h3>
+        <h3 className="text-sm font-medium text-gray-700 mb-2">{t('siteName')}</h3>
         <TextField
           fullWidth
           required
@@ -254,7 +257,7 @@ export default function GeneralView() {
             setName(e.target.value)
             scheduleSave({ name: e.target.value })
           }}
-          helperText="The name your customers will see"
+          helperText={t('siteNameHelper')}
         />
       </div>
 
@@ -262,7 +265,7 @@ export default function GeneralView() {
 
       {/* Billing type — Reservations */}
       <div className="mb-5">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">Reservation billing</h3>
+        <h3 className="text-sm font-medium text-gray-700 mb-2">{t('reservationBilling')}</h3>
         <div className="flex gap-3">
           <button
             type="button"
@@ -279,11 +282,11 @@ export default function GeneralView() {
             <div className="flex items-center gap-2 mb-1">
               <PaymentsIcon fontSize="small" className={isPaid ? 'text-blue-600' : 'text-gray-400'} />
               <span className={`font-medium text-sm ${isPaid ? 'text-blue-700' : 'text-gray-700'}`}>
-                Integrated payments
+                {t('integratedPayments')}
               </span>
             </div>
             <p className="text-xs text-gray-500">
-              Customers pay when booking. Payment is collected and settled through the platform.
+              {t('integratedPaymentsDesc')}
             </p>
           </button>
           <button
@@ -306,14 +309,14 @@ export default function GeneralView() {
             <div className="flex items-center gap-2 mb-1">
               <EventAvailableIcon fontSize="small" className={!canUseAvailabilityOnly ? 'text-gray-300' : !isPaid ? 'text-blue-600' : 'text-gray-400'} />
               <span className={`font-medium text-sm ${!canUseAvailabilityOnly ? 'text-gray-400' : !isPaid ? 'text-blue-700' : 'text-gray-700'}`}>
-                Off-platform billing
+                {t('offPlatformBilling')}
               </span>
             </div>
             <p className="text-xs text-gray-500">
-              No payment collected on the platform. Ideal when billing is handled externally, e.g. hotel guests.
+              {t('offPlatformBillingDesc')}
             </p>
             {!canUseAvailabilityOnly && (
-              <p className="text-xs text-amber-600 mt-1.5 font-medium">Pro or Business plan required</p>
+              <p className="text-xs text-amber-600 mt-1.5 font-medium">{t('proOrBusinessRequired')}</p>
             )}
           </button>
         </div>
@@ -325,7 +328,7 @@ export default function GeneralView() {
           <div className="flex gap-3">
             <TextField
               fullWidth
-              label="Base price (€)"
+              label={t('basePrice')}
               type="number"
               value={price}
               onChange={e => {
@@ -333,11 +336,11 @@ export default function GeneralView() {
                 scheduleSave({ price: e.target.value })
               }}
               placeholder="e.g. 15"
-              helperText="The price your customers will pay"
+              helperText={t('basePriceHelper')}
             />
             <TextField
               sx={{ width: 180, flexShrink: 0 }}
-              label="Tax rate (%)"
+              label={t('taxRate')}
               type="number"
               value={vat}
               onChange={e => {
@@ -345,7 +348,7 @@ export default function GeneralView() {
                 scheduleSave({ vat: e.target.value })
               }}
               placeholder="e.g. 21"
-              helperText="Applied to all sales"
+              helperText={t('taxRateHelper')}
             />
           </div>
           <PriceBreakdown price={price} vat={vat} serviceFees={site.serviceFees} tier={tier} />
@@ -356,9 +359,9 @@ export default function GeneralView() {
 
       {/* Booking hours */}
       <div className="mb-5">
-        <h3 className="text-sm font-medium text-gray-700 mb-1">Booking hours</h3>
+        <h3 className="text-sm font-medium text-gray-700 mb-1">{t('bookingHours')}</h3>
         <p className="text-xs text-gray-500 mb-3">
-          Set when sunbeds are available for reservation each day.
+          {t('bookingHoursDesc')}
         </p>
 
         <div className="flex flex-col gap-1">
@@ -396,7 +399,7 @@ export default function GeneralView() {
                           <span className="text-sm text-gray-700">
                             {formatTime(slot.openTime)}
                           </span>
-                          <span className="text-xs text-gray-400">to</span>
+                          <span className="text-xs text-gray-400">{t('timeTo')}</span>
                           <span className="text-sm text-gray-700">
                             {formatTime(slot.closeTime)}
                           </span>
@@ -407,7 +410,7 @@ export default function GeneralView() {
                       ))}
                     </div>
                   ) : (
-                    <span className="text-xs text-gray-400 italic">Closed</span>
+                    <span className="text-xs text-gray-400 italic">{t('closed')}</span>
                   )}
 
                   {isActive && (
@@ -419,7 +422,7 @@ export default function GeneralView() {
                       }
                       sx={{ textTransform: 'none', fontSize: '0.7rem', minWidth: 0, ml: 1 }}
                     >
-                      Split
+                      {t('split')}
                     </Button>
                   )}
                 </div>
@@ -428,7 +431,7 @@ export default function GeneralView() {
           })}
         </div>
         <p className="text-xs text-gray-400 mt-2">
-          Use "Split" to add a break in the middle of the day, e.g. a lunch closure.
+          {t('splitHint')}
         </p>
       </div>
 
@@ -436,14 +439,14 @@ export default function GeneralView() {
 
       {/* Site location */}
       <div className="mb-5">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">Site location</h3>
+        <h3 className="text-sm font-medium text-gray-700 mb-2">{t('location')}</h3>
         <p className="text-xs text-gray-500 mb-3">
-          Search or click the map to update the location pin.
+          {t('locationDesc')}
         </p>
 
         <div className="flex items-center gap-2 px-3 py-2 rounded mb-3 text-sm bg-green-50 border border-green-200 text-green-700">
           <CheckCircleIcon fontSize="small" />
-          <span>Location — {Number(mapCoords.lat).toFixed(5)}, {Number(mapCoords.lng).toFixed(5)}</span>
+          <span>{t('locationCoords', { lat: Number(mapCoords.lat).toFixed(5), lng: Number(mapCoords.lng).toFixed(5) })}</span>
         </div>
 
         <div className="h-[400px] rounded overflow-hidden border-2 border-green-300">
@@ -477,7 +480,7 @@ export default function GeneralView() {
 
       {/* Site visibility */}
       <div className="mb-5">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">Site visibility</h3>
+        <h3 className="text-sm font-medium text-gray-700 mb-2">{t('visibility')}</h3>
         <div className={`flex items-center justify-between rounded-lg border-2 p-4 transition-all ${
           siteStatus === 'active'
             ? 'border-green-300 bg-green-50'
@@ -491,12 +494,12 @@ export default function GeneralView() {
             )}
             <div>
               <div className={`text-sm font-medium ${siteStatus === 'active' ? 'text-green-700' : 'text-gray-700'}`}>
-                {siteStatus === 'active' ? 'Site is live' : 'Site is hidden'}
+                {siteStatus === 'active' ? t('siteIsLive') : t('siteIsHidden')}
               </div>
               <div className="text-xs text-gray-500">
                 {siteStatus === 'active'
-                  ? 'Customers can find and book sunbeds at this site.'
-                  : 'This site is not visible to customers. Activate it when you\'re ready.'}
+                  ? t('siteIsLiveDesc')
+                  : t('siteIsHiddenDesc')}
               </div>
             </div>
           </div>
@@ -519,14 +522,14 @@ export default function GeneralView() {
       {/* Payment provider */}
       {isPaid && (
         <div className="mb-5">
-          <h3 className="text-sm font-medium text-gray-700 mb-2">Payment provider</h3>
+          <h3 className="text-sm font-medium text-gray-700 mb-2">{t('paymentProvider')}</h3>
           <div className="rounded-lg border-2 border-blue-500 bg-blue-50 p-4">
             <div className="flex items-center gap-2 mb-1">
               <PaymentsIcon fontSize="small" className="text-blue-600" />
-              <span className="font-medium text-sm text-blue-700">Mollie</span>
+              <span className="font-medium text-sm text-blue-700">{t('mollie')}</span>
             </div>
             <p className="text-xs text-gray-500">
-              iDEAL, cards &amp; more. Connect your Mollie account in the Security section.
+              {t('mollieDesc')}
             </p>
           </div>
         </div>
@@ -536,9 +539,9 @@ export default function GeneralView() {
 
       {/* Site features */}
       <div className="mb-5">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">Site features</h3>
+        <h3 className="text-sm font-medium text-gray-700 mb-2">{t('siteFeatures')}</h3>
         <p className="text-xs text-gray-500 mb-3">
-          Choose what this site offers. Customers will see the enabled features.
+          {t('siteFeaturesDesc')}
         </p>
         <div className="space-y-2">
           <div className={`flex items-center justify-between rounded-lg border-2 p-3 transition-all ${
@@ -549,8 +552,8 @@ export default function GeneralView() {
             <div className="flex items-center gap-3">
               <span className="text-xl">⛱️</span>
               <div>
-                <div className="text-sm font-medium text-gray-700">Sunbed reservations</div>
-                <div className="text-xs text-gray-500">Customers can reserve sunbeds on a map</div>
+                <div className="text-sm font-medium text-gray-700">{t('sunbedReservations')}</div>
+                <div className="text-xs text-gray-500">{t('sunbedReservationsDesc')}</div>
               </div>
             </div>
             <Switch
@@ -573,8 +576,8 @@ export default function GeneralView() {
             <div className="flex items-center gap-3">
               <SurfingIcon className={features.includes('rentals') ? 'text-blue-600' : 'text-gray-400'} />
               <div>
-                <div className="text-sm font-medium text-gray-700">Equipment rental</div>
-                <div className="text-xs text-gray-500">Rent out surfboards, kayaks, umbrellas, and more</div>
+                <div className="text-sm font-medium text-gray-700">{t('equipmentRental')}</div>
+                <div className="text-xs text-gray-500">{t('equipmentRentalDesc')}</div>
               </div>
             </div>
             <Switch
@@ -596,13 +599,13 @@ export default function GeneralView() {
 
       {/* Danger zone */}
       <div className="mb-4">
-        <h3 className="text-sm font-medium text-red-600 mb-2">Danger zone</h3>
+        <h3 className="text-sm font-medium text-red-600 mb-2">{t('dangerZone')}</h3>
         <div className="rounded-lg border border-red-200 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium text-gray-700">Delete this site</div>
+              <div className="text-sm font-medium text-gray-700">{t('deleteSite')}</div>
               <div className="text-xs text-gray-500">
-                Permanently remove this site and all its data. This action cannot be undone.
+                {t('deleteSiteDesc')}
               </div>
             </div>
             <Button
@@ -612,7 +615,7 @@ export default function GeneralView() {
               onClick={() => setDeleteDialogOpen(true)}
               sx={{ textTransform: 'none', whiteSpace: 'nowrap', ml: 2 }}
             >
-              Delete site
+              {t('deleteSite')}
             </Button>
           </div>
         </div>
@@ -620,11 +623,10 @@ export default function GeneralView() {
 
       {/* Delete confirmation dialog */}
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-        <DialogTitle>Delete site?</DialogTitle>
+        <DialogTitle>{t('deleteSiteTitle')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete <strong>{name}</strong>? This will permanently remove
-            the site, all inventory items, reservations, and associated data. This action cannot be undone.
+            {t('deleteSiteConfirmBody', { name })}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
@@ -633,7 +635,7 @@ export default function GeneralView() {
             disabled={deleting}
             sx={{ textTransform: 'none' }}
           >
-            Cancel
+            {t('cancel')}
           </Button>
           <Button
             color="error"
@@ -647,9 +649,9 @@ export default function GeneralView() {
             sx={{ textTransform: 'none' }}
           >
             {deleting ? (
-              <><CircularProgress size={16} color="inherit" sx={{ mr: 1 }} /> Deleting…</>
+              <><CircularProgress size={16} color="inherit" sx={{ mr: 1 }} /> {t('deleting')}</>
             ) : (
-              'Delete permanently'
+              t('deletePermanently')
             )}
           </Button>
         </DialogActions>

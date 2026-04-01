@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { useFormState, useFormStatus } from 'react-dom'
 import { submitForm } from '@/app/account/actions'
 
@@ -98,10 +99,11 @@ const COUNTRY_OPTIONS = [
 
 function SelectField({
   name, label, defaultValue, required = false,
-  options,
+  options, selectCountryLabel,
 }: {
   name: string; label: string; defaultValue?: string; required?: boolean
   options: { code: string; label: string }[]
+  selectCountryLabel: string
 }) {
   return (
     <div>
@@ -115,7 +117,7 @@ function SelectField({
         defaultValue={defaultValue ?? ''}
         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 transition-colors"
       >
-        <option value="">Select country…</option>
+        <option value="">{selectCountryLabel}</option>
         {options.map(o => (
           <option key={o.code} value={o.code}>{o.label}</option>
         ))}
@@ -126,7 +128,8 @@ function SelectField({
 
 /* ── Submit button ───────────────────────────────────────────────────────── */
 
-function SubmitButton({ label = 'Continue' }: { label?: string }) {
+function SubmitButton({ label }: { label: string }) {
+  const t = useTranslations('Onboarding')
   const { pending } = useFormStatus()
   return (
     <button
@@ -137,7 +140,7 @@ function SubmitButton({ label = 'Continue' }: { label?: string }) {
       {pending ? (
         <>
           <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          Saving…
+          {t('saving')}
         </>
       ) : (
         label
@@ -149,9 +152,10 @@ function SubmitButton({ label = 'Continue' }: { label?: string }) {
 /* ── Step indicator ──────────────────────────────────────────────────────── */
 
 function StepIndicator({ currentStep }: { currentStep: number }) {
+  const t = useTranslations('Onboarding')
   const steps = [
-    { number: 1, label: 'Account details' },
-    { number: 2, label: 'Connect payments' },
+    { number: 1, label: t('stepAccount') },
+    { number: 2, label: t('stepPayments') },
   ]
 
   return (
@@ -202,6 +206,7 @@ function AccountStep({
   defaultAccount: AccountData
   onComplete: () => void
 }) {
+  const t = useTranslations('Onboarding')
   const [formState, formAction] = useFormState(
     async (prev: { status: string; errors?: string[] }, formData: FormData) => {
       const result = await submitForm(prev, formData)
@@ -216,10 +221,8 @@ function AccountStep({
   return (
     <>
       <div className="mb-6">
-        <h2 className="text-lg font-semibold text-gray-900">Tell us about yourself</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          We need these details to set up your partner account and prepare your payment onboarding.
-        </p>
+        <h2 className="text-lg font-semibold text-gray-900">{t('accountFormTitle')}</h2>
+        <p className="text-sm text-gray-500 mt-1">{t('accountFormSubtitle')}</p>
       </div>
 
       {formState.status === 'error' && formState.errors && (
@@ -228,7 +231,7 @@ function AccountStep({
             <svg className="w-5 h-5 text-red-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
             </svg>
-            <p className="text-sm font-medium text-red-800">Please fix the following:</p>
+            <p className="text-sm font-medium text-red-800">{t('fixErrors')}</p>
           </div>
           <ul className="ml-7 list-disc text-sm text-red-700 space-y-0.5">
             {formState.errors.map((error: string, i: number) => (
@@ -241,45 +244,45 @@ function AccountStep({
       <form action={formAction}>
         {/* Personal info */}
         <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Personal information</h3>
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('personalInfo')}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field name="firstName" label="First name" placeholder="John" defaultValue={defaultAccount.firstName || ''} required />
-            <Field name="lastName" label="Last name" placeholder="Doe" defaultValue={defaultAccount.lastName || ''} required />
-            <Field name="email" label="Email" type="email" placeholder="john@company.com" defaultValue={defaultAccount.email || ''} required />
-            <Field name="phoneNumber" label="Phone number" type="tel" placeholder="+358 40 123 4567" defaultValue={defaultAccount.phoneNumber || ''} required />
+            <Field name="firstName" label={t('firstName')} placeholder="John" defaultValue={defaultAccount.firstName || ''} required />
+            <Field name="lastName" label={t('lastName')} placeholder="Doe" defaultValue={defaultAccount.lastName || ''} required />
+            <Field name="email" label={t('email')} type="email" placeholder="john@company.com" defaultValue={defaultAccount.email || ''} required />
+            <Field name="phoneNumber" label={t('phone')} type="tel" placeholder="+358 40 123 4567" defaultValue={defaultAccount.phoneNumber || ''} required />
           </div>
         </div>
 
         {/* Company info */}
         <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Company</h3>
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('company')}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field name="company" label="Company name" placeholder="Sunbnb Oy" defaultValue={defaultAccount.company || ''} required />
-            <Field name="businessId" label="Business ID" placeholder="FI12345678" defaultValue={defaultAccount.businessId || ''} required />
+            <Field name="company" label={t('companyName')} placeholder="Sunbnb Oy" defaultValue={defaultAccount.company || ''} required />
+            <Field name="businessId" label={t('businessId')} placeholder="FI12345678" defaultValue={defaultAccount.businessId || ''} required />
             <div className="md:col-span-2">
-              <Field name="websiteUrl" label="Website" type="url" placeholder="https://sunbnb.com" defaultValue={defaultAccount.websiteUrl || ''} />
+              <Field name="websiteUrl" label={t('website')} type="url" placeholder="https://sunbnb.com" defaultValue={defaultAccount.websiteUrl || ''} />
             </div>
             <div className="md:col-span-2">
-              <Field name="address" label="Street address" placeholder="Paseo Marítimo 12" defaultValue={defaultAccount.address || ''} required />
+              <Field name="address" label={t('address')} placeholder="Paseo Marítimo 12" defaultValue={defaultAccount.address || ''} required />
             </div>
-            <Field name="postalCode" label="Postal code" placeholder="29602" defaultValue={defaultAccount.postalCode || ''} required />
-            <Field name="city" label="City" placeholder="Marbella" defaultValue={defaultAccount.city || ''} required />
+            <Field name="postalCode" label={t('postalCode')} placeholder="29602" defaultValue={defaultAccount.postalCode || ''} required />
+            <Field name="city" label={t('city')} placeholder="Marbella" defaultValue={defaultAccount.city || ''} required />
             <div className="md:col-span-2">
-              <SelectField name="country" label="Country" defaultValue={defaultAccount.country || ''} required options={COUNTRY_OPTIONS} />
+              <SelectField name="country" label={t('country')} defaultValue={defaultAccount.country || ''} required options={COUNTRY_OPTIONS} selectCountryLabel={t('selectCountry')} />
             </div>
           </div>
         </div>
 
         {/* Billing */}
         <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Billing</h3>
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('billing')}</h3>
           <div className="grid grid-cols-1 gap-4">
-            <Field name="bankAccount" label="Bank account (IBAN)" placeholder="FI12 3456 7891 2345" defaultValue={defaultAccount.bankAccount || ''} />
+            <Field name="bankAccount" label={t('iban')} placeholder="FI12 3456 7891 2345" defaultValue={defaultAccount.bankAccount || ''} />
           </div>
         </div>
 
         <div className="flex justify-end">
-          <SubmitButton label="Save & continue" />
+          <SubmitButton label={t('saveAndContinue')} />
         </div>
       </form>
     </>
@@ -289,6 +292,7 @@ function AccountStep({
 /* ── Step 2: Mollie connect ──────────────────────────────────────────────── */
 
 function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
+  const t = useTranslations('Onboarding')
   const router = useRouter()
   const [tab, setTab] = useState<'existing' | 'new'>('existing')
   const [submitting, setSubmitting] = useState(false)
@@ -345,17 +349,12 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
   return (
     <>
       <div className="mb-6">
-        <h2 className="text-lg font-semibold text-gray-900">Connect payments</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          Connect your Mollie account to accept payments from customers. You can also do this later from your account settings.
-        </p>
+        <h2 className="text-lg font-semibold text-gray-900">{t('connectFormTitle')}</h2>
+        <p className="text-sm text-gray-500 mt-1">{t('connectFormSubtitle')}</p>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
-        <p className="text-sm text-gray-500 mb-4">
-          Connect your Mollie account to start accepting iDEAL, credit/debit card, and other
-          payment methods from your customers.
-        </p>
+        <p className="text-sm text-gray-500 mb-4">{t('connectMollieDesc')}</p>
 
         {/* Tab switcher */}
         <div className="flex border-b border-gray-200 mb-4">
@@ -367,7 +366,7 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            I have a Mollie account
+            {t('haveMollie')}
           </button>
           <button
             onClick={() => setTab('new')}
@@ -377,15 +376,13 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            New to Mollie
+            {t('newToMollie')}
           </button>
         </div>
 
         {tab === 'existing' ? (
           <div className="space-y-3">
-            <p className="text-xs text-gray-500">
-              Log in to your existing Mollie account and authorize our platform to manage payments on your behalf.
-            </p>
+            <p className="text-xs text-gray-500">{t('existingAccountDesc')}</p>
             <a
               href="/api/mollie/authorize"
               className="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
@@ -393,18 +390,16 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m9.86-4.122a4.5 4.5 0 0 0-1.242-7.244l4.5-4.5a4.5 4.5 0 0 1 6.364 6.364l-1.757 1.757" />
               </svg>
-              Connect Mollie account
+              {t('connectMollieAccount')}
             </a>
           </div>
         ) : unavailable ? (
           <div>
             <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-4">
-              <p className="text-sm text-amber-800 mb-2">
-                Automatic account creation is not yet available. You can create a Mollie account manually and then connect it.
-              </p>
+              <p className="text-sm text-amber-800 mb-2">{t('unavailableTitle')}</p>
               <ol className="text-sm text-amber-800 list-decimal list-inside space-y-1">
                 <li>Create an account at <a href="https://my.mollie.com/signup" target="_blank" rel="noopener noreferrer" className="font-medium underline">my.mollie.com</a></li>
-                <li>Switch to the <button onClick={() => { setTab('existing'); setUnavailable(false) }} className="font-medium underline">&ldquo;I have a Mollie account&rdquo;</button> tab to connect</li>
+                <li>Switch to the <button onClick={() => { setTab('existing'); setUnavailable(false) }} className="font-medium underline">&ldquo;{t('haveMollie')}&rdquo;</button> tab to connect</li>
               </ol>
             </div>
             <a
@@ -416,15 +411,12 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
               </svg>
-              Sign up at Mollie
+              {t('signUpAtMollie')}
             </a>
           </div>
         ) : (
           <div>
-            <p className="text-xs text-gray-500 mb-4">
-              We&apos;ll create a Mollie account for you with your details pre-filled.
-              You&apos;ll just need to set a password and approve the connection.
-            </p>
+            <p className="text-xs text-gray-500 mb-4">{t('newAccountDesc')}</p>
 
             {formError && (
               <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
@@ -435,43 +427,43 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
             <form onSubmit={handleClientLink} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label htmlFor="ob-givenName" className={labelCls}>First name *</label>
+                  <label htmlFor="ob-givenName" className={labelCls}>{t('firstName')} *</label>
                   <input id="ob-givenName" name="givenName" required defaultValue={partnerData?.firstName ?? ''} className={inputCls} />
                 </div>
                 <div>
-                  <label htmlFor="ob-familyName" className={labelCls}>Last name *</label>
+                  <label htmlFor="ob-familyName" className={labelCls}>{t('lastName')} *</label>
                   <input id="ob-familyName" name="familyName" required defaultValue={partnerData?.lastName ?? ''} className={inputCls} />
                 </div>
               </div>
 
               <div>
-                <label htmlFor="ob-email" className={labelCls}>Email *</label>
+                <label htmlFor="ob-email" className={labelCls}>{t('email')} *</label>
                 <input id="ob-email" name="email" type="email" required defaultValue={partnerData?.email ?? ''} className={inputCls} />
               </div>
 
               <div>
-                <label htmlFor="ob-org" className={labelCls}>Organization / company name *</label>
+                <label htmlFor="ob-org" className={labelCls}>{t('orgName')} *</label>
                 <input id="ob-org" name="organizationName" required defaultValue={partnerData?.company ?? ''} className={inputCls} />
               </div>
 
               <div>
-                <label htmlFor="ob-street" className={labelCls}>Street and number</label>
+                <label htmlFor="ob-street" className={labelCls}>{t('streetAndNumber')}</label>
                 <input id="ob-street" name="streetAndNumber" defaultValue={partnerData?.address ?? ''} placeholder="e.g. Keizersgracht 126" className={inputCls} />
               </div>
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label htmlFor="ob-postalCode" className={labelCls}>Postal code</label>
+                  <label htmlFor="ob-postalCode" className={labelCls}>{t('postalCode')}</label>
                   <input id="ob-postalCode" name="postalCode" placeholder="1015 AA" defaultValue={partnerData?.postalCode ?? ''} className={inputCls} />
                 </div>
                 <div>
-                  <label htmlFor="ob-city" className={labelCls}>City</label>
+                  <label htmlFor="ob-city" className={labelCls}>{t('city')}</label>
                   <input id="ob-city" name="city" placeholder="Amsterdam" defaultValue={partnerData?.city ?? ''} className={inputCls} />
                 </div>
                 <div>
-                  <label htmlFor="ob-country" className={labelCls}>Country *</label>
+                  <label htmlFor="ob-country" className={labelCls}>{t('country')} *</label>
                   <select id="ob-country" name="country" required defaultValue={partnerData?.country ?? 'NL'} className={inputCls}>
-                    <option value="">Select country…</option>
+                    <option value="">{t('selectCountry')}</option>
                     {COUNTRY_OPTIONS.map((c) => (
                       <option key={c.code} value={c.code}>{c.label}</option>
                     ))}
@@ -481,11 +473,11 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label htmlFor="ob-reg" className={labelCls}>Registration number</label>
+                  <label htmlFor="ob-reg" className={labelCls}>{t('registrationNumber')}</label>
                   <input id="ob-reg" name="registrationNumber" placeholder="12345678" className={inputCls} />
                 </div>
                 <div>
-                  <label htmlFor="ob-vat" className={labelCls}>VAT number</label>
+                  <label htmlFor="ob-vat" className={labelCls}>{t('vatNumber')}</label>
                   <input id="ob-vat" name="vatNumber" placeholder="NL123456789B01" className={inputCls} />
                 </div>
               </div>
@@ -498,14 +490,14 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
                 {submitting ? (
                   <>
                     <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Creating account…
+                    {t('creatingAccount')}
                   </>
                 ) : (
                   <>
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
                     </svg>
-                    Create &amp; connect Mollie account
+                    {t('createMollieAccount')}
                   </>
                 )}
               </button>
@@ -520,11 +512,9 @@ function MollieStep({ partnerData }: { partnerData: PartnerData | null }) {
           onClick={() => router.push('/dashboard')}
           className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
         >
-          Do this later
+          {t('doLater')}
         </button>
-        <p className="text-xs text-gray-400">
-          You can connect Mollie anytime from Account &rarr; Mollie Payments
-        </p>
+        <p className="text-xs text-gray-400">{t('connectLaterHint')}</p>
       </div>
     </>
   )
@@ -538,6 +528,7 @@ export default function OnboardingView({
   mollieConnected,
   partnerData,
 }: OnboardingViewProps) {
+  const t = useTranslations('Onboarding')
   const [step, setStep] = useState(hasAccount ? 2 : 1)
 
   return (
@@ -546,10 +537,8 @@ export default function OnboardingView({
 
         {/* Header */}
         <div className="mb-2">
-          <h1 className="text-xl font-bold text-gray-900">Welcome to Sunbnb</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Let&apos;s get your partner account set up in a few quick steps.
-          </p>
+          <h1 className="text-xl font-bold text-gray-900">{t('welcomeTitle')}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t('welcomeSubtitle')}</p>
         </div>
 
         <StepIndicator currentStep={step} />

@@ -3,6 +3,7 @@
 import React, { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 
 /* ── MUI ───────────────────────────────────────────────────── */
 import Button from '@mui/material/Button'
@@ -100,15 +101,15 @@ function fmtDateTime(iso: string) {
     + ', ' + d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
-function paymentStatusLabel(status: string): string {
+function paymentStatusKey(status: string): string {
   switch (status) {
-    case RESERVATION_PENDING: return 'Pending'
-    case 'confirmed': return 'Confirmed'
-    case RESERVATION_COMPLETE: return 'Paid'
-    case RESERVATION_PAID_IN_CASH: return 'Paid in cash'
-    case RESERVATION_CANCELED: return 'Canceled'
-    case RESERVATION_PAYMENT_FAILED: return 'Payment failed'
-    case RESERVATION_REFUNDED: return 'Refunded'
+    case RESERVATION_PENDING: return 'payStatusPending'
+    case 'confirmed': return 'payStatusConfirmed'
+    case RESERVATION_COMPLETE: return 'payStatusPaid'
+    case RESERVATION_PAID_IN_CASH: return 'payStatusPaidInCash'
+    case RESERVATION_CANCELED: return 'payStatusCanceled'
+    case RESERVATION_PAYMENT_FAILED: return 'payStatusFailed'
+    case RESERVATION_REFUNDED: return 'payStatusRefunded'
     default: return status
   }
 }
@@ -131,13 +132,13 @@ function paymentChipColor(status: string): 'success' | 'warning' | 'error' | 'de
   }
 }
 
-function opStatusLabel(status: string): string {
+function opStatusKey(status: string): string {
   switch (status) {
-    case OP_EXPECTED: return 'Expected'
-    case OP_CHECKED_IN: return 'Checked in'
-    case OP_WALKED_IN: return 'Walk-in'
-    case OP_DEPARTED: return 'Departed'
-    case OP_NO_SHOW: return 'No-show'
+    case OP_EXPECTED: return 'statusExpected'
+    case OP_CHECKED_IN: return 'statusCheckedIn'
+    case OP_WALKED_IN: return 'statusWalkIn'
+    case OP_DEPARTED: return 'statusDeparted'
+    case OP_NO_SHOW: return 'statusNoShow'
     default: return status
   }
 }
@@ -175,13 +176,13 @@ function TimelineStep({ label, time, active, last }: { label: string; time: stri
 /* ── Action definitions ────────────────────────────────────── */
 
 interface ActionDef {
-  label: string
+  labelKey: string
   icon: React.ReactNode
   variant: 'contained' | 'outlined' | 'text'
   color: 'primary' | 'success' | 'error' | 'inherit'
   needsConfirm?: boolean
-  confirmTitle?: string
-  confirmBody?: string
+  confirmTitleKey?: string
+  confirmBodyKey?: string
   action: (id: string) => Promise<{ status: string; errors?: (string | undefined)[] }>
 }
 
@@ -192,30 +193,30 @@ function getActions(reservation: ReservationData): ActionDef[] {
     case OP_EXPECTED:
       return [
         {
-          label: 'Check in',
+          labelKey: 'checkIn',
           icon: <LoginIcon sx={{ fontSize: 18 }} />,
           variant: 'contained',
           color: 'primary',
           action: checkInReservation,
         },
         {
-          label: 'No-show',
+          labelKey: 'noShow',
           icon: <BlockIcon sx={{ fontSize: 18 }} />,
           variant: 'outlined',
           color: 'inherit',
           needsConfirm: true,
-          confirmTitle: 'Mark as no-show?',
-          confirmBody: 'This guest will be recorded as a no-show.',
+          confirmTitleKey: 'confirmNoShowTitle',
+          confirmBodyKey: 'confirmNoShowBody',
           action: markNoShow,
         },
         {
-          label: 'Cancel reservation',
+          labelKey: 'cancelReservation',
           icon: <CancelIcon sx={{ fontSize: 18 }} />,
           variant: 'text',
           color: 'error',
           needsConfirm: true,
-          confirmTitle: 'Cancel reservation?',
-          confirmBody: 'The guest will be notified by email and the booking will be released.',
+          confirmTitleKey: 'confirmCancelTitle',
+          confirmBodyKey: 'confirmCancelBody',
           action: cancelReservation,
         },
       ]
@@ -223,20 +224,20 @@ function getActions(reservation: ReservationData): ActionDef[] {
     case OP_WALKED_IN:
       return [
         {
-          label: 'Mark departed',
+          labelKey: 'markDeparted',
           icon: <LogoutIcon sx={{ fontSize: 18 }} />,
           variant: 'contained',
           color: 'success',
           action: markDeparted,
         },
         {
-          label: 'Cancel reservation',
+          labelKey: 'cancelReservation',
           icon: <CancelIcon sx={{ fontSize: 18 }} />,
           variant: 'text',
           color: 'error',
           needsConfirm: true,
-          confirmTitle: 'Cancel reservation?',
-          confirmBody: 'The guest will be notified by email and the booking will be released.',
+          confirmTitleKey: 'confirmCancelTitle',
+          confirmBodyKey: 'confirmCancelBody',
           action: cancelReservation,
         },
       ]
@@ -249,6 +250,7 @@ function getActions(reservation: ReservationData): ActionDef[] {
 
 export default function ReservationView({ reservation }: { reservation: ReservationData }) {
   const router = useRouter()
+  const t = useTranslations('ReservationView')
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [confirmAction, setConfirmAction] = useState<ActionDef | null>(null)
@@ -312,7 +314,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
       {/* ── Back link ── */}
       <Link href="/frontdesk" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4">
         <ArrowBackIcon sx={{ fontSize: 16 }} />
-        <span>Frontdesk</span>
+        <span>{t('backLink')}</span>
       </Link>
 
       {/* ── Header ── */}
@@ -323,7 +325,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
               {r.guestName || 'Guest'}
             </h1>
             {isCanceled && (
-              <Chip label="Canceled" size="small" color="error" sx={{ height: 22, fontSize: '0.7rem', fontWeight: 600 }} />
+              <Chip label={t('canceled')} size="small" color="error" sx={{ height: 22, fontSize: '0.7rem', fontWeight: 600 }} />
             )}
           </div>
           <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -337,7 +339,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
         {/* Status chips */}
         <div className="flex items-center gap-2 flex-shrink-0">
           <Chip
-            label={paymentStatusLabel(r.status)}
+            label={t(paymentStatusKey(r.status) as any)}
             size="small"
             color={paymentChipColor(r.status)}
             variant="outlined"
@@ -345,7 +347,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
           />
           {!isCanceled && (
             <Chip
-              label={opStatusLabel(r.operationalStatus)}
+              label={t(opStatusKey(r.operationalStatus) as any)}
               size="small"
               color={opChipColor(r.operationalStatus)}
               sx={{ height: 26, fontSize: '0.75rem', fontWeight: 600 }}
@@ -370,7 +372,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
               <CalendarTodayIcon sx={{ fontSize: 16, color: '#6b7280' }} />
-              Booking details
+              {t('bookingDetails')}
             </h2>
             <div className="grid gap-3">
               {/* Date/time */}
@@ -385,7 +387,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
                   ) : (
                     <>
                       <p className="text-sm text-gray-800">{fmtDate(r.from)} – {fmtDate(r.to)}</p>
-                      <p className="text-xs text-gray-500">Multi-day booking</p>
+                      <p className="text-xs text-gray-500">{t('multiDay')}</p>
                     </>
                   )}
                 </div>
@@ -409,7 +411,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
                   <PaymentIcon sx={{ fontSize: 16, color: '#9ca3af' }} />
                   <span className="text-sm text-gray-700">
                     €{r.paymentAmount.toFixed(2)}
-                    {r.site.vat != null && <span className="text-xs text-gray-400 ml-1">(incl. {r.site.vat}% VAT)</span>}
+                    {r.site.vat != null && <span className="text-xs text-gray-400 ml-1">{t('vatIncl', { vat: r.site.vat })}</span>}
                   </span>
                 </div>
               )}
@@ -420,7 +422,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
                   <EventSeatIcon sx={{ fontSize: 16, color: '#9ca3af', mt: 0.3 }} />
                   <div>
                     <p className="text-sm text-gray-700">
-                      {r.items.length} sunbed{r.items.length !== 1 ? 's' : ''}
+                      {t('sunbeds', { count: r.items.length })}
                     </p>
                     <div className="flex flex-wrap gap-1 mt-1">
                       {r.items.map(item => (
@@ -441,7 +443,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
               <div className="flex items-center gap-3 min-w-0">
                 <TagIcon sx={{ fontSize: 16, color: '#d1d5db', flexShrink: 0 }} />
                 <span className="font-mono text-xs text-gray-400 select-all truncate">{r.id}</span>
-                <Tooltip title={copied ? 'Copied!' : 'Copy ID'} arrow>
+                <Tooltip title={copied ? t('copiedTooltip') : t('copyIdTooltip')} arrow>
                   <IconButton size="small" onClick={copyId} sx={{ ml: -0.5, flexShrink: 0 }}>
                     <ContentCopyIcon sx={{ fontSize: 14, color: copied ? '#22c55e' : '#d1d5db' }} />
                   </IconButton>
@@ -454,7 +456,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
               <NoteIcon sx={{ fontSize: 16, color: '#6b7280' }} />
-              Internal notes
+              {t('internalNotes')}
             </h2>
             {editingNotes ? (
               <div className="flex flex-col gap-2">
@@ -465,7 +467,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
                   multiline
                   rows={3}
                   size="small"
-                  placeholder="Notes visible only to staff…"
+                  placeholder={t('notesPlaceholder')}
                   fullWidth
                   autoFocus
                   sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
@@ -476,7 +478,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
                     onClick={() => setEditingNotes(false)}
                     sx={{ textTransform: 'none' }}
                   >
-                    Cancel
+                    {t('cancel')}
                   </Button>
                   <Button
                     size="small"
@@ -486,7 +488,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
                     startIcon={notesSaving ? <CircularProgress size={14} /> : undefined}
                     sx={{ textTransform: 'none' }}
                   >
-                    {notesSaving ? 'Saving…' : 'Save'}
+                    {notesSaving ? t('saving') : t('save')}
                   </Button>
                 </div>
               </div>
@@ -498,7 +500,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
                 {r.internalNotes ? (
                   <span className="whitespace-pre-wrap">{r.internalNotes}</span>
                 ) : (
-                  <span className="text-gray-400">Click to add notes…</span>
+                  <span className="text-gray-400">{t('addNotes')}</span>
                 )}
               </button>
             )}
@@ -509,12 +511,12 @@ export default function ReservationView({ reservation }: { reservation: Reservat
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h2 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
                 <BeachAccessIcon sx={{ fontSize: 16, color: '#6b7280' }} />
-                Actions
+                {t('actionsTitle')}
               </h2>
               <div className="flex flex-wrap gap-2">
                 {actions.map(a => (
                   <Button
-                    key={a.label}
+                    key={a.labelKey}
                     size="small"
                     variant={a.variant}
                     color={a.color}
@@ -523,7 +525,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
                     disabled={isPending}
                     sx={{ textTransform: 'none', fontSize: '0.85rem', px: 2, minHeight: 36 }}
                   >
-                    {a.label}
+                    {t(a.labelKey as any)}
                   </Button>
                 ))}
               </div>
@@ -538,28 +540,28 @@ export default function ReservationView({ reservation }: { reservation: Reservat
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
               <ScheduleIcon sx={{ fontSize: 16, color: '#6b7280' }} />
-              Timeline
+              {t('timeline')}
             </h2>
             <div>
               <TimelineStep
-                label="Booked"
+                label={t('booked')}
                 time={r.createdAt}
                 active={false}
               />
               {r.reminderSentAt && (
                 <TimelineStep
-                  label="Reminder sent"
+                  label={t('reminderSent')}
                   time={r.reminderSentAt}
                   active={false}
                 />
               )}
               <TimelineStep
-                label="Checked in"
+                label={t('checkedIn')}
                 time={r.checkedInAt}
                 active={r.operationalStatus === OP_CHECKED_IN || r.operationalStatus === OP_WALKED_IN}
               />
               <TimelineStep
-                label={r.operationalStatus === OP_NO_SHOW ? 'No-show' : 'Departed'}
+                label={r.operationalStatus === OP_NO_SHOW ? t('noShow') : t('departed')}
                 time={r.operationalStatus === OP_NO_SHOW ? r.updatedAt : r.departedAt}
                 active={r.operationalStatus === OP_DEPARTED || r.operationalStatus === OP_NO_SHOW}
                 last
@@ -571,13 +573,13 @@ export default function ReservationView({ reservation }: { reservation: Reservat
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
               <PaymentIcon sx={{ fontSize: 16, color: '#6b7280' }} />
-              Payment
+              {t('paymentTitle')}
             </h2>
             <div className="grid gap-2.5">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Status</span>
+                <span className="text-gray-500">{t('status')}</span>
                 <Chip
-                  label={paymentStatusLabel(r.status)}
+                  label={t(paymentStatusKey(r.status) as any)}
                   size="small"
                   color={paymentChipColor(r.status)}
                   variant="outlined"
@@ -586,27 +588,27 @@ export default function ReservationView({ reservation }: { reservation: Reservat
               </div>
               {r.paymentAmount != null && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Amount</span>
+                  <span className="text-gray-500">{t('amount')}</span>
                   <span className="text-gray-800 font-medium">€{r.paymentAmount.toFixed(2)}</span>
                 </div>
               )}
               {r.paymentRef && (
                 <div className="flex justify-between text-sm gap-4 min-w-0">
-                  <span className="text-gray-500 flex-shrink-0">Reference</span>
+                  <span className="text-gray-500 flex-shrink-0">{t('reference')}</span>
                   <span className="text-gray-600 font-mono text-xs truncate">{r.paymentRef}</span>
                 </div>
               )}
               <Divider sx={{ my: 0.5 }} />
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Type</span>
-                <span className="text-gray-700">{isHourly ? 'Hourly' : 'Daily'}</span>
+                <span className="text-gray-500">{t('type')}</span>
+                <span className="text-gray-700">{isHourly ? t('hourly') : t('daily')}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Created</span>
+                <span className="text-gray-500">{t('created')}</span>
                 <span className="text-gray-600 text-xs">{fmtDateTime(r.createdAt)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Updated</span>
+                <span className="text-gray-500">{t('updated')}</span>
                 <span className="text-gray-600 text-xs">{fmtDateTime(r.updatedAt)}</span>
               </div>
             </div>
@@ -622,16 +624,16 @@ export default function ReservationView({ reservation }: { reservation: Reservat
         fullWidth
       >
         <DialogTitle sx={{ fontSize: '0.95rem', fontWeight: 600, pb: 0.5 }}>
-          {confirmAction?.confirmTitle}
+          {confirmAction?.confirmTitleKey ? t(confirmAction.confirmTitleKey as any) : ''}
         </DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ fontSize: '0.85rem' }}>
-            {confirmAction?.confirmBody}
+            {confirmAction?.confirmBodyKey ? t(confirmAction.confirmBodyKey as any) : ''}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setConfirmAction(null)} sx={{ textTransform: 'none' }}>
-            Cancel
+            {t('cancel')}
           </Button>
           <Button
             variant="contained"
@@ -641,7 +643,7 @@ export default function ReservationView({ reservation }: { reservation: Reservat
             startIcon={isPending ? <CircularProgress size={14} /> : confirmAction?.icon}
             sx={{ textTransform: 'none' }}
           >
-            {confirmAction?.label}
+            {confirmAction ? t(confirmAction.labelKey as any) : ''}
           </Button>
         </DialogActions>
       </Dialog>

@@ -3,6 +3,7 @@
 import { saveContentFields, uploadContentImage } from '../content-actions'
 
 import React, { useRef, useState, useCallback } from 'react'
+import { useTranslations } from 'next-intl'
 import Button from '@mui/material/Button'
 import TextField from '@mui/material/TextField'
 import Divider from '@mui/material/Divider'
@@ -18,19 +19,20 @@ import SyncIcon from '@mui/icons-material/Sync'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import { useSite } from '@/app/sites/site-context'
 
-const ALL_SERVICES = [
-  { value: 'wc', label: 'WC', description: 'Restroom facilities', icon: <WcIcon /> },
-  { value: 'food', label: 'Food', description: 'Food service available', icon: <RestaurantIcon /> },
-  { value: 'drinks', label: 'Drinks', description: 'Bar or refreshments', icon: <LocalBarIcon /> },
-  { value: 'rental', label: 'Rental', description: 'Equipment rental', icon: <SurfingIcon /> },
-]
-
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
 export default function Content() {
 
   const { site } = useSite()
+  const t = useTranslations('SiteContent')
   const fileRef = useRef<HTMLInputElement>(null)
+
+  const ALL_SERVICES = [
+    { value: 'wc', label: t('wc'), description: t('wcDesc'), icon: <WcIcon /> },
+    { value: 'food', label: t('food'), description: t('foodDesc'), icon: <RestaurantIcon /> },
+    { value: 'drinks', label: t('drinks'), description: t('drinksDesc'), icon: <LocalBarIcon /> },
+    { value: 'rental', label: t('rental'), description: t('rentalDesc'), icon: <SurfingIcon /> },
+  ]
 
   const [description, setDescription] = useState(site.description || '')
   const [services, setServices] = useState<string[]>(
@@ -143,15 +145,15 @@ export default function Content() {
         saveStatus === 'error' ? 'bg-red-50 border border-red-200 text-red-600' :
         'bg-gray-50 border border-gray-200 text-gray-400'
       }`}>
-        {saveStatus === 'saving' && <><SyncIcon fontSize="small" className="animate-spin" /> {uploading ? 'Uploading image…' : 'Saving…'}</>}
-        {saveStatus === 'saved' && <><CloudDoneIcon fontSize="small" /> All changes saved</>}
-        {saveStatus === 'error' && <><WarningAmberIcon fontSize="small" /> Error saving changes</>}
-        {saveStatus === 'idle' && <><CloudDoneIcon fontSize="small" /> Up to date</>}
+        {saveStatus === 'saving' && <><SyncIcon fontSize="small" className="animate-spin" /> {uploading ? t('uploadingImage') : t('saving')}</>}
+        {saveStatus === 'saved' && <><CloudDoneIcon fontSize="small" /> {t('allChangesSaved')}</>}
+        {saveStatus === 'error' && <><WarningAmberIcon fontSize="small" /> {t('errorSaving')}</>}
+        {saveStatus === 'idle' && <><CloudDoneIcon fontSize="small" /> {t('upToDate')}</>}
       </div>
 
       {/* Cover photo */}
       <div className="mb-5">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">Cover photo</h3>
+        <h3 className="text-sm font-medium text-gray-700 mb-2">{t('coverPhoto')}</h3>
 
         {displayImage ? (
           <div
@@ -177,7 +179,7 @@ export default function Content() {
             {dragging && !uploading && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-blue-500/20">
                 <CloudUploadIcon sx={{ fontSize: 36 }} className="text-blue-500" />
-                <p className="text-sm font-medium text-blue-600 mt-1">Drop to replace</p>
+                <p className="text-sm font-medium text-blue-600 mt-1">{t('dropToReplace')}</p>
               </div>
             )}
             <div className={`absolute inset-0 bg-black/0 hover:bg-black/30 transition-all flex items-center justify-center opacity-0 hover:opacity-100 ${uploading || dragging ? 'pointer-events-none' : ''}`}>
@@ -187,7 +189,7 @@ export default function Content() {
                 component="label"
                 sx={{ textTransform: 'none', bgcolor: 'white', color: 'gray', '&:hover': { bgcolor: 'gray.100' } }}
               >
-                Replace
+                {t('replace')}
                 <input
                   ref={fileRef}
                   type="file"
@@ -215,10 +217,10 @@ export default function Content() {
               className={dragging ? 'text-blue-400' : 'text-gray-300'}
             />
             <p className={`text-sm mt-2 ${dragging ? 'text-blue-600' : 'text-gray-500'}`}>
-              {dragging ? 'Drop image here' : 'Drag & drop an image, or click to browse'}
+              {dragging ? t('dropHere') : t('dragAndDrop')}
             </p>
             <p className="text-xs text-gray-400 mt-1">
-              Recommended size: 1200 × 400px · JPG or PNG
+              {t('imageSize')}
             </p>
             <input
               ref={fileRef}
@@ -235,7 +237,7 @@ export default function Content() {
 
       {/* Description */}
       <div className="mb-5">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">Description</h3>
+        <h3 className="text-sm font-medium text-gray-700 mb-2">{t('description')}</h3>
         <TextField
           fullWidth
           multiline
@@ -254,9 +256,9 @@ export default function Content() {
 
       {/* Services */}
       <div className="mb-5">
-        <h3 className="text-sm font-medium text-gray-700 mb-1">On-site services</h3>
+        <h3 className="text-sm font-medium text-gray-700 mb-1">{t('onSiteServices')}</h3>
         <p className="text-xs text-gray-500 mb-3">
-          Select what's available at your beach. These are shown as icons on the booking page.
+          {t('onSiteServicesDesc')}
         </p>
         <div className="grid grid-cols-2 gap-2">
           {ALL_SERVICES.map(service => {

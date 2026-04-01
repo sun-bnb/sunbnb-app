@@ -11,17 +11,16 @@ import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
 import EventSeatIcon from '@mui/icons-material/EventSeat'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
+import { useTranslations } from 'next-intl'
 
 import { useSite } from '@/app/sites/site-context'
 import { getPaidItemsByMonth } from './actions'
 
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-]
+const MONTH_KEYS = ['january','february','march','april','may','june','july','august','september','october','november','december'] as const
 
 export default function AccountingView() {
   const { site } = useSite()
+  const t = useTranslations('SiteAccounting')
 
   const now = new Date()
   const [selectedYear, setSelectedYear] = useState(now.getFullYear())
@@ -89,9 +88,9 @@ export default function AccountingView() {
     <div className="pt-2">
       {/* Header */}
       <div className="mt-4 mb-6">
-        <h2 className="text-lg font-semibold text-gray-800">Accounting</h2>
+        <h2 className="text-lg font-semibold text-gray-800">{t('title')}</h2>
         <p className="text-sm text-gray-500 mt-1">
-          Track revenue from reservations and product orders.
+          {t('subtitle')}
         </p>
       </div>
 
@@ -101,7 +100,7 @@ export default function AccountingView() {
           <ChevronLeftIcon />
         </IconButton>
         <h3 className="text-base font-semibold text-gray-800">
-          {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
+          {t(MONTH_KEYS[selectedMonth - 1])} {selectedYear}
         </h3>
         <IconButton
           size="small"
@@ -115,25 +114,25 @@ export default function AccountingView() {
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-3 mb-6">
         <div className="border border-gray-200 rounded-lg bg-white p-3">
-          <div className="text-xs text-gray-500 font-medium">Revenue</div>
+          <div className="text-xs text-gray-500 font-medium">{t('revenue')}</div>
           <div className="text-xl font-bold text-gray-900 mt-1">
             {loading ? '—' : `€${grandTotal.toFixed(2)}`}
           </div>
           <div className="text-xs text-gray-400 mt-0.5">
-            {loading ? '' : `${totalTransactions} transaction${totalTransactions !== 1 ? 's' : ''}`}
+            {loading ? '' : t('transactions', { count: totalTransactions })}
           </div>
         </div>
         <div className="border border-gray-200 rounded-lg bg-white p-3">
-          <div className="text-xs text-gray-500 font-medium">Tax collected</div>
+          <div className="text-xs text-gray-500 font-medium">{t('taxCollected')}</div>
           <div className="text-xl font-bold text-gray-900 mt-1">
             {loading ? '—' : `€${totalTax.toFixed(2)}`}
           </div>
           <div className="text-xs text-gray-400 mt-0.5">
-            {loading ? '' : `Net: €${(grandTotal - totalTax).toFixed(2)}`}
+            {loading ? '' : t('netAmount', { amount: (grandTotal - totalTax).toFixed(2) })}
           </div>
         </div>
         <div className="border border-gray-200 rounded-lg bg-white p-3">
-          <div className="text-xs text-gray-500 font-medium">Breakdown</div>
+          <div className="text-xs text-gray-500 font-medium">{t('breakdown')}</div>
           <div className="flex items-baseline gap-1 mt-1">
             <ShoppingCartIcon sx={{ fontSize: 14 }} className="text-blue-500" />
             <span className="text-sm font-semibold text-gray-800">€{loading ? '—' : orderTotal.toFixed(2)}</span>
@@ -152,7 +151,7 @@ export default function AccountingView() {
       ) : totalTransactions === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-gray-400">
           <ReceiptLongIcon sx={{ fontSize: 48, mb: 1, color: '#d1d5db' }} />
-          <p className="text-sm">No transactions this month</p>
+          <p className="text-sm">{t('noTransactions')}</p>
         </div>
       ) : (
         <>
@@ -165,7 +164,7 @@ export default function AccountingView() {
               >
                 <ShoppingCartIcon sx={{ fontSize: 16 }} className="text-blue-500" />
                 <span className="text-sm font-semibold text-gray-700">
-                  Product orders ({paidItems.orders.length})
+                  {t('productOrders', { count: paidItems.orders.length })}
                 </span>
                 {ordersExpanded ? <ExpandLessIcon fontSize="small" className="text-gray-400" /> : <ExpandMoreIcon fontSize="small" className="text-gray-400" />}
               </button>
@@ -183,13 +182,13 @@ export default function AccountingView() {
                         <div className="text-xs text-gray-400 mt-0.5">
                           {formatDate(order.createdAt)}
                           {order.user?.email && <span className="ml-2">· {order.user.email}</span>}
-                          {order.seat?.number != null && <span className="ml-2">· Seat #{String(order.seat.number).padStart(4, '0')}</span>}
+                          {order.seat?.number != null && <span className="ml-2">· {t('seat')} #{String(order.seat.number).padStart(4, '0')}</span>}
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0 ml-4">
                         <div className="text-sm font-semibold text-gray-900">€{order.invoices?.[0]?.totalAmount?.toFixed(2)}</div>
                         {(order.invoices?.[0]?.totalTax ?? 0) > 0 && (
-                          <div className="text-xs text-gray-400">tax €{order.invoices[0].totalTax.toFixed(2)}</div>
+                          <div className="text-xs text-gray-400">{t('taxAmount', { amount: order.invoices[0].totalTax.toFixed(2) })}</div>
                         )}
                       </div>
                     </div>
@@ -208,7 +207,7 @@ export default function AccountingView() {
               >
                 <EventSeatIcon sx={{ fontSize: 16 }} className="text-green-500" />
                 <span className="text-sm font-semibold text-gray-700">
-                  Reservations ({paidItems.reservations.length})
+                  {t('reservationsCount', { count: paidItems.reservations.length })}
                 </span>
                 {reservationsExpanded ? <ExpandLessIcon fontSize="small" className="text-gray-400" /> : <ExpandMoreIcon fontSize="small" className="text-gray-400" />}
               </button>
@@ -221,10 +220,10 @@ export default function AccountingView() {
                     >
                       <div className="flex-1 min-w-0">
                         <div className="text-sm text-gray-800">
-                          {res.type === 'hours' ? 'Hourly' : 'Daily'} reservation
+                          {res.type === 'hours' ? t('hourly') : t('daily')} reservation
                           {res.items?.length > 0 && (
                             <span className="text-gray-500">
-                              {' '}· Seat{res.items.length > 1 ? 's' : ''} {res.items.map((i: any) => `#${String(i.number).padStart(4, '0')}`).join(', ')}
+                              {' '}· {res.items.length > 1 ? t('seats') : t('seat')} {res.items.map((i: any) => `#${String(i.number).padStart(4, '0')}`).join(', ')}
                             </span>
                           )}
                         </div>
@@ -236,7 +235,7 @@ export default function AccountingView() {
                       <div className="text-right flex-shrink-0 ml-4">
                         <div className="text-sm font-semibold text-gray-900">€{res.invoices?.[0]?.totalAmount?.toFixed(2)}</div>
                         {(res.invoices?.[0]?.totalTax ?? 0) > 0 && (
-                          <div className="text-xs text-gray-400">tax €{res.invoices[0].totalTax.toFixed(2)}</div>
+                          <div className="text-xs text-gray-400">{t('taxAmount', { amount: res.invoices[0].totalTax.toFixed(2) })}</div>
                         )}
                       </div>
                     </div>

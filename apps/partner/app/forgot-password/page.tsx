@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, FormEvent } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import sunbnbLogo from '@/app/sunbnb-logo.svg'
 
 // ─── Validation helpers ───────────────────────────────────────────────────────
@@ -51,6 +52,7 @@ function inputBorder(state: ValidationState) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ForgotPasswordPage() {
+  const t = useTranslations('ForgotPassword')
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -73,10 +75,10 @@ export default function ForgotPasswordPage() {
       if (data.ok) {
         setSubmitted(true)
       } else {
-        setError(data.error || 'Something went wrong')
+        setError(data.error || t('errorGeneral'))
       }
     } catch {
-      setError('Something went wrong. Please try again.')
+      setError(t('errorGeneral'))
     } finally {
       setIsLoading(false)
     }
@@ -98,19 +100,19 @@ export default function ForgotPasswordPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-gray-900">Check your inbox</h2>
+            <h2 className="text-xl font-bold text-gray-900">{t('successTitle')}</h2>
             <p className="mt-2 text-sm text-gray-500 leading-relaxed">
-              If an account exists for <strong className="text-gray-700">{email}</strong>, we&apos;ve sent a password reset link. It expires in 1 hour.
+              {t('successBody')}
             </p>
             <Link href="/sign-in" className="inline-block mt-6 text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors">
-              Back to sign in
+              {t('backToSignIn')}
             </Link>
           </div>
         ) : (
           <>
             <div className="text-center">
-              <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Forgot your password?</h2>
-              <p className="mt-1.5 text-sm text-gray-500">Enter your email and we&apos;ll send you a reset link.</p>
+              <h2 className="text-2xl font-bold text-gray-900 tracking-tight">{t('title')}</h2>
+              <p className="mt-1.5 text-sm text-gray-500">{t('subtitle')}</p>
             </div>
 
             {error && (
@@ -121,7 +123,7 @@ export default function ForgotPasswordPage() {
 
             <form onSubmit={handleSubmit} className="mt-8 space-y-3">
               <div>
-                <label htmlFor="reset-email" className="block text-xs font-medium text-gray-600 mb-1.5">Email</label>
+                <label htmlFor="reset-email" className="block text-xs font-medium text-gray-600 mb-1.5">{t('email')}</label>
                 <div className="relative">
                   <input
                     id="reset-email"
@@ -142,9 +144,6 @@ export default function ForgotPasswordPage() {
                     </span>
                   )}
                 </div>
-                {emailState === 'invalid' && (
-                  <p className="mt-1 text-[11px] text-red-500">Enter a valid email address</p>
-                )}
               </div>
               <button
                 type="submit"
@@ -154,17 +153,17 @@ export default function ForgotPasswordPage() {
                 {isLoading ? (
                   <span className="inline-flex items-center gap-2">
                     <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Sending…
+                    {t('sending')}
                   </span>
                 ) : (
-                  'Send reset link'
+                  t('send')
                 )}
               </button>
             </form>
 
             <div className="mt-6 text-center">
               <Link href="/sign-in" className="text-sm text-gray-400 hover:text-gray-600 transition-colors">
-                Back to sign in
+                {t('backToSignIn')}
               </Link>
             </div>
           </>

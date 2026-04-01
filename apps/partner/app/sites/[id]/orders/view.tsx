@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { setOrderStatus, getOrders, type OrderTab } from './actions'
 import { Order } from '@/types/shared'
 import {
@@ -83,25 +84,25 @@ function ElapsedTimer({ since }: { since: Date | string }) {
 
 // ─── Tab Bar ─────────────────────────────────────────────────────────────────
 
-const TABS: { key: OrderTab; label: string }[] = [
-  { key: 'incoming', label: 'New' },
-  { key: 'active',   label: 'Kitchen' },
-  { key: 'ready',    label: 'Deliver' },
-  { key: 'history',  label: 'Done' },
+const TABS: { key: OrderTab; labelKey: string }[] = [
+  { key: 'incoming', labelKey: 'tabNew' },
+  { key: 'active',   labelKey: 'tabKitchen' },
+  { key: 'ready',    labelKey: 'tabDeliver' },
+  { key: 'history',  labelKey: 'tabDone' },
 ]
 
 // ─── Status Colours & Labels ─────────────────────────────────────────────────
 
-const STATUS_STYLE: Record<string, { bg: string; text: string; label: string }> = {
-  paid:              { bg: 'bg-amber-100',   text: 'text-amber-800',   label: 'NEW' },
-  [ORDER_COMPLETE]:  { bg: 'bg-amber-100',   text: 'text-amber-800',   label: 'NEW' },
-  [ORDER_ACCEPTED]:  { bg: 'bg-blue-100',    text: 'text-blue-800',    label: 'ACCEPTED' },
-  [ORDER_PREPARING]: { bg: 'bg-orange-100',  text: 'text-orange-800',  label: 'PREPARING' },
-  [ORDER_READY]:     { bg: 'bg-emerald-100', text: 'text-emerald-800', label: 'READY' },
-  [ORDER_DELIVERED]: { bg: 'bg-teal-100',    text: 'text-teal-800',    label: 'DELIVERED' },
-  [ORDER_COMPLETED]: { bg: 'bg-gray-100',    text: 'text-gray-600',    label: 'COMPLETED' },
-  [ORDER_REJECTED]:  { bg: 'bg-red-100',     text: 'text-red-700',     label: 'REJECTED' },
-  [ORDER_DISCARDED]: { bg: 'bg-gray-100',    text: 'text-gray-500',    label: 'DISCARDED' },
+const STATUS_STYLE: Record<string, { bg: string; text: string; labelKey: string }> = {
+  paid:              { bg: 'bg-amber-100',   text: 'text-amber-800',   labelKey: 'statusNew' },
+  [ORDER_COMPLETE]:  { bg: 'bg-amber-100',   text: 'text-amber-800',   labelKey: 'statusNew' },
+  [ORDER_ACCEPTED]:  { bg: 'bg-blue-100',    text: 'text-blue-800',    labelKey: 'statusAccepted' },
+  [ORDER_PREPARING]: { bg: 'bg-orange-100',  text: 'text-orange-800',  labelKey: 'statusPreparing' },
+  [ORDER_READY]:     { bg: 'bg-emerald-100', text: 'text-emerald-800', labelKey: 'statusReady' },
+  [ORDER_DELIVERED]: { bg: 'bg-teal-100',    text: 'text-teal-800',    labelKey: 'statusDelivered' },
+  [ORDER_COMPLETED]: { bg: 'bg-gray-100',    text: 'text-gray-600',    labelKey: 'statusCompleted' },
+  [ORDER_REJECTED]:  { bg: 'bg-red-100',     text: 'text-red-700',     labelKey: 'statusRejected' },
+  [ORDER_DISCARDED]: { bg: 'bg-gray-100',    text: 'text-gray-500',    labelKey: 'statusDiscarded' },
 }
 
 // ─── Action Buttons Per Status ───────────────────────────────────────────────
@@ -115,6 +116,7 @@ function OrderActions({
   order: Order
   onUpdated: () => void
 }) {
+  const t = useTranslations('SiteOrders')
   const [busy, setBusy] = useState(false)
   const [showReject, setShowReject] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
@@ -133,7 +135,7 @@ function OrderActions({
       <div className="space-y-2 mt-3">
         <input
           type="text"
-          placeholder="Reason (e.g. out of stock)"
+          placeholder={t('rejectReasonPlaceholder')}
           value={rejectReason}
           onChange={e => setRejectReason(e.target.value)}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
@@ -144,14 +146,14 @@ function OrderActions({
             onClick={() => { setShowReject(false); setRejectReason('') }}
             className="flex-1 py-2.5 rounded-lg border border-gray-300 text-gray-600 font-semibold text-sm"
           >
-            CANCEL
+            {t('cancel').toUpperCase()}
           </button>
           <button
             onClick={() => act(ORDER_REJECTED, rejectReason || undefined)}
             disabled={busy}
             className="flex-1 py-2.5 rounded-lg bg-red-600 text-white font-semibold text-sm disabled:opacity-50"
           >
-            CONFIRM REJECT
+            {t('confirmReject').toUpperCase()}
           </button>
         </div>
       </div>
@@ -164,7 +166,7 @@ function OrderActions({
       <div className="flex gap-2 mt-3">
         <button onClick={() => act(ORDER_ACCEPTED)} disabled={busy}
           className="flex-1 py-3 rounded-lg bg-blue-600 text-white font-bold text-base disabled:opacity-50 active:bg-blue-700">
-          ACCEPT
+          {t('accept').toUpperCase()}
         </button>
         <button onClick={() => setShowReject(true)} disabled={busy}
           className="w-16 py-3 rounded-lg border-2 border-red-400 text-red-600 font-bold text-xs disabled:opacity-50">
@@ -176,7 +178,7 @@ function OrderActions({
       <div className="flex gap-2 mt-3">
         <button onClick={() => act(ORDER_ACCEPTED)} disabled={busy}
           className="flex-1 py-3 rounded-lg bg-blue-600 text-white font-bold text-base disabled:opacity-50 active:bg-blue-700">
-          ACCEPT
+          {t('accept').toUpperCase()}
         </button>
         <button onClick={() => setShowReject(true)} disabled={busy}
           className="w-16 py-3 rounded-lg border-2 border-red-400 text-red-600 font-bold text-xs disabled:opacity-50">
@@ -188,7 +190,7 @@ function OrderActions({
       <div className="flex gap-2 mt-3">
         <button onClick={() => act(ORDER_PREPARING)} disabled={busy}
           className="flex-1 py-3 rounded-lg bg-orange-500 text-white font-bold text-base disabled:opacity-50 active:bg-orange-600">
-          START PREPARING
+          {t('startPreparing').toUpperCase()}
         </button>
       </div>
     ),
@@ -196,7 +198,7 @@ function OrderActions({
       <div className="flex gap-2 mt-3">
         <button onClick={() => act(ORDER_READY)} disabled={busy}
           className="flex-1 py-3 rounded-lg bg-emerald-600 text-white font-bold text-base disabled:opacity-50 active:bg-emerald-700">
-          READY
+          {t('ready').toUpperCase()}
         </button>
       </div>
     ),
@@ -204,7 +206,7 @@ function OrderActions({
       <div className="flex gap-2 mt-3">
         <button onClick={() => act(ORDER_DELIVERED)} disabled={busy}
           className="flex-1 py-3 rounded-lg bg-teal-600 text-white font-bold text-base disabled:opacity-50 active:bg-teal-700">
-          DELIVERED
+          {t('delivered').toUpperCase()}
         </button>
       </div>
     ),
@@ -212,7 +214,7 @@ function OrderActions({
       <div className="flex gap-2 mt-3">
         <button onClick={() => act(ORDER_COMPLETED)} disabled={busy}
           className="flex-1 py-3 rounded-lg bg-gray-800 text-white font-bold text-base disabled:opacity-50 active:bg-gray-900">
-          COMPLETE
+          {t('complete').toUpperCase()}
         </button>
       </div>
     ),
@@ -234,7 +236,8 @@ function OrderCard({
   onUpdated: () => void
   compact?: boolean
 }) {
-  const fallback = { bg: 'bg-gray-100', text: 'text-gray-600', label: order.status }
+  const t = useTranslations('SiteOrders')
+  const fallback = { bg: 'bg-gray-100', text: 'text-gray-600', labelKey: order.status }
   const style = STATUS_STYLE[order.status] ?? fallback
 
   // Group items by category for kitchen visibility
@@ -262,7 +265,7 @@ function OrderCard({
               <ElapsedTimer since={order.createdAt} />
             </div>
             <div className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${style.bg} ${style.text}`}>
-              {style.label}
+              {t(style.labelKey as any)}
             </div>
           </div>
         </div>
@@ -311,7 +314,7 @@ function OrderCard({
       {/* Rejection reason if shown */}
       {order.rejectReason && (
         <div className="px-4 pb-2 text-sm text-red-600">
-          Reason: {order.rejectReason}
+          {t('reason', { text: order.rejectReason })}
         </div>
       )}
 
@@ -328,7 +331,7 @@ function OrderCard({
 // ─── Main View ───────────────────────────────────────────────────────────────
 
 export default function Orders({ siteId, orders: initialOrders }: { siteId: string; orders: Order[] }) {
-
+  const t = useTranslations('SiteOrders')
   const [activeTab, setActiveTab] = useState<OrderTab>('incoming')
   const [allOrders, setAllOrders] = useState<Order[]>(initialOrders)
 
@@ -392,7 +395,7 @@ export default function Orders({ siteId, orders: initialOrders }: { siteId: stri
                 ? 'text-gray-900 border-b-2 border-gray-900'
                 : 'text-gray-400 hover:text-gray-600'}`}
           >
-            {tab.label}
+            {t(tab.labelKey as any)}
             {counts[tab.key] > 0 && tab.key !== 'history' && (
               <span className={`ml-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold text-white
                 ${tab.key === 'incoming' ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`}>
@@ -411,10 +414,10 @@ export default function Orders({ siteId, orders: initialOrders }: { siteId: stri
               {activeTab === 'incoming' ? '🔔' : activeTab === 'active' ? '👨‍🍳' : activeTab === 'ready' ? '🏃' : '✅'}
             </div>
             <p className="text-sm font-medium">
-              {activeTab === 'incoming' ? 'No new orders' :
-               activeTab === 'active' ? 'Nothing being prepared' :
-               activeTab === 'ready' ? 'No orders to deliver' :
-               'No completed orders yet'}
+              {activeTab === 'incoming' ? t('noNewOrders') :
+               activeTab === 'active' ? t('nothingPreparing') :
+               activeTab === 'ready' ? t('noOrdersToDeliver') :
+               t('noCompletedOrders')}
             </p>
           </div>
         ) : (

@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 
 /* ── MUI ───────────────────────────────────────────────────── */
 import TextField from '@mui/material/TextField'
@@ -130,16 +131,16 @@ function timeUntil(dateStr: string) {
   return rem > 0 ? `in ${hrs}h ${rem}m` : `in ${hrs}h`
 }
 
-function opStatusLabel(status: string): string {
+function opStatusKey(status: string): string {
   switch (status) {
-    case OP_EXPECTED: return 'Expected'
-    case OP_CHECKED_IN: return 'Checked in'
-    case OP_WALKED_IN: return 'Walk-in'
-    case OP_DEPARTED: return 'Departed'
-    case OP_NO_SHOW: return 'No-show'
-    case OP_RESERVED: return 'Reserved'
-    case OP_PICKED_UP: return 'Picked up'
-    case OP_RETURNED: return 'Returned'
+    case OP_EXPECTED: return 'statusExpected'
+    case OP_CHECKED_IN: return 'statusCheckedIn'
+    case OP_WALKED_IN: return 'statusWalkIn'
+    case OP_DEPARTED: return 'statusDeparted'
+    case OP_NO_SHOW: return 'statusNoShow'
+    case OP_RESERVED: return 'statusReserved'
+    case OP_PICKED_UP: return 'statusPickedUp'
+    case OP_RETURNED: return 'statusReturned'
     default: return status
   }
 }
@@ -167,8 +168,8 @@ function opStatusChipColor(status: string): 'warning' | 'info' | 'success' | 'de
 
 interface Lane {
   key: string
-  title: string
-  description: string
+  titleKey: string
+  descriptionKey: string
   accentColor: string
   chipColor: 'warning' | 'info' | 'success'
   matchStatuses: string[]
@@ -177,24 +178,24 @@ interface Lane {
 const LANES: Lane[] = [
   {
     key: 'arriving',
-    title: 'Arriving',
-    description: 'Expected guests not yet checked in',
+    titleKey: 'laneTitleArriving',
+    descriptionKey: 'laneDescArriving',
     accentColor: 'amber',
     chipColor: 'warning',
     matchStatuses: [OP_EXPECTED, OP_RESERVED],
   },
   {
     key: 'on-site',
-    title: 'On site',
-    description: 'Checked-in guests and active rentals',
+    titleKey: 'laneTitleOnSite',
+    descriptionKey: 'laneDescOnSite',
     accentColor: 'blue',
     chipColor: 'info',
     matchStatuses: [OP_CHECKED_IN, OP_WALKED_IN, OP_PICKED_UP],
   },
   {
     key: 'completed',
-    title: 'Completed',
-    description: 'Departed, returned, or no-show',
+    titleKey: 'laneTitleCompleted',
+    descriptionKey: 'laneDescCompleted',
     accentColor: 'green',
     chipColor: 'success',
     matchStatuses: [OP_DEPARTED, OP_NO_SHOW, OP_RETURNED],
@@ -210,13 +211,13 @@ const laneColors: Record<string, { bg: string; border: string; headerBg: string 
 /* ── Action definitions ────────────────────────────────────── */
 
 interface ActionDef {
-  label: string
+  labelKey: string
   icon: React.ReactNode
   variant: 'contained' | 'outlined' | 'text'
   color: 'primary' | 'success' | 'error' | 'inherit'
   needsConfirm?: boolean
-  confirmTitle?: string
-  confirmBody?: string
+  confirmTitleKey?: string
+  confirmBodyKey?: string
   action: (id: string) => Promise<{ status: string; errors?: (string | undefined)[] }>
 }
 
@@ -225,37 +226,37 @@ function getSunbedActions(opStatus: string): ActionDef[] {
     case OP_EXPECTED:
       return [
         {
-          label: 'Check in',
+          labelKey: 'checkIn',
           icon: <LoginIcon sx={{ fontSize: 16 }} />,
           variant: 'contained',
           color: 'primary',
           action: checkInReservation,
         },
         {
-          label: 'No-show',
+          labelKey: 'noShow',
           icon: <BlockIcon sx={{ fontSize: 16 }} />,
           variant: 'outlined',
           color: 'inherit',
           needsConfirm: true,
-          confirmTitle: 'Mark as no-show?',
-          confirmBody: 'This guest will be recorded as a no-show for today.',
+          confirmTitleKey: 'confirmNoShowTitle',
+          confirmBodyKey: 'confirmNoShowBody',
           action: markNoShow,
         },
         {
-          label: 'Cancel',
+          labelKey: 'cancel',
           icon: <CancelIcon sx={{ fontSize: 16 }} />,
           variant: 'text',
           color: 'error',
           needsConfirm: true,
-          confirmTitle: 'Cancel reservation?',
-          confirmBody: 'The guest will be notified by email and the booking will be released.',
+          confirmTitleKey: 'confirmCancelTitle',
+          confirmBodyKey: 'confirmCancelBody',
           action: cancelReservation,
         },
       ]
     case OP_CHECKED_IN:
     case OP_WALKED_IN:
       return [{
-        label: 'Mark departed',
+        labelKey: 'markDeparted',
         icon: <LogoutIcon sx={{ fontSize: 16 }} />,
         variant: 'contained',
         color: 'success',
@@ -271,26 +272,26 @@ function getRentalActions(opStatus: string): ActionDef[] {
     case OP_RESERVED:
       return [
         {
-          label: 'Picked up',
+          labelKey: 'pickedUp',
           icon: <Inventory2OutlinedIcon sx={{ fontSize: 16 }} />,
           variant: 'contained',
           color: 'primary',
           action: markRentalPickedUp,
         },
         {
-          label: 'Cancel',
+          labelKey: 'cancel',
           icon: <CancelIcon sx={{ fontSize: 16 }} />,
           variant: 'text',
           color: 'error',
           needsConfirm: true,
-          confirmTitle: 'Cancel rental?',
-          confirmBody: 'This rental booking will be canceled.',
+          confirmTitleKey: 'confirmCancelRentalTitle',
+          confirmBodyKey: 'confirmCancelRentalBody',
           action: cancelRentalBooking,
         },
       ]
     case OP_PICKED_UP:
       return [{
-        label: 'Returned',
+        labelKey: 'returned',
         icon: <AssignmentReturnIcon sx={{ fontSize: 16 }} />,
         variant: 'contained',
         color: 'success',
@@ -309,6 +310,7 @@ function BoardCard({ item, expanded, onToggle }: {
   onToggle: () => void
 }) {
   const router = useRouter()
+  const t = useTranslations('Frontdesk')
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [confirmAction, setConfirmAction] = useState<ActionDef | null>(null)
@@ -385,10 +387,10 @@ function BoardCard({ item, expanded, onToggle }: {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-0.5">
                 <span className="text-sm font-semibold text-gray-900 truncate">
-                  {item.guestName || 'Guest'}
+                  {item.guestName || t('guest')}
                 </span>
                 <Chip
-                  label={isRental ? 'Rental' : 'Sunbed'}
+                  label={isRental ? t('rental') : t('sunbed')}
                   size="small"
                   icon={isRental
                     ? <SurfingIcon sx={{ fontSize: 14 }} />
@@ -411,7 +413,7 @@ function BoardCard({ item, expanded, onToggle }: {
                 />
                 {sunbed && (
                   <span className="text-xs text-gray-500">
-                    {sunbed.itemCount} sunbed{sunbed.itemCount !== 1 ? 's' : ''}
+                    {t('sunbeds', { count: sunbed.itemCount })}
                   </span>
                 )}
                 {rental && (
@@ -428,12 +430,12 @@ function BoardCard({ item, expanded, onToggle }: {
             <div className="flex flex-col items-end gap-1.5 flex-shrink-0 pt-0.5">
               <div className="flex items-center gap-1">
                 <Chip
-                  label={opStatusLabel(item.operationalStatus)}
+                  label={t(opStatusKey(item.operationalStatus) as any)}
                   size="small"
                   color={opStatusChipColor(item.operationalStatus)}
                   sx={{ height: 22, fontSize: '0.65rem', fontWeight: 600 }}
                 />
-                <Tooltip title="View details" arrow>
+                <Tooltip title={t('viewDetails')} arrow>
                   <IconButton
                     size="small"
                     component={Link}
@@ -484,25 +486,25 @@ function BoardCard({ item, expanded, onToggle }: {
                 {sunbed?.checkedInAt && (
                   <div className="flex items-center gap-2 text-xs text-gray-500">
                     <AccessTimeIcon sx={{ fontSize: 15, color: '#9ca3af' }} />
-                    <span>Checked in at {formatTime(sunbed.checkedInAt)}</span>
+                    <span>{t('checkedInAt', { time: formatTime(sunbed.checkedInAt) })}</span>
                   </div>
                 )}
                 {sunbed?.departedAt && (
                   <div className="flex items-center gap-2 text-xs text-gray-500">
                     <AccessTimeIcon sx={{ fontSize: 15, color: '#9ca3af' }} />
-                    <span>Departed at {formatTime(sunbed.departedAt)}</span>
+                    <span>{t('departedAt', { time: formatTime(sunbed.departedAt) })}</span>
                   </div>
                 )}
                 {rental?.pickedUpAt && (
                   <div className="flex items-center gap-2 text-xs text-gray-500">
                     <AccessTimeIcon sx={{ fontSize: 15, color: '#9ca3af' }} />
-                    <span>Picked up at {formatTime(rental.pickedUpAt)}</span>
+                    <span>{t('pickedUpAt', { time: formatTime(rental.pickedUpAt) })}</span>
                   </div>
                 )}
                 {rental?.returnedAt && (
                   <div className="flex items-center gap-2 text-xs text-gray-500">
                     <AccessTimeIcon sx={{ fontSize: 15, color: '#9ca3af' }} />
-                    <span>Returned at {formatTime(rental.returnedAt)}</span>
+                    <span>{t('returnedAt', { time: formatTime(rental.returnedAt) })}</span>
                   </div>
                 )}
                 <div className="flex items-center gap-2 text-xs text-gray-400">
@@ -524,7 +526,7 @@ function BoardCard({ item, expanded, onToggle }: {
                       multiline
                       rows={2}
                       size="small"
-                      placeholder="Internal notes for staff…"
+                      placeholder={t('notesPlaceholder')}
                       fullWidth
                       autoFocus
                       sx={{ '& .MuiInputBase-input': { fontSize: '0.75rem' } }}
@@ -535,7 +537,7 @@ function BoardCard({ item, expanded, onToggle }: {
                         onClick={() => setEditingNotes(false)}
                         sx={{ textTransform: 'none', fontSize: '0.75rem' }}
                       >
-                        Cancel
+                        {t('cancel')}
                       </Button>
                       <Button
                         size="small"
@@ -545,7 +547,7 @@ function BoardCard({ item, expanded, onToggle }: {
                         startIcon={notesSaving ? <CircularProgress size={12} /> : undefined}
                         sx={{ textTransform: 'none', fontSize: '0.75rem' }}
                       >
-                        {notesSaving ? 'Saving…' : 'Save'}
+                        {notesSaving ? t('saving') : t('save')}
                       </Button>
                     </div>
                   </div>
@@ -558,7 +560,7 @@ function BoardCard({ item, expanded, onToggle }: {
                     {sunbed.internalNotes ? (
                       <span className="truncate">{sunbed.internalNotes}</span>
                     ) : (
-                      <span className="text-gray-400">Add notes…</span>
+                      <span className="text-gray-400">{t('addNotes')}</span>
                     )}
                   </button>
                 )}
@@ -582,7 +584,7 @@ function BoardCard({ item, expanded, onToggle }: {
               <div className="flex items-center gap-1.5 flex-wrap">
                 {actions.map(a => (
                   <Button
-                    key={a.label}
+                    key={a.labelKey}
                     size="small"
                     variant={a.variant}
                     color={a.color}
@@ -597,7 +599,7 @@ function BoardCard({ item, expanded, onToggle }: {
                       minHeight: 30,
                     }}
                   >
-                    {a.label}
+                    {t(a.labelKey as any)}
                   </Button>
                 ))}
               </div>
@@ -614,11 +616,11 @@ function BoardCard({ item, expanded, onToggle }: {
         fullWidth
       >
         <DialogTitle sx={{ fontSize: '0.95rem', fontWeight: 600, pb: 0.5 }}>
-          {confirmAction?.confirmTitle}
+          {confirmAction?.confirmTitleKey ? t(confirmAction.confirmTitleKey as any) : ''}
         </DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ fontSize: '0.85rem' }}>
-            {confirmAction?.confirmBody}
+            {confirmAction?.confirmBodyKey ? t(confirmAction.confirmBodyKey as any) : ''}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -626,7 +628,7 @@ function BoardCard({ item, expanded, onToggle }: {
             onClick={() => setConfirmAction(null)}
             sx={{ textTransform: 'none' }}
           >
-            Cancel
+            {t('cancel')}
           </Button>
           <Button
             variant="contained"
@@ -636,7 +638,7 @@ function BoardCard({ item, expanded, onToggle }: {
             startIcon={isPending ? <CircularProgress size={14} /> : confirmAction?.icon}
             sx={{ textTransform: 'none' }}
           >
-            {confirmAction?.label}
+            {confirmAction ? t(confirmAction.labelKey as any) : ''}
           </Button>
         </DialogActions>
       </Dialog>
@@ -662,6 +664,7 @@ function matchesSearch(item: BoardItem, query: string): boolean {
 /* ── Main view ─────────────────────────────────────────────── */
 
 export default function TodayBoardView({ data }: { data: TodayBoardData }) {
+  const t = useTranslations('Frontdesk')
   const [selectedSiteId, setSelectedSiteId] = useState<string>('all')
   const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -740,11 +743,11 @@ export default function TodayBoardView({ data }: { data: TodayBoardData }) {
       {/* Header row */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Frontdesk</h1>
+          <h1 className="text-xl font-bold text-gray-900">{t('title')}</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {new Date().toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' })}
             {' · '}
-            {totalCount} booking{totalCount !== 1 ? 's' : ''}
+            {t('bookings', { count: totalCount })}
           </p>
         </div>
 
@@ -753,7 +756,7 @@ export default function TodayBoardView({ data }: { data: TodayBoardData }) {
           <TextField
             value={searchInput}
             onChange={e => handleSearchChange(e.target.value)}
-            placeholder="Name, email, or ID…"
+            placeholder={t('searchPlaceholder')}
             size="small"
             sx={{
               width: 240,
@@ -788,7 +791,7 @@ export default function TodayBoardView({ data }: { data: TodayBoardData }) {
                 displayEmpty
                 sx={{ fontSize: '0.85rem', borderRadius: '8px' }}
               >
-                <MenuItem value="all">All sites</MenuItem>
+                <MenuItem value="all">{t('allSites')}</MenuItem>
                 {data.sites.map(s => (
                   <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
                 ))}
@@ -803,8 +806,8 @@ export default function TodayBoardView({ data }: { data: TodayBoardData }) {
         <>
           <p className="text-sm text-gray-500 mb-4">
             {searchLoading
-              ? 'Searching\u2026'
-              : `${searchResults?.length ?? 0} result${(searchResults?.length ?? 0) !== 1 ? 's' : ''} for \u201c${searchQuery}\u201d`
+              ? t('searching')
+              : t('searchResultsFor', { count: searchResults?.length ?? 0, query: searchQuery })
             }
           </p>
 
@@ -817,8 +820,8 @@ export default function TodayBoardView({ data }: { data: TodayBoardData }) {
           {!searchLoading && searchResults && searchResults.length === 0 && (
             <div className="text-center py-16 bg-gray-50 rounded-xl border border-gray-200">
               <SearchIcon sx={{ fontSize: 48, color: '#d1d5db', mb: 1 }} />
-              <h2 className="text-lg font-semibold text-gray-600 mb-1">No results found</h2>
-              <p className="text-sm text-gray-400">Try a different name, email, or reservation ID.</p>
+              <h2 className="text-lg font-semibold text-gray-600 mb-1">{t('noResultsTitle')}</h2>
+              <p className="text-sm text-gray-400">{t('noResultsBody')}</p>
             </div>
           )}
 
@@ -840,21 +843,21 @@ export default function TodayBoardView({ data }: { data: TodayBoardData }) {
           {/* ── Summary chips ── */}
           <div className="flex flex-wrap gap-2 mb-5">
             <Chip
-              label={`${arrivingCount} arriving`}
+              label={t('arriving', { count: arrivingCount })}
               size="small"
               color="warning"
               variant="outlined"
               sx={{ fontWeight: 600, fontSize: '0.78rem', height: 28 }}
             />
             <Chip
-              label={`${onSiteCount} on site`}
+              label={t('onSite', { count: onSiteCount })}
               size="small"
               color="info"
               variant="outlined"
               sx={{ fontWeight: 600, fontSize: '0.78rem', height: 28 }}
             />
             <Chip
-              label={`${completedCount} completed`}
+              label={t('completed', { count: completedCount })}
               size="small"
               color="success"
               variant="outlined"
@@ -866,11 +869,11 @@ export default function TodayBoardView({ data }: { data: TodayBoardData }) {
           {totalCount === 0 && (
             <div className="text-center py-16 bg-gray-50 rounded-xl border border-gray-200">
               <BeachAccessIcon sx={{ fontSize: 48, color: '#d1d5db', mb: 1 }} />
-              <h2 className="text-lg font-semibold text-gray-600 mb-1">No bookings today</h2>
+              <h2 className="text-lg font-semibold text-gray-600 mb-1">{t('noBookingsTitle')}</h2>
               <p className="text-sm text-gray-400">
                 {selectedSiteId !== 'all'
-                  ? 'Try selecting "All sites" or check back later.'
-                  : 'Bookings will appear here as they come in.'}
+                  ? t('noBookingsSiteBody')
+                  : t('noBookingsBody')}
               </p>
             </div>
           )}
@@ -886,7 +889,7 @@ export default function TodayBoardView({ data }: { data: TodayBoardData }) {
                   <div key={lane.key} className={`rounded-xl border ${colors.border} ${colors.bg}`}>
                     <div className={`px-4 py-3 ${colors.headerBg} rounded-t-xl border-b ${colors.border}`}>
                       <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-semibold text-gray-800">{lane.title}</h3>
+                        <h3 className="text-sm font-semibold text-gray-800">{t(lane.titleKey as any)}</h3>
                         <Chip
                           label={items.length}
                           size="small"
@@ -894,12 +897,12 @@ export default function TodayBoardView({ data }: { data: TodayBoardData }) {
                           sx={{ height: 22, fontSize: '0.7rem', fontWeight: 700, minWidth: 28 }}
                         />
                       </div>
-                      <p className="text-xs text-gray-500 mt-0.5">{lane.description}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{t(lane.descriptionKey as any)}</p>
                     </div>
 
                     <div className="p-2.5 flex flex-col gap-2">
                       {items.length === 0 && (
-                        <p className="text-xs text-gray-400 text-center py-6">No bookings</p>
+                        <p className="text-xs text-gray-400 text-center py-6">{t('noBookings')}</p>
                       )}
                       {items.map(item => (
                         <BoardCard

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { useTranslations } from 'next-intl'
 import { addProduct, getProducts, toggleAppSales, setOrderPaymentType } from './actions'
 import { Product } from '@/types/shared'
 import Button from '@mui/material/Button'
@@ -18,6 +19,7 @@ import ProductItem from './ProductItem'
 
 export default function ProductsView() {
 
+  const t = useTranslations('SiteProducts')
   const { site, setSite } = useSite()
 
   const [productList, setProductList] = useState<Product[]>(site.products || [])
@@ -87,9 +89,9 @@ export default function ProductsView() {
       {/* App sales toggle */}
       <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 mt-4 mb-2">
         <div>
-          <p className="text-sm font-medium text-gray-800">In-app product sales</p>
+          <p className="text-sm font-medium text-gray-800">{t('inAppSalesTitle')}</p>
           <p className="text-xs text-gray-500 mt-0.5">
-            Allow guests to order food, drinks &amp; accessories from your beach through the app.
+            {t('inAppSalesDescription')}
           </p>
         </div>
         <Switch
@@ -107,7 +109,7 @@ export default function ProductsView() {
       {/* Food order billing — only visible when sales enabled */}
       {salesEnabled && (
         <div className="mt-3 mb-2">
-          <h3 className="text-sm font-medium text-gray-700 mb-2">Order billing</h3>
+          <h3 className="text-sm font-medium text-gray-700 mb-2">{t('orderBilling')}</h3>
           <div className="flex gap-3">
             <button
               type="button"
@@ -125,11 +127,11 @@ export default function ProductsView() {
               <div className="flex items-center gap-2 mb-1">
                 <PaymentsIcon fontSize="small" className={orderBillingType === 'paid' ? 'text-blue-600' : 'text-gray-400'} />
                 <span className={`font-medium text-sm ${orderBillingType === 'paid' ? 'text-blue-700' : 'text-gray-700'}`}>
-                  Integrated payments
+                  {t('integratedPayments')}
                 </span>
               </div>
               <p className="text-xs text-gray-500">
-                Customers pay for food orders through the platform.
+                {t('integratedPaymentsDescription')}
               </p>
             </button>
             <button
@@ -148,11 +150,11 @@ export default function ProductsView() {
               <div className="flex items-center gap-2 mb-1">
                 <EventAvailableIcon fontSize="small" className={orderBillingType === 'unpaid' ? 'text-blue-600' : 'text-gray-400'} />
                 <span className={`font-medium text-sm ${orderBillingType === 'unpaid' ? 'text-blue-700' : 'text-gray-700'}`}>
-                  Off-platform billing
+                  {t('offPlatformBilling')}
                 </span>
               </div>
               <p className="text-xs text-gray-500">
-                No payment collected for food orders. Billing is handled at the venue, e.g. pay at counter or add to room tab.
+                {t('offPlatformBillingDescription')}
               </p>
             </button>
           </div>
@@ -162,9 +164,9 @@ export default function ProductsView() {
       {/* Header */}
       <div className="flex items-center justify-between mt-4 mb-6">
         <div>
-          <h2 className="text-lg font-semibold text-gray-800">Products</h2>
+          <h2 className="text-lg font-semibold text-gray-800">{t('productsTitle')}</h2>
           <p className="text-sm text-gray-500 mt-1">
-            Items available for purchase at your beach — food, drinks, accessories.
+            {t('productsSubtitle')}
           </p>
         </div>
         <Button
@@ -177,7 +179,7 @@ export default function ProductsView() {
           }}
           sx={{ textTransform: 'none', borderColor: '#d1d5db', color: '#374151' }}
         >
-          {showAddForm ? 'Cancel' : 'Add product'}
+          {showAddForm ? t('cancel') : t('addProduct')}
         </Button>
       </div>
 
@@ -212,7 +214,7 @@ export default function ProductsView() {
               <div className="flex-1 grid grid-cols-2 gap-3">
                 <TextField
                   name="name"
-                  label="Product name"
+                  label={t('productName')}
                   size="small"
                   required
                   fullWidth
@@ -222,7 +224,7 @@ export default function ProductsView() {
                 />
                 <TextField
                   name="description"
-                  label="Description (optional)"
+                  label={t('descriptionOptional')}
                   size="small"
                   fullWidth
                   multiline
@@ -234,7 +236,7 @@ export default function ProductsView() {
                 />
                 <TextField
                   name="totalPrice"
-                  label="Total price (€)"
+                  label={t('totalPrice')}
                   size="small"
                   type="number"
                   required
@@ -244,7 +246,7 @@ export default function ProductsView() {
                 />
                 <TextField
                   name="tax"
-                  label="Tax %"
+                  label={t('taxPercent')}
                   size="small"
                   type="number"
                   required
@@ -254,21 +256,21 @@ export default function ProductsView() {
                 />
                 <TextField
                   name="category"
-                  label="Category"
+                  label={t('productCategory')}
                   size="small"
                   select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                   SelectProps={{ native: true }}
                 >
-                  <option value="food">Food</option>
-                  <option value="drink">Drink</option>
-                  <option value="snack">Snack</option>
-                  <option value="accessory">Accessory</option>
+                  <option value="food">{t('food')}</option>
+                  <option value="drink">{t('drink')}</option>
+                  <option value="snack">{t('snack')}</option>
+                  <option value="accessory">{t('accessory')}</option>
                 </TextField>
                 <TextField
                   name="prepTime"
-                  label="Prep time (min)"
+                  label={t('prepTime')}
                   size="small"
                   type="number"
                   value={prepTime}
@@ -280,7 +282,7 @@ export default function ProductsView() {
 
             {priceNum > 0 && (
               <div className="text-xs text-gray-400 mt-2 ml-24">
-                Price before tax: €{priceBeforeTax.toFixed(2)}
+                {t('priceBeforeTax', { amount: priceBeforeTax.toFixed(2) })}
               </div>
             )}
 
@@ -292,7 +294,7 @@ export default function ProductsView() {
                 disabled={saving || !name || !totalPrice}
                 sx={{ textTransform: 'none', backgroundColor: '#111827', '&:hover': { backgroundColor: '#374151' } }}
               >
-                {saving ? 'Adding…' : 'Add product'}
+                {saving ? t('adding') : t('addProduct')}
               </Button>
             </div>
           </form>
@@ -303,8 +305,8 @@ export default function ProductsView() {
       {productList.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-gray-400">
           <Inventory2OutlinedIcon sx={{ fontSize: 48, mb: 1, color: '#d1d5db' }} />
-          <p className="text-sm">No products yet</p>
-          <p className="text-xs mt-1">Add your first product to get started.</p>
+          <p className="text-sm">{t('noProductsTitle')}</p>
+          <p className="text-xs mt-1">{t('noProductsSubtitle')}</p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
@@ -321,7 +323,7 @@ export default function ProductsView() {
       {/* Summary */}
       {productList.length > 0 && (
         <div className="mt-4 text-xs text-gray-400 text-right">
-          {productList.length} product{productList.length !== 1 ? 's' : ''}
+          {t('productCount', { count: productList.length })}
         </div>
       )}
     </div>
