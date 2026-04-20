@@ -165,6 +165,13 @@ export default function GeneralView() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [features, setFeatures] = useState<string[]>(site.features || ['sunbeds'])
+  const [layoutMode, setLayoutMode] = useState<'geo' | 'schematic'>(
+    (site.layoutMode as 'geo' | 'schematic' | undefined) ?? 'geo',
+  )
+  const [layoutWidth, setLayoutWidth] = useState(site.layoutWidth?.toString() ?? '50')
+  const [layoutHeight, setLayoutHeight] = useState(site.layoutHeight?.toString() ?? '35')
+  const [layoutLockedReason, setLayoutLockedReason] = useState<string | null>(null)
+  const layoutLocked = (site.inventoryItems?.length ?? 0) > 0
 
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
   const savedTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -176,6 +183,9 @@ export default function GeneralView() {
     vat?: string
     lat?: string
     lng?: string
+    layoutMode?: 'geo' | 'schematic'
+    layoutWidth?: string
+    layoutHeight?: string
   }) => {
     setSaveStatus('saving')
     try {
@@ -187,13 +197,19 @@ export default function GeneralView() {
         vat: overrides?.vat ?? vat,
         locationLat: overrides?.lat ?? mapCoords.lat.toString(),
         locationLng: overrides?.lng ?? mapCoords.lng.toString(),
+        ...(overrides?.layoutMode !== undefined ? { layoutMode: overrides.layoutMode } : {}),
+        ...(overrides?.layoutWidth !== undefined ? { layoutWidth: overrides.layoutWidth } : {}),
+        ...(overrides?.layoutHeight !== undefined ? { layoutHeight: overrides.layoutHeight } : {}),
       })
       if (result.status === 'ok') {
         setSaveStatus('saved')
+        setLayoutLockedReason(null)
         if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
         savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 3000)
       } else {
         setSaveStatus('error')
+        const lockMsg = result.errors?.find(e => e.includes('layout mode'))
+        if (lockMsg) setLayoutLockedReason(lockMsg)
       }
     } catch {
       setSaveStatus('error')
@@ -593,6 +609,97 @@ export default function GeneralView() {
             />
           </div>
         </div>
+      </div>
+
+      <Divider sx={{ mb: 3 }} />
+
+      {/* Layout mode */}
+      <div className="mb-5">
+        <h3 className="text-sm font-medium text-gray-700 mb-2">{t('layoutMode')}</h3>
+        <p className="text-xs text-gray-500 mb-3">{t('layoutModeDesc')}</p>
+
+        {layoutLocked && (
+          <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            {t('layoutModeLocked')}
+          </div>
+        )}
+        {layoutLockedReason && (
+          <div className="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            {layoutLockedReason}
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            disabled={layoutLocked}
+            onClick={() => {
+              if (layoutLocked || layoutMode === 'geo') return
+              setLayoutMode('geo')
+              immediateSave({ layoutMode: 'geo' })
+            }}
+            className={`flex-1 rounded-lg border-2 p-4 text-left transition-all ${
+              layoutLocked
+                ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed'
+                : layoutMode === 'geo'
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+            }`}
+          >
+            <div className="font-medium text-sm mb-1">{t('layoutModeGeo')}</div>
+            <p className="text-xs text-gray-500">{t('layoutModeGeoDesc')}</p>
+          </button>
+          <button
+            type="button"
+            disabled={layoutLocked}
+            onClick={() => {
+              if (layoutLocked || layoutMode === 'schematic') return
+              setLayoutMode('schematic')
+              immediateSave({
+                layoutMode: 'schematic',
+                layoutWidth: layoutWidth || '50',
+                layoutHeight: layoutHeight || '35',
+              })
+            }}
+            className={`flex-1 rounded-lg border-2 p-4 text-left transition-all ${
+              layoutLocked
+                ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed'
+                : layoutMode === 'schematic'
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+            }`}
+          >
+            <div className="font-medium text-sm mb-1">{t('layoutModeSchematic')}</div>
+            <p className="text-xs text-gray-500">{t('layoutModeSchematicDesc')}</p>
+          </button>
+        </div>
+
+        {layoutMode === 'schematic' && (
+          <div className="mt-3 flex gap-3">
+            <TextField
+              label={t('layoutWidth')}
+              type="number"
+              value={layoutWidth}
+              onChange={(e) => {
+                setLayoutWidth(e.target.value)
+                scheduleSave({ layoutWidth: e.target.value })
+              }}
+              helperText="m"
+              sx={{ flex: 1 }}
+            />
+            <TextField
+              label={t('layoutHeight')}
+              type="number"
+              value={layoutHeight}
+              onChange={(e) => {
+                setLayoutHeight(e.target.value)
+                scheduleSave({ layoutHeight: e.target.value })
+              }}
+              helperText="m"
+              sx={{ flex: 1 }}
+            />
+          </div>
+        )}
       </div>
 
       <Divider sx={{ mb: 3 }} />

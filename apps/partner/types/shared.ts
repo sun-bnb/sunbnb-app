@@ -6,12 +6,31 @@ export interface ServiceFee {
   serviceCode: string
 }
 
+export interface LayoutElementProps {
+  id: string
+  siteId: string
+  type: string
+  shape: string
+  x: number
+  y: number
+  width: number
+  height: number
+  rotation: number
+  z: number
+  label?: string | null
+  color?: string | null
+}
+
 export interface SiteProps {
   id?: string | undefined
   name?: string | undefined
   userId?: string | undefined
   locationLat?: string | undefined
   locationLng?: string | undefined
+  layoutMode?: string
+  layoutWidth?: number | null
+  layoutHeight?: number | null
+  layoutElements?: LayoutElementProps[]
   inventoryItems?: InventoryItem[]
   products?: Product[]
   rentalItems?: RentalItemProps[]
@@ -92,6 +111,8 @@ export interface InventoryItem {
   label?: string | null
   locationLat?: string
   locationLng?: string
+  schematicX?: number | null
+  schematicY?: number | null
   pairId?: string | null
   pair?: InventoryItem | null
   pairedBy?: InventoryItem | null

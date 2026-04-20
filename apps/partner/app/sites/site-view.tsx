@@ -35,6 +35,8 @@ export default function SiteView(
   const router = useRouter()
   const t = useTranslations('SiteView')
 
+  const isSchematic = site.layoutMode === 'schematic'
+
   return (
     <SiteProvider site={site} apiKey={apiKey}>
       <div className="mt-2">
@@ -57,12 +59,16 @@ export default function SiteView(
           <Tab value="general" label={t('general')} sx={tabStyle} />
           <Tab value="content" label={t('content')} sx={tabStyle} />
           <Tab value="brand" label={t('brand')} sx={tabStyle} />
-          <Tab value="inventory" label={t('inventory')} sx={tabStyle} />
+          {isSchematic ? (
+            <Tab value="schematic" label={t('schematic')} sx={tabStyle} />
+          ) : (
+            <Tab value="inventory" label={t('inventory')} sx={tabStyle} />
+          )}
           <Tab value="products" label={t('products')} sx={tabStyle} />
           <Tab value="rentals" label={t('rentals')} sx={tabStyle} />
           <Tab value="accounting" label={t('accounting')} sx={tabStyle} />
         </Tabs>
-        {tab !== 'inventory' && (
+        {tab !== 'inventory' && tab !== 'schematic' && (
           <ReadinessChecklist
             site={site}
             onNavigate={(path) => router.push(path.startsWith('/') ? path : `/sites/${site.id}/${path}`)}

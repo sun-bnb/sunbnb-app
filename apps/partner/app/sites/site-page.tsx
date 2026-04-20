@@ -24,9 +24,9 @@ export default async function SitePage(
     services: []
   }
 
-  site = await prisma.site.findFirst({ 
-    where: { id: params.id }, 
-    include: { 
+  site = await prisma.site.findFirst({
+    where: { id: params.id },
+    include: {
       workingHours: true,
       inventoryItems: {
         orderBy: { number: 'asc' },
@@ -41,10 +41,11 @@ export default async function SitePage(
           pairedBy: true
         }
       },
+      layoutElements: true,
       products: {
         where: { active: true }
       }
-    } 
+    }
   })
   
   if (!site) return <ErrorCard title="Site not found" message="This site does not exist or has been removed." />

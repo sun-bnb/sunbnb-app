@@ -68,9 +68,29 @@ const prisma = {
     findUnique: vi.fn(),
     findMany: vi.fn(),
   },
+  layoutElement: {
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+  },
+  itemGroup: {
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+  },
   $executeRaw: vi.fn(),
   $executeRawUnsafe: vi.fn(),
   $queryRaw: vi.fn(),
+  $transaction: vi.fn((arg) => {
+    if (Array.isArray(arg)) return Promise.all(arg)
+    if (typeof arg === 'function') return arg(prisma)
+    return Promise.resolve(arg)
+  }),
 }
 
 export default prisma

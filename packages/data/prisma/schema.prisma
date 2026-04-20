@@ -216,8 +216,12 @@ model Site {
   paymentProvider String                   @default("mollie") @map("payment_provider")
   noShowDeadlineMinutes Int?                @map("no_show_deadline_minutes")
   features        String[]                 @default(["sunbeds"])
+  layoutMode      String                   @default("geo") @map("layout_mode")
+  layoutWidth     Float?                   @map("layout_width")
+  layoutHeight    Float?                   @map("layout_height")
 
   inventoryItems  InventoryItem[]
+  layoutElements  LayoutElement[]
   orders          Order[]
   products        Product[]
   rentalItems     RentalItem[]
@@ -269,6 +273,8 @@ model InventoryItem {
   number       Int
   locationLat  String         @map("location_lat")
   locationLng  String         @map("location_lng")
+  schematicX   Float?         @map("schematic_x")
+  schematicY   Float?         @map("schematic_y")
   status       String
   notes        String?
   createdAt    DateTime       @default(now())
@@ -298,6 +304,8 @@ model ItemGroup {
   seatsPerRow   Int             @map("seats_per_row")
   locationLat   String          @map("location_lat")
   locationLng   String          @map("location_lng")
+  schematicX    Float?          @map("schematic_x")
+  schematicY    Float?          @map("schematic_y")
   status        String          @default("active")
   rotation      Int             @default(0)
   horizontalGap Float           @map("horizontal_gap")
@@ -308,6 +316,27 @@ model ItemGroup {
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   items         InventoryItem[]
+}
+
+model LayoutElement {
+  id        String   @id @default(cuid())
+  siteId    String   @map("site_id")
+  type      String
+  shape     String
+  x         Float
+  y         Float
+  width     Float
+  height    Float
+  rotation  Float    @default(0)
+  z         Int      @default(0)
+  label     String?
+  color     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId])
+  @@map("layout_element")
 }
 
 model Reservation {

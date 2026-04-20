@@ -24,6 +24,7 @@ export async function GET(request: NextRequest, { params } : { params: { id: str
     where: { id },
     include: {
       workingHours: true,
+      layoutElements: true,
       inventoryItems: {
         where: {
           status: 'active'

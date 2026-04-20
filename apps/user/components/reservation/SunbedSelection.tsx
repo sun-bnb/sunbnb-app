@@ -17,6 +17,7 @@ import sunshadeIcon from './sunshade-transparent.png'
 import beachTowelIcon from './beach-towel-transparent.png'
 import React from 'react'
 import { useSession } from 'next-auth/react'
+import SchematicSelection from './SchematicSelection'
 
 /** Helper: Check if the site is open on a given day and time range */
 function isSiteOpen(
@@ -203,7 +204,7 @@ interface ParcelShape {
 }
 
 /** Main SunbedSelection Component */
-export default function SunbedSelection({
+function SunbedSelectionGeo({
   apiKey,
   site,
 }: {
@@ -478,4 +479,11 @@ export default function SunbedSelection({
       </SafeAPIProvider>
     </>
   )
+}
+
+export default function SunbedSelection({ apiKey, site }: { apiKey: string; site: SiteProps }) {
+  if (site.layoutMode === 'schematic') {
+    return <SchematicSelection site={site} />
+  }
+  return <SunbedSelectionGeo apiKey={apiKey} site={site} />
 }

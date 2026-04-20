@@ -16,6 +16,9 @@ export async function saveGeneral(input: {
   vat: string
   locationLat: string
   locationLng: string
+  layoutMode?: string
+  layoutWidth?: string
+  layoutHeight?: string
 }): Promise<{ status: string; errors?: string[] }> {
   const { error } = await requireSiteOwner(input.id)
   if (error) return { status: 'error', errors: [error] }
@@ -44,7 +47,56 @@ export async function saveGeneral(input: {
   if (isNaN(lat) || lat < -90 || lat > 90) errors.push('Invalid latitude')
   if (isNaN(lng) || lng < -180 || lng > 180) errors.push('Invalid longitude')
 
+  const wantsLayoutChange =
+    input.layoutMode !== undefined ||
+    input.layoutWidth !== undefined ||
+    input.layoutHeight !== undefined
+
+  if (input.layoutMode !== undefined && !['geo', 'schematic'].includes(input.layoutMode)) {
+    errors.push('Invalid layout mode')
+  }
+
+  let layoutWidth: number | null | undefined
+  let layoutHeight: number | null | undefined
+  if (input.layoutWidth !== undefined) {
+    if (input.layoutWidth === '') {
+      layoutWidth = null
+    } else {
+      const w = Number(input.layoutWidth)
+      if (isNaN(w) || w <= 0 || w > 1000) errors.push('Layout width must be 1–1000 m')
+      else layoutWidth = w
+    }
+  }
+  if (input.layoutHeight !== undefined) {
+    if (input.layoutHeight === '') {
+      layoutHeight = null
+    } else {
+      const h = Number(input.layoutHeight)
+      if (isNaN(h) || h <= 0 || h > 1000) errors.push('Layout height must be 1–1000 m')
+      else layoutHeight = h
+    }
+  }
+
   if (errors.length > 0) return { status: 'error', errors }
+
+  // Hard-lock: refuse layoutMode switch when inventory items exist.
+  if (input.layoutMode !== undefined) {
+    const current = await prisma.site.findUnique({
+      where: { id: input.id },
+      select: { layoutMode: true, _count: { select: { inventoryItems: true } } },
+    })
+    if (current && current.layoutMode !== input.layoutMode && current._count.inventoryItems > 0) {
+      return {
+        status: 'error',
+        errors: ['Cannot change layout mode after inventory items exist'],
+      }
+    }
+  }
+
+  const layoutData: Record<string, unknown> = {}
+  if (input.layoutMode !== undefined) layoutData.layoutMode = input.layoutMode
+  if (layoutWidth !== undefined) layoutData.layoutWidth = layoutWidth
+  if (layoutHeight !== undefined) layoutData.layoutHeight = layoutHeight
 
   await prisma.site.update({
     where: { id: input.id },
@@ -55,6 +107,7 @@ export async function saveGeneral(input: {
       vat: vat > 0 ? vat : null,
       locationLat: input.locationLat,
       locationLng: input.locationLng,
+      ...(wantsLayoutChange ? layoutData : {}),
     },
   })
 

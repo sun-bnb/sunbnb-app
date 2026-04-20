@@ -184,6 +184,36 @@ export default function InventoryView() {
 
   const handleRotateSelected = async (delta: number) => {
     if (selectedItemIds.length === 0) return
+
+    // Complete parcel: regenerate grid at new rotation (mirrors ParcelForm "Apply").
+    if (isCompleteParcelSelected && selectedParcelGroupNumber) {
+      const groupItems = inventory.filter(i => i.group === selectedParcelGroupNumber)
+      const firstWithGroup = groupItems.find(i => i.itemGroupId)
+      if (firstWithGroup?.itemGroupId) {
+        const ig = await getItemGroup(firstWithGroup.itemGroupId)
+        if (ig) {
+          const newConfig: ChairConfig = {
+            rows: Math.ceil(groupItems.length / ig.seatsPerRow),
+            seatsPerRow: ig.seatsPerRow,
+            horizontalGap: ig.horizontalGap,
+            verticalGap: ig.verticalGap,
+            rotation: ig.rotation + delta,
+            group: ig.number,
+            category: ig.category || undefined,
+            price: ig.price || undefined,
+            pairSeats: ig.pairGap > 0,
+            intraPairGap: ig.pairGap,
+            baseLat: parseFloat(ig.locationLat),
+            baseLng: parseFloat(ig.locationLng),
+          }
+          await syncChairsWithLayout(siteId, newConfig, 'rearrange')
+          const updatedSite = await getSite(siteId)
+          if (updatedSite) setSite(updatedSite)
+          return
+        }
+      }
+    }
+
     await rotateSelection(siteId, selectedItemIds, delta)
     const updatedSite = await getSite(siteId)
     if (updatedSite) setSite(updatedSite)

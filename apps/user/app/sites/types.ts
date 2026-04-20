@@ -20,6 +20,25 @@ export interface SiteProps {
   features?: string[]
   rentalPaymentType?: string | null
   rentalItems?: RentalItemProps[]
+  layoutMode?: string | null
+  layoutWidth?: number | null
+  layoutHeight?: number | null
+  layoutElements?: LayoutElementProps[]
+}
+
+export interface LayoutElementProps {
+  id: string
+  siteId?: string
+  type: string
+  shape: string
+  x: number
+  y: number
+  width: number
+  height: number
+  rotation: number
+  z: number
+  label?: string | null
+  color?: string | null
 }
 
 export interface MapCenter {
@@ -99,6 +118,8 @@ export interface InventoryItem {
   rotation?: number | null
   locationLat?: string
   locationLng?: string
+  schematicX?: number | null
+  schematicY?: number | null
   reservations: Reservation[]
   site?: { id: string } | null
 }

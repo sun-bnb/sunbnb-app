@@ -66,6 +66,7 @@ export async function getSite(siteId: string) {
           pairedBy: true,
         },
       },
+      layoutElements: true,
       products: {
         where: { active: true },
       },

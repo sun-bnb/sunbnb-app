@@ -1,0 +1,139 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+vi.mock('@/app/auth', () => ({
+  auth: vi.fn().mockResolvedValue(null),
+}))
+
+vi.mock('@/lib/auth-helpers', () => ({
+  requireSiteOwner: vi.fn().mockResolvedValue({ session: null, error: 'Not authenticated' }),
+}))
+
+import { moveItems, moveParcel, rotateSelection } from './actions'
+import { requireSiteOwner } from '@/lib/auth-helpers'
+import prisma from '@repo/data/PrismaCient'
+
+const mockRequireSiteOwner = vi.mocked(requireSiteOwner)
+const SITE_ID = 'site-1'
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  mockRequireSiteOwner.mockResolvedValue({
+    session: { user: { id: 'owner-1' } },
+    error: null,
+  })
+})
+
+function setLayoutMode(mode: 'geo' | 'schematic') {
+  vi.mocked(prisma.site.findUnique).mockResolvedValue({ layoutMode: mode } as any)
+}
+
+// ─── moveItems schematic branch ────────────────────────────────────────────
+
+describe('moveItems (schematic mode)', () => {
+  it('updates schematicX/Y instead of locationLat/Lng', async () => {
+    setLayoutMode('schematic')
+    vi.mocked(prisma.inventoryItem.findMany)
+      .mockResolvedValueOnce([
+        { id: 'i1', locationLat: '0', locationLng: '0', schematicX: 10, schematicY: 5 },
+        { id: 'i2', locationLat: '0', locationLng: '0', schematicX: 12, schematicY: 5 },
+      ] as any)
+      .mockResolvedValueOnce([{ group: 1, itemGroupId: null }, { group: 1, itemGroupId: null }] as any)
+    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
+
+    // deltaLat=2 (north meters), deltaLng=3 (east meters) for schematic
+    const res = await moveItems(SITE_ID, ['i1', 'i2'], 2, 3)
+    expect(res.status).toBe('ok')
+
+    const calls = vi.mocked(prisma.inventoryItem.update).mock.calls
+    expect(calls).toHaveLength(2)
+    expect(calls[0][0].data).toEqual({ schematicX: 13, schematicY: 7 })
+    expect(calls[1][0].data).toEqual({ schematicX: 15, schematicY: 7 })
+  })
+
+  it('returns ok with empty itemIds', async () => {
+    const res = await moveItems(SITE_ID, [], 1, 1)
+    expect(res.status).toBe('ok')
+  })
+})
+
+// ─── moveParcel schematic branch ───────────────────────────────────────────
+
+describe('moveParcel (schematic mode)', () => {
+  it('shifts every item in the group by delta meters', async () => {
+    setLayoutMode('schematic')
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValueOnce([
+      { id: 'i1', locationLat: '0', locationLng: '0', schematicX: 5, schematicY: 5, itemGroupId: 'g-1' },
+      { id: 'i2', locationLat: '0', locationLng: '0', schematicX: 6, schematicY: 5, itemGroupId: 'g-1' },
+    ] as any)
+    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.itemGroup.findUnique).mockResolvedValue({
+      schematicX: 5,
+      schematicY: 5,
+      locationLat: '0',
+      locationLng: '0',
+    } as any)
+    vi.mocked(prisma.itemGroup.update).mockResolvedValue({} as any)
+
+    const res = await moveParcel(SITE_ID, 1, 4, -2)
+    expect(res.status).toBe('ok')
+
+    const calls = vi.mocked(prisma.inventoryItem.update).mock.calls
+    expect(calls[0][0].data).toEqual({ schematicX: 3, schematicY: 9 })
+    expect(calls[1][0].data).toEqual({ schematicX: 4, schematicY: 9 })
+
+    const groupUpdate = vi.mocked(prisma.itemGroup.update).mock.calls[0][0]
+    expect(groupUpdate.data).toEqual({ schematicX: 3, schematicY: 9 })
+  })
+})
+
+// ─── moveItems geo branch (regression) ────────────────────────────────────
+
+describe('moveItems (geo mode)', () => {
+  it('updates locationLat/Lng strings', async () => {
+    setLayoutMode('geo')
+    vi.mocked(prisma.inventoryItem.findMany)
+      .mockResolvedValueOnce([
+        { id: 'i1', locationLat: '40.0', locationLng: '-3.0', schematicX: null, schematicY: null },
+      ] as any)
+      .mockResolvedValueOnce([{ group: 1, itemGroupId: null }] as any)
+    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
+
+    const res = await moveItems(SITE_ID, ['i1'], 0.001, 0.002)
+    expect(res.status).toBe('ok')
+    const data = vi.mocked(prisma.inventoryItem.update).mock.calls[0][0].data as any
+    expect(data.locationLat).toBe('40.001')
+    expect(data.locationLng).toBe('-2.998')
+  })
+})
+
+// ─── rotateSelection schematic branch ─────────────────────────────────────
+
+describe('rotateSelection (schematic mode)', () => {
+  it('rotates two items 90° around their centroid in meters', async () => {
+    setLayoutMode('schematic')
+    vi.mocked(prisma.inventoryItem.findMany)
+      .mockResolvedValueOnce([
+        { id: 'i1', locationLat: '0', locationLng: '0', schematicX: 0, schematicY: 0, rotation: 0 },
+        { id: 'i2', locationLat: '0', locationLng: '0', schematicX: 2, schematicY: 0, rotation: 0 },
+      ] as any)
+      .mockResolvedValueOnce([{ itemGroupId: null }, { itemGroupId: null }] as any)
+    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
+
+    const res = await rotateSelection(SITE_ID, ['i1', 'i2'], 90)
+    expect(res.status).toBe('ok')
+
+    const calls = vi.mocked(prisma.inventoryItem.update).mock.calls
+    expect(calls).toHaveLength(2)
+
+    const d1 = calls[0][0].data as any
+    const d2 = calls[1][0].data as any
+    // Centroid: (1, 0). After 90° rotation around (1,0):
+    //   (0,0) -> (1, -1),  (2,0) -> (1, 1)  — using the function's convention.
+    expect(d1.rotation).toBe(90)
+    expect(d2.rotation).toBe(90)
+    expect(Math.round(d1.schematicX)).toBe(1)
+    expect(Math.round(d2.schematicX)).toBe(1)
+    // Y values must differ (items orbited)
+    expect(Math.round(d1.schematicY)).not.toBe(Math.round(d2.schematicY))
+  })
+})

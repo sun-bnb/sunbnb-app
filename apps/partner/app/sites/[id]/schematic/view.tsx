@@ -1,0 +1,709 @@
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
+import { useTranslations } from 'next-intl'
+import { useSite } from '@/app/sites/site-context'
+import type { InventoryItem, LayoutElementProps } from '@/types/shared'
+import { getSite } from '../queries'
+import {
+  createInventoryItem,
+  deleteInventoryItem,
+  saveInventoryItemSchematicLocation,
+} from '../inventory-actions'
+import {
+  syncChairsWithLayout,
+  getItemGroup,
+  moveParcel,
+  moveItems,
+  rotateSelection,
+  adjustItemSpacing,
+  assignItemsToGroup,
+  removeItemsFromGroup,
+} from '../inventory/actions'
+import {
+  createLayoutElement,
+  updateLayoutElement,
+  deleteLayoutElement,
+} from './actions'
+import { ChairConfig } from '../inventory/chair-util'
+import InventoryForm from '../inventory/InventoryForm'
+import ParcelForm from '../inventory/ParcelForm'
+import InventoryToolbar from '../inventory/InventoryToolbar'
+import ParcelList from '../inventory/ParcelList'
+import { ELEMENT_PRESETS } from './palette'
+import SchematicCanvas from './SchematicCanvas'
+import ElementPalette from './ElementPalette'
+import ElementForm from './ElementForm'
+
+type EditorMode = 'none' | 'create-chair' | 'edit-chair' | 'create-parcel' | 'edit-parcel'
+
+export default function SchematicView() {
+  const t = useTranslations('SiteSchematic')
+  const { site, setSite } = useSite()
+  const siteId = site.id || ''
+
+  const inventory: InventoryItem[] = site.inventoryItems || []
+  const elements: LayoutElementProps[] = site.layoutElements || []
+  const worldWidth = site.layoutWidth ?? 50
+  const worldHeight = site.layoutHeight ?? 35
+
+  const [editorMode, setEditorMode] = useState<EditorMode>('none')
+  const [pendingElementType, setPendingElementType] = useState<string | null>(null)
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([])
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
+  const [selectedElementId, setSelectedElementId] = useState<string | null>(null)
+  const [propertiesOpenId, setPropertiesOpenId] = useState<string | null>(null)
+  const [editGroup, setEditGroup] = useState<number | null>(null)
+
+  const [parcelConfig, setParcelConfig] = useState<ChairConfig>({
+    rows: 6,
+    seatsPerRow: 10,
+    horizontalGap: 1,
+    verticalGap: 1.5,
+    rotation: 0,
+    group: 1,
+    category: 'PRICE1',
+    price: site.price || 9,
+    pairSeats: true,
+    intraPairGap: 0.4,
+    baseLat: worldHeight / 2,
+    baseLng: worldWidth / 2,
+  })
+
+  const propertiesElement = elements.find((e) => e.id === propertiesOpenId) || null
+  const selectedItem = inventory.find((i) => i.id === selectedItemId) || null
+  const isParcelEditorActive = editorMode === 'create-parcel' || editorMode === 'edit-parcel'
+
+  // Summary
+  const totalSunbeds = inventory.length
+  const parcelGroups = new Set(inventory.filter(i => i.group && i.group > 0).map(i => i.group))
+  const totalParcels = parcelGroups.size
+
+  // Selection grouping
+  const selectedParcelGroupNumber = useMemo(() => {
+    if (selectedItemIds.length < 2) return null
+    const items = inventory.filter(i => selectedItemIds.includes(i.id))
+    if (items.length === 0) return null
+    const groups = new Set(items.map(i => i.group))
+    if (groups.size !== 1) return null
+    return items[0]!.group || null
+  }, [selectedItemIds, inventory])
+
+  const selectedParcelTotal = useMemo(() => {
+    if (!selectedParcelGroupNumber) return 0
+    return inventory.filter(i => i.group === selectedParcelGroupNumber).length
+  }, [selectedParcelGroupNumber, inventory])
+
+  const isCompleteParcelSelected = useMemo(() => {
+    if (!selectedParcelGroupNumber) return false
+    const totalInGroup = inventory.filter(i => i.group === selectedParcelGroupNumber).length
+    const selectedInGroup = inventory.filter(i =>
+      i.group === selectedParcelGroupNumber && selectedItemIds.includes(i.id)
+    ).length
+    return selectedInGroup === totalInGroup
+  }, [selectedParcelGroupNumber, selectedItemIds, inventory])
+
+  const allParcelNumbers = useMemo(() => {
+    const groups = new Set(inventory.filter(i => i.group && i.group > 0).map(i => i.group))
+    return Array.from(groups).sort((a, b) => a - b)
+  }, [inventory])
+
+  const [selectedParcelConfig, setSelectedParcelConfig] = useState<ChairConfig | null>(null)
+
+  useEffect(() => {
+    if (!selectedParcelGroupNumber) {
+      setSelectedParcelConfig(null)
+      return
+    }
+    const groupItems = inventory.filter(i => i.group === selectedParcelGroupNumber)
+    const firstWithGroup = groupItems.find(i => i.itemGroupId)
+    if (firstWithGroup?.itemGroupId) {
+      getItemGroup(firstWithGroup.itemGroupId).then(ig => {
+        if (!ig) return
+        setSelectedParcelConfig({
+          itemGroupId: ig.id,
+          rows: Math.ceil(groupItems.length / ig.seatsPerRow),
+          seatsPerRow: ig.seatsPerRow,
+          horizontalGap: ig.horizontalGap,
+          verticalGap: ig.verticalGap,
+          rotation: ig.rotation,
+          group: ig.number,
+          category: ig.category || undefined,
+          price: ig.price || undefined,
+          pairSeats: ig.pairGap > 0,
+          intraPairGap: ig.pairGap,
+          baseLat: ig.schematicY ?? 0,
+          baseLng: ig.schematicX ?? 0,
+        })
+      })
+    } else {
+      const xs = groupItems.map(i => i.schematicX ?? 0)
+      const ys = groupItems.map(i => i.schematicY ?? 0)
+      const avgX = xs.reduce((s, v) => s + v, 0) / xs.length
+      const avgY = ys.reduce((s, v) => s + v, 0) / ys.length
+      setSelectedParcelConfig({
+        rows: Math.ceil(groupItems.length / (parcelConfig.seatsPerRow || 4)),
+        seatsPerRow: parcelConfig.seatsPerRow || 4,
+        horizontalGap: parcelConfig.horizontalGap,
+        verticalGap: parcelConfig.verticalGap,
+        rotation: groupItems[0]?.rotation || 0,
+        group: selectedParcelGroupNumber,
+        pairSeats: true,
+        intraPairGap: parcelConfig.intraPairGap,
+        baseLat: avgY,
+        baseLng: avgX,
+      })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedParcelGroupNumber])
+
+  async function refresh() {
+    const updated = await getSite(siteId)
+    if (updated) setSite(updated)
+  }
+
+  // ─── Escape key ────────────────────────────────────────────────────────
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setPendingElementType(null)
+        setSelectedItemIds([])
+        setSelectedItemId(null)
+        setSelectedElementId(null)
+        setPropertiesOpenId(null)
+        setEditorMode('none')
+        setEditGroup(null)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  // ─── Parcel handlers ───────────────────────────────────────────────────
+  const handleParcelReorder = async () => {
+    if (!selectedParcelConfig || !selectedParcelGroupNumber) return
+    const groupItems = inventory.filter(i => i.group === selectedParcelGroupNumber)
+    const firstWithGroup = groupItems.find(i => i.itemGroupId)
+    let baseLat = selectedParcelConfig.baseLat
+    let baseLng = selectedParcelConfig.baseLng
+    if (firstWithGroup?.itemGroupId) {
+      const ig = await getItemGroup(firstWithGroup.itemGroupId)
+      if (ig) {
+        baseLat = ig.schematicY ?? baseLat
+        baseLng = ig.schematicX ?? baseLng
+      }
+    }
+    await syncChairsWithLayout(siteId, { ...selectedParcelConfig, baseLat, baseLng }, 'rearrange')
+    const updated = await getSite(siteId)
+    if (updated) {
+      setSite(updated)
+      const updatedGroupItems = (updated.inventoryItems || []).filter(
+        (i: InventoryItem) => i.group === selectedParcelGroupNumber,
+      )
+      setSelectedItemIds(updatedGroupItems.map((i: InventoryItem) => i.id))
+    }
+  }
+
+  const handleEditParcelFull = () => {
+    if (!selectedParcelConfig || !selectedParcelGroupNumber) return
+    setParcelConfig(selectedParcelConfig)
+    setEditGroup(selectedParcelGroupNumber)
+    setEditorMode('edit-parcel')
+    setSelectedItemId(null)
+    setSelectedItemIds([])
+  }
+
+  // ─── Selection operations ──────────────────────────────────────────────
+  const handleRotateSelected = async (delta: number) => {
+    if (selectedItemIds.length === 0) return
+
+    // Complete parcel: regenerate grid at new rotation (mirrors ParcelForm "Apply").
+    if (isCompleteParcelSelected && selectedParcelGroupNumber) {
+      const groupItems = inventory.filter(i => i.group === selectedParcelGroupNumber)
+      const firstWithGroup = groupItems.find(i => i.itemGroupId)
+      if (firstWithGroup?.itemGroupId) {
+        const ig = await getItemGroup(firstWithGroup.itemGroupId)
+        if (ig) {
+          const newConfig: ChairConfig = {
+            rows: Math.ceil(groupItems.length / ig.seatsPerRow),
+            seatsPerRow: ig.seatsPerRow,
+            horizontalGap: ig.horizontalGap,
+            verticalGap: ig.verticalGap,
+            rotation: ig.rotation + delta,
+            group: ig.number,
+            category: ig.category || undefined,
+            price: ig.price || undefined,
+            pairSeats: ig.pairGap > 0,
+            intraPairGap: ig.pairGap,
+            baseLat: ig.schematicY ?? 0,
+            baseLng: ig.schematicX ?? 0,
+          }
+          await syncChairsWithLayout(siteId, newConfig, 'rearrange')
+          await refresh()
+          return
+        }
+      }
+    }
+
+    await rotateSelection(siteId, selectedItemIds, delta)
+    await refresh()
+  }
+
+  const handleAdjustSpacing = async (axis: 'horizontal' | 'vertical', factor: number) => {
+    if (selectedItemIds.length < 2) return
+    await adjustItemSpacing(siteId, selectedItemIds, axis, factor)
+    await refresh()
+  }
+
+  const handleAssignToParcel = async (group: number) => {
+    if (selectedItemIds.length === 0) return
+    await assignItemsToGroup(siteId, selectedItemIds, group)
+    await refresh()
+  }
+
+  const handleRemoveFromParcel = async () => {
+    if (selectedItemIds.length === 0) return
+    await removeItemsFromGroup(siteId, selectedItemIds)
+    await refresh()
+  }
+
+  const handleSelectEntireParcel = (group: number) => {
+    const parcelItems = inventory.filter(i => i.group === group)
+    setSelectedItemIds(parcelItems.map(i => i.id))
+  }
+
+  const handleRestoreParcelOrder = async (group: number) => {
+    const groupItems = inventory.filter(i => i.group === group)
+    if (groupItems.length === 0) return
+    const firstWithGroup = groupItems.find(i => i.itemGroupId)
+    let config: ChairConfig
+    if (firstWithGroup?.itemGroupId) {
+      const ig = await getItemGroup(firstWithGroup.itemGroupId)
+      if (!ig) return
+      config = {
+        itemGroupId: ig.id,
+        rows: Math.ceil(groupItems.length / ig.seatsPerRow),
+        seatsPerRow: ig.seatsPerRow,
+        horizontalGap: ig.horizontalGap,
+        verticalGap: ig.verticalGap,
+        rotation: ig.rotation,
+        group: ig.number,
+        category: ig.category || undefined,
+        price: ig.price || undefined,
+        pairSeats: ig.pairGap > 0,
+        intraPairGap: ig.pairGap,
+        baseLat: ig.schematicY ?? 0,
+        baseLng: ig.schematicX ?? 0,
+      }
+    } else {
+      const xs = groupItems.map(i => i.schematicX ?? 0)
+      const ys = groupItems.map(i => i.schematicY ?? 0)
+      const avgX = xs.reduce((s, v) => s + v, 0) / xs.length
+      const avgY = ys.reduce((s, v) => s + v, 0) / ys.length
+      config = {
+        rows: Math.ceil(groupItems.length / (parcelConfig.seatsPerRow || 4)),
+        seatsPerRow: parcelConfig.seatsPerRow || 4,
+        horizontalGap: parcelConfig.horizontalGap,
+        verticalGap: parcelConfig.verticalGap,
+        rotation: groupItems[0]?.rotation || 0,
+        group,
+        pairSeats: true,
+        intraPairGap: parcelConfig.intraPairGap,
+        baseLat: avgY,
+        baseLng: avgX,
+      }
+    }
+    await syncChairsWithLayout(siteId, config, 'rearrange')
+    const updated = await getSite(siteId)
+    if (updated) {
+      setSite(updated)
+      const updatedGroupItems = (updated.inventoryItems || []).filter(
+        (i: InventoryItem) => i.group === group,
+      )
+      setSelectedItemIds(updatedGroupItems.map((i: InventoryItem) => i.id))
+    }
+  }
+
+  const handleDeleteSelected = async () => {
+    if (selectedItemIds.length === 0) return
+    await Promise.all(selectedItemIds.map(id => deleteInventoryItem(id)))
+    setSelectedItemIds([])
+    await refresh()
+  }
+
+  // ─── Canvas interactions ───────────────────────────────────────────────
+
+  async function handleBackgroundClick(x: number, y: number) {
+    // Place a pending element
+    if (pendingElementType) {
+      const preset = ELEMENT_PRESETS[pendingElementType]
+      if (!preset) return
+      const cx = x - preset.width / 2
+      const cy = y - preset.height / 2
+      await createLayoutElement(siteId, {
+        type: preset.type,
+        shape: preset.shape,
+        x: cx,
+        y: cy,
+        width: preset.width,
+        height: preset.height,
+      })
+      setPendingElementType(null)
+      await refresh()
+      return
+    }
+
+    // Move multi-selected items to clicked position
+    if (selectedItemIds.length > 0 && editorMode === 'none') {
+      const items = inventory.filter(i => selectedItemIds.includes(i.id))
+      if (items.length === 0) return
+      const xs = items.map(i => i.schematicX ?? 0)
+      const ys = items.map(i => i.schematicY ?? 0)
+      const centerX = (Math.min(...xs) + Math.max(...xs)) / 2
+      const centerY = (Math.min(...ys) + Math.max(...ys)) / 2
+      const deltaY = y - centerY
+      const deltaX = x - centerX
+      await moveItems(siteId, selectedItemIds, deltaY, deltaX) // (deltaLat, deltaLng) → (Y, X)
+      await refresh()
+      return
+    }
+
+    if (editorMode === 'create-parcel') {
+      const newGroup = Math.max(0, ...inventory.map(i => i.group || 0)) + 1
+      const newConfig: ChairConfig = {
+        ...parcelConfig,
+        group: newGroup,
+        baseLat: y,
+        baseLng: x,
+      }
+      setParcelConfig(newConfig)
+      await syncChairsWithLayout(siteId, newConfig, 'create')
+      const updated = await getSite(siteId)
+      if (updated) {
+        setSite(updated)
+        const newItems = (updated.inventoryItems || []).filter((i: InventoryItem) => i.group === newGroup)
+        setSelectedItemIds(newItems.map((i: InventoryItem) => i.id))
+      }
+      setEditorMode('none')
+      return
+    }
+
+    if (editorMode === 'edit-parcel') {
+      const deltaY = y - parcelConfig.baseLat
+      const deltaX = x - parcelConfig.baseLng
+      setParcelConfig({ ...parcelConfig, baseLat: y, baseLng: x })
+      await moveParcel(siteId, parcelConfig.group, deltaY, deltaX)
+      await refresh()
+      return
+    }
+
+    if (editorMode === 'create-chair') {
+      const result = await createInventoryItem({ siteId })
+      if (result.status === 'ok' && result.item) {
+        await saveInventoryItemSchematicLocation(result.item.id, x, y)
+        const updated = await getSite(siteId)
+        if (updated) setSite(updated)
+        setSelectedItemId(result.item.id)
+        setEditorMode('edit-chair')
+      }
+      return
+    }
+
+    // Default: clear selection
+    setSelectedItemIds([])
+    setSelectedItemId(null)
+    setSelectedElementId(null)
+    setPropertiesOpenId(null)
+  }
+
+  async function handleItemClick(id: string, mods: { metaKey: boolean; ctrlKey: boolean }) {
+    if (mods.metaKey || mods.ctrlKey) {
+      setSelectedItemIds(prev =>
+        prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id],
+      )
+      setSelectedItemId(null)
+      if (editorMode === 'edit-chair') setEditorMode('none')
+      return
+    }
+    const item = inventory.find(i => i.id === id)
+    if (!item) return
+    setSelectedItemId(prev => (prev === id ? null : id))
+    setSelectedItemIds([])
+    setSelectedElementId(null)
+    setPropertiesOpenId(null)
+    setEditorMode('edit-chair')
+  }
+
+  async function handleItemDragEnd(id: string, x: number, y: number) {
+    const item = inventory.find(i => i.id === id)
+    if (!item) return
+    if (item.group > 0) {
+      const origX = item.schematicX ?? 0
+      const origY = item.schematicY ?? 0
+      const deltaY = y - origY
+      const deltaX = x - origX
+      await moveParcel(siteId, item.group, deltaY, deltaX)
+    } else {
+      await saveInventoryItemSchematicLocation(id, x, y)
+    }
+    await refresh()
+  }
+
+  function handleElementClick(id: string) {
+    setSelectedElementId(id)
+    setSelectedItemIds([])
+    setSelectedItemId(null)
+    if (propertiesOpenId && propertiesOpenId !== id) setPropertiesOpenId(null)
+  }
+
+  function handleElementDoubleClick(id: string) {
+    setSelectedElementId(id)
+    setSelectedItemIds([])
+    setSelectedItemId(null)
+    setPropertiesOpenId(id)
+  }
+
+  async function handleElementDragEnd(id: string, x: number, y: number) {
+    await updateLayoutElement(id, { x, y })
+    await refresh()
+  }
+
+  async function handleElementResizeEnd(id: string, x: number, y: number, width: number, height: number) {
+    await updateLayoutElement(id, { x, y, width, height })
+    await refresh()
+  }
+
+  async function handleElementPatch(patch: Partial<LayoutElementProps>) {
+    if (!propertiesElement) return
+    await updateLayoutElement(propertiesElement.id, patch as any)
+    await refresh()
+  }
+
+  async function handleElementDelete() {
+    if (!propertiesElement) return
+    await deleteLayoutElement(propertiesElement.id)
+    setSelectedElementId(prev => (prev === propertiesElement.id ? null : prev))
+    setPropertiesOpenId(null)
+    await refresh()
+  }
+
+  // ─── Side panel visibility ─────────────────────────────────────────────
+  const showItemPanel = !!selectedItem && editorMode === 'edit-chair'
+  const showParcelPanel = isParcelEditorActive
+  const showElementPanel = !!propertiesElement
+  const showRightPanel = showItemPanel || showParcelPanel || showElementPanel
+
+  return (
+    <div className="flex flex-col -mt-2">
+      {/* Summary strip */}
+      <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs text-gray-500">
+        <span className="font-medium text-gray-700">{totalSunbeds}</span>
+        <span>{t('totalSunbedsLabel', { count: totalSunbeds })}</span>
+        <span className="text-gray-300">·</span>
+        <span className="font-medium text-gray-700">{totalParcels}</span>
+        <span>{t('parcelsLabel', { count: totalParcels })}</span>
+        <span className="text-gray-300">·</span>
+        <span className="font-medium text-gray-700">{elements.length}</span>
+        <span>{t('totalElements', { count: elements.length })}</span>
+        {pendingElementType ? (
+          <>
+            <span className="text-gray-300">·</span>
+            <span className="text-blue-600">{t('clickToPlace', { type: pendingElementType })}</span>
+          </>
+        ) : null}
+      </div>
+
+      {/* Parcel list */}
+      <ParcelList
+        inventory={inventory}
+        allParcelNumbers={allParcelNumbers}
+        selectedItemIds={selectedItemIds}
+        onSelectParcel={handleSelectEntireParcel}
+        onRestoreOrder={handleRestoreParcelOrder}
+      />
+
+      {/* Toolbar */}
+      <div className="px-4 py-2 border-b border-gray-100 bg-white">
+        <InventoryToolbar
+          creating={editorMode === 'create-chair'}
+          creatingParcel={editorMode === 'create-parcel'}
+          selectedItemCount={selectedItemIds.length}
+          selectedParcelGroup={selectedParcelGroupNumber}
+          selectedParcelTotal={selectedParcelTotal}
+          isCompleteParcelSelected={isCompleteParcelSelected}
+          allParcelNumbers={allParcelNumbers}
+          onClearSelection={() => setSelectedItemIds([])}
+          onDeleteSelected={handleDeleteSelected}
+          onRotateSelected={handleRotateSelected}
+          onAdjustSpacing={handleAdjustSpacing}
+          onAssignToParcel={handleAssignToParcel}
+          onRemoveFromParcel={handleRemoveFromParcel}
+          onSelectEntireParcel={handleSelectEntireParcel}
+          onParcelReorder={handleParcelReorder}
+          onEditParcelFull={handleEditParcelFull}
+          onStartCreate={() => {
+            setEditorMode('create-chair')
+            setSelectedItemId(null)
+            setSelectedItemIds([])
+            setPendingElementType(null)
+          }}
+          onStartParcel={() => {
+            setEditorMode('create-parcel')
+            setSelectedItemId(null)
+            setSelectedItemIds([])
+            setPendingElementType(null)
+          }}
+          onCancel={() => {
+            setEditorMode('none')
+            setSelectedItemId(null)
+            setSelectedItemIds([])
+          }}
+        />
+      </div>
+
+      <div className="flex relative" style={{ height: '600px' }}>
+        <ElementPalette
+          pendingType={pendingElementType}
+          onPickType={(type) => {
+            setPendingElementType(type)
+            setEditorMode('none')
+            setSelectedElementId(null)
+            setSelectedItemId(null)
+            setSelectedItemIds([])
+          }}
+          onAddSunbed={() => {
+            setEditorMode('create-chair')
+            setPendingElementType(null)
+            setSelectedElementId(null)
+            setSelectedItemId(null)
+            setSelectedItemIds([])
+          }}
+          onAddParcel={() => {
+            setEditorMode('create-parcel')
+            setPendingElementType(null)
+            setSelectedElementId(null)
+            setSelectedItemId(null)
+            setSelectedItemIds([])
+          }}
+        />
+
+        <div className="flex-1 relative bg-gray-100">
+          <SchematicCanvas
+            worldWidth={worldWidth}
+            worldHeight={worldHeight}
+            bgImageUrl={site.bgImageUrl}
+            elements={elements}
+            items={inventory}
+            selectedItemIds={selectedItemIds}
+            selectedElementId={selectedElementId}
+            highlightedGroup={editGroup}
+            placementActive={
+              pendingElementType !== null ||
+              editorMode === 'create-chair' ||
+              editorMode === 'create-parcel' ||
+              editorMode === 'edit-parcel'
+            }
+            onItemClick={handleItemClick}
+            onItemDragEnd={handleItemDragEnd}
+            onElementClick={handleElementClick}
+            onElementDoubleClick={handleElementDoubleClick}
+            onElementDragEnd={handleElementDragEnd}
+            onElementResizeEnd={handleElementResizeEnd}
+            onBackgroundClick={handleBackgroundClick}
+          />
+        </div>
+
+        {showRightPanel ? (
+          <div className="absolute right-0 top-0 bottom-0 w-80 border-l border-gray-200 bg-white overflow-y-auto shadow-lg z-10">
+            {showItemPanel && selectedItem ? (
+              <InventoryForm
+                selectedItem={selectedItem}
+                onDelete={() => {
+                  setSelectedItemId(null)
+                  setEditorMode('none')
+                  refresh()
+                }}
+                onEditGroup={async (item) => {
+                  const groupNumber = item.group || 1
+                  const allGroupItems = inventory.filter(i => i.group === groupNumber)
+                  if (item.itemGroupId) {
+                    const ig = await getItemGroup(item.itemGroupId)
+                    if (ig) {
+                      const config: ChairConfig = {
+                        itemGroupId: ig.id,
+                        rows: Math.ceil(allGroupItems.length / ig.seatsPerRow),
+                        seatsPerRow: ig.seatsPerRow,
+                        horizontalGap: ig.horizontalGap,
+                        verticalGap: ig.verticalGap,
+                        rotation: ig.rotation,
+                        group: ig.number,
+                        category: ig.category || undefined,
+                        price: ig.price || undefined,
+                        pairSeats: ig.pairGap > 0,
+                        intraPairGap: ig.pairGap,
+                        baseLat: ig.schematicY ?? 0,
+                        baseLng: ig.schematicX ?? 0,
+                      }
+                      setParcelConfig(config)
+                      setEditGroup(ig.number)
+                      setEditorMode('edit-parcel')
+                      setSelectedItemId(null)
+                      return
+                    }
+                  }
+                  const xs = allGroupItems.map(i => i.schematicX ?? 0)
+                  const ys = allGroupItems.map(i => i.schematicY ?? 0)
+                  const avgX = xs.reduce((s, v) => s + v, 0) / Math.max(xs.length, 1)
+                  const avgY = ys.reduce((s, v) => s + v, 0) / Math.max(ys.length, 1)
+                  const seatsPerRow = parcelConfig.seatsPerRow || 4
+                  setParcelConfig(prev => ({
+                    ...prev,
+                    group: groupNumber,
+                    rows: Math.ceil(allGroupItems.length / seatsPerRow),
+                    seatsPerRow,
+                    baseLat: avgY,
+                    baseLng: avgX,
+                    rotation: allGroupItems[0]?.rotation || 0,
+                  }))
+                  setEditGroup(groupNumber)
+                  setEditorMode('edit-parcel')
+                  setSelectedItemId(null)
+                }}
+                onClose={() => {
+                  setSelectedItemId(null)
+                  setEditorMode('none')
+                }}
+              />
+            ) : null}
+            {showParcelPanel ? (
+              <ParcelForm
+                mode={editorMode === 'edit-parcel' ? 'edit' : 'create'}
+                siteId={siteId}
+                editGroup={editGroup}
+                config={parcelConfig}
+                setConfig={setParcelConfig}
+                onCancel={() => {
+                  setEditorMode('none')
+                  setEditGroup(null)
+                }}
+                onDeleteParcel={() => {
+                  setEditorMode('none')
+                  setEditGroup(null)
+                  setSelectedItemId(null)
+                }}
+              />
+            ) : null}
+            {showElementPanel && propertiesElement ? (
+              <ElementForm
+                element={propertiesElement}
+                onPatch={handleElementPatch}
+                onDelete={handleElementDelete}
+                onClose={() => setPropertiesOpenId(null)}
+              />
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}

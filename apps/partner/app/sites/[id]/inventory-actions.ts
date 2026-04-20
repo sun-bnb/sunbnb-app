@@ -81,6 +81,44 @@ export async function saveInventoryItemLocation(
   return { status: 'ok' }
 }
 
+// ─── Update Item Schematic Location ─────────────────────────────────────────
+
+export async function saveInventoryItemSchematicLocation(
+  id: string,
+  x: number,
+  y: number,
+) {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return { status: 'error', errors: ['Invalid coordinates'] }
+  }
+  if (x < -10000 || x > 10000 || y < -10000 || y > 10000) {
+    return { status: 'error', errors: ['Coordinates out of range'] }
+  }
+
+  const session = await auth()
+  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+
+  const item = await prisma.inventoryItem.findUnique({
+    where: { id },
+    select: { site: { select: { userId: true } } },
+  })
+  if (!item || item.site.userId !== session.user.id) {
+    return { status: 'error', errors: ['Not authorized'] }
+  }
+
+  await prisma.inventoryItem.update({
+    where: { id },
+    data: {
+      status: 'active',
+      schematicX: x,
+      schematicY: y,
+    },
+  })
+
+  revalidatePath('/sites')
+  return { status: 'ok' }
+}
+
 // ─── Update Item Properties ─────────────────────────────────────────────────
 
 export async function saveInventoryItemProperties(

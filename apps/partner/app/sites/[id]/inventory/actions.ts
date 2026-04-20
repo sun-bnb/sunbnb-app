@@ -5,34 +5,79 @@ import { requireSiteOwner } from '@/lib/auth-helpers'
 import { isValidItemStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 
-import { generateChairs, ChairConfig } from './chair-util'
+import { generateChairs, generateChairsSchematic, ChairConfig } from './chair-util'
 
 type Mode = 'create' | 'rearrange'
+
+async function getSiteLayoutMode(siteId: string): Promise<'geo' | 'schematic'> {
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { layoutMode: true },
+  })
+  return site?.layoutMode === 'schematic' ? 'schematic' : 'geo'
+}
 
 export async function syncChairsWithLayout(siteId: string, config: ChairConfig, mode: Mode) {
 
   const { session, error } = await requireSiteOwner(siteId)
   if (error) return { status: 'error', errors: [error] }
 
-  const generated = generateChairs(config)
+  const layoutMode = await getSiteLayoutMode(siteId)
+  const isSchematic = layoutMode === 'schematic'
+
+  const generated = isSchematic
+    ? generateChairsSchematic({
+        ...config,
+        baseX: config.baseLng,
+        baseY: config.baseLat,
+      }).map((c) => ({
+        tempId: c.tempId,
+        pairTempId: c.pairTempId,
+        locationLat: '0',
+        locationLng: '0',
+        schematicX: c.schematicX,
+        schematicY: c.schematicY,
+        rotation: c.rotation,
+        group: c.group,
+        number: c.number,
+        isPrimary: c.isPrimary,
+      }))
+    : generateChairs(config).map((c) => ({ ...c, schematicX: undefined, schematicY: undefined }))
+
   const group = config.group
 
-  const itemGroupData = {
-    number: config.group,
-    price: config.price,
-    category: config.category,
-    rows: config.rows,
-    seatsPerRow: config.seatsPerRow,
-    horizontalGap: config.horizontalGap,
-    verticalGap: config.verticalGap,
-    pairGap: config.intraPairGap,
-    rotation: config.rotation,
-    locationLat: String(config.baseLat),
-    locationLng: String(config.baseLng)
-  }
+  const itemGroupData = isSchematic
+    ? {
+        number: config.group,
+        price: config.price,
+        category: config.category,
+        rows: config.rows,
+        seatsPerRow: config.seatsPerRow,
+        horizontalGap: config.horizontalGap,
+        verticalGap: config.verticalGap,
+        pairGap: config.intraPairGap,
+        rotation: config.rotation,
+        locationLat: '0',
+        locationLng: '0',
+        schematicX: config.baseLng,
+        schematicY: config.baseLat,
+      }
+    : {
+        number: config.group,
+        price: config.price,
+        category: config.category,
+        rows: config.rows,
+        seatsPerRow: config.seatsPerRow,
+        horizontalGap: config.horizontalGap,
+        verticalGap: config.verticalGap,
+        pairGap: config.intraPairGap,
+        rotation: config.rotation,
+        locationLat: String(config.baseLat),
+        locationLng: String(config.baseLng)
+      }
 
   if (mode === 'create') {
-    
+
     const itemGroup = await prisma.itemGroup.create({
       data: itemGroupData
     })
@@ -47,6 +92,7 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
             status: 'active',
             locationLat: item.locationLat,
             locationLng: item.locationLng,
+            ...(isSchematic ? { schematicX: item.schematicX, schematicY: item.schematicY } : {}),
             rotation: item.rotation,
             number: item.number,
             group: item.group,
@@ -63,20 +109,70 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
 
     const existing = await prisma.inventoryItem.findMany({
       where: { siteId, group },
-      select: { id: true, number: true, itemGroupId: true }
+      select: {
+        id: true,
+        number: true,
+        itemGroupId: true,
+        locationLat: true,
+        locationLng: true,
+        schematicX: true,
+        schematicY: true,
+      }
     })
+
+    // Preserve the visual centroid across the rearrange so rotation pivots
+    // around the parcel center rather than the first seat.
+    let shiftedGenerated = generated
+    let shiftedGroupData = itemGroupData
+    if (existing.length > 0 && generated.length > 0) {
+      if (isSchematic) {
+        const oldCx = existing.reduce((s, i) => s + (i.schematicX ?? 0), 0) / existing.length
+        const oldCy = existing.reduce((s, i) => s + (i.schematicY ?? 0), 0) / existing.length
+        const newCx = generated.reduce((s, g) => s + (g.schematicX ?? 0), 0) / generated.length
+        const newCy = generated.reduce((s, g) => s + (g.schematicY ?? 0), 0) / generated.length
+        const dx = oldCx - newCx
+        const dy = oldCy - newCy
+        shiftedGenerated = generated.map((g) => ({
+          ...g,
+          schematicX: (g.schematicX ?? 0) + dx,
+          schematicY: (g.schematicY ?? 0) + dy,
+        }))
+        shiftedGroupData = {
+          ...itemGroupData,
+          schematicX: (itemGroupData.schematicX ?? 0) + dx,
+          schematicY: (itemGroupData.schematicY ?? 0) + dy,
+        }
+      } else {
+        const oldCLat = existing.reduce((s, i) => s + parseFloat(i.locationLat), 0) / existing.length
+        const oldCLng = existing.reduce((s, i) => s + parseFloat(i.locationLng), 0) / existing.length
+        const newCLat = generated.reduce((s, g) => s + parseFloat(g.locationLat), 0) / generated.length
+        const newCLng = generated.reduce((s, g) => s + parseFloat(g.locationLng), 0) / generated.length
+        const dLat = oldCLat - newCLat
+        const dLng = oldCLng - newCLng
+        shiftedGenerated = generated.map((g) => ({
+          ...g,
+          locationLat: (parseFloat(g.locationLat) + dLat).toString(),
+          locationLng: (parseFloat(g.locationLng) + dLng).toString(),
+        }))
+        shiftedGroupData = {
+          ...itemGroupData,
+          locationLat: (parseFloat(itemGroupData.locationLat) + dLat).toString(),
+          locationLng: (parseFloat(itemGroupData.locationLng) + dLng).toString(),
+        }
+      }
+    }
 
     const numberToId = new Map(existing.map((e) => [e.number, e.id]))
 
     let itemGroup = null
     if (existing.length > 0 && !(existing[0]?.itemGroupId)) {
       itemGroup = await prisma.itemGroup.create({
-        data: itemGroupData
+        data: shiftedGroupData
       })
     } else {
       itemGroup = await prisma.itemGroup.update({
         where: { id: existing[0]!.itemGroupId! },
-        data: itemGroupData
+        data: shiftedGroupData
       })
     }
 
@@ -85,7 +181,7 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
 
     // Update existing chairs that match a generated position by number
     await Promise.all(
-      generated.map((item) => {
+      shiftedGenerated.map((item) => {
         const id = numberToId.get(item.number)
         if (!id) return Promise.resolve()
 
@@ -96,6 +192,7 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
             itemGroupId: itemGroup ? itemGroup.id : undefined,
             locationLat: item.locationLat,
             locationLng: item.locationLng,
+            ...(isSchematic ? { schematicX: item.schematicX, schematicY: item.schematicY } : {}),
             rotation: item.rotation,
             number: item.number,
             group: item.group,
@@ -110,7 +207,7 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
     // Assign remaining unmatched existing items to any leftover generated
     // positions so that every item in the group gets repositioned.
     const unmatchedExisting = existing.filter((e) => !matchedIds.has(e.id))
-    const unmatchedGenerated = generated.filter((g) => !numberToId.has(g.number))
+    const unmatchedGenerated = shiftedGenerated.filter((g) => !numberToId.has(g.number))
 
     await Promise.all(
       unmatchedExisting.map((existingItem, idx) => {
@@ -124,6 +221,7 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
             itemGroupId: itemGroup ? itemGroup.id : undefined,
             locationLat: gen.locationLat,
             locationLng: gen.locationLng,
+            ...(isSchematic ? { schematicX: gen.schematicX, schematicY: gen.schematicY } : {}),
             rotation: gen.rotation,
             number: gen.number,
             group: gen.group,
@@ -211,20 +309,33 @@ export async function moveParcel(
   const { error } = await requireSiteOwner(siteId)
   if (error) return { status: 'error', errors: [error] }
 
+  const isSchematic = (await getSiteLayoutMode(siteId)) === 'schematic'
+
   const items = await prisma.inventoryItem.findMany({
     where: { siteId, group },
-    select: { id: true, locationLat: true, locationLng: true, itemGroupId: true },
+    select: {
+      id: true,
+      locationLat: true,
+      locationLng: true,
+      schematicX: true,
+      schematicY: true,
+      itemGroupId: true,
+    },
   })
 
-  // Offset every item in the group by the delta
   await Promise.all(
     items.map((item) =>
       prisma.inventoryItem.update({
         where: { id: item.id },
-        data: {
-          locationLat: String(parseFloat(item.locationLat) + deltaLat),
-          locationLng: String(parseFloat(item.locationLng) + deltaLng),
-        },
+        data: isSchematic
+          ? {
+              schematicX: (item.schematicX ?? 0) + deltaLng,
+              schematicY: (item.schematicY ?? 0) + deltaLat,
+            }
+          : {
+              locationLat: String(parseFloat(item.locationLat) + deltaLat),
+              locationLng: String(parseFloat(item.locationLng) + deltaLng),
+            },
       })
     )
   )
@@ -236,10 +347,15 @@ export async function moveParcel(
     if (ig) {
       await prisma.itemGroup.update({
         where: { id: itemGroupId },
-        data: {
-          locationLat: String(parseFloat(ig.locationLat) + deltaLat),
-          locationLng: String(parseFloat(ig.locationLng) + deltaLng),
-        },
+        data: isSchematic
+          ? {
+              schematicX: (ig.schematicX ?? 0) + deltaLng,
+              schematicY: (ig.schematicY ?? 0) + deltaLat,
+            }
+          : {
+              locationLat: String(parseFloat(ig.locationLat) + deltaLat),
+              locationLng: String(parseFloat(ig.locationLng) + deltaLng),
+            },
       })
     }
   }
@@ -258,19 +374,32 @@ export async function moveItems(
 
   if (itemIds.length === 0) return { status: 'ok' }
 
+  const isSchematic = (await getSiteLayoutMode(siteId)) === 'schematic'
+
   const items = await prisma.inventoryItem.findMany({
     where: { id: { in: itemIds }, siteId },
-    select: { id: true, locationLat: true, locationLng: true },
+    select: {
+      id: true,
+      locationLat: true,
+      locationLng: true,
+      schematicX: true,
+      schematicY: true,
+    },
   })
 
   await Promise.all(
     items.map((item) =>
       prisma.inventoryItem.update({
         where: { id: item.id },
-        data: {
-          locationLat: String(parseFloat(item.locationLat) + deltaLat),
-          locationLng: String(parseFloat(item.locationLng) + deltaLng),
-        },
+        data: isSchematic
+          ? {
+              schematicX: (item.schematicX ?? 0) + deltaLng,
+              schematicY: (item.schematicY ?? 0) + deltaLat,
+            }
+          : {
+              locationLat: String(parseFloat(item.locationLat) + deltaLat),
+              locationLng: String(parseFloat(item.locationLng) + deltaLng),
+            },
       })
     )
   )
@@ -289,10 +418,15 @@ export async function moveItems(
       if (ig) {
         await prisma.itemGroup.update({
           where: { id: igId },
-          data: {
-            locationLat: String(parseFloat(ig.locationLat) + deltaLat),
-            locationLng: String(parseFloat(ig.locationLng) + deltaLng),
-          },
+          data: isSchematic
+            ? {
+                schematicX: (ig.schematicX ?? 0) + deltaLng,
+                schematicY: (ig.schematicY ?? 0) + deltaLat,
+              }
+            : {
+                locationLat: String(parseFloat(ig.locationLat) + deltaLat),
+                locationLng: String(parseFloat(ig.locationLng) + deltaLng),
+              },
         })
       }
     }
@@ -335,52 +469,60 @@ export async function rotateSelection(
   if (error) return { status: 'error', errors: [error] }
   if (itemIds.length === 0) return { status: 'ok' }
 
+  const isSchematic = (await getSiteLayoutMode(siteId)) === 'schematic'
+
   const items = await prisma.inventoryItem.findMany({
     where: { id: { in: itemIds }, siteId },
-    select: { id: true, locationLat: true, locationLng: true, rotation: true },
+    select: {
+      id: true,
+      locationLat: true,
+      locationLng: true,
+      schematicX: true,
+      schematicY: true,
+      rotation: true,
+    },
   })
 
   if (items.length === 0) return { status: 'ok' }
 
   // Compute centroid of the selection
-  const centerLat = items.reduce((s, i) => s + parseFloat(i.locationLat), 0) / items.length
-  const centerLng = items.reduce((s, i) => s + parseFloat(i.locationLng), 0) / items.length
+  const centerLat = isSchematic
+    ? items.reduce((s, i) => s + (i.schematicY ?? 0), 0) / items.length
+    : items.reduce((s, i) => s + parseFloat(i.locationLat), 0) / items.length
+  const centerLng = isSchematic
+    ? items.reduce((s, i) => s + (i.schematicX ?? 0), 0) / items.length
+    : items.reduce((s, i) => s + parseFloat(i.locationLng), 0) / items.length
 
   const rad = deltaDegrees * (Math.PI / 180)
-  const metersPerLat = 111320
-  const metersPerLng = 111320 * Math.cos(centerLat * Math.PI / 180)
+  const metersPerLat = isSchematic ? 1 : 111320
+  const metersPerLng = isSchematic ? 1 : 111320 * Math.cos(centerLat * Math.PI / 180)
 
   // Build all updates: orbit positions around centroid + update each chair's facing angle
   const updates = items.map((item) => {
-    let newLat: string
-    let newLng: string
+    const itemY = isSchematic ? (item.schematicY ?? 0) : parseFloat(item.locationLat)
+    const itemX = isSchematic ? (item.schematicX ?? 0) : parseFloat(item.locationLng)
+    let newLatVal = itemY
+    let newLngVal = itemX
 
     if (items.length > 1) {
-      const dLat = parseFloat(item.locationLat) - centerLat
-      const dLng = parseFloat(item.locationLng) - centerLng
-      const dy = dLat * metersPerLat  // north offset in meters
-      const dx = dLng * metersPerLng  // east offset in meters
+      const dLat = itemY - centerLat
+      const dLng = itemX - centerLng
+      const dy = dLat * metersPerLat
+      const dx = dLng * metersPerLng
 
-      // Orbit using same convention as generateChairs:
-      // newLat = dy*cos - dx*sin,  newLng = dy*sin + dx*cos
       const newLatM = dy * Math.cos(rad) - dx * Math.sin(rad)
       const newLngM = dy * Math.sin(rad) + dx * Math.cos(rad)
-      newLat = String(centerLat + newLatM / metersPerLat)
-      newLng = String(centerLng + newLngM / metersPerLng)
-    } else {
-      newLat = item.locationLat
-      newLng = item.locationLng
+      newLatVal = centerLat + newLatM / metersPerLat
+      newLngVal = centerLng + newLngM / metersPerLng
     }
 
     const newRotation = Math.round((item.rotation ?? 0) + deltaDegrees)
 
     return prisma.inventoryItem.update({
       where: { id: item.id },
-      data: {
-        locationLat: newLat,
-        locationLng: newLng,
-        rotation: newRotation,
-      },
+      data: isSchematic
+        ? { schematicY: newLatVal, schematicX: newLngVal, rotation: newRotation }
+        : { locationLat: String(newLatVal), locationLng: String(newLngVal), rotation: newRotation },
     })
   })
 
@@ -405,17 +547,27 @@ export async function rotateSelection(
         // Update centroid from new positions
         const updatedItems = await prisma.inventoryItem.findMany({
           where: { id: { in: itemIds } },
-          select: { locationLat: true, locationLng: true },
+          select: { locationLat: true, locationLng: true, schematicX: true, schematicY: true },
         })
-        const newCenterLat = updatedItems.reduce((s, i) => s + parseFloat(i.locationLat), 0) / updatedItems.length
-        const newCenterLng = updatedItems.reduce((s, i) => s + parseFloat(i.locationLng), 0) / updatedItems.length
+        const newCenterLat = isSchematic
+          ? updatedItems.reduce((s, i) => s + (i.schematicY ?? 0), 0) / updatedItems.length
+          : updatedItems.reduce((s, i) => s + parseFloat(i.locationLat), 0) / updatedItems.length
+        const newCenterLng = isSchematic
+          ? updatedItems.reduce((s, i) => s + (i.schematicX ?? 0), 0) / updatedItems.length
+          : updatedItems.reduce((s, i) => s + parseFloat(i.locationLng), 0) / updatedItems.length
         await prisma.itemGroup.update({
           where: { id: itemGroupId },
-          data: {
-            rotation: Math.round(currentGroup.rotation + deltaDegrees),
-            locationLat: String(newCenterLat),
-            locationLng: String(newCenterLng),
-          },
+          data: isSchematic
+            ? {
+                rotation: Math.round(currentGroup.rotation + deltaDegrees),
+                schematicY: newCenterLat,
+                schematicX: newCenterLng,
+              }
+            : {
+                rotation: Math.round(currentGroup.rotation + deltaDegrees),
+                locationLat: String(newCenterLat),
+                locationLng: String(newCenterLng),
+              },
         })
       }
     }
@@ -434,27 +586,42 @@ export async function adjustItemSpacing(
   if (error) return { status: 'error', errors: [error] }
   if (itemIds.length < 2) return { status: 'ok' }
 
+  const isSchematic = (await getSiteLayoutMode(siteId)) === 'schematic'
+
   const items = await prisma.inventoryItem.findMany({
     where: { id: { in: itemIds }, siteId },
-    select: { id: true, locationLat: true, locationLng: true, rotation: true },
+    select: {
+      id: true,
+      locationLat: true,
+      locationLng: true,
+      schematicX: true,
+      schematicY: true,
+      rotation: true,
+    },
   })
 
   if (items.length < 2) return { status: 'ok' }
 
   // Compute centroid
-  const centerLat = items.reduce((s, i) => s + parseFloat(i.locationLat), 0) / items.length
-  const centerLng = items.reduce((s, i) => s + parseFloat(i.locationLng), 0) / items.length
+  const centerLat = isSchematic
+    ? items.reduce((s, i) => s + (i.schematicY ?? 0), 0) / items.length
+    : items.reduce((s, i) => s + parseFloat(i.locationLat), 0) / items.length
+  const centerLng = isSchematic
+    ? items.reduce((s, i) => s + (i.schematicX ?? 0), 0) / items.length
+    : items.reduce((s, i) => s + parseFloat(i.locationLng), 0) / items.length
 
   // Average rotation to determine the group's axes
   const avgRotation = items.reduce((s, i) => s + (i.rotation || 0), 0) / items.length
   const rad = avgRotation * (Math.PI / 180)
-  const metersPerLat = 111320
-  const metersPerLng = 111320 * Math.cos(centerLat * Math.PI / 180)
+  const metersPerLat = isSchematic ? 1 : 111320
+  const metersPerLng = isSchematic ? 1 : 111320 * Math.cos(centerLat * Math.PI / 180)
 
   await Promise.all(
     items.map((item) => {
-      const dLat = parseFloat(item.locationLat) - centerLat
-      const dLng = parseFloat(item.locationLng) - centerLng
+      const itemY = isSchematic ? (item.schematicY ?? 0) : parseFloat(item.locationLat)
+      const itemX = isSchematic ? (item.schematicX ?? 0) : parseFloat(item.locationLng)
+      const dLat = itemY - centerLat
+      const dLng = itemX - centerLng
 
       // Convert to meters (dy=north, dx=east)
       const dy = dLat * metersPerLat
@@ -482,10 +649,9 @@ export async function adjustItemSpacing(
 
       return prisma.inventoryItem.update({
         where: { id: item.id },
-        data: {
-          locationLat: String(newLat),
-          locationLng: String(newLng),
-        },
+        data: isSchematic
+          ? { schematicY: newLat, schematicX: newLng }
+          : { locationLat: String(newLat), locationLng: String(newLng) },
       })
     })
   )
@@ -507,19 +673,31 @@ export async function adjustItemSpacing(
         // Update centroid from new positions
         const updatedItems = await prisma.inventoryItem.findMany({
           where: { id: { in: itemIds } },
-          select: { locationLat: true, locationLng: true },
+          select: { locationLat: true, locationLng: true, schematicX: true, schematicY: true },
         })
-        const newCenterLat = updatedItems.reduce((s, i) => s + parseFloat(i.locationLat), 0) / updatedItems.length
-        const newCenterLng = updatedItems.reduce((s, i) => s + parseFloat(i.locationLng), 0) / updatedItems.length
+        const newCenterLat = isSchematic
+          ? updatedItems.reduce((s, i) => s + (i.schematicY ?? 0), 0) / updatedItems.length
+          : updatedItems.reduce((s, i) => s + parseFloat(i.locationLat), 0) / updatedItems.length
+        const newCenterLng = isSchematic
+          ? updatedItems.reduce((s, i) => s + (i.schematicX ?? 0), 0) / updatedItems.length
+          : updatedItems.reduce((s, i) => s + parseFloat(i.locationLng), 0) / updatedItems.length
         await prisma.itemGroup.update({
           where: { id: itemGroupId },
-          data: {
-            ...(axis === 'horizontal'
-              ? { horizontalGap: currentGroup.horizontalGap * factor }
-              : { verticalGap: currentGroup.verticalGap * factor }),
-            locationLat: String(newCenterLat),
-            locationLng: String(newCenterLng),
-          },
+          data: isSchematic
+            ? {
+                ...(axis === 'horizontal'
+                  ? { horizontalGap: currentGroup.horizontalGap * factor }
+                  : { verticalGap: currentGroup.verticalGap * factor }),
+                schematicY: newCenterLat,
+                schematicX: newCenterLng,
+              }
+            : {
+                ...(axis === 'horizontal'
+                  ? { horizontalGap: currentGroup.horizontalGap * factor }
+                  : { verticalGap: currentGroup.verticalGap * factor }),
+                locationLat: String(newCenterLat),
+                locationLng: String(newCenterLng),
+              },
         })
       }
     }

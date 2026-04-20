@@ -1,3 +1,7 @@
+import { generateChairGrid, SUNBED_HEIGHT, SUNBED_WIDTH } from '@repo/schematic/grid'
+
+export { SUNBED_HEIGHT, SUNBED_WIDTH }
+
 export interface ChairConfig {
   itemGroupId?: string
   baseLat: number
@@ -26,94 +30,89 @@ export interface ChairDefinition {
 }
 
 export function generateChairs(config: ChairConfig): ChairDefinition[] {
-  const {
-    baseLat,
-    baseLng,
-    group,
-    rotation,
-    rows,
-    seatsPerRow,
-    horizontalGap,
-    verticalGap,
-    intraPairGap,
-    pairSeats,
-  } = config
-
-  const items: ChairDefinition[] = []
-  const degToRad = (deg: number) => deg * (Math.PI / 180)
-  const rad = degToRad(rotation)
+  const { baseLat, baseLng } = config
   const metersPerLat = 111320
-  const metersPerLng = 111320 * Math.cos(baseLat * Math.PI / 180)
+  const metersPerLng = 111320 * Math.cos((baseLat * Math.PI) / 180)
 
-  // Physical sunbed dimensions (must match getScaledSize physicalLength & aspect ratio)
-  const sunbedHeight = 2.1   // meters (vertical / along-row dimension)
-  const sunbedWidth = 2.1 / 2.5  // meters (horizontal dimension) = 0.84
+  const cells = generateChairGrid({
+    group: config.group,
+    rotation: config.rotation,
+    rows: config.rows,
+    seatsPerRow: config.seatsPerRow,
+    horizontalGap: config.horizontalGap,
+    verticalGap: config.verticalGap,
+    intraPairGap: config.intraPairGap,
+    pairSeats: config.pairSeats,
+  })
 
-  // Convert user-facing gaps (visible space between edges) to center-to-center offsets
-  const pairCTC = intraPairGap + sunbedWidth         // center-to-center within a pair
-  const hGapCTC = horizontalGap + sunbedWidth         // center-to-center between pairs (or singles)
-  const vGapCTC = verticalGap + sunbedHeight          // center-to-center between rows
+  return cells.map((cell) => ({
+    tempId: cell.tempId,
+    ...(cell.pairTempId ? { pairTempId: cell.pairTempId } : {}),
+    locationLat: (baseLat + cell.dy / metersPerLat).toString(),
+    locationLng: (baseLng + cell.dx / metersPerLng).toString(),
+    rotation: cell.rotation,
+    group: cell.group,
+    number: cell.number,
+    isPrimary: cell.isPrimary,
+  }))
+}
 
-  for (let r = 0; r < rows; r++) {
-    let c = 0
-    while (c < seatsPerRow) {
-      const isPair = pairSeats && c + 1 < seatsPerRow
-      const rowNum = (r + 1).toString().padStart(2, '0')
-      const seatNum1 = (c + 1).toString().padStart(2, '0')
-      const seatNum2 = (c + 2).toString().padStart(2, '0')
+export interface SchematicChairConfig {
+  itemGroupId?: string
+  baseX: number
+  baseY: number
+  group: number
+  rotation: number
+  rows: number
+  seatsPerRow: number
+  horizontalGap: number
+  verticalGap: number
+  intraPairGap: number
+  pairSeats: boolean
+  category?: string
+  price?: number
+}
 
-      // Calculate x offset of first chair in the current unit (chair or pair)
-      const unitIndex = pairSeats ? Math.floor(c / 2) : c
-      const dx1 = unitIndex * (pairSeats
-        ? (pairCTC + hGapCTC) // pair width + gap to next pair (center-to-center)
-        : hGapCTC)
+export interface SchematicChairDefinition {
+  tempId: string
+  pairTempId?: string
+  schematicX: number
+  schematicY: number
+  rotation: number
+  group: number
+  number: number
+  isPrimary?: boolean
+}
 
-      const dy1 = r * vGapCTC
-      const offsetLat1 = (dy1 * Math.cos(rad) - dx1 * Math.sin(rad)) / metersPerLat
-      const offsetLng1 = (dy1 * Math.sin(rad) + dx1 * Math.cos(rad)) / metersPerLng
+export function generateChairsSchematic(config: SchematicChairConfig): SchematicChairDefinition[] {
+  const { baseX, baseY } = config
+  // The grid math is written for Y-up (geographic) coordinates: a cell's `dy`
+  // points toward higher latitude = NORTH = UP on screen on a map. SVG schematic
+  // coordinates are Y-down (+y = DOWN on screen). To make a "+rotation" delta
+  // visually rotate the parcel CW on the schematic — matching how it rotates CW
+  // on the map editor — we generate the layout with the inverse angle, then apply
+  // the original rotation to each individual seat.
+  const cells = generateChairGrid({
+    group: config.group,
+    rotation: -config.rotation,
+    rows: config.rows,
+    seatsPerRow: config.seatsPerRow,
+    horizontalGap: config.horizontalGap,
+    verticalGap: config.verticalGap,
+    intraPairGap: config.intraPairGap,
+    pairSeats: config.pairSeats,
+  })
 
-      const tempIdA = `${group}-R${rowNum}C${seatNum1}`
-      const tempIdB = `${group}-R${rowNum}C${seatNum2}`
-
-      const seatA: ChairDefinition = {
-        tempId: tempIdA,
-        ...(isPair ? { pairTempId: tempIdB } : {}),
-        locationLat: (baseLat + offsetLat1).toString(),
-        locationLng: (baseLng + offsetLng1).toString(),
-        rotation,
-        group,
-        number: Number(`${group}${rowNum}${seatNum1}`),
-        isPrimary: true,
-      }
-
-      items.push(seatA)
-
-      if (isPair) {
-        // Second chair in pair: intra-pair gap only
-        const dx2 = dx1 + pairCTC
-        const offsetLat2 = (dy1 * Math.cos(rad) - dx2 * Math.sin(rad)) / metersPerLat
-        const offsetLng2 = (dy1 * Math.sin(rad) + dx2 * Math.cos(rad)) / metersPerLng
-
-        const seatB: ChairDefinition = {
-          tempId: tempIdB,
-          pairTempId: tempIdA,
-          locationLat: (baseLat + offsetLat2).toString(),
-          locationLng: (baseLng + offsetLng2).toString(),
-          rotation,
-          group,
-          number: Number(`${group}${rowNum}${seatNum2}`),
-          isPrimary: false,
-        }
-
-        items.push(seatB)
-        c += 2
-      } else {
-        c += 1
-      }
-    }
-  }
-
-  return items
+  return cells.map((cell) => ({
+    tempId: cell.tempId,
+    ...(cell.pairTempId ? { pairTempId: cell.pairTempId } : {}),
+    schematicX: baseX + cell.dx,
+    schematicY: baseY + cell.dy,
+    rotation: config.rotation,
+    group: cell.group,
+    number: cell.number,
+    isPrimary: cell.isPrimary,
+  }))
 }
 
 export const PARCEL_COLORS = [

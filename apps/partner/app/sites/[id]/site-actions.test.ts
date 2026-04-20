@@ -173,6 +173,99 @@ describe('saveGeneral', () => {
     // The DB should never be updated with NaN/null price for a paid site
     expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
   })
+
+  it('rejects invalid layoutMode value', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+
+    const res = await saveGeneral({
+      id: SITE_ID,
+      name: 'Beach Club',
+      type: 'paid',
+      price: '25',
+      vat: '21',
+      locationLat: '40.0',
+      locationLng: '3.0',
+      layoutMode: 'hexagonal',
+    })
+
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Invalid layout mode')
+    expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
+  })
+
+  it('refuses layoutMode switch when inventory items exist (hard-lock)', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      layoutMode: 'geo',
+      _count: { inventoryItems: 12 },
+    } as any)
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+
+    const res = await saveGeneral({
+      id: SITE_ID,
+      name: 'Beach Club',
+      type: 'paid',
+      price: '25',
+      vat: '21',
+      locationLat: '40.0',
+      locationLng: '3.0',
+      layoutMode: 'schematic',
+    })
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Cannot change layout mode')
+    expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
+  })
+
+  it('persists layoutMode + width + height when items absent', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      layoutMode: 'geo',
+      _count: { inventoryItems: 0 },
+    } as any)
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.$executeRaw).mockResolvedValue(1 as any)
+
+    const res = await saveGeneral({
+      id: SITE_ID,
+      name: 'Pool Club',
+      type: 'paid',
+      price: '15',
+      vat: '21',
+      locationLat: '40.0',
+      locationLng: '3.0',
+      layoutMode: 'schematic',
+      layoutWidth: '50',
+      layoutHeight: '35',
+    })
+
+    expect(res.status).toBe('ok')
+    const updateData = vi.mocked(prisma.site.update).mock.calls[0]![0].data as any
+    expect(updateData.layoutMode).toBe('schematic')
+    expect(updateData.layoutWidth).toBe(50)
+    expect(updateData.layoutHeight).toBe(35)
+  })
+
+  it('rejects layout dimensions outside 1–1000 m', async () => {
+    authorizeOwner()
+    const res = await saveGeneral({
+      id: SITE_ID,
+      name: 'Pool Club',
+      type: 'paid',
+      price: '15',
+      vat: '21',
+      locationLat: '40.0',
+      locationLng: '3.0',
+      layoutMode: 'schematic',
+      layoutWidth: '0',
+      layoutHeight: '5000',
+    })
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.some((e) => /width/i.test(e))).toBe(true)
+    expect(res.errors?.some((e) => /height/i.test(e))).toBe(true)
+  })
 })
 
 // ─── submitForm ─────────────────────────────────────────────────────────────

@@ -30,6 +30,7 @@
     "@react-pdf/renderer": "^4.3.0",
     "@reduxjs/toolkit": "^2.2.7",
     "@repo/data": "file:../../packages/data",
+    "@repo/schematic": "*",
     "@repo/ui": "*",
     "@stripe/react-stripe-js": "^3.0.0",
     "@stripe/stripe-js": "^4.10.0",
