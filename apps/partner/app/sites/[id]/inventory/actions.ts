@@ -2,10 +2,8 @@
 
 import { auth } from '@/app/auth'
 import { requireSiteOwner } from '@/lib/auth-helpers'
-import { validateImageFile, isValidBgOption, isValidItemStatus } from '@/lib/validation'
+import { isValidItemStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
-import sharp from 'sharp'
-import { put } from '@vercel/blob'
 
 import { generateChairs, ChairConfig } from './chair-util'
 
@@ -326,59 +324,6 @@ export async function setItemStatusByGroup(itemGroupId: string, status: string) 
 
   return { status: 'ok' }
   
-}
-
-export async function saveBgOption(siteId: string, bgOption: string) {
-
-  const { error } = await requireSiteOwner(siteId)
-  if (error) throw new Error(error)
-
-  if (!isValidBgOption(bgOption)) throw new Error('Invalid background option')
-
-  await prisma.site.update({
-    where: { id: siteId },
-    data: {
-      background: bgOption
-    }
-  })
-
-  return { status: 'ok' }
-  
-}
-
-export async function uploadBackground(siteId: string, formData: FormData) {
-
-  const { error } = await requireSiteOwner(siteId)
-  if (error) throw new Error(error)
-
-  const file = formData.get('image') as File | null
-  if (!file || file.size === 0) throw new Error('No file')
-
-  const fileCheck = validateImageFile(file)
-  if (!fileCheck.ok) throw new Error(fileCheck.error)
-
-  const buf = Buffer.from(await file.arrayBuffer())
-  const meta = await sharp(buf).metadata()
-
-  const ext = ({'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','image/svg+xml':'svg'}[file.type]) || 'jpg'
-  const key = `site/${siteId}/background.${ext}`
-
-  const blob = await put(key, buf, {
-    access: 'public',
-    contentType: file.type || 'image/jpeg',
-    allowOverwrite: true,
-  })
-
-  await prisma.site.update({
-    where: { id: siteId },
-    data: {
-      bgImageUrl: blob.url,
-      bgImageWidth: meta.width ?? null,
-      bgImageHeight: meta.height ?? null,
-    },
-  })
-
-  return { url: blob.url, width: meta.width ?? null, height: meta.height ?? null }
 }
 
 export async function rotateSelection(

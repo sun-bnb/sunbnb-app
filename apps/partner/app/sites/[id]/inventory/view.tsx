@@ -12,7 +12,6 @@ import {
 import { getSite } from '../queries'
 import { useSite } from '@/app/sites/site-context'
 import ReadinessChecklist from '@/app/sites/readiness-checklist'
-import { useSharedMap } from './SharedMapContext'
 import InventoryForm from './InventoryForm'
 import InventoryMap from './InventoryMap'
 import InventoryToolbar from './InventoryToolbar'
@@ -26,7 +25,6 @@ export default function InventoryView() {
 
   const t = useTranslations('SiteInventory')
   const { site, setSite, apiKey } = useSite()
-  const { setValue } = useSharedMap()
   const router = useRouter()
 
   const inventory: InventoryItem[] = site.inventoryItems || []
@@ -376,10 +374,8 @@ export default function InventoryView() {
 
     // Normal click: single-select for editing
     if (pairingMode && selectedItem && item.id !== selectedItem.id) {
-      setValue('selectedItemPairId', item.id)
       setPairingMode(false)
     } else {
-      setValue('selectedItemPairId', '')
       setSelectedItemId(prev => (prev === item.id ? null : item.id))
       setSelectedItemIds([])
       setEditorMode('edit-chair')

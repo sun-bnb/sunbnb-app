@@ -1,5 +1,14 @@
 import { getRequestConfig } from 'next-intl/server'
 import { headers, cookies } from 'next/headers'
+import enMessages from '../messages/en.json'
+import fiMessages from '../messages/fi.json'
+import esMessages from '../messages/es.json'
+
+const MESSAGES: Record<string, any> = {
+  en: enMessages,
+  fi: fiMessages,
+  es: esMessages,
+}
 
 /**
  * Parses an Accept-Language string into an array of
@@ -74,6 +83,6 @@ export default getRequestConfig(async ({ requestLocale }) => {
 
   return {
     locale,
-    messages: (await import(`../messages/${locale}.json`)).default,
+    messages: MESSAGES[locale] ?? MESSAGES.en!,
   }
 })

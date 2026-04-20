@@ -8,7 +8,6 @@ import {
   isValidOrderPaymentType,
   isValidRentalPaymentType,
   isValidProductCategory,
-  isValidBgOption,
   isValidItemStatus,
 } from './validation'
 
