@@ -49,6 +49,8 @@ interface DragState {
   currentWidth: number
   currentHeight: number
   moved: boolean
+  metaKey?: boolean
+  ctrlKey?: boolean
 }
 
 const MIN_ELEMENT_SIZE = 0.5
@@ -210,7 +212,7 @@ export function SchematicRenderer(props: SchematicRendererProps) {
         }
       } else {
         if (drag.kind === 'item') {
-          props.onItemClick?.(drag.id, { metaKey: false, ctrlKey: false })
+          props.onItemClick?.(drag.id, { metaKey: drag.metaKey ?? false, ctrlKey: drag.ctrlKey ?? false })
         } else if (drag.kind === 'element') {
           props.onElementClick?.(drag.id)
         }
@@ -355,6 +357,8 @@ export function SchematicRenderer(props: SchematicRendererProps) {
       currentWidth: 0,
       currentHeight: 0,
       moved: false,
+      metaKey: e.metaKey,
+      ctrlKey: e.ctrlKey,
     })
   }
 
@@ -679,12 +683,6 @@ export function SchematicRenderer(props: SchematicRendererProps) {
               stroke={strokeColor}
               strokeWidth={sx}
               onPointerDown={placementActive ? undefined : startItemDrag(item)}
-              onClick={(e) => {
-                if (placementActive) return
-                e.stopPropagation()
-                if (drag?.moved) return
-                props.onItemClick?.(item.id, { metaKey: e.metaKey, ctrlKey: e.ctrlKey })
-              }}
               style={{
                 cursor: placementActive
                   ? 'crosshair'

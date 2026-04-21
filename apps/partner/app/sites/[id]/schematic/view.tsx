@@ -375,21 +375,6 @@ export default function SchematicView() {
   }
 
   async function handleBackgroundClick(x: number, y: number) {
-    // Move multi-selected items to clicked position
-    if (selectedItemIds.length > 0 && editorMode === 'none') {
-      const items = inventory.filter(i => selectedItemIds.includes(i.id))
-      if (items.length === 0) return
-      const xs = items.map(i => i.schematicX ?? 0)
-      const ys = items.map(i => i.schematicY ?? 0)
-      const centerX = (Math.min(...xs) + Math.max(...xs)) / 2
-      const centerY = (Math.min(...ys) + Math.max(...ys)) / 2
-      const deltaY = y - centerY
-      const deltaX = x - centerX
-      await moveItems(siteId, selectedItemIds, deltaY, deltaX) // (deltaLat, deltaLng) → (Y, X)
-      await refresh()
-      return
-    }
-
     if (editorMode === 'create-parcel') {
       const newGroup = Math.max(0, ...inventory.map(i => i.group || 0)) + 1
       const newConfig: ChairConfig = {

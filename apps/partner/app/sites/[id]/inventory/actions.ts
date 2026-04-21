@@ -136,7 +136,7 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
           ...g,
           schematicX: (g.schematicX ?? 0) + dx,
           schematicY: (g.schematicY ?? 0) + dy,
-        }))
+        })) as typeof generated
         shiftedGroupData = {
           ...itemGroupData,
           schematicX: (itemGroupData.schematicX ?? 0) + dx,
@@ -153,7 +153,7 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
           ...g,
           locationLat: (parseFloat(g.locationLat) + dLat).toString(),
           locationLng: (parseFloat(g.locationLng) + dLng).toString(),
-        }))
+        })) as typeof generated
         shiftedGroupData = {
           ...itemGroupData,
           locationLat: (parseFloat(itemGroupData.locationLat) + dLat).toString(),
