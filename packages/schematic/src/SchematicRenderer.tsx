@@ -27,7 +27,10 @@ export interface SchematicRendererProps {
   onElementDragEnd?: (id: string, x: number, y: number) => void
   onElementResizeEnd?: (id: string, x: number, y: number, width: number, height: number) => void
   onBackgroundClick?: (x: number, y: number) => void
+  onElementDrop?: (type: string, x: number, y: number) => void
 }
+
+export const SCHEMATIC_DRAG_MIME = 'application/x-schematic-element'
 
 type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 
@@ -153,9 +156,10 @@ export function SchematicRenderer(props: SchematicRendererProps) {
   const worldPerPx = pxScale > 0 ? 1 / pxScale : 1
 
   const sortedElements = [...elements].sort((a, b) => {
-    const za = paletteConfig[a.type]?.zBand ?? a.z
-    const zb = paletteConfig[b.type]?.zBand ?? b.z
-    return za - zb
+    const za = paletteConfig[a.type]?.zBand ?? 0
+    const zb = paletteConfig[b.type]?.zBand ?? 0
+    if (za !== zb) return za - zb
+    return a.z - b.z
   })
 
   const selectedItemIds = new Set(selection?.itemIds ?? [])
@@ -433,6 +437,20 @@ export function SchematicRenderer(props: SchematicRendererProps) {
           g.moved = true
         }
       }}
+      onDragOver={props.onElementDrop ? (e) => {
+        if (e.dataTransfer.types.includes(SCHEMATIC_DRAG_MIME)) {
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'copy'
+        }
+      } : undefined}
+      onDrop={props.onElementDrop ? (e) => {
+        const type = e.dataTransfer.getData(SCHEMATIC_DRAG_MIME)
+        if (!type) return
+        e.preventDefault()
+        const w = screenToWorld(e.clientX, e.clientY)
+        if (!w) return
+        props.onElementDrop!(type, w.x, w.y)
+      } : undefined}
     >
       <rect
         x={0}
@@ -538,7 +556,7 @@ export function SchematicRenderer(props: SchematicRendererProps) {
             {el.shape === 'ellipse' ? (
               <ellipse {...baseProps} cx={cx} cy={cy} rx={w / 2} ry={h / 2} />
             ) : (
-              <rect {...baseProps} x={x} y={y} width={w} height={h} rx={0.2} ry={0.2} />
+              <rect {...baseProps} x={x} y={y} width={w} height={h} rx={el.cornerRadius ?? 0} ry={el.cornerRadius ?? 0} />
             )}
             {labelText ? (
               <text

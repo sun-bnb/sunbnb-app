@@ -18,6 +18,7 @@ interface CreateLayoutElementInput {
   z?: number
   label?: string | null
   color?: string | null
+  cornerRadius?: number | null
 }
 
 function validateGeometry(input: { x?: number; y?: number; width?: number; height?: number; rotation?: number }) {
@@ -56,9 +57,10 @@ export async function createLayoutElement(siteId: string, data: CreateLayoutElem
       width: data.width,
       height: data.height,
       rotation: data.rotation ?? 0,
-      z: data.z ?? 0,
+      z: data.z ?? 100,
       label: data.label ?? null,
       color: data.color ?? null,
+      cornerRadius: data.cornerRadius ?? 0,
     },
   })
 
@@ -77,6 +79,7 @@ interface UpdateLayoutElementInput {
   z?: number
   label?: string | null
   color?: string | null
+  cornerRadius?: number | null
 }
 
 export async function updateLayoutElement(id: string, patch: UpdateLayoutElementInput) {

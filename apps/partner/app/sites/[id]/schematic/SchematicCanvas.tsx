@@ -23,6 +23,7 @@ interface Props {
   onElementDragEnd: (id: string, x: number, y: number) => void
   onElementResizeEnd: (id: string, x: number, y: number, width: number, height: number) => void
   onBackgroundClick: (x: number, y: number) => void
+  onElementDrop?: (type: string, x: number, y: number) => void
 }
 
 const STATUS_FILL: Record<string, string> = {
@@ -45,6 +46,7 @@ function toElementDTO(el: LayoutElementProps): LayoutElementDTO {
     z: el.z,
     label: el.label ?? null,
     color: el.color ?? null,
+    cornerRadius: el.cornerRadius ?? null,
   }
 }
 
@@ -97,6 +99,7 @@ export default function SchematicCanvas(props: Props) {
       onElementDragEnd={props.onElementDragEnd}
       onElementResizeEnd={props.onElementResizeEnd}
       onBackgroundClick={props.onBackgroundClick}
+      onElementDrop={props.onElementDrop}
     />
   )
 }

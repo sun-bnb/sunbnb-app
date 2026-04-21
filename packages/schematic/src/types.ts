@@ -17,6 +17,7 @@ export interface LayoutElementDTO {
   z: number
   label?: string | null
   color?: string | null
+  cornerRadius?: number | null
 }
 
 export interface SchematicItem {

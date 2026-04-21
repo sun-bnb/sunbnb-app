@@ -37,6 +37,15 @@ import ElementForm from './ElementForm'
 
 type EditorMode = 'none' | 'create-chair' | 'edit-chair' | 'create-parcel' | 'edit-parcel'
 
+// Default labels applied on drop, per object type. Surfaces stay unlabeled.
+const OBJECT_DEFAULT_LABEL_KEY: Record<string, string> = {
+  pool: 'defaultLabelPool',
+  bar: 'defaultLabelBar',
+  reception: 'defaultLabelReception',
+  shower: 'defaultLabelShower',
+  restroom: 'defaultLabelRestroom',
+}
+
 export default function SchematicView() {
   const t = useTranslations('SiteSchematic')
   const { site, setSite } = useSite()
@@ -48,7 +57,6 @@ export default function SchematicView() {
   const worldHeight = site.layoutHeight ?? 35
 
   const [editorMode, setEditorMode] = useState<EditorMode>('none')
-  const [pendingElementType, setPendingElementType] = useState<string | null>(null)
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([])
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null)
@@ -165,19 +173,34 @@ export default function SchematicView() {
   // ─── Escape key ────────────────────────────────────────────────────────
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore when typing in a form field
+      const target = e.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return
+      }
       if (e.key === 'Escape') {
-        setPendingElementType(null)
         setSelectedItemIds([])
         setSelectedItemId(null)
         setSelectedElementId(null)
         setPropertiesOpenId(null)
         setEditorMode('none')
         setEditGroup(null)
+        return
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedElementId) {
+          e.preventDefault()
+          deleteLayoutElement(selectedElementId).then(() => {
+            setSelectedElementId(null)
+            setPropertiesOpenId(null)
+            refresh()
+          })
+        }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [selectedElementId])
 
   // ─── Parcel handlers ───────────────────────────────────────────────────
   const handleParcelReorder = async () => {
@@ -333,26 +356,25 @@ export default function SchematicView() {
 
   // ─── Canvas interactions ───────────────────────────────────────────────
 
-  async function handleBackgroundClick(x: number, y: number) {
-    // Place a pending element
-    if (pendingElementType) {
-      const preset = ELEMENT_PRESETS[pendingElementType]
-      if (!preset) return
-      const cx = x - preset.width / 2
-      const cy = y - preset.height / 2
-      await createLayoutElement(siteId, {
-        type: preset.type,
-        shape: preset.shape,
-        x: cx,
-        y: cy,
-        width: preset.width,
-        height: preset.height,
-      })
-      setPendingElementType(null)
-      await refresh()
-      return
-    }
+  async function handleElementDrop(type: string, x: number, y: number) {
+    const preset = ELEMENT_PRESETS[type]
+    if (!preset) return
+    const cx = x - preset.width / 2
+    const cy = y - preset.height / 2
+    const labelKey = OBJECT_DEFAULT_LABEL_KEY[type]
+    await createLayoutElement(siteId, {
+      type: preset.type,
+      shape: preset.shape,
+      x: cx,
+      y: cy,
+      width: preset.width,
+      height: preset.height,
+      label: labelKey ? t(labelKey) : null,
+    })
+    await refresh()
+  }
 
+  async function handleBackgroundClick(x: number, y: number) {
     // Move multi-selected items to clicked position
     if (selectedItemIds.length > 0 && editorMode === 'none') {
       const items = inventory.filter(i => selectedItemIds.includes(i.id))
@@ -505,12 +527,6 @@ export default function SchematicView() {
         <span className="text-gray-300">·</span>
         <span className="font-medium text-gray-700">{elements.length}</span>
         <span>{t('totalElements', { count: elements.length })}</span>
-        {pendingElementType ? (
-          <>
-            <span className="text-gray-300">·</span>
-            <span className="text-blue-600">{t('clickToPlace', { type: pendingElementType })}</span>
-          </>
-        ) : null}
       </div>
 
       {/* Parcel list */}
@@ -545,13 +561,11 @@ export default function SchematicView() {
             setEditorMode('create-chair')
             setSelectedItemId(null)
             setSelectedItemIds([])
-            setPendingElementType(null)
           }}
           onStartParcel={() => {
             setEditorMode('create-parcel')
             setSelectedItemId(null)
             setSelectedItemIds([])
-            setPendingElementType(null)
           }}
           onCancel={() => {
             setEditorMode('none')
@@ -562,32 +576,62 @@ export default function SchematicView() {
       </div>
 
       <div className="flex relative" style={{ height: '600px' }}>
-        <ElementPalette
-          pendingType={pendingElementType}
-          onPickType={(type) => {
-            setPendingElementType(type)
-            setEditorMode('none')
-            setSelectedElementId(null)
-            setSelectedItemId(null)
-            setSelectedItemIds([])
-          }}
-          onAddSunbed={() => {
-            setEditorMode('create-chair')
-            setPendingElementType(null)
-            setSelectedElementId(null)
-            setSelectedItemId(null)
-            setSelectedItemIds([])
-          }}
-          onAddParcel={() => {
-            setEditorMode('create-parcel')
-            setPendingElementType(null)
-            setSelectedElementId(null)
-            setSelectedItemId(null)
-            setSelectedItemIds([])
-          }}
-        />
+        <ElementPalette />
 
         <div className="flex-1 relative bg-gray-100">
+          {selectedElementId ? (() => {
+            const selected = elements.find((e) => e.id === selectedElementId)
+            if (!selected) return null
+            const bump = async (delta: number) => {
+              await updateLayoutElement(selected.id, { z: (selected.z ?? 0) + delta })
+              await refresh()
+            }
+            return (
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2">
+                <div className="flex gap-1 bg-white/95 backdrop-blur border border-gray-200 rounded-md shadow-sm p-1">
+                  <button
+                    type="button"
+                    onClick={() => bump(1)}
+                    title={t('bringForward')}
+                    className="px-2 py-1 text-xs text-gray-700 rounded hover:bg-gray-100"
+                  >
+                    ↑ {t('bringForward')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => bump(-1)}
+                    title={t('sendBackward')}
+                    className="px-2 py-1 text-xs text-gray-700 rounded hover:bg-gray-100"
+                  >
+                    ↓ {t('sendBackward')}
+                  </button>
+                </div>
+                <div className="flex gap-1 bg-white/95 backdrop-blur border border-gray-200 rounded-md shadow-sm p-1">
+                  <button
+                    type="button"
+                    onClick={() => setPropertiesOpenId(selected.id)}
+                    title={t('editElement')}
+                    className="w-7 h-7 flex items-center justify-center text-sm text-gray-700 rounded hover:bg-gray-100"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await deleteLayoutElement(selected.id)
+                      setSelectedElementId(null)
+                      setPropertiesOpenId(null)
+                      await refresh()
+                    }}
+                    title={t('deleteElement')}
+                    className="w-7 h-7 flex items-center justify-center text-sm text-red-600 rounded hover:bg-red-50"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            )
+          })() : null}
           <SchematicCanvas
             worldWidth={worldWidth}
             worldHeight={worldHeight}
@@ -598,7 +642,6 @@ export default function SchematicView() {
             selectedElementId={selectedElementId}
             highlightedGroup={editGroup}
             placementActive={
-              pendingElementType !== null ||
               editorMode === 'create-chair' ||
               editorMode === 'create-parcel' ||
               editorMode === 'edit-parcel'
@@ -610,6 +653,7 @@ export default function SchematicView() {
             onElementDragEnd={handleElementDragEnd}
             onElementResizeEnd={handleElementResizeEnd}
             onBackgroundClick={handleBackgroundClick}
+            onElementDrop={handleElementDrop}
           />
         </div>
 
