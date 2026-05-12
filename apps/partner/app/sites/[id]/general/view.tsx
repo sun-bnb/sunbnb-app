@@ -234,13 +234,38 @@ export default function GeneralView() {
   const formatTime = (date: Date) =>
     `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
 
+  const [workingHours, setWorkingHours] = useState(site.workingHours ?? [])
+
   const sortedHours = useMemo(
-    () => [...(site.workingHours ?? [])].sort((a, b) => a.day - b.day),
-    [site.workingHours],
+    () => [...workingHours].sort((a, b) => a.day - b.day),
+    [workingHours],
   )
 
   const hoursForDay = (dayKey: string) =>
     sortedHours.filter(h => h.day === Number(dayKey))
+
+  const applyHoursResult = (result: Awaited<ReturnType<typeof addWorkingHours>>) => {
+    if (result.status === 'ok' && result.workingHours) {
+      setWorkingHours(result.workingHours)
+      setSaveStatus('saved')
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+      savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 3000)
+    } else {
+      setSaveStatus('error')
+    }
+  }
+
+  const onAddHours = async (dayKey: string) => {
+    setSaveStatus('saving')
+    applyHoursResult(
+      await addWorkingHours(site.id!, { day: dayKey, openTime: '09:00', closeTime: '18:00' }),
+    )
+  }
+
+  const onDeleteHours = async (id: string) => {
+    setSaveStatus('saving')
+    applyHoursResult(await deleteWorkingHours(id))
+  }
 
   const isPaid = siteType === 'paid'
   const tier = site.subscriptionTier ?? 'STARTER'
@@ -396,11 +421,16 @@ export default function GeneralView() {
                   <Switch
                     size="small"
                     checked={isActive}
-                    onChange={() => {
+                    onChange={async () => {
                       if (isActive) {
-                        slots.forEach(s => deleteWorkingHours(s.id))
+                        setSaveStatus('saving')
+                        let last: Awaited<ReturnType<typeof deleteWorkingHours>> | null = null
+                        for (const s of slots) {
+                          last = await deleteWorkingHours(s.id)
+                        }
+                        if (last) applyHoursResult(last)
                       } else {
-                        addWorkingHours(site.id!, { day: day.key, openTime: '09:00', closeTime: '18:00' })
+                        await onAddHours(day.key)
                       }
                     }}
                   />
@@ -419,7 +449,7 @@ export default function GeneralView() {
                           <span className="text-sm text-gray-700">
                             {formatTime(slot.closeTime)}
                           </span>
-                          <IconButton size="small" onClick={() => deleteWorkingHours(slot.id)}>
+                          <IconButton size="small" onClick={() => onDeleteHours(slot.id)}>
                             <DeleteOutlineIcon fontSize="small" className="text-gray-400" />
                           </IconButton>
                         </div>
@@ -433,9 +463,7 @@ export default function GeneralView() {
                     <Button
                       size="small"
                       startIcon={<AddIcon fontSize="small" />}
-                      onClick={() =>
-                        addWorkingHours(site.id!, { day: day.key, openTime: '09:00', closeTime: '18:00' })
-                      }
+                      onClick={() => onAddHours(day.key)}
                       sx={{ textTransform: 'none', fontSize: '0.7rem', minWidth: 0, ml: 1 }}
                     >
                       {t('split')}
