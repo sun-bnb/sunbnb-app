@@ -51,6 +51,41 @@ export async function addWorkingHours(
   return { status: 'ok' as const, workingHours: updated }
 }
 
+// ─── Update Working Hours ───────────────────────────────────────────────────
+
+export async function updateWorkingHours(
+  id: string,
+  workingHours: { openTime: string; closeTime: string }
+) {
+  const timeRegex = /^\d{2}:\d{2}$/
+  if (!timeRegex.test(workingHours.openTime) || !timeRegex.test(workingHours.closeTime)) {
+    return { status: 'error' as const, errors: ['Time must be in HH:MM format'] }
+  }
+
+  const session = await auth()
+  if (!session?.user) return { status: 'error' as const, errors: ['Not authenticated'] }
+
+  const wh = await prisma.siteWorkingHours.findUnique({
+    where: { id },
+    select: { siteId: true, site: { select: { userId: true } } },
+  })
+  if (!wh || wh.site.userId !== session.user.id) {
+    return { status: 'error' as const, errors: ['Not authorized'] }
+  }
+
+  const openTimeDate = new Date('2000-01-01T' + workingHours.openTime + ':00.000')
+  const closeTimeDate = new Date('2000-01-01T' + workingHours.closeTime + ':00.000')
+
+  await prisma.siteWorkingHours.update({
+    where: { id },
+    data: { openTime: openTimeDate, closeTime: closeTimeDate },
+  })
+
+  revalidatePath(`/sites/${wh.siteId}/general`)
+  const updated = await loadSiteWorkingHours(wh.siteId)
+  return { status: 'ok' as const, workingHours: updated }
+}
+
 // ─── Delete Working Hours ───────────────────────────────────────────────────
 
 export async function deleteWorkingHours(id: string) {

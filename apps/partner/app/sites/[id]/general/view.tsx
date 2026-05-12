@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo, useCallback, useRef } from 'react'
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import {
@@ -42,7 +42,7 @@ import {
   deleteSite,
   setSiteStatus,
 } from '../site-actions'
-import { addWorkingHours, deleteWorkingHours } from '../working-hours-actions'
+import { addWorkingHours, deleteWorkingHours, updateWorkingHours } from '../working-hours-actions'
 import { toggleSiteFeature } from '../rentals/actions'
 
 function round(amount: number) {
@@ -129,6 +129,65 @@ function PriceBreakdown({
           <span>{t('noServiceFee')}</span>
         </div>
       )}
+    </div>
+  )
+}
+
+type Slot = { id: string; day: number; openTime: Date; closeTime: Date }
+
+function WorkingHoursSlot({
+  slot,
+  timeToLabel,
+  formatTime,
+  onSave,
+  onDelete,
+}: {
+  slot: Slot
+  timeToLabel: string
+  formatTime: (d: Date) => string
+  onSave: (id: string, openTime: string, closeTime: string) => Promise<void> | void
+  onDelete: (id: string) => Promise<void> | void
+}) {
+  const initialOpen = formatTime(slot.openTime)
+  const initialClose = formatTime(slot.closeTime)
+  const [openTime, setOpenTime] = useState(initialOpen)
+  const [closeTime, setCloseTime] = useState(initialClose)
+
+  // Resync local inputs when the server returns updated values for this slot.
+  useEffect(() => {
+    setOpenTime(initialOpen)
+    setCloseTime(initialClose)
+  }, [initialOpen, initialClose])
+
+  const commit = (nextOpen: string, nextClose: string) => {
+    if (nextOpen === initialOpen && nextClose === initialClose) return
+    if (!/^\d{2}:\d{2}$/.test(nextOpen) || !/^\d{2}:\d{2}$/.test(nextClose)) return
+    onSave(slot.id, nextOpen, nextClose)
+  }
+
+  const inputCls =
+    'text-sm text-gray-700 bg-transparent border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none focus:border-blue-400'
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="time"
+        value={openTime}
+        onChange={e => setOpenTime(e.target.value)}
+        onBlur={() => commit(openTime, closeTime)}
+        className={inputCls}
+      />
+      <span className="text-xs text-gray-400">{timeToLabel}</span>
+      <input
+        type="time"
+        value={closeTime}
+        onChange={e => setCloseTime(e.target.value)}
+        onBlur={() => commit(openTime, closeTime)}
+        className={inputCls}
+      />
+      <IconButton size="small" onClick={() => onDelete(slot.id)}>
+        <DeleteOutlineIcon fontSize="small" className="text-gray-400" />
+      </IconButton>
     </div>
   )
 }
@@ -265,6 +324,11 @@ export default function GeneralView() {
   const onDeleteHours = async (id: string) => {
     setSaveStatus('saving')
     applyHoursResult(await deleteWorkingHours(id))
+  }
+
+  const onUpdateHours = async (id: string, openTime: string, closeTime: string) => {
+    setSaveStatus('saving')
+    applyHoursResult(await updateWorkingHours(id, { openTime, closeTime }))
   }
 
   const isPaid = siteType === 'paid'
@@ -441,18 +505,14 @@ export default function GeneralView() {
                   {isActive ? (
                     <div className="flex-1 flex flex-col gap-1">
                       {slots.map(slot => (
-                        <div key={slot.id} className="flex items-center gap-2">
-                          <span className="text-sm text-gray-700">
-                            {formatTime(slot.openTime)}
-                          </span>
-                          <span className="text-xs text-gray-400">{t('timeTo')}</span>
-                          <span className="text-sm text-gray-700">
-                            {formatTime(slot.closeTime)}
-                          </span>
-                          <IconButton size="small" onClick={() => onDeleteHours(slot.id)}>
-                            <DeleteOutlineIcon fontSize="small" className="text-gray-400" />
-                          </IconButton>
-                        </div>
+                        <WorkingHoursSlot
+                          key={slot.id}
+                          slot={slot}
+                          timeToLabel={t('timeTo')}
+                          formatTime={formatTime}
+                          onSave={onUpdateHours}
+                          onDelete={onDeleteHours}
+                        />
                       ))}
                     </div>
                   ) : (
