@@ -290,8 +290,10 @@ export default function GeneralView() {
   const SafeMap = Map as unknown as React.ComponentType<any>
   const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
 
-  const formatTime = (date: Date) =>
-    `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+  const formatTime = (date: Date) => {
+    const d = date instanceof Date ? date : new Date(date)
+    return `${d.getUTCHours().toString().padStart(2, '0')}:${d.getUTCMinutes().toString().padStart(2, '0')}`
+  }
 
   const [workingHours, setWorkingHours] = useState(site.workingHours ?? [])
 

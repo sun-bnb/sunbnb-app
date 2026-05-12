@@ -34,8 +34,8 @@ export async function addWorkingHours(
   const { error } = await requireSiteOwner(siteId)
   if (error) return { status: 'error' as const, errors: [error] }
 
-  const openTimeDate = new Date('2000-01-01T' + workingHours.openTime + ':00.000')
-  const closeTimeDate = new Date('2000-01-01T' + workingHours.closeTime + ':00.000')
+  const openTimeDate = new Date('2000-01-01T' + workingHours.openTime + ':00.000Z')
+  const closeTimeDate = new Date('2000-01-01T' + workingHours.closeTime + ':00.000Z')
 
   await prisma.siteWorkingHours.create({
     data: {
@@ -73,8 +73,8 @@ export async function updateWorkingHours(
     return { status: 'error' as const, errors: ['Not authorized'] }
   }
 
-  const openTimeDate = new Date('2000-01-01T' + workingHours.openTime + ':00.000')
-  const closeTimeDate = new Date('2000-01-01T' + workingHours.closeTime + ':00.000')
+  const openTimeDate = new Date('2000-01-01T' + workingHours.openTime + ':00.000Z')
+  const closeTimeDate = new Date('2000-01-01T' + workingHours.closeTime + ':00.000Z')
 
   await prisma.siteWorkingHours.update({
     where: { id },
