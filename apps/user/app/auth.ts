@@ -3,8 +3,10 @@ import GoogleProvider from 'next-auth/providers/google';
 import FacebookProvider from 'next-auth/providers/facebook';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { PrismaAdapter } from '@auth/prisma-adapter';
+import { headers } from 'next/headers';
 import prisma from '@repo/data/PrismaCient';
 import { validateOrCreateUser } from '@repo/data/auth';
+import { consumeImpersonationToken } from '@repo/data/impersonation';
 
 const nextAuthResult: NextAuthResult = NextAuth({
   adapter: PrismaAdapter(prisma),
@@ -52,6 +54,42 @@ const nextAuthResult: NextAuthResult = NextAuth({
         return user;
       },
     }),
+    // Admin impersonation. The token is single-use and signed with AUTH_SECRET;
+    // consumeImpersonationToken writes the audit row (or throws on replay).
+    CredentialsProvider({
+      id: 'impersonation',
+      name: 'Impersonation',
+      credentials: {
+        token: { label: 'Token', type: 'text' },
+      },
+      authorize: async (raw) => {
+        const token = typeof raw?.token === 'string' ? raw.token : null;
+        if (!token) return null;
+        const h = await headers();
+        const ip =
+          h.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+          h.get('x-real-ip') ||
+          null;
+        const userAgent = h.get('user-agent');
+        const consumed = await consumeImpersonationToken(token, {
+          expectedApp: 'user',
+          ip,
+          userAgent,
+        });
+        const user = await prisma.user.findUnique({
+          where: { id: consumed.targetUserId },
+        });
+        if (!user) return null;
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          impersonating: true,
+          impersonatorId: consumed.adminId,
+          impersonationTokenId: consumed.tokenId,
+        } as never;
+      },
+    }),
   ],
   callbacks: {
     /**
@@ -60,6 +98,11 @@ const nextAuthResult: NextAuthResult = NextAuth({
     async session({ session, token }) {
       // 'user' is typically undefined here if using JWT strategy
       session.user.id = token.id as string;
+      if (token.impersonating) {
+        (session.user as any).impersonating = true;
+        (session.user as any).impersonatorId = token.impersonatorId;
+        (session.user as any).impersonationTokenId = token.impersonationTokenId;
+      }
       return session;
     },
 
@@ -68,7 +111,11 @@ const nextAuthResult: NextAuthResult = NextAuth({
      * We can redirect if there's a custom error in credentials,
      * or allow sign in to proceed.
      */
-    async signIn({ credentials, profile, user }) {
+    async signIn({ credentials, profile, user, account }) {
+      // Impersonation: the token already authorised this handoff; skip the
+      // user-creation / email-check branches that run for OAuth/credentials.
+      if (account?.provider === 'impersonation') return true;
+
       // Check if our credentials flow set a custom loginError
       const loginError = credentials?.loginError;
       if (loginError) {
@@ -83,12 +130,12 @@ const nextAuthResult: NextAuthResult = NextAuth({
       // (You already have 'user', so this might be redundant.)
       const existingUser = await prisma.user.findUnique({ where: { email } });
       if (!existingUser) {
-        await prisma.user.create({ 
-          data: { 
+        await prisma.user.create({
+          data: {
             email,
             name: user?.name,
             image: user?.image
-          } 
+          }
         })
       }
 
@@ -101,9 +148,15 @@ const nextAuthResult: NextAuthResult = NextAuth({
      */
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id;
-        token.name = user.name;
-        token.email = user.email;
+        const u = user as any;
+        token.id = u.id;
+        token.name = u.name;
+        token.email = u.email;
+        if (u.impersonating) {
+          token.impersonating = true;
+          token.impersonatorId = u.impersonatorId;
+          token.impersonationTokenId = u.impersonationTokenId;
+        }
       }
       return token;
     },

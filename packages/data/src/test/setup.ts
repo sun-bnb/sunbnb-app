@@ -9,6 +9,7 @@
 process.env.POSTGRES_URL = 'postgres://postgres:sunbnb@localhost:5432/sunbnb_test'
 process.env.ALLOWED_ORIGINS = 'https://test.sunbnb.app'
 process.env.RESEND_API_KEY = 'test-key'
+process.env.AUTH_SECRET = process.env.AUTH_SECRET ?? 'integration-test-auth-secret'
 
 import prisma from '../../index'
 
@@ -39,6 +40,7 @@ export async function cleanDatabase() {
       "SiteBrand",
       "SiteWorkingHours",
       "SecurityToken",
+      "impersonation_log",
       "Site",
       "Account",
       "Session",

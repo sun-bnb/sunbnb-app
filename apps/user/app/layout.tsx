@@ -8,6 +8,10 @@ import localFont from 'next/font/local'
 import App from './app'
 import NextAuthProvider from './nextauth'
 import { CookieConsent } from '@repo/ui/cookie-consent'
+import { FlagsProvider } from '@repo/ui/flags'
+import { getClientFlags } from './flags'
+import { auth } from './auth'
+import ImpersonationBanner from '@/components/ImpersonationBanner'
 import './globals.css'
 import StoreProvider from "./StoreProvider"
 
@@ -58,20 +62,27 @@ export default async function RootLayout({
 
   const locale = await getLocale()
   const messages = await getMessages()
+  const flags = await getClientFlags()
+  const session = await auth()
+  const impersonatingUser = (session?.user as { impersonating?: boolean; email?: string | null } | undefined)
+  const isImpersonating = !!impersonatingUser?.impersonating
 
   return (
     <html lang={locale}>
       <StoreProvider>
-        <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-cream min-h-screen`}>
-          <NextAuthProvider>
-            <NextIntlClientProvider messages={messages}>
-              <App>
-                {children}
-              </App>
-              <CookieConsent hasAnalytics />
-              <ConsentAwareAnalytics />
-            </NextIntlClientProvider>
-          </NextAuthProvider>
+        <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-cream min-h-screen ${isImpersonating ? 'pt-10' : ''}`}>
+          {isImpersonating && <ImpersonationBanner email={impersonatingUser?.email} />}
+          <FlagsProvider value={flags}>
+            <NextAuthProvider>
+              <NextIntlClientProvider messages={messages}>
+                <App>
+                  {children}
+                </App>
+                <CookieConsent hasAnalytics />
+                <ConsentAwareAnalytics />
+              </NextIntlClientProvider>
+            </NextAuthProvider>
+          </FlagsProvider>
         </body>
       </StoreProvider>
     </html>

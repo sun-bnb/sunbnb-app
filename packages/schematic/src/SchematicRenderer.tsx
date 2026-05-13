@@ -9,6 +9,7 @@ import type {
   SchematicItem,
   WorldDims,
 } from './types'
+import { computeChairPositions, type ChairShape } from './chair-glyphs'
 
 export interface SchematicRendererProps {
   world: WorldDims
@@ -19,15 +20,20 @@ export interface SchematicRendererProps {
   itemVisual: (item: SchematicItem) => ItemVisual
   mode: 'view' | 'edit'
   placementActive?: boolean
-  selection?: { itemIds?: string[]; elementId?: string | null }
+  selection?: { itemIds?: string[]; elementId?: string | null; editingItemId?: string | null }
   onItemClick?: (id: string, mods: { metaKey: boolean; ctrlKey: boolean }) => void
   onItemDragEnd?: (id: string, x: number, y: number) => void
+  onItemDoubleClick?: (id: string) => void
   onElementClick?: (id: string) => void
   onElementDoubleClick?: (id: string) => void
   onElementDragEnd?: (id: string, x: number, y: number) => void
   onElementResizeEnd?: (id: string, x: number, y: number, width: number, height: number) => void
   onBackgroundClick?: (x: number, y: number) => void
   onElementDrop?: (type: string, x: number, y: number) => void
+  onItemsRectSelect?: (
+    ids: string[],
+    mods: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean },
+  ) => void
 }
 
 export const SCHEMATIC_DRAG_MIME = 'application/x-schematic-element'
@@ -88,7 +94,13 @@ export function SchematicRenderer(props: SchematicRendererProps) {
     selection,
   } = props
   const svgRef = useRef<SVGSVGElement | null>(null)
+  const onBackgroundClickRef = useRef(props.onBackgroundClick)
+  onBackgroundClickRef.current = props.onBackgroundClick
   const [drag, setDrag] = useState<DragState | null>(null)
+  const [pendingItemDrops, setPendingItemDrops] = useState<Record<string, { x: number; y: number }>>({})
+  const [pendingElementDrops, setPendingElementDrops] = useState<
+    Record<string, { x: number; y: number; w?: number; h?: number }>
+  >({})
   const [containerSize, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
   const VIEWBOX_MARGIN = mode === 'edit' ? 0.08 : 0
   const [viewBox, setViewBox] = useState<{ x: number; y: number; w: number; h: number }>({
@@ -107,8 +119,22 @@ export function SchematicRenderer(props: SchematicRendererProps) {
     moved: boolean
     tapWorldX: number
     tapWorldY: number
+    tapElementId: string | null
+    kind: 'pan' | 'rectSelect'
+    mods: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean }
   } | null>(null)
   const [gestureActive, setGestureActive] = useState(false)
+  const [rectSelect, setRectSelect] = useState<
+    { startX: number; startY: number; endX: number; endY: number } | null
+  >(null)
+  const rectSelectRef = useRef(rectSelect)
+  rectSelectRef.current = rectSelect
+  const itemsRef = useRef(items)
+  itemsRef.current = items
+  const onItemsRectSelectRef = useRef(props.onItemsRectSelect)
+  onItemsRectSelectRef.current = props.onItemsRectSelect
+  const onElementClickRef = useRef(props.onElementClick)
+  onElementClickRef.current = props.onElementClick
 
   function clampViewBox(vb: { x: number; y: number; w: number; h: number }) {
     const aspect = world.width / world.height
@@ -165,6 +191,7 @@ export function SchematicRenderer(props: SchematicRendererProps) {
   })
 
   const selectedItemIds = new Set(selection?.itemIds ?? [])
+  const editingItemId = selection?.editingItemId ?? null
   const selectedElementId = selection?.elementId ?? null
 
   function screenToWorld(clientX: number, clientY: number): { x: number; y: number } | null {
@@ -204,10 +231,50 @@ export function SchematicRenderer(props: SchematicRendererProps) {
     const handleUp = () => {
       if (drag.moved) {
         if (drag.kind === 'item') {
+          const draggedItem = items.find((i) => i.id === drag.id)
+          const dx = draggedItem ? drag.currentX - draggedItem.x : 0
+          const dy = draggedItem ? drag.currentY - draggedItem.y : 0
+          const inSelection =
+            !!draggedItem && selectedItemIds.size > 1 && selectedItemIds.has(draggedItem.id)
+          const partnerId = !inSelection && draggedItem
+            ? draggedItem.pairId ??
+              items.find((i) => i.pairId === draggedItem.id)?.id ??
+              null
+            : null
+          const partner = partnerId ? items.find((i) => i.id === partnerId) : null
+          setPendingItemDrops((prev) => {
+            const next: typeof prev = {
+              ...prev,
+              [drag.id]: { x: drag.currentX, y: drag.currentY },
+            }
+            if (inSelection) {
+              for (const it of items) {
+                if (it.id !== drag.id && selectedItemIds.has(it.id)) {
+                  next[it.id] = { x: it.x + dx, y: it.y + dy }
+                }
+              }
+            } else if (partner) {
+              next[partner.id] = { x: partner.x + dx, y: partner.y + dy }
+            }
+            return next
+          })
           props.onItemDragEnd?.(drag.id, drag.currentX, drag.currentY)
         } else if (drag.kind === 'element') {
+          setPendingElementDrops((prev) => ({
+            ...prev,
+            [drag.id]: { x: drag.currentX, y: drag.currentY },
+          }))
           props.onElementDragEnd?.(drag.id, drag.currentX, drag.currentY)
         } else if (drag.kind === 'resize') {
+          setPendingElementDrops((prev) => ({
+            ...prev,
+            [drag.id]: {
+              x: drag.currentX,
+              y: drag.currentY,
+              w: drag.currentWidth,
+              h: drag.currentHeight,
+            },
+          }))
           props.onElementResizeEnd?.(drag.id, drag.currentX, drag.currentY, drag.currentWidth, drag.currentHeight)
         }
       } else {
@@ -226,6 +293,43 @@ export function SchematicRenderer(props: SchematicRendererProps) {
       window.removeEventListener('pointerup', handleUp)
     }
   }, [drag, props.onItemDragEnd, props.onItemClick, props.onElementDragEnd, props.onElementClick, props.onElementResizeEnd])
+
+  useEffect(() => {
+    setPendingItemDrops((prev) => {
+      let changed = false
+      const next: typeof prev = {}
+      for (const [id, p] of Object.entries(prev)) {
+        const it = items.find((i) => i.id === id)
+        if (!it || (Math.abs(it.x - p.x) < 0.01 && Math.abs(it.y - p.y) < 0.01)) {
+          changed = true
+        } else {
+          next[id] = p
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [items])
+
+  useEffect(() => {
+    setPendingElementDrops((prev) => {
+      let changed = false
+      const next: typeof prev = {}
+      for (const [id, p] of Object.entries(prev)) {
+        const el = elements.find((e) => e.id === id)
+        const posMatch = el && Math.abs(el.x - p.x) < 0.01 && Math.abs(el.y - p.y) < 0.01
+        const sizeMatch =
+          !el ||
+          ((p.w === undefined || Math.abs(el.width - p.w) < 0.01) &&
+            (p.h === undefined || Math.abs(el.height - p.h) < 0.01))
+        if (!el || (posMatch && sizeMatch)) {
+          changed = true
+        } else {
+          next[id] = p
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [elements])
 
   useEffect(() => {
     const svg = svgRef.current
@@ -269,12 +373,19 @@ export function SchematicRenderer(props: SchematicRendererProps) {
       const currPts = Array.from(g.pointers.values())
 
       if (currPts.length === 1 && startPts.length === 1) {
-        // Single-finger pan
-        const dx = (currPts[0]!.cx - startPts[0]!.cx) / scale
-        const dy = (currPts[0]!.cy - startPts[0]!.cy) / scale
+        // Single-finger pan or rectangle-select
         if (Math.abs(currPts[0]!.cx - startPts[0]!.cx) > 3 ||
             Math.abs(currPts[0]!.cy - startPts[0]!.cy) > 3) g.moved = true
-        if (g.moved) {
+        if (g.kind === 'rectSelect') {
+          const w = screenToWorld(currPts[0]!.cx, currPts[0]!.cy)
+          if (w) {
+            setRectSelect((prev) =>
+              prev ? { ...prev, endX: w.x, endY: w.y } : prev,
+            )
+          }
+        } else if (g.moved) {
+          const dx = (currPts[0]!.cx - startPts[0]!.cx) / scale
+          const dy = (currPts[0]!.cy - startPts[0]!.cy) / scale
           setViewBox(clampViewBox({ x: vb.x - dx, y: vb.y - dy, w: vb.w, h: vb.h }))
         }
       } else if (currPts.length >= 2 && startPts.length >= 2) {
@@ -318,8 +429,25 @@ export function SchematicRenderer(props: SchematicRendererProps) {
 
       if (g.pointers.size === 0) {
         setGestureActive(false)
-        if (!g.moved) {
-          props.onBackgroundClick?.(g.tapWorldX, g.tapWorldY)
+        if (g.kind === 'rectSelect') {
+          const r = rectSelectRef.current
+          if (r && g.moved) {
+            const minX = Math.min(r.startX, r.endX)
+            const maxX = Math.max(r.startX, r.endX)
+            const minY = Math.min(r.startY, r.endY)
+            const maxY = Math.max(r.startY, r.endY)
+            const ids = itemsRef.current
+              .filter((i) => i.x >= minX && i.x <= maxX && i.y >= minY && i.y <= maxY)
+              .map((i) => i.id)
+            onItemsRectSelectRef.current?.(ids, g.mods)
+          }
+          setRectSelect(null)
+        } else if (!g.moved) {
+          if (g.tapElementId) {
+            onElementClickRef.current?.(g.tapElementId)
+          } else {
+            onBackgroundClickRef.current?.(g.tapWorldX, g.tapWorldY)
+          }
         }
         gestureRef.current = null
       } else {
@@ -340,8 +468,43 @@ export function SchematicRenderer(props: SchematicRendererProps) {
     }
   }, [world.width, world.height])
 
+  const startCanvasGesture = (e: React.PointerEvent, tapElementId: string | null) => {
+    if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return
+    if (e.button === 1) e.preventDefault()
+    const w = screenToWorld(e.clientX, e.clientY)
+    if (!w) return
+    const kind: 'pan' | 'rectSelect' =
+      mode === 'edit' && e.shiftKey && !!props.onItemsRectSelect ? 'rectSelect' : 'pan'
+    const pt = { cx: e.clientX, cy: e.clientY }
+    const g = gestureRef.current
+    if (!g) {
+      gestureRef.current = {
+        pointers: new Map([[e.pointerId, pt]]),
+        startVb: { ...viewBoxRef.current },
+        startPointers: new Map([[e.pointerId, pt]]),
+        moved: false,
+        tapWorldX: w.x,
+        tapWorldY: w.y,
+        tapElementId,
+        kind,
+        mods: { metaKey: e.metaKey, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey },
+      }
+      if (kind === 'rectSelect') {
+        setRectSelect({ startX: w.x, startY: w.y, endX: w.x, endY: w.y })
+      }
+      setGestureActive(true)
+    } else {
+      g.pointers.set(e.pointerId, pt)
+      g.startVb = { ...viewBoxRef.current }
+      g.startPointers = new Map(g.pointers)
+      g.moved = true
+      g.kind = 'pan'
+      setRectSelect(null)
+    }
+  }
+
   const startItemDrag = (item: SchematicItem) => (e: React.PointerEvent) => {
-    if (mode !== 'edit') return
+    if (mode !== 'edit' && !props.onItemClick) return
     e.stopPropagation()
     setDrag({
       kind: 'item',
@@ -416,31 +579,7 @@ export function SchematicRenderer(props: SchematicRendererProps) {
         cursor: gestureActive ? 'grabbing' : 'grab',
         touchAction: 'none',
       }}
-      onPointerDown={(e) => {
-        if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return
-        if (e.button === 1) e.preventDefault()
-        const w = screenToWorld(e.clientX, e.clientY)
-        if (!w) return
-        const pt = { cx: e.clientX, cy: e.clientY }
-        const g = gestureRef.current
-        if (!g) {
-          gestureRef.current = {
-            pointers: new Map([[e.pointerId, pt]]),
-            startVb: { ...viewBoxRef.current },
-            startPointers: new Map([[e.pointerId, pt]]),
-            moved: false,
-            tapWorldX: w.x,
-            tapWorldY: w.y,
-          }
-          setGestureActive(true)
-        } else {
-          // Second finger: snapshot current state as pinch start
-          g.pointers.set(e.pointerId, pt)
-          g.startVb = { ...viewBoxRef.current }
-          g.startPointers = new Map(g.pointers)
-          g.moved = true
-        }
-      }}
+      onPointerDown={(e) => startCanvasGesture(e, null)}
       onDragOver={props.onElementDrop ? (e) => {
         if (e.dataTransfer.types.includes(SCHEMATIC_DRAG_MIME)) {
           e.preventDefault()
@@ -456,6 +595,11 @@ export function SchematicRenderer(props: SchematicRendererProps) {
         props.onElementDrop!(type, w.x, w.y)
       } : undefined}
     >
+      <defs>
+        <clipPath id="schematic-world-clip">
+          <rect x={0} y={0} width={world.width} height={world.height} />
+        </clipPath>
+      </defs>
       <rect
         x={0}
         y={0}
@@ -514,20 +658,47 @@ export function SchematicRenderer(props: SchematicRendererProps) {
         const isSelected = el.id === selectedElementId
         const isMoving = drag?.kind === 'element' && drag.id === el.id
         const isResizing = drag?.kind === 'resize' && drag.id === el.id
-        const x = isMoving ? drag.currentX : isResizing ? drag.currentX : el.x
-        const y = isMoving ? drag.currentY : isResizing ? drag.currentY : el.y
-        const w = isResizing ? drag.currentWidth : el.width
-        const h = isResizing ? drag.currentHeight : el.height
+        const pendingEl = pendingElementDrops[el.id]
+        const x = isMoving
+          ? drag.currentX
+          : isResizing
+            ? drag.currentX
+            : pendingEl?.x ?? el.x
+        const y = isMoving
+          ? drag.currentY
+          : isResizing
+            ? drag.currentY
+            : pendingEl?.y ?? el.y
+        const w = isResizing ? drag.currentWidth : pendingEl?.w ?? el.width
+        const h = isResizing ? drag.currentHeight : pendingEl?.h ?? el.height
         const cx = x + w / 2
         const cy = y + h / 2
         const transform = el.rotation ? `rotate(${el.rotation} ${cx} ${cy})` : undefined
-        const baseProps = {
+        const passThrough = !!visual?.passThrough && !isSelected
+        // Fill layer: clipped to canvas bounds so overflow is hidden.
+        const fillProps = {
           fill,
-          stroke,
-          strokeWidth: isSelected ? 0.18 : 0.06,
+          stroke: 'none' as const,
           opacity: 0.85,
           transform,
-          onPointerDown: placementActive ? undefined : startElementDrag(el),
+          clipPath: 'url(#schematic-world-clip)',
+          pointerEvents: 'none' as const,
+        }
+        // Interactive outline: unclipped so the full shape is always visible
+        // and the user can grab/drag the part outside the canvas.
+        const outlineProps = {
+          fill: 'none' as const,
+          stroke,
+          strokeWidth: isSelected ? 0.18 : 0.06,
+          transform,
+          onPointerDown: placementActive
+            ? undefined
+            : passThrough
+              ? (e: React.PointerEvent) => {
+                  e.stopPropagation()
+                  startCanvasGesture(e, el.id)
+                }
+              : startElementDrag(el),
           onClick: (e: React.MouseEvent) => {
             if (placementActive) return
             e.stopPropagation()
@@ -538,8 +709,14 @@ export function SchematicRenderer(props: SchematicRendererProps) {
             props.onElementDoubleClick?.(el.id)
           },
           style: {
-            cursor: placementActive ? 'crosshair' : mode === 'edit' ? 'move' : 'default',
-            pointerEvents: placementActive ? 'none' : undefined,
+            cursor: placementActive
+              ? 'crosshair'
+              : mode === 'edit'
+                ? passThrough
+                  ? 'grab'
+                  : 'move'
+                : 'default',
+            pointerEvents: placementActive ? 'none' : 'all',
           } as React.CSSProperties,
         }
         const labelText = el.label ?? null
@@ -558,9 +735,15 @@ export function SchematicRenderer(props: SchematicRendererProps) {
         return (
           <g key={el.id}>
             {el.shape === 'ellipse' ? (
-              <ellipse {...baseProps} cx={cx} cy={cy} rx={w / 2} ry={h / 2} />
+              <>
+                <ellipse {...fillProps} cx={cx} cy={cy} rx={w / 2} ry={h / 2} />
+                <ellipse {...outlineProps} cx={cx} cy={cy} rx={w / 2} ry={h / 2} />
+              </>
             ) : (
-              <rect {...baseProps} x={x} y={y} width={w} height={h} rx={el.cornerRadius ?? 0} ry={el.cornerRadius ?? 0} />
+              <>
+                <rect {...fillProps} x={x} y={y} width={w} height={h} rx={el.cornerRadius ?? 0} ry={el.cornerRadius ?? 0} />
+                <rect {...outlineProps} x={x} y={y} width={w} height={h} rx={el.cornerRadius ?? 0} ry={el.cornerRadius ?? 0} />
+              </>
             )}
             {labelText ? (
               <text
@@ -572,6 +755,7 @@ export function SchematicRenderer(props: SchematicRendererProps) {
                 fill="#0f172a"
                 pointerEvents="none"
                 fontWeight={500}
+                fontFamily="system-ui, -apple-system, sans-serif"
               >
                 {labelText}
               </text>
@@ -613,33 +797,73 @@ export function SchematicRenderer(props: SchematicRendererProps) {
       })}
 
       {(() => {
-        const draggedItem = drag?.kind === 'item' ? items.find((i) => i.id === drag.id) : null
-        const dragGroup =
-          draggedItem && draggedItem.group && draggedItem.group > 0 ? draggedItem.group : null
-        const dragOffsetX = drag?.kind === 'item' && draggedItem ? drag.currentX - draggedItem.x : 0
-        const dragOffsetY = drag?.kind === 'item' && draggedItem ? drag.currentY - draggedItem.y : 0
+        const draggedItem =
+          drag?.kind === 'item' ? items.find((i) => i.id === drag.id) : null
+        const dragDx = draggedItem ? drag!.currentX - draggedItem.x : 0
+        const dragDy = draggedItem ? drag!.currentY - draggedItem.y : 0
+        const draggedInSelection =
+          !!draggedItem &&
+          selectedItemIds.size > 1 &&
+          selectedItemIds.has(draggedItem.id)
+        const draggedPartnerId = draggedInSelection
+          ? null
+          : draggedItem
+            ? draggedItem.pairId ??
+              items.find((i) => i.pairId === draggedItem.id)?.id ??
+              null
+            : null
         return items.map((item) => {
         const v = itemVisual(item)
-        const w = 0.84
-        const h = 2.1
-        const isSelected = selectedItemIds.has(item.id)
-        const isDragging = drag?.kind === 'item' && drag.id === item.id
-        const isGroupSibling =
-          !isDragging && dragGroup !== null && item.group === dragGroup
+        // Per-item dimensions when provided (tables); otherwise the sunbed
+        // physical footprint (0.84 × 2.1) kept for the beach flow.
+        const isSunbed = item.width === undefined && item.height === undefined && item.shape === undefined
+        const w = item.width ?? 0.84
+        const h = item.height ?? 2.1
+        const itemShape = item.shape ?? 'rect'
+        const renderAsEllipse = itemShape === 'round' || itemShape === 'oval'
+        const isBooth = itemShape === 'booth'
+        const isBar = itemShape === 'bar'
+        const isEditing = editingItemId === item.id
+        const isMultiSelected = selectedItemIds.has(item.id)
+        const isHighlighted = isEditing || isMultiSelected
+        const pairedSelected = !!(
+          item.pairId &&
+          (editingItemId === item.pairId || selectedItemIds.has(item.pairId))
+        )
+        const isPaired = !!item.pairId
+        const isDragging = mode === 'edit' && drag?.kind === 'item' && drag.id === item.id
+        const isDragSelectionSibling =
+          mode === 'edit' &&
+          draggedInSelection &&
+          !isDragging &&
+          selectedItemIds.has(item.id)
+        const isDragPartner =
+          mode === 'edit' && !!draggedPartnerId && item.id === draggedPartnerId
+        const followDrag = isDragSelectionSibling || isDragPartner
+        const pending = pendingItemDrops[item.id]
         const cx = isDragging
           ? drag.currentX
-          : isGroupSibling
-            ? item.x + dragOffsetX
-            : item.x
+          : followDrag
+            ? item.x + dragDx
+            : pending?.x ?? item.x
         const cy = isDragging
           ? drag.currentY
-          : isGroupSibling
-            ? item.y + dragOffsetY
-            : item.y
+          : followDrag
+            ? item.y + dragDy
+            : pending?.y ?? item.y
         const transform = item.rotation ? `rotate(${item.rotation} ${cx} ${cy})` : undefined
-        const strokeColor = v.stroke ?? '#1f2937'
         const hasImage = !!v.sunbedImageUrl
-        const cornerRadius = hasImage ? 0 : w * 0.12
+        const parcelColor = v.parcelColor
+        const strokeColor = hasImage
+          ? v.stroke ?? '#1f2937'
+          : isEditing
+            ? '#f59e0b'
+            : isMultiSelected
+              ? '#3b82f6'
+              : isPaired
+                ? '#9ca3af'
+                : '#374151'
+        const cornerRadius = hasImage ? 0 : w * 0.1
 
         // Image mode: PNG renders at its natural aspect (physical 2.1m length),
         // and the fill rect is just a ~2px colored halo around it acting as a
@@ -657,10 +881,22 @@ export function SchematicRenderer(props: SchematicRendererProps) {
         const fillX = cx - fillW / 2
         const fillY = cy - fillH / 2
 
-        // Thin 1px black border always — fill color change conveys selection.
+        // Partner/edit: thin 1px default; +1px when self-selected or pair-selected (→ 2px).
         const sx = hasImage
           ? Math.max(1 * worldPerPx, pngH * 0.005)
-          : (isSelected ? 0.16 : 0.04)
+          : (1 + (isHighlighted || pairedSelected ? 1 : 0)) * worldPerPx
+
+        // Individual selection is conveyed by *decreasing transparency* of the
+        // parcel-color fill (not by a colored overlay). Pair-selected siblings
+        // keep the default transparent fill — only their border thickens.
+        const nonImageFill = parcelColor
+          ? isHighlighted
+            ? `${parcelColor}88`
+            : `${parcelColor}22`
+          : isHighlighted
+            ? 'rgba(55, 65, 81, 0.25)'
+            : 'rgba(255,255,255,0.02)'
+        const accentBarH = Math.min(0.12, h * 0.05)
 
         // Towel: proportional to PNG, 30° rotation around own center
         const towelH = pngH / 2
@@ -669,29 +905,130 @@ export function SchematicRenderer(props: SchematicRendererProps) {
         const towelY = pngY + pngH * (1 - 1 / 2.8)
         const towelCy = towelY + towelH / 2
 
+        const hitCursor = placementActive
+          ? 'crosshair'
+          : mode === 'edit' || props.onItemClick
+            ? 'pointer'
+            : 'default'
+        const hitStyle: React.CSSProperties = {
+          cursor: hitCursor,
+          pointerEvents: placementActive ? 'none' : undefined,
+        }
+        const itemFill = hasImage ? v.fill : nonImageFill
+        // Decorative chair glyphs around restaurant tables. Sunbeds (no
+        // explicit shape/dimensions) skip this — they have their own visuals.
+        const chairs =
+          !isSunbed && !hasImage && item.capacity !== undefined && item.capacity > 0
+            ? computeChairPositions(itemShape as ChairShape, w, h, item.capacity, {
+                override: item.seatLayout,
+              })
+            : []
+        const chairSize = chairs.length > 0
+          ? Math.min(0.4, Math.min(w, h) * 0.35)
+          : 0
+        const chairStrokeW = Math.max(0.5 * worldPerPx, sx * 0.6)
+        const longHorizontal = w >= h
         return (
           <g key={item.id} transform={transform}>
-            {/* Solid background — fully opaque, matches map marker backgroundColor */}
-            <rect
-              x={fillX}
-              y={fillY}
-              width={fillW}
-              height={fillH}
-              rx={cornerRadius}
-              ry={cornerRadius}
-              fill={v.fill}
-              stroke={strokeColor}
-              strokeWidth={sx}
-              onPointerDown={placementActive ? undefined : startItemDrag(item)}
-              style={{
-                cursor: placementActive
-                  ? 'crosshair'
-                  : mode === 'edit' || props.onItemClick
-                    ? 'pointer'
-                    : 'default',
-                pointerEvents: placementActive ? 'none' : undefined,
-              } as React.CSSProperties}
-            />
+            {chairs.map((p, idx) => (
+              <rect
+                key={`chair-${idx}`}
+                x={cx + p.x - chairSize / 2}
+                y={cy + p.y - chairSize * 0.45}
+                width={chairSize}
+                height={chairSize * 0.9}
+                rx={chairSize * 0.25}
+                ry={chairSize * 0.25}
+                fill="#f3f4f6"
+                stroke="#9ca3af"
+                strokeWidth={chairStrokeW}
+                opacity={0.85}
+                transform={`rotate(${p.rotation} ${cx + p.x} ${cy + p.y})`}
+                pointerEvents="none"
+              />
+            ))}
+            {renderAsEllipse ? (
+              <ellipse
+                cx={cx}
+                cy={cy}
+                rx={fillW / 2}
+                ry={fillH / 2}
+                fill={itemFill}
+                stroke={strokeColor}
+                strokeWidth={sx}
+                onPointerDown={placementActive ? undefined : startItemDrag(item)}
+                onDoubleClick={placementActive ? undefined : (e) => {
+                  e.stopPropagation()
+                  props.onItemDoubleClick?.(item.id)
+                }}
+                style={hitStyle}
+              />
+            ) : (
+              <rect
+                x={fillX}
+                y={fillY}
+                width={fillW}
+                height={fillH}
+                rx={isBar ? cornerRadius * 1.5 : cornerRadius}
+                ry={isBar ? cornerRadius * 1.5 : cornerRadius}
+                fill={itemFill}
+                stroke={strokeColor}
+                strokeWidth={sx}
+                shapeRendering={hasImage ? undefined : 'crispEdges'}
+                onPointerDown={placementActive ? undefined : startItemDrag(item)}
+                onDoubleClick={placementActive ? undefined : (e) => {
+                  e.stopPropagation()
+                  props.onItemDoubleClick?.(item.id)
+                }}
+                style={hitStyle}
+              />
+            )}
+            {/* Booth accent: thick bar along the long side that has the wall.
+                Aspect-aware so the chair glyphs always land on the open side. */}
+            {!hasImage && isBooth && (longHorizontal ? (
+              <rect
+                x={cx - w / 2 + sx / 2}
+                y={cy + h / 2 - Math.max(0.06, sx * 4) - sx / 2}
+                width={w - sx}
+                height={Math.max(0.06, sx * 4)}
+                fill={strokeColor}
+                opacity={0.55}
+                pointerEvents="none"
+              />
+            ) : (
+              <rect
+                x={cx + w / 2 - Math.max(0.06, sx * 4) - sx / 2}
+                y={cy - h / 2 + sx / 2}
+                width={Math.max(0.06, sx * 4)}
+                height={h - sx}
+                fill={strokeColor}
+                opacity={0.55}
+                pointerEvents="none"
+              />
+            ))}
+            {!hasImage && !renderAsEllipse && parcelColor && !isHighlighted && (
+              <rect
+                x={cx - w / 2 + sx / 2}
+                y={cy + h / 2 - sx / 2 - accentBarH}
+                width={w - sx}
+                height={accentBarH}
+                fill={parcelColor}
+                opacity={0.5}
+                pointerEvents="none"
+              />
+            )}
+            {!hasImage && item.status === 'disabled' && (
+              <line
+                x1={cx - w / 2 + sx + 0.02}
+                y1={cy - h / 2 + sx + 0.02}
+                x2={cx + w / 2 - sx - 0.02}
+                y2={cy + h / 2 - sx - 0.02}
+                stroke="#ef4444"
+                strokeWidth={3 * worldPerPx}
+                strokeLinecap="round"
+                pointerEvents="none"
+              />
+            )}
             {/* Sunbed PNG: natural aspect, centered horizontally, top-aligned in fill */}
             {v.sunbedImageUrl && (
               <image
@@ -717,32 +1054,31 @@ export function SchematicRenderer(props: SchematicRendererProps) {
                 pointerEvents="none"
               />
             )}
-            {/* Headrest separator (only in edit mode without PNG) */}
-            {!hasImage && (
+            {!hasImage && isSunbed && (
               <line
-                x1={cx - w / 2 + w * 0.15}
+                x1={cx - w / 2 + sx + 0.05}
                 y1={cy - h / 2 + h * 0.2}
-                x2={cx + w / 2 - w * 0.15}
+                x2={cx + w / 2 - sx - 0.05}
                 y2={cy - h / 2 + h * 0.2}
                 stroke={strokeColor}
-                strokeWidth={sx * 0.6}
-                strokeOpacity={0.45}
+                strokeWidth={1.5 * worldPerPx}
+                strokeOpacity={0.35}
                 strokeLinecap="round"
                 pointerEvents="none"
               />
             )}
-            {v.label ? (
+            {v.label && (hasImage || h / worldPerPx > 30) ? (
               <text
                 x={cx}
                 y={cy}
                 textAnchor="middle"
                 dominantBaseline="central"
-                fontSize={0.38}
+                fontSize={hasImage ? 0.38 : Math.min(h, w) * 0.28}
                 fill="#1f2937"
                 pointerEvents="none"
                 fontWeight={600}
                 fontFamily="system-ui, -apple-system, sans-serif"
-                transform={`rotate(90 ${cx} ${cy})`}
+                transform={isSunbed ? `rotate(90 ${cx} ${cy})` : undefined}
               >
                 {v.label}
               </text>
@@ -751,6 +1087,26 @@ export function SchematicRenderer(props: SchematicRendererProps) {
         )
         })
       })()}
+
+      {rectSelect ? (() => {
+        const minX = Math.min(rectSelect.startX, rectSelect.endX)
+        const minY = Math.min(rectSelect.startY, rectSelect.endY)
+        const w = Math.abs(rectSelect.endX - rectSelect.startX)
+        const h = Math.abs(rectSelect.endY - rectSelect.startY)
+        return (
+          <rect
+            x={minX}
+            y={minY}
+            width={w}
+            height={h}
+            fill="rgba(59, 130, 246, 0.12)"
+            stroke="#3b82f6"
+            strokeWidth={1.5 * worldPerPx}
+            strokeDasharray={`${4 * worldPerPx} ${2 * worldPerPx}`}
+            pointerEvents="none"
+          />
+        )
+      })() : null}
     </svg>
   )
 }

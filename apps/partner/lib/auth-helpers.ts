@@ -2,6 +2,8 @@
 
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { isFlagEnabled } from '@/app/flags'
+import type { FlagName } from '@repo/data/flags'
 
 /**
  * Verify the current user is authenticated and owns the given site.
@@ -29,4 +31,19 @@ export async function requireSiteOwner(
   }
 
   return { session, error: null }
+}
+
+/**
+ * Require both site ownership AND that the named feature flag is enabled.
+ * Sudo bypass is built into `isFlagEnabled`, so sudo users always pass.
+ * Use this in server actions for features that are runtime-gated.
+ */
+export async function requireSiteOwnerWithFlag(
+  siteId: string,
+  flag: FlagName,
+): Promise<{ session: any; error: string | null }> {
+  if (!(await isFlagEnabled(flag))) {
+    return { session: null, error: 'feature_disabled' }
+  }
+  return requireSiteOwner(siteId)
 }

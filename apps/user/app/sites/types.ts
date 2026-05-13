@@ -24,6 +24,7 @@ export interface SiteProps {
   layoutWidth?: number | null
   layoutHeight?: number | null
   layoutElements?: LayoutElementProps[]
+  restaurantId?: string | null
 }
 
 export interface LayoutElementProps {

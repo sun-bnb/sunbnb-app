@@ -6,6 +6,32 @@ import { requireSiteOwner } from '@/lib/auth-helpers'
 import { isValidSiteStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 
+// ─── Save Schematic Canvas Dimensions ───────────────────────────────────────
+
+export async function saveLayoutDimensions(
+  siteId: string,
+  width: number,
+  height: number,
+) {
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error' as const, errors: [error] }
+
+  if (!Number.isFinite(width) || !Number.isFinite(height)) {
+    return { status: 'error' as const, errors: ['Invalid dimensions'] }
+  }
+  if (width < 5 || height < 5 || width > 500 || height > 500) {
+    return { status: 'error' as const, errors: ['Dimensions out of range'] }
+  }
+
+  await prisma.site.update({
+    where: { id: siteId },
+    data: { layoutWidth: width, layoutHeight: height },
+  })
+
+  revalidatePath('/sites')
+  return { status: 'ok' as const }
+}
+
 // ─── Save General Settings ──────────────────────────────────────────────────
 
 export async function saveGeneral(input: {

@@ -1,0 +1,33 @@
+{
+  "name": "@repo/table-reservations-core",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts",
+    "./status": "./src/status.ts"
+  },
+  "typesVersions": {
+    "*": {
+      ".": ["./src/index.ts"],
+      "types": ["./src/types.ts"],
+      "status": ["./src/status.ts"]
+    }
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "*",
+    "@repo/typescript-config": "*",
+    "eslint": "^8.57.0",
+    "typescript": "^5.3.3",
+    "vitest": "^3"
+  },
+  "dependencies": {
+    "@repo/data": "*",
+    "@repo/schematic": "*"
+  }
+}

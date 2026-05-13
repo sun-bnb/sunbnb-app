@@ -46,7 +46,10 @@ export async function deleteInventoryItem(id: string) {
     return { status: 'error', errors: ['Not authorized'] }
   }
 
-  await prisma.inventoryItem.delete({ where: { id } })
+  await prisma.$transaction([
+    prisma.inventoryItem.updateMany({ where: { pairId: id }, data: { pairId: null } }),
+    prisma.inventoryItem.delete({ where: { id } }),
+  ])
   revalidatePath('/sites')
   return { status: 'ok' }
 }
@@ -196,6 +199,50 @@ export async function saveInventoryItemProperties(
       pair: pairItem ? { connect: { id: inventoryItem.pairId } } : undefined,
     },
   })
+
+  revalidatePath('/sites')
+  return { status: 'ok' }
+}
+
+// ─── Pair / Depair Items ─────────────────────────────────────────────────────
+
+export async function pairInventoryItems(id1: string, id2: string) {
+  const session = await auth()
+  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+
+  const [item1, item2] = await Promise.all([
+    prisma.inventoryItem.findUnique({ where: { id: id1 }, select: { siteId: true, site: { select: { userId: true } } } }),
+    prisma.inventoryItem.findUnique({ where: { id: id2 }, select: { siteId: true } }),
+  ])
+  if (!item1 || item1.site.userId !== session.user.id) return { status: 'error', errors: ['Not authorized'] }
+  if (!item2 || item2.siteId !== item1.siteId) return { status: 'error', errors: ['Items must belong to the same site'] }
+
+  await prisma.$transaction([
+    prisma.inventoryItem.update({ where: { id: id1 }, data: { pairId: id2 } }),
+    prisma.inventoryItem.update({ where: { id: id2 }, data: { pairId: id1 } }),
+  ])
+
+  revalidatePath('/sites')
+  return { status: 'ok' }
+}
+
+export async function depairInventoryItem(id: string) {
+  const session = await auth()
+  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
+
+  const item = await prisma.inventoryItem.findUnique({
+    where: { id },
+    select: { pairId: true, site: { select: { userId: true } } },
+  })
+  if (!item || item.site.userId !== session.user.id) return { status: 'error', errors: ['Not authorized'] }
+
+  const updates: Promise<unknown>[] = [
+    prisma.inventoryItem.update({ where: { id }, data: { pairId: null } }),
+  ]
+  if (item.pairId) {
+    updates.push(prisma.inventoryItem.update({ where: { id: item.pairId }, data: { pairId: null } }))
+  }
+  await Promise.all(updates)
 
   revalidatePath('/sites')
   return { status: 'ok' }

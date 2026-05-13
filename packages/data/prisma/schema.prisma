@@ -91,6 +91,10 @@ model ServiceFee {
   feeAmount        Float?            @map("fee_amount")
   percentage       Float?
   serviceCode      String            @map("service_code")
+  // Optional product scope. NULL = applies to any product (beachclub or
+  // restaurant). "beachclub" or "restaurant" = product-scoped. Brand-neutral
+  // values so rebrands don't force a data migration.
+  product          String?           @map("product")
   account          PartnerAccount?   @relation(fields: [accountId], references: [userId], onDelete: Cascade)
   settings         Settings          @relation(fields: [settingsId], references: [id], onDelete: Cascade)
   site             Site?             @relation(fields: [siteId], references: [id], onDelete: Cascade)
@@ -126,6 +130,7 @@ model User {
   reservations   Reservation[]
   sessions       Session[]
   sites          Site[]
+  tableReservations TableReservation[]
 }
 
 model PasswordResetToken {
@@ -184,6 +189,7 @@ model PartnerAccount {
   subscription Subscription?
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   serviceFees  ServiceFee[]
+  restaurants  Restaurant[]
 }
 
 model Site {
@@ -219,6 +225,11 @@ model Site {
   layoutMode      String                   @default("geo") @map("layout_mode")
   layoutWidth     Float?                   @map("layout_width")
   layoutHeight    Float?                   @map("layout_height")
+  // Soft link to a Restaurant for chiringuitos. No Prisma relation declared —
+  // plain column with FK constraint at the DB level only (see migration SQL).
+  // Kept soft to preserve a clean extraction path if the restaurant product
+  // ever needs its own database.
+  restaurantId    String?                  @unique @map("restaurant_id")
 
   inventoryItems  InventoryItem[]
   layoutElements  LayoutElement[]
@@ -320,7 +331,10 @@ model ItemGroup {
 
 model LayoutElement {
   id        String   @id @default(cuid())
-  siteId    String   @map("site_id")
+  // Exactly one of siteId or restaurantId must be set (enforced by a CHECK
+  // constraint in the migration SQL — Prisma itself cannot express an XOR).
+  siteId       String?  @map("site_id")
+  restaurantId String?  @map("restaurant_id")
   type      String
   shape     String
   x         Float
@@ -334,9 +348,11 @@ model LayoutElement {
   cornerRadius Float?   @default(0) @map("corner_radius")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-  site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  site         Site?       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  restaurant   Restaurant? @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@index([siteId])
+  @@index([restaurantId])
   @@map("layout_element")
 }
 
@@ -454,6 +470,11 @@ model Invoice {
   invoiceNumber    String?           @unique @map("invoice_number")
   previousHash     String?           @map("previous_hash")
   hash             String?
+  // Product discriminator. Brand-neutral values: "beachclub" for sunbed / F&B
+  // order / rental invoices, "restaurant" for (future) table-reservation
+  // invoices. Default preserves existing behaviour for code that doesn't set
+  // it explicitly.
+  product          String            @default("beachclub") @map("product")
   account          PartnerAccount    @relation(fields: [accountId], references: [userId], onDelete: Cascade)
   settlementBatch  Settlement?       @relation(fields: [settlementBatchId], references: [id])
   reservation      Reservation?      @relation(fields: [reservationId], references: [id])
@@ -478,6 +499,8 @@ model Settlement {
   notes          String?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
+  // Product discriminator (see Invoice.product).
+  product        String           @default("beachclub") @map("product")
   account        PartnerAccount   @relation(fields: [accountId], references: [userId])
   site           Site             @relation(fields: [siteId], references: [id])
   invoices       Invoice[]
@@ -578,10 +601,197 @@ model RentalBooking {
   user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Restaurants, tables, menu, table reservations
+//
+// All models in this section belong to the standalone restaurant product
+// (currently branded "tablefind"). Cross-product links (Site.restaurantId)
+// are declared without Prisma relations on the sunbnb side to keep the
+// extraction path clean. Brand-neutral naming throughout so the brand can
+// change without touching schema or migrations.
+// ═══════════════════════════════════════════════════════════════════════════
+
+model Restaurant {
+  id                    String              @id @default(cuid())
+  slug                  String              @unique
+  name                  String
+  tagline               String?
+  description           String?
+  partnerAccountId      String              @map("partner_account_id")
+  // Optional soft link to a Sunbnb Site for chiringuitos. Plain FK at the
+  // DB level; no Prisma relation on the Site side (see Site.restaurantId).
+  siteId                String?             @unique @map("site_id")
+  cuisineType           String?             @map("cuisine_type")
+  priceRange            Int?                @map("price_range")            // 1..4
+  averageMealDuration   Int                 @default(120) @map("average_meal_duration")
+  reservationWindow     Int                 @default(60)  @map("reservation_window")
+  layoutWidth           Float?              @map("layout_width")
+  layoutHeight          Float?              @map("layout_height")
+  // If false, chiringuito-linked restaurants stay hidden from tablefind.app's
+  // public listing. Always discoverable on Sunbnb. Brand-neutral column name
+  // so the standalone brand can change.
+  publicOnStandaloneApp Boolean             @default(true) @map("public_on_standalone_app")
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  partnerAccount        PartnerAccount      @relation(fields: [partnerAccountId], references: [userId], onDelete: Cascade)
+  tables                Table[]
+  reservations          TableReservation[]
+  menuItems             MenuItem[]
+  workingHours          RestaurantHours[]
+  layoutElements        LayoutElement[]
+
+  @@index([partnerAccountId])
+  @@map("restaurant")
+}
+
+model Table {
+  id             String              @id @default(cuid())
+  restaurantId   String              @map("restaurant_id")
+  number         Int
+  label          String?
+  capacity       Int
+  minPartySize   Int                 @default(1) @map("min_party_size")
+  // Cap above which a party should be steered to a larger table even if the
+  // physical capacity allows. Null = no upper bound beyond `capacity`.
+  maxPartySize   Int?                @map("max_party_size")
+  shape          String              @default("square")   // "square" | "round" | "rect" | "oval" | "booth" | "bar"
+  // Physical footprint in metres. Explicit per-table so a 2-top renders
+  // smaller than an 8-top. Defaults are a reasonable 4-seater — callers that
+  // care (palette presets, grid generator) always pass concrete values.
+  width          Float               @default(1.2)
+  height         Float               @default(1.2)
+  schematicX     Float?              @map("schematic_x")
+  schematicY     Float?              @map("schematic_y")
+  rotation       Float               @default(0)
+  status         String              @default("active")   // "active" | "inactive"
+  // Optional section grouping ("Terrace", "Indoor", "Bar").
+  zone           String?
+  // Partner-internal note shown on the reservation row when seating guests.
+  // Never visible to the customer.
+  staffNote      String?             @map("staff_note")
+  // When false, the table is reserved for walk-ins / staff seating only and
+  // never surfaces in the consumer availability search.
+  onlineBookable Boolean             @default(true) @map("online_bookable")
+  // Per-table override of `Restaurant.averageMealDuration`. Null inherits.
+  turnTimeMinutes Int?               @map("turn_time_minutes")
+  // Editor-only flag: prevents accidental drag/resize on the floor plan.
+  locked         Boolean             @default(false)
+  // Optional per-side chair-count override. Null on all four = auto-distribute
+  // by capacity (default). When any is non-null, the renderer uses these
+  // counts directly; their sum is validated to equal `capacity`.
+  seatsTop       Int?                @map("seats_top")
+  seatsRight     Int?                @map("seats_right")
+  seatsBottom    Int?                @map("seats_bottom")
+  seatsLeft      Int?                @map("seats_left")
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  restaurant     Restaurant          @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  reservations   TableReservation[]
+
+  @@unique([restaurantId, number])
+  @@index([restaurantId])
+  @@map("restaurant_table")
+}
+
+model TableReservation {
+  id                String      @id @default(cuid())
+  restaurantId      String      @map("restaurant_id")
+  tableId           String?     @map("table_id")          // optional; may be assigned at check-in
+  userId            String?     @map("user_id")
+  anonId            String?     @map("anon_id")
+  from              DateTime
+  to                DateTime
+  partySize         Int         @map("party_size")
+  status            String      @default("confirmed")     // confirmed | canceled
+  operationalStatus String      @default("expected") @map("operational_status")
+                                                          // expected | seated | departed | no_show
+  guestName         String      @map("guest_name")
+  guestEmail        String      @map("guest_email")
+  guestPhone        String?     @map("guest_phone")
+  specialRequests   String?     @map("special_requests")
+  internalNotes     String?     @map("internal_notes")
+  seatedAt          DateTime?   @map("seated_at")
+  departedAt        DateTime?   @map("departed_at")
+  reminderSentAt    DateTime?   @map("reminder_sent_at")
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  restaurant        Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  table             Table?      @relation(fields: [tableId], references: [id])
+  user              User?       @relation(fields: [userId], references: [id])
+
+  @@index([restaurantId, from])
+  @@index([tableId, from, to])
+  @@map("table_reservation")
+}
+
+model MenuItem {
+  id           String      @id @default(cuid())
+  restaurantId String      @map("restaurant_id")
+  name         String
+  description  String?
+  price        Float
+  imageUrl     String?     @map("image_url")
+  category     String      @default("main")
+  soldOut      Boolean     @default(false) @map("sold_out")
+  active       Boolean     @default(true)
+  displayOrder Int         @default(0) @map("display_order")
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId])
+  @@map("menu_item")
+}
+
+model RestaurantHours {
+  id           String      @id @default(cuid())
+  restaurantId String      @map("restaurant_id")
+  day          Int                                         // 0 (Sun) .. 6 (Sat)
+  openTime     String      @map("open_time")               // "HH:mm"
+  closeTime    String      @map("close_time")              // "HH:mm"
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId])
+  @@map("restaurant_hours")
+}
+
 model AdminUser {
   id        String   @id @default(cuid())
   email     String   @unique
   createdAt DateTime @default(now())
+}
+
+model FeatureFlag {
+  name        String   @id
+  description String
+  enabled     Boolean  @default(false)
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?  @map("updated_by")
+
+  @@map("feature_flag")
+}
+
+/// Audit + replay-protection record for one impersonation handoff. A row is
+/// created when the target app accepts an impersonation token; the unique
+/// constraint on `tokenId` (the JTI) makes a second consumption attempt fail
+/// with a unique-constraint violation, which the service translates to a
+/// replay error.
+model ImpersonationLog {
+  id           String    @id @default(cuid())
+  adminId      String    @map("admin_id")
+  targetUserId String    @map("target_user_id")
+  tokenId      String    @unique @map("token_id")
+  app          String                                 // 'partner' | 'user'
+  startedAt    DateTime  @default(now()) @map("started_at")
+  endedAt      DateTime? @map("ended_at")
+  ip           String?
+  userAgent    String?   @map("user_agent")
+
+  @@index([adminId, startedAt])
+  @@index([targetUserId, startedAt])
+  @@map("impersonation_log")
 }
 
 

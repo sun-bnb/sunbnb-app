@@ -1,14 +1,18 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useSite } from '@/app/sites/site-context'
 import type { InventoryItem, LayoutElementProps } from '@/types/shared'
 import { getSite } from '../queries'
+import { saveLayoutDimensions } from '../site-actions'
 import {
   createInventoryItem,
   deleteInventoryItem,
   saveInventoryItemSchematicLocation,
+  saveInventoryItemProperties,
+  pairInventoryItems,
+  depairInventoryItem,
 } from '../inventory-actions'
 import {
   syncChairsWithLayout,
@@ -25,7 +29,7 @@ import {
   updateLayoutElement,
   deleteLayoutElement,
 } from './actions'
-import { ChairConfig } from '../inventory/chair-util'
+import { ChairConfig, getParcelColor } from '../inventory/chair-util'
 import InventoryForm from '../inventory/InventoryForm'
 import ParcelForm from '../inventory/ParcelForm'
 import InventoryToolbar from '../inventory/InventoryToolbar'
@@ -55,13 +59,32 @@ export default function SchematicView() {
   const elements: LayoutElementProps[] = site.layoutElements || []
   const worldWidth = site.layoutWidth ?? 50
   const worldHeight = site.layoutHeight ?? 35
+  const [widthInput, setWidthInput] = useState(String(worldWidth))
+  const [heightInput, setHeightInput] = useState(String(worldHeight))
+  useEffect(() => {
+    setWidthInput(String(site.layoutWidth ?? 50))
+    setHeightInput(String(site.layoutHeight ?? 35))
+  }, [site.layoutWidth, site.layoutHeight])
+  const dimsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const saveDims = (w: string, h: string) => {
+    if (dimsDebounceRef.current) clearTimeout(dimsDebounceRef.current)
+    dimsDebounceRef.current = setTimeout(async () => {
+      const wn = Number(w)
+      const hn = Number(h)
+      if (!Number.isFinite(wn) || !Number.isFinite(hn)) return
+      await saveLayoutDimensions(siteId, wn, hn)
+      await refresh()
+    }, 600)
+  }
 
   const [editorMode, setEditorMode] = useState<EditorMode>('none')
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([])
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
+  const [itemPanelOpen, setItemPanelOpen] = useState(false)
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null)
   const [propertiesOpenId, setPropertiesOpenId] = useState<string | null>(null)
   const [editGroup, setEditGroup] = useState<number | null>(null)
+  const [pairingForId, setPairingForId] = useState<string | null>(null)
 
   const [parcelConfig, setParcelConfig] = useState<ChairConfig>({
     rows: 6,
@@ -354,6 +377,39 @@ export default function SchematicView() {
     await refresh()
   }
 
+  // ─── Single-item toolbar actions ──────────────────────────────────────────
+
+  async function handleRotateSingleItem(delta: number) {
+    if (!selectedItemId || !selectedItem) return
+    const partnerId =
+      selectedItem.pairId ??
+      selectedItem.pair?.id ??
+      selectedItem.pairedBy?.id ??
+      null
+    if (partnerId) {
+      await rotateSelection(siteId, [selectedItemId, partnerId], delta)
+    } else {
+      const newRotation = ((selectedItem.rotation ?? 0) + delta + 360) % 360
+      await saveInventoryItemProperties(selectedItemId, { rotation: newRotation })
+    }
+    await refresh()
+  }
+
+  async function handleDeleteSingleItem() {
+    if (!selectedItemId) return
+    await deleteInventoryItem(selectedItemId)
+    setSelectedItemId(null)
+    setItemPanelOpen(false)
+    setEditorMode('none')
+    await refresh()
+  }
+
+  async function handleDepairItem() {
+    if (!selectedItemId) return
+    await depairInventoryItem(selectedItemId)
+    await refresh()
+  }
+
   // ─── Canvas interactions ───────────────────────────────────────────────
 
   async function handleElementDrop(type: string, x: number, y: number) {
@@ -375,6 +431,7 @@ export default function SchematicView() {
   }
 
   async function handleBackgroundClick(x: number, y: number) {
+    if (pairingForId) { setPairingForId(null); return }
     if (editorMode === 'create-parcel') {
       const newGroup = Math.max(0, ...inventory.map(i => i.group || 0)) + 1
       const newConfig: ChairConfig = {
@@ -424,6 +481,15 @@ export default function SchematicView() {
   }
 
   async function handleItemClick(id: string, mods: { metaKey: boolean; ctrlKey: boolean }) {
+    // Pairing mode: second click pairs the two items
+    if (pairingForId && id !== pairingForId) {
+      await pairInventoryItems(pairingForId, id)
+      setPairingForId(null)
+      await refresh()
+      return
+    }
+    setPairingForId(null)
+
     if (mods.metaKey || mods.ctrlKey) {
       setSelectedItemIds(prev =>
         prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id],
@@ -434,22 +500,52 @@ export default function SchematicView() {
     }
     const item = inventory.find(i => i.id === id)
     if (!item) return
-    setSelectedItemId(prev => (prev === id ? null : id))
+    const toggling = selectedItemId === id
+    setSelectedItemId(toggling ? null : id)
+    if (toggling) { setItemPanelOpen(false); setEditorMode('none') }
+    else setEditorMode('edit-chair')
     setSelectedItemIds([])
     setSelectedElementId(null)
     setPropertiesOpenId(null)
+  }
+
+  function handleItemDoubleClick(id: string) {
+    setSelectedItemId(id)
     setEditorMode('edit-chair')
+    setItemPanelOpen(true)
+    setSelectedItemIds([])
+    setSelectedElementId(null)
+    setPropertiesOpenId(null)
   }
 
   async function handleItemDragEnd(id: string, x: number, y: number) {
-    const item = inventory.find(i => i.id === id)
-    if (!item) return
-    if (item.group > 0) {
-      const origX = item.schematicX ?? 0
-      const origY = item.schematicY ?? 0
-      const deltaY = y - origY
-      const deltaX = x - origX
-      await moveParcel(siteId, item.group, deltaY, deltaX)
+    const dragged = inventory.find((i) => i.id === id)
+    if (!dragged) return
+    const dx = x - (dragged.schematicX ?? 0)
+    const dy = y - (dragged.schematicY ?? 0)
+
+    // Multi-selection drag (e.g. whole parcel selected): move every selected
+    // bed by the same delta. Server-side moveItems also updates the ItemGroup
+    // anchor when all group members are included.
+    if (selectedItemIds.length > 1 && selectedItemIds.includes(id)) {
+      await moveItems(siteId, selectedItemIds, dy, dx)
+      await refresh()
+      return
+    }
+
+    // Pair-drag: partner follows.
+    const partnerId =
+      dragged.pairId ?? dragged.pair?.id ?? dragged.pairedBy?.id ?? null
+    const partner = partnerId ? inventory.find((i) => i.id === partnerId) : null
+    if (partner) {
+      await Promise.all([
+        saveInventoryItemSchematicLocation(id, x, y),
+        saveInventoryItemSchematicLocation(
+          partner.id,
+          (partner.schematicX ?? 0) + dx,
+          (partner.schematicY ?? 0) + dy,
+        ),
+      ])
     } else {
       await saveInventoryItemSchematicLocation(id, x, y)
     }
@@ -495,7 +591,7 @@ export default function SchematicView() {
   }
 
   // ─── Side panel visibility ─────────────────────────────────────────────
-  const showItemPanel = !!selectedItem && editorMode === 'edit-chair'
+  const showItemPanel = !!selectedItem && editorMode === 'edit-chair' && itemPanelOpen
   const showParcelPanel = isParcelEditorActive
   const showElementPanel = !!propertiesElement
   const showRightPanel = showItemPanel || showParcelPanel || showElementPanel
@@ -504,14 +600,43 @@ export default function SchematicView() {
     <div className="flex flex-col -mt-2">
       {/* Summary strip */}
       <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs text-gray-500">
-        <span className="font-medium text-gray-700">{totalSunbeds}</span>
         <span>{t('totalSunbedsLabel', { count: totalSunbeds })}</span>
         <span className="text-gray-300">·</span>
-        <span className="font-medium text-gray-700">{totalParcels}</span>
         <span>{t('parcelsLabel', { count: totalParcels })}</span>
         <span className="text-gray-300">·</span>
-        <span className="font-medium text-gray-700">{elements.length}</span>
         <span>{t('totalElements', { count: elements.length })}</span>
+        <span className="ml-auto flex items-center gap-2">
+          <label className="flex items-center gap-1">
+            <span>{t('layoutWidth')}</span>
+            <input
+              type="number"
+              min={5}
+              max={500}
+              value={widthInput}
+              onChange={(e) => {
+                setWidthInput(e.target.value)
+                saveDims(e.target.value, heightInput)
+              }}
+              className="w-16 rounded border border-gray-300 px-1.5 py-0.5 text-xs text-gray-700"
+            />
+            <span>m</span>
+          </label>
+          <label className="flex items-center gap-1">
+            <span>{t('layoutHeight')}</span>
+            <input
+              type="number"
+              min={5}
+              max={500}
+              value={heightInput}
+              onChange={(e) => {
+                setHeightInput(e.target.value)
+                saveDims(widthInput, e.target.value)
+              }}
+              className="w-16 rounded border border-gray-300 px-1.5 py-0.5 text-xs text-gray-700"
+            />
+            <span>m</span>
+          </label>
+        </span>
       </div>
 
       {/* Parcel list */}
@@ -533,7 +658,13 @@ export default function SchematicView() {
           selectedParcelTotal={selectedParcelTotal}
           isCompleteParcelSelected={isCompleteParcelSelected}
           allParcelNumbers={allParcelNumbers}
-          onClearSelection={() => setSelectedItemIds([])}
+          onClearSelection={() => {
+            setSelectedItemIds([])
+            setSelectedItemId(null)
+            setItemPanelOpen(false)
+            setPairingForId(null)
+            if (editorMode === 'edit-chair') setEditorMode('none')
+          }}
           onDeleteSelected={handleDeleteSelected}
           onRotateSelected={handleRotateSelected}
           onAdjustSpacing={handleAdjustSpacing}
@@ -542,6 +673,25 @@ export default function SchematicView() {
           onSelectEntireParcel={handleSelectEntireParcel}
           onParcelReorder={handleParcelReorder}
           onEditParcelFull={handleEditParcelFull}
+          selectedSingleItemId={
+            editorMode === 'edit-chair' && selectedItem ? selectedItem.id : null
+          }
+          selectedSingleItemNumber={selectedItem?.number ?? null}
+          selectedSingleItemParcelColor={
+            selectedItem?.group ? getParcelColor(selectedItem.group) ?? null : null
+          }
+          selectedSingleItemHasPair={
+            !!(selectedItem?.pairId || selectedItem?.pair?.id || selectedItem?.pairedBy?.id)
+          }
+          pairingMode={!!pairingForId}
+          isEditPanelOpen={itemPanelOpen}
+          onRotateSingle={handleRotateSingleItem}
+          onTogglePairing={() =>
+            setPairingForId(pairingForId ? null : selectedItemId)
+          }
+          onDepairSingle={handleDepairItem}
+          onEditSingle={() => setItemPanelOpen((v) => !v)}
+          onDeleteSingle={handleDeleteSingleItem}
           onStartCreate={() => {
             setEditorMode('create-chair')
             setSelectedItemId(null)
@@ -578,7 +728,7 @@ export default function SchematicView() {
                     type="button"
                     onClick={() => bump(1)}
                     title={t('bringForward')}
-                    className="px-2 py-1 text-xs text-gray-700 rounded hover:bg-gray-100"
+                    className="h-7 px-2 flex items-center text-xs text-gray-700 rounded hover:bg-gray-100 whitespace-nowrap"
                   >
                     ↑ {t('bringForward')}
                   </button>
@@ -586,7 +736,7 @@ export default function SchematicView() {
                     type="button"
                     onClick={() => bump(-1)}
                     title={t('sendBackward')}
-                    className="px-2 py-1 text-xs text-gray-700 rounded hover:bg-gray-100"
+                    className="h-7 px-2 flex items-center text-xs text-gray-700 rounded hover:bg-gray-100 whitespace-nowrap"
                   >
                     ↓ {t('sendBackward')}
                   </button>
@@ -614,6 +764,16 @@ export default function SchematicView() {
                     ✕
                   </button>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedElementId(null)
+                    setPropertiesOpenId(null)
+                  }}
+                  className="text-[11px] text-gray-500 hover:text-gray-700 underline px-1"
+                >
+                  {t('deselect')}
+                </button>
               </div>
             )
           })() : null}
@@ -624,6 +784,7 @@ export default function SchematicView() {
             elements={elements}
             items={inventory}
             selectedItemIds={selectedItemIds}
+            editingItemId={selectedItemId}
             selectedElementId={selectedElementId}
             highlightedGroup={editGroup}
             placementActive={
@@ -633,12 +794,24 @@ export default function SchematicView() {
             }
             onItemClick={handleItemClick}
             onItemDragEnd={handleItemDragEnd}
+            onItemDoubleClick={handleItemDoubleClick}
             onElementClick={handleElementClick}
             onElementDoubleClick={handleElementDoubleClick}
             onElementDragEnd={handleElementDragEnd}
             onElementResizeEnd={handleElementResizeEnd}
             onBackgroundClick={handleBackgroundClick}
             onElementDrop={handleElementDrop}
+            onItemsRectSelect={(ids, mods) => {
+              setSelectedItemIds((prev) =>
+                mods.metaKey || mods.ctrlKey
+                  ? Array.from(new Set([...prev, ...ids]))
+                  : ids,
+              )
+              setSelectedItemId(null)
+              setSelectedElementId(null)
+              setItemPanelOpen(false)
+              if (editorMode === 'edit-chair') setEditorMode('none')
+            }}
           />
         </div>
 
@@ -698,10 +871,7 @@ export default function SchematicView() {
                   setEditorMode('edit-parcel')
                   setSelectedItemId(null)
                 }}
-                onClose={() => {
-                  setSelectedItemId(null)
-                  setEditorMode('none')
-                }}
+                onClose={() => setItemPanelOpen(false)}
               />
             ) : null}
             {showParcelPanel ? (

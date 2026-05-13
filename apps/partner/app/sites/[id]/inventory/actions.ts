@@ -493,7 +493,10 @@ export async function rotateSelection(
     ? items.reduce((s, i) => s + (i.schematicX ?? 0), 0) / items.length
     : items.reduce((s, i) => s + parseFloat(i.locationLng), 0) / items.length
 
-  const rad = deltaDegrees * (Math.PI / 180)
+  // Schematic uses SVG Y-down, while the rotation matrix below is written for
+  // Y-up (geographic). Invert the angle in schematic mode so the orbit matches
+  // each seat's own CW tilt (same compensation generateChairsSchematic applies).
+  const rad = (isSchematic ? -deltaDegrees : deltaDegrees) * (Math.PI / 180)
   const metersPerLat = isSchematic ? 1 : 111320
   const metersPerLng = isSchematic ? 1 : 111320 * Math.cos(centerLat * Math.PI / 180)
 

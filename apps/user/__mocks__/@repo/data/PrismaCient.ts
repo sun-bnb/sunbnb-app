@@ -36,6 +36,18 @@ const prisma = {
   inventoryItem: {
     findMany: vi.fn(),
   },
+  featureFlag: {
+    findMany: vi.fn(),
+    upsert: vi.fn(),
+    deleteMany: vi.fn(),
+  },
+  impersonationLog: {
+    create: vi.fn(),
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    updateMany: vi.fn(),
+  },
 }
 
 export default prisma

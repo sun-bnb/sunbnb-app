@@ -13,6 +13,8 @@ const navItems = [
   { label: 'Fees', href: '/fees' },
   { label: 'Platform', href: '/platform' },
   { label: 'Users', href: '/users' },
+  { label: 'Flags', href: '/flags' },
+  { label: 'Audit', href: '/audit' },
 ]
 
 function isActive(pathname: string, href: string) {

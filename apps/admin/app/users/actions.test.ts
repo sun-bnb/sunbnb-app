@@ -4,13 +4,23 @@ vi.mock('@/app/auth', () => ({
   auth: vi.fn().mockResolvedValue(null),
 }))
 
+vi.mock('@repo/data/impersonation', () => ({
+  createImpersonationToken: vi.fn(),
+}))
+
 import {
   getAdminUsers,
   addAdminUser,
   removeAdminUser,
   searchUsers,
   deleteUser,
+  listUsers,
+  startImpersonation,
 } from './actions'
+import { LIST_USERS_PAGE_SIZE } from './constants'
+import { createImpersonationToken } from '@repo/data/impersonation'
+
+const mockCreateToken = vi.mocked(createImpersonationToken)
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 
@@ -144,7 +154,16 @@ describe('searchUsers', () => {
 
   it('searches by email and name', async () => {
     authenticateAsSudo()
-    vi.mocked(prisma.user.findMany).mockResolvedValue([{ id: 'u-1', email: 'john@test.com' }] as any)
+    vi.mocked(prisma.user.findMany).mockResolvedValue([
+      {
+        id: 'u-1',
+        name: null,
+        email: 'john@test.com',
+        createdAt: new Date(),
+        partnerAccount: null,
+        _count: { reservations: 0, orders: 0, sites: 0 },
+      },
+    ] as any)
 
     const res = await searchUsers('john')
     expect(res).toHaveLength(1)
@@ -152,6 +171,150 @@ describe('searchUsers', () => {
     const findCall = vi.mocked(prisma.user.findMany).mock.calls[0][0]
     expect(findCall.where.OR).toHaveLength(2)
     expect(findCall.take).toBe(20)
+  })
+})
+
+// ─── listUsers ──────────────────────────────────────────────────────────────
+
+describe('listUsers', () => {
+  it('rejects non-sudo users', async () => {
+    authenticateAsNonSudo()
+    await expect(listUsers(1)).rejects.toThrow('sudo required')
+  })
+
+  it('returns first page with total and pageSize', async () => {
+    authenticateAsSudo()
+    vi.mocked(prisma.user.count).mockResolvedValue(42)
+    vi.mocked(prisma.user.findMany).mockResolvedValue([
+      {
+        id: 'u-1',
+        name: null,
+        email: 'a@test.com',
+        createdAt: new Date(),
+        partnerAccount: null,
+        _count: { reservations: 0, orders: 0, sites: 0 },
+      },
+      {
+        id: 'u-2',
+        name: null,
+        email: 'b@test.com',
+        createdAt: new Date(),
+        partnerAccount: null,
+        _count: { reservations: 0, orders: 0, sites: 0 },
+      },
+    ] as any)
+
+    const res = await listUsers(1)
+    expect(res.total).toBe(42)
+    expect(res.page).toBe(1)
+    expect(res.pageSize).toBe(LIST_USERS_PAGE_SIZE)
+    expect(res.users).toHaveLength(2)
+
+    const call = vi.mocked(prisma.user.findMany).mock.calls[0][0]
+    expect(call.skip).toBe(0)
+    expect(call.take).toBe(20)
+    expect(call.orderBy).toEqual({ createdAt: 'desc' })
+  })
+
+  it('skips correctly for page 3 (page-1 * pageSize)', async () => {
+    authenticateAsSudo()
+    vi.mocked(prisma.user.count).mockResolvedValue(100)
+    vi.mocked(prisma.user.findMany).mockResolvedValue([] as any)
+
+    await listUsers(3)
+    const call = vi.mocked(prisma.user.findMany).mock.calls[0][0]
+    expect(call.skip).toBe(40)
+    expect(call.take).toBe(20)
+  })
+
+  it('clamps non-positive pages to 1', async () => {
+    authenticateAsSudo()
+    vi.mocked(prisma.user.count).mockResolvedValue(5)
+    vi.mocked(prisma.user.findMany).mockResolvedValue([] as any)
+
+    const res = await listUsers(0)
+    expect(res.page).toBe(1)
+    expect(vi.mocked(prisma.user.findMany).mock.calls[0][0].skip).toBe(0)
+  })
+
+  it('defaults to page 1 when called with no argument', async () => {
+    authenticateAsSudo()
+    vi.mocked(prisma.user.count).mockResolvedValue(5)
+    vi.mocked(prisma.user.findMany).mockResolvedValue([] as any)
+
+    const res = await listUsers()
+    expect(res.page).toBe(1)
+  })
+
+  it('returns the _count select shape (sites, reservations, orders)', async () => {
+    authenticateAsSudo()
+    vi.mocked(prisma.user.count).mockResolvedValue(1)
+    vi.mocked(prisma.user.findMany).mockResolvedValue([] as any)
+
+    await listUsers(1)
+    const call = vi.mocked(prisma.user.findMany).mock.calls[0][0]
+    expect(call.select._count.select).toEqual({
+      reservations: true,
+      orders: true,
+      sites: true,
+    })
+    expect(call.select.partnerAccount).toEqual({ select: { userId: true } })
+  })
+})
+
+// ─── appRole derivation ─────────────────────────────────────────────────────
+
+describe('appRole derivation (via listUsers)', () => {
+  function rowWith(opts: {
+    partner: boolean
+    sites?: number
+    reservations?: number
+    orders?: number
+  }) {
+    return {
+      id: `u-${Math.random()}`,
+      name: null,
+      email: 't@test.com',
+      createdAt: new Date(),
+      partnerAccount: opts.partner ? { userId: 'p-1' } : null,
+      _count: {
+        sites: opts.sites ?? 0,
+        reservations: opts.reservations ?? 0,
+        orders: opts.orders ?? 0,
+      },
+    }
+  }
+
+  async function runListAndGet(role: 'partner' | 'user' | 'both' | 'none', row: any) {
+    authenticateAsSudo()
+    vi.mocked(prisma.user.count).mockResolvedValue(1)
+    vi.mocked(prisma.user.findMany).mockResolvedValue([row] as any)
+    const res = await listUsers(1)
+    expect(res.users[0]?.appRole).toBe(role)
+  }
+
+  it('classifies as "partner" when only partnerAccount is present', async () => {
+    await runListAndGet('partner', rowWith({ partner: true }))
+  })
+
+  it('classifies as "user" when only reservations exist', async () => {
+    await runListAndGet('user', rowWith({ partner: false, reservations: 3 }))
+  })
+
+  it('classifies as "user" when only orders exist', async () => {
+    await runListAndGet('user', rowWith({ partner: false, orders: 1 }))
+  })
+
+  it('classifies as "both" when partnerAccount AND consumer activity exist', async () => {
+    await runListAndGet('both', rowWith({ partner: true, reservations: 2 }))
+  })
+
+  it('classifies as "none" when no partner account and no consumer activity', async () => {
+    await runListAndGet('none', rowWith({ partner: false }))
+  })
+
+  it('classifies as "partner" defensively when sites > 0 even without partnerAccount row', async () => {
+    await runListAndGet('partner', rowWith({ partner: false, sites: 1 }))
   })
 })
 
@@ -279,5 +442,136 @@ describe('deleteUser', () => {
 
     // findUnique should be called 2 times: requireSudo + combined user details with sudo
     expect(vi.mocked(prisma.user.findUnique)).toHaveBeenCalledTimes(2)
+  })
+})
+
+// ─── startImpersonation ─────────────────────────────────────────────────────
+
+describe('startImpersonation', () => {
+  function mockTarget(opts: {
+    id?: string
+    sudo?: boolean
+    partner?: boolean
+    sites?: number
+    reservations?: number
+    orders?: number
+  }) {
+    vi.mocked(prisma.user.findUnique)
+      .mockResolvedValueOnce({ sudo: true } as any) // requireSudo
+      .mockResolvedValueOnce({
+        id: opts.id ?? 'target',
+        email: 't@test.com',
+        sudo: opts.sudo ?? false,
+        partnerAccount: opts.partner ? { userId: 't' } : null,
+        _count: {
+          sites: opts.sites ?? 0,
+          reservations: opts.reservations ?? 0,
+          orders: opts.orders ?? 0,
+        },
+      } as any)
+  }
+
+  beforeEach(() => {
+    mockCreateToken.mockReset()
+    mockCreateToken.mockReturnValue({
+      token: 'signed.token',
+      tokenId: 'jti-1',
+      expiresAt: new Date(),
+    })
+  })
+
+  it('rejects non-sudo callers (via requireSudo)', async () => {
+    authenticateAsNonSudo()
+    await expect(startImpersonation('target', 'partner')).rejects.toThrow(
+      'sudo required',
+    )
+  })
+
+  it('rejects invalid app values', async () => {
+    authenticateAsSudo()
+    const res = await startImpersonation('target', 'admin' as never)
+    expect(res.status).toBe('error')
+    expect((res as { errors: string[] }).errors[0]).toContain('Invalid app')
+  })
+
+  it('rejects missing target id', async () => {
+    authenticateAsSudo()
+    const res = await startImpersonation('', 'partner')
+    expect(res.status).toBe('error')
+  })
+
+  it('rejects self-impersonation', async () => {
+    authenticateAsSudo()
+    // session.user.id is 'admin-1' from helper
+    const res = await startImpersonation('admin-1', 'partner')
+    expect(res.status).toBe('error')
+    expect((res as { errors: string[] }).errors[0]).toMatch(/yourself/)
+  })
+
+  it('rejects when target user does not exist', async () => {
+    authenticateAsSudo()
+    // requireSudo's findUnique → sudo:true; the target lookup returns null
+    vi.mocked(prisma.user.findUnique)
+      .mockResolvedValueOnce({ sudo: true } as any)
+      .mockResolvedValueOnce(null as any)
+    const res = await startImpersonation('ghost', 'partner')
+    expect(res.status).toBe('error')
+    expect((res as { errors: string[] }).errors[0]).toMatch(/not found/i)
+  })
+
+  it('rejects impersonating a sudo target', async () => {
+    authenticateAsSudo()
+    mockTarget({ sudo: true, partner: true })
+    const res = await startImpersonation('target', 'partner')
+    expect(res.status).toBe('error')
+    expect((res as { errors: string[] }).errors[0]).toMatch(/sudo/i)
+  })
+
+  it('rejects partner impersonation when target has no partner activity', async () => {
+    authenticateAsSudo()
+    mockTarget({ partner: false, reservations: 3 })
+    const res = await startImpersonation('target', 'partner')
+    expect(res.status).toBe('error')
+    expect((res as { errors: string[] }).errors[0]).toMatch(/partner/i)
+  })
+
+  it('rejects user impersonation when target has no consumer activity', async () => {
+    authenticateAsSudo()
+    mockTarget({ partner: true })
+    const res = await startImpersonation('target', 'user')
+    expect(res.status).toBe('error')
+    expect((res as { errors: string[] }).errors[0]).toMatch(/consumer/i)
+  })
+
+  it('allows partner impersonation when partnerAccount exists', async () => {
+    authenticateAsSudo()
+    mockTarget({ partner: true })
+    const res = await startImpersonation('target', 'partner')
+    expect(res.status).toBe('ok')
+    expect((res as { url: string }).url).toMatch(/\/api\/auth\/impersonate\?token=signed\.token$/)
+    expect(mockCreateToken).toHaveBeenCalledWith({
+      adminId: 'admin-1',
+      targetUserId: 'target',
+      app: 'partner',
+    })
+  })
+
+  it('allows user impersonation when reservations exist', async () => {
+    authenticateAsSudo()
+    mockTarget({ reservations: 1 })
+    const res = await startImpersonation('target', 'user')
+    expect(res.status).toBe('ok')
+    expect((res as { url: string }).url).toContain('/api/auth/impersonate?token=')
+  })
+
+  it('uses PARTNER_APP_URL for partner and USER_APP_URL for user', async () => {
+    authenticateAsSudo()
+    mockTarget({ partner: true })
+    const partnerRes = await startImpersonation('target', 'partner')
+    expect((partnerRes as { url: string }).url.startsWith('https://local.sunbnb.app:3001')).toBe(true)
+
+    mockTarget({ orders: 1 })
+    const userRes = await startImpersonation('target', 'user')
+    expect((userRes as { url: string }).url.startsWith('https://local.sunbnb.app:3002')).toBe(true)
   })
 })

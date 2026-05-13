@@ -49,6 +49,19 @@ const prisma = {
   securityToken: {
     deleteMany: vi.fn(),
   },
+  featureFlag: {
+    findMany: vi.fn(),
+    upsert: vi.fn(),
+    deleteMany: vi.fn(),
+  },
+  impersonationLog: {
+    count: vi.fn(),
+    create: vi.fn(),
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    updateMany: vi.fn(),
+  },
   $queryRaw: vi.fn(),
 }
 

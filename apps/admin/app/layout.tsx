@@ -4,6 +4,8 @@ import App from './app'
 import NextAuthProvider from './nextauth'
 import MuiThemeProvider from './mui-theme'
 import { CookieConsent } from '@repo/ui/cookie-consent'
+import { FlagsProvider } from '@repo/ui/flags'
+import { getClientFlags } from './flags'
 import './globals.css'
 
 const geistSans = localFont({
@@ -24,22 +26,25 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const flags = await getClientFlags()
   return (
     <html lang="en" className="dark">
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
-        <MuiThemeProvider>
-          <NextAuthProvider>
-            <App>
-              {children}
-            </App>
-            <CookieConsent privacyHref="#" />
-          </NextAuthProvider>
-        </MuiThemeProvider>
+        <FlagsProvider value={flags}>
+          <MuiThemeProvider>
+            <NextAuthProvider>
+              <App>
+                {children}
+              </App>
+              <CookieConsent privacyHref="#" />
+            </NextAuthProvider>
+          </MuiThemeProvider>
+        </FlagsProvider>
       </body>
     </html>
   )

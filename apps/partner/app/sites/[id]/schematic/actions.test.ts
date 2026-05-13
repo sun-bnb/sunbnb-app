@@ -78,7 +78,9 @@ describe('createLayoutElement', () => {
     expect(res.status).toBe('ok')
     const args = vi.mocked(prisma.layoutElement.create).mock.calls[0][0]
     expect(args.data.rotation).toBe(0)
-    expect(args.data.z).toBe(0)
+    // Action defaults z to 100 (not the schema default of 0) so newly-placed
+    // elements float above existing ones in the same zBand.
+    expect(args.data.z).toBe(100)
     expect(args.data.label).toBeNull()
     expect(args.data.color).toBeNull()
     expect(args.data.siteId).toBe(SITE_ID)

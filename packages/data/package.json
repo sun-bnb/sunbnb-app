@@ -18,7 +18,9 @@
     "./reservation-emails": "./src/reservation-emails.ts",
     "./password-reset": "./src/password-reset.ts",
     "./rate-limit": "./src/rate-limit.ts",
-    "./reservation-status": "./src/reservation-status.ts"
+    "./reservation-status": "./src/reservation-status.ts",
+    "./flags": "./src/flags.ts",
+    "./impersonation": "./src/impersonation.ts"
   },
   "typesVersions": {
     "*": {
@@ -60,6 +62,12 @@
       ],
       "reservation-status": [
         "./src/reservation-status.ts"
+      ],
+      "flags": [
+        "./src/flags.ts"
+      ],
+      "impersonation": [
+        "./src/impersonation.ts"
       ]
     }
   },

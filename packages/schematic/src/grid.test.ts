@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { generateChairGrid, SUNBED_WIDTH, SUNBED_HEIGHT } from './grid'
+import {
+  generateChairGrid,
+  generateTableGrid,
+  SUNBED_WIDTH,
+  SUNBED_HEIGHT,
+  TABLE_SHAPE_DEFAULTS,
+} from './grid'
 
 const baseConfig = {
   group: 1,
@@ -82,5 +88,75 @@ describe('generateChairGrid', () => {
 
   it('returns no cells for zero rows', () => {
     expect(generateChairGrid({ ...baseConfig, rows: 0 })).toHaveLength(0)
+  })
+})
+
+const tableBaseConfig = {
+  rows: 2,
+  tablesPerRow: 3,
+  horizontalGap: 0.8,
+  verticalGap: 0.8,
+  tableWidth: 1.2,
+  tableHeight: 1.2,
+  capacity: 4,
+  shape: 'square' as const,
+  rotation: 0,
+}
+
+describe('generateTableGrid', () => {
+  it('produces rows × tablesPerRow cells numbered row-major', () => {
+    const cells = generateTableGrid(tableBaseConfig)
+    expect(cells).toHaveLength(6)
+    expect(cells.map((c) => c.number)).toEqual([1, 2, 3, 4, 5, 6])
+  })
+
+  it('places the first table at origin', () => {
+    const [first] = generateTableGrid(tableBaseConfig)
+    expect(first?.dx).toBe(0)
+    expect(first?.dy).toBe(0)
+  })
+
+  it('spaces adjacent tables in a row by horizontalGap + tableWidth', () => {
+    const cells = generateTableGrid(tableBaseConfig)
+    const step = tableBaseConfig.horizontalGap + tableBaseConfig.tableWidth
+    expect(cells[1]!.dx).toBeCloseTo(step, 6)
+    expect(cells[2]!.dx).toBeCloseTo(2 * step, 6)
+  })
+
+  it('spaces rows by verticalGap + tableHeight', () => {
+    const cells = generateTableGrid(tableBaseConfig)
+    const rowStep = tableBaseConfig.verticalGap + tableBaseConfig.tableHeight
+    const firstOfRow2 = cells[3]! // row 2, column 1
+    expect(firstOfRow2.dy).toBeCloseTo(rowStep, 6)
+    expect(firstOfRow2.dx).toBeCloseTo(0, 6)
+  })
+
+  it('propagates capacity and shape onto every cell', () => {
+    const cells = generateTableGrid({ ...tableBaseConfig, capacity: 6, shape: 'round' })
+    expect(cells.every((c) => c.capacity === 6)).toBe(true)
+    expect(cells.every((c) => c.shape === 'round')).toBe(true)
+  })
+
+  it('rotates the grid 90°', () => {
+    const cells = generateTableGrid({
+      ...tableBaseConfig,
+      rotation: 90,
+      rows: 1,
+      tablesPerRow: 2,
+    })
+    const step = tableBaseConfig.horizontalGap + tableBaseConfig.tableWidth
+    expect(cells[1]!.dx).toBeCloseTo(0, 6)
+    expect(cells[1]!.dy).toBeCloseTo(-step, 6)
+  })
+
+  it('returns no cells for zero rows or zero columns', () => {
+    expect(generateTableGrid({ ...tableBaseConfig, rows: 0 })).toHaveLength(0)
+    expect(generateTableGrid({ ...tableBaseConfig, tablesPerRow: 0 })).toHaveLength(0)
+  })
+
+  it('exposes sensible defaults via TABLE_SHAPE_DEFAULTS', () => {
+    expect(TABLE_SHAPE_DEFAULTS.square.capacity).toBe(4)
+    expect(TABLE_SHAPE_DEFAULTS.round.capacity).toBe(4)
+    expect(TABLE_SHAPE_DEFAULTS.rect.capacity).toBe(2)
   })
 })

@@ -764,32 +764,6 @@ export default function GeneralView() {
           </button>
         </div>
 
-        {layoutMode === 'schematic' && (
-          <div className="mt-3 flex gap-3">
-            <TextField
-              label={t('layoutWidth')}
-              type="number"
-              value={layoutWidth}
-              onChange={(e) => {
-                setLayoutWidth(e.target.value)
-                scheduleSave({ layoutWidth: e.target.value })
-              }}
-              helperText="m"
-              sx={{ flex: 1 }}
-            />
-            <TextField
-              label={t('layoutHeight')}
-              type="number"
-              value={layoutHeight}
-              onChange={(e) => {
-                setLayoutHeight(e.target.value)
-                scheduleSave({ layoutHeight: e.target.value })
-              }}
-              helperText="m"
-              sx={{ flex: 1 }}
-            />
-          </div>
-        )}
       </div>
 
       <Divider sx={{ mb: 3 }} />

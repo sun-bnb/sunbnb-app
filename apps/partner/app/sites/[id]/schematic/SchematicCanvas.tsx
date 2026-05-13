@@ -13,24 +13,23 @@ interface Props {
   elements: LayoutElementProps[]
   items: InventoryItem[]
   selectedItemIds: string[]
+  editingItemId?: string | null
   selectedElementId: string | null
   placementActive?: boolean
   highlightedGroup?: number | null
   onItemClick: (id: string, mods: { metaKey: boolean; ctrlKey: boolean }) => void
   onItemDragEnd: (id: string, x: number, y: number) => void
+  onItemDoubleClick: (id: string) => void
   onElementClick: (id: string) => void
   onElementDoubleClick: (id: string) => void
   onElementDragEnd: (id: string, x: number, y: number) => void
   onElementResizeEnd: (id: string, x: number, y: number, width: number, height: number) => void
   onBackgroundClick: (x: number, y: number) => void
   onElementDrop?: (type: string, x: number, y: number) => void
-}
-
-const STATUS_FILL: Record<string, string> = {
-  active: '#fcd34d',
-  new: '#93c5fd',
-  disabled: '#9ca3af',
-  inactive: '#9ca3af',
+  onItemsRectSelect?: (
+    ids: string[],
+    mods: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean },
+  ) => void
 }
 
 function toElementDTO(el: LayoutElementProps): LayoutElementDTO {
@@ -53,6 +52,7 @@ function toElementDTO(el: LayoutElementProps): LayoutElementDTO {
 function toSchematicItem(item: InventoryItem): SchematicItem {
   const numberLabel =
     item.number != null ? String(item.number).padStart(4, '0') : ''
+  const pairId = item.pairId ?? item.pair?.id ?? item.pairedBy?.id ?? null
   return {
     id: item.id,
     x: item.schematicX ?? 0,
@@ -61,23 +61,20 @@ function toSchematicItem(item: InventoryItem): SchematicItem {
     status: item.status,
     label: item.label ?? numberLabel,
     group: item.group,
-    pairId: item.pairId ?? null,
+    pairId,
   }
 }
 
 export default function SchematicCanvas(props: Props) {
   const elements = props.elements.map(toElementDTO)
   const items = props.items.map(toSchematicItem)
-  const highlightedGroup = props.highlightedGroup ?? null
 
   function visualForItem(item: SchematicItem): ItemVisual {
     const parcelColor = item.group ? getParcelColor(item.group) : undefined
-    const isHighlightedGroup =
-      highlightedGroup != null && item.group === highlightedGroup
     return {
-      fill: STATUS_FILL[item.status ?? 'active'] ?? '#fcd34d',
-      stroke: parcelColor ?? (isHighlightedGroup ? '#2563eb' : '#1f2937'),
+      fill: 'transparent',
       label: item.label ? String(item.label) : undefined,
+      parcelColor,
     }
   }
 
@@ -91,15 +88,21 @@ export default function SchematicCanvas(props: Props) {
       itemVisual={visualForItem}
       mode="edit"
       placementActive={props.placementActive}
-      selection={{ itemIds: props.selectedItemIds, elementId: props.selectedElementId }}
+      selection={{
+        itemIds: props.selectedItemIds,
+        editingItemId: props.editingItemId,
+        elementId: props.selectedElementId,
+      }}
       onItemClick={props.onItemClick}
       onItemDragEnd={props.onItemDragEnd}
+      onItemDoubleClick={props.onItemDoubleClick}
       onElementClick={props.onElementClick}
       onElementDoubleClick={props.onElementDoubleClick}
       onElementDragEnd={props.onElementDragEnd}
       onElementResizeEnd={props.onElementResizeEnd}
       onBackgroundClick={props.onBackgroundClick}
       onElementDrop={props.onElementDrop}
+      onItemsRectSelect={props.onItemsRectSelect}
     />
   )
 }

@@ -116,15 +116,23 @@ describe('deleteInventoryItem', () => {
     expect(res.errors).toContain('Not authorized')
   })
 
-  it('deletes item when owner', async () => {
+  it('deletes item when owner and clears any partner pairId first', async () => {
     mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
     vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
       site: { userId: OWNER_ID },
     } as any)
+    vi.mocked(prisma.inventoryItem.updateMany).mockResolvedValue({ count: 0 } as any)
     vi.mocked(prisma.inventoryItem.delete).mockResolvedValue({} as any)
 
     const res = await deleteInventoryItem('item-1')
     expect(res.status).toBe('ok')
+    // Delete runs inside a transaction that also clears any partner's pairId
+    // pointing at this item — otherwise the FK constraint fails when a paired
+    // sunbed is deleted.
+    expect(vi.mocked(prisma.inventoryItem.updateMany)).toHaveBeenCalledWith({
+      where: { pairId: 'item-1' },
+      data: { pairId: null },
+    })
     expect(vi.mocked(prisma.inventoryItem.delete)).toHaveBeenCalledWith({ where: { id: 'item-1' } })
   })
 })

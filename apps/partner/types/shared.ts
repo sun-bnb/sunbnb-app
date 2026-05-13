@@ -8,7 +8,9 @@ export interface ServiceFee {
 
 export interface LayoutElementProps {
   id: string
-  siteId: string
+  // Exactly one of siteId or restaurantId is set (DB-level CHECK constraint).
+  siteId?: string | null
+  restaurantId?: string | null
   type: string
   shape: string
   x: number
@@ -31,6 +33,7 @@ export interface SiteProps {
   layoutMode?: string
   layoutWidth?: number | null
   layoutHeight?: number | null
+  restaurantId?: string | null
   layoutElements?: LayoutElementProps[]
   inventoryItems?: InventoryItem[]
   products?: Product[]

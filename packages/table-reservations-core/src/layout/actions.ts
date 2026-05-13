@@ -1,0 +1,170 @@
+import prisma from '@repo/data/PrismaCient'
+import type { ActionResult } from '../types'
+import { requireRestaurantOwner } from '../ownership'
+
+const ALLOWED_SHAPES = ['rect', 'ellipse', 'icon'] as const
+type Shape = (typeof ALLOWED_SHAPES)[number]
+
+export interface LayoutElementInput {
+  type: string
+  shape: Shape
+  x: number
+  y: number
+  width: number
+  height: number
+  rotation?: number
+  z?: number
+  label?: string | null
+  color?: string | null
+  cornerRadius?: number | null
+}
+
+export interface LayoutElementRecord {
+  id: string
+  restaurantId: string | null
+  siteId: string | null
+  type: string
+  shape: string
+  x: number
+  y: number
+  width: number
+  height: number
+  rotation: number
+  z: number
+  label: string | null
+  color: string | null
+  cornerRadius: number | null
+}
+
+const layoutSelect = {
+  id: true,
+  restaurantId: true,
+  siteId: true,
+  type: true,
+  shape: true,
+  x: true,
+  y: true,
+  width: true,
+  height: true,
+  rotation: true,
+  z: true,
+  label: true,
+  color: true,
+  cornerRadius: true,
+} as const
+
+function validateGeometry(input: Partial<LayoutElementInput>): string | null {
+  const { x, y, width, height, rotation, cornerRadius } = input
+  if (x !== undefined && (!Number.isFinite(x) || x < -10000 || x > 10000)) return 'Invalid x'
+  if (y !== undefined && (!Number.isFinite(y) || y < -10000 || y > 10000)) return 'Invalid y'
+  if (width !== undefined && (!Number.isFinite(width) || width <= 0 || width > 10000)) return 'Invalid width'
+  if (height !== undefined && (!Number.isFinite(height) || height <= 0 || height > 10000)) return 'Invalid height'
+  if (rotation !== undefined && (!Number.isFinite(rotation) || rotation < -360 || rotation > 360)) return 'Invalid rotation'
+  if (
+    cornerRadius !== undefined && cornerRadius !== null &&
+    (!Number.isFinite(cornerRadius) || cornerRadius < 0 || cornerRadius > 1000)
+  ) return 'Invalid cornerRadius'
+  return null
+}
+
+export async function listLayoutElementsForRestaurant(
+  restaurantId: string,
+): Promise<LayoutElementRecord[]> {
+  return prisma.layoutElement.findMany({
+    where: { restaurantId },
+    orderBy: { z: 'asc' },
+    select: layoutSelect,
+  })
+}
+
+export async function createLayoutElement(
+  restaurantId: string,
+  input: LayoutElementInput,
+  userId: string | null | undefined,
+): Promise<ActionResult & { element?: LayoutElementRecord }> {
+  const { error } = await requireRestaurantOwner(restaurantId, userId)
+  if (error) return { status: 'error', errors: [error] }
+
+  if (!input.type || typeof input.type !== 'string' || input.type.length > 50) {
+    return { status: 'error', errors: ['Invalid type'] }
+  }
+  if (!ALLOWED_SHAPES.includes(input.shape)) {
+    return { status: 'error', errors: ['Invalid shape'] }
+  }
+  const geomErr = validateGeometry(input)
+  if (geomErr) return { status: 'error', errors: [geomErr] }
+  if (input.label && input.label.length > 100) {
+    return { status: 'error', errors: ['Label too long'] }
+  }
+
+  const created = await prisma.layoutElement.create({
+    data: {
+      restaurantId,
+      siteId: null,
+      type: input.type,
+      shape: input.shape,
+      x: input.x,
+      y: input.y,
+      width: input.width,
+      height: input.height,
+      rotation: input.rotation ?? 0,
+      z: input.z ?? 100,
+      label: input.label ?? null,
+      color: input.color ?? null,
+      cornerRadius: input.cornerRadius ?? 0,
+    },
+    select: layoutSelect,
+  })
+  return { status: 'ok', element: created }
+}
+
+export async function updateLayoutElement(
+  id: string,
+  patch: Partial<LayoutElementInput>,
+  userId: string | null | undefined,
+): Promise<ActionResult & { element?: LayoutElementRecord }> {
+  const existing = await prisma.layoutElement.findUnique({
+    where: { id },
+    select: { restaurantId: true },
+  })
+  if (!existing || !existing.restaurantId) return { status: 'error', errors: ['Not found'] }
+
+  const { error } = await requireRestaurantOwner(existing.restaurantId, userId)
+  if (error) return { status: 'error', errors: [error] }
+
+  if (patch.shape !== undefined && !ALLOWED_SHAPES.includes(patch.shape)) {
+    return { status: 'error', errors: ['Invalid shape'] }
+  }
+  if (patch.type !== undefined && (typeof patch.type !== 'string' || patch.type.length > 50)) {
+    return { status: 'error', errors: ['Invalid type'] }
+  }
+  const geomErr = validateGeometry(patch)
+  if (geomErr) return { status: 'error', errors: [geomErr] }
+  if (patch.label && patch.label.length > 100) {
+    return { status: 'error', errors: ['Label too long'] }
+  }
+
+  const updated = await prisma.layoutElement.update({
+    where: { id },
+    data: patch,
+    select: layoutSelect,
+  })
+  return { status: 'ok', element: updated }
+}
+
+export async function deleteLayoutElement(
+  id: string,
+  userId: string | null | undefined,
+): Promise<ActionResult> {
+  const existing = await prisma.layoutElement.findUnique({
+    where: { id },
+    select: { restaurantId: true },
+  })
+  if (!existing || !existing.restaurantId) return { status: 'error', errors: ['Not found'] }
+
+  const { error } = await requireRestaurantOwner(existing.restaurantId, userId)
+  if (error) return { status: 'error', errors: [error] }
+
+  await prisma.layoutElement.delete({ where: { id } })
+  return { status: 'ok' }
+}

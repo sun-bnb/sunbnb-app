@@ -87,7 +87,7 @@ export async function updateLayoutElement(id: string, patch: UpdateLayoutElement
     where: { id },
     select: { siteId: true },
   })
-  if (!existing) return { status: 'error', errors: ['Not found'] }
+  if (!existing || !existing.siteId) return { status: 'error', errors: ['Not found'] }
 
   const { error } = await requireSiteOwner(existing.siteId)
   if (error) return { status: 'error', errors: [error] }
@@ -118,7 +118,7 @@ export async function deleteLayoutElement(id: string) {
     where: { id },
     select: { siteId: true },
   })
-  if (!existing) return { status: 'error', errors: ['Not found'] }
+  if (!existing || !existing.siteId) return { status: 'error', errors: ['Not found'] }
 
   const { error } = await requireSiteOwner(existing.siteId)
   if (error) return { status: 'error', errors: [error] }

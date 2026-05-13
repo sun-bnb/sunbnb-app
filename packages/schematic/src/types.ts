@@ -29,6 +29,36 @@ export interface SchematicItem {
   label?: string | null
   group?: number
   pairId?: string | null
+  /**
+   * Physical footprint in world units (metres). When absent, the renderer
+   * falls back to the sunbed defaults (0.84 × 2.1) so the beach flow is
+   * unchanged. Tables always set these explicitly.
+   */
+  width?: number
+  height?: number
+  /**
+   * Visual shape hint. Defaults to 'rect' (sunbed-like rounded rectangle).
+   * 'round' / 'oval' render as an ellipse; 'booth' adds a banquette accent
+   * along one long side; 'bar' is a small rounded square. 'square' / 'rect'
+   * render as plain rounded rects.
+   */
+  shape?: 'rect' | 'square' | 'round' | 'oval' | 'booth' | 'bar'
+  /**
+   * Decorative chair count rendered around the table. When set (and the item
+   * is not a sunbed), the renderer draws chair glyphs on the table's
+   * perimeter according to its `shape`. The beach flow leaves this undefined.
+   */
+  capacity?: number
+  /**
+   * Optional per-side chair-count override. When any side is non-null the
+   * renderer skips auto-distribution and uses these counts directly.
+   */
+  seatLayout?: {
+    top?: number | null
+    right?: number | null
+    bottom?: number | null
+    left?: number | null
+  }
 }
 
 export interface ElementVisualConfig {
@@ -37,6 +67,9 @@ export interface ElementVisualConfig {
   iconUrl?: string
   iconComponent?: ComponentType<{ size: number }>
   zBand: number
+  // If true, unselected element does not intercept drag-to-pan. A plain click
+  // still selects it; once selected, drag moves it normally.
+  passThrough?: boolean
 }
 
 export type ElementPaletteConfig = Record<string, ElementVisualConfig>
@@ -47,4 +80,5 @@ export interface ItemVisual {
   label?: string
   sunbedImageUrl?: string
   towelImageUrl?: string
+  parcelColor?: string
 }

@@ -3,8 +3,10 @@ import GoogleProvider from 'next-auth/providers/google'
 import FacebookProvider from 'next-auth/providers/facebook'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { PrismaAdapter } from '@auth/prisma-adapter'
+import { headers } from 'next/headers'
 import prisma from '@repo/data/PrismaCient'
 import { validateOrCreateUser } from '@repo/data/auth'
+import { consumeImpersonationToken } from '@repo/data/impersonation'
 import { SiteProps } from '@/types/shared'
 
 const nextAuthResult: NextAuthResult = NextAuth({
@@ -43,13 +45,58 @@ const nextAuthResult: NextAuthResult = NextAuth({
         return user
       },
     }),
+    // Admin impersonation. The token is single-use and signed with AUTH_SECRET;
+    // consumeImpersonationToken writes the audit row (or throws on replay).
+    CredentialsProvider({
+      id: 'impersonation',
+      name: 'Impersonation',
+      credentials: {
+        token: { label: 'Token', type: 'text' },
+      },
+      authorize: async (raw) => {
+        const token = typeof raw?.token === 'string' ? raw.token : null
+        if (!token) return null
+        const h = await headers()
+        const ip =
+          h.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+          h.get('x-real-ip') ||
+          null
+        const userAgent = h.get('user-agent')
+        const consumed = await consumeImpersonationToken(token, {
+          expectedApp: 'partner',
+          ip,
+          userAgent,
+        })
+        const user = await prisma.user.findUnique({
+          where: { id: consumed.targetUserId },
+        })
+        if (!user) return null
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          // Custom claims picked up by jwt callback
+          impersonating: true,
+          impersonatorId: consumed.adminId,
+          impersonationTokenId: consumed.tokenId,
+        } as never
+      },
+    }),
   ],
   callbacks: {
     async session({ session, token }) {
       session.user.id = token.id as string
+      if (token.impersonating) {
+        (session.user as any).impersonating = true
+        ;(session.user as any).impersonatorId = token.impersonatorId
+        ;(session.user as any).impersonationTokenId = token.impersonationTokenId
+      }
       return session
     },
-    async signIn({ credentials }) {
+    async signIn({ credentials, account }) {
+      // The impersonation provider has already authorised the handoff via a
+      // single-use signed token; skip the credentials-flow error handling.
+      if (account?.provider === 'impersonation') return true
       const loginError = credentials?.loginError
       if (loginError) {
         return `/api/auth/signin?error=${loginError}`
@@ -58,14 +105,25 @@ const nextAuthResult: NextAuthResult = NextAuth({
     },
     async jwt({ token, user }) {
       if (user) {
-        // user.id from OAuth providers may be the provider's sub (e.g. Google numeric ID),
-        // not the Prisma-generated CUID. Look up the DB record by email to get the real id.
-        const dbUser = user.email
-          ? await prisma.user.findUnique({ where: { email: user.email } })
-          : null
-        token.id = dbUser?.id ?? user.id
-        token.name = user.name
-        token.email = user.email
+        const u = user as any
+        if (u.impersonating) {
+          // Impersonation flow: id from authorize() is already the DB user id.
+          token.id = u.id
+          token.name = u.name
+          token.email = u.email
+          token.impersonating = true
+          token.impersonatorId = u.impersonatorId
+          token.impersonationTokenId = u.impersonationTokenId
+        } else {
+          // user.id from OAuth providers may be the provider's sub (e.g. Google numeric ID),
+          // not the Prisma-generated CUID. Look up the DB record by email to get the real id.
+          const dbUser = user.email
+            ? await prisma.user.findUnique({ where: { email: user.email } })
+            : null
+          token.id = dbUser?.id ?? user.id
+          token.name = user.name
+          token.email = user.email
+        }
       }
       return token
     },
