@@ -15,21 +15,27 @@ export default async function CreateSitePage() {
   // after the createSite action (the site was just created, limit now reached),
   // which would dismiss the Done step. Guard is enforced in the wizard instead.
 
-  // Fetch service fees for price breakdown preview
-  const [partnerAccount, settings] = await Promise.all([
-    prisma.partnerAccount.findUnique({
-      where: { userId: session.user.id },
-      include: {
-        serviceFees: true,
-        subscription: { include: { plan: true } },
-      },
-    }),
-    prisma.settings.findFirst({
-      include: {
-        serviceFees: { where: { siteId: null, accountId: null } },
-      },
-    }),
-  ])
+  // Fetch service fees for price breakdown preview. Match Settings by the
+  // partner's country (falling back to any row) — keep in sync with
+  // packages/data/src/payment.ts:loadFeeContext.
+  const partnerAccount = await prisma.partnerAccount.findUnique({
+    where: { userId: session.user.id },
+    include: {
+      serviceFees: true,
+      subscription: { include: { plan: true } },
+    },
+  })
+
+  const settingsInclude = {
+    serviceFees: { where: { siteId: null, accountId: null } },
+  } as const
+  const country = partnerAccount?.country
+  let settings = country
+    ? await prisma.settings.findFirst({ where: { country }, include: settingsInclude })
+    : null
+  if (!settings) {
+    settings = await prisma.settings.findFirst({ include: settingsInclude })
+  }
 
   const tier = partnerAccount?.subscription?.plan?.tier ?? 'STARTER'
   const platformFees = settings?.serviceFees ?? []

@@ -4,8 +4,12 @@ import prisma from '@repo/data/PrismaCient'
 
 // ─── Service Fee Resolution (private) ───────────────────────────────────────
 
+// Mirrors loadFeeContext + resolveServiceFee in @repo/data/payment, but
+// read-only (no bootstrap side effects on page load). Settings are matched by
+// the partner's country, falling back to any Settings row if no match — keep
+// this in sync with packages/data/src/payment.ts:loadFeeContext.
 async function resolveServiceFees(siteId: string, userId: string) {
-  const [site, partnerAccount, settings] = await Promise.all([
+  const [site, partnerAccount] = await Promise.all([
     prisma.site.findUnique({ where: { id: siteId }, include: { serviceFees: true } }),
     prisma.partnerAccount.findUnique({
       where: { userId },
@@ -14,14 +18,21 @@ async function resolveServiceFees(siteId: string, userId: string) {
         subscription: { include: { plan: { select: { tier: true } } } },
       },
     }),
-    prisma.settings.findFirst({
-      include: {
-        serviceFees: {
-          where: { siteId: null, accountId: null },
-        },
-      },
-    }),
   ])
+
+  const settingsInclude = {
+    serviceFees: {
+      where: { siteId: null, accountId: null },
+    },
+  } as const
+
+  const country = partnerAccount?.country
+  let settings = country
+    ? await prisma.settings.findFirst({ where: { country }, include: settingsInclude })
+    : null
+  if (!settings) {
+    settings = await prisma.settings.findFirst({ include: settingsInclude })
+  }
 
   const tier = partnerAccount?.subscription?.plan?.tier ?? null
   const serviceCodes = ['sunbed-rental', 'food-and-beverage']

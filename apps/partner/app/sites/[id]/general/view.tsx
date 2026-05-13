@@ -53,6 +53,13 @@ const TIER_ORDER = ['STARTER', 'PRO', 'BUSINESS'] as const
 const TIER_LABELS: Record<string, string> = { STARTER: 'Starter', PRO: 'Pro', BUSINESS: 'Business' }
 const TIER_FEES: Record<string, string> = { STARTER: '5%', PRO: '2%', BUSINESS: '0%' }
 
+function computeServiceFee(serviceFee: ServiceFee | undefined, itemPrice: number) {
+  if (!serviceFee) return 0
+  return serviceFee.chargeType === 'fixed'
+    ? (serviceFee.feeAmount ?? 0)
+    : round(((serviceFee.percentage ?? 0) / 100) * itemPrice)
+}
+
 function PriceBreakdown({
   price,
   vat: vatStr,
@@ -71,21 +78,13 @@ function PriceBreakdown({
   const vatRate = Number(vatStr) || 0
   const serviceFee = serviceFees?.find(f => f.serviceCode === 'sunbed-rental')
 
-  const feeAmount = serviceFee
-    ? serviceFee.chargeType === 'fixed'
-      ? (serviceFee.feeAmount ?? 0)
-      : round(((serviceFee.percentage ?? 0) / 100) * priceNum)
-    : 0
+  const feeAmount = computeServiceFee(serviceFee, priceNum)
 
   const partnerGross = round(priceNum - feeAmount)
   const partnerBase = vatRate > 0
     ? round(partnerGross / (1 + vatRate / 100))
     : partnerGross
   const partnerVat = round(partnerGross - partnerBase)
-
-  // Build processing fee label parts
-  const procParts: string[] = []
-  const procLabel = ''
 
   return (
     <div className="mt-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5 text-xs">
@@ -129,6 +128,85 @@ function PriceBreakdown({
           <span>{t('noServiceFee')}</span>
         </div>
       )}
+    </div>
+  )
+}
+
+// Example Mollie processing fee rate. Actual fees depend on the payment method
+// (iDEAL, card, Bancontact, etc.) and transaction size — see partner's Mollie
+// dashboard for live rates. This is rendered as a disclosure for partners.
+const MOLLIE_EXAMPLE_PCT = 1.8
+const MOLLIE_EXAMPLE_FIXED = 0.25
+const MOLLIE_EXAMPLE_QTY = 2
+
+function MolliePaymentExample({
+  price,
+  vat: vatStr,
+  serviceFees,
+}: {
+  price: string
+  vat: string
+  serviceFees?: ServiceFee[]
+}) {
+  const t = useTranslations('SiteGeneral')
+  const priceNum = Number(price)
+  if (!priceNum || priceNum <= 0) return null
+
+  const vatRate = Number(vatStr) || 0
+  const serviceFee = serviceFees?.find(f => f.serviceCode === 'sunbed-rental')
+
+  // Service fee is applied per item (mirrors processConfirmedReservation).
+  // Mollie's processing fee applies once per payment, not per item.
+  const customerTotal = round(priceNum * MOLLIE_EXAMPLE_QTY)
+  const perItemFee = computeServiceFee(serviceFee, priceNum)
+  const serviceFeeTotal = round(perItemFee * MOLLIE_EXAMPLE_QTY)
+  const mollieFee = round(
+    (MOLLIE_EXAMPLE_PCT / 100) * customerTotal + MOLLIE_EXAMPLE_FIXED
+  )
+  const partnerGross = round(customerTotal - serviceFeeTotal - mollieFee)
+  const partnerBase = vatRate > 0
+    ? round(partnerGross / (1 + vatRate / 100))
+    : partnerGross
+  const partnerVat = round(partnerGross - partnerBase)
+
+  return (
+    <div className="mt-3 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2.5 text-xs">
+      <div className="text-[11px] text-blue-700 font-medium mb-1.5">
+        {t('mollieExampleTitle', { count: MOLLIE_EXAMPLE_QTY })}
+      </div>
+      <div className="flex justify-between text-gray-500 mb-1">
+        <span>{t('customerPaysCount', { count: MOLLIE_EXAMPLE_QTY })}</span>
+        <span>{customerTotal.toFixed(2)} &euro;</span>
+      </div>
+      {serviceFeeTotal > 0 && (
+        <div className="flex justify-between text-gray-500 mb-1">
+          <span>{t('serviceFee')}</span>
+          <span className="text-red-500">&minus;{serviceFeeTotal.toFixed(2)} &euro;</span>
+        </div>
+      )}
+      <div className="flex justify-between text-gray-500 mb-1">
+        <span>
+          {t('mollieFee', {
+            pct: MOLLIE_EXAMPLE_PCT.toString(),
+            fixed: MOLLIE_EXAMPLE_FIXED.toFixed(2),
+          })}
+        </span>
+        <span className="text-red-500">&minus;{mollieFee.toFixed(2)} &euro;</span>
+      </div>
+      <div className="border-t border-blue-100 my-1.5" />
+      <div className="flex justify-between font-medium text-gray-800 mb-1">
+        <span>{t('youReceive')}</span>
+        <span>{partnerGross.toFixed(2)} &euro;</span>
+      </div>
+      {vatRate > 0 && (
+        <div className="flex justify-between text-gray-400">
+          <span>{t('inclVat', { rate: vatRate })}</span>
+          <span>{partnerVat.toFixed(2)} &euro;</span>
+        </div>
+      )}
+      <div className="text-[10px] text-gray-400 italic mt-1.5">
+        {t('mollieFeeNote')}
+      </div>
     </div>
   )
 }
@@ -459,6 +537,7 @@ export default function GeneralView() {
             />
           </div>
           <PriceBreakdown price={price} vat={vat} serviceFees={site.serviceFees} tier={tier} />
+          <MolliePaymentExample price={price} vat={vat} serviceFees={site.serviceFees} />
         </div>
       )}
 

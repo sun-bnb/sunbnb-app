@@ -46,39 +46,15 @@ export async function submitForm(
   const account = await prisma.partnerAccount.findUnique({ where: { userId: session.user.id } })
 
   if (!account) {
-    
-    await prisma.partnerAccount.create({
-      data: accountData
-    })
-
-    // Auto-assign STARTER subscription to new partner accounts
-    const starterPlan = await prisma.subscriptionPlan.findUnique({ where: { tier: 'STARTER' } })
-    if (starterPlan) {
-      await prisma.subscription.create({
-        data: {
-          partnerAccountId: session.user.id,
-          planId: starterPlan.id,
-          status: 'ACTIVE',
-        },
-      })
-    }
-    
-    revalidatePath('/account')
-    return { status: 'ok' }
-
-  } else {
-
-    await prisma.partnerAccount.update({
-      data: accountData,
-      where: {
-        userId: account.userId
-      }
-
-    })
-
-    revalidatePath('/account')
-    return { status: 'ok' }
-
+    return { status: 'error', errors: ['Partner accounts can only be created from the partner app'] }
   }
-  
+
+  await prisma.partnerAccount.update({
+    data: accountData,
+    where: { userId: account.userId },
+  })
+
+  revalidatePath('/account')
+  return { status: 'ok' }
+
 }

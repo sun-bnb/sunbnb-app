@@ -50,9 +50,11 @@ export default async function SitePage(
   
   if (!site) return <ErrorCard title="Site not found" message="This site does not exist or has been removed." />
 
-  // Resolve service fees: site → partnerAccount → global settings (tier-aware)
+  // Resolve service fees: site → partnerAccount → global settings (tier-aware).
+  // Settings are matched by the partner's country, falling back to any row —
+  // keep in sync with packages/data/src/payment.ts:loadFeeContext.
   if (site.userId) {
-    const [siteWithFees, partnerAccount, settings] = await Promise.all([
+    const [siteWithFees, partnerAccount] = await Promise.all([
       prisma.site.findUnique({ where: { id: params.id }, include: { serviceFees: true } }),
       prisma.partnerAccount.findUnique({
         where: { userId: site.userId },
@@ -61,12 +63,18 @@ export default async function SitePage(
           subscription: { include: { plan: true } },
         },
       }),
-      prisma.settings.findFirst({
-        include: {
-          serviceFees: { where: { siteId: null, accountId: null } },
-        },
-      }),
     ])
+
+    const settingsInclude = {
+      serviceFees: { where: { siteId: null, accountId: null } },
+    } as const
+    const country = partnerAccount?.country
+    let settings = country
+      ? await prisma.settings.findFirst({ where: { country }, include: settingsInclude })
+      : null
+    if (!settings) {
+      settings = await prisma.settings.findFirst({ include: settingsInclude })
+    }
 
     const tier = partnerAccount?.subscription?.plan?.tier ?? null
     const platformFees = settings?.serviceFees ?? []

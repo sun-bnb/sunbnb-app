@@ -40,7 +40,9 @@ async function getServiceFee(siteId: string, userId: string): Promise<{
   percentage?: number | null
 } | undefined> {
 
-  let [site, partnerAccount, settings] = await Promise.all([
+  // Match Settings by the partner's country (falling back to any row) — keep
+  // in sync with packages/data/src/payment.ts:loadFeeContext.
+  const [site, partnerAccount] = await Promise.all([
     prisma.site.findUnique({
       where: { id: siteId },
       include: { serviceFees: true },
@@ -52,12 +54,18 @@ async function getServiceFee(siteId: string, userId: string): Promise<{
         subscription: { include: { plan: { select: { tier: true } } } },
       },
     }),
-    prisma.settings.findFirst({
-      include: {
-        serviceFees: { where: { siteId: null, accountId: null } },
-      },
-    })
   ])
+
+  const settingsInclude = {
+    serviceFees: { where: { siteId: null, accountId: null } },
+  } as const
+  const country = partnerAccount?.country
+  let settings = country
+    ? await prisma.settings.findFirst({ where: { country }, include: settingsInclude })
+    : null
+  if (!settings) {
+    settings = await prisma.settings.findFirst({ include: settingsInclude })
+  }
 
   const serviceCode = 'food-and-beverage'
   const tier = partnerAccount?.subscription?.plan?.tier ?? null
