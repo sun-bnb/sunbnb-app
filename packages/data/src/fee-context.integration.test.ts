@@ -173,4 +173,86 @@ describe('loadFeeContext', () => {
       'Site not found'
     )
   })
+
+  it('selects Settings matching partnerAccount.country', async () => {
+    const user = await createTestUser()
+    const partner = await createTestPartnerAccount(user.id, { country: 'ES' })
+    const site = await createTestSite(user.id)
+    await createTestSubscription(partner.userId, 'STARTER')
+
+    // FI Settings — only a tier-NULL 1€ default (mirrors the production FI row)
+    const fiSettings = await createTestSettings({ country: 'FI' })
+    await createTestServiceFee(fiSettings.id, { feeAmount: 1.0, subscriptionTier: null })
+
+    // ES Settings — full tier ladder
+    const esSettings = await createTestSettings({ country: 'ES', vat: 21 })
+    await createTestServiceFee(esSettings.id, { feeAmount: 1.0, subscriptionTier: null })
+    await createTestServiceFee(esSettings.id, {
+      chargeType: 'percentage',
+      feeAmount: null,
+      percentage: 5,
+      subscriptionTier: 'STARTER',
+    })
+
+    const ctx = await loadFeeContext(site.id, 'sunbed-rental')
+    expect(ctx.settings!.id).toBe(esSettings.id)
+    expect(ctx.settings!.country).toBe('ES')
+
+    const tier = ctx.partnerAccount?.subscription?.plan?.tier ?? null
+    const resolved = resolveServiceFee(
+      ctx.site.serviceFees,
+      ctx.partnerAccount?.serviceFees ?? [],
+      ctx.settings?.serviceFees ?? [],
+      'sunbed-rental',
+      tier
+    )
+    expect(resolved!.subscriptionTier).toBe('STARTER')
+    expect(resolved!.chargeType).toBe('percentage')
+    expect(resolved!.percentage).toBe(5)
+  })
+
+  it('falls back to any Settings when partner country has no match', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id, { country: 'DE' })
+    const site = await createTestSite(user.id)
+
+    const fiSettings = await createTestSettings({ country: 'FI' })
+    await createTestServiceFee(fiSettings.id, { feeAmount: 1.0 })
+
+    const ctx = await loadFeeContext(site.id, 'sunbed-rental')
+    expect(ctx.settings!.id).toBe(fiSettings.id)
+  })
+
+  it('falls back to any Settings when partnerAccount is missing', async () => {
+    const user = await createTestUser()
+    // No partnerAccount created — country lookup is skipped
+    const site = await createTestSite(user.id)
+    const settings = await createTestSettings({ country: 'FI' })
+    await createTestServiceFee(settings.id, { feeAmount: 1.0 })
+
+    const ctx = await loadFeeContext(site.id, 'sunbed-rental')
+    expect(ctx.partnerAccount).toBeNull()
+    expect(ctx.settings!.id).toBe(settings.id)
+  })
+
+  it('bootstraps missing serviceCode fee on the country-matched Settings', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id, { country: 'ES' })
+    const site = await createTestSite(user.id)
+
+    // Two Settings rows, only FI has the sunbed-rental fee
+    const fiSettings = await createTestSettings({ country: 'FI' })
+    await createTestServiceFee(fiSettings.id, { serviceCode: 'sunbed-rental' })
+    const esSettings = await createTestSettings({ country: 'ES', vat: 21 })
+
+    // Request a service code missing from ES
+    const ctx = await loadFeeContext(site.id, 'food-and-beverage')
+
+    expect(ctx.settings!.id).toBe(esSettings.id)
+    const esFees = await prisma.serviceFee.findMany({ where: { settingsId: esSettings.id } })
+    expect(esFees.some((f) => f.serviceCode === 'food-and-beverage')).toBe(true)
+    // FI was not touched
+    const fiFees = await prisma.serviceFee.findMany({ where: { settingsId: fiSettings.id } })
+    expect(fiFees.some((f) => f.serviceCode === 'food-and-beverage')).toBe(false)
+  })
 })

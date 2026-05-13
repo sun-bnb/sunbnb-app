@@ -207,24 +207,28 @@ export async function loadFeeContext(
   })
   if (!site) throw new Error(`Site not found: ${siteId}`)
 
-  const [partnerAccount, existingSettings] = await Promise.all([
-    prisma.partnerAccount.findUnique({
-      where: { userId: site.userId },
-      include: {
-        serviceFees: true,
-        subscription: { include: { plan: { select: { tier: true } } } },
-      },
-    }),
-    prisma.settings.findFirst({
-      include: {
-        serviceFees: {
-          where: { siteId: null, accountId: null },
-        },
-      },
-    }),
-  ])
+  const partnerAccount = await prisma.partnerAccount.findUnique({
+    where: { userId: site.userId },
+    include: {
+      serviceFees: true,
+      subscription: { include: { plan: { select: { tier: true } } } },
+    },
+  })
 
-  let settings = existingSettings
+  const settingsInclude = {
+    serviceFees: {
+      where: { siteId: null, accountId: null },
+    },
+  } as const
+
+  // Match Settings by the partner's country; fall back to any row if no match.
+  const country = partnerAccount?.country
+  let settings = country
+    ? await prisma.settings.findFirst({ where: { country }, include: settingsInclude })
+    : null
+  if (!settings) {
+    settings = await prisma.settings.findFirst({ include: settingsInclude })
+  }
 
   // Bootstrap: create default settings + fee in a transaction to prevent duplicates
   if (!settings) {
@@ -244,13 +248,7 @@ export async function loadFeeContext(
         },
       })
     })
-    settings = await prisma.settings.findFirst({
-      include: {
-        serviceFees: {
-          where: { siteId: null, accountId: null },
-        },
-      },
-    })
+    settings = await prisma.settings.findFirst({ include: settingsInclude })
   }
 
   // Bootstrap: create default service fee if not found at any level
@@ -264,13 +262,11 @@ export async function loadFeeContext(
       tier
     )
     if (!existingFee) {
+      const settingsId = settings.id
       await prisma.$transaction(async (tx) => {
-        const currentSettings = await tx.settings.findFirst({
-          include: {
-            serviceFees: {
-              where: { siteId: null, accountId: null },
-            },
-          },
+        const currentSettings = await tx.settings.findUnique({
+          where: { id: settingsId },
+          include: settingsInclude,
         })
         if (!currentSettings) return
         const alreadyExists = currentSettings.serviceFees.some(
@@ -287,12 +283,9 @@ export async function loadFeeContext(
           },
         })
       })
-      settings = await prisma.settings.findFirst({
-        include: {
-          serviceFees: {
-            where: { siteId: null, accountId: null },
-          },
-        },
+      settings = await prisma.settings.findUnique({
+        where: { id: settingsId },
+        include: settingsInclude,
       })
     }
   }
