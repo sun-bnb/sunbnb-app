@@ -83,20 +83,28 @@ function MollieBanner({
               <p className="text-xs text-orange-600 mt-0.5">{reason}</p>
             </div>
           </div>
-          <a
-            href="https://my.mollie.com/dashboard"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-shrink-0 text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded-lg transition-colors"
-          >
-            {t('completeMollie')}
-          </a>
+          <div className="flex-shrink-0 flex items-center gap-3">
+            <a
+              href="https://my.mollie.com/dashboard"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-medium text-orange-700 hover:text-orange-900 hover:underline"
+            >
+              {t('completeMollie')}
+            </a>
+            <Link
+              href="/account/mollie"
+              className="text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              {t('continueSetup')}
+            </Link>
+          </div>
         </div>
       </div>
     )
   }
 
-  // in-review — informational only, lower urgency
+  // in-review — informational, lower urgency, but link partners to details
   if (mollieOnboardingStatus === 'in-review') {
     return (
       <div className="bg-blue-50 border-b border-blue-200">
@@ -112,6 +120,12 @@ function MollieBanner({
               <p className="text-xs text-blue-500 mt-0.5">{reason}</p>
             </div>
           </div>
+          <Link
+            href="/account/mollie"
+            className="flex-shrink-0 text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline"
+          >
+            {t('viewMollieDetails')}
+          </Link>
         </div>
       </div>
     )

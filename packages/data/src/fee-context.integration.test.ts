@@ -14,7 +14,13 @@ import {
   createTestSubscription,
   resetCounter,
 } from './test/fixtures'
-import { loadFeeContext, resolveServiceFee } from './payment'
+import {
+  loadFeeContext,
+  resolveServiceFee,
+  getSiteFeeContext,
+  getPartnerFeeContext,
+  resolveSiteFees,
+} from './payment'
 
 beforeEach(async () => {
   await cleanDatabase()
@@ -233,6 +239,92 @@ describe('loadFeeContext', () => {
     const ctx = await loadFeeContext(site.id, 'sunbed-rental')
     expect(ctx.partnerAccount).toBeNull()
     expect(ctx.settings!.id).toBe(settings.id)
+  })
+
+  it('getSiteFeeContext does NOT bootstrap missing Settings', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id)
+
+    // No Settings in DB
+    const ctx = await getSiteFeeContext(site.id)
+    expect(ctx.settings).toBeNull()
+    expect(ctx.site.id).toBe(site.id)
+    expect(ctx.tier).toBeNull()
+
+    // Confirm no Settings were created as a side effect
+    expect(await prisma.settings.count()).toBe(0)
+  })
+
+  it('getSiteFeeContext does NOT bootstrap missing serviceCode fee', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id, { country: 'ES' })
+    const site = await createTestSite(user.id)
+    const settings = await createTestSettings({ country: 'ES' })
+    // Settings exist but no fees for any code
+
+    const ctx = await getSiteFeeContext(site.id)
+    expect(ctx.settings!.id).toBe(settings.id)
+    expect(ctx.settings!.serviceFees).toHaveLength(0)
+
+    // Confirm no ServiceFee row was created
+    expect(await prisma.serviceFee.count()).toBe(0)
+  })
+
+  it('resolveSiteFees returns resolved fees for multiple codes', async () => {
+    const user = await createTestUser()
+    const partner = await createTestPartnerAccount(user.id, { country: 'ES' })
+    const site = await createTestSite(user.id)
+    await createTestSubscription(partner.userId, 'STARTER')
+    const settings = await createTestSettings({ country: 'ES' })
+    await createTestServiceFee(settings.id, {
+      serviceCode: 'sunbed-rental',
+      chargeType: 'percentage',
+      feeAmount: null,
+      percentage: 5,
+      subscriptionTier: 'STARTER',
+    })
+    await createTestServiceFee(settings.id, {
+      serviceCode: 'food-and-beverage',
+      chargeType: 'percentage',
+      feeAmount: null,
+      percentage: 5,
+      subscriptionTier: 'STARTER',
+    })
+
+    const fees = await resolveSiteFees(site.id, [
+      'sunbed-rental',
+      'food-and-beverage',
+      'equipment-rental', // no fee configured — should be omitted
+    ])
+
+    expect(fees).toHaveLength(2)
+    expect(fees.map((f) => f.serviceCode).sort()).toEqual([
+      'food-and-beverage',
+      'sunbed-rental',
+    ])
+    expect(fees.every((f) => f.subscriptionTier === 'STARTER')).toBe(true)
+  })
+
+  it('getPartnerFeeContext resolves country-matched Settings without a site', async () => {
+    const user = await createTestUser()
+    const partner = await createTestPartnerAccount(user.id, { country: 'ES' })
+    await createTestSubscription(partner.userId, 'PRO')
+
+    const fiSettings = await createTestSettings({ country: 'FI' })
+    await createTestServiceFee(fiSettings.id, { feeAmount: 1.0 })
+    const esSettings = await createTestSettings({ country: 'ES', vat: 21 })
+    await createTestServiceFee(esSettings.id, {
+      chargeType: 'percentage',
+      feeAmount: null,
+      percentage: 2,
+      subscriptionTier: 'PRO',
+    })
+
+    const ctx = await getPartnerFeeContext(user.id)
+    expect(ctx.settings!.id).toBe(esSettings.id)
+    expect(ctx.tier).toBe('PRO')
+    expect(ctx.partnerAccount?.country).toBe('ES')
   })
 
   it('bootstraps missing serviceCode fee on the country-matched Settings', async () => {

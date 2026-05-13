@@ -1,4 +1,6 @@
 import prisma from '@repo/data/PrismaCient'
+import { getSiteFeeContext } from '@repo/data/payment'
+import { resolveServiceFee } from '@repo/data/payment'
 import { auth } from '@/app/auth'
 import { SiteProps } from '@/types/shared'
 import SiteView from './site-view'
@@ -50,54 +52,22 @@ export default async function SitePage(
   
   if (!site) return <ErrorCard title="Site not found" message="This site does not exist or has been removed." />
 
-  // Resolve service fees: site → partnerAccount → global settings (tier-aware).
-  // Settings are matched by the partner's country, falling back to any row —
-  // keep in sync with packages/data/src/payment.ts:loadFeeContext.
+  // Resolve service fees and surface partner Mollie state for the header.
   if (site.userId) {
-    const [siteWithFees, partnerAccount] = await Promise.all([
-      prisma.site.findUnique({ where: { id: params.id }, include: { serviceFees: true } }),
-      prisma.partnerAccount.findUnique({
-        where: { userId: site.userId },
-        include: {
-          serviceFees: true,
-          subscription: { include: { plan: true } },
-        },
-      }),
-    ])
-
-    const settingsInclude = {
-      serviceFees: { where: { siteId: null, accountId: null } },
-    } as const
-    const country = partnerAccount?.country
-    let settings = country
-      ? await prisma.settings.findFirst({ where: { country }, include: settingsInclude })
-      : null
-    if (!settings) {
-      settings = await prisma.settings.findFirst({ include: settingsInclude })
-    }
-
-    const tier = partnerAccount?.subscription?.plan?.tier ?? null
-    const platformFees = settings?.serviceFees ?? []
-    ;(site as any).subscriptionTier = tier
-    ;(site as any).mollieOnboardingStatus = partnerAccount?.mollieOnboardingStatus ?? null
-    ;(site as any).hasMollieToken = !!partnerAccount?.mollieAccessToken
+    const ctx = await getSiteFeeContext(params.id)
+    ;(site as any).subscriptionTier = ctx.tier
+    ;(site as any).mollieOnboardingStatus = ctx.partnerAccount?.mollieOnboardingStatus ?? null
+    ;(site as any).hasMollieToken = !!ctx.partnerAccount?.mollieAccessToken
 
     const serviceCodes = ['sunbed-rental', 'food-and-beverage', 'equipment-rental']
     site.serviceFees = serviceCodes
-      .map(code => {
-        // 1. Site-level override
-        const siteFee = siteWithFees?.serviceFees?.find(f => f.serviceCode === code)
-        if (siteFee) return siteFee
-        // 2. Account-level override
-        const accountFee = partnerAccount?.serviceFees?.find(f => f.serviceCode === code)
-        if (accountFee) return accountFee
-        // 3. Platform-level: prefer tier-specific, fall back to default (null tier)
-        const tierFee = tier
-          ? platformFees.find(f => f.serviceCode === code && f.subscriptionTier === tier)
-          : null
-        if (tierFee) return tierFee
-        return platformFees.find(f => f.serviceCode === code && f.subscriptionTier === null)
-      })
+      .map(code => resolveServiceFee(
+        ctx.site.serviceFees,
+        ctx.partnerAccount?.serviceFees ?? [],
+        ctx.settings?.serviceFees ?? [],
+        code,
+        ctx.tier,
+      ))
       .filter(Boolean) as any
   }
 

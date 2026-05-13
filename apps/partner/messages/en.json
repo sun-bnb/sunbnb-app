@@ -20,7 +20,9 @@
     "mollieInReview": "Mollie account under review. Payments will be enabled once your account is verified. No action needed.",
     "mollieIntegratedReason": "One or more of your sites has integrated payments enabled for reservations, orders, or equipment rentals.",
     "connectMollie": "Set up Mollie",
-    "completeMollie": "Complete at Mollie ↗",
+    "completeMollie": "Open Mollie ↗",
+    "continueSetup": "Continue setup",
+    "viewMollieDetails": "View details",
     "learnMore": "Learn more"
   },
   "Dashboard": {

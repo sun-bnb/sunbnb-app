@@ -20,7 +20,9 @@
     "mollieInReview": "Mollie-tili tarkistuksessa. Maksut aktivoituvat kun tilisi on vahvistettu. Ei toimia tarvita.",
     "mollieIntegratedReason": "Yhdellä tai useammalla kohteistasi on integroitu maksu käytössä varauksissa, tilauksissa tai laitteiden vuokrauksessa.",
     "connectMollie": "Aseta Mollie",
-    "completeMollie": "Viimeistele Molliessa ↗",
+    "completeMollie": "Avaa Mollie ↗",
+    "continueSetup": "Jatka asetuksia",
+    "viewMollieDetails": "Näytä tiedot",
     "learnMore": "Lue lisää"
   },
   "Dashboard": {

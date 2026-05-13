@@ -1,4 +1,5 @@
 import prisma from '@repo/data/PrismaCient'
+import { resolveSiteFees } from '@repo/data/payment'
 import { auth } from '@/app/auth'
 import ReservationView from './view'
 import { Order } from '@/app/types/types'
@@ -34,58 +35,13 @@ async function getOrder(paymentRef: string) {
   })
 }
 
-async function getServiceFee(siteId: string, userId: string): Promise<{
+async function getServiceFee(siteId: string): Promise<{
   chargeType: string
   feeAmount?: number | null
   percentage?: number | null
 } | undefined> {
-
-  // Match Settings by the partner's country (falling back to any row) — keep
-  // in sync with packages/data/src/payment.ts:loadFeeContext.
-  const [site, partnerAccount] = await Promise.all([
-    prisma.site.findUnique({
-      where: { id: siteId },
-      include: { serviceFees: true },
-    }),
-    prisma.partnerAccount.findUnique({
-      where: { userId: userId },
-      include: {
-        serviceFees: true,
-        subscription: { include: { plan: { select: { tier: true } } } },
-      },
-    }),
-  ])
-
-  const settingsInclude = {
-    serviceFees: { where: { siteId: null, accountId: null } },
-  } as const
-  const country = partnerAccount?.country
-  let settings = country
-    ? await prisma.settings.findFirst({ where: { country }, include: settingsInclude })
-    : null
-  if (!settings) {
-    settings = await prisma.settings.findFirst({ include: settingsInclude })
-  }
-
-  const serviceCode = 'food-and-beverage'
-  const tier = partnerAccount?.subscription?.plan?.tier ?? null
-
-  // 1. Site-level override
-  const siteFee = site?.serviceFees?.find((fee: any) => fee.serviceCode === serviceCode)
-  if (siteFee) return siteFee
-
-  // 2. Account-level override
-  const accountFee = partnerAccount?.serviceFees?.find((fee: any) => fee.serviceCode === serviceCode)
-  if (accountFee) return accountFee
-
-  // 3. Platform-level: prefer tier-specific, fall back to default (null tier)
-  const platformFees = settings?.serviceFees ?? []
-  if (tier) {
-    const tierFee = platformFees.find((f: any) => f.serviceCode === serviceCode && f.subscriptionTier === tier)
-    if (tierFee) return tierFee
-  }
-  return platformFees.find((f: any) => f.serviceCode === serviceCode && f.subscriptionTier === null)
-
+  const [fee] = await resolveSiteFees(siteId, ['food-and-beverage'])
+  return fee
 }
 
 export default async function ReservationPage({ params, searchParams }: { params: { id: string }, searchParams: { [key: string]: string } }) {
@@ -132,7 +88,7 @@ export default async function ReservationPage({ params, searchParams }: { params
       where: { siteId: reservation.site.id, active: true },
     })
     if (productCount > 0) {
-      serviceFee = await getServiceFee(reservation.site.id, reservation.site.userId)
+      serviceFee = await getServiceFee(reservation.site.id)
     }
   }
 

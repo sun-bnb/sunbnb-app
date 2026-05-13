@@ -20,7 +20,9 @@
     "mollieInReview": "Cuenta de Mollie en revisión. Los pagos se activarán una vez verificada tu cuenta. No se requiere acción.",
     "mollieIntegratedReason": "Uno o más de tus sitios tiene pagos integrados habilitados para reservas, pedidos o alquiler de equipos.",
     "connectMollie": "Configurar Mollie",
-    "completeMollie": "Completar en Mollie ↗",
+    "completeMollie": "Abrir Mollie ↗",
+    "continueSetup": "Continuar configuración",
+    "viewMollieDetails": "Ver detalles",
     "learnMore": "Más información"
   },
   "Dashboard": {

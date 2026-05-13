@@ -54,6 +54,7 @@ const prisma = {
   },
   partnerAccount: {
     findUnique: vi.fn(),
+    update: vi.fn(),
   },
   siteBrand: {
     upsert: vi.fn(),

@@ -177,7 +177,7 @@ async function getLastHash(
 
 // ─── Fee Context Loading ────────────────────────────────────────────────────
 
-interface FeeContext {
+export interface FeeContext {
   site: NonNullable<Awaited<ReturnType<typeof prisma.site.findUnique>>> & {
     serviceFees: ServiceFee[]
   }
@@ -190,20 +190,50 @@ interface FeeContext {
   }) | null
 }
 
+export interface SiteFeeContext extends FeeContext {
+  tier: SubscriptionTier | null
+}
+
+export interface PartnerFeeContext {
+  partnerAccount: FeeContext['partnerAccount']
+  settings: FeeContext['settings']
+  tier: SubscriptionTier | null
+}
+
+const SETTINGS_INCLUDE = {
+  serviceFees: {
+    where: { siteId: null, accountId: null },
+  },
+} as const
+
 /**
- * Load the full fee resolution context for a site.
- * Creates default settings and service fee if none exist (bootstrapping).
- * Uses a transaction to prevent duplicate settings from concurrent requests.
+ * Resolve the Settings row for a country, preferring an exact match and
+ * falling back to the first available row if none matches. Returns null only
+ * when no Settings exist in the DB at all.
  */
-export async function loadFeeContext(
-  siteId: string,
-  serviceCode: string
-): Promise<FeeContext> {
+async function findCountryMatchedSettings(country: string | null | undefined) {
+  if (country) {
+    const match = await prisma.settings.findFirst({
+      where: { country },
+      include: SETTINGS_INCLUDE,
+    })
+    if (match) return match
+  }
+  return prisma.settings.findFirst({ include: SETTINGS_INCLUDE })
+}
+
+/**
+ * Read-only fee resolution context for a site. Settings are matched by the
+ * partner's country; falls back to any Settings row when no country match
+ * exists. No bootstrap side effects — use for display and read paths.
+ *
+ * For payment processing (which must guarantee a fee exists), use
+ * `loadFeeContext` — it wraps this and adds bootstrap logic.
+ */
+export async function getSiteFeeContext(siteId: string): Promise<SiteFeeContext> {
   const site = await prisma.site.findUnique({
     where: { id: siteId },
-    include: {
-      serviceFees: true,
-    },
+    include: { serviceFees: true },
   })
   if (!site) throw new Error(`Site not found: ${siteId}`)
 
@@ -215,20 +245,72 @@ export async function loadFeeContext(
     },
   })
 
-  const settingsInclude = {
-    serviceFees: {
-      where: { siteId: null, accountId: null },
-    },
-  } as const
+  const settings = await findCountryMatchedSettings(partnerAccount?.country)
+  const tier = partnerAccount?.subscription?.plan?.tier ?? null
 
-  // Match Settings by the partner's country; fall back to any row if no match.
-  const country = partnerAccount?.country
-  let settings = country
-    ? await prisma.settings.findFirst({ where: { country }, include: settingsInclude })
-    : null
-  if (!settings) {
-    settings = await prisma.settings.findFirst({ include: settingsInclude })
+  return {
+    site: site as FeeContext['site'],
+    partnerAccount,
+    settings,
+    tier,
   }
+}
+
+/**
+ * Read-only fee resolution context for a partner who has no site yet (e.g. the
+ * site-creation wizard). Settings are matched by the partner's country with
+ * the same fallback as `getSiteFeeContext`.
+ */
+export async function getPartnerFeeContext(userId: string): Promise<PartnerFeeContext> {
+  const partnerAccount = await prisma.partnerAccount.findUnique({
+    where: { userId },
+    include: {
+      serviceFees: true,
+      subscription: { include: { plan: { select: { tier: true } } } },
+    },
+  })
+  const settings = await findCountryMatchedSettings(partnerAccount?.country)
+  const tier = partnerAccount?.subscription?.plan?.tier ?? null
+  return { partnerAccount, settings, tier }
+}
+
+/**
+ * Convenience: resolve a list of service codes for a site in one call. Codes
+ * with no resolved fee are omitted from the result. Read-only — no bootstrap.
+ */
+export async function resolveSiteFees(
+  siteId: string,
+  serviceCodes: string[]
+): Promise<ServiceFee[]> {
+  const ctx = await getSiteFeeContext(siteId)
+  return serviceCodes
+    .map((code) =>
+      resolveServiceFee(
+        ctx.site.serviceFees,
+        ctx.partnerAccount?.serviceFees ?? [],
+        ctx.settings?.serviceFees ?? [],
+        code,
+        ctx.tier
+      )
+    )
+    .filter((f): f is ServiceFee => Boolean(f))
+}
+
+/**
+ * Load the full fee resolution context for a site, bootstrapping default
+ * Settings and a default ServiceFee for the requested code if none exist.
+ * For display/read paths, prefer `getSiteFeeContext` or `resolveSiteFees`.
+ *
+ * Bootstrap is idempotent and uses transactions to prevent duplicates from
+ * concurrent requests.
+ */
+export async function loadFeeContext(
+  siteId: string,
+  serviceCode: string
+): Promise<FeeContext> {
+  const baseCtx = await getSiteFeeContext(siteId)
+  const { site, partnerAccount, tier } = baseCtx
+  let settings = baseCtx.settings
 
   // Bootstrap: create default settings + fee in a transaction to prevent duplicates
   if (!settings) {
@@ -248,12 +330,11 @@ export async function loadFeeContext(
         },
       })
     })
-    settings = await prisma.settings.findFirst({ include: settingsInclude })
+    settings = await prisma.settings.findFirst({ include: SETTINGS_INCLUDE })
   }
 
   // Bootstrap: create default service fee if not found at any level
   if (settings) {
-    const tier = partnerAccount?.subscription?.plan?.tier ?? null
     const existingFee = resolveServiceFee(
       site.serviceFees,
       partnerAccount?.serviceFees ?? [],
@@ -266,7 +347,7 @@ export async function loadFeeContext(
       await prisma.$transaction(async (tx) => {
         const currentSettings = await tx.settings.findUnique({
           where: { id: settingsId },
-          include: settingsInclude,
+          include: SETTINGS_INCLUDE,
         })
         if (!currentSettings) return
         const alreadyExists = currentSettings.serviceFees.some(
@@ -285,12 +366,12 @@ export async function loadFeeContext(
       })
       settings = await prisma.settings.findUnique({
         where: { id: settingsId },
-        include: settingsInclude,
+        include: SETTINGS_INCLUDE,
       })
     }
   }
 
-  return { site: site as FeeContext['site'], partnerAccount, settings }
+  return { site, partnerAccount, settings }
 }
 
 // ─── Idempotent Reservation Processing ──────────────────────────────────────

@@ -1,6 +1,6 @@
 import { auth } from '@/app/auth'
 import { canCreateSite } from '@repo/data/subscription'
-import prisma from '@repo/data/PrismaCient'
+import { getPartnerFeeContext, resolveServiceFee } from '@repo/data/payment'
 import CreateSiteWizard from './create-site-wizard'
 
 export default async function CreateSitePage() {
@@ -15,38 +15,17 @@ export default async function CreateSitePage() {
   // after the createSite action (the site was just created, limit now reached),
   // which would dismiss the Done step. Guard is enforced in the wizard instead.
 
-  // Fetch service fees for price breakdown preview. Match Settings by the
-  // partner's country (falling back to any row) — keep in sync with
-  // packages/data/src/payment.ts:loadFeeContext.
-  const partnerAccount = await prisma.partnerAccount.findUnique({
-    where: { userId: session.user.id },
-    include: {
-      serviceFees: true,
-      subscription: { include: { plan: true } },
-    },
-  })
-
-  const settingsInclude = {
-    serviceFees: { where: { siteId: null, accountId: null } },
-  } as const
-  const country = partnerAccount?.country
-  let settings = country
-    ? await prisma.settings.findFirst({ where: { country }, include: settingsInclude })
-    : null
-  if (!settings) {
-    settings = await prisma.settings.findFirst({ include: settingsInclude })
-  }
-
-  const tier = partnerAccount?.subscription?.plan?.tier ?? 'STARTER'
-  const platformFees = settings?.serviceFees ?? []
-
-  // Resolve the sunbed-rental fee for this partner's tier
-  const accountFee = partnerAccount?.serviceFees?.find(f => f.serviceCode === 'sunbed-rental')
-  const tierFee = tier
-    ? platformFees.find(f => f.serviceCode === 'sunbed-rental' && f.subscriptionTier === tier)
-    : null
-  const defaultFee = platformFees.find(f => f.serviceCode === 'sunbed-rental' && f.subscriptionTier === null)
-  const serviceFee = accountFee ?? tierFee ?? defaultFee ?? null
+  // Resolve the sunbed-rental fee for the price-breakdown preview. There's no
+  // site yet, so we use the partner-only context (matches by country).
+  const ctx = await getPartnerFeeContext(session.user.id!)
+  const tier = ctx.tier ?? 'STARTER'
+  const serviceFee = resolveServiceFee(
+    [],
+    ctx.partnerAccount?.serviceFees ?? [],
+    ctx.settings?.serviceFees ?? [],
+    'sunbed-rental',
+    tier,
+  ) ?? null
 
   // Serialize fee data for the client
   const feeData = serviceFee ? {
