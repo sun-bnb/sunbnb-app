@@ -23,8 +23,23 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL('/', request.url))
   } catch (err) {
     if (err instanceof AuthError) {
+      // NextAuth wraps the underlying ImpersonationError in `cause`. Surface
+      // the code so misconfigurations (wrong AUTH_SECRET, expired token,
+      // wrong app, replay) are visible without grepping server logs.
+      const cause = err.cause as
+        | { err?: { code?: string; message?: string }; code?: string; message?: string }
+        | undefined
+      const code = cause?.err?.code ?? cause?.code ?? 'unknown'
+      console.error('[impersonate] failed', {
+        type: err.type,
+        code,
+        message: cause?.err?.message ?? cause?.message ?? err.message,
+      })
       return NextResponse.redirect(
-        new URL('/sign-in?error=impersonation_failed', request.url),
+        new URL(
+          `/sign-in?error=impersonation_failed&reason=${encodeURIComponent(code)}`,
+          request.url,
+        ),
       )
     }
     // NEXT_REDIRECT (success) — let the framework handle it.

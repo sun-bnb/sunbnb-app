@@ -22,8 +22,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL('/', request.url))
   } catch (err) {
     if (err instanceof AuthError) {
+      const cause = err.cause as
+        | { err?: { code?: string; message?: string }; code?: string; message?: string }
+        | undefined
+      const code = cause?.err?.code ?? cause?.code ?? 'unknown'
+      console.error('[impersonate] failed', {
+        type: err.type,
+        code,
+        message: cause?.err?.message ?? cause?.message ?? err.message,
+      })
       return NextResponse.redirect(
-        new URL('/sign-in?error=impersonation_failed', request.url),
+        new URL(
+          `/sign-in?error=impersonation_failed&reason=${encodeURIComponent(code)}`,
+          request.url,
+        ),
       )
     }
     throw err
