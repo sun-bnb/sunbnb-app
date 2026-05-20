@@ -1,0 +1,12 @@
+{
+  "name": "sunbnb-knowledge-scripts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Phase 0 knowledge-store tooling (ingest, recall). Isolated from the app dependency tree.",
+  "dependencies": {
+    "@huggingface/transformers": "^3.3.0",
+    "dotenv": "^16.4.7",
+    "pg": "^8.13.1"
+  }
+}
