@@ -1,205 +1,166 @@
-# /update-knowledge — Update project documentation
+# /update-knowledge — Maintain the auto-loaded canonical docs
 
-Review recent changes and update CLAUDE.md, ARCHITECTURE.md, and SECURITY.md files to reflect current state of the codebase.
+Update the **CLAUDE.md tree** and **`.claude/rules/`** files to reflect current architecture, conventions, and rules — applying a worthiness gate so the auto-loaded context stays tight, accurate, and not duplicative of the wiki.
+
+> **Layer model.** Sunbnb's project knowledge sits in three layers:
+>
+> | Layer | Lives in | Loaded | Owner |
+> |---|---|---|---|
+> | **1. Code** | `apps/`, `packages/` | n/a | humans + LLM edits |
+> | **2. Canonical schema docs** | `CLAUDE.md` tree, `.claude/rules/*.md` | **auto-loaded into every session** | **THIS COMMAND** |
+> | **3. Synthesis wiki** | `.claude/wiki/` (entities, flows, subsystems) | on-demand via `index.md` lookup | `/wiki ingest` |
+>
+> Adjacent artifacts (not owned by this command): `PROJECT_CONTEXT.md` (stable human narrative — leave alone), `.claude/knowledge/<agent>.md` (sub-agent learnings — appended by those agents).
+>
+> **Key fact:** layer 2 is auto-loaded, so every line costs tokens in every future session. Bloat here is more expensive than bloat in the wiki. Discipline is correspondingly stricter.
 
 ## Usage
-- `/update-knowledge` — update all documentation files across the entire project
-- `/update-knowledge user` — update apps/user/CLAUDE.md only
-- `/update-knowledge partner` — update apps/partner/CLAUDE.md only
-- `/update-knowledge admin` — update apps/admin/CLAUDE.md only
-- `/update-knowledge data` — update packages/data/CLAUDE.md only
-- `/update-knowledge root` — update root CLAUDE.md, ARCHITECTURE.md, SECURITY.md only
 
-## Instructions
+- `/update-knowledge` — sweep all canonical docs (entire CLAUDE.md tree + `.claude/rules/`)
+- `/update-knowledge user|partner|admin` — that app's `CLAUDE.md` only
+- `/update-knowledge data|ui` — that package's `CLAUDE.md` only
+- `/update-knowledge root` — root `CLAUDE.md` only
+- `/update-knowledge rules` — `.claude/rules/*.md` only
 
-Parse the argument: $ARGUMENTS
+`ARCHITECTURE.md` and `SECURITY.md` are **not** in scope. Their content lives in the wiki (`flows/`, `subsystems/`), `.claude/rules/`, and `PROJECT_CONTEXT.md`. Don't create them.
 
-### Step 1: Determine scope
+## The gate (apply before any write)
 
-Map argument to target files:
+Same canonical gate as the wiki uses (defined in `.claude/wiki/README.md` § Maintenance discipline), applied to the auto-loaded layer:
 
-| Argument | Files to update |
+> **"Will an agent doing typical project work be more *informed*, *effective*, *reliable*, *concise*, or *deterministic* after this update — without becoming less of any of these?"**
+
+Gain at least one of (informed / effective / reliable). Sacrifice none of (concise / deterministic). If both halves aren't a confident yes, skip — and log the skip briefly.
+
+The constraint side bites harder for this layer than for the wiki: **layer-2 (auto-loaded) bloat compounds across every session forever**, so every byte of *concise* lost is paid by every future agent every session. The bar for adding to a CLAUDE.md or `.claude/rules/` file is correspondingly higher than for adding to a wiki page.
+
+## When to run
+
+- A non-trivial PR landed that introduced or changed: a rule (auth guard requirement, status value, fee logic), a route/action contract, an architectural pattern, a new app/package
+- A `.claude/rules/` rule no longer matches current code
+- A CLAUDE.md file says something that's now false
+
+## When NOT to run
+
+- Bug fix without a contract/rule change → git history is enough
+- Pure refactor that preserves behaviour → nothing to update
+- Typo, formatting, dep bump, lint fix → never
+- One-off task / migration / temporary script
+- A new flow narrative or end-to-end concept landed → that's **`/wiki ingest`**, not this command
+- A subtle implementation detail you're worried about losing → that's `.claude/knowledge/<agent>.md` (the sub-agents' append-only logs)
+
+## Procedure
+
+### Step 1 — Determine scope
+
+Map `$ARGUMENTS`:
+
+| Arg | Files in scope |
 |---|---|
-| (none) | ALL: root CLAUDE.md, ARCHITECTURE.md, SECURITY.md, apps/*/CLAUDE.md, packages/data/CLAUDE.md |
-| `user` | apps/user/CLAUDE.md |
-| `partner` | apps/partner/CLAUDE.md |
-| `admin` | apps/admin/CLAUDE.md |
-| `data` | packages/data/CLAUDE.md |
-| `root` | CLAUDE.md, ARCHITECTURE.md, SECURITY.md |
+| (none) | root `CLAUDE.md` + `apps/{user,partner,admin}/CLAUDE.md` + `packages/{data,ui}/CLAUDE.md` + sweep `.claude/rules/*.md` |
+| `user` | `apps/user/CLAUDE.md` |
+| `partner` | `apps/partner/CLAUDE.md` |
+| `admin` | `apps/admin/CLAUDE.md` |
+| `data` | `packages/data/CLAUDE.md` |
+| `ui` | `packages/ui/CLAUDE.md` |
+| `root` | root `CLAUDE.md` |
+| `rules` | `.claude/rules/*.md` |
 
-### Step 2: Understand what changed
+### Step 2 — Understand what changed
 
-Run these to get context on recent changes:
 ```bash
 git log main..HEAD --oneline
 git diff main...HEAD --stat
 git diff main...HEAD
 ```
 
-If on main branch with no upstream divergence, use:
+If on `main` with no upstream divergence:
+
 ```bash
 git log -10 --oneline
 git diff HEAD~5...HEAD
 ```
 
-### Step 3: Update each target file
+Identify **concepts** that changed, not files. Examples: "added a new always-required guard", "new status value", "new route", "renamed exported function".
 
-For each file in scope:
+### Step 3 — Apply the worthiness gate per file
 
-**If the file exists:**
-1. Read the current content
-2. Compare against recent changes — identify anything stale, missing, or incorrect
-3. Edit the file to reflect current reality
+For each file in scope, walk the diff. For each candidate update, ask the worthiness-gate question above.
 
-**If the file does not exist (ARCHITECTURE.md, SECURITY.md):**
-Create it from scratch using the guidelines below.
+Skip candidates fail the gate. Patch candidates that pass — but keep them in the smallest form that conveys the rule (one bullet, one row of a table, one short paragraph).
 
-### Step 4: What to document (and what not to)
+### Step 4 — Write with discipline
 
-**DO document:**
-- Architectural patterns and how components interact
-- Key conventions and rules (auth guards, pricing rules, state machines)
-- Non-obvious behaviours and gotchas
-- Security-critical patterns that must not be regressed
-- New features and how they work at a system level
+When editing:
 
-**DO NOT document:**
-- Line-by-line change summaries (that's what git log is for)
-- Temporary state or work-in-progress
-- Things already obvious from reading the code
-- Speculative future plans
+- **Replace, don't append.** When a section is wrong because the world changed, rewrite it. No "as of <date>, this is now…" lines. Git history records when changes happened.
+- **Cite, don't quote.** Point at `path/file.ts#symbol`. Don't paste code blocks. The wiki convention is `path/file.ts#symbol` for symbols, `path/file.ts:LINE` for line refs.
+- **Defer to the wiki for narratives.** If you find yourself writing more than 3–4 paragraphs of end-to-end flow, stop — that belongs on a `[[flow:…]]` page. Add a one-line pointer here and recommend `/wiki ingest` instead.
+- **Defer to `.claude/rules/` for cross-cutting rules.** A rule that applies to all three apps belongs in `.claude/rules/`, not duplicated across three CLAUDE.md files.
+- **Cross-link rather than duplicate.** When CLAUDE.md needs to mention a concept the wiki covers, use a short pointer like *"see `.claude/wiki/flows/reservation-payment.md`"*, not a paragraph of synthesis.
+- **Stay within size budgets** (target lines, auto-loaded means tight):
 
----
+  | File | Target | Hard cap |
+  |---|---|---|
+  | Root `CLAUDE.md` | ≤ 200 | 280 |
+  | `apps/*/CLAUDE.md` | ≤ 300 | 400 |
+  | `packages/data/CLAUDE.md` | ≤ 250 | 350 |
+  | `packages/ui/CLAUDE.md` | ≤ 100 | 150 |
+  | Each `.claude/rules/*.md` | ≤ 50 | 80 |
 
-## ARCHITECTURE.md structure (create if missing)
+  Hitting the cap is a smell. Split a section out to the wiki, or distill.
 
-Create at repo root. Cover:
+### Step 5 — What belongs where
 
-```markdown
-# Architecture
+If you're unsure where an update goes:
 
-## Monorepo Structure
-- Apps and packages, what each owns, dependency direction
-- `packages/data` is the single source of truth for DB access — apps never define Prisma models
+| Content | Lives in |
+|---|---|
+| Project identity, workspace structure, top-level commands, tech stack, cross-cutting env vars, known quirks | root `CLAUDE.md` |
+| Per-app: auth model summary, route map, API map, server actions list, state management overview, testing entrypoints | `apps/*/CLAUDE.md` |
+| Per-package: exports, key functions, conventions, schema overview, testing | `packages/*/CLAUDE.md` |
+| Cross-cutting declarative rules (auth, data access, payments) | `.claude/rules/*.md` |
+| End-to-end flow narratives, entity deep-dives, subsystem walkthroughs | **wiki** (defer via `/wiki ingest`) |
+| Hard-earned per-task learnings, novel bug fixes, gotchas surfaced while solving a problem | `.claude/knowledge/<agent>.md` (the sub-agent appends, not this command) |
+| Stable system-wide narrative reference | `PROJECT_CONTEXT.md` (don't auto-edit; human-curated) |
 
-## Data Flow
-- Server components: fetch via Prisma directly (no API layer)
-- Client components: RTK Query for polling/caching, server actions for mutations
-- No API layer between server components and DB
+### Step 6 — Verify
 
-## Payment Architecture
-- Stripe: partner subscriptions + consumer payments (reservations, orders)
-- Mollie for Platforms: marketplace payments (consumer → Sunbnb → venue operator)
-- Demo mode: pi_demo_{timestamp} refs, same invoice logic, no real API calls
-- Three payment flows: Stripe, Mollie, Demo — always check isDemoPayment() first
+Before declaring done, sanity-check the touched files:
 
-## Inventory Map System
-- Google Maps via @vis.gl/react-google-maps
-- Physical sunbed size: 2.1m — must stay consistent across InventoryMap.tsx, InventoryField.tsx, chair-util.ts, SunbedSelection.tsx
-- Parcels: grouped inventory items (item.group > 0). Drag moves entire group via moveParcel() server action
-- Group drag: positionOverride prop pattern — sibling markers get position offset during drag
+- No section exceeds its size budget
+- No duplication of content the wiki covers (replace with a pointer if found)
+- No code blocks longer than ~10 lines (cite instead)
+- No "as of <date>" or change-narrative phrasing
+- Cross-refs to wiki pages use the `path/to/file.md` form so they remain navigable
 
-## Mobile Reservation Drawer (user app)
-- Fixed bottom panel with peek (minimized) and expanded states
-- viewMode ('sunbeds'|'equipment') stored in Redux sitesSlice — drives peek height calculation
-- Tab switch dispatches focused: true to open drawer automatically
-- Peek height varies by tab: sunbeds = date range only, equipment = +hours/days toggle when hourly pricing available
+### Step 7 — Report what changed
 
-## Equipment Rentals
-- Enabled per-site via features[] array (add "rentals")
-- RentalItem has pricePerHour and pricePerDay (both optional, at least one required)
-- RentalBooking has durationType ('hours'|'days'), from, to, quantity, totalPrice
-- Availability: aggregate booked quantities for overlapping time windows (from < to overlap)
-- Categories: surfboard, paddleboard, kayak, pedalboat, snorkel, other
+Brief, one-line-per-file summary:
 
-## Settlement System
-- Settlement records aggregate monthly payouts per partner
-- Lifecycle: DRAFT → CLOSED → APPROVED → PAID (revert: APPROVED→CLOSED, CLOSED→DRAFT)
-- Invoice + InvoiceLine generated post-payment via processConfirmedReservation/Order/RentalBooking
-- Two invoices per payment: PARTNER (revenue) and PLATFORM (commission)
-- Invoice hash chain: SHA-256, each hash includes previous invoice hash
-```
+- Which files modified
+- The concept-level change in each (not a line-by-line diff)
+- Anything intentionally left unchanged that you considered
 
----
+### Step 8 — Suggest `/wiki ingest` if warranted
 
-## SECURITY.md structure (create if missing)
+If the changes you just documented likely affect concepts that have wiki pages (entities, flows, subsystems — scan `.claude/wiki/index.md` for the catalog), append a one-line hint to your report:
 
-Create at repo root. Cover:
+> Consider `/wiki ingest <scope>` to sync the wiki's synthesis layer with these changes.
 
-```markdown
-# Security
+Where `<scope>` names the likely affected wiki pages or category. Do NOT run `/wiki ingest` yourself — the user decides whether the changes pass the wiki-worthiness gate.
 
-## Auth Model
+Skip the hint if all updates were rule-level (auto-loaded layer only) and don't affect any synthesized concept.
 
-### Partner App (apps/partner)
-- Google OAuth only
-- requireSiteOwner(siteId) / verifySiteOwnership(siteId) checks session.user.id === site.userId
-- Manage page: token-gated via SecurityToken table. All manage actions accept optional accessKey param.
-  accessKey validation: token must exist, not expired, resources includes 'all' or 'manage_site',
-  and token.userId must match site.userId
-- Sudo users (User.sudo) bypass ownership checks in admin app only — not partner app
+## Anti-patterns
 
-### User App (apps/user)
-- Google, Facebook, Credentials (bcrypt)
-- Anonymous support: anonId UUID in localStorage('sunbnb-anonId') for POS/QR flows
-- Identity extraction: getRequestIdentity(request, bodyAnonId?) returns { userId?, anonId? }
-- Ownership: verifyOwnership(identity, entity) — checks userId or anonId match
-
-### Admin App (apps/admin)
-- Requires sudo: true on User record
-- requireSudo() guard on every action
-
-## Payment Security
-
-### Default-deny logic
-Use `=== 'paid'` NOT `!== 'unpaid'` when checking if payment is required.
-Unknown payment types must NOT bypass payment — fail closed.
-
-### Price trust
-Never trust client-supplied prices. Always fetch from DB.
-paymentAmount must always be set alongside totalPrice on bookings.
-
-### Webhook verification
-- Stripe: verify stripe-signature header via stripe.webhooks.constructEvent()
-- Mollie: validate payment ID format (/^tr_[A-Za-z0-9]{1,50}$/)
-
-### Demo payments
-Check isDemoPayment(ref) (prefix: pi_demo_) before calling any real Stripe/Mollie API.
-Demo payments run the same invoice creation logic but never hit payment providers.
-
-## API Security
-
-### Error responses
-API error responses use generic messages — never leak internal details (product IDs, DB errors, Mollie error.detail/field).
-Pattern: return generic string like 'Payment could not be processed. Please try again or contact support.'
-
-### Input validation
-- redirectUrl origin validated against APP_URL/NEXT_PUBLIC_APP_URL (Mollie)
-- placeId regex-validated before Google Places proxy calls
-- Entity IDs validated as CUID or UUID v4 via isValidEntityId()
-- Enum fields use validators from lib/validation.ts — never hardcode allowed values
-
-### Rate limiting
-- Password reset: max 3/hour per email (in-memory sliding window, resets on cold start)
-- Auth endpoints: rate-limited via rateLimit() from @repo/data/rate-limit
-
-## Password Reset
-- Tokens are SHA-256 hashed before storage — NEVER store plaintext tokens
-- Origin validated against ALLOWED_ORIGINS env var
-- Password strength: 8+ chars, upper + lower + digit
-- Max 3 reset requests/hour per email, previous tokens invalidated on new request
-- Token expiry enforced at redemption time
-
-## Reconciliation
-- /api/reconcile endpoint: requires RECONCILIATION_SECRET header (returns 503 if unset)
-- Safety net for stuck payments — processes any succeeded payments that webhooks missed
-```
-
----
-
-### Step 5: Confirm what was updated
-
-After updating, briefly list:
-- Which files were modified or created
-- Key changes made to each
-- Any content that was intentionally left unchanged and why
+- **Adding narrative content to CLAUDE.md** ("the way bookings work is…"). That's wiki territory. Cross-link.
+- **Pasting code into the canonical docs.** Cite `path/file.ts#symbol` instead.
+- **Duplicating a rule across multiple CLAUDE.md files.** If it applies broadly, move it to `.claude/rules/` once.
+- **Creating `ARCHITECTURE.md` or `SECURITY.md`.** This command no longer does that. Their content lives in the wiki, `.claude/rules/`, and `PROJECT_CONTEXT.md`.
+- **Editing `PROJECT_CONTEXT.md`.** It's human-curated. Suggest manual edits if needed.
+- **Editing `.claude/knowledge/<agent>.md`.** That's append-only by the matching sub-agent.
+- **Updating for a typo / refactor / dep bump.** Skip.
+- **Logging "as of <date>" change history in the doc.** Git owns that.
+- **Bumping every CLAUDE.md "just in case" when only one app changed.** Scope tightly.
+- **Defending stale content for backward compatibility.** Canonical means current. Replace.

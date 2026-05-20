@@ -21,6 +21,26 @@ Sunbnb is a sunbed reservation SaaS platform — a Turborepo monorepo with:
 @packages/data/CLAUDE.md
 @packages/ui/CLAUDE.md
 
+## LLM Wiki
+
+A domain-oriented knowledge layer lives at `.claude/wiki/` — synthesized entity pages, end-to-end flow pages, subsystem pages, and operational workflows. Modelled on Karpathy's three-layer wiki pattern.
+
+- **Schema:** `.claude/wiki/README.md` — conventions, page types, status discipline
+- **Index:** `.claude/wiki/index.md` — start here when researching, debugging, or designing
+- **Log:** `.claude/wiki/log.md` — append-only history of wiki changes
+
+When to consult the wiki: **before** writing code on a non-trivial change, **first** when answering a "how does X work end-to-end" question, and **after** shipping anything non-trivial (run `.claude/wiki/workflows/ingest.md` to fold the change in). The wiki points at canonical sources (this file, the `CLAUDE.md` tree, `.claude/rules/`, the code) — it never replaces them.
+
+## Tracks (long-horizon work)
+
+Durable, resumable units of multi-session work live in `.claude/tracks/` — the **intent layer** of the context system. Each **track** is a goal + status-marked roadmap + append-only log + a "Resume here" contract, persisted so any session (or a parallel agent in a git worktree) can resume exactly where the last one stopped.
+
+- **Spec:** `.claude/tracks/README.md` — what a track is, lifecycle, conventions
+- **Registry:** `.claude/tracks/index.md` — start here to see active tracks and their next action
+- **Workflows:** `.claude/tracks/workflows/` — create · resume · handoff · close
+
+When to use: **before** starting non-trivial multi-session work, check the registry and resume the relevant track. **Before ending** work on a track, run the `handoff` workflow (update roadmap → append log → rewrite "Resume here"). Run parallel tracks in separate git worktrees.
+
 ## Commands
 
 ### Development

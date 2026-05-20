@@ -90,3 +90,19 @@ List each issue with:
 - "Needs discussion" — architectural concerns that need alignment
 
 If no issues found, keep it brief: "Changes reviewed. No issues. Tests pass. Ready to push."
+
+### Step 6: Wiki sync hint (if applicable)
+
+If the review found changes that introduce or substantially modify:
+- A new entity, status value, or external integration
+- A new flow (booking type, payment provider, lifecycle path)
+- A new route, server action, or webhook
+- A non-obvious gotcha worth recording
+
+…append a one-line hint to the verdict:
+
+> Substantive changes detected — consider `/wiki ingest` after merging to keep the synthesis layer current.
+
+Do NOT run `/wiki ingest` yourself. The wiki has a worthiness gate (see `.claude/wiki/workflows/ingest.md`) and the user decides.
+
+Skip this hint for pure bug fixes, refactors that preserve contracts, formatting, dep bumps, or test additions.

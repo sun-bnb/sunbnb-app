@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+# AI context drift check — warn-only, never blocks push.
+# Scans wiki + canonical (CLAUDE.md tree, .claude/rules/, PROJECT_CONTEXT.md).
+# Installed by .claude/wiki/scripts/install-hook.sh
+node "$(git rev-parse --show-toplevel)/.claude/scripts/detect-drift.mjs" || true
+exit 0

@@ -1,0 +1,13 @@
+{
+  "chat.mcp.discovery.enabled": {
+    "claude-desktop": true,
+    "windsurf": true,
+    "cursor-global": true,
+    "cursor-workspace": true
+  },
+  "chat.mcp.autoStart": true, 
+  "chat.mcp.serverSampling": {
+    "claude-4-6-opus": true,
+    "claude-4-6-sonnet": true
+  }
+}

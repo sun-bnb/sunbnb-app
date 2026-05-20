@@ -1,0 +1,46 @@
+{
+  "servers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/vhalme/projects/sunbnb/sunbnb-app"
+      ],
+      "type": "stdio"
+    },
+    "fetch": {
+      "command": "/Users/vhalme/.nvm/versions/node/v24.11.1/bin/node",
+      "args": [
+        "/opt/homebrew/bin/npx",
+        "-y",
+        "fetch-mcp"
+      ],
+      "type": "stdio"
+    },
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgres://postgres:sunbnb@localhost:5432/postgres"],
+      "type": "stdio"
+    },
+    "prisma": {
+      "command": "/Users/vhalme/.nvm/versions/node/v24.11.1/bin/node",
+      "args": [
+        "/opt/homebrew/bin/npx",
+        "-y",
+        "prisma@latest",
+        "mcp"
+      ],
+      "type": "stdio"
+    },
+    "memory": {
+      "command": "/Users/vhalme/.nvm/versions/node/v24.11.1/bin/node",
+      "args": [
+        "/opt/homebrew/bin/npx",
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
+      "type": "stdio"
+    }
+  }
+}
