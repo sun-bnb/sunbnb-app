@@ -566,6 +566,22 @@ describe('saveGeneral — off-platform billing entitlement', () => {
     // getEffectiveSubscriptionForUser must NOT have been called for type:paid
     expect(mockGetEffective).not.toHaveBeenCalled()
   })
+
+  it('allows editing an already-unpaid site without the entitlement', async () => {
+    authorizeOwner()
+    // Site is already unpaid → editing it must not require the entitlement
+    // (only the transition paid→unpaid is gated). Guards against locking out a
+    // downgraded partner from their own existing off-platform site.
+    vi.mocked(prisma.site.findUnique).mockResolvedValueOnce({ type: 'unpaid' } as any)
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.$executeRaw).mockResolvedValue(1 as any)
+
+    const res = await saveGeneral(baseInput)
+
+    expect(res.status).toBe('ok')
+    expect(mockGetEffective).not.toHaveBeenCalled()
+    expect(vi.mocked(prisma.site.update)).toHaveBeenCalled()
+  })
 })
 
 // ─── Off-platform billing entitlement (submitForm) ──────────────────────────

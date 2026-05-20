@@ -120,13 +120,22 @@ export async function saveGeneral(input: {
     }
   }
 
-  // Entitlement check: off-platform billing (type:'unpaid') requires the feature
+  // Entitlement check: gate only the transition INTO off-platform billing.
+  // A site that is already unpaid stays editable without the entitlement (e.g.
+  // after a downgrade), so partners aren't locked out of their own site
+  // settings — saveGeneral autosaves the current `type` on every field change.
   if (input.type === 'unpaid' && session) {
-    const effective = await getEffectiveSubscriptionForUser(session.user.id)
-    if (!effective.features.OFF_PLATFORM_BILLING) {
-      return {
-        status: 'error',
-        errors: ['Off-platform billing requires a Pro/Business plan or an admin override'],
+    const current = await prisma.site.findUnique({
+      where: { id: input.id },
+      select: { type: true },
+    })
+    if (current?.type !== 'unpaid') {
+      const effective = await getEffectiveSubscriptionForUser(session.user.id)
+      if (!effective.features.OFF_PLATFORM_BILLING) {
+        return {
+          status: 'error',
+          errors: ['Off-platform billing requires a Pro/Business plan or an admin override'],
+        }
       }
     }
   }
@@ -198,14 +207,21 @@ export async function submitForm(
 
   const price = Number(priceVal)
 
-  // Entitlement check: off-platform billing (type:'unpaid') requires the feature
+  // Entitlement check: gate only the transition INTO off-platform billing.
+  // New sites (no siteId) and paid→unpaid switches are gated; an existing
+  // unpaid site stays editable without the entitlement.
   const typeVal = (formData.get('type') as string) || 'paid'
   if (typeVal === 'unpaid') {
-    const effective = await getEffectiveSubscriptionForUser(session.user.id)
-    if (!effective.features.OFF_PLATFORM_BILLING) {
-      return {
-        status: 'error',
-        errors: ['Off-platform billing requires a Pro/Business plan or an admin override'],
+    const current = siteId
+      ? await prisma.site.findUnique({ where: { id: siteId }, select: { type: true } })
+      : null
+    if (current?.type !== 'unpaid') {
+      const effective = await getEffectiveSubscriptionForUser(session.user.id)
+      if (!effective.features.OFF_PLATFORM_BILLING) {
+        return {
+          status: 'error',
+          errors: ['Off-platform billing requires a Pro/Business plan or an admin override'],
+        }
       }
     }
   }
