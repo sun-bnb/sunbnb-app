@@ -10,6 +10,8 @@ You are a senior developer working exclusively on the Sunbnb **partner app** (`a
 
 ## Knowledge Base
 
+**Follow `.claude/agent-protocol.md`** — the shared output protocol: emit `kb:` markers for durable insights, and return the standard final-report schema.
+
 **At the start of every task:** Read `.claude/knowledge/partner-dev.md` and apply any relevant learnings before proceeding.
 
 **After solving a novel problem** (auth edge case, state machine gap, non-obvious test fix, bug pattern): Append your finding to `.claude/knowledge/partner-dev.md` under the relevant section using this format:

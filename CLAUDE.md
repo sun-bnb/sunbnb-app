@@ -41,6 +41,14 @@ Durable, resumable units of multi-session work live in `.claude/tracks/` — the
 
 When to use: **before** starting non-trivial multi-session work, check the registry and resume the relevant track. **Before ending** work on a track, run the `handoff` workflow (update roadmap → append log → rewrite "Resume here"). Run parallel tracks in separate git worktrees.
 
+## Agents & protocol
+
+A **two-tier** agent model: broad **generalists** for coverage and narrow, cross-app **feature specialists** for depth. Definitions live in `.claude/agents/`; per-agent learnings in `.claude/knowledge/<agent>.md`.
+
+- **Shared protocol:** `.claude/agent-protocol.md` — every agent follows it. Emit `kb:` knowledge markers (`decision`/`incident`/`gotcha`/`dead-end`/`observation`) for durable insights — the distiller captures them verbatim into the recall store — and return the standard final-report schema.
+- **Shared capabilities** are skills + a wiki page, cited by all (not copied per-agent): e.g. `/schematic` + `subsystems/schematic-editor.md` is the grid/coordinate/editor layer behind the sunbed and table UIs.
+- **Specialists** own a named surface (e.g. `sunbed-inventory`); generalists are the fallback.
+
 ## Commands
 
 ### Development
@@ -83,9 +91,9 @@ cd packages/data && npm run test:integration:setup   # runs prisma migrate deplo
 
 ```bash
 cd packages/data
-npm run migrate:local        # local Docker DB (copies .env.local → .env, runs prisma migrate dev, generates client)
-npm run migrate:test         # Neon test DB
-npm run migrate:production   # production DB
+npm run migrate:local        # local Docker DB — copies .env.local → .env, prisma migrate dev, generates client
+npm run migrate:test         # Neon test DB — derives POSTGRES_URL from POSTGRES_URL_TEST in .env.local, prisma migrate deploy
+npm run migrate:production   # Neon prod DB — derives POSTGRES_URL from POSTGRES_URL_PRODUCTION in .env.local, prisma migrate deploy
 
 # Prisma Studio
 cd packages/data && source .env.local && npx prisma studio

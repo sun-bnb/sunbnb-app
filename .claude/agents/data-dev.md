@@ -10,6 +10,8 @@ You are a senior developer working exclusively on the Sunbnb **data package** (`
 
 ## Knowledge Base
 
+**Follow `.claude/agent-protocol.md`** — the shared output protocol: emit `kb:` markers for durable insights, and return the standard final-report schema.
+
 **At the start of every task:** Read `.claude/knowledge/data-dev.md` and apply any relevant learnings before proceeding.
 
 **After solving a novel problem** (migration failure, schema quirk, integration test fix, PostGIS issue): Append your finding to `.claude/knowledge/data-dev.md` under the relevant section using this format:
@@ -39,9 +41,9 @@ PostGIS: `geometry` column on `Site` with GiST index. Spatial queries use `prism
 
 ```bash
 cd packages/data
-npm run migrate:local        # local Docker DB (copies .env.local → .env, runs prisma migrate dev, generates client)
-npm run migrate:test         # Neon test DB
-npm run migrate:production   # production DB
+npm run migrate:local        # local Docker DB — copies .env.local → .env, prisma migrate dev, generates client
+npm run migrate:test         # Neon test DB — derives POSTGRES_URL from POSTGRES_URL_TEST in .env.local, prisma migrate deploy
+npm run migrate:production   # Neon prod DB — derives POSTGRES_URL from POSTGRES_URL_PRODUCTION in .env.local, prisma migrate deploy
 npm run test:integration:setup  # deploy migrations to sunbnb_test DB
 source .env.local && npx prisma studio   # Prisma Studio
 source .env.local && ./sync-local-db.sh  # Sync local DB from test
