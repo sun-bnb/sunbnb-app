@@ -1,6 +1,13 @@
 -- Knowledge store schema (Phase 0).
 -- Single normalized record table + an ingestion ledger. Backend is pgvector.
--- Apply: docker exec -i sunbnb-knowledge-postgres psql -U postgres -d sunbnb_knowledge < this file
+--
+-- Provision the container (durable: named volume survives `docker rm`/reboot; auto-restarts):
+--   docker run -d --name sunbnb-knowledge-postgres --restart unless-stopped \
+--     -e POSTGRES_PASSWORD=sunbnb -p 5434:5432 \
+--     -v sunbnb-knowledge-data:/var/lib/postgresql/data pgvector/pgvector:pg17
+--   docker exec sunbnb-knowledge-postgres psql -U postgres -c "CREATE DATABASE sunbnb_knowledge;"
+-- Apply this schema:
+--   docker exec -i sunbnb-knowledge-postgres psql -U postgres -d sunbnb_knowledge < this file
 --
 -- The record shape is the durable contract: every datasource adapter (Phase 0 = session
 -- transcripts; later = logs, reconcile reports, ...) maps its data into knowledge_record.

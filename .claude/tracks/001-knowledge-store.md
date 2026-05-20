@@ -51,11 +51,16 @@ decided / tried this before?"* Free + keyless wherever possible.
   Design principles locked: distill-don't-dump, pull-not-push, provenance + git SHA per record,
   stable schema/adapter/retrieval contract with swappable backend/model. Residual: a chunk
   whose content reads like dialogue can make Haiku reply in prose → skipped with a warning.
+- **2026-05-20** — Hardened local persistence: migrated the pgvector container to a named
+  volume (`sunbnb-knowledge-data`) + `--restart unless-stopped`, preserving all 68 records via
+  pg_dump/restore. Provisioning `docker run` now documented in `.claude/scripts/knowledge-schema.sql`.
+  (Was an anonymous volume with no restart policy — fragile to `docker rm`/reboot.)
 
 ## Open decisions
 
-- Keep local Docker store vs. promote to Neon as volume / multi-machine needs grow.
-- Whether to commit the store scripts/config to the repo.
+- Storage location: local Docker is now durable (named volume + restart policy) — enough for
+  solo dev. **Later: a common/shared store for a team** (Neon or a hosted vector DB) so multiple
+  developers/agents share one knowledge base. Revisit when the team grows.
 - Automate the promotion-to-wiki step (Phase 3) or keep it manual.
 
 ## Links
