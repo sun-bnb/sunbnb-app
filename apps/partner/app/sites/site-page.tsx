@@ -56,6 +56,7 @@ export default async function SitePage(
   if (site.userId) {
     const ctx = await getSiteFeeContext(params.id)
     ;(site as any).subscriptionTier = ctx.tier
+    ;(site as any).subscriptionFeatures = ctx.features
     ;(site as any).mollieOnboardingStatus = ctx.partnerAccount?.mollieOnboardingStatus ?? null
     ;(site as any).hasMollieToken = !!ctx.partnerAccount?.mollieAccessToken
 

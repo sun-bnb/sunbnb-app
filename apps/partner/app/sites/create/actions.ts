@@ -5,7 +5,7 @@ import { auth } from '@/app/auth'
 import { requireSiteOwner } from '@/lib/auth-helpers'
 import { validateImageFile, safeBlobKey } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
-import { canCreateSite } from '@repo/data/subscription'
+import { canCreateSite, getEffectiveSubscriptionForUser } from '@repo/data/subscription'
 import { put } from '@vercel/blob'
 import sharp from 'sharp'
 
@@ -42,6 +42,17 @@ export async function createSite(
   if (!input.name.trim()) errors.push('Site name is required')
   if (!input.locationLat || !input.locationLng) errors.push('Site location is required')
   if (errors.length > 0) return { status: 'error', errors }
+
+  // Entitlement check: off-platform billing (type:'unpaid') requires the feature
+  if (input.type === 'unpaid') {
+    const effective = await getEffectiveSubscriptionForUser(session.user.id!)
+    if (!effective.features.OFF_PLATFORM_BILLING) {
+      return {
+        status: 'error',
+        errors: ['Off-platform billing requires a Pro/Business plan or an admin override'],
+      }
+    }
+  }
 
   const price = Number(input.price)
   const vat = Number(input.vat)

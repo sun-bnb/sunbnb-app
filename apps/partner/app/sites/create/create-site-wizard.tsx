@@ -17,6 +17,7 @@ export interface WizardFeeData {
   feeAmount?: number | null
   percentage?: number | null
   serviceCode: string
+  overridden?: boolean
 }
 
 export interface WizardData {
@@ -56,11 +57,13 @@ export default function CreateSiteWizard({
   tier,
   serviceFee,
   allowed = true,
+  features = null,
 }: {
   apiKey: string
   tier: string
   serviceFee?: WizardFeeData | null
   allowed?: boolean
+  features?: Record<string, boolean> | null
 }) {
 
   const [activeStep, setActiveStep] = useState(0)
@@ -144,6 +147,7 @@ export default function CreateSiteWizard({
           update={update}
           tier={tier}
           serviceFee={serviceFee}
+          features={features}
         />
       )}
       {activeStep === 2 && (

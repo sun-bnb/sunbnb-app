@@ -33,6 +33,7 @@ export default async function CreateSitePage() {
     feeAmount: serviceFee.feeAmount,
     percentage: serviceFee.percentage,
     serviceCode: serviceFee.serviceCode,
+    overridden: serviceFee.accountId != null || serviceFee.siteId != null,
   } : null
 
   return (
@@ -42,6 +43,7 @@ export default async function CreateSitePage() {
         tier={tier}
         serviceFee={feeData}
         allowed={siteLimit.allowed}
+        features={ctx.features ?? null}
       />
     </div>
   )

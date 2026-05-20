@@ -25,6 +25,7 @@ import {
 import { auth } from '@/app/auth'
 import { requireSiteOwner } from '@/lib/auth-helpers'
 import prisma from '@repo/data/PrismaCient'
+import { getEffectiveSubscriptionForUser } from '@repo/data/subscription'
 
 const mockAuth = vi.mocked(auth)
 const mockRequireSiteOwner = vi.mocked(requireSiteOwner)
@@ -107,6 +108,12 @@ describe('saveGeneral', () => {
     authorizeOwner()
     vi.mocked(prisma.site.update).mockResolvedValue({} as any)
     vi.mocked(prisma.$executeRaw).mockResolvedValue(1 as any)
+    // type:'unpaid' requires the off-platform-billing entitlement; grant it so the
+    // update proceeds (this test exercises price-null logic, not the gate).
+    vi.mocked(getEffectiveSubscriptionForUser).mockResolvedValueOnce({
+      tier: 'BUSINESS', name: 'Business', monthlyPrice: 0, maxSites: 999,
+      isCustom: false, features: { OFF_PLATFORM_BILLING: true },
+    } as any)
 
     await saveGeneral({
       id: SITE_ID,
@@ -490,5 +497,127 @@ describe('saveBrand', () => {
       data: { slug: 'beach-club' },
     })
     expect(vi.mocked(prisma.siteBrand.upsert)).toHaveBeenCalled()
+  })
+})
+
+// ─── Off-platform billing entitlement (saveGeneral) ─────────────────────────
+
+describe('saveGeneral — off-platform billing entitlement', () => {
+  const mockGetEffective = vi.mocked(getEffectiveSubscriptionForUser)
+
+  const baseInput = {
+    id: SITE_ID,
+    name: 'Beach Club',
+    type: 'unpaid',
+    price: '',
+    vat: '',
+    locationLat: '40.0',
+    locationLng: '3.0',
+  }
+
+  it('rejects type:unpaid when OFF_PLATFORM_BILLING feature is false', async () => {
+    authorizeOwner()
+    mockGetEffective.mockResolvedValue({
+      tier: 'STARTER',
+      name: 'Starter',
+      monthlyPrice: 0,
+      maxSites: 1,
+      isCustom: false,
+      features: { OFF_PLATFORM_BILLING: false },
+    } as any)
+
+    const res = await saveGeneral(baseInput)
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Off-platform billing')
+    expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
+  })
+
+  it('allows type:unpaid when OFF_PLATFORM_BILLING feature is true', async () => {
+    authorizeOwner()
+    mockGetEffective.mockResolvedValue({
+      tier: 'PRO',
+      name: 'Pro',
+      monthlyPrice: 49,
+      maxSites: 5,
+      isCustom: false,
+      features: { OFF_PLATFORM_BILLING: true },
+    } as any)
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.$executeRaw).mockResolvedValue(1 as any)
+
+    const res = await saveGeneral(baseInput)
+
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(prisma.site.update)).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ type: 'unpaid' }) })
+    )
+  })
+
+  it('allows type:paid regardless of OFF_PLATFORM_BILLING feature', async () => {
+    authorizeOwner()
+    // Feature is false but type is 'paid' — should not call entitlement check logic
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.$executeRaw).mockResolvedValue(1 as any)
+
+    const res = await saveGeneral({ ...baseInput, type: 'paid', price: '20', vat: '21' })
+
+    expect(res.status).toBe('ok')
+    // getEffectiveSubscriptionForUser must NOT have been called for type:paid
+    expect(mockGetEffective).not.toHaveBeenCalled()
+  })
+})
+
+// ─── Off-platform billing entitlement (submitForm) ──────────────────────────
+
+describe('submitForm — off-platform billing entitlement', () => {
+  const mockGetEffective = vi.mocked(getEffectiveSubscriptionForUser)
+
+  it('rejects type:unpaid when OFF_PLATFORM_BILLING feature is false', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    mockGetEffective.mockResolvedValue({
+      tier: 'STARTER',
+      name: 'Starter',
+      monthlyPrice: 0,
+      maxSites: 1,
+      isCustom: false,
+      features: { OFF_PLATFORM_BILLING: false },
+    } as any)
+
+    const formData = new FormData()
+    formData.set('name', 'Beach Club')
+    formData.set('locationLat', '40')
+    formData.set('locationLng', '3')
+    formData.set('type', 'unpaid')
+
+    const res = await submitForm({ status: '' }, formData)
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Off-platform billing')
+    expect(vi.mocked(prisma.site.create)).not.toHaveBeenCalled()
+  })
+
+  it('allows type:unpaid when OFF_PLATFORM_BILLING feature is true', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    mockGetEffective.mockResolvedValue({
+      tier: 'PRO',
+      name: 'Pro',
+      monthlyPrice: 49,
+      maxSites: 5,
+      isCustom: false,
+      features: { OFF_PLATFORM_BILLING: true },
+    } as any)
+    vi.mocked(prisma.site.create).mockResolvedValue({ id: 'new-site-id' } as any)
+    vi.mocked(prisma.$executeRaw).mockResolvedValue(1 as any)
+
+    const formData = new FormData()
+    formData.set('name', 'Beach Club')
+    formData.set('locationLat', '40')
+    formData.set('locationLng', '3')
+    formData.set('type', 'unpaid')
+
+    const res = await submitForm({ status: '' }, formData)
+
+    expect(res.status).toBe('ok')
   })
 })

@@ -8,6 +8,7 @@ const prisma = {
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
+    count: vi.fn(),
   },
   reservation: {
     findUnique: vi.fn(),
@@ -64,6 +65,10 @@ const prisma = {
     update: vi.fn(),
   },
   subscriptionPlan: {
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+  },
+  customSubscription: {
     findUnique: vi.fn(),
   },
   user: {

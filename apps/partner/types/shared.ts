@@ -4,6 +4,8 @@ export interface ServiceFee {
   feeAmount?: number | null
   percentage?: number | null
   serviceCode: string
+  accountId?: string | null
+  siteId?: string | null
 }
 
 export interface LayoutElementProps {

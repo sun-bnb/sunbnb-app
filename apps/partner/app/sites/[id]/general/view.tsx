@@ -103,7 +103,7 @@ function PriceBreakdown({
           <span className="text-red-500">&minus;{feeAmount.toFixed(2)} &euro;</span>
         </div>
       )}
-      {feeAmount > 0 && (() => {
+      {feeAmount > 0 && !serviceFee?.accountId && !serviceFee?.siteId && (() => {
         const tierIdx = TIER_ORDER.indexOf(tier as typeof TIER_ORDER[number])
         const nextTier = tierIdx >= 0 && tierIdx < TIER_ORDER.length - 1 ? TIER_ORDER[tierIdx + 1] : null
         return nextTier ? (
@@ -412,8 +412,8 @@ export default function GeneralView() {
   }
 
   const isPaid = siteType === 'paid'
-  const tier = site.subscriptionTier ?? 'STARTER'
-  const canUseAvailabilityOnly = tier === 'PRO' || tier === 'BUSINESS'
+  const tier = (site as any).subscriptionTier ?? 'STARTER'
+  const canUseAvailabilityOnly = ((site as any).subscriptionFeatures?.OFF_PLATFORM_BILLING ?? false) as boolean
 
   return (
     <div className="pt-2">

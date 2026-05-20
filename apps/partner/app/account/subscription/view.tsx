@@ -11,6 +11,8 @@ interface SubscriptionData {
   subscription: SubscriptionWithPlan | null
   plans: SubscriptionPlan[]
   siteCount: number
+  effectiveMaxSites: number
+  isCustomMaxSites: boolean
 }
 
 const TIER_FEATURES: Record<string, string[]> = {
@@ -43,7 +45,7 @@ const TIER_COLORS: Record<string, typeof DEFAULT_COLORS> = {
 }
 
 export default function SubscriptionView({ data }: { data: SubscriptionData }) {
-  const { subscription, plans, siteCount } = data
+  const { subscription, plans, siteCount, effectiveMaxSites, isCustomMaxSites } = data
   const currentTier = subscription?.plan?.tier ?? 'STARTER'
   const [loading, setLoading] = useState<string | null>(null)
 
@@ -108,7 +110,10 @@ export default function SubscriptionView({ data }: { data: SubscriptionData }) {
           <div className="text-right">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Sites used</p>
             <p className="text-xl font-bold text-gray-900 mt-1">
-              {siteCount} / {subscription?.plan?.maxSites === 999 ? '∞' : (subscription?.plan?.maxSites ?? 1)}
+              {siteCount} / {effectiveMaxSites === 999 ? '∞' : effectiveMaxSites}
+              {isCustomMaxSites && (
+                <span className="ml-1.5 text-xs font-normal text-indigo-500">(custom)</span>
+              )}
             </p>
           </div>
         </div>

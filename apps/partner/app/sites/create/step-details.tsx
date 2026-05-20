@@ -75,7 +75,7 @@ function WizardPriceBreakdown({
           <span className="text-red-500">&minus;{feeAmount.toFixed(2)} &euro;</span>
         </div>
       )}
-      {feeAmount > 0 && nextTier && (
+      {feeAmount > 0 && nextTier && !serviceFee?.overridden && (
         <div className="text-[11px] text-indigo-500 mb-1">
           Upgrade to {TIER_LABELS[nextTier]} for {TIER_FEES[nextTier]} service fee
         </div>
@@ -100,15 +100,17 @@ export default function StepDetails({
   update,
   tier,
   serviceFee,
+  features = null,
 }: {
   data: WizardData
   update: (p: Partial<WizardData>) => void
   tier: string
   serviceFee?: WizardFeeData | null
+  features?: Record<string, boolean> | null
 }) {
 
   const isPaid = data.type === 'paid'
-  const canUseAvailabilityOnly = tier === 'PRO' || tier === 'BUSINESS'
+  const canUseAvailabilityOnly = features?.OFF_PLATFORM_BILLING ?? false
 
   const hoursForDay = (dayKey: string) =>
     data.workingHours

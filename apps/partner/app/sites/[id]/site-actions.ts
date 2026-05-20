@@ -5,6 +5,7 @@ import { auth } from '@/app/auth'
 import { requireSiteOwner } from '@/lib/auth-helpers'
 import { isValidSiteStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
+import { getEffectiveSubscriptionForUser } from '@repo/data/subscription'
 
 // ─── Save Schematic Canvas Dimensions ───────────────────────────────────────
 
@@ -46,7 +47,7 @@ export async function saveGeneral(input: {
   layoutWidth?: string
   layoutHeight?: string
 }): Promise<{ status: string; errors?: string[] }> {
-  const { error } = await requireSiteOwner(input.id)
+  const { session, error } = await requireSiteOwner(input.id)
   if (error) return { status: 'error', errors: [error] }
 
   const errors: string[] = []
@@ -119,6 +120,17 @@ export async function saveGeneral(input: {
     }
   }
 
+  // Entitlement check: off-platform billing (type:'unpaid') requires the feature
+  if (input.type === 'unpaid' && session) {
+    const effective = await getEffectiveSubscriptionForUser(session.user.id)
+    if (!effective.features.OFF_PLATFORM_BILLING) {
+      return {
+        status: 'error',
+        errors: ['Off-platform billing requires a Pro/Business plan or an admin override'],
+      }
+    }
+  }
+
   const layoutData: Record<string, unknown> = {}
   if (input.layoutMode !== undefined) layoutData.layoutMode = input.layoutMode
   if (layoutWidth !== undefined) layoutData.layoutWidth = layoutWidth
@@ -186,9 +198,21 @@ export async function submitForm(
 
   const price = Number(priceVal)
 
+  // Entitlement check: off-platform billing (type:'unpaid') requires the feature
+  const typeVal = (formData.get('type') as string) || 'paid'
+  if (typeVal === 'unpaid') {
+    const effective = await getEffectiveSubscriptionForUser(session.user.id)
+    if (!effective.features.OFF_PLATFORM_BILLING) {
+      return {
+        status: 'error',
+        errors: ['Off-platform billing requires a Pro/Business plan or an admin override'],
+      }
+    }
+  }
+
   const siteData = {
     name: formData.get('name') as string,
-    type: (formData.get('type') as string) || 'paid',
+    type: typeVal,
     price: price > 0 ? price : null,
     locationLat: formData.get('locationLat') as string,
     locationLng: formData.get('locationLng') as string,
