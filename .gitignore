@@ -20,6 +20,9 @@ node_modules
 /.env.*.local
 /.env.development.test
 
+# Dev-env master (real values, source of truth — distributed out-of-band, never committed)
+/dev-env.local
+
 # Testing
 coverage
 
