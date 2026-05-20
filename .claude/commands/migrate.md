@@ -27,14 +27,14 @@ Parse the user's argument: $ARGUMENTS
 This copies `.env.local` → `.env`, runs `prisma migrate dev`, and regenerates the Prisma client.
 
 **`test`**: Run `cd packages/data && npm run migrate:test`
-This copies `.env.test` → `.env`, runs `prisma migrate dev`, regenerates client, then restores `.env.local`.
+This derives `POSTGRES_URL` from the `POSTGRES_URL_TEST` key in `.env.local` into a transient `.env`, runs `prisma migrate deploy`, regenerates the client, then restores `.env` to `.env.local`. There is no separate `.env.test` — `.env.local` is the single source for all DB URLs.
 
 **`production`**:
 - ALWAYS confirm with the user before running production migrations
-- Show pending migrations first: `cd packages/data && cp .env.production .env && source .env && npx prisma migrate status`
-- Only after explicit confirmation: `cd packages/data && npm run migrate:production`
+- Show pending migrations first: `cd packages/data && grep -E '^(export )?POSTGRES_URL_PRODUCTION=' .env.local | sed -E 's/^(export )?POSTGRES_URL_PRODUCTION=/POSTGRES_URL=/' > .env && npx prisma migrate status && cp .env.local .env`
+- Only after explicit confirmation: `cd packages/data && npm run migrate:production` (derives `POSTGRES_URL` from `POSTGRES_URL_PRODUCTION`, runs `prisma migrate deploy`)
 
-**`status`**: For each environment (local, test, production), run `prisma migrate status` with the corresponding env file to show pending migrations.
+**`status`**: For each environment, point `POSTGRES_URL` at the matching `.env.local` key (local → `POSTGRES_URL`, test → `POSTGRES_URL_TEST`, production → `POSTGRES_URL_PRODUCTION`) in a transient `.env`, then run `prisma migrate status`.
 
 **`sync`**: Run `cd packages/data && source .env.local && ./sync-local-db.sh` to sync local DB from test.
 

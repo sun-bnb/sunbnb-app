@@ -6,9 +6,9 @@
 
 ```bash
 cd packages/data
-npm run migrate:local        # local Docker DB (copies .env.local → .env, runs prisma migrate dev, generates client)
-npm run migrate:test         # Neon test DB
-npm run migrate:production   # production DB
+npm run migrate:local        # local Docker DB — copies .env.local → .env, prisma migrate dev, generates client
+npm run migrate:test         # Neon test DB — derives POSTGRES_URL from POSTGRES_URL_TEST in .env.local, prisma migrate deploy
+npm run migrate:production   # Neon prod DB — derives POSTGRES_URL from POSTGRES_URL_PRODUCTION in .env.local, prisma migrate deploy
 source .env.local && npx prisma studio   # Prisma Studio
 source .env.local && ./sync-local-db.sh  # Sync local DB from test
 ```
