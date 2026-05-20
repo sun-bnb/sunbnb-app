@@ -48,3 +48,9 @@ Operations:
 - changed: `.claude/wiki/scripts/detect-drift.mjs` (new — Node script, no deps, scans wiki for broken `sources:`/inline-ref/cross-ref); `.claude/hooks/pre-push.sample` (new — warn-only hook); `.claude/wiki/scripts/install-hook.sh` (new — installs hook with backup); `.claude/wiki/workflows/lint.md` (added two-modes section: quick vs full); `.claude/commands/wiki.md` (recognize `lint --quick` flag); `.claude/commands/update-knowledge.md` (layer-separation note + Step 6 wiki ingest hint); `.claude/commands/review.md` (Step 6 wiki ingest hint); plus drift patches surfaced by first script run: `entities/reservation.md` (`services/` → `service/`), `subsystems/auth.md` (`auth.ts` → `app/auth.ts` for all 3 apps), `flows/reservation-payment.md` (`payment/page.tsx` → `payment/Payment.tsx`, `sendConfirmation` → `sendConfirmationEmail`).
 - reason: pair the existing user-driven workflows with a cheap mechanical detector so drift caught between sessions costs ~0 tokens. The script formalizes the grep recipes from `workflows/lint.md` "Tooling shortcuts". Soft couplings on `/update-knowledge` and `/review` add proactive nudges at the moments the user is already touching the doc layer.
 - by: claude (opus-4-7)
+
+## [2026-05-20] add | subsystem:schematic-editor page
+- mode: add
+- changed: `.claude/wiki/subsystems/schematic-editor.md` (new — draft); `.claude/wiki/index.md` (registered under Subsystems)
+- reason: the shared grid-geometry + editor-chrome layer (`@repo/schematic`, `@repo/schematic-editor`) is the single shared capability behind the sunbed inventory editor, the user sunbed-selection UI, and the restaurant tables editor — but had no synthesis page. Created as the cited shared-knowledge source for the new `sunbed-inventory` specialist agent and the `/schematic` skill. Status draft: core grid math + chair-util verified against code, editor-chrome internals not yet fully read.
+- by: claude (opus-4-7)

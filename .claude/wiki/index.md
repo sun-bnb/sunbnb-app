@@ -50,6 +50,7 @@ Invokable via `/wiki <op>` (see `.claude/commands/wiki.md`).
 
 - [`subsystem:auth`](subsystems/auth.md) — **stable** — NextAuth setup per app, anonId, ownership checks, sudo
 - [`subsystem:payments`](subsystems/payments.md) — **stable** — Stripe vs Mollie vs Demo, webhooks, reconciliation, refunds
+- [`subsystem:schematic-editor`](subsystems/schematic-editor.md) — **draft** — shared grid geometry + editor chrome behind sunbed inventory & restaurant tables
 
 ---
 
