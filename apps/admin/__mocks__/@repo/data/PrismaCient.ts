@@ -36,11 +36,19 @@ const prisma = {
   },
   serviceCode: {
     findUnique: vi.fn(),
+    findMany: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
   },
   partnerAccount: {
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+  },
+  customSubscription: {
+    findUnique: vi.fn(),
+    upsert: vi.fn(),
+    deleteMany: vi.fn(),
     findMany: vi.fn(),
   },
   settlement: {

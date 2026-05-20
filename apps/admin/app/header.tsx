@@ -9,6 +9,7 @@ import { useState, useRef, useEffect } from 'react'
 
 const navItems = [
   { label: 'Settlements', href: '/settlements' },
+  { label: 'Partners', href: '/partners' },
   { label: 'Sites', href: '/sites' },
   { label: 'Fees', href: '/fees' },
   { label: 'Platform', href: '/platform' },

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
+import Link from 'next/link'
 import {
   addAdminUser,
   removeAdminUser,
@@ -469,6 +470,14 @@ export default function UsersView({ initialUsers }: { initialUsers: AdminUser[] 
                         <div>
                           <div className="text-gray-200">{u.email}</div>
                           {u.name && <div className="text-gray-500 text-xs mt-0.5">{u.name}</div>}
+                          {u.partnerAccountId && (
+                            <Link
+                              href={`/partners/${u.partnerAccountId}`}
+                              className="inline-flex items-center mt-1 text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                            >
+                              View partner &rarr;
+                            </Link>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -576,6 +585,14 @@ export default function UsersView({ initialUsers }: { initialUsers: AdminUser[] 
                     <div>
                       <div className="text-gray-200">{u.email}</div>
                       {u.name && <div className="text-gray-500 text-xs mt-0.5">{u.name}</div>}
+                      {u.partnerAccountId && (
+                        <Link
+                          href={`/partners/${u.partnerAccountId}`}
+                          className="inline-flex items-center mt-1 text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                        >
+                          View partner &rarr;
+                        </Link>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3">

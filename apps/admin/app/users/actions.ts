@@ -77,6 +77,7 @@ export interface UserSearchResult {
   email: string
   createdAt: Date
   appRole: UserAppRole
+  partnerAccountId: string | null
   _count: {
     reservations: number
     orders: number
@@ -129,6 +130,7 @@ function toSearchResult(u: UserRowWithRelations): UserSearchResult {
     email: u.email,
     createdAt: u.createdAt,
     appRole: deriveAppRole(u),
+    partnerAccountId: u.partnerAccount?.userId ?? null,
     _count: u._count,
   }
 }
