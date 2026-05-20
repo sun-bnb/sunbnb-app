@@ -58,6 +58,35 @@ function transcriptDir() {
   return join(homedir(), '.claude', 'projects', slug);
 }
 
+// Subagent (Task-spawned specialist) transcripts are relocated AFTER the agent finishes to
+// <project>/<session-id>/subagents/agent-*.jsonl — they never sit at the top level. A flat
+// readdir of the project dir therefore misses them, which silently dropped every specialist's
+// `kb:` markers (see .claude/agent-protocol.md §1). Both the sweep and the SessionEnd hook must
+// descend here, or the whole agent→marker→recall path is broken for anything a subagent emits.
+//
+// But that directory is shared: Claude Code also drops its OWN internal sidechains there —
+// `agent-acompact-<hex>` (auto-compaction summarizer) and `agent-aside_question-<hex>`. Those
+// are meta-summaries of the parent session, not agent work; distilling them yields nothing
+// useful and burns retry calls choking on their <analysis>/<summary> format. Genuine Task
+// subagents are `agent-<hex>.jsonl` with no label infix, so this regex keeps only those.
+const TASK_SUBAGENT_RE = /^agent-[0-9a-f]+\.jsonl$/;
+function listSubagentTranscripts(projectDir, sessionId) {
+  if (!sessionId) return [];
+  const d = join(projectDir, sessionId, 'subagents');
+  if (!existsSync(d)) return [];
+  return readdirSync(d).filter(f => TASK_SUBAGENT_RE.test(f)).map(f => join(d, f));
+}
+
+// Every transcript under a project dir: top-level session files + each session's subagents/.
+function listTranscripts(dir) {
+  const files = [];
+  for (const ent of readdirSync(dir, { withFileTypes: true })) {
+    if (ent.isFile() && ent.name.endsWith('.jsonl')) files.push(join(dir, ent.name));
+    else if (ent.isDirectory()) files.push(...listSubagentTranscripts(dir, ent.name));
+  }
+  return files;
+}
+
 function parseTranscript(raw) {
   const out = [];
   for (const line of raw.split('\n')) {
@@ -89,12 +118,51 @@ function toolSummary(block) {
   }
 }
 
+// Agent-emitted knowledge markers (see .claude/agent-protocol.md §1). Agents fence a
+// durable insight as ```kb:<type> with optional `entities:`/`files:` header lines, e.g.
+//   ```kb:gotcha
+//   entities: inventory, schematic
+//   files: packages/schematic/src/grid.ts
+//   <1-4 sentence insight including the WHY>
+//   ```
+// These are extracted verbatim (high fidelity) and merged ahead of the LLM-distilled
+// records, so the model never has to re-infer what the agent already stated explicitly.
+const KB_TYPES = new Set(['decision', 'incident', 'gotcha', 'dead-end', 'observation']);
+const KB_BLOCK_RE = /```kb:([a-z-]+)[ \t]*\r?\n([\s\S]*?)```/g;
+
+export function extractMarkers(text) {
+  if (!text || !text.includes('```kb:')) return [];
+  const out = [];
+  let m;
+  KB_BLOCK_RE.lastIndex = 0;
+  while ((m = KB_BLOCK_RE.exec(text)) !== null) {
+    const type = m[1].trim();
+    if (!KB_TYPES.has(type)) continue;
+    const lines = m[2].split('\n');
+    let entities = [], files = [], i = 0;
+    // Header zone: leading blanks + entities:/files: lines, in any order.
+    for (; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line.trim()) continue;
+      const em = line.match(/^\s*entities:\s*(.*)$/i);
+      const fm = line.match(/^\s*files:\s*(.*)$/i);
+      if (em) { entities = em[1].split(',').map(s => s.trim()).filter(Boolean); continue; }
+      if (fm) { files = fm[1].split(',').map(s => s.trim()).filter(Boolean); continue; }
+      break;
+    }
+    const recordText = lines.slice(i).join('\n').trim();
+    if (recordText) out.push({ type, text: recordText, entities, files });
+  }
+  return out;
+}
+
 // Build a compact textual transcript: keep the conversational spine + edit/tool intent,
 // drop tool_result bodies (file dumps, command output) and thinking blocks. This is the
 // first redaction pass and shrinks the input ~10-50x before it ever reaches the model.
 function prefilter(messages) {
   const lines = [];
   const files = new Set();
+  const markers = [];
   let branch = null, firstTs = null, lastTs = null;
   for (const m of messages) {
     if (m.gitBranch) branch = m.gitBranch;
@@ -106,12 +174,14 @@ function prefilter(messages) {
     const content = msg.content;
     if (typeof content === 'string') {
       if (content.trim()) lines.push(`${role}: ${cap(content, 4000)}`);
+      markers.push(...extractMarkers(content));
       continue;
     }
     if (!Array.isArray(content)) continue;
     for (const b of content) {
       if (b.type === 'text' && b.text && b.text.trim()) {
         lines.push(`${role}: ${cap(b.text, 4000)}`);
+        markers.push(...extractMarkers(b.text));
       } else if (b.type === 'tool_use') {
         lines.push(`[TOOL ${b.name}${toolSummary(b)}]`);
         if (['Edit', 'Write', 'MultiEdit', 'NotebookEdit'].includes(b.name) && b.input?.file_path) {
@@ -121,7 +191,7 @@ function prefilter(messages) {
       // tool_result / thinking blocks intentionally dropped
     }
   }
-  return { text: lines.join('\n'), files: [...files], branch, firstTs, lastTs };
+  return { text: lines.join('\n'), files: [...files], branch, firstTs, lastTs, markers };
 }
 
 function gitShaBefore(ts, branch) {
@@ -287,7 +357,10 @@ export async function ingestSession(client, transcriptPath, sessionId, cfg, opts
   }
 
   const pf = prefilter(parseTranscript(raw));
-  const records = distill(pf.text, cfg);
+  // Agent-emitted kb: markers are pre-extracted, high-confidence records (verbatim, with
+  // their own entities/files). Put them first so they win on dedupe over any distilled
+  // restatement of the same insight. See .claude/agent-protocol.md §1.
+  const records = dedupeRecords([...pf.markers, ...distill(pf.text, cfg)]);
   const ts = pf.lastTs || new Date().toISOString();
   const codeVersion = gitShaBefore(ts, pf.branch);
   const vectors = await embedTexts(records.map(r => r.text), 'document', cfg);
@@ -300,7 +373,7 @@ export async function ingestSession(client, transcriptPath, sessionId, cfg, opts
       await client.query(
         `INSERT INTO knowledge_record (source,type,text,embedding,ts,code_version,branch,entities,files,provenance,status)
          VALUES ('session-transcript',$1,$2,$3::vector,$4,$5,$6,$7,$8,$9,'raw')`,
-        [r.type, r.text, v ? toVec(v) : null, ts, codeVersion, pf.branch, r.entities, pf.files, sessionId]
+        [r.type, r.text, v ? toVec(v) : null, ts, codeVersion, pf.branch, r.entities, (r.files && r.files.length ? r.files : pf.files), sessionId]
       );
     }
     await client.query(
@@ -318,7 +391,7 @@ export async function ingestSession(client, transcriptPath, sessionId, cfg, opts
 async function sweep(client, cfg, opts) {
   const dir = transcriptDir();
   if (!existsSync(dir)) { console.error('no transcript dir: ' + dir); return; }
-  const files = readdirSync(dir).filter(f => f.endsWith('.jsonl')).map(f => join(dir, f));
+  const files = listTranscripts(dir);  // top-level sessions + <session>/subagents/*.jsonl
   let total = 0;
   for (const f of files) {
     const sid = basename(f).replace(/\.jsonl$/, '');
@@ -356,10 +429,22 @@ async function main() {
     if (has('--sweep')) await sweep(client, cfg, opts);
     else if (has('--embed-pending')) await embedPending(client, cfg);
     else if (has('--session')) {
-      const res = await ingestSession(client, val('--session'), val('--session-id'), cfg, opts);
+      const transcript = val('--session');
+      const res = await ingestSession(client, transcript, val('--session-id'), cfg, opts);
       console.log(res.skipped ? `skip ${res.sessionId} (unchanged)` : `ingested ${res.sessionId}: ${res.count} records`);
+      // --with-subagents: also ingest this session's specialist transcripts (the SessionEnd hook
+      // passes it, since the relocated subagents/ files are present by the time the session ends).
+      if (has('--with-subagents')) {
+        const sid = val('--session-id') || basename(transcript).replace(/\.jsonl$/, '');
+        for (const sub of listSubagentTranscripts(dirname(transcript), sid)) {
+          try {
+            const r = await ingestSession(client, sub, undefined, cfg, opts);
+            console.log(r.skipped ? `skip ${r.sessionId} (unchanged)` : `ingested ${r.sessionId}: ${r.count} records`);
+          } catch (e) { console.error(`error ${basename(sub)}: ${e.message}`); }
+        }
+      }
     } else {
-      console.error('usage: --session <path> [--session-id id] | --sweep | --embed-pending  [--force]');
+      console.error('usage: --session <path> [--session-id id] [--with-subagents] | --sweep | --embed-pending  [--force]');
       process.exit(2);
     }
   } finally { await client.end(); }

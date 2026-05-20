@@ -20,7 +20,9 @@ process.stdin.on('end', () => {
   if (!transcript) process.exit(0);
 
   const script = join(dirname(fileURLToPath(import.meta.url)), 'knowledge-ingest.mjs');
-  const child = spawn('node', [script, '--session', transcript, '--session-id', sessionId], {
+  // --with-subagents: also ingest <session>/subagents/agent-*.jsonl, where Task-spawned
+  // specialists' transcripts (and their kb: markers) are relocated by session end.
+  const child = spawn('node', [script, '--session', transcript, '--session-id', sessionId, '--with-subagents'], {
     detached: true,
     stdio: 'ignore',
   });
