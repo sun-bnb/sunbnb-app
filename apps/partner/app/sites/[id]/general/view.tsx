@@ -60,15 +60,28 @@ function computeServiceFee(serviceFee: ServiceFee | undefined, itemPrice: number
     : round(((serviceFee.percentage ?? 0) / 100) * itemPrice)
 }
 
+// "12% " for percentage fees, "" for fixed — prefixes the € amount in the breakdown.
+function feePctPrefix(fee: ServiceFee | undefined) {
+  return fee && fee.chargeType !== 'fixed' ? `${(fee.percentage ?? 0).toFixed(0)}% ` : ''
+}
+
+// True when the resolved fee comes from a site/account override (a custom rate)
+// rather than the partner's base subscription tier.
+function isCustomFee(fee: ServiceFee | undefined) {
+  return !!(fee?.accountId || fee?.siteId)
+}
+
 function PriceBreakdown({
   price,
   vat: vatStr,
   serviceFees,
+  baseServiceFees,
   tier,
 }: {
   price: string
   vat: string
   serviceFees?: ServiceFee[]
+  baseServiceFees?: ServiceFee[]
   tier: string
 }) {
   const t = useTranslations('SiteGeneral')
@@ -77,8 +90,13 @@ function PriceBreakdown({
 
   const vatRate = Number(vatStr) || 0
   const serviceFee = serviceFees?.find(f => f.serviceCode === 'sunbed-rental')
+  const baseFee = baseServiceFees?.find(f => f.serviceCode === 'sunbed-rental')
 
   const feeAmount = computeServiceFee(serviceFee, priceNum)
+  const baseFeeAmount = computeServiceFee(baseFee, priceNum)
+  // Show the base tier fee struck through over the custom fee when a custom
+  // (site/account) rate applies and actually differs from the base.
+  const showCustomFee = isCustomFee(serviceFee) && baseFeeAmount !== feeAmount
 
   const partnerGross = round(priceNum - feeAmount)
   const partnerBase = vatRate > 0
@@ -92,7 +110,24 @@ function PriceBreakdown({
         <span>{t('customerPays')}</span>
         <span>{priceNum.toFixed(2)} &euro;</span>
       </div>
-      {feeAmount > 0 && (
+      {showCustomFee ? (
+        <div className="flex justify-between mb-1">
+          <span className="text-gray-500">
+            {t('serviceFee')}
+            <span className="ml-1.5 inline-block rounded bg-indigo-50 px-1 text-[10px] font-medium text-indigo-600 align-middle">
+              {t('customRate')}
+            </span>
+          </span>
+          <span className="text-right leading-tight">
+            <span className="block text-gray-400 line-through">
+              {feePctPrefix(baseFee)}&minus;{baseFeeAmount.toFixed(2)} &euro;
+            </span>
+            <span className="block text-red-500">
+              {feePctPrefix(serviceFee)}&minus;{feeAmount.toFixed(2)} &euro;
+            </span>
+          </span>
+        </div>
+      ) : feeAmount > 0 ? (
         <div className="flex justify-between text-gray-500 mb-1">
           <span>
             {t('serviceFee')}
@@ -102,7 +137,7 @@ function PriceBreakdown({
           </span>
           <span className="text-red-500">&minus;{feeAmount.toFixed(2)} &euro;</span>
         </div>
-      )}
+      ) : null}
       {feeAmount > 0 && !serviceFee?.accountId && !serviceFee?.siteId && (() => {
         const tierIdx = TIER_ORDER.indexOf(tier as typeof TIER_ORDER[number])
         const nextTier = tierIdx >= 0 && tierIdx < TIER_ORDER.length - 1 ? TIER_ORDER[tierIdx + 1] : null
@@ -143,10 +178,12 @@ function MolliePaymentExample({
   price,
   vat: vatStr,
   serviceFees,
+  baseServiceFees,
 }: {
   price: string
   vat: string
   serviceFees?: ServiceFee[]
+  baseServiceFees?: ServiceFee[]
 }) {
   const t = useTranslations('SiteGeneral')
   const priceNum = Number(price)
@@ -154,12 +191,15 @@ function MolliePaymentExample({
 
   const vatRate = Number(vatStr) || 0
   const serviceFee = serviceFees?.find(f => f.serviceCode === 'sunbed-rental')
+  const baseFee = baseServiceFees?.find(f => f.serviceCode === 'sunbed-rental')
 
   // Service fee is applied per item (mirrors processConfirmedReservation).
   // Mollie's processing fee applies once per payment, not per item.
   const customerTotal = round(priceNum * MOLLIE_EXAMPLE_QTY)
   const perItemFee = computeServiceFee(serviceFee, priceNum)
   const serviceFeeTotal = round(perItemFee * MOLLIE_EXAMPLE_QTY)
+  const baseServiceFeeTotal = round(computeServiceFee(baseFee, priceNum) * MOLLIE_EXAMPLE_QTY)
+  const showCustomFee = isCustomFee(serviceFee) && baseServiceFeeTotal !== serviceFeeTotal
   const mollieFee = round(
     (MOLLIE_EXAMPLE_PCT / 100) * customerTotal + MOLLIE_EXAMPLE_FIXED
   )
@@ -178,12 +218,25 @@ function MolliePaymentExample({
         <span>{t('customerPaysCount', { count: MOLLIE_EXAMPLE_QTY })}</span>
         <span>{customerTotal.toFixed(2)} &euro;</span>
       </div>
-      {serviceFeeTotal > 0 && (
+      {showCustomFee ? (
+        <div className="flex justify-between mb-1">
+          <span className="text-gray-500">
+            {t('serviceFee')}
+            <span className="ml-1.5 inline-block rounded bg-indigo-50 px-1 text-[10px] font-medium text-indigo-600 align-middle">
+              {t('customRate')}
+            </span>
+          </span>
+          <span className="text-right leading-tight">
+            <span className="block text-gray-400 line-through">&minus;{baseServiceFeeTotal.toFixed(2)} &euro;</span>
+            <span className="block text-red-500">&minus;{serviceFeeTotal.toFixed(2)} &euro;</span>
+          </span>
+        </div>
+      ) : serviceFeeTotal > 0 ? (
         <div className="flex justify-between text-gray-500 mb-1">
           <span>{t('serviceFee')}</span>
           <span className="text-red-500">&minus;{serviceFeeTotal.toFixed(2)} &euro;</span>
         </div>
-      )}
+      ) : null}
       <div className="flex justify-between text-gray-500 mb-1">
         <span>
           {t('mollieFee', {
@@ -536,8 +589,8 @@ export default function GeneralView() {
               helperText={t('taxRateHelper')}
             />
           </div>
-          <PriceBreakdown price={price} vat={vat} serviceFees={site.serviceFees} tier={tier} />
-          <MolliePaymentExample price={price} vat={vat} serviceFees={site.serviceFees} />
+          <PriceBreakdown price={price} vat={vat} serviceFees={site.serviceFees} baseServiceFees={(site as any).baseServiceFees} tier={tier} />
+          <MolliePaymentExample price={price} vat={vat} serviceFees={site.serviceFees} baseServiceFees={(site as any).baseServiceFees} />
         </div>
       )}
 

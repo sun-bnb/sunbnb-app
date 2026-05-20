@@ -27,6 +27,16 @@ export default async function CreateSitePage() {
     tier,
   ) ?? null
 
+  // Base plan fee — resolved WITHOUT account/site overrides — so the preview can
+  // strike it through when a custom rate applies.
+  const baseServiceFee = resolveServiceFee(
+    [],
+    [],
+    ctx.settings?.serviceFees ?? [],
+    'sunbed-rental',
+    tier,
+  ) ?? null
+
   // Serialize fee data for the client
   const feeData = serviceFee ? {
     chargeType: serviceFee.chargeType,
@@ -36,12 +46,20 @@ export default async function CreateSitePage() {
     overridden: serviceFee.accountId != null || serviceFee.siteId != null,
   } : null
 
+  const baseFeeData = baseServiceFee ? {
+    chargeType: baseServiceFee.chargeType,
+    feeAmount: baseServiceFee.feeAmount,
+    percentage: baseServiceFee.percentage,
+    serviceCode: baseServiceFee.serviceCode,
+  } : null
+
   return (
     <div className="container mx-auto max-w-[768px]">
       <CreateSiteWizard
         apiKey={apiKey}
         tier={tier}
         serviceFee={feeData}
+        baseServiceFee={baseFeeData}
         allowed={siteLimit.allowed}
         features={ctx.features ?? null}
       />

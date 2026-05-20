@@ -56,12 +56,14 @@ export default function CreateSiteWizard({
   apiKey,
   tier,
   serviceFee,
+  baseServiceFee = null,
   allowed = true,
   features = null,
 }: {
   apiKey: string
   tier: string
   serviceFee?: WizardFeeData | null
+  baseServiceFee?: WizardFeeData | null
   allowed?: boolean
   features?: Record<string, boolean> | null
 }) {
@@ -147,6 +149,7 @@ export default function CreateSiteWizard({
           update={update}
           tier={tier}
           serviceFee={serviceFee}
+          baseServiceFee={baseServiceFee}
           features={features}
         />
       )}

@@ -436,6 +436,7 @@
     "taxRateHelper": "Sovelletaan kaikkiin myynteihin",
     "customerPays": "Asiakas maksaa",
     "serviceFee": "Palvelumaksu",
+    "customRate": "erikoishinta",
     "upgradeTier": "Päivitä {tier}-tilaukseen saadaksesi {fee} palvelumaksun",
     "youReceive": "Saat",
     "inclVat": "sis. ALV {rate}%",

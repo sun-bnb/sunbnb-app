@@ -436,6 +436,7 @@
     "taxRateHelper": "Applied to all sales",
     "customerPays": "Customer pays",
     "serviceFee": "Service fee",
+    "customRate": "special rate",
     "upgradeTier": "Upgrade to {tier} for {fee} service fee",
     "youReceive": "You receive",
     "inclVat": "incl. VAT {rate}%",

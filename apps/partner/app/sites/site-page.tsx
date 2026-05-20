@@ -70,6 +70,18 @@ export default async function SitePage(
         ctx.tier,
       ))
       .filter(Boolean) as any
+    // Base plan fees — resolved WITHOUT site/account overrides — so the price
+    // preview can show the partner's standard tier fee struck through when a
+    // custom (site/account) rate applies.
+    ;(site as any).baseServiceFees = serviceCodes
+      .map(code => resolveServiceFee(
+        [],
+        [],
+        ctx.settings?.serviceFees ?? [],
+        code,
+        ctx.tier,
+      ))
+      .filter(Boolean)
   }
 
   const sudoUsers = await prisma.user.findMany({

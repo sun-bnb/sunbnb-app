@@ -26,6 +26,17 @@ function round(amount: number) {
   return Math.round(amount * 100) / 100
 }
 
+function wizardFeeAmount(fee: WizardFeeData | null | undefined, priceNum: number) {
+  if (!fee) return 0
+  return fee.chargeType === 'fixed'
+    ? (fee.feeAmount ?? 0)
+    : round(((fee.percentage ?? 0) / 100) * priceNum)
+}
+
+function wizardFeePctPrefix(fee: WizardFeeData | null | undefined) {
+  return fee && fee.chargeType !== 'fixed' ? `${(fee.percentage ?? 0).toFixed(0)}% ` : ''
+}
+
 const TIER_ORDER = ['STARTER', 'PRO', 'BUSINESS'] as const
 const TIER_LABELS: Record<string, string> = { STARTER: 'Starter', PRO: 'Pro', BUSINESS: 'Business' }
 const TIER_FEES: Record<string, string> = { STARTER: '5%', PRO: '2%', BUSINESS: '0%' }
@@ -34,11 +45,13 @@ function WizardPriceBreakdown({
   price,
   vat: vatStr,
   serviceFee,
+  baseServiceFee,
   tier,
 }: {
   price: string
   vat: string
   serviceFee?: WizardFeeData | null
+  baseServiceFee?: WizardFeeData | null
   tier: string
 }) {
   const priceNum = Number(price)
@@ -46,11 +59,11 @@ function WizardPriceBreakdown({
 
   const vatRate = Number(vatStr) || 0
 
-  const feeAmount = serviceFee
-    ? serviceFee.chargeType === 'fixed'
-      ? (serviceFee.feeAmount ?? 0)
-      : round(((serviceFee.percentage ?? 0) / 100) * priceNum)
-    : 0
+  const feeAmount = wizardFeeAmount(serviceFee, priceNum)
+  const baseFeeAmount = wizardFeeAmount(baseServiceFee, priceNum)
+  // Show the base tier fee struck through over the custom fee when the partner
+  // has a custom (account/site) rate that differs from the base.
+  const showCustomFee = !!serviceFee?.overridden && baseFeeAmount !== feeAmount
 
   const partnerGross = round(priceNum - feeAmount)
   const partnerBase = vatRate > 0 ? round(partnerGross / (1 + vatRate / 100)) : partnerGross
@@ -66,7 +79,24 @@ function WizardPriceBreakdown({
         <span>Customer pays</span>
         <span>{priceNum.toFixed(2)} &euro;</span>
       </div>
-      {feeAmount > 0 && (
+      {showCustomFee ? (
+        <div className="flex justify-between mb-1">
+          <span className="text-gray-500">
+            Service fee
+            <span className="ml-1.5 inline-block rounded bg-indigo-50 px-1 text-[10px] font-medium text-indigo-600 align-middle">
+              special rate
+            </span>
+          </span>
+          <span className="text-right leading-tight">
+            <span className="block text-gray-400 line-through">
+              {wizardFeePctPrefix(baseServiceFee)}&minus;{baseFeeAmount.toFixed(2)} &euro;
+            </span>
+            <span className="block text-red-500">
+              {wizardFeePctPrefix(serviceFee)}&minus;{feeAmount.toFixed(2)} &euro;
+            </span>
+          </span>
+        </div>
+      ) : feeAmount > 0 ? (
         <div className="flex justify-between text-gray-500 mb-1">
           <span>
             Service fee
@@ -74,7 +104,7 @@ function WizardPriceBreakdown({
           </span>
           <span className="text-red-500">&minus;{feeAmount.toFixed(2)} &euro;</span>
         </div>
-      )}
+      ) : null}
       {feeAmount > 0 && nextTier && !serviceFee?.overridden && (
         <div className="text-[11px] text-indigo-500 mb-1">
           Upgrade to {TIER_LABELS[nextTier]} for {TIER_FEES[nextTier]} service fee
@@ -100,12 +130,14 @@ export default function StepDetails({
   update,
   tier,
   serviceFee,
+  baseServiceFee = null,
   features = null,
 }: {
   data: WizardData
   update: (p: Partial<WizardData>) => void
   tier: string
   serviceFee?: WizardFeeData | null
+  baseServiceFee?: WizardFeeData | null
   features?: Record<string, boolean> | null
 }) {
 
@@ -256,6 +288,7 @@ export default function StepDetails({
             price={data.price}
             vat={data.vat}
             serviceFee={serviceFee}
+            baseServiceFee={baseServiceFee}
             tier={tier}
           />
         </>
