@@ -13,7 +13,79 @@
  */
 
 import prisma from '../index'
-import { SubscriptionStatus } from '@prisma/client'
+import { SubscriptionStatus, SubscriptionTier } from '@prisma/client'
+
+// ─── Feature Catalog ────────────────────────────────────────────────────────
+
+/**
+ * The canonical catalog of subscription feature flags.
+ * Add new features here — no migration needed (stored as JSON overrides).
+ */
+export const SUBSCRIPTION_FEATURES = {
+  OFF_PLATFORM_BILLING: {
+    key: 'OFF_PLATFORM_BILLING',
+    label: 'Off-platform billing',
+    description: 'Allow availability-only (unpaid) sites',
+  },
+} as const
+
+export type SubscriptionFeatureKey = keyof typeof SUBSCRIPTION_FEATURES
+
+/**
+ * Per-tier default entitlements.
+ * Source of truth for server-side enforcement. Marketing copy in the apps
+ * is separate and should align with this map over time.
+ */
+export const TIER_FEATURE_DEFAULTS: Record<SubscriptionTier, Partial<Record<SubscriptionFeatureKey, boolean>>> = {
+  STARTER:  { OFF_PLATFORM_BILLING: false },
+  PRO:      { OFF_PLATFORM_BILLING: true },
+  BUSINESS: { OFF_PLATFORM_BILLING: true },
+}
+
+/**
+ * Resolve the effective feature entitlements for a partner.
+ * Per-partner override wins; falls back to tier default; then false.
+ *
+ * Pure function — no DB access. Unit-testable without mocks.
+ * `overrides` arrives as Prisma JsonValue — cast at the DB boundary before calling.
+ */
+export function resolveEffectiveFeatures(
+  tier: SubscriptionTier | null,
+  overrides: Partial<Record<SubscriptionFeatureKey, boolean>> | null,
+): Record<SubscriptionFeatureKey, boolean> {
+  const t = tier ?? 'STARTER'
+  const out = {} as Record<SubscriptionFeatureKey, boolean>
+  for (const key of Object.keys(SUBSCRIPTION_FEATURES) as SubscriptionFeatureKey[]) {
+    out[key] = overrides?.[key] ?? TIER_FEATURE_DEFAULTS[t]?.[key] ?? false
+  }
+  return out
+}
+
+// ─── Subscription Resolver ──────────────────────────────────────────────────
+
+/**
+ * Merge a partner's base subscription plan with an optional custom-subscription
+ * override record. Any non-null value on the custom override wins; unset fields
+ * fall back to the base plan; hard defaults apply when neither is present.
+ *
+ * Pure function — no DB access. Unit-testable without mocks.
+ * `custom.featureOverrides` is typed as a partial record but arrives from Prisma
+ * as JsonValue — cast at the DB boundary (call site) before passing here.
+ */
+export function resolveEffectiveSubscription(
+  plan: { tier: SubscriptionTier; name: string; monthlyPrice: number; maxSites: number } | null,
+  custom: { maxSites: number | null; featureOverrides?: Partial<Record<SubscriptionFeatureKey, boolean>> | null } | null,
+) {
+  const tier = plan?.tier ?? ('STARTER' as SubscriptionTier)
+  return {
+    tier,
+    name:         plan?.name         ?? 'Starter',
+    monthlyPrice: plan?.monthlyPrice ?? 0,
+    maxSites:     custom?.maxSites   ?? plan?.maxSites ?? 1,
+    isCustom:     custom != null && custom.maxSites != null,
+    features:     resolveEffectiveFeatures(tier, custom?.featureOverrides ?? null),
+  }
+}
 
 /**
  * Fetch the partner's current subscription with plan details.
@@ -27,27 +99,44 @@ export async function getPartnerSubscription(partnerAccountId: string) {
 }
 
 /**
- * Check whether the partner is allowed to create another site
- * based on their subscription plan's maxSites limit.
+ * Load and resolve the effective subscription (plan + custom overrides) for a partner.
+ * Returns all merged fields including feature entitlements.
+ */
+export async function getEffectiveSubscriptionForUser(userId: string) {
+  const account = await prisma.partnerAccount.findUnique({
+    where: { userId },
+    select: {
+      customSubscription: true,
+      subscription: { include: { plan: true } },
+    },
+  })
+  return resolveEffectiveSubscription(
+    account?.subscription?.plan ?? null,
+    (account?.customSubscription as any) ?? null,
+  )
+}
+
+/**
+ * Check whether the partner is allowed to create another site.
+ * Respects a CustomSubscription override when present.
  *
- * Returns { allowed, currentCount, maxSites, tier }.
+ * Returns { allowed, currentCount, maxSites, tier, overridden }.
+ * `overridden` is true when the effective maxSites comes from a
+ * CustomSubscription record rather than the base plan.
  */
 export async function canCreateSite(userId: string) {
-  const subscription = await getPartnerSubscription(userId)
-
-  // No subscription → treat as Starter (1 site max)
-  const maxSites = subscription?.plan?.maxSites ?? 1
-  const tier = subscription?.plan?.tier ?? 'STARTER'
+  const effective = await getEffectiveSubscriptionForUser(userId)
 
   const currentCount = await prisma.site.count({
     where: { userId },
   })
 
   return {
-    allowed: currentCount < maxSites,
+    allowed:      currentCount < effective.maxSites,
     currentCount,
-    maxSites,
-    tier,
+    maxSites:     effective.maxSites,
+    tier:         effective.tier,
+    overridden:   effective.isCustom,
   }
 }
 

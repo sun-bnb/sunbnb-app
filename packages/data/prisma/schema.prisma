@@ -184,12 +184,24 @@ model PartnerAccount {
   mollieAccessToken    String?      @map("mollie_access_token")
   mollieRefreshToken   String?      @map("mollie_refresh_token")
   mollieOnboardingStatus String?    @map("mollie_onboarding_status")
-  invoices     Invoice[]
-  settlements  Settlement[]
-  subscription Subscription?
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  serviceFees  ServiceFee[]
-  restaurants  Restaurant[]
+  invoices            Invoice[]
+  settlements         Settlement[]
+  subscription        Subscription?
+  customSubscription  CustomSubscription?
+  user                User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serviceFees         ServiceFee[]
+  restaurants         Restaurant[]
+}
+
+model CustomSubscription {
+  id               String         @id @default(cuid())
+  partnerAccountId String         @unique @map("partner_account_id")
+  maxSites         Int?           @map("max_sites")
+  notes            String?
+  featureOverrides Json?          @map("feature_overrides")
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  partnerAccount   PartnerAccount @relation(fields: [partnerAccountId], references: [userId], onDelete: Cascade)
 }
 
 model Site {

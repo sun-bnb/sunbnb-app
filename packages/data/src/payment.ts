@@ -27,6 +27,7 @@ import {
   RENTAL_COMPLETE,
   ORDER_COMPLETE,
 } from './reservation-status'
+import { resolveEffectiveFeatures, type SubscriptionFeatureKey } from './subscription'
 
 // ─── Financial Utilities ────────────────────────────────────────────────────
 
@@ -192,12 +193,14 @@ export interface FeeContext {
 
 export interface SiteFeeContext extends FeeContext {
   tier: SubscriptionTier | null
+  features: Record<SubscriptionFeatureKey, boolean>
 }
 
 export interface PartnerFeeContext {
   partnerAccount: FeeContext['partnerAccount']
   settings: FeeContext['settings']
   tier: SubscriptionTier | null
+  features: Record<SubscriptionFeatureKey, boolean>
 }
 
 const SETTINGS_INCLUDE = {
@@ -242,17 +245,20 @@ export async function getSiteFeeContext(siteId: string): Promise<SiteFeeContext>
     include: {
       serviceFees: true,
       subscription: { include: { plan: { select: { tier: true } } } },
+      customSubscription: true,
     },
   })
 
   const settings = await findCountryMatchedSettings(partnerAccount?.country)
   const tier = partnerAccount?.subscription?.plan?.tier ?? null
+  const featureOverrides = (partnerAccount?.customSubscription?.featureOverrides as any) ?? null
 
   return {
     site: site as FeeContext['site'],
     partnerAccount,
     settings,
     tier,
+    features: resolveEffectiveFeatures(tier, featureOverrides),
   }
 }
 
@@ -267,11 +273,18 @@ export async function getPartnerFeeContext(userId: string): Promise<PartnerFeeCo
     include: {
       serviceFees: true,
       subscription: { include: { plan: { select: { tier: true } } } },
+      customSubscription: true,
     },
   })
   const settings = await findCountryMatchedSettings(partnerAccount?.country)
   const tier = partnerAccount?.subscription?.plan?.tier ?? null
-  return { partnerAccount, settings, tier }
+  const featureOverrides = (partnerAccount?.customSubscription?.featureOverrides as any) ?? null
+  return {
+    partnerAccount,
+    settings,
+    tier,
+    features: resolveEffectiveFeatures(tier, featureOverrides),
+  }
 }
 
 /**

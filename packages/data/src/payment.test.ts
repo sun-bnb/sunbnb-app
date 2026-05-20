@@ -164,6 +164,38 @@ describe('resolveServiceFee', () => {
     const result = resolveServiceFee([], [], [defaultFee], 'sunbed-rental')
     expect(result?.id).toBe('default')
   })
+
+  it('account fee with percentage:0 wins over tier platform fee (commission override)', () => {
+    // An account-level fee with percentage:0 and no subscriptionTier set represents a
+    // custom-subscription commission waiver. It must win over any tier platform fee
+    // regardless of which tier the caller passes — locking in the override behavior.
+    const accountFee = makeFee({
+      id: 'account-waiver',
+      accountId: 'acc-1',
+      chargeType: 'percentage',
+      percentage: 0,
+      subscriptionTier: null,
+      feeAmount: null,
+    })
+    const platformFee = makeFee({
+      id: 'platform-tier',
+      settingsId: 'set-1',
+      subscriptionTier: 'STARTER' as any,
+      chargeType: 'percentage',
+      percentage: 5,
+      feeAmount: null,
+    })
+
+    // Account fee wins for STARTER tier
+    const resultStarter = resolveServiceFee([], [accountFee], [platformFee], 'sunbed-rental', 'STARTER' as any)
+    expect(resultStarter?.id).toBe('account-waiver')
+    expect(resultStarter?.percentage).toBe(0)
+
+    // Account fee also wins when caller passes PRO tier
+    const resultPro = resolveServiceFee([], [accountFee], [platformFee], 'sunbed-rental', 'PRO' as any)
+    expect(resultPro?.id).toBe('account-waiver')
+    expect(resultPro?.percentage).toBe(0)
+  })
 })
 
 // ─── calculateServiceFeeAmount() ────────────────────────────────────────────
