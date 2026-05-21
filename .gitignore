@@ -56,3 +56,6 @@ yarn-error.log*
 
 # AI context sync cursor (per-developer, not shared)
 .claude/context/state.json
+
+# Scheduled-tasks runtime lock (transient: sessionId/pid/timestamp)
+.claude/scheduled_tasks.lock
