@@ -2,6 +2,7 @@
 
 import React, { useState, useTransition } from 'react'
 import { useTranslations } from 'next-intl'
+import dayjs from 'dayjs'
 import { InventoryItem, Reservation } from '@/types/shared'
 import {
   reserveItem,
@@ -74,6 +75,12 @@ export default function BedDetail({
   const [guestName, setGuestName] = useState('')
   const [showBlock, setShowBlock] = useState(false)
   const [showNoShow, setShowNoShow] = useState(false)
+  const [until, setUntil] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const tomorrow = dayjs().add(1, 'day').format('YYYY-MM-DD')
+  const maxUntil = dayjs().add(90, 'day').format('YYYY-MM-DD')
+  const days = until ? dayjs(until).startOf('day').diff(dayjs().startOf('day'), 'day') + 1 : 1
 
   const stateLabels: Record<BedState, string> = {
     'available': t('free'),
@@ -87,10 +94,12 @@ export default function BedDetail({
   const state = getBedState(item)
   const pairNumber = item.pair?.number || item.pairedBy?.number
 
-  function runAction(fn: () => Promise<{ status: string }>) {
+  function runAction(fn: () => Promise<{ status: string; errors?: (string | undefined)[] }>) {
+    setError(null)
     startTransition(async () => {
       const result = await fn()
       if (result.status === 'ok') onClose()
+      else setError(result.errors?.[0] || 'Something went wrong')
     })
   }
 
@@ -115,6 +124,12 @@ export default function BedDetail({
           <button onClick={onClose} className="text-gray-400 text-3xl leading-none p-2">&times;</button>
         </div>
 
+        {error && (
+          <div className="mb-3 bg-red-50 border-2 border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+            {error}
+          </div>
+        )}
+
         {/* ── FREE — one big button to seat someone ── */}
         {state === 'available' && !showBlock && (
           <div className="space-y-3">
@@ -126,12 +141,42 @@ export default function BedDetail({
               className="w-full border-2 rounded-xl px-4 py-3.5 text-base"
               autoFocus
             />
+
+            {/* Multi-day stay — collapsed by default so the common one-day case stays a single tap */}
+            {until === '' ? (
+              <button
+                onClick={() => setUntil(tomorrow)}
+                className="w-full text-gray-400 text-sm py-1.5 active:text-gray-600"
+              >
+                {t('multipleDays')}
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 bg-gray-50 border-2 rounded-xl px-3 py-2.5">
+                <span className="text-sm font-medium text-gray-500 flex-shrink-0">{t('until')}</span>
+                <input
+                  type="date"
+                  value={until}
+                  min={tomorrow}
+                  max={maxUntil}
+                  onChange={e => setUntil(e.target.value || tomorrow)}
+                  className="flex-1 bg-transparent text-base font-medium outline-none"
+                />
+                <button
+                  onClick={() => setUntil('')}
+                  className="text-gray-400 text-2xl leading-none px-1 flex-shrink-0"
+                  aria-label={t('cancel')}
+                >
+                  &times;
+                </button>
+              </div>
+            )}
+
             <button
               disabled={isPending}
-              onClick={() => runAction(() => reserveItem(siteId, item.id, guestName || undefined, undefined, accessKey))}
+              onClick={() => runAction(() => reserveItem(siteId, item.id, guestName || undefined, undefined, accessKey, until || undefined))}
               className="w-full bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50"
             >
-              {isPending ? '...' : t('reserve')}
+              {isPending ? '...' : days > 1 ? t('reserveDays', { n: days }) : t('reserve')}
             </button>
             <button
               onClick={() => setShowBlock(true)}

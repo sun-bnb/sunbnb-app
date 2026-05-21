@@ -24,6 +24,7 @@ import {
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import dayjs from 'dayjs'
 
 const mockAuth = vi.mocked(auth)
 
@@ -141,6 +142,87 @@ describe('reserveItem', () => {
     const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
     expect(createCall.data.guestName).toHaveLength(200)
     expect(createCall.data.internalNotes).toHaveLength(500)
+  })
+
+  it('defaults to a single-day (today) reservation when no end date given', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
+
+    await reserveItem(SITE_ID, ITEM_ID)
+
+    const data = vi.mocked(prisma.reservation.create).mock.calls[0]![0].data
+    expect((data.from as Date).getTime()).toBe(dayjs().startOf('day').toDate().getTime())
+    expect((data.to as Date).getTime()).toBe(dayjs().endOf('day').toDate().getTime())
+  })
+
+  it('extends the reservation to the end of the given `until` date', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
+
+    const until = dayjs().add(3, 'day').format('YYYY-MM-DD')
+    const res = await reserveItem(SITE_ID, ITEM_ID, undefined, undefined, undefined, until)
+    expect(res.status).toBe('ok')
+
+    const data = vi.mocked(prisma.reservation.create).mock.calls[0]![0].data
+    expect((data.from as Date).getTime()).toBe(dayjs().startOf('day').toDate().getTime())
+    expect((data.to as Date).getTime()).toBe(dayjs(until).endOf('day').toDate().getTime())
+  })
+
+  it('checks the bed and its pair for conflicts across the whole range', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      id: ITEM_ID, pairId: 'pair-1', pairedBy: null,
+    } as any)
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
+
+    const until = dayjs().add(2, 'day').format('YYYY-MM-DD')
+    await reserveItem(SITE_ID, ITEM_ID, undefined, undefined, undefined, until)
+
+    const where = vi.mocked(prisma.reservation.findFirst).mock.calls[0]![0]!.where as any
+    expect(where.items.some.id.in).toEqual([ITEM_ID, 'pair-1'])
+    expect((where.from.lte as Date).getTime()).toBe(dayjs(until).endOf('day').toDate().getTime())
+    expect((where.to.gte as Date).getTime()).toBe(dayjs().startOf('day').toDate().getTime())
+  })
+
+  it('rejects when the bed is already reserved for part of the range', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({ id: 'existing' } as any)
+
+    const until = dayjs().add(4, 'day').format('YYYY-MM-DD')
+    const res = await reserveItem(SITE_ID, ITEM_ID, undefined, undefined, undefined, until)
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/already reserved/i)
+    expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
+  })
+
+  it('rejects an invalid end date', async () => {
+    authenticateAsOwner()
+    const res = await reserveItem(SITE_ID, ITEM_ID, undefined, undefined, undefined, 'not-a-date')
+    expect(res.status).toBe('error')
+    expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
+  })
+
+  it('rejects an end date in the past', async () => {
+    authenticateAsOwner()
+    const until = dayjs().subtract(1, 'day').format('YYYY-MM-DD')
+    const res = await reserveItem(SITE_ID, ITEM_ID, undefined, undefined, undefined, until)
+    expect(res.status).toBe('error')
+    expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
+  })
+
+  it('rejects a range longer than 90 days', async () => {
+    authenticateAsOwner()
+    const until = dayjs().add(91, 'day').format('YYYY-MM-DD')
+    const res = await reserveItem(SITE_ID, ITEM_ID, undefined, undefined, undefined, until)
+    expect(res.status).toBe('error')
+    expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
   })
 })
 

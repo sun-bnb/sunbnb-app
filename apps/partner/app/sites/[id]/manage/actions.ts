@@ -7,6 +7,7 @@ import dayjs from 'dayjs'
 import {
   RESERVATION_PAID_IN_CASH,
   RESERVATION_COMPLETE,
+  RESERVATION_CANCELED,
   RENTAL_COMPLETE,
   RENTAL_CANCELED,
   OP_EXPECTED,
@@ -70,21 +71,58 @@ export async function reserveItem(
   itemId: string,
   guestName?: string,
   internalNotes?: string,
-  accessKey?: string
+  accessKey?: string,
+  until?: string
 ) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  // The guest is being seated now, so the stay always starts today. `until`
+  // optionally extends it across multiple days; omitted means today only.
+  const fromDate = dayjs().startOf('day').toDate()
+  let toDate = dayjs().endOf('day').toDate()
+  if (until) {
+    if (isNaN(Date.parse(until))) {
+      return { status: 'error', errors: ['Invalid date format'] }
+    }
+    const days = dayjs(until).startOf('day').diff(dayjs().startOf('day'), 'day')
+    if (days < 0) {
+      return { status: 'error', errors: ['End date cannot be in the past'] }
+    }
+    if (days > 90) {
+      return { status: 'error', errors: ['Date range cannot exceed 90 days'] }
+    }
+    toDate = dayjs(until).endOf('day').toDate()
+  }
 
   const itemIds = [{ id: itemId }]
   const pairId = await getPairItemId(itemId)
   if (pairId) itemIds.push({ id: pairId })
 
+  // Reject if the bed (or its pair) is already reserved on any day in the range.
+  // The today-only case can't conflict — the Reserve action is only offered for
+  // beds that are free today — but a multi-day hold must not collide with an
+  // existing future booking.
+  const conflicting = await prisma.reservation.findFirst({
+    where: {
+      siteId,
+      status: { notIn: [RESERVATION_CANCELED] },
+      operationalStatus: { notIn: [OP_NO_SHOW, OP_DEPARTED] },
+      from: { lte: toDate },
+      to: { gte: fromDate },
+      items: { some: { id: { in: itemIds.map(i => i.id) } } },
+    },
+  })
+  if (conflicting) {
+    return { status: 'error', errors: ['Sunbed is already reserved for part of this period'] }
+  }
+
   await prisma.reservation.create({
     data: {
       userId: ownership.userId,
       type: 'days',
-      from: dayjs().startOf('day').toDate(),
-      to: dayjs().endOf('day').toDate(),
+      from: fromDate,
+      to: toDate,
       siteId,
       status: RESERVATION_PAID_IN_CASH,
       operationalStatus: OP_WALKED_IN,
