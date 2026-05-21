@@ -10,7 +10,7 @@ related:
   - entity:reservation
   - subsystem:auth
   - flow:reservation-payment
-last_verified: 2026-05-20
+last_verified: 2026-05-21
 ---
 
 # Flow: Walk-In / On-Site Management
@@ -34,14 +34,14 @@ All in `apps/partner/app/sites/[id]/manage/actions.ts`. Each validates the token
 
 | Action | What it does | Resulting status |
 |---|---|---|
-| `reserveItem(siteId, itemId, from, to, guestName?, …)` | Create a walk-in reservation for one item | `status: paid_in_cash`, `operationalStatus: walked-in` |
+| `reserveItem(siteId, itemId, guestName?, …, until?)` | Create a walk-in for one item (+ its pair). Starts **today**; optional `until` extends the stay across multiple days (max 90) | `status: paid_in_cash`, `operationalStatus: walked-in`, `checkedInAt` set |
 | `unreserveItem(reservationId)` | Cancel a not-yet-paid reservation | terminal cancel |
 | `checkInReservation(reservationId)` | Mark guest as arrived | `operationalStatus: checked-in`, `checkedInAt` set |
 | `markDeparted(reservationId)` | Mark guest as departed | `operationalStatus: departed`, `departedAt` set |
 | `markNoShow(reservationId)` | Mark no-show after deadline | `operationalStatus: no-show` |
 | `updateReservationNotes(reservationId, notes)` | Edit `internalNotes` | (notes only, no status change) |
 | `moveReservation(reservationId, newItemId)` | Reassign a reservation to a different bed | (link change) |
-| `blockBed(siteId, itemId, from, to)` | Mark a bed unavailable (maintenance, broken, reserved-for-staff) | A `Reservation` row with `operationalStatus: blocked`. Counts as `BLOCKING_STATUSES` |
+| `blockBed(siteId, itemId, notes?)` | Mark a bed (+ its pair) unavailable for **today** (maintenance, broken, reserved-for-staff) | A `Reservation` row with `operationalStatus: blocked`. Counts as `BLOCKING_STATUSES` |
 | `unblockBed(reservationId)` | Remove a bed-block | terminal cancel |
 | `markRentalPickedUp(rentalBookingId)` | Rental equipment handed over | `operationalStatus: picked-up`, `pickedUpAt` set |
 | `markRentalReturned(rentalBookingId)` | Rental equipment returned | `operationalStatus: returned`, `returnedAt` set |
@@ -76,6 +76,7 @@ Constants live in `packages/data/src/reservation-status.ts` under `OP_*`.
 3. **No-show transitions are deadline-driven.** `Site.noShowDeadlineMinutes` (when set) defines when an `expected` reservation becomes eligible for no-show marking. Currently a manual action, not auto-applied.
 4. **Move reservation is a link change**, not a copy. Same `id`, new `itemId` / join row. Beware of double-booking checks — the move should re-check availability for the target.
 5. **The manage page is the only public-route mutation surface in the partner app.** Every other partner action goes through Google OAuth.
+6. **Walk-ins and bed-blocks start today; only `reserveItem` extends forward.** Both set `from` to the start of today (the guest is seated now) — no back-dating. `reserveItem` takes an optional `until` to extend the stay across multiple days (capped at 90, validated as not-past); `blockBed` is today-only. Future-dated bookings are *not* made here — they go through the calendar's `createPartnerReservation` (`apps/partner/app/calendar/actions.ts`). Both auto-include the bed's **pair**, and `reserveItem` rejects the create if the item or its pair already has a non-terminal reservation overlapping any day in the range.
 
 ## Side effects
 
@@ -88,7 +89,7 @@ Constants live in `packages/data/src/reservation-status.ts` under `OP_*`.
 |---|---|---|
 | Invalid / expired `accessKey` | Action returns auth error | Staff must get a fresh token from `/security` |
 | Token scope mismatch | Action returns auth error | Token needs `resources` including `'all'` or `'manage_site'` |
-| Conflicting walk-in (item already booked for window) | Availability check inside `reserveItem` | `{ status: 'error' }` |
+| Conflicting walk-in (item or its pair already booked for any day in the range) | Overlap check inside `reserveItem` (excludes canceled / no-show / departed) | `{ status: 'error', errors: [...] }` |
 | `markNoShow` before deadline | Action enforces it (where applicable) | Wait until eligible |
 
 ## Related

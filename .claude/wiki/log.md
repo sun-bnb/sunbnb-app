@@ -54,3 +54,10 @@ Operations:
 - changed: `.claude/wiki/subsystems/schematic-editor.md` (new — draft); `.claude/wiki/index.md` (registered under Subsystems)
 - reason: the shared grid-geometry + editor-chrome layer (`@repo/schematic`, `@repo/schematic-editor`) is the single shared capability behind the sunbed inventory editor, the user sunbed-selection UI, and the restaurant tables editor — but had no synthesis page. Created as the cited shared-knowledge source for the new `sunbed-inventory` specialist agent and the `/schematic` skill. Status draft: core grid math + chair-util verified against code, editor-chrome internals not yet fully read.
 - by: claude (opus-4-7)
+
+## [2026-05-21] ingest | Multi-day staff walk-ins + corrected manage action contracts
+- mode: revise
+- changed: `.claude/wiki/flows/walk-in.md`
+- reason: `reserveItem` gained an optional `until` param for multi-day walk-in stays (starts today, max 90d) plus an item+pair overlap check that previously did not exist (apps/partner manage page feature). While revising, corrected stale signatures: the page documented `reserveItem(…, from, to, …)` and `blockBed(…, from, to)` date-window params that never existed in code.
+- follow-up: other rows in the Available-actions table use a simplified signature shorthand (omit/garble `siteId`/`accessKey`/reservationId — e.g. `unreserveItem`, `checkInReservation`); a `/wiki lint` pass on this page could reconcile the whole table against `manage/actions.ts`.
+- by: claude
