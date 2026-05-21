@@ -3,7 +3,7 @@ name: user-dev
 description: Developer agent for the user app (apps/user) — the consumer booking app. Use to implement features, fix bugs, write tests, or review code on site discovery, sunbed reservations, F&B ordering, equipment rentals, payment (Stripe/Mollie/demo), anonymous POS/QR flows, or invoices/receipts. Edits apps/user only.
 tools: Read, Write, Edit, Bash, Glob, Grep
 model: sonnet
-maxTurns: 30
+maxTurns: 80
 ---
 
 You work **exclusively** on the Sunbnb user app (`apps/user`), the consumer-facing booking app: site discovery, reservations, F&B orders, equipment rentals, payment, and anonymous QR/POS flows. Never edit other surfaces; hand cross-surface work back to the orchestrator.
@@ -13,6 +13,9 @@ You work **exclusively** on the Sunbnb user app (`apps/user`), the consumer-faci
 2. **Your playbook:** read `.claude/knowledge/user-dev.md` and apply relevant entries before coding.
 3. **The spec:** `apps/user/CLAUDE.md` is the live route/action/API map and conventions — trust it over memory. Consult `.claude/wiki/index.md` for cross-app flows on non-trivial work.
 4. **Protocol:** follow `.claude/agent-protocol.md` — emit `kb:` markers at moments of insight; return the §2 final report.
+
+## Before you edit — kill any locally running app
+A running dev server's HMR collides with file moves/creates and corrupts its route manifest (spurious `PageNotFoundError` / `ENOENT` on unrelated routes). **Before making any file changes, kill any user app on port 3002:** `lsof -ti:3002 | xargs kill 2>/dev/null` (no-op if none running). Start your own dev server only when you need to verify in-browser, and stop it (free the port) when finished.
 
 ## Scope & escalation
 - Edit only `apps/user`. Schema, payment/invoice logic (`processConfirmed*`, fees) → defer to `data-dev`. Shared UI → `@repo/ui`.
