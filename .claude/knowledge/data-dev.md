@@ -1,22 +1,31 @@
-# data-dev Knowledge Base
+# data-dev playbook
 
-Accumulated learnings from past tasks. Entries are appended automatically after solving novel problems.
+`data-dev`'s curated, growing memory for `packages/data` (`@repo/data`). Governed by
+`.claude/knowledge/README.md` (layer spec + trust ladder). Grow it via the gated
+retrospective; curate it via `workflows/groom.md`.
 
-## Migration Issues & Solutions
+## Navigation index
 
-<!-- Format: ### YYYY-MM-DD: <issue title>
-**Problem:** what went wrong
-**Solution:** how it was fixed
-**Prevention:** how to avoid it next time -->
+What this playbook knows, by theme. Maintained by grooming; scan it before reading
+sections.
 
-## Schema Quirks & Gotchas
+- **Schema & migrations** — `prisma migrate dev` advisory-lock contention (never background it) (2026-05-20)
+- **Payment / invoice / fee / subscription** — `resolveEffectiveSubscription` override convention (2026-05-20); feature-entitlement catalog/resolver + circular-import avoidance (2026-05-20)
+- **Integration test failures & fixes** — _none yet_
+- **PostGIS notes** — _none yet_
+- **Cross-app blast radius** — schema/export changes that rippled to app mocks — _none yet_
+- **Rejected approaches** — dead-ends, so nobody re-tries them — _none yet_
 
-<!-- Unexpected behaviors, constraints, or patterns in the Prisma schema -->
+---
+
+## Schema & migrations
 
 ### 2026-05-20: prisma migrate dev advisory lock contention from background process
 **Problem:** Running `npm run migrate:local` in the background (via `run_in_background`) then attempting a second `prisma migrate dev` in the foreground fails immediately with `P1002: Timed out trying to acquire a postgres advisory lock`. The background process holds the lock even when stdin is waiting for input.
 **Solution:** Kill the background process with `pkill -f "prisma migrate dev"` before retrying. Then pipe the migration name via stdin: `echo "migration_name" | npx prisma migrate dev`.
 **Prevention:** Never run `prisma migrate dev` as a background task. Always run it in the foreground with stdin piped for the name prompt.
+
+## Payment / invoice / fee / subscription
 
 ### 2026-05-20: effective-subscription resolution convention (CustomSubscription)
 **Problem:** Need a canonical way to merge a partner's base `SubscriptionPlan` with a sparse `CustomSubscription` override (null field = inherit base).
@@ -28,10 +37,22 @@ Accumulated learnings from past tasks. Entries are appended automatically after 
 **Solution:** `resolveEffectiveFeatures` is pure (no DB) and lives in `subscription.ts`. `payment.ts` imports it with `import { resolveEffectiveFeatures, type SubscriptionFeatureKey } from './subscription'`. `subscription.ts` does NOT import from `payment.ts`. No cycle. `featureOverrides` on `CustomSubscription` is `Json?` (JSONB) — cast as `any` at the DB boundary before passing to the pure resolver. Fee contexts (`SiteFeeContext`, `PartnerFeeContext`) add `features: Record<SubscriptionFeatureKey, boolean>` as an additive field; both `getSiteFeeContext` and `getPartnerFeeContext` add `customSubscription: true` to their partnerAccount includes.
 **Prevention:** Keep the feature resolver pure and in `subscription.ts`. Always cast Prisma `Json` fields to the expected type at the DB boundary, not inside pure helpers. Adding a new feature to the catalog is a one-liner in `SUBSCRIPTION_FEATURES` + `TIER_FEATURE_DEFAULTS` — no migration needed (sparse JSON map).
 
-## Integration Test Failures & Fixes
+## Integration test failures & fixes
 
-<!-- Test failures that required non-obvious fixes -->
+<!-- Entry format:
+### YYYY-MM-DD: <concise title>
+**Problem:** what went wrong / what was non-obvious
+**Solution:** what actually worked
+**Prevention:** how a future session avoids it (cite path/file.ts#symbol) -->
 
-## PostGIS Notes
+## PostGIS notes
 
-<!-- Spatial query patterns, index behaviors, geometry gotchas -->
+<!-- Spatial query patterns, GiST index behaviors, geometry gotchas -->
+
+## Cross-app blast radius
+
+<!-- Schema/export changes and what they rippled to (app mocks, consumers) -->
+
+## Rejected approaches
+
+<!-- Approaches tried and rejected — record so a future session doesn't re-try them -->

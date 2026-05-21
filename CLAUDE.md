@@ -43,11 +43,13 @@ When to use: **before** starting non-trivial multi-session work, check the regis
 
 ## Agents & protocol
 
-A **two-tier** agent model: broad **generalists** for coverage and narrow, cross-app **feature specialists** for depth. Definitions live in `.claude/agents/`; per-agent learnings in `.claude/knowledge/<agent>.md`.
+A **two-tier** agent model: per-surface **developer generalists** (`user-dev`, `partner-dev`, `admin-dev`, `data-dev` — one per app/package) for coverage, and narrow cross-app **feature specialists** (e.g. `sunbed-inventory`) for depth. Definitions live in `.claude/agents/`.
 
-- **Shared protocol:** `.claude/agent-protocol.md` — every agent follows it. Emit `kb:` knowledge markers (`decision`/`incident`/`gotcha`/`dead-end`/`observation`) for durable insights — the distiller captures them verbatim into the recall store — and return the standard final-report schema.
+- **Lean prompts, pulled depth.** An agent definition carries identity, scope boundary, and *how to pull* knowledge — not copied route maps or state machines. At task start each agent queries the recall vector store (`.claude/scripts/knowledge-recall.mjs`), reads its playbook (`.claude/knowledge/<agent>.md`), and consults the live canon (the `CLAUDE.md` tree, `.claude/rules/`, `.claude/wiki/`). Capability lives in the pulled stores; the prompt is the wiring.
+- **Self-improving.** Agents run a closed **produce → curate → promote** loop: a gated task-end retrospective emits `kb:` markers + curated playbook entries (produce); `.claude/knowledge/workflows/groom.md` dedupes/prunes and rebuilds each playbook's navigation index (curate); the **trust ladder** in `.claude/knowledge/README.md` promotes recurring, verified insight episodic → curated → canonical (`/wiki ingest`, proposed not silent). Agents never edit their own definitions.
+- **Shared protocol:** `.claude/agent-protocol.md` — every agent follows it. Emit `kb:` markers (`decision`/`incident`/`gotcha`/`dead-end`/`observation`); the distiller captures them verbatim into the recall store. Return the standard final-report schema.
 - **Shared capabilities** are skills + a wiki page, cited by all (not copied per-agent): e.g. `/schematic` + `subsystems/schematic-editor.md` is the grid/coordinate/editor layer behind the sunbed and table UIs.
-- **Specialists** own a named surface (e.g. `sunbed-inventory`); generalists are the fallback.
+- **Architecture is a concern, not an agent.** Cross-app design, blast-radius, and trade-off review are owned by the orchestrator and governed by `.claude/rules/architecture.md`; deep context-isolated design delegates to the `Plan` agent. There is no architect agent; generalists are the fallback when no specialist owns the surface.
 
 ## Commands
 

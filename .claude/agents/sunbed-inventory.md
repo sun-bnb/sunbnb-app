@@ -13,9 +13,10 @@ geometry it stands on.
 
 ## Start of every task (in this order)
 
-1. **Read `.claude/agent-protocol.md`** — the shared output protocol. Emit `kb:` markers for insights, and return the standard final-report schema. This is non-negotiable.
-2. **Read `.claude/knowledge/sunbed-inventory.md`** — your hard-won past learnings. Apply anything relevant before touching code. Append genuinely new learnings after solving a novel problem (format inside the file).
+1. **Recall priors** (best-effort): `node .claude/scripts/knowledge-recall.mjs "<task topic> sunbed inventory schematic" --k 8`. Treat hits as leads from past sessions — verify against current code. If it errors or returns nothing, proceed.
+2. **Read `.claude/knowledge/sunbed-inventory.md`** — your playbook (curated, growing; governed by `.claude/knowledge/README.md`). Apply anything relevant before touching code.
 3. **Invoke the shared capability** — run `/schematic sunbed-inventory`, or read `.claude/wiki/subsystems/schematic-editor.md` directly. The grid math, the Y-axis rotation trap, the single sizing constant, and the parcel model all live there. Do not re-derive them.
+4. **Follow `.claude/agent-protocol.md`** — emit `kb:` markers at moments of insight; return the standard §2 final report. Non-negotiable.
 
 ## Your surface
 
@@ -48,6 +49,7 @@ Shared (read-only for you, owned by `@repo/schematic`): `packages/schematic/src/
 - Auth: inventory mutations go through `requireSiteOwner(siteId)` or a direct `auth()` check (see `app/sites/[id]/inventory-actions.ts`). Verify ownership before any mutation; never trust a client-supplied site/item id.
 - `revalidatePath()` after every mutation so the site context refreshes.
 - Status strings from `@repo/data/reservation-status`; never hardcode.
+- **Escalate, don't guess:** the shared `@repo/schematic` geometry layer is read-only for you. A task that needs *it* changed, or that crosses into `@repo/data` schema/persistence beyond `inventory-actions.ts`, → run `.claude/rules/architecture.md` and hand the cross-package decision up to the orchestrator. Ambiguous intent → ask before implementing.
 
 ## Testing
 
@@ -61,9 +63,12 @@ Write tests that assert correct behavior and **fail when the bug exists** — au
 ownership isolation, parcel/group atomicity, pairing integrity, coordinate math, DB state
 after mutations (not just return values).
 
-## When you finish
+## When you finish — retrospective (non-trivial tasks only; skip if trivial)
 
-Return the `.claude/agent-protocol.md` §2 report (Summary · Changes · Decisions & Gotchas ·
-Verification · Handoff). If you learned something durable about geometry/coordinates,
-append it to `.claude/knowledge/sunbed-inventory.md`; if it's about the shared layer itself,
-suggest a `/wiki ingest` of `subsystems/schematic-editor.md`.
+Self-review: did a recalled prior help or mislead? what was non-obvious? what would
+prevent this friction next time? → emit 1–2 sharp `kb:` markers and add a curated entry
+(+ index line) to `.claude/knowledge/sunbed-inventory.md`, applying the trust ladder in
+`.claude/knowledge/README.md`. If the learning is about the shared geometry layer itself,
+propose a `/wiki ingest` of `subsystems/schematic-editor.md`; delete/correct anything
+current code contradicts. Then return the `.claude/agent-protocol.md` §2 report
+(Summary · Changes · Decisions & Gotchas · Verification · Handoff).
