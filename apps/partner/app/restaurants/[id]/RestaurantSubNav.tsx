@@ -6,20 +6,20 @@ import { useTranslations } from 'next-intl'
 export type RestaurantSubTab = 'settings' | 'tables' | 'menu' | 'reservations'
 
 export function RestaurantSubNav({
-  siteId,
+  restaurantId,
   active,
 }: {
-  siteId: string
+  restaurantId: string
   active: RestaurantSubTab
 }) {
   const router = useRouter()
   const t = useTranslations('Restaurant')
 
   const tabs: Array<{ key: RestaurantSubTab; label: string; href: string }> = [
-    { key: 'reservations', label: t('subNavReservations'), href: `/sites/${siteId}/restaurant/reservations` },
-    { key: 'tables', label: t('subNavTables'), href: `/sites/${siteId}/restaurant/tables` },
-    { key: 'menu', label: t('subNavMenu'), href: `/sites/${siteId}/restaurant/menu` },
-    { key: 'settings', label: t('subNavSettings'), href: `/sites/${siteId}/restaurant` },
+    { key: 'reservations', label: t('subNavReservations'), href: `/restaurants/${restaurantId}/reservations` },
+    { key: 'tables', label: t('subNavTables'), href: `/restaurants/${restaurantId}/tables` },
+    { key: 'menu', label: t('subNavMenu'), href: `/restaurants/${restaurantId}/menu` },
+    { key: 'settings', label: t('subNavSettings'), href: `/restaurants/${restaurantId}` },
   ]
 
   return (

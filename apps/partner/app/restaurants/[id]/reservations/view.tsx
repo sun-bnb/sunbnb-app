@@ -7,50 +7,40 @@ import {
   type ReservationListLabels,
 } from '@repo/table-reservations-ui'
 import type { TableReservationListItem } from '@repo/table-reservations-core'
-import { useSite } from '@/app/sites/site-context'
 import { RestaurantSubNav } from '../RestaurantSubNav'
 import {
-  getReservationsForDay,
-  markReservationSeated,
-  markReservationDeparted,
-  markReservationNoShow,
-  cancelReservationForSite,
-  setReservationInternalNotes,
+  getRestaurantReservationsForDay,
+  markRestaurantReservationSeated,
+  markRestaurantReservationDeparted,
+  markRestaurantReservationNoShow,
+  cancelRestaurantReservation,
+  setRestaurantReservationNotes,
 } from './actions'
 
-export default function ReservationsView() {
+function formatYmd(d: Date): string {
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
+}
+
+export default function ReservationsView({ restaurantId }: { restaurantId: string }) {
   const t = useTranslations('Restaurant')
-  const { site } = useSite()
-  const siteId = site.id || ''
 
   const [date, setDate] = useState(formatYmd(new Date()))
   const [items, setItems] = useState<TableReservationListItem[]>([])
   const [loading, setLoading] = useState(true)
 
   const refresh = useCallback(async () => {
-    const res = await getReservationsForDay(siteId, date)
+    const res = await getRestaurantReservationsForDay(restaurantId, date)
     if (res.status === 'ok') setItems(res.reservations)
     else setItems([])
-  }, [siteId, date])
+  }, [restaurantId, date])
 
   useEffect(() => {
-    if (!site.restaurantId) {
-      setItems([])
-      setLoading(false)
-      return
-    }
     setLoading(true)
     refresh().finally(() => setLoading(false))
-  }, [site.restaurantId, refresh])
-
-  if (!site.restaurantId) {
-    return (
-      <div className="pt-2">
-        <RestaurantSubNav siteId={siteId} active="reservations" />
-        <div className="p-4 text-sm text-gray-500">{t('reservationsRequireEnable')}</div>
-      </div>
-    )
-  }
+  }, [refresh])
 
   const labels: ReservationListLabels = {
     dateLabel: t('resDateLabel'),
@@ -85,7 +75,7 @@ export default function ReservationsView() {
 
   return (
     <div className="pt-2">
-      <RestaurantSubNav siteId={siteId} active="reservations" />
+      <RestaurantSubNav restaurantId={restaurantId} active="reservations" />
       <div className="p-4">
         {loading ? (
           <div className="text-sm text-gray-500">{t('loading')}</div>
@@ -96,27 +86,27 @@ export default function ReservationsView() {
             labels={labels}
             onChangeDate={(d) => setDate(d)}
             onMarkSeated={async (id) => {
-              const res = await markReservationSeated(siteId, id)
+              const res = await markRestaurantReservationSeated(restaurantId, id)
               if (res.status === 'ok') await refresh()
               return res
             }}
             onMarkDeparted={async (id) => {
-              const res = await markReservationDeparted(siteId, id)
+              const res = await markRestaurantReservationDeparted(restaurantId, id)
               if (res.status === 'ok') await refresh()
               return res
             }}
             onMarkNoShow={async (id) => {
-              const res = await markReservationNoShow(siteId, id)
+              const res = await markRestaurantReservationNoShow(restaurantId, id)
               if (res.status === 'ok') await refresh()
               return res
             }}
             onCancel={async (id) => {
-              const res = await cancelReservationForSite(siteId, id)
+              const res = await cancelRestaurantReservation(restaurantId, id)
               if (res.status === 'ok') await refresh()
               return res
             }}
             onUpdateNotes={async (id, notes) => {
-              const res = await setReservationInternalNotes(siteId, id, notes)
+              const res = await setRestaurantReservationNotes(restaurantId, id, notes)
               if (res.status === 'ok') await refresh()
               return res
             }}
@@ -125,11 +115,4 @@ export default function ReservationsView() {
       </div>
     </div>
   )
-}
-
-function formatYmd(d: Date): string {
-  const yyyy = d.getFullYear()
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd}`
 }

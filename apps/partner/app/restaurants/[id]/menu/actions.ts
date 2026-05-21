@@ -3,9 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import crypto from 'node:crypto'
 import { put } from '@vercel/blob'
-import { requireSiteOwnerWithFlag } from '@/lib/auth-helpers'
+import { requireRestaurantOwnerWithFlag } from '@/lib/auth-helpers'
 import { validateImageFile } from '@/lib/validation'
-import prisma from '@repo/data/PrismaCient'
 import {
   createMenuItem,
   updateMenuItem,
@@ -15,28 +14,17 @@ import {
   type MenuItemInput,
 } from '@repo/table-reservations-core'
 
-type LinkedOk = { ok: true; restaurantId: string; userId: string }
-type LinkedErr = { ok: false; error: string }
+type AuthOk = { ok: true; userId: string }
+type AuthErr = { ok: false; error: string }
 
-async function requireLinkedRestaurant(siteId: string): Promise<LinkedOk | LinkedErr> {
-  const { session, error } = await requireSiteOwnerWithFlag(siteId, 'restaurants')
+async function requireAuth(restaurantId: string): Promise<AuthOk | AuthErr> {
+  const { session, error } = await requireRestaurantOwnerWithFlag(restaurantId, 'restaurants')
   if (error) return { ok: false, error }
-
-  const site = await prisma.site.findUnique({
-    where: { id: siteId },
-    select: { restaurantId: true },
-  })
-  if (!site?.restaurantId) return { ok: false, error: 'Site has no linked restaurant' }
-  return { ok: true, restaurantId: site.restaurantId, userId: session!.user.id as string }
+  return { ok: true, userId: session!.user.id as string }
 }
 
-/**
- * Upload a menu-item image to Vercel Blob and return the public URL.
- * Partner-side only: content-type and size validation happens via
- * validateImageFile; the path namespaces blobs under the owning site.
- */
 async function uploadMenuItemImage(
-  siteId: string,
+  restaurantId: string,
   file: File,
 ): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
   const check = validateImageFile(file)
@@ -52,13 +40,13 @@ async function uploadMenuItemImage(
         'image/gif': 'gif',
       } as Record<string, string>
     )[file.type] ?? 'bin'
-  const key = `sites/${siteId}/menu/${crypto.randomUUID()}.${ext}`
+  const key = `restaurants/${restaurantId}/menu/${crypto.randomUUID()}.${ext}`
   const blob = await put(key, buffer, { access: 'public', contentType: file.type })
   return { ok: true, url: blob.url }
 }
 
-export async function createMenuItemForSite(siteId: string, formData: FormData) {
-  const r = await requireLinkedRestaurant(siteId)
+export async function createMenuItemForRestaurant(restaurantId: string, formData: FormData) {
+  const r = await requireAuth(restaurantId)
   if (!r.ok) return { status: 'error' as const, errors: [r.error] }
 
   const name = String(formData.get('name') ?? '').trim()
@@ -76,32 +64,26 @@ export async function createMenuItemForSite(siteId: string, formData: FormData) 
     imageUrl = imageUrlField
   }
   if (imageFile && imageFile.size > 0) {
-    const up = await uploadMenuItemImage(siteId, imageFile)
+    const up = await uploadMenuItemImage(restaurantId, imageFile)
     if (!up.ok) return { status: 'error' as const, errors: [up.error] }
     imageUrl = up.url
   }
 
   const res = await createMenuItem(
-    r.restaurantId,
-    {
-      name,
-      description: description || null,
-      price,
-      category,
-      imageUrl,
-    } as MenuItemInput,
+    restaurantId,
+    { name, description: description || null, price, category, imageUrl } as MenuItemInput,
     r.userId,
   )
-  if (res.status === 'ok') revalidatePath(`/sites/${siteId}/restaurant/menu`)
+  if (res.status === 'ok') revalidatePath(`/restaurants/${restaurantId}/menu`)
   return res
 }
 
-export async function updateMenuItemForSite(
-  siteId: string,
+export async function updateMenuItemForRestaurant(
+  restaurantId: string,
   menuItemId: string,
   formData: FormData,
 ) {
-  const r = await requireLinkedRestaurant(siteId)
+  const r = await requireAuth(restaurantId)
   if (!r.ok) return { status: 'error' as const, errors: [r.error] }
 
   const name = formData.get('name')
@@ -123,7 +105,7 @@ export async function updateMenuItemForSite(
   if (typeof category === 'string') patch.category = category.trim() || 'main'
 
   if (imageFile && imageFile.size > 0) {
-    const up = await uploadMenuItemImage(siteId, imageFile)
+    const up = await uploadMenuItemImage(restaurantId, imageFile)
     if (!up.ok) return { status: 'error' as const, errors: [up.error] }
     patch.imageUrl = up.url
   } else if (removeImage) {
@@ -133,37 +115,37 @@ export async function updateMenuItemForSite(
   }
 
   const res = await updateMenuItem(menuItemId, patch, r.userId)
-  if (res.status === 'ok') revalidatePath(`/sites/${siteId}/restaurant/menu`)
+  if (res.status === 'ok') revalidatePath(`/restaurants/${restaurantId}/menu`)
   return res
 }
 
-export async function archiveMenuItemForSite(siteId: string, menuItemId: string) {
-  const r = await requireLinkedRestaurant(siteId)
+export async function archiveMenuItemForRestaurant(restaurantId: string, menuItemId: string) {
+  const r = await requireAuth(restaurantId)
   if (!r.ok) return { status: 'error' as const, errors: [r.error] }
 
   const res = await archiveMenuItem(menuItemId, r.userId)
-  if (res.status === 'ok') revalidatePath(`/sites/${siteId}/restaurant/menu`)
+  if (res.status === 'ok') revalidatePath(`/restaurants/${restaurantId}/menu`)
   return res
 }
 
-export async function setMenuItemSoldOutForSite(
-  siteId: string,
+export async function setMenuItemSoldOutForRestaurant(
+  restaurantId: string,
   menuItemId: string,
   soldOut: boolean,
 ) {
-  const r = await requireLinkedRestaurant(siteId)
+  const r = await requireAuth(restaurantId)
   if (!r.ok) return { status: 'error' as const, errors: [r.error] }
 
   const res = await setMenuItemSoldOut(menuItemId, soldOut, r.userId)
-  if (res.status === 'ok') revalidatePath(`/sites/${siteId}/restaurant/menu`)
+  if (res.status === 'ok') revalidatePath(`/restaurants/${restaurantId}/menu`)
   return res
 }
 
-export async function reorderMenuItemsForSite(siteId: string, orderedIds: string[]) {
-  const r = await requireLinkedRestaurant(siteId)
+export async function reorderMenuItemsForRestaurant(restaurantId: string, orderedIds: string[]) {
+  const r = await requireAuth(restaurantId)
   if (!r.ok) return { status: 'error' as const, errors: [r.error] }
 
-  const res = await reorderMenuItems(r.restaurantId, orderedIds, r.userId)
-  if (res.status === 'ok') revalidatePath(`/sites/${siteId}/restaurant/menu`)
+  const res = await reorderMenuItems(restaurantId, orderedIds, r.userId)
+  if (res.status === 'ok') revalidatePath(`/restaurants/${restaurantId}/menu`)
   return res
 }

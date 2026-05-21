@@ -4,56 +4,39 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { MenuEditor, type MenuEditorLabels } from '@repo/table-reservations-ui'
 import type { MenuItemRecord } from '@repo/table-reservations-core'
-import { useSite } from '@/app/sites/site-context'
-import { getLinkedRestaurantMenu } from '../queries'
+import { getRestaurantMenu } from '../queries'
 import {
-  createMenuItemForSite,
-  updateMenuItemForSite,
-  archiveMenuItemForSite,
-  setMenuItemSoldOutForSite,
-  reorderMenuItemsForSite,
+  createMenuItemForRestaurant,
+  updateMenuItemForRestaurant,
+  archiveMenuItemForRestaurant,
+  setMenuItemSoldOutForRestaurant,
+  reorderMenuItemsForRestaurant,
 } from './actions'
 import { RestaurantSubNav } from '../RestaurantSubNav'
 
-export default function MenuView() {
+export default function MenuView({ restaurantId }: { restaurantId: string }) {
   const t = useTranslations('Restaurant')
-  const { site } = useSite()
-  const siteId = site.id || ''
 
   const [items, setItems] = useState<MenuItemRecord[]>([])
   const [loading, setLoading] = useState(true)
 
   const refresh = useCallback(async () => {
-    const list = await getLinkedRestaurantMenu(siteId)
+    const list = await getRestaurantMenu(restaurantId)
     setItems(list ?? [])
-  }, [siteId])
+  }, [restaurantId])
 
   useEffect(() => {
-    if (!site.restaurantId) {
-      setItems([])
-      setLoading(false)
-      return
-    }
     setLoading(true)
-    getLinkedRestaurantMenu(siteId).then((list) => {
+    getRestaurantMenu(restaurantId).then((list) => {
       setItems(list ?? [])
       setLoading(false)
     })
-  }, [site.restaurantId, siteId])
-
-  if (!site.restaurantId) {
-    return (
-      <div className="pt-2">
-        <RestaurantSubNav siteId={siteId} active="menu" />
-        <div className="p-4 text-sm text-gray-500">{t('menuRequiresEnable')}</div>
-      </div>
-    )
-  }
+  }, [restaurantId])
 
   if (loading) {
     return (
       <div className="pt-2">
-        <RestaurantSubNav siteId={siteId} active="menu" />
+        <RestaurantSubNav restaurantId={restaurantId} active="menu" />
         <div className="p-4 text-sm text-gray-500">{t('loading')}</div>
       </div>
     )
@@ -93,7 +76,7 @@ export default function MenuView() {
 
   return (
     <div className="pt-2">
-      <RestaurantSubNav siteId={siteId} active="menu" />
+      <RestaurantSubNav restaurantId={restaurantId} active="menu" />
       <div className="p-4">
         <MenuEditor
           items={items}
@@ -106,7 +89,7 @@ export default function MenuView() {
             fd.set('category', values.category)
             if (values.imageFile) fd.set('imageFile', values.imageFile)
             if (values.imageUrl) fd.set('imageUrl', values.imageUrl)
-            const res = await createMenuItemForSite(siteId, fd)
+            const res = await createMenuItemForRestaurant(restaurantId, fd)
             if (res.status === 'ok') await refresh()
             return res
           }}
@@ -119,22 +102,22 @@ export default function MenuView() {
             if (values.imageFile) fd.set('imageFile', values.imageFile)
             else if (values.imageUrl === null) fd.set('removeImage', '1')
             else if (values.imageUrl) fd.set('imageUrl', values.imageUrl)
-            const res = await updateMenuItemForSite(siteId, id, fd)
+            const res = await updateMenuItemForRestaurant(restaurantId, id, fd)
             if (res.status === 'ok') await refresh()
             return res
           }}
           onArchive={async (id) => {
-            const res = await archiveMenuItemForSite(siteId, id)
+            const res = await archiveMenuItemForRestaurant(restaurantId, id)
             if (res.status === 'ok') await refresh()
             return res
           }}
           onToggleSoldOut={async (id, soldOut) => {
-            const res = await setMenuItemSoldOutForSite(siteId, id, soldOut)
+            const res = await setMenuItemSoldOutForRestaurant(restaurantId, id, soldOut)
             if (res.status === 'ok') await refresh()
             return res
           }}
           onReorder={async (ids) => {
-            const res = await reorderMenuItemsForSite(siteId, ids)
+            const res = await reorderMenuItemsForRestaurant(restaurantId, ids)
             if (res.status === 'ok') await refresh()
             return res
           }}

@@ -7,6 +7,7 @@
     "dashboard": "Panel",
     "frontdesk": "Recepción",
     "sites": "Sitios",
+    "restaurants": "Restaurantes",
     "calendar": "Calendario",
     "security": "Seguridad",
     "account": "Cuenta",
@@ -135,7 +136,12 @@
     "restaurant": "Restaurante",
     "products": "Productos",
     "rentals": "Alquileres",
-    "accounting": "Contabilidad"
+    "accounting": "Contabilidad",
+    "restaurantManage": "Gestionar restaurante →",
+    "restaurantAdd": "Añadir restaurante",
+    "restaurantAddDescription": "Activa las reservas de mesa para este sitio.",
+    "restaurantCreating": "Creando…",
+    "restaurantError": "No se pudo crear el restaurante"
   },
   "Restaurant": {
     "enableTitle": "Reservas de mesa",
@@ -304,7 +310,8 @@
     "gridRotation": "Rotación (°)",
     "gridCreate": "Crear",
     "gridCreating": "Creando…",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "linkedSiteLink": "← Volver al sitio"
   },
   "SiteSchematic": {
     "layoutWidth": "Ancho",

@@ -7,6 +7,7 @@
     "dashboard": "Dashboard",
     "frontdesk": "Frontdesk",
     "sites": "Sites",
+    "restaurants": "Restaurants",
     "calendar": "Calendar",
     "security": "Security",
     "account": "Account",
@@ -135,7 +136,12 @@
     "restaurant": "Restaurant",
     "products": "Products",
     "rentals": "Rentals",
-    "accounting": "Accounting"
+    "accounting": "Accounting",
+    "restaurantManage": "Manage restaurant →",
+    "restaurantAdd": "Add a restaurant",
+    "restaurantAddDescription": "Enable table reservations for this site.",
+    "restaurantCreating": "Creating…",
+    "restaurantError": "Could not create restaurant"
   },
   "Restaurant": {
     "enableTitle": "Table reservations",
@@ -304,7 +310,8 @@
     "gridRotation": "Rotation (°)",
     "gridCreate": "Create",
     "gridCreating": "Creating…",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "linkedSiteLink": "← Back to site"
   },
   "SiteSchematic": {
     "layoutWidth": "Width",

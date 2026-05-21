@@ -17,63 +17,46 @@ import {
   CanvasDimensionsHeader,
   type SaveStatus,
 } from '@repo/schematic-editor'
-import { useSite } from '@/app/sites/site-context'
-import { getLinkedRestaurantLayout, type LinkedRestaurantLayout } from '../queries'
+import { getRestaurantLayout, type RestaurantLayout } from '../queries'
 import {
-  createTableForSite,
-  updateTableForSite,
-  deleteTableForSite,
-  duplicateTableForSite,
-  createTableGridForSite,
-  createElementForSite,
-  updateElementForSite,
-  deleteElementForSite,
-  saveRestaurantDimensions,
+  createTableForRestaurant,
+  updateTableForRestaurant,
+  deleteTableForRestaurant,
+  duplicateTableForRestaurant,
+  createTableGridForRestaurant,
+  createElementForRestaurant,
+  updateElementForRestaurant,
+  deleteElementForRestaurant,
+  saveRestaurantCanvasDimensions,
 } from './actions'
 import { RestaurantSubNav } from '../RestaurantSubNav'
 
-export default function TablesView() {
+export default function TablesView({ restaurantId }: { restaurantId: string }) {
   const t = useTranslations('Restaurant')
   const tGeneral = useTranslations('SiteGeneral')
-  const { site } = useSite()
-  const siteId = site.id || ''
 
-  const [layout, setLayout] = useState<LinkedRestaurantLayout | null>(null)
+  const [layout, setLayout] = useState<RestaurantLayout | null>(null)
   const [loading, setLoading] = useState(true)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [saveErrors, setSaveErrors] = useState<string[]>([])
 
   const refresh = useCallback(async () => {
-    const l = await getLinkedRestaurantLayout(siteId)
+    const l = await getRestaurantLayout(restaurantId)
     setLayout(l)
-  }, [siteId])
+  }, [restaurantId])
 
   useEffect(() => {
-    if (!site.restaurantId) {
-      setLayout(null)
-      setLoading(false)
-      return
-    }
     setLoading(true)
-    getLinkedRestaurantLayout(siteId).then((l) => {
+    getRestaurantLayout(restaurantId).then((l) => {
       setLayout(l)
       setLoading(false)
     })
-  }, [site.restaurantId, siteId])
-
-  if (!site.restaurantId) {
-    return (
-      <div className="pt-2">
-        <RestaurantSubNav siteId={siteId} active="tables" />
-        <div className="p-4 text-sm text-gray-500">{t('tablesRequireEnable')}</div>
-      </div>
-    )
-  }
+  }, [restaurantId])
 
   if (loading || !layout) {
     return (
       <div className="pt-2">
-        <RestaurantSubNav siteId={siteId} active="tables" />
+        <RestaurantSubNav restaurantId={restaurantId} active="tables" />
         <div className="p-4 text-sm text-gray-500">{t('loading')}</div>
       </div>
     )
@@ -198,7 +181,7 @@ export default function TablesView() {
 
   return (
     <div className="pt-2">
-      <RestaurantSubNav siteId={siteId} active="tables" />
+      <RestaurantSubNav restaurantId={restaurantId} active="tables" />
       <div className="p-4">
         <SaveStatusBanner
           status={saveStatus}
@@ -221,7 +204,7 @@ export default function TablesView() {
             }}
             onSave={async (w, h) => {
               trackSave('saving')
-              const res = await saveRestaurantDimensions(siteId, w, h)
+              const res = await saveRestaurantCanvasDimensions(restaurantId, w, h)
               if (res.status === 'ok') {
                 await refresh()
                 trackSave('saved')
@@ -231,77 +214,77 @@ export default function TablesView() {
             }}
           />
         </div>
-      <TableLayoutEditor
-        worldWidth={layout.layoutWidth}
-        worldHeight={layout.layoutHeight}
-        tables={layout.tables as TableRecord[]}
-        elements={layout.elements as LayoutElementRecord[]}
-        labels={labels}
-        onSaveStatusChange={trackSave}
-        onTablePatch={async (tableId, patch) => {
-          const res = await updateTableForSite(siteId, tableId, patch as Partial<TableInput>)
-          if (res.status === 'ok') await refresh()
-          return res
-        }}
-        onTableDelete={async (tableId) => {
-          const res = await deleteTableForSite(siteId, tableId)
-          if (res.status === 'ok') await refresh()
-          return res
-        }}
-        onTableDuplicate={async (tableId) => {
-          const res = await duplicateTableForSite(siteId, tableId)
-          if (res.status === 'ok') await refresh()
-          return res
-        }}
-        onTableCreate={async (at) => {
-          const res = await createTableForSite(siteId, at)
-          if (res.status === 'ok') await refresh()
-          return res
-        }}
-        onTableGrid={async (input) => {
-          const res = await createTableGridForSite(siteId, input)
-          if (res.status === 'ok') await refresh()
-          return res
-        }}
-        onElementCreate={async (at, type) => {
-          const preset = RESTAURANT_ELEMENT_PRESETS[type]
-          if (!preset) {
-            return { status: 'error' as const, errors: ['Unknown element type'] }
-          }
-          const res = await createElementForSite(siteId, {
-            type: preset.type,
-            shape: preset.shape,
-            x: at.x - preset.width / 2,
-            y: at.y - preset.height / 2,
-            width: preset.width,
-            height: preset.height,
-          })
-          if (res.status === 'ok') await refresh()
-          return res
-        }}
-        onElementPatch={async (elementId, patch) => {
-          const res = await updateElementForSite(siteId, elementId, patch as Partial<{
-            type: string
-            shape: 'rect' | 'ellipse' | 'icon'
-            x: number
-            y: number
-            width: number
-            height: number
-            rotation: number
-            z: number
-            label: string | null
-            color: string | null
-            cornerRadius: number | null
-          }>)
-          if (res.status === 'ok') await refresh()
-          return res
-        }}
-        onElementDelete={async (elementId) => {
-          const res = await deleteElementForSite(siteId, elementId)
-          if (res.status === 'ok') await refresh()
-          return res
-        }}
-      />
+        <TableLayoutEditor
+          worldWidth={layout.layoutWidth}
+          worldHeight={layout.layoutHeight}
+          tables={layout.tables as TableRecord[]}
+          elements={layout.elements as LayoutElementRecord[]}
+          labels={labels}
+          onSaveStatusChange={trackSave}
+          onTablePatch={async (tableId, patch) => {
+            const res = await updateTableForRestaurant(restaurantId, tableId, patch as Partial<TableInput>)
+            if (res.status === 'ok') await refresh()
+            return res
+          }}
+          onTableDelete={async (tableId) => {
+            const res = await deleteTableForRestaurant(restaurantId, tableId)
+            if (res.status === 'ok') await refresh()
+            return res
+          }}
+          onTableDuplicate={async (tableId) => {
+            const res = await duplicateTableForRestaurant(restaurantId, tableId)
+            if (res.status === 'ok') await refresh()
+            return res
+          }}
+          onTableCreate={async (at) => {
+            const res = await createTableForRestaurant(restaurantId, at)
+            if (res.status === 'ok') await refresh()
+            return res
+          }}
+          onTableGrid={async (input) => {
+            const res = await createTableGridForRestaurant(restaurantId, input)
+            if (res.status === 'ok') await refresh()
+            return res
+          }}
+          onElementCreate={async (at, type) => {
+            const preset = RESTAURANT_ELEMENT_PRESETS[type]
+            if (!preset) {
+              return { status: 'error' as const, errors: ['Unknown element type'] }
+            }
+            const res = await createElementForRestaurant(restaurantId, {
+              type: preset.type,
+              shape: preset.shape,
+              x: at.x - preset.width / 2,
+              y: at.y - preset.height / 2,
+              width: preset.width,
+              height: preset.height,
+            })
+            if (res.status === 'ok') await refresh()
+            return res
+          }}
+          onElementPatch={async (elementId, patch) => {
+            const res = await updateElementForRestaurant(restaurantId, elementId, patch as Partial<{
+              type: string
+              shape: 'rect' | 'ellipse' | 'icon'
+              x: number
+              y: number
+              width: number
+              height: number
+              rotation: number
+              z: number
+              label: string | null
+              color: string | null
+              cornerRadius: number | null
+            }>)
+            if (res.status === 'ok') await refresh()
+            return res
+          }}
+          onElementDelete={async (elementId) => {
+            const res = await deleteElementForRestaurant(restaurantId, elementId)
+            if (res.status === 'ok') await refresh()
+            return res
+          }}
+        />
       </div>
     </div>
   )

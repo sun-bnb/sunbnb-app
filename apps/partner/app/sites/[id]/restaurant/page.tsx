@@ -1,10 +1,16 @@
-import SitePage from '@/app/sites/site-page'
-import RestaurantView from './view'
+import { redirect } from 'next/navigation'
+import prisma from '@repo/data/PrismaCient'
 
-export default async function RestaurantPage({ params }: { params: { id: string } }) {
-  return (
-    <SitePage params={params} tab="restaurant">
-      <RestaurantView />
-    </SitePage>
-  )
+// Restaurant management moved to the top-level /restaurants section. This stub
+// forwards any bookmarked /sites/[id]/restaurant URL to the linked restaurant.
+export default async function LegacyRestaurantRedirect({
+  params,
+}: {
+  params: { id: string }
+}) {
+  const site = await prisma.site.findUnique({
+    where: { id: params.id },
+    select: { restaurantId: true },
+  })
+  redirect(site?.restaurantId ? `/restaurants/${site.restaurantId}` : '/restaurants')
 }

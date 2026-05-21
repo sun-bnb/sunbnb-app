@@ -10,58 +10,75 @@ vi.mock('@vercel/blob', () => ({
 import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
 import {
-  createMenuItemForSite,
-  updateMenuItemForSite,
-  archiveMenuItemForSite,
-  setMenuItemSoldOutForSite,
-  reorderMenuItemsForSite,
+  createMenuItemForRestaurant,
+  updateMenuItemForRestaurant,
+  archiveMenuItemForRestaurant,
+  setMenuItemSoldOutForRestaurant,
+  reorderMenuItemsForRestaurant,
 } from './actions'
 
 const mockAuth = vi.mocked(auth)
-const SITE_ID = 'site-1'
-const OWNER_ID = 'user-1'
 const RESTAURANT_ID = 'restaurant-1'
+const OWNER_ID = 'user-1'
 
 beforeEach(() => {
   vi.clearAllMocks()
   mockAuth.mockResolvedValue(null as any)
 })
 
-function authorizeOwnerOfLinkedRestaurant() {
+// ─────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────
+
+function authorizeOwner() {
   mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
   vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as any)
-  vi.mocked(prisma.site.findUnique)
-    .mockResolvedValueOnce({ userId: OWNER_ID } as any) // requireSiteOwner
-    .mockResolvedValueOnce({ restaurantId: RESTAURANT_ID } as any) // requireLinkedRestaurant
-}
-
-function restaurantOwned() {
-  vi.mocked(prisma.restaurant.findUnique).mockResolvedValue({
-    id: RESTAURANT_ID,
+  // requireRestaurantOwnerWithFlag → requireRestaurantOwner → ownership check
+  vi.mocked(prisma.restaurant.findUnique).mockResolvedValueOnce({
     partnerAccountId: OWNER_ID,
-    siteId: SITE_ID,
   } as any)
 }
 
-describe('createMenuItemForSite', () => {
-  it('rejects when site has no linked restaurant', async () => {
+/** Core functions perform their own ownership check before each mutation. */
+function coreOwnershipOk() {
+  vi.mocked(prisma.restaurant.findUnique).mockResolvedValueOnce({
+    id: RESTAURANT_ID,
+    partnerAccountId: OWNER_ID,
+  } as any)
+}
+
+// ─────────────────────────────────────────────────────
+// createMenuItemForRestaurant
+// ─────────────────────────────────────────────────────
+
+describe('createMenuItemForRestaurant', () => {
+  it('rejects unauthenticated', async () => {
+    const fd = new FormData()
+    fd.set('name', 'Pizza')
+    fd.set('price', '10')
+    const res = await createMenuItemForRestaurant(RESTAURANT_ID, fd)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+  })
+
+  it('rejects when restaurant is not owned', async () => {
     mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
     vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as any)
-    vi.mocked(prisma.site.findUnique)
-      .mockResolvedValueOnce({ userId: OWNER_ID } as any)
-      .mockResolvedValueOnce({ restaurantId: null } as any)
+    vi.mocked(prisma.restaurant.findUnique).mockResolvedValueOnce({
+      partnerAccountId: 'someone-else',
+    } as any)
 
     const fd = new FormData()
     fd.set('name', 'Pizza')
     fd.set('price', '10')
-    const res = await createMenuItemForSite(SITE_ID, fd)
+    const res = await createMenuItemForRestaurant(RESTAURANT_ID, fd)
     expect(res.status).toBe('error')
-    expect(res.errors).toContain('Site has no linked restaurant')
+    expect(res.errors).toContain('Not authorized')
   })
 
-  it('creates a menu item with next displayOrder', async () => {
-    authorizeOwnerOfLinkedRestaurant()
-    restaurantOwned()
+  it('creates a menu item with the next displayOrder', async () => {
+    authorizeOwner()
+    coreOwnershipOk()
     vi.mocked(prisma.menuItem.findFirst).mockResolvedValue({ displayOrder: 4 } as any)
     vi.mocked(prisma.menuItem.create).mockResolvedValue({ id: 'mi-1' } as any)
     vi.mocked(prisma.menuItem.findUnique).mockResolvedValue({
@@ -71,7 +88,7 @@ describe('createMenuItemForSite', () => {
       description: null,
       price: 10,
       imageUrl: null,
-      category: 'main',
+      category: 'mains',
       soldOut: false,
       active: true,
       displayOrder: 5,
@@ -81,7 +98,7 @@ describe('createMenuItemForSite', () => {
     fd.set('name', 'Pizza')
     fd.set('price', '10')
     fd.set('category', 'mains')
-    const res = await createMenuItemForSite(SITE_ID, fd)
+    const res = await createMenuItemForRestaurant(RESTAURANT_ID, fd)
     expect(res.status).toBe('ok')
     expect(prisma.menuItem.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -97,14 +114,18 @@ describe('createMenuItemForSite', () => {
   })
 })
 
-describe('updateMenuItemForSite', () => {
+// ─────────────────────────────────────────────────────
+// updateMenuItemForRestaurant
+// ─────────────────────────────────────────────────────
+
+describe('updateMenuItemForRestaurant', () => {
   it('updates description and price', async () => {
-    authorizeOwnerOfLinkedRestaurant()
+    authorizeOwner()
     vi.mocked(prisma.menuItem.findUnique).mockResolvedValueOnce({
       id: 'mi-1',
       restaurantId: RESTAURANT_ID,
     } as any)
-    restaurantOwned()
+    coreOwnershipOk()
     vi.mocked(prisma.menuItem.update).mockResolvedValue({ id: 'mi-1' } as any)
     vi.mocked(prisma.menuItem.findUnique).mockResolvedValue({
       id: 'mi-1',
@@ -113,7 +134,7 @@ describe('updateMenuItemForSite', () => {
       description: 'With buffalo mozzarella',
       price: 12,
       imageUrl: null,
-      category: 'main',
+      category: 'mains',
       soldOut: false,
       active: true,
       displayOrder: 0,
@@ -122,7 +143,7 @@ describe('updateMenuItemForSite', () => {
     const fd = new FormData()
     fd.set('description', 'With buffalo mozzarella')
     fd.set('price', '12')
-    const res = await updateMenuItemForSite(SITE_ID, 'mi-1', fd)
+    const res = await updateMenuItemForRestaurant(RESTAURANT_ID, 'mi-1', fd)
     expect(res.status).toBe('ok')
     expect(prisma.menuItem.update).toHaveBeenCalledWith({
       where: { id: 'mi-1' },
@@ -134,12 +155,12 @@ describe('updateMenuItemForSite', () => {
   })
 
   it('removes the image when removeImage flag is set', async () => {
-    authorizeOwnerOfLinkedRestaurant()
+    authorizeOwner()
     vi.mocked(prisma.menuItem.findUnique).mockResolvedValueOnce({
       id: 'mi-1',
       restaurantId: RESTAURANT_ID,
     } as any)
-    restaurantOwned()
+    coreOwnershipOk()
     vi.mocked(prisma.menuItem.update).mockResolvedValue({ id: 'mi-1' } as any)
     vi.mocked(prisma.menuItem.findUnique).mockResolvedValue({
       id: 'mi-1',
@@ -148,7 +169,7 @@ describe('updateMenuItemForSite', () => {
       description: null,
       price: 10,
       imageUrl: null,
-      category: 'main',
+      category: 'mains',
       soldOut: false,
       active: true,
       displayOrder: 0,
@@ -156,7 +177,7 @@ describe('updateMenuItemForSite', () => {
 
     const fd = new FormData()
     fd.set('removeImage', '1')
-    const res = await updateMenuItemForSite(SITE_ID, 'mi-1', fd)
+    const res = await updateMenuItemForRestaurant(RESTAURANT_ID, 'mi-1', fd)
     expect(res.status).toBe('ok')
     expect(prisma.menuItem.update).toHaveBeenCalledWith({
       where: { id: 'mi-1' },
@@ -165,16 +186,20 @@ describe('updateMenuItemForSite', () => {
   })
 })
 
-describe('setMenuItemSoldOutForSite', () => {
+// ─────────────────────────────────────────────────────
+// setMenuItemSoldOutForRestaurant
+// ─────────────────────────────────────────────────────
+
+describe('setMenuItemSoldOutForRestaurant', () => {
   it('toggles soldOut', async () => {
-    authorizeOwnerOfLinkedRestaurant()
+    authorizeOwner()
     vi.mocked(prisma.menuItem.findUnique).mockResolvedValueOnce({
       restaurantId: RESTAURANT_ID,
     } as any)
-    restaurantOwned()
+    coreOwnershipOk()
     vi.mocked(prisma.menuItem.update).mockResolvedValue({ id: 'mi-1' } as any)
 
-    const res = await setMenuItemSoldOutForSite(SITE_ID, 'mi-1', true)
+    const res = await setMenuItemSoldOutForRestaurant(RESTAURANT_ID, 'mi-1', true)
     expect(res.status).toBe('ok')
     expect(prisma.menuItem.update).toHaveBeenCalledWith({
       where: { id: 'mi-1' },
@@ -183,16 +208,20 @@ describe('setMenuItemSoldOutForSite', () => {
   })
 })
 
-describe('archiveMenuItemForSite', () => {
+// ─────────────────────────────────────────────────────
+// archiveMenuItemForRestaurant
+// ─────────────────────────────────────────────────────
+
+describe('archiveMenuItemForRestaurant', () => {
   it('soft-deletes via active: false', async () => {
-    authorizeOwnerOfLinkedRestaurant()
+    authorizeOwner()
     vi.mocked(prisma.menuItem.findUnique).mockResolvedValueOnce({
       restaurantId: RESTAURANT_ID,
     } as any)
-    restaurantOwned()
+    coreOwnershipOk()
     vi.mocked(prisma.menuItem.update).mockResolvedValue({ id: 'mi-1' } as any)
 
-    const res = await archiveMenuItemForSite(SITE_ID, 'mi-1')
+    const res = await archiveMenuItemForRestaurant(RESTAURANT_ID, 'mi-1')
     expect(res.status).toBe('ok')
     expect(prisma.menuItem.update).toHaveBeenCalledWith({
       where: { id: 'mi-1' },
@@ -201,23 +230,27 @@ describe('archiveMenuItemForSite', () => {
   })
 })
 
-describe('reorderMenuItemsForSite', () => {
+// ─────────────────────────────────────────────────────
+// reorderMenuItemsForRestaurant
+// ─────────────────────────────────────────────────────
+
+describe('reorderMenuItemsForRestaurant', () => {
   it('rejects items from a different restaurant', async () => {
-    authorizeOwnerOfLinkedRestaurant()
-    restaurantOwned()
+    authorizeOwner()
+    coreOwnershipOk()
     vi.mocked(prisma.menuItem.findMany).mockResolvedValue([
       { id: 'mi-1', restaurantId: RESTAURANT_ID },
       { id: 'foreign', restaurantId: 'other-restaurant' },
     ] as any)
 
-    const res = await reorderMenuItemsForSite(SITE_ID, ['mi-1', 'foreign'])
+    const res = await reorderMenuItemsForRestaurant(RESTAURANT_ID, ['mi-1', 'foreign'])
     expect(res.status).toBe('error')
     expect(res.errors?.[0]).toMatch(/belong to this restaurant/)
   })
 
   it('updates displayOrder row by row', async () => {
-    authorizeOwnerOfLinkedRestaurant()
-    restaurantOwned()
+    authorizeOwner()
+    coreOwnershipOk()
     vi.mocked(prisma.menuItem.findMany).mockResolvedValue([
       { id: 'mi-1', restaurantId: RESTAURANT_ID },
       { id: 'mi-2', restaurantId: RESTAURANT_ID },
@@ -225,10 +258,10 @@ describe('reorderMenuItemsForSite', () => {
     ] as any)
     vi.mocked(prisma.menuItem.update).mockResolvedValue({} as any)
 
-    const res = await reorderMenuItemsForSite(SITE_ID, ['mi-3', 'mi-1', 'mi-2'])
+    const res = await reorderMenuItemsForRestaurant(RESTAURANT_ID, ['mi-3', 'mi-1', 'mi-2'])
     expect(res.status).toBe('ok')
     expect(prisma.$transaction).toHaveBeenCalledTimes(1)
-    // Three updates queued with ordered displayOrder 0/1/2.
+    // Three updates queued with displayOrder 0/1/2.
     expect(prisma.menuItem.update).toHaveBeenNthCalledWith(1, {
       where: { id: 'mi-3' },
       data: { displayOrder: 0 },

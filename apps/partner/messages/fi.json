@@ -7,6 +7,7 @@
     "dashboard": "Dashboard",
     "frontdesk": "Vastaanotto",
     "sites": "Kohteet",
+    "restaurants": "Ravintolat",
     "calendar": "Kalenteri",
     "security": "Turvallisuus",
     "account": "Tili",
@@ -135,7 +136,12 @@
     "restaurant": "Ravintola",
     "products": "Tuotteet",
     "rentals": "Vuokraus",
-    "accounting": "Kirjanpito"
+    "accounting": "Kirjanpito",
+    "restaurantManage": "Hallinnoi ravintolaa →",
+    "restaurantAdd": "Lisää ravintola",
+    "restaurantAddDescription": "Ota pöytävaraukset käyttöön tälle kohteelle.",
+    "restaurantCreating": "Luodaan…",
+    "restaurantError": "Ravintolan luonti epäonnistui"
   },
   "Restaurant": {
     "enableTitle": "Pöytävaraukset",
@@ -304,7 +310,8 @@
     "gridRotation": "Kierto (°)",
     "gridCreate": "Luo",
     "gridCreating": "Luodaan…",
-    "cancel": "Peruuta"
+    "cancel": "Peruuta",
+    "linkedSiteLink": "← Takaisin kohteeseen"
   },
   "SiteSchematic": {
     "layoutWidth": "Leveys",

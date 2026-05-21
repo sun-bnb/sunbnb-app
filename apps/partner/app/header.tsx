@@ -34,6 +34,7 @@ export default function Header() {
     { label: t('dashboard'), href: '/' },
     { label: t('frontdesk'), href: '/frontdesk' },
     { label: t('sites'), href: '/sites' },
+    { label: t('restaurants'), href: '/restaurants' },
     { label: t('calendar'), href: '/calendar' },
     { label: t('security'), href: '/security' },
   ]
