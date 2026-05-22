@@ -177,17 +177,30 @@ resolved.
 - ☐ **Wiki documentation.** No `entity:table-reservation` or `subsystem:table-reservations`
   page yet; the `subsystem:schematic-editor` page is still **draft**. Document the engine,
   flows, and the standalone-extraction design.
-- ☐ **Table-editor reservation depth** (deferred from the 2026-05-22 web research into reservation
-  apps — OpenTable/SevenRooms/Resy/Toast). The table editor's *palette content* is reworked
-  (meaningful Areas + shape-differentiated Fixtures), but the booking-relevant depth is still
-  missing, in rough priority:
-  1. **Table attributes** (small schema + `TableForm`): table **type** (booth/banquette/high-top/
-     bar/communal), **ADA-accessible** flag (ADA wants ≥5% accessible seating), **by-window**.
-  2. **Section-based availability + guest preference**: tie tables to a bookable **area/section**
-     (indoor/outdoor/bar/private — currently the editor "Areas" are visual-only) so guests can
-     book/prefer a section; touches the availability engine + `getRestaurantAvailability`.
-  3. **Table combinations**: auto-merge adjacent tables for large parties (the killer feature in
-     OpenTable & SevenRooms) — schema for combinable sets + availability-engine support.
+- ☐ **Reservation depth & live floor** — the table editor's product roadmap, from the 2026-05-22
+  deep domain research (OpenTable / SevenRooms / Resy / Tock / Square / TouchBistro / eat-app /
+  Simple Host / Resos). **Strategic reframe:** in every serious product the floor plan is *two apps
+  in one* — a design-time editor (we have this) **and** the live run-time host-stand view. The
+  editor is the operational nucleus: design → availability → live service → analytics. Today we
+  have only the design half + visual-only Areas. Prioritized for the chiringuito/Sunbnb fit:
+  1. **Live floor / service view.** The canvas becomes the host view: color-coded statuses
+     (available / booked / seated / eating / dessert / check / clearing / overdue), tap-a-table to
+     seat a reservation or walk-in, drag to move/transfer parties, server sections. Highest leverage;
+     reuses the `@repo/schematic` renderer; the Reservations tab (a list today) folds in.
+  2. **No-show protection.** Deposits / card-hold / cancellation fees on bookings — the clearest
+     revenue lever for a high-demand beach venue. **Gated on + drives the payment-model open decision
+     below**: if table reservations take money, reuse the `@repo/data` invoice / settlement /
+     fee-cascade rather than a parallel money path.
+  3. **Smart availability.** Table **attributes** (type booth/high-top/bar/communal · ADA-accessible ·
+     by-window · combinable · server section); make the editor **Areas real bookable sections**
+     (indoor/outdoor) so guests can prefer/book a section; **party-size↔table matching**, **pacing**
+     (parties per time window), **shift-based** plans, and **table combinations** (auto-merge for
+     large parties). Touches the schema + `getRestaurantAvailability`.
+  4. **Waitlist.** Auto-notify (SMS) when a table frees; fills cancellations.
+  5. **CRM-lite.** Guest profiles, visit history, preferences/tags/notes (SevenRooms' moat, scaled down).
+  _Skip for now — enterprise / over-scope for the chiringuito case (revisit if the standalone
+  tablefind.app targets fine-dining): AI seating optimization, deep CRM/marketing, multi-location
+  floor-plan standardization, ticketed experiences/events, private-dining "hall" booking._
 - 💤 **Standalone "tablefind.app" extraction (confirmed, deferred).** The long-horizon payoff:
   spin the `table-reservations-*` packages into a standalone consumer app on its own domain.
   Direction is decided; timing is post-Sunbnb-integration. Every shared-package change should
@@ -254,6 +267,15 @@ resolved.
   wall/pillar/plant); no schema change. **Web research** (OpenTable/SevenRooms/Resy/Toast/RoomSketcher)
   drove the new "Table-editor reservation depth" roadmap item (table attributes, section availability,
   table combinations). MUI removal advanced (Switch to Toggle, dimensions inputs, table-editor toolbar).
+- **2026-05-22** — Deeper domain research (OpenTable/SevenRooms/Resy/Tock/Square/TouchBistro/eat-app/
+  Simple Host/Resos) folded into the roadmap as **"Reservation depth & live floor"**, replacing the
+  narrower "Table-editor reservation depth" item. Category-defining insight: the floor plan is *two
+  apps in one* — design-time editor (done) + live run-time host-stand view (missing). Prioritized for
+  the chiringuito fit: (1) live floor/service view [reuses `@repo/schematic`; the Reservations list
+  folds in], (2) no-show deposits [drives the payment-model decision], (3) smart availability
+  [attributes + real bookable sections + party↔table matching + pacing + combinations], (4) waitlist
+  + SMS, (5) CRM-lite. Explicitly de-scoped: AI seating, deep CRM, multi-location, ticketed events,
+  hall booking. Still planning only — no build started.
 
 ## Open decisions
 
