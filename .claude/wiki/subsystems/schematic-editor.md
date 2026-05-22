@@ -11,8 +11,9 @@ sources:
   - apps/partner/app/sites/[id]/inventory/InventoryMap.tsx#getScaledSize
   - apps/partner/app/sites/[id]/inventory/actions.ts#moveParcel
   - packages/table-reservations-ui
-related: []
-last_verified: 2026-05-20
+related:
+  - subsystem:table-reservations
+last_verified: 2026-05-22
 ---
 
 # Subsystem: Schematic Editor

@@ -37,6 +37,8 @@ Invokable via `/wiki <op>` (see `.claude/commands/wiki.md`).
 - [`entity:invoice`](entities/invoice.md) — **stable** — generated post-payment, two-invoice rule, hash chain
 - [`entity:service-fee`](entities/service-fee.md) — **stable** — three-tier cascade, fixed vs percentage
 - [`entity:settlement`](entities/settlement.md) — **stable** — monthly partner payout aggregation, DRAFT→PAID
+- [`entity:restaurant`](entities/restaurant.md) — **stable** — PartnerAccount-owned venue, optional Site soft-link, booking config, ownership
+- [`entity:table-reservation`](entities/table-reservation.md) — **stable** — table booking, dual-status machine, free today, `Table` model
 
 ## Flows — end-to-end journeys
 
@@ -45,11 +47,13 @@ Invokable via `/wiki <op>` (see `.claude/commands/wiki.md`).
 - [`flow:rental-booking`](flows/rental-booking.md) — **stable** — equipment rental: availability check → booking → payment → pickup/return
 - [`flow:walk-in`](flows/walk-in.md) — **stable** — partner manage page: walk-in reservation, check-in, departure, no-show, bed-block
 - [`flow:settlement-cycle`](flows/settlement-cycle.md) — **stable** — admin app: generate → close → approve → mark paid
+- [`flow:table-booking`](flows/table-booking.md) — **stable** — availability → slot → guest form → confirm → email; cancel; staff lifecycle (no payment)
 
 ## Subsystems — cross-cutting modules
 
 - [`subsystem:auth`](subsystems/auth.md) — **stable** — NextAuth setup per app, anonId, ownership checks, sudo
 - [`subsystem:payments`](subsystems/payments.md) — **stable** — Stripe vs Mollie vs Demo, webhooks, reconciliation, refunds
+- [`subsystem:table-reservations`](subsystems/table-reservations.md) — **stable** — restaurant product: core/ui packages, availability engine, app wiring, extraction posture
 - [`subsystem:schematic-editor`](subsystems/schematic-editor.md) — **draft** — shared grid geometry + editor chrome behind sunbed inventory & restaurant tables
 - [`subsystem:design-system`](subsystems/design-system.md) — **draft** — UI design language: `accent` token, component classes, identity header, `Toggle`; canonical conventions in `.claude/rules/ui.md`. Prime with `/ui`
 

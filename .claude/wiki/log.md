@@ -80,3 +80,15 @@ Operations:
 - changed: `.claude/wiki/subsystems/design-system.md` absorbed the full conventions (color/type/spacing/shape, component class expansions, page-structure patterns, resolved conventions). Companion: `.claude/rules/ui.md` trimmed to the non-negotiables + pointers; `/ui` command re-pointed (rule auto-loaded; this page = full conventions).
 - reason: `.claude/rules/*` is auto-loaded every session; the ~130-line design language taxed non-UI tasks. The always-loaded rule now carries only the non-negotiables; the full conventions are pulled here via `/ui`. This page is now the canonical detailed design language — a deliberate exception to "wiki points, doesn't replace" (the design language is synthesized prescriptive knowledge with no other canonical home).
 - by: claude
+
+## [2026-05-22] add page | Table-reservations product documented (4 pages)
+- mode: add page (×4) + patch (×1)
+- changed: `.claude/wiki/entities/restaurant.md` (new), `.claude/wiki/entities/table-reservation.md` (new), `.claude/wiki/subsystems/table-reservations.md` (new), `.claude/wiki/flows/table-booking.md` (new); `.claude/wiki/index.md` (cataloged the 4); `.claude/wiki/subsystems/schematic-editor.md` (added `related: subsystem:table-reservations`, bumped last_verified).
+- reason: The restaurant table-reservation product (data layer + `@repo/table-reservations-core`/`-ui` + partner `/restaurants` + user `/sites/[id]/table`, all shipped on `main`) had **no** wiki coverage — the gap the track flagged. Synthesized current truth from code at HEAD: the Restaurant aggregate + soft Site FK, the dual-status `TableReservation`/`Table` model, the decoupled-engine/Sunbnb-tight-apps boundary, and the consumer booking flow. Verified against schema + core + app sources cited in each page; the known server-TZ bug and the free-bookings-today fact are documented as current behaviour with a pointer to the planned fixes in `.claude/tracks/002-table-reservations.md` (wiki documents current state, not the plan).
+- by: claude (opus-4-7)
+
+## [2026-05-22] revise | Re-ingest table-reservations pages for the P1 implementation
+- mode: revise (×4)
+- changed: `.claude/wiki/entities/restaurant.md`, `.claude/wiki/entities/table-reservation.md`, `.claude/wiki/subsystems/table-reservations.md`, `.claude/wiki/flows/table-booking.md`.
+- reason: The P1 booking core landed (commit 567f987, track 002), invalidating the pages' "current truth": the server-TZ bug is **fixed** (`Restaurant.timeZone` + `tz.ts`), bookings are no longer field-less ("free today" → deposit model present, collection pending), and the engine now does shifts/pacing/combinations + section/feature filters. Rewrote (not appended): availability-engine description (TZ + shifts + pacing + combos), the deposit model + lifecycle, modify/reminder/waitlist paths, the public CORS booking API, group-atomic combo transitions, and the `PACING_FULL` failure mode. Removed the stale server-TZ bug callout + "free until 1e" claims. Roadmap sections now point to the *remaining seams* (deposit money collection, SMS, widget UI, Google/Instagram Reserve, deferred consumer/partner UIs).
+- by: claude (opus-4-7)
