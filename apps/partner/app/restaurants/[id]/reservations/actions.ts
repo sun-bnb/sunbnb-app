@@ -8,6 +8,8 @@ import {
   markDeparted,
   markNoShow,
   cancelReservationAsStaff,
+  modifyReservationAsStaff,
+  chargeNoShowDeposit,
   updateReservationInternalNotes,
   type TableReservationListItem,
 } from '@repo/table-reservations-core'
@@ -31,8 +33,7 @@ export async function getRestaurantReservationsForDay(
   if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
     return { status: 'error', errors: ['Invalid date'] }
   }
-  const date = new Date(`${isoDate}T00:00:00`)
-  const reservations = await listReservationsForDay(r.restaurantId, date)
+  const reservations = await listReservationsForDay(r.restaurantId, isoDate)
   return { status: 'ok', reservations }
 }
 
@@ -76,6 +77,39 @@ export async function setRestaurantReservationNotes(
   const r = await requireAuth(restaurantId)
   if (!r.ok) return { status: 'error' as const, errors: [r.error] }
   const res = await updateReservationInternalNotes(reservationId, notes, r.userId)
+  if (res.status === 'ok') revalidatePath(`/restaurants/${restaurantId}/reservations`)
+  return res
+}
+
+export async function modifyRestaurantReservation(
+  restaurantId: string,
+  reservationId: string,
+  changes: { fromIso?: string; toIso?: string; partySize?: number; tableId?: string },
+) {
+  const r = await requireAuth(restaurantId)
+  if (!r.ok) return { status: 'error' as const, errors: [r.error] }
+  const res = await modifyReservationAsStaff(
+    reservationId,
+    {
+      from: changes.fromIso ? new Date(changes.fromIso) : undefined,
+      to: changes.toIso ? new Date(changes.toIso) : undefined,
+      partySize: changes.partySize,
+      tableId: changes.tableId,
+    },
+    r.userId,
+  )
+  if (res.status === 'ok') revalidatePath(`/restaurants/${restaurantId}/reservations`)
+  return res
+}
+
+/** Charge a held no-show deposit (operator action after marking no-show). */
+export async function chargeRestaurantReservationDeposit(
+  restaurantId: string,
+  reservationId: string,
+) {
+  const r = await requireAuth(restaurantId)
+  if (!r.ok) return { status: 'error' as const, errors: [r.error] }
+  const res = await chargeNoShowDeposit(reservationId, r.userId)
   if (res.status === 'ok') revalidatePath(`/restaurants/${restaurantId}/reservations`)
   return res
 }

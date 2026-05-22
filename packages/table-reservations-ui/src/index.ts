@@ -23,6 +23,12 @@ export {
 } from './partner/RestaurantHoursEditor'
 
 export {
+  ShiftsEditor,
+  type ShiftsEditorProps,
+  type ShiftsEditorLabels,
+} from './partner/ShiftsEditor'
+
+export {
   EnableRestaurantCta,
   type EnableRestaurantCtaProps,
   type EnableRestaurantCtaLabels,

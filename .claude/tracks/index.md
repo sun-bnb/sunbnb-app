@@ -8,7 +8,7 @@ Maintained by the `create` and `handoff` workflows.
 | ID | Track | Next action | Worktree | Updated |
 |----|-------|-------------|----------|---------|
 | [001](001-knowledge-store.md) | Knowledge Store | Phase 1 — stand up Vercel test-env log-drain adapter | — | 2026-05-20 |
-| [002](002-table-reservations.md) | Table Reservations | Restructure shipped — verify `/restaurants` in browser, then payment decision / wiki docs | — | 2026-05-21 |
+| [002](002-table-reservations.md) | Table Reservations | P1 implemented (1a–d done, 1e–h core ◐) — next: 1e payment collection + deferred UIs + migrate:test | — | 2026-05-22 |
 
 ## Proposed / backlog
 

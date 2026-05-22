@@ -3,6 +3,7 @@ import type { ActionResult, RestaurantInput } from '../types'
 import { getRestaurantById, type RestaurantRecord } from './queries'
 import { slugify, uniqueRestaurantSlug } from './slug'
 import { requireRestaurantOwner } from '../ownership'
+import { isValidTimeZone } from '../tz'
 
 function validateRestaurantInput(input: Partial<RestaurantInput>): string[] {
   const errors: string[] = []
@@ -48,6 +49,25 @@ function validateRestaurantInput(input: Partial<RestaurantInput>): string[] {
       input.reservationWindow > 365)
   ) {
     errors.push('Reservation window must be 1–365 days')
+  }
+  if (
+    input.timeZone !== undefined && input.timeZone !== null &&
+    !isValidTimeZone(input.timeZone)
+  ) {
+    errors.push('Invalid timezone')
+  }
+  if (
+    input.noShowPolicy !== undefined &&
+    input.noShowPolicy !== 'none' &&
+    input.noShowPolicy !== 'deposit'
+  ) {
+    errors.push('Invalid no-show policy')
+  }
+  if (
+    input.depositPerGuest !== undefined && input.depositPerGuest !== null &&
+    (!Number.isFinite(input.depositPerGuest) || input.depositPerGuest < 0 || input.depositPerGuest > 1000)
+  ) {
+    errors.push('Deposit per guest must be 0–1000')
   }
   if (
     input.layoutWidth !== undefined && input.layoutWidth !== null &&
@@ -104,6 +124,9 @@ export async function createRestaurant(
       priceRange: input.priceRange ?? null,
       averageMealDuration: input.averageMealDuration ?? 120,
       reservationWindow: input.reservationWindow ?? 60,
+      timeZone: input.timeZone ?? null,
+      noShowPolicy: input.noShowPolicy ?? 'none',
+      depositPerGuest: input.depositPerGuest ?? null,
       layoutWidth: input.layoutWidth ?? null,
       layoutHeight: input.layoutHeight ?? null,
       publicOnStandaloneApp: input.publicOnStandaloneApp ?? true,
@@ -146,6 +169,9 @@ export async function updateRestaurant(
   if (input.priceRange !== undefined) data.priceRange = input.priceRange
   if (input.averageMealDuration !== undefined) data.averageMealDuration = input.averageMealDuration
   if (input.reservationWindow !== undefined) data.reservationWindow = input.reservationWindow
+  if (input.timeZone !== undefined) data.timeZone = input.timeZone
+  if (input.noShowPolicy !== undefined) data.noShowPolicy = input.noShowPolicy
+  if (input.depositPerGuest !== undefined) data.depositPerGuest = input.depositPerGuest
   if (input.layoutWidth !== undefined) data.layoutWidth = input.layoutWidth
   if (input.layoutHeight !== undefined) data.layoutHeight = input.layoutHeight
   if (input.publicOnStandaloneApp !== undefined) data.publicOnStandaloneApp = input.publicOnStandaloneApp

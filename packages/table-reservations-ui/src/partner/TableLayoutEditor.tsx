@@ -496,6 +496,8 @@ function toFormValues(t: TableRecord): TableFormValues {
     zone: t.zone ?? '',
     staffNote: t.staffNote ?? '',
     onlineBookable: t.onlineBookable,
+    combinable: t.combinable,
+    features: t.features ?? [],
     turnTimeMinutes: t.turnTimeMinutes ?? null,
     locked: t.locked,
     seatsTop: t.seatsTop,

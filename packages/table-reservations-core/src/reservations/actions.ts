@@ -5,7 +5,11 @@ import {
   BLOCKING_TABLE_RESERVATION_OP_STATUSES,
   TABLE_RESERVATION_STATUS,
   TABLE_RESERVATION_OP_STATUS,
+  DEPOSIT_STATUS,
 } from '../status'
+import { DEFAULT_TIME_ZONE, getZonedParts, zonedWallClockToUtc } from '../tz'
+import { pacingWindowStartMs } from '../pacing'
+import { computeDepositAmount } from '../deposit'
 import {
   getTableReservationById,
   reservationOwnedBy,
@@ -103,8 +107,23 @@ export async function createTableReservation(
     return { status: 'error', errors: ['Party is too small for this table'] }
   }
 
+  // Resolve the pacing constraint (if any) for the booking's start instant from
+  // the restaurant's shifts. Enforced inside the txn below to close the race.
+  const pacing = await resolvePacingForInstant(input.restaurantId, input.from)
+
+  // Resolve any required no-show deposit. The amount + 'pending' state are
+  // recorded here; collecting it (Stripe/Mollie) is an app-layer concern that
+  // calls markDepositHeld() once paid.
+  const depositAmount = await resolveDepositForInstant(
+    input.restaurantId,
+    input.from,
+    input.partySize,
+  )
+
   // Availability re-check inside transaction. If the overlap count is > 0
-  // after the insert, we've hit a race and should roll back.
+  // after the insert, we've hit a race and should roll back. Pacing is
+  // re-checked in the same txn for the same reason.
+  let failReason: 'SLOT_TAKEN' | 'PACING_FULL' | null = null
   const reservation = await prisma.$transaction(async (tx) => {
     const overlap = await tx.tableReservation.count({
       where: {
@@ -119,6 +138,22 @@ export async function createTableReservation(
     })
     if (overlap > 0) {
       throw new Error('SLOT_TAKEN')
+    }
+    if (pacing) {
+      const windowEnd = new Date(pacing.windowStartMs + pacing.windowMinutes * 60000)
+      const others = await tx.tableReservation.findMany({
+        where: {
+          restaurantId: input.restaurantId,
+          status: { in: BLOCKING_TABLE_RESERVATION_STATUSES as string[] },
+          operationalStatus: { in: BLOCKING_TABLE_RESERVATION_OP_STATUSES as string[] },
+          from: { gte: new Date(pacing.windowStartMs), lt: windowEnd },
+        },
+        select: { partySize: true },
+      })
+      const existing = others.reduce((sum, o) => sum + o.partySize, 0)
+      if (existing + input.partySize > pacing.cap) {
+        throw new Error('PACING_FULL')
+      }
     }
     return tx.tableReservation.create({
       data: {
@@ -135,21 +170,188 @@ export async function createTableReservation(
         guestEmail: input.guestEmail.trim().toLowerCase(),
         guestPhone: input.guestPhone?.trim() || null,
         specialRequests: input.specialRequests?.trim() || null,
+        depositAmount: depositAmount > 0 ? depositAmount : null,
+        depositStatus: depositAmount > 0 ? DEPOSIT_STATUS.PENDING : DEPOSIT_STATUS.NONE,
       },
       select: { id: true },
     })
   }).catch((err: unknown) => {
-    if (err instanceof Error && err.message === 'SLOT_TAKEN') {
+    if (err instanceof Error && (err.message === 'SLOT_TAKEN' || err.message === 'PACING_FULL')) {
+      failReason = err.message
       return null
     }
     throw err
   })
 
   if (!reservation) {
-    return { status: 'error', errors: ['Slot no longer available'] }
+    return {
+      status: 'error',
+      errors: [failReason === 'PACING_FULL' ? 'This time is fully booked' : 'Slot no longer available'],
+    }
   }
   const full = await getTableReservationById(reservation.id)
   return { status: 'ok', ...(full ? { reservation: full } : {}) }
+}
+
+export interface ModifyChanges {
+  from?: Date
+  to?: Date
+  partySize?: number
+  tableId?: string
+}
+
+/**
+ * Re-apply a reservation's time/party/table after validating + re-checking
+ * availability and pacing **inside a transaction** (excluding the reservation's
+ * own row). Shared by the consumer + staff modify entry points. Combination
+ * bookings are not modifiable yet.
+ */
+async function reapplyReservation(
+  reservationId: string,
+  changes: ModifyChanges,
+): Promise<ActionResult & { reservation?: TableReservationRecord }> {
+  const existing = await prisma.tableReservation.findUnique({
+    where: { id: reservationId },
+    select: {
+      id: true,
+      restaurantId: true,
+      tableId: true,
+      from: true,
+      to: true,
+      partySize: true,
+      status: true,
+      bookingGroupId: true,
+      depositStatus: true,
+    },
+  })
+  if (!existing) return { status: 'error', errors: ['Not found'] }
+  if (existing.bookingGroupId) {
+    return { status: 'error', errors: ['Combination bookings cannot be modified yet'] }
+  }
+  if (existing.status === TABLE_RESERVATION_STATUS.CANCELED) {
+    return { status: 'error', errors: ['Cannot modify a canceled reservation'] }
+  }
+
+  const from = changes.from ?? existing.from
+  const to = changes.to ?? existing.to
+  const partySize = changes.partySize ?? existing.partySize
+  const tableId = changes.tableId ?? existing.tableId
+
+  const errors: string[] = []
+  if (!(from instanceof Date) || Number.isNaN(from.getTime())) errors.push('Invalid from')
+  if (!(to instanceof Date) || Number.isNaN(to.getTime())) errors.push('Invalid to')
+  if (from && to && from >= to) errors.push('from must be before to')
+  if (!Number.isInteger(partySize) || partySize < 1 || partySize > 50) errors.push('Party size must be 1–50')
+  if (!tableId) errors.push('tableId is required')
+  if (from && from.getTime() < Date.now() - 60 * 1000) errors.push('Cannot move to the past')
+  if (errors.length > 0) return { status: 'error', errors }
+
+  const table = await prisma.table.findUnique({
+    where: { id: tableId! },
+    select: { restaurantId: true, capacity: true, minPartySize: true, status: true },
+  })
+  if (!table) return { status: 'error', errors: ['Table not found'] }
+  if (table.restaurantId !== existing.restaurantId) {
+    return { status: 'error', errors: ['Table does not belong to this restaurant'] }
+  }
+  if (table.status !== 'active') return { status: 'error', errors: ['Table is not available'] }
+  if (table.capacity < partySize) return { status: 'error', errors: ['Table capacity is below the party size'] }
+  if (table.minPartySize > partySize) return { status: 'error', errors: ['Party is too small for this table'] }
+
+  const pacing = await resolvePacingForInstant(existing.restaurantId, from)
+
+  let failReason: 'SLOT_TAKEN' | 'PACING_FULL' | null = null
+  const ok = await prisma
+    .$transaction(async (tx) => {
+      const overlap = await tx.tableReservation.count({
+        where: {
+          tableId: tableId!,
+          id: { not: reservationId },
+          status: { in: BLOCKING_TABLE_RESERVATION_STATUSES as string[] },
+          operationalStatus: { in: BLOCKING_TABLE_RESERVATION_OP_STATUSES as string[] },
+          from: { lt: to },
+          to: { gt: from },
+        },
+      })
+      if (overlap > 0) throw new Error('SLOT_TAKEN')
+
+      if (pacing) {
+        const windowEnd = new Date(pacing.windowStartMs + pacing.windowMinutes * 60000)
+        const others = await tx.tableReservation.findMany({
+          where: {
+            restaurantId: existing.restaurantId,
+            id: { not: reservationId },
+            status: { in: BLOCKING_TABLE_RESERVATION_STATUSES as string[] },
+            operationalStatus: { in: BLOCKING_TABLE_RESERVATION_OP_STATUSES as string[] },
+            from: { gte: new Date(pacing.windowStartMs), lt: windowEnd },
+          },
+          select: { partySize: true },
+        })
+        const existingCovers = others.reduce((sum, o) => sum + o.partySize, 0)
+        if (existingCovers + partySize > pacing.cap) throw new Error('PACING_FULL')
+      }
+
+      await tx.tableReservation.update({
+        where: { id: reservationId },
+        data: { from, to, partySize, tableId },
+      })
+      return true
+    })
+    .catch((err: unknown) => {
+      if (err instanceof Error && (err.message === 'SLOT_TAKEN' || err.message === 'PACING_FULL')) {
+        failReason = err.message
+        return false
+      }
+      throw err
+    })
+
+  if (!ok) {
+    return {
+      status: 'error',
+      errors: [failReason === 'PACING_FULL' ? 'This time is fully booked' : 'Slot no longer available'],
+    }
+  }
+
+  // Recompute the deposit when the party/time changed and it isn't yet collected.
+  if (existing.depositStatus === DEPOSIT_STATUS.PENDING || existing.depositStatus === DEPOSIT_STATUS.NONE) {
+    const depositAmount = await resolveDepositForInstant(existing.restaurantId, from, partySize)
+    await prisma.tableReservation.update({
+      where: { id: reservationId },
+      data: {
+        depositAmount: depositAmount > 0 ? depositAmount : null,
+        depositStatus: depositAmount > 0 ? DEPOSIT_STATUS.PENDING : DEPOSIT_STATUS.NONE,
+      },
+    })
+  }
+
+  const full = await getTableReservationById(reservationId)
+  return { status: 'ok', ...(full ? { reservation: full } : {}) }
+}
+
+/** Consumer-initiated modify. Ownership by userId/anonId. */
+export async function modifyTableReservation(
+  reservationId: string,
+  changes: ModifyChanges,
+  identity: CustomerIdentity,
+): Promise<ActionResult & { reservation?: TableReservationRecord }> {
+  const owner = await prisma.tableReservation.findUnique({
+    where: { id: reservationId },
+    select: { userId: true, anonId: true },
+  })
+  if (!owner) return { status: 'error', errors: ['Not found'] }
+  if (!reservationOwnedBy(owner, identity)) return { status: 'error', errors: ['Not authorized'] }
+  return reapplyReservation(reservationId, changes)
+}
+
+/** Staff-initiated modify. Ownership via the restaurant's partnerAccount. */
+export async function modifyReservationAsStaff(
+  reservationId: string,
+  changes: ModifyChanges,
+  userId: string | null | undefined,
+): Promise<ActionResult & { reservation?: TableReservationRecord }> {
+  const r = await requireStaffOwner(reservationId, userId)
+  if (!r.ok) return { status: 'error', errors: [r.error] }
+  return reapplyReservation(reservationId, changes)
 }
 
 export async function cancelTableReservation(
@@ -175,12 +377,25 @@ export async function cancelTableReservation(
     const full = await getTableReservationById(id)
     return { status: 'ok', ...(full ? { reservation: full } : {}) }
   }
-  await prisma.tableReservation.update({
-    where: { id },
+  await prisma.tableReservation.updateMany({
+    where: await targetGroupWhere(id),
     data: { status: TABLE_RESERVATION_STATUS.CANCELED },
   })
   const full = await getTableReservationById(id)
   return { status: 'ok', ...(full ? { reservation: full } : {}) }
+}
+
+/**
+ * Resolve the prisma `where` that targets a reservation *and its booking group*
+ * — so combination bookings (N rows sharing a bookingGroupId) transition
+ * together. Falls back to the single row for ordinary bookings.
+ */
+async function targetGroupWhere(reservationId: string): Promise<Record<string, unknown>> {
+  const r = await prisma.tableReservation.findUnique({
+    where: { id: reservationId },
+    select: { bookingGroupId: true },
+  })
+  return r?.bookingGroupId ? { bookingGroupId: r.bookingGroupId } : { id: reservationId }
 }
 
 // ─── Partner-side operational transitions (exposed for MVP-5, but simple
@@ -192,8 +407,8 @@ export async function markSeated(
 ): Promise<ActionResult> {
   const r = await requireStaffOwner(reservationId, userId)
   if (!r.ok) return { status: "error", errors: [r.error] }
-  await prisma.tableReservation.update({
-    where: { id: reservationId },
+  await prisma.tableReservation.updateMany({
+    where: await targetGroupWhere(reservationId),
     data: {
       operationalStatus: TABLE_RESERVATION_OP_STATUS.SEATED,
       seatedAt: new Date(),
@@ -208,8 +423,8 @@ export async function markDeparted(
 ): Promise<ActionResult> {
   const r = await requireStaffOwner(reservationId, userId)
   if (!r.ok) return { status: "error", errors: [r.error] }
-  await prisma.tableReservation.update({
-    where: { id: reservationId },
+  await prisma.tableReservation.updateMany({
+    where: await targetGroupWhere(reservationId),
     data: {
       operationalStatus: TABLE_RESERVATION_OP_STATUS.DEPARTED,
       departedAt: new Date(),
@@ -224,8 +439,8 @@ export async function markNoShow(
 ): Promise<ActionResult> {
   const r = await requireStaffOwner(reservationId, userId)
   if (!r.ok) return { status: "error", errors: [r.error] }
-  await prisma.tableReservation.update({
-    where: { id: reservationId },
+  await prisma.tableReservation.updateMany({
+    where: await targetGroupWhere(reservationId),
     data: { operationalStatus: TABLE_RESERVATION_OP_STATUS.NO_SHOW },
   })
   return { status: 'ok' }
@@ -270,12 +485,184 @@ export async function cancelReservationAsStaff(
     return { status: 'ok', ...(full ? { reservation: full } : {}) }
   }
 
-  await prisma.tableReservation.update({
-    where: { id: reservationId },
+  await prisma.tableReservation.updateMany({
+    where: await targetGroupWhere(reservationId),
     data: { status: TABLE_RESERVATION_STATUS.CANCELED },
   })
   const full = await getTableReservationById(reservationId)
   return { status: 'ok', ...(full ? { reservation: full } : {}) }
+}
+
+/**
+ * Resolve the pacing window/cap that applies to a booking starting at `instant`,
+ * by matching it against the restaurant's shifts (in the venue timezone).
+ * Returns null when no shift with pacing covers the instant.
+ */
+export async function resolvePacingForInstant(
+  restaurantId: string,
+  instant: Date,
+): Promise<{ windowStartMs: number; windowMinutes: number; cap: number } | null> {
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: restaurantId },
+    select: {
+      timeZone: true,
+      shifts: {
+        select: {
+          day: true,
+          startTime: true,
+          endTime: true,
+          pacingCovers: true,
+          pacingWindowMinutes: true,
+        },
+      },
+    },
+  })
+  if (!restaurant || restaurant.shifts.length === 0) return null
+  const tz = restaurant.timeZone ?? DEFAULT_TIME_ZONE
+  const parts = getZonedParts(instant, tz)
+  const fromMs = instant.getTime()
+  const wallMs = (hhmm: string): number => {
+    const [h = 0, m = 0] = hhmm.split(':').map(Number)
+    return zonedWallClockToUtc(parts.year, parts.month, parts.day, h, m, tz).getTime()
+  }
+  for (const s of restaurant.shifts) {
+    if (s.day !== parts.weekday || s.pacingCovers == null) continue
+    if (fromMs >= wallMs(s.startTime) && fromMs < wallMs(s.endTime)) {
+      return {
+        windowStartMs: pacingWindowStartMs(fromMs, s.pacingWindowMinutes),
+        windowMinutes: s.pacingWindowMinutes,
+        cap: s.pacingCovers,
+      }
+    }
+  }
+  return null
+}
+
+/**
+ * Resolve the no-show deposit required for a booking at `instant` for a party of
+ * `partySize`, by matching the restaurant's policy + the covering shift. Returns
+ * the amount (0 = none). Combination bookings don't carry a deposit yet.
+ */
+export async function resolveDepositForInstant(
+  restaurantId: string,
+  instant: Date,
+  partySize: number,
+): Promise<number> {
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: restaurantId },
+    select: {
+      timeZone: true,
+      noShowPolicy: true,
+      depositPerGuest: true,
+      shifts: {
+        select: {
+          day: true,
+          startTime: true,
+          endTime: true,
+          requiresDeposit: true,
+          depositMinPartySize: true,
+        },
+      },
+    },
+  })
+  if (!restaurant || restaurant.noShowPolicy !== 'deposit') return 0
+  const tz = restaurant.timeZone ?? DEFAULT_TIME_ZONE
+  const parts = getZonedParts(instant, tz)
+  const fromMs = instant.getTime()
+  const wallMs = (hhmm: string): number => {
+    const [h = 0, m = 0] = hhmm.split(':').map(Number)
+    return zonedWallClockToUtc(parts.year, parts.month, parts.day, h, m, tz).getTime()
+  }
+  for (const s of restaurant.shifts) {
+    if (s.day !== parts.weekday || !s.requiresDeposit) continue
+    if (fromMs >= wallMs(s.startTime) && fromMs < wallMs(s.endTime)) {
+      return computeDepositAmount({
+        noShowPolicy: restaurant.noShowPolicy,
+        depositPerGuest: restaurant.depositPerGuest,
+        shiftRequiresDeposit: true,
+        shiftDepositMinPartySize: s.depositMinPartySize,
+        partySize,
+      })
+    }
+  }
+  return 0
+}
+
+// ─── Deposit state transitions (idempotent). The app collects/captures/refunds
+// via Stripe/Mollie + the @repo/data invoice cascade, then records the state
+// here. ──────────────────────────────────────────────────────────────────────
+
+/** Record that a reminder email was sent (idempotent — sets the timestamp). */
+export async function markReminderSent(reservationId: string): Promise<ActionResult> {
+  await prisma.tableReservation.update({
+    where: { id: reservationId },
+    data: { reminderSentAt: new Date() },
+  })
+  return { status: 'ok' }
+}
+
+/** Mark a pending deposit as collected (held), recording the payment ref. */
+export async function markDepositHeld(
+  reservationId: string,
+  paymentRef: string,
+): Promise<ActionResult> {
+  await prisma.tableReservation.update({
+    where: { id: reservationId },
+    data: { depositStatus: DEPOSIT_STATUS.HELD, paymentRef },
+  })
+  return { status: 'ok' }
+}
+
+/** Charge a held deposit after a no-show. Idempotent — only held → charged. */
+export async function chargeNoShowDeposit(
+  reservationId: string,
+  userId: string | null | undefined,
+): Promise<ActionResult> {
+  const r = await requireStaffOwner(reservationId, userId)
+  if (!r.ok) return { status: 'error', errors: [r.error] }
+  const existing = await prisma.tableReservation.findUnique({
+    where: { id: reservationId },
+    select: { depositStatus: true },
+  })
+  if (!existing) return { status: 'error', errors: ['Not found'] }
+  if (existing.depositStatus !== DEPOSIT_STATUS.HELD) {
+    return { status: 'ok' } // nothing to charge / already resolved
+  }
+  await prisma.tableReservation.update({
+    where: { id: reservationId },
+    data: { depositStatus: DEPOSIT_STATUS.CHARGED },
+  })
+  return { status: 'ok' }
+}
+
+/** Refund a held deposit (timely cancel). Idempotent — only held → refunded. */
+export async function refundDeposit(reservationId: string): Promise<ActionResult> {
+  const existing = await prisma.tableReservation.findUnique({
+    where: { id: reservationId },
+    select: { depositStatus: true },
+  })
+  if (!existing) return { status: 'error', errors: ['Not found'] }
+  if (existing.depositStatus !== DEPOSIT_STATUS.HELD) return { status: 'ok' }
+  await prisma.tableReservation.update({
+    where: { id: reservationId },
+    data: { depositStatus: DEPOSIT_STATUS.REFUNDED },
+  })
+  return { status: 'ok' }
+}
+
+/** Release a held deposit once the guest is seated (no charge). held → released. */
+export async function releaseDeposit(reservationId: string): Promise<ActionResult> {
+  const existing = await prisma.tableReservation.findUnique({
+    where: { id: reservationId },
+    select: { depositStatus: true },
+  })
+  if (!existing) return { status: 'error', errors: ['Not found'] }
+  if (existing.depositStatus !== DEPOSIT_STATUS.HELD) return { status: 'ok' }
+  await prisma.tableReservation.update({
+    where: { id: reservationId },
+    data: { depositStatus: DEPOSIT_STATUS.RELEASED },
+  })
+  return { status: 'ok' }
 }
 
 async function requireStaffOwner(

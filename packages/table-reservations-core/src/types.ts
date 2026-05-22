@@ -11,6 +11,9 @@ export interface RestaurantInput {
   priceRange?: number | null
   averageMealDuration?: number
   reservationWindow?: number
+  timeZone?: string | null
+  noShowPolicy?: string
+  depositPerGuest?: number | null
   layoutWidth?: number | null
   layoutHeight?: number | null
   publicOnStandaloneApp?: boolean
@@ -32,6 +35,8 @@ export interface TableInput {
   zone?: string | null
   staffNote?: string | null
   onlineBookable?: boolean
+  combinable?: boolean
+  features?: string[]
   turnTimeMinutes?: number | null
   locked?: boolean
   seatsTop?: number | null
@@ -55,6 +60,18 @@ export interface RestaurantHoursInput {
   closeTime: string    // "HH:mm"
 }
 
+export interface RestaurantShiftInput {
+  name: string
+  day: number              // 0..6 (Sun..Sat)
+  startTime: string        // "HH:mm"
+  endTime: string          // "HH:mm"
+  pacingCovers?: number | null
+  pacingWindowMinutes?: number
+  lastSeatingOffsetMinutes?: number | null
+  requiresDeposit?: boolean
+  depositMinPartySize?: number | null
+}
+
 export interface TableReservationInput {
   restaurantId: string
   tableId?: string | null
@@ -69,10 +86,31 @@ export interface TableReservationInput {
   anonId?: string | null
 }
 
+export interface TableCombinationInput {
+  name?: string | null
+  capacity: number
+  tableIds: string[]
+}
+
+export interface WaitlistEntryInput {
+  restaurantId: string
+  dateISO: string                  // venue civil date "YYYY-MM-DD"
+  requestedTime?: string | null    // "HH:mm" preference
+  partySize: number
+  guestName: string
+  guestEmail: string
+  guestPhone?: string | null
+  userId?: string | null
+  anonId?: string | null
+}
+
 export interface AvailabilitySlot {
   from: Date
   to: Date
   availableTableIds: string[]
+  /** Predefined combinations bookable at this slot (offered when no single
+   *  table fits the party). */
+  availableCombinationIds?: string[]
 }
 
 export interface ActionResult {

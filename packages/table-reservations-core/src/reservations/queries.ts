@@ -1,4 +1,5 @@
 import prisma from '@repo/data/PrismaCient'
+import { DEFAULT_TIME_ZONE, parseCivilDate, zonedWallClockToUtc } from '../tz'
 
 const reservationSelect = {
   id: true,
@@ -18,6 +19,9 @@ const reservationSelect = {
   internalNotes: true,
   seatedAt: true,
   departedAt: true,
+  depositAmount: true,
+  depositStatus: true,
+  paymentRef: true,
   createdAt: true,
 } as const
 
@@ -39,6 +43,9 @@ export interface TableReservationRecord {
   internalNotes: string | null
   seatedAt: Date | null
   departedAt: Date | null
+  depositAmount: number | null
+  depositStatus: string | null
+  paymentRef: string | null
   createdAt: Date
 }
 
@@ -96,16 +103,22 @@ export async function listReservationsForRestaurant(
 }
 
 /**
- * Day view — list reservations that overlap the given local-day window.
- * `date` is interpreted as local midnight; the window runs up to the next
- * local midnight.
+ * Day view — list reservations overlapping the venue's civil `dateISO`
+ * ("YYYY-MM-DD"). The day window is computed in the **restaurant's timezone**
+ * (default `Europe/Madrid`), not the server process TZ.
  */
 export async function listReservationsForDay(
   restaurantId: string,
-  date: Date,
+  dateISO: string,
 ): Promise<TableReservationListItem[]> {
-  const start = new Date(date)
-  start.setHours(0, 0, 0, 0)
+  const civil = parseCivilDate(dateISO)
+  if (!civil) return []
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: restaurantId },
+    select: { timeZone: true },
+  })
+  const timeZone = restaurant?.timeZone ?? DEFAULT_TIME_ZONE
+  const start = zonedWallClockToUtc(civil.year, civil.month, civil.day, 0, 0, timeZone)
   const end = new Date(start.getTime() + 24 * 60 * 60 * 1000)
   return listReservationsForRestaurant(restaurantId, { from: start, to: end })
 }
@@ -127,4 +140,42 @@ export function reservationOwnedBy(
   if (reservation.userId && identity.userId && reservation.userId === identity.userId) return true
   if (reservation.anonId && identity.anonId && reservation.anonId === identity.anonId) return true
   return false
+}
+
+export interface ReminderDue {
+  id: string
+  from: Date
+  to: Date
+  partySize: number
+  guestName: string
+  guestEmail: string
+  restaurant: { name: string; slug: string; tagline: string | null }
+}
+
+/**
+ * Confirmed, still-expected reservations starting within `withinHours` that have
+ * not had a reminder sent. Used by the daily reminder cron (app-orchestrated).
+ */
+export async function listReservationsNeedingReminder(
+  withinHours: number,
+): Promise<ReminderDue[]> {
+  const now = new Date()
+  const until = new Date(now.getTime() + withinHours * 60 * 60 * 1000)
+  return prisma.tableReservation.findMany({
+    where: {
+      status: 'confirmed',
+      operationalStatus: 'expected',
+      reminderSentAt: null,
+      from: { gte: now, lte: until },
+    },
+    select: {
+      id: true,
+      from: true,
+      to: true,
+      partySize: true,
+      guestName: true,
+      guestEmail: true,
+      restaurant: { select: { name: true, slug: true, tagline: true } },
+    },
+  })
 }

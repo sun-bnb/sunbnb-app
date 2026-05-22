@@ -23,6 +23,25 @@ const PRICE_OPTIONS: Array<{ value: number | null; label: string }> = [
   { value: 4, label: '$$$$' },
 ]
 
+// Curated IANA zones — the product's venues cluster around Europe; '' means
+// "use the platform default". The stored value is always the IANA id.
+const TIME_ZONE_OPTIONS: string[] = [
+  '',
+  'Europe/Madrid',
+  'Atlantic/Canary',
+  'Europe/Lisbon',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'Europe/Rome',
+  'Europe/Athens',
+  'Europe/Helsinki',
+  'America/New_York',
+  'America/Los_Angeles',
+  'Asia/Dubai',
+  'UTC',
+]
+
 export interface RestaurantSettingsLabels {
   identityHeading: string
   detailsHeading: string
@@ -40,6 +59,14 @@ export interface RestaurantSettingsLabels {
   averageMealDurationHint: string
   reservationWindow: string
   reservationWindowHint: string
+  timeZone: string
+  timeZoneHint: string
+  timeZoneDefault: string
+  noShowPolicy: string
+  noShowPolicyNone: string
+  noShowPolicyDeposit: string
+  depositPerGuest: string
+  depositPerGuestHint: string
   publicOnStandaloneApp: string
   publicOnStandaloneAppHint: string
 }
@@ -53,6 +80,9 @@ export interface RestaurantSettingsValues {
   priceRange: number | null
   averageMealDuration: number
   reservationWindow: number
+  timeZone: string
+  noShowPolicy: string
+  depositPerGuest: number | null
   publicOnStandaloneApp: boolean
 }
 
@@ -247,6 +277,73 @@ export function RestaurantSettingsForm({
             />
             <span className={HELPER}>{labels.reservationWindowHint}</span>
           </label>
+          <label className="mt-3 block">
+            <span className={LABEL}>{labels.timeZone}</span>
+            <select
+              className={INPUT}
+              value={values.timeZone}
+              onChange={(e) => {
+                const v = e.target.value
+                setValues((s) => ({ ...s, timeZone: v }))
+                void save({ timeZone: v || null })
+              }}
+            >
+              {TIME_ZONE_OPTIONS.map((tz) => (
+                <option key={tz || 'default'} value={tz}>
+                  {tz === '' ? labels.timeZoneDefault : tz}
+                </option>
+              ))}
+            </select>
+            <span className={HELPER}>{labels.timeZoneHint}</span>
+          </label>
+          <div className="mt-3">
+            <span className={LABEL}>{labels.noShowPolicy}</span>
+            <div className="inline-flex rounded-lg border border-gray-300 bg-white p-0.5">
+              {[
+                { value: 'none', label: labels.noShowPolicyNone },
+                { value: 'deposit', label: labels.noShowPolicyDeposit },
+              ].map((opt) => {
+                const active = values.noShowPolicy === opt.value
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => {
+                      setValues((s) => ({ ...s, noShowPolicy: opt.value }))
+                      void save({ noShowPolicy: opt.value })
+                    }}
+                    className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                      active ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          {values.noShowPolicy === 'deposit' && (
+            <label className="mt-3 block">
+              <span className={LABEL}>{labels.depositPerGuest}</span>
+              <input
+                type="number"
+                min={0}
+                max={1000}
+                step={0.5}
+                className={INPUT}
+                value={values.depositPerGuest ?? ''}
+                onChange={(e) => {
+                  const raw = e.target.value
+                  const n = raw === '' ? null : Number(raw)
+                  if (n !== null && !Number.isFinite(n)) return
+                  setValues((s) => ({ ...s, depositPerGuest: n }))
+                  scheduleSave({ depositPerGuest: n })
+                }}
+              />
+              <span className={HELPER}>{labels.depositPerGuestHint}</span>
+            </label>
+          )}
         </section>
 
         <section className={CARD}>

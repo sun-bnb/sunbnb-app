@@ -38,16 +38,10 @@ export async function GET(
   if (!Number.isInteger(partySize) || partySize < 1 || partySize > 50) {
     return NextResponse.json({ error: 'Invalid party size' }, { status: 400 })
   }
-  // Interpret the date as local midnight in the server's timezone. Good
-  // enough for single-timezone venues; multi-tz support is a post-MVP item.
-  const date = new Date(`${dateStr}T00:00:00`)
-  if (Number.isNaN(date.getTime())) {
-    return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
-  }
-
+  // The engine interprets the civil date in the restaurant's timezone.
   const result = await getRestaurantAvailability({
     restaurantId: params.id,
-    date,
+    dateISO: dateStr,
     partySize,
   })
 
@@ -56,6 +50,7 @@ export async function GET(
       from: s.from.toISOString(),
       to: s.to.toISOString(),
       availableTableIds: s.availableTableIds,
+      ...(s.availableCombinationIds ? { availableCombinationIds: s.availableCombinationIds } : {}),
     })),
     mealDurationMinutes: result.mealDurationMinutes,
   })

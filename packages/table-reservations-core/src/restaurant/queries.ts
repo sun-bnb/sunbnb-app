@@ -12,6 +12,9 @@ const restaurantSelect = {
   priceRange: true,
   averageMealDuration: true,
   reservationWindow: true,
+  timeZone: true,
+  noShowPolicy: true,
+  depositPerGuest: true,
   layoutWidth: true,
   layoutHeight: true,
   publicOnStandaloneApp: true,
@@ -33,6 +36,9 @@ export type RestaurantRecord = {
   priceRange: number | null
   averageMealDuration: number
   reservationWindow: number
+  timeZone: string | null
+  noShowPolicy: string
+  depositPerGuest: number | null
   layoutWidth: number | null
   layoutHeight: number | null
   publicOnStandaloneApp: boolean

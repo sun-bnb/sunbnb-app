@@ -18,6 +18,8 @@ const tableSelect = {
   zone: true,
   staffNote: true,
   onlineBookable: true,
+  combinable: true,
+  features: true,
   turnTimeMinutes: true,
   locked: true,
   seatsTop: true,
@@ -44,6 +46,8 @@ export interface TableRecord {
   zone: string | null
   staffNote: string | null
   onlineBookable: boolean
+  combinable: boolean
+  features: string[]
   turnTimeMinutes: number | null
   locked: boolean
   seatsTop: number | null

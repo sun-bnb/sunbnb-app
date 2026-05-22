@@ -6,9 +6,15 @@ import {
   listTablesForRestaurant,
   listLayoutElementsForRestaurant,
   listMenuItemsForRestaurant,
+  listShiftsForRestaurant,
+  listCombinationsForRestaurant,
+  listWaitlistForRestaurant,
   type TableRecord,
   type LayoutElementRecord,
   type MenuItemRecord,
+  type RestaurantShiftRecord,
+  type TableCombinationRecord,
+  type WaitlistEntryRecord,
 } from '@repo/table-reservations-core'
 
 export interface RestaurantDetail {
@@ -21,6 +27,9 @@ export interface RestaurantDetail {
   priceRange: number | null
   averageMealDuration: number
   reservationWindow: number
+  timeZone: string | null
+  noShowPolicy: string
+  depositPerGuest: number | null
   layoutWidth: number | null
   layoutHeight: number | null
   publicOnStandaloneApp: boolean
@@ -50,6 +59,9 @@ export async function getRestaurant(
     priceRange: r.priceRange,
     averageMealDuration: r.averageMealDuration,
     reservationWindow: r.reservationWindow,
+    timeZone: r.timeZone,
+    noShowPolicy: r.noShowPolicy,
+    depositPerGuest: r.depositPerGuest,
     layoutWidth: r.layoutWidth,
     layoutHeight: r.layoutHeight,
     publicOnStandaloneApp: r.publicOnStandaloneApp,
@@ -60,6 +72,34 @@ export async function getRestaurant(
       closeTime: h.closeTime,
     })),
   }
+}
+
+/** Service shifts for a restaurant. Ownership-checked. */
+export async function getRestaurantShifts(
+  restaurantId: string,
+): Promise<RestaurantShiftRecord[] | null> {
+  const { error } = await requireRestaurantOwner(restaurantId)
+  if (error) return null
+  return listShiftsForRestaurant(restaurantId)
+}
+
+/** Predefined table combinations for a restaurant. Ownership-checked. */
+export async function getRestaurantCombinations(
+  restaurantId: string,
+): Promise<TableCombinationRecord[] | null> {
+  const { error } = await requireRestaurantOwner(restaurantId)
+  if (error) return null
+  return listCombinationsForRestaurant(restaurantId)
+}
+
+/** Waitlist entries for a restaurant (optionally a single day). Ownership-checked. */
+export async function getRestaurantWaitlist(
+  restaurantId: string,
+  dateISO?: string,
+): Promise<WaitlistEntryRecord[] | null> {
+  const { error } = await requireRestaurantOwner(restaurantId)
+  if (error) return null
+  return listWaitlistForRestaurant(restaurantId, dateISO)
 }
 
 export interface RestaurantLayout {

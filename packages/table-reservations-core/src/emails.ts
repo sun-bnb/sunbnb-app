@@ -61,6 +61,31 @@ export function confirmationEmailHtml(
   return wrap(`Reservation confirmed at ${escapeHtml(restaurant.name)}`, body)
 }
 
+export function reminderEmailHtml(
+  reservation: Pick<
+    TableReservationRecord,
+    'id' | 'from' | 'to' | 'partySize' | 'guestName'
+  >,
+  restaurant: RestaurantEmailContext,
+  cancelUrl: string | null,
+): string {
+  const body = `
+  <p style="margin:0 0 16px 0;">Hi ${escapeHtml(reservation.guestName)},</p>
+  <p style="margin:0 0 16px 0;">
+    A reminder of your upcoming reservation at <strong>${escapeHtml(restaurant.name)}</strong>.
+  </p>
+  <table style="border-collapse: collapse; width: 100%; font-size: 14px; margin-bottom: 16px;">
+    <tr><td style="padding:4px 0;color:#6b7280;">Date</td><td style="padding:4px 0;">${formatDate(reservation.from)}</td></tr>
+    <tr><td style="padding:4px 0;color:#6b7280;">Time</td><td style="padding:4px 0;">${formatTime(reservation.from)} – ${formatTime(reservation.to)}</td></tr>
+    <tr><td style="padding:4px 0;color:#6b7280;">Party</td><td style="padding:4px 0;">${reservation.partySize} ${reservation.partySize === 1 ? 'guest' : 'guests'}</td></tr>
+  </table>
+  ${cancelUrl
+    ? `<p style="margin:0 0 16px 0;"><a href="${cancelUrl}" style="color:#2563eb;">Can't make it? Cancel here</a></p>`
+    : ''}
+  <p style="color:#6b7280; font-size: 13px;">We look forward to seeing you.</p>`
+  return wrap(`Reminder: your reservation at ${escapeHtml(restaurant.name)}`, body)
+}
+
 export function cancellationEmailHtml(
   reservation: Pick<
     TableReservationRecord,
@@ -77,6 +102,23 @@ export function cancellationEmailHtml(
   </p>
   <p style="color:#6b7280; font-size: 13px;">Reservation id: ${reservation.id}</p>`
   return wrap(`Reservation canceled at ${escapeHtml(restaurant.name)}`, body)
+}
+
+export function waitlistNotifyEmailHtml(
+  entry: { guestName: string; dateISO: string; partySize: number },
+  restaurant: RestaurantEmailContext,
+  bookUrl: string | null,
+): string {
+  const body = `
+  <p style="margin:0 0 16px 0;">Hi ${escapeHtml(entry.guestName)},</p>
+  <p style="margin:0 0 16px 0;">
+    Good news — a table has opened up at <strong>${escapeHtml(restaurant.name)}</strong> on
+    ${escapeHtml(entry.dateISO)} for ${entry.partySize} ${entry.partySize === 1 ? 'guest' : 'guests'}.
+  </p>
+  ${bookUrl
+    ? `<p style="margin:0 0 16px 0;"><a href="${bookUrl}" style="color:#2563eb;">Book now</a> — spots go fast.</p>`
+    : '<p style="margin:0 0 16px 0;">Reply or visit our page to book — spots go fast.</p>'}`
+  return wrap(`A table opened up at ${escapeHtml(restaurant.name)}`, body)
 }
 
 function escapeHtml(s: string): string {

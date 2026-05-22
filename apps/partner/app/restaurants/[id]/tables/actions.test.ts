@@ -138,6 +138,50 @@ describe('updateTableForRestaurant', () => {
       data: { capacity: 6 },
     })
   })
+
+  it('rejects an unknown table feature', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.table.findUnique).mockResolvedValueOnce({
+      id: 'table-1',
+      restaurantId: RESTAURANT_ID,
+    } as any)
+    coreOwnershipOk()
+
+    const res = await updateTableForRestaurant(RESTAURANT_ID, 'table-1', {
+      features: ['bogus'],
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/feature/i)
+  })
+
+  it('persists combinable + valid features', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.table.findUnique).mockResolvedValueOnce({
+      id: 'table-1',
+      restaurantId: RESTAURANT_ID,
+    } as any)
+    coreOwnershipOk()
+    vi.mocked(prisma.table.update).mockResolvedValue({ id: 'table-1' } as any)
+    vi.mocked(prisma.table.findUnique).mockResolvedValueOnce({
+      id: 'table-1',
+      restaurantId: RESTAURANT_ID,
+      number: 1,
+      capacity: 4,
+      minPartySize: 1,
+      shape: 'square',
+      status: 'active',
+    } as any)
+
+    const res = await updateTableForRestaurant(RESTAURANT_ID, 'table-1', {
+      combinable: true,
+      features: ['accessible', 'window'],
+    })
+    expect(res.status).toBe('ok')
+    expect(prisma.table.update).toHaveBeenCalledWith({
+      where: { id: 'table-1' },
+      data: { combinable: true, features: ['accessible', 'window'] },
+    })
+  })
 })
 
 // ─────────────────────────────────────────────────────

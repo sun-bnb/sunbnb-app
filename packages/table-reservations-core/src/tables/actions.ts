@@ -13,6 +13,14 @@ const ALLOWED_SHAPES: readonly TableShape[] = [
   'bar',
 ]
 const ALLOWED_STATUSES = ['active', 'inactive'] as const
+const ALLOWED_TABLE_FEATURES = [
+  'accessible',
+  'window',
+  'outdoor',
+  'high_top',
+  'communal',
+  'quiet',
+] as const
 
 function validateTableInput(input: Partial<TableInput>): string[] {
   const errors: string[] = []
@@ -119,6 +127,13 @@ function validateTableInput(input: Partial<TableInput>): string[] {
   if (input.staffNote !== undefined && input.staffNote !== null && input.staffNote.length > 500) {
     errors.push('Staff note is too long (max 500)')
   }
+  if (input.features !== undefined) {
+    if (!Array.isArray(input.features)) {
+      errors.push('Features must be a list')
+    } else if (input.features.some((f) => !ALLOWED_TABLE_FEATURES.includes(f as never))) {
+      errors.push('Invalid table feature')
+    }
+  }
   return errors
 }
 
@@ -169,6 +184,8 @@ export async function createTable(
       zone: input.zone ?? null,
       staffNote: input.staffNote ?? null,
       onlineBookable: input.onlineBookable ?? true,
+      combinable: input.combinable ?? false,
+      features: input.features ?? [],
       turnTimeMinutes: input.turnTimeMinutes ?? null,
       locked: input.locked ?? false,
       seatsTop: input.seatsTop ?? null,
@@ -227,6 +244,8 @@ export async function updateTable(
   if (patch.zone !== undefined) data.zone = patch.zone
   if (patch.staffNote !== undefined) data.staffNote = patch.staffNote
   if (patch.onlineBookable !== undefined) data.onlineBookable = patch.onlineBookable
+  if (patch.combinable !== undefined) data.combinable = patch.combinable
+  if (patch.features !== undefined) data.features = patch.features
   if (patch.turnTimeMinutes !== undefined) data.turnTimeMinutes = patch.turnTimeMinutes
   if (patch.locked !== undefined) data.locked = patch.locked
   if (patch.seatsTop !== undefined) data.seatsTop = patch.seatsTop
@@ -268,6 +287,8 @@ export async function duplicateTable(
       zone: true,
       staffNote: true,
       onlineBookable: true,
+      combinable: true,
+      features: true,
       turnTimeMinutes: true,
       locked: true,
       seatsTop: true,
@@ -302,6 +323,8 @@ export async function duplicateTable(
       zone: source.zone,
       staffNote: source.staffNote,
       onlineBookable: source.onlineBookable,
+      combinable: source.combinable,
+      features: source.features,
       turnTimeMinutes: source.turnTimeMinutes,
       // Don't carry the `locked` flag — the freshly placed copy should be
       // immediately movable.
@@ -407,4 +430,4 @@ export async function createTableGrid(
   return { status: 'ok', created: data.length }
 }
 
-export { ALLOWED_SHAPES, ALLOWED_STATUSES, TABLE_SHAPE_DEFAULTS }
+export { ALLOWED_SHAPES, ALLOWED_STATUSES, ALLOWED_TABLE_FEATURES, TABLE_SHAPE_DEFAULTS }

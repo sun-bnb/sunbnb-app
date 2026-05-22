@@ -110,11 +110,11 @@ describe('markRestaurantReservationSeated', () => {
     authorizeOwner()
     reservationOwnedByPartner()
     vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({ sudo: false } as any)
-    vi.mocked(prisma.tableReservation.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.tableReservation.updateMany).mockResolvedValue({ count: 1 } as any)
 
     const res = await markRestaurantReservationSeated(RESTAURANT_ID, RESERVATION_ID)
     expect(res.status).toBe('ok')
-    expect(prisma.tableReservation.update).toHaveBeenCalledWith({
+    expect(prisma.tableReservation.updateMany).toHaveBeenCalledWith({
       where: { id: RESERVATION_ID },
       data: expect.objectContaining({
         operationalStatus: 'seated',
@@ -133,11 +133,11 @@ describe('markRestaurantReservationDeparted', () => {
     authorizeOwner()
     reservationOwnedByPartner()
     vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({ sudo: false } as any)
-    vi.mocked(prisma.tableReservation.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.tableReservation.updateMany).mockResolvedValue({ count: 1 } as any)
 
     const res = await markRestaurantReservationDeparted(RESTAURANT_ID, RESERVATION_ID)
     expect(res.status).toBe('ok')
-    expect(prisma.tableReservation.update).toHaveBeenCalledWith({
+    expect(prisma.tableReservation.updateMany).toHaveBeenCalledWith({
       where: { id: RESERVATION_ID },
       data: expect.objectContaining({
         operationalStatus: 'departed',
@@ -156,11 +156,11 @@ describe('markRestaurantReservationNoShow', () => {
     authorizeOwner()
     reservationOwnedByPartner()
     vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({ sudo: false } as any)
-    vi.mocked(prisma.tableReservation.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.tableReservation.updateMany).mockResolvedValue({ count: 1 } as any)
 
     const res = await markRestaurantReservationNoShow(RESTAURANT_ID, RESERVATION_ID)
     expect(res.status).toBe('ok')
-    expect(prisma.tableReservation.update).toHaveBeenCalledWith({
+    expect(prisma.tableReservation.updateMany).toHaveBeenCalledWith({
       where: { id: RESERVATION_ID },
       data: { operationalStatus: 'no_show' },
     })
@@ -178,6 +178,7 @@ describe('cancelRestaurantReservation', () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({ sudo: false } as any)
     vi.mocked(prisma.tableReservation.findUnique)
       .mockResolvedValueOnce({ status: 'confirmed' } as any)
+      .mockResolvedValueOnce({ bookingGroupId: null } as any) // targetGroupWhere lookup
       .mockResolvedValueOnce({
         id: RESERVATION_ID,
         restaurantId: RESTAURANT_ID,
@@ -198,11 +199,11 @@ describe('cancelRestaurantReservation', () => {
         departedAt: null,
         createdAt: new Date(),
       } as any)
-    vi.mocked(prisma.tableReservation.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.tableReservation.updateMany).mockResolvedValue({ count: 1 } as any)
 
     const res = await cancelRestaurantReservation(RESTAURANT_ID, RESERVATION_ID)
     expect(res.status).toBe('ok')
-    expect(prisma.tableReservation.update).toHaveBeenCalledWith({
+    expect(prisma.tableReservation.updateMany).toHaveBeenCalledWith({
       where: { id: RESERVATION_ID },
       data: { status: 'canceled' },
     })

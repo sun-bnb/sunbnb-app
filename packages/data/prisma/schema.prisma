@@ -637,6 +637,15 @@ model Restaurant {
   priceRange            Int?                @map("price_range")            // 1..4
   averageMealDuration   Int                 @default(120) @map("average_meal_duration")
   reservationWindow     Int                 @default(60)  @map("reservation_window")
+  // IANA timezone (e.g. "Europe/Madrid") the venue's working hours and slot
+  // wall-clock times are interpreted in. Null falls back to a default in the
+  // availability engine — the server process TZ must never be used for slot math.
+  timeZone              String?             @map("time_zone")
+  // No-show protection. "none" = free bookings (default). "deposit" = a
+  // per-guest deposit is required for shifts/parties that opt in (per-shift
+  // `requiresDeposit` + `depositMinPartySize`). Consumer-paid via the apps.
+  noShowPolicy          String              @default("none") @map("no_show_policy")
+  depositPerGuest       Float?              @map("deposit_per_guest")
   layoutWidth           Float?              @map("layout_width")
   layoutHeight          Float?              @map("layout_height")
   // If false, chiringuito-linked restaurants stay hidden from tablefind.app's
@@ -650,6 +659,9 @@ model Restaurant {
   reservations          TableReservation[]
   menuItems             MenuItem[]
   workingHours          RestaurantHours[]
+  shifts                RestaurantShift[]
+  combinations          TableCombination[]
+  waitlistEntries       TableWaitlistEntry[]
   layoutElements        LayoutElement[]
 
   @@index([partnerAccountId])
@@ -684,6 +696,11 @@ model Table {
   // When false, the table is reserved for walk-ins / staff seating only and
   // never surfaces in the consumer availability search.
   onlineBookable Boolean             @default(true) @map("online_bookable")
+  // Eligible to be joined into a TableCombination for larger parties.
+  combinable     Boolean             @default(false)
+  // Booking-relevant attributes (validated allowed set in core): "accessible",
+  // "window", "outdoor", "high_top", "communal", "quiet". Section = `zone`.
+  features       String[]            @default([])
   // Per-table override of `Restaurant.averageMealDuration`. Null inherits.
   turnTimeMinutes Int?               @map("turn_time_minutes")
   // Editor-only flag: prevents accidental drag/resize on the floor plan.
@@ -717,6 +734,16 @@ model TableReservation {
   status            String      @default("confirmed")     // confirmed | canceled
   operationalStatus String      @default("expected") @map("operational_status")
                                                           // expected | seated | departed | no_show
+  // When a large party books a TableCombination, one TableReservation row is
+  // created per member table, all sharing this group id (cancel/seat operate on
+  // the group). Null for ordinary single-table bookings.
+  bookingGroupId    String?     @map("booking_group_id")
+  // No-show deposit (chunk 1e). depositAmount = required deposit (null = free);
+  // depositStatus = none|pending|held|charged|refunded|released; paymentRef is
+  // the Stripe/Mollie/demo reference once a deposit is collected by the app.
+  depositAmount     Float?      @map("deposit_amount")
+  depositStatus     String?     @map("deposit_status")
+  paymentRef        String?     @map("payment_ref")
   guestName         String      @map("guest_name")
   guestEmail        String      @map("guest_email")
   guestPhone        String?     @map("guest_phone")
@@ -733,7 +760,48 @@ model TableReservation {
 
   @@index([restaurantId, from])
   @@index([tableId, from, to])
+  @@index([bookingGroupId])
   @@map("table_reservation")
+}
+
+// A predefined joinable set of tables for large parties (the OpenTable /
+// SevenRooms model). All member tables must have `combinable = true`. Booking a
+// combination creates one TableReservation per member sharing a bookingGroupId.
+model TableCombination {
+  id           String     @id @default(cuid())
+  restaurantId String     @map("restaurant_id")
+  name         String?
+  capacity     Int                                  // combined seating
+  tableIds     String[]   @map("table_ids")         // member Table ids
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId])
+  @@map("table_combination")
+}
+
+// A guest waiting for an opening on a given day. When a reservation frees
+// capacity, the earliest matching waiting entry is auto-notified by the apps.
+model TableWaitlistEntry {
+  id            String     @id @default(cuid())
+  restaurantId  String     @map("restaurant_id")
+  dateISO       String     @map("date_iso")          // venue civil date "YYYY-MM-DD"
+  requestedTime String?    @map("requested_time")     // "HH:mm" preference, optional
+  partySize     Int        @map("party_size")
+  guestName     String     @map("guest_name")
+  guestEmail    String     @map("guest_email")
+  guestPhone    String?    @map("guest_phone")
+  status        String     @default("waiting")        // waiting | notified | converted | expired
+  notifiedAt    DateTime?  @map("notified_at")
+  userId        String?    @map("user_id")
+  anonId        String?    @map("anon_id")
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId, dateISO, status])
+  @@map("table_waitlist_entry")
 }
 
 model MenuItem {
@@ -767,6 +835,36 @@ model RestaurantHours {
 
   @@index([restaurantId])
   @@map("restaurant_hours")
+}
+
+// Named service shift (e.g. Lunch, Dinner) for a weekday. When a restaurant has
+// shifts for a day, the availability engine uses them instead of RestaurantHours
+// (which it falls back to when there are none). Shifts add pacing — a cap on the
+// covers (summed party size) that may *start* within each pacing window.
+model RestaurantShift {
+  id                      String     @id @default(cuid())
+  restaurantId            String     @map("restaurant_id")
+  name                    String
+  day                     Int                                 // 0 (Sun) .. 6 (Sat)
+  startTime               String     @map("start_time")       // "HH:mm"
+  endTime                 String     @map("end_time")         // "HH:mm"
+  // Max covers (sum of party sizes) that may start in one pacing window. Null =
+  // unlimited (no pacing on this shift).
+  pacingCovers            Int?       @map("pacing_covers")
+  pacingWindowMinutes     Int        @default(15) @map("pacing_window_minutes")
+  // Latest booking start before the shift ends, as minutes-before-end. Null =
+  // only bounded by the meal fitting before end.
+  lastSeatingOffsetMinutes Int?      @map("last_seating_offset_minutes")
+  // No-show deposit gate (consumed in chunk 1e). When true, this shift requires
+  // a deposit for parties ≥ depositMinPartySize.
+  requiresDeposit         Boolean    @default(false) @map("requires_deposit")
+  depositMinPartySize     Int?       @map("deposit_min_party_size")
+  createdAt               DateTime   @default(now())
+  updatedAt               DateTime   @updatedAt
+  restaurant              Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId, day])
+  @@map("restaurant_shift")
 }
 
 model AdminUser {

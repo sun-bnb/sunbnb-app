@@ -7,9 +7,15 @@ import {
   createRestaurant as coreCreateRestaurant,
   updateRestaurant,
   setRestaurantHours,
+  setRestaurantShifts,
+  createCombination,
+  updateCombination,
+  deleteCombination,
   uniqueRestaurantSlug,
   type RestaurantInput,
   type RestaurantHoursInput,
+  type RestaurantShiftInput,
+  type TableCombinationInput,
 } from '@repo/table-reservations-core'
 
 /**
@@ -153,6 +159,59 @@ export async function setRestaurantOpeningHours(
   if (res.status === 'ok') {
     revalidatePath(`/restaurants/${restaurantId}`)
   }
+  return res
+}
+
+/**
+ * Replace the set of service shifts (with pacing) for a Restaurant.
+ */
+export async function setRestaurantServiceShifts(
+  restaurantId: string,
+  shifts: RestaurantShiftInput[],
+) {
+  const { session, error } = await requireRestaurantOwnerWithFlag(restaurantId, 'restaurants')
+  if (error) return { status: 'error' as const, errors: [error] }
+
+  const res = await setRestaurantShifts(restaurantId, shifts, session!.user.id as string)
+  if (res.status === 'ok') {
+    revalidatePath(`/restaurants/${restaurantId}`)
+  }
+  return res
+}
+
+// ─── Table combinations (large-party joins) ─────────────────────────────────
+
+export async function createRestaurantCombination(
+  restaurantId: string,
+  input: TableCombinationInput,
+) {
+  const { session, error } = await requireRestaurantOwnerWithFlag(restaurantId, 'restaurants')
+  if (error) return { status: 'error' as const, errors: [error] }
+  const res = await createCombination(restaurantId, input, session!.user.id as string)
+  if (res.status === 'ok') revalidatePath(`/restaurants/${restaurantId}/tables`)
+  return res
+}
+
+export async function updateRestaurantCombination(
+  restaurantId: string,
+  combinationId: string,
+  patch: Partial<TableCombinationInput>,
+) {
+  const { session, error } = await requireRestaurantOwnerWithFlag(restaurantId, 'restaurants')
+  if (error) return { status: 'error' as const, errors: [error] }
+  const res = await updateCombination(combinationId, patch, session!.user.id as string)
+  if (res.status === 'ok') revalidatePath(`/restaurants/${restaurantId}/tables`)
+  return res
+}
+
+export async function deleteRestaurantCombination(
+  restaurantId: string,
+  combinationId: string,
+) {
+  const { session, error } = await requireRestaurantOwnerWithFlag(restaurantId, 'restaurants')
+  if (error) return { status: 'error' as const, errors: [error] }
+  const res = await deleteCombination(combinationId, session!.user.id as string)
+  if (res.status === 'ok') revalidatePath(`/restaurants/${restaurantId}/tables`)
   return res
 }
 

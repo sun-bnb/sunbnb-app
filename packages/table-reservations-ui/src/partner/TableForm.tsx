@@ -15,6 +15,15 @@ import type { TableInput } from '@repo/table-reservations-core'
 
 export type TableFormShape = 'square' | 'round' | 'rect' | 'oval' | 'booth' | 'bar'
 
+const FEATURE_OPTIONS: Array<{ key: string; labelKey: keyof TableFormLabels }> = [
+  { key: 'accessible', labelKey: 'featureAccessible' },
+  { key: 'window', labelKey: 'featureWindow' },
+  { key: 'outdoor', labelKey: 'featureOutdoor' },
+  { key: 'high_top', labelKey: 'featureHighTop' },
+  { key: 'communal', labelKey: 'featureCommunal' },
+  { key: 'quiet', labelKey: 'featureQuiet' },
+]
+
 export interface TableFormLabels {
   heading: string
   number: string
@@ -35,6 +44,14 @@ export interface TableFormLabels {
   zone: string
   staffNote: string
   onlineBookable: string
+  combinable: string
+  featuresHeading: string
+  featureAccessible: string
+  featureWindow: string
+  featureOutdoor: string
+  featureHighTop: string
+  featureCommunal: string
+  featureQuiet: string
   turnTimeMinutes: string
   inheritsFromRestaurant: string
   locked: string
@@ -64,6 +81,8 @@ export interface TableFormValues {
   zone: string
   staffNote: string
   onlineBookable: boolean
+  combinable: boolean
+  features: string[]
   turnTimeMinutes: number | null
   locked: boolean
   seatsTop: number | null
@@ -303,6 +322,50 @@ export function TableForm({ initial, labels, onChange, onDelete, onClose }: Tabl
         }
         label={<span className="text-xs text-gray-700">{labels.onlineBookable}</span>}
       />
+
+      <FormControlLabel
+        control={
+          <Switch
+            size="small"
+            checked={values.combinable}
+            onChange={(_, checked) => {
+              setValues((s) => ({ ...s, combinable: checked }))
+              saveNow({ combinable: checked })
+            }}
+          />
+        }
+        label={<span className="text-xs text-gray-700">{labels.combinable}</span>}
+      />
+
+      <div className="flex flex-col gap-1.5 border-t border-gray-100 pt-3">
+        <span className="text-xs font-medium text-gray-600">{labels.featuresHeading}</span>
+        <div className="flex flex-wrap gap-1.5">
+          {FEATURE_OPTIONS.map(({ key, labelKey }) => {
+            const active = values.features.includes(key)
+            return (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={active}
+                onClick={() => {
+                  const next = active
+                    ? values.features.filter((f) => f !== key)
+                    : [...values.features, key]
+                  setValues((s) => ({ ...s, features: next }))
+                  saveNow({ features: next })
+                }}
+                className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                  active
+                    ? 'border-gray-900 bg-gray-900 text-white'
+                    : 'border-gray-300 text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                {labels[labelKey]}
+              </button>
+            )
+          })}
+        </div>
+      </div>
 
       <FormControlLabel
         control={

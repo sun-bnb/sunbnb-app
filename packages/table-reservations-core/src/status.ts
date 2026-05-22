@@ -40,3 +40,37 @@ export const TERMINAL_TABLE_RESERVATION_OP_STATUSES: readonly string[] = [
   TABLE_RESERVATION_OP_STATUS.DEPARTED,
   TABLE_RESERVATION_OP_STATUS.NO_SHOW,
 ]
+
+// ─── No-show protection (chunk 1e) ───────────────────────────────────────────
+
+export const NO_SHOW_POLICY = {
+  NONE: 'none',
+  DEPOSIT: 'deposit',
+} as const
+
+export type NoShowPolicy = (typeof NO_SHOW_POLICY)[keyof typeof NO_SHOW_POLICY]
+
+// Deposit lifecycle: none (free) → pending (required, awaiting payment) → held
+// (collected) → charged (kept after no-show) | refunded (timely cancel) |
+// released (guest showed; hold dropped / credited).
+export const DEPOSIT_STATUS = {
+  NONE: 'none',
+  PENDING: 'pending',
+  HELD: 'held',
+  CHARGED: 'charged',
+  REFUNDED: 'refunded',
+  RELEASED: 'released',
+} as const
+
+export type DepositStatus = (typeof DEPOSIT_STATUS)[keyof typeof DEPOSIT_STATUS]
+
+// ─── Waitlist (chunk 1g) ──────────────────────────────────────────────────────
+
+export const WAITLIST_STATUS = {
+  WAITING: 'waiting',
+  NOTIFIED: 'notified',
+  CONVERTED: 'converted',
+  EXPIRED: 'expired',
+} as const
+
+export type WaitlistStatus = (typeof WAITLIST_STATUS)[keyof typeof WAITLIST_STATUS]

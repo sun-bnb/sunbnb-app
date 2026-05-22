@@ -5,34 +5,51 @@ import { useTranslations } from 'next-intl'
 import {
   RestaurantSettingsForm,
   RestaurantHoursEditor,
+  ShiftsEditor,
   type RestaurantSettingsValues,
   type SaveStatus,
 } from '@repo/table-reservations-ui'
-import type { RestaurantHoursInput } from '@repo/table-reservations-core'
+import type {
+  RestaurantHoursInput,
+  RestaurantShiftInput,
+  RestaurantShiftRecord,
+} from '@repo/table-reservations-core'
 import { RestaurantSubNav } from './RestaurantSubNav'
 import { RestaurantHeader } from './RestaurantHeader'
-import { getRestaurant, type RestaurantDetail } from './queries'
-import { updateRestaurantSettings, setRestaurantOpeningHours } from './actions'
+import { getRestaurant, getRestaurantShifts, type RestaurantDetail } from './queries'
+import {
+  updateRestaurantSettings,
+  setRestaurantOpeningHours,
+  setRestaurantServiceShifts,
+} from './actions'
 
 export default function RestaurantView({ restaurantId }: { restaurantId: string }) {
   const t = useTranslations('Restaurant')
 
   const [restaurant, setRestaurant] = useState<RestaurantDetail | null>(null)
+  const [shifts, setShifts] = useState<RestaurantShiftRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [saveErrors, setSaveErrors] = useState<string[]>([])
 
   async function refresh() {
-    const r = await getRestaurant(restaurantId)
+    const [r, s] = await Promise.all([
+      getRestaurant(restaurantId),
+      getRestaurantShifts(restaurantId),
+    ])
     setRestaurant(r)
+    setShifts(s ?? [])
   }
 
   useEffect(() => {
     setLoading(true)
-    getRestaurant(restaurantId).then((r) => {
-      setRestaurant(r)
-      setLoading(false)
-    })
+    Promise.all([getRestaurant(restaurantId), getRestaurantShifts(restaurantId)]).then(
+      ([r, s]) => {
+        setRestaurant(r)
+        setShifts(s ?? [])
+        setLoading(false)
+      },
+    )
   }, [restaurantId])
 
   if (loading || !restaurant) {
@@ -53,6 +70,9 @@ export default function RestaurantView({ restaurantId }: { restaurantId: string 
     priceRange: restaurant.priceRange,
     averageMealDuration: restaurant.averageMealDuration,
     reservationWindow: restaurant.reservationWindow,
+    timeZone: restaurant.timeZone ?? '',
+    noShowPolicy: restaurant.noShowPolicy,
+    depositPerGuest: restaurant.depositPerGuest,
     publicOnStandaloneApp: restaurant.publicOnStandaloneApp,
   }
 
@@ -98,6 +118,14 @@ export default function RestaurantView({ restaurantId }: { restaurantId: string 
             averageMealDurationHint: t('fieldAverageMealDurationHint'),
             reservationWindow: t('fieldReservationWindow'),
             reservationWindowHint: t('fieldReservationWindowHint'),
+            timeZone: t('fieldTimeZone'),
+            timeZoneHint: t('fieldTimeZoneHint'),
+            timeZoneDefault: t('fieldTimeZoneDefault'),
+            noShowPolicy: t('fieldNoShowPolicy'),
+            noShowPolicyNone: t('fieldNoShowPolicyNone'),
+            noShowPolicyDeposit: t('fieldNoShowPolicyDeposit'),
+            depositPerGuest: t('fieldDepositPerGuest'),
+            depositPerGuestHint: t('fieldDepositPerGuestHint'),
             publicOnStandaloneApp: t('fieldPublicOnStandaloneApp'),
             publicOnStandaloneAppHint: t('fieldPublicOnStandaloneAppHint'),
           }}
@@ -131,6 +159,55 @@ export default function RestaurantView({ restaurantId }: { restaurantId: string 
           onSaveStatusChange={trackSave}
           onSave={async (hours) => {
             const res = await setRestaurantOpeningHours(restaurantId, hours)
+            if (res.status === 'ok') await refresh()
+            return res
+          }}
+        />
+
+        <ShiftsEditor
+          initial={shifts.map(
+            (s): RestaurantShiftInput => ({
+              name: s.name,
+              day: s.day,
+              startTime: s.startTime,
+              endTime: s.endTime,
+              pacingCovers: s.pacingCovers,
+              pacingWindowMinutes: s.pacingWindowMinutes,
+              lastSeatingOffsetMinutes: s.lastSeatingOffsetMinutes,
+              requiresDeposit: s.requiresDeposit,
+              depositMinPartySize: s.depositMinPartySize,
+            }),
+          )}
+          labels={{
+            heading: t('shiftsHeading'),
+            addShift: t('shiftAdd'),
+            name: t('shiftName'),
+            day: t('shiftDay'),
+            start: t('shiftStart'),
+            end: t('shiftEnd'),
+            pacingCovers: t('shiftPacingCovers'),
+            pacingWindow: t('shiftPacingWindow'),
+            lastSeating: t('shiftLastSeating'),
+            noPacingHint: t('shiftNoPacing'),
+            requiresDeposit: t('shiftRequiresDeposit'),
+            depositMinParty: t('shiftDepositMinParty'),
+            remove: t('shiftRemove'),
+            save: t('shiftSave'),
+            saving: t('saving'),
+            empty: t('shiftEmpty'),
+            dayNames: [
+              t('daySun'),
+              t('dayMon'),
+              t('dayTue'),
+              t('dayWed'),
+              t('dayThu'),
+              t('dayFri'),
+              t('daySat'),
+            ],
+          }}
+          onSaveStatusChange={trackSave}
+          onSave={async (next) => {
+            const res = await setRestaurantServiceShifts(restaurantId, next)
             if (res.status === 'ok') await refresh()
             return res
           }}
