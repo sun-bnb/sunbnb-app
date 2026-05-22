@@ -121,3 +121,4 @@ Requires local Docker Postgres with `sunbnb_test` DB (same DB as `packages/data`
 - Equipment rentals: supports hourly and daily bookings. `viewMode` (sunbeds/equipment) stored in Redux so the mobile drawer can adapt its peek height to content. Tab switching opens the drawer automatically
 - Mobile reservation drawer: fixed bottom panel with peek (minimized) and expanded states. Peek height varies by tab — sunbeds shows date range only, equipment shows hours/days toggle + time picker. Drawer opens on tab switch
 - Error handling: server actions return `{ status: 'ok' | 'error', errors?: string[] }`. API error responses use generic messages (no internal details leaked)
+- UI / design system: see **`apps/user/UI.md`** (user design-system layer) + the general **`.claude/rules/ui.md`**; prime UI work with `/ui user`.

@@ -51,3 +51,7 @@ Run: `npm test`, `npm run test:watch`, `npm run test:coverage`
 - **Duplicate country settings**: no uniqueness check when creating settings for same country
 - **Password validation mismatch**: `reset-password` API route validates `>= 6 chars` but `@repo/data/password-reset` enforces `8+ chars with upper+lower+digit` — misleading API error message
 - **No siteId validation** in `updatePaymentProvider`: empty string goes to DB without check
+
+## UI / design system
+
+See **`apps/admin/UI.md`** (admin design-system layer) + the general **`.claude/rules/ui.md`**; prime UI work with `/ui admin`.

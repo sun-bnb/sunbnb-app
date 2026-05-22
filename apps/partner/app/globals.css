@@ -11,3 +11,32 @@
     @apply text-gray-900 bg-white;
   }
 }
+
+/* Semantic component classes — see .claude/rules/ui.md. Prefer these over
+   re-typing the utility strings; one-offs may still use raw utilities. */
+@layer components {
+  .btn-primary {
+    @apply bg-accent text-white px-4 py-2 text-sm font-medium rounded-lg transition-colors hover:bg-accent-hover disabled:opacity-60 disabled:cursor-not-allowed;
+  }
+  .btn-ghost {
+    @apply text-sm font-medium text-gray-600 transition-colors hover:text-gray-900;
+  }
+  .btn-danger {
+    @apply bg-red-600 text-white px-4 py-2 text-sm font-medium rounded-lg transition-colors hover:bg-red-700;
+  }
+  .input {
+    @apply w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent;
+  }
+  .label {
+    @apply block text-xs font-medium text-gray-700 mb-1.5;
+  }
+  .card {
+    @apply bg-white rounded-xl border border-gray-200 p-4;
+  }
+  .card-add {
+    @apply bg-white rounded-xl border-2 border-dashed border-gray-300 transition-colors hover:border-gray-400 hover:bg-gray-50;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full;
+  }
+}

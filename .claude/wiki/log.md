@@ -61,3 +61,22 @@ Operations:
 - reason: `reserveItem` gained an optional `until` param for multi-day walk-in stays (starts today, max 90d) plus an item+pair overlap check that previously did not exist (apps/partner manage page feature). While revising, corrected stale signatures: the page documented `reserveItem(…, from, to, …)` and `blockBed(…, from, to)` date-window params that never existed in code.
 - follow-up: other rows in the Available-actions table use a simplified signature shorthand (omit/garble `siteId`/`accessKey`/reservationId — e.g. `unreserveItem`, `checkInReservation`); a `/wiki lint` pass on this page could reconcile the whole table against `manage/actions.ts`.
 - by: claude
+
+## [2026-05-22] add page | Design-system subsystem + /ui capability
+- mode: add page
+- changed: `.claude/wiki/subsystems/design-system.md` (new); `.claude/wiki/index.md`; new `/ui` command (`.claude/commands/ui.md`); `/ui` wired into partner/user/admin-dev start sequences
+- reason: Codify the UI design language as a shared capability (skill + wiki page) mirroring `/schematic`, so per-surface dev agents pull and apply it instead of improvising. Canonical conventions stay in `.claude/rules/ui.md`; this page is orientation — where it lives, building blocks, reference impl (restaurant General tab), invariants/pitfalls (incl. the Tailwind content-scan gotcha for shared packages, and that shared components can't use the app-only `accent`/`.btn-*`).
+- follow-up: promote `draft`→`stable` after a verification pass; generalize beyond partner once `apps/user`/`apps/admin` adopt it; revisit if a design-system package-owner agent becomes warranted.
+- by: claude
+
+## [2026-05-22] patch | Per-app UI layers moved to apps/<app>/UI.md (pulled, not auto-loaded)
+- mode: patch
+- changed: `.claude/wiki/subsystems/design-system.md` (per-app pointer → `apps/<app>/UI.md`). Companion non-wiki edits: extracted the per-app UI detail out of each `apps/<app>/CLAUDE.md` into a new `apps/<app>/UI.md`, leaving a one-line pointer in CLAUDE.md; `/ui` command + `.claude/rules/ui.md` re-pointed.
+- reason: CLAUDE.md is auto-loaded every session, so per-app UI detail there taxed non-UI tasks. The per-app layer now lives in pulled-on-demand `apps/<app>/UI.md`, loaded only via `/ui <surface>` — detailed when needed, absent otherwise.
+- by: claude
+
+## [2026-05-22] revise | Fold full UI conventions into design-system page; lean the rule
+- mode: revise
+- changed: `.claude/wiki/subsystems/design-system.md` absorbed the full conventions (color/type/spacing/shape, component class expansions, page-structure patterns, resolved conventions). Companion: `.claude/rules/ui.md` trimmed to the non-negotiables + pointers; `/ui` command re-pointed (rule auto-loaded; this page = full conventions).
+- reason: `.claude/rules/*` is auto-loaded every session; the ~130-line design language taxed non-UI tasks. The always-loaded rule now carries only the non-negotiables; the full conventions are pulled here via `/ui`. This page is now the canonical detailed design language — a deliberate exception to "wiki points, doesn't replace" (the design language is synthesized prescriptive knowledge with no other canonical home).
+- by: claude

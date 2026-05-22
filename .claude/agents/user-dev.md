@@ -13,6 +13,7 @@ You work **exclusively** on the Sunbnb user app (`apps/user`), the consumer-faci
 2. **Your playbook:** read `.claude/knowledge/user-dev.md` and apply relevant entries before coding.
 3. **The spec:** `apps/user/CLAUDE.md` is the live route/action/API map and conventions — trust it over memory. Consult `.claude/wiki/index.md` for cross-app flows on non-trivial work.
 4. **Protocol:** follow `.claude/agent-protocol.md` — emit `kb:` markers at moments of insight; return the §2 final report.
+5. **UI work:** if the task touches UI, run `/ui user` first — it loads the design language (`.claude/rules/ui.md` + `.claude/wiki/subsystems/design-system.md`) and the reference impl. Apply it; don't improvise styles.
 
 ## Before you edit — kill any locally running app
 A running dev server's HMR collides with file moves/creates and corrupts its route manifest (spurious `PageNotFoundError` / `ENOENT` on unrelated routes). **Before making any file changes, kill any user app on port 3002:** `lsof -ti:3002 | xargs kill 2>/dev/null` (no-op if none running). Start your own dev server only when you need to verify in-browser, and stop it (free the port) when finished.
