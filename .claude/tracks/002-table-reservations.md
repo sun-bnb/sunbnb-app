@@ -177,6 +177,17 @@ resolved.
 - ☐ **Wiki documentation.** No `entity:table-reservation` or `subsystem:table-reservations`
   page yet; the `subsystem:schematic-editor` page is still **draft**. Document the engine,
   flows, and the standalone-extraction design.
+- ☐ **Table-editor reservation depth** (deferred from the 2026-05-22 web research into reservation
+  apps — OpenTable/SevenRooms/Resy/Toast). The table editor's *palette content* is reworked
+  (meaningful Areas + shape-differentiated Fixtures), but the booking-relevant depth is still
+  missing, in rough priority:
+  1. **Table attributes** (small schema + `TableForm`): table **type** (booth/banquette/high-top/
+     bar/communal), **ADA-accessible** flag (ADA wants ≥5% accessible seating), **by-window**.
+  2. **Section-based availability + guest preference**: tie tables to a bookable **area/section**
+     (indoor/outdoor/bar/private — currently the editor "Areas" are visual-only) so guests can
+     book/prefer a section; touches the availability engine + `getRestaurantAvailability`.
+  3. **Table combinations**: auto-merge adjacent tables for large parties (the killer feature in
+     OpenTable & SevenRooms) — schema for combinable sets + availability-engine support.
 - 💤 **Standalone "tablefind.app" extraction (confirmed, deferred).** The long-horizon payoff:
   spin the `table-reservations-*` packages into a standalone consumer app on its own domain.
   Direction is decided; timing is post-Sunbnb-integration. Every shared-package change should
@@ -218,6 +229,31 @@ resolved.
   between each. Also fixed the root cause of spurious dev-server `PageNotFoundError`s — a running
   HMR server colliding with the agents' file churn — by adding a "kill the local app before
   editing" rule to all three dev-agent definitions ([[kill-app-before-dev]]).
+- **2026-05-22** — Partner restaurant **UI design language** established + codified in
+  `.claude/rules/ui.md` (flat bordered-card aesthetic, near-black `accent` token, one warm
+  sun-amber decorative monogram, Tailwind-first/no-MUI, identity header + grouped cards, new
+  accessible `Toggle`, segmented control). Built it on the **General** tab (now the canonical
+  reference). **Rollout Phase 1 done:** extracted a shared `RestaurantHeader` (monogram + chips +
+  inline save status) and applied it to all four detail tabs (General/Tables/Menu/Reservations) —
+  Tables' full-width `SaveStatusBanner` replaced by the header's inline status. tsc clean, all
+  four routes compile, browser-verification pending. **Phase 2 queued** (shared-component MUI
+  cleanup in `@repo/table-reservations-ui`): `MenuEditor`/`TableLayoutEditor` buttons → `.btn-primary`;
+  `MenuItemRow` `Switch` → `Toggle`; `ReservationList` `ToggleButtonGroup` → segmented control + the
+  date as a Tailwind input; `ReservationRow` MUI buttons/menu → Tailwind. **Keep MUI for the
+  dialogs** (`MenuItemDialog`, `TableGridDialog`) per the guide's complex-widget rule. `TableForm`
+  (large MUI form) is its own follow-up packet.
+- **2026-05-22** — Design language **codified** (`.claude/rules/ui.md` lean rule → full conventions
+  in `subsystem:design-system` → per-app `apps/<app>/UI.md`; `/ui <surface>` capability; wired into
+  the dev agents). General tab polished into the canonical reference (identity header + grouped
+  cards + segmented price control + Tailwind `Toggle` + sun-amber monogram); shared `RestaurantHeader`
+  on all tabs. **Tables tab** integrated into one editor card (unified toolbar: Add table + canvas
+  dimensions) and the **table-grid feature removed** end-to-end (UI/action/test/dialog/export; core
+  `createTableGrid` left as dead-but-harmless engine code). **Element palette reworked** from the
+  research: "Surfaces" became **Areas** (dining/terrace/bar/lounge/private/kitchen), arbitrary
+  "Objects" became **Fixtures** differentiated by shape (entrance/bar-counter/host-stand/restroom/
+  wall/pillar/plant); no schema change. **Web research** (OpenTable/SevenRooms/Resy/Toast/RoomSketcher)
+  drove the new "Table-editor reservation depth" roadmap item (table attributes, section availability,
+  table combinations). MUI removal advanced (Switch to Toggle, dimensions inputs, table-editor toolbar).
 
 ## Open decisions
 
