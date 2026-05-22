@@ -5,5 +5,9 @@ export default async function MenuPage({
 }: {
   params: { id: string }
 }) {
-  return <MenuView restaurantId={params.id} />
+  return (
+    <div className="container mx-auto max-w-[768px]">
+      <MenuView restaurantId={params.id} />
+    </div>
+  )
 }

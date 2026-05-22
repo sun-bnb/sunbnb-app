@@ -1,17 +1,31 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import TextField from '@mui/material/TextField'
-import MenuItem from '@mui/material/MenuItem'
-import Divider from '@mui/material/Divider'
-import Switch from '@mui/material/Switch'
-import FormControlLabel from '@mui/material/FormControlLabel'
 import type { RestaurantInput } from '@repo/table-reservations-core'
+import { Toggle } from './Toggle'
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
+// Raw utility strings (this shared package can't see the partner app's
+// component classes) — kept aligned with .claude/rules/ui.md by hand.
+const INPUT =
+  'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900'
+const LABEL = 'block text-xs font-medium text-gray-700 mb-1.5'
+const HELPER = 'mt-1 block text-xs text-gray-500'
+const HEADING = 'text-sm font-medium text-gray-700 mb-3'
+const CARD = 'rounded-xl border border-gray-200 bg-white p-5 shadow-sm'
+
+const PRICE_OPTIONS: Array<{ value: number | null; label: string }> = [
+  { value: null, label: '—' },
+  { value: 1, label: '$' },
+  { value: 2, label: '$$' },
+  { value: 3, label: '$$$' },
+  { value: 4, label: '$$$$' },
+]
+
 export interface RestaurantSettingsLabels {
   identityHeading: string
+  detailsHeading: string
   policyHeading: string
   visibilityHeading: string
   name: string
@@ -52,13 +66,14 @@ export interface RestaurantSettingsFormProps {
 }
 
 /**
- * Editable restaurant-settings form matching the partner-app design language
- * (MUI outlined fields, `h3 text-sm font-medium text-gray-700 mb-2` section
- * headings, dividers). Brand-neutral: labels come from the parent.
+ * Editable restaurant-settings form. Grouped into cards (Identity, Details,
+ * Policy, Visibility) per the "settings page" pattern in .claude/rules/ui.md;
+ * short fields paired into a 2-column grid; price uses a segmented control and
+ * visibility a Tailwind Toggle. Brand-neutral: labels come from the parent.
  *
- * Text fields debounce 1.5s before saving; the Switch saves immediately on
- * toggle. Save status is propagated up via `onSaveStatusChange` so the parent
- * can drive a single page-level indicator.
+ * Text fields debounce 1.5s before saving; the price control and toggle save
+ * immediately. Save status is propagated up via `onSaveStatusChange` so the
+ * parent can drive a single page-level indicator.
  */
 export function RestaurantSettingsForm({
   initial,
@@ -93,68 +108,73 @@ export function RestaurantSettingsForm({
   }
 
   return (
-    <div>
-      {/* Identity — name + slug */}
-      <div className="mb-5">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">{labels.identityHeading}</h3>
-        <TextField
-          fullWidth
-          required
-          label={labels.name}
-          value={values.name}
-          onChange={(e) => {
-            const v = e.target.value
-            setValues((s) => ({ ...s, name: v }))
-            scheduleSave({ name: v })
-          }}
-          helperText={labels.nameHelper}
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          fullWidth
-          label={labels.slug}
-          value={values.slug}
-          onChange={(e) => {
-            const v = e.target.value
-            setValues((s) => ({ ...s, slug: v }))
-            scheduleSave({ slug: v })
-          }}
-          helperText={labels.slugHelper}
-        />
-      </div>
+    <div className="space-y-4">
+      {/* Identity — name + link */}
+      <section className={CARD}>
+        <h3 className={HEADING}>{labels.identityHeading}</h3>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className={LABEL}>{labels.name}</span>
+            <input
+              className={INPUT}
+              required
+              value={values.name}
+              onChange={(e) => {
+                const v = e.target.value
+                setValues((s) => ({ ...s, name: v }))
+                scheduleSave({ name: v })
+              }}
+            />
+            <span className={HELPER}>{labels.nameHelper}</span>
+          </label>
+          <label className="block">
+            <span className={LABEL}>{labels.slug}</span>
+            <input
+              className={INPUT}
+              value={values.slug}
+              onChange={(e) => {
+                const v = e.target.value
+                setValues((s) => ({ ...s, slug: v }))
+                scheduleSave({ slug: v })
+              }}
+            />
+            <span className={HELPER}>{labels.slugHelper}</span>
+          </label>
+        </div>
+      </section>
 
-      <Divider sx={{ mb: 3 }} />
-
-      {/* Marketing — tagline + description + cuisine + price */}
-      <div className="mb-5">
-        <TextField
-          fullWidth
-          label={labels.tagline}
-          value={values.tagline}
-          onChange={(e) => {
-            const v = e.target.value
-            setValues((s) => ({ ...s, tagline: v }))
-            scheduleSave({ tagline: v || null })
-          }}
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          fullWidth
-          label={labels.description}
-          value={values.description}
-          onChange={(e) => {
-            const v = e.target.value
-            setValues((s) => ({ ...s, description: v }))
-            scheduleSave({ description: v || null })
-          }}
-          multiline
-          minRows={3}
-          sx={{ mb: 2 }}
-        />
-        <div className="flex gap-3">
-          <TextField
-            fullWidth
-            label={labels.cuisineType}
+      {/* Details — tagline + description + cuisine + price */}
+      <section className={CARD}>
+        <h3 className={HEADING}>{labels.detailsHeading}</h3>
+        <label className="block mb-3">
+          <span className={LABEL}>{labels.tagline}</span>
+          <input
+            className={INPUT}
+            value={values.tagline}
+            onChange={(e) => {
+              const v = e.target.value
+              setValues((s) => ({ ...s, tagline: v }))
+              scheduleSave({ tagline: v || null })
+            }}
+          />
+        </label>
+        <label className="block mb-3">
+          <span className={LABEL}>{labels.description}</span>
+          <textarea
+            className={INPUT}
+            rows={3}
+            value={values.description}
+            onChange={(e) => {
+              const v = e.target.value
+              setValues((s) => ({ ...s, description: v }))
+              scheduleSave({ description: v || null })
+            }}
+          />
+        </label>
+        <label className="block mb-3">
+          <span className={LABEL}>{labels.cuisineType}</span>
+          <input
+            className={INPUT}
             value={values.cuisineType}
             onChange={(e) => {
               const v = e.target.value
@@ -162,91 +182,94 @@ export function RestaurantSettingsForm({
               scheduleSave({ cuisineType: v || null })
             }}
           />
-          <TextField
-            select
-            label={labels.priceRange}
-            value={values.priceRange == null ? '' : String(values.priceRange)}
-            onChange={(e) => {
-              const raw = e.target.value
-              const n = raw === '' ? null : Number(raw)
-              setValues((s) => ({ ...s, priceRange: n }))
-              void save({ priceRange: n })
-            }}
-            sx={{ width: 180, flexShrink: 0 }}
-          >
-            <MenuItem value="">—</MenuItem>
-            <MenuItem value="1">$</MenuItem>
-            <MenuItem value="2">$$</MenuItem>
-            <MenuItem value="3">$$$</MenuItem>
-            <MenuItem value="4">$$$$</MenuItem>
-          </TextField>
+        </label>
+        <div>
+          <span className={LABEL}>{labels.priceRange}</span>
+          <div className="inline-flex rounded-lg border border-gray-300 bg-white p-0.5">
+            {PRICE_OPTIONS.map((opt) => {
+              const active = values.priceRange === opt.value
+              return (
+                <button
+                  key={String(opt.value)}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => {
+                    setValues((s) => ({ ...s, priceRange: opt.value }))
+                    void save({ priceRange: opt.value })
+                  }}
+                  className={`min-w-[2.5rem] rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    active ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
         </div>
-      </div>
+      </section>
 
-      <Divider sx={{ mb: 3 }} />
-
-      {/* Reservation policy — meal duration + window */}
-      <div className="mb-5">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">{labels.policyHeading}</h3>
-        <div className="flex gap-3">
-          <TextField
-            fullWidth
-            label={labels.averageMealDuration}
-            type="number"
-            value={values.averageMealDuration}
-            onChange={(e) => {
-              const n = Number(e.target.value)
-              if (!Number.isFinite(n)) return
-              setValues((s) => ({ ...s, averageMealDuration: n }))
-              scheduleSave({ averageMealDuration: n })
-            }}
-            helperText={labels.averageMealDurationHint}
-            inputProps={{ min: 15, max: 600 }}
-          />
-          <TextField
-            fullWidth
-            label={labels.reservationWindow}
-            type="number"
-            value={values.reservationWindow}
-            onChange={(e) => {
-              const n = Number(e.target.value)
-              if (!Number.isFinite(n)) return
-              setValues((s) => ({ ...s, reservationWindow: n }))
-              scheduleSave({ reservationWindow: n })
-            }}
-            helperText={labels.reservationWindowHint}
-            inputProps={{ min: 1, max: 365 }}
-          />
-        </div>
-      </div>
-
-      <Divider sx={{ mb: 3 }} />
-
-      {/* Visibility */}
-      <div className="mb-5">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">{labels.visibilityHeading}</h3>
-        <FormControlLabel
-          control={
-            <Switch
-              checked={values.publicOnStandaloneApp}
+      {/* Policy + Visibility side by side */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <section className={CARD}>
+          <h3 className={HEADING}>{labels.policyHeading}</h3>
+          <label className="block mb-3">
+            <span className={LABEL}>{labels.averageMealDuration}</span>
+            <input
+              type="number"
+              min={15}
+              max={600}
+              className={INPUT}
+              value={values.averageMealDuration}
               onChange={(e) => {
-                const v = e.target.checked
+                const n = Number(e.target.value)
+                if (!Number.isFinite(n)) return
+                setValues((s) => ({ ...s, averageMealDuration: n }))
+                scheduleSave({ averageMealDuration: n })
+              }}
+            />
+            <span className={HELPER}>{labels.averageMealDurationHint}</span>
+          </label>
+          <label className="block">
+            <span className={LABEL}>{labels.reservationWindow}</span>
+            <input
+              type="number"
+              min={1}
+              max={365}
+              className={INPUT}
+              value={values.reservationWindow}
+              onChange={(e) => {
+                const n = Number(e.target.value)
+                if (!Number.isFinite(n)) return
+                setValues((s) => ({ ...s, reservationWindow: n }))
+                scheduleSave({ reservationWindow: n })
+              }}
+            />
+            <span className={HELPER}>{labels.reservationWindowHint}</span>
+          </label>
+        </section>
+
+        <section className={CARD}>
+          <h3 className={HEADING}>{labels.visibilityHeading}</h3>
+          <div className="flex items-start justify-between gap-3">
+            <span>
+              <span className="block text-sm font-medium text-gray-900">
+                {labels.publicOnStandaloneApp}
+              </span>
+              <span className="mt-0.5 block text-xs text-gray-500">
+                {labels.publicOnStandaloneAppHint}
+              </span>
+            </span>
+            <Toggle
+              checked={values.publicOnStandaloneApp}
+              ariaLabel={labels.publicOnStandaloneApp}
+              onChange={(v) => {
                 setValues((s) => ({ ...s, publicOnStandaloneApp: v }))
                 void save({ publicOnStandaloneApp: v })
               }}
             />
-          }
-          label={
-            <span>
-              <span className="font-medium text-gray-900 text-sm">
-                {labels.publicOnStandaloneApp}
-              </span>
-              <span className="block text-xs text-gray-500">
-                {labels.publicOnStandaloneAppHint}
-              </span>
-            </span>
-          }
-        />
+          </div>
+        </section>
       </div>
     </div>
   )

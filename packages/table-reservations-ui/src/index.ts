@@ -42,13 +42,6 @@ export {
 } from './partner/TableForm'
 
 export {
-  TableGridDialog,
-  type TableGridDialogProps,
-  type TableGridDialogLabels,
-  type TableGridSubmit,
-} from './partner/TableGridDialog'
-
-export {
   ElementPalette,
   type ElementPaletteProps,
   type ElementPaletteLabels,

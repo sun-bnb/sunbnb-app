@@ -2,11 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import Link from 'next/link'
-import SyncIcon from '@mui/icons-material/Sync'
-import CloudDoneIcon from '@mui/icons-material/CloudDone'
-import WarningAmberIcon from '@mui/icons-material/WarningAmber'
-import Divider from '@mui/material/Divider'
 import {
   RestaurantSettingsForm,
   RestaurantHoursEditor,
@@ -14,14 +9,13 @@ import {
   type SaveStatus,
 } from '@repo/table-reservations-ui'
 import type { RestaurantHoursInput } from '@repo/table-reservations-core'
-import { useTranslations as useTrans } from 'next-intl'
 import { RestaurantSubNav } from './RestaurantSubNav'
+import { RestaurantHeader } from './RestaurantHeader'
 import { getRestaurant, type RestaurantDetail } from './queries'
 import { updateRestaurantSettings, setRestaurantOpeningHours } from './actions'
 
 export default function RestaurantView({ restaurantId }: { restaurantId: string }) {
   const t = useTranslations('Restaurant')
-  const tGeneral = useTranslations('SiteGeneral')
 
   const [restaurant, setRestaurant] = useState<RestaurantDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -44,7 +38,7 @@ export default function RestaurantView({ restaurantId }: { restaurantId: string 
   if (loading || !restaurant) {
     return (
       <div className="pt-2">
-        <RestaurantSubNav restaurantId={restaurantId} active="settings" />
+        <RestaurantSubNav restaurantId={restaurantId} active="general" />
         <div className="p-4 text-sm text-gray-500">{t('loading')}</div>
       </div>
     )
@@ -76,59 +70,20 @@ export default function RestaurantView({ restaurantId }: { restaurantId: string 
 
   return (
     <div className="pt-2">
-      <RestaurantSubNav restaurantId={restaurantId} active="settings" />
-      <div className="p-4">
-        {/* Back-link to linked site if any */}
-        {restaurant.siteId && (
-          <div className="mb-4">
-            <Link
-              href={`/sites/${restaurant.siteId}`}
-              className="text-sm text-blue-600 hover:underline"
-            >
-              {t('linkedSiteLink')}
-            </Link>
-          </div>
-        )}
-
-        <div
-          className={`flex items-center justify-center gap-2 px-3 py-2 rounded mb-4 text-sm transition-all ${
-            saveStatus === 'saving'
-              ? 'bg-blue-50 border border-blue-200 text-blue-600'
-              : saveStatus === 'saved'
-                ? 'bg-green-50 border border-green-200 text-green-600'
-                : saveStatus === 'error'
-                  ? 'bg-red-50 border border-red-200 text-red-600'
-                  : 'bg-gray-50 border border-gray-200 text-gray-400'
-          }`}
-        >
-          {saveStatus === 'saving' && (
-            <>
-              <SyncIcon fontSize="small" className="animate-spin" /> {tGeneral('saving')}
-            </>
-          )}
-          {saveStatus === 'saved' && (
-            <>
-              <CloudDoneIcon fontSize="small" /> {tGeneral('allChangesSaved')}
-            </>
-          )}
-          {saveStatus === 'error' && (
-            <>
-              <WarningAmberIcon fontSize="small" />{' '}
-              {tGeneral('errorSaving')}
-              {saveErrors.length > 0 && <span className="ml-1">— {saveErrors.join(', ')}</span>}
-            </>
-          )}
-          {saveStatus === 'idle' && (
-            <>
-              <CloudDoneIcon fontSize="small" /> {tGeneral('upToDate')}
-            </>
-          )}
-        </div>
+      <RestaurantSubNav restaurantId={restaurantId} active="general" />
+      <div className="p-4 space-y-4">
+        <RestaurantHeader
+          restaurantId={restaurantId}
+          restaurant={restaurant}
+          saveStatus={saveStatus}
+          saveError={saveErrors.length > 0 ? saveErrors.join(', ') : undefined}
+        />
 
         <RestaurantSettingsForm
           initial={initialSettings}
           labels={{
             identityHeading: t('identityHeading'),
+            detailsHeading: t('detailsHeading'),
             policyHeading: t('policyHeading'),
             visibilityHeading: t('visibilityHeading'),
             name: t('fieldName'),
@@ -153,8 +108,6 @@ export default function RestaurantView({ restaurantId }: { restaurantId: string 
             return res
           }}
         />
-
-        <Divider sx={{ mb: 3 }} />
 
         <RestaurantHoursEditor
           initial={initialHours}

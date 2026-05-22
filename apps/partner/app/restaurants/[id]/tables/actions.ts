@@ -5,7 +5,6 @@ import { requireRestaurantOwnerWithFlag } from '@/lib/auth-helpers'
 import prisma from '@repo/data/PrismaCient'
 import {
   createTable,
-  createTableGrid,
   duplicateTable,
   updateTable,
   deleteTable,
@@ -13,7 +12,6 @@ import {
   updateLayoutElement,
   deleteLayoutElement,
   type TableInput,
-  type TableGridPlacementInput,
   type LayoutElementInput,
 } from '@repo/table-reservations-core'
 
@@ -76,18 +74,6 @@ export async function deleteTableForRestaurant(restaurantId: string, tableId: st
   if (!r.ok) return { status: 'error' as const, errors: [r.error] }
 
   const res = await deleteTable(tableId, r.userId)
-  if (res.status === 'ok') revalidatePath(`/restaurants/${restaurantId}/tables`)
-  return res
-}
-
-export async function createTableGridForRestaurant(
-  restaurantId: string,
-  input: TableGridPlacementInput,
-) {
-  const r = await requireAuth(restaurantId)
-  if (!r.ok) return { status: 'error' as const, errors: [r.error] }
-
-  const res = await createTableGrid(restaurantId, input, r.userId)
   if (res.status === 'ok') revalidatePath(`/restaurants/${restaurantId}/tables`)
   return res
 }

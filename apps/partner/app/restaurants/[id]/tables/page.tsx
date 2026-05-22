@@ -5,5 +5,9 @@ export default async function TablesPage({
 }: {
   params: { id: string }
 }) {
-  return <TablesView restaurantId={params.id} />
+  return (
+    <div className="container mx-auto max-w-[768px]">
+      <TablesView restaurantId={params.id} />
+    </div>
+  )
 }

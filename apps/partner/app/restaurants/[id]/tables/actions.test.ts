@@ -10,7 +10,6 @@ import {
   createTableForRestaurant,
   updateTableForRestaurant,
   deleteTableForRestaurant,
-  createTableGridForRestaurant,
   createElementForRestaurant,
   updateElementForRestaurant,
   deleteElementForRestaurant,
@@ -157,40 +156,6 @@ describe('deleteTableForRestaurant', () => {
     const res = await deleteTableForRestaurant(RESTAURANT_ID, 'table-1')
     expect(res.status).toBe('ok')
     expect(prisma.table.delete).toHaveBeenCalledWith({ where: { id: 'table-1' } })
-  })
-})
-
-// ─────────────────────────────────────────────────────
-// createTableGridForRestaurant
-// ─────────────────────────────────────────────────────
-
-describe('createTableGridForRestaurant', () => {
-  it('creates a grid of tables with row-major numbers', async () => {
-    authorizeOwner()
-    coreOwnershipOk()
-    vi.mocked(prisma.table.findFirst).mockResolvedValue(null as any) // start at 1
-    vi.mocked(prisma.table.createMany).mockResolvedValue({ count: 6 } as any)
-
-    const res = await createTableGridForRestaurant(RESTAURANT_ID, {
-      rows: 2,
-      cols: 3,
-      originX: 5,
-      originY: 5,
-      horizontalGap: 1,
-      verticalGap: 1,
-      tableWidth: 1,
-      tableHeight: 1,
-      capacity: 4,
-      shape: 'square',
-      rotation: 0,
-    })
-
-    expect(res.status).toBe('ok')
-    expect(res.created).toBe(6)
-    const call = vi.mocked(prisma.table.createMany).mock.calls[0]![0] as any
-    expect(call.data).toHaveLength(6)
-    expect(call.data[0].number).toBe(1)
-    expect(call.data[5].number).toBe(6)
   })
 })
 

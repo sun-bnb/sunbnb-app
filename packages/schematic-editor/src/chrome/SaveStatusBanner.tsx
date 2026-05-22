@@ -37,6 +37,8 @@ export function SaveStatusBanner({ status, labels, errorDetails }: SaveStatusBan
 
   return (
     <div
+      role="status"
+      aria-live="polite"
       className={`flex items-center justify-center gap-2 px-3 py-2 rounded mb-4 text-sm transition-all ${cls}`}
     >
       {status === 'saving' && (

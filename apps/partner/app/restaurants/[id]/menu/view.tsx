@@ -13,6 +13,7 @@ import {
   reorderMenuItemsForRestaurant,
 } from './actions'
 import { RestaurantSubNav } from '../RestaurantSubNav'
+import { RestaurantHeader } from '../RestaurantHeader'
 
 export default function MenuView({ restaurantId }: { restaurantId: string }) {
   const t = useTranslations('Restaurant')
@@ -77,7 +78,8 @@ export default function MenuView({ restaurantId }: { restaurantId: string }) {
   return (
     <div className="pt-2">
       <RestaurantSubNav restaurantId={restaurantId} active="menu" />
-      <div className="p-4">
+      <div className="p-4 space-y-4">
+        <RestaurantHeader restaurantId={restaurantId} />
         <MenuEditor
           items={items}
           labels={labels}

@@ -4,6 +4,7 @@ import { SCHEMATIC_DRAG_MIME } from '@repo/schematic/renderer'
 import {
   RESTAURANT_SURFACE_TYPES,
   RESTAURANT_OBJECT_TYPES,
+  RESTAURANT_ELEMENT_PRESETS,
   restaurantPalette,
 } from './restaurantPalette'
 
@@ -66,7 +67,9 @@ function Section({
               className="flex items-center gap-2 rounded border border-gray-200 bg-gray-50 px-2 py-1.5 cursor-grab active:cursor-grabbing hover:border-gray-300"
             >
               <span
-                className="inline-block h-4 w-4 rounded-sm border"
+                className={`inline-block h-4 w-4 border ${
+                  RESTAURANT_ELEMENT_PRESETS[type]?.shape === 'ellipse' ? 'rounded-full' : 'rounded-sm'
+                }`}
                 style={{ backgroundColor: visual?.fill ?? '#e5e7eb', borderColor: visual?.stroke ?? '#9ca3af' }}
               />
               <span className="text-xs text-gray-700">{typeLabels[type] ?? type}</span>

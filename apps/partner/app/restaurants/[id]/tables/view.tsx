@@ -13,7 +13,6 @@ import type {
 } from '@repo/table-reservations-core'
 import { RESTAURANT_ELEMENT_PRESETS } from '@repo/table-reservations-ui'
 import {
-  SaveStatusBanner,
   CanvasDimensionsHeader,
   type SaveStatus,
 } from '@repo/schematic-editor'
@@ -23,17 +22,16 @@ import {
   updateTableForRestaurant,
   deleteTableForRestaurant,
   duplicateTableForRestaurant,
-  createTableGridForRestaurant,
   createElementForRestaurant,
   updateElementForRestaurant,
   deleteElementForRestaurant,
   saveRestaurantCanvasDimensions,
 } from './actions'
 import { RestaurantSubNav } from '../RestaurantSubNav'
+import { RestaurantHeader } from '../RestaurantHeader'
 
 export default function TablesView({ restaurantId }: { restaurantId: string }) {
   const t = useTranslations('Restaurant')
-  const tGeneral = useTranslations('SiteGeneral')
 
   const [layout, setLayout] = useState<RestaurantLayout | null>(null)
   const [loading, setLoading] = useState(true)
@@ -68,13 +66,18 @@ export default function TablesView({ restaurantId }: { restaurantId: string }) {
       objectsHeading: t('paletteObjects'),
       typeLabels: {
         dining: t('elementDining'),
-        bar: t('elementBar'),
-        kitchen: t('elementKitchen'),
         terrace: t('elementTerrace'),
+        bar: t('elementBar'),
         lounge: t('elementLounge'),
-        reception: t('elementReception'),
+        private: t('elementPrivate'),
+        kitchen: t('elementKitchen'),
+        entrance: t('elementEntrance'),
+        'bar-counter': t('elementBarCounter'),
+        'host-stand': t('elementHostStand'),
         restroom: t('elementRestroom'),
-        stage: t('elementStage'),
+        wall: t('elementWall'),
+        pillar: t('elementPillar'),
+        plant: t('elementPlant'),
       },
     },
     tableForm: {
@@ -111,27 +114,7 @@ export default function TablesView({ restaurantId }: { restaurantId: string }) {
       deleteTable: t('deleteTable'),
       close: t('close'),
     },
-    gridDialog: {
-      title: t('gridDialogTitle'),
-      rows: t('gridRows'),
-      cols: t('gridCols'),
-      capacity: t('tableFieldCapacity'),
-      shape: t('tableFieldShape'),
-      shapeSquare: t('shapeSquare'),
-      shapeRound: t('shapeRound'),
-      shapeRect: t('shapeRect'),
-      horizontalGap: t('gridHorizontalGap'),
-      verticalGap: t('gridVerticalGap'),
-      tableWidth: t('gridTableWidth'),
-      tableHeight: t('gridTableHeight'),
-      rotation: t('gridRotation'),
-      cancel: t('cancel'),
-      create: t('gridCreate'),
-      creating: t('gridCreating'),
-      errorPrefix: t('errorPrefix'),
-    },
     addTable: t('addTable'),
-    addGrid: t('addGrid'),
     emptyHint: t('clickCanvasToPlace'),
     bringForward: t('elementSidebarBringForward'),
     sendBackward: t('elementSidebarSendBackward'),
@@ -159,13 +142,18 @@ export default function TablesView({ restaurantId }: { restaurantId: string }) {
       close: t('close'),
       typeLabels: {
         dining: t('elementDining'),
-        bar: t('elementBar'),
-        kitchen: t('elementKitchen'),
         terrace: t('elementTerrace'),
+        bar: t('elementBar'),
         lounge: t('elementLounge'),
-        reception: t('elementReception'),
+        private: t('elementPrivate'),
+        kitchen: t('elementKitchen'),
+        entrance: t('elementEntrance'),
+        'bar-counter': t('elementBarCounter'),
+        'host-stand': t('elementHostStand'),
         restroom: t('elementRestroom'),
-        stage: t('elementStage'),
+        wall: t('elementWall'),
+        pillar: t('elementPillar'),
+        plant: t('elementPlant'),
       },
     },
   }
@@ -182,38 +170,12 @@ export default function TablesView({ restaurantId }: { restaurantId: string }) {
   return (
     <div className="pt-2">
       <RestaurantSubNav restaurantId={restaurantId} active="tables" />
-      <div className="p-4">
-        <SaveStatusBanner
-          status={saveStatus}
-          labels={{
-            saving: tGeneral('saving'),
-            saved: tGeneral('allChangesSaved'),
-            idle: tGeneral('upToDate'),
-            error: tGeneral('errorSaving'),
-          }}
-          errorDetails={saveErrors.length > 0 ? saveErrors.join(', ') : undefined}
+      <div className="p-4 space-y-4">
+        <RestaurantHeader
+          restaurantId={restaurantId}
+          saveStatus={saveStatus}
+          saveError={saveErrors.length > 0 ? saveErrors.join(', ') : undefined}
         />
-        <div className="flex items-center justify-end mb-3">
-          <CanvasDimensionsHeader
-            width={layout.layoutWidth}
-            height={layout.layoutHeight}
-            labels={{
-              width: t('canvasWidth'),
-              height: t('canvasHeight'),
-              metres: t('canvasMetres'),
-            }}
-            onSave={async (w, h) => {
-              trackSave('saving')
-              const res = await saveRestaurantCanvasDimensions(restaurantId, w, h)
-              if (res.status === 'ok') {
-                await refresh()
-                trackSave('saved')
-              } else {
-                trackSave('error', res.errors)
-              }
-            }}
-          />
-        </div>
         <TableLayoutEditor
           worldWidth={layout.layoutWidth}
           worldHeight={layout.layoutHeight}
@@ -221,6 +183,27 @@ export default function TablesView({ restaurantId }: { restaurantId: string }) {
           elements={layout.elements as LayoutElementRecord[]}
           labels={labels}
           onSaveStatusChange={trackSave}
+          toolbarRight={
+            <CanvasDimensionsHeader
+              width={layout.layoutWidth}
+              height={layout.layoutHeight}
+              labels={{
+                width: t('canvasWidth'),
+                height: t('canvasHeight'),
+                metres: t('canvasMetres'),
+              }}
+              onSave={async (w, h) => {
+                trackSave('saving')
+                const res = await saveRestaurantCanvasDimensions(restaurantId, w, h)
+                if (res.status === 'ok') {
+                  await refresh()
+                  trackSave('saved')
+                } else {
+                  trackSave('error', res.errors)
+                }
+              }}
+            />
+          }
           onTablePatch={async (tableId, patch) => {
             const res = await updateTableForRestaurant(restaurantId, tableId, patch as Partial<TableInput>)
             if (res.status === 'ok') await refresh()
@@ -238,11 +221,6 @@ export default function TablesView({ restaurantId }: { restaurantId: string }) {
           }}
           onTableCreate={async (at) => {
             const res = await createTableForRestaurant(restaurantId, at)
-            if (res.status === 'ok') await refresh()
-            return res
-          }}
-          onTableGrid={async (input) => {
-            const res = await createTableGridForRestaurant(restaurantId, input)
             if (res.status === 'ok') await refresh()
             return res
           }}

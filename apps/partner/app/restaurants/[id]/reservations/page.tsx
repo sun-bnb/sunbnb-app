@@ -5,5 +5,9 @@ export default async function ReservationsPage({
 }: {
   params: { id: string }
 }) {
-  return <ReservationsView restaurantId={params.id} />
+  return (
+    <div className="container mx-auto max-w-[768px]">
+      <ReservationsView restaurantId={params.id} />
+    </div>
+  )
 }

@@ -8,6 +8,7 @@ import {
 } from '@repo/table-reservations-ui'
 import type { TableReservationListItem } from '@repo/table-reservations-core'
 import { RestaurantSubNav } from '../RestaurantSubNav'
+import { RestaurantHeader } from '../RestaurantHeader'
 import {
   getRestaurantReservationsForDay,
   markRestaurantReservationSeated,
@@ -76,7 +77,8 @@ export default function ReservationsView({ restaurantId }: { restaurantId: strin
   return (
     <div className="pt-2">
       <RestaurantSubNav restaurantId={restaurantId} active="reservations" />
-      <div className="p-4">
+      <div className="p-4 space-y-4">
+        <RestaurantHeader restaurantId={restaurantId} />
         {loading ? (
           <div className="text-sm text-gray-500">{t('loading')}</div>
         ) : (

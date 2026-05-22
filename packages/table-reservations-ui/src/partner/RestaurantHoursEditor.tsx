@@ -1,12 +1,17 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Button from '@mui/material/Button'
-import Switch from '@mui/material/Switch'
-import TextField from '@mui/material/TextField'
 import type { RestaurantHoursInput } from '@repo/table-reservations-core'
+import { Toggle } from './Toggle'
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+
+// Raw utility strings — aligned with .claude/rules/ui.md by hand (this shared
+// package can't see the partner app's component classes).
+const TIME_INPUT =
+  'text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-gray-900'
+const BTN =
+  'bg-gray-900 text-white px-4 py-2 text-sm font-medium rounded-lg transition-colors hover:bg-gray-700 disabled:opacity-60 disabled:cursor-not-allowed'
 
 export interface RestaurantHoursEditorLabels {
   heading: string
@@ -83,38 +88,42 @@ export function RestaurantHoursEditor({
   }
 
   return (
-    <div className="mb-5">
-      <h3 className="text-sm font-medium text-gray-700 mb-2">{labels.heading}</h3>
-      <div className="flex flex-col gap-2">
-        {rows.map((r) => (
-          <div key={r.day} className="flex items-center gap-3">
-            <div className="flex items-center gap-1 w-36 shrink-0">
-              <Switch
-                size="small"
+    <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <h3 className="text-sm font-medium text-gray-700 mb-3">{labels.heading}</h3>
+      <div className="flex flex-col">
+        {rows.map((r, idx) => (
+          <div
+            key={r.day}
+            className={`flex items-center gap-3 py-2 ${idx > 0 ? 'border-t border-gray-100' : ''}`}
+          >
+            <div className="flex items-center gap-2 w-36 shrink-0">
+              <Toggle
+                size="sm"
                 checked={r.enabled}
-                onChange={(e) => setRow(r.day, { enabled: e.target.checked })}
+                ariaLabel={labels.dayNames[r.day]}
+                onChange={(v) => setRow(r.day, { enabled: v })}
               />
-              <span className="text-sm font-medium text-gray-900">
+              <span
+                className={`text-sm font-medium ${r.enabled ? 'text-gray-900' : 'text-gray-400'}`}
+              >
                 {labels.dayNames[r.day]}
               </span>
             </div>
             {r.enabled ? (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-gray-500 w-10">{labels.openAbbr}</span>
-                <TextField
+                <input
                   type="time"
-                  size="small"
+                  className={TIME_INPUT}
                   value={r.openTime}
                   onChange={(e) => setRow(r.day, { openTime: e.target.value })}
-                  sx={{ width: 120 }}
                 />
                 <span className="text-xs text-gray-500 w-10">{labels.closeAbbr}</span>
-                <TextField
+                <input
                   type="time"
-                  size="small"
+                  className={TIME_INPUT}
                   value={r.closeTime}
                   onChange={(e) => setRow(r.day, { closeTime: e.target.value })}
-                  sx={{ width: 120 }}
                 />
               </div>
             ) : (
@@ -123,18 +132,11 @@ export function RestaurantHoursEditor({
           </div>
         ))}
       </div>
-      <div className="mt-3">
-        <Button
-          type="button"
-          variant="contained"
-          size="small"
-          disabled={busy}
-          onClick={handleSave}
-          sx={{ textTransform: 'none' }}
-        >
+      <div className="mt-4">
+        <button type="button" className={BTN} disabled={busy} onClick={handleSave}>
           {busy ? labels.saving : labels.save}
-        </Button>
+        </button>
       </div>
-    </div>
+    </section>
   )
 }

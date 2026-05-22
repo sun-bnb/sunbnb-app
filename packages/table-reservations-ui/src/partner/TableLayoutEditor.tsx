@@ -1,9 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import Button from '@mui/material/Button'
-import AddIcon from '@mui/icons-material/Add'
-import GridOnIcon from '@mui/icons-material/GridOn'
+import { useMemo, useState, type ReactNode } from 'react'
 import { SchematicRenderer } from '@repo/schematic/renderer'
 import type { LayoutElementDTO, SchematicItem, ItemVisual } from '@repo/schematic/types'
 import type { TableShape } from '@repo/schematic/grid'
@@ -20,16 +17,13 @@ import {
 } from '@repo/schematic-editor'
 import { ElementPalette, type ElementPaletteLabels } from './ElementPalette'
 import { TableForm, type TableFormLabels, type TableFormValues } from './TableForm'
-import { TableGridDialog, type TableGridDialogLabels, type TableGridSubmit } from './TableGridDialog'
 import { restaurantPalette } from './restaurantPalette'
 
 export interface TableLayoutEditorLabels {
   palette: ElementPaletteLabels
   tableForm: TableFormLabels
-  gridDialog: TableGridDialogLabels
   elementSidebar: ElementPropertiesSidebarLabels
   addTable: string
-  addGrid: string
   emptyHint: string
   bringForward: string
   sendBackward: string
@@ -49,6 +43,8 @@ export interface TableLayoutEditorProps {
   labels: TableLayoutEditorLabels
   /** Optional — bubble CRUD save status up so the parent can drive a shared banner. */
   onSaveStatusChange?: (status: SaveStatus, errors?: string[]) => void
+  /** Optional content rendered on the right of the toolbar (e.g. canvas dimensions). */
+  toolbarRight?: ReactNode
 
   onTablePatch: (
     tableId: string,
@@ -57,7 +53,6 @@ export interface TableLayoutEditorProps {
   onTableDelete: (tableId: string) => Promise<{ status: 'ok' | 'error'; errors?: string[] }>
   onTableCreate: (at: { x: number; y: number }) => Promise<{ status: 'ok' | 'error'; errors?: string[] }>
   onTableDuplicate: (tableId: string) => Promise<{ status: 'ok' | 'error'; errors?: string[]; tableId?: string }>
-  onTableGrid: (input: TableGridSubmit) => Promise<{ status: 'ok' | 'error'; errors?: string[] }>
 
   onElementCreate: (at: { x: number; y: number }, type: string) => Promise<{ status: 'ok' | 'error'; errors?: string[] }>
   onElementPatch: (
@@ -80,7 +75,6 @@ export function TableLayoutEditor(props: TableLayoutEditorProps) {
   const [propertiesOpenTableId, setPropertiesOpenTableId] = useState<string | null>(null)
   const [propertiesOpenElementId, setPropertiesOpenElementId] = useState<string | null>(null)
   const [placementMode, setPlacementMode] = useState<'none' | 'single'>('none')
-  const [gridOpen, setGridOpen] = useState(false)
   const [clipboardTableId, setClipboardTableId] = useState<string | null>(null)
 
   const selectedTable = useMemo(
@@ -133,7 +127,7 @@ export function TableLayoutEditor(props: TableLayoutEditorProps) {
   }
 
   useEditorKeyboard({
-    disabled: gridOpen,
+    disabled: false,
     onEscape: () => {
       clearSelection()
       setPlacementMode('none')
@@ -232,29 +226,28 @@ export function TableLayoutEditor(props: TableLayoutEditorProps) {
   const showPropertiesPanel = !!(propertiesTable || (propertiesElement && !propertiesTable))
 
   return (
-    <div className="flex flex-col">
-      <div className="flex items-center gap-2 px-4 py-2 bg-white border-b border-gray-200">
-        <Button
-          size="small"
-          variant={placementMode === 'single' ? 'contained' : 'outlined'}
-          startIcon={<AddIcon fontSize="small" />}
-          onClick={() => setPlacementMode(placementMode === 'single' ? 'none' : 'single')}
-          sx={{ textTransform: 'none' }}
-        >
-          {props.labels.addTable}
-        </Button>
-        <Button
-          size="small"
-          variant="outlined"
-          startIcon={<GridOnIcon fontSize="small" />}
-          onClick={() => setGridOpen(true)}
-          sx={{ textTransform: 'none' }}
-        >
-          {props.labels.addGrid}
-        </Button>
-        {placementMode === 'single' && (
-          <span className="text-xs text-blue-600 ml-2">{props.labels.emptyHint}</span>
-        )}
+    <div className="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPlacementMode(placementMode === 'single' ? 'none' : 'single')}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+              placementMode === 'single'
+                ? 'bg-gray-900 text-white hover:bg-gray-700'
+                : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+              <path d="M10 5a1 1 0 0 1 1 1v3h3a1 1 0 1 1 0 2h-3v3a1 1 0 1 1-2 0v-3H6a1 1 0 1 1 0-2h3V6a1 1 0 0 1 1-1Z" />
+            </svg>
+            {props.labels.addTable}
+          </button>
+          {placementMode === 'single' && (
+            <span className="text-xs text-blue-600">{props.labels.emptyHint}</span>
+          )}
+        </div>
+        {props.toolbarRight}
       </div>
 
       <div className="flex relative" style={{ height: 600 }}>
@@ -484,19 +477,6 @@ export function TableLayoutEditor(props: TableLayoutEditorProps) {
           ) : null}
         </div>
       </div>
-
-      <TableGridDialog
-        open={gridOpen}
-        onClose={() => setGridOpen(false)}
-        labels={props.labels.gridDialog}
-        worldWidth={props.worldWidth}
-        worldHeight={props.worldHeight}
-        onSubmit={async (input) => {
-          const res = await props.onTableGrid(input)
-          if (res.status === 'ok') setGridOpen(false)
-          return res
-        }}
-      />
     </div>
   )
 }

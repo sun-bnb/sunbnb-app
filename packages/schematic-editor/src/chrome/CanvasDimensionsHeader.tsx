@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import TextField from '@mui/material/TextField'
 
 export interface CanvasDimensionsHeaderLabels {
   width: string
@@ -21,10 +20,14 @@ export interface CanvasDimensionsHeaderProps {
   max?: number
 }
 
+// Raw utilities (shared package — no app `.input`/`accent`), aligned with .claude/rules/ui.md.
+const NUM_INPUT =
+  'w-20 rounded-lg border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900'
+
 /**
- * Inline-debounced width/height inputs for the editor canvas. Displays to
- * the right of any other header content. Validates and clamps to the given
- * range before invoking onSave.
+ * Inline-debounced width/height inputs for the editor canvas. Sits in the
+ * editor toolbar (e.g. via TableLayoutEditor's `toolbarRight`). Validates and
+ * clamps to the given range before invoking onSave.
  */
 export function CanvasDimensionsHeader({
   width,
@@ -60,31 +63,31 @@ export function CanvasDimensionsHeader({
     <div className="flex items-center gap-3 text-xs text-gray-600">
       <label className="flex items-center gap-1.5">
         <span>{labels.width}</span>
-        <TextField
-          size="small"
+        <input
           type="number"
+          min={min}
+          max={max}
           value={w}
           onChange={(e) => {
             setW(e.target.value)
             commit(e.target.value, h)
           }}
-          inputProps={{ min, max }}
-          sx={{ width: 90 }}
+          className={NUM_INPUT}
         />
         <span className="text-gray-400">{labels.metres}</span>
       </label>
       <label className="flex items-center gap-1.5">
         <span>{labels.height}</span>
-        <TextField
-          size="small"
+        <input
           type="number"
+          min={min}
+          max={max}
           value={h}
           onChange={(e) => {
             setH(e.target.value)
             commit(w, e.target.value)
           }}
-          inputProps={{ min, max }}
-          sx={{ width: 90 }}
+          className={NUM_INPUT}
         />
         <span className="text-gray-400">{labels.metres}</span>
       </label>
