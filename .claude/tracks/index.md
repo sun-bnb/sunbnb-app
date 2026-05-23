@@ -9,7 +9,7 @@ Maintained by the `create` and `handoff` workflows.
 |----|-------|-------------|----------|---------|
 | [001](001-knowledge-store.md) | Knowledge Store | Phase 1 — stand up Vercel test-env log-drain adapter | — | 2026-05-20 |
 | [002](002-table-reservations.md) | Table Reservations | 1e collection Piece 1 done — Piece 2/3 paused; Mollie-only targeted upfront deposits (pre-auth later via 003) | — | 2026-05-23 |
-| [003](003-stripe-connect-compliance.md) | Stripe Connect compliance | Confirm scope + urgency — Stripe consumer payments collect into platform acct (no Connect); legal gap | — | 2026-05-23 |
+| [003](003-stripe-connect-compliance.md) | Stripe Connect compliance | Scope/urgency confirmed (2 paths; ungated Stripe toggle) — next: gate the toggle + founder counts prod Stripe sites | — | 2026-05-23 |
 
 ## Proposed / backlog
 
