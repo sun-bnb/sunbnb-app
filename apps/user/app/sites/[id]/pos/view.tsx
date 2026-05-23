@@ -13,7 +13,7 @@ import {
 import ReservationView from './Reservation'
 
 
-export default function PosView({ site, apiKey, stripePublicKey }: { site: SiteProps, apiKey: string, stripePublicKey: string | undefined }) {
+export default function PosView({ site, apiKey }: { site: SiteProps, apiKey: string }) {
 
   const sitesState = useSelector((state: RootState) => state.sites)
 
@@ -51,14 +51,6 @@ export default function PosView({ site, apiKey, stripePublicKey }: { site: SiteP
 
   const { reservationState, pendingReservationId } = sitesState
 
-  if (!stripePublicKey) {
-    return (
-      <div className="flex flex-col items-center justify-center">
-        <div>Payment gateway unavailable</div>
-      </div>
-    )
-  }
-
   const { data: reservation } = useGetReservationByIdQuery({ id: pendingReservationId }, {
     skip: !pendingReservationId
   })
@@ -69,9 +61,8 @@ export default function PosView({ site, apiKey, stripePublicKey }: { site: SiteP
     <div>
       <div>
         <div>
-          <ReservationView 
-            apiKey={apiKey} 
-            stripePublicKey={stripePublicKey} 
+          <ReservationView
+            apiKey={apiKey}
             site={fetchedSite || site}
             dateRange={{ from: availabilityFrom, to: availabilityTo }}
           />

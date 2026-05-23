@@ -132,13 +132,11 @@ function ReservationButton({
 
 export default function ReservationView({
   apiKey,
-  stripePublicKey,
   items,
   site,
   dateRange
 } : {
   apiKey: string
-  stripePublicKey: string | undefined
   items: InventoryItem[],
   site: SiteProps,
   dateRange: { from: string, to: string }
@@ -151,14 +149,6 @@ export default function ReservationView({
 
   let focused = sitesState.focused
   let panelBottom = sitesState.panelBottom || '-bottom-[364px]'
-
-  if (!stripePublicKey && site.paymentProvider !== 'mollie') {
-    return (
-      <div className="flex flex-col items-center justify-center">
-        <div>Payment gateway unavailable</div>
-      </div>
-    )
-  }
 
   const { data: reservation } = useGetReservationByIdQuery({ id: pendingReservationId }, {
     skip: !pendingReservationId
@@ -217,8 +207,7 @@ export default function ReservationView({
         <div className="flex justify-center mb-[12px] mt-[24px]">
           <CircularProgress />
         </div>
-      ) : <PaymentView 
-            stripePublicKey={stripePublicKey}
+      ) : <PaymentView
             preview={previewElem}
             reservation={reservation}
             paymentProvider={site.paymentProvider} />

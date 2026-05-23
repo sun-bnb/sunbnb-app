@@ -3,8 +3,6 @@ import { auth } from '@/app/auth'
 import { Metadata } from 'next'
 import BrandedSiteView from './view'
 
-const { STRIPE_PUBLIC_KEY } = process.env
-
 async function getSiteBySlug(slug: string, userId?: string) {
 
   const includeReservations = !!userId
@@ -79,7 +77,6 @@ export default async function BrandedSitePage({ params }: { params: { slug: stri
       site={site}
       brand={site.brand}
       apiKey={apiKey}
-      stripePublicKey={STRIPE_PUBLIC_KEY}
     />
   )
 }

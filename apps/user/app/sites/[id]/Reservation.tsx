@@ -735,12 +735,10 @@ function ViewModeSelector({
 
 export default function ReservationView({
   apiKey,
-  stripePublicKey,
   site,
   wide,
 } : {
   apiKey: string
-  stripePublicKey: string | undefined
   site: SiteProps
   wide?: boolean
 }) {
@@ -759,14 +757,6 @@ export default function ReservationView({
   const setViewMode = (mode: ViewMode) => dispatch(setValue({ viewMode: mode }))
 
   const t = useTranslations('SiteView')
-
-  if (!stripePublicKey && site.paymentProvider !== 'mollie') {
-    return (
-      <div className="flex flex-col items-center justify-center">
-        <div>{t('Payment gateway unavailable')}</div>
-      </div>
-    )
-  }
 
   const { data: reservation } = useGetReservationByIdQuery({ id: pendingReservationId }, {
     skip: !pendingReservationId
@@ -788,7 +778,7 @@ export default function ReservationView({
             <div className="flex justify-center mb-[12px] mt-[12px]">
               <CircularProgress />
             </div>
-          ) : <PaymentView stripePublicKey={stripePublicKey} reservation={reservation} paymentProvider={site.paymentProvider} onCancel={handleCancelReservation} />
+          ) : <PaymentView reservation={reservation} paymentProvider={site.paymentProvider} onCancel={handleCancelReservation} />
          ) : (
           <>
             <ViewModeSelector

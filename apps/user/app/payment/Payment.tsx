@@ -1,22 +1,19 @@
 /**
  * Payment Component
  *
- * Renders a Stripe payment form, Mollie redirect payment, or a demo payment form,
- * depending on site.paymentProvider and NEXT_PUBLIC_DEMO_MODE.
+ * Renders a Mollie redirect payment or a demo payment form, depending on
+ * NEXT_PUBLIC_DEMO_MODE.
  *
  * Key design decisions:
  * - Demo mode is controlled SERVER-SIDE via env var (not localStorage)
- * - paymentRef is stored server-side in the payment-intent / create-payment route
+ * - paymentRef is stored server-side in the create-payment route
  * - Demo mode uses a dedicated server action that processes immediately
  * - Mollie uses redirect-based checkout (no embedded elements)
- * - Stripe uses embedded Elements + PaymentElement
  */
 
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
-import { loadStripe } from '@stripe/stripe-js'
-import { Elements } from '@stripe/react-stripe-js'
+import React, { useState, useEffect } from 'react'
 import CircularProgress from '@mui/material/CircularProgress'
 import Button from '@mui/material/Button'
 import { useTranslations } from 'next-intl'
@@ -27,80 +24,6 @@ import ReservationItem from './ReservationItem'
 import { Reservation } from '../sites/types'
 
 const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
-
-
-export function StripePayment({
-  stripePublicKey,
-  reservation,
-  preview,
-  completeUrl,
-}: {
-  stripePublicKey: string | undefined
-  reservation: Reservation
-  preview?: React.ReactNode
-  completeUrl?: string
-}) {
-  const [clientSecret, setClientSecret] = useState('')
-
-  if (!stripePublicKey) {
-    console.error('STRIPE_PUBLIC_KEY is not set')
-    return null
-  }
-
-  // Memoize Stripe instance to avoid re-loading on every render
-  const stripePromise = useMemo(() => loadStripe(stripePublicKey), [stripePublicKey])
-
-  useEffect(() => {
-    if (reservation.paymentRef) {
-      return
-    }
-
-    // Include anonId for anonymous user ownership verification
-    const anonId = typeof window !== 'undefined'
-      ? localStorage.getItem('sunbnb-anonId')
-      : null
-
-    fetch('/api/payment/stripe/payment-intent', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reservationId: reservation.id, anonId }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.error) {
-          console.error('[Payment] PI creation error:', data.error)
-          return
-        }
-        setClientSecret(data.clientSecret)
-      })
-      .catch((error) => {
-        console.error('[Payment] PI creation failed:', error)
-      })
-  }, [reservation.id])
-
-  const appearance: { theme: 'stripe' } = { theme: 'stripe' }
-  const options = { clientSecret, appearance }
-  const SafeElements = Elements as unknown as React.ComponentType<any>
-
-  return (
-    <div className="App">
-      {clientSecret ? (
-        <SafeElements options={options} stripe={stripePromise}>
-          <CheckoutForm
-            dpmCheckerLink=""
-            reservation={reservation}
-            preview={preview}
-            completeUrl={completeUrl}
-          />
-        </SafeElements>
-      ) : (
-        <div className="flex justify-center mt-[24px]">
-          <CircularProgress />
-        </div>
-      )}
-    </div>
-  )
-}
 
 
 export function DemoPayment({
@@ -138,11 +61,9 @@ export function DemoPayment({
   return (
     <div className="App">
       <CheckoutForm
-        dpmCheckerLink=""
         reservation={currentReservation}
         preview={preview}
         completeUrl={completeUrl}
-        demoMode={true}
       />
     </div>
   )
@@ -270,7 +191,6 @@ export default function Payment({
   completeUrl,
   onCancel,
 }: {
-  stripePublicKey: string | undefined
   reservation: Reservation
   preview?: React.ReactNode
   completeUrl?: string
@@ -287,8 +207,7 @@ export default function Payment({
     )
   }
 
-  // Mollie is the default payment provider for reservations.
-  // Stripe payment code is retained but not active for new reservations.
+  // Consumer reservations are paid via Mollie (redirect checkout).
   return (
     <MolliePayment
       reservation={reservation}

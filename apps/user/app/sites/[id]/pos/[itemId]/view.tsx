@@ -7,7 +7,7 @@ import ReservationView from './Reservation'
 import { findAnonReservation, findUserReservation } from '../../actions'
 
 
-export default function PosView({ items, site, apiKey, stripePublicKey }: { items: InventoryItem[], site: SiteProps, apiKey: string, stripePublicKey: string | undefined }) {
+export default function PosView({ items, site, apiKey }: { items: InventoryItem[], site: SiteProps, apiKey: string }) {
 
   const router = useRouter()
 
@@ -40,21 +40,12 @@ export default function PosView({ items, site, apiKey, stripePublicKey }: { item
   let availabilityFrom = startOfDay.toISOString()
   let availabilityTo = startOfDay.toISOString() // The time is adjusted in the server action
 
-  if (!stripePublicKey) {
-    return (
-      <div className="flex flex-col items-center justify-center">
-        <div>Payment gateway unavailable</div>
-      </div>
-    )
-  }
-
   return (
     <div>
       <div>
         <div>
-          <ReservationView 
-            apiKey={apiKey} 
-            stripePublicKey={stripePublicKey} 
+          <ReservationView
+            apiKey={apiKey}
             items={items}
             site={site}
             dateRange={{ from: availabilityFrom, to: availabilityTo }}

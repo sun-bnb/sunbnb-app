@@ -67,7 +67,7 @@ export interface SiteViewBrand {
   logoUrl?: string | null
 }
 
-export default function SiteView({ site, apiKey, stripePublicKey, brand }: { site: SiteProps, apiKey: string, stripePublicKey: string | undefined, brand?: SiteViewBrand }) {
+export default function SiteView({ site, apiKey, brand }: { site: SiteProps, apiKey: string, brand?: SiteViewBrand }) {
 
   const router = useRouter()
   const pathname = usePathname()
@@ -276,7 +276,7 @@ export default function SiteView({ site, apiKey, stripePublicKey, brand }: { sit
 
             </div> : null
             }
-            <ReservationView apiKey={apiKey} stripePublicKey={stripePublicKey} site={fetchedSite || site} wide={true} />
+            <ReservationView apiKey={apiKey} site={fetchedSite || site} wide={true} />
           </div>
         </div>
       </div>
@@ -323,7 +323,7 @@ export default function SiteView({ site, apiKey, stripePublicKey, brand }: { sit
                 </Tabs>
               </div>
             )}
-            <ReservationView apiKey={apiKey} stripePublicKey={stripePublicKey} site={fetchedSite || site} />
+            <ReservationView apiKey={apiKey} site={fetchedSite || site} />
           </div>
         </div>
     </div>

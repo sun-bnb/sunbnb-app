@@ -4,8 +4,6 @@ import { auth } from '@/app/auth'
 import ReservationView from './view'
 import { Order } from '@/app/types/types'
 
-const { STRIPE_PUBLIC_KEY } = process.env
-
 async function getReservation(id: string) {
   return await prisma.reservation.findUnique({ 
     where: { id: id },
@@ -95,6 +93,6 @@ export default async function ReservationPage({ params, searchParams }: { params
   const siteType = reservation.site.type ?? 'paid'
   const orderPaymentType = (reservation.site as any).orderPaymentType ?? siteType
 
-  return <ReservationView signedIn={signedIn} showTerms={terms === 'true'} serviceFee={serviceFee} siteType={siteType} orderPaymentType={orderPaymentType} paymentProvider={reservation.site.paymentProvider} reservation={reservation} apiKey={apiKey} stripePublicKey={STRIPE_PUBLIC_KEY} order={order} />
+  return <ReservationView signedIn={signedIn} showTerms={terms === 'true'} serviceFee={serviceFee} siteType={siteType} orderPaymentType={orderPaymentType} paymentProvider={reservation.site.paymentProvider} reservation={reservation} apiKey={apiKey} order={order} />
 
 }

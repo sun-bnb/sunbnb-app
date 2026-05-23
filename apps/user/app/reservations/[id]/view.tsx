@@ -15,7 +15,7 @@ import { RESERVATION_PROCESSING, RESERVATION_COMPLETE, ORDER_COMPLETE, ORDER_PRO
 interface ReservationViewProps {
   reservation: Reservation,
   order: Order | null,
-  apiKey: string, stripePublicKey: string | undefined
+  apiKey: string
   signedIn: boolean
   showTerms?: boolean
   siteType?: string
@@ -28,7 +28,7 @@ interface ReservationViewProps {
   } | undefined
 }
 
-export default function ReservationView({ serviceFee, siteType, orderPaymentType, showTerms, signedIn, reservation, order, stripePublicKey, paymentProvider }: ReservationViewProps) {
+export default function ReservationView({ serviceFee, siteType, orderPaymentType, showTerms, signedIn, reservation, order, paymentProvider }: ReservationViewProps) {
 
   const t = useTranslations('Reservations')
   const containerRef = useRef<HTMLDivElement>(null)
@@ -194,7 +194,6 @@ export default function ReservationView({ serviceFee, siteType, orderPaymentType
               reservationId={reservation.id}
               seatId={seatId}
               siteType={orderPaymentType ?? siteType}
-              stripePublicKey={stripePublicKey}
               paymentProvider={paymentProvider}
               orders={reservation.orders}
               showConfirmation={!!order}

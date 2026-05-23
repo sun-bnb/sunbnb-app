@@ -6,8 +6,6 @@ import { auth } from '@/app/auth'
 import SiteView from './view'
 import ErrorCard from '@/components/ErrorCard'
 
-const { STRIPE_PUBLIC_KEY } = process.env
-
 async function getSite(id: string, userId: string) {
 
   const includeReservations = !!userId
@@ -85,7 +83,7 @@ export default async function Site({ params }: { params: { id: string }}) {
 
   return (
     <div>
-      <SiteView site={site} apiKey={apiKey} stripePublicKey={STRIPE_PUBLIC_KEY}/>
+      <SiteView site={site} apiKey={apiKey}/>
     </div>
   )
 

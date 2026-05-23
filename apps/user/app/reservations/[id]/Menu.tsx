@@ -31,7 +31,6 @@ export default function Menu({
   reservationId,
   seatId,
   siteType,
-  stripePublicKey,
   paymentProvider,
   orders,
   showConfirmation,
@@ -40,7 +39,6 @@ export default function Menu({
   reservationId: string
   seatId?: string
   siteType?: string
-  stripePublicKey: string | undefined
   paymentProvider?: string
   orders?: {
     id: string
@@ -105,15 +103,6 @@ export default function Menu({
       .finally(() => setLoading(false))
   }, [siteId])
 
-  /* ── Conditional return AFTER hooks ── */
-
-  if (!isUnpaid && !stripePublicKey && paymentProvider !== 'mollie') {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-        <p className="text-sm">{t('Payment gateway unavailable')}</p>
-      </div>
-    )
-  }
 
   /* ── Basket helpers ── */
 
@@ -278,7 +267,6 @@ export default function Menu({
         </div>
       ) : (
         <OrderPaymentView
-          stripePublicKey={stripePublicKey}
           paymentProvider={paymentProvider}
           preview={orderPreview}
           completeUrl={`/reservations/${reservationId}${anonId ? `?anonId=${anonId}` : ''}`}
