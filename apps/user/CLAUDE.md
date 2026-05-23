@@ -21,8 +21,8 @@ Google, Facebook, Credentials (email/password with bcrypt). Anonymous support vi
 | `/reservations/[id]` | Reservation detail — swipeable confirmation + F&B menu | Mixed |
 | `/reservations/[id]/pass` | QR ticket pass — printable | Mixed |
 | `/reservations/[id]/receipt` | Invoice receipt — HTML + PDF download | Mixed |
-| `/payment` | Mollie redirect / Demo payment form | Mixed |
-| `/payment/complete` | Payment verification + redirect | Mixed |
+| `payment/Payment.tsx` (in-page) | Payment step rendered inside the reservation flow (Mollie redirect / demo form) — **not a standalone route**; `/payment` 404s | — |
+| `/payment/complete` | Payment verification + redirect (Mollie returns here with `?reservationId`; demo with `?payment_intent`) | Mixed |
 | `/account` | User account settings | Auth |
 | `/demo` | Demo mode activation + interactive showcase | Public |
 | `/s/[slug]` | Branded site page via slug | Public |
