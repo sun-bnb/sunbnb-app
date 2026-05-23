@@ -4,11 +4,9 @@ slug: payments
 status: stable
 sources:
   - apps/user/app/api/_lib/payment-provider.ts
-  - apps/user/app/api/_lib/stripe.ts
+  - apps/user/app/api/_lib/payment-ids.ts
   - apps/user/app/api/_lib/mollie.ts
-  - apps/user/app/api/payment/stripe/payment-intent/route.ts
   - apps/user/app/api/payment/mollie/create-payment/route.ts
-  - apps/user/app/api/webhooks/stripe/route.ts
   - apps/user/app/api/webhooks/mollie/route.ts
   - apps/user/app/api/reconcile/route.ts
   - apps/user/app/payment/actions.ts
@@ -26,17 +24,17 @@ last_verified: 2026-05-23
 
 # Subsystem: Payments
 
-Three payment paths (Stripe, Mollie for Platforms, Demo) behind a provider-agnostic abstraction. Webhook + polling + reconciliation as three layers of confirmation.
+**Consumer payment is Mollie-for-Platforms + Demo** behind a provider-agnostic abstraction. Webhook + polling + reconciliation as three layers of confirmation. Consumer Stripe was **removed** (2026-05-23) — see [[track:003-stripe-connect-compliance]]; Stripe now only powers **partner subscriptions** (a separate concern, partner app, platform-as-merchant).
 
 ## Provider matrix
 
 | Provider | Used for | Direction | Money flow |
 |---|---|---|---|
-| **Stripe** | Consumer reservations & orders; partner subscriptions | Direct charge | Card → Stripe → platform account |
-| **Mollie for Platforms** | Consumer reservations & orders for partners using Mollie | Marketplace | Card → Mollie → partner Mollie account (with `applicationFee` routed to platform) |
+| **Mollie for Platforms** | All real consumer reservations & orders | Marketplace | Card → Mollie → partner Mollie account (with `applicationFee` routed to platform) |
 | **Demo** | `NEXT_PUBLIC_DEMO_MODE=true` | Faked | No real money; `paymentRef = pi_demo_<timestamp>` |
+| **Stripe** | Partner **subscriptions only** (not consumer) | Direct charge | Card → Stripe → platform account (correct for SaaS billing) |
 
-Per-site provider choice: stored on `Site` (via `setPaymentProvider` action in `apps/partner/app/sites/[id]/site-actions.ts`). Mollie requires the partner has connected via OAuth (`mollieAccessToken` on `PartnerAccount`). The partner General UI currently exposes **only Mollie** as the consumer provider; `setPaymentProvider` *accepts* `'stripe'` but has no UI path, so consumer Stripe is effectively unexposed (latent platform-collecting paths tracked in `.claude/tracks/003-stripe-connect-compliance.md`).
+Per-site consumer provider: stored on `Site` (via `setPaymentProvider` in `apps/partner/app/sites/[id]/site-actions.ts`) — **only `'mollie'` is accepted** (`VALID_PAYMENT_PROVIDERS = { 'mollie' }`), and it requires the partner has connected via OAuth (`mollieAccessToken` on `PartnerAccount`). The earlier consumer-Stripe path (platform-collecting reservation/order PaymentIntents) was deleted; if it ever returns it must be built on Stripe Connect from the start ([[track:003-stripe-connect-compliance]]).
 
 ## Discovery visibility gate (payment capability)
 
@@ -54,12 +52,12 @@ The same `searchSites` WHERE also requires `status = 'active'`, a name, a valid 
 `apps/user/app/api/_lib/payment-provider.ts` is the boundary:
 
 ```ts
-getPaymentStatus(paymentRef)          // resolves Stripe or Mollie or demo
+getPaymentStatus(paymentRef)          // resolves Mollie or demo
 isPaymentSucceeded(status) / isPaymentFailed(status)  // provider-agnostic
-issueRefund(paymentRef)               // routes to the correct provider
+issueRefund(paymentRef)               // routes to Mollie (demo: no-op)
 ```
 
-**Always use these helpers** in code that needs to be provider-agnostic (polling endpoints, reconciliation, refunds). Direct Stripe/Mollie calls belong only inside payment creation routes and webhook handlers.
+**Always use these helpers** in code that needs to be provider-agnostic (polling endpoints, reconciliation, refunds). Direct Mollie calls belong only inside the payment creation route and webhook handler.
 
 ### Default-deny check
 
@@ -67,19 +65,19 @@ Use `=== 'paid'` (or `isPaymentSucceeded(status)`), NEVER `!== 'unpaid'`. Unknow
 
 ### Demo detection
 
-`isDemoPayment(ref)` in `apps/user/app/api/_lib/stripe.ts` — checks for `pi_demo_` prefix. **Always check before any provider API call.** Demo payments otherwise look identical to real ones in downstream code (invoice creation runs unchanged).
+`isDemoPayment(ref)` in `apps/user/app/api/_lib/payment-ids.ts` — checks for `pi_demo_` prefix. **Always check before any provider API call.** Demo payments otherwise look identical to real ones in downstream code (invoice creation runs unchanged).
 
 ### Entity id validation
 
-`isValidEntityId(value)` — checks for CUID or UUID v4. Used at the entry of payment-intent routes so a malformed id never reaches Stripe.
+`isValidEntityId(value)` in `payment-ids.ts` — checks for CUID or UUID v4. Used at the entry of the Mollie create-payment route so a malformed id never reaches the provider.
 
-## Stripe specifics
+## Stripe (subscriptions only — not consumer)
 
-- Client: `getStripeClient()` — throws if `STRIPE_SECRET_KEY` missing
-- Webhook signature: `Stripe.webhooks.constructEvent(body, sig, STRIPE_WEBHOOK_SECRET)`. **Reject malformed.**
-- Events handled: `payment_intent.succeeded`, `payment_intent.payment_failed`, `charge.refunded`
-- PI metadata: stores `reservationId` / `orderId` / `rentalBookingPaymentRef` to find the row on webhook
-- Amount: stored in cents (multiply by 100), currency from `Site` or platform default
+Consumer Stripe was **removed** (2026-05-23). Stripe survives **only** for partner subscription billing — a *separate* subsystem from this consumer-payment one:
+
+- Client: `getStripeClient()` in `apps/partner/app/api/_lib/stripe.ts` — throws if `STRIPE_SECRET_KEY` missing
+- Subscription webhook: `apps/partner/app/api/subscription/webhook/route.ts`, signature-verified via `STRIPE_SUBSCRIPTION_WEBHOOK_SECRET` (a distinct secret from the old consumer `STRIPE_WEBHOOK_SECRET`, now unused)
+- Platform-as-merchant is **correct** here (the platform bills the partner for SaaS) — unlike the removed consumer path. [[track:003-stripe-connect-compliance]] covers what a compliant consumer Stripe (Connect) would require if it ever returns.
 
 ## Mollie specifics
 
@@ -109,10 +107,9 @@ Anonymous demo payments require `anonId` argument and verify ownership via `anon
 
 | Webhook | Route | Verification |
 |---|---|---|
-| Stripe | `apps/user/app/api/webhooks/stripe/route.ts` | `stripe-signature` header via `STRIPE_WEBHOOK_SECRET` |
 | Mollie | `apps/user/app/api/webhooks/mollie/route.ts` | Payment id format regex + provider state fetch |
 
-Both routes call into `processConfirmed*` from `@repo/data/payment` — same idempotent logic as the polling fallback. Double-firing is safe.
+The Mollie webhook calls into `processConfirmed*` from `@repo/data/payment` — same idempotent logic as the polling fallback and reconcile. Double-firing is safe. (The partner subscription webhook is separate — see the Stripe section above.)
 
 ## Reconciliation
 
@@ -126,8 +123,8 @@ Both routes call into `processConfirmed*` from `@repo/data/payment` — same ide
 ## Refunds
 
 `issueRefund(paymentRef)` in `apps/user/app/api/_lib/payment-provider.ts`:
-- Stripe: creates a `Refund` on the PI
-- Mollie: creates a refund on the partner's payment
+- Mollie: creates a refund on the partner's payment for the full amount
+- Demo: no-op
 
 Triggered from `apps/user/app/reservations/[id]/actions.ts#cancelReservation` (and similar order/rental cancel actions). Updates reservation `status: refunded` on success.
 
@@ -135,19 +132,19 @@ Triggered from `apps/user/app/reservations/[id]/actions.ts#cancelReservation` (a
 
 Env vars (all required for the providers you use):
 
-- `STRIPE_SECRET_KEY`, `STRIPE_PUBLIC_KEY`, `STRIPE_WEBHOOK_SECRET`
 - `MOLLIE_CLIENT_ID`, `MOLLIE_CLIENT_SECRET`, `MOLLIE_REDIRECT_URI`
 - `NEXT_PUBLIC_DEMO_MODE` — boolean-ish, enables demo path
 - `RECONCILIATION_SECRET` — required (503 if unset)
 - `APP_URL` / `NEXT_PUBLIC_APP_URL` — used for redirect URL validation
 - `CRON_SECRET` — for cron-triggered reconcile in production
+- *(subscriptions, partner app — separate subsystem)* `STRIPE_SECRET_KEY` + `STRIPE_SUBSCRIPTION_WEBHOOK_SECRET`. The old consumer `STRIPE_PUBLIC_KEY` / `STRIPE_WEBHOOK_SECRET` are no longer used.
 
 ## Invariants
 
 1. **Idempotency end-to-end.** Webhook, polling, and reconciliation can all fire for the same payment. Each downstream `processConfirmed*` is idempotent.
 2. **All money math via `round()`** from `@repo/data`. VAT-inclusive everywhere; reverse-VAT for splits.
 3. **No client-supplied prices.** Server fetches from DB.
-4. **Webhook signature verification is non-negotiable.** Don't add a debug bypass.
+4. **Verify webhook authenticity, never trust the payload.** Mollie sends only a payment id — validate its format, then re-fetch state from the provider; don't add a bypass. (The partner subscription webhook verifies a Stripe HMAC signature.)
 5. **Generic error messages on payment failures.** Never leak internal details (PI id, Mollie error.detail, DB row id) to the client. Pattern: `"Payment could not be processed. Please try again or contact support."`
 
 ## Related
@@ -158,10 +155,9 @@ Env vars (all required for the providers you use):
 
 ## Common pitfalls
 
-- **Skipping `isDemoPayment` check** before calling Stripe — Stripe will 404 on a `pi_demo_*` id.
+- **Skipping `isDemoPayment` check** before calling Mollie — a `pi_demo_*` id has no provider record.
 - **Hardcoding currency.** Use site / platform config.
-- **Calling Stripe SDK at module load.** Lazy-init via `getStripeClient()`.
 - **Forgetting `applicationFee` on Mollie.** Then the platform takes nothing.
-- **Trusting `payment_intent` query params on the return URL.** Always re-verify with the provider.
+- **Trusting return-URL query params** (`reservationId` / `payment_intent`). Always re-verify status with the provider before treating a payment as paid.
 - **Logging full webhook payloads.** Contains PII / partial card data.
 - **Re-issuing refunds because the first one's response was lost.** Provider also has idempotency keys — use them where available.

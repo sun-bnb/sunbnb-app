@@ -43,7 +43,7 @@ export async function cancelReservation(reservationId: string) {
     return { status: 'ok' }
   }
 
-  // Issue a refund (Stripe or Mollie) if this reservation was paid with a real payment
+  // Issue a refund via the payment provider if this reservation was paid with a real payment
   const isPaid = reservation.status === RESERVATION_COMPLETE
   const hasRealPayment = reservation.paymentRef && !isDemoPayment(reservation.paymentRef)
 

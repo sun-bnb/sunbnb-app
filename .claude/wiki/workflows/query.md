@@ -19,7 +19,7 @@ When the user asks a question — about the architecture, how a flow works, wher
 
 ### 1. Decompose the question into concepts
 
-"How does an order get paid?" → concepts: **order**, **payment**, **stripe/mollie/demo**, **invoice**.
+"How does an order get paid?" → concepts: **order**, **payment**, **mollie/demo**, **invoice**.
 
 "Why isn't the partner seeing their commission?" → concepts: **settlement**, **invoice (platform)**, **service-fee**.
 

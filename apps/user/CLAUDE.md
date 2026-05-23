@@ -21,7 +21,7 @@ Google, Facebook, Credentials (email/password with bcrypt). Anonymous support vi
 | `/reservations/[id]` | Reservation detail — swipeable confirmation + F&B menu | Mixed |
 | `/reservations/[id]/pass` | QR ticket pass — printable | Mixed |
 | `/reservations/[id]/receipt` | Invoice receipt — HTML + PDF download | Mixed |
-| `/payment` | Stripe / Demo payment form | Mixed |
+| `/payment` | Mollie redirect / Demo payment form | Mixed |
 | `/payment/complete` | Payment verification + redirect | Mixed |
 | `/account` | User account settings | Auth |
 | `/demo` | Demo mode activation + interactive showcase | Public |
@@ -42,11 +42,8 @@ Google, Facebook, Credentials (email/password with bcrypt). Anonymous support vi
 | `/api/reservations/[id]/find` | GET | Find reservation by paymentRef |
 | `/api/orders/[id]` | GET | Fetch order + verify payment + create invoice |
 | `/api/orders/[id]/find` | GET | Find order by paymentRef |
-| `/api/payment/stripe/payment-intent` | POST | Create Stripe PaymentIntent for reservation |
 | `/api/payment/mollie/create-payment` | POST | Create Mollie payment for reservation (redirectUrl origin-validated) |
-| `/api/order-payment/stripe/payment-intent` | POST | Create Stripe PaymentIntent for order |
 | `/api/order-payment/mollie/create-payment` | POST | Create Mollie payment for order |
-| `/api/webhooks/stripe` | POST | Stripe webhook (signature-verified) |
 | `/api/webhooks/mollie` | POST | Mollie webhook (paymentId format-validated) |
 | `/api/reconcile` | POST | Reconcile stuck payments (RECONCILIATION_SECRET required) |
 | `/api/places/autocomplete` | GET | Google Places proxy (input length-limited) |
@@ -56,15 +53,15 @@ Google, Facebook, Credentials (email/password with bcrypt). Anonymous support vi
 ## Server Actions
 
 - **`sites/[id]/actions.ts`**: `saveReservationForMultipleItems` (multi-item, auth/anonId required, price from DB), `saveRentalBooking` (availability-checked), `findAnonReservation`, `findUserReservation`
-- **`reservations/[id]/actions.ts`**: `cancelReservation` (+ Stripe refund if paid), `getProducts`, `createOrder` (DB prices enforced), `completeUnpaidOrder`, `getOrderByPaymentRef`, `getOrders`
+- **`reservations/[id]/actions.ts`**: `cancelReservation` (+ provider refund via `issueRefund` if paid), `getProducts`, `createOrder` (DB prices enforced), `completeUnpaidOrder`, `getOrderByPaymentRef`, `getOrders`
 - **`payment/actions.ts`**: `initiateDemoReservationPayment`, `initiateDemoOrderPayment`, `initiateDemoRentalPayment`, `getReservationById`, `getReservationByPaymentRef`, `getOrderByPaymentRef`
 
 ## API Auth Helpers (`app/api/_lib/`)
 
 - **`auth.ts`**: `getRequestIdentity(request, bodyAnonId?)` extracts userId from session or anonId from query/body. `verifyOwnership(identity, entity)` checks requesting user owns the resource.
-- **`stripe.ts`**: `getStripeClient()`, `getStripePaymentStatus(paymentRef)`, `isDemoPayment(paymentRef)` (checks `pi_demo_` prefix), `isValidEntityId(value)` (CUID or UUID v4)
+- **`payment-ids.ts`**: `isDemoPayment(paymentRef)` (checks `pi_demo_` prefix), `isValidEntityId(value)` (CUID or UUID v4). Extracted from the removed Stripe lib when consumer Stripe was purged.
 - **`mollie.ts`**: `getMollieClientForPartner(accessToken)`, `getValidMollieToken(partnerAccount)`, `findPartnerTokenForPayment(paymentId)`
-- **`payment-provider.ts`**: `getPaymentStatus(paymentRef)`, `isPaymentSucceeded/Failed(status)`, `issueRefund(paymentRef)` — provider-agnostic abstraction
+- **`payment-provider.ts`**: `getPaymentStatus(paymentRef)`, `isPaymentSucceeded/Failed(status)`, `issueRefund(paymentRef)` — provider-agnostic abstraction over **Mollie + demo** (consumer Stripe removed)
 
 ## State Management
 
@@ -78,7 +75,7 @@ RTK Query: `reservationApi` (getReservation, getReservationByDate, etc.), `place
 ## Testing
 
 ```bash
-npm run test              # unit + route + server action tests (162 tests, Prisma mocked)
+npm run test              # unit + route + server action tests (194 tests, Prisma mocked)
 npm run test:watch        # vitest in watch mode
 npm run test:integration  # integration tests against local sunbnb_test DB (19 tests, real Prisma)
 ```
@@ -88,16 +85,20 @@ npm run test:integration  # integration tests against local sunbnb_test DB (19 t
 - Excludes `*.integration.test.ts`
 - Path aliases redirect `@repo/data/PrismaCient` → mock, `@repo/data/payment` → mock
 - **Mock modules** (`__mocks__/@repo/data/`): `PrismaCient.ts`, `payment.ts`, `reservation-emails.ts`, `env.ts`
-- `app/api/_lib/stripe.test.ts` — isDemoPayment, isValidEntityId (11 tests)
-- `app/api/_lib/payment-provider.test.ts` — detectProvider, isPaymentSucceeded/Failed (16 tests)
-- `app/api/payment/stripe/payment-intent/route.test.ts` — PaymentIntent creation, validation, auth (11 tests)
+- `app/api/_lib/payment-ids.test.ts` — isDemoPayment, isValidEntityId (6 tests)
+- `app/api/_lib/payment-provider.test.ts` — detectProvider (Mollie/demo), isPaymentSucceeded/Failed (16 tests)
 - `app/api/reservations/[id]/route.test.ts` — reservation fetch, payment verification (9 tests)
-- `app/api/webhooks/stripe/route.test.ts` — Stripe webhook handling (11 tests)
+- `app/api/sites/[id]/route.test.ts` — single-site fetch (2 tests)
+- `app/api/restaurants/[id]/availability/route.test.ts` — restaurant table availability query (5 tests)
 - `app/api/webhooks/mollie/route.test.ts` — Mollie webhook handling (13 tests)
 - `app/api/reconcile/route.test.ts` — stuck payment reconciliation (9 tests)
-- `app/sites/[id]/actions.test.ts` — reservation/rental creation, availability, pricing (18 tests)
-- `app/reservations/[id]/actions.test.ts` — cancel, createOrder, completeUnpaidOrder (37 tests)
-- `app/payment/actions.test.ts` — demo payments, query actions (27 tests)
+- `app/api/auth/forgot-password/route.test.ts` — rate limiting, email validation, enumeration protection (10 tests)
+- `app/api/auth/reset-password/route.test.ts` — rate limiting, token/password validation (12 tests)
+- `app/api/auth/impersonate/route.test.ts` — sudo impersonation start (4 tests)
+- `app/api/auth/end-impersonation/route.test.ts` — impersonation end (4 tests)
+- `app/sites/[id]/actions.test.ts` — reservation/rental creation, availability, pricing (35 tests)
+- `app/reservations/[id]/actions.test.ts` — cancel, createOrder, completeUnpaidOrder (40 tests)
+- `app/payment/actions.test.ts` — demo payments, query actions (29 tests)
 
 ### Integration tests (`vitest.integration.config.ts`)
 

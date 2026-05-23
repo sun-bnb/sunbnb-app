@@ -14,7 +14,7 @@ Maintained by the `create` and `handoff` workflows.
 
 | ID | Track | Why deferred | Updated |
 |----|-------|--------------|---------|
-| [003](003-stripe-connect-compliance.md) | Stripe Connect compliance | **Deferred / latent — not a live exposure.** Stripe is subs-only; in-app Stripe is unexposed (UI offers only Mollie). Build on Connect if/when Stripe in-app is enabled. | 2026-05-23 |
+| [003](003-stripe-connect-compliance.md) | Stripe Connect compliance | **Green-field — consumer Stripe code removed (2026-05-23).** Stripe is subs-only; consumer = Mollie + Demo. Build on Connect from scratch if/when consumer Stripe is reintroduced. | 2026-05-23 |
 
 ## Done / archived
 

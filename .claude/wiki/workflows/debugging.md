@@ -55,9 +55,9 @@ Cheap to disprove first. Typical ranking:
 1. **Auth/ownership** — wrong user, missing `anonId`, missing sudo. Check the relevant `requireSiteOwner()` / `verifyOwnership()` call.
 2. **Status field mismatch** — a state machine transition that didn't fire. Confirm `status` and `operationalStatus` values match the constants module.
 3. **Idempotency / double-write** — invoice created twice, or not created because a prior partial run set inconsistent state.
-4. **External provider state** — Stripe/Mollie payment status diverged from DB. Check provider dashboard / payment intent ID.
+4. **External provider state** — Mollie payment status diverged from DB. Check the Mollie dashboard / payment id.
 5. **Webhook missed** — reconciliation endpoint should be a safety net; if it's not catching this, that's a second bug.
-6. **Env var missing** — esp. `RECONCILIATION_SECRET`, `CRON_SECRET`, `MOLLIE_*`, `STRIPE_WEBHOOK_SECRET`.
+6. **Env var missing** — esp. `RECONCILIATION_SECRET`, `CRON_SECRET`, `MOLLIE_*`.
 7. **Race condition** — concurrent availability check + create. Wrap-in-transaction was missed.
 
 ### 5. Verify against code
@@ -90,8 +90,8 @@ Update `last_verified` on any page you re-verified during the debug.
 ## Cross-app debugging tips
 
 - **Stuck payments**: `/api/reconcile` (user app) is the safety net. It requires `RECONCILIATION_SECRET`. POST it manually to clear backlogs.
-- **Webhook signature failures**: Stripe needs `STRIPE_WEBHOOK_SECRET` matched to the dashboard; Mollie validates payment ID regex.
-- **Demo mode confusion**: anything starting with `pi_demo_` is a fake payment ref. `isDemoPayment(ref)` (in `apps/user/app/api/_lib/stripe.ts`) is the canonical check.
+- **Webhook verification failures**: the Mollie webhook validates the payment-id regex then re-fetches state from the provider. (The partner subscription Stripe webhook needs `STRIPE_SUBSCRIPTION_WEBHOOK_SECRET` matched to the dashboard.)
+- **Demo mode confusion**: anything starting with `pi_demo_` is a fake payment ref. `isDemoPayment(ref)` (in `apps/user/app/api/_lib/payment-ids.ts`) is the canonical check.
 - **`@repo/data/PrismaCient`**: the typo path (missing 'l') is intentional — every app depends on it. Don't "fix" it.
 - **Status field typos**: every status value lives in `packages/data/src/reservation-status.ts`. Searches for raw strings like `'expected'` or `'checked-in'` will turn up usages — always prefer the constant.
 

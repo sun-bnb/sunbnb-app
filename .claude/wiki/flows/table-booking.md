@@ -88,7 +88,7 @@ Combination bookings transition as a group. See `[[entity:table-reservation]]` f
   moved yet). Combination = N rows. Waitlist entries created / marked notified.
 - Email: confirmation on book, cancellation on cancel, reminder (daily cron), waitlist-open notify —
   all via Resend, all non-blocking.
-- External: none yet (deposit collection via Stripe/Mollie is the unbuilt seam).
+- External: none yet (Mollie deposit collection is the unbuilt seam — Stripe pre-auth via Connect deferred to [[track:003-stripe-connect-compliance]]).
 
 ## Failure modes
 

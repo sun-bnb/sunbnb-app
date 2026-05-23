@@ -90,7 +90,7 @@ embeddable widget + future Reserve. A daily reminder cron lives at `app/api/cron
   chrome — the same layer behind the sunbed inventory editor. See `[[subsystem:schematic-editor]]`.
 - **No-show deposits (recorded, not yet collected):** `Restaurant.noShowPolicy` + per-shift
   `requiresDeposit` drive a deposit amount stored on the reservation (`depositStatus: pending`). The
-  actual collection (Stripe/Mollie capture/refund) + `@repo/data` invoice/settlement/fee cascade
+  actual collection (Mollie deposit capture/refund; Stripe pre-auth via Connect deferred to [[track:003-stripe-connect-compliance]]) + `@repo/data` invoice/settlement/fee cascade
   (`[[subsystem:payments]]`) + consumer pay-before-confirm UI is the **remaining app-layer seam**.
 
 ## Invariants

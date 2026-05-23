@@ -2,7 +2,7 @@
  * GET /api/reservations/[id]
  *
  * Fetches a reservation and — if it's still processing — verifies the
- * payment status (Stripe or Mollie) and triggers idempotent invoice creation.
+ * payment status and triggers idempotent invoice creation.
  *
  * Security:
  * - Authenticates via session or anonId query param
@@ -10,7 +10,7 @@
  *
  * Used by:
  * - RTK Query polling on the payment-complete page
- * - Webhook (Stripe or Mollie) as primary confirmation, this as fallback
+ * - Webhook (Mollie) as primary confirmation, this as fallback
  * - Direct lookup for reservation details
  */
 
@@ -62,7 +62,7 @@ export async function GET(
     )
   }
 
-  // ── Handle 'processing' state: verify Stripe and process ──────────────
+  // ── Handle 'processing' state: verify with the provider and process ──────────────
 
   if (reservation.status === RESERVATION_PROCESSING && reservation.paymentRef) {
     try {
@@ -70,7 +70,7 @@ export async function GET(
         // Demo mode: process immediately without provider verification
         await processConfirmedReservation(reservation.id)
       } else {
-        // Real payment: verify with correct provider (Stripe or Mollie)
+        // Real payment: verify with the payment provider (Mollie)
         const paymentStatus = await getPaymentStatus(reservation.paymentRef)
 
         if (isPaymentSucceeded(paymentStatus)) {
@@ -82,7 +82,7 @@ export async function GET(
             data: { status: RESERVATION_PAYMENT_FAILED },
           })
         }
-        // else: still processing (Stripe 'processing', Mollie 'open'/'pending') — wait
+        // else: still processing (Mollie 'open'/'pending') — wait
       }
 
       // Re-fetch to return current state

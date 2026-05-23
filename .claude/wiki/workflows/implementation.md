@@ -68,7 +68,7 @@ Non-negotiables (these are in `.claude/rules/` and `CLAUDE.md` — always check 
 - Reservations: fee **deducted from partner revenue**. Orders: fee **added to customer total**. Do not mix.
 - All prices VAT-inclusive. Use `round()` from `@repo/data` for all money math.
 - Demo payments: `pi_demo_{timestamp}` prefix. Check `isDemoPayment()` before any provider call.
-- Stripe webhook: verify signature. Mollie webhook: validate payment ID regex.
+- Mollie webhook: validate the payment-id regex + re-fetch state. (Subscription Stripe webhook: verify the HMAC signature.)
 - `/api/reconcile` must require `RECONCILIATION_SECRET`.
 
 ### 4. Write the tests first when feasible

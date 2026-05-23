@@ -42,7 +42,7 @@ Invokable via `/wiki <op>` (see `.claude/commands/wiki.md`).
 
 ## Flows — end-to-end journeys
 
-- [`flow:reservation-payment`](flows/reservation-payment.md) — **stable** — booking → Stripe/Mollie/Demo → invoice → confirmation email
+- [`flow:reservation-payment`](flows/reservation-payment.md) — **stable** — booking → Mollie/Demo → invoice → confirmation email
 - [`flow:order-payment`](flows/order-payment.md) — **stable** — F&B order placement → payment → invoice (fee added to total)
 - [`flow:rental-booking`](flows/rental-booking.md) — **stable** — equipment rental: availability check → booking → payment → pickup/return
 - [`flow:walk-in`](flows/walk-in.md) — **stable** — partner manage page: walk-in reservation, check-in, departure, no-show, bed-block
@@ -52,7 +52,7 @@ Invokable via `/wiki <op>` (see `.claude/commands/wiki.md`).
 ## Subsystems — cross-cutting modules
 
 - [`subsystem:auth`](subsystems/auth.md) — **stable** — NextAuth setup per app, anonId, ownership checks, sudo
-- [`subsystem:payments`](subsystems/payments.md) — **stable** — Stripe vs Mollie vs Demo, webhooks, reconciliation, refunds
+- [`subsystem:payments`](subsystems/payments.md) — **stable** — consumer Mollie + Demo (Stripe = subscriptions only), webhooks, reconciliation, refunds
 - [`subsystem:table-reservations`](subsystems/table-reservations.md) — **stable** — restaurant product: core/ui packages, availability engine, app wiring, extraction posture
 - [`subsystem:schematic-editor`](subsystems/schematic-editor.md) — **draft** — shared grid geometry + editor chrome behind sunbed inventory & restaurant tables
 - [`subsystem:design-system`](subsystems/design-system.md) — **draft** — UI design language: `accent` token, component classes, identity header, `Toggle`; canonical conventions in `.claude/rules/ui.md`. Prime with `/ui`

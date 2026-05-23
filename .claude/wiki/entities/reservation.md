@@ -31,7 +31,7 @@ A booking of one or more inventory items (sunbeds) at a Site for a date/time ran
 - Identity: `id`, `userId` (FK → User), `anonId?` (anonymous flow), `siteId` (FK → Site).
 - Items: M:N relation `InventoryItem` via implicit join `InventoryItemToReservation`. `itemId?` is a legacy single-item link; multi-item bookings use the M:N table.
 - Time: `from`, `to` (DateTime), `type` (default `"hours"` — sunbed bookings use `"days"`).
-- Money: `paymentAmount?` (Float), `paymentRef?` (Stripe PI id or Mollie payment id or `pi_demo_*`).
+- Money: `paymentAmount?` (Float), `paymentRef?` (Mollie payment id or `pi_demo_*`; legacy rows may carry a Stripe `pi_*` id from before consumer Stripe was removed).
 - Invoice link: `invoiceId?` (unique, 1:1 → Invoice).
 - Status: `status` (payment), `operationalStatus` (on-site state).
 - Walk-in / partner-side fields: `guestName?`, `guestContact?`, `internalNotes?`, `checkedInAt?`, `departedAt?`.
@@ -93,7 +93,7 @@ expected → checked-in → departed
 
 ## Related flows
 
-- `[[flow:reservation-payment]]` — the full booking → payment → confirmation journey (Stripe, Mollie, Demo).
+- `[[flow:reservation-payment]]` — the full booking → payment → confirmation journey (Mollie, Demo).
 - `[[flow:walk-in]]` — partner manage page lifecycle (check-in, departure, no-show, bed-block).
 
 ## Common pitfalls

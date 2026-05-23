@@ -69,7 +69,7 @@ export default async function ReservationPage({ params, searchParams }: { params
 
   let order: Order | null = null
   if (redirect_status === 'succeeded' && payment_intent) {
-    // Stripe redirect: look up order by paymentRef
+    // Demo redirect: look up order by paymentRef (payment_intent query shape)
     order = await getOrder(payment_intent)
   } else if (orderId) {
     // Mollie redirect: look up order by ID

@@ -51,7 +51,7 @@ Equipment rental (surfboards, paddleboards, kayaks, etc.) — hourly or daily. D
    - `quantity` (default 1)
    - `totalPrice` calculated server-side from `pricePerHour × hours` or `pricePerDay × days` × `quantity`
    - `status: pending`, `operationalStatus: reserved`
-3. **Payment** — follows the same Stripe / Mollie / Demo paths as `[[flow:reservation-payment]]`
+3. **Payment** — follows the same Mollie / Demo paths as `[[flow:reservation-payment]]`
    - On confirmation → `processConfirmedRentalBooking(paymentRef)` — note: groups bookings by `paymentRef` (a single payment can cover multiple booking rows)
 4. **Invoice** — partner + platform invoices created. Fee direction follows the reservation pattern (deducted from partner). Verify in source before assuming.
 
@@ -94,7 +94,7 @@ Overdue indicator: hourly bookings past their `to` time without being marked ret
 - `[[entity:reservation]]` — sibling entity (sunbed bookings)
 - `[[entity:invoice]]` — invoices created on confirmation
 - `[[entity:service-fee]]` — fees apply
-- `[[flow:reservation-payment]]` — payment paths are shared (Stripe/Mollie/Demo)
+- `[[flow:reservation-payment]]` — payment paths are shared (Mollie/Demo)
 - `[[flow:walk-in]]` — manage page lifecycle (sunbed side)
 
 ## Common pitfalls

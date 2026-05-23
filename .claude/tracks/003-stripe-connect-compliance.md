@@ -17,18 +17,30 @@ not** — see the gap below. The goal of this track is to bring Stripe consumer 
 connected-account/commission model (**Stripe Connect**), closing the compliance gap and unblocking
 Stripe for the table-reservation no-show deposits ([[track:002-table-reservations]] 1e).
 
-## The gap (verified 2026-05-23)
+## The gap (verified 2026-05-23) — closed by removal 2026-05-23
 
-- **Both** Stripe consumer charge paths are plain charges into the **platform's own Stripe account** —
+> **Update (2026-05-23): the gap is closed by *deleting* the offending code, not by fixing it.** The
+> consumer Stripe charge paths below were **purged** from `apps/user` (the stripe payment-intent +
+> webhook routes, the Elements UI + `stripePublicKey` threading, `_lib/stripe.ts`), and the prod
+> "stripe" sites — all our own test beaches, no real customers — were migrated to Mollie first.
+> Consumer payment is now **Mollie + Demo only**, and `setPaymentProvider` rejects anything but
+> `'mollie'` (`VALID_PAYMENT_PROVIDERS = { 'mollie' }`). So there is **no non-compliant consumer code
+> in production**; this track is now **green-field** — the work below applies only *if/when* consumer
+> Stripe is deliberately reintroduced, and then it must be built on Connect from the start.
+
+The original gap, for the record (code since deleted):
+
+- **Both** Stripe consumer charge paths were plain charges into the **platform's own Stripe account** —
   `paymentIntents.create({ amount, currency, automatic_payment_methods, metadata })` with **no
   `transfer_data` / `application_fee_amount` / `on_behalf_of` / connected `stripeAccount`**:
   - reservation: `apps/user/app/api/payment/stripe/payment-intent/route.ts:78`
-  - F&B order: `apps/user/app/api/order-payment/stripe/payment-intent/route.ts:75` (confirmed — mirrors it)
+  - F&B order: `apps/user/app/api/order-payment/stripe/payment-intent/route.ts:75` (confirmed — mirrored it)
 - **No Stripe Connect anywhere** in the payment code, and `PartnerAccount` has Stripe fields only for
   *subscriptions* (`stripeCustomerId` / `stripeSubscriptionId` — platform→partner billing, which is
-  correctly platform-as-merchant). There is **no Stripe connected-account id** on the partner.
-- Net: today, Stripe consumer reservation + order payments are collected by the platform — the exact
-  thing the legal requirement prohibits. Mollie is compliant; Stripe is not.
+  correctly platform-as-merchant). There was **no Stripe connected-account id** on the partner.
+- Net (at the time): Stripe consumer reservation + order payments were collected by the platform — the
+  exact thing the legal requirement prohibits. That code is now removed; Mollie (compliant) is the only
+  consumer path.
 
 ## Scope & urgency (confirmed 2026-05-23)
 
@@ -61,11 +73,11 @@ gap touches no real users. (Worth verifying + folding into [[subsystem:payments]
 - ✅ **Confirm scope** (2026-05-23). Two consumer paths — reservation + order PaymentIntents — both
   plain platform charges (no Connect). Rentals (Mollie-only), table deposits (Mollie-only), and
   subscriptions (correctly platform-merchant) are out of scope. See Scope & urgency above.
-- ☐ **Optional defense-in-depth (not urgent).** The partner UI already exposes only Mollie, so there's
-  no live exposure. As belt-and-braces, reject `'stripe'` in `setPaymentProvider` so the dormant
-  server-action path can't be reached even via a direct call. A one-time sanity check
-  (`SELECT count(*) FROM site WHERE payment_provider = 'stripe'` on prod/test) confirms 0 before
-  relying on "not exposed."
+- ✅ **Containment done by removal** (2026-05-23). Went past defense-in-depth: the consumer Stripe code
+  is **deleted**, and `setPaymentProvider` now rejects anything but `'mollie'`
+  (`VALID_PAYMENT_PROVIDERS = { 'mollie' }`). The prod sanity check (`SELECT count(*) FROM site WHERE
+  payment_provider = 'stripe'`) found 13 sites — all our own test beaches, no real customers — which
+  were migrated to Mollie before the purge.
 - ✅ **Verify + document the visibility gate** (2026-05-23). Verified in
   `apps/user/service/siteService.ts#searchSites` (the sole consumer site-discovery query → `/sites`
   SSR + `/api/sites`): a `Site` is listed only if **all services are off-platform** (`type` /
@@ -81,17 +93,20 @@ gap touches no real users. (Worth verifying + folding into [[subsystem:payments]
 - ☐ **Onboarding.** Stripe Connect onboarding flow in the partner app (Account Links / hosted
   onboarding), mirroring the Mollie OAuth connect flow; gate consumer Stripe charges on a completed
   connected account.
-- ☐ **Migrate consumer charges.** Reservation + order PaymentIntents → Connect (funds to the venue,
-  `application_fee_amount` = platform commission). Update webhooks/reconcile for connected-account
-  events.
+- ☐ **Build consumer charges on Connect (green-field).** If consumer Stripe is reintroduced, build
+  reservation + order charges on Connect from the start (funds to the venue, `application_fee_amount` =
+  platform commission); wire webhooks/reconcile for connected-account events. (The old
+  platform-collecting PaymentIntents were **deleted**, not migrated — there is nothing to retrofit.)
 - ☐ **Unblock table deposits + pre-auth.** Once Connect exists, enable Stripe for the 1e deposit flow
   ([[track:002-table-reservations]]); until then deposits are Mollie-only. This is also where the
   **fee-clean pre-auth / card-hold** deposit mechanic lands (authorize, capture only on no-show → no
   PSP fee on show-ups), replacing the interim Mollie "targeted upfront deposit + refund-on-arrival"
   which leaks a per-transaction fee on every refunded deposit. Stripe's manual capture supports this
   cleanly; Mollie's auth support is too limited to rely on.
-- ☐ **Wiki.** Update `[[subsystem:payments]]` to document the connected-account model for Stripe
-  (currently it only describes Mollie-for-Platforms + "direct" Stripe consumer payments).
+- ✅ **Wiki + docs reconciled to the removal** (2026-05-23). `[[subsystem:payments]]`, the
+  reservation/order flow pages, root + `apps/user` `CLAUDE.md`, and incidental wiki mentions now read
+  "consumer = Mollie + Demo; Stripe = subscriptions only". A *future* edit (when Connect lands) will
+  add the connected-account model for consumer Stripe.
 
 ## Log
 
@@ -112,6 +127,16 @@ gap touches no real users. (Worth verifying + folding into [[subsystem:payments]
   **visibility-gate** model (venue hidden unless off-platform-payments OR Mollie) which is *why* the
   latent gap touches no users. Containment downgraded to optional defense-in-depth; added a
   verify-and-document-the-visibility-gate step.
+- **2026-05-23** — **Consumer Stripe purged; gap closed by removal.** Founder confirmed the 13 prod
+  "stripe" sites were all our own test beaches (no real customers) and authorized migrating them to
+  Mollie, then deleting the dead consumer Stripe code so it stops degrading agent context. Done:
+  migrated the test-beach sites to Mollie; removed `_lib/stripe.ts`, the stripe payment-intent +
+  webhook routes (reservation + order), and the Stripe Elements UI + `stripePublicKey` threading from
+  `apps/user`; reworked `payment-provider` + `reconcile` to Mollie+demo (`PaymentProvider = 'mollie'`);
+  `setPaymentProvider` + `VALID_PAYMENT_PROVIDERS` are Mollie-only; tests reworked (user 194 green).
+  Reconciled docs + wiki to "consumer = Mollie + Demo, Stripe = subscriptions only". Stripe survives
+  for partner subscriptions only. **This track is now green-field** (build-on-Connect-if-reintroduced),
+  not remediation of live non-compliant code.
 
 ## Links
 

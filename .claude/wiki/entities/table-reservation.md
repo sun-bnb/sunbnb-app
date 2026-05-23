@@ -21,7 +21,7 @@ last_verified: 2026-05-22
 
 A booking of a `Table` at a `[[entity:restaurant]]` for a time window and party size. Created by a
 consumer (signed-in or anonymous) or by staff. **Free unless a no-show deposit is required** — chunk
-1e added the deposit model + state machine, but the actual Stripe/Mollie collection + invoice
+1e added the deposit model + state machine, but the actual Mollie deposit collection + invoice
 cascade is the remaining app-layer seam, so deposit-required bookings currently sit at
 `depositStatus: pending`. Contrast with the sunbed `[[entity:reservation]]` (fully paid).
 

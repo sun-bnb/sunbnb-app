@@ -33,7 +33,7 @@ The project already has several well-loved knowledge artifacts:
 
 The wiki adds three things these don't provide:
 
-1. **Domain-oriented synthesis.** The existing docs are organized by *location* (which file, which app). The wiki is organized by *concept* (Reservation, Invoice, Settlement, Stripe flow). When the task is "explain how X works end-to-end," the wiki answers it without spelunking.
+1. **Domain-oriented synthesis.** The existing docs are organized by *location* (which file, which app). The wiki is organized by *concept* (Reservation, Invoice, Settlement, payment flow). When the task is "explain how X works end-to-end," the wiki answers it without spelunking.
 2. **Cross-references.** Every wiki page links to related pages and to canonical source files. The web of `[[type:slug]]` links + `path/to/file.ts:line` references lets the LLM walk from a question to the relevant code in 1–2 hops.
 3. **Operational workflows.** `workflows/` documents *how* the LLM should approach recurring tasks (ingest new info, query the wiki, lint for drift, design a feature, debug a problem, implement a feature). These are procedures — they live with the wiki because they reference it.
 

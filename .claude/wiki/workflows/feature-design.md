@@ -69,7 +69,7 @@ Which app(s) does the feature touch? For each, list:
 ### 6. Identify side effects
 
 - Will it send emails? Edit/extend `packages/data/src/reservation-emails.ts`.
-- Will it call Stripe/Mollie? Use the abstractions in `apps/user/app/api/_lib/payment-provider.ts` (or pull them up if a new app needs them).
+- Will it touch consumer payment? Use the abstractions in `apps/user/app/api/_lib/payment-provider.ts` (Mollie + demo; or pull them up if a new app needs them).
 - Will it trigger a webhook? Define new webhook route, update reconciliation if applicable.
 - Will it need a cron job? Edit `vercel.json` in the relevant app.
 

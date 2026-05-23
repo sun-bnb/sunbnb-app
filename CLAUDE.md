@@ -144,8 +144,8 @@ Vercel-managed via git branches: `main` → preview, `test` → test.sunbnb.app,
 ## Key Environment Variables
 
 - `POSTGRES_URL` — Database connection string
-- `STRIPE_SECRET_KEY`, `STRIPE_PUBLIC_KEY` — Stripe credentials
-- `STRIPE_WEBHOOK_SECRET` — Stripe webhook signature verification
+- `STRIPE_SECRET_KEY` — Stripe credentials (**partner subscriptions only** — consumer Stripe removed)
+- `STRIPE_SUBSCRIPTION_WEBHOOK_SECRET` — signature verification for the subscription webhook (`/api/subscription/webhook`, partner app)
 - `MOLLIE_CLIENT_ID`, `MOLLIE_CLIENT_SECRET`, `MOLLIE_REDIRECT_URI` — Mollie OAuth (partner app)
 - `GOOGLE_MAPS_API_KEY` — Server-side Maps + Places API proxy
 - `NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY` — Client-side Maps (HTTP-referrer-restricted; falls back to `GOOGLE_MAPS_API_KEY`)
@@ -166,17 +166,13 @@ Vercel-managed via git branches: `main` → preview, `test` → test.sunbnb.app,
 
 ### Payment Architecture
 
-**Stripe** handles:
-- Partner subscriptions (STARTER/PRO/BUSINESS tiers) in partner app
-- Direct consumer payments for reservations and F&B orders in user app
+**Stripe** handles **partner subscriptions only** (STARTER/PRO/BUSINESS tiers in the partner app — platform-as-merchant, which is correct for SaaS billing). **Consumer Stripe was removed** (reservation/order PaymentIntents, Elements, webhooks, `_lib/stripe.ts`): it was a platform-collecting charge that didn't meet the marketplace/commission legal model. Until it's rebuilt on Stripe Connect, consumer payments are **Mollie or demo only**. See `.claude/tracks/003-stripe-connect-compliance.md`.
 
-**Mollie for Platforms** handles marketplace payments (consumer → Sunbnb → venue operator). Partner tokens stored as `mollieAccessToken` on PartnerAccount, refreshed via OAuth. Platform commission collected as `applicationFee`.
+**Mollie for Platforms** handles all real consumer marketplace payments (consumer → Sunbnb → venue operator). Partner tokens stored as `mollieAccessToken` on PartnerAccount, refreshed via OAuth. Platform commission collected as `applicationFee`.
 
-**Demo mode** (`NEXT_PUBLIC_DEMO_MODE`): Generates fake `pi_demo_{timestamp}` refs, runs same invoice creation logic.
+**Demo mode** (`NEXT_PUBLIC_DEMO_MODE`): Generates fake `pi_demo_{timestamp}` refs, runs the same invoice creation logic. The demo checkout redirects to `/payment/complete` reusing the `payment_intent` query-param contract — a Stripe-shaped contract the demo path kept after consumer Stripe was removed.
 
-**Stripe reservation flow**: User selects sunbeds → reservation created (pending) → `/payment` → POST `/api/payment/stripe/payment-intent` → Stripe Elements → `confirmPayment()` → redirect to `/payment/complete` → VerifyPayment polls GET `/api/reservations/[id]` → `processConfirmedReservation()` creates Invoice + InvoiceLines → status set to `complete`.
-
-**Mollie reservation flow**: POST `/api/payment/mollie/create-payment` → payment created on partner's Mollie account → redirect to Mollie checkout → POST `/api/webhooks/mollie` with payment ID → process based on status. `redirectUrl` validated against `APP_URL`/`NEXT_PUBLIC_APP_URL`.
+**Mollie reservation flow**: User selects sunbeds → reservation created (pending) → `/payment` → POST `/api/payment/mollie/create-payment` → payment created on partner's Mollie account → redirect to Mollie checkout → return to `/payment/complete?reservationId=...` → `processConfirmedReservation()` creates Invoice + InvoiceLines → status set to `complete`. POST `/api/webhooks/mollie` confirms in parallel; GET `/api/reservations/[id]` polling + `/api/reconcile` are the fallbacks (all re-verify via the provider-agnostic `getPaymentStatus`). `redirectUrl` validated against `APP_URL`/`NEXT_PUBLIC_APP_URL`.
 
 ### Settlement System
 

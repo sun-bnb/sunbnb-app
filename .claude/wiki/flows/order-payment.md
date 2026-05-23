@@ -4,7 +4,6 @@ slug: order-payment
 status: stable
 sources:
   - apps/user/app/reservations/[id]/actions.ts#createOrder
-  - apps/user/app/api/order-payment/stripe/payment-intent/route.ts
   - apps/user/app/api/order-payment/mollie/create-payment/route.ts
   - apps/user/app/api/orders/[id]/route.ts
   - apps/user/app/payment/actions.ts#initiateDemoOrderPayment
@@ -16,7 +15,7 @@ related:
   - entity:service-fee
   - flow:reservation-payment
   - subsystem:payments
-last_verified: 2026-05-20
+last_verified: 2026-05-23
 ---
 
 # Flow: Order Payment
@@ -42,10 +41,10 @@ User opens the menu inside an active reservation (`/reservations/[id]`, in `Menu
    - Validates `active`, soldOut, quantity > 0
    - Inserts `Order` (status `pending`) + `OrderItem` rows in a transaction
 2. **Calculate service fee** — `calculateOrderServiceFee(orderId)` resolves via the three-tier cascade with `serviceCode: 'food-and-beverage'`. Result is added to customer total.
-3. **Create PaymentIntent** — POST `apps/user/app/api/order-payment/stripe/payment-intent/route.ts` (or Mollie equivalent)
+3. **Create Mollie payment** — POST `apps/user/app/api/order-payment/mollie/create-payment/route.ts`
    - Amount = `order.totalPrice + serviceFee`  ← **fee ADDED, unlike reservations**
    - `paymentRef` stored on Order; `status: processing`
-4. **Stripe Elements / Mollie redirect / Demo** — same patterns as `[[flow:reservation-payment]]`
+4. **Mollie redirect / Demo** — same patterns as `[[flow:reservation-payment]]`
 5. **Verify** — GET `apps/user/app/api/orders/[id]/route.ts` polled by client
    - Checks payment status via `getPaymentStatus` (provider-agnostic)
    - On succeeded → `processConfirmedOrder(id)`
@@ -71,7 +70,7 @@ User opens the menu inside an active reservation (`/reservations/[id]`, in `Menu
 ## Side effects
 
 - DB writes: `Order`, `OrderItem` (multiple), `Invoice` (×2), `InvoiceLine` (multiple).
-- External: Stripe/Mollie API (real); none in demo.
+- External: Mollie API (real); none in demo.
 - No automatic email at this time (verify in code before claiming — `[[entity:order]]` does not document order-paid emails as of `last_verified`).
 
 ## Failure modes

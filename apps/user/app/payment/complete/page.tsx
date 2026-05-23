@@ -67,7 +67,9 @@ export default async function Complete({ searchParams }: SearchParams) {
     return <CompletePage reservation={reservation} />
   }
 
-  // Stripe redirect: look up by payment_intent (paymentRef)
+  // Demo redirect: completes via the payment_intent (paymentRef) query shape —
+  // the demo checkout mirrors the legacy Stripe redirect contract. (Consumer
+  // Stripe was removed; see .claude/tracks/003-stripe-connect-compliance.md.)
   if (!payment_intent || !payment_intent_client_secret) {
     console.error('payment_intent or payment_intent_client_secret is not set')
     return <ErrorCard title="Something went wrong" message="Payment details are missing. Please return to your reservation and try again." showHomeLink />
@@ -80,9 +82,8 @@ export default async function Complete({ searchParams }: SearchParams) {
     return <ErrorCard title="Reservation not found" message="We couldn't locate your reservation. If you completed a payment, please check your reservations page." showHomeLink />
   }
 
-  // For Stripe redirects, the payment_intent_client_secret serves as proof
-  // of ownership (only the payment initiator receives it from Stripe).
-  // Additionally verify session/anonId ownership when available.
+  // Verify session ownership when signed in. (Anonymous demo completions are
+  // matched by the paymentRef carried in the redirect URL — no extra check here.)
   if (sessionUserId && reservation.userId !== sessionUserId) {
     return <ErrorCard title="Not authorized" message="You don't have permission to view this reservation." showHomeLink />
   }
