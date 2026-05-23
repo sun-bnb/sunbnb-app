@@ -66,9 +66,14 @@ gap touches no real users. (Worth verifying + folding into [[subsystem:payments]
   server-action path can't be reached even via a direct call. A one-time sanity check
   (`SELECT count(*) FROM site WHERE payment_provider = 'stripe'` on prod/test) confirms 0 before
   relying on "not exposed."
-- ☐ **Verify + document the visibility gate.** Confirm in code how end-user visibility is gated on
-  payment capability (off-platform-payments-enabled OR Mollie-connected → visible; neither → hidden)
-  and fold it into [[subsystem:payments]] (or a site/visibility wiki note) so it isn't re-derived.
+- ✅ **Verify + document the visibility gate** (2026-05-23). Verified in
+  `apps/user/service/siteService.ts#searchSites` (the sole consumer site-discovery query → `/sites`
+  SSR + `/api/sites`): a `Site` is listed only if **all services are off-platform** (`type` /
+  `order_payment_type` / `rental_payment_type` all `IS DISTINCT FROM 'paid'`) **OR** the partner has
+  **completed Mollie onboarding** (`mollieAccessToken` + `mollieOnboardingStatus = 'completed'`). The
+  clause references **only Mollie** — confirming consumer Stripe is not on the payable/visible path.
+  Documented in [[subsystem:payments]] ("Discovery visibility gate"). Restaurants have no separate
+  consumer-discovery query yet (reached via their linked Site), so this gate governs them too.
 - ☐ **Connected-account model.** Decide the Connect charge type (destination charges with
   `transfer_data`+`application_fee_amount`, vs direct charges on the connected account vs separate
   charges+transfers) and storage (a `stripeConnectedAccountId` on `PartnerAccount`, mirroring

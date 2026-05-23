@@ -13,6 +13,7 @@ sources:
   - apps/user/app/api/reconcile/route.ts
   - apps/user/app/payment/actions.ts
   - packages/data/src/payment.ts
+  - apps/user/service/siteService.ts#searchSites
   - .claude/rules/payments.md
 related:
   - entity:invoice
@@ -20,7 +21,7 @@ related:
   - flow:reservation-payment
   - flow:order-payment
   - flow:rental-booking
-last_verified: 2026-05-20
+last_verified: 2026-05-23
 ---
 
 # Subsystem: Payments
@@ -35,7 +36,18 @@ Three payment paths (Stripe, Mollie for Platforms, Demo) behind a provider-agnos
 | **Mollie for Platforms** | Consumer reservations & orders for partners using Mollie | Marketplace | Card → Mollie → partner Mollie account (with `applicationFee` routed to platform) |
 | **Demo** | `NEXT_PUBLIC_DEMO_MODE=true` | Faked | No real money; `paymentRef = pi_demo_<timestamp>` |
 
-Per-site provider choice: stored on `Site` (via `setPaymentProvider` action in `apps/partner/app/sites/[id]/site-actions.ts`). Mollie requires the partner has connected via OAuth (`mollieAccessToken` on `PartnerAccount`).
+Per-site provider choice: stored on `Site` (via `setPaymentProvider` action in `apps/partner/app/sites/[id]/site-actions.ts`). Mollie requires the partner has connected via OAuth (`mollieAccessToken` on `PartnerAccount`). The partner General UI currently exposes **only Mollie** as the consumer provider; `setPaymentProvider` *accepts* `'stripe'` but has no UI path, so consumer Stripe is effectively unexposed (latent platform-collecting paths tracked in `.claude/tracks/003-stripe-connect-compliance.md`).
+
+## Discovery visibility gate (payment capability)
+
+Consumer site discovery — `apps/user/service/siteService.ts#searchSites`, the only such query (it powers both the `/sites` SSR list and the `/api/sites` coordinate search) — **hides any venue that can't actually take payment**. A `Site` is listed only when:
+
+- **all its services are off-platform** — `type`, `order_payment_type`, and `rental_payment_type` are each `IS DISTINCT FROM 'paid'` (paid on-site / outside the platform; no online payment), **OR**
+- the owning **`PartnerAccount` has completed Mollie onboarding** — `mollieAccessToken IS NOT NULL` **AND** `mollieOnboardingStatus = 'completed'`.
+
+Rationale: a venue advertising an online-paid service it has no way to charge is unusable for the guest, so it's gated out of discovery. The clause references **only Mollie** — Stripe is not part of consumer payability today.
+
+The same `searchSites` WHERE also requires `status = 'active'`, a name, a valid non-zero location, a cover image, ≥1 `active` `InventoryItem`, ≥1 `SiteWorkingHours`, and (for `type = 'paid'`) a positive `price` + a `vat`. Restaurants have no separate consumer-discovery query yet — they're reached via their linked Site, so this gate governs their consumer visibility too.
 
 ## Provider abstraction
 
