@@ -539,10 +539,20 @@ monetization + no-show work is unblocked.
     booking is a hold until the deposit is collected; free bookings stay instant-confirm).
     **Configurable** at restaurant (`noShowPolicy` + `depositPerGuest`) + per-shift
     (`requiresDeposit` + `depositMinPartySize`) and **overridable per table** (`Table.requiresDeposit`
-    tri-state + `Table.depositPerGuest`). For the *collection* (Piece 2): **both Stripe + Mollie**
-    (mirror the reservation flow, Mollie-for-Platforms); a kept deposit flows through the **full
-    `@repo/data` invoice + settlement + fee cascade**; the deposit is **refunded on arrival**
-    (seated) and kept only on no-show. Per-cover amounts still per the platform-monetization line.
+    tri-state + `Table.depositPerGuest`). For the *collection* (Piece 2): **Mollie-only initially**
+    (decided 2026-05-23) — Mollie-for-Platforms already routes funds to the venue with the platform
+    taking only `applicationFee`; **Stripe is blocked** because the current Stripe consumer flow
+    collects into the *platform's own account* (no Connect), which the legal requirement prohibits, so
+    Stripe deposits wait on a **Stripe Connect foundation → [[track:003-stripe-connect-compliance]]**.
+    A kept deposit flows through the **full `@repo/data` invoice + settlement + fee cascade**.
+    **⚠ Mechanic re-opened 2026-05-23 (fee economics):** "upfront deposit + refund-on-arrival" leaks a
+    Mollie per-transaction fee on *every refunded* deposit — i.e. on every guest who shows up (the
+    majority) — since the original PSP fee isn't returned on refund. Revisit before building: options
+    are (a) **targeted deposits only** (large parties / peak shifts / specific tables — the per-table/
+    shift config already minimizes the count of fee-incurring txns), (b) **pre-auth / card-hold** (no
+    fee unless captured — but Mollie's auth support is limited; clean on Stripe, which is Connect-gated),
+    (c) **deduct the PSP fee from the refund**, (d) **non-refundable, applied-to-bill** (needs F&B/bill
+    integration — later). Confirm Mollie's current fee/refund/auth terms when deciding.
   - **Still pending (P1 design detail):** the per-cover fee amount + exactly which tier boundary is
     "first paid".
 - **Admin scope.** Read-only oversight vs. full management (and how much reservations feed the
