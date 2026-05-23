@@ -5,6 +5,7 @@ import {
   createCombinationReservation,
   confirmationEmailHtml,
   getRestaurantById,
+  TABLE_RESERVATION_STATUS,
 } from '@repo/table-reservations-core'
 import { sendEmail } from '@repo/data/email'
 import { isFlagEnabled } from '@/app/flags'
@@ -85,6 +86,19 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   if (res.status === 'error' || !res.reservation) {
     return NextResponse.json({ error: res.errors ?? ['Booking failed'] }, { status: 400, headers: CORS })
+  }
+
+  // Deposit-required booking is a PENDING_PAYMENT hold — don't confirm-email it;
+  // signal the caller to collect the deposit (widget/Reserve handle the pay step).
+  if (res.reservation.status === TABLE_RESERVATION_STATUS.PENDING_PAYMENT) {
+    return NextResponse.json(
+      {
+        reservationId: res.reservation.id,
+        requiresDeposit: true,
+        depositAmount: res.reservation.depositAmount ?? 0,
+      },
+      { status: 200, headers: CORS },
+    )
   }
 
   try {

@@ -7,6 +7,9 @@
 //                                   (or no_show)
 
 export const TABLE_RESERVATION_STATUS = {
+  // Deposit-required booking awaiting payment — a short-lived hold that blocks
+  // the slot but is not yet a confirmed booking (cleaned up if unpaid).
+  PENDING_PAYMENT: 'pending_payment',
   CONFIRMED: 'confirmed',
   CANCELED: 'canceled',
 } as const
@@ -25,8 +28,11 @@ export type TableReservationOpStatus =
   (typeof TABLE_RESERVATION_OP_STATUS)[keyof typeof TABLE_RESERVATION_OP_STATUS]
 
 // Reservations in these statuses *block* a table's slot from being re-booked.
-// A canceled or no_show reservation does not block.
+// A canceled or no_show reservation does not block. A pending-payment hold
+// blocks too (so the slot can't be double-grabbed during checkout) — stale ones
+// are reaped by the cleanup so they don't block forever.
 export const BLOCKING_TABLE_RESERVATION_STATUSES: readonly string[] = [
+  TABLE_RESERVATION_STATUS.PENDING_PAYMENT,
   TABLE_RESERVATION_STATUS.CONFIRMED,
 ]
 

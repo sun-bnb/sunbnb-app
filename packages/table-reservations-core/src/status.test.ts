@@ -20,6 +20,12 @@ describe('table reservation status', () => {
     )
   })
 
+  it('blocks the slot while a deposit hold is pending payment', () => {
+    expect(BLOCKING_TABLE_RESERVATION_STATUSES).toContain(
+      TABLE_RESERVATION_STATUS.PENDING_PAYMENT,
+    )
+  })
+
   it('does not block when canceled or no_show', () => {
     expect(BLOCKING_TABLE_RESERVATION_STATUSES).not.toContain(
       TABLE_RESERVATION_STATUS.CANCELED,

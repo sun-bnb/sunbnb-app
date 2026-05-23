@@ -165,7 +165,12 @@ export async function createTableReservation(
         from: input.from,
         to: input.to,
         partySize: input.partySize,
-        status: TABLE_RESERVATION_STATUS.CONFIRMED,
+        // Deposit-required bookings start as a PENDING_PAYMENT hold (confirmed
+        // once the deposit is collected via markDepositHeld); free bookings
+        // confirm immediately.
+        status: depositAmount > 0
+          ? TABLE_RESERVATION_STATUS.PENDING_PAYMENT
+          : TABLE_RESERVATION_STATUS.CONFIRMED,
         operationalStatus: TABLE_RESERVATION_OP_STATUS.EXPECTED,
         guestName: input.guestName.trim(),
         guestEmail: input.guestEmail.trim().toLowerCase(),
@@ -626,16 +631,43 @@ export async function markReminderSent(reservationId: string): Promise<ActionRes
   return { status: 'ok' }
 }
 
-/** Mark a pending deposit as collected (held), recording the payment ref. */
+/**
+ * Mark a pending deposit as collected (held) and **confirm** the booking. Called
+ * by the app once the deposit payment succeeds (provider webhook/poll or demo).
+ * Idempotent in effect — re-running on a confirmed booking is harmless.
+ */
 export async function markDepositHeld(
   reservationId: string,
   paymentRef: string,
 ): Promise<ActionResult> {
   await prisma.tableReservation.update({
     where: { id: reservationId },
-    data: { depositStatus: DEPOSIT_STATUS.HELD, paymentRef },
+    data: {
+      status: TABLE_RESERVATION_STATUS.CONFIRMED,
+      depositStatus: DEPOSIT_STATUS.HELD,
+      paymentRef,
+    },
   })
   return { status: 'ok' }
+}
+
+/**
+ * Reap stale PENDING_PAYMENT holds whose deposit was never collected (older than
+ * `olderThanMinutes`), so abandoned checkouts stop blocking the slot. Returns the
+ * number removed. Intended for a cleanup cron, mirroring reservations-cleanup.
+ */
+export async function cleanupStalePendingDeposits(
+  olderThanMinutes = 20,
+): Promise<{ removed: number }> {
+  const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000)
+  const res = await prisma.tableReservation.deleteMany({
+    where: {
+      status: TABLE_RESERVATION_STATUS.PENDING_PAYMENT,
+      depositStatus: DEPOSIT_STATUS.PENDING,
+      createdAt: { lt: cutoff },
+    },
+  })
+  return { removed: res.count }
 }
 
 /** Charge a held deposit after a no-show. Idempotent — only held → charged. */

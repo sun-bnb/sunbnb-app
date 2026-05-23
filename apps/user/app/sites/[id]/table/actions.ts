@@ -8,15 +8,19 @@ import {
   createCombinationReservation,
   cancelTableReservation,
   modifyTableReservation,
+  markDepositHeld,
   joinWaitlist,
   findWaitlistCandidateForFreedReservation,
   markWaitlistNotified,
   confirmationEmailHtml,
   cancellationEmailHtml,
   waitlistNotifyEmailHtml,
+  TABLE_RESERVATION_STATUS,
   type CustomerIdentity,
 } from '@repo/table-reservations-core'
 import { sendEmail } from '@repo/data/email'
+
+const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
 
 async function requireFlag(): Promise<{ status: 'error'; errors: string[] } | null> {
   if (!(await isFlagEnabled('restaurants'))) {
@@ -57,9 +61,27 @@ export interface BookTableInput {
   anonId?: string | null
 }
 
-export async function bookTableForSite(
-  input: BookTableInput,
-): Promise<{ status: 'ok'; reservationId: string } | { status: 'error'; errors: string[] }> {
+type BookResult =
+  | { status: 'ok'; reservationId: string; requiresDeposit?: boolean; depositAmount?: number }
+  | { status: 'error'; errors: string[] }
+
+async function sendBookingConfirmation(
+  restaurant: { name: string; slug: string; tagline: string | null },
+  r: { id: string; guestEmail: string; from: Date; to: Date; partySize: number; guestName: string; specialRequests: string | null },
+): Promise<void> {
+  // Fire-and-forget: a failed send must not block the booking.
+  try {
+    await sendEmail({
+      to: r.guestEmail,
+      subject: `Reservation confirmed at ${restaurant.name}`,
+      html: confirmationEmailHtml(r, restaurant, null),
+    })
+  } catch (err) {
+    console.error('[table-booking] confirmation email failed', err)
+  }
+}
+
+export async function bookTableForSite(input: BookTableInput): Promise<BookResult> {
   const gated = await requireFlag()
   if (gated) return gated
   const restaurant = await getSiteRestaurant(input.siteId)
@@ -71,14 +93,11 @@ export async function bookTableForSite(
   const userId = session?.user?.id ?? null
   const anonId = input.anonId?.trim() || null
 
-  const from = new Date(input.fromIso)
-  const to = new Date(input.toIso)
-
   const res = await createTableReservation({
     restaurantId: restaurant.id,
     tableId: input.tableId,
-    from,
-    to,
+    from: new Date(input.fromIso),
+    to: new Date(input.toIso),
     partySize: input.partySize,
     guestName: input.guestName,
     guestEmail: input.guestEmail,
@@ -91,25 +110,22 @@ export async function bookTableForSite(
     return { status: 'error', errors: res.errors ?? ['Booking failed'] }
   }
 
-  // Fire-and-forget email: a failed send shouldn't block the booking
-  // confirmation page render. Log failures via the Resend response.
   const r = res.reservation
-  try {
-    await sendEmail({
-      to: r.guestEmail,
-      subject: `Reservation confirmed at ${restaurant.name}`,
-      html: confirmationEmailHtml(
-        r,
-        { name: restaurant.name, slug: restaurant.slug, tagline: restaurant.tagline },
-        null,
-      ),
-    })
-  } catch (err) {
-    // Swallow — reservation is created; email is a nice-to-have.
-    console.error('[table-booking] confirmation email failed', err)
+
+  // Deposit-required booking → created as a PENDING_PAYMENT hold. In demo mode
+  // auto-collect + confirm; otherwise signal the client to pay (the confirmation
+  // email is sent on confirm, not now).
+  if (r.status === TABLE_RESERVATION_STATUS.PENDING_PAYMENT) {
+    if (DEMO_MODE) {
+      await markDepositHeld(r.id, `pi_demo_${Date.now()}`)
+      await sendBookingConfirmation(restaurant, r)
+      return { status: 'ok', reservationId: r.id }
+    }
+    return { status: 'ok', reservationId: r.id, requiresDeposit: true, depositAmount: r.depositAmount ?? 0 }
   }
 
-  return { status: 'ok', reservationId: res.reservation.id }
+  await sendBookingConfirmation(restaurant, r)
+  return { status: 'ok', reservationId: r.id }
 }
 
 export interface BookCombinationInput {
