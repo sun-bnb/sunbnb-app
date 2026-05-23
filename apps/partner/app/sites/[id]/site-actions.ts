@@ -294,7 +294,9 @@ export async function setPaymentProvider(
   const { session, error } = await requireSiteOwner(siteId)
   if (error) return { status: 'error', errors: [error] }
 
-  if (!['stripe', 'mollie'].includes(paymentProvider)) {
+  // Consumer payments are Mollie-only (Stripe consumer payments were removed; a
+  // Stripe Connect path is future work — see .claude/tracks/003-stripe-connect-compliance.md).
+  if (paymentProvider !== 'mollie') {
     return { status: 'error', errors: ['Invalid payment provider'] }
   }
 

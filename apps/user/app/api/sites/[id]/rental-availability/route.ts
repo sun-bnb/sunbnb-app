@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import prisma from '@repo/data/PrismaCient'
-import { isValidEntityId } from '@/app/api/_lib/stripe'
+import { isValidEntityId } from '@/app/api/_lib/payment-ids'
 import { OP_RETURNED, RENTAL_CANCELED } from '@repo/data/reservation-status'
 
 /** Max date range allowed (90 days) to prevent expensive queries. */

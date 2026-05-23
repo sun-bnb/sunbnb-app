@@ -369,11 +369,11 @@ describe('setPaymentProvider', () => {
     expect(res.errors?.[0]).toContain('Invalid payment provider')
   })
 
-  it('accepts stripe without additional checks', async () => {
+  it('rejects stripe (consumer payments are Mollie-only)', async () => {
     authorizeOwner()
-    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
     const res = await setPaymentProvider(SITE_ID, 'stripe')
-    expect(res.status).toBe('ok')
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Invalid payment provider')
   })
 
   it('rejects mollie when partner has no Mollie token', async () => {

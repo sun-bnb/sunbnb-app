@@ -17,8 +17,8 @@ describe('detectProvider', () => {
     expect(detectProvider('tr_abc123')).toBe('mollie')
   })
 
-  it('returns stripe for pi_ prefix (non-demo)', () => {
-    expect(detectProvider('pi_real_123')).toBe('stripe')
+  it('returns null for a non-demo pi_ ref (consumer Stripe removed)', () => {
+    expect(detectProvider('pi_real_123')).toBeNull()
   })
 
   it('returns null for null input', () => {
@@ -31,7 +31,7 @@ describe('detectProvider', () => {
 })
 
 describe('isPaymentSucceeded', () => {
-  it('returns true for Stripe succeeded', () => {
+  it('returns true for demo succeeded', () => {
     expect(isPaymentSucceeded('succeeded')).toBe(true)
   })
 

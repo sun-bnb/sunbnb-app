@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { processConfirmedOrder } from '@repo/data/payment'
-import { isDemoPayment, isValidEntityId } from '@/app/api/_lib/stripe'
+import { isDemoPayment, isValidEntityId } from '@/app/api/_lib/payment-ids'
 import { issueRefund } from '@/app/api/_lib/payment-provider'
 import {
   RESERVATION_CANCELED,

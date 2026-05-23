@@ -3,7 +3,7 @@
  *
  * Reconciliation endpoint for stuck payments. Finds reservations and orders
  * that have been in 'processing' state for too long and resolves them by
- * checking the actual Stripe PaymentIntent status.
+ * checking the actual provider (Mollie / demo) payment status.
  *
  * Can be triggered by:
  * - Vercel Cron Jobs (add to vercel.json)
@@ -27,20 +27,16 @@ import {
   ORDER_PAYMENT_FAILED,
 } from '@repo/data/reservation-status'
 import { NextRequest } from 'next/server'
-import { getStripeClient, isDemoPayment } from '@/app/api/_lib/stripe'
+import {
+  getPaymentStatus,
+  isPaymentSucceeded,
+  isPaymentFailed,
+} from '@/app/api/_lib/payment-provider'
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
 /** Records older than this are considered stuck. */
 const STALE_THRESHOLD_MINUTES = 15
-
-// ─── Stripe Helper ──────────────────────────────────────────────────────────
-
-async function getStripePaymentStatus(paymentRef: string): Promise<string> {
-  const stripe = getStripeClient()
-  const paymentIntent = await stripe.paymentIntents.retrieve(paymentRef)
-  return paymentIntent.status
-}
 
 // ─── Route Handler ──────────────────────────────────────────────────────────
 
@@ -75,24 +71,19 @@ export async function POST(request: NextRequest) {
 
   for (const reservation of stuckReservations) {
     try {
-      if (isDemoPayment(reservation.paymentRef)) {
+      const status = await getPaymentStatus(reservation.paymentRef!)
+
+      if (isPaymentSucceeded(status)) {
         await processConfirmedReservation(reservation.id)
         results.reservations.processed++
-        continue
-      }
-
-      const status = await getStripePaymentStatus(reservation.paymentRef!)
-
-      if (status === 'succeeded') {
-        await processConfirmedReservation(reservation.id)
-        results.reservations.processed++
-      } else if (status !== 'processing' && status !== 'requires_action') {
+      } else if (isPaymentFailed(status)) {
         await prisma.reservation.update({
           where: { id: reservation.id },
           data: { status: RESERVATION_PAYMENT_FAILED },
         })
         results.reservations.failed++
       }
+      // else: still pending — leave it for the next sweep
     } catch (error) {
       console.error(
         `[Reconcile] Error processing reservation ${reservation.id}:`,
@@ -114,24 +105,19 @@ export async function POST(request: NextRequest) {
 
   for (const order of stuckOrders) {
     try {
-      if (isDemoPayment(order.paymentRef)) {
+      const status = await getPaymentStatus(order.paymentRef!)
+
+      if (isPaymentSucceeded(status)) {
         await processConfirmedOrder(order.id)
         results.orders.processed++
-        continue
-      }
-
-      const status = await getStripePaymentStatus(order.paymentRef!)
-
-      if (status === 'succeeded') {
-        await processConfirmedOrder(order.id)
-        results.orders.processed++
-      } else if (status !== 'processing' && status !== 'requires_action') {
+      } else if (isPaymentFailed(status)) {
         await prisma.order.update({
           where: { id: order.id },
           data: { status: ORDER_PAYMENT_FAILED },
         })
         results.orders.failed++
       }
+      // else: still pending — leave it for the next sweep
     } catch (error) {
       console.error(
         `[Reconcile] Error processing order ${order.id}:`,

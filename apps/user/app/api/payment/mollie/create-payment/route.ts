@@ -27,7 +27,7 @@ import { RESERVATION_PENDING, RESERVATION_PROCESSING } from '@repo/data/reservat
 import { NextRequest } from 'next/server'
 import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
 import { getMollieClientForPartner, getValidMollieToken } from '@/app/api/_lib/mollie'
-import { isValidEntityId } from '@/app/api/_lib/stripe'
+import { isValidEntityId } from '@/app/api/_lib/payment-ids'
 
 export async function POST(request: NextRequest) {
   const body = await request.json()

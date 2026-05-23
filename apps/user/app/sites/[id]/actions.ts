@@ -5,7 +5,7 @@ import dayjs from 'dayjs'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { getAvailability } from '@/service/availabilityService'
-import { isValidEntityId } from '@/app/api/_lib/stripe'
+import { isValidEntityId } from '@/app/api/_lib/payment-ids'
 import { InventoryItem } from '../types'
 import {
   RESERVATION_PENDING,

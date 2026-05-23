@@ -254,29 +254,16 @@ describe('setSiteStatus', () => {
 // ---------------------------------------------------------------------------
 
 describe('setPaymentProvider', () => {
-  it('sets stripe as payment provider in the database', async () => {
+  it('rejects stripe and leaves the provider unchanged (Mollie-only)', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id, { paymentProvider: 'mollie' })
     mockUserId = user.id
 
-    // Need a PartnerAccount for the user (setPaymentProvider reads it for mollie check)
-    await prisma.partnerAccount.create({
-      data: {
-        userId: user.id,
-        firstName: 'Test',
-        lastName: 'Partner',
-        email: 'partner@test.com',
-        phoneNumber: '+358401234567',
-        company: 'Test Co',
-        address: 'Test Street 1',
-      },
-    })
-
     const result = await setPaymentProvider(site.id, 'stripe')
-    expect(result).toEqual({ status: 'ok' })
+    expect(result.status).toBe('error')
 
     const updated = await prisma.site.findUnique({ where: { id: site.id } })
-    expect(updated!.paymentProvider).toBe('stripe')
+    expect(updated!.paymentProvider).toBe('mollie')
   })
 
   it('rejects mollie without a Mollie access token in the database', async () => {

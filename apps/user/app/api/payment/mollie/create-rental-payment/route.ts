@@ -23,7 +23,7 @@ import { RENTAL_PENDING, RENTAL_PROCESSING } from '@repo/data/reservation-status
 import { NextRequest } from 'next/server'
 import { getRequestIdentity } from '@/app/api/_lib/auth'
 import { getMollieClientForPartner, getValidMollieToken } from '@/app/api/_lib/mollie'
-import { isValidEntityId } from '@/app/api/_lib/stripe'
+import { isValidEntityId } from '@/app/api/_lib/payment-ids'
 
 export async function POST(request: NextRequest) {
   const body = await request.json()

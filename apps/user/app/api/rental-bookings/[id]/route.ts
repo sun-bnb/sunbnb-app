@@ -11,7 +11,7 @@ import prisma from '@repo/data/PrismaCient'
 import { processConfirmedRentalBooking } from '@repo/data/payment'
 import { NextRequest } from 'next/server'
 import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
-import { isDemoPayment, isValidEntityId } from '@/app/api/_lib/stripe'
+import { isDemoPayment, isValidEntityId } from '@/app/api/_lib/payment-ids'
 import { getPaymentStatus, isPaymentSucceeded, isPaymentFailed } from '@/app/api/_lib/payment-provider'
 import { RENTAL_PROCESSING, RENTAL_PAYMENT_FAILED } from '@repo/data/reservation-status'
 

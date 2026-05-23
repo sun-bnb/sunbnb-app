@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { getAvailability } from '@/service/availabilityService'
-import { isValidEntityId } from '@/app/api/_lib/stripe'
+import { isValidEntityId } from '@/app/api/_lib/payment-ids'
 
 /** Max date range allowed (90 days) to prevent expensive queries. */
 const MAX_RANGE_MS = 90 * 24 * 60 * 60 * 1000

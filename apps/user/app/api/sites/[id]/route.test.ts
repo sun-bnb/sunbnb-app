@@ -5,7 +5,7 @@ vi.mock('@/app/auth', () => ({
   auth: vi.fn().mockResolvedValue(null),
 }))
 
-vi.mock('@/app/api/_lib/stripe', () => ({
+vi.mock('@/app/api/_lib/payment-ids', () => ({
   isValidEntityId: () => true,
 }))
 

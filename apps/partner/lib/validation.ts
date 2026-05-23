@@ -90,7 +90,9 @@ export function validatePassword(
 // ─── Enum Validation ────────────────────────────────────────────────────────
 
 const VALID_SITE_STATUSES = new Set(['active', 'hidden'])
-const VALID_PAYMENT_PROVIDERS = new Set(['stripe', 'mollie'])
+// Consumer payments are Mollie-only (Stripe consumer payments removed; Stripe
+// Connect is future work — see .claude/tracks/003-stripe-connect-compliance.md).
+const VALID_PAYMENT_PROVIDERS = new Set(['mollie'])
 const VALID_ORDER_STATUSES: Set<string> = new Set([
   ORDER_PENDING, ORDER_PROCESSING, ORDER_COMPLETE, ORDER_COMPLETED,
   ORDER_ACCEPTED, ORDER_PREPARING, ORDER_READY, ORDER_DELIVERED,

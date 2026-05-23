@@ -12,7 +12,7 @@ vi.mock('@/service/availabilityService', () => ({
   getAvailability: vi.fn().mockResolvedValue([]),
 }))
 
-vi.mock('@/app/api/_lib/stripe', () => ({
+vi.mock('@/app/api/_lib/payment-ids', () => ({
   isValidEntityId: vi.fn().mockReturnValue(true),
   isDemoPayment: vi.fn().mockReturnValue(false),
 }))
@@ -26,7 +26,7 @@ import {
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { getAvailability } from '@/service/availabilityService'
-import { isValidEntityId } from '@/app/api/_lib/stripe'
+import { isValidEntityId } from '@/app/api/_lib/payment-ids'
 
 const mockAuth = vi.mocked(auth)
 const mockGetAvailability = vi.mocked(getAvailability)

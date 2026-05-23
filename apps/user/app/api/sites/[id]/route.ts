@@ -8,7 +8,7 @@
 import prisma from '@repo/data/PrismaCient'
 import { NextRequest } from 'next/server'
 import { auth } from '@/app/auth'
-import { isValidEntityId } from '@/app/api/_lib/stripe'
+import { isValidEntityId } from '@/app/api/_lib/payment-ids'
 
 export async function GET(request: NextRequest, { params } : { params: { id: string } }) {
 

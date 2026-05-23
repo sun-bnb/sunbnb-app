@@ -8,7 +8,7 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }))
 
-vi.mock('@/app/api/_lib/stripe', () => ({
+vi.mock('@/app/api/_lib/payment-ids', () => ({
   isDemoPayment: (ref: string | null) => ref?.startsWith('pi_demo_') ?? false,
 }))
 
