@@ -498,6 +498,8 @@ function toFormValues(t: TableRecord): TableFormValues {
     onlineBookable: t.onlineBookable,
     combinable: t.combinable,
     features: t.features ?? [],
+    requiresDeposit: t.requiresDeposit ?? null,
+    depositPerGuest: t.depositPerGuest ?? null,
     turnTimeMinutes: t.turnTimeMinutes ?? null,
     locked: t.locked,
     seatsTop: t.seatsTop,

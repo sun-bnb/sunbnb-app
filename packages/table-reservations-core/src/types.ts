@@ -37,6 +37,8 @@ export interface TableInput {
   onlineBookable?: boolean
   combinable?: boolean
   features?: string[]
+  requiresDeposit?: boolean | null
+  depositPerGuest?: number | null
   turnTimeMinutes?: number | null
   locked?: boolean
   seatsTop?: number | null

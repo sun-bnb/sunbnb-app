@@ -64,17 +64,21 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
 
 - **Status:** P1 **largely implemented** (2026-05-22). 1a–1d **complete** (engine: TZ, attributes,
   sections/pacing/shifts, combinations — with partner UI). 1e–1g **core complete** (◐) with the
-  payment-collection / SMS / some UIs deferred. 1h: public booking **API** done; widget UI + Reserve
-  remain. 6 migrations applied locally; **core 43 / partner 279 / user 221 / data 109 tests green**;
-  every touched package typechecks. **Not committed** (docs-style edits + code on `main`).
-- **Next action:** Decide the remaining-surface priority — the biggest open item is **1e's payment
-  collection** (Stripe/Mollie deposit capture/refund + `@repo/data` invoice/settlement cascade +
-  consumer pay-before-confirm UI; reuses `[[subsystem:payments]]`). Then the deferred UIs (consumer
-  section/feature + combo pickers, waitlist join/partner view, modify UI), SMS reminders, and the
-  embed widget UI. **Verification gaps to close:** (1) browser-verify all the new partner surfaces
-  (:3001, kill app first — [[kill-app-before-dev]]); (2) `migrate:test` to propagate the 6 new
-  migrations to the Neon test DB (only `migrate:local` was run); (3) optionally a `migrate:production`.
-  Re-ingest the wiki pages as the deferred surfaces ship.
+  payment-collection / some UIs deferred. 1h: public booking **API** done; widget UI + Reserve remain.
+  6 migrations applied **locally only**; **core 43 / partner 279 / user 221 / data 109 tests green**;
+  every touched package typechecks. **Committed** on `main`: `567f987` (implementation) + `32da7de`
+  (wiki, re-ingested to match). Nothing pushed.
+- **P1 scope narrowed (founder, 2026-05-22):** **SMS reminders/notify** and **Google/Instagram
+  Reserve** are **out of P1** → later phase (both also external-dependency-bound). What remains *in*
+  P1: 1e payment collection + the deferred consumer/partner UIs + the embed widget UI.
+- **Next action:** Biggest in-P1 open item is **1e's payment collection** (Stripe/Mollie deposit
+  capture/refund + `@repo/data` invoice/settlement cascade + consumer pay-before-confirm UI; reuses
+  `[[subsystem:payments]]`). Then the deferred UIs (consumer section/feature + combo pickers, waitlist
+  join/partner view, modify UI) and the embed widget UI. **Verification gaps:** (1) browser-verify all
+  new partner surfaces (:3001, kill app first — [[kill-app-before-dev]]) — partial (add-table OK);
+  (2) `migrate:test` — **done** (founder ran it manually 2026-05-22; 6 migrations on the Neon test DB);
+  (3) `migrate:production` still pending (do at promote time). Wiki re-ingest for 1a–1h: **done**
+  (`32da7de`). 6 migrations now applied local + test.
 - **Context needed:**
   - **Restructure outcome** (done 2026-05-21): restaurant management now lives at top-level
     `app/restaurants/*` (list, `[id]` settings, `[id]/{tables,menu,reservations}`, `create`),
@@ -302,9 +306,10 @@ monetization + no-show work is unblocked.
     recomputes the deposit; `reminderEmailHtml` template + `listReservationsNeedingReminder(24h)` +
     `markReminderSent`; user cron `app/api/cron/table-reminders` (CRON_SECRET + flag-gated, email);
     user `modifyTableBooking` + partner `modifyRestaurantReservation` / `chargeRestaurantReservationDeposit`.
-    Confirmation/cancellation emails already shipped. Core 43 / partner 47 / user 5 green._ **Deferred:**
-    SMS reminders (needs an SMS provider — Twilio decision), a configurable cancellation deadline (no
-    field yet), consumer modify UI. Combination bookings not modifiable yet.
+    Confirmation/cancellation emails already shipped. Core 43 / partner 47 / user 5 green._ **Out of P1
+    scope (deferred to a later phase, founder call 2026-05-22):** SMS reminders/notify (needs an SMS
+    provider). **Still-P1 deferred:** a configurable cancellation deadline (no field yet), consumer
+    modify UI. Combination bookings not modifiable yet.
     Confirmation + cancellation emails already
     exist (`core/emails.ts` templates, sent from `bookTableForSite`/`cancelTableBooking`). **Reminders:**
     wire a user-app daily cron mirroring `/api/cron/send-reminders` (`CRON_SECRET`), using the existing

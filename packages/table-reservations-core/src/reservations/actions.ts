@@ -118,6 +118,7 @@ export async function createTableReservation(
     input.restaurantId,
     input.from,
     input.partySize,
+    input.tableId,
   )
 
   // Availability re-check inside transaction. If the overlap count is > 0
@@ -314,7 +315,7 @@ async function reapplyReservation(
 
   // Recompute the deposit when the party/time changed and it isn't yet collected.
   if (existing.depositStatus === DEPOSIT_STATUS.PENDING || existing.depositStatus === DEPOSIT_STATUS.NONE) {
-    const depositAmount = await resolveDepositForInstant(existing.restaurantId, from, partySize)
+    const depositAmount = await resolveDepositForInstant(existing.restaurantId, from, partySize, tableId)
     await prisma.tableReservation.update({
       where: { id: reservationId },
       data: {
@@ -547,6 +548,7 @@ export async function resolveDepositForInstant(
   restaurantId: string,
   instant: Date,
   partySize: number,
+  tableId?: string | null,
 ): Promise<number> {
   const restaurant = await prisma.restaurant.findUnique({
     where: { id: restaurantId },
@@ -566,6 +568,22 @@ export async function resolveDepositForInstant(
     },
   })
   if (!restaurant || restaurant.noShowPolicy !== 'deposit') return 0
+
+  // Per-table override (force-require / exempt / amount).
+  let tableRequiresDeposit: boolean | null = null
+  let tableDepositPerGuest: number | null = null
+  if (tableId) {
+    const table = await prisma.table.findUnique({
+      where: { id: tableId },
+      select: { requiresDeposit: true, depositPerGuest: true },
+    })
+    if (table) {
+      tableRequiresDeposit = table.requiresDeposit
+      tableDepositPerGuest = table.depositPerGuest
+    }
+  }
+
+  // Find the shift covering this instant (for the inherited gate + min party).
   const tz = restaurant.timeZone ?? DEFAULT_TIME_ZONE
   const parts = getZonedParts(instant, tz)
   const fromMs = instant.getTime()
@@ -573,19 +591,26 @@ export async function resolveDepositForInstant(
     const [h = 0, m = 0] = hhmm.split(':').map(Number)
     return zonedWallClockToUtc(parts.year, parts.month, parts.day, h, m, tz).getTime()
   }
+  let shiftRequiresDeposit = false
+  let shiftDepositMinPartySize: number | null = null
   for (const s of restaurant.shifts) {
-    if (s.day !== parts.weekday || !s.requiresDeposit) continue
+    if (s.day !== parts.weekday) continue
     if (fromMs >= wallMs(s.startTime) && fromMs < wallMs(s.endTime)) {
-      return computeDepositAmount({
-        noShowPolicy: restaurant.noShowPolicy,
-        depositPerGuest: restaurant.depositPerGuest,
-        shiftRequiresDeposit: true,
-        shiftDepositMinPartySize: s.depositMinPartySize,
-        partySize,
-      })
+      shiftRequiresDeposit = s.requiresDeposit
+      shiftDepositMinPartySize = s.depositMinPartySize
+      break
     }
   }
-  return 0
+
+  return computeDepositAmount({
+    noShowPolicy: restaurant.noShowPolicy,
+    depositPerGuest: restaurant.depositPerGuest,
+    shiftRequiresDeposit,
+    shiftDepositMinPartySize,
+    partySize,
+    tableRequiresDeposit,
+    tableDepositPerGuest,
+  })
 }
 
 // ─── Deposit state transitions (idempotent). The app collects/captures/refunds

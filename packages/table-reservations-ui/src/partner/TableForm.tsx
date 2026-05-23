@@ -52,6 +52,11 @@ export interface TableFormLabels {
   featureHighTop: string
   featureCommunal: string
   featureQuiet: string
+  depositHeading: string
+  depositInherit: string
+  depositRequire: string
+  depositExempt: string
+  depositPerGuest: string
   turnTimeMinutes: string
   inheritsFromRestaurant: string
   locked: string
@@ -83,6 +88,8 @@ export interface TableFormValues {
   onlineBookable: boolean
   combinable: boolean
   features: string[]
+  requiresDeposit: boolean | null
+  depositPerGuest: number | null
   turnTimeMinutes: number | null
   locked: boolean
   seatsTop: number | null
@@ -365,6 +372,54 @@ export function TableForm({ initial, labels, onChange, onDelete, onClose }: Tabl
             )
           })}
         </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5 border-t border-gray-100 pt-3">
+        <span className="text-xs font-medium text-gray-600">{labels.depositHeading}</span>
+        <div className="inline-flex self-start rounded-lg border border-gray-300 bg-white p-0.5">
+          {([['inherit', null], ['require', true], ['exempt', false]] as const).map(
+            ([key, val]) => {
+              const active = values.requiresDeposit === val
+              const label =
+                key === 'inherit'
+                  ? labels.depositInherit
+                  : key === 'require'
+                    ? labels.depositRequire
+                    : labels.depositExempt
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => {
+                    setValues((s) => ({ ...s, requiresDeposit: val }))
+                    saveNow({ requiresDeposit: val })
+                  }}
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                    active ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'
+                  }`}
+                >
+                  {label}
+                </button>
+              )
+            },
+          )}
+        </div>
+        <TextField
+          size="small"
+          label={labels.depositPerGuest}
+          type="number"
+          value={values.depositPerGuest ?? ''}
+          placeholder={labels.inheritsFromRestaurant}
+          onChange={(e) => {
+            const raw = e.target.value
+            const n = raw === '' ? null : Number(raw)
+            if (n !== null && !Number.isFinite(n)) return
+            setValues((s) => ({ ...s, depositPerGuest: n }))
+            save({ depositPerGuest: n })
+          }}
+          inputProps={{ min: 0, max: 1000, step: 0.5 }}
+        />
       </div>
 
       <FormControlLabel

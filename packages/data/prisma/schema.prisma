@@ -701,6 +701,13 @@ model Table {
   // Booking-relevant attributes (validated allowed set in core): "accessible",
   // "window", "outdoor", "high_top", "communal", "quiet". Section = `zone`.
   features       String[]            @default([])
+  // Per-table no-show deposit override (chunk 1e). `requiresDeposit`: null =
+  // inherit the shift's gate; true = always require (ignores shift + min party);
+  // false = exempt this table. `depositPerGuest`: null = inherit
+  // Restaurant.depositPerGuest; else this per-guest amount. Both gated by the
+  // restaurant-level noShowPolicy master switch.
+  requiresDeposit Boolean?           @map("requires_deposit")
+  depositPerGuest Float?             @map("deposit_per_guest")
   // Per-table override of `Restaurant.averageMealDuration`. Null inherits.
   turnTimeMinutes Int?               @map("turn_time_minutes")
   // Editor-only flag: prevents accidental drag/resize on the floor plan.

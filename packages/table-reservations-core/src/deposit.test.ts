@@ -30,6 +30,35 @@ describe('computeDepositAmount', () => {
   it('rounds to 2 decimals', () => {
     expect(computeDepositAmount({ ...base, depositPerGuest: 3.333, partySize: 3 })).toBe(10)
   })
+
+  describe('table overrides', () => {
+    it('table exempt → 0 even when the shift requires', () => {
+      expect(computeDepositAmount({ ...base, tableRequiresDeposit: false })).toBe(0)
+    })
+    it('table force-requires even when the shift does not', () => {
+      expect(
+        computeDepositAmount({ ...base, shiftRequiresDeposit: false, tableRequiresDeposit: true }),
+      ).toBe(40)
+    })
+    it('table per-guest amount overrides the restaurant default', () => {
+      expect(computeDepositAmount({ ...base, tableDepositPerGuest: 25 })).toBe(100)
+    })
+    it('force-require ignores the shift minimum party size', () => {
+      expect(
+        computeDepositAmount({
+          ...base,
+          shiftDepositMinPartySize: 6,
+          partySize: 2,
+          tableRequiresDeposit: true,
+        }),
+      ).toBe(20)
+    })
+    it('restaurant master switch still wins (policy none → 0)', () => {
+      expect(
+        computeDepositAmount({ ...base, noShowPolicy: 'none', tableRequiresDeposit: true }),
+      ).toBe(0)
+    })
+  })
 })
 
 describe('roundMoney', () => {

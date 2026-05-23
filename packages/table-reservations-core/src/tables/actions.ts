@@ -134,6 +134,12 @@ function validateTableInput(input: Partial<TableInput>): string[] {
       errors.push('Invalid table feature')
     }
   }
+  if (
+    input.depositPerGuest !== undefined && input.depositPerGuest !== null &&
+    (!Number.isFinite(input.depositPerGuest) || input.depositPerGuest < 0 || input.depositPerGuest > 1000)
+  ) {
+    errors.push('Deposit per guest must be 0–1000')
+  }
   return errors
 }
 
@@ -186,6 +192,8 @@ export async function createTable(
       onlineBookable: input.onlineBookable ?? true,
       combinable: input.combinable ?? false,
       features: input.features ?? [],
+      requiresDeposit: input.requiresDeposit ?? null,
+      depositPerGuest: input.depositPerGuest ?? null,
       turnTimeMinutes: input.turnTimeMinutes ?? null,
       locked: input.locked ?? false,
       seatsTop: input.seatsTop ?? null,
@@ -246,6 +254,8 @@ export async function updateTable(
   if (patch.onlineBookable !== undefined) data.onlineBookable = patch.onlineBookable
   if (patch.combinable !== undefined) data.combinable = patch.combinable
   if (patch.features !== undefined) data.features = patch.features
+  if (patch.requiresDeposit !== undefined) data.requiresDeposit = patch.requiresDeposit
+  if (patch.depositPerGuest !== undefined) data.depositPerGuest = patch.depositPerGuest
   if (patch.turnTimeMinutes !== undefined) data.turnTimeMinutes = patch.turnTimeMinutes
   if (patch.locked !== undefined) data.locked = patch.locked
   if (patch.seatsTop !== undefined) data.seatsTop = patch.seatsTop
@@ -289,6 +299,8 @@ export async function duplicateTable(
       onlineBookable: true,
       combinable: true,
       features: true,
+      requiresDeposit: true,
+      depositPerGuest: true,
       turnTimeMinutes: true,
       locked: true,
       seatsTop: true,
@@ -325,6 +337,8 @@ export async function duplicateTable(
       onlineBookable: source.onlineBookable,
       combinable: source.combinable,
       features: source.features,
+      requiresDeposit: source.requiresDeposit,
+      depositPerGuest: source.depositPerGuest,
       turnTimeMinutes: source.turnTimeMinutes,
       // Don't carry the `locked` flag — the freshly placed copy should be
       // immediately movable.
