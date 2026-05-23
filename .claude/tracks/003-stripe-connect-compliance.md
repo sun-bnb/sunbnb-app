@@ -52,8 +52,12 @@ be **disabled** until Connect lands.
 - ☐ **Migrate consumer charges.** Reservation + order PaymentIntents → Connect (funds to the venue,
   `application_fee_amount` = platform commission). Update webhooks/reconcile for connected-account
   events.
-- ☐ **Unblock table deposits.** Once Connect exists, enable Stripe for the 1e deposit flow
-  ([[track:002-table-reservations]]); until then deposits are Mollie-only.
+- ☐ **Unblock table deposits + pre-auth.** Once Connect exists, enable Stripe for the 1e deposit flow
+  ([[track:002-table-reservations]]); until then deposits are Mollie-only. This is also where the
+  **fee-clean pre-auth / card-hold** deposit mechanic lands (authorize, capture only on no-show → no
+  PSP fee on show-ups), replacing the interim Mollie "targeted upfront deposit + refund-on-arrival"
+  which leaks a per-transaction fee on every refunded deposit. Stripe's manual capture supports this
+  cleanly; Mollie's auth support is too limited to rely on.
 - ☐ **Wiki.** Update `[[subsystem:payments]]` to document the connected-account model for Stripe
   (currently it only describes Mollie-for-Platforms + "direct" Stripe consumer payments).
 

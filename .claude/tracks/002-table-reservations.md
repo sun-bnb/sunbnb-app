@@ -544,15 +544,16 @@ monetization + no-show work is unblocked.
     taking only `applicationFee`; **Stripe is blocked** because the current Stripe consumer flow
     collects into the *platform's own account* (no Connect), which the legal requirement prohibits, so
     Stripe deposits wait on a **Stripe Connect foundation → [[track:003-stripe-connect-compliance]]**.
-    A kept deposit flows through the **full `@repo/data` invoice + settlement + fee cascade**.
-    **⚠ Mechanic re-opened 2026-05-23 (fee economics):** "upfront deposit + refund-on-arrival" leaks a
-    Mollie per-transaction fee on *every refunded* deposit — i.e. on every guest who shows up (the
-    majority) — since the original PSP fee isn't returned on refund. Revisit before building: options
-    are (a) **targeted deposits only** (large parties / peak shifts / specific tables — the per-table/
-    shift config already minimizes the count of fee-incurring txns), (b) **pre-auth / card-hold** (no
-    fee unless captured — but Mollie's auth support is limited; clean on Stripe, which is Connect-gated),
-    (c) **deduct the PSP fee from the refund**, (d) **non-refundable, applied-to-bill** (needs F&B/bill
-    integration — later). Confirm Mollie's current fee/refund/auth terms when deciding.
+    A kept deposit flows through the **full `@repo/data` invoice + settlement + fee cascade**; the
+    deposit is **refunded on arrival** (seated) and kept only on no-show.
+    **Mechanic fee-economics — resolved 2026-05-23:** keep **upfront deposit + refund-on-arrival**, but
+    make deposits **targeted** — required only on high-risk / high-value bookings (large parties, peak/
+    dinner shifts, premium tables) via the per-table + per-shift + min-party config — so the Mollie
+    per-transaction fee leaked on each *refunded* (i.e. showed-up) deposit stays small + bounded, far
+    below the no-show losses it prevents (refunds don't return the original PSP fee). The fee-clean
+    **pre-auth / card-hold** model (no fee unless captured) is the upgrade, **deferred to
+    [[track:003-stripe-connect-compliance]]** — it rides in with Stripe Connect (Mollie's manual-capture/
+    auth support is too limited to rely on). Confirm Mollie's current fee/refund terms before launch.
   - **Still pending (P1 design detail):** the per-cover fee amount + exactly which tier boundary is
     "first paid".
 - **Admin scope.** Read-only oversight vs. full management (and how much reservations feed the
