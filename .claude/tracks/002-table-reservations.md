@@ -62,22 +62,31 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
 
 ## Resume here
 
-- **Status:** P1 **largely implemented** (2026-05-22). 1a–1d **complete** (engine: TZ, attributes,
-  sections/pacing/shifts, combinations — with partner UI). 1e–1g **core complete** (◐) with the
-  payment-collection / some UIs deferred. 1h: public booking **API** done; widget UI + Reserve remain.
-  6 migrations applied **locally only**; **core 43 / partner 279 / user 221 / data 109 tests green**;
-  every touched package typechecks. **Committed** on `main`: `567f987` (implementation) + `32da7de`
-  (wiki, re-ingested to match). Nothing pushed.
-- **P1 scope narrowed (founder, 2026-05-22):** **SMS reminders/notify** and **Google/Instagram
-  Reserve** are **out of P1** → later phase (both also external-dependency-bound). What remains *in*
-  P1: 1e payment collection + the deferred consumer/partner UIs + the embed widget UI.
-- **Next action:** Biggest in-P1 open item is **1e's payment collection** (Stripe/Mollie deposit
-  capture/refund + `@repo/data` invoice/settlement cascade + consumer pay-before-confirm UI; reuses
-  `[[subsystem:payments]]`). Then the deferred UIs (consumer section/feature + combo pickers, waitlist
-  join/partner view, modify UI) and the embed widget UI. **Verification gaps:** (1) browser-verify all
-  new partner surfaces (:3001, kill app first — [[kill-app-before-dev]]) — partial (add-table OK);
-  (2) `migrate:test` — **done** (founder ran it manually 2026-05-22; 6 migrations on the Neon test DB);
-  (3) `migrate:production` still pending (do at promote time). Wiki re-ingest for 1a–1h: **done**
+- **Status:** P1 **largely implemented** (through 2026-05-23). 1a–1d **complete** (engine: TZ,
+  attributes, sections/pacing/shifts, combinations — with partner UI). 1e: **config complete**
+  (restaurant + shift + per-table override) + **collection Piece 1 done** (pending-until-paid hold +
+  confirm + cleanup; demo deposit flow works end-to-end). 1f/1g **core complete** (◐). 1h: public
+  booking **API** done. **8 migrations** applied **local + Neon test**; **core 49 / partner 279 /
+  user 221 / data 109 green**; touched packages typecheck. **Committed** on `main` (6 commits, none
+  pushed): `567f987` impl · `32da7de` wiki · `c829971` table deposit override · `15bcfb1` deposit
+  Piece 1 (+ the earlier two from prior goals).
+- **P1 scope narrowed (founder):** **SMS reminders/notify** + **Google/Instagram Reserve** are **out
+  of P1** → later phase (external-bound). What remains *in* P1: **1e collection Piece 2/3** + the
+  deferred consumer/partner UIs + the embed widget UI.
+- **Next action — 1e collection Piece 2/3 (PAUSED 2026-05-23 by founder; resume as a focused
+  session).** Decisions **locked** (see Open decisions): upfront deposit, pending-until-paid, **both
+  Stripe + Mollie** (mirror reservation flow / Mollie-for-Platforms), kept deposit flows through the
+  **full `@repo/data` invoice + settlement + fee cascade**, **refund on arrival** (seated), keep on
+  no-show. **Build plan:** (Piece 2) deposit PaymentIntent (Stripe) + Mollie payment reusing
+  `[[subsystem:payments]]`; webhook/poll → `markDepositHeld` (already confirms); a `processChargedDeposit`
+  cascade fn in `@repo/data` fired on `chargeNoShowDeposit`; refund on `markSeated`/timely-cancel →
+  `releaseDeposit`/`refundDeposit`. (Piece 3) consumer pay-before-confirm UI (the `bookTableForSite` /
+  public `/api/restaurants/[id]/book` already return `{ requiresDeposit, depositAmount }` for real mode
+  to route on). Spans `@repo/data` (data-dev) + `apps/user` (user-dev) + `apps/partner` (partner-dev).
+  Then the deferred UIs + embed widget. **Verification gaps:** (1) browser-verify all new partner
+  surfaces (:3001, kill app first — [[kill-app-before-dev]]) — partial (add-table OK);
+  (2) `migrate:test` — **done**; (3) `migrate:production` pending (at promote time). Wiki re-ingest for
+  1a–1h: **done**
   (`32da7de`). 6 migrations now applied local + test.
 - **Context needed:**
   - **Restructure outcome** (done 2026-05-21): restaurant management now lives at top-level
@@ -526,9 +535,16 @@ monetization + no-show work is unblocked.
   - **No-show protection = consumer-side, separate flow.** Deposits / card-hold / cancellation fees
     the *guest* pays, routed through the `@repo/data` invoice + settlement + fee cascade — independent
     of the per-cover monetization above.
+  - **No-show mechanic — decided 2026-05-23:** **upfront deposit**, **pending-until-paid** (the
+    booking is a hold until the deposit is collected; free bookings stay instant-confirm).
+    **Configurable** at restaurant (`noShowPolicy` + `depositPerGuest`) + per-shift
+    (`requiresDeposit` + `depositMinPartySize`) and **overridable per table** (`Table.requiresDeposit`
+    tri-state + `Table.depositPerGuest`). For the *collection* (Piece 2): **both Stripe + Mollie**
+    (mirror the reservation flow, Mollie-for-Platforms); a kept deposit flows through the **full
+    `@repo/data` invoice + settlement + fee cascade**; the deposit is **refunded on arrival**
+    (seated) and kept only on no-show. Per-cover amounts still per the platform-monetization line.
   - **Still pending (P1 design detail):** the per-cover fee amount + exactly which tier boundary is
-    "first paid"; and the no-show mechanic (deposit vs card-hold vs cancellation fee), default
-    amounts, and which shifts/party-sizes require it.
+    "first paid".
 - **Admin scope.** Read-only oversight vs. full management (and how much reservations feed the
   existing settlement/accounting views — the Approach favors folding in rather than a new silo).
 _(Resolved 2026-05-22: (1) **Timezone source** — `timeZone` IANA column on `Restaurant`
