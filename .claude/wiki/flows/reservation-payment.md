@@ -43,7 +43,7 @@ User clicks "Book" after selecting sunbeds and a date range in the consumer app 
    - Availability re-check inside the same operation
    - `paymentAmount` calculated from DB (`InventoryItem.price` × duration logic), not from client input
    - Insert `Reservation` with `status: pending`
-2. **Navigate** — client routed to `/payment` with the new reservation id
+2. **Enter payment step** — the booking flow mounts the in-page `Payment` component (`apps/user/app/payment/Payment.tsx`, rendered from `sites/[id]/Reservation.tsx` + the POS variants) for the new reservation — there is no standalone `/payment` route
 3. **Create Mollie payment** — POST `apps/user/app/api/payment/mollie/create-payment/route.ts`
    - Entity id format validated (`isValidEntityId`)
    - Created on the PARTNER's Mollie account (OAuth access token from `PartnerAccount.mollieAccessToken`)

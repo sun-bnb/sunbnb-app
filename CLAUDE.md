@@ -172,7 +172,7 @@ Vercel-managed via git branches: `main` → preview, `test` → test.sunbnb.app,
 
 **Demo mode** (`NEXT_PUBLIC_DEMO_MODE`): Generates fake `pi_demo_{timestamp}` refs, runs the same invoice creation logic. The demo checkout redirects to `/payment/complete` reusing the `payment_intent` query-param contract — a Stripe-shaped contract the demo path kept after consumer Stripe was removed.
 
-**Mollie reservation flow**: User selects sunbeds → reservation created (pending) → `/payment` → POST `/api/payment/mollie/create-payment` → payment created on partner's Mollie account → redirect to Mollie checkout → return to `/payment/complete?reservationId=...` → `processConfirmedReservation()` creates Invoice + InvoiceLines → status set to `complete`. POST `/api/webhooks/mollie` confirms in parallel; GET `/api/reservations/[id]` polling + `/api/reconcile` are the fallbacks (all re-verify via the provider-agnostic `getPaymentStatus`). `redirectUrl` validated against `APP_URL`/`NEXT_PUBLIC_APP_URL`.
+**Mollie reservation flow**: User selects sunbeds → reservation created (pending) → in-page payment step (the `Payment` component, no `/payment` route) → POST `/api/payment/mollie/create-payment` → payment created on partner's Mollie account → redirect to Mollie checkout → return to `/payment/complete?reservationId=...` → `processConfirmedReservation()` creates Invoice + InvoiceLines → status set to `complete`. POST `/api/webhooks/mollie` confirms in parallel; GET `/api/reservations/[id]` polling + `/api/reconcile` are the fallbacks (all re-verify via the provider-agnostic `getPaymentStatus`). `redirectUrl` validated against `APP_URL`/`NEXT_PUBLIC_APP_URL`.
 
 ### Settlement System
 
