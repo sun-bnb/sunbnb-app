@@ -1,7 +1,7 @@
 ---
 id: 003-stripe-connect-compliance
 title: Stripe Connect / platform-collection compliance
-status: active
+status: backlog
 created: 2026-05-23
 updated: 2026-05-23
 worktree: null
@@ -35,32 +35,40 @@ Stripe for the table-reservation no-show deposits ([[track:002-table-reservation
 **In scope** — exactly two consumer charge paths (both `apps/user`): **reservations** + **F&B orders**.
 **Out of scope:** **rentals** (Mollie-only — no Stripe path exists, `apps/user/app/api/payment/mollie/create-rental-payment`), table-reservation **deposits** (Mollie-only by decision — [[track:002-table-reservations]]), and **subscriptions** (platform-as-merchant is correct there).
 
-**Urgency — the gap is one ungated toggle away.** Site default is `paymentProvider = "mollie"`
-(`schema.prisma:234`) and switching a site to **Mollie requires a connected account**
-(`mollieAccessToken`). But switching to **Stripe is ungated** — `setPaymentProvider`
-(`apps/partner/app/sites/[id]/site-actions.ts:315`) just writes `paymentProvider: 'stripe'` with no
-onboarding/check, after which reservation + order payments immediately collect into the platform's
-shared Stripe account. So **any partner can self-serve into the non-compliant state with one click**,
-and live exposure = however many production sites currently have `payment_provider = 'stripe'`.
+**Urgency — LOW / latent, NOT a live exposure (corrected 2026-05-23 per founder + UI check).** Stripe
+is **subscriptions-only** today (platform-as-merchant, which is correct). Stripe **in-app/consumer
+payments are deferred and not exposed to any users**: the partner General UI's payment-provider
+section shows **only Mollie** (`apps/partner/app/sites/[id]/general/view.tsx:760-774` — a fixed Mollie
+card, no provider chooser), so there is **no product path to select Stripe**. `setPaymentProvider`
+*accepts* `'stripe'` at the server-action level (`site-actions.ts:297,315`), but that's **dormant code
+with no UI entry point** — not a self-serve toggle. So the Connect gap is latent: it would only become
+live if/when Stripe in-app payments are deliberately enabled. (My earlier "one ungated toggle away"
+was wrong — there's no UI toggle.)
 
-**Founder action to size it:** `SELECT count(*) FROM site WHERE payment_provider = 'stripe';` on prod
-(and test). If 0 → no live exposure yet, but the toggle should still be closed to prevent new
-exposure. If > 0 → live exposure now; decide migrate-to-Mollie / notify.
+**Therefore this track is deferred future work, not a fire.** When Stripe in-app payments are
+eventually exposed, they must be built on Connect from the start (the body below). Until then: no
+action required; optional defense-in-depth would be to also reject `'stripe'` in `setPaymentProvider`
+so the dormant path can't be reached even via a direct action call.
 
-**Recommended immediate containment (cheap, independent of building Connect):** gate `setPaymentProvider`
-to reject `'stripe'` (and hide/disable the Stripe option in the partner General UI) until Connect
-lands — converting an open self-serve toggle into "no new exposure" in a few lines. Sites already on
-Stripe need a separate decision (migrate or pause Stripe charges).
+**Visibility-gate context (founder, 2026-05-23):** end-user visibility of a beach/restaurant is gated
+on *payment capability* — a venue is hidden when it has **neither off-platform payments enabled NOR a
+working Mollie connection** (it can't take any payment → unusable for the guest). So the usable-payment
+path is **off-platform-or-Mollie**; Stripe-consumer is not part of it, which is *why* the latent Stripe
+gap touches no real users. (Worth verifying + folding into [[subsystem:payments]] — see roadmap.)
 
 ## Roadmap
 
 - ✅ **Confirm scope** (2026-05-23). Two consumer paths — reservation + order PaymentIntents — both
   plain platform charges (no Connect). Rentals (Mollie-only), table deposits (Mollie-only), and
   subscriptions (correctly platform-merchant) are out of scope. See Scope & urgency above.
-- ☐ **Immediate containment (do first; cheap).** Gate `setPaymentProvider` to reject `'stripe'` +
-  hide/disable the Stripe option in the partner General UI, so no new site can self-serve into
-  platform-collecting Stripe. Founder: count prod sites already on `payment_provider='stripe'`; for
-  any, decide migrate-to-Mollie / pause. This is the urgent bit; the rest is the proper Connect build.
+- ☐ **Optional defense-in-depth (not urgent).** The partner UI already exposes only Mollie, so there's
+  no live exposure. As belt-and-braces, reject `'stripe'` in `setPaymentProvider` so the dormant
+  server-action path can't be reached even via a direct call. A one-time sanity check
+  (`SELECT count(*) FROM site WHERE payment_provider = 'stripe'` on prod/test) confirms 0 before
+  relying on "not exposed."
+- ☐ **Verify + document the visibility gate.** Confirm in code how end-user visibility is gated on
+  payment capability (off-platform-payments-enabled OR Mollie-connected → visible; neither → hidden)
+  and fold it into [[subsystem:payments]] (or a site/visibility wiki note) so it isn't re-derived.
 - ☐ **Connected-account model.** Decide the Connect charge type (destination charges with
   `transfer_data`+`application_fee_amount`, vs direct charges on the connected account vs separate
   charges+transfers) and storage (a `stripeConnectedAccountId` on `PartnerAccount`, mirroring
@@ -88,14 +96,17 @@ Stripe need a separate decision (migrate or pause Stripe charges).
   showed it does **not** — the Stripe reservation PaymentIntent collects into the platform account
   with no Connect. Recorded as a separate compliance track; 002 deposits go **Mollie-only** until this
   lands.
-- **2026-05-23** — **Scope + urgency confirmed** (code investigation). Scope = exactly two consumer
-  charge paths (reservation `payment/stripe/payment-intent:78` + order `order-payment/stripe/
-  payment-intent:75`), both plain platform charges; rentals/deposits/subscriptions out of scope.
-  Urgency = **one ungated toggle**: `setPaymentProvider('stripe')` (site-actions.ts:315) writes the
-  flag with no onboarding (vs Mollie which requires a connected account), so any partner can self-serve
-  into platform-collecting Stripe; live exposure = sites with `payment_provider='stripe'` (founder to
-  count on prod). Added an **immediate-containment** roadmap step (gate the Stripe toggle) ahead of the
-  full Connect build.
+- **2026-05-23** — **Scope confirmed** (code investigation). Scope = exactly two consumer charge paths
+  (reservation `payment/stripe/payment-intent:78` + order `order-payment/stripe/payment-intent:75`),
+  both plain platform charges; rentals/deposits/subscriptions out of scope.
+- **2026-05-23** — **Urgency corrected DOWN to latent/low** (founder + UI check). Stripe is
+  subscriptions-only today; Stripe **in-app payments are deferred and not exposed** — the partner
+  General UI offers **only Mollie** (`general/view.tsx:760-774`), so `setPaymentProvider('stripe')` is
+  dormant code with no UI entry point (my earlier "one ungated toggle away" was wrong). Not a live
+  exposure → this track is **deferred future work**, not a fire. Also captured the founder's
+  **visibility-gate** model (venue hidden unless off-platform-payments OR Mollie) which is *why* the
+  latent gap touches no users. Containment downgraded to optional defense-in-depth; added a
+  verify-and-document-the-visibility-gate step.
 
 ## Links
 
