@@ -13,6 +13,32 @@ vi.mock('@/app/api/_lib/mollie', () => ({
   isMolliePayment: (ref: string | null) => ref?.startsWith('tr_') ?? false,
 }))
 
+// vi.hoisted() so these are available in vi.mock() factories (which are hoisted)
+const { mockSendEmail, mockMarkDepositHeld, mockConfirmationEmailHtml } = vi.hoisted(() => ({
+  mockSendEmail: vi.fn().mockResolvedValue(undefined),
+  mockMarkDepositHeld: vi.fn().mockResolvedValue(undefined),
+  mockConfirmationEmailHtml: vi.fn().mockReturnValue('<html>confirm</html>'),
+}))
+
+// Mock @repo/data/email so sendEmail (called in table-deposit path) is a no-op
+vi.mock('@repo/data/email', () => ({
+  sendEmail: mockSendEmail,
+}))
+
+// Mock @repo/table-reservations-core — only the symbols used by the webhook
+vi.mock('@repo/table-reservations-core', () => ({
+  markDepositHeld: mockMarkDepositHeld,
+  confirmationEmailHtml: mockConfirmationEmailHtml,
+  DEPOSIT_STATUS: {
+    NONE: 'none',
+    PENDING: 'pending',
+    HELD: 'held',
+    CHARGED: 'charged',
+    REFUNDED: 'refunded',
+    RELEASED: 'released',
+  },
+}))
+
 import { POST } from './route'
 import prisma from '@repo/data/PrismaCient'
 import {
@@ -47,6 +73,12 @@ beforeEach(() => {
   } as any)
   vi.mocked(prisma.order.findFirst).mockResolvedValue(null)
   vi.mocked(prisma.rentalBooking.findFirst).mockResolvedValue(null)
+  // Default: no table reservation (overridden in table-deposit tests)
+  vi.mocked(prisma.tableReservation.findFirst).mockResolvedValue(null)
+  vi.mocked(prisma.tableReservation.findUnique).mockResolvedValue(null)
+  // sendEmail: reset so we can assert call counts
+  mockSendEmail.mockResolvedValue(undefined)
+  mockMarkDepositHeld.mockResolvedValue(undefined)
 })
 
 describe('POST /api/webhooks/mollie', () => {
@@ -213,5 +245,165 @@ describe('POST /api/webhooks/mollie', () => {
     const res = await POST(makeWebhookRequest('tr_abc123'))
     expect(res.status).toBe(200)
     expect(mockProcessReservation).not.toHaveBeenCalled()
+  })
+})
+
+// ── table-deposit webhook branch ─────────────────────────────────────────────
+
+describe('POST /api/webhooks/mollie — table-deposit branch', () => {
+  const PAYMENT_ID = 'tr_deposit99'
+  const TABLE_RESERVATION_ID = 'clxk0000000000000000000000'
+
+  /** Return null for reservation/order/rental so the fallback tableReservation path is reached. */
+  function useTableDepositToken() {
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.order.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.rentalBooking.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.tableReservation.findFirst).mockResolvedValue({
+      restaurant: {
+        partnerAccount: { mollieAccessToken: 'access_deposit_token' },
+      },
+    } as any)
+  }
+
+  /** Mollie returns a paid table-deposit payment. */
+  function mockPaidDeposit() {
+    mockMollieGet.mockResolvedValue({
+      status: 'paid',
+      metadata: JSON.stringify({
+        type: 'table-deposit',
+        entityId: TABLE_RESERVATION_ID,
+        restaurantId: 'restaurant-1',
+      }),
+    })
+  }
+
+  it('resolves partner access token via tableReservation → restaurant → partnerAccount', async () => {
+    useTableDepositToken()
+    // moldify Mollie to return a non-deposit paid so we just verify token resolution
+    mockMollieGet.mockResolvedValue({
+      status: 'open',
+      metadata: JSON.stringify({
+        type: 'table-deposit',
+        entityId: TABLE_RESERVATION_ID,
+        restaurantId: 'restaurant-1',
+      }),
+    })
+
+    const res = await POST(makeWebhookRequest(PAYMENT_ID))
+    expect(res.status).toBe(200)
+    // The Mollie client was called — means the token was resolved
+    expect(mockMollieGet).toHaveBeenCalled()
+  })
+
+  it('calls markDepositHeld when deposit status is PENDING (paid webhook)', async () => {
+    useTableDepositToken()
+    mockPaidDeposit()
+
+    // Simulate the tableReservation.findUnique call inside handlePaymentPaid
+    vi.mocked(prisma.tableReservation.findUnique).mockResolvedValue({
+      id: TABLE_RESERVATION_ID,
+      guestEmail: 'guest@example.com',
+      guestName: 'Alice',
+      from: new Date('2026-06-01T19:00:00Z'),
+      to: new Date('2026-06-01T21:00:00Z'),
+      partySize: 2,
+      specialRequests: null,
+      depositStatus: 'pending', // PENDING → eligible for HELD transition
+      restaurant: { name: 'Test Restaurant', slug: 'test-restaurant', tagline: null },
+    } as any)
+
+    const res = await POST(makeWebhookRequest(PAYMENT_ID))
+    expect(res.status).toBe(200)
+
+    // Core assertion: the deposit was marked held exactly once
+    expect(mockMarkDepositHeld).toHaveBeenCalledOnce()
+    expect(mockMarkDepositHeld).toHaveBeenCalledWith(TABLE_RESERVATION_ID, PAYMENT_ID)
+  })
+
+  it('sends a confirmation email to the guest after marking deposit held', async () => {
+    useTableDepositToken()
+    mockPaidDeposit()
+
+    vi.mocked(prisma.tableReservation.findUnique).mockResolvedValue({
+      id: TABLE_RESERVATION_ID,
+      guestEmail: 'guest@example.com',
+      guestName: 'Alice',
+      from: new Date('2026-06-01T19:00:00Z'),
+      to: new Date('2026-06-01T21:00:00Z'),
+      partySize: 2,
+      specialRequests: null,
+      depositStatus: 'pending',
+      restaurant: { name: 'Test Restaurant', slug: 'test-restaurant', tagline: null },
+    } as any)
+
+    await POST(makeWebhookRequest(PAYMENT_ID))
+
+    expect(mockSendEmail).toHaveBeenCalledOnce()
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'guest@example.com',
+        subject: expect.stringContaining('Test Restaurant'),
+      }),
+    )
+  })
+
+  it('does NOT call markDepositHeld when depositStatus is already HELD (idempotency guard)', async () => {
+    useTableDepositToken()
+    mockPaidDeposit()
+
+    // Second Mollie delivery: deposit already confirmed
+    vi.mocked(prisma.tableReservation.findUnique).mockResolvedValue({
+      id: TABLE_RESERVATION_ID,
+      guestEmail: 'guest@example.com',
+      guestName: 'Alice',
+      from: new Date('2026-06-01T19:00:00Z'),
+      to: new Date('2026-06-01T21:00:00Z'),
+      partySize: 2,
+      specialRequests: null,
+      depositStatus: 'held', // already transitioned — do NOT re-process
+      restaurant: { name: 'Test Restaurant', slug: 'test-restaurant', tagline: null },
+    } as any)
+
+    const res = await POST(makeWebhookRequest(PAYMENT_ID))
+    expect(res.status).toBe(200)
+
+    // Idempotency: neither side effect fires on re-delivery
+    expect(mockMarkDepositHeld).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it('does not send confirmation email when guestEmail is absent', async () => {
+    useTableDepositToken()
+    mockPaidDeposit()
+
+    vi.mocked(prisma.tableReservation.findUnique).mockResolvedValue({
+      id: TABLE_RESERVATION_ID,
+      guestEmail: null, // no email — skip email but still hold deposit
+      guestName: 'Walk-In',
+      from: new Date('2026-06-01T19:00:00Z'),
+      to: new Date('2026-06-01T21:00:00Z'),
+      partySize: 2,
+      specialRequests: null,
+      depositStatus: 'pending',
+      restaurant: { name: 'Test Restaurant', slug: 'test-restaurant', tagline: null },
+    } as any)
+
+    await POST(makeWebhookRequest(PAYMENT_ID))
+
+    expect(mockMarkDepositHeld).toHaveBeenCalledOnce()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it('returns 200 (not 500) when table reservation is not found by findUnique (safe no-op)', async () => {
+    useTableDepositToken()
+    mockPaidDeposit()
+
+    // findUnique returns null — the handler should skip gracefully
+    vi.mocked(prisma.tableReservation.findUnique).mockResolvedValue(null)
+
+    const res = await POST(makeWebhookRequest(PAYMENT_ID))
+    expect(res.status).toBe(200)
+    expect(mockMarkDepositHeld).not.toHaveBeenCalled()
   })
 })

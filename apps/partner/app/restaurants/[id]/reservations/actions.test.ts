@@ -3,9 +3,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/app/auth', () => ({ auth: vi.fn() }))
 vi.mock('@/app/flags', () => ({ isFlagEnabled: vi.fn().mockResolvedValue(true) }))
+vi.mock('@repo/data/payment', () => ({ processChargedTableDeposit: vi.fn() }))
+vi.mock('@/app/api/_lib/mollie', () => ({ refundDepositPayment: vi.fn() }))
 
 import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
+import { processChargedTableDeposit } from '@repo/data/payment'
 import {
   getRestaurantReservationsForDay,
   markRestaurantReservationSeated,
@@ -13,6 +16,7 @@ import {
   markRestaurantReservationNoShow,
   cancelRestaurantReservation,
   setRestaurantReservationNotes,
+  chargeRestaurantReservationDeposit,
 } from './actions'
 
 const mockAuth = vi.mocked(auth)
@@ -57,14 +61,14 @@ describe('getRestaurantReservationsForDay', () => {
   it('rejects unauthenticated', async () => {
     const res = await getRestaurantReservationsForDay(RESTAURANT_ID, '2026-05-01')
     expect(res.status).toBe('error')
-    expect(res.errors).toContain('Not authenticated')
+    if (res.status === 'error') expect(res.errors).toContain('Not authenticated')
   })
 
   it('rejects an invalid date format', async () => {
     authorizeOwner()
     const res = await getRestaurantReservationsForDay(RESTAURANT_ID, 'bad-date')
     expect(res.status).toBe('error')
-    expect(res.errors).toContain('Invalid date')
+    if (res.status === 'error') expect(res.errors).toContain('Invalid date')
   })
 
   it('returns the day list on a valid date', async () => {
@@ -239,5 +243,37 @@ describe('setRestaurantReservationNotes', () => {
     )
     expect(res.status).toBe('error')
     expect(res.errors?.[0]).toMatch(/too long/)
+  })
+})
+
+// ─────────────────────────────────────────────────────
+// chargeRestaurantReservationDeposit (no-show → invoice cascade)
+// ─────────────────────────────────────────────────────
+
+describe('chargeRestaurantReservationDeposit', () => {
+  it('runs the @repo/data invoice cascade once the deposit is charged', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.tableReservation.findUnique)
+      .mockResolvedValueOnce({ restaurant: { partnerAccountId: OWNER_ID } } as any) // requireStaffOwner
+      .mockResolvedValueOnce({ depositStatus: 'held' } as any) // chargeNoShowDeposit status check
+      .mockResolvedValueOnce({ depositStatus: 'charged', depositAmount: 20 } as any) // action cascade gate
+    vi.mocked(prisma.tableReservation.update).mockResolvedValue({} as any)
+
+    const res = await chargeRestaurantReservationDeposit(RESTAURANT_ID, RESERVATION_ID)
+    expect(res.status).toBe('ok')
+    expect(processChargedTableDeposit).toHaveBeenCalledWith(RESERVATION_ID)
+  })
+
+  it('does not run the cascade when the booking has no held deposit', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.tableReservation.findUnique)
+      .mockResolvedValueOnce({ restaurant: { partnerAccountId: OWNER_ID } } as any) // requireStaffOwner
+      .mockResolvedValueOnce({ depositStatus: 'none' } as any) // chargeNoShowDeposit no-op
+      .mockResolvedValueOnce({ depositStatus: 'none', depositAmount: null } as any) // action gate
+    vi.mocked(prisma.tableReservation.update).mockResolvedValue({} as any)
+
+    const res = await chargeRestaurantReservationDeposit(RESTAURANT_ID, RESERVATION_ID)
+    expect(res.status).toBe('ok')
+    expect(processChargedTableDeposit).not.toHaveBeenCalled()
   })
 })

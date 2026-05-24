@@ -955,6 +955,193 @@ export async function processConfirmedOrder(
   })
 }
 
+// ─── Idempotent Table-Reservation Deposit Processing ────────────────────────
+
+/**
+ * Process a kept no-show deposit: create two invoices atomically.
+ *
+ * Called when `chargeNoShowDeposit` transitions depositStatus HELD → CHARGED.
+ * The deposit amount is already collected; this function records the revenue
+ * split for accounting and Veri*factu chain purposes.
+ *
+ * SPLIT MERCHANT model (mirrors processConfirmedReservation):
+ *   1. PARTNER invoice — one line for the kept deposit amount
+ *      Taxed at the linked Site's vat rate (same source as sunbed reservations).
+ *      Merchant of record: partner company.
+ *   2. PLATFORM invoice — service fee line (deducted from partner revenue)
+ *      Taxed at the VAT rate from the fee's associated Settings entry.
+ *      Merchant of record: Sunbnb business entity.
+ *
+ * Service code: 'no-show-deposit'. Fee is DEDUCTED from partner revenue
+ * (reservation convention) — customer already paid the deposit amount in full.
+ *
+ * Scope constraint: requires a site-linked restaurant (restaurant.siteId must
+ * be non-null). Throws if the restaurant has no site link.
+ *
+ * Safe to call multiple times — skips if invoices already exist for this
+ * tableReservationId.
+ */
+export async function processChargedTableDeposit(
+  tableReservationId: string
+): Promise<void> {
+  const tableReservation = await prisma.tableReservation.findUnique({
+    where: { id: tableReservationId },
+    include: { restaurant: true, invoices: true },
+  })
+
+  if (!tableReservation) {
+    throw new Error(`TableReservation not found: ${tableReservationId}`)
+  }
+
+  // Idempotency guard: bail if invoices already exist
+  if (tableReservation.invoices.length > 0) {
+    return
+  }
+
+  if (!tableReservation.depositAmount || tableReservation.depositAmount <= 0) {
+    throw new Error(
+      `TableReservation ${tableReservationId} has no deposit amount to process`
+    )
+  }
+
+  const { restaurant } = tableReservation
+  if (!restaurant.siteId) {
+    throw new Error('Deposit cascade requires a site-linked restaurant')
+  }
+
+  const siteId = restaurant.siteId
+
+  const { site, partnerAccount, settings } = await loadFeeContext(
+    siteId,
+    'no-show-deposit'
+  )
+
+  const tier = partnerAccount?.subscription?.plan?.tier ?? null
+  const matchedFee = resolveServiceFee(
+    site.serviceFees,
+    partnerAccount?.serviceFees ?? [],
+    settings?.serviceFees ?? [],
+    'no-show-deposit',
+    tier
+  )
+
+  const totalDeposit = round(tableReservation.depositAmount)
+  const siteVatRate = site.vat ?? 0
+
+  // Fee deducted from partner revenue (reservation convention)
+  const totalServiceFee = calculateServiceFeeAmount(matchedFee, totalDeposit)
+  const partnerAmount = round(totalDeposit - totalServiceFee)
+
+  const businessEntity = await getBusinessEntity()
+
+  const feeSettings = matchedFee
+    ? await prisma.settings.findUnique({
+        where: { id: matchedFee.settingsId },
+        select: { vat: true, country: true },
+      })
+    : null
+  const platformVatRate = feeSettings?.vat ?? businessEntity.vatRate
+  const feeCountry = feeSettings?.country ?? ''
+
+  await prisma.$transaction(async (tx) => {
+    // Double-check idempotency inside transaction (race-safe)
+    const current = await tx.tableReservation.findUnique({
+      where: { id: tableReservationId },
+      include: { invoices: true },
+    })
+    if ((current?.invoices?.length ?? 0) > 0) return
+
+    const invoicedAt = new Date()
+
+    // ── 1. PARTNER Invoice (kept deposit line) ──
+
+    const { baseAmount: partnerBase, vatAmount: partnerVat } =
+      computeVatAndBaseAmounts(partnerAmount, siteVatRate)
+
+    const partnerInvoiceNumber = await nextInvoiceNumber(tx, 'PARTNER')
+    const partnerPrevHash = await getLastHash(tx, 'PARTNER')
+
+    const partnerInvoice = await tx.invoice.create({
+      data: {
+        accountId: partnerAccount?.userId ?? '',
+        tableReservationId,
+        totalCharge: partnerBase,
+        totalTax: partnerVat,
+        totalAmount: partnerAmount,
+        invoicedAt,
+        issuerType: 'PARTNER',
+        issuerVatNumber: partnerAccount?.businessId ?? null,
+        issuerCompanyName: partnerAccount?.company ?? null,
+        issuerCompanyAddress: partnerAccount?.address ?? null,
+        invoiceNumber: partnerInvoiceNumber,
+        previousHash: partnerPrevHash,
+        hash: computeInvoiceHash(
+          partnerInvoiceNumber, invoicedAt, partnerAmount,
+          partnerAccount?.businessId ?? null, partnerPrevHash
+        ),
+        product: 'restaurant',
+      },
+    })
+
+    // Single line: the kept no-show deposit
+    await tx.invoiceLine.create({
+      data: {
+        charge: partnerBase,
+        tax: partnerVat,
+        amount: partnerAmount,
+        vatRate: siteVatRate,
+        invoiceId: partnerInvoice.id,
+        productCode: 'no-show-deposit',
+        description: `No-show deposit — ${tableReservation.guestName} (party of ${tableReservation.partySize})`,
+      },
+    })
+
+    // ── 2. PLATFORM Invoice (service fee) ──
+
+    if (totalServiceFee > 0) {
+      const { baseAmount: feeBase, vatAmount: feeVat } =
+        computeVatAndBaseAmounts(totalServiceFee, platformVatRate)
+
+      const platformInvoiceNumber = await nextInvoiceNumber(tx, 'PLATFORM')
+      const platformPrevHash = await getLastHash(tx, 'PLATFORM')
+
+      const platformInvoice = await tx.invoice.create({
+        data: {
+          accountId: partnerAccount?.userId ?? '',
+          tableReservationId,
+          totalCharge: feeBase,
+          totalTax: feeVat,
+          totalAmount: totalServiceFee,
+          invoicedAt,
+          issuerType: 'PLATFORM',
+          issuerVatNumber: businessEntity.vatId || null,
+          issuerCompanyName: businessEntity.companyName,
+          issuerCompanyAddress: businessEntity.companyAddress || null,
+          invoiceNumber: platformInvoiceNumber,
+          previousHash: platformPrevHash,
+          hash: computeInvoiceHash(
+            platformInvoiceNumber, invoicedAt, totalServiceFee,
+            businessEntity.vatId || null, platformPrevHash
+          ),
+          product: 'restaurant',
+        },
+      })
+
+      await tx.invoiceLine.create({
+        data: {
+          charge: feeBase,
+          tax: feeVat,
+          amount: totalServiceFee,
+          vatRate: platformVatRate,
+          invoiceId: platformInvoice.id,
+          productCode: 'sunbnb-service-fee',
+          description: `No-show deposit service fee${feeCountry ? ` (${feeCountry})` : ''}`,
+        },
+      })
+    }
+  })
+}
+
 // ─── Order Service Fee Calculation ──────────────────────────────────────────
 
 /**

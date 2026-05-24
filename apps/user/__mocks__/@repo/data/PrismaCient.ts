@@ -36,6 +36,14 @@ const prisma = {
   inventoryItem: {
     findMany: vi.fn(),
   },
+  tableReservation: {
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+  },
   featureFlag: {
     findMany: vi.fn(),
     upsert: vi.fn(),

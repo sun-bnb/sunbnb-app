@@ -138,6 +138,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<MollieTo
 // ── Client Links API ────────────────────────────────────────────────────────
 
 import createMollieClient from '@mollie/api-client'
+import { isTestMode } from '@repo/data/env'
 
 /**
  * Get the Organization Access Token from environment.
@@ -468,4 +469,26 @@ export async function fetchMollieProfile(accessToken: string): Promise<{
   }
 
   return { profileId, onboardingStatus }
+}
+
+// ── Deposit Refunds ───────────────────────────────────────────────────────────
+
+/**
+ * Issue a full refund of a table-reservation deposit on the partner's own Mollie
+ * account. Demo refs (`pi_demo_`) are a no-op. Throws on a real Mollie error so
+ * the caller can avoid marking the deposit refunded when the money didn't move.
+ */
+export async function refundDepositPayment(
+  paymentRef: string,
+  accessToken: string | null | undefined,
+): Promise<void> {
+  if (paymentRef.startsWith('pi_demo_')) return // demo — no real money to refund
+  if (!accessToken) throw new Error('Partner has no Mollie connection')
+  const client = createMollieClient({ accessToken })
+  const payment = await client.payments.get(paymentRef, { testmode: isTestMode() } as any)
+  await client.paymentRefunds.create({
+    paymentId: paymentRef,
+    amount: payment.amount,
+    ...(isTestMode() && { testmode: true }),
+  } as any)
 }

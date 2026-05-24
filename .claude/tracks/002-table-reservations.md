@@ -3,7 +3,7 @@ id: 002-table-reservations
 title: Table Reservations
 status: active
 created: 2026-05-21
-updated: 2026-05-22
+updated: 2026-05-23
 worktree: null
 ---
 
@@ -73,17 +73,25 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
 - **P1 scope narrowed (founder):** **SMS reminders/notify** + **Google/Instagram Reserve** are **out
   of P1** → later phase (external-bound). What remains *in* P1: **1e collection Piece 2/3** + the
   deferred consumer/partner UIs + the embed widget UI.
-- **Next action — 1e collection Piece 2/3 (PAUSED 2026-05-23 by founder; resume as a focused
-  session).** Decisions **locked** (see Open decisions): upfront deposit, pending-until-paid, **both
-  Stripe + Mollie** (mirror reservation flow / Mollie-for-Platforms), kept deposit flows through the
-  **full `@repo/data` invoice + settlement + fee cascade**, **refund on arrival** (seated), keep on
-  no-show. **Build plan:** (Piece 2) deposit PaymentIntent (Stripe) + Mollie payment reusing
-  `[[subsystem:payments]]`; webhook/poll → `markDepositHeld` (already confirms); a `processChargedDeposit`
-  cascade fn in `@repo/data` fired on `chargeNoShowDeposit`; refund on `markSeated`/timely-cancel →
-  `releaseDeposit`/`refundDeposit`. (Piece 3) consumer pay-before-confirm UI (the `bookTableForSite` /
-  public `/api/restaurants/[id]/book` already return `{ requiresDeposit, depositAmount }` for real mode
-  to route on). Spans `@repo/data` (data-dev) + `apps/user` (user-dev) + `apps/partner` (partner-dev).
-  Then the deferred UIs + embed widget. **Verification gaps:** (1) browser-verify all new partner
+- **1e collection Piece 2 — DONE (2026-05-23): Mollie + demo deposit collection through the cascade.**
+  (2a) `@repo/data#processChargedTableDeposit` (payment.ts:984) — 2-invoice cascade (PARTNER −fee /
+  PLATFORM commission), fee **deducted**, idempotent via new `Invoice.tableReservationId`; migration
+  `20260523120159_invoice_table_reservation_link`; `no-show-deposit` ServiceCode seeded; 15 integration
+  tests. (2b) `apps/user` POST `/api/table-reservations/[id]/deposit/mollie` (DB amount, origin/ownership/
+  state-validated) + Mollie webhook `table-deposit` branch → `markDepositHeld` + confirmation email
+  (idempotent on PENDING→HELD); 23 route tests. (2c) `apps/partner/app/restaurants/[id]/reservations/actions.ts`:
+  `chargeRestaurantReservationDeposit` runs the cascade on HELD→CHARGED; `markSeated`/`cancel` issue a
+  best-effort Mollie refund (`refundDepositPayment` in `apps/partner/app/api/_lib/mollie.ts`, demo-safe)
+  + `refundDeposit`; 2 cascade tests. **Suites green: data 109 unit + 69 integration / user 223 / partner 281;
+  touched files typecheck.** Demo path (Piece 1) intact. **Uncommitted.**
+- **Next action — 1e Piece 3: consumer pay-before-confirm UI** (`apps/user`, user-dev). When
+  `bookTableForSite` / public `/api/restaurants/[id]/book` return `{ requiresDeposit, depositAmount }`,
+  render a deposit pay step (Mollie redirect via the new deposit route / demo form, mirroring the sunbed
+  `Payment` component) **before** the booking confirms; show confirmed state on return. **Fold in here:**
+  a poll-fallback GET status route the return page polls (reliability if the Mollie webhook is missed).
+  Then the deferred consumer/partner UIs + embed widget. **Deferred from Piece 2** (low marginal value):
+  a unit test for the seated/cancel refund path (deep mock chain; wiring is tsc-verified), and
+  `refundDepositPayment` token-refresh-on-expiry (uses the stored token today, throws if expired). **Verification gaps:** (1) browser-verify all new partner
   surfaces (:3001, kill app first — [[kill-app-before-dev]]) — partial (add-table OK);
   (2) `migrate:test` — **done**; (3) `migrate:production` pending (at promote time). Wiki re-ingest for
   1a–1h: **done**
@@ -281,7 +289,7 @@ monetization + no-show work is unblocked.
   architecture pass + payments.md/data-access.md rules; the rest are lighter but each ships behind the
   `restaurants` flag. Today the feature is **free** — `TableReservation` has no payment fields and
   `bookTableForSite` (apps/user) just creates + fire-and-forget-emails via `@repo/data/email`.)_
-  - ◐ **1e — No-show deposits (core done; provider collection = remaining seam).** _Done 2026-05-22:
+  - ◐ **1e — No-show deposits (core + Mollie/demo collection done; consumer pay-UI = remaining seam).** _Done 2026-05-22:
     migration `20260522163219_restaurant_no_show_deposits` (`Restaurant.noShowPolicy`/`depositPerGuest`;
     `TableReservation.depositAmount`/`depositStatus`/`paymentRef`); `NO_SHOW_POLICY`/`DEPOSIT_STATUS`
     constants; pure `deposit.ts#computeDepositAmount` (+ 7 tests); `resolveDepositForInstant`
@@ -289,7 +297,7 @@ monetization + no-show work is unblocked.
     when due; idempotent state transitions `markDepositHeld` / `chargeNoShowDeposit` / `refundDeposit` /
     `releaseDeposit`; partner policy UI (General: none/deposit segmented + per-guest amount; ShiftsEditor:
     requiresDeposit + min-party) + i18n. Core 43 / partner 47 tests green._ **Remaining seam (large,
-    app-layer):** actual Stripe/Mollie deposit **collection** (PaymentIntent + capture/refund), the
+    app-layer):** actual Mollie (+ demo) deposit **collection** (Mollie payment + capture/refund), the
     `@repo/data` invoice + settlement + fee-cascade generation on charge, and the consumer
     pay-before-confirm UI — reuses `[[subsystem:payments]]`; deposit-bearing bookings currently persist
     as `depositStatus: pending` (not yet collected). Combination bookings don't carry a deposit yet.
@@ -301,7 +309,7 @@ monetization + no-show work is unblocked.
     `Restaurant.noShowPolicy String @default("none")` (`none|deposit|card_hold|cancellation_fee`) +
     `depositPerGuest Float?`; per-shift `RestaurantShift.requiresDeposit` + `depositMinPartySize`
     (depends on 1c). **Flow:** when the chosen slot/shift requires it, the consumer booking routes
-    through Stripe/Mollie ([[subsystem:payments]]) **before** confirming; `markNoShow` captures/charges
+    through Mollie ([[subsystem:payments]]) **before** confirming; `markNoShow` captures/charges
     via idempotent invoice creation; seated/departed releases or credits; an in-deadline cancel
     refunds. Distinct from the platform per-cover fee (see Open decisions → Payment model). **Decision
     still open** (P1 detail): deposit vs card-hold vs cancellation-fee mechanic, default amounts, which
@@ -522,6 +530,27 @@ monetization + no-show work is unblocked.
   engine/data/core/API layers + partner config UIs are implemented + tested; the money-collection path,
   SMS, several consumer/partner UIs, and the external Reserve integration are explicitly deferred (see
   ◐ items). Not committed.
+- **2026-05-23** — **1e collection Piece 2 implemented + tested (Mollie + demo).** First reconciled the
+  plan to the consumer-Stripe purge (deposits are Mollie + demo only; Stripe pre-auth deferred to
+  [[track:003-stripe-connect-compliance]]). Then built the money path across three surfaces:
+  **(2a, `@repo/data`)** `processChargedTableDeposit` (payment.ts:984) mirrors `processConfirmedReservation`
+  — two invoices (PARTNER revenue −commission, PLATFORM commission), fee **deducted**, reverse-VAT, hash
+  chain, idempotent via the new nullable `Invoice.tableReservationId` (migration
+  `20260523120159_invoice_table_reservation_link`); fee context via `loadFeeContext(restaurant.siteId,
+  'no-show-deposit')` — **site-linked restaurants only** (throws if no `siteId`; site-less deferred to
+  the standalone phase); `no-show-deposit` ServiceCode seeded; 15 integration tests.
+  **(2b, `apps/user`)** POST `/api/table-reservations/[id]/deposit/mollie` (Mollie-for-Platforms on the
+  partner account, DB amount, origin/ownership/state-validated) + a `table-deposit` branch in the Mollie
+  webhook → `markDepositHeld` + confirmation email, **idempotent on the PENDING→HELD transition** so
+  retries don't double-confirm/email; 23 route tests. **(2c, `apps/partner`)**
+  `chargeRestaurantReservationDeposit` → cascade once HELD→CHARGED; `markSeated`/`cancel` → best-effort
+  Mollie refund (`refundDepositPayment`, demo-safe — `pi_demo_` is a no-op; status flipped to REFUNDED
+  only if the money moved) + `refundDeposit`; 2 cascade tests. Suites: data 109+69, user 223, partner 281.
+  Process: delegated to data-dev/user-dev/partner-dev but all three stopped early (~38 turns, under the
+  80 cap; `SendMessage`-resume unavailable), so the orchestrator finished the webhook confirm wiring,
+  the partner cascade+refund wiring, and the partner tsc/test fixes by hand. **Not committed.** Remaining
+  for 1e: **Piece 3** (consumer pay-before-confirm UI + poll-fallback route) + the two deferred polish
+  items.
 
 ## Open decisions
 
@@ -542,7 +571,7 @@ monetization + no-show work is unblocked.
     tri-state + `Table.depositPerGuest`). For the *collection* (Piece 2): **Mollie-only initially**
     (decided 2026-05-23) — Mollie-for-Platforms already routes funds to the venue with the platform
     taking only `applicationFee`; **Stripe is blocked** because the current Stripe consumer flow
-    collects into the *platform's own account* (no Connect), which the legal requirement prohibits, so
+    collected into the *platform's own account* (no Connect; since **removed** 2026-05-23), which the legal requirement prohibits, so
     Stripe deposits wait on a **Stripe Connect foundation → [[track:003-stripe-connect-compliance]]**.
     A kept deposit flows through the **full `@repo/data` invoice + settlement + fee cascade**; the
     deposit is **refunded on arrival** (seated) and kept only on no-show.

@@ -210,6 +210,48 @@ export async function createTestOrderItem(
   })
 }
 
+// ─── Restaurant ─────────────────────────────────────────────────────────────
+
+export async function createTestRestaurant(
+  partnerAccountId: string,
+  overrides: Record<string, any> = {}
+) {
+  return prisma.restaurant.create({
+    data: {
+      partnerAccountId,
+      name: 'Test Restaurant',
+      slug: `test-restaurant-${nextId()}`,
+      ...overrides,
+    },
+  })
+}
+
+// ─── TableReservation ────────────────────────────────────────────────────────
+
+export async function createTestTableReservation(
+  restaurantId: string,
+  overrides: Record<string, any> = {}
+) {
+  const from = overrides.from ?? new Date()
+  const to = overrides.to ?? new Date(Date.now() + 2 * 60 * 60 * 1000)
+  const { from: _f, to: _t, ...rest } = overrides
+
+  return prisma.tableReservation.create({
+    data: {
+      restaurantId,
+      from,
+      to,
+      partySize: 2,
+      guestName: 'Test Guest',
+      guestEmail: 'guest@test.com',
+      status: 'confirmed',
+      operationalStatus: 'expected',
+      ...rest,
+    },
+    include: { invoices: true },
+  })
+}
+
 // ─── Subscription Plan + Subscription ───────────────────────────────────────
 
 export async function createTestSubscription(

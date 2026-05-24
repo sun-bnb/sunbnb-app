@@ -479,6 +479,8 @@ model Invoice {
   settlementBatchId String?          @map("settlement_batch_id")
   reservationId    String?           @map("reservation_id")
   orderId          String?           @map("order_id")
+  // Table-reservation deposit invoice link (no-show deposit cascade).
+  tableReservationId String?         @map("table_reservation_id")
   invoiceNumber    String?           @unique @map("invoice_number")
   previousHash     String?           @map("previous_hash")
   hash             String?
@@ -491,7 +493,10 @@ model Invoice {
   settlementBatch  Settlement?       @relation(fields: [settlementBatchId], references: [id])
   reservation      Reservation?      @relation(fields: [reservationId], references: [id])
   order            Order?            @relation(fields: [orderId], references: [id])
+  tableReservation TableReservation? @relation(fields: [tableReservationId], references: [id])
   invoiceLines     InvoiceLine[]
+
+  @@index([tableReservationId])
 }
 
 model Settlement {
@@ -764,6 +769,7 @@ model TableReservation {
   restaurant        Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   table             Table?      @relation(fields: [tableId], references: [id])
   user              User?       @relation(fields: [userId], references: [id])
+  invoices          Invoice[]
 
   @@index([restaurantId, from])
   @@index([tableId, from, to])

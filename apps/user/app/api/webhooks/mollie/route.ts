@@ -39,13 +39,20 @@ import {
   RENTAL_PAYMENT_FAILED,
   RENTAL_REFUNDED,
 } from '@repo/data/reservation-status'
+import {
+  markDepositHeld,
+  DEPOSIT_STATUS,
+  confirmationEmailHtml,
+} from '@repo/table-reservations-core'
+import { sendEmail } from '@repo/data/email'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 interface MollieMetadata {
-  type: 'reservation' | 'order' | 'rental-booking'
+  type: 'reservation' | 'order' | 'rental-booking' | 'table-deposit'
   entityId: string
-  siteId: string
+  siteId?: string
+  restaurantId?: string
   bookingIds?: string[]
 }
 
@@ -136,6 +143,19 @@ async function findPartnerAccessToken(paymentId: string): Promise<string | null>
     return rentalBooking.site.user.partnerAccount.mollieAccessToken
   }
 
+  // Check table-reservation deposits (restaurant → partner account)
+  const tableReservation = await prisma.tableReservation.findFirst({
+    where: { paymentRef: paymentId },
+    select: {
+      restaurant: {
+        select: { partnerAccount: { select: { mollieAccessToken: true } } },
+      },
+    },
+  })
+  if (tableReservation?.restaurant?.partnerAccount?.mollieAccessToken) {
+    return tableReservation.restaurant.partnerAccount.mollieAccessToken
+  }
+
   return null
 }
 
@@ -147,6 +167,39 @@ async function handlePaymentPaid(meta: MollieMetadata, paymentId: string): Promi
   } else if (meta.type === 'rental-booking') {
     // Use the paymentRef (Mollie payment ID) to find all bookings in this group
     await processConfirmedRentalBooking(paymentId)
+  } else if (meta.type === 'table-deposit') {
+    // Confirm only on the PENDING → HELD transition so Mollie retries don't
+    // re-send the confirmation email. The booking only becomes real now, so
+    // the confirmation is sent here (mirrors the demo path in
+    // apps/user/app/sites/[id]/table/actions.ts).
+    const tr = await prisma.tableReservation.findUnique({
+      where: { id: meta.entityId },
+      select: {
+        id: true,
+        guestEmail: true,
+        guestName: true,
+        from: true,
+        to: true,
+        partySize: true,
+        specialRequests: true,
+        depositStatus: true,
+        restaurant: { select: { name: true, slug: true, tagline: true } },
+      },
+    })
+    if (tr && tr.depositStatus === DEPOSIT_STATUS.PENDING) {
+      await markDepositHeld(meta.entityId, paymentId)
+      if (tr.restaurant && tr.guestEmail) {
+        try {
+          await sendEmail({
+            to: tr.guestEmail,
+            subject: `Reservation confirmed at ${tr.restaurant.name}`,
+            html: confirmationEmailHtml(tr, tr.restaurant, null),
+          })
+        } catch (err) {
+          console.error('[Mollie Webhook] table-deposit confirmation email failed', err)
+        }
+      }
+    }
   } else {
     console.warn('[Mollie Webhook] Unknown payment type in metadata:', meta.type)
   }
