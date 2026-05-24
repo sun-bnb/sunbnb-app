@@ -4,13 +4,17 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import TextField from '@mui/material/TextField'
+import CircularProgress from '@mui/material/CircularProgress'
 import {
   AvailabilityPicker,
   BookingForm,
   type BookingFormValues,
 } from '@repo/table-reservations-ui'
 import type { AvailabilitySlot } from '@repo/table-reservations-core'
-import { bookTableForSite } from './actions'
+import { bookTableForSite, initiateDemoTableDeposit } from './actions'
+
+const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || ''
 
 interface Props {
   siteId: string
@@ -29,9 +33,15 @@ interface SlotWire {
   availableTableIds: string[]
 }
 
+/** State set when bookTableForSite returns requiresDeposit. */
+interface DepositPending {
+  reservationId: string
+  depositAmount: number
+}
+
 const ANON_ID_KEY = 'sunbnb-anonId'
 
-/** Full booking flow on a single page: pick slot → fill form → submit. */
+/** Full booking flow on a single page: pick slot → fill form → pay deposit (if required) → confirm. */
 export default function TableBookingView({
   siteId,
   restaurant,
@@ -50,6 +60,9 @@ export default function TableBookingView({
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [selectedSlot, setSelectedSlot] = useState<SlotWire | null>(null)
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null)
+  const [depositPending, setDepositPending] = useState<DepositPending | null>(null)
+  const [depositError, setDepositError] = useState<string | null>(null)
+  const [depositLoading, setDepositLoading] = useState(false)
 
   // Anonymous identity — persisted across bookings so cancellation stays
   // possible without signing in. Keep scoped to this hook (same pattern as
@@ -98,6 +111,72 @@ export default function TableBookingView({
     to: new Date(s.to),
     availableTableIds: s.availableTableIds,
   }))
+
+  // ── Deposit pay step ────────────────────────────────────────────────────────
+  if (depositPending) {
+    const { reservationId, depositAmount } = depositPending
+
+    if (DEMO_MODE) {
+      return (
+        <DepositDemoStep
+          restaurantName={restaurant.name}
+          reservationId={reservationId}
+          depositAmount={depositAmount}
+          anonId={anonId}
+          loading={depositLoading}
+          error={depositError}
+          onPay={async () => {
+            setDepositLoading(true)
+            setDepositError(null)
+            const res = await initiateDemoTableDeposit(reservationId, anonId)
+            setDepositLoading(false)
+            if (res.status === 'ok') {
+              router.push(`/table-reservations/${reservationId}`)
+            } else {
+              setDepositError(res.errors?.[0] ?? 'Payment failed')
+            }
+          }}
+        />
+      )
+    }
+
+    // Mollie redirect path
+    return (
+      <DepositMollieStep
+        restaurantName={restaurant.name}
+        reservationId={reservationId}
+        depositAmount={depositAmount}
+        anonId={anonId}
+        loading={depositLoading}
+        error={depositError}
+        onPay={async () => {
+          setDepositLoading(true)
+          setDepositError(null)
+          try {
+            const redirectUrl = `${APP_URL}/table-reservations/${reservationId}`
+            const res = await fetch(
+              `/api/table-reservations/${reservationId}/deposit/mollie`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ redirectUrl, anonId }),
+              },
+            )
+            const data = await res.json()
+            if (data.error) {
+              setDepositError(data.error)
+              setDepositLoading(false)
+              return
+            }
+            window.location.assign(data.checkoutUrl)
+          } catch {
+            setDepositError('Payment failed — please try again')
+            setDepositLoading(false)
+          }
+        }}
+      />
+    )
+  }
 
   return (
     <div className="max-w-xl mx-auto p-6 flex flex-col gap-6">
@@ -186,13 +265,129 @@ export default function TableBookingView({
                 anonId,
               })
               if (res.status === 'ok') {
-                router.push(`/table-reservations/${res.reservationId}`)
+                if (res.requiresDeposit) {
+                  // Transition to the in-page deposit pay step (no page nav).
+                  setDepositPending({
+                    reservationId: res.reservationId,
+                    depositAmount: res.depositAmount ?? 0,
+                  })
+                } else {
+                  router.push(`/table-reservations/${res.reservationId}`)
+                }
               }
               return res
             }}
           />
         </section>
       ) : null}
+    </div>
+  )
+}
+
+// ── Deposit pay-step sub-components ──────────────────────────────────────────
+
+interface DepositStepProps {
+  restaurantName: string
+  reservationId: string
+  depositAmount: number
+  anonId: string | null
+  loading: boolean
+  error: string | null
+  onPay: () => void | Promise<void>
+}
+
+function DepositAmountBadge({ amount }: { amount: number }) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3 mb-4">
+      <div>
+        <p className="text-sm font-medium text-gray-700">Refundable deposit</p>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Held until your visit — refunded on arrival
+        </p>
+      </div>
+      <span className="text-lg font-semibold text-gray-900">
+        &euro;{amount.toFixed(2)}
+      </span>
+    </div>
+  )
+}
+
+function DepositDemoStep({
+  restaurantName,
+  depositAmount,
+  loading,
+  error,
+  onPay,
+}: DepositStepProps) {
+  return (
+    <div className="max-w-xl mx-auto p-6 flex flex-col gap-4">
+      <header>
+        <h1 className="text-xl font-semibold text-gray-900">{restaurantName}</h1>
+        <p className="text-sm text-gray-600 mt-1">
+          A refundable deposit is required to confirm your table.
+        </p>
+      </header>
+      <DepositAmountBadge amount={depositAmount} />
+      <button
+        type="button"
+        disabled={loading}
+        onClick={onPay}
+        className="w-full flex items-center justify-center gap-2 rounded-lg bg-gray-900 text-white text-sm font-semibold py-3 hover:bg-gray-800 disabled:opacity-60 transition-colors"
+      >
+        {loading ? (
+          <CircularProgress size={16} color="inherit" />
+        ) : (
+          'Pay deposit (demo)'
+        )}
+      </button>
+      {error && <p className="text-red-600 text-sm text-center">{error}</p>}
+    </div>
+  )
+}
+
+function DepositMollieStep({
+  restaurantName,
+  depositAmount,
+  loading,
+  error,
+  onPay,
+}: DepositStepProps) {
+  return (
+    <div className="max-w-xl mx-auto p-6 flex flex-col gap-4">
+      <header>
+        <h1 className="text-xl font-semibold text-gray-900">{restaurantName}</h1>
+        <p className="text-sm text-gray-600 mt-1">
+          A refundable deposit is required to confirm your table.
+        </p>
+      </header>
+      <DepositAmountBadge amount={depositAmount} />
+      <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
+        <div className="flex items-center gap-2 mb-1">
+          <svg
+            className="w-4 h-4 text-gray-400"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+          <span className="text-sm font-medium text-gray-700">Secure checkout</span>
+        </div>
+        <p className="text-xs text-gray-500">
+          You will be redirected to complete payment
+        </p>
+      </div>
+      <button
+        type="button"
+        disabled={loading}
+        onClick={onPay}
+        className="w-full flex items-center justify-center gap-2 rounded-lg bg-gray-900 text-white text-sm font-semibold py-3 hover:bg-gray-800 disabled:opacity-60 transition-colors"
+      >
+        {loading ? <CircularProgress size={16} color="inherit" /> : 'Pay deposit now'}
+      </button>
+      {error && <p className="text-red-600 text-sm text-center">{error}</p>}
     </div>
   )
 }

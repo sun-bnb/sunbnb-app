@@ -84,13 +84,37 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
   best-effort Mollie refund (`refundDepositPayment` in `apps/partner/app/api/_lib/mollie.ts`, demo-safe)
   + `refundDeposit`; 2 cascade tests. **Suites green: data 109 unit + 69 integration / user 223 / partner 281;
   touched files typecheck.** Demo path (Piece 1) intact. **Uncommitted.**
-- **Next action — 1e Piece 3: consumer pay-before-confirm UI** (`apps/user`, user-dev). When
-  `bookTableForSite` / public `/api/restaurants/[id]/book` return `{ requiresDeposit, depositAmount }`,
-  render a deposit pay step (Mollie redirect via the new deposit route / demo form, mirroring the sunbed
-  `Payment` component) **before** the booking confirms; show confirmed state on return. **Fold in here:**
-  a poll-fallback GET status route the return page polls (reliability if the Mollie webhook is missed).
-  Then the deferred consumer/partner UIs + embed widget. **Deferred from Piece 2** (low marginal value):
-  a unit test for the seated/cancel refund path (deep mock chain; wiring is tsc-verified), and
+- **1e Piece 3 — DONE (2026-05-24): consumer flow reachable + pay-before-confirm.** Built (parts below):
+  **(a)** "Reserve a table" CTA on `/sites/[id]` (`view.tsx`, gated on `site.restaurantId`; `SiteProps`
+  already had `restaurantId`, and `getSite` returns it via Prisma `include` scalars — no page.tsx change
+  needed) → `/sites/[id]/table`; i18n added to en/es/fi. **(b)** Pay step in `sites/[id]/table/view.tsx`:
+  on `{ requiresDeposit, depositAmount }` → demo (`initiateDemoTableDeposit` action → `markDepositHeld`) or
+  Mollie (POST the deposit route → `checkoutUrl`), `redirectUrl` = `/table-reservations/[id]`;
+  `bookTableForSite`'s demo branch now also returns `requiresDeposit` so demo shows the pay step.
+  **(c)** GET `/api/table-reservations/[id]` poll route (ownership + provider re-verify → `markDepositHeld`)
+  + the detail page (`table-reservations/[id]/view.tsx`) polls it while `PENDING_PAYMENT` until confirmed.
+  Tests: 8 new route tests; **user 231 green**, touched files typecheck. **Uncommitted. Needs a browser
+  pay-through (Mollie + demo) + CTA check — I can't verify UI myself.** Deferred polish: a unit test for
+  `initiateDemoTableDeposit` (mirrors the tested sunbed demo action), CTA flag-gating (booking page already
+  404s if the flag is off), and the two Piece 2 deferrals (seated/cancel refund unit test, refund token-refresh).
+- **(superseded) Piece 3 plan — make the consumer booking flow reachable + pay-before-confirm**
+  (`apps/user`, user-dev). Three parts:
+  - **(a) Discovery entry point** — *folded in 2026-05-24.* **Today nothing links to `/sites/[id]/table`**
+    (verified: no in-app nav to it; the page is reachable only by direct URL and already requires
+    `site.restaurantId`). There is **no consumer restaurant discovery** at all — `searchSites` doesn't
+    flag restaurants, and there's no `/restaurants` browse / slug page. Surface a **"Reserve a table"
+    card/tab on the beach's `/sites/[id]` detail page** when the site has a linked restaurant:
+    `app/sites/[id]/page.tsx` must start selecting `restaurantId` (it doesn't today) and
+    `app/sites/[id]/view.tsx` renders the CTA → `/sites/[id]/table`. (A badge in the `/sites` list/map can
+    follow later.) This is the "unified unit, separated processes" north star — guests browsing the beach
+    find its restaurant. Without it, even a finished pay flow is unreachable except by direct link.
+  - **(b) Pay-before-confirm UI** — when `bookTableForSite` / public `/api/restaurants/[id]/book` return
+    `{ requiresDeposit, depositAmount }`, render a deposit pay step (Mollie redirect via the new deposit
+    route / demo form, mirroring the sunbed `Payment` component) **before** the booking confirms; show
+    confirmed state on return.
+  - **(c) Poll-fallback GET status route** the return page polls (reliability if the Mollie webhook is missed).
+  Then the deferred partner UIs + embed widget (1h). **Deferred from Piece 2** (low marginal value): a unit
+  test for the seated/cancel refund path (deep mock chain; wiring is tsc-verified), and
   `refundDepositPayment` token-refresh-on-expiry (uses the stored token today, throws if expired). **Verification gaps:** (1) browser-verify all new partner
   surfaces (:3001, kill app first — [[kill-app-before-dev]]) — partial (add-table OK);
   (2) `migrate:test` — **done**; (3) `migrate:production` pending (at promote time). Wiki re-ingest for
@@ -289,7 +313,7 @@ monetization + no-show work is unblocked.
   architecture pass + payments.md/data-access.md rules; the rest are lighter but each ships behind the
   `restaurants` flag. Today the feature is **free** — `TableReservation` has no payment fields and
   `bookTableForSite` (apps/user) just creates + fire-and-forget-emails via `@repo/data/email`.)_
-  - ◐ **1e — No-show deposits (core + Mollie/demo collection done; consumer pay-UI = remaining seam).** _Done 2026-05-22:
+  - ◐ **1e — No-show deposits (implemented end-to-end: config + Mollie/demo collection + cascade + refund + consumer pay-UI; browser-verify + minor polish pending).** _Done 2026-05-22:
     migration `20260522163219_restaurant_no_show_deposits` (`Restaurant.noShowPolicy`/`depositPerGuest`;
     `TableReservation.depositAmount`/`depositStatus`/`paymentRef`); `NO_SHOW_POLICY`/`DEPOSIT_STATUS`
     constants; pure `deposit.ts#computeDepositAmount` (+ 7 tests); `resolveDepositForInstant`
@@ -551,6 +575,25 @@ monetization + no-show work is unblocked.
   the partner cascade+refund wiring, and the partner tsc/test fixes by hand. **Not committed.** Remaining
   for 1e: **Piece 3** (consumer pay-before-confirm UI + poll-fallback route) + the two deferred polish
   items.
+- **2026-05-24** — Committed + pushed Piece 2 on `main` (`d2e63fa`). **Folded a discovery entry point into
+  Piece 3** (founder call): verified there is **no consumer restaurant discovery** today — nothing links
+  to `/sites/[id]/table` (direct-URL only), `searchSites` doesn't flag restaurants, and there's no
+  `/restaurants` browse / slug page. Piece 3 now leads with surfacing a "Reserve a table" CTA on the
+  linked beach's `/sites/[id]` detail page (the page must start selecting `restaurantId`), so the booking
+  flow is actually reachable — without it a finished pay flow is dead-ends-only-by-link. Embed widget (1h)
+  + Google/Instagram Reserve + standalone tablefind.app remain the other (deferred) discovery channels.
+- **2026-05-24** — **1e Piece 3 implemented (consumer deposit flow).** Built the site-detail "Reserve a
+  table" CTA (`apps/user/app/sites/[id]/view.tsx`, gated on `site.restaurantId`; i18n en/es/fi — turned out
+  `getSite`'s Prisma `include` already returns `restaurantId` and `SiteProps` already typed it, so no
+  page.tsx change), the pay-before-confirm step in the table booking view (demo via new
+  `initiateDemoTableDeposit` action + Mollie via the Piece-2 deposit route; `bookTableForSite` demo branch
+  now returns `requiresDeposit` so demo shows the step too), a GET `/api/table-reservations/[id]` poll route
+  (ownership + provider re-verify → `markDepositHeld`), and detail-page polling until confirmed. 8 new route
+  tests; user 231 green; touched files typecheck (also fixed a latent tsc error in the Piece-2 deposit
+  route test). Process: delegated to user-dev which stopped early after the pay step + poll route; the
+  orchestrator finished detail-page polling, the CTA + i18n, the tests, and verification by hand. **Not
+  committed. Browser pay-through (Mollie + demo) + CTA visibility still need a human pass** — with this the
+  1e no-show deposit feature is end-to-end (config → collection → confirm → refund/charge → consumer UI).
 
 ## Open decisions
 

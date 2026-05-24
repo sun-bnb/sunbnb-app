@@ -112,20 +112,103 @@ export async function bookTableForSite(input: BookTableInput): Promise<BookResul
 
   const r = res.reservation
 
-  // Deposit-required booking → created as a PENDING_PAYMENT hold. In demo mode
-  // auto-collect + confirm; otherwise signal the client to pay (the confirmation
-  // email is sent on confirm, not now).
+  // Deposit-required booking → created as a PENDING_PAYMENT hold.
+  // Both demo and real mode return requiresDeposit so the UI shows the pay
+  // step. Demo handles the actual "payment" in initiateDemoTableDeposit
+  // (called from the pay step), keeping the flow symmetric.
   if (r.status === TABLE_RESERVATION_STATUS.PENDING_PAYMENT) {
-    if (DEMO_MODE) {
-      await markDepositHeld(r.id, `pi_demo_${Date.now()}`)
-      await sendBookingConfirmation(restaurant, r)
-      return { status: 'ok', reservationId: r.id }
-    }
     return { status: 'ok', reservationId: r.id, requiresDeposit: true, depositAmount: r.depositAmount ?? 0 }
   }
 
   await sendBookingConfirmation(restaurant, r)
   return { status: 'ok', reservationId: r.id }
+}
+
+/**
+ * Process a demo deposit payment for a table reservation.
+ * Only available when NEXT_PUBLIC_DEMO_MODE is enabled.
+ * Mirrors initiateDemoReservationPayment in apps/user/app/payment/actions.ts.
+ * Verifies ownership (session userId or anonId), generates a pi_demo_… ref,
+ * calls markDepositHeld, and sends the booking confirmation email.
+ */
+export async function initiateDemoTableDeposit(
+  reservationId: string,
+  anonId?: string | null,
+): Promise<{ status: 'ok'; reservationId: string } | { status: 'error'; errors: string[] }> {
+  if (!DEMO_MODE) {
+    return { status: 'error', errors: ['Demo mode is not enabled'] }
+  }
+
+  const gated = await requireFlag()
+  if (gated) return gated
+
+  const tr = await prisma.tableReservation.findUnique({
+    where: { id: reservationId },
+    select: {
+      id: true,
+      userId: true,
+      anonId: true,
+      status: true,
+      depositStatus: true,
+      paymentRef: true,
+      guestEmail: true,
+      guestName: true,
+      from: true,
+      to: true,
+      partySize: true,
+      specialRequests: true,
+      depositAmount: true,
+      restaurantId: true,
+    },
+  })
+
+  if (!tr) {
+    return { status: 'error', errors: ['Reservation not found'] }
+  }
+
+  // Ownership check — session userId or matching anonId
+  const session = await auth()
+  const sessionUserId = session?.user?.id ?? null
+  const trimmedAnonId = anonId?.trim() || null
+
+  const isOwner =
+    (sessionUserId && tr.userId && sessionUserId === tr.userId) ||
+    (trimmedAnonId && tr.anonId && trimmedAnonId === tr.anonId)
+
+  if (!isOwner) {
+    return { status: 'error', errors: ['Not authorized'] }
+  }
+
+  // Idempotency: if already held, skip re-processing
+  if (tr.depositStatus === TABLE_RESERVATION_STATUS.PENDING_PAYMENT && tr.paymentRef) {
+    return { status: 'ok', reservationId: tr.id }
+  }
+
+  // Must still be awaiting payment
+  if (tr.status !== TABLE_RESERVATION_STATUS.PENDING_PAYMENT) {
+    return { status: 'ok', reservationId: tr.id }
+  }
+
+  const paymentRef = `pi_demo_${Date.now()}`
+
+  try {
+    await markDepositHeld(tr.id, paymentRef)
+  } catch (err) {
+    console.error('[initiateDemoTableDeposit] markDepositHeld failed', err)
+    return { status: 'error', errors: ['Failed to confirm deposit'] }
+  }
+
+  // Fetch restaurant for the email
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: tr.restaurantId },
+    select: { name: true, slug: true, tagline: true },
+  })
+
+  if (restaurant) {
+    await sendBookingConfirmation(restaurant, tr)
+  }
+
+  return { status: 'ok', reservationId: tr.id }
 }
 
 export interface BookCombinationInput {

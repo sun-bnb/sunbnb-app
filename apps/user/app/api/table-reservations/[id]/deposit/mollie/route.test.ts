@@ -399,7 +399,7 @@ describe('POST /api/table-reservations/[id]/deposit/mollie', () => {
       const req = makeRequest({ redirectUrl: REDIRECT_URL })
       await POST(req, { params: { id: VALID_RESERVATION_ID } })
 
-      const createCall = mockPaymentsCreate.mock.calls[0][0]
+      const createCall = mockPaymentsCreate.mock.calls[0]![0]
       const meta = JSON.parse(createCall.metadata)
       expect(meta.type).toBe('table-deposit')
       expect(meta.entityId).toBe(VALID_RESERVATION_ID)

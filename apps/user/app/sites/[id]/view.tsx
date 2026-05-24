@@ -221,6 +221,15 @@ export default function SiteView({ site, apiKey, brand }: { site: SiteProps, api
           <div className={`pt-2 text-sm leading-relaxed ${brand ? 'mt-2' : 'text-gray-600'}`}>
             { site.description }
           </div>
+          {site.restaurantId && (
+            <a
+              href={`/sites/${site.id}/table`}
+              className="mt-3 flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-gray-800"
+            >
+              <RestaurantIcon style={{ fontSize: 18 }} />
+              {t('Reserve a table')}
+            </a>
+          )}
           <div className={`pt-3 ${whMaxHeight} overflow-hidden`}>
             <Divider textAlign="left">
               <span className="text-sm font-bold">{t('OPENING HOURS')}</span>

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ConfirmationCard } from '@repo/table-reservations-ui'
+import { TABLE_RESERVATION_STATUS } from '@repo/table-reservations-core'
 import { cancelTableBooking } from '../../sites/[id]/table/actions'
 
 const ANON_ID_KEY = 'sunbnb-anonId'
@@ -32,6 +33,34 @@ export default function TableReservationView({ reservation, restaurantName }: Pr
     if (typeof window === 'undefined') return
     setAnonId(window.localStorage.getItem(ANON_ID_KEY))
   }, [])
+
+  // While the deposit is being collected (returned from Mollie / demo), poll the
+  // status route until the booking confirms. The Mollie webhook is the primary
+  // confirm path; this is the safety net when the customer beats the webhook.
+  useEffect(() => {
+    if (status !== TABLE_RESERVATION_STATUS.PENDING_PAYMENT) return
+    let active = true
+    const poll = async () => {
+      const qs = anonId ? `?anonId=${encodeURIComponent(anonId)}` : ''
+      try {
+        const res = await fetch(`/api/table-reservations/${reservation.id}${qs}`)
+        if (!res.ok) return
+        const data = await res.json()
+        if (active && data?.status && data.status !== status) {
+          setStatus(data.status)
+          router.refresh()
+        }
+      } catch {
+        /* transient — the next tick retries */
+      }
+    }
+    poll()
+    const interval = setInterval(poll, 2500)
+    return () => {
+      active = false
+      clearInterval(interval)
+    }
+  }, [status, anonId, reservation.id, router])
 
   return (
     <div className="max-w-xl mx-auto p-6">
