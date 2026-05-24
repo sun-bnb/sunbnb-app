@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ConfirmationCard } from '@repo/table-reservations-ui'
-import { TABLE_RESERVATION_STATUS } from '@repo/table-reservations-core'
+import { TABLE_RESERVATION_STATUS } from '@repo/table-reservations-core/status'
 import { cancelTableBooking } from '../../sites/[id]/table/actions'
 
 const ANON_ID_KEY = 'sunbnb-anonId'
