@@ -3,7 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
-import { refreshAccessToken, fetchMollieProfile } from '@/app/api/_lib/mollie'
+import { getValidMollieToken } from '@repo/data/mollie-tokens'
+import { fetchMollieProfile } from '@/app/api/_lib/mollie'
 
 /**
  * Disconnect the partner's Mollie account.
@@ -35,24 +36,16 @@ export async function refreshMollieTokens() {
   const session = await auth()
   if (!session?.user) return { status: 'error', message: 'Not authenticated' }
 
-  const account = await prisma.partnerAccount.findUnique({
-    where: { userId: session.user.id },
-    select: { mollieRefreshToken: true },
-  })
-
-  if (!account?.mollieRefreshToken) {
-    return { status: 'error', message: 'No Mollie account connected' }
-  }
-
   try {
-    const tokens = await refreshAccessToken(account.mollieRefreshToken)
-    const profile = await fetchMollieProfile(tokens.accessToken)
+    // The centralized manager refreshes (if needed) + persists access/refresh/
+    // expiry under a per-partner lock — no independent rotation here. Then we
+    // re-sync the profile/onboarding status with the freshly-valid token.
+    const validToken = await getValidMollieToken(session.user.id as string)
+    const profile = await fetchMollieProfile(validToken)
 
     await prisma.partnerAccount.update({
       where: { userId: session.user.id },
       data: {
-        mollieAccessToken: tokens.accessToken,
-        mollieRefreshToken: tokens.refreshToken,
         mollieProfileId: profile.profileId || null,
         mollieOnboardingStatus: profile.onboardingStatus,
       },

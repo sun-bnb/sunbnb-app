@@ -43,265 +43,52 @@ export function getMollieClientForPartner(accessToken: string) {
   return createMollieClient({ accessToken })
 }
 
-// ── Token Refresh ───────────────────────────────────────────────────────────
+// ── Token validity & refresh (centralized in @repo/data) ─────────────────────
 
-const MOLLIE_TOKEN_URL = 'https://api.mollie.com/oauth2/tokens'
-
-/**
- * Thrown when Mollie rejects the refresh token (`invalid_grant`). This is
- * unrecoverable without a fresh OAuth connect — the partner must reconnect.
- * The stored tokens are cleared before this is thrown so the partner UI shows
- * "disconnected" and prompts a reconnect.
- */
-export class MollieReconnectRequiredError extends Error {
-  constructor(message = 'Mollie account must be reconnected') {
-    super(message)
-    this.name = 'MollieReconnectRequiredError'
-  }
-}
-
-/** Internal: distinguishes a dead refresh token from a transient failure. */
-class MollieInvalidGrantError extends Error {}
-
-interface RefreshedTokens {
-  accessToken: string
-  refreshToken: string
-}
-
-/**
- * Exchange a refresh token for a new access + refresh pair. Mollie ROTATES the
- * refresh token on every call (the old one is then invalid). Throws
- * {@link MollieInvalidGrantError} on a rejected token (400 invalid_grant) and a
- * generic Error on any other (transient) failure, so the caller can react
- * differently — only the former warrants disconnecting the partner.
- */
-async function refreshAccessToken(refreshToken: string): Promise<RefreshedTokens> {
-  const clientId = process.env.MOLLIE_CLIENT_ID
-  const clientSecret = process.env.MOLLIE_CLIENT_SECRET
-  if (!clientId || !clientSecret) {
-    throw new Error('MOLLIE_CLIENT_ID and MOLLIE_CLIENT_SECRET are required for token refresh')
-  }
-
-  const res = await fetch(MOLLIE_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-      client_id: clientId,
-      client_secret: clientSecret,
-    }),
-  })
-
-  if (!res.ok) {
-    const body = await res.text()
-    console.error('[Mollie] Token refresh failed:', res.status, body)
-    if (res.status === 400 && body.includes('invalid_grant')) {
-      throw new MollieInvalidGrantError('invalid_grant')
-    }
-    throw new Error(`Mollie token refresh failed (${res.status})`)
-  }
-
-  const data = await res.json()
-  return { accessToken: data.access_token, refreshToken: data.refresh_token }
-}
-
-async function persistTokens(partnerAccountId: string, tokens: RefreshedTokens): Promise<void> {
-  await prisma.partnerAccount.update({
-    where: { userId: partnerAccountId },
-    data: { mollieAccessToken: tokens.accessToken, mollieRefreshToken: tokens.refreshToken },
-  })
-}
-
-// Per-partner in-flight refresh promise. Concurrent requests in this process
-// share one refresh so they don't each spend the same (rotating) refresh token
-// and invalidate one another.
-const inflightRefresh = new Map<string, Promise<string>>()
-
-/**
- * Refresh a partner's Mollie token, deduped per partner and robust to the
- * stored refresh token being rotated out-of-sync by another request/process: on
- * `invalid_grant` it re-reads the latest stored refresh token and retries once.
- * Only clears the stored tokens (forcing a reconnect) when the token is
- * genuinely dead — transient failures keep the connection intact.
- */
-function refreshPartnerToken(partnerAccountId: string, refreshToken: string): Promise<string> {
-  const existing = inflightRefresh.get(partnerAccountId)
-  if (existing) return existing
-
-  const run = (async (): Promise<string> => {
-    try {
-      const tokens = await refreshAccessToken(refreshToken)
-      await persistTokens(partnerAccountId, tokens)
-      console.log('[Mollie] Token refreshed successfully')
-      return tokens.accessToken
-    } catch (err) {
-      if (!(err instanceof MollieInvalidGrantError)) throw err // transient — keep connection
-
-      // Another request/process may have just rotated the token — retry with the latest.
-      const latest = await prisma.partnerAccount.findUnique({
-        where: { userId: partnerAccountId },
-        select: { mollieRefreshToken: true },
-      })
-      if (latest?.mollieRefreshToken && latest.mollieRefreshToken !== refreshToken) {
-        try {
-          const tokens = await refreshAccessToken(latest.mollieRefreshToken)
-          await persistTokens(partnerAccountId, tokens)
-          console.log('[Mollie] Token refreshed via latest stored token')
-          return tokens.accessToken
-        } catch (retryErr) {
-          if (!(retryErr instanceof MollieInvalidGrantError)) throw retryErr
-        }
-      }
-
-      // Genuinely dead — clear so the partner UI prompts a reconnect.
-      await prisma.partnerAccount.update({
-        where: { userId: partnerAccountId },
-        data: { mollieAccessToken: null, mollieRefreshToken: null },
-      })
-      throw new MollieReconnectRequiredError(
-        'Mollie refresh token was rejected — the partner must reconnect their Mollie account.',
-      )
-    }
-  })()
-
-  inflightRefresh.set(partnerAccountId, run)
-  return run.finally(() => inflightRefresh.delete(partnerAccountId))
-}
-
-/**
- * Get a valid Mollie access token for a partner. Probes the stored access
- * token; if it's expired, refreshes (deduped + rotation-safe via
- * {@link refreshPartnerToken}). Throws {@link MollieReconnectRequiredError} only
- * when the partner genuinely needs to reconnect (no/dead refresh token).
- *
- * @param partnerAccountId - The partner account's userId (PK), for persistence
- * @param currentAccessToken - The currently stored access token
- * @param currentRefreshToken - The currently stored refresh token
- */
-export async function getValidMollieToken(
-  partnerAccountId: string,
-  currentAccessToken: string,
-  currentRefreshToken: string | null,
-): Promise<string> {
-  // Probe: is the stored access token still valid?
-  try {
-    await createMollieClient({ accessToken: currentAccessToken }).profiles.page()
-    return currentAccessToken
-  } catch {
-    // Probe failed (expired / scope / transient) — fall through to refresh.
-  }
-
-  if (!currentRefreshToken) {
-    throw new MollieReconnectRequiredError(
-      'Mollie access token expired and no refresh token is stored — reconnect required.',
-    )
-  }
-
-  console.log('[Mollie] Access token probe failed, refreshing…')
-  return refreshPartnerToken(partnerAccountId, currentRefreshToken)
-}
+// Token freshness + rotation-safe, single-locked, expiry-based refresh is owned
+// by @repo/data/mollie-tokens so the user and partner apps share ONE refresh
+// authority (no refresh-token rotation drift between uncoordinated paths).
+// getValidMollieToken reads the partner's tokens + expiry from the DB itself, so
+// callers pass only the partner account id.
+export { getValidMollieToken, MollieReconnectRequiredError } from '@repo/data/mollie-tokens'
+import { getValidMollieToken } from '@repo/data/mollie-tokens'
 
 // ── Partner Token Lookup ────────────────────────────────────────────────────
 
 /**
- * Find the partner's Mollie access token for a given paymentRef.
- * Checks both reservations and orders since either could hold the ref.
+ * Find the partner account id that owns a given paymentRef. Checks reservations,
+ * orders, rental bookings, and table-reservation deposits (the latter is owned
+ * via restaurant → partnerAccount, not site → user).
  */
-async function findPartnerTokenForPayment(paymentRef: string): Promise<{
-  accessToken: string
-  refreshToken: string | null
-  partnerAccountId: string
-} | null> {
-  // Check reservations first
+async function findPartnerAccountForPayment(paymentRef: string): Promise<string | null> {
   const reservation = await prisma.reservation.findFirst({
     where: { paymentRef },
-    select: {
-      site: {
-        select: {
-          user: {
-            select: {
-              partnerAccount: {
-                select: {
-                  userId: true,
-                  mollieAccessToken: true,
-                  mollieRefreshToken: true,
-                },
-              },
-            },
-          },
-        },
-      },
-    },
+    select: { site: { select: { user: { select: { partnerAccount: { select: { userId: true } } } } } } },
   })
-  const rPA = reservation?.site?.user?.partnerAccount
-  if (rPA?.mollieAccessToken) {
-    return {
-      accessToken: rPA.mollieAccessToken,
-      refreshToken: rPA.mollieRefreshToken,
-      partnerAccountId: rPA.userId,
-    }
-  }
+  const rId = reservation?.site?.user?.partnerAccount?.userId
+  if (rId) return rId
 
-  // Check orders
   const order = await prisma.order.findFirst({
     where: { paymentRef },
-    select: {
-      site: {
-        select: {
-          user: {
-            select: {
-              partnerAccount: {
-                select: {
-                  userId: true,
-                  mollieAccessToken: true,
-                  mollieRefreshToken: true,
-                },
-              },
-            },
-          },
-        },
-      },
-    },
+    select: { site: { select: { user: { select: { partnerAccount: { select: { userId: true } } } } } } },
   })
-  const oPA = order?.site?.user?.partnerAccount
-  if (oPA?.mollieAccessToken) {
-    return {
-      accessToken: oPA.mollieAccessToken,
-      refreshToken: oPA.mollieRefreshToken,
-      partnerAccountId: oPA.userId,
-    }
-  }
+  const oId = order?.site?.user?.partnerAccount?.userId
+  if (oId) return oId
 
-  // Check rental bookings
   const rentalBooking = await prisma.rentalBooking.findFirst({
     where: { paymentRef },
-    select: {
-      site: {
-        select: {
-          user: {
-            select: {
-              partnerAccount: {
-                select: {
-                  userId: true,
-                  mollieAccessToken: true,
-                  mollieRefreshToken: true,
-                },
-              },
-            },
-          },
-        },
-      },
-    },
+    select: { site: { select: { user: { select: { partnerAccount: { select: { userId: true } } } } } } },
   })
-  const rbPA = rentalBooking?.site?.user?.partnerAccount
-  if (rbPA?.mollieAccessToken) {
-    return {
-      accessToken: rbPA.mollieAccessToken,
-      refreshToken: rbPA.mollieRefreshToken,
-      partnerAccountId: rbPA.userId,
-    }
-  }
+  const rbId = rentalBooking?.site?.user?.partnerAccount?.userId
+  if (rbId) return rbId
+
+  // Table-reservation deposits: partner is reached via restaurant → partnerAccount.
+  const tableReservation = await prisma.tableReservation.findFirst({
+    where: { paymentRef },
+    select: { restaurant: { select: { partnerAccount: { select: { userId: true } } } } },
+  })
+  const trId = tableReservation?.restaurant?.partnerAccount?.userId
+  if (trId) return trId
 
   return null
 }
@@ -316,18 +103,12 @@ async function findPartnerTokenForPayment(paymentRef: string): Promise<{
  * Mollie statuses: open, canceled, pending, authorized, expired, failed, paid
  */
 export async function getMolliePaymentStatus(paymentId: string): Promise<string> {
-  const partnerInfo = await findPartnerTokenForPayment(paymentId)
-  if (!partnerInfo) {
-    throw new Error(`Cannot find partner access token for Mollie payment: ${paymentId}`)
+  const partnerAccountId = await findPartnerAccountForPayment(paymentId)
+  if (!partnerAccountId) {
+    throw new Error(`Cannot find partner account for Mollie payment: ${paymentId}`)
   }
 
-  // Ensure the token is valid (auto-refresh if expired)
-  const validToken = await getValidMollieToken(
-    partnerInfo.partnerAccountId,
-    partnerInfo.accessToken,
-    partnerInfo.refreshToken,
-  )
-
+  const validToken = await getValidMollieToken(partnerAccountId)
   const mollie = getMollieClientForPartner(validToken)
   const payment = await mollie.payments.get(paymentId, { testmode: isTestMode() } as any)
   return payment.status
@@ -346,17 +127,12 @@ export function isMolliePayment(paymentRef: string | null): boolean {
  * can issue the refund on the same client instance.
  */
 export async function getMolliePaymentForRefund(paymentRef: string) {
-  const partnerInfo = await findPartnerTokenForPayment(paymentRef)
-  if (!partnerInfo) {
-    throw new Error(`Cannot find partner access token for Mollie payment: ${paymentRef}`)
+  const partnerAccountId = await findPartnerAccountForPayment(paymentRef)
+  if (!partnerAccountId) {
+    throw new Error(`Cannot find partner account for Mollie payment: ${paymentRef}`)
   }
 
-  const validToken = await getValidMollieToken(
-    partnerInfo.partnerAccountId,
-    partnerInfo.accessToken,
-    partnerInfo.refreshToken,
-  )
-
+  const validToken = await getValidMollieToken(partnerAccountId)
   const client = getMollieClientForPartner(validToken)
   const payment = await client.payments.get(paymentRef, { testmode: isTestMode() } as any)
   return { client, payment }

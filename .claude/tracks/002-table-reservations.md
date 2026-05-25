@@ -451,9 +451,16 @@ monetization + no-show work is unblocked.
     Mollie tokens after the test→local dump, so local starts cleanly disconnected (reconnect once from
     `/account/mollie`) instead of fighting the test env over the same rotating refresh token. Stops the
     recurring local `invalid_grant` seen during 1e testing.
-  - ☐ **Centralize the token manager** in `@repo/data` (one refresh path for both apps) + a
-    `mollieTokenExpiresAt` column → proactive, single-locked refresh; drop the per-call `profiles.page()`
-    probe. Ends the sprawl/races — the production root cause. Schema change ⇒ `.claude/rules/migrations.md`.
+  - ✅ **Centralize the token manager** (2026-05-25). `@repo/data/mollie-tokens#getValidMollieToken`
+    (`partnerAccountId`) is the single refresh authority for both apps: expiry fast-path (no per-call
+    `profiles.page()` probe), per-partner Postgres **advisory-locked** refresh (cross-process
+    serialization with re-read-inside-lock), `invalid_grant` → clear tokens + `MollieReconnectRequiredError`,
+    transient → keep connection. Added `PartnerAccount.mollieTokenExpiresAt` (migration
+    `20260525120520_partner_mollie_token_expiry`, local + `sunbnb_test`); the partner connect callback +
+    `refreshMollieTokens` action and all user payment routes now route through it (no independent rotation).
+    Also fixed the token lookup to resolve table-deposit payments (the poll fallback couldn't before).
+    Verified: user 231 / partner 281 / data 115 unit + 69 integration; tsc clean. **Pending push:**
+    `migrate:test` before merging `main` (additive — pre-push hook enforces).
   - ☐ **Proactive health-check + partner alert:** schedule the existing `/api/mollie/readiness-check`
     per connected partner; on `tokenValid: false`, email + dashboard-banner the partner *before* a
     customer hits a broken checkout.

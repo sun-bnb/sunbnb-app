@@ -104,11 +104,7 @@ export async function POST(request: NextRequest) {
   // ── Ensure the access token is valid (auto-refresh if expired) ───────────
   let validAccessToken: string
   try {
-    validAccessToken = await getValidMollieToken(
-      partnerAccount.userId,
-      partnerAccount.mollieAccessToken,
-      partnerAccount.mollieRefreshToken,
-    )
+    validAccessToken = await getValidMollieToken(partnerAccount.userId)
   } catch (err) {
     console.error('[MolliePayment] Token refresh failed:', err)
     return Response.json(

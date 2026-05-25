@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { mollieTokenExpiresAtFrom } from '@repo/data/mollie-tokens'
 import {
   exchangeCodeForTokens,
   fetchMollieProfile,
@@ -67,6 +68,7 @@ export async function GET(request: NextRequest) {
       data: {
         mollieAccessToken: tokens.accessToken,
         mollieRefreshToken: tokens.refreshToken,
+        mollieTokenExpiresAt: mollieTokenExpiresAtFrom(tokens.expiresIn),
         mollieProfileId: profile.profileId || null,
         mollieOnboardingStatus: profile.onboardingStatus,
       },

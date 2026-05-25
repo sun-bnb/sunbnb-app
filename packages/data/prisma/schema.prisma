@@ -183,6 +183,7 @@ model PartnerAccount {
   mollieProfileId      String?      @map("mollie_profile_id")
   mollieAccessToken    String?      @map("mollie_access_token")
   mollieRefreshToken   String?      @map("mollie_refresh_token")
+  mollieTokenExpiresAt DateTime?    @map("mollie_token_expires_at")
   mollieOnboardingStatus String?    @map("mollie_onboarding_status")
   invoices            Invoice[]
   settlements         Settlement[]
