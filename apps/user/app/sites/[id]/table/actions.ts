@@ -9,16 +9,20 @@ import {
   cancelTableReservation,
   modifyTableReservation,
   markDepositHeld,
+  refundDeposit,
   joinWaitlist,
   findWaitlistCandidateForFreedReservation,
   markWaitlistNotified,
+  isPastCancellationDeadline,
   confirmationEmailHtml,
   cancellationEmailHtml,
   waitlistNotifyEmailHtml,
   TABLE_RESERVATION_STATUS,
+  DEPOSIT_STATUS,
   type CustomerIdentity,
 } from '@repo/table-reservations-core'
 import { sendEmail } from '@repo/data/email'
+import { issueRefund } from '@/app/api/_lib/payment-provider'
 
 const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
 
@@ -333,7 +337,7 @@ export async function cancelTableBooking(
   const r = res.reservation
   const restaurant = await prisma.restaurant.findUnique({
     where: { id: r.restaurantId },
-    select: { name: true, slug: true, tagline: true },
+    select: { name: true, slug: true, tagline: true, cancellationDeadlineHours: true },
   })
   if (restaurant) {
     try {
@@ -359,6 +363,21 @@ export async function cancelTableBooking(
       }
     } catch (err) {
       console.error('[table-booking] waitlist auto-notify failed', err)
+    }
+
+    // Timely cancel (before the deadline) refunds the deposit; a late cancel
+    // forfeits it (kept HELD for the partner). Null deadline = always refund.
+    try {
+      if (
+        r.depositStatus === DEPOSIT_STATUS.HELD &&
+        r.paymentRef &&
+        !isPastCancellationDeadline(r.from, restaurant.cancellationDeadlineHours)
+      ) {
+        await issueRefund(r.paymentRef)
+        await refundDeposit(reservationId)
+      }
+    } catch (err) {
+      console.error('[table-booking] deposit refund on cancel failed', err)
     }
   }
 

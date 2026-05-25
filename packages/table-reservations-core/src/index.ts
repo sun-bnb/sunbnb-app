@@ -11,6 +11,7 @@ export * from './status'
 export * from './tz'
 export * from './pacing'
 export * from './deposit'
+export * from './cancellation'
 export * from './ownership'
 
 export * from './restaurant/queries'

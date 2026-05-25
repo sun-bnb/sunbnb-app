@@ -358,10 +358,16 @@ monetization + no-show work is unblocked.
     recomputes the deposit; `reminderEmailHtml` template + `listReservationsNeedingReminder(24h)` +
     `markReminderSent`; user cron `app/api/cron/table-reminders` (CRON_SECRET + flag-gated, email);
     user `modifyTableBooking` + partner `modifyRestaurantReservation` / `chargeRestaurantReservationDeposit`.
-    Confirmation/cancellation emails already shipped. Core 43 / partner 47 / user 5 green._ **Out of P1
-    scope (deferred to a later phase, founder call 2026-05-22):** SMS reminders/notify (needs an SMS
-    provider). **Still-P1 deferred:** a configurable cancellation deadline (no field yet), consumer
-    modify UI. Combination bookings not modifiable yet.
+    Confirmation/cancellation emails already shipped. Core 43 / partner 47 / user 5 green._
+    **1f Slice A — DONE (2026-05-25): cancellation-deadline policy + cancel-refund.** `Restaurant.cancellationDeadlineHours`
+    (migration `20260525134946`, additive; local + test). Pure `isPastCancellationDeadline` (core, +3 tests);
+    consumer `modifyTableReservation` rejects within the deadline (staff exempt); consumer `cancelTableBooking`
+    now **refunds the held deposit on a timely cancel** (`issueRefund` + `refundDeposit`) and **forfeits on a
+    late cancel** — also fixes the prior gap where consumer cancel didn't refund at all. core 52 / user 231 green.
+    **1f Slice B (next):** partner config input for `cancellationDeadlineHours` (General settings); consumer
+    **modify UI** (full re-pick: date/party → live availability → new slot → `modifyTableBooking` on the detail
+    page) — the only thing that exercises the modify gate; + apps/user tests for the gate + cancel-refund timeliness.
+    **Out of P1** (founder 2026-05-22): SMS reminders/notify. Combination bookings not modifiable yet.
     Confirmation + cancellation emails already
     exist (`core/emails.ts` templates, sent from `bookTableForSite`/`cancelTableBooking`). **Reminders:**
     wire a user-app daily cron mirroring `/api/cron/send-reminders` (`CRON_SECRET`), using the existing

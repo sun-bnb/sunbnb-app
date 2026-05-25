@@ -652,6 +652,10 @@ model Restaurant {
   // `requiresDeposit` + `depositMinPartySize`). Consumer-paid via the apps.
   noShowPolicy          String              @default("none") @map("no_show_policy")
   depositPerGuest       Float?              @map("deposit_per_guest")
+  // Hours before a reservation's start that a guest may still cancel/modify
+  // online. Null = no restriction. A timely (before-deadline) cancel refunds the
+  // deposit; a late cancel forfeits it; modify is blocked within the deadline.
+  cancellationDeadlineHours Int?            @map("cancellation_deadline_hours")
   layoutWidth           Float?              @map("layout_width")
   layoutHeight          Float?              @map("layout_height")
   // If false, chiringuito-linked restaurants stay hidden from tablefind.app's

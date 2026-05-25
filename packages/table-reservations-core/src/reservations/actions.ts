@@ -10,6 +10,7 @@ import {
 import { DEFAULT_TIME_ZONE, getZonedParts, zonedWallClockToUtc } from '../tz'
 import { pacingWindowStartMs } from '../pacing'
 import { computeDepositAmount } from '../deposit'
+import { isPastCancellationDeadline } from '../cancellation'
 import {
   getTableReservationById,
   reservationOwnedBy,
@@ -342,10 +343,23 @@ export async function modifyTableReservation(
 ): Promise<ActionResult & { reservation?: TableReservationRecord }> {
   const owner = await prisma.tableReservation.findUnique({
     where: { id: reservationId },
-    select: { userId: true, anonId: true },
+    select: {
+      userId: true,
+      anonId: true,
+      from: true,
+      restaurant: { select: { cancellationDeadlineHours: true } },
+    },
   })
   if (!owner) return { status: 'error', errors: ['Not found'] }
   if (!reservationOwnedBy(owner, identity)) return { status: 'error', errors: ['Not authorized'] }
+  // Within the cancellation deadline the guest can't change the booking online
+  // (staff can, via modifyReservationAsStaff). Null deadline = no restriction.
+  if (isPastCancellationDeadline(owner.from, owner.restaurant.cancellationDeadlineHours)) {
+    return {
+      status: 'error',
+      errors: ['Too late to modify this booking online — please contact the restaurant.'],
+    }
+  }
   return reapplyReservation(reservationId, changes)
 }
 
