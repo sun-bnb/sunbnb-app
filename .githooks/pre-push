@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+#
+# pre-push — guard the shared TEST database before pushing main.
+#
+# main deploys to the Vercel preview environment, which is wired to the TEST
+# database (the same DB the `test` branch serves). So schema-dependent code
+# pushed to main hits the test DB immediately — if the test DB hasn't been
+# migrated, the preview breaks. This hook blocks a push to main when the test DB
+# has pending migrations; run `npm run migrate:test` first.
+#
+# Only additive (expand) migrations should be applied here; destructive
+# (contract) migrations belong at promote time. See .claude/rules/migrations.md.
+#
+# Enable:  git config core.hooksPath .githooks   (scripts/bootstrap.sh does this)
+# Bypass:  git push --no-verify                  (deliberate, rare)
+set -uo pipefail
+
+ZERO="0000000000000000000000000000000000000000"
+ROOT="$(git rev-parse --show-toplevel)"
+DATA="$ROOT/packages/data"
+
+# Collect the main ref being pushed (and its sha range), if any.
+main_local=""
+main_remote=""
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [ "$local_ref" = "refs/heads/main" ]; then
+    main_local="$local_sha"
+    main_remote="$remote_sha"
+  fi
+done
+[ -n "$main_local" ] || exit 0   # not pushing main
+
+# Fast path: only do the (networked) status check when this push actually
+# carries migration files. If the remote sha is unknown/new, be conservative
+# and run the check anyway.
+needs_check=1
+if [ -n "$main_remote" ] && [ "$main_remote" != "$ZERO" ] && git cat-file -e "${main_remote}^{commit}" 2>/dev/null; then
+  if [ -z "$(git diff --name-only "$main_remote" "$main_local" -- packages/data/prisma/migrations/ 2>/dev/null)" ]; then
+    needs_check=0
+  fi
+fi
+[ "$needs_check" -eq 1 ] || exit 0
+
+# Skip gracefully if this machine has no test-DB credentials (CI / a clone
+# without .env.local) — the guard is for laptops that can actually migrate.
+if [ ! -f "$DATA/.env.local" ] || ! grep -qE '^(export )?POSTGRES_URL_TEST=' "$DATA/.env.local"; then
+  echo "pre-push: no POSTGRES_URL_TEST in packages/data/.env.local — skipping test-DB migration check." >&2
+  exit 0
+fi
+
+echo "pre-push: this push changes migrations — checking the shared TEST database…" >&2
+if ( cd "$DATA" && npm run --silent migrate:status:test >/dev/null 2>&1 ); then
+  echo "pre-push: ✓ test DB is up to date." >&2
+  exit 0
+fi
+
+cat >&2 <<'EOF'
+
+✗ pre-push blocked: the TEST database has pending migrations (or is unreachable).
+
+  main deploys to the Vercel preview, which uses the TEST DB. Pushing schema-
+  dependent code before the test DB is migrated will break the preview.
+
+  Apply the migrations first:
+      cd packages/data && npm run migrate:test
+
+  Then push again. (Destructive/contract migrations belong at promote time —
+  see .claude/rules/migrations.md.)
+
+  To bypass deliberately (e.g. the change needs no migration and the DB is just
+  unreachable):  git push --no-verify
+
+EOF
+exit 1

@@ -15,6 +15,13 @@ say "Dependencies"
 npm install
 ( cd .claude/scripts && npm install )
 
+say "Git hooks (.githooks)"
+# pre-commit guards direct commits to test/production; pre-push guards the shared
+# TEST database before pushing main (see .claude/rules/migrations.md). core.hooksPath
+# is not set automatically on clone, so wire it here (idempotent).
+git config core.hooksPath .githooks
+echo "✓ core.hooksPath → .githooks"
+
 say "App database — sunbnb-postgres (:5432)"
 if docker inspect sunbnb-postgres >/dev/null 2>&1; then
   docker start sunbnb-postgres >/dev/null 2>&1 || true; echo "already exists (started)"
