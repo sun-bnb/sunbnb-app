@@ -75,14 +75,19 @@
     "lint": "eslint . --max-warnings 0",
     "generate:component": "turbo gen react-component",
     "postinstall": "npx prisma generate",
-    "migrate:local": "cp .env.local .env && npx prisma migrate dev && npx prisma generate",
-    "migrate:test": "grep -E '^(export )?POSTGRES_URL_TEST=' .env.local | sed -E 's/^(export )?POSTGRES_URL_TEST=/POSTGRES_URL=/' > .env && npx prisma migrate deploy && npx prisma generate && cp .env.local .env",
-    "migrate:production": "grep -E '^(export )?POSTGRES_URL_PRODUCTION=' .env.local | sed -E 's/^(export )?POSTGRES_URL_PRODUCTION=/POSTGRES_URL=/' > .env && npx prisma migrate deploy && npx prisma generate && cp .env.local .env",
+    "migrate:local": "cp .env.local .env && npx prisma migrate dev && npx prisma generate && (npm run migrate:integration || echo '⚠ sunbnb_test not migrated — create the DB if you run integration tests')",
+    "migrate:integration": "POSTGRES_URL=postgres://postgres:sunbnb@localhost:5432/sunbnb_test npx prisma migrate deploy",
+    "migrate:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx prisma migrate deploy && npx prisma generate",
+    "migrate:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx prisma migrate deploy && npx prisma generate",
+    "migrate:check": "./scripts/with-db-url.sh POSTGRES_URL npx prisma migrate diff --from-config-datasource --to-schema ./prisma/schema.prisma --exit-code",
+    "migrate:status:local": "./scripts/with-db-url.sh POSTGRES_URL npx prisma migrate status",
+    "migrate:status:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx prisma migrate status",
+    "migrate:status:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx prisma migrate status",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:integration": "POSTGRES_URL=postgres://postgres:sunbnb@localhost:5432/sunbnb_test vitest run --config vitest.integration.config.ts",
-    "test:integration:setup": "POSTGRES_URL=postgres://postgres:sunbnb@localhost:5432/sunbnb_test npx prisma migrate deploy"
+    "test:integration:setup": "npm run migrate:integration"
   },
   "devDependencies": {
     "@repo/eslint-config": "*",
