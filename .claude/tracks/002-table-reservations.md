@@ -412,6 +412,41 @@ monetization + no-show work is unblocked.
   one map, one guest: sunbeds + tables + F&B + rentals in a single system for beach clubs /
   chiringuitos / hotel pools / rooftops. No incumbent serves this and Sunbnb owns the sunbed half.
   Plus **fair pricing** — no per-cover from the first paid tier (Starter is per-cover). This is how we *win*, not just match.
+- ☐ **Guest-selectable tables ("pick your spot") — leisure-venue wedge feature** _(captured 2026-05-24,
+  founder question re: parity with the sunbed booking map)._ Let the consumer pick an exact table from the
+  `@repo/schematic` floor map (as the sunbed app does), but **only as an opt-in, partner-configurable,
+  per-section** option — never the default for a normal restaurant floor. **Why incumbents
+  (OpenTable/Resy/SevenRooms) don't:** a floor is a *pooled, reconfigurable* resource the host optimizes
+  for max covers (2-tops merge into 4-tops, sections open/close with staffing, assignments re-juggle for
+  no-shows/walk-ins/VIPs); guest-locking the exact table fragments capacity, lowers total seatings,
+  concentrates demand on a few "best" tables (map shows mostly taken → worse conversion), and a promised
+  table you can't honour is worse than not promising. So they sell **attributes/preferences** (booth /
+  patio / window / special-request) and expose a *specific* table only as a priced premium product (Tock
+  experiences, private dining). **Why it still fits Sunbnb:** the wedge is *leisure venues* — beach-club
+  terraces, rooftops, cabanas, prime-view tables — where a specific spot is a genuine view-driven premium,
+  much more sunbed-like than a normal 4-top, and a niche incumbents ignore. **Design discipline:** gate to
+  a *subset* of tables (premium/view) via a per-section toggle so the main floor stays host-optimized and
+  attribute-based; never let guest-locking break **pacing (1c)** or **table-combination (1d)** logic;
+  optionally upcharge selectable spots. **Default for ordinary floors stays preferences, not exact-table**
+  (model already has `Table.features` / `zone` / `combinable`). **Low marginal build cost** — the
+  schematic map + combination model already exist; sequence with/after **P2** (the live-floor renderer it
+  shares).
+- ☐ **Harden / centralize Mollie token management (payments-infra; cross-cutting).** _Surfaced
+  2026-05-25 during 1e deposit testing — a consumer deposit failed with `invalid_grant` because the
+  stored Mollie refresh token had drifted out of sync._ A **contained fix landed** (`bc385b8`:
+  per-partner refresh dedupe + retry-with-latest-token on `invalid_grant` + clear-on-dead in
+  `apps/user/app/api/_lib/mollie.ts`). Root cause is **refresh-token sprawl**: the partner app
+  refreshes/persists Mollie tokens in several uncoordinated places (`api/mollie/callback`,
+  `readiness-check`, `setup-test-merchant`, `account/mollie/actions`, `onboarding-status`) *and* the
+  user app refreshes independently — Mollie rotates the refresh token on every refresh, so each path can
+  invalidate the others. **Durable fix:** one Mollie token manager in `@repo/data` used by both apps, +
+  a **`mollieTokenExpiresAt`** column so refresh is **proactive + single-locked** (and the per-call
+  `profiles.page()` probe goes away). Mollie already returns `expires_in` (the partner
+  `exchangeCodeForTokens`/refresh paths surface it) — it's just not persisted. Schema change ⇒ follow
+  `.claude/rules/migrations.md` (immutable migrations, expand/contract, migrate-before-deploy).
+  **Not table-specific** — affects all consumer Mollie payments (reservations / orders / rentals /
+  deposits); could graduate to its own payments track. Low priority unless the drift keeps recurring in
+  real use.
 - ✅ **Wiki documentation** (2026-05-22). Authored `[[entity:restaurant]]`,
   `[[entity:table-reservation]]`, `[[subsystem:table-reservations]]` (engine + package boundaries +
   standalone-extraction posture + flag gate + roadmap pointer) and `[[flow:table-booking]]` — all
@@ -594,6 +629,21 @@ monetization + no-show work is unblocked.
   orchestrator finished detail-page polling, the CTA + i18n, the tests, and verification by hand. **Not
   committed. Browser pay-through (Mollie + demo) + CTA visibility still need a human pass** — with this the
   1e no-show deposit feature is end-to-end (config → collection → confirm → refund/charge → consumer UI).
+- **2026-05-24** — Captured a new roadmap item: **guest-selectable tables ("pick your spot")**, prompted
+  by the founder asking whether to mirror the sunbed floor-map table-pick for end users. Conclusion: not a
+  default (it breaks restaurant yield management — the host needs flexible pooled assignment; this is *why*
+  incumbents sell attributes/preferences instead of exact tables), but a genuine **opt-in, per-section,
+  optionally-upcharged wedge feature for leisure venues** (terraces/rooftops/cabanas/prime-view spots,
+  which are sunbed-like premiums incumbents ignore). Logged under the wedge layer with the design
+  discipline (gate to a table subset; don't break pacing/combination logic; reuse `@repo/schematic`).
+- **2026-05-25** — During real-Mollie deposit testing, a booking failed with `invalid_grant` on token
+  refresh (the stored Mollie refresh token had drifted out of sync — Mollie rotates it each refresh, and
+  multiple uncoordinated partner/user refresh paths fight over it). Shipped a **contained hardening**
+  (`bc385b8`): `getValidMollieToken` now dedupes concurrent refreshes per partner, retries once with the
+  latest stored token on `invalid_grant`, and clears tokens (→ clean reconnect) only when genuinely dead.
+  Logged the **durable follow-up** (centralize Mollie token management in `@repo/data` + add
+  `mollieTokenExpiresAt` for proactive single-locked refresh) as a new roadmap item — cross-cutting
+  payments-infra, not table-specific.
 
 ## Open decisions
 
