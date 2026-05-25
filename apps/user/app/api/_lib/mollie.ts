@@ -48,13 +48,34 @@ export function getMollieClientForPartner(accessToken: string) {
 const MOLLIE_TOKEN_URL = 'https://api.mollie.com/oauth2/tokens'
 
 /**
- * Refresh a Mollie OAuth access token using the refresh token.
- * Returns new access + refresh tokens.
+ * Thrown when Mollie rejects the refresh token (`invalid_grant`). This is
+ * unrecoverable without a fresh OAuth connect — the partner must reconnect.
+ * The stored tokens are cleared before this is thrown so the partner UI shows
+ * "disconnected" and prompts a reconnect.
  */
-async function refreshAccessToken(refreshToken: string): Promise<{
+export class MollieReconnectRequiredError extends Error {
+  constructor(message = 'Mollie account must be reconnected') {
+    super(message)
+    this.name = 'MollieReconnectRequiredError'
+  }
+}
+
+/** Internal: distinguishes a dead refresh token from a transient failure. */
+class MollieInvalidGrantError extends Error {}
+
+interface RefreshedTokens {
   accessToken: string
   refreshToken: string
-}> {
+}
+
+/**
+ * Exchange a refresh token for a new access + refresh pair. Mollie ROTATES the
+ * refresh token on every call (the old one is then invalid). Throws
+ * {@link MollieInvalidGrantError} on a rejected token (400 invalid_grant) and a
+ * generic Error on any other (transient) failure, so the caller can react
+ * differently — only the former warrants disconnecting the partner.
+ */
+async function refreshAccessToken(refreshToken: string): Promise<RefreshedTokens> {
   const clientId = process.env.MOLLIE_CLIENT_ID
   const clientSecret = process.env.MOLLIE_CLIENT_SECRET
   if (!clientId || !clientSecret) {
@@ -75,63 +96,110 @@ async function refreshAccessToken(refreshToken: string): Promise<{
   if (!res.ok) {
     const body = await res.text()
     console.error('[Mollie] Token refresh failed:', res.status, body)
+    if (res.status === 400 && body.includes('invalid_grant')) {
+      throw new MollieInvalidGrantError('invalid_grant')
+    }
     throw new Error(`Mollie token refresh failed (${res.status})`)
   }
 
   const data = await res.json()
-  return {
-    accessToken: data.access_token,
-    refreshToken: data.refresh_token,
-  }
+  return { accessToken: data.access_token, refreshToken: data.refresh_token }
+}
+
+async function persistTokens(partnerAccountId: string, tokens: RefreshedTokens): Promise<void> {
+  await prisma.partnerAccount.update({
+    where: { userId: partnerAccountId },
+    data: { mollieAccessToken: tokens.accessToken, mollieRefreshToken: tokens.refreshToken },
+  })
+}
+
+// Per-partner in-flight refresh promise. Concurrent requests in this process
+// share one refresh so they don't each spend the same (rotating) refresh token
+// and invalidate one another.
+const inflightRefresh = new Map<string, Promise<string>>()
+
+/**
+ * Refresh a partner's Mollie token, deduped per partner and robust to the
+ * stored refresh token being rotated out-of-sync by another request/process: on
+ * `invalid_grant` it re-reads the latest stored refresh token and retries once.
+ * Only clears the stored tokens (forcing a reconnect) when the token is
+ * genuinely dead — transient failures keep the connection intact.
+ */
+function refreshPartnerToken(partnerAccountId: string, refreshToken: string): Promise<string> {
+  const existing = inflightRefresh.get(partnerAccountId)
+  if (existing) return existing
+
+  const run = (async (): Promise<string> => {
+    try {
+      const tokens = await refreshAccessToken(refreshToken)
+      await persistTokens(partnerAccountId, tokens)
+      console.log('[Mollie] Token refreshed successfully')
+      return tokens.accessToken
+    } catch (err) {
+      if (!(err instanceof MollieInvalidGrantError)) throw err // transient — keep connection
+
+      // Another request/process may have just rotated the token — retry with the latest.
+      const latest = await prisma.partnerAccount.findUnique({
+        where: { userId: partnerAccountId },
+        select: { mollieRefreshToken: true },
+      })
+      if (latest?.mollieRefreshToken && latest.mollieRefreshToken !== refreshToken) {
+        try {
+          const tokens = await refreshAccessToken(latest.mollieRefreshToken)
+          await persistTokens(partnerAccountId, tokens)
+          console.log('[Mollie] Token refreshed via latest stored token')
+          return tokens.accessToken
+        } catch (retryErr) {
+          if (!(retryErr instanceof MollieInvalidGrantError)) throw retryErr
+        }
+      }
+
+      // Genuinely dead — clear so the partner UI prompts a reconnect.
+      await prisma.partnerAccount.update({
+        where: { userId: partnerAccountId },
+        data: { mollieAccessToken: null, mollieRefreshToken: null },
+      })
+      throw new MollieReconnectRequiredError(
+        'Mollie refresh token was rejected — the partner must reconnect their Mollie account.',
+      )
+    }
+  })()
+
+  inflightRefresh.set(partnerAccountId, run)
+  return run.finally(() => inflightRefresh.delete(partnerAccountId))
 }
 
 /**
- * Get a valid Mollie access token for a partner, auto-refreshing if expired.
+ * Get a valid Mollie access token for a partner. Probes the stored access
+ * token; if it's expired, refreshes (deduped + rotation-safe via
+ * {@link refreshPartnerToken}). Throws {@link MollieReconnectRequiredError} only
+ * when the partner genuinely needs to reconnect (no/dead refresh token).
  *
- * Attempts to use the stored access token first. If Mollie returns 401,
- * refreshes the token using the stored refresh token, persists the new
- * tokens in the DB, and returns the fresh access token.
- *
- * @param partnerAccountId - The partner account's userId (PK)
+ * @param partnerAccountId - The partner account's userId (PK), for persistence
  * @param currentAccessToken - The currently stored access token
  * @param currentRefreshToken - The currently stored refresh token
- * @returns A valid access token
  */
 export async function getValidMollieToken(
   partnerAccountId: string,
   currentAccessToken: string,
   currentRefreshToken: string | null,
 ): Promise<string> {
-  // Quick probe: check whether the current access token is still valid.
-  // On ANY failure (expired → 401, scope → 403, network error → no statusCode,
-  // etc.) we fall through to the refresh path rather than rethrowing.
+  // Probe: is the stored access token still valid?
   try {
-    const testClient = createMollieClient({ accessToken: currentAccessToken })
-    await testClient.profiles.page()
-    return currentAccessToken // still valid
+    await createMollieClient({ accessToken: currentAccessToken }).profiles.page()
+    return currentAccessToken
   } catch {
-    // Probe failed for any reason — attempt token refresh below.
+    // Probe failed (expired / scope / transient) — fall through to refresh.
   }
 
-  // Token appears invalid — try to refresh it.
   if (!currentRefreshToken) {
-    throw new Error('Mollie access token expired and no refresh token available. Partner must reconnect.')
+    throw new MollieReconnectRequiredError(
+      'Mollie access token expired and no refresh token is stored — reconnect required.',
+    )
   }
 
   console.log('[Mollie] Access token probe failed, refreshing…')
-  const tokens = await refreshAccessToken(currentRefreshToken)
-
-  // Persist new tokens
-  await prisma.partnerAccount.update({
-    where: { userId: partnerAccountId },
-    data: {
-      mollieAccessToken: tokens.accessToken,
-      mollieRefreshToken: tokens.refreshToken,
-    },
-  })
-
-  console.log('[Mollie] Token refreshed successfully')
-  return tokens.accessToken
+  return refreshPartnerToken(partnerAccountId, currentRefreshToken)
 }
 
 // ── Partner Token Lookup ────────────────────────────────────────────────────
