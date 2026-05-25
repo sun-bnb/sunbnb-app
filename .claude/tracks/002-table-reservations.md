@@ -445,8 +445,23 @@ monetization + no-show work is unblocked.
   `exchangeCodeForTokens`/refresh paths surface it) — it's just not persisted. Schema change ⇒ follow
   `.claude/rules/migrations.md` (immutable migrations, expand/contract, migrate-before-deploy).
   **Not table-specific** — affects all consumer Mollie payments (reservations / orders / rentals /
-  deposits); could graduate to its own payments track. Low priority unless the drift keeps recurring in
-  real use.
+  deposits); could graduate to its own payments track. **Prevention pillars** (so payment never silently
+  dies + the partner is told first):
+  - ✅ **Local-dev token scrub** (2026-05-25): `packages/data/sync-local-db.sh` now nulls `PartnerAccount`
+    Mollie tokens after the test→local dump, so local starts cleanly disconnected (reconnect once from
+    `/account/mollie`) instead of fighting the test env over the same rotating refresh token. Stops the
+    recurring local `invalid_grant` seen during 1e testing.
+  - ☐ **Centralize the token manager** in `@repo/data` (one refresh path for both apps) + a
+    `mollieTokenExpiresAt` column → proactive, single-locked refresh; drop the per-call `profiles.page()`
+    probe. Ends the sprawl/races — the production root cause. Schema change ⇒ `.claude/rules/migrations.md`.
+  - ☐ **Proactive health-check + partner alert:** schedule the existing `/api/mollie/readiness-check`
+    per connected partner; on `tokenValid: false`, email + dashboard-banner the partner *before* a
+    customer hits a broken checkout.
+  - ☐ **Fail-safe discovery:** the visibility gate checks only `mollie_onboarding_status = 'completed'`,
+    not token validity (`apps/user/service/siteService.ts#searchSites`). Reflect *real* payability (a
+    cached health flag) so a dead connection hides the venue from discovery instead of failing a guest
+    mid-payment.
+  Low priority for the ☐ items unless the drift keeps recurring in real use; the local scrub is done.
 - ✅ **Wiki documentation** (2026-05-22). Authored `[[entity:restaurant]]`,
   `[[entity:table-reservation]]`, `[[subsystem:table-reservations]]` (engine + package boundaries +
   standalone-extraction posture + flag gate + roadmap pointer) and `[[flow:table-booking]]` — all
@@ -644,6 +659,14 @@ monetization + no-show work is unblocked.
   Logged the **durable follow-up** (centralize Mollie token management in `@repo/data` + add
   `mollieTokenExpiresAt` for proactive single-locked refresh) as a new roadmap item — cross-cutting
   payments-infra, not table-specific.
+- **2026-05-25** — Confirmed Mollie test-env payment works after reconnecting. Root of the *local*
+  recurrence pinned down: `sync-local-db.sh` copies the test env's Mollie tokens into local, which then
+  fight over the same rotating refresh token. **Fixed it:** `sync-local-db.sh` now scrubs (`NULL`s)
+  `PartnerAccount` Mollie tokens after the dump, so local starts cleanly disconnected (reconnect once).
+  Expanded the durable follow-up into four **prevention pillars** (local scrub ✅; centralized token
+  manager + expiry; proactive health-check + partner alert via the existing `/api/mollie/readiness-check`;
+  fail-safe discovery via a token-validity check in the visibility gate) so payment can't silently die
+  without the partner being alerted and the guest being shielded.
 
 ## Open decisions
 
