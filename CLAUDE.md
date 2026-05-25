@@ -93,9 +93,11 @@ cd packages/data && npm run test:integration:setup   # runs prisma migrate deplo
 
 ```bash
 cd packages/data
-npm run migrate:local        # local Docker DB — copies .env.local → .env, prisma migrate dev, generates client
-npm run migrate:test         # Neon test DB — derives POSTGRES_URL from POSTGRES_URL_TEST in .env.local, prisma migrate deploy
-npm run migrate:production   # Neon prod DB — derives POSTGRES_URL from POSTGRES_URL_PRODUCTION in .env.local, prisma migrate deploy
+npm run migrate:local        # local Docker DB — migrate dev + generate, then migrate deploy to sunbnb_test (lockstep)
+npm run migrate:test         # Neon test DB — POSTGRES_URL_TEST via scripts/with-db-url.sh, migrate deploy
+npm run migrate:production   # Neon prod DB — POSTGRES_URL_PRODUCTION via scripts/with-db-url.sh, migrate deploy
+npm run migrate:check        # exit 2 if schema.prisma has changes no committed migration captures
+npm run migrate:status:{local,test,production}   # pending / failed / checksum-drift per env
 
 # Prisma Studio
 cd packages/data && source .env.local && npx prisma studio
@@ -104,14 +106,20 @@ cd packages/data && source .env.local && npx prisma studio
 cd packages/data && source .env.local && ./sync-local-db.sh
 ```
 
+Migration workflow doctrine — immutable applied migrations, expand/contract (additive-only per release), migrate-before-deploy — lives in **`.claude/rules/migrations.md`**.
+
 ### Deployment
 
 ```bash
-./promote-to-test.sh        # merge main → test branch
-./deploy-to-production.sh   # merge test → production branch
+./promote-to-test.sh        # verify → migrate TEST DB → merge main→test → push (deploys test.sunbnb.app)
+./deploy-to-production.sh   # verify → confirm → migrate PROD DB → merge test→production → push (deploys sunbnb.app)
 ```
 
-Vercel-managed via git branches: `main` → preview, `test` → test.sunbnb.app, `production` → sunbnb.app. Region: Frankfurt `fra1`.
+Both scripts are **migrate-before-deploy**: the target DB is migrated (via the `.env.local` URLs) *before* the branch is pushed, so Vercel never serves new code against a schema missing its migration. `SKIP_TESTS=1 ./promote-to-test.sh` bypasses the lint/test gate for docs-only promotes (migration guards still run).
+
+Vercel-managed via git branches: `main` → preview, `test` → test.sunbnb.app, `production` → sunbnb.app. Region: Frankfurt `fra1`. Vercel does **not** run migrations on build — the scripts above are the only path that applies them.
+
+**The `main`/preview and `test` environments share the TEST database.** Since `main` runs ahead of `test`, additive migrations must reach the test DB *before* `main` is pushed — the `.githooks/pre-push` hook blocks a `main` push with pending test-DB migrations (run `npm run migrate:test` first). Destructive migrations are deferred to promote time. Full reasoning + the expand/contract split: **`.claude/rules/migrations.md`**.
 
 ## Local setup requirements
 

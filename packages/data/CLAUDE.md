@@ -6,12 +6,23 @@
 
 ```bash
 cd packages/data
-npm run migrate:local        # local Docker DB — copies .env.local → .env, prisma migrate dev, generates client
-npm run migrate:test         # Neon test DB — derives POSTGRES_URL from POSTGRES_URL_TEST in .env.local, prisma migrate deploy
-npm run migrate:production   # Neon prod DB — derives POSTGRES_URL from POSTGRES_URL_PRODUCTION in .env.local, prisma migrate deploy
+npm run migrate:local        # local Docker DB — prisma migrate dev + generate, then migrate deploy to sunbnb_test (lockstep)
+npm run migrate:test         # Neon test DB — POSTGRES_URL_TEST via scripts/with-db-url.sh, prisma migrate deploy
+npm run migrate:production   # Neon prod DB — POSTGRES_URL_PRODUCTION via scripts/with-db-url.sh, prisma migrate deploy
+npm run migrate:check        # fails (exit 2) if schema.prisma has changes no committed migration captures
+npm run migrate:status:local        # pending / failed / checksum-drift status per environment
+npm run migrate:status:test         #   (test)
+npm run migrate:status:production   #   (production)
 source .env.local && npx prisma studio   # Prisma Studio
 source .env.local && ./sync-local-db.sh  # Sync local DB from test
 ```
+
+`migrate:test`/`:production`/`:status:*`/`:check` route the right DB URL from `.env.local`
+through `scripts/with-db-url.sh` as an **inline `POSTGRES_URL` override** — `.env` is never
+rewritten, so prod/test creds never linger in `.env`. Migration workflow doctrine
+(immutable applied migrations, expand/contract, migrate-before-deploy) lives in
+`.claude/rules/migrations.md`; the `./promote-to-test.sh` / `./deploy-to-production.sh`
+scripts enforce migrate-before-deploy.
 
 ## Schema
 

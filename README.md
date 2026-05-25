@@ -104,7 +104,7 @@ source .env.local
 npm run migrate:local
 ```
 
-This copies `.env.local` → `.env`, runs `prisma migrate dev`, and generates the Prisma client.
+This copies `.env.local` → `.env`, runs `prisma migrate dev`, generates the Prisma client, and migrate-deploys to the `sunbnb_test` integration DB. Migration workflow doctrine lives in `.claude/rules/migrations.md`.
 
 ### 5. Set up local HTTPS
 
@@ -161,10 +161,14 @@ npm run dev
 
 ```bash
 cd packages/data
-npm run migrate:local        # local database
+npm run migrate:local        # local DB (+ sunbnb_test lockstep)
 npm run migrate:test         # test (Neon) database
 npm run migrate:production   # production database
+npm run migrate:check        # verify schema.prisma is captured by committed migrations
+npm run migrate:status:{local,test,production}   # pending / failed / drift per env
 ```
+
+To deploy, use `./promote-to-test.sh` and `./deploy-to-production.sh` from the repo root — they migrate the target DB *before* pushing the branch (migrate-before-deploy). See `.claude/rules/migrations.md`.
 
 ### Sync local DB from test
 
