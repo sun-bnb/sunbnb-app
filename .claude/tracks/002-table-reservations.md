@@ -72,8 +72,9 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
   Neon test. Founder confirmed the Mollie test-env deposit pays through.
 - **Out of P1** (founder): SMS reminders/notify + Google/Instagram Reserve (external, later phase).
 - **✅ 1g Waitlist UIs — DONE (2026-05-25):** consumer "join waitlist" (empty-availability) + staff
-  auto-notify on cancel/no-show + partner waitlist view (see/remove). user 231 / partner 281 green;
-  tsc clean. Remaining: unit tests for the 2 new partner actions + staff-notify wiring; browser-verify.
+  auto-notify on cancel/no-show + partner waitlist view (see/remove) + **7 partner unit tests** (waitlist
+  actions + auto-notify). user 231 / partner 288 green; tsc clean. Remaining: browser-verify both UIs
+  (SMS notify stays out of P1).
 - **Next action — pick a remaining P1 thread** (engine/core done for each; what's left is UI + light wiring):
   - **1f Modify/cancel within policy** — consumer modify UI + a cancellation-deadline field/enforcement
     (core `modifyTableReservation` + reminders done).
@@ -376,10 +377,10 @@ monetization + no-show work is unblocked.
     returns 0 slots; reuses `BookingForm` → `joinWaitlistForSite`; i18n en/es/fi); **staff auto-notify** on
     cancel/no-show wired in `apps/partner/.../reservations/actions.ts` (`notifyWaitlistOnFreed` mirrors the
     consumer-cancel hook); **partner waitlist view** in `reservations/view.tsx` (lists the day's entries +
-    remove, via new `getRestaurantWaitlistForDay` / `removeRestaurantWaitlistEntry` actions; i18n). user 231
-    / partner 281 green; tsc clean. **Remaining:** unit tests for the 2 new partner actions + the
-    staff-notify wiring (needs `tableWaitlistEntry` + `sendEmail` mocks); browser-verify both UIs; SMS notify
-    (out of P1)._ _Done 2026-05-22: migration
+    remove, via new `getRestaurantWaitlistForDay` / `removeRestaurantWaitlistEntry` actions; i18n) + **7
+    partner unit tests** (waitlist actions + the staff auto-notify; core partial-mocked + `sendEmail` mock,
+    so no prisma-mock change). user 231 / partner 288 green; tsc clean. **Remaining:** browser-verify both
+    UIs; SMS notify (out of P1)._ _Done 2026-05-22: migration
     `20260522164455_restaurant_waitlist` (`TableWaitlistEntry`); `WAITLIST_STATUS` constants;
     `waitlist/{queries,actions}` (`joinWaitlist` + validation, `leaveWaitlist`, `markWaitlistNotified`/
     `Converted`, `removeWaitlistEntryAsStaff`, `findWaitlistMatches`, `findWaitlistCandidateForFreedReservation`

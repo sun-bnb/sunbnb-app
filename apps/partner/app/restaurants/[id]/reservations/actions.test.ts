@@ -5,10 +5,30 @@ vi.mock('@/app/auth', () => ({ auth: vi.fn() }))
 vi.mock('@/app/flags', () => ({ isFlagEnabled: vi.fn().mockResolvedValue(true) }))
 vi.mock('@repo/data/payment', () => ({ processChargedTableDeposit: vi.fn() }))
 vi.mock('@/app/api/_lib/mollie', () => ({ refundDepositPayment: vi.fn() }))
+vi.mock('@repo/data/email', () => ({ sendEmail: vi.fn() }))
+vi.mock('../queries', () => ({ getRestaurantWaitlist: vi.fn() }))
+// Partial-mock core: keep the real operational fns (markSeated / markNoShow /
+// cancelReservationAsStaff …) but stub the waitlist helpers the new actions use.
+vi.mock('@repo/table-reservations-core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@repo/table-reservations-core')>()
+  return {
+    ...actual,
+    findWaitlistCandidateForFreedReservation: vi.fn(),
+    markWaitlistNotified: vi.fn(),
+    removeWaitlistEntryAsStaff: vi.fn(),
+  }
+})
 
 import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
 import { processChargedTableDeposit } from '@repo/data/payment'
+import { sendEmail } from '@repo/data/email'
+import { getRestaurantWaitlist } from '../queries'
+import {
+  findWaitlistCandidateForFreedReservation,
+  markWaitlistNotified,
+  removeWaitlistEntryAsStaff,
+} from '@repo/table-reservations-core'
 import {
   getRestaurantReservationsForDay,
   markRestaurantReservationSeated,
@@ -17,6 +37,8 @@ import {
   cancelRestaurantReservation,
   setRestaurantReservationNotes,
   chargeRestaurantReservationDeposit,
+  getRestaurantWaitlistForDay,
+  removeRestaurantWaitlistEntry,
 } from './actions'
 
 const mockAuth = vi.mocked(auth)
@@ -275,5 +297,87 @@ describe('chargeRestaurantReservationDeposit', () => {
     const res = await chargeRestaurantReservationDeposit(RESTAURANT_ID, RESERVATION_ID)
     expect(res.status).toBe('ok')
     expect(processChargedTableDeposit).not.toHaveBeenCalled()
+  })
+})
+
+// ─────────────────────────────────────────────────────
+// Waitlist actions
+// ─────────────────────────────────────────────────────
+
+describe('getRestaurantWaitlistForDay', () => {
+  it('rejects unauthenticated', async () => {
+    const res = await getRestaurantWaitlistForDay(RESTAURANT_ID, '2026-05-25')
+    expect(res.status).toBe('error')
+  })
+
+  it('rejects an invalid date format', async () => {
+    authorizeOwner()
+    const res = await getRestaurantWaitlistForDay(RESTAURANT_ID, 'bad-date')
+    expect(res.status).toBe('error')
+    if (res.status === 'error') expect(res.errors).toContain('Invalid date')
+  })
+
+  it('returns the day waitlist on a valid date', async () => {
+    authorizeOwner()
+    vi.mocked(getRestaurantWaitlist).mockResolvedValue([
+      { id: 'w1', guestName: 'Alice', partySize: 2 } as any,
+    ])
+    const res = await getRestaurantWaitlistForDay(RESTAURANT_ID, '2026-05-25')
+    expect(res.status).toBe('ok')
+    if (res.status === 'ok') expect(res.entries).toHaveLength(1)
+  })
+})
+
+describe('removeRestaurantWaitlistEntry', () => {
+  it('rejects unauthenticated', async () => {
+    const res = await removeRestaurantWaitlistEntry(RESTAURANT_ID, 'w1')
+    expect(res.status).toBe('error')
+  })
+
+  it('removes the entry via the core staff action', async () => {
+    authorizeOwner()
+    vi.mocked(removeWaitlistEntryAsStaff).mockResolvedValue({ status: 'ok' } as any)
+    const res = await removeRestaurantWaitlistEntry(RESTAURANT_ID, 'w1')
+    expect(res.status).toBe('ok')
+    expect(removeWaitlistEntryAsStaff).toHaveBeenCalledWith('w1', OWNER_ID)
+  })
+})
+
+describe('staff cancel/no-show auto-notifies the waitlist', () => {
+  it('no-show emails the earliest matching waitlist guest + marks notified', async () => {
+    authorizeOwner()
+    reservationOwnedByPartner()
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({ sudo: false } as any)
+    vi.mocked(prisma.tableReservation.updateMany).mockResolvedValue({ count: 1 } as any)
+    vi.mocked(findWaitlistCandidateForFreedReservation).mockResolvedValue({
+      id: 'w1',
+      guestName: 'Alice',
+      guestEmail: 'alice@example.com',
+      dateISO: '2026-05-25',
+      partySize: 2,
+    } as any)
+    // notifyWaitlistOnFreed loads the restaurant (name/slug/tagline) for the email.
+    vi.mocked(prisma.restaurant.findUnique).mockResolvedValueOnce({
+      name: 'Malaga Vento',
+      slug: 'malaga-vento',
+      tagline: null,
+    } as any)
+
+    const res = await markRestaurantReservationNoShow(RESTAURANT_ID, RESERVATION_ID)
+    expect(res.status).toBe('ok')
+    expect(sendEmail).toHaveBeenCalledTimes(1)
+    expect(markWaitlistNotified).toHaveBeenCalledWith('w1')
+  })
+
+  it('does not notify when no waitlist candidate matches', async () => {
+    authorizeOwner()
+    reservationOwnedByPartner()
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({ sudo: false } as any)
+    vi.mocked(prisma.tableReservation.updateMany).mockResolvedValue({ count: 1 } as any)
+    vi.mocked(findWaitlistCandidateForFreedReservation).mockResolvedValue(null as any)
+
+    const res = await markRestaurantReservationNoShow(RESTAURANT_ID, RESERVATION_ID)
+    expect(res.status).toBe('ok')
+    expect(sendEmail).not.toHaveBeenCalled()
   })
 })
