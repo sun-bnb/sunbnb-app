@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import prisma from '@repo/data/PrismaCient'
 import { processChargedTableDeposit } from '@repo/data/payment'
+import { sendEmail } from '@repo/data/email'
 import { requireRestaurantOwnerWithFlag } from '@/lib/auth-helpers'
 import {
   listReservationsForDay,
@@ -14,10 +15,16 @@ import {
   chargeNoShowDeposit,
   refundDeposit,
   updateReservationInternalNotes,
+  findWaitlistCandidateForFreedReservation,
+  markWaitlistNotified,
+  removeWaitlistEntryAsStaff,
+  waitlistNotifyEmailHtml,
   DEPOSIT_STATUS,
   type TableReservationListItem,
+  type WaitlistEntryRecord,
 } from '@repo/table-reservations-core'
 import { refundDepositPayment } from '@/app/api/_lib/mollie'
+import { getRestaurantWaitlist } from '../queries'
 
 type AuthOk = { ok: true; restaurantId: string; userId: string }
 type AuthErr = { ok: false; error: string }
@@ -49,6 +56,31 @@ async function refundHeldDeposit(reservationId: string): Promise<void> {
     await refundDeposit(reservationId)
   } catch (err) {
     console.error('[deposit] refund-on-arrival/cancel failed', err)
+  }
+}
+
+/**
+ * A staff cancel / no-show frees the table for its window — auto-notify the
+ * earliest matching waitlist guest. Best-effort (mirrors the consumer-cancel
+ * hook in apps/user); a send failure must not fail the operational transition.
+ */
+async function notifyWaitlistOnFreed(restaurantId: string, reservationId: string): Promise<void> {
+  try {
+    const candidate = await findWaitlistCandidateForFreedReservation(reservationId)
+    if (!candidate) return
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { name: true, slug: true, tagline: true },
+    })
+    if (!restaurant) return
+    await sendEmail({
+      to: candidate.guestEmail,
+      subject: `A table opened up at ${restaurant.name}`,
+      html: waitlistNotifyEmailHtml(candidate, restaurant, null),
+    })
+    await markWaitlistNotified(candidate.id)
+  } catch (err) {
+    console.error('[waitlist] staff cancel/no-show auto-notify failed', err)
   }
 }
 
@@ -89,7 +121,10 @@ export async function markRestaurantReservationNoShow(restaurantId: string, rese
   const r = await requireAuth(restaurantId)
   if (!r.ok) return { status: 'error' as const, errors: [r.error] }
   const res = await markNoShow(reservationId, r.userId)
-  if (res.status === 'ok') revalidatePath(`/restaurants/${restaurantId}/reservations`)
+  if (res.status === 'ok') {
+    await notifyWaitlistOnFreed(restaurantId, reservationId) // freed table → notify waitlist
+    revalidatePath(`/restaurants/${restaurantId}/reservations`)
+  }
   return res
 }
 
@@ -99,6 +134,7 @@ export async function cancelRestaurantReservation(restaurantId: string, reservat
   const res = await cancelReservationAsStaff(reservationId, r.userId)
   if (res.status === 'ok') {
     await refundHeldDeposit(reservationId) // refund deposit on staff cancel
+    await notifyWaitlistOnFreed(restaurantId, reservationId) // freed table → notify waitlist
     revalidatePath(`/restaurants/${restaurantId}/reservations`)
   }
   return res
@@ -169,4 +205,28 @@ export async function chargeRestaurantReservationDeposit(
 
   revalidatePath(`/restaurants/${restaurantId}/reservations`)
   return { status: 'ok' as const }
+}
+
+// ── Waitlist (staff) ─────────────────────────────────────────────────────────
+
+export async function getRestaurantWaitlistForDay(
+  restaurantId: string,
+  isoDate: string,
+): Promise<{ status: 'ok'; entries: WaitlistEntryRecord[] } | { status: 'error'; errors: string[] }> {
+  const r = await requireAuth(restaurantId)
+  if (!r.ok) return { status: 'error', errors: [r.error] }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
+    return { status: 'error', errors: ['Invalid date'] }
+  }
+  const entries = await getRestaurantWaitlist(r.restaurantId, isoDate)
+  return { status: 'ok', entries: entries ?? [] }
+}
+
+/** Remove a waitlist entry (staff cleared it / seated the guest elsewhere). */
+export async function removeRestaurantWaitlistEntry(restaurantId: string, entryId: string) {
+  const r = await requireAuth(restaurantId)
+  if (!r.ok) return { status: 'error' as const, errors: [r.error] }
+  const res = await removeWaitlistEntryAsStaff(entryId, r.userId)
+  if (res.status === 'ok') revalidatePath(`/restaurants/${restaurantId}/reservations`)
+  return res
 }

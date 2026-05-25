@@ -62,17 +62,25 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
 
 ## Resume here
 
-- **Status:** P1 **largely implemented** (through 2026-05-23). 1a–1d **complete** (engine: TZ,
-  attributes, sections/pacing/shifts, combinations — with partner UI). 1e: **config complete**
-  (restaurant + shift + per-table override) + **collection Piece 1 done** (pending-until-paid hold +
-  confirm + cleanup; demo deposit flow works end-to-end). 1f/1g **core complete** (◐). 1h: public
-  booking **API** done. **8 migrations** applied **local + Neon test**; **core 49 / partner 279 /
-  user 221 / data 109 green**; touched packages typecheck. **Committed** on `main` (6 commits, none
-  pushed): `567f987` impl · `32da7de` wiki · `c829971` table deposit override · `15bcfb1` deposit
-  Piece 1 (+ the earlier two from prior goals).
-- **P1 scope narrowed (founder):** **SMS reminders/notify** + **Google/Instagram Reserve** are **out
-  of P1** → later phase (external-bound). What remains *in* P1: **1e collection Piece 2/3** + the
-  deferred consumer/partner UIs + the embed widget UI.
+- **Status (2026-05-25): P1 booking core functionally complete and live on `main`** (the per-piece
+  detail bullets below are now historical — all committed + pushed). 1a–1d engine done. **1e no-show
+  deposits — DONE end-to-end:** config + Mollie/demo collection + `@repo/data` charge cascade +
+  refund-on-arrival + consumer pay-before-confirm UI + "Reserve a table" discovery CTA. 1f/1g **core**
+  done (◐). 1h public booking **API** done. Mollie **token resilience** pillars #1 (db-sync token scrub)
+  + #2 (centralized `@repo/data/mollie-tokens` — expiry fast-path + advisory-locked refresh) **done**.
+  Suites green: **user 231 / partner 281 / data 115 unit + 69 integration**; migrations applied local +
+  Neon test. Founder confirmed the Mollie test-env deposit pays through.
+- **Out of P1** (founder): SMS reminders/notify + Google/Instagram Reserve (external, later phase).
+- **✅ 1g Waitlist UIs — DONE (2026-05-25):** consumer "join waitlist" (empty-availability) + staff
+  auto-notify on cancel/no-show + partner waitlist view (see/remove). user 231 / partner 281 green;
+  tsc clean. Remaining: unit tests for the 2 new partner actions + staff-notify wiring; browser-verify.
+- **Next action — pick a remaining P1 thread** (engine/core done for each; what's left is UI + light wiring):
+  - **1f Modify/cancel within policy** — consumer modify UI + a cancellation-deadline field/enforcement
+    (core `modifyTableReservation` + reminders done).
+  - **1d Combinations UIs** — partner Combinations editor + consumer combo-pick for large parties.
+  - **1h Embed widget** — book from the venue's own site over the public availability + `/book` APIs.
+  - Also open: **"pick your spot"** wedge feature; token pillars **#3** (health-check + alert) / **#4**
+    (fail-safe discovery); **P2 live floor**. See Roadmap.
 - **1e collection Piece 2 — DONE (2026-05-23): Mollie + demo deposit collection through the cascade.**
   (2a) `@repo/data#processChargedTableDeposit` (payment.ts:984) — 2-invoice cascade (PARTNER −fee /
   PLATFORM commission), fee **deducted**, idempotent via new `Invoice.tableReservationId`; migration
@@ -147,8 +155,10 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
     committed: `20260421132654_restaurant_add_tables_feature`,
     `..._restaurant_table_extended_fields`, `20260505100000_restaurant_table_booking_rules`,
     `..._restaurant_table_seat_layout`.
-  - `TableReservation` has **no** payment fields (no `paymentRef`/`paymentAmount`) — bookings
-    are free today; P1's no-show work adds the money path via the `@repo/data` cascade.
+  - `TableReservation` now carries the deposit money path (`depositAmount` / `depositStatus` /
+    `paymentRef`; `Invoice.tableReservationId`). Deposits are Mollie + demo via
+    `@repo/data/payment#processChargedTableDeposit` + the centralized `@repo/data/mollie-tokens`;
+    free (no-deposit) bookings still instant-confirm.
 - **Blocked by:** —
 
 ## Roadmap
@@ -361,7 +371,15 @@ monetization + no-show work is unblocked.
     `Site.noShowDeadlineMinutes` precedent). Tests: reminder-once idempotency + TZ; modify re-checks
     availability; deadline enforcement. **Ships when** guests get reminders and can modify/cancel within
     policy.
-  - ◐ **1g — Waitlist with auto-notify (core done; UI deferred).** _Done 2026-05-22: migration
+  - ◐ **1g — Waitlist with auto-notify (core + UIs done 2026-05-25; SMS deferred).** _UIs added 2026-05-25:
+    consumer **"join waitlist"** UI in `apps/user/app/sites/[id]/table/view.tsx` (shown when a search
+    returns 0 slots; reuses `BookingForm` → `joinWaitlistForSite`; i18n en/es/fi); **staff auto-notify** on
+    cancel/no-show wired in `apps/partner/.../reservations/actions.ts` (`notifyWaitlistOnFreed` mirrors the
+    consumer-cancel hook); **partner waitlist view** in `reservations/view.tsx` (lists the day's entries +
+    remove, via new `getRestaurantWaitlistForDay` / `removeRestaurantWaitlistEntry` actions; i18n). user 231
+    / partner 281 green; tsc clean. **Remaining:** unit tests for the 2 new partner actions + the
+    staff-notify wiring (needs `tableWaitlistEntry` + `sendEmail` mocks); browser-verify both UIs; SMS notify
+    (out of P1)._ _Done 2026-05-22: migration
     `20260522164455_restaurant_waitlist` (`TableWaitlistEntry`); `WAITLIST_STATUS` constants;
     `waitlist/{queries,actions}` (`joinWaitlist` + validation, `leaveWaitlist`, `markWaitlistNotified`/
     `Converted`, `removeWaitlistEntryAsStaff`, `findWaitlistMatches`, `findWaitlistCandidateForFreedReservation`
@@ -674,6 +692,16 @@ monetization + no-show work is unblocked.
   manager + expiry; proactive health-check + partner alert via the existing `/api/mollie/readiness-check`;
   fail-safe discovery via a token-validity check in the visibility gate) so payment can't silently die
   without the partner being alerted and the guest being shielded.
+- **2026-05-25** — **1g Waitlist UIs shipped** (the engine/core was already done). Consumer "join
+  waitlist" on empty availability (`apps/user/.../sites/[id]/table/view.tsx`, reuses `BookingForm` →
+  `joinWaitlistForSite`, i18n en/es/fi); staff **auto-notify on cancel/no-show** (`notifyWaitlistOnFreed`
+  in `apps/partner/.../reservations/actions.ts`, mirrors the consumer-cancel hook); partner **waitlist
+  view** (`reservations/view.tsx`) listing the day's entries + remove, via new `getRestaurantWaitlistForDay`
+  / `removeRestaurantWaitlistEntry` actions (i18n). Closes the loop: join-when-full → freed table emails
+  the earliest match → host sees/manages it. No schema change. user 231 / partner 281 green; tsc clean.
+  Implemented directly (sub-agents kept stopping early all session). Remaining: unit tests for the 2 new
+  partner actions + staff-notify wiring (needs `tableWaitlistEntry` + `sendEmail` mocks); browser-verify
+  both UIs; SMS notify stays out of P1.
 
 ## Open decisions
 

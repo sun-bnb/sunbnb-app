@@ -11,7 +11,7 @@ import {
   type BookingFormValues,
 } from '@repo/table-reservations-ui'
 import type { AvailabilitySlot } from '@repo/table-reservations-core'
-import { bookTableForSite, initiateDemoTableDeposit } from './actions'
+import { bookTableForSite, initiateDemoTableDeposit, joinWaitlistForSite } from './actions'
 
 const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || ''
@@ -63,6 +63,7 @@ export default function TableBookingView({
   const [depositPending, setDepositPending] = useState<DepositPending | null>(null)
   const [depositError, setDepositError] = useState<string | null>(null)
   const [depositLoading, setDepositLoading] = useState(false)
+  const [waitlisted, setWaitlisted] = useState(false)
 
   // Anonymous identity — persisted across bookings so cancellation stays
   // possible without signing in. Keep scoped to this hook (same pattern as
@@ -95,6 +96,7 @@ export default function TableBookingView({
           setSlots(body.slots)
           setSelectedSlot(null)
           setSelectedTableId(null)
+          setWaitlisted(false)
         }
       } finally {
         if (!cancelled) setLoadingSlots(false)
@@ -237,6 +239,45 @@ export default function TableBookingView({
           />
         )}
       </section>
+
+      {!loadingSlots && slots.length === 0 ? (
+        <section className="border-t border-gray-200 pt-5">
+          {waitlisted ? (
+            <div
+              role="status"
+              className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700"
+            >
+              {t('waitlistJoined')}
+            </div>
+          ) : (
+            <BookingForm
+              labels={{
+                heading: t('waitlistHeading'),
+                guestName: t('fieldGuestName'),
+                guestEmail: t('fieldGuestEmail'),
+                guestPhone: t('fieldGuestPhone'),
+                specialRequests: t('fieldSpecialRequests'),
+                submit: t('waitlistSubmit'),
+                submitting: t('submitting'),
+                errorPrefix: t('errorPrefix'),
+              }}
+              onSubmit={async (values: BookingFormValues) => {
+                const res = await joinWaitlistForSite({
+                  siteId,
+                  dateISO: date,
+                  partySize,
+                  guestName: values.guestName,
+                  guestEmail: values.guestEmail,
+                  guestPhone: values.guestPhone || null,
+                  anonId,
+                })
+                if (res.status === 'ok') setWaitlisted(true)
+                return res
+              }}
+            />
+          )}
+        </section>
+      ) : null}
 
       {selectedSlot && selectedTableId ? (
         <section className="border-t border-gray-200 pt-5">

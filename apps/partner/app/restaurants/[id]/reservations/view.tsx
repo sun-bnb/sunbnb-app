@@ -6,11 +6,16 @@ import {
   ReservationList,
   type ReservationListLabels,
 } from '@repo/table-reservations-ui'
-import type { TableReservationListItem } from '@repo/table-reservations-core'
+import type {
+  TableReservationListItem,
+  WaitlistEntryRecord,
+} from '@repo/table-reservations-core'
 import { RestaurantSubNav } from '../RestaurantSubNav'
 import { RestaurantHeader } from '../RestaurantHeader'
 import {
   getRestaurantReservationsForDay,
+  getRestaurantWaitlistForDay,
+  removeRestaurantWaitlistEntry,
   markRestaurantReservationSeated,
   markRestaurantReservationDeparted,
   markRestaurantReservationNoShow,
@@ -30,12 +35,16 @@ export default function ReservationsView({ restaurantId }: { restaurantId: strin
 
   const [date, setDate] = useState(formatYmd(new Date()))
   const [items, setItems] = useState<TableReservationListItem[]>([])
+  const [waitlist, setWaitlist] = useState<WaitlistEntryRecord[]>([])
   const [loading, setLoading] = useState(true)
 
   const refresh = useCallback(async () => {
-    const res = await getRestaurantReservationsForDay(restaurantId, date)
-    if (res.status === 'ok') setItems(res.reservations)
-    else setItems([])
+    const [resv, wl] = await Promise.all([
+      getRestaurantReservationsForDay(restaurantId, date),
+      getRestaurantWaitlistForDay(restaurantId, date),
+    ])
+    setItems(resv.status === 'ok' ? resv.reservations : [])
+    setWaitlist(wl.status === 'ok' ? wl.entries : [])
   }, [restaurantId, date])
 
   useEffect(() => {
@@ -113,6 +122,53 @@ export default function ReservationsView({ restaurantId }: { restaurantId: strin
               return res
             }}
           />
+        )}
+
+        {!loading && (
+          <section className="rounded-lg border border-gray-200 bg-white">
+            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+              <h2 className="text-sm font-semibold text-gray-900">{t('waitlistHeading')}</h2>
+              <span className="text-xs text-gray-400">{waitlist.length}</span>
+            </div>
+            {waitlist.length === 0 ? (
+              <p className="px-4 py-3 text-sm text-gray-500">{t('waitlistEmpty')}</p>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {waitlist.map((w) => (
+                  <li key={w.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="truncate text-sm font-medium text-gray-900">{w.guestName}</span>
+                        <span className="text-xs text-gray-500">· {t('resParty')} {w.partySize}</span>
+                        {w.requestedTime ? (
+                          <span className="text-xs text-gray-500">· {w.requestedTime}</span>
+                        ) : null}
+                        {w.notifiedAt ? (
+                          <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-px text-xs text-blue-600">
+                            {t('waitlistNotified')}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="truncate text-xs text-gray-500">
+                        {w.guestEmail}
+                        {w.guestPhone ? ` · ${w.guestPhone}` : ''}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const res = await removeRestaurantWaitlistEntry(restaurantId, w.id)
+                        if (res.status === 'ok') await refresh()
+                      }}
+                      className="shrink-0 text-xs text-gray-500 hover:text-red-600"
+                    >
+                      {t('waitlistRemove')}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         )}
       </div>
     </div>
