@@ -111,10 +111,19 @@ async function refreshMollieToken(refreshToken: string): Promise<RefreshResult> 
  * (now-rotated) refresh token a second time.
  */
 async function refreshUnderLock(partnerAccountId: string): Promise<string> {
-  return prisma.$transaction(
-    async (tx) => {
+  // The dead-token clear must COMMIT, so it cannot be a `throw` inside the
+  // transaction — Prisma rolls the callback's writes back on throw, which would
+  // leave the partner stuck "connected" but unable to pay (every call loops on
+  // "session expired"). Instead we signal a dead token by returning null, let the
+  // transaction commit the clear, then throw the reconnect error outside it.
+  const accessToken = await prisma.$transaction(
+    async (tx): Promise<string | null> => {
       // Serialize refreshes for this partner (released at transaction end).
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('mollie_token_refresh'), hashtext(${partnerAccountId}))`
+      // $executeRaw (not $queryRaw): pg_advisory_xact_lock returns `void`, which
+      // the pg driver adapter can't deserialize as a result column ("Failed to
+      // deserialize column of type 'void'"). $executeRaw returns an affected-row
+      // count and never deserializes the result set, so it sidesteps that.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mollie_token_refresh'), hashtext(${partnerAccountId}))`
 
       const acct = await tx.partnerAccount.findUnique({
         where: { userId: partnerAccountId },
@@ -150,8 +159,9 @@ async function refreshUnderLock(partnerAccountId: string): Promise<string> {
         console.log('[Mollie] Token refreshed (centralized)')
         return tokens.accessToken
       } catch (err) {
-        if (!(err instanceof MollieInvalidGrantError)) throw err // transient — keep connection
-        // Genuinely dead — clear so the partner UI prompts a reconnect.
+        if (!(err instanceof MollieInvalidGrantError)) throw err // transient — roll back, keep the connection
+        // Genuinely dead — clear so the partner UI prompts a reconnect. Returning
+        // null (not throwing) lets this clear commit; the throw happens below.
         await tx.partnerAccount.update({
           where: { userId: partnerAccountId },
           data: {
@@ -160,13 +170,18 @@ async function refreshUnderLock(partnerAccountId: string): Promise<string> {
             mollieTokenExpiresAt: null,
           },
         })
-        throw new MollieReconnectRequiredError(
-          'Mollie refresh token was rejected — the partner must reconnect their Mollie account.',
-        )
+        return null
       }
     },
     { timeout: 20_000 },
   )
+
+  if (accessToken === null) {
+    throw new MollieReconnectRequiredError(
+      'Mollie refresh token was rejected — the partner must reconnect their Mollie account.',
+    )
+  }
+  return accessToken
 }
 
 /**
