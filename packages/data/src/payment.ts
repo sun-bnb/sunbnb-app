@@ -4,12 +4,18 @@
  * Centralizes all payment business logic: service fee resolution, VAT calculation,
  * and idempotent invoice creation for both reservations and orders.
  *
- * Billing model: SPLIT MERCHANT
- *   Two invoices per transaction:
- *   1. PARTNER invoice — product/service lines, taxed at the partner site's VAT rate.
- *      Merchant of record: the partner company.
- *   2. PLATFORM invoice — service fee line, taxed at the platform's default VAT rate.
- *      Merchant of record: Sunbnb (business entity from Settings).
+ * Billing model: AGENT / MARKETPLACE
+ *   The partner is the merchant of record for the consumer sale; Sunbnb is a
+ *   disclosed intermediary that charges the partner a commission. Two invoices
+ *   per transaction:
+ *   1. PARTNER invoice — product/service lines at the FULL price the consumer
+ *      paid (GROSS), taxed at the partner site's VAT rate. The partner's revenue
+ *      is the whole consumer payment, not net of commission.
+ *   2. PLATFORM (commission) invoice — a B2B invoice FROM Sunbnb TO the partner
+ *      for the service fee (recipient = partner). It is NOT a slice of the
+ *      consumer's payment. Local VAT applies, or reverse charge for cross-border
+ *      EU B2B (0 VAT, partner self-accounts). The commission is collected via
+ *      Mollie's applicationFee routing, not added to the consumer total.
  *
  * Key design principles:
  * - Idempotent: safe to call multiple times (webhook + polling convergence)
@@ -99,6 +105,50 @@ export function calculateServiceFeeAmount(
       ? (fee.feeAmount ?? 0)
       : ((fee.percentage ?? 0) / 100) * referenceAmount
   )
+}
+
+// ─── Commission (PLATFORM) invoice helpers ──────────────────────────────────
+
+/**
+ * Bill-to fields for the B2B commission invoice — the partner is the recipient.
+ * (Agent model: the platform sells an intermediation service to the partner.)
+ */
+function commissionRecipientFields(partnerAccount: FeeContext['partnerAccount']) {
+  return {
+    recipientCompanyName: partnerAccount?.company ?? null,
+    recipientVatNumber: partnerAccount?.businessId ?? null,
+    recipientCompanyAddress: partnerAccount?.address ?? null,
+  }
+}
+
+/**
+ * VAT treatment of the platform commission charged to the partner.
+ *
+ * Cross-border EU B2B (partner VAT-registered in a different country than the
+ * platform) → reverse charge: the issuer charges 0 VAT and the partner
+ * self-accounts. Otherwise the platform's local VAT rate applies (reverse-VAT
+ * split of the VAT-inclusive fee).
+ *
+ * Note: this treats "different country" as the reverse-charge trigger; both
+ * parties are assumed EU. A non-EU partner (outside-scope) is not yet modelled.
+ */
+function computeCommissionVat(
+  feeAmount: number,
+  platformVatRate: number,
+  partnerCountry: string | null | undefined,
+  partnerVatNumber: string | null | undefined,
+  platformCountry: string | null | undefined
+): { base: number; vat: number; vatRate: number; reverseCharge: boolean } {
+  const reverseCharge =
+    !!partnerVatNumber &&
+    !!partnerCountry &&
+    !!platformCountry &&
+    partnerCountry !== platformCountry
+  if (reverseCharge) {
+    return { base: round(feeAmount), vat: 0, vatRate: 0, reverseCharge: true }
+  }
+  const { baseAmount, vatAmount } = computeVatAndBaseAmounts(feeAmount, platformVatRate)
+  return { base: baseAmount, vat: vatAmount, vatRate: platformVatRate, reverseCharge: false }
 }
 
 // ─── Invoice Numbering & Hashing (Veri*factu) ───────────────────────────────
@@ -444,8 +494,11 @@ export async function processConfirmedReservation(
   }
   totalServiceFee = round(totalServiceFee)
 
-  // Partner amount = total payment minus service fee
-  const partnerAmount = round(totalPayment - totalServiceFee)
+  // Agent model: the partner sells the full listed price to the consumer, so
+  // the PARTNER (revenue) invoice is booked GROSS. The commission is billed
+  // separately to the partner via the PLATFORM invoice (it is NOT a slice of
+  // the consumer's payment).
+  const partnerAmount = totalPayment
 
   // Load platform business entity for the PLATFORM invoice
   const businessEntity = await getBusinessEntity()
@@ -499,18 +552,16 @@ export async function processConfirmedReservation(
       },
     })
 
-    // Product lines — one per sunbed item
+    // Product lines — one per sunbed item, at the full listed price (gross).
     const partnerLines = reservation.items.map((item) => {
       const itemPrice = round(item.price ?? site.price ?? 0)
-      const itemFee = calculateServiceFeeAmount(matchedFee, itemPrice)
-      const itemPartnerAmount = round(itemPrice - itemFee)
       const { baseAmount: lineBase, vatAmount: lineVat } =
-        computeVatAndBaseAmounts(itemPartnerAmount, siteVatRate)
+        computeVatAndBaseAmounts(itemPrice, siteVatRate)
 
       return {
         charge: lineBase,
         tax: lineVat,
-        amount: itemPartnerAmount,
+        amount: itemPrice,
         vatRate: siteVatRate,
         invoiceId: partnerInvoice.id,
         productCode: 'sunbed-rental',
@@ -525,8 +576,10 @@ export async function processConfirmedReservation(
     // ── 2. PLATFORM Invoice (service fee) ──
 
     if (totalServiceFee > 0) {
-      const { baseAmount: feeBase, vatAmount: feeVat } =
-        computeVatAndBaseAmounts(totalServiceFee, platformVatRate)
+      const commission = computeCommissionVat(
+        totalServiceFee, platformVatRate,
+        partnerAccount?.country, partnerAccount?.businessId, feeCountry
+      )
 
       const platformInvoiceNumber = await nextInvoiceNumber(tx, 'PLATFORM')
       const platformPrevHash = await getLastHash(tx, 'PLATFORM')
@@ -535,14 +588,16 @@ export async function processConfirmedReservation(
         data: {
           accountId: partnerAccount?.userId ?? '',
           reservationId,
-          totalCharge: feeBase,
-          totalTax: feeVat,
+          totalCharge: commission.base,
+          totalTax: commission.vat,
           totalAmount: totalServiceFee,
           invoicedAt,
           issuerType: 'PLATFORM',
           issuerVatNumber: businessEntity.vatId || null,
           issuerCompanyName: businessEntity.companyName,
           issuerCompanyAddress: businessEntity.companyAddress || null,
+          ...commissionRecipientFields(partnerAccount),
+          reverseCharge: commission.reverseCharge,
           invoiceNumber: platformInvoiceNumber,
           previousHash: platformPrevHash,
           hash: computeInvoiceHash(
@@ -554,10 +609,10 @@ export async function processConfirmedReservation(
 
       await tx.invoiceLine.create({
         data: {
-          charge: feeBase,
-          tax: feeVat,
+          charge: commission.base,
+          tax: commission.vat,
           amount: totalServiceFee,
-          vatRate: platformVatRate,
+          vatRate: commission.vatRate,
           invoiceId: platformInvoice.id,
           productCode: 'sunbnb-service-fee',
           description: `Reservation service fee${feeCountry ? ` (${feeCountry})` : ''}`,
@@ -643,7 +698,8 @@ export async function processConfirmedRentalBooking(
   }
   totalServiceFee = round(totalServiceFee)
 
-  const partnerAmount = round(totalPayment - totalServiceFee)
+  // Agent model: PARTNER invoice booked GROSS; commission billed separately.
+  const partnerAmount = totalPayment
 
   const businessEntity = await getBusinessEntity()
 
@@ -694,18 +750,16 @@ export async function processConfirmedRentalBooking(
       },
     })
 
-    // One line per booking
+    // One line per booking, at the full price (gross).
     const partnerLines = bookings.map((booking) => {
       const bookingPrice = round(booking.paymentAmount ?? booking.totalPrice ?? 0)
-      const itemFee = calculateServiceFeeAmount(matchedFee, bookingPrice)
-      const itemPartnerAmount = round(bookingPrice - itemFee)
       const { baseAmount: lineBase, vatAmount: lineVat } =
-        computeVatAndBaseAmounts(itemPartnerAmount, siteVatRate)
+        computeVatAndBaseAmounts(bookingPrice, siteVatRate)
 
       return {
         charge: lineBase,
         tax: lineVat,
-        amount: itemPartnerAmount,
+        amount: bookingPrice,
         vatRate: siteVatRate,
         invoiceId: partnerInvoice.id,
         productCode: 'equipment-rental',
@@ -720,8 +774,10 @@ export async function processConfirmedRentalBooking(
     // ── 2. PLATFORM Invoice (service fee) ──
 
     if (totalServiceFee > 0) {
-      const { baseAmount: feeBase, vatAmount: feeVat } =
-        computeVatAndBaseAmounts(totalServiceFee, platformVatRate)
+      const commission = computeCommissionVat(
+        totalServiceFee, platformVatRate,
+        partnerAccount?.country, partnerAccount?.businessId, feeCountry
+      )
 
       const platformInvoiceNumber = await nextInvoiceNumber(tx, 'PLATFORM')
       const platformPrevHash = await getLastHash(tx, 'PLATFORM')
@@ -730,14 +786,16 @@ export async function processConfirmedRentalBooking(
         data: {
           accountId: partnerAccount?.userId ?? '',
           paymentRef,
-          totalCharge: feeBase,
-          totalTax: feeVat,
+          totalCharge: commission.base,
+          totalTax: commission.vat,
           totalAmount: totalServiceFee,
           invoicedAt,
           issuerType: 'PLATFORM',
           issuerVatNumber: businessEntity.vatId || null,
           issuerCompanyName: businessEntity.companyName,
           issuerCompanyAddress: businessEntity.companyAddress || null,
+          ...commissionRecipientFields(partnerAccount),
+          reverseCharge: commission.reverseCharge,
           invoiceNumber: platformInvoiceNumber,
           previousHash: platformPrevHash,
           hash: computeInvoiceHash(
@@ -749,10 +807,10 @@ export async function processConfirmedRentalBooking(
 
       await tx.invoiceLine.create({
         data: {
-          charge: feeBase,
-          tax: feeVat,
+          charge: commission.base,
+          tax: commission.vat,
           amount: totalServiceFee,
-          vatRate: platformVatRate,
+          vatRate: commission.vatRate,
           invoiceId: platformInvoice.id,
           productCode: 'sunbnb-service-fee',
           description: `Equipment rental service fee${feeCountry ? ` (${feeCountry})` : ''}`,
@@ -821,21 +879,20 @@ export async function processConfirmedOrder(
   const totalProductAmount = order.paymentAmount ?? 0
   const serviceFeeAmount = calculateServiceFeeAmount(matchedFee, totalProductAmount)
 
-  // Compute per-item fee distribution and partner line amounts
-  // (mirrors reservation processing: fee deducted per line)
+  // Agent model: partner lines are booked GROSS (full per-item price). The
+  // commission is billed separately to the partner on the PLATFORM invoice.
   let totalPartnerCharge = 0
   let totalPartnerVat = 0
   let totalPartnerAmount = 0
 
   const itemCalcs = order.orderItems.map((item) => {
-    const itemFee = calculateServiceFeeAmount(matchedFee, item.totalPrice)
-    const itemPartnerAmount = round(item.totalPrice - itemFee)
+    const itemGross = round(item.totalPrice)
     const { baseAmount: lineBase, vatAmount: lineVat } =
-      computeVatAndBaseAmounts(itemPartnerAmount, item.tax)
+      computeVatAndBaseAmounts(itemGross, item.tax)
     totalPartnerCharge += lineBase
     totalPartnerVat += lineVat
-    totalPartnerAmount += itemPartnerAmount
-    return { lineBase, lineVat, itemPartnerAmount, item }
+    totalPartnerAmount += itemGross
+    return { lineBase, lineVat, itemGross, item }
   })
 
   totalPartnerCharge = round(totalPartnerCharge)
@@ -891,11 +948,11 @@ export async function processConfirmedOrder(
       },
     })
 
-    const itemLines = itemCalcs.map(({ lineBase, lineVat, itemPartnerAmount, item }) => {
+    const itemLines = itemCalcs.map(({ lineBase, lineVat, itemGross, item }) => {
       return {
         charge: lineBase,
         tax: lineVat,
-        amount: itemPartnerAmount,
+        amount: itemGross,
         vatRate: item.tax,
         invoiceId: partnerInvoice.id,
         productCode: 'food-and-beverage',
@@ -910,8 +967,10 @@ export async function processConfirmedOrder(
     // ── 2. PLATFORM Invoice (service fee) ──
 
     if (serviceFeeAmount > 0) {
-      const { baseAmount: feeBase, vatAmount: feeVat } =
-        computeVatAndBaseAmounts(serviceFeeAmount, platformVatRate)
+      const commission = computeCommissionVat(
+        serviceFeeAmount, platformVatRate,
+        partnerAccount?.country, partnerAccount?.businessId, feeCountry
+      )
 
       const platformInvoiceNumber = await nextInvoiceNumber(tx, 'PLATFORM')
       const platformPrevHash = await getLastHash(tx, 'PLATFORM')
@@ -920,14 +979,16 @@ export async function processConfirmedOrder(
         data: {
           accountId: partnerAccount?.userId ?? '',
           orderId,
-          totalCharge: feeBase,
-          totalTax: feeVat,
+          totalCharge: commission.base,
+          totalTax: commission.vat,
           totalAmount: serviceFeeAmount,
           invoicedAt,
           issuerType: 'PLATFORM',
           issuerVatNumber: businessEntity.vatId || null,
           issuerCompanyName: businessEntity.companyName,
           issuerCompanyAddress: businessEntity.companyAddress || null,
+          ...commissionRecipientFields(partnerAccount),
+          reverseCharge: commission.reverseCharge,
           invoiceNumber: platformInvoiceNumber,
           previousHash: platformPrevHash,
           hash: computeInvoiceHash(
@@ -939,10 +1000,10 @@ export async function processConfirmedOrder(
 
       await tx.invoiceLine.create({
         data: {
-          charge: feeBase,
-          tax: feeVat,
+          charge: commission.base,
+          tax: commission.vat,
           amount: serviceFeeAmount,
-          vatRate: platformVatRate,
+          vatRate: commission.vatRate,
           invoiceId: platformInvoice.id,
           productCode: 'sunbnb-service-fee',
           description: `Order service fee${feeCountry ? ` (${feeCountry})` : ''}`,
@@ -1030,9 +1091,10 @@ export async function processChargedTableDeposit(
   const totalDeposit = round(tableReservation.depositAmount)
   const siteVatRate = site.vat ?? 0
 
-  // Fee deducted from partner revenue (reservation convention)
   const totalServiceFee = calculateServiceFeeAmount(matchedFee, totalDeposit)
-  const partnerAmount = round(totalDeposit - totalServiceFee)
+  // Agent model: PARTNER invoice booked GROSS (full kept deposit); commission
+  // billed separately to the partner on the PLATFORM invoice.
+  const partnerAmount = totalDeposit
 
   const businessEntity = await getBusinessEntity()
 
@@ -1101,8 +1163,10 @@ export async function processChargedTableDeposit(
     // ── 2. PLATFORM Invoice (service fee) ──
 
     if (totalServiceFee > 0) {
-      const { baseAmount: feeBase, vatAmount: feeVat } =
-        computeVatAndBaseAmounts(totalServiceFee, platformVatRate)
+      const commission = computeCommissionVat(
+        totalServiceFee, platformVatRate,
+        partnerAccount?.country, partnerAccount?.businessId, feeCountry
+      )
 
       const platformInvoiceNumber = await nextInvoiceNumber(tx, 'PLATFORM')
       const platformPrevHash = await getLastHash(tx, 'PLATFORM')
@@ -1111,14 +1175,16 @@ export async function processChargedTableDeposit(
         data: {
           accountId: partnerAccount?.userId ?? '',
           tableReservationId,
-          totalCharge: feeBase,
-          totalTax: feeVat,
+          totalCharge: commission.base,
+          totalTax: commission.vat,
           totalAmount: totalServiceFee,
           invoicedAt,
           issuerType: 'PLATFORM',
           issuerVatNumber: businessEntity.vatId || null,
           issuerCompanyName: businessEntity.companyName,
           issuerCompanyAddress: businessEntity.companyAddress || null,
+          ...commissionRecipientFields(partnerAccount),
+          reverseCharge: commission.reverseCharge,
           invoiceNumber: platformInvoiceNumber,
           previousHash: platformPrevHash,
           hash: computeInvoiceHash(
@@ -1131,10 +1197,10 @@ export async function processChargedTableDeposit(
 
       await tx.invoiceLine.create({
         data: {
-          charge: feeBase,
-          tax: feeVat,
+          charge: commission.base,
+          tax: commission.vat,
           amount: totalServiceFee,
-          vatRate: platformVatRate,
+          vatRate: commission.vatRate,
           invoiceId: platformInvoice.id,
           productCode: 'sunbnb-service-fee',
           description: `No-show deposit service fee${feeCountry ? ` (${feeCountry})` : ''}`,

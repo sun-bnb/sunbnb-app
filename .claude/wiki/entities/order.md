@@ -15,7 +15,7 @@ related:
   - entity:invoice
   - entity:service-fee
   - flow:order-payment
-last_verified: 2026-05-20
+last_verified: 2026-05-26
 ---
 
 # Order
@@ -60,7 +60,7 @@ pending → processing → complete → accepted → preparing → ready → del
 4. **`appSalesEnabled` on the Site must be true** for consumer-app ordering (separate from in-person F&B).
 5. **One Invoice per confirmed order** (1:1 via `invoiceId`), plus the corresponding platform-side invoice.
 6. **Per-item VAT, not site-wide.** Unlike reservations, each `OrderItem` carries its own `tax` rate (from the source Product).
-7. **Service fee is ADDED to customer total.** (Reservations *deduct* the fee from partner revenue; orders *add* the fee on top.) See `[[entity:service-fee]]`.
+7. **Fee is a B2B commission to the partner, not a consumer charge.** The customer pays the product total; the partner books it gross and the commission is carved out via Mollie `applicationFee` — same as reservations. See `[[entity:service-fee]]`.
 
 ## Related entities
 
@@ -74,7 +74,7 @@ pending → processing → complete → accepted → preparing → ready → del
 
 ## Common pitfalls
 
-- **Mixing reservation-fee logic and order-fee logic.** Reservations deduct; orders add. Look at which `process*` function you're modelling after.
+- **Assuming the order fee is a consumer charge or reduces booked revenue.** It's a B2B commission to the partner: the partner books gross and the commission is carved out via `applicationFee` — same as reservations.
 - **Using site-wide VAT for orders.** Orders use per-item VAT from the snapshot fields in `OrderItem`.
 - **Forgetting to set `paymentAmount` separately from `totalPrice`.** `paymentAmount` is what the customer actually paid (includes service fee); `totalPrice` is item total only.
 - **Treating order status as a single linear chain.** It branches (`rejected`, `discarded`, `canceled`, `refunded`).

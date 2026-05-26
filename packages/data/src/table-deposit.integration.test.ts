@@ -41,7 +41,7 @@ describe('processChargedTableDeposit', () => {
    * charged deposit ready for invoice processing.
    *
    * Defaults:
-   *   depositAmount = 50.0 (fee = 1.0 fixed → partner 49.0, platform 1.0)
+   *   depositAmount = 50.0 (partner books gross 50.0; commission 1.0 fixed, separate)
    *   site.vat      = 25.5 (from createTestSite default)
    */
   async function setupDeposit(overrides?: {
@@ -100,7 +100,7 @@ describe('processChargedTableDeposit', () => {
     expect(types).toEqual(['PARTNER', 'PLATFORM'])
   })
 
-  it('deducts fee from partner revenue — partner receives depositAmount minus fee', async () => {
+  it('books the full kept deposit as partner revenue, commission separately', async () => {
     const { tableReservation } = await setupDeposit()
 
     await processChargedTableDeposit(tableReservation.id)
@@ -112,8 +112,9 @@ describe('processChargedTableDeposit', () => {
       where: { tableReservationId: tableReservation.id, issuerType: 'PLATFORM' },
     })
 
-    // depositAmount=50, fee=1 (fixed) → partner=49, platform=1
-    expect(partnerInvoice!.totalAmount).toBe(49.0)
+    // Agent model: partner books the full kept deposit (gross 50.0); the
+    // commission (fixed 1.0) is billed separately on the PLATFORM invoice.
+    expect(partnerInvoice!.totalAmount).toBe(50.0)
     expect(platformInvoice!.totalAmount).toBe(1.0)
   })
 
@@ -132,12 +133,12 @@ describe('processChargedTableDeposit', () => {
     expect(partnerInvoice!.invoiceLines).toHaveLength(1)
     const line = partnerInvoice!.invoiceLines[0]!
 
-    // partnerAmount = 49.0, siteVat = 25.5
-    const expected = computeVatAndBaseAmounts(49.0, site.vat ?? 0)
+    // partnerAmount = 50.0 (gross kept deposit), siteVat = 25.5
+    const expected = computeVatAndBaseAmounts(50.0, site.vat ?? 0)
     expect(line.vatRate).toBe(site.vat)
     expect(line.charge).toBe(expected.baseAmount)
     expect(line.tax).toBe(expected.vatAmount)
-    expect(line.amount).toBe(49.0)
+    expect(line.amount).toBe(50.0)
     expect(line.productCode).toBe('no-show-deposit')
   })
 
@@ -175,7 +176,7 @@ describe('processChargedTableDeposit', () => {
       where: { tableReservationId: tableReservation.id, issuerType: 'PLATFORM' },
     })
 
-    const partnerVat = computeVatAndBaseAmounts(49.0, site.vat ?? 0)
+    const partnerVat = computeVatAndBaseAmounts(50.0, site.vat ?? 0)
     expect(partnerInvoice!.totalCharge).toBe(partnerVat.baseAmount)
     expect(partnerInvoice!.totalTax).toBe(partnerVat.vatAmount)
 
@@ -316,9 +317,9 @@ describe('processChargedTableDeposit', () => {
       where: { tableReservationId: tableReservation.id, issuerType: 'PLATFORM' },
     })
 
-    // 10% of 50.0 = 5.0 fee; partner = 50.0 - 5.0 = 45.0
+    // 10% of 50.0 = 5.0 commission (billed separately); partner books gross 50.0
     expect(platformInvoice!.totalAmount).toBe(5.0)
-    expect(partnerInvoice!.totalAmount).toBe(45.0)
+    expect(partnerInvoice!.totalAmount).toBe(50.0)
   })
 
   // ── Error paths ───────────────────────────────────────────────────────────

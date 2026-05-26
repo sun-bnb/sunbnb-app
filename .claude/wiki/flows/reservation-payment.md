@@ -18,7 +18,7 @@ related:
   - entity:service-fee
   - subsystem:payments
   - subsystem:auth
-last_verified: 2026-05-23
+last_verified: 2026-05-26
 ---
 
 # Flow: Reservation Payment
@@ -59,8 +59,8 @@ User clicks "Book" after selecting sunbeds and a date range in the consumer app 
 7. **Invoice creation** — `processConfirmedReservation`:
    - **Idempotent** — bails if reservation already has `invoiceId`
    - Loads fee context (`loadFeeContext` — see `[[entity:service-fee]]`)
-   - Creates PARTNER invoice with per-sunbed lines + fee line (fee deducted)
-   - Creates PLATFORM invoice with commission line
+   - Creates PARTNER invoice with per-sunbed lines at the full listed price (gross)
+   - Creates PLATFORM invoice — the commission, a B2B invoice billed to the partner
    - Sequential numbering with `FOR UPDATE` lock per issuer type
    - Hash chain extended (`computeInvoiceHash`)
    - Reservation updated: `status: complete`, `invoiceId` set
@@ -106,4 +106,4 @@ Invoice creation is real even in demo mode — only the payment provider call is
 - `[[entity:service-fee]]` — affects invoice line composition
 - `[[subsystem:payments]]` — provider abstraction details
 - `[[subsystem:auth]]` — ownership checks on polling routes
-- `[[flow:order-payment]]` — same pattern but for F&B orders (with fee added rather than deducted)
+- `[[flow:order-payment]]` — same pattern (same fee handling) for F&B orders, with per-item VAT

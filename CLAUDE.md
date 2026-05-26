@@ -176,7 +176,7 @@ Vercel-managed via git branches: `main` → preview, `test` → test.sunbnb.app,
 
 **Stripe** handles **partner subscriptions only** (STARTER/PRO/BUSINESS tiers in the partner app — platform-as-merchant, which is correct for SaaS billing). **Consumer Stripe was removed** (reservation/order PaymentIntents, Elements, webhooks, `_lib/stripe.ts`): it was a platform-collecting charge that didn't meet the marketplace/commission legal model. Until it's rebuilt on Stripe Connect, consumer payments are **Mollie or demo only**. See `.claude/tracks/003-stripe-connect-compliance.md`.
 
-**Mollie for Platforms** handles all real consumer marketplace payments (consumer → Sunbnb → venue operator). Partner tokens stored as `mollieAccessToken` on PartnerAccount, refreshed via OAuth. Platform commission collected as `applicationFee`.
+**Mollie for Platforms** handles all real consumer marketplace payments (consumer → Sunbnb → venue operator). Partner tokens stored as `mollieAccessToken` on PartnerAccount, refreshed via OAuth. Platform commission collected as `applicationFee`. **Agent model**: each payment yields two invoices — a **gross PARTNER** invoice (partner = merchant of record, books the full consumer price) and a separate **B2B PLATFORM commission** invoice billed to the partner; they do not sum to the consumer total. See `.claude/rules/payments.md`.
 
 **Demo mode** (`NEXT_PUBLIC_DEMO_MODE`): Generates fake `pi_demo_{timestamp}` refs, runs the same invoice creation logic. The demo checkout redirects to `/payment/complete` reusing the `payment_intent` query-param contract — a Stripe-shaped contract the demo path kept after consumer Stripe was removed.
 

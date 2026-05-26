@@ -121,7 +121,6 @@ export default async function Receipt({ params, searchParams }: { params: { id: 
     }
 
     const partnerInvoice = order.invoices.find((i) => i.issuerType === 'PARTNER')
-    const platformInvoice = order.invoices.find((i) => i.issuerType === 'PLATFORM')
 
     if (!partnerInvoice) {
       return <div>Invoice not found</div>
@@ -140,12 +139,9 @@ export default async function Receipt({ params, searchParams }: { params: { id: 
       partnerAccount?.phoneNumber
     )
 
-    const platformSection = platformInvoice
-      ? buildSection(platformInvoice, 'Sunbnb')
-      : null
+    const platformSection = null
 
-    const grandTotal =
-      partnerInvoice.totalAmount + (platformInvoice?.totalAmount ?? 0)
+    const grandTotal = partnerInvoice.totalAmount
 
     const receipt: ReceiptProps = {
       date,
@@ -180,7 +176,6 @@ export default async function Receipt({ params, searchParams }: { params: { id: 
   }
 
   const partnerInvoice = reservation.invoices.find((i) => i.issuerType === 'PARTNER')
-  const platformInvoice = reservation.invoices.find((i) => i.issuerType === 'PLATFORM')
 
   if (!partnerInvoice) {
     console.error('Partner invoice not found')
@@ -214,12 +209,9 @@ export default async function Receipt({ params, searchParams }: { params: { id: 
     partnerAccount?.phoneNumber
   )
 
-  const platformSection = platformInvoice
-    ? buildSection(platformInvoice, 'Sunbnb')
-    : null
+  const platformSection = null
 
-  const grandTotal =
-    partnerInvoice.totalAmount + (platformInvoice?.totalAmount ?? 0)
+  const grandTotal = partnerInvoice.totalAmount
 
   const receipt: ReceiptProps = {
     date,

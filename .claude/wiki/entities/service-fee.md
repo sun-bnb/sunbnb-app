@@ -14,7 +14,7 @@ related:
   - entity:order
   - entity:invoice
   - entity:settlement
-last_verified: 2026-05-20
+last_verified: 2026-05-26
 ---
 
 # Service Fee
@@ -61,15 +61,7 @@ if fee.chargeType === 'percentage' → return round(fee.percentage × referenceA
 
 ## Where it's applied
 
-Direction depends on context — this is the single most error-prone rule in the codebase:
-
-| Context | Direction | Effect on customer | Effect on partner |
-|---|---|---|---|
-| `[[entity:reservation]]` (sunbed) | **Deducted from partner revenue** | Pays listed price | Receives price − fee |
-| `[[entity:order]]` (F&B) | **Added to customer total** | Pays price + fee | Receives full item price |
-| Rental booking | Follows the reservation pattern (deducted) — verify in `processConfirmedRentalBooking` |
-
-The fee line on invoices uses product code `"sunbnb-service-fee"`. See `[[entity:invoice]]` for line composition.
+The fee is the platform's **commission**, applied identically in every context (sunbed reservation, F&B order, rental, no-show deposit). The consumer pays the listed price; the partner is booked **gross** (the PARTNER invoice carries that full price); and the commission is a **separate B2B `PLATFORM` invoice billed to the partner** (recipient = partner, product code `"sunbnb-service-fee"`, reverse-charged at 0 VAT for cross-border EU B2B). The commission reduces the partner's **net payout**, not their booked revenue — it is collected via Mollie's `applicationFee` routing and is never added to the consumer total. See `[[entity:invoice]]` for line composition.
 
 ## Invariants
 
@@ -94,7 +86,7 @@ The fee line on invoices uses product code `"sunbnb-service-fee"`. See `[[entity
 
 ## Common pitfalls
 
-- **Inverting the direction.** Reservations *deduct*, orders *add*. Look at the relevant `process*` function before writing fee logic.
+- **Treating the fee as part of the consumer payment, or as reducing booked revenue.** It's a separate B2B commission billed to the partner: the partner books gross, and the fee reduces their *net payout*. Don't net it into the PARTNER invoice or add it to the consumer total.
 - **Assuming the cascade is union.** It is **first-match-wins per tier**. A site fee fully shadows the account-tier and settings-tier fees for that `serviceCode`.
 - **Forgetting to recompute on price changes.** Fee math depends on `referenceAmount` — a price update to a sunbed/product after booking doesn't retroactively change the booked reservation's amount, but a price update before payment confirmation does affect the fee.
 - **Setting both `feeAmount` and `percentage` on the same row.** Admin app currently allows it (known issue per `apps/admin/CLAUDE.md`). Don't.

@@ -17,7 +17,7 @@ related:
   - flow:reservation-payment
   - flow:order-payment
   - subsystem:payments
-last_verified: 2026-05-20
+last_verified: 2026-05-26
 ---
 
 # Invoice
@@ -42,15 +42,12 @@ Financial record of a confirmed payment. Two invoices per payment: one for the *
 
 ### Two-invoice rule
 
-For each successful payment, two `Invoice` rows are created:
+For each successful payment, two `Invoice` rows are created (agent/marketplace model):
 
-- **PARTNER invoice** — `accountId` is the partner's PartnerAccount. Lines:
-  - Reservation: one `sunbed-rental` line per item (amount = item price − service fee) + one `sunbnb-service-fee` line (the fee, **negative or contra**, depending on the implementation — read the source for sign convention).
-  - Order: one `food-and-beverage` line per item at full price.
-  - Rental: similar to reservation per-booking.
-- **PLATFORM invoice** — `accountId` is the platform's business entity (`packages/data/src/business-entity.ts`). Lines represent the commission.
+- **PARTNER invoice** — the partner's gross consumer sale (partner = merchant of record). Booked **GROSS**: lines carry the full price the consumer paid — one `sunbed-rental` line per sunbed (reservation), one `food-and-beverage` line per item (order), one line per booking (rental). The service fee is **not** netted out of these lines.
+- **PLATFORM invoice** — the platform's **B2B commission billed to the partner**. `issuerType: PLATFORM`; the recipient fields (`recipientCompanyName/recipientVatNumber/recipientCompanyAddress`) are the partner. One `sunbnb-service-fee` line. Local VAT, or `reverseCharge` (0 VAT, partner self-accounts) for cross-border EU B2B.
 
-The exact line composition is canonical in `packages/data/src/payment.ts` — read it when changing anything about lines.
+The two invoices do **not** sum to the consumer payment — the PARTNER invoice alone equals it; the commission is collected via Mollie `applicationFee` and reduces the partner's net payout. `Invoice.processingFee` (VAT-exempt Mollie/PSP fee) is reserved for reconciliation. Canonical: `packages/data/src/payment.ts` (the `processConfirmed*` functions).
 
 ## Invariants
 
@@ -59,7 +56,7 @@ The exact line composition is canonical in `packages/data/src/payment.ts` — re
 3. **Reverse VAT.** Prices are VAT-inclusive at source. `computeVatAndBaseAmounts(gross, vatRate)` does the canonical split: `base = round(gross / (1 + vatRate / 100))`, `vat = round(gross − base)`.
 4. **Sequential numbering per issuer type.** Protected by `FOR UPDATE` row lock in the transaction to prevent gaps under concurrency.
 5. **SHA-256 hash chain.** Each invoice includes a hash that incorporates the previous invoice's hash (per issuer type). Tamper-evident.
-6. **Reservation fee logic ≠ order fee logic.** Reservations deduct fee from partner revenue. Orders add fee to customer total. See `[[entity:service-fee]]`.
+6. **Fee handling is uniform across reservation / order / rental / deposit.** The partner is booked gross; the fee is a separate B2B commission billed to the partner — never netted into the PARTNER invoice, never added to the consumer total. See `[[entity:service-fee]]`.
 7. **`paymentRef` is the same** on both invoices and on the source Reservation/Order — the canonical correlation id.
 
 ## Hash chain
@@ -84,5 +81,5 @@ The exact line composition is canonical in `packages/data/src/payment.ts` — re
 - **Calling `processConfirmed*` more than once and assuming the second call is no-op.** It *is* no-op when the existing-invoice check passes — but if you bypassed that check (don't), you'd duplicate.
 - **Computing fee math in app code.** Don't. Use `packages/data/src/payment.ts` helpers.
 - **Editing an issued invoice.** Breaks the hash chain. Always issue a correction (a new invoice + a credit invoice).
-- **Sign convention on the service-fee line.** Re-read the source before assuming positive/negative.
+- **Assuming PARTNER + PLATFORM sum to the consumer payment.** They don't — the PARTNER invoice alone equals it; the PLATFORM invoice is a separate B2B commission billed to the partner.
 - **Float comparison in tests.** Use `toBeCloseTo(expected, 2)` for money assertions.

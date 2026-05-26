@@ -89,8 +89,9 @@ describe('processConfirmedReservation', () => {
     const partnerInvoice = invoices.find((i) => i.issuerType === 'PARTNER')!
     const platformInvoice = invoices.find((i) => i.issuerType === 'PLATFORM')!
 
-    // 2 items × 10.0, fee = 2 × 1.0 = 2.0, partner = 20 - 2 = 18.0
-    expect(partnerInvoice.totalAmount).toBe(18.0)
+    // Agent model: PARTNER invoice is GROSS — 2 items × 10.0 = 20.0 (full price
+    // the consumer paid). Commission (2 × 1.0 = 2.0) is billed separately.
+    expect(partnerInvoice.totalAmount).toBe(20.0)
     expect(platformInvoice.totalAmount).toBe(2.0)
   })
 
@@ -107,10 +108,10 @@ describe('processConfirmedReservation', () => {
     const partnerInvoice = invoices.find((i) => i.issuerType === 'PARTNER')!
     const platformInvoice = invoices.find((i) => i.issuerType === 'PLATFORM')!
 
-    // One line per sunbed
+    // One line per sunbed, at the full listed price (gross)
     expect(partnerInvoice.invoiceLines).toHaveLength(2)
     for (const line of partnerInvoice.invoiceLines) {
-      expect(line.amount).toBe(9.0) // 10.0 - 1.0 fee
+      expect(line.amount).toBe(10.0) // full listed price
       expect(line.vatRate).toBe(25.5)
       expect(line.productCode).toBe('sunbed-rental')
     }
@@ -143,8 +144,8 @@ describe('processConfirmedReservation', () => {
     })
 
     const line = partnerInvoice!.invoiceLines[0]!
-    // 9.0 at 25.5%: base = round(9.0 / 1.255)
-    const expected = computeVatAndBaseAmounts(9.0, 25.5)
+    // 10.0 at 25.5%: base = round(10.0 / 1.255)
+    const expected = computeVatAndBaseAmounts(10.0, 25.5)
     expect(line.charge).toBe(expected.baseAmount)
     expect(line.tax).toBe(expected.vatAmount)
   })
@@ -234,9 +235,10 @@ describe('processConfirmedReservation', () => {
     const partnerInvoice = invoices.find((i) => i.issuerType === 'PARTNER')!
     const platformInvoice = invoices.find((i) => i.issuerType === 'PLATFORM')!
 
-    // 10% of 10.0 per item = 1.0 per item, 2.0 total
+    // 10% of 10.0 per item = 1.0 per item, 2.0 total commission.
+    // PARTNER invoice is gross: 2 × 10.0 = 20.0.
     expect(platformInvoice.totalAmount).toBe(2.0)
-    expect(partnerInvoice.totalAmount).toBe(18.0)
+    expect(partnerInvoice.totalAmount).toBe(20.0)
   })
 
   it('uses item-level price when set, falls back to site price', async () => {
@@ -256,14 +258,68 @@ describe('processConfirmedReservation', () => {
       .map((l) => l.amount)
       .sort((a, b) => a - b)
 
-    // item2: 10.0 - 1.0 fee = 9.0, item1: 15.0 - 1.0 fee = 14.0
-    expect(amounts).toEqual([9.0, 14.0])
+    // Gross (full listed price): item2 = 10.0, item1 = 15.0
+    expect(amounts).toEqual([10.0, 15.0])
   })
 
   it('throws for non-existent reservation', async () => {
     await expect(
       processConfirmedReservation('nonexistent-id')
     ).rejects.toThrow('Reservation not found')
+  })
+
+  it('sets the partner as recipient (bill-to) on the commission invoice', async () => {
+    const { reservation, partner } = await setupReservation()
+
+    await processConfirmedReservation(reservation.id)
+
+    const platformInvoice = await prisma.invoice.findFirst({
+      where: { reservationId: reservation.id, issuerType: 'PLATFORM' },
+    })
+
+    // The PLATFORM invoice is a B2B commission billed TO the partner.
+    expect(platformInvoice!.recipientCompanyName).toBe(partner.company)
+    expect(platformInvoice!.recipientVatNumber).toBe(partner.businessId)
+    expect(platformInvoice!.recipientCompanyAddress).toBe(partner.address)
+    // Same-country (partner has no country set → falls back to local VAT).
+    expect(platformInvoice!.reverseCharge).toBe(false)
+    expect(platformInvoice!.totalTax).toBeGreaterThan(0)
+  })
+
+  it('reverse-charges the commission for a cross-border EU partner', async () => {
+    const user = await createTestUser()
+    // Partner VAT-registered in ES; platform (settings) is FI → cross-border B2B.
+    await createTestPartnerAccount(user.id, {
+      country: 'ES',
+      businessId: 'ESX1234567B',
+    })
+    const site = await createTestSite(user.id)
+    const settings = await createTestSettings() // country: 'FI'
+    await createTestServiceFee(settings.id)
+    const item1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const reservation = await createTestReservation(user.id, site.id, [item1.id], {
+      paymentAmount: 10.0,
+    })
+
+    await processConfirmedReservation(reservation.id)
+
+    const platformInvoice = await prisma.invoice.findFirst({
+      where: { reservationId: reservation.id, issuerType: 'PLATFORM' },
+      include: { invoiceLines: true },
+    })
+
+    // Reverse charge: 0 VAT, partner self-accounts; commission amount unchanged.
+    expect(platformInvoice!.reverseCharge).toBe(true)
+    expect(platformInvoice!.totalTax).toBe(0)
+    expect(platformInvoice!.totalAmount).toBe(1.0)
+    expect(platformInvoice!.invoiceLines[0]!.tax).toBe(0)
+    expect(platformInvoice!.invoiceLines[0]!.vatRate).toBe(0)
+
+    // The partner sale (PARTNER invoice) is unaffected — still gross.
+    const partnerInvoice = await prisma.invoice.findFirst({
+      where: { reservationId: reservation.id, issuerType: 'PARTNER' },
+    })
+    expect(partnerInvoice!.totalAmount).toBe(10.0)
   })
 })
 
@@ -345,7 +401,7 @@ describe('processConfirmedOrder', () => {
     expect(vatRates).toEqual([14, 24])
   })
 
-  it('deducts service fee from partner amount', async () => {
+  it('books partner lines gross and commission separately', async () => {
     const { order } = await setupOrder()
 
     await processConfirmedOrder(order.id)
@@ -357,12 +413,11 @@ describe('processConfirmedOrder', () => {
       where: { orderId: order.id, issuerType: 'PLATFORM' },
     })
 
-    // Platform fee: calculateServiceFeeAmount(fixedFee=1.0, totalPayment=19.0) = 1.0
-    // Per-line deductions: each item deducts calculateServiceFeeAmount(fixedFee=1.0, itemPrice)
-    // Beer 7.0 → deduct 1.0 → partner 6.0, Cocktail 12.0 → deduct 1.0 → partner 11.0
-    // Total partner lines = 17.0, platform invoice = 1.0
+    // Agent model: PARTNER invoice is gross — Beer 7.0 + Cocktail 12.0 = 19.0
+    // (the full prices the consumer paid). Commission (fixed 1.0) is billed
+    // separately to the partner on the PLATFORM invoice.
     expect(platformInvoice!.totalAmount).toBe(1.0)
-    expect(partnerInvoice!.totalAmount).toBe(17.0)
+    expect(partnerInvoice!.totalAmount).toBe(19.0)
   })
 
   it('is idempotent — calling twice creates only 2 invoices', async () => {

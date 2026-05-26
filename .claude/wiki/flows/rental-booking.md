@@ -18,7 +18,7 @@ related:
   - entity:service-fee
   - flow:reservation-payment
   - flow:walk-in
-last_verified: 2026-05-20
+last_verified: 2026-05-26
 ---
 
 # Flow: Rental Booking
@@ -53,7 +53,7 @@ Equipment rental (surfboards, paddleboards, kayaks, etc.) — hourly or daily. D
    - `status: pending`, `operationalStatus: reserved`
 3. **Payment** — follows the same Mollie / Demo paths as `[[flow:reservation-payment]]`
    - On confirmation → `processConfirmedRentalBooking(paymentRef)` — note: groups bookings by `paymentRef` (a single payment can cover multiple booking rows)
-4. **Invoice** — partner + platform invoices created. Fee direction follows the reservation pattern (deducted from partner). Verify in source before assuming.
+4. **Invoice** — same as reservations: PARTNER invoice booked gross (full price), and a separate PLATFORM commission invoice billed to the partner.
 
 ## Sequence — Walk-in rental (partner)
 

@@ -79,30 +79,19 @@ export default function Orders({ orders, reservationId }: { orders: OrderData[],
   if (selected) {
     const hasInvoice = !!(selected.invoices && selected.invoices.length > 0)
 
-    // Use the PARTNER invoice for product lines and PLATFORM invoice for service fee
+    // Consumer display: PARTNER invoice is the gross amount the consumer paid.
+    // The PLATFORM invoice is a B2B commission billed to the partner — not shown here.
     const partnerInvoice = selected.invoices?.find(i => i.issuerType === 'PARTNER')
-    const platformInvoice = selected.invoices?.find(i => i.issuerType === 'PLATFORM')
     const displayInvoice = partnerInvoice ?? selected.invoices?.[0]
 
     const rows = hasInvoice && displayInvoice
-      ? [
-          ...displayInvoice.invoiceLines.map(l => ({
-            key: l.id,
-            label: l.description ?? '—',
-            net: l.charge,
-            tax: l.tax,
-            gross: l.amount,
-          })),
-          ...(platformInvoice && platformInvoice !== displayInvoice
-            ? platformInvoice.invoiceLines.map(l => ({
-                key: l.id,
-                label: (l.description ?? 'Service fee').replace(/\s*\([A-Z]{2,3}\)\s*$/, ''),
-                net: l.charge,
-                tax: l.tax,
-                gross: l.amount,
-              }))
-            : []),
-        ]
+      ? displayInvoice.invoiceLines.map(l => ({
+          key: l.id,
+          label: l.description ?? '—',
+          net: l.charge,
+          tax: l.tax,
+          gross: l.amount,
+        }))
       : selected.orderItems.map(oi => ({
           key: oi.id,
           label: `${oi.name} × ${oi.quantity}`,
@@ -111,11 +100,8 @@ export default function Orders({ orders, reservationId }: { orders: OrderData[],
           gross: oi.totalPrice,
         }))
 
-    const totals = hasInvoice
-      ? (selected.invoices ?? []).reduce(
-          (a, inv) => ({ net: a.net + inv.totalCharge, tax: a.tax + inv.totalTax, gross: a.gross + inv.totalAmount }),
-          { net: 0, tax: 0, gross: 0 },
-        )
+    const totals = hasInvoice && displayInvoice
+      ? { net: displayInvoice.totalCharge, tax: displayInvoice.totalTax, gross: displayInvoice.totalAmount }
       : rows.reduce(
           (a, r) => ({ net: a.net + r.net, tax: a.tax + r.tax, gross: a.gross + r.gross }),
           { net: 0, tax: 0, gross: 0 },

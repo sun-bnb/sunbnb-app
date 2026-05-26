@@ -42,15 +42,15 @@ Key models: User, PartnerAccount, Site, InventoryItem, Reservation, Order, Order
 ### DB-Dependent Functions
 - `loadFeeContext(siteId, serviceCode)` — loads site + partnerAccount + settings fees; bootstraps default Settings if missing
 - `processConfirmedReservation(id)` — idempotent invoice creation: 2 invoices (partner + platform), per-sunbed lines + fee lines, sequential numbering with FOR UPDATE lock, hash chain, sends confirmation email
-- `processConfirmedOrder(id)` — same pattern but per-item VAT (not site-wide), fee added to customer total
+- `processConfirmedOrder(id)` — same pattern but per-item VAT (not site-wide)
 - `processConfirmedRentalBooking(paymentRef)` — groups bookings by paymentRef, creates invoices for the group
 - `calculateOrderServiceFee(orderId)` — read-only fee calculation for orders
 
 ### Invoice Creation Rules
-- **Reservations**: fee deducted from partner revenue (customer pays listed price)
-- **Orders**: fee added to customer total
+- **Agent/marketplace model**: the PARTNER invoice is booked GROSS (the full price the consumer paid); the fee is never netted out of partner revenue or added to the consumer total
+- Two invoices per payment: **PARTNER** (gross consumer sale, partner = merchant of record) and **PLATFORM** (B2B commission billed TO the partner — recipient fields populated; `reverseCharge` + 0 VAT for cross-border EU B2B). They do NOT sum to the consumer payment
 - All prices are VAT-inclusive; reverse calculation to get base amounts
-- Two invoices per payment: PARTNER (revenue) and PLATFORM (commission)
+- `Invoice.processingFee` holds the (VAT-exempt) Mollie/PSP fee for reconciliation — populated by a deferred settlement-sync step
 - Invoice numbers sequential per issuer type, protected by FOR UPDATE lock
 - Hash chain: each invoice's hash includes previous invoice's hash
 

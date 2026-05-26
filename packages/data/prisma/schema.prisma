@@ -476,6 +476,18 @@ model Invoice {
   issuerVatNumber  String?           @map("issuer_vat_number")
   issuerCompanyName   String?        @map("issuer_company_name")
   issuerCompanyAddress String?       @map("issuer_company_address")
+  // Bill-to party. Populated on the PLATFORM (B2B commission) invoice, whose
+  // recipient is the partner. Null on PARTNER invoices (consumer sale / simplified receipt).
+  recipientCompanyName    String?    @map("recipient_company_name")
+  recipientVatNumber      String?    @map("recipient_vat_number")
+  recipientCompanyAddress String?    @map("recipient_company_address")
+  // EU B2B reverse charge: when set, the issuer charged 0 VAT and the recipient
+  // self-accounts. Used on cross-border PLATFORM commission invoices.
+  reverseCharge    Boolean           @default(false) @map("reverse_charge")
+  // Mollie (or other PSP) processing fee for this payment, captured for partner
+  // reconciliation. VAT-exempt — not part of the invoice VAT total. Populated by
+  // the settlement-sync step (deferred); null until captured.
+  processingFee    Float?            @map("processing_fee")
   settlementId     String?           @map("settlement_id")
   settlementBatchId String?          @map("settlement_batch_id")
   reservationId    String?           @map("reservation_id")
