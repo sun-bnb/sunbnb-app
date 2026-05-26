@@ -11,7 +11,11 @@ import {
   createRestaurant,
   updateRestaurantSettings,
   setRestaurantOpeningHours,
+  createRestaurantCombination,
+  updateRestaurantCombination,
+  deleteRestaurantCombination,
 } from './actions'
+import { revalidatePath } from 'next/cache'
 
 const mockAuth = vi.mocked(auth)
 const mockIsFlagEnabled = vi.mocked(isFlagEnabled)
@@ -353,5 +357,139 @@ describe('setRestaurantOpeningHours', () => {
         { restaurantId: RESTAURANT_ID, day: 2, openTime: '11:00', closeTime: '23:00' },
       ],
     })
+  })
+})
+
+// ─────────────────────────────────────────────────────
+// Table combinations (large-party joins)
+// ─────────────────────────────────────────────────────
+
+describe('table combinations', () => {
+  const COMBO_ID = 'combo-1'
+
+  /** Make both the partner-level and core-level ownership checks pass. */
+  function authorizeForCombination() {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as any)
+    // Two ownership checks resolve to the owner (partner requireRestaurantOwner
+    // then the core requireRestaurantOwner) — use a persistent mock for both.
+    vi.mocked(prisma.restaurant.findUnique).mockResolvedValue({
+      id: RESTAURANT_ID,
+      partnerAccountId: OWNER_ID,
+      siteId: SITE_ID,
+    } as any)
+  }
+
+  it('createRestaurantCombination returns feature_disabled when flag is off', async () => {
+    mockIsFlagEnabled.mockResolvedValue(false)
+    const res = await createRestaurantCombination(RESTAURANT_ID, {
+      capacity: 8,
+      tableIds: ['t1', 't2'],
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('feature_disabled')
+    expect(prisma.tableCombination.create).not.toHaveBeenCalled()
+  })
+
+  it('createRestaurantCombination rejects when restaurant is not owned', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as any)
+    vi.mocked(prisma.restaurant.findUnique).mockResolvedValueOnce({
+      partnerAccountId: 'someone-else',
+    } as any)
+
+    const res = await createRestaurantCombination(RESTAURANT_ID, {
+      capacity: 8,
+      tableIds: ['t1', 't2'],
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authorized')
+    expect(prisma.tableCombination.create).not.toHaveBeenCalled()
+  })
+
+  it('createRestaurantCombination creates the combo and revalidates the tables tab', async () => {
+    authorizeForCombination()
+    vi.mocked(prisma.table.findMany).mockResolvedValue([
+      { id: 't1', restaurantId: RESTAURANT_ID, combinable: true },
+      { id: 't2', restaurantId: RESTAURANT_ID, combinable: true },
+    ] as any)
+    vi.mocked(prisma.tableCombination.create).mockResolvedValue({ id: COMBO_ID } as any)
+    vi.mocked(prisma.tableCombination.findUnique).mockResolvedValue({
+      id: COMBO_ID,
+      restaurantId: RESTAURANT_ID,
+      name: 'Terrace join',
+      capacity: 8,
+      tableIds: ['t1', 't2'],
+    } as any)
+
+    const res = await createRestaurantCombination(RESTAURANT_ID, {
+      name: 'Terrace join',
+      capacity: 8,
+      tableIds: ['t1', 't2'],
+    })
+
+    expect(res.status).toBe('ok')
+    expect(prisma.tableCombination.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          restaurantId: RESTAURANT_ID,
+          name: 'Terrace join',
+          capacity: 8,
+          tableIds: ['t1', 't2'],
+        }),
+      }),
+    )
+    expect(revalidatePath).toHaveBeenCalledWith(`/restaurants/${RESTAURANT_ID}/tables`)
+  })
+
+  it('createRestaurantCombination rejects a member table that is not combinable', async () => {
+    authorizeForCombination()
+    vi.mocked(prisma.table.findMany).mockResolvedValue([
+      { id: 't1', restaurantId: RESTAURANT_ID, combinable: true },
+      { id: 't2', restaurantId: RESTAURANT_ID, combinable: false },
+    ] as any)
+
+    const res = await createRestaurantCombination(RESTAURANT_ID, {
+      capacity: 8,
+      tableIds: ['t1', 't2'],
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/combinable/)
+    expect(prisma.tableCombination.create).not.toHaveBeenCalled()
+  })
+
+  it('updateRestaurantCombination forwards the patch to core and revalidates', async () => {
+    authorizeForCombination()
+    vi.mocked(prisma.tableCombination.findUnique).mockResolvedValue({
+      id: COMBO_ID,
+      restaurantId: RESTAURANT_ID,
+      name: null,
+      capacity: 10,
+      tableIds: ['t1', 't2'],
+    } as any)
+    vi.mocked(prisma.tableCombination.update).mockResolvedValue({ id: COMBO_ID } as any)
+
+    const res = await updateRestaurantCombination(RESTAURANT_ID, COMBO_ID, { capacity: 10 })
+
+    expect(res.status).toBe('ok')
+    expect(prisma.tableCombination.update).toHaveBeenCalledWith({
+      where: { id: COMBO_ID },
+      data: { capacity: 10 },
+    })
+    expect(revalidatePath).toHaveBeenCalledWith(`/restaurants/${RESTAURANT_ID}/tables`)
+  })
+
+  it('deleteRestaurantCombination forwards to core and revalidates', async () => {
+    authorizeForCombination()
+    vi.mocked(prisma.tableCombination.findUnique).mockResolvedValue({
+      restaurantId: RESTAURANT_ID,
+    } as any)
+    vi.mocked(prisma.tableCombination.delete).mockResolvedValue({ id: COMBO_ID } as any)
+
+    const res = await deleteRestaurantCombination(RESTAURANT_ID, COMBO_ID)
+
+    expect(res.status).toBe('ok')
+    expect(prisma.tableCombination.delete).toHaveBeenCalledWith({ where: { id: COMBO_ID } })
+    expect(revalidatePath).toHaveBeenCalledWith(`/restaurants/${RESTAURANT_ID}/tables`)
   })
 })

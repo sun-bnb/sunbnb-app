@@ -218,6 +218,7 @@ export default function TableReservationView({
                 heading: t('availabilityHeading'),
                 empty: t('availabilityEmpty'),
                 tablesSuffix: t('tablesSuffix'),
+                combinationSuffix: t('combinationSuffix'),
               }}
               onSelect={async (slot) => {
                 setModError(null)

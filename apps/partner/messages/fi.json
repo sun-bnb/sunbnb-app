@@ -359,7 +359,22 @@
     "gridCreate": "Luo",
     "gridCreating": "Luodaan…",
     "cancel": "Peruuta",
-    "linkedSiteLink": "← Takaisin kohteeseen"
+    "linkedSiteLink": "← Takaisin kohteeseen",
+    "combinationsHeading": "Pöytäyhdistelmät",
+    "combinationsAdd": "Lisää yhdistelmä",
+    "combinationsEmpty": "Ei yhdistelmiä vielä. Luo yksi mahdollistaaksesi suurten seurueiden varaukset useille pöydille.",
+    "combinationsNoTables": "Ei yhdisteltäviä pöytiä vielä — merkitse pöydät yhdisteltäviksi yllä olevassa pöytäeditorissa.",
+    "combinationsName": "Nimi (valinnainen)",
+    "combinationsNamePlaceholder": "esim. Terassi yhdistelmä",
+    "combinationsCapacity": "Kapasiteetti",
+    "combinationsTables": "Pöydät",
+    "combinationsTablesNoneSelected": "Valitse vähintään 2 pöytää",
+    "combinationsTableLabel": "Pöytä {n}",
+    "combinationsSave": "Tallenna yhdistelmä",
+    "combinationsDelete": "Poista",
+    "combinationsEdit": "Muokkaa",
+    "combinationsCapacitySuggestion": "Ehdotettu valittujen pöytien perusteella",
+    "combinationsErrorMinTables": "Valitse vähintään 2 pöytää"
   },
   "SiteSchematic": {
     "layoutWidth": "Leveys",

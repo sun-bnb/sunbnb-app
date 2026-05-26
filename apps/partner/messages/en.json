@@ -359,7 +359,22 @@
     "gridCreate": "Create",
     "gridCreating": "Creating…",
     "cancel": "Cancel",
-    "linkedSiteLink": "← Back to site"
+    "linkedSiteLink": "← Back to site",
+    "combinationsHeading": "Table combinations",
+    "combinationsAdd": "Add combination",
+    "combinationsEmpty": "No combinations yet. Create one to allow large-party bookings across multiple tables.",
+    "combinationsNoTables": "No combinable tables yet — mark tables as combinable in the table editor above.",
+    "combinationsName": "Name (optional)",
+    "combinationsNamePlaceholder": "e.g. Terrace join",
+    "combinationsCapacity": "Capacity",
+    "combinationsTables": "Tables",
+    "combinationsTablesNoneSelected": "Select at least 2 tables",
+    "combinationsTableLabel": "Table {n}",
+    "combinationsSave": "Save combination",
+    "combinationsDelete": "Delete",
+    "combinationsEdit": "Edit",
+    "combinationsCapacitySuggestion": "Suggested from selected tables",
+    "combinationsErrorMinTables": "Select at least 2 tables"
   },
   "SiteSchematic": {
     "layoutWidth": "Width",

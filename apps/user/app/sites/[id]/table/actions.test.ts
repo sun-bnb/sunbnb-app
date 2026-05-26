@@ -16,20 +16,23 @@ vi.mock('@repo/table-reservations-core', async (importOriginal) => {
     modifyTableReservation: vi.fn(),
     findWaitlistCandidateForFreedReservation: vi.fn(),
     markWaitlistNotified: vi.fn(),
+    createCombinationReservation: vi.fn(),
   }
 })
 
 import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
+import { isFlagEnabled } from '@/app/flags'
 import { issueRefund } from '@/app/api/_lib/payment-provider'
 import {
   cancelTableReservation,
   refundDeposit,
   modifyTableReservation,
   findWaitlistCandidateForFreedReservation,
+  createCombinationReservation,
   DEPOSIT_STATUS,
 } from '@repo/table-reservations-core'
-import { cancelTableBooking, modifyTableBooking } from './actions'
+import { cancelTableBooking, modifyTableBooking, bookCombinationForSite } from './actions'
 
 const mockAuth = vi.mocked(auth)
 const ANON_ID = 'anon-1'
@@ -174,6 +177,88 @@ describe('modifyTableBooking', () => {
       RESERVATION_ID,
       { from: new Date(from), to: new Date(to), partySize: 4, tableId: 'table-9' },
       { userId: null, anonId: ANON_ID },
+    )
+  })
+})
+
+// ── bookCombinationForSite ────────────────────────────────────────────────────
+
+const COMBINATION_ID = 'combo-1'
+const FROM_ISO = '2026-08-01T18:00:00.000Z'
+const TO_ISO = '2026-08-01T20:00:00.000Z'
+
+function comboInput(overrides: Record<string, unknown> = {}) {
+  return {
+    siteId: 'site-1',
+    combinationId: COMBINATION_ID,
+    fromIso: FROM_ISO,
+    toIso: TO_ISO,
+    partySize: 8,
+    guestName: 'Guest',
+    guestEmail: 'guest@example.com',
+    guestPhone: null,
+    specialRequests: null,
+    anonId: ANON_ID,
+    ...overrides,
+  }
+}
+
+describe('bookCombinationForSite', () => {
+  it('returns feature_disabled when the restaurants flag is off', async () => {
+    vi.mocked(isFlagEnabled).mockResolvedValueOnce(false)
+
+    const res = await bookCombinationForSite(comboInput())
+
+    expect(res.status).toBe('error')
+    expect((res as { status: 'error'; errors: string[] }).errors).toContain('feature_disabled')
+    expect(createCombinationReservation).not.toHaveBeenCalled()
+  })
+
+  it('returns an error when the site has no linked restaurant', async () => {
+    // site.findUnique returns null restaurantId
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ restaurantId: null } as any)
+
+    const res = await bookCombinationForSite(comboInput())
+
+    expect(res.status).toBe('error')
+    expect((res as { status: 'error'; errors: string[] }).errors).toContain(
+      'Restaurant not found for this site',
+    )
+    expect(createCombinationReservation).not.toHaveBeenCalled()
+  })
+
+  it('forwards the combination booking to core and returns the reservationId on success', async () => {
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ restaurantId: RESTAURANT_ID } as any)
+    vi.mocked(prisma.restaurant.findUnique).mockResolvedValue({
+      id: RESTAURANT_ID,
+      name: 'Vento',
+      slug: 'vento',
+      tagline: null,
+    } as any)
+    vi.mocked(createCombinationReservation).mockResolvedValue({
+      status: 'ok',
+      reservation: {
+        id: RESERVATION_ID,
+        guestEmail: 'guest@example.com',
+        guestName: 'Guest',
+        from: new Date(FROM_ISO),
+        to: new Date(TO_ISO),
+        partySize: 8,
+        specialRequests: null,
+      },
+    } as any)
+
+    const res = await bookCombinationForSite(comboInput())
+
+    expect(res.status).toBe('ok')
+    expect((res as { status: 'ok'; reservationId: string }).reservationId).toBe(RESERVATION_ID)
+    expect(createCombinationReservation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        restaurantId: RESTAURANT_ID,
+        combinationId: COMBINATION_ID,
+        partySize: 8,
+        guestEmail: 'guest@example.com',
+      }),
     )
   })
 })

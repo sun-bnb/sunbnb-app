@@ -118,3 +118,10 @@ export {
   type ReservationRowProps,
   type ReservationRowLabels,
 } from './partner/ReservationRow'
+
+export {
+  CombinationsEditor,
+  type CombinationsEditorProps,
+  type CombinationsEditorLabels,
+  type CombinableTableInfo,
+} from './partner/CombinationsEditor'

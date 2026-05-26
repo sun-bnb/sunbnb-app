@@ -11,7 +11,7 @@ import {
   type BookingFormValues,
 } from '@repo/table-reservations-ui'
 import type { AvailabilitySlot } from '@repo/table-reservations-core'
-import { bookTableForSite, initiateDemoTableDeposit, joinWaitlistForSite } from './actions'
+import { bookTableForSite, bookCombinationForSite, initiateDemoTableDeposit, joinWaitlistForSite } from './actions'
 
 const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || ''
@@ -31,6 +31,7 @@ interface SlotWire {
   from: string
   to: string
   availableTableIds: string[]
+  availableCombinationIds?: string[]
 }
 
 /** State set when bookTableForSite returns requiresDeposit. */
@@ -60,6 +61,7 @@ export default function TableBookingView({
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [selectedSlot, setSelectedSlot] = useState<SlotWire | null>(null)
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null)
+  const [selectedCombinationId, setSelectedCombinationId] = useState<string | null>(null)
   const [depositPending, setDepositPending] = useState<DepositPending | null>(null)
   const [depositError, setDepositError] = useState<string | null>(null)
   const [depositLoading, setDepositLoading] = useState(false)
@@ -96,6 +98,7 @@ export default function TableBookingView({
           setSlots(body.slots)
           setSelectedSlot(null)
           setSelectedTableId(null)
+          setSelectedCombinationId(null)
           setWaitlisted(false)
         }
       } finally {
@@ -112,6 +115,7 @@ export default function TableBookingView({
     from: new Date(s.from),
     to: new Date(s.to),
     availableTableIds: s.availableTableIds,
+    ...(s.availableCombinationIds ? { availableCombinationIds: s.availableCombinationIds } : {}),
   }))
 
   // ── Deposit pay step ────────────────────────────────────────────────────────
@@ -224,17 +228,27 @@ export default function TableBookingView({
               heading: t('availabilityHeading'),
               empty: t('availabilityEmpty'),
               tablesSuffix: t('tablesSuffix'),
+              combinationSuffix: t('combinationSuffix'),
             }}
             onSelect={(slot) => {
               const wire: SlotWire = {
                 from: new Date(slot.from).toISOString(),
                 to: new Date(slot.to).toISOString(),
                 availableTableIds: slot.availableTableIds,
+                ...(slot.availableCombinationIds
+                  ? { availableCombinationIds: slot.availableCombinationIds }
+                  : {}),
               }
               setSelectedSlot(wire)
-              // Default to the first available table — the customer can switch
-              // once we expose a TableSelector (post-MVP).
-              setSelectedTableId(slot.availableTableIds[0] ?? null)
+              // Combo-only slot: no single table fits the party — use the first
+              // available combination instead. Single-table path remains unchanged.
+              if (slot.availableTableIds.length === 0 && (slot.availableCombinationIds?.length ?? 0) > 0) {
+                setSelectedTableId(null)
+                setSelectedCombinationId(slot.availableCombinationIds![0] ?? null)
+              } else {
+                setSelectedTableId(slot.availableTableIds[0] ?? null)
+                setSelectedCombinationId(null)
+              }
             }}
           />
         )}
@@ -315,6 +329,45 @@ export default function TableBookingView({
                 } else {
                   router.push(`/table-reservations/${res.reservationId}`)
                 }
+              }
+              return res
+            }}
+          />
+        </section>
+      ) : null}
+
+      {selectedSlot && !selectedTableId && selectedCombinationId ? (
+        <section className="border-t border-gray-200 pt-5">
+          <p className="text-sm text-gray-600 mb-4">
+            {t('comboNote', { partySize })}
+          </p>
+          <BookingForm
+            labels={{
+              heading: t('comboFormHeading'),
+              guestName: t('fieldGuestName'),
+              guestEmail: t('fieldGuestEmail'),
+              guestPhone: t('fieldGuestPhone'),
+              specialRequests: t('fieldSpecialRequests'),
+              submit: t('submit'),
+              submitting: t('submitting'),
+              errorPrefix: t('errorPrefix'),
+            }}
+            onSubmit={async (values: BookingFormValues) => {
+              const res = await bookCombinationForSite({
+                siteId,
+                combinationId: selectedCombinationId!,
+                fromIso: selectedSlot!.from,
+                toIso: selectedSlot!.to,
+                partySize,
+                guestName: values.guestName,
+                guestEmail: values.guestEmail,
+                guestPhone: values.guestPhone || null,
+                specialRequests: values.specialRequests || null,
+                anonId,
+              })
+              if (res.status === 'ok') {
+                // Combinations carry no deposit — navigate straight to detail page.
+                router.push(`/table-reservations/${res.reservationId}`)
               }
               return res
             }}

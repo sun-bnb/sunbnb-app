@@ -5,18 +5,21 @@ import { useTranslations } from 'next-intl'
 import {
   TableLayoutEditor,
   type TableLayoutEditorLabels,
+  CombinationsEditor,
+  type CombinationsEditorLabels,
 } from '@repo/table-reservations-ui'
 import type {
   LayoutElementRecord,
   TableInput,
   TableRecord,
+  TableCombinationRecord,
 } from '@repo/table-reservations-core'
 import { RESTAURANT_ELEMENT_PRESETS } from '@repo/table-reservations-ui'
 import {
   CanvasDimensionsHeader,
   type SaveStatus,
 } from '@repo/schematic-editor'
-import { getRestaurantLayout, type RestaurantLayout } from '../queries'
+import { getRestaurantLayout, getRestaurantCombinations, type RestaurantLayout } from '../queries'
 import {
   createTableForRestaurant,
   updateTableForRestaurant,
@@ -27,6 +30,11 @@ import {
   deleteElementForRestaurant,
   saveRestaurantCanvasDimensions,
 } from './actions'
+import {
+  createRestaurantCombination,
+  updateRestaurantCombination,
+  deleteRestaurantCombination,
+} from '../actions'
 import { RestaurantSubNav } from '../RestaurantSubNav'
 import { RestaurantHeader } from '../RestaurantHeader'
 
@@ -34,19 +42,33 @@ export default function TablesView({ restaurantId }: { restaurantId: string }) {
   const t = useTranslations('Restaurant')
 
   const [layout, setLayout] = useState<RestaurantLayout | null>(null)
+  const [combinations, setCombinations] = useState<TableCombinationRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [saveErrors, setSaveErrors] = useState<string[]>([])
 
-  const refresh = useCallback(async () => {
+  const refreshLayout = useCallback(async () => {
     const l = await getRestaurantLayout(restaurantId)
     setLayout(l)
   }, [restaurantId])
 
+  const refreshCombinations = useCallback(async () => {
+    const c = await getRestaurantCombinations(restaurantId)
+    setCombinations(c ?? [])
+  }, [restaurantId])
+
+  const refresh = useCallback(async () => {
+    await Promise.all([refreshLayout(), refreshCombinations()])
+  }, [refreshLayout, refreshCombinations])
+
   useEffect(() => {
     setLoading(true)
-    getRestaurantLayout(restaurantId).then((l) => {
+    Promise.all([
+      getRestaurantLayout(restaurantId),
+      getRestaurantCombinations(restaurantId),
+    ]).then(([l, c]) => {
       setLayout(l)
+      setCombinations(c ?? [])
       setLoading(false)
     })
   }, [restaurantId])
@@ -180,6 +202,31 @@ export default function TablesView({ restaurantId }: { restaurantId: string }) {
     }
   }
 
+  const combinationsLabels: CombinationsEditorLabels = {
+    heading: t('combinationsHeading'),
+    addCombination: t('combinationsAdd'),
+    emptyNoCombinations: t('combinationsEmpty'),
+    emptyNoTables: t('combinationsNoTables'),
+    name: t('combinationsName'),
+    namePlaceholder: t('combinationsNamePlaceholder'),
+    capacity: t('combinationsCapacity'),
+    tablesHeading: t('combinationsTables'),
+    tablesNoneSelected: t('combinationsTablesNoneSelected'),
+    tableLabel: t('combinationsTableLabel'),
+    save: t('combinationsSave'),
+    saving: t('saving'),
+    cancel: t('cancel'),
+    delete: t('combinationsDelete'),
+    edit: t('combinationsEdit'),
+    combinationCapacitySuggestion: t('combinationsCapacitySuggestion'),
+    errorMinTables: t('combinationsErrorMinTables'),
+  }
+
+  // Only pass combinable tables to the editor — server also validates this.
+  const combinableTables = (layout.tables as TableRecord[])
+    .filter((t) => t.combinable)
+    .map((t) => ({ id: t.id, number: t.number, label: t.label ?? null, capacity: t.capacity }))
+
   return (
     <div className="pt-2">
       <RestaurantSubNav restaurantId={restaurantId} active="tables" />
@@ -209,7 +256,7 @@ export default function TablesView({ restaurantId }: { restaurantId: string }) {
                 trackSave('saving')
                 const res = await saveRestaurantCanvasDimensions(restaurantId, w, h)
                 if (res.status === 'ok') {
-                  await refresh()
+                  await refreshLayout()
                   trackSave('saved')
                 } else {
                   trackSave('error', res.errors)
@@ -229,12 +276,12 @@ export default function TablesView({ restaurantId }: { restaurantId: string }) {
           }}
           onTableDuplicate={async (tableId) => {
             const res = await duplicateTableForRestaurant(restaurantId, tableId)
-            if (res.status === 'ok') await refresh()
+            if (res.status === 'ok') await refreshLayout()
             return res
           }}
           onTableCreate={async (at) => {
             const res = await createTableForRestaurant(restaurantId, at)
-            if (res.status === 'ok') await refresh()
+            if (res.status === 'ok') await refreshLayout()
             return res
           }}
           onElementCreate={async (at, type) => {
@@ -250,7 +297,7 @@ export default function TablesView({ restaurantId }: { restaurantId: string }) {
               width: preset.width,
               height: preset.height,
             })
-            if (res.status === 'ok') await refresh()
+            if (res.status === 'ok') await refreshLayout()
             return res
           }}
           onElementPatch={async (elementId, patch) => {
@@ -267,12 +314,33 @@ export default function TablesView({ restaurantId }: { restaurantId: string }) {
               color: string | null
               cornerRadius: number | null
             }>)
-            if (res.status === 'ok') await refresh()
+            if (res.status === 'ok') await refreshLayout()
             return res
           }}
           onElementDelete={async (elementId) => {
             const res = await deleteElementForRestaurant(restaurantId, elementId)
-            if (res.status === 'ok') await refresh()
+            if (res.status === 'ok') await refreshLayout()
+            return res
+          }}
+        />
+
+        <CombinationsEditor
+          combinations={combinations}
+          combinableTables={combinableTables}
+          labels={combinationsLabels}
+          onCreate={async (input) => {
+            const res = await createRestaurantCombination(restaurantId, input)
+            if (res.status === 'ok') await refreshCombinations()
+            return res
+          }}
+          onUpdate={async (id, patch) => {
+            const res = await updateRestaurantCombination(restaurantId, id, patch)
+            if (res.status === 'ok') await refreshCombinations()
+            return res
+          }}
+          onDelete={async (id) => {
+            const res = await deleteRestaurantCombination(restaurantId, id)
+            if (res.status === 'ok') await refreshCombinations()
             return res
           }}
         />

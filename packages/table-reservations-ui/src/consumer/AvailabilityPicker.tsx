@@ -7,6 +7,8 @@ export interface AvailabilityPickerLabels {
   heading: string
   empty: string
   tablesSuffix: string
+  /** Label shown on a combo-only slot where no single table fits the party. */
+  combinationSuffix: string
 }
 
 export interface AvailabilityPickerProps {
@@ -50,7 +52,10 @@ export function AvailabilityPicker({
               <span className="flex flex-col">
                 <span className="font-medium">{formatTime(slot.from)}</span>
                 <span className="text-[10px] opacity-70">
-                  {slot.availableTableIds.length} {labels.tablesSuffix}
+                  {slot.availableTableIds.length === 0 &&
+                  (slot.availableCombinationIds?.length ?? 0) > 0
+                    ? labels.combinationSuffix
+                    : `${slot.availableTableIds.length} ${labels.tablesSuffix}`}
                 </span>
               </span>
             </Button>

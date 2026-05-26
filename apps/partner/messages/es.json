@@ -359,7 +359,22 @@
     "gridCreate": "Crear",
     "gridCreating": "Creando…",
     "cancel": "Cancelar",
-    "linkedSiteLink": "← Volver al sitio"
+    "linkedSiteLink": "← Volver al sitio",
+    "combinationsHeading": "Combinaciones de mesas",
+    "combinationsAdd": "Añadir combinación",
+    "combinationsEmpty": "Sin combinaciones aún. Crea una para permitir reservas de grupos grandes en varias mesas.",
+    "combinationsNoTables": "No hay mesas combinables aún — marca las mesas como combinables en el editor de mesas de arriba.",
+    "combinationsName": "Nombre (opcional)",
+    "combinationsNamePlaceholder": "p.ej. Unión terraza",
+    "combinationsCapacity": "Capacidad",
+    "combinationsTables": "Mesas",
+    "combinationsTablesNoneSelected": "Selecciona al menos 2 mesas",
+    "combinationsTableLabel": "Mesa {n}",
+    "combinationsSave": "Guardar combinación",
+    "combinationsDelete": "Eliminar",
+    "combinationsEdit": "Editar",
+    "combinationsCapacitySuggestion": "Sugerido según mesas seleccionadas",
+    "combinationsErrorMinTables": "Selecciona al menos 2 mesas"
   },
   "SiteSchematic": {
     "layoutWidth": "Ancho",
