@@ -21,7 +21,10 @@ echo "==> [2/6] Schema captured by migrations? (local DB vs schema.prisma)"
 ( cd "$DATA" && npm run migrate:check )
 
 echo "==> [3/6] PENDING migrations on PRODUCTION:"
-( cd "$DATA" && npm run migrate:status:production )
+# `prisma migrate status` exits non-zero when migrations are pending (the normal
+# pre-deploy state). This is informational only — don't let it trip `set -e`
+# before the confirmation + migrate steps below. Real failures surface at [4/6].
+( cd "$DATA" && npm run migrate:status:production ) || true
 
 read -r -p "Apply the above migration(s) to PRODUCTION and deploy? [y/N] " ans
 case "$ans" in
