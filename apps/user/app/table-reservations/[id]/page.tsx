@@ -16,7 +16,7 @@ export default async function TableReservationPage({ params }: { params: { id: s
   }
   const restaurant = await prisma.restaurant.findUnique({
     where: { id: reservation.restaurantId },
-    select: { id: true, name: true, slug: true, siteId: true },
+    select: { id: true, name: true, slug: true, siteId: true, reservationWindow: true },
   })
 
   return (
@@ -32,6 +32,8 @@ export default async function TableReservationPage({ params }: { params: { id: s
         anonId: reservation.anonId,
       }}
       restaurantName={restaurant?.name ?? ''}
+      restaurantId={reservation.restaurantId}
+      reservationWindow={restaurant?.reservationWindow ?? 60}
     />
   )
 }
