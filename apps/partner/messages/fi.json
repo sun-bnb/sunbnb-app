@@ -374,7 +374,11 @@
     "combinationsDelete": "Poista",
     "combinationsEdit": "Muokkaa",
     "combinationsCapacitySuggestion": "Ehdotettu valittujen pöytien perusteella",
-    "combinationsErrorMinTables": "Valitse vähintään 2 pöytää"
+    "combinationsErrorMinTables": "Valitse vähintään 2 pöytää",
+    "embedHeading": "Upota verkkosivuillesi",
+    "embedHint": "Liitä tämä koodinpätkä sivustollesi ottaaksesi varauksia suoraan omalta sivultasi.",
+    "embedCopy": "Kopioi koodi",
+    "embedCopied": "Kopioitu!"
   },
   "SiteSchematic": {
     "layoutWidth": "Leveys",

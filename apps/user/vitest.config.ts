@@ -2,6 +2,9 @@ import { defineConfig } from 'vitest/config'
 import path from 'path'
 
 export default defineConfig({
+  // Match Next's automatic JSX runtime so transformed .tsx (e.g. server
+  // components returning JSX) don't need an explicit `import React`.
+  esbuild: { jsx: 'automatic' },
   test: {
     include: ['app/**/*.test.ts'],
     exclude: ['app/**/*.integration.test.ts'],

@@ -374,7 +374,11 @@
     "combinationsDelete": "Eliminar",
     "combinationsEdit": "Editar",
     "combinationsCapacitySuggestion": "Sugerido según mesas seleccionadas",
-    "combinationsErrorMinTables": "Selecciona al menos 2 mesas"
+    "combinationsErrorMinTables": "Selecciona al menos 2 mesas",
+    "embedHeading": "Incrustar en tu web",
+    "embedHint": "Pega este fragmento en tu sitio para recibir reservas directamente desde tu propia página.",
+    "embedCopy": "Copiar código",
+    "embedCopied": "¡Copiado!"
   },
   "SiteSchematic": {
     "layoutWidth": "Ancho",

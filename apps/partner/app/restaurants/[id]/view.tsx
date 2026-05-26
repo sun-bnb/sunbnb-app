@@ -16,6 +16,7 @@ import type {
 } from '@repo/table-reservations-core'
 import { RestaurantSubNav } from './RestaurantSubNav'
 import { RestaurantHeader } from './RestaurantHeader'
+import { EmbedCodeCard } from './EmbedCodeCard'
 import { getRestaurant, getRestaurantShifts, type RestaurantDetail } from './queries'
 import {
   updateRestaurantSettings,
@@ -215,6 +216,8 @@ export default function RestaurantView({ restaurantId }: { restaurantId: string 
             return res
           }}
         />
+
+        <EmbedCodeCard restaurantId={restaurantId} />
       </div>
     </div>
   )

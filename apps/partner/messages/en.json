@@ -374,7 +374,11 @@
     "combinationsDelete": "Delete",
     "combinationsEdit": "Edit",
     "combinationsCapacitySuggestion": "Suggested from selected tables",
-    "combinationsErrorMinTables": "Select at least 2 tables"
+    "combinationsErrorMinTables": "Select at least 2 tables",
+    "embedHeading": "Embed on your website",
+    "embedHint": "Paste this snippet into your site to take reservations directly from your own page.",
+    "embedCopy": "Copy code",
+    "embedCopied": "Copied!"
   },
   "SiteSchematic": {
     "layoutWidth": "Width",
