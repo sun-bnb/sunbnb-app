@@ -89,12 +89,26 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
   green; tsc 0 new errors; lint clean.** **Deferred (still tracked):** combos skip the no-show deposit; combo-only
   slots aren't modifiable (modify returns a graceful error). **Browser-verify pending (founder's):** partner —
   mark 2 tables combinable + define a combo; consumer — search a party larger than any single table → combo slot.
-- **Next action — pick a remaining P1 thread:**
-  - **1h Embed widget** — book from the venue's own site over the public availability + `/book` APIs (the only
-    remaining in-scope P1 build; Google/Instagram Reserve is external, deferred to its own sub-project).
-  - Also open: **browser-verify** the 1d/1e/1f/1g consumer + partner UIs (founder's to run); **"pick your spot"**
-    wedge feature; token pillars **#3** (health-check + alert) / **#4** (fail-safe discovery); **P2 live floor**.
-    See Roadmap.
+- **✅ 1h Embed widget — DONE (2026-05-26; commit `5954bc7`, on `main`):** chrome-less, framable
+  `apps/user/app/embed/[restaurantId]` route (flag-gated, restaurant-keyed) running the full booking flow
+  (date/party → public availability API → `AvailabilityPicker`/`BookingForm` → POST public `/book`), single-table
+  + combination; reports height via `postMessage`. `public/embed.js` one-line loader (responsive iframe +
+  origin-checked resize). Framing allowed via per-path CSP `frame-ancestors *` (global `X-Frame-Options: DENY`
+  kept elsewhere via negative-lookahead source); `/embed` added to `app.tsx` bare-render list; user vitest gained
+  `esbuild.jsx: 'automatic'`. Partner **`EmbedCodeCard`** (copy-paste snippet from `NEXT_PUBLIC_APP_URL`) on the
+  restaurant settings page. +12 i18n keys (8 user / 4 partner) + 3 embed-page tests. **user 246 / partner 294
+  green; tsc 0 new errors; `next build` passes with `/embed` in the manifest.** **Deferred (flagged):** deposit
+  bookings show a "complete on hosted page" panel (no in-iframe pay — rides with Stripe Connect); root-layout
+  cookie banner still renders in the iframe (needs a route-group split). **Browser-verify pending (founder's):**
+  drop the snippet / load `/embed/<restaurantId>` in an iframe, book a free slot, confirm auto-resize.
+- **🎉 P1 booking core — in-scope build COMPLETE (1a–1h).** What's left of P1 is **external only**: SMS
+  reminders/notify + **Google/Instagram Reserve** (needs partner-API credentials + approval; can't be built in
+  this environment) — its own later sub-project.
+- **Next action — out of P1; pick a follow-on:**
+  - **Browser-verify** the 1d–1h consumer + partner UIs (founder's to run) — the standing verification debt.
+  - **"Pick your spot"** wedge feature (sequences with/after P2 — shares the live-floor renderer).
+  - Mollie token pillars **#3** (health-check + alert) / **#4** (fail-safe discovery).
+  - **P2 live floor** — the next big pillar. See Roadmap.
 - **1e collection Piece 2 — DONE (2026-05-23): Mollie + demo deposit collection through the cascade.**
   (2a) `@repo/data#processChargedTableDeposit` (payment.ts:984) — 2-invoice cascade (PARTNER −fee /
   PLATFORM commission), fee **deducted**, idempotent via new `Invoice.tableReservationId`; migration
@@ -236,7 +250,9 @@ wedge. Five product pillars; ship P1–P2 to be *taken seriously*, P3 for *reten
 tier; plus consumer no-show deposits via the existing cascade — see Open decisions), so P1's
 monetization + no-show work is unblocked.
 
-- ☐ **P1 — Booking core** (table-stakes to be taken seriously). A real availability engine
+- ◐ **P1 — Booking core** (table-stakes to be taken seriously). **In-scope build COMPLETE 2026-05-26
+  (1a–1h all shipped on `main`);** only external SMS notify + Google/Instagram Reserve remain (deferred,
+  can't be built here). A real availability engine
   (party-size to table-size matching, **sections**, **pacing** per time window, **shift-based**
   plans, **table combinations** for large parties; fix the server-TZ bug in
   `getRestaurantAvailability` first — it reads midnight in the *server's* TZ). Multi-channel intake
@@ -429,15 +445,20 @@ monetization + no-show work is unblocked.
     hold window (email + SMS once 1f lands). Tests: enqueue when full; notify earliest match on free-up;
     hold-window expiry. **Ships when** a full-night guest can join a waitlist and is auto-notified on an
     opening.
-  - ◐ **1h — Multi-channel intake (public booking API done; widget UI + Reserve remain).** _Done
+  - ◐ **1h — Multi-channel intake (public API + embed widget DONE; only external Reserve remains).** _Done
     2026-05-22: public, **CORS-enabled, restaurant-keyed** booking endpoint
     `apps/user/app/api/restaurants/[id]/book` (POST + OPTIONS; flag-gated; rate-limited 10/min/IP; anon;
     handles single-table + combination; server-validated; sends confirmation) — the genuine intake point
     for an embeddable widget and future Reserve. Pairs with the existing public availability API._
-    **Remaining:** the embed **widget UI** itself (an iframe/script over these APIs reusing
-    `@repo/table-reservations-ui`), and **Google / Instagram Reserve** — a large external integration
-    that **needs partner-API credentials + approval** (cannot be built in this environment); sequenced
-    last, its own sub-project.
+    **Embed widget DONE 2026-05-26 (commit `5954bc7`):** chrome-less, framable `apps/user/app/embed/[restaurantId]`
+    route running the full booking flow over the public availability + `/book` APIs (reuses
+    `AvailabilityPicker`/`BookingForm`; single-table + combination; `postMessage` height); `public/embed.js`
+    one-line loader (responsive iframe + origin-checked resize); per-path CSP `frame-ancestors *` (global
+    `X-Frame-Options: DENY` kept elsewhere); partner `EmbedCodeCard` snippet on restaurant settings; +12 i18n +
+    3 tests; `next build` passes. **Deferred:** in-iframe deposit pay (shows hosted-completion panel instead —
+    rides with Stripe Connect); cookie banner inside the iframe (route-group split). **Remaining in 1h:** only
+    **Google / Instagram Reserve** — a large external integration that **needs partner-API credentials + approval**
+    (cannot be built in this environment); sequenced last, its own sub-project.
     (a) **Embeddable widget** — package the existing
     `@repo/table-reservations-ui` `BookingForm` / `AvailabilityPicker` as an embeddable widget
     (iframe/script) over a public availability + booking API, so a venue books from its own site; reuses
@@ -753,6 +774,26 @@ monetization + no-show work is unblocked.
   mid-verification without a final report** ([[feedback-agent-task-sizing]]) — the orchestrator verified state,
   added the missing partner wrapper tests, and fixed the two consumer tsc errors (strict-index `?? null` + the
   missed second `AvailabilityPicker` call site) directly.
+- **2026-05-26** — **1h embed widget shipped** (commit `5954bc7`, on `main`) — completes the in-scope half of
+  1h (the public CORS availability + `/book` APIs already existed). A chrome-less, **framable**
+  `apps/user/app/embed/[restaurantId]` route runs the full booking flow over those public APIs (reusing the
+  shared `AvailabilityPicker`/`BookingForm`; single-table + combination), and `public/embed.js` is a one-line
+  loader that injects a responsive iframe and resizes it via an **origin-checked `postMessage`**. **Crux:** the
+  global `X-Frame-Options: DENY` (`next.config.mjs`) blocked all framing — split it so `/embed/*` gets a
+  per-path CSP `frame-ancestors *` and no `X-Frame-Options`, everything else keeps `DENY` via a negative-lookahead
+  source (`/((?!embed).*)`); also added `/embed` to `app.tsx`'s bare-render list (no header/nav in the iframe).
+  Partner `EmbedCodeCard` shows the copy-paste snippet (built from `NEXT_PUBLIC_APP_URL`, the consumer-app origin
+  — same var QR/POS links use). Set `esbuild.jsx: 'automatic'` in the user vitest config so the server component
+  returning JSX transforms without an explicit React import (caught by the first embed-page test).
+  **Deliberate scope boundaries (flagged):** deposit-required bookings show a "complete on the hosted page" panel
+  rather than paying in-iframe (payment redirects inside a third-party iframe are unreliable — rides with Stripe
+  Connect, [[track:003-stripe-connect-compliance]]); the root-layout cookie banner still renders inside the
+  iframe (clean suppression needs a route-group split). +12 i18n (8 user / 4 partner) + 3 embed-page tests.
+  user 246 / partner 294 green; tsc 0 new errors; `next build` passes with `/embed` in the manifest.
+  **Built directly** (not delegated) — interlocking files (headers ↔ route ↔ view ↔ loader contract) plus the
+  session's repeated dev-agent turn-cap failures made orchestrator-driven the safer call. **With 1h done, P1's
+  in-scope build is complete (1a–1h);** only external SMS + Google/Instagram Reserve remain. Browser-verify is
+  the founder's.
 
 ## Open decisions
 

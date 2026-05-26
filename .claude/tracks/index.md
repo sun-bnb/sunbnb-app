@@ -8,7 +8,7 @@ Maintained by the `create` and `handoff` workflows.
 | ID | Track | Next action | Worktree | Updated |
 |----|-------|-------------|----------|---------|
 | [001](001-knowledge-store.md) | Knowledge Store | Phase 1 — stand up Vercel test-env log-drain adapter | — | 2026-05-20 |
-| [002](002-table-reservations.md) | Table Reservations | 1a–1g done (incl. 1d combination UIs, commit `7dc2e0b`). Next P1: **1h embed widget**; browser-verify 1d–1g UIs (founder's) | — | 2026-05-26 |
+| [002](002-table-reservations.md) | Table Reservations | **P1 in-scope build complete (1a–1h)** — last was 1h embed widget (`5954bc7`). Out of P1: browser-verify 1d–1h (founder's), then P2 live floor / token pillars #3–#4 | — | 2026-05-26 |
 
 ## Proposed / backlog
 
