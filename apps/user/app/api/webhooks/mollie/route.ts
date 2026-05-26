@@ -30,7 +30,12 @@ import {
 } from '@repo/data/payment'
 import { isTestMode } from '@repo/data/env'
 import { NextRequest } from 'next/server'
-import { getMollieClientForPartner } from '@/app/api/_lib/mollie'
+import {
+  getMollieClientForPartner,
+  findPartnerAccountForPayment,
+  getValidMollieToken,
+  MollieReconnectRequiredError,
+} from '@/app/api/_lib/mollie'
 import {
   RESERVATION_PAYMENT_FAILED,
   RESERVATION_REFUNDED,
@@ -72,91 +77,6 @@ function parseMetadata(metadata: unknown): MollieMetadata | null {
   } catch {
     return null
   }
-}
-
-/**
- * Find the partner's Mollie access token from a paymentRef.
- * The paymentRef is stored on either a reservation or an order,
- * and we trace back through the site to the partner account.
- */
-async function findPartnerAccessToken(paymentId: string): Promise<string | null> {
-  // Check reservations first
-  const reservation = await prisma.reservation.findFirst({
-    where: { paymentRef: paymentId },
-    select: {
-      site: {
-        select: {
-          user: {
-            select: {
-              partnerAccount: {
-                select: { mollieAccessToken: true },
-              },
-            },
-          },
-        },
-      },
-    },
-  })
-  if (reservation?.site?.user?.partnerAccount?.mollieAccessToken) {
-    return reservation.site.user.partnerAccount.mollieAccessToken
-  }
-
-  // Check orders
-  const order = await prisma.order.findFirst({
-    where: { paymentRef: paymentId },
-    select: {
-      site: {
-        select: {
-          user: {
-            select: {
-              partnerAccount: {
-                select: { mollieAccessToken: true },
-              },
-            },
-          },
-        },
-      },
-    },
-  })
-  if (order?.site?.user?.partnerAccount?.mollieAccessToken) {
-    return order.site.user.partnerAccount.mollieAccessToken
-  }
-
-  // Check rental bookings
-  const rentalBooking = await prisma.rentalBooking.findFirst({
-    where: { paymentRef: paymentId },
-    select: {
-      site: {
-        select: {
-          user: {
-            select: {
-              partnerAccount: {
-                select: { mollieAccessToken: true },
-              },
-            },
-          },
-        },
-      },
-    },
-  })
-  if (rentalBooking?.site?.user?.partnerAccount?.mollieAccessToken) {
-    return rentalBooking.site.user.partnerAccount.mollieAccessToken
-  }
-
-  // Check table-reservation deposits (restaurant → partner account)
-  const tableReservation = await prisma.tableReservation.findFirst({
-    where: { paymentRef: paymentId },
-    select: {
-      restaurant: {
-        select: { partnerAccount: { select: { mollieAccessToken: true } } },
-      },
-    },
-  })
-  if (tableReservation?.restaurant?.partnerAccount?.mollieAccessToken) {
-    return tableReservation.restaurant.partnerAccount.mollieAccessToken
-  }
-
-  return null
 }
 
 async function handlePaymentPaid(meta: MollieMetadata, paymentId: string): Promise<void> {
@@ -268,12 +188,28 @@ export async function POST(request: NextRequest) {
 
   console.log('[Mollie Webhook] Received webhook for payment:', paymentId)
 
-  // Find the partner's access token so we can fetch the payment from their account
-  const accessToken = await findPartnerAccessToken(paymentId)
-  if (!accessToken) {
-    console.error('[Mollie Webhook] Cannot find partner access token for payment:', paymentId)
+  // Resolve the partner this payment belongs to, then get a VALID token via the
+  // centralized manager (refreshes + backfills expiry) rather than reading the
+  // raw stored token — otherwise an expired token would 401 here.
+  const partnerAccountId = await findPartnerAccountForPayment(paymentId)
+  if (!partnerAccountId) {
+    console.error('[Mollie Webhook] Cannot find partner account for payment:', paymentId)
     // Return 200 to prevent Mollie from retrying — we can't process this
     return Response.json({ received: true })
+  }
+
+  let accessToken: string
+  try {
+    accessToken = await getValidMollieToken(partnerAccountId)
+  } catch (err) {
+    if (err instanceof MollieReconnectRequiredError) {
+      console.error('[Mollie Webhook] Partner must reconnect Mollie — cannot verify payment:', paymentId)
+      // Unrecoverable without a reconnect — 200 so Mollie stops retrying.
+      return Response.json({ received: true })
+    }
+    console.error('[Mollie Webhook] Token refresh failed (transient):', paymentId, err)
+    // Transient — 500 so Mollie retries later.
+    return Response.json({ error: 'Token refresh failed' }, { status: 500 })
   }
 
   // Fetch the full payment object from Mollie (partner's account)

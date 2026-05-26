@@ -6,11 +6,30 @@ vi.mock('@/app/auth', () => ({
 }))
 
 const mockMollieGet = vi.fn()
+// Token resolution + refresh now funnel through the centralized manager
+// (findPartnerAccountForPayment → getValidMollieToken), so mock those rather
+// than the raw prisma token lookups the webhook used to do itself.
+const { mockFindPartnerAccount, mockGetValidToken, MockReconnectError } = vi.hoisted(() => {
+  class MockReconnectError extends Error {
+    constructor(message = 'reconnect required') {
+      super(message)
+      this.name = 'MollieReconnectRequiredError'
+    }
+  }
+  return {
+    mockFindPartnerAccount: vi.fn(),
+    mockGetValidToken: vi.fn(),
+    MockReconnectError,
+  }
+})
 vi.mock('@/app/api/_lib/mollie', () => ({
   getMollieClientForPartner: () => ({
     payments: { get: mockMollieGet },
   }),
   isMolliePayment: (ref: string | null) => ref?.startsWith('tr_') ?? false,
+  findPartnerAccountForPayment: mockFindPartnerAccount,
+  getValidMollieToken: mockGetValidToken,
+  MollieReconnectRequiredError: MockReconnectError,
 }))
 
 // vi.hoisted() so these are available in vi.mock() factories (which are hoisted)
@@ -63,18 +82,10 @@ function makeWebhookRequest(paymentId?: string) {
 beforeEach(() => {
   vi.clearAllMocks()
 
-  // Default: reservation lookup returns partner token
-  vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
-    site: {
-      user: {
-        partnerAccount: { mollieAccessToken: 'access_test' },
-      },
-    },
-  } as any)
-  vi.mocked(prisma.order.findFirst).mockResolvedValue(null)
-  vi.mocked(prisma.rentalBooking.findFirst).mockResolvedValue(null)
+  // Default: a partner resolves and the centralized manager returns a valid token.
+  mockFindPartnerAccount.mockResolvedValue('partner-1')
+  mockGetValidToken.mockResolvedValue('access_test')
   // Default: no table reservation (overridden in table-deposit tests)
-  vi.mocked(prisma.tableReservation.findFirst).mockResolvedValue(null)
   vi.mocked(prisma.tableReservation.findUnique).mockResolvedValue(null)
   // sendEmail: reset so we can assert call counts
   mockSendEmail.mockResolvedValue(undefined)
@@ -104,12 +115,29 @@ describe('POST /api/webhooks/mollie', () => {
     expect(res.status).toBe(400)
   })
 
-  it('returns 200 when partner access token not found', async () => {
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
+  it('returns 200 when no partner account owns the payment', async () => {
+    mockFindPartnerAccount.mockResolvedValue(null)
     const res = await POST(makeWebhookRequest('tr_abc123'))
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.received).toBe(true)
+    expect(mockMollieGet).not.toHaveBeenCalled()
+  })
+
+  it('returns 200 without fetching the payment when the partner must reconnect', async () => {
+    mockGetValidToken.mockRejectedValue(new MockReconnectError())
+    const res = await POST(makeWebhookRequest('tr_abc123'))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.received).toBe(true)
+    expect(mockMollieGet).not.toHaveBeenCalled()
+  })
+
+  it('returns 500 on a transient token-refresh failure (triggers retry)', async () => {
+    mockGetValidToken.mockRejectedValue(new Error('network blip'))
+    const res = await POST(makeWebhookRequest('tr_abc123'))
+    expect(res.status).toBe(500)
+    expect(mockMollieGet).not.toHaveBeenCalled()
   })
 
   it('processes paid reservation', async () => {
@@ -254,16 +282,10 @@ describe('POST /api/webhooks/mollie — table-deposit branch', () => {
   const PAYMENT_ID = 'tr_deposit99'
   const TABLE_RESERVATION_ID = 'clxk0000000000000000000000'
 
-  /** Return null for reservation/order/rental so the fallback tableReservation path is reached. */
+  /** The deposit's partner resolves and the manager returns a valid token. */
   function useTableDepositToken() {
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
-    vi.mocked(prisma.order.findFirst).mockResolvedValue(null)
-    vi.mocked(prisma.rentalBooking.findFirst).mockResolvedValue(null)
-    vi.mocked(prisma.tableReservation.findFirst).mockResolvedValue({
-      restaurant: {
-        partnerAccount: { mollieAccessToken: 'access_deposit_token' },
-      },
-    } as any)
+    mockFindPartnerAccount.mockResolvedValue('partner-deposit')
+    mockGetValidToken.mockResolvedValue('access_deposit_token')
   }
 
   /** Mollie returns a paid table-deposit payment. */
@@ -278,9 +300,9 @@ describe('POST /api/webhooks/mollie — table-deposit branch', () => {
     })
   }
 
-  it('resolves partner access token via tableReservation → restaurant → partnerAccount', async () => {
+  it('resolves the partner account then fetches the payment with a valid token', async () => {
     useTableDepositToken()
-    // moldify Mollie to return a non-deposit paid so we just verify token resolution
+    // Non-terminal status so we just verify the resolve → token → fetch funnel.
     mockMollieGet.mockResolvedValue({
       status: 'open',
       metadata: JSON.stringify({
@@ -292,7 +314,8 @@ describe('POST /api/webhooks/mollie — table-deposit branch', () => {
 
     const res = await POST(makeWebhookRequest(PAYMENT_ID))
     expect(res.status).toBe(200)
-    // The Mollie client was called — means the token was resolved
+    expect(mockFindPartnerAccount).toHaveBeenCalledWith(PAYMENT_ID)
+    expect(mockGetValidToken).toHaveBeenCalledWith('partner-deposit')
     expect(mockMollieGet).toHaveBeenCalled()
   })
 

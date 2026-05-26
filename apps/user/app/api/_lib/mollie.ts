@@ -60,7 +60,7 @@ import { getValidMollieToken } from '@repo/data/mollie-tokens'
  * orders, rental bookings, and table-reservation deposits (the latter is owned
  * via restaurant → partnerAccount, not site → user).
  */
-async function findPartnerAccountForPayment(paymentRef: string): Promise<string | null> {
+export async function findPartnerAccountForPayment(paymentRef: string): Promise<string | null> {
   const reservation = await prisma.reservation.findFirst({
     where: { paymentRef },
     select: { site: { select: { user: { select: { partnerAccount: { select: { userId: true } } } } } } },

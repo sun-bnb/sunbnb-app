@@ -91,7 +91,9 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:integration": "POSTGRES_URL=postgres://postgres:sunbnb@localhost:5432/sunbnb_test vitest run --config vitest.integration.config.ts",
-    "test:integration:setup": "npm run migrate:integration"
+    "test:integration:setup": "npm run migrate:integration",
+    "prewarm:mollie:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx --yes tsx scripts/prewarm-mollie-tokens.ts",
+    "prewarm:mollie:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx --yes tsx scripts/prewarm-mollie-tokens.ts"
   },
   "devDependencies": {
     "@repo/eslint-config": "*",

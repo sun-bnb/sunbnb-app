@@ -48,11 +48,11 @@ async function refundHeldDeposit(reservationId: string): Promise<void> {
       select: {
         depositStatus: true,
         paymentRef: true,
-        restaurant: { select: { partnerAccount: { select: { mollieAccessToken: true } } } },
+        restaurant: { select: { partnerAccount: { select: { userId: true } } } },
       },
     })
     if (!tr || tr.depositStatus !== DEPOSIT_STATUS.HELD || !tr.paymentRef) return
-    await refundDepositPayment(tr.paymentRef, tr.restaurant?.partnerAccount?.mollieAccessToken)
+    await refundDepositPayment(tr.paymentRef, tr.restaurant?.partnerAccount?.userId)
     await refundDeposit(reservationId)
   } catch (err) {
     console.error('[deposit] refund-on-arrival/cancel failed', err)
