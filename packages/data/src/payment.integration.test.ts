@@ -25,7 +25,6 @@ import {
 import {
   processConfirmedReservation,
   processConfirmedOrder,
-  round,
   computeVatAndBaseAmounts,
 } from './payment'
 import { RESERVATION_COMPLETE, ORDER_COMPLETE } from './reservation-status'
@@ -176,7 +175,7 @@ describe('processConfirmedReservation', () => {
   })
 
   it('chains invoice hashes correctly across sequential reservations', async () => {
-    const { reservation: res1, user, site, settings } = await setupReservation()
+    const { reservation: res1, user, site } = await setupReservation()
 
     await processConfirmedReservation(res1.id)
 
@@ -396,7 +395,7 @@ describe('processConfirmedOrder', () => {
   it('maintains hash chain across reservation and order invoices', async () => {
     // Process a reservation first to establish chain
     const user = await createTestUser()
-    const partner = await createTestPartnerAccount(user.id)
+    await createTestPartnerAccount(user.id)
     const site = await createTestSite(user.id)
     const settings = await createTestSettings()
     await createTestServiceFee(settings.id)

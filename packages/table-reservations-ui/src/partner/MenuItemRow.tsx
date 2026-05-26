@@ -68,7 +68,6 @@ export function MenuItemRow({
       {item.imageUrl ? (
         // Plain <img> — the UI package is framework-neutral; consumers use their
         // own Image component if they want Next.js optimization.
-        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={item.imageUrl}
           alt={item.name}

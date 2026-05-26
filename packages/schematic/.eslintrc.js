@@ -7,7 +7,4 @@ module.exports = {
     project: "./tsconfig.lint.json",
     tsconfigRootDir: __dirname,
   },
-  // Operational one-off scripts and Prisma seeds aren't part of the lint
-  // tsconfig project (and aren't shipped library source) — skip them.
-  ignorePatterns: ["scripts/", "prisma/"],
 };

@@ -134,14 +134,12 @@ export function MenuItemDialog({
 
           <div className="flex items-center gap-3">
             {imageUrl && !imageFile ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={imageUrl}
                 alt=""
                 className="h-16 w-16 rounded object-cover border border-gray-200"
               />
             ) : imageFile ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={URL.createObjectURL(imageFile)}
                 alt=""

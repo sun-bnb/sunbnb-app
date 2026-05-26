@@ -77,8 +77,8 @@ describe('loadFeeContext', () => {
     const settings = await createTestSettings()
     await createTestServiceFee(settings.id, { serviceCode: 'sunbed-rental' })
 
-    // Request a different service code
-    const ctx = await loadFeeContext(site.id, 'food-and-beverage')
+    // Request a different service code (bootstraps a default fee as a side effect)
+    await loadFeeContext(site.id, 'food-and-beverage')
 
     const fees = await prisma.serviceFee.findMany({
       where: { settingsId: settings.id },

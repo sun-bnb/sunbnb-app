@@ -21,7 +21,6 @@ import {
 } from './test/fixtures'
 import {
   processChargedTableDeposit,
-  round,
   computeVatAndBaseAmounts,
 } from './payment'
 

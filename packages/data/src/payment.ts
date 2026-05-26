@@ -575,7 +575,9 @@ export async function processConfirmedReservation(
   try {
     const { sendConfirmationEmail } = await import('./reservation-emails')
     sendConfirmationEmail(reservationId).catch(() => {})
-  } catch {}
+  } catch {
+    // best-effort: a confirmation-email failure must not block invoice creation
+  }
 }
 
 // ─── Idempotent Rental Booking Processing ───────────────────────────────────
