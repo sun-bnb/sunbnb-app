@@ -3,7 +3,7 @@ id: 002-table-reservations
 title: Table Reservations
 status: active
 created: 2026-05-21
-updated: 2026-05-23
+updated: 2026-05-26
 worktree: null
 ---
 
@@ -63,25 +63,36 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
 ## Resume here
 
 - **Status (2026-05-26): P1 booking core functionally complete and live on `main`** (the per-piece
-  detail bullets below are now historical — all committed + pushed). 1a–1d engine done. **1e no-show
+  detail bullets below are now historical — all committed + pushed; the prior "LOCAL-only" 1f caveat is
+  resolved — `1cb0e40`/`e4172a7`/`ac4a2b5` + the agent-model invoicing commit are all on `origin/main`).
+  **1a–1d fully done — engine AND UI.** **1e no-show
   deposits — DONE end-to-end:** config + Mollie/demo collection + `@repo/data` charge cascade +
   refund-on-arrival + consumer pay-before-confirm UI + "Reserve a table" discovery CTA. **1f modify/cancel
   + cancellation deadline — DONE** (consumer modify UI + partner deadline config + refund-on-timely-cancel;
   SMS reminders deferred). **1g waitlist — DONE** (UIs + auto-notify). 1h public booking **API** done.
   Mollie **token resilience** pillars #1 (db-sync token scrub) + #2 (centralized `@repo/data/mollie-tokens`
-  — expiry fast-path + advisory-locked refresh) **done**. Suites green: **user 238 / partner 288 / data 115
+  — expiry fast-path + advisory-locked refresh) **done**. Suites green: **user 243 / partner 294 / data 115
   unit + 69 integration / core 52**; migrations applied local + Neon test. Founder confirmed the Mollie
-  test-env deposit pays through. **Slice A+B 1f commits `1cb0e40`/`e4172a7` + this config/tests commit are
-  LOCAL-only** — Slice A carries additive migration `20260525134946`, so a push needs `migrate:test` first.
+  test-env deposit pays through.
 - **Out of P1** (founder): SMS reminders/notify + Google/Instagram Reserve (external, later phase).
 - **✅ 1g Waitlist UIs — DONE (2026-05-25):** consumer "join waitlist" (empty-availability) + staff
   auto-notify on cancel/no-show + partner waitlist view (see/remove) + **7 partner unit tests** (waitlist
   actions + auto-notify). user 231 / partner 288 green; tsc clean. Remaining: browser-verify both UIs
   (SMS notify stays out of P1).
-- **Next action — pick a remaining P1 thread** (engine/core done for each; what's left is UI + light wiring):
-  - **1d Combinations UIs** — partner Combinations editor + consumer combo-pick for large parties.
-  - **1h Embed widget** — book from the venue's own site over the public availability + `/book` APIs.
-  - Also open: **browser-verify** the 1e/1f/1g consumer + partner UIs (founder's to run); **"pick your spot"**
+- **✅ 1d Combinations UIs — DONE (2026-05-26; commit `7dc2e0b`, on `main`):** partner **CombinationsEditor**
+  (new shared `@repo/table-reservations-ui` component) on the Tables tab — pick 2+ combinable tables, name,
+  capacity (auto-suggests the member-capacity sum); wires the existing `getRestaurantCombinations` +
+  create/update/delete actions; +15 i18n keys (en/es/fi) + 6 partner wrapper tests. Consumer **combo-pick**:
+  `AvailabilityPicker` shows "combine tables" for combo-only slots; the table booking view books such a slot
+  via `bookCombinationForSite` (instant-confirm — combos carry **no deposit**) → detail page; +3 i18n + 3 tests.
+  Making `combinationSuffix` required also pulled the label into the 1f modify picker. **user 243 / partner 294
+  green; tsc 0 new errors; lint clean.** **Deferred (still tracked):** combos skip the no-show deposit; combo-only
+  slots aren't modifiable (modify returns a graceful error). **Browser-verify pending (founder's):** partner —
+  mark 2 tables combinable + define a combo; consumer — search a party larger than any single table → combo slot.
+- **Next action — pick a remaining P1 thread:**
+  - **1h Embed widget** — book from the venue's own site over the public availability + `/book` APIs (the only
+    remaining in-scope P1 build; Google/Instagram Reserve is external, deferred to its own sub-project).
+  - Also open: **browser-verify** the 1d/1e/1f/1g consumer + partner UIs (founder's to run); **"pick your spot"**
     wedge feature; token pillars **#3** (health-check + alert) / **#4** (fail-safe discovery); **P2 live floor**.
     See Roadmap.
 - **1e collection Piece 2 — DONE (2026-05-23): Mollie + demo deposit collection through the cascade.**
@@ -300,7 +311,7 @@ monetization + no-show work is unblocked.
     `RestaurantHoursEditor`). Migration `…_restaurant_shifts`. Tests: pacing in availability + in
     create (race), shift windows + last-seating, RestaurantHours fallback. **Ships when**
     Lunch/Dinner shifts with a covers-per-window cap are honoured by both availability and booking.
-  - ✅ **1d — Table combinations (core; UI deferred).** _Done 2026-05-22: migration
+  - ✅ **1d — Table combinations (core + UI, fully done).** _Engine done 2026-05-22: migration
     `20260522162209_restaurant_table_combinations` (`TableCombination` + `TableReservation.bookingGroupId`);
     `combinations/{queries,actions}` (CRUD + member-combinable validation + `createCombinationReservation`
     = N linked rows sharing `bookingGroupId`, in-txn all-member overlap + pacing dedup-by-group);
@@ -308,7 +319,14 @@ monetization + no-show work is unblocked.
     pacing covers dedup by group); cancel/seat/depart/no-show made **group-atomic** via `targetGroupWhere`
     + `updateMany`; partner CRUD action wrappers + `getRestaurantCombinations`; user `bookCombinationForSite`;
     route DTO extended. Core 36 / partner 47 / user 5 tests green (partner mock gained `updateMany` +
-    `tableCombination`/`restaurantShift`). **Deferred:** partner Combinations editor UI + consumer combo-pick UI._
+    `tableCombination`/`restaurantShift`)._ **UIs done 2026-05-26 (commit `7dc2e0b`):** partner
+    `CombinationsEditor` (new shared `@repo/table-reservations-ui` component) on the Tables tab — pick 2+
+    combinable tables + name + capacity (auto-suggests member-capacity sum), wires the existing
+    create/update/delete + `getRestaurantCombinations`; consumer combo-pick (`AvailabilityPicker` "combine
+    tables" affordance + `bookCombinationForSite` instant-confirm path → detail page); +18 i18n keys
+    (en/es/fi) + 9 tests. user 243 / partner 294 green; tsc 0 new errors. **Deferred (still tracked):** combos
+    skip the no-show deposit (1e); combo-only slots aren't modifiable (1f modify returns a graceful error).
+    **Browser-verify pending (founder's).**
     Explicit predefined combos (the
     OpenTable/SevenRooms model): `TableCombination { restaurantId, tableIds String[], capacity Int }`
     (members must be `combinable`). Availability evaluates combos when no single eligible table fits
@@ -718,6 +736,23 @@ monetization + no-show work is unblocked.
   Implemented directly (sub-agents kept stopping early all session). Remaining: unit tests for the 2 new
   partner actions + staff-notify wiring (needs `tableWaitlistEntry` + `sendEmail` mocks); browser-verify
   both UIs; SMS notify stays out of P1.
+- **2026-05-26** — **1d Combinations UIs shipped** (commit `7dc2e0b`, on `main`) — the engine + server
+  actions were already done since 2026-05-22; this closed the missing UI on both surfaces. **Partner:** a new
+  shared `CombinationsEditor` (`@repo/table-reservations-ui`) on the restaurant Tables tab — pick 2+
+  combinable tables, optional name, capacity (auto-suggests the member-capacity sum); loads via
+  `getRestaurantCombinations`, filters tables to `combinable`, wires the existing create/update/delete
+  actions; +15 i18n keys + 6 wrapper tests (`actions.test.ts`). **Consumer:** `AvailabilityPicker` now shows
+  "combine tables" for combo-only slots (was a misleading "0 tables"), and the table booking view books such
+  a slot via `bookCombinationForSite` (instant-confirm — combos carry **no deposit**) → detail page; +3 i18n +
+  3 tests. Making `AvailabilityPickerLabels.combinationSuffix` **required** also forced the 1f modify-booking
+  picker (`table-reservations/[id]/view.tsx`) to pass the label — caught by tsc. **Deferred (still tracked in
+  1d/1e/1f):** combos skip the no-show deposit; combo-only slots aren't modifiable (modify returns a graceful
+  error, not a crash). user 243 / partner 294 green; tsc 0 new errors; lint clean. Browser-verify is the
+  founder's. **Process:** drove this with one `partner-dev` then one `user-dev` agent (sequential, not parallel,
+  to avoid both editing the shared UI package's `index.ts`); **both agents again hit their turn cap and stopped
+  mid-verification without a final report** ([[feedback-agent-task-sizing]]) — the orchestrator verified state,
+  added the missing partner wrapper tests, and fixed the two consumer tsc errors (strict-index `?? null` + the
+  missed second `AvailabilityPicker` call site) directly.
 
 ## Open decisions
 

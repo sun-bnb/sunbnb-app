@@ -8,7 +8,7 @@ Maintained by the `create` and `handoff` workflows.
 | ID | Track | Next action | Worktree | Updated |
 |----|-------|-------------|----------|---------|
 | [001](001-knowledge-store.md) | Knowledge Store | Phase 1 — stand up Vercel test-env log-drain adapter | — | 2026-05-20 |
-| [002](002-table-reservations.md) | Table Reservations | 1e collection Piece 1 done — Piece 2/3 paused; Mollie-only targeted upfront deposits (pre-auth later via 003) | — | 2026-05-23 |
+| [002](002-table-reservations.md) | Table Reservations | 1a–1g done (incl. 1d combination UIs, commit `7dc2e0b`). Next P1: **1h embed widget**; browser-verify 1d–1g UIs (founder's) | — | 2026-05-26 |
 
 ## Proposed / backlog
 
