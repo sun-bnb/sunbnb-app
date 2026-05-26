@@ -172,6 +172,7 @@ export async function updateRestaurant(
   if (input.timeZone !== undefined) data.timeZone = input.timeZone
   if (input.noShowPolicy !== undefined) data.noShowPolicy = input.noShowPolicy
   if (input.depositPerGuest !== undefined) data.depositPerGuest = input.depositPerGuest
+  if (input.cancellationDeadlineHours !== undefined) data.cancellationDeadlineHours = input.cancellationDeadlineHours
   if (input.layoutWidth !== undefined) data.layoutWidth = input.layoutWidth
   if (input.layoutHeight !== undefined) data.layoutHeight = input.layoutHeight
   if (input.publicOnStandaloneApp !== undefined) data.publicOnStandaloneApp = input.publicOnStandaloneApp

@@ -27,6 +27,9 @@ const prisma = {
   site: {
     findUnique: vi.fn(),
   },
+  restaurant: {
+    findUnique: vi.fn(),
+  },
   product: {
     findMany: vi.fn(),
   },

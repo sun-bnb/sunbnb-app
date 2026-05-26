@@ -14,6 +14,7 @@ export interface RestaurantInput {
   timeZone?: string | null
   noShowPolicy?: string
   depositPerGuest?: number | null
+  cancellationDeadlineHours?: number | null
   layoutWidth?: number | null
   layoutHeight?: number | null
   publicOnStandaloneApp?: boolean

@@ -15,6 +15,7 @@ const restaurantSelect = {
   timeZone: true,
   noShowPolicy: true,
   depositPerGuest: true,
+  cancellationDeadlineHours: true,
   layoutWidth: true,
   layoutHeight: true,
   publicOnStandaloneApp: true,
@@ -39,6 +40,7 @@ export type RestaurantRecord = {
   timeZone: string | null
   noShowPolicy: string
   depositPerGuest: number | null
+  cancellationDeadlineHours: number | null
   layoutWidth: number | null
   layoutHeight: number | null
   publicOnStandaloneApp: boolean

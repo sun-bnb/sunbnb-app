@@ -62,26 +62,28 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
 
 ## Resume here
 
-- **Status (2026-05-25): P1 booking core functionally complete and live on `main`** (the per-piece
+- **Status (2026-05-26): P1 booking core functionally complete and live on `main`** (the per-piece
   detail bullets below are now historical — all committed + pushed). 1a–1d engine done. **1e no-show
   deposits — DONE end-to-end:** config + Mollie/demo collection + `@repo/data` charge cascade +
-  refund-on-arrival + consumer pay-before-confirm UI + "Reserve a table" discovery CTA. 1f/1g **core**
-  done (◐). 1h public booking **API** done. Mollie **token resilience** pillars #1 (db-sync token scrub)
-  + #2 (centralized `@repo/data/mollie-tokens` — expiry fast-path + advisory-locked refresh) **done**.
-  Suites green: **user 231 / partner 281 / data 115 unit + 69 integration**; migrations applied local +
-  Neon test. Founder confirmed the Mollie test-env deposit pays through.
+  refund-on-arrival + consumer pay-before-confirm UI + "Reserve a table" discovery CTA. **1f modify/cancel
+  + cancellation deadline — DONE** (consumer modify UI + partner deadline config + refund-on-timely-cancel;
+  SMS reminders deferred). **1g waitlist — DONE** (UIs + auto-notify). 1h public booking **API** done.
+  Mollie **token resilience** pillars #1 (db-sync token scrub) + #2 (centralized `@repo/data/mollie-tokens`
+  — expiry fast-path + advisory-locked refresh) **done**. Suites green: **user 238 / partner 288 / data 115
+  unit + 69 integration / core 52**; migrations applied local + Neon test. Founder confirmed the Mollie
+  test-env deposit pays through. **Slice A+B 1f commits `1cb0e40`/`e4172a7` + this config/tests commit are
+  LOCAL-only** — Slice A carries additive migration `20260525134946`, so a push needs `migrate:test` first.
 - **Out of P1** (founder): SMS reminders/notify + Google/Instagram Reserve (external, later phase).
 - **✅ 1g Waitlist UIs — DONE (2026-05-25):** consumer "join waitlist" (empty-availability) + staff
   auto-notify on cancel/no-show + partner waitlist view (see/remove) + **7 partner unit tests** (waitlist
   actions + auto-notify). user 231 / partner 288 green; tsc clean. Remaining: browser-verify both UIs
   (SMS notify stays out of P1).
 - **Next action — pick a remaining P1 thread** (engine/core done for each; what's left is UI + light wiring):
-  - **1f Modify/cancel within policy** — consumer modify UI + a cancellation-deadline field/enforcement
-    (core `modifyTableReservation` + reminders done).
   - **1d Combinations UIs** — partner Combinations editor + consumer combo-pick for large parties.
   - **1h Embed widget** — book from the venue's own site over the public availability + `/book` APIs.
-  - Also open: **"pick your spot"** wedge feature; token pillars **#3** (health-check + alert) / **#4**
-    (fail-safe discovery); **P2 live floor**. See Roadmap.
+  - Also open: **browser-verify** the 1e/1f/1g consumer + partner UIs (founder's to run); **"pick your spot"**
+    wedge feature; token pillars **#3** (health-check + alert) / **#4** (fail-safe discovery); **P2 live floor**.
+    See Roadmap.
 - **1e collection Piece 2 — DONE (2026-05-23): Mollie + demo deposit collection through the cascade.**
   (2a) `@repo/data#processChargedTableDeposit` (payment.ts:984) — 2-invoice cascade (PARTNER −fee /
   PLATFORM commission), fee **deducted**, idempotent via new `Invoice.tableReservationId`; migration
@@ -364,9 +366,16 @@ monetization + no-show work is unblocked.
     consumer `modifyTableReservation` rejects within the deadline (staff exempt); consumer `cancelTableBooking`
     now **refunds the held deposit on a timely cancel** (`issueRefund` + `refundDeposit`) and **forfeits on a
     late cancel** — also fixes the prior gap where consumer cancel didn't refund at all. core 52 / user 231 green.
-    **1f Slice B (next):** partner config input for `cancellationDeadlineHours` (General settings); consumer
-    **modify UI** (full re-pick: date/party → live availability → new slot → `modifyTableBooking` on the detail
-    page) — the only thing that exercises the modify gate; + apps/user tests for the gate + cancel-refund timeliness.
+    **1f Slice B — DONE (2026-05-26): partner config input + consumer modify UI + tests.** Consumer
+    **modify UI** (`apps/user/app/table-reservations/[id]/view.tsx`): "Modify booking" toggles a full re-pick
+    (date/party → `/api/restaurants/[id]/availability` → `AvailabilityPicker` → `modifyTableBooking`), shown only
+    on CONFIRMED bookings (commit `e4172a7`). Partner **config input** for `cancellationDeadlineHours` threaded
+    through core `RestaurantInput` + `updateRestaurant` + `getRestaurantById` select, the shared
+    `RestaurantSettingsForm` (Policy card number input), and partner `view.tsx`/`queries.ts` + i18n (en/es/fi).
+    apps/user tests (`app/sites/[id]/table/actions.test.ts`, 7): cancel-refund timeliness (refund before deadline /
+    forfeit after / always-refund when null / no-deposit no-op / surfaces core error) + `modifyTableBooking`
+    (auth gate + faithful forward of the late-modify rejection). core 52 / user 238 green. **1f in-P1 scope
+    complete** (modify/cancel + cancellation deadline); SMS reminders remain the only deferred piece.
     **Out of P1** (founder 2026-05-22): SMS reminders/notify. Combination bookings not modifiable yet.
     Confirmation + cancellation emails already
     exist (`core/emails.ts` templates, sent from `bookTableForSite`/`cancelTableBooking`). **Reminders:**

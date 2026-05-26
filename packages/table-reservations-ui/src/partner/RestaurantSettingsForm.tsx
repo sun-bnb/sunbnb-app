@@ -67,6 +67,8 @@ export interface RestaurantSettingsLabels {
   noShowPolicyDeposit: string
   depositPerGuest: string
   depositPerGuestHint: string
+  cancellationDeadlineHours: string
+  cancellationDeadlineHoursHint: string
   publicOnStandaloneApp: string
   publicOnStandaloneAppHint: string
 }
@@ -83,6 +85,7 @@ export interface RestaurantSettingsValues {
   timeZone: string
   noShowPolicy: string
   depositPerGuest: number | null
+  cancellationDeadlineHours: number | null
   publicOnStandaloneApp: boolean
 }
 
@@ -276,6 +279,24 @@ export function RestaurantSettingsForm({
               }}
             />
             <span className={HELPER}>{labels.reservationWindowHint}</span>
+          </label>
+          <label className="mt-3 block">
+            <span className={LABEL}>{labels.cancellationDeadlineHours}</span>
+            <input
+              type="number"
+              min={0}
+              max={720}
+              className={INPUT}
+              value={values.cancellationDeadlineHours ?? ''}
+              onChange={(e) => {
+                const raw = e.target.value
+                const n = raw === '' ? null : Number(raw)
+                if (n !== null && !Number.isFinite(n)) return
+                setValues((s) => ({ ...s, cancellationDeadlineHours: n }))
+                scheduleSave({ cancellationDeadlineHours: n })
+              }}
+            />
+            <span className={HELPER}>{labels.cancellationDeadlineHoursHint}</span>
           </label>
           <label className="mt-3 block">
             <span className={LABEL}>{labels.timeZone}</span>

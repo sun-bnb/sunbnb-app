@@ -30,6 +30,7 @@ export interface RestaurantDetail {
   timeZone: string | null
   noShowPolicy: string
   depositPerGuest: number | null
+  cancellationDeadlineHours: number | null
   layoutWidth: number | null
   layoutHeight: number | null
   publicOnStandaloneApp: boolean
@@ -62,6 +63,7 @@ export async function getRestaurant(
     timeZone: r.timeZone,
     noShowPolicy: r.noShowPolicy,
     depositPerGuest: r.depositPerGuest,
+    cancellationDeadlineHours: r.cancellationDeadlineHours,
     layoutWidth: r.layoutWidth,
     layoutHeight: r.layoutHeight,
     publicOnStandaloneApp: r.publicOnStandaloneApp,

@@ -73,6 +73,7 @@ export default function RestaurantView({ restaurantId }: { restaurantId: string 
     timeZone: restaurant.timeZone ?? '',
     noShowPolicy: restaurant.noShowPolicy,
     depositPerGuest: restaurant.depositPerGuest,
+    cancellationDeadlineHours: restaurant.cancellationDeadlineHours,
     publicOnStandaloneApp: restaurant.publicOnStandaloneApp,
   }
 
@@ -126,6 +127,8 @@ export default function RestaurantView({ restaurantId }: { restaurantId: string 
             noShowPolicyDeposit: t('fieldNoShowPolicyDeposit'),
             depositPerGuest: t('fieldDepositPerGuest'),
             depositPerGuestHint: t('fieldDepositPerGuestHint'),
+            cancellationDeadlineHours: t('fieldCancellationDeadlineHours'),
+            cancellationDeadlineHoursHint: t('fieldCancellationDeadlineHoursHint'),
             publicOnStandaloneApp: t('fieldPublicOnStandaloneApp'),
             publicOnStandaloneAppHint: t('fieldPublicOnStandaloneAppHint'),
           }}

@@ -195,6 +195,8 @@
     "fieldNoShowPolicyDeposit": "Deposit",
     "fieldDepositPerGuest": "Deposit per guest",
     "fieldDepositPerGuestHint": "Charged on no-show for shifts that require it.",
+    "fieldCancellationDeadlineHours": "Online cancellation deadline (hours)",
+    "fieldCancellationDeadlineHoursHint": "Hours before the booking when guests can no longer modify or cancel online (and any deposit is forfeited). Leave blank for no deadline.",
     "fieldPublicOnStandaloneApp": "List on the standalone app",
     "fieldPublicOnStandaloneAppHint": "Show this restaurant on tablefind.app's public search. Always visible on Sunbnb.",
     "daySun": "Sunday",

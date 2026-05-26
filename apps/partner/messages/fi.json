@@ -195,6 +195,8 @@
     "fieldNoShowPolicyDeposit": "Panttimaksu",
     "fieldDepositPerGuest": "Pantti per asiakas",
     "fieldDepositPerGuestHint": "Veloitetaan saapumatta jättämisestä vuoroissa, jotka sitä vaativat.",
+    "fieldCancellationDeadlineHours": "Verkkoperuutuksen takaraja (tuntia)",
+    "fieldCancellationDeadlineHoursHint": "Montako tuntia ennen varausta asiakkaat eivät enää voi muuttaa tai peruuttaa varausta verkossa (ja mahdollinen ennakkomaksu menetetään). Jätä tyhjäksi, jos takarajaa ei ole.",
     "fieldPublicOnStandaloneApp": "Näytä erillisessä sovelluksessa",
     "fieldPublicOnStandaloneAppHint": "Näytä tämä ravintola tablefind.app-haun julkisessa listauksessa. Näkyy aina Sunbnb:ssa.",
     "daySun": "Sunnuntai",

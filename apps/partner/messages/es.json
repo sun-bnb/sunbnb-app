@@ -195,6 +195,8 @@
     "fieldNoShowPolicyDeposit": "Depósito",
     "fieldDepositPerGuest": "Depósito por comensal",
     "fieldDepositPerGuestHint": "Se cobra por no presentarse en los turnos que lo exigen.",
+    "fieldCancellationDeadlineHours": "Plazo de cancelación online (horas)",
+    "fieldCancellationDeadlineHoursHint": "Horas antes de la reserva a partir de las cuales los clientes ya no pueden modificarla ni cancelarla online (y se pierde cualquier depósito). Déjalo en blanco para no fijar plazo.",
     "fieldPublicOnStandaloneApp": "Mostrar en la app independiente",
     "fieldPublicOnStandaloneAppHint": "Muestra este restaurante en la búsqueda pública de tablefind.app. Siempre visible en Sunbnb.",
     "daySun": "Domingo",
