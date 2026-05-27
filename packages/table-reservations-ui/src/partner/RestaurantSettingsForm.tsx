@@ -71,6 +71,8 @@ export interface RestaurantSettingsLabels {
   cancellationDeadlineHoursHint: string
   publicOnStandaloneApp: string
   publicOnStandaloneAppHint: string
+  guestSelectionEnabled: string
+  guestSelectionEnabledHint: string
 }
 
 export interface RestaurantSettingsValues {
@@ -87,6 +89,7 @@ export interface RestaurantSettingsValues {
   depositPerGuest: number | null
   cancellationDeadlineHours: number | null
   publicOnStandaloneApp: boolean
+  guestSelectionEnabled: boolean
 }
 
 export interface RestaurantSettingsFormProps {
@@ -384,6 +387,24 @@ export function RestaurantSettingsForm({
               onChange={(v) => {
                 setValues((s) => ({ ...s, publicOnStandaloneApp: v }))
                 void save({ publicOnStandaloneApp: v })
+              }}
+            />
+          </div>
+          <div className="mt-4 flex items-start justify-between gap-3 border-t border-gray-100 pt-4">
+            <span>
+              <span className="block text-sm font-medium text-gray-900">
+                {labels.guestSelectionEnabled}
+              </span>
+              <span className="mt-0.5 block text-xs text-gray-500">
+                {labels.guestSelectionEnabledHint}
+              </span>
+            </span>
+            <Toggle
+              checked={values.guestSelectionEnabled}
+              ariaLabel={labels.guestSelectionEnabled}
+              onChange={(v) => {
+                setValues((s) => ({ ...s, guestSelectionEnabled: v }))
+                void save({ guestSelectionEnabled: v })
               }}
             />
           </div>

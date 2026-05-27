@@ -34,6 +34,7 @@ export interface RestaurantDetail {
   layoutWidth: number | null
   layoutHeight: number | null
   publicOnStandaloneApp: boolean
+  guestSelectionEnabled: boolean
   siteId: string | null
   workingHours: Array<{ day: number; openTime: string; closeTime: string }>
 }
@@ -67,6 +68,7 @@ export async function getRestaurant(
     layoutWidth: r.layoutWidth,
     layoutHeight: r.layoutHeight,
     publicOnStandaloneApp: r.publicOnStandaloneApp,
+    guestSelectionEnabled: r.guestSelectionEnabled,
     siteId: r.siteId ?? null,
     workingHours: r.workingHours.map((h) => ({
       day: h.day,

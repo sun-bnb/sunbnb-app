@@ -497,6 +497,7 @@ function toFormValues(t: TableRecord): TableFormValues {
     staffNote: t.staffNote ?? '',
     onlineBookable: t.onlineBookable,
     combinable: t.combinable,
+    guestSelectable: t.guestSelectable,
     features: t.features ?? [],
     requiresDeposit: t.requiresDeposit ?? null,
     depositPerGuest: t.depositPerGuest ?? null,

@@ -33,6 +33,7 @@ export default async function TableBookingPage({
       name: true,
       reservationWindow: true,
       averageMealDuration: true,
+      guestSelectionEnabled: true,
     },
   })
   if (!restaurant) {
@@ -50,6 +51,7 @@ export default async function TableBookingPage({
         id: restaurant.id,
         name: restaurant.name,
         reservationWindow: restaurant.reservationWindow,
+        guestSelectionEnabled: restaurant.guestSelectionEnabled,
       }}
       initialDate={searchParams.date}
       initialPartySize={searchParams.partySize ? Number(searchParams.partySize) : undefined}

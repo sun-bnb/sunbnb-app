@@ -8,7 +8,10 @@ import CircularProgress from '@mui/material/CircularProgress'
 import {
   AvailabilityPicker,
   BookingForm,
+  FloorMapPicker,
   type BookingFormValues,
+  type FloorMapTable,
+  type FloorMapElement,
 } from '@repo/table-reservations-ui'
 import type { AvailabilitySlot } from '@repo/table-reservations-core'
 import { bookTableForSite, bookCombinationForSite, initiateDemoTableDeposit, joinWaitlistForSite } from './actions'
@@ -22,6 +25,7 @@ interface Props {
     id: string
     name: string
     reservationWindow: number
+    guestSelectionEnabled?: boolean
   }
   initialDate?: string
   initialPartySize?: number
@@ -32,6 +36,12 @@ interface SlotWire {
   to: string
   availableTableIds: string[]
   availableCombinationIds?: string[]
+}
+
+interface LayoutData {
+  world: { width: number; height: number }
+  elements: FloorMapElement[]
+  tables: FloorMapTable[]
 }
 
 /** State set when bookTableForSite returns requiresDeposit. */
@@ -66,6 +76,32 @@ export default function TableBookingView({
   const [depositError, setDepositError] = useState<string | null>(null)
   const [depositLoading, setDepositLoading] = useState(false)
   const [waitlisted, setWaitlisted] = useState(false)
+  const [layout, setLayout] = useState<LayoutData | null>(null)
+
+  // "Pick your spot": fetch the floor layout once when the venue has guest
+  // selection enabled. The map only appears for slots with available selectable
+  // tables; otherwise the flow auto-assigns the first available table as before.
+  useEffect(() => {
+    if (!restaurant.guestSelectionEnabled) return
+    let cancelled = false
+    void fetch(`/api/restaurants/${restaurant.id}/layout`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data) setLayout(data as LayoutData)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [restaurant.id, restaurant.guestSelectionEnabled])
+
+  const selectableIds = new Set(
+    (layout?.tables ?? []).filter((tbl) => tbl.guestSelectable).map((tbl) => tbl.id),
+  )
+  const slotHasSelectable = (slot: SlotWire) =>
+    !!restaurant.guestSelectionEnabled &&
+    !!layout &&
+    slot.availableTableIds.some((id) => selectableIds.has(id))
 
   // Anonymous identity — persisted across bookings so cancellation stays
   // possible without signing in. Keep scoped to this hook (same pattern as
@@ -241,10 +277,15 @@ export default function TableBookingView({
               }
               setSelectedSlot(wire)
               // Combo-only slot: no single table fits the party — use the first
-              // available combination instead. Single-table path remains unchanged.
+              // available combination instead.
               if (slot.availableTableIds.length === 0 && (slot.availableCombinationIds?.length ?? 0) > 0) {
                 setSelectedTableId(null)
                 setSelectedCombinationId(slot.availableCombinationIds![0] ?? null)
+              } else if (slotHasSelectable(wire)) {
+                // Pick-your-spot: let the guest choose a table from the floor map
+                // (don't auto-assign). The booking form appears after they tap.
+                setSelectedTableId(null)
+                setSelectedCombinationId(null)
               } else {
                 setSelectedTableId(slot.availableTableIds[0] ?? null)
                 setSelectedCombinationId(null)
@@ -253,6 +294,25 @@ export default function TableBookingView({
           />
         )}
       </section>
+
+      {selectedSlot && layout && slotHasSelectable(selectedSlot) && !selectedCombinationId ? (
+        <section className="border-t border-gray-200 pt-5">
+          <FloorMapPicker
+            world={layout.world}
+            elements={layout.elements}
+            tables={layout.tables}
+            availableTableIds={selectedSlot.availableTableIds}
+            selectedTableId={selectedTableId}
+            labels={{
+              heading: t('mapHeading'),
+              legendAvailable: t('mapLegendAvailable'),
+              legendSelected: t('mapLegendSelected'),
+              legendUnavailable: t('mapLegendUnavailable'),
+            }}
+            onSelect={(id) => setSelectedTableId(id)}
+          />
+        </section>
+      ) : null}
 
       {!loadingSlots && slots.length === 0 ? (
         <section className="border-t border-gray-200 pt-5">

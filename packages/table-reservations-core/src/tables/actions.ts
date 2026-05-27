@@ -191,6 +191,7 @@ export async function createTable(
       staffNote: input.staffNote ?? null,
       onlineBookable: input.onlineBookable ?? true,
       combinable: input.combinable ?? false,
+      guestSelectable: input.guestSelectable ?? false,
       features: input.features ?? [],
       requiresDeposit: input.requiresDeposit ?? null,
       depositPerGuest: input.depositPerGuest ?? null,
@@ -253,6 +254,7 @@ export async function updateTable(
   if (patch.staffNote !== undefined) data.staffNote = patch.staffNote
   if (patch.onlineBookable !== undefined) data.onlineBookable = patch.onlineBookable
   if (patch.combinable !== undefined) data.combinable = patch.combinable
+  if (patch.guestSelectable !== undefined) data.guestSelectable = patch.guestSelectable
   if (patch.features !== undefined) data.features = patch.features
   if (patch.requiresDeposit !== undefined) data.requiresDeposit = patch.requiresDeposit
   if (patch.depositPerGuest !== undefined) data.depositPerGuest = patch.depositPerGuest
@@ -298,6 +300,7 @@ export async function duplicateTable(
       staffNote: true,
       onlineBookable: true,
       combinable: true,
+      guestSelectable: true,
       features: true,
       requiresDeposit: true,
       depositPerGuest: true,
@@ -336,6 +339,7 @@ export async function duplicateTable(
       staffNote: source.staffNote,
       onlineBookable: source.onlineBookable,
       combinable: source.combinable,
+      guestSelectable: source.guestSelectable,
       features: source.features,
       requiresDeposit: source.requiresDeposit,
       depositPerGuest: source.depositPerGuest,

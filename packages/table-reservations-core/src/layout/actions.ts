@@ -77,6 +77,85 @@ export async function listLayoutElementsForRestaurant(
   })
 }
 
+/** A floor-map table sanitized for the public ("pick your spot") consumer view —
+ *  geometry + render hints only. Deliberately omits staff notes, deposit amounts,
+ *  party-size rules, and other partner-internal fields. */
+export interface PublicLayoutTable {
+  id: string
+  label: string | null
+  capacity: number
+  shape: string
+  width: number
+  height: number
+  schematicX: number | null
+  schematicY: number | null
+  rotation: number
+  zone: string | null
+  guestSelectable: boolean
+  seatsTop: number | null
+  seatsRight: number | null
+  seatsBottom: number | null
+  seatsLeft: number | null
+}
+
+export interface PublicRestaurantLayout {
+  restaurantId: string
+  guestSelectionEnabled: boolean
+  world: { width: number; height: number }
+  elements: LayoutElementRecord[]
+  tables: PublicLayoutTable[]
+}
+
+/**
+ * Public, sanitized floor layout for the consumer "pick your spot" map. No
+ * ownership check (it's public) but returns only render geometry — never staff
+ * notes or deposit amounts. Returns null when the restaurant doesn't exist.
+ * Only `active` tables are returned (inactive tables aren't bookable and
+ * shouldn't clutter the floor).
+ */
+export async function getPublicRestaurantLayout(
+  restaurantId: string,
+): Promise<PublicRestaurantLayout | null> {
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: restaurantId },
+    select: { id: true, layoutWidth: true, layoutHeight: true, guestSelectionEnabled: true },
+  })
+  if (!restaurant) return null
+
+  const [tables, elements] = await Promise.all([
+    prisma.table.findMany({
+      where: { restaurantId, status: 'active' },
+      orderBy: { number: 'asc' },
+      select: {
+        id: true,
+        label: true,
+        capacity: true,
+        shape: true,
+        width: true,
+        height: true,
+        schematicX: true,
+        schematicY: true,
+        rotation: true,
+        zone: true,
+        guestSelectable: true,
+        seatsTop: true,
+        seatsRight: true,
+        seatsBottom: true,
+        seatsLeft: true,
+      },
+    }),
+    listLayoutElementsForRestaurant(restaurantId),
+  ])
+
+  return {
+    restaurantId: restaurant.id,
+    guestSelectionEnabled: restaurant.guestSelectionEnabled,
+    world: { width: restaurant.layoutWidth ?? 15, height: restaurant.layoutHeight ?? 10 },
+    elements,
+    tables,
+  }
+}
+
 export async function createLayoutElement(
   restaurantId: string,
   input: LayoutElementInput,

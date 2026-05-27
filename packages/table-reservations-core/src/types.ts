@@ -18,6 +18,7 @@ export interface RestaurantInput {
   layoutWidth?: number | null
   layoutHeight?: number | null
   publicOnStandaloneApp?: boolean
+  guestSelectionEnabled?: boolean
 }
 
 export interface TableInput {
@@ -37,6 +38,7 @@ export interface TableInput {
   staffNote?: string | null
   onlineBookable?: boolean
   combinable?: boolean
+  guestSelectable?: boolean
   features?: string[]
   requiresDeposit?: boolean | null
   depositPerGuest?: number | null

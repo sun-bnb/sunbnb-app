@@ -123,6 +123,7 @@ export default function TablesView({ restaurantId }: { restaurantId: string }) {
       staffNote: t('tableFieldStaffNote'),
       onlineBookable: t('tableFieldOnlineBookable'),
       combinable: t('tableFieldCombinable'),
+      guestSelectable: t('tableFieldGuestSelectable'),
       featuresHeading: t('tableFeaturesHeading'),
       featureAccessible: t('tableFeatureAccessible'),
       featureWindow: t('tableFeatureWindow'),

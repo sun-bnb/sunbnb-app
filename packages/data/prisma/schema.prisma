@@ -674,6 +674,11 @@ model Restaurant {
   // public listing. Always discoverable on Sunbnb. Brand-neutral column name
   // so the standalone brand can change.
   publicOnStandaloneApp Boolean             @default(true) @map("public_on_standalone_app")
+  // Master switch for guest table-selection ("pick your spot"). When false
+  // (default) the consumer never sees the floor map and tables are auto-assigned.
+  // When true, tables individually flagged `Table.guestSelectable` become
+  // guest-pickable from the read-only floor map. Opt-in, never the default.
+  guestSelectionEnabled Boolean             @default(false) @map("guest_selection_enabled")
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
   partnerAccount        PartnerAccount      @relation(fields: [partnerAccountId], references: [userId], onDelete: Cascade)
@@ -720,6 +725,10 @@ model Table {
   onlineBookable Boolean             @default(true) @map("online_bookable")
   // Eligible to be joined into a TableCombination for larger parties.
   combinable     Boolean             @default(false)
+  // "Pick your spot": when true (and the restaurant's guestSelectionEnabled
+  // master switch is on), this table is guest-pickable from the consumer floor
+  // map. Gate to a premium/view subset — never the whole floor.
+  guestSelectable Boolean            @default(false) @map("guest_selectable")
   // Booking-relevant attributes (validated allowed set in core): "accessible",
   // "window", "outdoor", "high_top", "communal", "quiet". Section = `zone`.
   features       String[]            @default([])

@@ -3,7 +3,10 @@ module.exports = {
   content: [
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
-    "../../packages/ui/src/**/*.{js,ts,jsx,tsx}"
+    "../../packages/ui/src/**/*.{js,ts,jsx,tsx}",
+    // Scan the table-reservations UI package so its Tailwind classes (e.g. the
+    // FloorMapPicker's h-80 map container) aren't purged from the build.
+    "../../packages/table-reservations-ui/src/**/*.{js,ts,jsx,tsx}"
   ],
   theme: {
     extend: {

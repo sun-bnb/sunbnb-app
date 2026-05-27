@@ -19,6 +19,7 @@ const tableSelect = {
   staffNote: true,
   onlineBookable: true,
   combinable: true,
+  guestSelectable: true,
   features: true,
   requiresDeposit: true,
   depositPerGuest: true,
@@ -49,6 +50,7 @@ export interface TableRecord {
   staffNote: string | null
   onlineBookable: boolean
   combinable: boolean
+  guestSelectable: boolean
   features: string[]
   requiresDeposit: boolean | null
   depositPerGuest: number | null

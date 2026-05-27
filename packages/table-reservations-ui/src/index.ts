@@ -100,6 +100,14 @@ export {
 } from './consumer/BookingForm'
 
 export {
+  FloorMapPicker,
+  type FloorMapPickerProps,
+  type FloorMapPickerLabels,
+  type FloorMapTable,
+  type FloorMapElement,
+} from './consumer/FloorMapPicker'
+
+export {
   ConfirmationCard,
   type ConfirmationCardProps,
   type ConfirmationCardLabels,

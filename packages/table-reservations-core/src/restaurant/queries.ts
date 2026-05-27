@@ -19,6 +19,7 @@ const restaurantSelect = {
   layoutWidth: true,
   layoutHeight: true,
   publicOnStandaloneApp: true,
+  guestSelectionEnabled: true,
   workingHours: {
     orderBy: { day: 'asc' as const },
     select: { id: true, day: true, openTime: true, closeTime: true },
@@ -44,6 +45,7 @@ export type RestaurantRecord = {
   layoutWidth: number | null
   layoutHeight: number | null
   publicOnStandaloneApp: boolean
+  guestSelectionEnabled: boolean
   workingHours: Array<{ id: string; day: number; openTime: string; closeTime: string }>
 }
 

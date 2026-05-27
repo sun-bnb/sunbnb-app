@@ -45,6 +45,7 @@ export interface TableFormLabels {
   staffNote: string
   onlineBookable: string
   combinable: string
+  guestSelectable: string
   featuresHeading: string
   featureAccessible: string
   featureWindow: string
@@ -87,6 +88,7 @@ export interface TableFormValues {
   staffNote: string
   onlineBookable: boolean
   combinable: boolean
+  guestSelectable: boolean
   features: string[]
   requiresDeposit: boolean | null
   depositPerGuest: number | null
@@ -342,6 +344,20 @@ export function TableForm({ initial, labels, onChange, onDelete, onClose }: Tabl
           />
         }
         label={<span className="text-xs text-gray-700">{labels.combinable}</span>}
+      />
+
+      <FormControlLabel
+        control={
+          <Switch
+            size="small"
+            checked={values.guestSelectable}
+            onChange={(_, checked) => {
+              setValues((s) => ({ ...s, guestSelectable: checked }))
+              saveNow({ guestSelectable: checked })
+            }}
+          />
+        }
+        label={<span className="text-xs text-gray-700">{labels.guestSelectable}</span>}
       />
 
       <div className="flex flex-col gap-1.5 border-t border-gray-100 pt-3">

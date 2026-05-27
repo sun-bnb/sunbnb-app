@@ -6,7 +6,10 @@ import TextField from '@mui/material/TextField'
 import {
   AvailabilityPicker,
   BookingForm,
+  FloorMapPicker,
   type BookingFormValues,
+  type FloorMapTable,
+  type FloorMapElement,
 } from '@repo/table-reservations-ui'
 import type { AvailabilitySlot } from '@repo/table-reservations-core'
 
@@ -19,6 +22,7 @@ interface Props {
     name: string
     reservationWindow: number
     siteId: string | null
+    guestSelectionEnabled?: boolean
   }
   initialDate?: string
   initialPartySize?: number
@@ -29,6 +33,12 @@ interface SlotWire {
   to: string
   availableTableIds: string[]
   availableCombinationIds?: string[]
+}
+
+interface LayoutData {
+  world: { width: number; height: number }
+  elements: FloorMapElement[]
+  tables: FloorMapTable[]
 }
 
 interface Confirmed {
@@ -57,6 +67,30 @@ export default function EmbedBookingView({ restaurant, initialDate, initialParty
   const [selectedCombinationId, setSelectedCombinationId] = useState<string | null>(null)
   const [confirmed, setConfirmed] = useState<Confirmed | null>(null)
   const [depositRequired, setDepositRequired] = useState(false)
+  const [layout, setLayout] = useState<LayoutData | null>(null)
+
+  // "Pick your spot": fetch the floor layout when the venue opts in.
+  useEffect(() => {
+    if (!restaurant.guestSelectionEnabled) return
+    let cancelled = false
+    void fetch(`/api/restaurants/${restaurant.id}/layout`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data) setLayout(data as LayoutData)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [restaurant.id, restaurant.guestSelectionEnabled])
+
+  const selectableIds = new Set(
+    (layout?.tables ?? []).filter((tbl) => tbl.guestSelectable).map((tbl) => tbl.id),
+  )
+  const slotHasSelectable = (slot: SlotWire) =>
+    !!restaurant.guestSelectionEnabled &&
+    !!layout &&
+    slot.availableTableIds.some((id) => selectableIds.has(id))
 
   const anonIdRef = useRef<string | null>(null)
   useEffect(() => {
@@ -262,6 +296,10 @@ export default function EmbedBookingView({ restaurant, initialDate, initialParty
               if (slot.availableTableIds.length === 0 && (slot.availableCombinationIds?.length ?? 0) > 0) {
                 setSelectedTableId(null)
                 setSelectedCombinationId(slot.availableCombinationIds![0] ?? null)
+              } else if (slotHasSelectable(wire)) {
+                // Pick-your-spot: guest chooses from the floor map below.
+                setSelectedTableId(null)
+                setSelectedCombinationId(null)
               } else {
                 setSelectedTableId(slot.availableTableIds[0] ?? null)
                 setSelectedCombinationId(null)
@@ -270,6 +308,25 @@ export default function EmbedBookingView({ restaurant, initialDate, initialParty
           />
         )}
       </section>
+
+      {selectedSlot && layout && slotHasSelectable(selectedSlot) && !selectedCombinationId ? (
+        <section className="mt-5 border-t border-gray-200 pt-5">
+          <FloorMapPicker
+            world={layout.world}
+            elements={layout.elements}
+            tables={layout.tables}
+            availableTableIds={selectedSlot.availableTableIds}
+            selectedTableId={selectedTableId}
+            labels={{
+              heading: t('mapHeading'),
+              legendAvailable: t('mapLegendAvailable'),
+              legendSelected: t('mapLegendSelected'),
+              legendUnavailable: t('mapLegendUnavailable'),
+            }}
+            onSelect={(id) => setSelectedTableId(id)}
+          />
+        </section>
+      ) : null}
 
       {selectedSlot && (selectedTableId || selectedCombinationId) ? (
         <section className="mt-5 border-t border-gray-200 pt-5">
