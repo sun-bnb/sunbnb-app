@@ -3,7 +3,7 @@ id: 002-table-reservations
 title: Table Reservations
 status: active
 created: 2026-05-21
-updated: 2026-05-26
+updated: 2026-05-27
 worktree: null
 ---
 
@@ -104,9 +104,24 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
 - **🎉 P1 booking core — in-scope build COMPLETE (1a–1h).** What's left of P1 is **external only**: SMS
   reminders/notify + **Google/Instagram Reserve** (needs partner-API credentials + approval; can't be built in
   this environment) — its own later sub-project.
+- **✅ "Pick your spot" guest table selection — DONE (2026-05-27; commit `71c75e7`, on `main`).** Built ahead of
+  P2 (it didn't actually need the live-floor renderer — the read-only `SchematicRenderer` `mode="view"` already
+  exists). **Two-level gate (founder-chosen):** `Restaurant.guestSelectionEnabled` master switch +
+  per-table `Table.guestSelectable` (additive migration `20260526145829`, local + local `sunbnb_test`). The
+  consumer floor map (`FloorMapPicker` in `@repo/table-reservations-ui`, wrapping `SchematicRenderer`) shows only
+  when the master switch is on AND the slot has an available selectable table; else the flow auto-assigns as
+  before. Sanitized `getPublicRestaurantLayout` (core) + public `GET /api/restaurants/[id]/layout` feed geometry
+  only. Wired into **both** `/sites/[id]/table` and the embed widget; partner gets the per-table toggle (TableForm)
+  + master switch (RestaurantSettingsForm). **Pacing (1c) + combinations (1d) untouched** — only picks the
+  `tableId`. Also added `@repo/table-reservations-ui` to the user Tailwind content globs (else `h-80` purges →
+  map collapses). i18n en/es/fi; +5 layout-route tests. core 52 / user 251 / partner 294 / data-integ 74 green;
+  `next build` passes. **Deferred:** optional upcharge for selectable spots (skipped). **Browser-verify pending
+  (founder's):** master switch on + flag 2–3 tables → book a slot → tap a green table on the map.
 - **Next action — out of P1; pick a follow-on:**
-  - **Browser-verify** the 1d–1h consumer + partner UIs (founder's to run) — the standing verification debt.
-  - **"Pick your spot"** wedge feature (sequences with/after P2 — shares the live-floor renderer).
+  - **`migrate:test` then push** is the only step left for this batch (1d/1h already pushed; pick-your-spot is
+    committed local only — additive migration `20260526145829` must reach the Neon TEST DB before `main` push;
+    pre-push hook enforces).
+  - **Browser-verify** the 1d–1h + pick-your-spot consumer + partner UIs (founder's to run) — the standing debt.
   - Mollie token pillars **#3** (health-check + alert) / **#4** (fail-safe discovery).
   - **P2 live floor** — the next big pillar. See Roadmap.
 - **1e collection Piece 2 — DONE (2026-05-23): Mollie + demo deposit collection through the cascade.**
@@ -485,8 +500,14 @@ monetization + no-show work is unblocked.
   one map, one guest: sunbeds + tables + F&B + rentals in a single system for beach clubs /
   chiringuitos / hotel pools / rooftops. No incumbent serves this and Sunbnb owns the sunbed half.
   Plus **fair pricing** — no per-cover from the first paid tier (Starter is per-cover). This is how we *win*, not just match.
-- ☐ **Guest-selectable tables ("pick your spot") — leisure-venue wedge feature** _(captured 2026-05-24,
-  founder question re: parity with the sunbed booking map)._ Let the consumer pick an exact table from the
+- ✅ **Guest-selectable tables ("pick your spot") — leisure-venue wedge feature** _(captured 2026-05-24; DONE
+  2026-05-27, commit `71c75e7`, on `main`)._ Shipped as a **two-level gate** — `Restaurant.guestSelectionEnabled`
+  master switch + per-table `Table.guestSelectable` (the "per-section" intent realized as a per-table flag the
+  partner sets on a premium subset). Consumer `FloorMapPicker` reuses `SchematicRenderer` `mode="view"`; public
+  `getPublicRestaurantLayout` + `GET /api/restaurants/[id]/layout` feed sanitized geometry; map shows only when
+  enabled AND the slot has an available selectable table, else auto-assign. In both `/sites/[id]/table` + embed.
+  Built ahead of P2 (no live-floor dependency). Optional upcharge deferred. Pacing/combination invariants held.
+  _Original design discipline (kept):_ Let the consumer pick an exact table from the
   `@repo/schematic` floor map (as the sunbed app does), but **only as an opt-in, partner-configurable,
   per-section** option — never the default for a normal restaurant floor. **Why incumbents
   (OpenTable/Resy/SevenRooms) don't:** a floor is a *pooled, reconfigurable* resource the host optimizes
@@ -794,6 +815,22 @@ monetization + no-show work is unblocked.
   session's repeated dev-agent turn-cap failures made orchestrator-driven the safer call. **With 1h done, P1's
   in-scope build is complete (1a–1h);** only external SMS + Google/Instagram Reserve remain. Browser-verify is
   the founder's.
+- **2026-05-27** — **"Pick your spot" guest table selection shipped** (commit `71c75e7`, on `main`) — built
+  ahead of its P2 sequencing once it was clear the read-only `SchematicRenderer` `mode="view"` already existed
+  (no live-floor dependency). Founder chose the **two-level gate** (master switch + per-table flag) over
+  per-table-only or zone-based. Additive migration `20260526145829` (`Restaurant.guestSelectionEnabled` +
+  `Table.guestSelectable`), applied local + local `sunbnb_test`. Consumer **`FloorMapPicker`**
+  (`@repo/table-reservations-ui`) wraps the existing renderer; sanitized **`getPublicRestaurantLayout`** (core) +
+  public **`GET /api/restaurants/[id]/layout`** (404s when the master switch is off) feed geometry only — no staff
+  notes/deposit amounts. Map shows only when enabled AND the slot has an available selectable table, else the
+  pre-existing auto-assign path runs; pacing (1c) + combinations (1d) untouched (it only chooses the `tableId`).
+  Wired into `/sites/[id]/table` + the embed widget; partner gets the per-table toggle + master switch. **Gotcha
+  caught:** the user app's Tailwind config wasn't scanning `@repo/table-reservations-ui`, so `FloorMapPicker`'s
+  `h-80` map-height class would purge → SVG collapses to 0 height → invisible map; fixed by adding the package to
+  the content globs ([[subsystem:design-system]] purge rule). Built directly (schema+core+UI+two apps interlock).
+  core 52 / user 251 (+5 layout-route) / partner 294 / data-integ 74 green; tsc 0 new errors; `next build` passes.
+  **Deferred:** optional upcharge for selectable spots. **Remaining for this batch:** `migrate:test` (Neon TEST DB)
+  before the next `main` push — additive, pre-push-hook-enforced. Browser-verify is the founder's.
 
 ## Open decisions
 
