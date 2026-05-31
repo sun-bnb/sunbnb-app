@@ -2,6 +2,7 @@ import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
 import Reservations from './Reservations'
 import { Reservation } from '@/app/sites/types'
+import { isFlagEnabled } from '@/app/flags'
 
 async function getReservations(userId: string): Promise<Reservation[]> {
   return await prisma.reservation.findMany({ 
@@ -26,6 +27,9 @@ async function getRentalBookings(userId: string) {
 }
 
 async function getTableReservations(userId: string) {
+  // Gate on the `restaurants` feature flag — when off, the detail page (/
+  // table-reservations/[id]) 404s, so surfacing cards in the list would deadlink.
+  if (!(await isFlagEnabled('restaurants'))) return []
   return await prisma.tableReservation.findMany({
     where: { userId },
     orderBy: { from: 'desc' },

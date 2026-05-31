@@ -16,13 +16,15 @@ import {
 } from '@repo/data/reservation-status'
 
 
-export interface MonthTotals {
+// Local to this module — Next.js page modules may only export `default`,
+// `metadata`, `viewport`, etc. Any other export trips .next/types validation.
+interface MonthTotals {
   month: string
   revenue: number
   fees: number
 }
 
-export async function getRevenueAndFeesByMonth(
+async function getRevenueAndFeesByMonth(
   userId: string
 ): Promise<MonthTotals[]> {
   const now = new Date()
