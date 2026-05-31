@@ -18,4 +18,5 @@ const nextConfig = {
   },
 };
 
+// Picked up by Vercel's per-app path filter on redeploy.
 export default nextConfig;
