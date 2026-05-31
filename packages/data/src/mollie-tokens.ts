@@ -41,12 +41,28 @@ export class MollieReconnectRequiredError extends Error {
 /** Internal: a refresh token Mollie rejected — unrecoverable without reconnect. */
 class MollieInvalidGrantError extends Error {}
 
-/** Pure: is a token still fresh enough to use (with the safety buffer)? */
+/** Pure: is a token still fresh enough to use (with the safety buffer)?
+ *
+ *  **NULL expiry → fresh.** The `mollieTokenExpiresAt` column was added as a
+ *  nullable backfill (migration `20260525120520_partner_mollie_token_expiry`),
+ *  so existing rows carried NULL until their next OAuth round-trip populated
+ *  it. Treating NULL as "expired" forced a refresh on every existing partner
+ *  the first time this manager ran; combined with the refresh-token sprawl
+ *  the centralization was meant to fix, many of those refreshes raced and
+ *  came back `invalid_grant`, and the catch path cleared the entire token
+ *  trio + flipped `mollieOnboardingStatus` to `'needs-data'` (incident
+ *  2026-05-26 — torrentehamma@gmail.com on prod).
+ *
+ *  Trusting the stored access token when expiry is unknown is safe: if it
+ *  IS dead, Mollie returns 401 on the next API call and the consumer surfaces
+ *  the error reactively. The previous behavior caused proactive, blanket
+ *  loss of working tokens; this one cannot.
+ */
 export function isMollieTokenFresh(
   expiresAt: Date | null | undefined,
   now: Date = new Date(),
 ): boolean {
-  if (!expiresAt) return false
+  if (!expiresAt) return true
   return now.getTime() < expiresAt.getTime() - EXPIRY_BUFFER_MS
 }
 

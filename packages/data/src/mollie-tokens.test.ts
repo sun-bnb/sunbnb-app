@@ -4,9 +4,16 @@ import { isMollieTokenFresh, mollieTokenExpiresAtFrom } from './mollie-tokens'
 describe('isMollieTokenFresh', () => {
   const now = new Date('2026-05-25T12:00:00Z')
 
-  it('is false when no expiry is stored', () => {
-    expect(isMollieTokenFresh(null, now)).toBe(false)
-    expect(isMollieTokenFresh(undefined, now)).toBe(false)
+  // Post-incident (2026-05-26) semantics: NULL expiry means "we don't know yet"
+  // (backfill column added but never populated for pre-existing partners). We
+  // trust the stored access token in that case rather than preemptively
+  // refreshing it — a forced refresh against a possibly-stale refresh token
+  // can `invalid_grant` and trigger the catch path that clears the whole
+  // token trio. If the access token IS dead, Mollie's own 401 surfaces it
+  // reactively at call time.
+  it('treats NULL/undefined expiry as fresh (post-incident)', () => {
+    expect(isMollieTokenFresh(null, now)).toBe(true)
+    expect(isMollieTokenFresh(undefined, now)).toBe(true)
   })
 
   it('is false when already expired', () => {
