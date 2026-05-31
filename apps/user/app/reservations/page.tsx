@@ -25,16 +25,50 @@ async function getRentalBookings(userId: string) {
   })
 }
 
+async function getTableReservations(userId: string) {
+  return await prisma.tableReservation.findMany({
+    where: { userId },
+    orderBy: { from: 'desc' },
+    include: {
+      restaurant: { select: { id: true, name: true } },
+      table: { select: { id: true, number: true, label: true } },
+    },
+  })
+}
+
 export default async function ReservationsPage() {
 
   const session = await auth()
   if (!session?.user) return null
 
-  const [reservations, rentalBookings] = await Promise.all([
+  const [reservations, rentalBookings, tableReservations] = await Promise.all([
     getReservations(session.user.id),
     getRentalBookings(session.user.id),
+    getTableReservations(session.user.id),
   ])
 
-  return <Reservations reservations={reservations} rentalBookings={rentalBookings} />
+  // Combination bookings persist as N linked rows sharing a bookingGroupId
+  // (chunk 1d). Dedupe to one card per booking — first seen wins (the query is
+  // ordered by `from` desc, so it doesn't matter which member represents the group).
+  const dedupedTables = (() => {
+    const seen = new Set<string>()
+    const out: typeof tableReservations = []
+    for (const r of tableReservations) {
+      if (r.bookingGroupId) {
+        if (seen.has(r.bookingGroupId)) continue
+        seen.add(r.bookingGroupId)
+      }
+      out.push(r)
+    }
+    return out
+  })()
+
+  return (
+    <Reservations
+      reservations={reservations}
+      rentalBookings={rentalBookings}
+      tableReservations={dedupedTables}
+    />
+  )
 
 }

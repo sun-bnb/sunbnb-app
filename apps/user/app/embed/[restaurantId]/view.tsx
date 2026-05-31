@@ -317,11 +317,18 @@ export default function EmbedBookingView({ restaurant, initialDate, initialParty
             tables={layout.tables}
             availableTableIds={selectedSlot.availableTableIds}
             selectedTableId={selectedTableId}
+            partySize={partySize}
             labels={{
               heading: t('mapHeading'),
               legendAvailable: t('mapLegendAvailable'),
               legendSelected: t('mapLegendSelected'),
               legendUnavailable: t('mapLegendUnavailable'),
+              reasonNotSelectable: t('mapReasonNotSelectable'),
+              reasonUnavailable: t('mapReasonUnavailable'),
+              reasonTooSmall: ({ capacity, partySize }) =>
+                t('mapReasonTooSmall', { capacity, partySize }),
+              reasonTooBig: ({ minPartySize, partySize }) =>
+                t('mapReasonTooBig', { minPartySize, partySize }),
             }}
             onSelect={(id) => setSelectedTableId(id)}
           />

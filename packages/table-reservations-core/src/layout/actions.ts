@@ -84,6 +84,11 @@ export interface PublicLayoutTable {
   id: string
   label: string | null
   capacity: number
+  /** Minimum party size the table accepts — used to surface a "too big for your
+   *  party" reason on the floor map when a small party taps a large table. */
+  minPartySize: number
+  /** Optional upper bound below `capacity` (null = no cap beyond capacity). */
+  maxPartySize: number | null
   shape: string
   width: number
   height: number
@@ -130,6 +135,8 @@ export async function getPublicRestaurantLayout(
         id: true,
         label: true,
         capacity: true,
+        minPartySize: true,
+        maxPartySize: true,
         shape: true,
         width: true,
         height: true,

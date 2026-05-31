@@ -125,7 +125,7 @@ export default function TableReservationView({
   const canModify = status === TABLE_RESERVATION_STATUS.CONFIRMED
 
   return (
-    <div className="mx-auto flex max-w-xl flex-col gap-4 p-6">
+    <div className="mx-auto flex max-w-xl flex-col gap-4 px-6 pt-[80px] pb-6">
       <ConfirmationCard
         reservation={{
           id: reservation.id,

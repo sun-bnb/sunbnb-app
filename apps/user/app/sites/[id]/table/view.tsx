@@ -221,7 +221,7 @@ export default function TableBookingView({
   }
 
   return (
-    <div className="max-w-xl mx-auto p-6 flex flex-col gap-6">
+    <div className="max-w-xl mx-auto px-6 pt-[80px] pb-6 flex flex-col gap-6">
       <header>
         <h1 className="text-xl font-semibold text-gray-900">
           {t('pageTitle', { name: restaurant.name })}
@@ -303,11 +303,18 @@ export default function TableBookingView({
             tables={layout.tables}
             availableTableIds={selectedSlot.availableTableIds}
             selectedTableId={selectedTableId}
+            partySize={partySize}
             labels={{
               heading: t('mapHeading'),
               legendAvailable: t('mapLegendAvailable'),
               legendSelected: t('mapLegendSelected'),
               legendUnavailable: t('mapLegendUnavailable'),
+              reasonNotSelectable: t('mapReasonNotSelectable'),
+              reasonUnavailable: t('mapReasonUnavailable'),
+              reasonTooSmall: ({ capacity, partySize }) =>
+                t('mapReasonTooSmall', { capacity, partySize }),
+              reasonTooBig: ({ minPartySize, partySize }) =>
+                t('mapReasonTooBig', { minPartySize, partySize }),
             }}
             onSelect={(id) => setSelectedTableId(id)}
           />
@@ -474,7 +481,7 @@ function DepositDemoStep({
   onPay,
 }: DepositStepProps) {
   return (
-    <div className="max-w-xl mx-auto p-6 flex flex-col gap-4">
+    <div className="max-w-xl mx-auto px-6 pt-[80px] pb-6 flex flex-col gap-4">
       <header>
         <h1 className="text-xl font-semibold text-gray-900">{restaurantName}</h1>
         <p className="text-sm text-gray-600 mt-1">
@@ -507,7 +514,7 @@ function DepositMollieStep({
   onPay,
 }: DepositStepProps) {
   return (
-    <div className="max-w-xl mx-auto p-6 flex flex-col gap-4">
+    <div className="max-w-xl mx-auto px-6 pt-[80px] pb-6 flex flex-col gap-4">
       <header>
         <h1 className="text-xl font-semibold text-gray-900">{restaurantName}</h1>
         <p className="text-sm text-gray-600 mt-1">

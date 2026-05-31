@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { Reservation } from '@/app/sites/types'
 import ReservationItem from '@/components/reservation/ReservationItem'
 import RentalBookingItem from '@/components/reservation/RentalBookingItem'
+import TableReservationItem from '@/components/reservation/TableReservationItem'
 import EventBusyIcon from '@mui/icons-material/EventBusy'
 
 export type RentalBookingListItem = {
@@ -26,16 +27,34 @@ export type RentalBookingListItem = {
   rentalItem: { id: string; name: string } | null
 }
 
+export type TableReservationListItem = {
+  id: string
+  restaurantId: string
+  tableId: string | null
+  userId: string | null
+  bookingGroupId: string | null
+  from: Date
+  to: Date
+  partySize: number
+  status: string
+  operationalStatus: string
+  restaurant: { id: string; name: string } | null
+  table: { id: string; number: number; label: string | null } | null
+}
+
 type ListEntry =
   | { kind: 'reservation'; data: Reservation }
   | { kind: 'rental'; data: RentalBookingListItem }
+  | { kind: 'table'; data: TableReservationListItem }
 
 export default function Reservations({
   reservations,
   rentalBookings,
+  tableReservations,
 }: {
   reservations: Reservation[]
   rentalBookings: RentalBookingListItem[]
+  tableReservations: TableReservationListItem[]
 }) {
 
   const [reservationType, setReservationType] = useState<string>('active')
@@ -44,10 +63,11 @@ export default function Reservations({
 
   const now = new Date()
 
-  // Merge reservations + rental bookings into a single sorted list
+  // Merge reservations + rental bookings + table reservations into one sorted list
   const allEntries: ListEntry[] = [
     ...reservations.map(r => ({ kind: 'reservation' as const, data: r })),
     ...rentalBookings.map(r => ({ kind: 'rental' as const, data: r })),
+    ...tableReservations.map(r => ({ kind: 'table' as const, data: r })),
   ]
 
   const visible = allEntries
@@ -90,8 +110,10 @@ export default function Reservations({
           {visible.map(entry =>
             entry.kind === 'reservation' ? (
               <ReservationItem key={`r-${entry.data.id}`} reservation={entry.data} />
-            ) : (
+            ) : entry.kind === 'rental' ? (
               <RentalBookingItem key={`rb-${entry.data.id}`} booking={entry.data} />
+            ) : (
+              <TableReservationItem key={`tr-${entry.data.id}`} reservation={entry.data} />
             )
           )}
         </div>
