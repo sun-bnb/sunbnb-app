@@ -59,3 +59,6 @@ yarn-error.log*
 
 # Scheduled-tasks runtime lock (transient: sessionId/pid/timestamp)
 .claude/scheduled_tasks.lock
+
+# Ad-hoc read-only diag scripts (tracked tooling here is .ts/.sh)
+packages/data/scripts/*.mjs
