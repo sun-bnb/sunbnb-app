@@ -95,7 +95,10 @@ export function MolliePayment({
         ? localStorage.getItem('sunbnb-anonId')
         : null
 
-      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}${completeUrl || '/payment/complete'}?reservationId=${reservation.id}`
+      const baseUrl = `${process.env.NEXT_PUBLIC_APP_URL}${completeUrl || '/payment/complete'}`
+      const separator = baseUrl.includes('?') ? '&' : '?'
+      const anonSuffix = anonId ? `&anonId=${anonId}` : ''
+      const redirectUrl = `${baseUrl}${separator}reservationId=${reservation.id}${anonSuffix}`
 
       const res = await fetch('/api/payment/mollie/create-payment', {
         method: 'POST',
