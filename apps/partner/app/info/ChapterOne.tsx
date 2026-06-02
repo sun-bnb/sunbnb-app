@@ -1,7 +1,8 @@
 import Image from 'next/image'
 import { motion } from 'framer-motion'
+import { useTranslations } from 'next-intl'
 
-import { 
+import {
   chapterVariants,
   chapter1Part1Variants,
   chapter1Frames,
@@ -20,7 +21,9 @@ export default function ChapterOne({
 }: {
   state: string
 }) {
-  
+
+  const t = useTranslations('Info')
+
   return (
 
     <div className="h-[230px] w-full relative">
@@ -33,14 +36,14 @@ export default function ChapterOne({
               variants={chapter1Frames['frame0']!['Title1']}
               initial="frame0"
               animate={state}>
-              Self-service check-in drastically reduces operation labour.
+              {t('ch1Heading')}
             </motion.div>
             <div className="w-full relative h-[24px] pt-[10px]">
               <motion.div className="absolute whitespace-nowrap"
                 variants={chapter1Frames['frame0']!['SubTitle1']}
                 initial="frame0"
                 animate={state}>
-                <b>Your customers can check in:</b>
+                <b>{t('ch1CheckInLabel')}</b>
               </motion.div>
             </div>
           </div>
@@ -75,19 +78,19 @@ export default function ChapterOne({
                   variants={chapter1Frames['frame0']!['CheckIn1']}
                   initial="frame0"
                   animate={state}>
-                  <span>ON THE BEACH</span>
+                  <span>{t('ch1OnTheBeach')}</span>
                 </motion.div>
                 <motion.div className="whitespace-nowrap text-[16px]"
                   variants={chapter1Frames['frame0']!['CheckIn2']}
                   initial="frame0"
                   animate={state}>
-                  <span>AT THE VENUE</span>
+                  <span>{t('ch1AtTheVenue')}</span>
                 </motion.div>
                 <motion.div className="whitespace-nowrap text-[16px]"
                   variants={chapter1Frames['frame0']!['CheckIn3']}
                   initial="frame0"
                   animate={state}>
-                  <span>IN ADVANCE</span>
+                  <span>{t('ch1InAdvance')}</span>
                 </motion.div>
               </div>
             </div>
@@ -100,7 +103,7 @@ export default function ChapterOne({
           <div className="w-full flex">
             <div className="text-center text-[16px] pr-[12px]">
               <div>
-                In-app payments eliminate the need for money handling.
+                {t('ch1PaymentsHeading')}
               </div>
               <motion.div className="mt-[24px]" 
                   variants={{
@@ -121,21 +124,21 @@ export default function ChapterOne({
                   variants={chapterVariants}
                   className="mt-[8px]"
                 >
-                    <b>Secure mobile payments</b>
+                    <b>{t('ch1SecurePayments')}</b>
                 </motion.div>
                 <motion.div
                   key={1}
                   variants={chapterVariants}
                   className="mt-[8px]"
                 >
-                    <b>Regular payouts</b>
+                    <b>{t('ch1RegularPayouts')}</b>
                 </motion.div>
                 <motion.div
                   key={2}
                   variants={chapterVariants}
                   className="mt-[8px]"
                 >
-                    <b>Automated accounting</b>
+                    <b>{t('ch1AutomatedAccounting')}</b>
                 </motion.div>
               </motion.div>
             </div>

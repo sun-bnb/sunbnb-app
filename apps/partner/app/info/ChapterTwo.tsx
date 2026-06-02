@@ -1,5 +1,6 @@
 import Image from 'next/image'
 import { motion, Variants } from 'framer-motion'
+import { useTranslations } from 'next-intl'
 import StarsIcon from '@mui/icons-material/Stars'
 import TodayIcon from '@mui/icons-material/Today'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
@@ -425,7 +426,9 @@ export default function ChapterTwo({
 }: {
   state: string
 }) {
-  
+
+  const t = useTranslations('Info')
+
   return (
 
     <div className="h-[200px] w-full relative">
@@ -438,7 +441,7 @@ export default function ChapterTwo({
             variants={chapter2Frames['Title1']}
             initial="frame0"
             animate={state}>
-            Bring in more revenue with Sunbnb's pricing features
+            {t('ch2Heading')}
           </motion.div>
         </div>
         <motion.div className="w-full h-auto flex justify-center items-center absolute"
@@ -465,13 +468,13 @@ export default function ChapterTwo({
                 variants={chapter2Frames['FlexiblePricingTitle']}
                 initial="frame0"
                 animate={state}>
-                <b>FLEXIBLE PRICING</b>
+                <b>{t('ch2FlexibleTitle')}</b>
               </motion.div>
               <motion.div className="w-full text-center text-[16px] absolute"
                 variants={chapter2Frames['FlexiblePricingSubtitle']}
                 initial="frame0"
                 animate={state}>
-                <span>Rent premium seats at a premium price</span>
+                <span>{t('ch2FlexibleSubtitle')}</span>
               </motion.div>
             </div>
           </div>
@@ -494,13 +497,13 @@ export default function ChapterTwo({
                 variants={chapter2Frames['DynamicPricingTitle']}
                 initial="frame0"
                 animate={state}>
-                <b>DYNAMIC PRICING</b>
+                <b>{t('ch2DynamicTitle')}</b>
               </motion.div>
               <motion.div className="w-full text-center text-[16px] absolute"
                 variants={chapter2Frames['DynamicPricingSubtitle']}
                 initial="frame0"
                 animate={state}>
-                <span>Get the maximum price based on seasonal demand</span>
+                <span>{t('ch2DynamicSubtitle')}</span>
               </motion.div>
             </div>
           </div>
@@ -510,7 +513,7 @@ export default function ChapterTwo({
         variants={chapter2Part2Variants}
         initial="frame0"
         animate={state}>
-        <div className="w-full flex justify-center text-[16px] mt-[12px]"><b>MAXIMIZE OFF-SEASON OCCUPANCY</b></div>
+        <div className="w-full flex justify-center text-[16px] mt-[12px]"><b>{t('ch2OffSeasonTitle')}</b></div>
         <motion.div className="w-full h-auto flex justify-center items-center absolute"
           variants={chapter2Frames['SalesChannelsContainer']}
           initial="frame0"
@@ -529,9 +532,9 @@ export default function ChapterTwo({
                 variants={chapter2Frames['SalesChannelsText']}
                 initial="frame0"
                 animate={state}>
-                1. Reservation calendar and demand forecast
+                {t('ch2SalesChannels1')}
                 <br/><br/>
-                2. New marketing channels: Online, Hotels
+                {t('ch2SalesChannels2')}
               </motion.div>
             </div>
           </div>

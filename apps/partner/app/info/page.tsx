@@ -14,6 +14,7 @@ import {
 
  } from './animations';
 import { useIntroAnimations } from './useIntroAnimations'
+import { useTranslations } from 'next-intl'
 import { useState } from 'react'
 import ChapterOne from './ChapterOne'
 import ChapterTwo from './ChapterTwo'
@@ -22,8 +23,10 @@ import ChapterFour from './ChapterFour'
 import ChapterFive from './ChapterFive'
 
 export default function InfoPage() {
-  
-  const { 
+
+  const t = useTranslations('Info')
+
+  const {
     logoState, sloganState, chaptersState,
     chapter1State,
     chapter2State,
@@ -46,25 +49,25 @@ export default function InfoPage() {
 
   const chaptersData = [
     {
-      title: 'Cut labour costs',
+      title: t('chapter1Title'),
       background: <div className="w-full mt-[80px]"></div>,
       content: <ChapterOne state={chapter1State} />
-      
+
     },
     {
-      title: 'Increase rental revenue',
+      title: t('chapter2Title'),
       content: <ChapterTwo state={chapter2State} />,
     },
     {
-      title: 'Improve customer satisfaction',
+      title: t('chapter3Title'),
       content: selectedIndex === 2 ? <ChapterThree /> : null,
     },
     {
-      title: 'Sell more products',
+      title: t('chapter4Title'),
       content: selectedIndex === 3 ? <ChapterFour /> : null
     },
     {
-      title: 'Automate accounting',
+      title: t('chapter5Title'),
       content: selectedIndex === 4 ? <ChapterFive /> : null
     },
   ]
@@ -87,9 +90,9 @@ export default function InfoPage() {
         animate={sloganState}
       >
         <div className="font-bold text-center">
-          Sunbnb - Your partner
+          {t('sloganLine1')}
           <br />
-          in sunbed management
+          {t('sloganLine2')}
         </div>
       </motion.div>
 
