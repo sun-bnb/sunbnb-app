@@ -2,8 +2,10 @@
 
 import logger from '@/utils/logger'
 
+import { v4 as uuidv4 } from 'uuid'
 import { SiteProps } from '@/app/sites/types'
 import Button from '@mui/material/Button'
+import TextField from '@mui/material/TextField'
 import InputLabel from '@mui/material/InputLabel'
 import MenuItem from '@mui/material/MenuItem'
 import FormControl from '@mui/material/FormControl'
@@ -199,82 +201,135 @@ function ReservationButton({
 
   const t = useTranslations('SiteView')
 
+  const [guestEmail, setGuestEmail] = useState('')
+  const [emailError, setEmailError] = useState(false)
+
+  // We rely on the same lightweight check as the server action (a stricter check
+  // is enforced server-side too). Keeps the field forgiving for typos like trailing spaces.
+  const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
+
+  async function submitReservation(opts: { anonId?: string; email?: string }) {
+    dispatch(setValue({ reservationState: 'saving' }))
+    logger.debug('Reserve', reservationMode, timeRange, dateRange, selectedItems)
+
+    let saveResult = null
+    const common = {
+      siteId: site.id!,
+      items: selectedItems,
+      userId: session?.user?.id,
+      anonId: opts.anonId,
+      email: opts.email,
+    }
+
+    if (reservationMode === 'hours' && reservationDay && timeRange[0] && timeRange[1]) {
+      const from = reservationDay
+        .hour(timeRange[0].hour())
+        .minute(timeRange[0].minute())
+        .second(timeRange[0].second())
+        .toDate()
+      const to = reservationDay
+        .hour(timeRange[1].hour())
+        .minute(timeRange[1].minute())
+        .second(timeRange[1].second())
+        .toDate()
+      saveResult = await saveReservationForMultipleItems({
+        ...common,
+        from: from.toISOString(),
+        to: to.toISOString(),
+        type: 'hours',
+      })
+    } else if (reservationMode === 'days' && dateRange[0] && dateRange[1]) {
+      const from = dateRange[0].toDate()
+      const to = dateRange[1].toDate()
+      logger.debug('Save reservation', from, to)
+      saveResult = await saveReservationForMultipleItems({
+        ...common,
+        from: from.toISOString(),
+        to: to.toISOString(),
+        type: 'days',
+      })
+    }
+
+    logger.debug('Save result', saveResult)
+    if (saveResult?.status === 'ok' && saveResult.id) {
+      logger.debug('Site type', site.type)
+      if (site.type !== 'paid') {
+        const suffix = opts.anonId ? `?anonId=${opts.anonId}` : ''
+        router.push(`/reservations/${saveResult.id}${suffix}`)
+      } else {
+        dispatch(setValue({
+          reservationState: 'processing',
+          pendingReservationId: saveResult.id
+        }))
+      }
+    } else {
+      logger.debug('Save result error', saveResult)
+      dispatch(setValue({ reservationState: 'default' }))
+    }
+  }
+
+  if (loggedIn) {
+    return (
+      <div className="mt-[10px]">
+        <Button variant="contained"
+          fullWidth={true}
+          disabled={disabled}
+          onClick={() => submitReservation({})}>
+            {t('Reserve')}
+        </Button>
+      </div>
+    )
+  }
+
+  // Anonymous (marketplace) flow — collect an email so we can send confirmation
+  // and let the guest recover their booking. The QR/POS flow uses a different
+  // component and skips email capture by design.
   return (
     <div className="mt-[10px]">
-      {
-        !loggedIn ? (
-          <Button variant="contained" 
-            fullWidth={true} onClick={() => {
-              const callbackUrl = pathname.startsWith('/s/') ? pathname : `/sites/${site.id}`
-              router.push('/api/auth/signin?callbackUrl=' + callbackUrl)
-            }}>
-              {t('Login to reserve')}
-          </Button>
-        ) : (
-          <Button variant="contained" 
-            fullWidth={true}
-            disabled={disabled}
-            onClick={
-              async () => {
-                dispatch(setValue({ reservationState: 'saving' }))
-                logger.debug('Reserve', reservationMode, timeRange, dateRange, selectedItems)
-
-                let saveResult = null
-                if (reservationMode === 'hours' && reservationDay && timeRange[0] && timeRange[1]) {
-                  const from = reservationDay
-                    .hour(timeRange[0].hour())
-                    .minute(timeRange[0].minute())
-                    .second(timeRange[0].second())
-                    .toDate()
-                  const to = reservationDay
-                    .hour(timeRange[1].hour())
-                    .minute(timeRange[1].minute())
-                    .second(timeRange[1].second())
-                    .toDate()
-                  saveResult = await saveReservationForMultipleItems({
-                    from: from.toISOString(),
-                    to: to.toISOString(),
-                    type: 'hours',
-                    siteId: site.id!,
-                    items: selectedItems,
-                    userId: session?.user?.id!
-                  })
-                } else if (reservationMode === 'days' && dateRange[0] && dateRange[1]) {
-                  const from = dateRange[0].toDate()
-                  const to = dateRange[1].toDate()
-                  logger.debug('Save reservation', from, to)
-                  saveResult = await saveReservationForMultipleItems({
-                    from: from.toISOString(),
-                    to: to.toISOString(),
-                    type: 'days',
-                    siteId: site.id!,
-                    items: selectedItems,
-                    userId: session?.user?.id!
-                  })
-                }
-
-                logger.debug('Save result', saveResult)
-                if (saveResult?.status === 'ok' && saveResult.id) {
-                  logger.debug('Site type', site.type)
-                  if (site.type !== 'paid') {
-                    router.push(`/reservations/${saveResult.id}`)
-                  } else {
-                    dispatch(setValue({
-                      reservationState: site.type !== 'paid' ? 'complete' : 'processing',
-                      pendingReservationId: saveResult.id
-                    }))
-                  }
-                } else {
-                  logger.debug('Save result error', saveResult)
-                }
-
-              }
-            }>
-              {t('Reserve')}
-            </Button>
-          )
-      }
-      
+      <TextField
+        type="email"
+        size="small"
+        fullWidth
+        label={t('Email')}
+        value={guestEmail}
+        onChange={(e) => {
+          setGuestEmail(e.target.value)
+          if (emailError) setEmailError(false)
+        }}
+        error={emailError}
+        helperText={emailError ? t('Enter a valid email') : ''}
+        sx={{ mb: 1 }}
+      />
+      <Button variant="contained"
+        fullWidth={true}
+        disabled={disabled}
+        onClick={async () => {
+          const trimmed = guestEmail.trim()
+          if (!isValidEmail(trimmed)) {
+            setEmailError(true)
+            return
+          }
+          let anonId = localStorage.getItem('sunbnb-anonId')
+          if (!anonId) {
+            anonId = uuidv4()
+            localStorage.setItem('sunbnb-anonId', anonId)
+          }
+          await submitReservation({ anonId, email: trimmed })
+        }}>
+          {t('Reserve as guest')}
+      </Button>
+      <div className="text-center mt-2 text-xs text-gray-500">
+        <button
+          type="button"
+          className="underline hover:text-gray-700"
+          onClick={() => {
+            const callbackUrl = pathname.startsWith('/s/') ? pathname : `/sites/${site.id}`
+            router.push('/api/auth/signin?callbackUrl=' + callbackUrl)
+          }}
+        >
+          {t('Sign in instead')}
+        </button>
+      </div>
     </div>
   )
 }

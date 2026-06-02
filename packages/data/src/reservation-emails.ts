@@ -190,11 +190,20 @@ async function loadReservationEmailData(reservationId: string): Promise<Reservat
     },
   })
 
-  if (!reservation || !reservation.user?.email) return null
+  if (!reservation) return null
+
+  // For anonymous reservations the `user` FK points at the site owner — we must
+  // never email the site owner the customer's confirmation. Use guestEmail
+  // (collected at marketplace checkout). QR/POS bookings skip email capture,
+  // so guestEmail may be null and no confirmation is sent.
+  const recipientEmail = reservation.anonId
+    ? reservation.guestEmail
+    : reservation.user?.email
+  if (!recipientEmail) return null
 
   return {
     reservationId: reservation.id,
-    userEmail: reservation.user.email,
+    userEmail: recipientEmail,
     siteName: reservation.site?.name ?? 'Beach',
     siteId: reservation.site?.id ?? reservation.siteId,
     sunbedNumbers: reservation.items.map(i => i.number),
@@ -285,11 +294,14 @@ export async function sendDueReminders(): Promise<number> {
   let sent = 0
 
   for (const reservation of dueReservations) {
-    if (!reservation.user?.email) continue
+    const recipientEmail = reservation.anonId
+      ? reservation.guestEmail
+      : reservation.user?.email
+    if (!recipientEmail) continue
 
     const data: ReservationEmailData = {
       reservationId: reservation.id,
-      userEmail: reservation.user.email,
+      userEmail: recipientEmail,
       siteName: reservation.site?.name ?? 'Beach',
       siteId: reservation.site?.id ?? reservation.siteId,
       sunbedNumbers: reservation.items.map(i => i.number),

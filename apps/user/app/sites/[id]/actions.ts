@@ -20,10 +20,15 @@ const VALID_RESERVATION_TYPES = ['days', 'hours'] as const
 
 // ─── Reservations ───────────────────────────────────────────────────────────
 
+// Minimal email format check — full RFC validation is impractical and noisy.
+// We only need to reject obvious nonsense; deliverability is verified by the email service.
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 export async function saveReservationForMultipleItems(
   reservation: {
     userId?: string,
     anonId?: string,
+    email?: string,
     siteId: string,
     items?: InventoryItem[],
     type: string,
@@ -53,6 +58,12 @@ export async function saveReservationForMultipleItems(
 
   if (reservation.anonId && reservation.anonId.length > 36) {
     return { status: 'error', errors: ['Invalid anonymous ID'] }
+  }
+
+  if (reservation.email !== undefined) {
+    if (reservation.email.length > 254 || !EMAIL_REGEX.test(reservation.email)) {
+      return { status: 'error', errors: ['Invalid email address'] }
+    }
   }
 
   const fromDate = new Date(reservation.from)
@@ -150,6 +161,7 @@ export async function saveReservationForMultipleItems(
       status,
       paymentAmount,
       anonId: reservation.anonId,
+      guestEmail: reservation.email,
       items: {
         connect: reservation.items?.map(item => ({ id: item.id }))
       },

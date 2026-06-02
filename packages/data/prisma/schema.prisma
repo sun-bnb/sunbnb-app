@@ -388,6 +388,7 @@ model Reservation {
   departedAt        DateTime?       @map("departed_at")
   guestName         String?         @map("guest_name")
   guestContact      String?         @map("guest_contact")
+  guestEmail        String?         @map("guest_email")
   internalNotes     String?         @map("internal_notes")
   reminderSentAt    DateTime?       @map("reminder_sent_at")
   orders            Order[]
