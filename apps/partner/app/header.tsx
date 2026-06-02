@@ -6,6 +6,7 @@ import { useSession, signOut } from 'next-auth/react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useRef, useEffect } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
+import { useFlag } from '@repo/ui/flags'
 import sunbnbLogo from '@/app/sunbnb-logo.svg'
 import { getEnvLabel } from '@repo/data/env'
 import { setLocale } from '@/app/locale/actions'
@@ -29,12 +30,13 @@ export default function Header() {
   const currentLocale = useLocale()
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const restaurantsEnabled = useFlag('restaurants')
 
   const navItems = [
     { label: t('dashboard'), href: '/' },
     { label: t('frontdesk'), href: '/frontdesk' },
     { label: t('sites'), href: '/sites' },
-    { label: t('restaurants'), href: '/restaurants' },
+    ...(restaurantsEnabled ? [{ label: t('restaurants'), href: '/restaurants' }] : []),
     { label: t('calendar'), href: '/calendar' },
     { label: t('security'), href: '/security' },
   ]
