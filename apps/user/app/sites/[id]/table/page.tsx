@@ -11,8 +11,8 @@ export default async function TableBookingPage({
   searchParams: { date?: string; partySize?: string }
 }) {
   if (!(await isFlagEnabled('restaurants'))) notFound()
-  const site = await prisma.site.findUnique({
-    where: { id: params.id },
+  const site = await prisma.site.findFirst({
+    where: { OR: [{ id: params.id }, { slug: params.id }] },
     select: {
       id: true,
       name: true,

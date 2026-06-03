@@ -2,9 +2,9 @@ import prisma from '@repo/data/PrismaCient'
 import PosView from './view'
 import ErrorCard from '@/components/ErrorCard'
 
-async function getSite(id: string) {
-  return await prisma.site.findUnique({ 
-    where: { id: id },
+async function getSite(idOrSlug: string) {
+  return await prisma.site.findFirst({
+    where: { OR: [{ id: idOrSlug }, { slug: idOrSlug }] },
     include: {
       inventoryItems: {
         include: {

@@ -6,12 +6,12 @@ import { auth } from '@/app/auth'
 import SiteView from './view'
 import ErrorCard from '@/components/ErrorCard'
 
-async function getSite(id: string, userId: string) {
+async function getSite(idOrSlug: string, userId: string) {
 
   const includeReservations = !!userId
 
-  const site = await prisma.site.findFirst({ 
-    where: { id: id },
+  const site = await prisma.site.findFirst({
+    where: { OR: [{ id: idOrSlug }, { slug: idOrSlug }] },
     include: {
       workingHours: true,
       inventoryItems: {
@@ -42,7 +42,7 @@ async function getSite(id: string, userId: string) {
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const site = await prisma.site.findFirst({
-    where: { id: params.id },
+    where: { OR: [{ id: params.id }, { slug: params.id }] },
     select: { name: true, description: true, image: true },
   })
 
