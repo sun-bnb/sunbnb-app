@@ -146,17 +146,23 @@ export async function unreserveItem(siteId: string, itemId: string, accessKey?: 
   const todayStart = dayjs().startOf('day').toDate()
   const todayEnd = dayjs().endOf('day').toDate()
 
-  // For walk-ins (paid-in-cash), delete them entirely (no invoice trail)
-  await prisma.reservation.deleteMany({
+  // For walk-ins (paid-in-cash), delete them entirely (no invoice trail).
+  // Use overlap-with-today semantics so multi-day walk-ins (to > todayEnd)
+  // and in-progress stays (from < todayStart) are matched correctly.
+  const result = await prisma.reservation.deleteMany({
     where: {
       siteId,
       status: RESERVATION_PAID_IN_CASH,
       operationalStatus: OP_WALKED_IN,
-      from: { gte: todayStart },
-      to: { lte: todayEnd },
+      from: { lte: todayEnd },
+      to: { gte: todayStart },
       items: { some: { id: itemId } },
     },
   })
+
+  if (result.count === 0) {
+    return { status: 'error', errors: ['No walk-in reservation found to release'] }
+  }
 
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok' }

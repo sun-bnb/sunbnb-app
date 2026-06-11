@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest'
+import dayjs from 'dayjs'
 import { cleanDatabase, disconnectDatabase, prisma } from '@/app/test/setup'
 import {
   createTestUser,
@@ -166,6 +167,48 @@ describe('unreserveItem', () => {
     const remaining = await prisma.reservation.findMany({ where: { siteId: site.id } })
     expect(remaining).toHaveLength(1)
     expect(remaining[0].status).toBe('complete')
+  })
+
+  it('deletes a multi-day walk-in that extends beyond today', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id)
+    mockUserId = user.id
+
+    // Create a multi-day walk-in spanning today + 3 more days
+    const until = dayjs().add(3, 'day').format('YYYY-MM-DD')
+    const reserveResult = await reserveItem(site.id, item.id, 'Multi-day guest', undefined, undefined, until)
+    expect(reserveResult.status).toBe('ok')
+
+    const beforeCount = await prisma.reservation.count({ where: { siteId: site.id } })
+    expect(beforeCount).toBe(1)
+
+    const result = await unreserveItem(site.id, item.id)
+    expect(result).toEqual({ status: 'ok' })
+
+    const afterCount = await prisma.reservation.count({ where: { siteId: site.id } })
+    expect(afterCount).toBe(0)
+  })
+
+  it('returns error and deletes nothing when the bed has no active walk-in', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id)
+    mockUserId = user.id
+
+    // A regular complete/expected reservation — NOT a walk-in
+    await createTestReservation(user.id, site.id, [item.id], {
+      status: 'complete',
+      operationalStatus: 'expected',
+    })
+
+    const result = await unreserveItem(site.id, item.id)
+    expect(result.status).toBe('error')
+    expect(result.errors![0]).toMatch(/no walk-in reservation found/i)
+
+    // The complete/expected reservation must survive
+    const remaining = await prisma.reservation.count({ where: { siteId: site.id } })
+    expect(remaining).toBe(1)
   })
 })
 

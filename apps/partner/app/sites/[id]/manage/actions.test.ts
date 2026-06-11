@@ -226,6 +226,56 @@ describe('reserveItem', () => {
   })
 })
 
+// ─── unreserveItem ─────────────────────────────────────────────────────────
+
+describe('unreserveItem', () => {
+  it('deletes walk-in with overlap-with-today filter and returns ok when count > 0', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
+
+    const res = await unreserveItem(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('ok')
+
+    const deleteCall = vi.mocked(prisma.reservation.deleteMany).mock.calls[0][0]
+    const where = deleteCall?.where as any
+    // Overlap semantics: from <= todayEnd AND to >= todayStart
+    expect(where.from).toHaveProperty('lte')
+    expect(where.to).toHaveProperty('gte')
+    // Must NOT use the old fully-contained filter shapes
+    expect(where.from).not.toHaveProperty('gte')
+    expect(where.to).not.toHaveProperty('lte')
+    // Core ownership + status filters must remain
+    expect(where.siteId).toBe(SITE_ID)
+    expect(where.status).toBe('paid-in-cash')
+    expect(where.operationalStatus).toBe('walked-in')
+    expect(where.items.some.id).toBe(ITEM_ID)
+  })
+
+  it('returns error when deleteMany finds nothing (count === 0)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 0 } as any)
+
+    const res = await unreserveItem(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/no walk-in reservation found/i)
+  })
+
+  it('does not call revalidatePath when nothing was deleted', async () => {
+    const { revalidatePath } = await import('next/cache')
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 0 } as any)
+
+    await unreserveItem(SITE_ID, ITEM_ID)
+    expect(vi.mocked(revalidatePath)).not.toHaveBeenCalled()
+  })
+
+  it('rejects unauthenticated caller without touching the DB', async () => {
+    const res = await unreserveItem(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
+  })
+})
+
 // ─── checkInReservation ─────────────────────────────────────────────────────
 
 describe('checkInReservation', () => {
