@@ -23,6 +23,9 @@ function parseSunbedNumber(num: number) {
 }
 
 type BedState = 'available' | 'expected' | 'checked-in' | 'walked-in' | 'blocked'
+type ViewMode = 'sections' | 'scroll'
+
+const VIEW_MODE_KEY = 'sunbnb-manage-view'
 
 function getActiveReservation(item: InventoryItem): Reservation | null {
   if (!item.reservations?.length) return null
@@ -43,6 +46,30 @@ function getBedState(item: InventoryItem): BedState {
   }
 }
 
+// ── View-toggle icons ──────────────────────────────────────────────────────────
+
+function SectionsIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
+      <rect x="0" y="0" width="6" height="6" rx="1" />
+      <rect x="8" y="0" width="6" height="6" rx="1" />
+      <rect x="0" y="8" width="6" height="6" rx="1" />
+      <rect x="8" y="8" width="6" height="6" rx="1" />
+    </svg>
+  )
+}
+
+function ScrollIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
+      <rect x="0" y="1" width="10" height="3" rx="1" />
+      <rect x="0" y="6" width="10" height="3" rx="1" />
+      <rect x="0" y="11" width="10" height="3" rx="1" />
+      <path d="M11 4 L14 7 L11 10 Z" />
+    </svg>
+  )
+}
+
 export default function ManageView({
   site,
   accessKey,
@@ -54,6 +81,20 @@ export default function ManageView({
   const router = useRouter()
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
   const [showRentalModal, setShowRentalModal] = useState(false)
+
+  // View mode — initialised to 'sections' so SSR and first client render match,
+  // then overridden from localStorage in useEffect (avoids hydration mismatch).
+  const [viewMode, setViewMode] = useState<ViewMode>('sections')
+
+  useEffect(() => {
+    const stored = localStorage.getItem(VIEW_MODE_KEY)
+    if (stored === 'sections' || stored === 'scroll') setViewMode(stored)
+  }, [])
+
+  const handleViewMode = (mode: ViewMode) => {
+    setViewMode(mode)
+    localStorage.setItem(VIEW_MODE_KEY, mode)
+  }
 
   // Measure the container width so we can compute how many bed columns fit.
   // ResizeObserver fires once immediately on observe() then on every resize/
@@ -127,15 +168,126 @@ export default function ManageView({
             {summary['blocked']} {t('blocked')}
           </span>
         )}
+
+        {/* ── View Mode Toggle ── */}
+        <div className="col-span-2 flex justify-end sm:ml-auto">
+          <div className="flex rounded-lg overflow-hidden border border-gray-200 font-semibold">
+            <button
+              onClick={() => handleViewMode('sections')}
+              aria-label={t('viewSections')}
+              title={t('viewSections')}
+              className={`
+                flex items-center gap-1.5 px-3 min-h-[44px] text-xs transition-colors
+                ${viewMode === 'sections'
+                  ? 'bg-gray-900 text-white'
+                  : 'bg-white text-gray-400 hover:text-gray-700 hover:bg-gray-50'}
+              `}
+            >
+              <SectionsIcon />
+              <span className="hidden sm:inline">{t('viewSections')}</span>
+            </button>
+            <button
+              onClick={() => handleViewMode('scroll')}
+              aria-label={t('viewScroll')}
+              title={t('viewScroll')}
+              className={`
+                flex items-center gap-1.5 px-3 min-h-[44px] text-xs border-l border-gray-200 transition-colors
+                ${viewMode === 'scroll'
+                  ? 'bg-gray-900 text-white'
+                  : 'bg-white text-gray-400 hover:text-gray-700 hover:bg-gray-50'}
+              `}
+            >
+              <ScrollIcon />
+              <span className="hidden sm:inline">{t('viewScroll')}</span>
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* ── Sectioned Sunbed Grid ── */}
+      {/* ── Sunbed Grid ── */}
       {Object.entries(grouped).map(([parcel, rows]) => {
         // Sort row entries by row number (ascending = front row first)
         const rowEntries: [number, Record<number, InventoryItem>][] = Object.entries(rows)
           .map(([rowStr, positions]) => [Number(rowStr), positions] as [number, Record<number, InventoryItem>])
           .sort(([a], [b]) => a - b)
 
+        // ── Horizontal-scroll view ────────────────────────────────────────────
+        if (viewMode === 'scroll') {
+          // Collect all positions across every row, sorted DESCENDING (same
+          // display order as sectioned view: largest position on the left).
+          const allPositions = Array.from(
+            rowEntries.reduce<Set<number>>((s, [, positions]) => {
+              Object.keys(positions).forEach(k => s.add(Number(k)))
+              return s
+            }, new Set())
+          ).sort((a, b) => b - a)
+
+          return (
+            <div key={parcel} className="mb-5">
+              <h2 className="text-base sm:text-lg font-bold mb-2 px-1">
+                {t('parcel', { n: parcel })}
+              </h2>
+
+              {/* Single scroll container — all rows stay aligned while scrolling */}
+              <div className="overflow-x-auto">
+                {rowEntries.map(([rowNum, positions]) => (
+                  <div
+                    key={rowNum}
+                    className={`
+                      flex items-stretch gap-1 mb-0.5 rounded-lg py-0.5
+                      ${rowNum % 2 === 0 ? 'bg-gray-50' : ''}
+                    `}
+                  >
+                    {/* Row-label badge — sticky to the left so it stays visible
+                        while the bed cells scroll horizontally beneath it.
+                        Background matches the row strip so cells slide cleanly under it. */}
+                    <div
+                      className={`
+                        sticky left-0 z-10 flex-shrink-0
+                        flex items-center justify-center
+                        ${rowNum % 2 === 0 ? 'bg-gray-50' : 'bg-white'}
+                      `}
+                      style={{ width: ROW_LABEL_WIDTH }}
+                    >
+                      <span className="text-[10px] font-bold text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 leading-none whitespace-nowrap">
+                        {t('rowLabel', { n: rowNum })}
+                      </span>
+                    </div>
+
+                    {/* Fixed-width bed cells — ~48px each so they never shrink;
+                        the scroll container widens instead.
+                        Using a single-column grid wrapper makes the Item button
+                        stretch to fill the cell (grid items stretch by default). */}
+                    {allPositions.map(pos => {
+                      const item = positions[pos] ?? null
+                      return item ? (
+                        <div
+                          key={pos}
+                          className="flex-shrink-0"
+                          style={{ display: 'grid', width: 48 }}
+                        >
+                          <Item
+                            siteId={site.id!}
+                            item={item}
+                            onSelect={() => setSelectedItem(item)}
+                          />
+                        </div>
+                      ) : (
+                        <div
+                          key={pos}
+                          className="flex-shrink-0 min-h-[44px]"
+                          style={{ width: 48 }}
+                        />
+                      )
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        }
+
+        // ── Sectioned view (default) ──────────────────────────────────────────
         const sections = chunkRows(rowEntries, chunkSize)
 
         return (

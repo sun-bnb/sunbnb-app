@@ -726,7 +726,9 @@
     "waiting": "odottaa",
     "sunbeds": "{count, plural, one {# aurinkotuoli} other {# aurinkotuolia}}",
     "sunbedsOccupied": "{count, plural, one {# varattu} other {# varattua}}",
-    "rowLabel": "R{n}"
+    "rowLabel": "R{n}",
+    "viewSections": "Osiot",
+    "viewScroll": "Vieritä"
   },
   "BedDetail": {
     "free": "Vapaa",

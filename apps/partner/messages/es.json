@@ -726,7 +726,9 @@
     "waiting": "esperando",
     "sunbeds": "{count, plural, one {# tumbona} other {# tumbonas}}",
     "sunbedsOccupied": "{count, plural, one {# ocupada} other {# ocupadas}}",
-    "rowLabel": "F{n}"
+    "rowLabel": "F{n}",
+    "viewSections": "Secciones",
+    "viewScroll": "Desplazar"
   },
   "BedDetail": {
     "free": "Libre",
