@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { InventoryItem, Reservation, RentalBookingProps, SiteProps } from '@/types/shared'
@@ -8,6 +8,7 @@ import Item from './Item'
 import BedDetail from './BedDetail'
 import RentalBookingCard from './RentalBookingCard'
 import CreateRentalModal from './CreateRentalModal'
+import { computeChunkSize, chunkRows, ROW_LABEL_WIDTH } from './grid-helpers'
 import {
   OP_EXPECTED, OP_CHECKED_IN, OP_WALKED_IN, OP_DEPARTED, OP_NO_SHOW,
   OP_PICKED_UP, OP_RESERVED,
@@ -54,6 +55,26 @@ export default function ManageView({
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
   const [showRentalModal, setShowRentalModal] = useState(false)
 
+  // Measure the container width so we can compute how many bed columns fit.
+  // ResizeObserver fires once immediately on observe() then on every resize/
+  // orientation change — no separate window-resize listener needed.
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [containerWidth, setContainerWidth] = useState<number>(0)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const ro = new ResizeObserver(entries => {
+      setContainerWidth(entries[0]!.contentRect.width)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // Default to 50 until measured — keeps all beds in a single section on the
+  // first render, avoiding a visible layout jump on small sites.
+  const chunkSize = containerWidth > 0 ? computeChunkSize(containerWidth) : 50
+
   // Auto-refresh every 30 seconds so Carlos sees new bookings
   useEffect(() => {
     const interval = setInterval(() => router.refresh(), 30_000)
@@ -73,7 +94,8 @@ export default function ManageView({
   const total = activeItems.length
   const occupied = (summary['checked-in'] || 0) + (summary['walked-in'] || 0)
 
-  // Group by parcel → row → position
+  // Group by parcel → row → position (all items, including disabled — Item.tsx renders
+  // disabled items as spacers so row geometry is preserved)
   const grouped = inventoryItems.reduce((acc, item) => {
     const { parcel, row, position } = parseSunbedNumber(item.number)
     if (!acc[parcel]) acc[parcel] = {}
@@ -83,8 +105,8 @@ export default function ManageView({
   }, {} as Record<number, Record<number, Record<number, InventoryItem>>>)
 
   return (
-    <div className="px-2 pt-2 pb-20 mx-auto w-full max-w-screen-lg">
-      {/* ── Summary Bar — compact on phone, row on tablet ── */}
+    <div ref={containerRef} className="px-2 pt-2 pb-20 mx-auto w-full max-w-screen-lg">
+      {/* ── Summary Bar ── */}
       <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-2 sm:gap-4 mb-3 px-3 py-3 sm:px-4 sm:py-4 bg-white rounded-xl text-sm sm:text-base font-bold sticky top-0 z-10 border-2 shadow-sm">
         <span className="text-gray-900 text-base sm:text-lg col-span-2 sm:col-span-1">{occupied}/{total}</span>
         <span className="flex items-center gap-1.5 text-green-700">
@@ -107,32 +129,74 @@ export default function ManageView({
         )}
       </div>
 
-      {/* ── Grid — phone: fixed columns, tablet: auto-fit ── */}
-      {Object.entries(grouped).map(([parcel, rows]) => (
-        <div key={parcel} className="mb-4">
-          <h2 className="text-base sm:text-lg font-bold mb-2 px-1">{t('parcel', { n: parcel })}</h2>
+      {/* ── Sectioned Sunbed Grid ── */}
+      {Object.entries(grouped).map(([parcel, rows]) => {
+        // Sort row entries by row number (ascending = front row first)
+        const rowEntries: [number, Record<number, InventoryItem>][] = Object.entries(rows)
+          .map(([rowStr, positions]) => [Number(rowStr), positions] as [number, Record<number, InventoryItem>])
+          .sort(([a], [b]) => a - b)
 
-          {Object.entries(rows).map(([row, positions]) => {
-            const items = Object.entries(positions).reverse()
-            return (
-              <div
-                key={row}
-                className="w-full mb-1 grid gap-1"
-                style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
-              >
-                {items.map(([_, item]) => (
-                  <Item
-                    key={item.id}
-                    siteId={site.id!}
-                    item={item}
-                    onSelect={() => setSelectedItem(item)}
-                  />
+        const sections = chunkRows(rowEntries, chunkSize)
+
+        return (
+          <div key={parcel} className="mb-5">
+            <h2 className="text-base sm:text-lg font-bold mb-2 px-1">
+              {t('parcel', { n: parcel })}
+            </h2>
+
+            {sections.map((section, sectionIdx) => (
+              <div key={sectionIdx} className={sectionIdx > 0 ? 'mt-4' : ''}>
+                {/* Section span header — only when the parcel has multiple sections */}
+                {sections.length > 1 && (
+                  <div className="text-xs text-gray-400 font-semibold mb-1 px-1 tabular-nums tracking-wide">
+                    {section.minPos}–{section.maxPos}
+                  </div>
+                )}
+
+                {/* Row strips */}
+                {section.rows.map(({ rowNum, cells }) => (
+                  <div
+                    key={rowNum}
+                    className={`
+                      flex items-stretch gap-1 mb-0.5 rounded-lg py-0.5
+                      ${rowNum % 2 === 0 ? 'bg-gray-50' : ''}
+                    `}
+                  >
+                    {/* Row-label badge — same badge for this rowNum in every section */}
+                    <div
+                      className="flex-shrink-0 flex items-center justify-center"
+                      style={{ width: ROW_LABEL_WIDTH }}
+                    >
+                      <span className="text-[10px] font-bold text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 leading-none whitespace-nowrap">
+                        {t('rowLabel', { n: rowNum })}
+                      </span>
+                    </div>
+
+                    {/* Bed cells — fixed chunkSize columns so every section is the same width */}
+                    <div
+                      className="flex-1 grid gap-1"
+                      style={{ gridTemplateColumns: `repeat(${chunkSize}, minmax(0, 1fr))` }}
+                    >
+                      {cells.map((item, cellIdx) =>
+                        item ? (
+                          <Item
+                            key={item.id}
+                            siteId={site.id!}
+                            item={item}
+                            onSelect={() => setSelectedItem(item)}
+                          />
+                        ) : (
+                          <div key={`spacer-${cellIdx}`} className="min-h-[44px]" />
+                        )
+                      )}
+                    </div>
+                  </div>
                 ))}
               </div>
-            )
-          })}
-        </div>
-      ))}
+            ))}
+          </div>
+        )
+      })}
 
       {/* ── Rental Bookings Section ── */}
       {site.features?.includes('rentals') && (

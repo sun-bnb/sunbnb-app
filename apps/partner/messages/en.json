@@ -725,7 +725,8 @@
     "out": "out",
     "waiting": "waiting",
     "sunbeds": "{count, plural, one {# sunbed} other {# sunbeds}}",
-    "sunbedsOccupied": "{count, plural, one {# occupied} other {# occupied}}"
+    "sunbedsOccupied": "{count, plural, one {# occupied} other {# occupied}}",
+    "rowLabel": "R{n}"
   },
   "BedDetail": {
     "free": "Free",

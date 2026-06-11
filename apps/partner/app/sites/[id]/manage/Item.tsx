@@ -63,8 +63,8 @@ export default function SunbedItem({
         active:brightness-90 transition-colors select-none
       `}
     >
-      {icon && <span className="text-[9px] sm:text-[10px] leading-none">{icon}</span>}
-      <span className="text-[8px] leading-none opacity-70">
+      {icon && <span className="text-[10px] leading-none">{icon}</span>}
+      <span className="text-[10px] leading-none opacity-70">
         {parseInt(String(item.number).substring(1))}
       </span>
     </button>
