@@ -111,10 +111,12 @@ function OrderActions({
   siteId,
   order,
   onUpdated,
+  accessKey,
 }: {
   siteId: string
   order: Order
   onUpdated: () => void
+  accessKey?: string
 }) {
   const t = useTranslations('SiteOrders')
   const [busy, setBusy] = useState(false)
@@ -123,7 +125,7 @@ function OrderActions({
 
   const act = async (status: string, reason?: string) => {
     setBusy(true)
-    await setOrderStatus(siteId, order.id, status, reason)
+    await setOrderStatus(siteId, order.id, status, reason, accessKey)
     setBusy(false)
     onUpdated()
   }
@@ -230,11 +232,13 @@ function OrderCard({
   order,
   onUpdated,
   compact = false,
+  accessKey,
 }: {
   siteId: string
   order: Order
   onUpdated: () => void
   compact?: boolean
+  accessKey?: string
 }) {
   const t = useTranslations('SiteOrders')
   const fallback = { bg: 'bg-gray-100', text: 'text-gray-600', labelKey: order.status }
@@ -321,7 +325,7 @@ function OrderCard({
       {/* Actions */}
       {!compact && (
         <div className="px-4 pb-4">
-          <OrderActions siteId={siteId} order={order} onUpdated={onUpdated} />
+          <OrderActions siteId={siteId} order={order} onUpdated={onUpdated} accessKey={accessKey} />
         </div>
       )}
     </div>
@@ -330,7 +334,7 @@ function OrderCard({
 
 // ─── Main View ───────────────────────────────────────────────────────────────
 
-export default function Orders({ siteId, orders: initialOrders }: { siteId: string; orders: Order[] }) {
+export default function Orders({ siteId, orders: initialOrders, accessKey }: { siteId: string; orders: Order[]; accessKey?: string }) {
   const t = useTranslations('SiteOrders')
   const [activeTab, setActiveTab] = useState<OrderTab>('incoming')
   const [allOrders, setAllOrders] = useState<Order[]>(initialOrders)
@@ -369,10 +373,10 @@ export default function Orders({ siteId, orders: initialOrders }: { siteId: stri
   // Polling — fetch all active orders every 5 seconds
   const fetchOrders = useCallback(async () => {
     const tabs: OrderTab[] = activeTab === 'history' ? ['history'] : ['incoming', 'active', 'ready']
-    const results = await Promise.all(tabs.map(t => getOrders(siteId, t)))
+    const results = await Promise.all(tabs.map(t => getOrders(siteId, t, accessKey)))
     const merged = results.flatMap(r => r.orders ?? [])
     setAllOrders(merged)
-  }, [siteId, activeTab])
+  }, [siteId, activeTab, accessKey])
 
   useEffect(() => {
     const id = setInterval(fetchOrders, 5000)
@@ -428,6 +432,7 @@ export default function Orders({ siteId, orders: initialOrders }: { siteId: stri
               order={order}
               onUpdated={handleUpdated}
               compact={activeTab === 'history'}
+              accessKey={accessKey}
             />
           ))
         )}

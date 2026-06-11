@@ -1,6 +1,5 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 
@@ -11,41 +10,46 @@ export async function getTokens() {
   if (!session?.user) throw new Error('Not authenticated')
 
   return await prisma.securityToken.findMany({
-    where: { 
+    where: {
       userId: session.user.id
-    }
+    },
+    orderBy: { createdAt: 'desc' },
   })
 }
 
-export async function createToken(expires: Date, resources: string[]) {
+export async function getOwnedSites() {
 
   const session = await auth()
   if (!session?.user) throw new Error('Not authenticated')
 
-  // Input validation
-  if (!expires || isNaN(new Date(expires).getTime())) {
-    return { status: 'error', errors: ['Invalid expiry date'] }
-  }
-  if (new Date(expires) < new Date()) {
-    return { status: 'error', errors: ['Expiry date must be in the future'] }
-  }
-  if (!Array.isArray(resources) || resources.length > 50) {
-    return { status: 'error', errors: ['Too many resources (max 50)'] }
-  }
-  if (resources.some(r => typeof r !== 'string' || r.length > 200)) {
-    return { status: 'error', errors: ['Each resource must be a string of max 200 characters'] }
-  }
+  return await prisma.site.findMany({
+    where: { userId: session.user.id },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  })
+}
+
+export async function createToken() {
+
+  const session = await auth()
+  if (!session?.user) throw new Error('Not authenticated')
+
+  // One-year validity from now. The Security page generates tokens with the
+  // implicit `all` role and a fixed expiry — the multi-role data model is
+  // preserved at the schema level for tokens issued by other means.
+  const expires = new Date()
+  expires.setFullYear(expires.getFullYear() + 1)
 
   const token = await prisma.securityToken.create({
     data: {
       userId: session.user.id,
-      resources,
+      resources: ['all'],
       expires
     }
   })
 
   return { status: 'ok', token: token.id }
-  
+
 }
 
 export async function deleteToken(id: string) {

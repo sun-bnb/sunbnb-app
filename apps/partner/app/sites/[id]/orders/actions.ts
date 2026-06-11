@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { requireSiteOwner } from '@/lib/auth-helpers'
+import { verifySiteAccess } from '@/lib/auth-helpers'
 import { isValidOrderStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 import {
@@ -43,12 +43,13 @@ export async function setOrderStatus(
   orderId: string,
   status: string,
   reason?: string,
+  accessKey?: string,
 ) {
   if (reason !== undefined && typeof reason === 'string' && reason.length > 500) {
     return { status: 'error', errors: ['Reason is too long (max 500 characters)'] }
   }
 
-  const { error } = await requireSiteOwner(siteId)
+  const { error } = await verifySiteAccess(siteId, accessKey)
   if (error) return { status: 'error', errors: [error] }
 
   if (!isValidOrderStatus(status)) {
@@ -95,6 +96,7 @@ const TAB_STATUSES: Record<OrderTab, string[]> = {
 export async function getOrders(
   siteId: string,
   tab: OrderTab = 'incoming',
+  accessKey?: string,
 ): Promise<{ status: string; errors?: string[]; orders?: any[] }> {
 
   const validTabs: OrderTab[] = ['incoming', 'active', 'ready', 'history']
@@ -102,7 +104,7 @@ export async function getOrders(
     return { status: 'error', errors: ['Invalid tab'] }
   }
 
-  const { error } = await requireSiteOwner(siteId)
+  const { error } = await verifySiteAccess(siteId, accessKey)
   if (error) return { status: 'error', errors: [error] }
 
   const statuses = TAB_STATUSES[tab]
@@ -124,8 +126,8 @@ export async function getOrders(
 
 // ─── Toggle Product Sold Out ─────────────────────────────────────────────────
 
-export async function toggleProductSoldOut(siteId: string, productId: string, soldOut: boolean) {
-  const { error } = await requireSiteOwner(siteId)
+export async function toggleProductSoldOut(siteId: string, productId: string, soldOut: boolean, accessKey?: string) {
+  const { error } = await verifySiteAccess(siteId, accessKey)
   if (error) return { status: 'error', errors: [error] }
 
   const product = await prisma.product.findUnique({

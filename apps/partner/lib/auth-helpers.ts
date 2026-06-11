@@ -34,6 +34,40 @@ export async function requireSiteOwner(
 }
 
 /**
+ * Verify the caller may act on the given site, accepting either a SecurityToken
+ * access key (for staff/integration use without login) or a signed-in session
+ * that owns the site. When an access key is supplied, the token must include
+ * `all` in its `resources` and its owner must own the site.
+ */
+export async function verifySiteAccess(
+  siteId: string,
+  accessKey?: string
+): Promise<{ userId: string | null; error: string | null }> {
+  if (accessKey) {
+    const token = await prisma.securityToken.findUnique({
+      where: {
+        id: accessKey,
+        expires: { gt: new Date() },
+        resources: { has: 'all' },
+      },
+    })
+    if (!token) return { userId: null, error: 'Invalid or expired access key' }
+    const site = await prisma.site.findUnique({
+      where: { id: siteId },
+      select: { userId: true },
+    })
+    if (!site || site.userId !== token.userId) {
+      return { userId: null, error: 'Not authorized' }
+    }
+    return { userId: site.userId, error: null }
+  }
+
+  const { session, error } = await requireSiteOwner(siteId)
+  if (error) return { userId: null, error }
+  return { userId: session.user.id, error: null }
+}
+
+/**
  * Verify the current user is authenticated and owns the given restaurant.
  * Ownership is checked via restaurant.partnerAccountId === session.user.id
  * (PartnerAccount is keyed by userId, so this is a direct userId comparison).
