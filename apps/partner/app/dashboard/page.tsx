@@ -126,9 +126,9 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
     totalReservationsThisMonth,
   ] = await Promise.all([
 
-    // Total inventory
+    // Total inventory (exclude pool seats — ad-hoc overflow, counted separately)
     prisma.inventoryItem.count({
-      where: { siteId: { in: siteIds } },
+      where: { siteId: { in: siteIds }, status: { not: 'pool' } },
     }),
 
     // Today's reservations (blocking statuses = actually happening)

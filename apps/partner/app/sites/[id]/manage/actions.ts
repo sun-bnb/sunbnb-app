@@ -72,7 +72,8 @@ export async function reserveItem(
   guestName?: string,
   internalNotes?: string,
   accessKey?: string,
-  until?: string
+  until?: string,
+  applyToPair: boolean = true
 ) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
@@ -96,8 +97,10 @@ export async function reserveItem(
   }
 
   const itemIds = [{ id: itemId }]
-  const pairId = await getPairItemId(itemId)
-  if (pairId) itemIds.push({ id: pairId })
+  if (applyToPair) {
+    const pairId = await getPairItemId(itemId)
+    if (pairId) itemIds.push({ id: pairId })
+  }
 
   // Reject if the bed (or its pair) is already reserved on any day in the range.
   // The today-only case can't conflict — the Reserve action is only offered for
@@ -139,29 +142,64 @@ export async function reserveItem(
 
 // ─── Release bed: walk-in departs or no-show ────────────────────────────────
 
-export async function unreserveItem(siteId: string, itemId: string, accessKey?: string) {
+export async function unreserveItem(siteId: string, itemId: string, accessKey?: string, applyToPair: boolean = true) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
   const todayStart = dayjs().startOf('day').toDate()
   const todayEnd = dayjs().endOf('day').toDate()
 
-  // For walk-ins (paid-in-cash), delete them entirely (no invoice trail).
-  // Use overlap-with-today semantics so multi-day walk-ins (to > todayEnd)
-  // and in-progress stays (from < todayStart) are matched correctly.
-  const result = await prisma.reservation.deleteMany({
-    where: {
-      siteId,
-      status: RESERVATION_PAID_IN_CASH,
-      operationalStatus: OP_WALKED_IN,
-      from: { lte: todayEnd },
-      to: { gte: todayStart },
-      items: { some: { id: itemId } },
-    },
-  })
+  if (applyToPair) {
+    // Pair mode: delete the whole walk-in reservation (frees both seats).
+    // For walk-ins (paid-in-cash), delete them entirely (no invoice trail).
+    // Use overlap-with-today semantics so multi-day walk-ins (to > todayEnd)
+    // and in-progress stays (from < todayStart) are matched correctly.
+    const result = await prisma.reservation.deleteMany({
+      where: {
+        siteId,
+        status: RESERVATION_PAID_IN_CASH,
+        operationalStatus: OP_WALKED_IN,
+        from: { lte: todayEnd },
+        to: { gte: todayStart },
+        items: { some: { id: itemId } },
+      },
+    })
 
-  if (result.count === 0) {
-    return { status: 'error', errors: ['No walk-in reservation found to release'] }
+    if (result.count === 0) {
+      return { status: 'error', errors: ['No walk-in reservation found to release'] }
+    }
+  } else {
+    // Single-seat mode: if the reservation has >1 item, disconnect just this
+    // seat (the partner stays walked-in); otherwise delete the whole reservation.
+    const reservation = await prisma.reservation.findFirst({
+      where: {
+        siteId,
+        status: RESERVATION_PAID_IN_CASH,
+        operationalStatus: OP_WALKED_IN,
+        from: { lte: todayEnd },
+        to: { gte: todayStart },
+        items: { some: { id: itemId } },
+      },
+      include: { items: true },
+    })
+
+    if (!reservation) {
+      return { status: 'error', errors: ['No walk-in reservation found to release'] }
+    }
+
+    if (reservation.items.length > 1) {
+      await prisma.reservation.update({
+        where: { id: reservation.id },
+        data: { items: { disconnect: [{ id: itemId }] } },
+      })
+    } else {
+      await prisma.reservation.deleteMany({
+        where: {
+          id: reservation.id,
+          siteId,
+        },
+      })
+    }
   }
 
   revalidatePath(`/sites/${siteId}/manage`)
@@ -338,14 +376,17 @@ export async function blockBed(
   siteId: string,
   itemId: string,
   notes?: string,
-  accessKey?: string
+  accessKey?: string,
+  applyToPair: boolean = true
 ) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
   const itemIds = [{ id: itemId }]
-  const pairId = await getPairItemId(itemId)
-  if (pairId) itemIds.push({ id: pairId })
+  if (applyToPair) {
+    const pairId = await getPairItemId(itemId)
+    if (pairId) itemIds.push({ id: pairId })
+  }
 
   await prisma.reservation.create({
     data: {
@@ -367,22 +408,54 @@ export async function blockBed(
 
 // ─── Unblock bed ────────────────────────────────────────────────────────────
 
-export async function unblockBed(siteId: string, itemId: string, accessKey?: string) {
+export async function unblockBed(siteId: string, itemId: string, accessKey?: string, applyToPair: boolean = true) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
   const todayStart = dayjs().startOf('day').toDate()
   const todayEnd = dayjs().endOf('day').toDate()
 
-  await prisma.reservation.deleteMany({
-    where: {
-      siteId,
-      operationalStatus: 'blocked',
-      from: { gte: todayStart },
-      to: { lte: todayEnd },
-      items: { some: { id: itemId } },
-    },
-  })
+  if (applyToPair) {
+    // Pair mode: delete the whole block reservation (frees both seats).
+    await prisma.reservation.deleteMany({
+      where: {
+        siteId,
+        operationalStatus: 'blocked',
+        from: { gte: todayStart },
+        to: { lte: todayEnd },
+        items: { some: { id: itemId } },
+      },
+    })
+  } else {
+    // Single-seat mode: if the block reservation has >1 item, disconnect just
+    // this seat (the partner stays blocked); otherwise delete the whole reservation.
+    const reservation = await prisma.reservation.findFirst({
+      where: {
+        siteId,
+        operationalStatus: 'blocked',
+        from: { gte: todayStart },
+        to: { lte: todayEnd },
+        items: { some: { id: itemId } },
+      },
+      include: { items: true },
+    })
+
+    if (reservation) {
+      if (reservation.items.length > 1) {
+        await prisma.reservation.update({
+          where: { id: reservation.id },
+          data: { items: { disconnect: [{ id: itemId }] } },
+        })
+      } else {
+        await prisma.reservation.deleteMany({
+          where: {
+            id: reservation.id,
+            siteId,
+          },
+        })
+      }
+    }
+  }
 
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok' }
@@ -569,4 +642,110 @@ export async function createWalkInRental(input: {
 
   revalidatePath(`/sites/${input.siteId}/manage`)
   return { status: 'ok', bookingIds: bookings.map(b => b.id) }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// POOL SEAT ACTIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Pool seats are ad-hoc overflow loungers: status='pool', sentinel coords (0,0),
+// number = parcel*10000 + 9900 + seq (e.g. parcel 1 → 19901, 19902…).
+// They are invisible to consumers (consumer side filters status:'active') and
+// excluded from the headline occupancy summary — tracked only in their own section.
+
+const POOL_BAND_BASE = 9900 // seq starts after this within each parcel's 10k block
+
+// ─── Create pool seat ────────────────────────────────────────────────────────
+
+export async function createPoolSeat(siteId: string, parcel: number, accessKey?: string) {
+  if (!Number.isInteger(parcel) || parcel < 1 || parcel > 9) {
+    return { status: 'error', errors: ['Invalid parcel number'] }
+  }
+
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  // Find the highest existing pool number in this parcel's pool band
+  // Pool band: parcel*10000 + 9901 to parcel*10000 + 9999
+  const bandMin = parcel * 10000 + POOL_BAND_BASE + 1
+  const bandMax = parcel * 10000 + 9999
+
+  const existing = await prisma.inventoryItem.findMany({
+    where: {
+      siteId,
+      status: 'pool',
+      group: parcel,
+      number: { gte: bandMin, lte: bandMax },
+    },
+    select: { number: true },
+    orderBy: { number: 'desc' },
+  })
+
+  const maxSeq = existing.length > 0 ? existing[0]!.number - (parcel * 10000 + POOL_BAND_BASE) : 0
+  const nextSeq = maxSeq + 1
+
+  if (nextSeq > 99) {
+    return { status: 'error', errors: ['Maximum pool seats per parcel reached (99)'] }
+  }
+
+  const number = parcel * 10000 + POOL_BAND_BASE + nextSeq
+
+  await prisma.inventoryItem.create({
+    data: {
+      siteId,
+      userId: ownership.userId,
+      number,
+      status: 'pool',
+      group: parcel,
+      locationLat: '0',
+      locationLng: '0',
+      schematicX: null,
+      schematicY: null,
+      itemGroupId: null,
+      pairId: null,
+    },
+  })
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
+}
+
+// ─── Delete pool seat ────────────────────────────────────────────────────────
+
+export async function deletePoolSeat(siteId: string, itemId: string, accessKey?: string) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  // Load item and verify it belongs to this site and is a pool seat
+  const item = await prisma.inventoryItem.findUnique({
+    where: { id: itemId },
+    select: { siteId: true, status: true, number: true },
+  })
+  if (!item || item.siteId !== siteId) {
+    return { status: 'error', errors: ['Item not found'] }
+  }
+  if (item.status !== 'pool') {
+    return { status: 'error', errors: ['Item is not a pool seat'] }
+  }
+
+  // Reject if the seat has an active reservation (not departed/no-show)
+  const todayStart = dayjs().startOf('day').toDate()
+  const todayEnd = dayjs().endOf('day').toDate()
+  const activeReservation = await prisma.reservation.findFirst({
+    where: {
+      siteId,
+      from: { lte: todayEnd },
+      to: { gte: todayStart },
+      operationalStatus: { notIn: ['departed', 'no-show'] },
+      items: { some: { id: itemId } },
+    },
+  })
+  if (activeReservation) {
+    return { status: 'error', errors: ['Release the seat before removing it'] }
+  }
+
+  await prisma.inventoryItem.delete({ where: { id: itemId } })
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { InventoryItem, Reservation, RentalBookingProps, SiteProps } from '@/types/shared'
@@ -9,6 +9,7 @@ import BedDetail from './BedDetail'
 import RentalBookingCard from './RentalBookingCard'
 import CreateRentalModal from './CreateRentalModal'
 import { computeChunkSize, chunkRows, ROW_LABEL_WIDTH } from './grid-helpers'
+import { createPoolSeat } from './actions'
 import {
   OP_EXPECTED, OP_CHECKED_IN, OP_WALKED_IN, OP_DEPARTED, OP_NO_SHOW,
   OP_PICKED_UP, OP_RESERVED,
@@ -24,6 +25,15 @@ function parseSunbedNumber(num: number) {
 
 type BedState = 'available' | 'expected' | 'checked-in' | 'walked-in' | 'blocked'
 type ViewMode = 'sections' | 'scroll'
+
+// Pool seat numbering: number = parcel*10000 + 9900 + seq
+// Display label = seq (number - parcel*10000 - 9900)
+const POOL_BAND_BASE = 9900
+
+function getPoolSeq(item: InventoryItem): number {
+  const parcel = parseInt(String(item.number)[0]!, 10)
+  return item.number - (parcel * 10000 + POOL_BAND_BASE)
+}
 
 const VIEW_MODE_KEY = 'sunbnb-manage-view'
 
@@ -44,6 +54,120 @@ function getBedState(item: InventoryItem): BedState {
     case 'blocked': return 'blocked'
     default: return 'available'
   }
+}
+
+// ── Pool seat cell ─────────────────────────────────────────────────────────────
+// Uses the exact same state colors as the regular Item cell so additional seats
+// read as a continuation, not a separate system.
+
+const POOL_STATE_STYLES: Record<BedState, string> = {
+  'available':  'bg-green-300 border-green-500',
+  'expected':   'bg-yellow-300 border-yellow-500 animate-pulse-slow',
+  'checked-in': 'bg-blue-400 border-blue-600 text-white',
+  'walked-in':  'bg-orange-400 border-orange-600 text-white',
+  'blocked':    'bg-gray-400 border-gray-600 text-white',
+}
+
+const POOL_ICONS: Record<BedState, string> = {
+  'available': '',
+  'expected': '⏳',
+  'checked-in': '✓',
+  'walked-in': '●',
+  'blocked': '✕',
+}
+
+function PoolCell({
+  item,
+  onSelect,
+}: {
+  item: InventoryItem
+  onSelect: () => void
+}) {
+  const seq = getPoolSeq(item)
+  const state = getBedState(item)
+
+  return (
+    <button
+      onClick={onSelect}
+      className={`
+        ${POOL_STATE_STYLES[state]} border-2 rounded-lg
+        min-w-[44px] min-h-[44px] w-14
+        py-2 px-1 flex flex-col items-center justify-center
+        active:brightness-90 transition-colors select-none
+      `}
+      title={`Seat ${seq}`}
+    >
+      {POOL_ICONS[state] && <span className="text-[10px] leading-none">{POOL_ICONS[state]}</span>}
+      <span className="text-[10px] leading-none opacity-70">{seq}</span>
+    </button>
+  )
+}
+
+// ── Pool section (per-parcel) ──────────────────────────────────────────────────
+// Renders as a continuation strip beneath the parcel's mapped seats — a light
+// neutral tint distinguishes the area; seats use the same state colors as
+// regular Item cells. The "add seat" button is an outline of the next seat.
+
+function PoolSection({
+  poolItems,
+  isPendingPool,
+  onSelectPool,
+  onAddSeat,
+  t,
+}: {
+  poolItems: InventoryItem[]
+  isPendingPool: boolean
+  onSelectPool: (item: InventoryItem) => void
+  onAddSeat: () => void
+  t: ReturnType<typeof useTranslations<'SiteManage'>>
+}) {
+  const occupied = poolItems.filter(i => getBedState(i) !== 'available').length
+
+  // Always render — even when empty — so the add-seat button is always visible
+  return (
+    <div className="mt-2">
+      <div className="bg-gray-100 rounded-xl px-2 pt-2 pb-2">
+        {/* Caption — small and muted, reads as a section annotation */}
+        <div className="text-xs text-gray-400 mb-1.5 px-0.5 leading-none">
+          {t('additionalSeats')}
+          {poolItems.length > 0 && (
+            <span className="ml-1">· {occupied}/{poolItems.length}</span>
+          )}
+        </div>
+
+        {/* Seats + outline add-seat button in a wrapping flex row */}
+        <div className="flex flex-wrap gap-1">
+          {poolItems.map(item => (
+            <PoolCell
+              key={item.id}
+              item={item}
+              onSelect={() => onSelectPool(item)}
+            />
+          ))}
+
+          {/* Add-seat: seat-sized cell with dashed outline */}
+          <button
+            onClick={onAddSeat}
+            disabled={isPendingPool}
+            aria-label={t('poolAddSeat')}
+            className="
+              border-2 border-dashed border-gray-400 rounded-lg bg-transparent
+              min-w-[44px] min-h-[44px] w-14
+              py-2 px-1 flex items-center justify-center
+              text-gray-400 text-lg font-light
+              active:bg-gray-200 disabled:opacity-40 transition-colors select-none
+            "
+          >
+            {isPendingPool ? (
+              <span className="text-xs">…</span>
+            ) : (
+              <span aria-hidden="true">+</span>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ── View-toggle icons ──────────────────────────────────────────────────────────
@@ -80,7 +204,9 @@ export default function ManageView({
   const t = useTranslations('SiteManage')
   const router = useRouter()
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
+  const [selectedItemIsPool, setSelectedItemIsPool] = useState(false)
   const [showRentalModal, setShowRentalModal] = useState(false)
+  const [isPendingPool, startPoolTransition] = useTransition()
 
   // View mode — initialised to 'sections' so SSR and first client render match,
   // then overridden from localStorage in useEffect (avoids hydration mismatch).
@@ -123,9 +249,17 @@ export default function ManageView({
   }, [router])
 
   const { inventoryItems = [] } = site
-  const activeItems = inventoryItems.filter(i => i.status !== 'disabled')
 
-  // Compute summary counts
+  // Pool seats (status='pool') are separated from the regular grid.
+  // They are NOT counted in the headline occupancy summary — tracked only within
+  // their own per-parcel section (product decision).
+  const poolItems = inventoryItems.filter(i => i.status === 'pool')
+  const regularItems = inventoryItems.filter(i => i.status !== 'pool')
+
+  // Headline summary excludes pool seats and disabled items
+  const activeItems = regularItems.filter(i => i.status !== 'disabled')
+
+  // Compute summary counts (regular seats only)
   const summary = activeItems.reduce((acc, item) => {
     const state = getBedState(item)
     acc[state] = (acc[state] || 0) + 1
@@ -135,15 +269,22 @@ export default function ManageView({
   const total = activeItems.length
   const occupied = (summary['checked-in'] || 0) + (summary['walked-in'] || 0)
 
-  // Group by parcel → row → position (all items, including disabled — Item.tsx renders
-  // disabled items as spacers so row geometry is preserved)
-  const grouped = inventoryItems.reduce((acc, item) => {
+  // Group regular items by parcel → row → position (including disabled for spacers)
+  const grouped = regularItems.reduce((acc, item) => {
     const { parcel, row, position } = parseSunbedNumber(item.number)
     if (!acc[parcel]) acc[parcel] = {}
     if (!acc[parcel][row]) acc[parcel][row] = {}
     acc[parcel][row][position] = item
     return acc
   }, {} as Record<number, Record<number, Record<number, InventoryItem>>>)
+
+  // Group pool items by parcel
+  const poolByParcel = poolItems.reduce((acc, item) => {
+    const parcel = parseInt(String(item.number)[0]!, 10)
+    if (!acc[parcel]) acc[parcel] = []
+    acc[parcel].push(item)
+    return acc
+  }, {} as Record<number, InventoryItem[]>)
 
   return (
     <div ref={containerRef} className="px-2 pt-2 pb-20 mx-auto w-full max-w-screen-lg">
@@ -206,10 +347,14 @@ export default function ManageView({
 
       {/* ── Sunbed Grid ── */}
       {Object.entries(grouped).map(([parcel, rows]) => {
+        const parcelNum = Number(parcel)
         // Sort row entries by row number (ascending = front row first)
         const rowEntries: [number, Record<number, InventoryItem>][] = Object.entries(rows)
           .map(([rowStr, positions]) => [Number(rowStr), positions] as [number, Record<number, InventoryItem>])
           .sort(([a], [b]) => a - b)
+
+        // Pool seats for this parcel (sorted by seq = number ascending)
+        const parcelPoolItems = (poolByParcel[parcelNum] || []).slice().sort((a, b) => a.number - b.number)
 
         // ── Horizontal-scroll view ────────────────────────────────────────────
         if (viewMode === 'scroll') {
@@ -269,7 +414,7 @@ export default function ManageView({
                           <Item
                             siteId={site.id!}
                             item={item}
-                            onSelect={() => setSelectedItem(item)}
+                            onSelect={() => { setSelectedItem(item); setSelectedItemIsPool(false) }}
                           />
                         </div>
                       ) : (
@@ -283,6 +428,20 @@ export default function ManageView({
                   </div>
                 ))}
               </div>
+
+              {/* Pool section (scroll view) */}
+              <PoolSection
+                poolItems={parcelPoolItems}
+                isPendingPool={isPendingPool}
+                onSelectPool={(item) => { setSelectedItem(item); setSelectedItemIsPool(true) }}
+                onAddSeat={() => {
+                  startPoolTransition(async () => {
+                    await createPoolSeat(site.id!, parcelNum, accessKey)
+                    router.refresh()
+                  })
+                }}
+                t={t}
+              />
             </div>
           )
         }
@@ -335,7 +494,7 @@ export default function ManageView({
                             key={item.id}
                             siteId={site.id!}
                             item={item}
-                            onSelect={() => setSelectedItem(item)}
+                            onSelect={() => { setSelectedItem(item); setSelectedItemIsPool(false) }}
                           />
                         ) : (
                           <div key={`spacer-${cellIdx}`} className="min-h-[44px]" />
@@ -346,6 +505,20 @@ export default function ManageView({
                 ))}
               </div>
             ))}
+
+            {/* Pool section (sections view) */}
+            <PoolSection
+              poolItems={parcelPoolItems}
+              isPendingPool={isPendingPool}
+              onSelectPool={(item) => { setSelectedItem(item); setSelectedItemIsPool(true) }}
+              onAddSeat={() => {
+                startPoolTransition(async () => {
+                  await createPoolSeat(site.id!, parcelNum, accessKey)
+                  router.refresh()
+                })
+              }}
+              t={t}
+            />
           </div>
         )
       })}
@@ -400,8 +573,11 @@ export default function ManageView({
         <BedDetail
           siteId={site.id!}
           item={selectedItem}
+          pairItem={selectedItemIsPool ? null : (inventoryItems.find(i => i.id === selectedItem.pairId || i.pairId === selectedItem.id) ?? null)}
           accessKey={accessKey}
-          onClose={() => setSelectedItem(null)}
+          isPool={selectedItemIsPool}
+          onClose={() => { setSelectedItem(null); setSelectedItemIsPool(false) }}
+          onPoolSeatRemoved={() => { setSelectedItem(null); setSelectedItemIsPool(false); router.refresh() }}
         />
       )}
 

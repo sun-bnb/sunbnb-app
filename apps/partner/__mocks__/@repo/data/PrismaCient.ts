@@ -33,6 +33,7 @@ const prisma = {
     updateMany: vi.fn(),
     delete: vi.fn(),
     deleteMany: vi.fn(),
+    count: vi.fn(),
   },
   product: {
     findUnique: vi.fn(),

@@ -728,7 +728,9 @@
     "sunbedsOccupied": "{count, plural, one {# ocupada} other {# ocupadas}}",
     "rowLabel": "F{n}",
     "viewSections": "Secciones",
-    "viewScroll": "Desplazar"
+    "viewScroll": "Desplazar",
+    "additionalSeats": "asientos adicionales",
+    "poolAddSeat": "Añadir asiento"
   },
   "BedDetail": {
     "free": "Libre",
@@ -754,7 +756,11 @@
     "sunbedNumber": "Tumbona #{n}",
     "noShowConfirmTitle": "¿Marcar como no presentado?",
     "noShowConfirmBody": "Este huésped quedará registrado como no presentado.",
-    "confirm": "Confirmar"
+    "confirm": "Confirmar",
+    "bothSeats": "Ambos asientos",
+    "thisSeatOnly": "Solo este asiento",
+    "poolRemoveSeat": "Eliminar asiento",
+    "additionalSeat": "asiento adicional"
   },
   "CreateRentalModal": {
     "title": "Alquilar",

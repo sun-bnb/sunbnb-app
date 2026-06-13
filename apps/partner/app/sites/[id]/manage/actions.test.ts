@@ -21,6 +21,8 @@ import {
   markRentalPickedUp,
   markRentalReturned,
   createWalkInRental,
+  createPoolSeat,
+  deletePoolSeat,
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
@@ -624,5 +626,326 @@ describe('createWalkInRental', () => {
     // paymentAmount must match totalPrice — without it, payment reconciliation
     // and invoicing will see null and potentially break downstream processing
     expect(createCall.data.paymentAmount).toBe(60)
+  })
+})
+
+// ─── applyToPair = false — single-seat mode ─────────────────────────────────
+
+describe('reserveItem with applyToPair = false', () => {
+  it('does NOT look up or add the pair item when applyToPair is false', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
+
+    const res = await reserveItem(SITE_ID, ITEM_ID, 'Solo guest', undefined, undefined, undefined, false)
+    expect(res.status).toBe('ok')
+
+    // getPairItemId calls inventoryItem.findUnique — must NOT be called
+    expect(vi.mocked(prisma.inventoryItem.findUnique)).not.toHaveBeenCalled()
+
+    const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
+    expect(createCall.data.items.connect).toEqual([{ id: ITEM_ID }])
+  })
+
+  it('still adds pair when applyToPair is true (default behavior preserved)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      id: ITEM_ID,
+      pairId: 'pair-1',
+      pairedBy: null,
+    } as any)
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
+
+    await reserveItem(SITE_ID, ITEM_ID, undefined, undefined, undefined, undefined, true)
+
+    const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
+    expect(createCall.data.items.connect).toEqual([{ id: ITEM_ID }, { id: 'pair-1' }])
+  })
+})
+
+describe('blockBed with applyToPair = false', () => {
+  it('does NOT look up or add the pair item when applyToPair is false', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
+
+    const res = await blockBed(SITE_ID, ITEM_ID, undefined, undefined, false)
+    expect(res.status).toBe('ok')
+
+    expect(vi.mocked(prisma.inventoryItem.findUnique)).not.toHaveBeenCalled()
+
+    const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
+    expect(createCall.data.items.connect).toEqual([{ id: ITEM_ID }])
+  })
+
+  it('still adds pair when applyToPair is true (default behavior preserved)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      id: ITEM_ID,
+      pairId: 'pair-1',
+      pairedBy: null,
+    } as any)
+    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
+
+    await blockBed(SITE_ID, ITEM_ID, undefined, undefined, true)
+
+    const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
+    expect(createCall.data.items.connect).toEqual([{ id: ITEM_ID }, { id: 'pair-1' }])
+  })
+})
+
+describe('unreserveItem with applyToPair = false', () => {
+  it('disconnects this item from a 2-item reservation (partner stays walked-in)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
+      id: RES_ID,
+      items: [{ id: ITEM_ID }, { id: 'pair-1' }],
+    } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
+
+    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, false)
+    expect(res.status).toBe('ok')
+
+    // Update called to disconnect — not deleteMany
+    expect(vi.mocked(prisma.reservation.update)).toHaveBeenCalledWith({
+      where: { id: RES_ID },
+      data: { items: { disconnect: [{ id: ITEM_ID }] } },
+    })
+    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
+  })
+
+  it('deletes the whole reservation when it has only 1 item', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
+      id: RES_ID,
+      items: [{ id: ITEM_ID }],
+    } as any)
+    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
+
+    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, false)
+    expect(res.status).toBe('ok')
+
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+    expect(vi.mocked(prisma.reservation.deleteMany)).toHaveBeenCalledWith({
+      where: { id: RES_ID, siteId: SITE_ID },
+    })
+  })
+
+  it('returns error when no walk-in reservation found (single mode)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
+
+    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, false)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/no walk-in reservation found/i)
+  })
+
+  it('pair mode (true) still uses deleteMany to free both seats', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
+
+    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, true)
+    expect(res.status).toBe('ok')
+
+    expect(vi.mocked(prisma.reservation.deleteMany)).toHaveBeenCalled()
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+  })
+})
+
+// ─── Pool Seat Actions ──────────────────────────────────────────────────────
+
+describe('createPoolSeat', () => {
+  it('creates first pool seat for parcel with number parcel*10000+9901', async () => {
+    authenticateAsOwner()
+    // No existing pool seats in the band
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([])
+    vi.mocked(prisma.inventoryItem.create).mockResolvedValue({} as any)
+
+    const res = await createPoolSeat(SITE_ID, 1)
+    expect(res.status).toBe('ok')
+
+    const createCall = vi.mocked(prisma.inventoryItem.create).mock.calls[0][0]
+    expect(createCall.data.number).toBe(19901) // parcel 1: 1*10000 + 9900 + 1
+    expect(createCall.data.status).toBe('pool')
+    expect(createCall.data.group).toBe(1)
+    expect(createCall.data.locationLat).toBe('0')
+    expect(createCall.data.locationLng).toBe('0')
+    expect(createCall.data.siteId).toBe(SITE_ID)
+  })
+
+  it('computes next seq from max existing pool number', async () => {
+    authenticateAsOwner()
+    // Two existing seats: 19901 and 19902 (seq 1 and 2)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([
+      { number: 19902 }, // highest first (orderBy: number desc)
+      { number: 19901 },
+    ] as any)
+    vi.mocked(prisma.inventoryItem.create).mockResolvedValue({} as any)
+
+    const res = await createPoolSeat(SITE_ID, 1)
+    expect(res.status).toBe('ok')
+
+    const createCall = vi.mocked(prisma.inventoryItem.create).mock.calls[0][0]
+    expect(createCall.data.number).toBe(19903) // seq 3
+  })
+
+  it('uses parcel-scoped band — parcel 2 starts at 29901', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([])
+    vi.mocked(prisma.inventoryItem.create).mockResolvedValue({} as any)
+
+    const res = await createPoolSeat(SITE_ID, 2)
+    expect(res.status).toBe('ok')
+
+    const createCall = vi.mocked(prisma.inventoryItem.create).mock.calls[0][0]
+    expect(createCall.data.number).toBe(29901) // parcel 2: 2*10000 + 9900 + 1
+    expect(createCall.data.group).toBe(2)
+  })
+
+  it('rejects invalid parcel number', async () => {
+    authenticateAsOwner()
+    const res = await createPoolSeat(SITE_ID, 0)
+    expect(res.status).toBe('error')
+    expect(vi.mocked(prisma.inventoryItem.create)).not.toHaveBeenCalled()
+  })
+
+  it('rejects unauthenticated caller', async () => {
+    const res = await createPoolSeat(SITE_ID, 1)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+    expect(vi.mocked(prisma.inventoryItem.create)).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-owner', async () => {
+    authenticateAsNonOwner()
+    const res = await createPoolSeat(SITE_ID, 1)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authorized')
+    expect(vi.mocked(prisma.inventoryItem.create)).not.toHaveBeenCalled()
+  })
+})
+
+describe('deletePoolSeat', () => {
+  it('deletes a free pool seat successfully', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      status: 'pool',
+      number: 19901,
+    } as any)
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null) // no active reservation
+    vi.mocked(prisma.inventoryItem.delete).mockResolvedValue({} as any)
+
+    const res = await deletePoolSeat(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(prisma.inventoryItem.delete)).toHaveBeenCalledWith({ where: { id: ITEM_ID } })
+  })
+
+  it('rejects when pool seat has an active reservation (occupied)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      status: 'pool',
+      number: 19901,
+    } as any)
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({ id: RES_ID } as any) // occupied
+
+    const res = await deletePoolSeat(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/release the seat/i)
+    expect(vi.mocked(prisma.inventoryItem.delete)).not.toHaveBeenCalled()
+  })
+
+  it('rejects deletion of a non-pool item (regular sunbed)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      status: 'active', // not a pool seat
+      number: 10101,
+    } as any)
+
+    const res = await deletePoolSeat(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/not a pool seat/i)
+    expect(vi.mocked(prisma.inventoryItem.delete)).not.toHaveBeenCalled()
+  })
+
+  it('rejects when item not found or belongs to different site', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      siteId: 'other-site',
+      status: 'pool',
+      number: 19901,
+    } as any)
+
+    const res = await deletePoolSeat(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Item not found')
+    expect(vi.mocked(prisma.inventoryItem.delete)).not.toHaveBeenCalled()
+  })
+
+  it('rejects unauthenticated caller', async () => {
+    const res = await deletePoolSeat(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+  })
+})
+
+describe('unblockBed with applyToPair = false', () => {
+  it('disconnects this item from a 2-item block reservation (partner stays blocked)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
+      id: RES_ID,
+      items: [{ id: ITEM_ID }, { id: 'pair-1' }],
+    } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
+
+    const res = await unblockBed(SITE_ID, ITEM_ID, undefined, false)
+    expect(res.status).toBe('ok')
+
+    expect(vi.mocked(prisma.reservation.update)).toHaveBeenCalledWith({
+      where: { id: RES_ID },
+      data: { items: { disconnect: [{ id: ITEM_ID }] } },
+    })
+    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
+  })
+
+  it('deletes the whole block reservation when it has only 1 item', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
+      id: RES_ID,
+      items: [{ id: ITEM_ID }],
+    } as any)
+    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
+
+    const res = await unblockBed(SITE_ID, ITEM_ID, undefined, false)
+    expect(res.status).toBe('ok')
+
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+    expect(vi.mocked(prisma.reservation.deleteMany)).toHaveBeenCalledWith({
+      where: { id: RES_ID, siteId: SITE_ID },
+    })
+  })
+
+  it('returns ok and does nothing when no block reservation found (single mode)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
+
+    const res = await unblockBed(SITE_ID, ITEM_ID, undefined, false)
+    expect(res.status).toBe('ok')
+
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
+  })
+
+  it('pair mode (true) still uses deleteMany to free both seats', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
+
+    const res = await unblockBed(SITE_ID, ITEM_ID, undefined, true)
+    expect(res.status).toBe('ok')
+
+    expect(vi.mocked(prisma.reservation.deleteMany)).toHaveBeenCalled()
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
   })
 })

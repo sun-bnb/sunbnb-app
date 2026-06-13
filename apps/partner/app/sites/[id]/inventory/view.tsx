@@ -27,7 +27,9 @@ export default function InventoryView() {
   const { site, setSite, apiKey } = useSite()
   const router = useRouter()
 
-  const inventory: InventoryItem[] = site.inventoryItems || []
+  // Exclude pool seats (status:'pool') from the inventory editor entirely.
+  // Pool seats have sentinel coords (0,0) and must not appear in the map or stats.
+  const inventory: InventoryItem[] = (site.inventoryItems || []).filter(i => i.status !== 'pool')
   const siteId = site.id || ''
   const siteLat = site.locationLat!
   const siteLng = site.locationLng!

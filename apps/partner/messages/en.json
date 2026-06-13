@@ -728,7 +728,9 @@
     "sunbedsOccupied": "{count, plural, one {# occupied} other {# occupied}}",
     "rowLabel": "R{n}",
     "viewSections": "Sections",
-    "viewScroll": "Scroll"
+    "viewScroll": "Scroll",
+    "additionalSeats": "additional seats",
+    "poolAddSeat": "Add seat"
   },
   "BedDetail": {
     "free": "Free",
@@ -754,7 +756,11 @@
     "sunbedNumber": "Sunbed #{n}",
     "noShowConfirmTitle": "Mark as no-show?",
     "noShowConfirmBody": "This guest will be recorded as a no-show.",
-    "confirm": "Confirm"
+    "confirm": "Confirm",
+    "bothSeats": "Both seats",
+    "thisSeatOnly": "This seat only",
+    "poolRemoveSeat": "Remove seat",
+    "additionalSeat": "additional seat"
   },
   "CreateRentalModal": {
     "title": "Rent Out",

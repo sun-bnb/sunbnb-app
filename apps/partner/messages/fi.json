@@ -728,7 +728,9 @@
     "sunbedsOccupied": "{count, plural, one {# varattu} other {# varattua}}",
     "rowLabel": "R{n}",
     "viewSections": "Osiot",
-    "viewScroll": "Vieritä"
+    "viewScroll": "Vieritä",
+    "additionalSeats": "lisäpaikat",
+    "poolAddSeat": "Lisää paikka"
   },
   "BedDetail": {
     "free": "Vapaa",
@@ -754,7 +756,11 @@
     "sunbedNumber": "Aurinkotuoli #{n}",
     "noShowConfirmTitle": "Merkitäänkö ei saapunut?",
     "noShowConfirmBody": "Tämä vieras kirjataan ei saapuneeksi.",
-    "confirm": "Vahvista"
+    "confirm": "Vahvista",
+    "bothSeats": "Molemmat paikat",
+    "thisSeatOnly": "Vain tämä paikka",
+    "poolRemoveSeat": "Poista paikka",
+    "additionalSeat": "lisäpaikka"
   },
   "CreateRentalModal": {
     "title": "Vuokraa",

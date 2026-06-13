@@ -361,7 +361,8 @@ export default function GeneralView() {
   const [layoutWidth, setLayoutWidth] = useState(site.layoutWidth?.toString() ?? '50')
   const [layoutHeight, setLayoutHeight] = useState(site.layoutHeight?.toString() ?? '35')
   const [layoutLockedReason, setLayoutLockedReason] = useState<string | null>(null)
-  const layoutLocked = (site.inventoryItems?.length ?? 0) > 0
+  // Layout mode lock is based on map-placed items only; pool seats (status:'pool') don't count
+  const layoutLocked = (site.inventoryItems?.filter(i => i.status !== 'pool').length ?? 0) > 0
 
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
   const savedTimerRef = useRef<NodeJS.Timeout | null>(null)

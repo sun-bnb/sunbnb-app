@@ -102,7 +102,7 @@ const VALID_ORDER_STATUSES: Set<string> = new Set([
 const VALID_PRODUCT_CATEGORIES = new Set(['food', 'drink', 'snack', 'accessory'])
 const VALID_ORDER_PAYMENT_TYPES = new Set(['paid', 'unpaid'])
 const VALID_RENTAL_PAYMENT_TYPES = new Set(['paid', 'unpaid'])
-const VALID_ITEM_STATUSES = new Set(['active', 'disabled'])
+const VALID_ITEM_STATUSES = new Set(['active', 'disabled', 'pool'])
 
 export function isValidSiteStatus(s: string): boolean {
   return VALID_SITE_STATUSES.has(s)

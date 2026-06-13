@@ -157,7 +157,8 @@ function MapContent({
         if (!topLeft || !bottomRight) return null
 
         // Hit test: find all items within bounds
-        const items = site.inventoryItems || []
+        // Exclude pool seats (sentinel coords 0,0 + status:'pool') from marquee selection
+        const items = (site.inventoryItems || []).filter(i => i.status !== 'pool')
         const selected = items.filter(item => {
           const lat = Number(item.locationLat)
           const lng = Number(item.locationLng)
@@ -198,7 +199,9 @@ function MapContent({
 
   return (
     <>
-      {(site.inventoryItems || []).map((item) => {
+      {/* Exclude pool seats (status:'pool') — they have sentinel coords (0,0)
+          and must not appear as stray markers on the inventory map. */}
+      {(site.inventoryItems || []).filter(i => i.status !== 'pool').map((item) => {
         const isEditing = selectedItemId === item.id
         const isMultiSelected =
           selectedSet.has(item.id) ||

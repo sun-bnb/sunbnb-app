@@ -11,7 +11,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { useSite } from '@/app/sites/site-context'
 import { ChairConfig } from './chair-util'
-import { syncChairsWithLayout, setItemStatusByGroup } from './actions'
+import { syncChairsWithLayout, setItemStatusByGroup, reverseParcelNumbering } from './actions'
 import { deleteItemsByGroup } from '../inventory-actions'
 import { getSite } from '../queries'
 import PriceBreakdown from '@/components/PriceBreakdown'
@@ -60,8 +60,9 @@ export default function ParcelFormView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editGroup])
 
-  const parcelItems = site.inventoryItems?.filter(item => item.group === config.group) || []
-  const activeItems = parcelItems?.filter(item => item.status !== 'disabled') || []
+  // Exclude pool seats (status:'pool') — they are managed from the manage page, not the inventory editor
+  const parcelItems = (site.inventoryItems || []).filter(item => item.group === config.group && item.status !== 'pool')
+  const activeItems = parcelItems.filter(item => item.status !== 'disabled')
   const allDisabled = parcelItems.length > 0 && activeItems.length === 0
 
   useEffect(() => {
@@ -246,9 +247,26 @@ export default function ParcelFormView({
             variant="contained"
             size="small"
             onClick={handleApplyChanges}
-            sx={{ textTransform: 'none', mb: 2 }}
+            sx={{ textTransform: 'none', mb: 1 }}
           >
             Apply changes
+          </Button>
+        )}
+
+        {/* Reverse seat numbering */}
+        {mode === 'edit' && editGroup && (
+          <Button
+            fullWidth
+            variant="outlined"
+            size="small"
+            onClick={async () => {
+              await reverseParcelNumbering(siteId, editGroup)
+              const updatedSite = await getSite(siteId)
+              setSite(updatedSite!)
+            }}
+            sx={{ textTransform: 'none', mb: 2 }}
+          >
+            Reverse seat numbering
           </Button>
         )}
 

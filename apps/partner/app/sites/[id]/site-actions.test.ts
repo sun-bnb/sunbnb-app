@@ -205,8 +205,9 @@ describe('saveGeneral', () => {
     authorizeOwner()
     vi.mocked(prisma.site.findUnique).mockResolvedValue({
       layoutMode: 'geo',
-      _count: { inventoryItems: 12 },
     } as any)
+    // Pool-excluded map item count — 12 real sunbeds present
+    vi.mocked(prisma.inventoryItem.count).mockResolvedValue(12 as any)
     vi.mocked(prisma.site.update).mockResolvedValue({} as any)
 
     const res = await saveGeneral({
@@ -229,8 +230,9 @@ describe('saveGeneral', () => {
     authorizeOwner()
     vi.mocked(prisma.site.findUnique).mockResolvedValue({
       layoutMode: 'geo',
-      _count: { inventoryItems: 0 },
     } as any)
+    // Pool-excluded map item count — zero, so mode switch is allowed
+    vi.mocked(prisma.inventoryItem.count).mockResolvedValue(0 as any)
     vi.mocked(prisma.site.update).mockResolvedValue({} as any)
     vi.mocked(prisma.$executeRaw).mockResolvedValue(1 as any)
 

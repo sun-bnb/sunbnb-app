@@ -743,3 +743,67 @@ export async function removeItemsFromGroup(
 
   return { status: 'ok' }
 }
+
+/**
+ * Reverse seat numbering within each row of a parcel.
+ *
+ * Beds stay physically in place — only their `number` field changes so the
+ * sequence counts from the opposite end.  The seat-number suffix (last 2
+ * digits of `number`) is remapped s_i → s_(n+1-i) for every seat in each
+ * row.  Coordinates, rotation, and pairId are untouched.
+ *
+ * Number encoding: `Number(`${group}${rowNum2}${seatNum2}`)`.
+ * The seat suffix is always the final 2 digits; everything before it is the
+ * row prefix (group digits + 2-digit row).
+ */
+export async function reverseParcelNumbering(siteId: string, group: number) {
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
+
+  const items = await prisma.inventoryItem.findMany({
+    where: { siteId, group },
+    select: { id: true, number: true },
+  })
+
+  if (items.length === 0) return { status: 'ok' }
+
+  // Group items by row prefix (all digits except the last 2 = seat suffix).
+  const rowMap = new Map<string, Array<{ id: string; number: number }>>()
+  for (const item of items) {
+    const numStr = String(item.number)
+    const rowPrefix = numStr.slice(0, -2) // everything except last 2 digits
+    if (!rowMap.has(rowPrefix)) rowMap.set(rowPrefix, [])
+    rowMap.get(rowPrefix)!.push(item)
+  }
+
+  // Build all updates: for each row, sort by seat suffix ascending, then
+  // remap s_i → s_(n+1-i) while keeping coordinates/rotation intact.
+  const updates: Array<{ id: string; newNumber: number }> = []
+  for (const [rowPrefix, rowItems] of rowMap) {
+    // Sort by current seat suffix so indices are well-defined
+    rowItems.sort((a, b) => a.number - b.number)
+
+    const n = rowItems.length
+    for (let i = 0; i < n; i++) {
+      const reversedIndex = n - 1 - i
+      const item = rowItems[i]!
+      const reversedItem = rowItems[reversedIndex]!
+      const originalSeatSuffix = String(reversedItem.number).slice(-2)
+      const newNumber = Number(`${rowPrefix}${originalSeatSuffix}`)
+      updates.push({ id: item.id, newNumber })
+    }
+  }
+
+  // Execute atomically.  No uniqueness constraint on (siteId, number) means
+  // we can do a single-pass update without a temp-offset stage.
+  await prisma.$transaction(
+    updates.map(({ id, newNumber }) =>
+      prisma.inventoryItem.update({
+        where: { id },
+        data: { number: newNumber },
+      })
+    )
+  )
+
+  return { status: 'ok' }
+}

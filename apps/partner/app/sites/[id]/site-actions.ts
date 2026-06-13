@@ -110,9 +110,13 @@ export async function saveGeneral(input: {
   if (input.layoutMode !== undefined) {
     const current = await prisma.site.findUnique({
       where: { id: input.id },
-      select: { layoutMode: true, _count: { select: { inventoryItems: true } } },
+      select: { layoutMode: true },
     })
-    if (current && current.layoutMode !== input.layoutMode && current._count.inventoryItems > 0) {
+    // Count map-placed items only (exclude pool seats which have sentinel coords)
+    const mapItemCount = current ? await prisma.inventoryItem.count({
+      where: { siteId: input.id, status: { not: 'pool' } },
+    }) : 0
+    if (current && current.layoutMode !== input.layoutMode && mapItemCount > 0) {
       return {
         status: 'error',
         errors: ['Cannot change layout mode after inventory items exist'],
