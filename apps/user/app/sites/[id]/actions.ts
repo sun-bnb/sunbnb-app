@@ -115,14 +115,18 @@ export async function saveReservationForMultipleItems(
   }
 
   // ── Server-side availability check ─────────────────────────────────────
+  // Every requested item must be present in the availability set (i.e. a real,
+  // active seat for this site) AND available for the date range. Items absent
+  // from the set are non-active seats (disabled, pool overflow, cross-site IDs,
+  // bogus IDs) and must never be booked — never-trust-the-client.
   if (reservation.items?.length) {
     const availability = await getAvailability(reservation.siteId, from, to)
-    const requestedIds = new Set(reservation.items.map(i => i.id))
-    const unavailable = availability
-      .filter(a => requestedIds.has(a.itemId) && !a.available)
-      .map(a => a.itemId)
+    const availableIds = new Set(
+      availability.filter(a => a.available).map(a => a.itemId)
+    )
+    const hasUnavailable = reservation.items.some(i => !availableIds.has(i.id))
 
-    if (unavailable.length > 0) {
+    if (hasUnavailable) {
       return {
         status: 'error',
         errors: [`Some items are not available for the requested dates`],

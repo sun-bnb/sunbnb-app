@@ -98,7 +98,7 @@ describe('saveReservationForMultipleItems', () => {
     expect(res.errors?.[0]).toContain('price not set')
   })
 
-  it('returns error when requested items are unavailable', async () => {
+  it('returns error when requested items are unavailable (present but not available)', async () => {
     mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
     vi.mocked(prisma.site.findUnique).mockResolvedValue({
       id: 'site-1',
@@ -112,6 +112,85 @@ describe('saveReservationForMultipleItems', () => {
     const res = await saveReservationForMultipleItems({
       siteId: 'site-1',
       items: [{ id: 'item-1' } as any],
+      type: 'days',
+      from: '2025-07-01',
+      to: '2025-07-02',
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('not available')
+  })
+
+  // Guard: item ID absent from the availability set entirely (non-active seat,
+  // pool overflow, cross-site ID, or bogus ID) must be rejected even though it
+  // is not in the unavailable list — the old filter missed this case.
+  it('returns error when a requested item ID is absent from the availability set', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      id: 'site-1',
+      type: 'paid',
+      price: 10,
+    } as any)
+    // availability set only contains item-1; item-ghost is not a reservable seat
+    mockGetAvailability.mockResolvedValue([
+      { itemId: 'item-1', available: true },
+    ] as any)
+
+    const res = await saveReservationForMultipleItems({
+      siteId: 'site-1',
+      items: [{ id: 'item-1' } as any, { id: 'item-ghost' } as any],
+      type: 'days',
+      from: '2025-07-01',
+      to: '2025-07-02',
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('not available')
+  })
+
+  // Confirm the legitimate path is unaffected: all requested IDs present AND available.
+  it('allows reservation when all requested items are in the availability set and available', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      id: 'site-1',
+      type: 'paid',
+      price: 10,
+    } as any)
+    mockGetAvailability.mockResolvedValue([
+      { itemId: 'item-1', available: true },
+      { itemId: 'item-2', available: true },
+    ] as any)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([
+      { id: 'item-1', price: 10 },
+      { id: 'item-2', price: 10 },
+    ] as any)
+    vi.mocked(prisma.reservation.create).mockResolvedValue({ id: 'res-ok' } as any)
+
+    const res = await saveReservationForMultipleItems({
+      siteId: 'site-1',
+      items: [{ id: 'item-1' } as any, { id: 'item-2' } as any],
+      type: 'days',
+      from: '2025-07-01',
+      to: '2025-07-02',
+    })
+    expect(res.status).toBe('ok')
+    expect(res.id).toBe('res-ok')
+  })
+
+  // Confirm the present-but-unavailable case still rejects (no regression).
+  it('rejects when one item is present in availability set but unavailable', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      id: 'site-1',
+      type: 'paid',
+      price: 10,
+    } as any)
+    mockGetAvailability.mockResolvedValue([
+      { itemId: 'item-1', available: true },
+      { itemId: 'item-2', available: false }, // booked by someone else
+    ] as any)
+
+    const res = await saveReservationForMultipleItems({
+      siteId: 'site-1',
+      items: [{ id: 'item-1' } as any, { id: 'item-2' } as any],
       type: 'days',
       from: '2025-07-01',
       to: '2025-07-02',
