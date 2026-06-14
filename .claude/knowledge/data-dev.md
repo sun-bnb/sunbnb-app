@@ -51,7 +51,15 @@ sections.
 
 ## Cross-app blast radius
 
-<!-- Schema/export changes and what they rippled to (app mocks, consumers) -->
+### 2026-06-14: SunbedGroup model — additive, mocks updated in partner + user; admin skipped
+**Change:** Added `SunbedGroup` model (id, siteId, createdAt, updatedAt, items[]) and `sunbedGroupId` nullable FK on `InventoryItem`. Back-relation `sunbedGroups` added to `Site`. `pairId`/`pair`/`pairedBy` kept intact.
+**Blast radius:** `apps/partner/__mocks__/@repo/data/PrismaCient.ts` and `apps/user/__mocks__/@repo/data/PrismaCient.ts` both needed a `sunbedGroup` delegate. `apps/admin` mock skipped — admin never touches inventory items. `packages/data/src/test/fixtures.ts` got `createTestSunbedGroup()`.
+**Prevention:** Any new top-level model that partner or user code might query must appear in both those mocks, even if no test currently calls it (missing mock delegate crashes the whole test file at import time).
+
+### 2026-06-14: --create-only migration pattern for custom backfills
+**Problem:** `migrate:local` (which runs `migrate dev`) auto-applies. When a migration needs a custom idempotent data backfill appended to the generated SQL, auto-apply would run before we could add the backfill.
+**Solution:** Use `echo "name" | npx prisma migrate dev --create-only --name <name>` to generate the file only, append backfill SQL, then apply with `echo "" | npx prisma migrate dev` (no --create-only). Then manually run `migrate:integration` (`POSTGRES_URL=postgres://postgres:sunbnb@localhost:5432/sunbnb_test npx prisma migrate deploy`) to keep sunbnb_test in lockstep (mirrors what `migrate:local` does).
+**Prevention:** Any migration with seed/backfill data must use `--create-only`. Backfill SQL must be idempotent (`ON CONFLICT DO NOTHING` / `WHERE col IS NULL` guards). Deterministic IDs (e.g., `'grp_' || LEAST(a, b)`) are simpler and safer than `gen_random_uuid()` inside CTEs because they avoid correlation problems and need no extension.
 
 ## Rejected approaches
 

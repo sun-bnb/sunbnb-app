@@ -45,6 +45,13 @@ sections.
 
 <!-- next-intl edge cases, missing translations, locale detection -->
 
+## SunbedGroup migration pattern
+
+### 2026-06-14: POS direct-item page — group-first, pair fallback
+**Problem:** `pos/[itemId]/page.tsx` built the reservation item list from `item.pair || item.pairedBy` (single pair). As `SunbedGroup` becomes source of truth for paired beds, the page needed to resolve siblings from the group first.
+**Solution:** In the `sunbedGroup` include, switch from `items: { select: { id: true } }` to `items: { include: { reservations: true } }` so sibling items carry all scalar fields + reservations (same shape as the top-level `item`). Resolution: filter `sunbedGroup.items` to exclude `item.id`, use `[item, ...otherGroupMembers]`. Fall back to `pair || pairedBy` when no group is present (un-migrated beds).
+**Prevention:** When expanding a `sunbedGroup.items` include to carry sub-relations, use `include: { ... }` not `select: { ... }` — Prisma can't combine both at the same nesting level. All scalar fields are returned automatically with `include`.
+
 ## Rejected approaches
 
 <!-- Approaches tried and rejected — record so a future session doesn't re-try them -->
