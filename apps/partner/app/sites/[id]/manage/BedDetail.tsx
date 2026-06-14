@@ -288,7 +288,7 @@ export default function BedDetail({
         {/* Block confirmation (hidden behind tap) */}
         {state === 'available' && showBlock && (
           <div className="space-y-3">
-            <p className="text-base text-gray-600">{t('sunbedNumber', { n: item.number })}?</p>
+            <p className="text-base text-gray-600">{t('sunbedNumber', { n: formatSeat(item, { parcel: true }) })}?</p>
             <div className="flex gap-3">
               <button
                 disabled={isPending}

@@ -5,6 +5,7 @@ import { InventoryItem, Reservation } from '@/types/shared'
 import {
   OP_EXPECTED, OP_CHECKED_IN, OP_WALKED_IN, OP_DEPARTED, OP_NO_SHOW,
 } from '@repo/data/reservation-status'
+import { formatSeat } from '@repo/data/seat-label'
 
 type BedState = 'available' | 'expected' | 'checked-in' | 'walked-in' | 'blocked'
 
@@ -65,7 +66,7 @@ export default function SunbedItem({
     >
       {icon && <span className="text-[10px] leading-none">{icon}</span>}
       <span className="text-[10px] leading-none opacity-70">
-        {parseInt(String(item.number).substring(1))}
+        {formatSeat(item, { parcel: false })}
       </span>
     </button>
   )
