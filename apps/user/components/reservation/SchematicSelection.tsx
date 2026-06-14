@@ -19,8 +19,15 @@ const STATUS_FILL = {
   unavailable: 'red',
 }
 
-const getPairedItem = (item: InventoryItem): { id: string } | null | undefined =>
-  item.pair || item.pairedBy
+/** Returns all OTHER members of this item's sunbed group for co-selection.
+ *  Falls back to pair/pairedBy when no group is set. */
+const getGroupMembers = (item: InventoryItem): { id: string }[] => {
+  if (item.sunbedGroup?.items?.length) {
+    return item.sunbedGroup.items.filter((m) => m.id !== item.id)
+  }
+  const paired = item.pair || item.pairedBy
+  return paired ? [paired] : []
+}
 
 export default function SchematicSelection({ site }: { site: SiteProps }) {
   const dispatch = useDispatch()
@@ -73,17 +80,19 @@ export default function SchematicSelection({ site }: { site: SiteProps }) {
     const item = inventoryItems.find((i) => i.id === itemId)
     if (!item || !isAvailable(item)) return
     const alreadySelected = selectedItems?.some((sel: { id: string }) => sel.id === item.id)
+    const groupMembers = getGroupMembers(item)
     let updated = [...(selectedItems || [])]
     if (alreadySelected) {
-      updated = updated.filter((sel: { id: string }) => sel.id !== item.id)
-      const paired = getPairedItem(item)
-      if (paired) updated = updated.filter((sel: { id: string }) => sel.id !== paired.id)
+      const removeIds = new Set([item.id, ...groupMembers.map((m) => m.id)])
+      updated = updated.filter((sel: { id: string }) => !removeIds.has(sel.id))
     } else {
       updated.push(item)
-      const paired = getPairedItem(item)
-      if (paired && !updated.some((sel: { id: string }) => sel.id === paired.id)) {
-        const pairItem = inventoryItems.find((i) => i.id === paired.id)
-        if (pairItem) updated.push(pairItem)
+      for (const member of groupMembers) {
+        if (!updated.some((sel: { id: string }) => sel.id === member.id)) {
+          // Push the full InventoryItem if found, otherwise the stub (id-only) from the group
+          const fullItem = inventoryItems.find((i) => i.id === member.id)
+          updated.push(fullItem ?? member)
+        }
       }
     }
     dispatch(setValue({ selectedItems: updated }))

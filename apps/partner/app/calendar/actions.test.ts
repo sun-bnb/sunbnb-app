@@ -104,7 +104,10 @@ describe('createPartnerReservation', () => {
     authenticateAsOwner()
     vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ id: 'item-1' }] as any)
     vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null) // no conflict
-    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({ id: 'item-1', pairId: null, pairedBy: null } as any)
+    // findUnique for the group membership check — no group
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      id: 'item-1', pairId: null, sunbedGroupId: null, pairedBy: null,
+    } as any)
     vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
 
     const res = await createPartnerReservation({
@@ -125,7 +128,9 @@ describe('createPartnerReservation', () => {
     authenticateAsOwner()
     vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ id: 'item-1' }] as any)
     vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
-    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({ id: 'item-1', pairId: null, pairedBy: null } as any)
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      id: 'item-1', pairId: null, sunbedGroupId: null, pairedBy: null,
+    } as any)
     vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
 
     const res = await createPartnerReservation({
@@ -145,7 +150,9 @@ describe('createPartnerReservation', () => {
     authenticateAsOwner()
     vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ id: 'item-1' }] as any)
     vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
-    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({ id: 'item-1', pairId: null, pairedBy: null } as any)
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      id: 'item-1', pairId: null, sunbedGroupId: null, pairedBy: null,
+    } as any)
     vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
 
     await createPartnerReservation({
@@ -165,13 +172,42 @@ describe('createPartnerReservation', () => {
     expect(createCall.data.internalNotes).toHaveLength(500)
   })
 
-  it('auto-includes paired items', async () => {
+  it('auto-includes group members via SunbedGroup', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findMany)
+      .mockResolvedValueOnce([{ id: 'item-1' }] as any)  // active items check
+      .mockResolvedValueOnce([{ id: 'item-pair' }] as any)  // sibling lookup
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      id: 'item-1',
+      pairId: 'item-pair',
+      sunbedGroupId: 'group-1',
+      pairedBy: null,
+    } as any)
+    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
+
+    await createPartnerReservation({
+      siteId: SITE_ID,
+      itemIds: ['item-1'],
+      from: '2025-07-01',
+      to: '2025-07-02',
+      paymentType: 'cash',
+    })
+
+    const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
+    const connectedIds = createCall.data.items.connect.map((c: any) => c.id)
+    expect(connectedIds).toContain('item-1')
+    expect(connectedIds).toContain('item-pair')
+  })
+
+  it('auto-includes paired items via legacy pairId fallback (no SunbedGroup)', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ id: 'item-1' }] as any)
     vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
     vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
       id: 'item-1',
       pairId: 'item-pair',
+      sunbedGroupId: null,
       pairedBy: null,
     } as any)
     vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)

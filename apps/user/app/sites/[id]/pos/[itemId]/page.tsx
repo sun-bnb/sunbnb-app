@@ -18,6 +18,9 @@ async function getInventoryItems(id: string) {
         include: {
           reservations: true
         }
+      },
+      sunbedGroup: {
+        include: { items: { select: { id: true } } }
       }
     }
   })

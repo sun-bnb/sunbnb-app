@@ -36,9 +36,15 @@ function isSiteOpen(
   return !notWorkingHours
 }
 
-/** Helper: Return the paired InventoryItem, if any */
-const getPairedItem = (item: InventoryItem): { id: string; } | null | undefined =>
-  item.pair || item.pairedBy
+/** Helper: Return all OTHER members of this item's sunbed group (used by co-selection logic).
+ *  Falls back to pair/pairedBy only when no group is present, preserving backward compat. */
+const getGroupMembers = (item: InventoryItem): { id: string }[] => {
+  if (item.sunbedGroup?.items?.length) {
+    return item.sunbedGroup.items.filter((m) => m.id !== item.id)
+  }
+  const paired = item.pair || item.pairedBy
+  return paired ? [paired] : []
+}
 
 /** Scaling function: Adjust the marker size based on the physical length of the sunbed.
  *  We assume a physical sunbed length of 2 meters.
@@ -337,24 +343,25 @@ function SunbedSelectionGeo({
 
   const dynamicSize = getScaledSize(zoom)
 
-  // Toggle selection: if an item is available, toggle its selection state. If pairing is defined, include its pair.
+  // Toggle selection: if an item is available, toggle its selection state.
+  // Co-selects/deselects all other members of the item's sunbed group (group-authoritative;
+  // falls back to pair/pairedBy when no group is set).
   const toggleSelection = (item: InventoryItem): void => {
     if (!isAvailable(item)) return
     const alreadySelected = selectedItems?.some(
       (selected: { id: string }) => selected.id === item.id
     )
+    const groupMembers = getGroupMembers(item)
     let updatedItems = [...(selectedItems || [])]
     if (alreadySelected) {
-      updatedItems = updatedItems.filter((selected: { id: string }) => selected.id !== item.id)
-      const pairItem = getPairedItem(item)
-      if (pairItem) {
-        updatedItems = updatedItems.filter((selected: { id: string }) => selected.id !== pairItem.id)
-      }
+      const removeIds = new Set([item.id, ...groupMembers.map((m) => m.id)])
+      updatedItems = updatedItems.filter((selected: { id: string }) => !removeIds.has(selected.id))
     } else {
       updatedItems.push(item)
-      const pairItem = getPairedItem(item)
-      if (pairItem && !updatedItems.some((selected: { id: string }) => selected.id === pairItem.id)) {
-        updatedItems.push(pairItem)
+      for (const member of groupMembers) {
+        if (!updatedItems.some((selected: { id: string }) => selected.id === member.id)) {
+          updatedItems.push(member)
+        }
       }
     }
     dispatch(setValue({ selectedItems: updatedItems }))

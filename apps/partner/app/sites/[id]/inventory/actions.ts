@@ -250,10 +250,11 @@ async function assignChairPairings({
 }) {
   const allItems = await prisma.inventoryItem.findMany({
     where: { siteId, group },
-    select: { id: true, number: true },
+    select: { id: true, number: true, sunbedGroupId: true },
   })
 
   const numberToId = new Map(allItems.map((i) => [i.number, i.id]))
+  const idToSunbedGroupId = new Map(allItems.map((i) => [i.id, i.sunbedGroupId]))
   const tempToNumber = new Map(generated.map((i) => [i.tempId, i.number]))
 
   for (const item of generated) {
@@ -264,10 +265,50 @@ async function assignChairPairings({
     const pairId = pairNumber ? numberToId.get(pairNumber) : undefined
 
     if (itemId && pairId) {
+      // Keep existing pairId write (dual-write)
       await prisma.inventoryItem.update({
         where: { id: itemId },
         data: { pairId },
       })
+
+      // Idempotent SunbedGroup assignment: if both items already share a group, skip.
+      const existingGroupId = idToSunbedGroupId.get(itemId)
+      const pairExistingGroupId = idToSunbedGroupId.get(pairId)
+      if (existingGroupId && existingGroupId === pairExistingGroupId) {
+        // Already in the same group — nothing to do
+        continue
+      }
+
+      // Detach both from any prior (different) groups
+      const priorGroupIds = new Set(
+        [existingGroupId, pairExistingGroupId].filter(Boolean) as string[]
+      )
+      if (priorGroupIds.size > 0) {
+        await prisma.inventoryItem.updateMany({
+          where: { sunbedGroupId: { in: [...priorGroupIds] } },
+          data: { sunbedGroupId: null },
+        })
+        for (const gid of priorGroupIds) {
+          const cnt = await prisma.inventoryItem.count({ where: { sunbedGroupId: gid } })
+          if (cnt === 0) await prisma.sunbedGroup.delete({ where: { id: gid } })
+        }
+      }
+
+      // Create new 2-member SunbedGroup
+      const newGroup = await prisma.sunbedGroup.create({
+        data: {
+          siteId,
+          items: { connect: [{ id: itemId }, { id: pairId }] },
+        },
+      })
+      await prisma.inventoryItem.updateMany({
+        where: { id: { in: [itemId, pairId] } },
+        data: { sunbedGroupId: newGroup.id },
+      })
+
+      // Update local tracking so subsequent iterations see current state
+      idToSunbedGroupId.set(itemId, newGroup.id)
+      idToSunbedGroupId.set(pairId, newGroup.id)
     }
   }
 }

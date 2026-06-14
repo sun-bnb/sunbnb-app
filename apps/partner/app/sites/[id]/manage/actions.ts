@@ -53,15 +53,36 @@ async function verifySiteOwnership(siteId: string, accessKey?: string) {
   return { userId: session.user.id }
 }
 
-async function getPairItemId(itemId: string): Promise<string | null> {
+/**
+ * Returns all other member IDs of the item's SunbedGroup.
+ * Falls back to pairId/pairedBy for beds that pre-date SunbedGroup migration.
+ * For a 2-member group this returns exactly one id — identical to the old
+ * getPairItemId behaviour.
+ */
+async function getGroupMemberIds(itemId: string): Promise<string[]> {
   const item = await prisma.inventoryItem.findUnique({
     where: { id: itemId },
-    include: { pairedBy: true },
+    select: {
+      pairId: true,
+      sunbedGroupId: true,
+      pairedBy: { select: { id: true } },
+    },
   })
-  if (!item) return null
-  if (item.pairedBy) return item.pairedBy.id
-  if (item.pairId) return item.pairId
-  return null
+  if (!item) return []
+
+  // Prefer SunbedGroup (authoritative for co-booking) when present
+  if (item.sunbedGroupId) {
+    const siblings = await prisma.inventoryItem.findMany({
+      where: { sunbedGroupId: item.sunbedGroupId, id: { not: itemId } },
+      select: { id: true },
+    })
+    return siblings.map((s) => s.id)
+  }
+
+  // Fallback: legacy pairId / pairedBy self-relation
+  if (item.pairedBy) return [item.pairedBy.id]
+  if (item.pairId) return [item.pairId]
+  return []
 }
 
 // ─── Walk-in: Place a customer on an empty bed ──────────────────────────────
@@ -98,11 +119,11 @@ export async function reserveItem(
 
   const itemIds = [{ id: itemId }]
   if (applyToPair) {
-    const pairId = await getPairItemId(itemId)
-    if (pairId) itemIds.push({ id: pairId })
+    const memberIds = await getGroupMemberIds(itemId)
+    for (const mid of memberIds) itemIds.push({ id: mid })
   }
 
-  // Reject if the bed (or its pair) is already reserved on any day in the range.
+  // Reject if the bed (or its group siblings) are already reserved on any day in the range.
   // The today-only case can't conflict — the Reserve action is only offered for
   // beds that are free today — but a multi-day hold must not collide with an
   // existing future booking.
@@ -384,8 +405,8 @@ export async function blockBed(
 
   const itemIds = [{ id: itemId }]
   if (applyToPair) {
-    const pairId = await getPairItemId(itemId)
-    if (pairId) itemIds.push({ id: pairId })
+    const memberIds = await getGroupMemberIds(itemId)
+    for (const mid of memberIds) itemIds.push({ id: mid })
   }
 
   await prisma.reservation.create({

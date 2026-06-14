@@ -253,6 +253,7 @@ model Site {
   reservations    Reservation[]
   serviceFees     ServiceFee[]
   settlements     Settlement[]
+  sunbedGroups    SunbedGroup[]
   user            User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   workingHours    SiteWorkingHours[]
@@ -291,33 +292,44 @@ model SiteWorkingHours {
 }
 
 model InventoryItem {
-  id           String         @id @unique @default(cuid())
-  userId       String         @map("user_id")
-  siteId       String         @map("site_id")
-  number       Int
-  locationLat  String         @map("location_lat")
-  locationLng  String         @map("location_lng")
-  schematicX   Float?         @map("schematic_x")
-  schematicY   Float?         @map("schematic_y")
-  status       String
-  notes        String?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  image        String?
-  label        String?
-  rotation     Int?
-  category     String?
-  price        Float?
-  pairId       String?        @unique @map("pair_id")
-  group        Int            @default(0)
-  itemGroupId  String?        @map("item_group_id")
-  itemGroup    ItemGroup?     @relation(fields: [itemGroupId], references: [id])
-  pair         InventoryItem? @relation("ItemPair", fields: [pairId], references: [id])
-  pairedBy     InventoryItem? @relation("ItemPair")
-  site         Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  orders       Order[]
-  reservations Reservation[]  @relation("InventoryItemToReservation")
+  id             String         @id @unique @default(cuid())
+  userId         String         @map("user_id")
+  siteId         String         @map("site_id")
+  number         Int
+  locationLat    String         @map("location_lat")
+  locationLng    String         @map("location_lng")
+  schematicX     Float?         @map("schematic_x")
+  schematicY     Float?         @map("schematic_y")
+  status         String
+  notes          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  image          String?
+  label          String?
+  rotation       Int?
+  category       String?
+  price          Float?
+  pairId         String?        @unique @map("pair_id")
+  group          Int            @default(0)
+  itemGroupId    String?        @map("item_group_id")
+  sunbedGroupId  String?        @map("sunbed_group_id")
+  itemGroup      ItemGroup?     @relation(fields: [itemGroupId], references: [id])
+  sunbedGroup    SunbedGroup?   @relation(fields: [sunbedGroupId], references: [id])
+  pair           InventoryItem? @relation("ItemPair", fields: [pairId], references: [id])
+  pairedBy       InventoryItem? @relation("ItemPair")
+  site           Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders         Order[]
+  reservations   Reservation[]  @relation("InventoryItemToReservation")
+}
+
+model SunbedGroup {
+  id        String          @id @unique @default(cuid())
+  siteId    String          @map("site_id")
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  site      Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  items     InventoryItem[]
 }
 
 model ItemGroup {

@@ -26,7 +26,10 @@ async function getSite(idOrSlug: string, userId: string) {
             }
           }),
           pair: true,
-          pairedBy: true
+          pairedBy: true,
+          sunbedGroup: {
+            include: { items: { select: { id: true } } }
+          }
         }
       },
       rentalItems: {

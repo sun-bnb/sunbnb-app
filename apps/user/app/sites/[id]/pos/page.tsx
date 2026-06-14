@@ -12,7 +12,10 @@ async function getSite(idOrSlug: string) {
             orderBy: { from: 'desc' }
           },
           pair: true,
-          pairedBy: true
+          pairedBy: true,
+          sunbedGroup: {
+            include: { items: { select: { id: true } } }
+          }
         }
       }
     }

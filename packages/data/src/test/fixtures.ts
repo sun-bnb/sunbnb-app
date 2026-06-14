@@ -252,6 +252,20 @@ export async function createTestTableReservation(
   })
 }
 
+// ─── SunbedGroup ────────────────────────────────────────────────────────────
+
+export async function createTestSunbedGroup(
+  siteId: string,
+  overrides: Record<string, any> = {}
+) {
+  return prisma.sunbedGroup.create({
+    data: {
+      siteId,
+      ...overrides,
+    },
+  })
+}
+
 // ─── Subscription Plan + Subscription ───────────────────────────────────────
 
 export async function createTestSubscription(

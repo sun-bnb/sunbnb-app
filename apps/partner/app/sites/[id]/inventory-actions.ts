@@ -46,10 +46,35 @@ export async function deleteInventoryItem(id: string) {
     return { status: 'error', errors: ['Not authorized'] }
   }
 
+  // Load item to get its sunbedGroupId before deletion
+  const itemForGroup = await prisma.inventoryItem.findUnique({
+    where: { id },
+    select: { sunbedGroupId: true },
+  })
+
   await prisma.$transaction([
+    // Clear sunbedGroupId on all siblings so they are detached from this group
+    ...(itemForGroup?.sunbedGroupId
+      ? [prisma.inventoryItem.updateMany({
+          where: { sunbedGroupId: itemForGroup.sunbedGroupId },
+          data: { sunbedGroupId: null },
+        })]
+      : []),
     prisma.inventoryItem.updateMany({ where: { pairId: id }, data: { pairId: null } }),
     prisma.inventoryItem.delete({ where: { id } }),
   ])
+
+  // Delete the now-empty SunbedGroup (must be outside $transaction so the item
+  // deletion FK is already committed before we check emptiness).
+  if (itemForGroup?.sunbedGroupId) {
+    const remaining = await prisma.inventoryItem.count({
+      where: { sunbedGroupId: itemForGroup.sunbedGroupId },
+    })
+    if (remaining === 0) {
+      await prisma.sunbedGroup.delete({ where: { id: itemForGroup.sunbedGroupId } })
+    }
+  }
+
   revalidatePath('/sites')
   return { status: 'ok' }
 }
@@ -200,6 +225,46 @@ export async function saveInventoryItemProperties(
     },
   })
 
+  // Dual-write: when a pair is being connected, also assign a 2-member SunbedGroup.
+  if (pairItem && inventoryItem.pairId) {
+    // Fetch current sunbedGroupIds for both items
+    const [currentItem, currentPair] = await Promise.all([
+      prisma.inventoryItem.findUnique({ where: { id }, select: { sunbedGroupId: true } }),
+      prisma.inventoryItem.findUnique({ where: { id: inventoryItem.pairId }, select: { sunbedGroupId: true } }),
+    ])
+
+    // Detach both from any prior groups and delete groups that become empty
+    const priorGroupIds = new Set(
+      [currentItem?.sunbedGroupId, currentPair?.sunbedGroupId].filter(Boolean) as string[]
+    )
+    if (priorGroupIds.size > 0) {
+      await prisma.inventoryItem.updateMany({
+        where: { sunbedGroupId: { in: [...priorGroupIds] } },
+        data: { sunbedGroupId: null },
+      })
+      for (const gid of priorGroupIds) {
+        const cnt = await prisma.inventoryItem.count({ where: { sunbedGroupId: gid } })
+        if (cnt === 0) await prisma.sunbedGroup.delete({ where: { id: gid } })
+      }
+    }
+
+    // Re-fetch the item's siteId for the new group
+    const baseItem = await prisma.inventoryItem.findUnique({ where: { id }, select: { siteId: true } })
+    if (baseItem) {
+      const newGroup = await prisma.sunbedGroup.create({
+        data: {
+          siteId: baseItem.siteId,
+          items: { connect: [{ id }, { id: inventoryItem.pairId }] },
+        },
+      })
+      // Explicitly set sunbedGroupId on both items (connect above sets it via relation)
+      await prisma.inventoryItem.updateMany({
+        where: { id: { in: [id, inventoryItem.pairId] } },
+        data: { sunbedGroupId: newGroup.id },
+      })
+    }
+  }
+
   revalidatePath('/sites')
   return { status: 'ok' }
 }
@@ -217,10 +282,44 @@ export async function pairInventoryItems(id1: string, id2: string) {
   if (!item1 || item1.site.userId !== session.user.id) return { status: 'error', errors: ['Not authorized'] }
   if (!item2 || item2.siteId !== item1.siteId) return { status: 'error', errors: ['Items must belong to the same site'] }
 
+  // Fetch current sunbedGroupIds for both items so we can clean up prior groups
+  const [prior1, prior2] = await Promise.all([
+    prisma.inventoryItem.findUnique({ where: { id: id1 }, select: { sunbedGroupId: true } }),
+    prisma.inventoryItem.findUnique({ where: { id: id2 }, select: { sunbedGroupId: true } }),
+  ])
+  const priorGroupIds = new Set(
+    [prior1?.sunbedGroupId, prior2?.sunbedGroupId].filter(Boolean) as string[]
+  )
+
   await prisma.$transaction([
+    // Detach both items from any prior SunbedGroups
+    ...(priorGroupIds.size > 0
+      ? [prisma.inventoryItem.updateMany({
+          where: { sunbedGroupId: { in: [...priorGroupIds] } },
+          data: { sunbedGroupId: null },
+        })]
+      : []),
     prisma.inventoryItem.update({ where: { id: id1 }, data: { pairId: id2 } }),
     prisma.inventoryItem.update({ where: { id: id2 }, data: { pairId: id1 } }),
   ])
+
+  // Delete prior groups now empty (outside transaction so FK is committed first)
+  for (const gid of priorGroupIds) {
+    const cnt = await prisma.inventoryItem.count({ where: { sunbedGroupId: gid } })
+    if (cnt === 0) await prisma.sunbedGroup.delete({ where: { id: gid } })
+  }
+
+  // Create new 2-member SunbedGroup and assign both items to it
+  const newGroup = await prisma.sunbedGroup.create({
+    data: {
+      siteId: item1.siteId,
+      items: { connect: [{ id: id1 }, { id: id2 }] },
+    },
+  })
+  await prisma.inventoryItem.updateMany({
+    where: { id: { in: [id1, id2] } },
+    data: { sunbedGroupId: newGroup.id },
+  })
 
   revalidatePath('/sites')
   return { status: 'ok' }
@@ -232,9 +331,23 @@ export async function depairInventoryItem(id: string) {
 
   const item = await prisma.inventoryItem.findUnique({
     where: { id },
-    select: { pairId: true, site: { select: { userId: true } } },
+    select: { pairId: true, sunbedGroupId: true, site: { select: { userId: true } } },
   })
   if (!item || item.site.userId !== session.user.id) return { status: 'error', errors: ['Not authorized'] }
+
+  // Clear sunbedGroupId on all members of this item's group, then delete the group
+  if (item.sunbedGroupId) {
+    await prisma.inventoryItem.updateMany({
+      where: { sunbedGroupId: item.sunbedGroupId },
+      data: { sunbedGroupId: null },
+    })
+    const remaining = await prisma.inventoryItem.count({
+      where: { sunbedGroupId: item.sunbedGroupId },
+    })
+    if (remaining === 0) {
+      await prisma.sunbedGroup.delete({ where: { id: item.sunbedGroupId } })
+    }
+  }
 
   const updates: Promise<unknown>[] = [
     prisma.inventoryItem.update({ where: { id }, data: { pairId: null } }),

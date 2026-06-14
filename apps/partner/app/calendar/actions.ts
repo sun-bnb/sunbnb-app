@@ -109,17 +109,26 @@ export async function createPartnerReservation(data: {
     return { status: 'error', errors: ['One or more sunbeds are already reserved for this period'] }
   }
 
-  // Also include paired items automatically
+  // Also include all other SunbedGroup members automatically
   const allItemIds: { id: string }[] = []
   for (const itemId of data.itemIds) {
     allItemIds.push({ id: itemId })
     const item = await prisma.inventoryItem.findUnique({
       where: { id: itemId },
-      include: { pairedBy: true },
+      select: { sunbedGroupId: true, pairId: true, pairedBy: { select: { id: true } } },
     })
-    if (item?.pairedBy) {
+    if (item?.sunbedGroupId) {
+      // SunbedGroup is authoritative — include all other members
+      const siblings = await prisma.inventoryItem.findMany({
+        where: { sunbedGroupId: item.sunbedGroupId, id: { not: itemId } },
+        select: { id: true },
+      })
+      for (const s of siblings) allItemIds.push({ id: s.id })
+    } else if (item?.pairedBy) {
+      // Legacy fallback: pairedBy self-relation
       allItemIds.push({ id: item.pairedBy.id })
     } else if (item?.pairId) {
+      // Legacy fallback: pairId self-relation
       allItemIds.push({ id: item.pairId })
     }
   }

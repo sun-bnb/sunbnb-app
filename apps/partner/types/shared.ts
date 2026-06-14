@@ -122,6 +122,8 @@ export interface InventoryItem {
   pairId?: string | null
   pair?: InventoryItem | null
   pairedBy?: InventoryItem | null
+  sunbedGroupId?: string | null
+  sunbedGroup?: { items: { id: string }[] } | null
   reservations?: Reservation[]
 }
 

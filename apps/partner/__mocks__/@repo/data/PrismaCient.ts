@@ -91,6 +91,14 @@ const prisma = {
     create: vi.fn(),
     update: vi.fn(),
   },
+  sunbedGroup: {
+    create: vi.fn(),
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    deleteMany: vi.fn(),
+  },
   restaurant: {
     findUnique: vi.fn(),
     findMany: vi.fn(),

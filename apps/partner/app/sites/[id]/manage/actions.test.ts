@@ -119,11 +119,31 @@ describe('reserveItem', () => {
     expect(createCall.data.items.connect).toEqual([{ id: ITEM_ID }])
   })
 
-  it('includes paired item automatically', async () => {
+  it('includes paired item automatically via SunbedGroup', async () => {
+    authenticateAsOwner()
+    // getGroupMemberIds: findUnique returns an item with a sunbedGroupId
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      id: ITEM_ID,
+      pairId: 'pair-1',
+      sunbedGroupId: 'group-1',
+      pairedBy: null,
+    } as any)
+    // findMany for siblings
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ id: 'pair-1' }] as any)
+    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
+
+    await reserveItem(SITE_ID, ITEM_ID)
+
+    const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
+    expect(createCall.data.items.connect).toEqual([{ id: ITEM_ID }, { id: 'pair-1' }])
+  })
+
+  it('includes paired item automatically via legacy pairId fallback', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
       id: ITEM_ID,
       pairId: 'pair-1',
+      sunbedGroupId: null,
       pairedBy: null,
     } as any)
     vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
@@ -174,11 +194,12 @@ describe('reserveItem', () => {
     expect((data.to as Date).getTime()).toBe(dayjs(until).endOf('day').toDate().getTime())
   })
 
-  it('checks the bed and its pair for conflicts across the whole range', async () => {
+  it('checks the bed and its group siblings for conflicts across the whole range', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
-      id: ITEM_ID, pairId: 'pair-1', pairedBy: null,
+      id: ITEM_ID, pairId: 'pair-1', sunbedGroupId: 'group-1', pairedBy: null,
     } as any)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ id: 'pair-1' }] as any)
     vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
     vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
 
@@ -632,7 +653,7 @@ describe('createWalkInRental', () => {
 // ─── applyToPair = false — single-seat mode ─────────────────────────────────
 
 describe('reserveItem with applyToPair = false', () => {
-  it('does NOT look up or add the pair item when applyToPair is false', async () => {
+  it('does NOT look up or add the group members when applyToPair is false', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
     vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
@@ -640,20 +661,22 @@ describe('reserveItem with applyToPair = false', () => {
     const res = await reserveItem(SITE_ID, ITEM_ID, 'Solo guest', undefined, undefined, undefined, false)
     expect(res.status).toBe('ok')
 
-    // getPairItemId calls inventoryItem.findUnique — must NOT be called
+    // getGroupMemberIds calls inventoryItem.findUnique — must NOT be called
     expect(vi.mocked(prisma.inventoryItem.findUnique)).not.toHaveBeenCalled()
 
     const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
     expect(createCall.data.items.connect).toEqual([{ id: ITEM_ID }])
   })
 
-  it('still adds pair when applyToPair is true (default behavior preserved)', async () => {
+  it('still adds group member when applyToPair is true (default behavior preserved)', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
       id: ITEM_ID,
       pairId: 'pair-1',
+      sunbedGroupId: 'group-1',
       pairedBy: null,
     } as any)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ id: 'pair-1' }] as any)
     vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
     vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
 
@@ -665,7 +688,7 @@ describe('reserveItem with applyToPair = false', () => {
 })
 
 describe('blockBed with applyToPair = false', () => {
-  it('does NOT look up or add the pair item when applyToPair is false', async () => {
+  it('does NOT look up or add group members when applyToPair is false', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
 
@@ -678,13 +701,15 @@ describe('blockBed with applyToPair = false', () => {
     expect(createCall.data.items.connect).toEqual([{ id: ITEM_ID }])
   })
 
-  it('still adds pair when applyToPair is true (default behavior preserved)', async () => {
+  it('still adds group member when applyToPair is true (default behavior preserved)', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
       id: ITEM_ID,
       pairId: 'pair-1',
+      sunbedGroupId: 'group-1',
       pairedBy: null,
     } as any)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ id: 'pair-1' }] as any)
     vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
 
     await blockBed(SITE_ID, ITEM_ID, undefined, undefined, true)

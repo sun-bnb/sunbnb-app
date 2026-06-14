@@ -38,7 +38,10 @@ export async function GET(request: NextRequest, { params } : { params: { id: str
             }
           }),
           pair: true,
-          pairedBy: true
+          pairedBy: true,
+          sunbedGroup: {
+            include: { items: { select: { id: true } } }
+          }
         }
       },
       rentalItems: {

@@ -19,6 +19,7 @@ export async function getSite(siteId: string) {
           },
           pair: true,
           pairedBy: true,
+          sunbedGroup: { include: { items: { select: { id: true } } } },
         },
       },
       layoutElements: true,

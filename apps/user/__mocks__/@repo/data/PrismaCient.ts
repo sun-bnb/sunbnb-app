@@ -39,6 +39,14 @@ const prisma = {
   inventoryItem: {
     findMany: vi.fn(),
   },
+  sunbedGroup: {
+    create: vi.fn(),
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    deleteMany: vi.fn(),
+  },
   tableReservation: {
     findUnique: vi.fn(),
     findFirst: vi.fn(),
