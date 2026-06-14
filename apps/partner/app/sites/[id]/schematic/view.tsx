@@ -10,10 +10,9 @@ import {
   createInventoryItem,
   deleteInventoryItem,
   saveInventoryItemSchematicLocation,
-  saveInventoryItemProperties,
   pairInventoryItems,
-  depairInventoryItem,
 } from '../inventory-actions'
+import { useSunbedEditing } from '../inventory/useSunbedEditing'
 import {
   syncChairsWithLayout,
   getItemGroup,
@@ -192,6 +191,8 @@ export default function SchematicView() {
     const updated = await getSite(siteId)
     if (updated) setSite(updated)
   }
+
+  const sunbedEditing = useSunbedEditing(siteId, refresh)
 
   // ─── Escape key ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -386,28 +387,20 @@ export default function SchematicView() {
       selectedItem.pair?.id ??
       selectedItem.pairedBy?.id ??
       null
-    if (partnerId) {
-      await rotateSelection(siteId, [selectedItemId, partnerId], delta)
-    } else {
-      const newRotation = ((selectedItem.rotation ?? 0) + delta + 360) % 360
-      await saveInventoryItemProperties(selectedItemId, { rotation: newRotation })
-    }
-    await refresh()
+    await sunbedEditing.rotateSingle(selectedItemId, selectedItem.rotation ?? 0, delta, partnerId)
   }
 
   async function handleDeleteSingleItem() {
     if (!selectedItemId) return
-    await deleteInventoryItem(selectedItemId)
     setSelectedItemId(null)
     setItemPanelOpen(false)
     setEditorMode('none')
-    await refresh()
+    await sunbedEditing.deleteSingle(selectedItemId)
   }
 
   async function handleDepairItem() {
     if (!selectedItemId) return
-    await depairInventoryItem(selectedItemId)
-    await refresh()
+    await sunbedEditing.depair(selectedItemId)
   }
 
   // ─── Canvas interactions ───────────────────────────────────────────────

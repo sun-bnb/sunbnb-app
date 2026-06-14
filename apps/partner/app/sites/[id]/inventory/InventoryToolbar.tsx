@@ -41,18 +41,19 @@ interface InventoryToolbarProps {
   onSelectEntireParcel: (group: number) => void
   onParcelReorder: () => void
   onEditParcelFull: () => void
-  // Single-item selection (optional — enables the single-sunbed variant of the bar)
-  selectedSingleItemId?: string | null
-  selectedSingleItemNumber?: number | null
-  selectedSingleItemParcelColor?: string | null
-  selectedSingleItemHasPair?: boolean
-  pairingMode?: boolean
-  isEditPanelOpen?: boolean
-  onRotateSingle?: (delta: number) => void
-  onTogglePairing?: () => void
-  onDepairSingle?: () => void
-  onEditSingle?: () => void
-  onDeleteSingle?: () => void
+  // Single-item selection — required so both editors must wire every tool.
+  // The single-sunbed bar only renders when selectedSingleItemId is truthy.
+  selectedSingleItemId: string | null
+  selectedSingleItemNumber: number | null
+  selectedSingleItemParcelColor: string | null
+  selectedSingleItemHasPair: boolean
+  pairingMode: boolean
+  isEditPanelOpen: boolean
+  onRotateSingle: (delta: number) => void
+  onTogglePairing: () => void
+  onDepairSingle: () => void
+  onEditSingle: () => void
+  onDeleteSingle: () => void
 }
 
 export default function InventoryToolbar({
@@ -310,31 +311,29 @@ export default function InventoryToolbar({
 
         <span className="text-blue-200">|</span>
 
-        {onRotateSingle && (
-          <>
-            <Tooltip title="Rotate −15°">
-              <IconButton size="small" onClick={() => onRotateSingle(-15)} sx={{ p: 0.5 }}>
-                <RotateLeftIcon sx={{ fontSize: '1rem' }} />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Rotate +15°">
-              <IconButton size="small" onClick={() => onRotateSingle(15)} sx={{ p: 0.5 }}>
-                <RotateRightIcon sx={{ fontSize: '1rem' }} />
-              </IconButton>
-            </Tooltip>
-            <span className="text-blue-200">|</span>
-          </>
-        )}
+        <>
+          <Tooltip title="Rotate −15°">
+            <IconButton size="small" onClick={() => onRotateSingle(-15)} sx={{ p: 0.5 }}>
+              <RotateLeftIcon sx={{ fontSize: '1rem' }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Rotate +15°">
+            <IconButton size="small" onClick={() => onRotateSingle(15)} sx={{ p: 0.5 }}>
+              <RotateRightIcon sx={{ fontSize: '1rem' }} />
+            </IconButton>
+          </Tooltip>
+          <span className="text-blue-200">|</span>
+        </>
 
         {selectedSingleItemHasPair
-          ? onDepairSingle && (
+          ? (
               <Tooltip title="Depair">
                 <IconButton size="small" onClick={onDepairSingle} sx={{ p: 0.5 }}>
                   <LinkOffIcon sx={{ fontSize: '1rem' }} />
                 </IconButton>
               </Tooltip>
             )
-          : onTogglePairing && (
+          : (
               <Tooltip title={pairingMode ? 'Click another sunbed to pair' : 'Pair with…'}>
                 <IconButton
                   size="small"
@@ -347,24 +346,20 @@ export default function InventoryToolbar({
             )}
 
         <div className="ml-auto flex items-center gap-1">
-          {onEditSingle && (
-            <Tooltip title="Edit sunbed">
-              <IconButton
-                size="small"
-                onClick={onEditSingle}
-                sx={{ p: 0.5, color: isEditPanelOpen ? 'primary.main' : undefined }}
-              >
-                <EditIcon sx={{ fontSize: '1rem' }} />
-              </IconButton>
-            </Tooltip>
-          )}
-          {onDeleteSingle && (
-            <Tooltip title="Delete sunbed">
-              <IconButton size="small" color="error" onClick={onDeleteSingle} sx={{ p: 0.5 }}>
-                <DeleteOutlineIcon sx={{ fontSize: '1rem' }} />
-              </IconButton>
-            </Tooltip>
-          )}
+          <Tooltip title="Edit sunbed">
+            <IconButton
+              size="small"
+              onClick={onEditSingle}
+              sx={{ p: 0.5, color: isEditPanelOpen ? 'primary.main' : undefined }}
+            >
+              <EditIcon sx={{ fontSize: '1rem' }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Delete sunbed">
+            <IconButton size="small" color="error" onClick={onDeleteSingle} sx={{ p: 0.5 }}>
+              <DeleteOutlineIcon sx={{ fontSize: '1rem' }} />
+            </IconButton>
+          </Tooltip>
           <button
             className="text-[10px] text-gray-400 hover:text-gray-600 underline ml-1"
             onClick={onClearSelection}

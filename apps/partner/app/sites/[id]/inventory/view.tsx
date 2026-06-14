@@ -8,6 +8,7 @@ import {
   createInventoryItem,
   saveInventoryItemLocation,
   deleteInventoryItem,
+  pairInventoryItems,
 } from '../inventory-actions'
 import { getSite } from '../queries'
 import { useSite } from '@/app/sites/site-context'
@@ -18,8 +19,9 @@ import InventoryToolbar from './InventoryToolbar'
 import ParcelList from './ParcelList'
 import ParcelForm from './ParcelForm'
 import { MapMouseEvent } from '@vis.gl/react-google-maps'
-import { ChairConfig } from './chair-util'
+import { ChairConfig, getParcelColor } from './chair-util'
 import { syncChairsWithLayout, getItemGroup, moveParcel, moveItems, rotateSelection, adjustItemSpacing, assignItemsToGroup, removeItemsFromGroup } from './actions'
+import { useSunbedEditing } from './useSunbedEditing'
 
 export default function InventoryView() {
 
@@ -57,8 +59,16 @@ export default function InventoryView() {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const selectedItem = inventory.find((i) => i.id === selectedItemId)
 
+  const [itemPanelOpen, setItemPanelOpen] = useState(false)
   const [pairingMode, setPairingMode] = useState(false)
   const [selectedPlace, setSelectedPlace] = useState<any>(null)
+
+  const refresh = async () => {
+    const updatedSite = await getSite(siteId)
+    if (updatedSite) setSite(updatedSite)
+  }
+
+  const sunbedEditing = useSunbedEditing(siteId, refresh)
 
   const isParcelEditorActive = editorMode === 'create-parcel' || editorMode === 'edit-parcel'
 
@@ -404,13 +414,25 @@ export default function InventoryView() {
       return
     }
 
-    // Normal click: single-select for editing
+    // Pairing mode: second click on a different bed completes the pair
     if (pairingMode && selectedItem && item.id !== selectedItem.id) {
+      pairInventoryItems(selectedItem.id, item.id).then(() => refresh())
       setPairingMode(false)
+      return
+    }
+    setPairingMode(false)
+
+    // Normal click: select the bed (show quick bar); panel stays closed
+    const toggling = selectedItemId === item.id
+    if (toggling) {
+      setSelectedItemId(null)
+      setItemPanelOpen(false)
+      setEditorMode('none')
     } else {
-      setSelectedItemId(prev => (prev === item.id ? null : item.id))
+      setSelectedItemId(item.id)
       setSelectedItemIds([])
       setEditorMode('edit-chair')
+      // Do NOT open the panel here — operator uses the Edit button in the toolbar
     }
   }
 
@@ -418,8 +440,33 @@ export default function InventoryView() {
     if (selectedItemIds.length === 0) return
     await Promise.all(selectedItemIds.map(id => deleteInventoryItem(id)))
     setSelectedItemIds([])
-    const updatedSite = await getSite(siteId)
-    if (updatedSite) setSite(updatedSite)
+    await refresh()
+  }
+
+  // --- Single-item toolbar handlers ---
+
+  const handleRotateSingleItem = async (delta: number) => {
+    if (!selectedItemId || !selectedItem) return
+    const partnerId =
+      selectedItem.pairId ??
+      selectedItem.pair?.id ??
+      selectedItem.pairedBy?.id ??
+      null
+    await sunbedEditing.rotateSingle(selectedItemId, selectedItem.rotation ?? 0, delta, partnerId)
+  }
+
+  const handleDeleteSingleItem = async () => {
+    if (!selectedItemId) return
+    const idToDelete = selectedItemId
+    setSelectedItemId(null)
+    setItemPanelOpen(false)
+    setEditorMode('none')
+    await sunbedEditing.deleteSingle(idToDelete)
+  }
+
+  const handleDepairItem = async () => {
+    if (!selectedItemId) return
+    await sunbedEditing.depair(selectedItemId)
   }
 
   const handleMarkerDragEnd = (item: InventoryItem, e: any) => {
@@ -485,6 +532,7 @@ export default function InventoryView() {
         setEditGroup(itemGroup.number)
         setEditorMode('edit-parcel')
         setSelectedItemId(null)
+        setItemPanelOpen(false)
         return
       }
     }
@@ -507,10 +555,13 @@ export default function InventoryView() {
     setEditGroup(groupNumber)
     setEditorMode('edit-parcel')
     setSelectedItemId(null)
+    setItemPanelOpen(false)
   }
 
   // --- Side panel visibility ---
-  const showItemPanel = !!selectedItem && editorMode === 'edit-chair'
+  // InventoryForm opens only when the Edit button is pressed (itemPanelOpen),
+  // not on every single click — matching the schematic editor's UX.
+  const showItemPanel = !!selectedItem && editorMode === 'edit-chair' && itemPanelOpen
   const showParcelPanel = isParcelEditorActive
   const showPanel = showItemPanel || showParcelPanel
 
@@ -558,7 +609,13 @@ export default function InventoryView() {
           selectedParcelTotal={selectedParcelTotal}
           isCompleteParcelSelected={isCompleteParcelSelected}
           allParcelNumbers={allParcelNumbers}
-          onClearSelection={() => setSelectedItemIds([])}
+          onClearSelection={() => {
+            setSelectedItemIds([])
+            setSelectedItemId(null)
+            setItemPanelOpen(false)
+            setPairingMode(false)
+            if (editorMode === 'edit-chair') setEditorMode('none')
+          }}
           onDeleteSelected={handleDeleteSelected}
           onRotateSelected={handleRotateSelected}
           onAdjustSpacing={handleAdjustSpacing}
@@ -567,6 +624,23 @@ export default function InventoryView() {
           onSelectEntireParcel={handleSelectEntireParcel}
           onParcelReorder={handleParcelReorder}
           onEditParcelFull={handleEditParcelFull}
+          selectedSingleItemId={
+            editorMode === 'edit-chair' && selectedItem ? selectedItem.id : null
+          }
+          selectedSingleItemNumber={selectedItem?.number ?? null}
+          selectedSingleItemParcelColor={
+            selectedItem?.group ? getParcelColor(selectedItem.group) ?? null : null
+          }
+          selectedSingleItemHasPair={
+            !!(selectedItem?.pairId || selectedItem?.pair?.id || selectedItem?.pairedBy?.id)
+          }
+          pairingMode={pairingMode}
+          isEditPanelOpen={itemPanelOpen}
+          onRotateSingle={handleRotateSingleItem}
+          onTogglePairing={() => setPairingMode(prev => !prev)}
+          onDepairSingle={handleDepairItem}
+          onEditSingle={() => setItemPanelOpen(prev => !prev)}
+          onDeleteSingle={handleDeleteSingleItem}
           onStartCreate={() => {
             setEditorMode('create-chair')
             setSelectedItemId(null)
@@ -617,15 +691,13 @@ export default function InventoryView() {
                 selectedItem={selectedItem}
                 onDelete={() => {
                   setSelectedItemId(null)
+                  setItemPanelOpen(false)
                   setEditorMode('none')
-                  getSite(siteId).then((updatedSite) => {
-                    if (updatedSite) setSite(updatedSite)
-                  })
+                  refresh()
                 }}
                 onEditGroup={handleEditGroupFromForm}
                 onClose={() => {
-                  setSelectedItemId(null)
-                  setEditorMode('none')
+                  setItemPanelOpen(false)
                 }}
               />
             )}
