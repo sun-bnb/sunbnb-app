@@ -22,7 +22,8 @@
     "./flags": "./src/flags.ts",
     "./impersonation": "./src/impersonation.ts",
     "./mollie-tokens": "./src/mollie-tokens.ts",
-    "./seat-label": "./src/seat-label.ts"
+    "./seat-label": "./src/seat-label.ts",
+    "./seat-label-db": "./src/seat-label-db.ts"
   },
   "typesVersions": {
     "*": {
@@ -76,6 +77,9 @@
       ],
       "seat-label": [
         "./src/seat-label.ts"
+      ],
+      "seat-label-db": [
+        "./src/seat-label-db.ts"
       ]
     }
   },

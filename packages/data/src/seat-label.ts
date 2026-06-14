@@ -18,7 +18,9 @@
  * groupSeq (1-based, zero-padded to 2 digits) and member (1-based).
  */
 
-import prisma from '../index'
+// Pure module — NO database imports. The DB-backed recomputeSeatLabels /
+// backfillAllSeatLabels live in `./seat-label-db` so client components can
+// import the display helpers (formatSeat) without pulling `pg` into the bundle.
 
 // ---------------------------------------------------------------------------
 // Types
@@ -146,66 +148,4 @@ export function formatSeat(
 ): string {
   if (item.seatLabel) return formatSeatLabel(item.seatLabel, options)
   return String(item.number).padStart(4, '0')
-}
-
-// ---------------------------------------------------------------------------
-// DB-dependent helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Recompute seat labels for all inventory items belonging to a site and
- * persist any that have changed.
- *
- * Idempotent: items whose computed label already matches what is stored are
- * skipped. Returns the number of items updated.
- */
-export async function recomputeSeatLabels(siteId: string): Promise<number> {
-  const items = await prisma.inventoryItem.findMany({
-    where: { siteId },
-    select: {
-      id: true,
-      number: true,
-      group: true,
-      sunbedGroupId: true,
-      seatLabel: true,
-    },
-  })
-
-  const computed = computeSeatLabels(items)
-
-  const updates: Array<{ id: string; label: string }> = []
-  for (const item of items) {
-    const newLabel = computed.get(item.id) ?? null
-    if (newLabel !== null && newLabel !== item.seatLabel) {
-      updates.push({ id: item.id, label: newLabel })
-    }
-  }
-
-  if (updates.length === 0) return 0
-
-  await prisma.$transaction(
-    updates.map(({ id, label }) =>
-      prisma.inventoryItem.update({
-        where: { id },
-        data: { seatLabel: label },
-      }),
-    ),
-  )
-
-  return updates.length
-}
-
-/**
- * Backfill seat labels for every site in the system.
- * Intended for one-time data migration after Phase 1 ships.
- *
- * @returns Total number of inventory items updated across all sites.
- */
-export async function backfillAllSeatLabels(): Promise<number> {
-  const sites = await prisma.site.findMany({ select: { id: true } })
-  let total = 0
-  for (const site of sites) {
-    total += await recomputeSeatLabels(site.id)
-  }
-  return total
 }

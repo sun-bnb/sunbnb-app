@@ -6,7 +6,7 @@ import { isValidItemStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 
 import { generateChairs, generateChairsSchematic, ChairConfig } from './chair-util'
-import { recomputeSeatLabels } from '@repo/data/seat-label'
+import { recomputeSeatLabels } from '@repo/data/seat-label-db'
 
 type Mode = 'create' | 'rearrange'
 

@@ -5,7 +5,7 @@ import { auth } from '@/app/auth'
 import { requireSiteOwner } from '@/lib/auth-helpers'
 import { isValidItemStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
-import { recomputeSeatLabels } from '@repo/data/seat-label'
+import { recomputeSeatLabels } from '@repo/data/seat-label-db'
 
 // ─── Create Inventory Item ──────────────────────────────────────────────────
 

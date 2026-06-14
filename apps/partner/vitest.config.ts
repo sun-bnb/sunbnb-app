@@ -27,6 +27,7 @@ export default defineConfig({
       '@repo/data/reservation-emails': path.resolve(__dirname, '__mocks__/@repo/data/reservation-emails'),
       '@repo/data/subscription': path.resolve(__dirname, '__mocks__/@repo/data/subscription'),
       '@repo/data/seat-label': path.resolve(__dirname, '__mocks__/@repo/data/seat-label'),
+      '@repo/data/seat-label-db': path.resolve(__dirname, '__mocks__/@repo/data/seat-label-db'),
     },
   },
 })

@@ -1,10 +1,5 @@
-import { vi } from 'vitest'
-
-// DB-backed helpers are no-ops in unit tests (Prisma is mocked).
-export const recomputeSeatLabels = vi.fn(async () => 0)
-export const backfillAllSeatLabels = vi.fn(async () => 0)
-
 // Pure helpers — real implementations (no DB), mirrored from @repo/data/seat-label.
+// (DB-backed recompute/backfill live in the @repo/data/seat-label-db mock.)
 export function formatSeatLabel(
   label: string | null | undefined,
   options: { parcel?: boolean } = {},
