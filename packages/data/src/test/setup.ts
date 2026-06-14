@@ -13,11 +13,36 @@ process.env.AUTH_SECRET = process.env.AUTH_SECRET ?? 'integration-test-auth-secr
 
 import prisma from '../../index'
 
+/** The only database cleanDatabase() is ever allowed to TRUNCATE. */
+const TEST_DB_NAME = 'sunbnb_test'
+
+/**
+ * Refuse to truncate anything but the dedicated local integration DB.
+ *
+ * This is a connection-level guard (it asks the server `current_database()`),
+ * so it holds regardless of how POSTGRES_URL was resolved — a bare `vitest`
+ * run, an IDE test runner, or a `source .env.local` that leaked a dev/test/prod
+ * URL. It is the backstop that makes wiping the dev, test, or production
+ * database impossible. See `.claude/rules/` and the incident that motivated it.
+ */
+async function assertTestDatabase() {
+  const rows = await prisma.$queryRawUnsafe<Array<{ db: string }>>(`SELECT current_database() AS db`)
+  const db = rows[0]?.db
+  if (db !== TEST_DB_NAME) {
+    throw new Error(
+      `cleanDatabase() refused to run: connected to database "${db}", not the integration ` +
+        `test database "${TEST_DB_NAME}". Run integration tests via "npm run test:integration". ` +
+        `This guard prevents TRUNCATE from wiping a dev, test, or production database.`
+    )
+  }
+}
+
 /**
  * Truncate all application tables (CASCADE handles FK ordering).
  * Call in beforeEach to get a clean slate per test.
  */
 export async function cleanDatabase() {
+  await assertTestDatabase()
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
       "InvoiceLine",
