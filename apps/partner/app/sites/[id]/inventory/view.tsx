@@ -447,12 +447,22 @@ export default function InventoryView() {
 
   const handleRotateSingleItem = async (delta: number) => {
     if (!selectedItemId || !selectedItem) return
-    const partnerId =
-      selectedItem.pairId ??
-      selectedItem.pair?.id ??
-      selectedItem.pairedBy?.id ??
-      null
-    await sunbedEditing.rotateSingle(selectedItemId, selectedItem.rotation ?? 0, delta, partnerId)
+    // Group-first: collect other members of the same SunbedGroup from in-memory inventory.
+    const partnerIds: string[] = selectedItem.sunbedGroupId
+      ? inventory
+          .filter((i) => i.sunbedGroupId === selectedItem.sunbedGroupId && i.id !== selectedItemId)
+          .map((i) => i.id)
+      : []
+    // pairId fallback: for items not yet in a group, use the old pairId chain.
+    if (partnerIds.length === 0) {
+      const legacyPartnerId =
+        selectedItem.pairId ??
+        selectedItem.pair?.id ??
+        selectedItem.pairedBy?.id ??
+        null
+      if (legacyPartnerId) partnerIds.push(legacyPartnerId)
+    }
+    await sunbedEditing.rotateSingle(selectedItemId, selectedItem.rotation ?? 0, delta, partnerIds)
   }
 
   const handleDeleteSingleItem = async () => {
@@ -631,9 +641,7 @@ export default function InventoryView() {
           selectedSingleItemParcelColor={
             selectedItem?.group ? getParcelColor(selectedItem.group) ?? null : null
           }
-          selectedSingleItemHasPair={
-            !!(selectedItem?.pairId || selectedItem?.pair?.id || selectedItem?.pairedBy?.id)
-          }
+          selectedSingleItemHasPair={!!selectedItem?.sunbedGroupId}
           pairingMode={pairingMode}
           isEditPanelOpen={itemPanelOpen}
           onRotateSingle={handleRotateSingleItem}

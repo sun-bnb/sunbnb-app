@@ -24,9 +24,10 @@ export function useSunbedEditing(
   refresh: () => void | Promise<void>,
 ) {
   /**
-   * Rotate a single item (and its pair partner, if any) by `delta` degrees.
-   * Mirrors schematic/view.tsx handleRotateSingleItem exactly:
-   *  - If the item has a pair, both beds are rotated together via rotateSelection.
+   * Rotate a single item (and its group partners, if any) by `delta` degrees.
+   * Callers pass `partnerIds` = the other members of the item's SunbedGroup
+   * (group-first resolution with pairId fallback).
+   *  - If partnerIds is non-empty, all beds are rotated together via rotateSelection.
    *  - Otherwise the single bed is updated directly via saveInventoryItemProperties,
    *    normalising the angle into [0, 360).
    */
@@ -34,10 +35,10 @@ export function useSunbedEditing(
     itemId: string,
     currentRotation: number,
     delta: number,
-    partnerId?: string | null,
+    partnerIds: string[] = [],
   ) {
-    if (partnerId) {
-      await rotateSelection(siteId, [itemId, partnerId], delta)
+    if (partnerIds.length > 0) {
+      await rotateSelection(siteId, [itemId, ...partnerIds], delta)
     } else {
       const newRotation = ((currentRotation + delta) + 360) % 360
       await saveInventoryItemProperties(itemId, { rotation: newRotation })

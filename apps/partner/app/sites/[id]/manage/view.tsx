@@ -573,7 +573,7 @@ export default function ManageView({
         <BedDetail
           siteId={site.id!}
           item={selectedItem}
-          pairItem={selectedItemIsPool ? null : (inventoryItems.find(i => i.id === selectedItem.pairId || i.pairId === selectedItem.id) ?? null)}
+          pairItem={selectedItemIsPool ? null : (inventoryItems.find(i => i.id !== selectedItem.id && !!i.sunbedGroupId && i.sunbedGroupId === selectedItem.sunbedGroupId) ?? null)}
           accessKey={accessKey}
           isPool={selectedItemIsPool}
           onClose={() => { setSelectedItem(null); setSelectedItemIsPool(false) }}

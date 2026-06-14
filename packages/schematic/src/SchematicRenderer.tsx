@@ -236,12 +236,15 @@ export function SchematicRenderer(props: SchematicRendererProps) {
           const dy = draggedItem ? drag.currentY - draggedItem.y : 0
           const inSelection =
             !!draggedItem && selectedItemIds.size > 1 && selectedItemIds.has(draggedItem.id)
-          const partnerId = !inSelection && draggedItem
-            ? draggedItem.pairId ??
-              items.find((i) => i.pairId === draggedItem.id)?.id ??
-              null
-            : null
-          const partner = partnerId ? items.find((i) => i.id === partnerId) : null
+          // Co-movers: all other items sharing the same non-null groupId as the
+          // dragged item. When groupId is absent (tables, ungrouped sunbeds), the
+          // array is empty and the behaviour is identical to before this change.
+          // The multi-selection branch is unchanged — it takes precedence.
+          const coMoverIds: string[] = !inSelection && draggedItem?.groupId
+            ? items
+                .filter((i) => i.id !== draggedItem.id && i.groupId === draggedItem.groupId)
+                .map((i) => i.id)
+            : []
           setPendingItemDrops((prev) => {
             const next: typeof prev = {
               ...prev,
@@ -253,8 +256,11 @@ export function SchematicRenderer(props: SchematicRendererProps) {
                   next[it.id] = { x: it.x + dx, y: it.y + dy }
                 }
               }
-            } else if (partner) {
-              next[partner.id] = { x: partner.x + dx, y: partner.y + dy }
+            } else {
+              for (const coId of coMoverIds) {
+                const co = items.find((i) => i.id === coId)
+                if (co) next[co.id] = { x: co.x + dx, y: co.y + dy }
+              }
             }
             return next
           })
@@ -805,13 +811,16 @@ export function SchematicRenderer(props: SchematicRendererProps) {
           !!draggedItem &&
           selectedItemIds.size > 1 &&
           selectedItemIds.has(draggedItem.id)
-        const draggedPartnerId = draggedInSelection
-          ? null
-          : draggedItem
-            ? draggedItem.pairId ??
-              items.find((i) => i.pairId === draggedItem.id)?.id ??
-              null
-            : null
+        // Co-mover ids for live drag preview. Use groupId when available;
+        // falls back to an empty set so tables and ungrouped items are unaffected.
+        // Multi-selection drag takes precedence (draggedInSelection branch).
+        const dragCoMoverIds: Set<string> = draggedInSelection || !draggedItem?.groupId
+          ? new Set()
+          : new Set(
+              items
+                .filter((i) => i.id !== draggedItem.id && i.groupId === draggedItem.groupId)
+                .map((i) => i.id),
+            )
         return items.map((item) => {
         const v = itemVisual(item)
         // Per-item dimensions when provided (tables); otherwise the sunbed
@@ -826,20 +835,25 @@ export function SchematicRenderer(props: SchematicRendererProps) {
         const isEditing = editingItemId === item.id
         const isMultiSelected = selectedItemIds.has(item.id)
         const isHighlighted = isEditing || isMultiSelected
+        const isPaired = !!item.groupId
         const pairedSelected = !!(
-          item.pairId &&
-          (editingItemId === item.pairId || selectedItemIds.has(item.pairId))
+          item.groupId &&
+          items.some(
+            (o) =>
+              o.id !== item.id &&
+              o.groupId === item.groupId &&
+              (editingItemId === o.id || selectedItemIds.has(o.id)),
+          )
         )
-        const isPaired = !!item.pairId
         const isDragging = mode === 'edit' && drag?.kind === 'item' && drag.id === item.id
         const isDragSelectionSibling =
           mode === 'edit' &&
           draggedInSelection &&
           !isDragging &&
           selectedItemIds.has(item.id)
-        const isDragPartner =
-          mode === 'edit' && !!draggedPartnerId && item.id === draggedPartnerId
-        const followDrag = isDragSelectionSibling || isDragPartner
+        const isDragCoMover =
+          mode === 'edit' && dragCoMoverIds.has(item.id)
+        const followDrag = isDragSelectionSibling || isDragCoMover
         const pending = pendingItemDrops[item.id]
         const cx = isDragging
           ? drag.currentX

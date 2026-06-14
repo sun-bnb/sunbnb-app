@@ -2,11 +2,10 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import { AdvancedMarker, useMap } from '@vis.gl/react-google-maps'
-import { InventoryItem } from '@/types/shared'
 
 interface SunbedMarkerProps {
-  pairedBy?: InventoryItem
-  pairId?: string
+  /** True when this item belongs to a SunbedGroup (i.e. is part of a double/couple). */
+  isGroupMember?: boolean
   number: number
   rotation: number
   status: string
@@ -27,8 +26,7 @@ interface SunbedMarkerProps {
 }
 
 export default function SunbedMarker({
-  pairedBy,
-  pairId,
+  isGroupMember = false,
   number,
   rotation,
   status,
@@ -60,7 +58,7 @@ export default function SunbedMarker({
   const startClientRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const startWorldRef = useRef<google.maps.Point | null>(null)
 
-  const isPaired = Boolean(pairId || pairedBy?.id)
+  const isPaired = isGroupMember
   const isHighlighted = isEditing || isMultiSelected
 
   // Fixed viewBox coordinate space for crisp rendering at any zoom

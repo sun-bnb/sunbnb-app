@@ -109,7 +109,8 @@ export default function BedDetail({
 
   const reservation = getActiveReservation(item)
   const state = getBedState(item)
-  const pairNumber = isPool ? undefined : (pairItem?.number ?? item.pair?.number ?? item.pairedBy?.number)
+  // pairItem is resolved from SunbedGroup membership (manage/view.tsx); no pairId fallback.
+  const pairNumber = isPool ? undefined : pairItem?.number
   const poolSeq = isPool ? getPoolSeq(item) : null
 
   // Sync: both seats share the same reservation (or both are free)

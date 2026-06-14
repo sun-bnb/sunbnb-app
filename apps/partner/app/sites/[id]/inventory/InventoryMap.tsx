@@ -207,10 +207,10 @@ function MapContent({
           selectedSet.has(item.id) ||
           (selectedGroupNumber != null && item.group === selectedGroupNumber)
         const itemParcelColor = getParcelColor(item.group)
+        const selectedInvItem = (site.inventoryItems || []).find((i) => i.id === selectedItemId)
         const pairedSelected =
-          pairingMode && selectedItemId
-            ? item.id === (site.inventoryItems || []).find((i) => i.id === selectedItemId)?.pairId ||
-              item.id === (site.inventoryItems || []).find((i) => i.id === selectedItemId)?.pairedBy?.id
+          pairingMode && selectedInvItem?.sunbedGroupId
+            ? item.id !== selectedInvItem.id && item.sunbedGroupId === selectedInvItem.sunbedGroupId
             : false
 
         const position = {
@@ -232,8 +232,7 @@ function MapContent({
         return (
           <SunbedMarker
             key={item.id}
-            pairedBy={item.pairedBy || undefined}
-            pairId={item.pairId || undefined}
+            isGroupMember={Boolean(item.sunbedGroupId)}
             number={item.number}
             rotation={item.rotation || 0}
             status={item.status}

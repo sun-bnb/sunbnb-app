@@ -80,7 +80,7 @@ const SiteSunbedMarker: React.FC<SiteSunbedMarkerProps> = ({
 }) => {
   const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
 
-  const beachTowelImage = <Image 
+  const beachTowelImage = <Image
     src={beachTowelIcon} alt="Towel" height={dynamicSize / 2}
     style={{
       marginTop: `-${dynamicSize / 2.8}px`,
@@ -91,42 +91,28 @@ const SiteSunbedMarker: React.FC<SiteSunbedMarkerProps> = ({
   const borderThickness = available && isSelected ? 4 : 1;
   const backgroundColor = available ? (isSelected ? 'blue' : 'green') : 'red';
   const beachTowel = available ? (
-    isSelected ? 
-      beachTowelImage : 
+    isSelected ?
+      beachTowelImage :
       null
     ) : beachTowelImage;
 
   const size = dynamicSize; // use dynamicSize as the base container size
 
-  // --- NEW: Add shade circle ---
-  // Use 30% of dynamicSize as the shade diameter.
+  // Shade diameter: 60% of dynamicSize (same as before).
   const shadeDiameter = dynamicSize * 0.6;
-  // Determine if this sunbed is paired.
-  const isPaired = Boolean(item.pair || item.pairedBy);
-  // Assume that if the item has a pairedBy field, it is the primary in the pair.
-  const isPrimary = Boolean(item.pairedBy);
+  // A bed in a sunbed group never renders its own umbrella — the group layer renders
+  // one umbrella at the group centroid instead (see groupUmbrellaMarkers below).
+  const isInGroup = Boolean(item.sunbedGroupId);
 
   const dynamicHeight = dynamicSize * (zoom > 20 ? 1 : 1.1)
   const dynamicWidth = dynamicSize / (zoom > 20 ? 2.1 : 1.9)
 
-  // Compute the shade style for a single bed or primary in a pair.
-  let shadeStyle: React.CSSProperties = {};
-  if (isPaired) {
-    // For paired beds, only the primary gets the shade (upper, centered).
-    shadeStyle = {
-      position: 'absolute',
-      left: `-${dynamicWidth}px`,
-      top: '0px'
-    };
-  } else {
-    // For single beds, position the shade on the left-center.
-    shadeStyle = {
-      position: 'absolute',
-      left: `-${dynamicWidth}px`,
-      top: '0px'
-    };
-  }
-  // --- END NEW ---
+  // Shade style for single beds (unchanged from before).
+  const shadeStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: `-${dynamicWidth}px`,
+    top: '0px'
+  };
 
   const markerContent = zoom > 19 ? (
 
@@ -152,8 +138,8 @@ const SiteSunbedMarker: React.FC<SiteSunbedMarkerProps> = ({
           <Image src={sunbedIcon} alt="Sunbed" height={dynamicSize} />
           { beachTowel }
         </div>
-        
-        {(!isPaired || (isPaired && isPrimary)) && (
+
+        {!isInGroup && (
           <div className="absolute"
             style={{
               ...shadeStyle,
@@ -164,10 +150,10 @@ const SiteSunbedMarker: React.FC<SiteSunbedMarkerProps> = ({
               zIndex: 10
             }}
           >
-            <Image 
-              src={sunshadeIcon} 
-              alt="Sunshade" 
-              height={dynamicSize} 
+            <Image
+              src={sunshadeIcon}
+              alt="Sunshade"
+              height={dynamicSize}
               style={{
                 marginTop: `-${(dynamicHeight - shadeDiameter) / 2}px`,
                 marginLeft: `-${(0)}px`
@@ -189,7 +175,7 @@ const SiteSunbedMarker: React.FC<SiteSunbedMarkerProps> = ({
             ? { transform: `rotate(${item.rotation}deg)`, transformOrigin: 'center' }
             : {})
       }}></div>
-  
+
   )
 
   return (
@@ -197,7 +183,7 @@ const SiteSunbedMarker: React.FC<SiteSunbedMarkerProps> = ({
       key={item.id}
       position={{ lat: Number(item.locationLat), lng: Number(item.locationLng) }}
       onClick={onClick}
-      zIndex={isPaired && isPrimary ? 10 : 1}
+      zIndex={1}
     >
       {markerContent}
     </SafeAdvancedMarker>
@@ -406,6 +392,58 @@ function SunbedSelectionGeo({
   const SafeMap = Map as unknown as React.ComponentType<any>
   const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
 
+  // Group-umbrella layer: one umbrella per SunbedGroup, positioned at the group centroid.
+  // Only rendered at zoom > 19 (same condition as sunbedMarkers).
+  // Items without a sunbedGroupId are singles and render their own umbrella inside SiteSunbedMarker.
+  const groupedBySunbedGroupId = (inventoryItems || []).reduce<Record<string, InventoryItem[]>>(
+    (acc, item) => {
+      const gid = item.sunbedGroupId;
+      if (!gid) return acc;
+      if (!acc[gid]) acc[gid] = [];
+      acc[gid].push(item);
+      return acc;
+    },
+    {}
+  );
+
+  const groupUmbrellaMarkers = Object.entries(groupedBySunbedGroupId).map(([groupId, members]) => {
+    const points = members.map(m => ({
+      lat: Number(m.locationLat),
+      lng: Number(m.locationLng),
+    }));
+    const centroid = getCentroid(points);
+    const shadeDiameter = dynamicSize * 0.6;
+    const dynamicHeight = dynamicSize * (zoom > 20 ? 1 : 1.1);
+    const dynamicWidth = dynamicSize / (zoom > 20 ? 2.1 : 1.9);
+    return (
+      <SafeAdvancedMarker key={`group-shade-${groupId}`} position={centroid} zIndex={10}>
+        <div
+          className="absolute"
+          style={{
+            position: 'absolute',
+            left: `-${dynamicWidth}px`,
+            top: '0px',
+            width: `${shadeDiameter}px`,
+            height: `${shadeDiameter}px`,
+            borderRadius: '50%',
+            backgroundColor: 'rgba(0, 0, 0, 0.3)',
+            zIndex: 10,
+          }}
+        >
+          <Image
+            src={sunshadeIcon}
+            alt="Sunshade"
+            height={dynamicSize}
+            style={{
+              marginTop: `-${(dynamicHeight - shadeDiameter) / 2}px`,
+              marginLeft: `-${(0)}px`,
+            }}
+          />
+        </div>
+      </SafeAdvancedMarker>
+    );
+  });
+
   return (
     <>
       <SafeAPIProvider apiKey={apiKey}>
@@ -431,7 +469,7 @@ function SunbedSelectionGeo({
           }}
         >
           {
-            zoom > 19 ? sunbedMarkers :
+            zoom > 19 ? [...sunbedMarkers, ...groupUmbrellaMarkers] :
               (parcelShapes || []).map((parcelShape, idx) => {
                 // Compute the parcel centroid.
                 const centroid = getCentroid(parcelShape.shape);

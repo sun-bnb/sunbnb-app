@@ -382,12 +382,22 @@ export default function SchematicView() {
 
   async function handleRotateSingleItem(delta: number) {
     if (!selectedItemId || !selectedItem) return
-    const partnerId =
-      selectedItem.pairId ??
-      selectedItem.pair?.id ??
-      selectedItem.pairedBy?.id ??
-      null
-    await sunbedEditing.rotateSingle(selectedItemId, selectedItem.rotation ?? 0, delta, partnerId)
+    // Group-first: collect other members of the same SunbedGroup from in-memory inventory.
+    const partnerIds: string[] = selectedItem.sunbedGroupId
+      ? inventory
+          .filter((i) => i.sunbedGroupId === selectedItem.sunbedGroupId && i.id !== selectedItemId)
+          .map((i) => i.id)
+      : []
+    // pairId fallback: for items not yet in a group, use the old pairId chain.
+    if (partnerIds.length === 0) {
+      const legacyPartnerId =
+        selectedItem.pairId ??
+        selectedItem.pair?.id ??
+        selectedItem.pairedBy?.id ??
+        null
+      if (legacyPartnerId) partnerIds.push(legacyPartnerId)
+    }
+    await sunbedEditing.rotateSingle(selectedItemId, selectedItem.rotation ?? 0, delta, partnerIds)
   }
 
   async function handleDeleteSingleItem() {
@@ -526,22 +536,29 @@ export default function SchematicView() {
       return
     }
 
-    // Pair-drag: partner follows.
-    const partnerId =
-      dragged.pairId ?? dragged.pair?.id ?? dragged.pairedBy?.id ?? null
-    const partner = partnerId ? inventory.find((i) => i.id === partnerId) : null
-    if (partner) {
-      await Promise.all([
-        saveInventoryItemSchematicLocation(id, x, y),
+    // Group-drag: all other group members follow.
+    // Group-first: resolve via sunbedGroupId; fall back to pairId for legacy items.
+    let groupPartners: InventoryItem[] = dragged.sunbedGroupId
+      ? inventory.filter((i) => i.sunbedGroupId === dragged.sunbedGroupId && i.id !== id)
+      : []
+    if (groupPartners.length === 0) {
+      const legacyPartnerId =
+        dragged.pairId ?? dragged.pair?.id ?? dragged.pairedBy?.id ?? null
+      const legacyPartner = legacyPartnerId
+        ? inventory.find((i) => i.id === legacyPartnerId) ?? null
+        : null
+      if (legacyPartner) groupPartners = [legacyPartner]
+    }
+    await Promise.all([
+      saveInventoryItemSchematicLocation(id, x, y),
+      ...groupPartners.map((partner) =>
         saveInventoryItemSchematicLocation(
           partner.id,
           (partner.schematicX ?? 0) + dx,
           (partner.schematicY ?? 0) + dy,
         ),
-      ])
-    } else {
-      await saveInventoryItemSchematicLocation(id, x, y)
-    }
+      ),
+    ])
     await refresh()
   }
 
@@ -673,9 +690,7 @@ export default function SchematicView() {
           selectedSingleItemParcelColor={
             selectedItem?.group ? getParcelColor(selectedItem.group) ?? null : null
           }
-          selectedSingleItemHasPair={
-            !!(selectedItem?.pairId || selectedItem?.pair?.id || selectedItem?.pairedBy?.id)
-          }
+          selectedSingleItemHasPair={!!selectedItem?.sunbedGroupId}
           pairingMode={!!pairingForId}
           isEditPanelOpen={itemPanelOpen}
           onRotateSingle={handleRotateSingleItem}

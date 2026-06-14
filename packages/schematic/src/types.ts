@@ -28,7 +28,13 @@ export interface SchematicItem {
   status?: string
   label?: string | null
   group?: number
-  pairId?: string | null
+  /**
+   * Generic co-move group identifier. Items sharing the same non-null groupId
+   * move together when any member is dragged (outside of a multi-selection).
+   * The renderer is domain-agnostic here — for sunbeds this is populated from
+   * `SunbedGroup.id`; tables never set it, making this field a no-op for them.
+   */
+  groupId?: string | null
   /**
    * Physical footprint in world units (metres). When absent, the renderer
    * falls back to the sunbed defaults (0.84 × 2.1) so the beach flow is

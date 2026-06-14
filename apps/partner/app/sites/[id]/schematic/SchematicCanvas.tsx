@@ -52,7 +52,6 @@ function toElementDTO(el: LayoutElementProps): LayoutElementDTO {
 function toSchematicItem(item: InventoryItem): SchematicItem {
   const numberLabel =
     item.number != null ? String(item.number).padStart(4, '0') : ''
-  const pairId = item.pairId ?? item.pair?.id ?? item.pairedBy?.id ?? null
   return {
     id: item.id,
     x: item.schematicX ?? 0,
@@ -61,7 +60,9 @@ function toSchematicItem(item: InventoryItem): SchematicItem {
     status: item.status,
     label: item.label ?? numberLabel,
     group: item.group,
-    pairId,
+    // groupId drives BOTH the drag co-move and the isPaired highlight in
+    // SchematicRenderer (all members of the same SunbedGroup are linked).
+    groupId: item.sunbedGroupId ?? null,
   }
 }
 

@@ -20,24 +20,44 @@ async function getInventoryItems(id: string) {
         }
       },
       sunbedGroup: {
-        include: { items: { select: { id: true } } }
+        include: {
+          items: {
+            include: {
+              reservations: true
+            }
+          }
+        }
       }
     }
   })
 
   if (!item) return null
 
+  // Prefer group-based pairing (SunbedGroup source of truth).
+  // otherGroupMembers are the sibling items from the group, excluding this item.
+  const otherGroupMembers = item.sunbedGroup?.items.filter(
+    (member) => member.id !== item.id
+  ) ?? []
+
+  if (otherGroupMembers.length > 0) {
+    return {
+      site: item.site,
+      items: [item, ...otherGroupMembers]
+    }
+  }
+
+  // Fallback: legacy pairId/pairedBy self-relation for beds not yet in a group.
   const pair = item.pair || item.pairedBy
   if (pair) {
     return {
       site: item.site,
       items: [item, pair]
-    }    
+    }
   }
-  
+
   return {
     site: item.site,
-    items: [item] 
+    items: [item]
   }
 
 }
