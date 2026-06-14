@@ -349,13 +349,22 @@ export async function depairInventoryItem(id: string) {
     }
   }
 
-  const updates: Promise<unknown>[] = [
-    prisma.inventoryItem.update({ where: { id }, data: { pairId: null } }),
-  ]
-  if (item.pairId) {
-    updates.push(prisma.inventoryItem.update({ where: { id: item.pairId }, data: { pairId: null } }))
-  }
-  await Promise.all(updates)
+  // Clear the legacy pairId mirror in BOTH directions. Bulk-generated pairs are
+  // one-directional (only the primary holds pairId; the secondary is linked
+  // solely via the pairedBy reverse-relation). Clearing only `id` and its
+  // forward `pairId` target would leave the primary still pointing at a depaired
+  // secondary, so the pair (and the pairedBy-driven UI state) would survive.
+  // Clear the item, whatever it points to, and whatever points to it.
+  await prisma.inventoryItem.updateMany({
+    where: {
+      OR: [
+        { id },
+        { pairId: id },
+        ...(item.pairId ? [{ id: item.pairId }] : []),
+      ],
+    },
+    data: { pairId: null },
+  })
 
   revalidatePath('/sites')
   return { status: 'ok' }

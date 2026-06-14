@@ -397,10 +397,34 @@ describe('depairInventoryItem', () => {
     // Deletes the empty group
     expect(vi.mocked(prisma.sunbedGroup.delete)).toHaveBeenCalledWith({ where: { id: GROUP_ID } })
 
-    // Clears pairId on both items
-    const updateCalls = vi.mocked(prisma.inventoryItem.update).mock.calls
-    expect(updateCalls.some(c => c[0].where?.id === 'item-1')).toBe(true)
-    expect(updateCalls.some(c => c[0].where?.id === 'item-2')).toBe(true)
+    // Clears pairId in both directions (item, its forward target, and anything pointing at it)
+    expect(vi.mocked(prisma.inventoryItem.updateMany)).toHaveBeenCalledWith({
+      where: { OR: [{ id: 'item-1' }, { pairId: 'item-1' }, { id: 'item-2' }] },
+      data: { pairId: null },
+    })
+  })
+
+  it('clears the pair when depairing the SECONDARY bed (pairId null, linked via pairedBy)', async () => {
+    // One-directional pairs (bulk-generated) hold pairId only on the primary.
+    // Depairing the secondary must still clear the primary's pairId via the
+    // reverse `{ pairId: <secondary> }` branch — otherwise the pair survives.
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      pairId: null,
+      sunbedGroupId: 'group-9',
+      site: { userId: OWNER_ID },
+    } as any)
+    vi.mocked(prisma.inventoryItem.updateMany).mockResolvedValue({ count: 1 } as any)
+    vi.mocked(prisma.inventoryItem.count).mockResolvedValue(0)
+    vi.mocked(prisma.sunbedGroup.delete).mockResolvedValue({} as any)
+
+    const res = await depairInventoryItem('secondary-id')
+    expect(res.status).toBe('ok')
+    // No forward target (pairId null), but the reverse pointer is cleared
+    expect(vi.mocked(prisma.inventoryItem.updateMany)).toHaveBeenCalledWith({
+      where: { OR: [{ id: 'secondary-id' }, { pairId: 'secondary-id' }] },
+      data: { pairId: null },
+    })
   })
 
   it('does not crash when item has no SunbedGroup (legacy item)', async () => {
@@ -410,7 +434,7 @@ describe('depairInventoryItem', () => {
       sunbedGroupId: null,
       site: { userId: OWNER_ID },
     } as any)
-    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.inventoryItem.updateMany).mockResolvedValue({ count: 2 } as any)
 
     const res = await depairInventoryItem('item-1')
     expect(res.status).toBe('ok')
