@@ -5,6 +5,7 @@ import { auth } from '@/app/auth'
 import { requireSiteOwner } from '@/lib/auth-helpers'
 import { isValidItemStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
+import { recomputeSeatLabels } from '@repo/data/seat-label'
 
 // ─── Create Inventory Item ──────────────────────────────────────────────────
 
@@ -28,6 +29,7 @@ export async function createInventoryItem(inventoryItem: { siteId: string }) {
     },
   })
 
+  await recomputeSeatLabels(inventoryItem.siteId)
   revalidatePath('/sites')
   return { status: 'ok', item }
 }
@@ -40,11 +42,13 @@ export async function deleteInventoryItem(id: string) {
 
   const item = await prisma.inventoryItem.findUnique({
     where: { id },
-    select: { site: { select: { userId: true } } },
+    select: { siteId: true, site: { select: { userId: true } } },
   })
   if (!item || item.site.userId !== session.user.id) {
     return { status: 'error', errors: ['Not authorized'] }
   }
+
+  const deletedSiteId = item.siteId
 
   // Load item to get its sunbedGroupId before deletion
   const itemForGroup = await prisma.inventoryItem.findUnique({
@@ -75,6 +79,7 @@ export async function deleteInventoryItem(id: string) {
     }
   }
 
+  await recomputeSeatLabels(deletedSiteId)
   revalidatePath('/sites')
   return { status: 'ok' }
 }
@@ -190,11 +195,13 @@ export async function saveInventoryItemProperties(
 
   const item = await prisma.inventoryItem.findUnique({
     where: { id },
-    select: { site: { select: { userId: true } } },
+    select: { siteId: true, site: { select: { userId: true } } },
   })
   if (!item || item.site.userId !== session.user.id) {
     return { status: 'error', errors: ['Not authorized'] }
   }
+
+  const itemSiteId = item.siteId
 
   const pairItem = inventoryItem.pairId
     ? await prisma.inventoryItem.findUnique({ where: { id: inventoryItem.pairId }, select: { id: true, siteId: true } })
@@ -202,11 +209,7 @@ export async function saveInventoryItemProperties(
 
   if (pairItem) {
     // Verify the pair item belongs to the same site
-    const currentItem = await prisma.inventoryItem.findUnique({
-      where: { id },
-      select: { siteId: true },
-    })
-    if (pairItem.siteId !== currentItem?.siteId) {
+    if (pairItem.siteId !== itemSiteId) {
       return { status: 'error', errors: ['Pair item must belong to the same site'] }
     }
   }
@@ -248,23 +251,20 @@ export async function saveInventoryItemProperties(
       }
     }
 
-    // Re-fetch the item's siteId for the new group
-    const baseItem = await prisma.inventoryItem.findUnique({ where: { id }, select: { siteId: true } })
-    if (baseItem) {
-      const newGroup = await prisma.sunbedGroup.create({
-        data: {
-          siteId: baseItem.siteId,
-          items: { connect: [{ id }, { id: inventoryItem.pairId }] },
-        },
-      })
-      // Explicitly set sunbedGroupId on both items (connect above sets it via relation)
-      await prisma.inventoryItem.updateMany({
-        where: { id: { in: [id, inventoryItem.pairId] } },
-        data: { sunbedGroupId: newGroup.id },
-      })
-    }
+    const newGroup = await prisma.sunbedGroup.create({
+      data: {
+        siteId: itemSiteId,
+        items: { connect: [{ id }, { id: inventoryItem.pairId }] },
+      },
+    })
+    // Explicitly set sunbedGroupId on both items (connect above sets it via relation)
+    await prisma.inventoryItem.updateMany({
+      where: { id: { in: [id, inventoryItem.pairId] } },
+      data: { sunbedGroupId: newGroup.id },
+    })
   }
 
+  await recomputeSeatLabels(itemSiteId)
   revalidatePath('/sites')
   return { status: 'ok' }
 }
@@ -321,6 +321,7 @@ export async function pairInventoryItems(id1: string, id2: string) {
     data: { sunbedGroupId: newGroup.id },
   })
 
+  await recomputeSeatLabels(item1.siteId)
   revalidatePath('/sites')
   return { status: 'ok' }
 }
@@ -331,7 +332,7 @@ export async function depairInventoryItem(id: string) {
 
   const item = await prisma.inventoryItem.findUnique({
     where: { id },
-    select: { pairId: true, sunbedGroupId: true, site: { select: { userId: true } } },
+    select: { siteId: true, pairId: true, sunbedGroupId: true, site: { select: { userId: true } } },
   })
   if (!item || item.site.userId !== session.user.id) return { status: 'error', errors: ['Not authorized'] }
 
@@ -366,6 +367,7 @@ export async function depairInventoryItem(id: string) {
     data: { pairId: null },
   })
 
+  await recomputeSeatLabels(item.siteId)
   revalidatePath('/sites')
   return { status: 'ok' }
 }

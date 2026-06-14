@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useTransition } from 'react'
 import { useTranslations } from 'next-intl'
 import dayjs from 'dayjs'
+import { formatSeat } from '@repo/data/seat-label'
 import { InventoryItem, Reservation } from '@/types/shared'
 import {
   reserveItem,
@@ -110,7 +111,7 @@ export default function BedDetail({
   const reservation = getActiveReservation(item)
   const state = getBedState(item)
   // pairItem is resolved from SunbedGroup membership (manage/view.tsx); no pairId fallback.
-  const pairNumber = isPool ? undefined : pairItem?.number
+  const pairNumber = isPool || !pairItem ? undefined : formatSeat(pairItem, { parcel: true })
   const poolSeq = isPool ? getPoolSeq(item) : null
 
   // Sync: both seats share the same reservation (or both are free)
@@ -152,7 +153,7 @@ export default function BedDetail({
                 <span className="text-[10px] text-gray-400 font-normal leading-none">{t('additionalSeat')}</span>
               </div>
             ) : (
-              <span className="text-2xl sm:text-3xl font-black">#{item.number}</span>
+              <span className="text-2xl sm:text-3xl font-black">#{formatSeat(item, { parcel: true })}</span>
             )}
             {pairNumber && (
               <span className="text-base sm:text-lg text-gray-400 font-medium">+ #{pairNumber}</span>

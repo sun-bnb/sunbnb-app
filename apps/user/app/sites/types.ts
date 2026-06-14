@@ -65,7 +65,7 @@ export interface Reservation {
   anonId?: string | null
   site?: { id: string, name?: string | null, type?: string | null }
   itemId?: string | null
-  items?: { id: string, number: number }[] | null
+  items?: { id: string, number: number, seatLabel?: string | null }[] | null
   orders?: { 
     id: string,
     createdAt: Date,
@@ -110,6 +110,7 @@ export interface Invoice {
 export interface InventoryItem {
   id: string
   number: number
+  seatLabel?: string | null
   group: number
   status: string
   category?: string | null

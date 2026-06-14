@@ -15,6 +15,7 @@ import { useTranslations } from 'next-intl'
 
 import { useSite } from '@/app/sites/site-context'
 import { getPaidItemsByMonth } from './actions'
+import { formatSeat } from '@repo/data/seat-label'
 
 const MONTH_KEYS = ['january','february','march','april','may','june','july','august','september','october','november','december'] as const
 
@@ -182,7 +183,7 @@ export default function AccountingView() {
                         <div className="text-xs text-gray-400 mt-0.5">
                           {formatDate(order.createdAt)}
                           {order.user?.email && <span className="ml-2">· {order.user.email}</span>}
-                          {order.seat?.number != null && <span className="ml-2">· {t('seat')} #{String(order.seat.number).padStart(4, '0')}</span>}
+                          {order.seat?.number != null && <span className="ml-2">· {t('seat')} #{formatSeat(order.seat, { parcel: true })}</span>}
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0 ml-4">
@@ -223,7 +224,7 @@ export default function AccountingView() {
                           {res.type === 'hours' ? t('hourly') : t('daily')} reservation
                           {res.items?.length > 0 && (
                             <span className="text-gray-500">
-                              {' '}· {res.items.length > 1 ? t('seats') : t('seat')} {res.items.map((i: any) => `#${String(i.number).padStart(4, '0')}`).join(', ')}
+                              {' '}· {res.items.length > 1 ? t('seats') : t('seat')} {res.items.map((i: any) => `#${formatSeat(i, { parcel: true })}`).join(', ')}
                             </span>
                           )}
                         </div>

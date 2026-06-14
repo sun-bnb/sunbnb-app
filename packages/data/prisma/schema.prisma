@@ -313,6 +313,7 @@ model InventoryItem {
   group          Int            @default(0)
   itemGroupId    String?        @map("item_group_id")
   sunbedGroupId  String?        @map("sunbed_group_id")
+  seatLabel      String?        @map("seat_label")
   itemGroup      ItemGroup?     @relation(fields: [itemGroupId], references: [id])
   sunbedGroup    SunbedGroup?   @relation(fields: [sunbedGroupId], references: [id])
   pair           InventoryItem? @relation("ItemPair", fields: [pairId], references: [id])

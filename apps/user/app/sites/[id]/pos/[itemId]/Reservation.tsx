@@ -26,6 +26,7 @@ import sunbedIcon from './sunbed-icon-transparent.png'
 import sunbedPerfIcon from '@/components/reservation/sunbed-perforated-transparent.png'
 import sunshadeIcon from '@/components/reservation/sunshade-transparent.png'
 import { useRouter } from 'next/navigation'
+import { formatSeat } from '@repo/data/seat-label'
 
 // A helper function that checks if an item is free for the current day
 function isItemAvailableToday(item: InventoryItem): boolean {
@@ -186,8 +187,8 @@ export default function ReservationView({
                 <div className="text-left">DATE: <b>{dateStr}</b></div>
                 {
                   items.length === 1 ? 
-                    <div className="text-left">SEAT NUMBER: <b>{items[0]!.number}</b></div> :
-                    <div className="text-left">SEAT NUMBERS: <b>{items.map(item => item.number).join(', ')}</b></div>
+                    <div className="text-left">SEAT NUMBER: <b>{formatSeat(items[0]!)}</b></div> :
+                    <div className="text-left">SEAT NUMBERS: <b>{items.map(item => formatSeat(item)).join(', ')}</b></div>
                 }
                 
               </div>
@@ -254,10 +255,10 @@ export default function ReservationView({
           {
             items.length === 1 ?
               <div className="text-[rgb(142,114,49)] ">
-                SEAT {items[0]!.number}
+                SEAT {formatSeat(items[0]!)}
               </div> :
               <div className="text-[rgb(142,114,49)] ">
-                SEATS {items.map(item => item.number).join(', ')}
+                SEATS {items.map(item => formatSeat(item)).join(', ')}
               </div>
           }
           

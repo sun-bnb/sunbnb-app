@@ -3,6 +3,7 @@
 import QRCodeLib from 'react-qr-code'
 import { useTranslations } from 'next-intl'
 import { Reservation } from '@/app/sites/types'
+import { formatSeat } from '@repo/data/seat-label'
 
 // Workaround: react-qr-code class component types are incompatible with React 18+ JSX
 const QRCode = QRCodeLib as unknown as React.FC<{
@@ -32,7 +33,7 @@ export default function PassView({
   const validTo = new Date(reservation.to).toLocaleDateString('en-US', fmtOpts)
   const validity = validFrom === validTo ? validFrom : `${validFrom} – ${validTo}`
 
-  const seats = reservation.items?.map(item => String(item.number)).join(', ')
+  const seats = reservation.items?.map(item => formatSeat(item)).join(', ')
   const seatCount = reservation.items?.length || 0
 
   const isPaid = reservation.paymentAmount && reservation.paymentAmount > 0

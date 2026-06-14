@@ -234,6 +234,7 @@ function MapContent({
             key={item.id}
             isGroupMember={Boolean(item.sunbedGroupId)}
             number={item.number}
+            seatLabel={item.seatLabel}
             rotation={item.rotation || 0}
             status={item.status}
             initialPosition={position}

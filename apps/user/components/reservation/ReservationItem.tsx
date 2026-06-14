@@ -13,6 +13,7 @@ import {
   RESERVATION_PAYMENT_FAILED,
   RESERVATION_REFUNDED,
 } from '@repo/data/reservation-status'
+import { formatSeat } from '@repo/data/seat-label'
 
 const statusToChipColor: {
   [key: string]: 'default' | 'success' | 'error'
@@ -47,7 +48,7 @@ export default function ReservationItem({ reservation }: { reservation: Reservat
   const t = useTranslations('Reservations')
 
   const siteName = reservation.site?.name
-  const seatNumbers = reservation.items?.map(item => item.number).join(', ')
+  const seatNumbers = reservation.items?.map(item => formatSeat(item)).join(', ')
 
   if (reservation.type === 'hours') {
     const formattedDate = dayjs(reservation.from).format('ddd, D MMM YYYY')

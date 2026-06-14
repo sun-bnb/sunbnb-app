@@ -1,6 +1,7 @@
 import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
 import ReceiptPage, { ReceiptProps, InvoiceSection } from './ReceiptPage'
+import { formatSeat } from '@repo/data/seat-label'
 
 async function getReservation(id: string) {
   return prisma.reservation.findUnique({
@@ -190,7 +191,7 @@ export default async function Receipt({ params, searchParams }: { params: { id: 
     partnerInvoice.invoicedAt.toISOString().substring(11, 19)
 
   const seatNumbers =
-    reservation.items?.map((item) => String(item.number)).join(', ') ?? null
+    reservation.items?.map((item) => formatSeat(item)).join(', ') ?? null
 
   // from/to are stored as UTC from startOf/endOf('day') in the user's local timezone.
   // Adding 12h to from and subtracting 12h from to normalises both to the correct

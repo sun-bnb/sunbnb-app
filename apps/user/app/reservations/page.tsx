@@ -10,7 +10,7 @@ async function getReservations(userId: string): Promise<Reservation[]> {
     orderBy: { from: 'desc' },
     include: {
       site: { select: { id: true, name: true } },
-      items: { select: { id: true, number: true } },
+      items: { select: { id: true, number: true, seatLabel: true } },
     },
   })
 }

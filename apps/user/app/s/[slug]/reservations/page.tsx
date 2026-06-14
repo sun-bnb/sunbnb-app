@@ -15,7 +15,7 @@ async function getSiteAndReservations(slug: string, userId: string) {
     orderBy: { from: 'desc' },
     include: {
       site: { select: { id: true, name: true } },
-      items: { select: { id: true, number: true } },
+      items: { select: { id: true, number: true, seatLabel: true } },
     },
   })
 

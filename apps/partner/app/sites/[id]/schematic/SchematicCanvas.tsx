@@ -5,6 +5,7 @@ import type { LayoutElementDTO, SchematicItem, ItemVisual } from '@repo/schemati
 import { beachPalette } from './palette'
 import { getParcelColor } from '../inventory/chair-util'
 import type { InventoryItem, LayoutElementProps } from '@/types/shared'
+import { formatSeat } from '@repo/data/seat-label'
 
 interface Props {
   worldWidth: number
@@ -51,7 +52,7 @@ function toElementDTO(el: LayoutElementProps): LayoutElementDTO {
 
 function toSchematicItem(item: InventoryItem): SchematicItem {
   const numberLabel =
-    item.number != null ? String(item.number).padStart(4, '0') : ''
+    item.number != null ? formatSeat(item, { parcel: true }) : ''
   return {
     id: item.id,
     x: item.schematicX ?? 0,

@@ -20,6 +20,7 @@ import LinkOffIcon from '@mui/icons-material/LinkOff'
 import QRPrintButton from './qr-print-button'
 import { useSite } from '@/app/sites/site-context'
 import { getParcelColor } from './chair-util'
+import { formatSeat } from '@repo/data/seat-label'
 
 interface InventoryToolbarProps {
   creating: boolean
@@ -45,6 +46,7 @@ interface InventoryToolbarProps {
   // The single-sunbed bar only renders when selectedSingleItemId is truthy.
   selectedSingleItemId: string | null
   selectedSingleItemNumber: number | null
+  selectedSingleItemLabel: string | null
   selectedSingleItemParcelColor: string | null
   selectedSingleItemHasPair: boolean
   pairingMode: boolean
@@ -78,6 +80,7 @@ export default function InventoryToolbar({
   onEditParcelFull,
   selectedSingleItemId,
   selectedSingleItemNumber,
+  selectedSingleItemLabel,
   selectedSingleItemParcelColor,
   selectedSingleItemHasPair,
   pairingMode,
@@ -298,7 +301,7 @@ export default function InventoryToolbar({
           )}
           <span className="font-medium text-blue-800">
             {selectedSingleItemNumber != null
-              ? `Sunbed ${String(selectedSingleItemNumber).padStart(4, '0')}`
+              ? `Sunbed ${formatSeat({ seatLabel: selectedSingleItemLabel, number: selectedSingleItemNumber }, { parcel: true })}`
               : 'Sunbed'}
           </span>
           {selectedSingleItemHasPair && (

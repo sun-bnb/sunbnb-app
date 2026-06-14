@@ -17,6 +17,7 @@ import {
   RESERVATION_CANCELED,
   RESERVATION_REFUNDED,
 } from '@repo/data/reservation-status'
+import { formatSeat } from '@repo/data/seat-label'
 
 const STATUS_CONFIG: {
   [key: string]: {
@@ -80,7 +81,7 @@ export default function ReservationConfirmationView({
   const effectiveStatus = processingStatus || status
   const cfg = STATUS_CONFIG[effectiveStatus] ?? STATUS_CONFIG.default!
 
-  const seats = reservation.items?.map(item => String(item.number)).join(', ')
+  const seats = reservation.items?.map(item => formatSeat(item)).join(', ')
   const showQr = status === RESERVATION_COMPLETE || status === 'reserved'
   const showReceipt = status === RESERVATION_COMPLETE && !isUnpaid
 

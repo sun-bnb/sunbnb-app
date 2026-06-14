@@ -638,6 +638,7 @@ export default function InventoryView() {
             editorMode === 'edit-chair' && selectedItem ? selectedItem.id : null
           }
           selectedSingleItemNumber={selectedItem?.number ?? null}
+          selectedSingleItemLabel={selectedItem?.seatLabel ?? null}
           selectedSingleItemParcelColor={
             selectedItem?.group ? getParcelColor(selectedItem.group) ?? null : null
           }

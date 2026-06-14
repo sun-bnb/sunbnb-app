@@ -249,14 +249,11 @@ describe('saveInventoryItemProperties', () => {
   it('connects pair item when pairId is provided and found, creates SunbedGroup', async () => {
     mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
     vi.mocked(prisma.inventoryItem.findUnique)
-      .mockResolvedValueOnce({ site: { userId: OWNER_ID } } as any) // ownership lookup
+      .mockResolvedValueOnce({ siteId: SITE_ID, site: { userId: OWNER_ID } } as any) // ownership lookup (now selects siteId)
       .mockResolvedValueOnce({ id: 'pair-1', siteId: SITE_ID } as any) // pair item lookup
-      .mockResolvedValueOnce({ siteId: SITE_ID } as any) // current item siteId lookup for cross-site check
-      // Dual-write: fetch sunbedGroupId for current item and pair
+      // Dual-write: fetch sunbedGroupId for current item and pair (siteId reused, no re-fetch)
       .mockResolvedValueOnce({ sunbedGroupId: null } as any) // currentItem group check
       .mockResolvedValueOnce({ sunbedGroupId: null } as any) // currentPair group check
-      // Re-fetch siteId for new group creation
-      .mockResolvedValueOnce({ siteId: SITE_ID } as any)
     vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
     vi.mocked(prisma.inventoryItem.updateMany).mockResolvedValue({ count: 2 } as any)
     vi.mocked(prisma.sunbedGroup.create).mockResolvedValue({ id: 'group-new' } as any)

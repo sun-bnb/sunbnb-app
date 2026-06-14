@@ -21,7 +21,8 @@
     "./reservation-status": "./src/reservation-status.ts",
     "./flags": "./src/flags.ts",
     "./impersonation": "./src/impersonation.ts",
-    "./mollie-tokens": "./src/mollie-tokens.ts"
+    "./mollie-tokens": "./src/mollie-tokens.ts",
+    "./seat-label": "./src/seat-label.ts"
   },
   "typesVersions": {
     "*": {
@@ -72,6 +73,9 @@
       ],
       "mollie-tokens": [
         "./src/mollie-tokens.ts"
+      ],
+      "seat-label": [
+        "./src/seat-label.ts"
       ]
     }
   },

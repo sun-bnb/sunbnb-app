@@ -6,6 +6,7 @@ import { isValidItemStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 
 import { generateChairs, generateChairsSchematic, ChairConfig } from './chair-util'
+import { recomputeSeatLabels } from '@repo/data/seat-label'
 
 type Mode = 'create' | 'rearrange'
 
@@ -236,6 +237,7 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
 
   await assignChairPairings({ generated, group, siteId })
 
+  await recomputeSeatLabels(siteId)
 }
 
 
@@ -765,6 +767,7 @@ export async function assignItemsToGroup(
     data: { group, itemGroupId: null },
   })
 
+  await recomputeSeatLabels(siteId)
   return { status: 'ok' }
 }
 
@@ -782,6 +785,7 @@ export async function removeItemsFromGroup(
     data: { group: 0, itemGroupId: null },
   })
 
+  await recomputeSeatLabels(siteId)
   return { status: 'ok' }
 }
 
@@ -846,5 +850,6 @@ export async function reverseParcelNumbering(siteId: string, group: number) {
     )
   )
 
+  await recomputeSeatLabels(siteId)
   return { status: 'ok' }
 }

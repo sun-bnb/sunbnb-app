@@ -2,11 +2,13 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import { AdvancedMarker, useMap } from '@vis.gl/react-google-maps'
+import { formatSeat } from '@repo/data/seat-label'
 
 interface SunbedMarkerProps {
   /** True when this item belongs to a SunbedGroup (i.e. is part of a double/couple). */
   isGroupMember?: boolean
   number: number
+  seatLabel?: string | null
   rotation: number
   status: string
   initialPosition: {
@@ -28,6 +30,7 @@ interface SunbedMarkerProps {
 export default function SunbedMarker({
   isGroupMember = false,
   number,
+  seatLabel,
   rotation,
   status,
   initialPosition,
@@ -233,7 +236,7 @@ export default function SunbedMarker({
                 shapeRendering="geometricPrecision"
                 style={{ pointerEvents: 'none' }}
               >
-                {String(number).padStart(4, '0')}
+                {formatSeat({ seatLabel, number }, { parcel: true })}
               </text>
             </g>
           )}
