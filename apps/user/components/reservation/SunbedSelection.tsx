@@ -66,6 +66,8 @@ interface SiteSunbedMarkerProps {
   zoom: number
   isSelected: boolean
   available: boolean
+  /** For a grouped bed, true on the single designated "primary" that renders the shared umbrella. */
+  isGroupPrimary: boolean
   onClick: () => void
 }
 
@@ -76,6 +78,7 @@ const SiteSunbedMarker: React.FC<SiteSunbedMarkerProps> = ({
   zoom,
   isSelected,
   available,
+  isGroupPrimary,
   onClick,
 }) => {
   const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
@@ -100,9 +103,11 @@ const SiteSunbedMarker: React.FC<SiteSunbedMarkerProps> = ({
 
   // Shade diameter: 60% of dynamicSize (same as before).
   const shadeDiameter = dynamicSize * 0.6;
-  // A bed in a sunbed group never renders its own umbrella — the group layer renders
-  // one umbrella at the group centroid instead (see groupUmbrellaMarkers below).
+  // A grouped bed renders the shared umbrella only on its designated primary
+  // (chosen by the parent so the original left-offset lands between the pair and
+  // rotates with the bed); other group members render none. Singles always do.
   const isInGroup = Boolean(item.sunbedGroupId);
+  const showUmbrella = !isInGroup || isGroupPrimary;
 
   const dynamicHeight = dynamicSize * (zoom > 20 ? 1 : 1.1)
   const dynamicWidth = dynamicSize / (zoom > 20 ? 2.1 : 1.9)
@@ -139,7 +144,7 @@ const SiteSunbedMarker: React.FC<SiteSunbedMarkerProps> = ({
           { beachTowel }
         </div>
 
-        {!isInGroup && (
+        {showUmbrella && (
           <div className="absolute"
             style={{
               ...shadeStyle,
@@ -183,7 +188,7 @@ const SiteSunbedMarker: React.FC<SiteSunbedMarkerProps> = ({
       key={item.id}
       position={{ lat: Number(item.locationLat), lng: Number(item.locationLng) }}
       onClick={onClick}
-      zIndex={1}
+      zIndex={isGroupPrimary ? 10 : 1}
     >
       {markerContent}
     </SafeAdvancedMarker>
@@ -353,6 +358,38 @@ function SunbedSelectionGeo({
     dispatch(setValue({ selectedItems: updatedItems }))
   }
 
+  // Pick one "primary" bed per SunbedGroup to host the single shared umbrella.
+  // It renders inside that bed's rotated container with the same left-offset as a
+  // single bed, so it rotates consistently with the parcel (the old primary-seat
+  // look) — but the primary is derived from group GEOMETRY, not pairId: it's the
+  // member whose partner lies to its LOCAL-left, so the offset lands the umbrella
+  // between the beds rather than outside the pair.
+  const groupPrimaryIds = (() => {
+    const groups: Record<string, InventoryItem[]> = {}
+    for (const it of inventoryItems || []) {
+      const gid = it.sunbedGroupId
+      if (!gid) continue
+      if (!groups[gid]) groups[gid] = []
+      groups[gid]!.push(it)
+    }
+    const ids = new Set<string>()
+    for (const members of Object.values(groups)) {
+      if (members.length === 1) { ids.add(members[0]!.id); continue }
+      if (members.length < 2) continue
+      const a = members[0]!, b = members[1]!
+      // Bed's local-left direction in screen space for its CSS rotation.
+      const theta = ((a.rotation || 0) * Math.PI) / 180
+      const leftX = -Math.cos(theta)
+      const leftY = -Math.sin(theta)
+      // Vector a->b in screen coords (east = +x, north = -y).
+      const vx = Number(b.locationLng) - Number(a.locationLng)
+      const vy = -(Number(b.locationLat) - Number(a.locationLat))
+      // If b is to a's local-left, a is primary; otherwise b.
+      ids.add(leftX * vx + leftY * vy > 0 ? a.id : b.id)
+    }
+    return ids
+  })()
+
   const sunbedMarkers = (inventoryItems || []).map(item => {
     const available = isAvailable(item)
     const isSelected = selectedItems?.some(
@@ -366,6 +403,7 @@ function SunbedSelectionGeo({
         zoom={zoom}
         isSelected={isSelected}
         available={available}
+        isGroupPrimary={groupPrimaryIds.has(item.id)}
         onClick={() => toggleSelection(item)}
       />
     )
@@ -392,58 +430,6 @@ function SunbedSelectionGeo({
   const SafeMap = Map as unknown as React.ComponentType<any>
   const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
 
-  // Group-umbrella layer: one umbrella per SunbedGroup, positioned at the group centroid.
-  // Only rendered at zoom > 19 (same condition as sunbedMarkers).
-  // Items without a sunbedGroupId are singles and render their own umbrella inside SiteSunbedMarker.
-  const groupedBySunbedGroupId = (inventoryItems || []).reduce<Record<string, InventoryItem[]>>(
-    (acc, item) => {
-      const gid = item.sunbedGroupId;
-      if (!gid) return acc;
-      if (!acc[gid]) acc[gid] = [];
-      acc[gid].push(item);
-      return acc;
-    },
-    {}
-  );
-
-  const groupUmbrellaMarkers = Object.entries(groupedBySunbedGroupId).map(([groupId, members]) => {
-    const points = members.map(m => ({
-      lat: Number(m.locationLat),
-      lng: Number(m.locationLng),
-    }));
-    const centroid = getCentroid(points);
-    const shadeDiameter = dynamicSize * 0.6;
-    const dynamicHeight = dynamicSize * (zoom > 20 ? 1 : 1.1);
-    const dynamicWidth = dynamicSize / (zoom > 20 ? 2.1 : 1.9);
-    return (
-      <SafeAdvancedMarker key={`group-shade-${groupId}`} position={centroid} zIndex={10}>
-        <div
-          className="absolute"
-          style={{
-            position: 'absolute',
-            left: `-${dynamicWidth}px`,
-            top: '0px',
-            width: `${shadeDiameter}px`,
-            height: `${shadeDiameter}px`,
-            borderRadius: '50%',
-            backgroundColor: 'rgba(0, 0, 0, 0.3)',
-            zIndex: 10,
-          }}
-        >
-          <Image
-            src={sunshadeIcon}
-            alt="Sunshade"
-            height={dynamicSize}
-            style={{
-              marginTop: `-${(dynamicHeight - shadeDiameter) / 2}px`,
-              marginLeft: `-${(0)}px`,
-            }}
-          />
-        </div>
-      </SafeAdvancedMarker>
-    );
-  });
-
   return (
     <>
       <SafeAPIProvider apiKey={apiKey}>
@@ -469,7 +455,7 @@ function SunbedSelectionGeo({
           }}
         >
           {
-            zoom > 19 ? [...sunbedMarkers, ...groupUmbrellaMarkers] :
+            zoom > 19 ? sunbedMarkers :
               (parcelShapes || []).map((parcelShape, idx) => {
                 // Compute the parcel centroid.
                 const centroid = getCentroid(parcelShape.shape);
