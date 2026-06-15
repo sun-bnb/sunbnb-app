@@ -223,18 +223,28 @@ export default function ManageView({
     localStorage.setItem(VIEW_MODE_KEY, mode)
   }
 
-  // Seat column order — false = smallest seat number on the left (default),
-  // true = reversed (largest on the left). Per-device staff preference.
-  const [reversed, setReversed] = useState(false)
+  // Seat column order, per parcel — a parcel number in this set is reversed
+  // (largest seat number on the left); default is ascending (smallest on the
+  // left). Persisted per-site so a staff member's choice sticks per device.
+  const [reversedParcels, setReversedParcels] = useState<Set<number>>(new Set())
 
   useEffect(() => {
-    if (localStorage.getItem(SEAT_ORDER_REVERSED_KEY) === 'true') setReversed(true)
-  }, [])
+    try {
+      const stored = localStorage.getItem(`${SEAT_ORDER_REVERSED_KEY}-${site.id}`)
+      if (stored) setReversedParcels(new Set(JSON.parse(stored) as number[]))
+    } catch {
+      /* ignore malformed value */
+    }
+  }, [site.id])
 
-  const handleToggleReversed = () => {
-    setReversed(prev => {
-      const next = !prev
-      localStorage.setItem(SEAT_ORDER_REVERSED_KEY, String(next))
+  const isParcelReversed = (parcel: number) => reversedParcels.has(parcel)
+
+  const toggleParcelReversed = (parcel: number) => {
+    setReversedParcels(prev => {
+      const next = new Set(prev)
+      if (next.has(parcel)) next.delete(parcel)
+      else next.add(parcel)
+      localStorage.setItem(`${SEAT_ORDER_REVERSED_KEY}-${site.id}`, JSON.stringify([...next]))
       return next
     })
   }
@@ -328,23 +338,7 @@ export default function ManageView({
         )}
 
         {/* ── View Mode Toggle ── */}
-        <div className="col-span-2 flex justify-end sm:ml-auto gap-2">
-          {/* Reverse seat order (per-device staff preference) */}
-          <button
-            onClick={handleToggleReversed}
-            aria-label={t('reverseOrder')}
-            aria-pressed={reversed}
-            title={t('reverseOrder')}
-            className={`
-              flex items-center gap-1.5 px-3 min-h-[44px] text-xs rounded-lg border font-semibold transition-colors
-              ${reversed
-                ? 'bg-gray-900 text-white border-gray-900'
-                : 'bg-white text-gray-400 border-gray-200 hover:text-gray-700 hover:bg-gray-50'}
-            `}
-          >
-            <span aria-hidden="true">⇄</span>
-            <span className="hidden sm:inline">{t('reverseOrder')}</span>
-          </button>
+        <div className="col-span-2 flex justify-end sm:ml-auto">
           <div className="flex rounded-lg overflow-hidden border border-gray-200 font-semibold">
             <button
               onClick={() => handleViewMode('sections')}
@@ -399,13 +393,30 @@ export default function ManageView({
               Object.keys(positions).forEach(k => s.add(Number(k)))
               return s
             }, new Set())
-          ).sort((a, b) => (reversed ? b - a : a - b))
+          ).sort((a, b) => (isParcelReversed(parcelNum) ? b - a : a - b))
 
           return (
             <div key={parcel} className="mb-5">
-              <h2 className="text-base sm:text-lg font-bold mb-2 px-1">
-                {t('parcel', { n: parcel })}
-              </h2>
+              <div className="flex items-center gap-2 mb-2 px-1">
+                <h2 className="text-base sm:text-lg font-bold">
+                  {t('parcel', { n: parcel })}
+                </h2>
+                <button
+                  onClick={() => toggleParcelReversed(parcelNum)}
+                  aria-label={t('reverseOrder')}
+                  aria-pressed={isParcelReversed(parcelNum)}
+                  title={t('reverseOrder')}
+                  className={`
+                    flex items-center gap-1 px-2 min-h-[32px] text-xs rounded-md border font-semibold transition-colors
+                    ${isParcelReversed(parcelNum)
+                      ? 'bg-gray-900 text-white border-gray-900'
+                      : 'bg-white text-gray-400 border-gray-200 hover:text-gray-700 hover:bg-gray-50'}
+                  `}
+                >
+                  <span aria-hidden="true">⇄</span>
+                  <span className="hidden sm:inline">{t('reverseOrder')}</span>
+                </button>
+              </div>
 
               {/* Single scroll container — all rows stay aligned while scrolling */}
               <div className="overflow-x-auto">
@@ -448,6 +459,7 @@ export default function ManageView({
                           <Item
                             siteId={site.id!}
                             item={item}
+                            reversed={isParcelReversed(parcelNum)}
                             onSelect={() => { setSelectedItem(item); setSelectedItemIsPool(false) }}
                           />
                         </div>
@@ -481,13 +493,30 @@ export default function ManageView({
         }
 
         // ── Sectioned view (default) ──────────────────────────────────────────
-        const sections = chunkRows(rowEntries, chunkSize, reversed)
+        const sections = chunkRows(rowEntries, chunkSize, isParcelReversed(parcelNum))
 
         return (
           <div key={parcel} className="mb-5">
-            <h2 className="text-base sm:text-lg font-bold mb-2 px-1">
-              {t('parcel', { n: parcel })}
-            </h2>
+            <div className="flex items-center gap-2 mb-2 px-1">
+              <h2 className="text-base sm:text-lg font-bold">
+                {t('parcel', { n: parcel })}
+              </h2>
+              <button
+                onClick={() => toggleParcelReversed(parcelNum)}
+                aria-label={t('reverseOrder')}
+                aria-pressed={isParcelReversed(parcelNum)}
+                title={t('reverseOrder')}
+                className={`
+                  flex items-center gap-1 px-2 min-h-[32px] text-xs rounded-md border font-semibold transition-colors
+                  ${isParcelReversed(parcelNum)
+                    ? 'bg-gray-900 text-white border-gray-900'
+                    : 'bg-white text-gray-400 border-gray-200 hover:text-gray-700 hover:bg-gray-50'}
+                `}
+              >
+                <span aria-hidden="true">⇄</span>
+                <span className="hidden sm:inline">{t('reverseOrder')}</span>
+              </button>
+            </div>
 
             {sections.map((section, sectionIdx) => (
               <div key={sectionIdx} className={sectionIdx > 0 ? 'mt-4' : ''}>
@@ -528,6 +557,7 @@ export default function ManageView({
                             key={item.id}
                             siteId={site.id!}
                             item={item}
+                            reversed={isParcelReversed(parcelNum)}
                             onSelect={() => { setSelectedItem(item); setSelectedItemIsPool(false) }}
                           />
                         ) : (

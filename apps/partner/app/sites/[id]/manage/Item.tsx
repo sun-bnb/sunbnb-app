@@ -41,10 +41,13 @@ export default function SunbedItem({
   siteId,
   item,
   onSelect,
+  reversed = false,
 }: {
   siteId: string
   item: InventoryItem
   onSelect: () => void
+  /** Column order of the row this cell sits in — flips which side the pair gap is on. */
+  reversed?: boolean
 }) {
   if (item.status === 'disabled') {
     return <div className="basis-0 flex-1 p-2" />
@@ -60,7 +63,9 @@ export default function SunbedItem({
         ${bg} border-2 rounded-lg
         min-w-0 min-h-[44px]
         py-2 sm:py-3 px-0.5 flex flex-col items-center justify-center
-        ${item.number % 2 !== 0 ? 'mr-[3px] sm:mr-[6px]' : 'ml-[3px] sm:ml-[6px]'}
+        ${item.number % 2 !== 0
+          ? (reversed ? 'mr-[3px] sm:mr-[6px]' : 'ml-[3px] sm:ml-[6px]')
+          : (reversed ? 'ml-[3px] sm:ml-[6px]' : 'mr-[3px] sm:mr-[6px]')}
         active:brightness-90 transition-colors select-none
       `}
     >
