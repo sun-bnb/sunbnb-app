@@ -43,4 +43,7 @@ pointer here + the full entry in its section below.)*
 
 ## Rejected approaches
 
-<!-- Approaches tried and rejected — record so a future session doesn't re-try them -->
+### 2026-06-15: React onWheel prop for wheel zoom (passive listener no-op)
+**Problem:** React's synthetic `onWheel` prop attaches a passive listener. Calling `e.preventDefault()` inside it is silently ignored by the browser — the native page zoom fires anyway (and on macOS, ctrl+wheel triggers OS-level zoom).
+**Solution:** Register via `el.addEventListener('wheel', handler, { passive: false })` inside a `useEffect` on the element ref, with cleanup `removeEventListener`. This is what `SchematicRenderer.tsx` does (lines 340–363).
+**Prevention:** Any time you need to `preventDefault()` on a wheel event, skip `onWheel` prop and use the manual `addEventListener` pattern. The eslint-disable comment on the empty dep array is standard for this pattern — the handler reads a ref, not state.
