@@ -676,18 +676,15 @@ export async function createWalkInRental(input: {
 
 const POOL_BAND_BASE = 9900 // seq starts after this within each parcel's 10k block
 
-// ─── Create pool seat ────────────────────────────────────────────────────────
-
-export async function createPoolSeat(siteId: string, parcel: number, accessKey?: string) {
-  if (!Number.isInteger(parcel) || parcel < 1 || parcel > 9) {
-    return { status: 'error', errors: ['Invalid parcel number'] }
-  }
-
-  const ownership = await verifySiteOwnership(siteId, accessKey)
-  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
-
-  // Find the highest existing pool number in this parcel's pool band
-  // Pool band: parcel*10000 + 9901 to parcel*10000 + 9999
+/**
+ * Computes the next available number in a parcel's pool band.
+ * Pool band: parcel*10000 + 9901 to parcel*10000 + 9999 (max 99 seats).
+ * Returns { number } on success or { error } when the band is exhausted.
+ */
+async function nextPoolNumber(
+  siteId: string,
+  parcel: number
+): Promise<{ number: number } | { error: string }> {
   const bandMin = parcel * 10000 + POOL_BAND_BASE + 1
   const bandMax = parcel * 10000 + 9999
 
@@ -706,16 +703,33 @@ export async function createPoolSeat(siteId: string, parcel: number, accessKey?:
   const nextSeq = maxSeq + 1
 
   if (nextSeq > 99) {
-    return { status: 'error', errors: ['Maximum pool seats per parcel reached (99)'] }
+    return { error: 'Maximum pool seats per parcel reached (99)' }
   }
 
-  const number = parcel * 10000 + POOL_BAND_BASE + nextSeq
+  return { number: parcel * 10000 + POOL_BAND_BASE + nextSeq }
+}
+
+// ─── Create pool seat ────────────────────────────────────────────────────────
+
+export async function createPoolSeat(siteId: string, parcel: number, accessKey?: string) {
+  if (!Number.isInteger(parcel) || parcel < 1 || parcel > 9) {
+    return { status: 'error', errors: ['Invalid parcel number'] }
+  }
+
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  // Find the highest existing pool number in this parcel's pool band
+  const poolNum = await nextPoolNumber(siteId, parcel)
+  if ('error' in poolNum) {
+    return { status: 'error', errors: [poolNum.error] }
+  }
 
   await prisma.inventoryItem.create({
     data: {
       siteId,
       userId: ownership.userId,
-      number,
+      number: poolNum.number,
       status: 'pool',
       group: parcel,
       locationLat: '0',
@@ -726,6 +740,140 @@ export async function createPoolSeat(siteId: string, parcel: number, accessKey?:
       pairId: null,
     },
   })
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
+}
+
+// ─── Add extra seat to a sunbed group ────────────────────────────────────────
+//
+// Creates a status='pool' InventoryItem linked to the anchor item's SunbedGroup.
+// If the anchor doesn't have a SunbedGroup yet (legacy paired beds), one is
+// created and both the anchor and its pair partner are updated to reference it.
+
+export async function addSeatToGroup(siteId: string, itemId: string, accessKey?: string) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  // Load anchor item with all fields needed for group resolution and pool numbering
+  const anchor = await prisma.inventoryItem.findUnique({
+    where: { id: itemId },
+    select: {
+      siteId: true,
+      group: true,
+      number: true,
+      status: true,
+      sunbedGroupId: true,
+      pairId: true,
+      pairedBy: { select: { id: true } },
+    },
+  })
+
+  if (!anchor || anchor.siteId !== siteId) {
+    return { status: 'error', errors: ['Item not found'] }
+  }
+  // A FREE pool seat (no group) can't seed a group. A GROUP-EXTRA pool seat
+  // (already linked to a SunbedGroup) CAN — clicking it adds another extra to the
+  // same group, reusing its sunbedGroupId below.
+  if (anchor.status === 'pool' && !anchor.sunbedGroupId) {
+    return { status: 'error', errors: ['Cannot add a group seat to a free pool seat'] }
+  }
+
+  // Compute next pool number before entering the transaction (avoids holding the
+  // transaction open while doing a findMany that isn't write-conflicting anyway).
+  const poolNum = await nextPoolNumber(siteId, anchor.group)
+  if ('error' in poolNum) {
+    return { status: 'error', errors: [poolNum.error] }
+  }
+
+  const newItem = await prisma.$transaction(async (tx) => {
+    let groupId: string
+
+    if (anchor.sunbedGroupId) {
+      // Group already exists — use it directly
+      groupId = anchor.sunbedGroupId
+    } else {
+      // Self-heal: create a SunbedGroup and wire up the anchor + its pair partner
+      const newGroup = await tx.sunbedGroup.create({ data: { siteId } })
+      groupId = newGroup.id
+
+      const pairPartnerId = anchor.pairId ?? anchor.pairedBy?.id ?? null
+
+      // Update the anchor
+      await tx.inventoryItem.update({
+        where: { id: itemId },
+        data: { sunbedGroupId: groupId },
+      })
+
+      // Update the pair partner (if any)
+      if (pairPartnerId) {
+        await tx.inventoryItem.update({
+          where: { id: pairPartnerId },
+          data: { sunbedGroupId: groupId },
+        })
+      }
+    }
+
+    return tx.inventoryItem.create({
+      data: {
+        siteId,
+        userId: ownership.userId,
+        number: poolNum.number,
+        status: 'pool',
+        group: anchor.group,
+        locationLat: '0',
+        locationLng: '0',
+        schematicX: null,
+        schematicY: null,
+        itemGroupId: null,
+        pairId: null,
+        sunbedGroupId: groupId,
+      },
+    })
+  })
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok', itemId: newItem.id }
+}
+
+// ─── Remove a group extra seat ────────────────────────────────────────────────
+//
+// Deletes a status='pool' item that belongs to a SunbedGroup (a group extra).
+// Plain pool seats (no sunbedGroupId) must be removed via deletePoolSeat.
+
+export async function removeGroupSeat(siteId: string, itemId: string, accessKey?: string) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const item = await prisma.inventoryItem.findUnique({
+    where: { id: itemId },
+    select: { siteId: true, status: true, sunbedGroupId: true },
+  })
+
+  if (!item || item.siteId !== siteId) {
+    return { status: 'error', errors: ['Item not found'] }
+  }
+  if (item.status !== 'pool' || item.sunbedGroupId == null) {
+    return { status: 'error', errors: ['Item is not a group extra seat'] }
+  }
+
+  // Reject if the seat has an active reservation today
+  const todayStart = dayjs().startOf('day').toDate()
+  const todayEnd = dayjs().endOf('day').toDate()
+  const activeReservation = await prisma.reservation.findFirst({
+    where: {
+      siteId,
+      from: { lte: todayEnd },
+      to: { gte: todayStart },
+      operationalStatus: { notIn: ['departed', 'no-show'] },
+      items: { some: { id: itemId } },
+    },
+  })
+  if (activeReservation) {
+    return { status: 'error', errors: ['Release the seat before removing it'] }
+  }
+
+  await prisma.inventoryItem.delete({ where: { id: itemId } })
 
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok' }

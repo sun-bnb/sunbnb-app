@@ -46,7 +46,14 @@ export default async function ManagePage({ params, searchParams }: { params: { i
             orderBy: { from: 'asc' }
           },
           pair: true,
-          pairedBy: true
+          pairedBy: true,
+          sunbedGroup: {
+            include: {
+              items: {
+                select: { id: true, number: true, status: true }
+              }
+            }
+          }
         }
       },
       rentalItems: {

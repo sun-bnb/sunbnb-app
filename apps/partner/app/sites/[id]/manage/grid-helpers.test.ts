@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { computeChunkSize, chunkRows } from './grid-helpers'
+import {
+  computeChunkSize, chunkRows, groupExtraSeatLabel,
+  buildDisplayColumns, chunkDisplayColumns,
+} from './grid-helpers'
 import type { InventoryItem } from '@/types/shared'
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
@@ -176,5 +179,134 @@ describe('chunkRows', () => {
         expect(cells[1]!.number % 2).toBe(0) // second is even (pair partner)
       }
     }
+  })
+})
+
+// ── groupExtraSeatLabel ──────────────────────────────────────────────────────
+
+describe('groupExtraSeatLabel', () => {
+  // A group with regular members "1-103-1" / "1-103-2" (parcel 1, row 1, unit 03).
+  const reg1 = { id: 'r1', number: 103, seatLabel: '1-103-1', status: 'active' }
+  const reg2 = { id: 'r2', number: 104, seatLabel: '1-103-2', status: 'active' }
+  // Group-extra pool seats live in the parcel-1 pool band (1*10000 + 9900 + seq).
+  const extra1 = { id: 'e1', number: 19901, status: 'pool' }
+  const extra2 = { id: 'e2', number: 19902, status: 'pool' }
+
+  it('labels the first extra as the next group member (103-3)', () => {
+    expect(groupExtraSeatLabel(extra1, [reg1, reg2])).toBe('103-3')
+  })
+
+  it('numbers multiple extras sequentially by ascending seat number', () => {
+    expect(groupExtraSeatLabel(extra1, [reg1, reg2, extra2])).toBe('103-3')
+    expect(groupExtraSeatLabel(extra2, [reg1, reg2, extra1])).toBe('103-4')
+  })
+
+  it('derives the member offset from the highest labeled regular member, not the count', () => {
+    // A single labeled member "1-103-2" (member 2) → next extra is member 3, not 2.
+    expect(groupExtraSeatLabel(extra1, [reg2])).toBe('103-3')
+  })
+
+  it('falls back to "+N" when the group has no labeled regular member', () => {
+    const unlabeled = { id: 'r3', number: 105, seatLabel: null, status: 'active' }
+    expect(groupExtraSeatLabel(extra1, [unlabeled])).toBe('+1')
+    expect(groupExtraSeatLabel(extra2, [unlabeled, extra1])).toBe('+2')
+  })
+})
+
+// ── buildDisplayColumns ──────────────────────────────────────────────────────
+
+describe('buildDisplayColumns', () => {
+  it('inserts a gap separator after each pair (even position), but not trailing', () => {
+    const cols = buildDisplayColumns([1, 2, 3, 4], new Map())
+    expect(cols).toEqual([
+      { kind: 'pos', pos: 1 },
+      { kind: 'pos', pos: 2 },
+      { kind: 'gap' },
+      { kind: 'pos', pos: 3 },
+      { kind: 'pos', pos: 4 },
+    ])
+  })
+
+  it('inserts extra columns after the position, before the group gap', () => {
+    // Group at positions 3,4 has 2 extras → 2 extra columns after position 4,
+    // and (since position 4 is not the last) no trailing gap here.
+    const cols = buildDisplayColumns([1, 2, 3, 4], new Map([[4, 2]]))
+    expect(cols).toEqual([
+      { kind: 'pos', pos: 1 },
+      { kind: 'pos', pos: 2 },
+      { kind: 'gap' },
+      { kind: 'pos', pos: 3 },
+      { kind: 'pos', pos: 4 },
+      { kind: 'extra', afterPos: 4, slot: 0 },
+      { kind: 'extra', afterPos: 4, slot: 1 },
+    ])
+  })
+
+  it('places the group gap AFTER a group\'s extras', () => {
+    // 6 positions, group at 3,4 has 1 extra → extra then gap before position 5.
+    const cols = buildDisplayColumns([1, 2, 3, 4, 5, 6], new Map([[4, 1]]))
+    expect(cols).toEqual([
+      { kind: 'pos', pos: 1 },
+      { kind: 'pos', pos: 2 },
+      { kind: 'gap' },
+      { kind: 'pos', pos: 3 },
+      { kind: 'pos', pos: 4 },
+      { kind: 'extra', afterPos: 4, slot: 0 },
+      { kind: 'gap' },
+      { kind: 'pos', pos: 5 },
+      { kind: 'pos', pos: 6 },
+    ])
+  })
+
+  it('dedupes and sorts positions before building', () => {
+    const cols = buildDisplayColumns([4, 1, 2, 2, 3], new Map())
+    expect(cols.filter(c => c.kind === 'pos').map(c => (c as { pos: number }).pos)).toEqual([1, 2, 3, 4])
+  })
+
+  it('reverses the whole column list (extras + gaps stay with their group) when reversed', () => {
+    const cols = buildDisplayColumns([1, 2, 3, 4], new Map([[4, 1]]), true)
+    expect(cols).toEqual([
+      { kind: 'extra', afterPos: 4, slot: 0 },
+      { kind: 'pos', pos: 4 },
+      { kind: 'pos', pos: 3 },
+      { kind: 'gap' },
+      { kind: 'pos', pos: 2 },
+      { kind: 'pos', pos: 1 },
+    ])
+  })
+})
+
+// ── chunkDisplayColumns ──────────────────────────────────────────────────────
+
+describe('chunkDisplayColumns', () => {
+  it('keeps everything in one section when it fits (padded to chunkSize)', () => {
+    const cols = buildDisplayColumns([1, 2, 3, 4], new Map([[4, 1]]))
+    const sections = chunkDisplayColumns(cols, 10)
+    expect(sections).toHaveLength(1)
+    expect(sections[0]!.minPos).toBe(1)
+    expect(sections[0]!.maxPos).toBe(4)
+    // 4 seats + 1 extra = 5 seat columns → padded with 5 'pad' columns up to 10.
+    expect(sections[0]!.columns.filter(c => c.kind === 'pad')).toHaveLength(5)
+  })
+
+  it('derives min/max position from pos columns only, ignoring extras', () => {
+    const cols = buildDisplayColumns([1, 2, 3, 4, 5, 6], new Map([[6, 2]]))
+    const [s] = chunkDisplayColumns(cols, 10)
+    expect(s!.maxPos).toBe(6) // extra columns do not bump maxPos past position 6
+  })
+
+  it('counts only seat columns toward chunkSize, trims edge gaps, pads the short last section', () => {
+    const cols = buildDisplayColumns([1, 2, 3, 4, 5, 6], new Map())
+    const sections = chunkDisplayColumns(cols, 4)
+    expect(sections).toHaveLength(2)
+    // First section: positions 1–4, exactly chunkSize seats, no padding needed.
+    expect(sections[0]!.columns.filter(c => c.kind === 'pos')).toHaveLength(4)
+    expect(sections[0]!.columns.filter(c => c.kind === 'pad')).toHaveLength(0)
+    // No section begins or ends on a gap separator.
+    expect(sections[0]!.columns[0]!.kind).not.toBe('gap')
+    expect(sections[0]!.columns[sections[0]!.columns.length - 1]!.kind).not.toBe('gap')
+    // Last section: 2 real seats padded up to chunkSize (4) with 2 'pad' columns.
+    expect(sections[1]!.columns.filter(c => c.kind === 'pos')).toHaveLength(2)
+    expect(sections[1]!.columns.filter(c => c.kind === 'pad')).toHaveLength(2)
   })
 })

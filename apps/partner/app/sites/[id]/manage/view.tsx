@@ -8,7 +8,10 @@ import Item from './Item'
 import BedDetail from './BedDetail'
 import RentalBookingCard from './RentalBookingCard'
 import CreateRentalModal from './CreateRentalModal'
-import { computeChunkSize, chunkRows, ROW_LABEL_WIDTH } from './grid-helpers'
+import {
+  computeChunkSize, ROW_LABEL_WIDTH, groupExtraSeatLabel,
+  buildDisplayColumns, chunkDisplayColumns, type DisplayColumn,
+} from './grid-helpers'
 import { createPoolSeat } from './actions'
 import {
   OP_EXPECTED, OP_CHECKED_IN, OP_WALKED_IN, OP_DEPARTED, OP_NO_SHOW,
@@ -37,6 +40,22 @@ function getPoolSeq(item: InventoryItem): number {
 
 const VIEW_MODE_KEY = 'sunbnb-manage-view'
 const SEAT_ORDER_REVERSED_KEY = 'sunbnb-manage-seat-order-reversed'
+const MANAGE_ZOOM_KEY = 'sunbnb-manage-zoom'
+
+const ZOOM_MIN = 0.5
+const ZOOM_MAX = 2.5
+const ZOOM_STEP = 0.25
+
+// Fixed width (px) of the gap track BETWEEN groups in the SCROLL view.
+const GROUP_GAP_PX = 14
+// Narrower group separator in the SECTIONED view (cells are denser there).
+const SECTION_GROUP_GAP_PX = 8
+
+// Sectioned view fills the width with uniform 1fr seat cells, wrapping into
+// stacked sections. SECTION_FIT_WIDTH is the target/min cell width used to decide
+// how many columns fit per section; a short final section is padded so its cells
+// match a full section's width rather than stretching.
+const SECTION_FIT_WIDTH = 48
 
 function getActiveReservation(item: InventoryItem): Reservation | null {
   if (!item.reservations?.length) return null
@@ -124,20 +143,18 @@ function PoolSection({
 }) {
   const occupied = poolItems.filter(i => getBedState(i) !== 'available').length
 
-  // Always render — even when empty — so the add-seat button is always visible
+  // Always render — even when empty — so the add-seat button is always visible.
+  // Separated from the mapped seats by a thin ruler (no tinted background, no title).
   return (
-    <div className="mt-2">
-      <div className="bg-gray-100 rounded-xl px-2 pt-2 pb-2">
-        {/* Caption — small and muted, reads as a section annotation */}
-        <div className="text-xs text-gray-400 mb-1.5 px-0.5 leading-none">
-          {t('additionalSeats')}
-          {poolItems.length > 0 && (
-            <span className="ml-1">· {occupied}/{poolItems.length}</span>
-          )}
+    <div className="mt-3 pt-3 border-t border-gray-200">
+      {poolItems.length > 0 && (
+        <div className="text-xs text-gray-400 mb-1.5 px-0.5 leading-none tabular-nums">
+          {occupied}/{poolItems.length}
         </div>
+      )}
 
-        {/* Seats + outline add-seat button in a wrapping flex row */}
-        <div className="flex flex-wrap gap-1">
+      {/* Seats + outline add-seat button in a wrapping flex row */}
+      <div className="flex flex-wrap gap-1">
           {poolItems.map(item => (
             <PoolCell
               key={item.id}
@@ -165,7 +182,6 @@ function PoolSection({
               <span aria-hidden="true">+</span>
             )}
           </button>
-        </div>
       </div>
     </div>
   )
@@ -206,6 +222,7 @@ export default function ManageView({
   const router = useRouter()
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
   const [selectedItemIsPool, setSelectedItemIsPool] = useState(false)
+  const [selectedItemIsGroupExtra, setSelectedItemIsGroupExtra] = useState(false)
   const [showRentalModal, setShowRentalModal] = useState(false)
   const [isPendingPool, startPoolTransition] = useTransition()
 
@@ -249,9 +266,45 @@ export default function ManageView({
     })
   }
 
+  // Zoom — initialised to 1 so SSR and first client render match,
+  // then overridden from localStorage in useEffect (avoids hydration mismatch).
+  // Stored per-site so each venue can have its own preferred zoom level.
+  const [zoom, setZoom] = useState(1)
+
+  // Mirror zoom into a ref so the wheel handler (registered once) always reads
+  // the latest value without a stale closure. Updated in sync with setZoom.
+  const zoomRef = useRef(1)
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`${MANAGE_ZOOM_KEY}-${site.id}`)
+      if (stored !== null) {
+        const v = parseFloat(stored)
+        if (!isNaN(v)) {
+          const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, v))
+          setZoom(clamped)
+          zoomRef.current = clamped
+        }
+      }
+    } catch {
+      /* ignore malformed value */
+    }
+  }, [site.id])
+
+  const applyZoom = (next: number) => {
+    const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next))
+    zoomRef.current = clamped
+    setZoom(clamped)
+    try { localStorage.setItem(`${MANAGE_ZOOM_KEY}-${site.id}`, String(clamped)) } catch { /* ignore */ }
+  }
+  const zoomIn = () => applyZoom(Math.round((zoom + ZOOM_STEP) * 100) / 100)
+  const zoomOut = () => applyZoom(Math.round((zoom - ZOOM_STEP) * 100) / 100)
+  const resetZoom = () => applyZoom(1)
+
   // Measure the container width so we can compute how many bed columns fit.
   // ResizeObserver fires once immediately on observe() then on every resize/
   // orientation change — no separate window-resize listener needed.
+  // Declared here (before the gesture handlers) so containerRef is in scope.
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState<number>(0)
 
@@ -265,9 +318,140 @@ export default function ManageView({
     return () => ro.disconnect()
   }, [])
 
+  // ── Trackpad pinch / ctrl+wheel zoom (desktop) ───────────────────────────────
+  // Mac trackpad pinch-to-zoom and ctrl+wheel both arrive as a WheelEvent with
+  // ctrlKey=true. We must attach via addEventListener with { passive: false } so
+  // that e.preventDefault() actually suppresses the browser's native page zoom —
+  // React's synthetic onWheel listener is always passive, making preventDefault
+  // a no-op there (same reason SchematicRenderer uses this pattern).
+  //
+  // Stale-closure guard: the handler is registered once (empty deps) and reads
+  // zoomRef.current, which applyZoom keeps in sync on every zoom change.
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    const onWheel = (e: WheelEvent) => {
+      // Only intercept ctrl+wheel / trackpad pinch; leave normal scroll alone
+      if (!e.ctrlKey) return
+      e.preventDefault()
+
+      // Exponential factor: pinch-out → negative deltaY → factor > 1 → zoom in
+      // Small constant (0.01) keeps trackpad deltas (typically 1–5) gentle.
+      const factor = Math.exp(-e.deltaY * 0.01)
+      const nextZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoomRef.current * factor))
+      applyZoom(nextZoom)
+    }
+
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // intentionally empty — handler reads zoomRef, applyZoom is stable
+
+  // ── Pinch-to-zoom (touch) ─────────────────────────────────────────────────────
+  // Tracks all active pointer contacts in a Map (id → {x,y}). When two pointers
+  // are live we compute a pinch ratio vs the initial distance and drive `zoom`.
+  // Single-touch panning is left entirely to native browser scroll (touch-action:
+  // pan-x pan-y on the scroll containers below). Matches the SchematicRenderer
+  // ref-Map pattern to avoid re-renders on every pointermove.
+
+  // Active pointers over the grid area (shared across both view modes)
+  const pinchPointers = useRef<Map<number, { x: number; y: number }>>(new Map())
+  // State captured at the moment the second finger lands
+  const pinchStart = useRef<{
+    dist: number   // initial distance between the two pointers
+    zoom: number   // zoom value at gesture start
+  } | null>(null)
+
+  const handleGridPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    pinchPointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+    if (pinchPointers.current.size === 2) {
+      // Second finger landed — record the gesture baseline
+      const pts = Array.from(pinchPointers.current.values())
+      const p0 = pts[0]!
+      const p1 = pts[1]!
+      const dist = Math.hypot(p1.x - p0.x, p1.y - p0.y)
+      pinchStart.current = { dist, zoom }
+    }
+  }
+
+  const handleGridPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!pinchPointers.current.has(e.pointerId)) return
+    pinchPointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+    const ps = pinchStart.current
+    if (!ps || pinchPointers.current.size < 2) return
+
+    // Suppress native page pinch-zoom while a two-finger gesture is active
+    e.preventDefault()
+
+    const pts = Array.from(pinchPointers.current.values())
+    const p0 = pts[0]!
+    const p1 = pts[1]!
+    const currentDist = Math.hypot(p1.x - p0.x, p1.y - p0.y)
+    const ratio = ps.dist > 0 ? currentDist / ps.dist : 1
+    const nextZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, ps.zoom * ratio))
+
+    // Nudge the scroll container so the content under the fingers doesn't jump
+    // wildly — a simple proportional adjustment, not pixel-perfect.
+    if (nextZoom !== zoom) {
+      const zoomRatio = nextZoom / zoom
+      // Find the nearest horizontally-scrolling ancestor (scroll view containers)
+      const scrollEl = (e.target as HTMLElement).closest<HTMLElement>('.overflow-x-auto')
+      if (scrollEl) {
+        scrollEl.scrollLeft = scrollEl.scrollLeft * zoomRatio
+      }
+    }
+
+    applyZoom(nextZoom)
+  }
+
+  const handleGridPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    pinchPointers.current.delete(e.pointerId)
+
+    if (pinchPointers.current.size < 2) {
+      // Pinch ended (one or zero fingers left) — clear the baseline
+      pinchStart.current = null
+    }
+  }
+
+  // ── Drag-to-pan for the scroll view (desktop mouse only) ──────────────────
+  // Threshold prevents accidental panning on short taps. Each scroll container
+  // gets its own ref; we share a single drag-state ref and attach identical
+  // handlers per container. Touch scroll is left to the browser — touch pointer
+  // events go to the pinch handler above instead.
+  const dragState = useRef<{
+    el: HTMLElement
+    startX: number
+    scrollLeft: number
+    moved: boolean
+  } | null>(null)
+
+  const handleScrollPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'touch') return
+    const el = e.currentTarget
+    dragState.current = { el, startX: e.clientX, scrollLeft: el.scrollLeft, moved: false }
+    el.setPointerCapture(e.pointerId)
+  }
+
+  const handleScrollPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const ds = dragState.current
+    if (!ds || e.pointerType === 'touch') return
+    const dx = e.clientX - ds.startX
+    if (!ds.moved && Math.abs(dx) <= 5) return  // threshold — don't pan on micro-movements
+    ds.moved = true
+    ds.el.scrollLeft = ds.scrollLeft - dx
+  }
+
+  const handleScrollPointerUp = () => { dragState.current = null }
+
   // Default to 50 until measured — keeps all beds in a single section on the
   // first render, avoiding a visible layout jump on small sites.
-  const chunkSize = containerWidth > 0 ? computeChunkSize(containerWidth) : 50
+  // Sectioned view uses constant-size cells (no zoom scaling); chunkSize is just
+  // how many fixed-width cells fit the container, so each section row fills the
+  // width and the remainder wraps to the next stacked section.
+  const chunkSize = containerWidth > 0 ? computeChunkSize(containerWidth, { minBedWidth: SECTION_FIT_WIDTH }) : 50
 
   // Auto-refresh every 30 seconds so Carlos sees new bookings
   useEffect(() => {
@@ -280,7 +464,12 @@ export default function ManageView({
   // Pool seats (status='pool') are separated from the regular grid.
   // They are NOT counted in the headline occupancy summary — tracked only within
   // their own per-parcel section (product decision).
-  const poolItems = inventoryItems.filter(i => i.status === 'pool')
+  //
+  // Two flavours of pool seat:
+  //   freePoolItems  — status='pool' && !sunbedGroupId → per-parcel strip (existing PoolSection)
+  //   groupExtraItems — status='pool' && sunbedGroupId  → rendered inline with their group
+  const freePoolItems = inventoryItems.filter(i => i.status === 'pool' && !i.sunbedGroupId)
+  const groupExtraItems = inventoryItems.filter(i => i.status === 'pool' && !!i.sunbedGroupId)
   const regularItems = inventoryItems.filter(i => i.status !== 'pool')
 
   // Headline summary excludes pool seats and disabled items
@@ -305,16 +494,47 @@ export default function ManageView({
     return acc
   }, {} as Record<number, Record<number, Record<number, InventoryItem>>>)
 
-  // Group pool items by parcel
-  const poolByParcel = poolItems.reduce((acc, item) => {
+  // Group FREE pool items by parcel (these go in the per-parcel PoolSection strip)
+  const poolByParcel = freePoolItems.reduce((acc, item) => {
     const parcel = parseInt(String(item.number)[0]!, 10)
     if (!acc[parcel]) acc[parcel] = []
     acc[parcel].push(item)
     return acc
   }, {} as Record<number, InventoryItem[]>)
 
+  // Group-extra pool seats render INLINE, clustered with their group's regular
+  // members so the whole group reads as ONE tight cluster (like a pair, but N
+  // members). Index extras by sunbedGroupId; at render time the group's
+  // TRAILING regular member (the one drawn last in the current row direction)
+  // becomes the anchor and the extras are emitted immediately after it — on the
+  // cluster's outer edge. Sorted by seat number so they read left→right stably.
+  const groupExtrasByGroupId = new Map<string, InventoryItem[]>()
+  for (const extra of groupExtraItems) {
+    if (!extra.sunbedGroupId) continue
+    const list = groupExtrasByGroupId.get(extra.sunbedGroupId) ?? []
+    list.push(extra)
+    groupExtrasByGroupId.set(extra.sunbedGroupId, list)
+  }
+  for (const list of groupExtrasByGroupId.values()) {
+    list.sort((a, b) => a.number - b.number)
+  }
+
+  // All OTHER members of an item's group (regular + extras) — for label derivation.
+  const otherGroupMembers = (it: InventoryItem): InventoryItem[] =>
+    it.sunbedGroupId
+      ? inventoryItems.filter(i => i.id !== it.id && i.sunbedGroupId === it.sunbedGroupId)
+      : []
+
   return (
-    <div ref={containerRef} className="px-2 pt-2 pb-20 mx-auto w-full max-w-screen-lg">
+    <div
+      ref={containerRef}
+      className="px-2 pt-2 pb-20 mx-auto w-full max-w-screen-lg"
+      style={{ touchAction: 'pan-x pan-y' }}
+      onPointerDown={handleGridPointerDown}
+      onPointerMove={handleGridPointerMove}
+      onPointerUp={handleGridPointerUp}
+      onPointerCancel={handleGridPointerUp}
+    >
       {/* ── Summary Bar ── */}
       <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-2 sm:gap-4 mb-3 px-3 py-3 sm:px-4 sm:py-4 bg-white rounded-xl text-sm sm:text-base font-bold sticky top-0 z-10 border-2 shadow-sm">
         <span className="text-gray-900 text-base sm:text-lg col-span-2 sm:col-span-1">{occupied}/{total}</span>
@@ -337,8 +557,42 @@ export default function ManageView({
           </span>
         )}
 
-        {/* ── View Mode Toggle ── */}
-        <div className="col-span-2 flex justify-end sm:ml-auto">
+        {/* ── Zoom + View Mode Controls ── */}
+        <div className="col-span-2 flex items-center justify-end gap-2 sm:ml-auto">
+          {/* Zoom control — "−  100%  +" — only meaningful in the scroll view;
+              the sectioned view uses constant-size cells. */}
+          {viewMode === 'scroll' && (
+            <div className="flex rounded-lg overflow-hidden border border-gray-200 font-semibold">
+              <button
+                onClick={zoomOut}
+                disabled={zoom <= ZOOM_MIN}
+                aria-label={t('zoomOut')}
+                title={t('zoomOut')}
+                className="flex items-center justify-center px-3 min-h-[44px] text-sm transition-colors bg-white text-gray-600 hover:text-gray-900 hover:bg-gray-50 disabled:text-gray-300 disabled:cursor-not-allowed"
+              >
+                −
+              </button>
+              <button
+                onClick={resetZoom}
+                aria-label={t('resetZoom')}
+                title={t('resetZoom')}
+                className="flex items-center justify-center px-2 min-h-[44px] text-xs font-semibold border-l border-gray-200 transition-colors bg-white text-gray-600 hover:text-gray-900 hover:bg-gray-50 tabular-nums min-w-[3.5rem]"
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <button
+                onClick={zoomIn}
+                disabled={zoom >= ZOOM_MAX}
+                aria-label={t('zoomIn')}
+                title={t('zoomIn')}
+                className="flex items-center justify-center px-3 min-h-[44px] text-sm border-l border-gray-200 transition-colors bg-white text-gray-600 hover:text-gray-900 hover:bg-gray-50 disabled:text-gray-300 disabled:cursor-not-allowed"
+              >
+                +
+              </button>
+            </div>
+          )}
+
+          {/* View mode toggle */}
           <div className="flex rounded-lg overflow-hidden border border-gray-200 font-semibold">
             <button
               onClick={() => handleViewMode('sections')}
@@ -383,18 +637,59 @@ export default function ManageView({
         // Pool seats for this parcel (sorted by seq = number ascending)
         const parcelPoolItems = (poolByParcel[parcelNum] || []).slice().sort((a, b) => a.number - b.number)
 
+        // ── Column-aligned layout (shared) ─────────────────────────────────────
+        // Each seat position is a grid column shared by EVERY row. A group with
+        // extra seats reserves additional columns after its trailing position;
+        // those columns are global, so a column widened by one group widens for
+        // all rows — groups with fewer seats just render empty space, keeping the
+        // grid aligned in rows and columns.
+        const reversed = isParcelReversed(parcelNum)
+        const parcelPositions = Array.from(
+          rowEntries.reduce<Set<number>>((s, [, positions]) => {
+            Object.keys(positions).forEach(k => s.add(Number(k)))
+            return s
+          }, new Set())
+        )
+        // position → max extra count among groups whose trailing (highest) position is that position
+        const extraSlotsAfter = new Map<number, number>()
+        for (const [gid, extras] of groupExtrasByGroupId) {
+          const members = regularItems.filter(r => r.sunbedGroupId === gid)
+          if (members.length === 0) continue
+          const parsed = members.map(m => parseSunbedNumber(m.number))
+          if (parsed[0]!.parcel !== parcelNum) continue
+          const trailingPos = Math.max(...parsed.map(p => p.position))
+          extraSlotsAfter.set(trailingPos, Math.max(extraSlotsAfter.get(trailingPos) ?? 0, extras.length))
+        }
+        const displayColumns = buildDisplayColumns(parcelPositions, extraSlotsAfter, reversed)
+
+        // Resolve a seat/extra display column to what THIS row renders in it.
+        // ('gap' columns are rendered directly in the markup, not here.)
+        type ResolvedCell =
+          | { kind: 'seat'; item: InventoryItem }
+          | { kind: 'extra'; item: InventoryItem; label: string }
+          | { kind: 'empty' }
+        const resolveColumn = (col: DisplayColumn, positions: Record<number, InventoryItem>): ResolvedCell => {
+          if (col.kind === 'gap' || col.kind === 'pad') return { kind: 'empty' }
+          if (col.kind === 'pos') {
+            const item = positions[col.pos]
+            return item ? { kind: 'seat', item } : { kind: 'empty' }
+          }
+          // Extra column: this row fills it only if the seat at afterPos is its
+          // group's trailing member AND the group has a slot-th extra.
+          const trailing = positions[col.afterPos]
+          const gid = trailing?.sunbedGroupId
+          if (!trailing || !gid) return { kind: 'empty' }
+          const members = regularItems.filter(r => r.sunbedGroupId === gid)
+          const trailingPos = Math.max(...members.map(m => parseSunbedNumber(m.number).position))
+          if (trailingPos !== col.afterPos) return { kind: 'empty' }
+          const groupExtras = groupExtrasByGroupId.get(gid) ?? []
+          const extra = groupExtras[col.slot]
+          if (!extra) return { kind: 'empty' }
+          return { kind: 'extra', item: extra, label: groupExtraSeatLabel(extra, otherGroupMembers(extra)) }
+        }
+
         // ── Horizontal-scroll view ────────────────────────────────────────────
         if (viewMode === 'scroll') {
-          // Collect all positions across every row, ordered to match the
-          // sectioned view: smallest seat number on the left by default,
-          // reversed (largest on the left) when the staff toggle is on.
-          const allPositions = Array.from(
-            rowEntries.reduce<Set<number>>((s, [, positions]) => {
-              Object.keys(positions).forEach(k => s.add(Number(k)))
-              return s
-            }, new Set())
-          ).sort((a, b) => (isParcelReversed(parcelNum) ? b - a : a - b))
-
           return (
             <div key={parcel} className="mb-5">
               <div className="flex items-center gap-2 mb-2 px-1">
@@ -418,61 +713,108 @@ export default function ManageView({
                 </button>
               </div>
 
-              {/* Single scroll container — all rows stay aligned while scrolling */}
-              <div className="overflow-x-auto">
-                {rowEntries.map(([rowNum, positions]) => (
-                  <div
-                    key={rowNum}
-                    className={`
-                      flex items-stretch gap-1 mb-0.5 rounded-lg py-0.5
-                      ${rowNum % 2 === 0 ? 'bg-gray-50' : ''}
-                    `}
-                  >
-                    {/* Row-label badge — sticky to the left so it stays visible
-                        while the bed cells scroll horizontally beneath it.
-                        Background matches the row strip so cells slide cleanly under it. */}
+              {/* Single scroll container — all rows stay aligned while scrolling.
+                  Drag-to-pan on desktop; one-finger pan on touch via native
+                  browser scroll (touch-action: pan-x pan-y lets the browser
+                  handle single-touch; two-finger pinch is handled by the
+                  outer container's pointer handlers above). */}
+              <div
+                className={`overflow-x-auto select-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${zoom !== 1 ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                style={{ touchAction: 'pan-x pan-y' }}
+                onPointerDown={handleScrollPointerDown}
+                onPointerMove={handleScrollPointerMove}
+                onPointerUp={handleScrollPointerUp}
+                onPointerLeave={handleScrollPointerUp}
+              >
+                {/* CSS zoom scales the rendered content; the overflow container then
+                    reports the scaled scrollWidth so panning the container works
+                    correctly. Sticky left-0 row labels pin within the zoom frame. */}
+                <div style={{ zoom }}>
+                  {rowEntries.map(([rowNum, positions]) => (
                     <div
+                      key={rowNum}
                       className={`
-                        sticky left-0 z-10 flex-shrink-0
-                        flex items-center justify-center
-                        ${rowNum % 2 === 0 ? 'bg-gray-50' : 'bg-white'}
+                        flex items-stretch gap-1 mb-0.5 rounded-lg py-0.5
+                        ${rowNum % 2 === 0 ? 'bg-gray-50' : ''}
                       `}
-                      style={{ width: ROW_LABEL_WIDTH }}
                     >
-                      <span className="text-[10px] font-bold text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 leading-none whitespace-nowrap">
-                        {t('rowLabel', { n: rowNum })}
-                      </span>
-                    </div>
+                      {/* Row-label badge — sticky to the left so it stays visible
+                          while the bed cells scroll horizontally beneath it.
+                          Background matches the row strip so cells slide cleanly under it. */}
+                      <div
+                        className={`
+                          sticky left-0 z-10 flex-shrink-0
+                          flex items-center justify-center
+                          ${rowNum % 2 === 0 ? 'bg-gray-50' : 'bg-white'}
+                        `}
+                        style={{ width: ROW_LABEL_WIDTH }}
+                      >
+                        <span className="text-[10px] font-bold text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 leading-none whitespace-nowrap">
+                          {t('rowLabel', { n: rowNum })}
+                        </span>
+                      </div>
 
-                    {/* Fixed-width bed cells — ~48px each so they never shrink;
-                        the scroll container widens instead.
-                        Using a single-column grid wrapper makes the Item button
-                        stretch to fill the cell (grid items stretch by default). */}
-                    {allPositions.map(pos => {
-                      const item = positions[pos] ?? null
-                      return item ? (
-                        <div
-                          key={pos}
-                          className="flex-shrink-0"
-                          style={{ display: 'grid', width: 48 }}
-                        >
-                          <Item
-                            siteId={site.id!}
-                            item={item}
-                            reversed={isParcelReversed(parcelNum)}
-                            onSelect={() => { setSelectedItem(item); setSelectedItemIsPool(false) }}
-                          />
-                        </div>
-                      ) : (
-                        <div
-                          key={pos}
-                          className="flex-shrink-0 min-h-[44px]"
-                          style={{ width: 48 }}
-                        />
-                      )
-                    })}
-                  </div>
-                ))}
+                      {/* Fixed-width bed cells — ~48px each so they never shrink;
+                          the scroll container widens instead. Every row renders the
+                          SAME display columns (incl. global extra columns + empty
+                          spacers) so seats stay aligned in rows and columns. */}
+                      {displayColumns.map((col, colIdx) => {
+                        if (col.kind === 'gap') {
+                          return <div key={`g${colIdx}`} className="flex-shrink-0" style={{ width: GROUP_GAP_PX }} />
+                        }
+                        if (col.kind === 'pad') return null // pads exist only in the sectioned view
+                        const key = col.kind === 'pos' ? `p${col.pos}` : `x${col.afterPos}-${col.slot}`
+                        const resolved = resolveColumn(col, positions)
+                        if (resolved.kind === 'empty') {
+                          return (
+                            <div
+                              key={key}
+                              className="flex-shrink-0 min-h-[44px]"
+                              style={{ width: 48 }}
+                            />
+                          )
+                        }
+                        if (resolved.kind === 'seat') {
+                          return (
+                            <div
+                              key={key}
+                              className="flex-shrink-0"
+                              style={{ display: 'grid', width: 48 }}
+                            >
+                              <Item
+                                siteId={site.id!}
+                                item={resolved.item}
+                                onSelect={() => { setSelectedItem(resolved.item); setSelectedItemIsPool(false); setSelectedItemIsGroupExtra(false) }}
+                              />
+                            </div>
+                          )
+                        }
+                        const extraState = getBedState(resolved.item)
+                        return (
+                          <div
+                            key={key}
+                            className="flex-shrink-0"
+                            style={{ width: 48 }}
+                          >
+                            <button
+                              onClick={() => { setSelectedItem(resolved.item); setSelectedItemIsPool(false); setSelectedItemIsGroupExtra(true) }}
+                              className={`
+                                ${POOL_STATE_STYLES[extraState]} border-2 rounded-lg
+                                w-full min-h-[44px]
+                                py-2 px-0.5 flex flex-col items-center justify-center
+                                active:brightness-90 transition-colors select-none
+                              `}
+                              title={`Seat ${resolved.label}`}
+                            >
+                              {POOL_ICONS[extraState] && <span className="text-[10px] leading-none">{POOL_ICONS[extraState]}</span>}
+                              <span className="text-[10px] leading-none opacity-70">{resolved.label}</span>
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* Pool section (scroll view) */}
@@ -493,7 +835,7 @@ export default function ManageView({
         }
 
         // ── Sectioned view (default) ──────────────────────────────────────────
-        const sections = chunkRows(rowEntries, chunkSize, isParcelReversed(parcelNum))
+        const sections = chunkDisplayColumns(displayColumns, chunkSize)
 
         return (
           <div key={parcel} className="mb-5">
@@ -527,8 +869,11 @@ export default function ManageView({
                   </div>
                 )}
 
-                {/* Row strips */}
-                {section.rows.map(({ rowNum, cells }) => (
+                {/* Row strips — every row renders the SAME display columns, so
+                    seats line up in rows and columns. A column reserved for a
+                    group's extra seat exists in every row; rows whose group has
+                    no seat there render empty space. */}
+                {rowEntries.map(([rowNum, positions]) => (
                   <div
                     key={rowNum}
                     className={`
@@ -546,24 +891,51 @@ export default function ManageView({
                       </span>
                     </div>
 
-                    {/* Bed cells — fixed chunkSize columns so every section is the same width */}
                     <div
                       className="flex-1 grid gap-1"
-                      style={{ gridTemplateColumns: `repeat(${chunkSize}, minmax(0, 1fr))` }}
+                      style={{
+                        gridTemplateColumns: section.columns
+                          .map(c => (c.kind === 'gap' ? `${SECTION_GROUP_GAP_PX}px` : 'minmax(0, 1fr)'))
+                          .join(' '),
+                      }}
                     >
-                      {cells.map((item, cellIdx) =>
-                        item ? (
-                          <Item
-                            key={item.id}
-                            siteId={site.id!}
-                            item={item}
-                            reversed={isParcelReversed(parcelNum)}
-                            onSelect={() => { setSelectedItem(item); setSelectedItemIsPool(false) }}
-                          />
-                        ) : (
-                          <div key={`spacer-${cellIdx}`} className="min-h-[44px]" />
+                      {section.columns.map((col, colIdx) => {
+                        if (col.kind === 'gap') return <div key={`g${colIdx}`} />
+                        if (col.kind === 'pad') return <div key={`pad${colIdx}`} className="min-h-[44px]" />
+                        const key = col.kind === 'pos' ? `p${col.pos}` : `x${col.afterPos}-${col.slot}`
+                        const resolved = resolveColumn(col, positions)
+                        if (resolved.kind === 'empty') {
+                          return <div key={key} className="min-h-[44px]" />
+                        }
+                        if (resolved.kind === 'seat') {
+                          return (
+                            <Item
+                              key={key}
+                              siteId={site.id!}
+                              item={resolved.item}
+                              onSelect={() => { setSelectedItem(resolved.item); setSelectedItemIsPool(false); setSelectedItemIsGroupExtra(false) }}
+                            />
+                          )
+                        }
+                        // Group-extra seat — a full-width cell like any other.
+                        const extraState = getBedState(resolved.item)
+                        return (
+                          <button
+                            key={key}
+                            onClick={() => { setSelectedItem(resolved.item); setSelectedItemIsPool(false); setSelectedItemIsGroupExtra(true) }}
+                            className={`
+                              ${POOL_STATE_STYLES[extraState]} border-2 rounded-lg
+                              min-w-0 min-h-[44px]
+                              py-2 sm:py-3 px-0.5 flex flex-col items-center justify-center
+                              active:brightness-90 transition-colors select-none
+                            `}
+                            title={`Seat ${resolved.label}`}
+                          >
+                            {POOL_ICONS[extraState] && <span className="text-[10px] leading-none">{POOL_ICONS[extraState]}</span>}
+                            <span className="text-[10px] leading-none opacity-70">{resolved.label}</span>
+                          </button>
                         )
-                      )}
+                      })}
                     </div>
                   </div>
                 ))}
@@ -637,11 +1009,18 @@ export default function ManageView({
         <BedDetail
           siteId={site.id!}
           item={selectedItem}
-          pairItem={selectedItemIsPool ? null : (inventoryItems.find(i => i.id !== selectedItem.id && !!i.sunbedGroupId && i.sunbedGroupId === selectedItem.sunbedGroupId) ?? null)}
+          groupItems={
+            selectedItem.sunbedGroupId
+              ? inventoryItems.filter(i => i.id !== selectedItem.id && i.sunbedGroupId === selectedItem.sunbedGroupId)
+              : []
+          }
           accessKey={accessKey}
           isPool={selectedItemIsPool}
-          onClose={() => { setSelectedItem(null); setSelectedItemIsPool(false) }}
-          onPoolSeatRemoved={() => { setSelectedItem(null); setSelectedItemIsPool(false); router.refresh() }}
+          isGroupExtra={selectedItemIsGroupExtra}
+          onClose={() => { setSelectedItem(null); setSelectedItemIsPool(false); setSelectedItemIsGroupExtra(false) }}
+          onPoolSeatRemoved={() => { setSelectedItem(null); setSelectedItemIsPool(false); setSelectedItemIsGroupExtra(false); router.refresh() }}
+          onGroupSeatAdded={() => { router.refresh() }}
+          onGroupSeatRemoved={() => { setSelectedItem(null); setSelectedItemIsPool(false); setSelectedItemIsGroupExtra(false); router.refresh() }}
         />
       )}
 

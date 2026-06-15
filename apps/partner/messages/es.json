@@ -731,7 +731,10 @@
     "viewScroll": "Desplazar",
     "reverseOrder": "Invertir",
     "additionalSeats": "asientos adicionales",
-    "poolAddSeat": "Añadir asiento"
+    "poolAddSeat": "Añadir asiento",
+    "zoomIn": "Ampliar",
+    "zoomOut": "Reducir",
+    "resetZoom": "Restablecer zoom"
   },
   "BedDetail": {
     "free": "Libre",
@@ -744,7 +747,7 @@
     "markNoShow": "Marcar como no presentado",
     "reserve": "Reservar",
     "reserveDays": "Reservar · {n} días",
-    "multipleDays": "+ Varios días",
+    "multipleDays": "Varios días",
     "until": "Hasta",
     "unreserve": "Cancelar reserva",
     "block": "Bloquear",
@@ -758,10 +761,13 @@
     "noShowConfirmTitle": "¿Marcar como no presentado?",
     "noShowConfirmBody": "Este huésped quedará registrado como no presentado.",
     "confirm": "Confirmar",
-    "bothSeats": "Ambos asientos",
+    "bothSeats": "Todos los asientos",
     "thisSeatOnly": "Solo este asiento",
     "poolRemoveSeat": "Eliminar asiento",
-    "additionalSeat": "asiento adicional"
+    "additionalSeat": "asiento adicional",
+    "groupExtraSeat": "asiento extra (con #{n})",
+    "groupExtraRemove": "Eliminar asiento extra",
+    "addSeatToGroup": "Añadir asiento extra"
   },
   "CreateRentalModal": {
     "title": "Alquilar",

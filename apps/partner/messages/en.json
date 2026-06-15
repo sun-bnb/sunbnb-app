@@ -731,7 +731,10 @@
     "viewScroll": "Scroll",
     "reverseOrder": "Reverse",
     "additionalSeats": "additional seats",
-    "poolAddSeat": "Add seat"
+    "poolAddSeat": "Add seat",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "resetZoom": "Reset zoom"
   },
   "BedDetail": {
     "free": "Free",
@@ -744,7 +747,7 @@
     "markNoShow": "Mark no-show",
     "reserve": "Reserve",
     "reserveDays": "Reserve · {n} days",
-    "multipleDays": "+ Multiple days",
+    "multipleDays": "Multiple days",
     "until": "Until",
     "unreserve": "Unreserve",
     "block": "Block",
@@ -758,10 +761,13 @@
     "noShowConfirmTitle": "Mark as no-show?",
     "noShowConfirmBody": "This guest will be recorded as a no-show.",
     "confirm": "Confirm",
-    "bothSeats": "Both seats",
+    "bothSeats": "All seats",
     "thisSeatOnly": "This seat only",
     "poolRemoveSeat": "Remove seat",
-    "additionalSeat": "additional seat"
+    "additionalSeat": "additional seat",
+    "groupExtraSeat": "extra seat (with #{n})",
+    "groupExtraRemove": "Remove extra seat",
+    "addSeatToGroup": "Add extra seat"
   },
   "CreateRentalModal": {
     "title": "Rent Out",

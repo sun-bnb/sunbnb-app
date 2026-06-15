@@ -731,7 +731,10 @@
     "viewScroll": "Vieritä",
     "reverseOrder": "Käännä",
     "additionalSeats": "lisäpaikat",
-    "poolAddSeat": "Lisää paikka"
+    "poolAddSeat": "Lisää paikka",
+    "zoomIn": "Lähennä",
+    "zoomOut": "Loitonna",
+    "resetZoom": "Nollaa zoom"
   },
   "BedDetail": {
     "free": "Vapaa",
@@ -744,7 +747,7 @@
     "markNoShow": "Merkitse ei saapunut",
     "reserve": "Varaa",
     "reserveDays": "Varaa · {n} päivää",
-    "multipleDays": "+ Useita päiviä",
+    "multipleDays": "Useita päiviä",
     "until": "Päättyy",
     "unreserve": "Peruuta varaus",
     "block": "Estä",
@@ -758,10 +761,13 @@
     "noShowConfirmTitle": "Merkitäänkö ei saapunut?",
     "noShowConfirmBody": "Tämä vieras kirjataan ei saapuneeksi.",
     "confirm": "Vahvista",
-    "bothSeats": "Molemmat paikat",
+    "bothSeats": "Kaikki paikat",
     "thisSeatOnly": "Vain tämä paikka",
     "poolRemoveSeat": "Poista paikka",
-    "additionalSeat": "lisäpaikka"
+    "additionalSeat": "lisäpaikka",
+    "groupExtraSeat": "lisäpaikka (parin #{n} kanssa)",
+    "groupExtraRemove": "Poista lisäpaikka",
+    "addSeatToGroup": "Lisää lisäpaikka"
   },
   "CreateRentalModal": {
     "title": "Vuokraa",

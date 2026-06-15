@@ -23,6 +23,8 @@ import {
   createWalkInRental,
   createPoolSeat,
   deletePoolSeat,
+  addSeatToGroup,
+  removeGroupSeat,
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
@@ -972,5 +974,349 @@ describe('unblockBed with applyToPair = false', () => {
 
     expect(vi.mocked(prisma.reservation.deleteMany)).toHaveBeenCalled()
     expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+  })
+})
+
+// ─── addSeatToGroup ──────────────────────────────────────────────────────────
+
+describe('addSeatToGroup', () => {
+  it('rejects unauthenticated caller', async () => {
+    const res = await addSeatToGroup(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+    expect(vi.mocked(prisma.inventoryItem.create)).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-owner', async () => {
+    authenticateAsNonOwner()
+    const res = await addSeatToGroup(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authorized')
+    expect(vi.mocked(prisma.inventoryItem.create)).not.toHaveBeenCalled()
+  })
+
+  it('rejects when item not found or belongs to a different site', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+
+    const res = await addSeatToGroup(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Item not found')
+  })
+
+  it('rejects when anchor is a FREE pool seat (no group to add to)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      group: 1,
+      number: 19901,
+      status: 'pool',
+      sunbedGroupId: null,
+      pairId: null,
+      pairedBy: null,
+    } as any)
+
+    const res = await addSeatToGroup(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/pool seat/i)
+  })
+
+  it('allows a GROUP-EXTRA pool seat as anchor — adds another extra to the same group', async () => {
+    authenticateAsOwner()
+    // A group extra: status 'pool' but already linked to a SunbedGroup.
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      group: 1,
+      number: 19901,
+      status: 'pool',
+      sunbedGroupId: 'group-existing',
+      pairId: null,
+      pairedBy: null,
+    } as any)
+    // nextPoolNumber: one existing pool seat in the band (the anchor) → next is 19902
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ number: 19901 }] as any)
+    vi.mocked(prisma.inventoryItem.create).mockResolvedValue({ id: 'new-seat-2' } as any)
+
+    const res = await addSeatToGroup(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('ok')
+    // Reuses the anchor's group, never creates a new SunbedGroup.
+    expect(vi.mocked(prisma.sunbedGroup.create)).not.toHaveBeenCalled()
+    const createCall = vi.mocked(prisma.inventoryItem.create).mock.calls[0][0]
+    expect(createCall.data.sunbedGroupId).toBe('group-existing')
+    expect(createCall.data.status).toBe('pool')
+  })
+
+  it('uses existing sunbedGroupId without creating a new SunbedGroup', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      group: 1,
+      number: 10101,
+      status: 'active',
+      sunbedGroupId: 'group-existing',
+      pairId: null,
+      pairedBy: null,
+    } as any)
+    // nextPoolNumber: no existing pool seats in band
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([])
+    vi.mocked(prisma.inventoryItem.create).mockResolvedValue({ id: 'new-seat-1' } as any)
+
+    const res = await addSeatToGroup(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('ok')
+
+    // No SunbedGroup.create should have been called
+    expect(vi.mocked(prisma.sunbedGroup.create)).not.toHaveBeenCalled()
+
+    const createCall = vi.mocked(prisma.inventoryItem.create).mock.calls[0][0]
+    expect(createCall.data.sunbedGroupId).toBe('group-existing')
+    expect(createCall.data.status).toBe('pool')
+    expect(createCall.data.number).toBe(19901) // parcel 1 first pool seat
+    expect(createCall.data.locationLat).toBe('0')
+    expect(createCall.data.locationLng).toBe('0')
+    expect(createCall.data.schematicX).toBeNull()
+    expect(createCall.data.schematicY).toBeNull()
+  })
+
+  it('self-heals when anchor has pairId: creates SunbedGroup and updates anchor + pair partner', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      group: 2,
+      number: 20101,
+      status: 'active',
+      sunbedGroupId: null,
+      pairId: 'pair-item-1',
+      pairedBy: null,
+    } as any)
+    // nextPoolNumber: no existing pool seats for parcel 2
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([])
+    vi.mocked(prisma.sunbedGroup.create).mockResolvedValue({ id: 'group-new' } as any)
+    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.inventoryItem.create).mockResolvedValue({ id: 'new-seat-2' } as any)
+
+    const res = await addSeatToGroup(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('ok')
+
+    // A new SunbedGroup must have been created
+    expect(vi.mocked(prisma.sunbedGroup.create)).toHaveBeenCalledWith({ data: { siteId: SITE_ID } })
+
+    // Both the anchor and its pairId partner must have been updated
+    const updateCalls = vi.mocked(prisma.inventoryItem.update).mock.calls
+    const updatedIds = updateCalls.map(c => (c[0] as any).where.id)
+    expect(updatedIds).toContain(ITEM_ID)
+    expect(updatedIds).toContain('pair-item-1')
+    const updatedGroupIds = updateCalls.map(c => (c[0] as any).data.sunbedGroupId)
+    expect(updatedGroupIds).toEqual(['group-new', 'group-new'])
+
+    // Extra seat must be created in parcel 2's pool band
+    const createCall = vi.mocked(prisma.inventoryItem.create).mock.calls[0][0]
+    expect(createCall.data.number).toBe(29901) // parcel 2 first pool seat
+    expect(createCall.data.sunbedGroupId).toBe('group-new')
+    expect(createCall.data.group).toBe(2)
+  })
+
+  it('self-heals when anchor has pairedBy (back-ref): updates back-ref partner', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      group: 1,
+      number: 10102,
+      status: 'active',
+      sunbedGroupId: null,
+      pairId: null,
+      pairedBy: { id: 'pair-primary-1' },
+    } as any)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([])
+    vi.mocked(prisma.sunbedGroup.create).mockResolvedValue({ id: 'group-backref' } as any)
+    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.inventoryItem.create).mockResolvedValue({ id: 'new-seat-3' } as any)
+
+    const res = await addSeatToGroup(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('ok')
+
+    const updateCalls = vi.mocked(prisma.inventoryItem.update).mock.calls
+    const updatedIds = updateCalls.map(c => (c[0] as any).where.id)
+    expect(updatedIds).toContain(ITEM_ID)
+    expect(updatedIds).toContain('pair-primary-1')
+  })
+
+  it('creates the extra seat with correct band number for sequential seats', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      group: 1,
+      number: 10101,
+      status: 'active',
+      sunbedGroupId: 'group-existing',
+      pairId: null,
+      pairedBy: null,
+    } as any)
+    // Two seats already in the band: seq 1 and 2
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([
+      { number: 19902 },
+      { number: 19901 },
+    ] as any)
+    vi.mocked(prisma.inventoryItem.create).mockResolvedValue({ id: 'new-seat-4' } as any)
+
+    const res = await addSeatToGroup(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('ok')
+
+    const createCall = vi.mocked(prisma.inventoryItem.create).mock.calls[0][0]
+    expect(createCall.data.number).toBe(19903) // seq 3
+  })
+
+  it('rejects when pool band is exhausted (seq > 99)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      group: 1,
+      number: 10101,
+      status: 'active',
+      sunbedGroupId: 'group-existing',
+      pairId: null,
+      pairedBy: null,
+    } as any)
+    // Highest existing is seq 99 (number 19999)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([
+      { number: 19999 },
+    ] as any)
+
+    const res = await addSeatToGroup(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/maximum pool seats/i)
+    expect(vi.mocked(prisma.inventoryItem.create)).not.toHaveBeenCalled()
+  })
+})
+
+// ─── removeGroupSeat ─────────────────────────────────────────────────────────
+
+describe('removeGroupSeat', () => {
+  it('rejects unauthenticated caller', async () => {
+    const res = await removeGroupSeat(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+    expect(vi.mocked(prisma.inventoryItem.delete)).not.toHaveBeenCalled()
+  })
+
+  it('rejects a plain pool seat that has no sunbedGroupId', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      status: 'pool',
+      sunbedGroupId: null,
+    } as any)
+
+    const res = await removeGroupSeat(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/not a group extra seat/i)
+    expect(vi.mocked(prisma.inventoryItem.delete)).not.toHaveBeenCalled()
+  })
+
+  it('rejects a regular (non-pool) active item even with a sunbedGroupId', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      status: 'active',
+      sunbedGroupId: 'group-1',
+    } as any)
+
+    const res = await removeGroupSeat(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/not a group extra seat/i)
+    expect(vi.mocked(prisma.inventoryItem.delete)).not.toHaveBeenCalled()
+  })
+
+  it('rejects when item not found or belongs to different site', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      siteId: 'other-site',
+      status: 'pool',
+      sunbedGroupId: 'group-1',
+    } as any)
+
+    const res = await removeGroupSeat(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Item not found')
+    expect(vi.mocked(prisma.inventoryItem.delete)).not.toHaveBeenCalled()
+  })
+
+  it('rejects when the seat has an active reservation today', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      status: 'pool',
+      sunbedGroupId: 'group-1',
+    } as any)
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({ id: RES_ID } as any)
+
+    const res = await removeGroupSeat(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/release the seat/i)
+    expect(vi.mocked(prisma.inventoryItem.delete)).not.toHaveBeenCalled()
+  })
+
+  it('deletes the group extra seat and revalidates when free', async () => {
+    const { revalidatePath } = await import('next/cache')
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      status: 'pool',
+      sunbedGroupId: 'group-1',
+    } as any)
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null) // no active reservation
+    vi.mocked(prisma.inventoryItem.delete).mockResolvedValue({} as any)
+
+    const res = await removeGroupSeat(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(prisma.inventoryItem.delete)).toHaveBeenCalledWith({ where: { id: ITEM_ID } })
+    expect(vi.mocked(revalidatePath)).toHaveBeenCalled()
+  })
+})
+
+// ─── Regression: group-attached pool seat cascades through reserveItem ────────
+
+describe('reserveItem cascade regression: pool seat with sunbedGroupId', () => {
+  it('group-extra pool seat cascades sibling members via getGroupMemberIds when applyToPair=true', async () => {
+    // This tests that a pool seat (status='pool') WITH a sunbedGroupId correctly
+    // triggers the SunbedGroup cascade path in getGroupMemberIds, meaning the
+    // sibling regular seat (status='active') gets co-reserved when the pool seat
+    // is the reservation anchor.
+    authenticateAsOwner()
+
+    const POOL_SEAT_ID = 'pool-seat-1'
+    const SIBLING_ID = 'sibling-active-1'
+    const GROUP_ID = 'group-1'
+
+    // getGroupMemberIds: pool seat has a sunbedGroupId
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      id: POOL_SEAT_ID,
+      pairId: null,
+      sunbedGroupId: GROUP_ID,
+      pairedBy: null,
+    } as any)
+
+    // getGroupMemberIds: findMany for other members of the group (the regular sibling)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([
+      { id: SIBLING_ID },
+    ] as any)
+
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null) // no conflicts
+    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
+
+    const res = await reserveItem(SITE_ID, POOL_SEAT_ID, 'Guest', undefined, undefined, undefined, true)
+    expect(res.status).toBe('ok')
+
+    // getGroupMemberIds must have used the sunbedGroupId path (findMany was called)
+    expect(vi.mocked(prisma.inventoryItem.findMany)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ sunbedGroupId: GROUP_ID }),
+      })
+    )
+
+    // The reservation must cover both the pool seat AND the sibling
+    const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
+    const connectedIds = createCall.data.items.connect.map((c: { id: string }) => c.id)
+    expect(connectedIds).toContain(POOL_SEAT_ID)
+    expect(connectedIds).toContain(SIBLING_ID)
   })
 })

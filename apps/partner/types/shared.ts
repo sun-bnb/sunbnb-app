@@ -123,7 +123,7 @@ export interface InventoryItem {
   pair?: InventoryItem | null
   pairedBy?: InventoryItem | null
   sunbedGroupId?: string | null
-  sunbedGroup?: { items: { id: string }[] } | null
+  sunbedGroup?: { id: string; items: { id: string; number?: number; status?: string }[] } | null
   seatLabel?: string | null
   reservations?: Reservation[]
 }

@@ -15,10 +15,13 @@ import {
   blockBed,
   unblockBed,
   deletePoolSeat,
+  addSeatToGroup,
+  removeGroupSeat,
 } from './actions'
 import {
   OP_EXPECTED, OP_CHECKED_IN, OP_WALKED_IN, OP_DEPARTED, OP_NO_SHOW,
 } from '@repo/data/reservation-status'
+import { groupExtraSeatLabel } from './grid-helpers'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -74,19 +77,27 @@ function getPoolSeq(item: InventoryItem): number {
 export default function BedDetail({
   siteId,
   item,
-  pairItem,
+  groupItems,
   accessKey,
   isPool = false,
+  isGroupExtra = false,
   onClose,
   onPoolSeatRemoved,
+  onGroupSeatAdded,
+  onGroupSeatRemoved,
 }: {
   siteId: string
   item: InventoryItem
-  pairItem: InventoryItem | null
+  /** All OTHER members of the item's SunbedGroup (empty array when not in a group). */
+  groupItems: InventoryItem[]
   accessKey?: string
   isPool?: boolean
+  /** True when this item is a group-attached extra (status='pool' && sunbedGroupId set). */
+  isGroupExtra?: boolean
   onClose: () => void
   onPoolSeatRemoved?: () => void
+  onGroupSeatAdded?: () => void
+  onGroupSeatRemoved?: () => void
 }) {
   const t = useTranslations('BedDetail')
   const [isPending, startTransition] = useTransition()
@@ -110,16 +121,21 @@ export default function BedDetail({
 
   const reservation = getActiveReservation(item)
   const state = getBedState(item)
-  // pairItem is resolved from SunbedGroup membership (manage/view.tsx); no pairId fallback.
-  const pairNumber = isPool || !pairItem ? undefined : formatSeat(pairItem, { parcel: true })
-  const poolSeq = isPool ? getPoolSeq(item) : null
+  // For header display: show companion info when exactly one group peer (classic pair)
+  const pairItem = groupItems.length === 1 ? groupItems[0]! : null
+  const pairNumber = (isPool || isGroupExtra) ? undefined : (pairItem ? formatSeat(pairItem, { parcel: true }) : undefined)
+  const poolSeq = (isPool || isGroupExtra) ? getPoolSeq(item) : null
+  // A group-extra reads as the next member of its group (e.g. "103-3"); a free
+  // pool seat keeps the "+N" sequence label.
+  const groupExtraLabel = isGroupExtra ? groupExtraSeatLabel(item, groupItems) : null
 
-  // Sync: both seats share the same reservation (or both are free)
-  const inSync = pairItem !== null
-    ? (getActiveReservation(item)?.id ?? null) === (getActiveReservation(pairItem)?.id ?? null)
+  // Sync: all group members share the same reservation (or all are free)
+  const thisResId = getActiveReservation(item)?.id ?? null
+  const inSync = groupItems.length > 0
+    ? groupItems.every(gi => (getActiveReservation(gi)?.id ?? null) === thisResId)
     : false
 
-  // Default: apply to both when in sync; apply to single only when out of sync
+  // Default: apply to all group members when in sync; single only when out of sync
   const [applyToPair, setApplyToPair] = useState(inSync)
 
   // Re-initialize when the selected item changes
@@ -147,15 +163,21 @@ export default function BedDetail({
         {/* Header — big number, plain status */}
         <div className="flex items-center justify-between mb-4 sm:mb-5">
           <div className="flex items-center gap-2 sm:gap-3">
-            {isPool ? (
+            {(isPool || isGroupExtra) ? (
               <div className="flex flex-col leading-tight">
-                <span className="text-2xl sm:text-3xl font-black">#{poolSeq}</span>
-                <span className="text-[10px] text-gray-400 font-normal leading-none">{t('additionalSeat')}</span>
+                <span className="text-2xl sm:text-3xl font-black">
+                  {isGroupExtra ? `#${groupExtraLabel}` : `+${poolSeq}`}
+                </span>
+                <span className="text-[10px] text-gray-400 font-normal leading-none">
+                  {isGroupExtra && pairItem
+                    ? t('groupExtraSeat', { n: formatSeat(pairItem, { parcel: true }) })
+                    : t('additionalSeat')}
+                </span>
               </div>
             ) : (
               <span className="text-2xl sm:text-3xl font-black">#{formatSeat(item, { parcel: true })}</span>
             )}
-            {pairNumber && (
+            {pairNumber && !isGroupExtra && (
               <span className="text-base sm:text-lg text-gray-400 font-medium">+ #{pairNumber}</span>
             )}
             <span className={`text-xs sm:text-sm font-bold px-2.5 sm:px-3 py-1 rounded-full ${stateBadgeColors[state]}`}>
@@ -165,9 +187,9 @@ export default function BedDetail({
           <button onClick={onClose} className="text-gray-400 text-3xl leading-none p-2">&times;</button>
         </div>
 
-        {/* Pair-scope toggle — visible only when paired AND the current state has a
+        {/* Group-scope toggle — visible only when in a group AND the current state has a
             creation/release action that the toggle governs */}
-        {pairItem !== null && TOGGLE_VISIBLE_STATES.includes(state) && (
+        {groupItems.length > 0 && TOGGLE_VISIBLE_STATES.includes(state) && (
           <div className="mb-4">
             <div className="flex rounded-lg overflow-hidden border border-gray-200 font-semibold">
               <button
@@ -207,24 +229,43 @@ export default function BedDetail({
         {/* ── FREE — one big button to seat someone ── */}
         {state === 'available' && !showBlock && (
           <div className="space-y-3">
-            <input
-              type="text"
-              placeholder={t('guestName')}
-              value={guestName}
-              onChange={e => setGuestName(e.target.value)}
-              className="w-full border-2 rounded-xl px-4 py-3.5 text-base"
-              autoFocus
-            />
+            {/* Guest name + multi-day DURATION toggle on one row */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder={t('guestName')}
+                value={guestName}
+                onChange={e => setGuestName(e.target.value)}
+                className="flex-1 border-2 rounded-xl px-4 py-3.5 text-base"
+                autoFocus
+              />
+              {/* Calendar toggle — opens the date picker row below. Hidden for pool
+                  seats (today-only, walk-in only). Highlighted while active. */}
+              {!isPool && (
+                <button
+                  onClick={() => setUntil(until === '' ? tomorrow : '')}
+                  aria-label={t('multipleDays')}
+                  aria-pressed={until !== ''}
+                  title={t('multipleDays')}
+                  className={`w-14 self-stretch flex flex-col items-center justify-center gap-0.5 rounded-xl border-2 transition-colors ${
+                    until !== ''
+                      ? 'border-orange-400 bg-orange-50 text-orange-600'
+                      : 'border-gray-300 text-gray-500 active:bg-gray-50'
+                  }`}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                    <path d="M16 2v4M8 2v4M3 10h18" />
+                  </svg>
+                  {until !== '' && (
+                    <span className="text-[10px] font-bold leading-none tabular-nums">{days}d</span>
+                  )}
+                </button>
+              )}
+            </div>
 
-            {/* Multi-day stay — hidden for pool seats (today-only, walk-in only) */}
-            {!isPool && (until === '' ? (
-              <button
-                onClick={() => setUntil(tomorrow)}
-                className="w-full text-gray-400 text-sm py-1.5 active:text-gray-600"
-              >
-                {t('multipleDays')}
-              </button>
-            ) : (
+            {/* Date range picker — shown when the multi-day toggle is on */}
+            {!isPool && until !== '' && (
               <div className="flex items-center gap-2 bg-gray-50 border-2 rounded-xl px-3 py-2.5">
                 <span className="text-sm font-medium text-gray-500 flex-shrink-0">{t('until')}</span>
                 <input
@@ -243,44 +284,104 @@ export default function BedDetail({
                   &times;
                 </button>
               </div>
-            ))}
+            )}
 
-            <button
-              disabled={isPending}
-              onClick={() => runAction(() => reserveItem(
-                siteId, item.id, guestName || undefined, undefined, accessKey,
-                isPool ? undefined : (until || undefined),
-                isPool ? false : applyToPair
-              ))}
-              className="w-full bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50"
-            >
-              {isPending ? '...' : (!isPool && days > 1) ? t('reserveDays', { n: days }) : t('reserve')}
-            </button>
-            <button
-              onClick={() => setShowBlock(true)}
-              className="w-full text-gray-400 text-sm py-2 active:text-gray-600"
-            >
-              {t('block')}
-            </button>
-            {/* Pool seat: "Remove seat" only when free */}
-            {isPool && (
+            {/* Block (square, on the left) + Reserve (primary, takes the row) */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowBlock(true)}
+                aria-label={t('block')}
+                title={t('block')}
+                className="w-16 self-stretch flex flex-col items-center justify-center gap-0.5 border-2 border-gray-300 text-gray-500 rounded-xl active:bg-gray-50"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M5.6 5.6l12.8 12.8" />
+                </svg>
+                <span className="text-[10px] font-semibold leading-none">{t('block')}</span>
+              </button>
               <button
                 disabled={isPending}
-                onClick={() => {
-                  setError(null)
-                  startTransition(async () => {
-                    const result = await deletePoolSeat(siteId, item.id, accessKey)
-                    if (result.status === 'ok') {
-                      onPoolSeatRemoved?.()
-                    } else {
-                      setError(result.errors?.[0] || 'Something went wrong')
-                    }
-                  })
-                }}
-                className="w-full text-red-500 text-sm py-2 active:text-red-700 disabled:opacity-50"
+                onClick={() => runAction(() => reserveItem(
+                  siteId, item.id, guestName || undefined, undefined, accessKey,
+                  (isPool && !isGroupExtra) ? undefined : (until || undefined),
+                  groupItems.length > 0 ? applyToPair : false
+                ))}
+                className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50"
               >
-                {t('poolRemoveSeat')}
+                {isPending ? '...' : (!isPool && days > 1) ? t('reserveDays', { n: days }) : t('reserve')}
               </button>
+            </div>
+            {/* ── Seat management — compact link-style actions, divided off from the
+                larger reservation controls above. Add + Remove share the row at
+                equal width. ── */}
+            {(groupItems.length > 0 || (isPool && !isGroupExtra)) && (
+              <div className="mt-2 pt-2.5 border-t border-gray-200 flex items-center gap-3">
+                {/* Add another seat to the group — works from a regular member OR a
+                    group extra. */}
+                {groupItems.length > 0 && (
+                  <button
+                    disabled={isPending}
+                    onClick={() => {
+                      setError(null)
+                      startTransition(async () => {
+                        const result = await addSeatToGroup(siteId, item.id, accessKey)
+                        if (result.status === 'ok') {
+                          onGroupSeatAdded?.()
+                          onClose()
+                        } else {
+                          setError(result.errors?.[0] || 'Something went wrong')
+                        }
+                      })
+                    }}
+                    className="flex-1 text-gray-500 text-sm py-2 active:text-gray-700 disabled:opacity-50"
+                  >
+                    {t('addSeatToGroup')}
+                  </button>
+                )}
+
+                {/* Remove a group extra seat */}
+                {isGroupExtra && (
+                  <button
+                    disabled={isPending}
+                    onClick={() => {
+                      setError(null)
+                      startTransition(async () => {
+                        const result = await removeGroupSeat(siteId, item.id, accessKey)
+                        if (result.status === 'ok') {
+                          onGroupSeatRemoved?.()
+                        } else {
+                          setError(result.errors?.[0] || 'Something went wrong')
+                        }
+                      })
+                    }}
+                    className="flex-1 text-red-500 text-sm py-2 active:text-red-700 disabled:opacity-50"
+                  >
+                    {t('groupExtraRemove')}
+                  </button>
+                )}
+
+                {/* Remove a free pool seat */}
+                {isPool && !isGroupExtra && (
+                  <button
+                    disabled={isPending}
+                    onClick={() => {
+                      setError(null)
+                      startTransition(async () => {
+                        const result = await deletePoolSeat(siteId, item.id, accessKey)
+                        if (result.status === 'ok') {
+                          onPoolSeatRemoved?.()
+                        } else {
+                          setError(result.errors?.[0] || 'Something went wrong')
+                        }
+                      })
+                    }}
+                    className="flex-1 text-red-500 text-sm py-2 active:text-red-700 disabled:opacity-50"
+                  >
+                    {t('poolRemoveSeat')}
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}
