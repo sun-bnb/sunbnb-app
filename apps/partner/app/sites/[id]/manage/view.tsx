@@ -36,6 +36,7 @@ function getPoolSeq(item: InventoryItem): number {
 }
 
 const VIEW_MODE_KEY = 'sunbnb-manage-view'
+const SEAT_ORDER_REVERSED_KEY = 'sunbnb-manage-seat-order-reversed'
 
 function getActiveReservation(item: InventoryItem): Reservation | null {
   if (!item.reservations?.length) return null
@@ -222,6 +223,22 @@ export default function ManageView({
     localStorage.setItem(VIEW_MODE_KEY, mode)
   }
 
+  // Seat column order — false = smallest seat number on the left (default),
+  // true = reversed (largest on the left). Per-device staff preference.
+  const [reversed, setReversed] = useState(false)
+
+  useEffect(() => {
+    if (localStorage.getItem(SEAT_ORDER_REVERSED_KEY) === 'true') setReversed(true)
+  }, [])
+
+  const handleToggleReversed = () => {
+    setReversed(prev => {
+      const next = !prev
+      localStorage.setItem(SEAT_ORDER_REVERSED_KEY, String(next))
+      return next
+    })
+  }
+
   // Measure the container width so we can compute how many bed columns fit.
   // ResizeObserver fires once immediately on observe() then on every resize/
   // orientation change — no separate window-resize listener needed.
@@ -311,7 +328,23 @@ export default function ManageView({
         )}
 
         {/* ── View Mode Toggle ── */}
-        <div className="col-span-2 flex justify-end sm:ml-auto">
+        <div className="col-span-2 flex justify-end sm:ml-auto gap-2">
+          {/* Reverse seat order (per-device staff preference) */}
+          <button
+            onClick={handleToggleReversed}
+            aria-label={t('reverseOrder')}
+            aria-pressed={reversed}
+            title={t('reverseOrder')}
+            className={`
+              flex items-center gap-1.5 px-3 min-h-[44px] text-xs rounded-lg border font-semibold transition-colors
+              ${reversed
+                ? 'bg-gray-900 text-white border-gray-900'
+                : 'bg-white text-gray-400 border-gray-200 hover:text-gray-700 hover:bg-gray-50'}
+            `}
+          >
+            <span aria-hidden="true">⇄</span>
+            <span className="hidden sm:inline">{t('reverseOrder')}</span>
+          </button>
           <div className="flex rounded-lg overflow-hidden border border-gray-200 font-semibold">
             <button
               onClick={() => handleViewMode('sections')}
@@ -358,14 +391,15 @@ export default function ManageView({
 
         // ── Horizontal-scroll view ────────────────────────────────────────────
         if (viewMode === 'scroll') {
-          // Collect all positions across every row, sorted DESCENDING (same
-          // display order as sectioned view: largest position on the left).
+          // Collect all positions across every row, ordered to match the
+          // sectioned view: smallest seat number on the left by default,
+          // reversed (largest on the left) when the staff toggle is on.
           const allPositions = Array.from(
             rowEntries.reduce<Set<number>>((s, [, positions]) => {
               Object.keys(positions).forEach(k => s.add(Number(k)))
               return s
             }, new Set())
-          ).sort((a, b) => b - a)
+          ).sort((a, b) => (reversed ? b - a : a - b))
 
           return (
             <div key={parcel} className="mb-5">
@@ -447,7 +481,7 @@ export default function ManageView({
         }
 
         // ── Sectioned view (default) ──────────────────────────────────────────
-        const sections = chunkRows(rowEntries, chunkSize)
+        const sections = chunkRows(rowEntries, chunkSize, reversed)
 
         return (
           <div key={parcel} className="mb-5">

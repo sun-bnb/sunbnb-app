@@ -729,6 +729,7 @@
     "rowLabel": "R{n}",
     "viewSections": "Osiot",
     "viewScroll": "Vieritä",
+    "reverseOrder": "Käännä",
     "additionalSeats": "lisäpaikat",
     "poolAddSeat": "Lisää paikka"
   },

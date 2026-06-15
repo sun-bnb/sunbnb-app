@@ -66,18 +66,20 @@ export interface GridSection {
  */
 export function chunkRows(
   rowEntries: [number, Record<number, InventoryItem>][],
-  chunkSize: number
+  chunkSize: number,
+  reversed = false
 ): GridSection[] {
   if (rowEntries.length === 0) return []
 
-  // Collect all positions across every row → sort DESCENDING (display order)
+  // Collect all positions across every row → order them for display.
+  // Default: ascending (smallest seat number on the left). reversed: descending.
   const allPositions = new Set<number>()
   for (const [, positions] of rowEntries) {
     for (const key of Object.keys(positions)) {
       allPositions.add(Number(key))
     }
   }
-  const orderedPositions = Array.from(allPositions).sort((a, b) => b - a)
+  const orderedPositions = Array.from(allPositions).sort((a, b) => (reversed ? b - a : a - b))
 
   if (orderedPositions.length === 0) return []
 

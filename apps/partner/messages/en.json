@@ -729,6 +729,7 @@
     "rowLabel": "R{n}",
     "viewSections": "Sections",
     "viewScroll": "Scroll",
+    "reverseOrder": "Reverse",
     "additionalSeats": "additional seats",
     "poolAddSeat": "Add seat"
   },

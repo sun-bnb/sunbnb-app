@@ -729,6 +729,7 @@
     "rowLabel": "F{n}",
     "viewSections": "Secciones",
     "viewScroll": "Desplazar",
+    "reverseOrder": "Invertir",
     "additionalSeats": "asientos adicionales",
     "poolAddSeat": "Añadir asiento"
   },
