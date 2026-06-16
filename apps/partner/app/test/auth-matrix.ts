@@ -1,5 +1,5 @@
 /**
- * Auth-matrix runner — Phase 0.2 of the partner test-architecture track.
+ * Auth-matrix runner — Phase 0.2 / Phase 3 of the partner test-architecture track.
  *
  * `SCENARIOS` maps each GateType to a list of named scenarios with an
  * apply() function (drives mocks) and a shouldReject flag.
@@ -16,16 +16,16 @@
  *   ok     → response.status < 400
  *
  * IMPORTANT: the matrix drives prisma + auth mocks directly (no mock of
- * lib/auth-helpers) so the real gate implementations execute — that is what
- * allows the matrix to surface divergences between verifySiteOwnership and
- * verifySiteAccess.
+ * lib/auth-helpers) so the real gate implementation in verifySiteAccess executes.
+ * manage/actions.ts verifySiteOwnership delegates to verifySiteAccess (Phase 3
+ * consolidation), so both manage and orders actions run through one code path.
  *
- * Unit-mode blind spot: the Prisma where clause filter (hasSome / has) is
- * NOT executed in unit-mode — prisma.securityToken.findUnique is a vi.fn()
- * that returns whatever we tell it to. applyExpiredToken / applyWrongScopeToken
- * therefore return null from findUnique (simulating Prisma filtering them out)
- * rather than returning the row and trusting the where clause. This is the
- * documented unit-mode blind spot; closed in Phase 0.2b via an integration test.
+ * Unit-mode blind spot: the Prisma where clause filter (hasSome) is NOT executed
+ * in unit-mode — prisma.securityToken.findUnique is a vi.fn() that returns
+ * whatever we tell it to. applyExpiredToken / applyWrongScopeToken therefore
+ * return null from findUnique (simulating Prisma filtering them out) rather than
+ * returning the row and trusting the where clause. This is the documented
+ * unit-mode blind spot; closed in Phase 0.2b / Phase 3 via integration tests.
  */
 
 import { it, expect } from 'vitest'
@@ -165,7 +165,7 @@ export const SCENARIOS: Record<GateType, Scenario[]> = {
  * The set of error messages emitted by the auth-gate helpers.
  * Used to distinguish auth rejections from downstream (post-auth) errors.
  *
- * verifySiteOwnership / verifySiteAccess / requireSiteOwner emit:
+ * verifySiteAccess / requireSiteOwner emit (verifySiteOwnership delegates to verifySiteAccess):
  *   'Not authenticated' — no session, no token
  *   'Not authorized'    — session exists but wrong owner
  *   'Invalid or expired access key' — token not found / expired / wrong scope

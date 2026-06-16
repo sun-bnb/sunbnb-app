@@ -1,18 +1,20 @@
 /**
- * Token fixtures for the auth-matrix test (Phase 0.2).
+ * Token fixtures for the auth-matrix test (Phase 0.2 / Phase 3).
  *
  * Each fixture is a `{ key, row }` pair where `row` mirrors the shape that
  * `prisma.securityToken.findUnique` would return. The `apply*` helpers drive
  * the mocked prisma + auth into the named scenario so that the matrix runner
  * can call them unconditionally.
  *
- * SecurityToken shape (read from manage/actions.ts verifySiteOwnership and
- * lib/auth-helpers.ts verifySiteAccess):
+ * SecurityToken shape (read from lib/auth-helpers.ts verifySiteAccess — the
+ * single canonical gate for all token-or-session actions):
  *   id: string               — the accessKey itself
  *   userId: string           — the token owner (must match site.userId)
  *   expires: Date            — checked as { gt: new Date() }
- *   resources: string[]      — verifySiteOwnership uses hasSome ['all','manage_site']
- *                              verifySiteAccess uses has 'all'
+ *   resources: string[]      — unified gate uses hasSome ['all', 'manage_site']
+ *                              (both the manage page AND the orders dashboard accept
+ *                              either scope; manage/actions.ts verifySiteOwnership
+ *                              delegates to verifySiteAccess — Phase 3 consolidation)
  */
 
 import { vi } from 'vitest'
@@ -74,8 +76,8 @@ export const TOKENS = {
 
   /**
    * Wrong-scope: not expired, but resources = ['read_only'] only.
-   * This should be rejected by both verifySiteOwnership (hasSome ['all','manage_site'])
-   * and verifySiteAccess (has 'all').
+   * This should be rejected by the unified verifySiteAccess gate
+   * (hasSome ['all', 'manage_site']).
    */
   wrongScope: {
     key: 'token-wrong-scope-1',

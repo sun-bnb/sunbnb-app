@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { auth } from '@/app/auth'
+import { verifySiteAccess } from '@/lib/auth-helpers'
 import prisma from '@repo/data/PrismaCient'
 import dayjs from 'dayjs'
 import {
@@ -22,35 +22,15 @@ import {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+/**
+ * Thin wrapper around the canonical `verifySiteAccess` helper (lib/auth-helpers.ts).
+ * Kept as a local alias so all existing `verifySiteOwnership(siteId, accessKey)` call
+ * sites inside this file are untouched; the single-implementation guarantee lives in
+ * `verifySiteAccess`.
+ */
 async function verifySiteOwnership(siteId: string, accessKey?: string) {
-  // Token-gated access for manage page (staff without login)
-  if (accessKey) {
-    const token = await prisma.securityToken.findUnique({
-      where: {
-        id: accessKey,
-        expires: { gt: new Date() },
-        resources: { hasSome: ['all', 'manage_site'] },
-      },
-    })
-    if (!token) return { error: 'Invalid or expired access key' }
-    // Verify the token belongs to this site's owner
-    const site = await prisma.site.findUnique({
-      where: { id: siteId },
-      select: { userId: true },
-    })
-    if (!site || site.userId !== token.userId) return { error: 'Not authorized' }
-    return { userId: site.userId }
-  }
-
-  // Session-based access for logged-in partners
-  const session = await auth()
-  if (!session?.user) return { error: 'Not authenticated' }
-  const site = await prisma.site.findUnique({
-    where: { id: siteId },
-    select: { userId: true },
-  })
-  if (!site || site.userId !== session.user.id) return { error: 'Not authorized' }
-  return { userId: session.user.id }
+  const { userId, error } = await verifySiteAccess(siteId, accessKey)
+  return error ? { error } : { userId: userId! }
 }
 
 /**

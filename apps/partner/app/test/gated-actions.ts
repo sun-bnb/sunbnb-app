@@ -235,8 +235,9 @@ async function normaliseThrow(fn: () => Promise<unknown>): Promise<unknown> {
 
 export const GATED_ACTIONS: GatedAction[] = [
   // ══════════════════════════════════════════════════════════════════════════
-  // token-or-session: manage/actions.ts — guarded by verifySiteOwnership
-  // (resources: hasSome ['all', 'manage_site'])
+  // token-or-session: manage/actions.ts — verifySiteOwnership delegates to
+  // the canonical verifySiteAccess (lib/auth-helpers.ts):
+  // resources: hasSome ['all', 'manage_site']
   // ══════════════════════════════════════════════════════════════════════════
 
   {
@@ -346,7 +347,7 @@ export const GATED_ACTIONS: GatedAction[] = [
 
   // ══════════════════════════════════════════════════════════════════════════
   // token-or-session: orders/actions.ts — guarded by verifySiteAccess
-  // (resources: has 'all' only — different from verifySiteOwnership above)
+  // (same unified gate as manage above: hasSome ['all', 'manage_site'])
   // ══════════════════════════════════════════════════════════════════════════
 
   {

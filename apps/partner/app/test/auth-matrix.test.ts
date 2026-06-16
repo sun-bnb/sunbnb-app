@@ -1,12 +1,14 @@
 /**
- * Auth-matrix test — Phase 0.2 of the partner test-architecture track.
+ * Auth-matrix test — Phase 0.2 / Phase 3 of the partner test-architecture track.
  *
  * For every entry in GATED_ACTIONS, emits the full scenario matrix for that
  * entry's gate type. Expected reds (genuine bugs, do NOT fix source):
  *   - queries.getSite: has no ownership check → unauthenticated/non-owner scenarios pass
- *   - Any divergence between verifySiteOwnership (manage, hasSome) and
- *     verifySiteAccess (orders, has 'all') will surface as a scenario passing
- *     for one set of actions but failing for another.
+ *
+ * Phase 3 note: the former verifySiteOwnership vs verifySiteAccess divergence is
+ * resolved — manage/actions.ts now delegates to the canonical verifySiteAccess
+ * in lib/auth-helpers.ts. Both gates are unified on hasSome ['all', 'manage_site'].
+ * Unit-mode mocks return null for wrongScope so both sets of actions reject equally.
  *
  * Architecture note: vi.mock() is hoisted, so these run before imports.
  * The matrix runner (auth-matrix.ts) and token-fixtures.ts use vi.mocked()

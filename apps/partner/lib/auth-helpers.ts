@@ -37,7 +37,11 @@ export async function requireSiteOwner(
  * Verify the caller may act on the given site, accepting either a SecurityToken
  * access key (for staff/integration use without login) or a signed-in session
  * that owns the site. When an access key is supplied, the token must include
- * `all` in its `resources` and its owner must own the site.
+ * `all` OR `manage_site` in its `resources` and its owner must own the site.
+ *
+ * This is the single canonical token-gate for all token-or-session actions,
+ * covering both the orders dashboard and the manage page. `manage_site`-scoped
+ * staff tokens are accepted on both surfaces.
  */
 export async function verifySiteAccess(
   siteId: string,
@@ -48,7 +52,7 @@ export async function verifySiteAccess(
       where: {
         id: accessKey,
         expires: { gt: new Date() },
-        resources: { has: 'all' },
+        resources: { hasSome: ['all', 'manage_site'] },
       },
     })
     if (!token) return { userId: null, error: 'Invalid or expired access key' }

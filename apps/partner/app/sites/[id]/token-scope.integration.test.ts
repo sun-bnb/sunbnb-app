@@ -1,48 +1,39 @@
 /**
- * Integration test: SecurityToken scope-filter divergence (Phase 0.2b)
+ * Integration test: SecurityToken scope-filter unified policy (Phase 3 fix)
  *
  * PURPOSE
  * -------
  * Unit-mode mocks (PrismaCient mock) return a canned row regardless of the
- * `where` clause, so they cannot distinguish:
- *   - verifySiteOwnership (manage/actions.ts): resources: { hasSome: ['all', 'manage_site'] }
- *   - verifySiteAccess    (lib/auth-helpers.ts): resources: { has: 'all' }
+ * `where` clause, so they cannot distinguish the Postgres array operators used
+ * by the token gate. This file exercises the real Prisma query against
+ * sunbnb_test to confirm the unified policy holds end-to-end.
  *
- * A `manage_site`-only token satisfies hasSome but NOT has, so it is accepted
- * by manage actions and rejected by orders actions. This file exercises the
- * real Prisma query against sunbnb_test to confirm the Postgres array operators
- * behave as expected — giving the query-side filter the real DB coverage that
- * unit-mode mocks cannot provide.
+ * UNIFIED POLICY (decided Phase 3)
+ * ---------------------------------
+ * `manage_site` authorises BOTH the manage page AND the orders dashboard.
+ * There is now one canonical gate: `verifySiteAccess` in `lib/auth-helpers.ts`,
+ * using `resources: { hasSome: ['all', 'manage_site'] }`.
+ *
+ * `manage/actions.ts` `verifySiteOwnership` is a thin wrapper that delegates to
+ * `verifySiteAccess` — there is no longer a second independent implementation.
  *
  * REPRESENTATIVE ACTIONS CHOSEN
  * ------------------------------
  * - manage gate: `blockBed` from app/sites/[id]/manage/actions.ts
- *     Uses verifySiteOwnership (resources: { hasSome: ['all', 'manage_site'] })
- *     Cheap: needs a site + 1 inventory item; creates a blocked reservation on success.
+ *     Delegates to verifySiteAccess (hasSome ['all', 'manage_site'])
+ *     Creates a blocked reservation on success.
  *
  * - orders gate: `getOrders` from app/sites/[id]/orders/actions.ts
- *     Uses verifySiteAccess (resources: { has: 'all' })
- *     Trivially cheap: read-only, returns [] when no orders exist.
+ *     Uses verifySiteAccess directly (hasSome ['all', 'manage_site'])
+ *     Read-only, returns [] when no orders exist.
  *
- * Both accept an optional `accessKey` parameter whose only gate is the token check
- * (auth is mocked to null so the session path is never taken).
- *
- * GREEN TESTS (must pass — query-side filter coverage)
- * -----------------------------------------------------
- * 1. ['all']-scoped unexpired token → accepted by BOTH manage AND orders gates.
- * 2. Expired token (past expires)   → rejected by BOTH gates.
- * 3. Foreign-site token (valid scope, but owner mismatch) → rejected by BOTH gates.
- *
- * RED TEST (bug-revealing consistency check — expected to FAIL until Phase 3)
- * ---------------------------------------------------------------------------
- * 4. ['manage_site']-only unexpired token → manage accepts, orders rejects.
- *    Assertion: both gates must reach the SAME authorization outcome (both ok
- *    or both error). Currently FAILS because manage uses hasSome and orders
- *    uses has — they disagree on manage_site-only scope. The test is direction-
- *    agnostic: it fails on the MISMATCH, not on a specific expected value.
- *
- *    RED until Phase 3 reconciles verifySiteOwnership.hasSome vs
- *    verifySiteAccess.has — direction is an open domain decision.
+ * TESTS
+ * -----
+ * GREEN — ['all']-scoped token accepted by BOTH gates.
+ * GREEN — Expired token rejected by BOTH gates.
+ * GREEN — Foreign-site token (owner mismatch) rejected by BOTH gates.
+ * GREEN — ['manage_site']-only token ACCEPTED by BOTH gates (unified policy).
+ * GREEN — ['orders_only']-scoped token (wrong scope) rejected by BOTH gates.
  */
 
 import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest'
@@ -96,7 +87,7 @@ afterAll(async () => {
  * orders: getOrders returns { status: 'ok' } on success; { status: 'error' } on auth failure.
  *
  * We distinguish auth errors from downstream errors via the error message set
- * that verifySiteOwnership / verifySiteAccess emits.
+ * that verifySiteAccess emits.
  */
 const AUTH_ERROR_MESSAGES = new Set([
   'Invalid or expired access key',
@@ -112,11 +103,11 @@ function wasAccepted(result: { status: string; errors?: string[] }): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// GREEN: query-side filter coverage (must pass)
+// Tests
 // ---------------------------------------------------------------------------
 
-describe('SecurityToken scope filter — real DB coverage', () => {
-  it("['all']-scoped unexpired token is accepted by both manage gate (hasSome) and orders gate (has)", async () => {
+describe('SecurityToken scope filter — unified policy (real DB)', () => {
+  it("['all']-scoped unexpired token is accepted by both manage gate and orders gate", async () => {
     const owner = await createTestUser()
     const site = await createTestSite(owner.id)
     const item = await createTestInventoryItem(owner.id, site.id)
@@ -157,34 +148,32 @@ describe('SecurityToken scope filter — real DB coverage', () => {
     expect(wasAccepted(manageResult)).toBe(false)
     expect(wasAccepted(ordersResult)).toBe(false)
   })
-})
 
-// ---------------------------------------------------------------------------
-// RED: bug-revealing consistency check (EXPECTED TO FAIL until Phase 3)
-// ---------------------------------------------------------------------------
+  it("['manage_site']-only token is accepted by BOTH manage gate AND orders gate (unified policy)", async () => {
+    const owner = await createTestUser()
+    const site = await createTestSite(owner.id)
+    const item = await createTestInventoryItem(owner.id, site.id)
+    // manage_site scope only — must now be accepted by both gates under the unified policy
+    const token = await createTestSecurityToken(owner.id, ['manage_site'])
 
-describe('SecurityToken scope divergence — consistency check', () => {
-  it(
-    // RED until Phase 3 reconciles verifySiteOwnership.hasSome vs verifySiteAccess.has
-    // — direction is an open domain decision.
-    "[manage_site]-only token: manage gate (hasSome) and orders gate (has) must reach the same authorization outcome",
-    async () => {
-      const owner = await createTestUser()
-      const site = await createTestSite(owner.id)
-      const item = await createTestInventoryItem(owner.id, site.id)
-      // ['manage_site'] only — satisfies hasSome ['all','manage_site'] but NOT has 'all'
-      const token = await createTestSecurityToken(owner.id, ['manage_site'])
+    const manageResult = await blockBed(site.id, item.id, 'scope test', token.id, false)
+    const ordersResult = await getOrders(site.id, 'incoming', token.id)
 
-      const manageResult = await blockBed(site.id, item.id, 'scope test', token.id, false)
-      const ordersResult = await getOrders(site.id, 'incoming', token.id)
+    expect(wasAccepted(manageResult)).toBe(true)
+    expect(wasAccepted(ordersResult)).toBe(true)
+  })
 
-      const manageAccepted = wasAccepted(manageResult)
-      const ordersAccepted = wasAccepted(ordersResult)
+  it("['orders_only']-scoped token (wrong scope) is rejected by both gates", async () => {
+    const owner = await createTestUser()
+    const site = await createTestSite(owner.id)
+    const item = await createTestInventoryItem(owner.id, site.id)
+    // A scope that is neither 'all' nor 'manage_site' — rejected by hasSome filter
+    const token = await createTestSecurityToken(owner.id, ['orders_only'])
 
-      // Direction-agnostic: the two gates must agree. Whether the fix tightens
-      // manage or loosens orders is a domain decision for Phase 3. This assertion
-      // fails on the MISMATCH, not on which direction is correct.
-      expect(manageAccepted).toBe(ordersAccepted)
-    }
-  )
+    const manageResult = await blockBed(site.id, item.id, 'scope test', token.id, false)
+    const ordersResult = await getOrders(site.id, 'incoming', token.id)
+
+    expect(wasAccepted(manageResult)).toBe(false)
+    expect(wasAccepted(ordersResult)).toBe(false)
+  })
 })
