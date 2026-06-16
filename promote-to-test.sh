@@ -30,11 +30,18 @@ echo "==> [3/6] TEST database migration status"
 ( cd "$DATA" && npm run migrate:status:test ) || true
 
 if [ "${SKIP_TESTS:-0}" = "1" ]; then
-  echo "==> [4/6] lint + unit tests SKIPPED (SKIP_TESTS=1)"
+  echo "==> [4/6] lint + unit + integration tests SKIPPED (SKIP_TESTS=1)"
 else
   echo "==> [4/6] lint + unit tests"
   npm run lint
   npm run test
+  if [ "${SKIP_INTEGRATION:-0}" = "1" ]; then
+    echo "    integration tests SKIPPED (SKIP_INTEGRATION=1)"
+  else
+    echo "    integration tests (local sunbnb_test — needs Docker Postgres)"
+    ( cd "$DATA" && npm run migrate:integration )
+    npm run test:integration
+  fi
 fi
 
 echo "==> [5/6] Migrating the TEST database (before deploy)"

@@ -37,21 +37,23 @@ expanded set.
 
 ## Resume here
 
-- **Next action:** Phase 0.5 (erosion-proof gate) — the last spine piece. (1) `test:integration`
-  turbo task (`cache:false`) + root `"test:integration": "turbo test:integration"`. (2) Wire
-  `promote-to-test.sh` to run unit **+ integration**, with a local `migrate:integration`
-  (sunbnb_test) step BEFORE the integration run — distinct from the Neon `migrate:test` step
-  already there. (3) Per-file coverage ratchet: a baseline + a gate check that fails if a
-  *touched* file's coverage drops below baseline. Decide the ratchet's storage + diff mechanism.
-- **Context needed:** spine complete except the gate — 0.1 mock-contract, 0.2 auth-matrix
-  (107-entry registry), 0.3 coverage-contract (47-entry allowlist), 0.4 money guard +
-  `@repo/data/reservations` race chokepoint. The promote script is `./promote-to-test.sh`
-  (runs `npm run test` at step [4/6]); integration runs against **local** `sunbnb_test`, so the
-  gate needs `cd packages/data && npm run migrate:integration` first. ⚠️ **Gate tension:** with
-  the suite intentionally red (getSite, money, token-scope divergence) and fail-loud chosen,
-  wiring integration into promote will BLOCK promote until Phase 3 fixes land — intended;
-  sequence Phase 3 right after. Also confirm the pre-existing `saveGeneral` integration red
-  (subscription-plan guard fixture gap vs real bug) when wiring.
+- **Next action:** **Phase 0 (the spine) is COMPLETE.** Choose the next direction: **Phase 1**
+  (behavioral backfill — the contract's to-do list, all GREEN) or **Phase 3** (fixes — flip the
+  red ledger green and unblock promote). Phase 2 (race/pair-expansion bug-revealing tests) adds
+  more reds before Phase 3. Recommendation if unblocking promote matters: jump to Phase 3 for the
+  4 known reds, then resume Phase 1/2. The red ledger is the bug backlog (see below).
+- **Context needed:** the spine — 0.1 mock-contract, 0.2 auth-matrix (107-entry registry in
+  `app/test/gated-actions.ts`), 0.3 coverage-contract (47-entry allowlist in
+  `app/test/coverage-contract.test.ts`), 0.4 no-inline-money guard + `@repo/data/reservations`
+  race chokepoint, 0.5 gate (turbo `test:integration` + promote wiring). **Red ledger / Phase-3
+  backlog:** (1) `getSite` no ownership guard (`queries.getSite`, 2 reds); (2) `products/actions.ts`
+  inline VAT math → use `@repo/data` `round()`/reverse-VAT (8 sites, 1 red); (3) token-scope
+  divergence `verifySiteOwnership` `hasSome` vs `verifySiteAccess` `has` (1 integration red,
+  decide direction); (4) partner blocking-status divergence + `blockBed` missing conflict check
+  (surfaced in 0.4); adopt `reserveWithConflictGuard` at the 5 call sites. Also confirm the
+  pre-existing `saveGeneral` integration red (subscription-plan guard fixture gap vs real bug).
+  ⚠️ Promote is blocked until these land. **0.5 gate config is uncommitted** (turbo.json,
+  package.json, promote-to-test.sh + track docs).
 - **Blocked by:** —
 
 ## Roadmap
@@ -129,10 +131,16 @@ expanded set.
   blast radius = 0. **Two findings logged for Phase 3:** (i) blocking-status divergence — partner
   uses `{ notIn: [CANCELED] }` so PAYMENT_FAILED/REFUNDED beds stay unavailable (likely a bug; user
   app frees them); (ii) `blockBed` has NO conflict check (double-block, confirms audit).
-- ☐ **0.5 Real, erosion-proof gate** — `test:integration` turbo task (`cache:false`) + root
-  script; `promote-to-test.sh` runs unit + integration with local `migrate:integration`
-  first (distinct from Neon `migrate:test`); per-file coverage ratchet (touched file can't
-  drop below baseline).
+- ✅ **0.5 Erosion-proof gate** (2026-06-16 — gate wiring; ratchet deferred to Phase 4).
+  `test:integration` turbo task (`cache:false`) added; root `npm run test:integration` =
+  `turbo run test:integration --concurrency=1` (**serial across packages** — partner/user/data
+  share one `sunbnb_test` DB and each TRUNCATEs, so parallel would clobber). `promote-to-test.sh`
+  step [4/6] now runs lint + unit + **integration** (local `migrate:integration` first, distinct
+  from Neon `migrate:test`; `SKIP_INTEGRATION=1` finer bypass for docs/DB-less promotes).
+  Validated via JSON parse + `bash -n` + `turbo run --dry-run` (`@repo/data#test:integration`,
+  cache off). **⚠ Promote is now blocked until Phase 3 fixes land** (fail-loud, intended).
+  Per-file **coverage ratchet deferred to Phase 4** — can't validate against a red suite; it's
+  steady-state erosion protection that only matters once green.
 
 ### ☐ Phase 1 — Behavioral backfill (flows through the contract; green)
 Close the contract's to-do list with the non-auth dimensions (happy / error / state-machine /
@@ -156,9 +164,12 @@ divergence — `{ notIn: [CANCELED] }` keeps PAYMENT_FAILED/REFUNDED beds unavai
 matching the user app / `BLOCKING_STATUSES`); (ii) `blockBed` needs a conflict check on adoption.
 
 ### 💤 Phase 4 — Steady state & extraction
-Contract + ratchet keep coverage watertight. Clean stale `BUG:` comments + the tautological
-`paymentAmount === totalPrice` test; refresh `apps/partner/CLAUDE.md` counts; extract
-`auth-matrix` / `race` / fixtures into `@repo/test-utils` for user + admin.
+**Build the per-file coverage ratchet** (deferred from 0.5): a committed coverage baseline + a
+gate check that fails if a *touched* file's coverage drops below it — best built once the suite
+is green so it can be validated. Contract + ratchet then keep coverage watertight. Clean stale
+`BUG:` comments + the tautological `paymentAmount === totalPrice` test; refresh
+`apps/partner/CLAUDE.md` counts; extract `auth-matrix` / `race` / fixtures into `@repo/test-utils`
+for user + admin.
 
 ## Log
 
@@ -241,6 +252,22 @@ Contract + ratchet keep coverage watertight. Clean stale `BUG:` comments + the t
   data-dev surfaced 2 Phase-3 findings: partner blocking-status divergence (`{notIn:[CANCELED]}`
   keeps PAYMENT_FAILED/REFUNDED beds unavailable) and `blockBed`'s missing conflict check.
   `packages/data` work is **uncommitted** (separate workspace from the f724891 partner commit).
+
+- **2026-06-16** — Phase 0.4 committed as two atomic commits (not pushed): `95e310e` (partner
+  no-inline-money guard) + `c082f3d` (`@repo/data` reserveWithConflictGuard chokepoint + track
+  docs). Split because they're different logical changes in different packages.
+
+- **2026-06-16** — **Phase 0.5 complete → the spine (Phase 0) is DONE.** Gate wiring applied
+  (user-approved): `turbo.json` `test:integration` task (`cache:false`); root script
+  `turbo run test:integration --concurrency=1` (serial — shared `sunbnb_test` DB); `promote-to-test.sh`
+  now runs lint + unit + integration at step [4/6] (local `migrate:integration` first;
+  `SKIP_INTEGRATION=1` bypass). Validated (JSON / `bash -n` / turbo dry-run). Coverage ratchet
+  deferred to Phase 4 (defer decided with user — can't validate against a red suite). Gate config
+  is **uncommitted**. The "watertight by construction" architecture is now built AND enforced:
+  mock-contract (no false-green) + auth-matrix/registry (auth tested by construction) +
+  coverage-contract (no ungoverned exports) + money/race chokepoints + integration in the gate.
+  Remaining is application: Phase 1 backfill (green) and Phase 3 fixes (flip the 4-item red
+  ledger, unblock promote).
 
 ## Open decisions
 

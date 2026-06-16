@@ -6,7 +6,8 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "test": "turbo test"
+    "test": "turbo test",
+    "test:integration": "turbo run test:integration --concurrency=1"
   },
   "devDependencies": {
     "@types/qrcode": "^1.5.5",
