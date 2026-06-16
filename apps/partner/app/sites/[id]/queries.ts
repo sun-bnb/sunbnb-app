@@ -1,13 +1,17 @@
 'use server'
 
+import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { resolveSiteFees } from '@repo/data/payment'
 
 // ─── Full Site Query ────────────────────────────────────────────────────────
 
 export async function getSite(siteId: string) {
+  const session = await auth()
+  if (!session?.user) return null
+
   const site = await prisma.site.findFirst({
-    where: { id: siteId },
+    where: { id: siteId, userId: session.user.id },
     include: {
       workingHours: true,
       inventoryItems: {

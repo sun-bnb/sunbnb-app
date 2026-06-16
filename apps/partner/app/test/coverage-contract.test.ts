@@ -536,6 +536,11 @@ const UNGATED_ALLOWLIST: AllowlistEntry[] = [
     reason: 'SAFE — ownership enforced via query filter: site.findFirst where { id: siteId, userId: session.user.id } (site-actions.ts:336-339); returns null for non-owners. Auth-only (non-standard return: returns data|null not { status })',
   },
   {
+    export: 'getSite',
+    file: 'app/sites/[id]/queries.ts',
+    reason: 'SAFE — ownership enforced via query filter: site.findFirst where { id: siteId, userId: session.user.id } (queries.ts:12-13); returns null for unauthenticated or non-owners. Bug #1 fixed. Auth-only (non-standard return: returns full site|null not { status }). Regression guard: queries.test.ts (3 tests).',
+  },
+  {
     export: 'checkSlug',
     file: 'app/sites/[id]/site-actions.ts',
     reason: 'Auth-only (non-standard return: { available: boolean }); reads only existence of slug string, not any site data; returns false for unauthenticated',

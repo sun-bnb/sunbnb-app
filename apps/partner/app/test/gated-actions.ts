@@ -54,7 +54,6 @@ import {
   submitForm,
 } from '@/app/sites/[id]/site-actions'
 
-import { getSite } from '@/app/sites/[id]/queries'
 
 import {
   createPartnerReservation,
@@ -400,18 +399,6 @@ export const GATED_ACTIONS: GatedAction[] = [
         locationLat: '60.1699',
         locationLng: '24.9384',
       }),
-  },
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // session-owner: getSite — EXPECTED RED (bug #1: no ownership check)
-  // ══════════════════════════════════════════════════════════════════════════
-
-  {
-    name: 'queries.getSite',
-    kind: 'action',
-    gate: 'session-owner',
-    // getSite has no auth guard; the matrix tests will fail loudly (intended)
-    invoke: (_accessKey?) => getSite(SITE_ID),
   },
 
   // ══════════════════════════════════════════════════════════════════════════
