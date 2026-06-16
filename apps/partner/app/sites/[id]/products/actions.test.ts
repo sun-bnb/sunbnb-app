@@ -125,11 +125,29 @@ describe('updateProduct', () => {
       .mockResolvedValueOnce({ tax: 10, totalPrice: 11 } as any) // existing product
     vi.mocked(prisma.product.update).mockResolvedValue({} as any)
 
-    // totalPrice = 22, existing tax = 10% → price = 22 / 1.10 = 20
+    // totalPrice = 22, existing tax = 10% → price = round(22 / 1.10) = 20
     await updateProduct('prod-1', { totalPrice: 22 })
 
     const updateCall = vi.mocked(prisma.product.update).mock.calls[0][0]
     expect(updateCall.data.price).toBe(20)
+  })
+
+  it('recalculates price when only tax changes (existing totalPrice)', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.product.findUnique)
+      .mockResolvedValueOnce({ siteId: SITE_ID, site: { userId: OWNER_ID } } as any) // ownership check
+      .mockResolvedValueOnce({ tax: 10, totalPrice: 24 } as any) // existing product — totalPrice=24, tax was 10%
+    vi.mocked(prisma.product.update).mockResolvedValue({} as any)
+
+    // tax changes to 20%, existing totalPrice = 24 → price = round(24 / 1.20) = 20
+    await updateProduct('prod-1', { tax: 20 })
+
+    const updateCall = vi.mocked(prisma.product.update).mock.calls[0][0]
+    // price must be the canonical round() result, not a .toFixed string
+    expect(updateCall.data.price).toBe(20)
+    expect(updateCall.data.tax).toBe(20)
+    // totalPrice is unchanged (only tax was provided)
+    expect(updateCall.data.totalPrice).toBeUndefined()
   })
 })
 

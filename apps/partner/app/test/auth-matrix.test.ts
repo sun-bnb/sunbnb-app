@@ -31,6 +31,8 @@ vi.mock('next/cache', () => ({
 vi.mock('@repo/data/payment', () => ({
   resolveSiteFees: vi.fn().mockResolvedValue([]),
   processChargedTableDeposit: vi.fn().mockResolvedValue(undefined),
+  // Pure VAT helper — used by addProduct/updateProduct; return a stub that passes through
+  computeVatAndBaseAmounts: vi.fn().mockReturnValue({ baseAmount: 10, vatAmount: 2 }),
 }))
 
 // Mock @repo/data/subscription for saveGeneral which calls getEffectiveSubscriptionForUser

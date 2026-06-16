@@ -5,6 +5,7 @@ import { auth } from '@/app/auth'
 import { requireSiteOwner } from '@/lib/auth-helpers'
 import { validateImageFile, isValidOrderPaymentType, isValidProductCategory } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
+import { computeVatAndBaseAmounts } from '@repo/data/payment'
 import { put } from '@vercel/blob'
 import sharp from 'sharp'
 import { Product } from '@/types/shared'
@@ -80,8 +81,7 @@ export async function addProduct(formData: FormData) {
     return { status: 'error', errors: ['Prep time must be a non-negative number'] }
   }
 
-  const priceBeforeTax = totalPrice / (1 + taxPercent / 100)
-  const price          = +priceBeforeTax.toFixed(2)
+  const { baseAmount: price } = computeVatAndBaseAmounts(totalPrice, taxPercent)
 
   let productData: any = {
     siteId,
@@ -169,21 +169,21 @@ export async function updateProduct(
   if (data.category !== undefined) updateData.category = data.category
   if (data.prepTime !== undefined) updateData.prepTime = data.prepTime
   if (data.totalPrice !== undefined && data.tax !== undefined) {
-    const priceBeforeTax = data.totalPrice / (1 + data.tax / 100)
-    updateData.price = +priceBeforeTax.toFixed(2)
+    const { baseAmount } = computeVatAndBaseAmounts(data.totalPrice, data.tax)
+    updateData.price = baseAmount
     updateData.tax = data.tax
     updateData.totalPrice = data.totalPrice
   } else if (data.totalPrice !== undefined) {
     const existing = await prisma.product.findUnique({ where: { id } })
     if (!existing) return { status: 'error', errors: ['Product not found'] }
-    const priceBeforeTax = data.totalPrice / (1 + existing.tax / 100)
-    updateData.price = +priceBeforeTax.toFixed(2)
+    const { baseAmount } = computeVatAndBaseAmounts(data.totalPrice, existing.tax)
+    updateData.price = baseAmount
     updateData.totalPrice = data.totalPrice
   } else if (data.tax !== undefined) {
     const existing = await prisma.product.findUnique({ where: { id } })
     if (!existing) return { status: 'error', errors: ['Product not found'] }
-    const priceBeforeTax = existing.totalPrice / (1 + data.tax / 100)
-    updateData.price = +priceBeforeTax.toFixed(2)
+    const { baseAmount } = computeVatAndBaseAmounts(existing.totalPrice, data.tax)
+    updateData.price = baseAmount
     updateData.tax = data.tax
   }
 
