@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest'
 import { cleanDatabase, disconnectDatabase, prisma } from '@/app/test/setup'
-import { createTestUser, createTestSite } from '@/app/test/fixtures'
+import {
+  createTestUser,
+  createTestSite,
+  createTestPartnerAccount,
+  createTestSubscription,
+} from '@/app/test/fixtures'
 
 // ---------------------------------------------------------------------------
 // Mocks — only auth and next/cache. Everything else (including
@@ -57,6 +62,12 @@ describe('saveGeneral', () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id)
     mockUserId = user.id
+
+    // The site starts as type='paid' (default). Transitioning to 'unpaid' requires
+    // the OFF_PLATFORM_BILLING entitlement (PRO/BUSINESS plan). Grant it via a real
+    // DB subscription so saveGeneral's entitlement check passes legitimately.
+    const account = await createTestPartnerAccount(user.id)
+    await createTestSubscription(account.userId, 'PRO')
 
     const result = await saveGeneral({
       id: site.id,

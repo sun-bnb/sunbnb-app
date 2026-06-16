@@ -19,6 +19,60 @@ export async function createTestUser(overrides: Record<string, any> = {}) {
   })
 }
 
+/**
+ * Creates a PartnerAccount for the given user.
+ * Required before createTestSubscription — Subscription references PartnerAccount by userId.
+ */
+export async function createTestPartnerAccount(
+  userId: string,
+  overrides: Record<string, any> = {}
+) {
+  return prisma.partnerAccount.create({
+    data: {
+      userId,
+      firstName: 'Test',
+      lastName: 'Partner',
+      email: `partner-${nextId()}@test.com`,
+      phoneNumber: '+358401234567',
+      company: 'Test Company Oy',
+      address: 'Test Street 1, Helsinki',
+      ...overrides,
+    },
+  })
+}
+
+/**
+ * Creates a SubscriptionPlan + Subscription for the given partner account.
+ * Grants the entitlements that come with the chosen tier (e.g. PRO/BUSINESS
+ * both enable OFF_PLATFORM_BILLING).
+ *
+ * Requires a PartnerAccount to exist for the user first — call
+ * createTestPartnerAccount() before this.
+ */
+export async function createTestSubscription(
+  partnerAccountId: string,
+  tier: 'STARTER' | 'PRO' | 'BUSINESS' = 'STARTER'
+) {
+  const plan = await prisma.subscriptionPlan.create({
+    data: {
+      tier,
+      name: `${tier} Plan`,
+      monthlyPrice: tier === 'STARTER' ? 9.99 : tier === 'PRO' ? 29.99 : 79.99,
+      maxSites: tier === 'STARTER' ? 1 : tier === 'PRO' ? 5 : 20,
+    },
+  })
+
+  const subscription = await prisma.subscription.create({
+    data: {
+      partnerAccountId,
+      planId: plan.id,
+      status: 'ACTIVE',
+    },
+  })
+
+  return { plan, subscription }
+}
+
 export async function createTestSite(userId: string, overrides: Record<string, any> = {}) {
   return prisma.site.create({
     data: {
