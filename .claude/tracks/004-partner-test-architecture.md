@@ -37,11 +37,13 @@ expanded set.
 
 ## Resume here
 
-- **Next action:** **Phase 0 (the spine) is COMPLETE.** Choose the next direction: **Phase 1**
-  (behavioral backfill — the contract's to-do list, all GREEN) or **Phase 3** (fixes — flip the
-  red ledger green and unblock promote). Phase 2 (race/pair-expansion bug-revealing tests) adds
-  more reds before Phase 3. Recommendation if unblocking promote matters: jump to Phase 3 for the
-  4 known reds, then resume Phase 1/2. The red ledger is the bug backlog (see below).
+- **Next action:** **All test-pinned reds are GREEN — promote is unblocked.** Partner unit 775
+  green + integration 68 green; getSite/products/token-scope/saveGeneral all fixed. **Uncommitted:**
+  token-scope fix (`lib/auth-helpers.ts` + manage wrapper + token-scope integration test) +
+  saveGeneral fixture (`app/test/fixtures.ts` + site-actions integration test) + track docs.
+  The ONLY remaining Phase-3 item is **proactive**: adopt `reserveWithConflictGuard` for the
+  pair-expansion double-booking (suspected bug #2) — cross-app (touches apps/user), no failing
+  test pins it. Decide: do it now (finish Phase 3) or treat as a separate effort.
 - **Context needed:** the spine — 0.1 mock-contract, 0.2 auth-matrix (107-entry registry in
   `app/test/gated-actions.ts`), 0.3 coverage-contract (47-entry allowlist in
   `app/test/coverage-contract.test.ts`), 0.4 no-inline-money guard + `@repo/data/reservations`
@@ -155,13 +157,41 @@ restaurant deposit→invoice integration cascade. Ratchet prevents backslide.
 pair-expansion double-booking tests (manage + calendar). Each red = one bug ticket. Promote
 intentionally blocked.
 
-### 💤 Phase 3 — Fixes (the "afterward")
-Flip reds green: `getSite` ownership; product money math (use `@repo/data` `round()`/reverse-VAT);
-pair-expansion conflict check; the `verifySiteOwnership` vs `verifySiteAccess` scope divergence
-(decide direction); adopt `reserveWithConflictGuard` at the 5 race-prone call sites (expand
-SunbedGroup/pair siblings before calling). Also surfaced in 0.4: (i) partner blocking-status
-divergence — `{ notIn: [CANCELED] }` keeps PAYMENT_FAILED/REFUNDED beds unavailable (free them,
-matching the user app / `BLOCKING_STATUSES`); (ii) `blockBed` needs a conflict check on adoption.
+### ▶ Phase 3 — Fixes (the "afterward")
+- ✅ **`getSite` ownership** (2026-06-16) — query-side `where: { id, userId }` (mirrors `getBrand`)
+  + `queries.test.ts` regression test + moved registry→allowlist. 2 matrix reds gone. Callers all
+  session-auth owner contexts (verified).
+- ✅ **products VAT math** (2026-06-16) — all 8 inline sites → `@repo/data` `computeVatAndBaseAmounts`;
+  tax-only branch now tested; `no-inline-money` green (empty allowlist). **Partner unit suite: 775
+  green, 0 red.**
+- ✅ **Token-scope divergence** (2026-06-16; decided: `manage_site` authorizes both). Consolidated
+  to ONE gate — `verifySiteAccess` (`lib/auth-helpers.ts`) is now canonical with
+  `hasSome ['all','manage_site']`; manage's `verifySiteOwnership` is a 3-line delegating wrapper
+  (was a 30-line duplicate, never exported → zero blast radius). Behavior change: orders dashboard
+  (`setOrderStatus`/`getOrders`/`toggleProductSoldOut`) now also accepts `manage_site` tokens.
+  `token-scope.integration.test.ts` strengthened to assert the unified policy (manage_site accepted
+  by both, `orders_only` rejected by both) — **5/5 green** (was 4+1 red). Unit suite unchanged.
+- ☐ **Reservation race adoption** (decided: free the bed → default `BLOCKING_STATUSES`). Adopt
+  `@repo/data/reservations` `reserveWithConflictGuard` at the **4 sunbed-reservation** call sites,
+  expanding SunbedGroup/pair siblings BEFORE the call (fixes pair-expansion double-booking,
+  suspected bug #2): **partner** (partner-dev) manage `reserveItem`, manage `blockBed` (also ADD a
+  conflict check — it has none today), calendar `createPartnerReservation`; **user** (user-dev)
+  `saveReservationForMultipleItems`. Write bug-revealing call-site tests (pair-expansion sibling →
+  conflict; the @repo/data race test already proves serialization). ⚠️ **Cross-app** — touches
+  apps/user (consumer booking flow); architecture pass. **Rental wrinkle:** manage
+  `createWalkInRental` is RentalBooking (quantity-based availability), NOT InventoryItem bed-lock —
+  `reserveWithConflictGuard` doesn't fit it; its race needs a separate quantity guard → **follow-up,
+  not this packet.**
+- ✅ `saveGeneral` integration red (2026-06-16) — **confirmed fixture gap, NOT a product bug.**
+  The `paid→unpaid` entitlement gate (OFF_PLATFORM_BILLING, Pro/Business) is correct; the test
+  created a plan-less partner. Fix: added `createTestPartnerAccount` + `createTestSubscription`
+  fixtures and granted a real PRO subscription in the test. **Partner integration suite now 68
+  green, 0 red.**
+- ☐ **Reservation race adoption (the only remaining Phase-3 item — PROACTIVE, no failing test).**
+  Suspected bug #2 (pair-expansion double-booking) + the race; adopt `reserveWithConflictGuard`.
+  See the item above for scope (4 sunbed call sites, cross-app, rental follow-up). The suite is
+  GREEN and promote is UNBLOCKED without this — it's a real latent double-booking bug to fix with
+  its own bug-revealing test, not a red to flip.
 
 ### 💤 Phase 4 — Steady state & extraction
 **Build the per-file coverage ratchet** (deferred from 0.5): a committed coverage baseline + a
@@ -268,6 +298,25 @@ for user + admin.
   coverage-contract (no ungoverned exports) + money/race chokepoints + integration in the gate.
   Remaining is application: Phase 1 backfill (green) and Phase 3 fixes (flip the 4-item red
   ledger, unblock promote).
+
+- **2026-06-16** — Gate config committed `514b243`. **Phase 3 started** — 2 of 4 reds fixed in
+  parallel (partner-dev ×2, disjoint files). **`getSite`** ownership leak (bug #1): query-side
+  `where: {id, userId}` + `queries.test.ts` regression test + registry→allowlist move (48
+  allowlisted); all callers verified session-auth owner. **products VAT**: 8 inline sites →
+  `@repo/data` `computeVatAndBaseAmounts`, tax-only branch tested, `no-inline-money` green.
+  Orchestrator re-ran to confirm combined state (the parallel agents' handoff counts disagreed):
+  partner unit suite **775 green, 0 red**. Both fixes **uncommitted**. Remaining Phase 3:
+  token-scope divergence + reservation race adoption — both awaiting user direction decisions.
+
+- **2026-06-16** — getSite + products committed `b7b22c5` / `8918f0b` (two atomic, not pushed).
+  User decisions: token-scope → `manage_site` authorizes both; bed-blocking → free the bed
+  (`BLOCKING_STATUSES`). **Token-scope FIXED** (partner-dev): consolidated to one gate
+  (`verifySiteAccess` canonical, `hasSome ['all','manage_site']`; `verifySiteOwnership` → thin
+  wrapper); orders dashboard now accepts `manage_site`; integration token-scope 5/5 green; unit
+  unchanged. **`saveGeneral` FIXED** (partner-dev): fixture gap confirmed (not a bug) — granted a
+  real PRO subscription via new `createTestPartnerAccount`/`createTestSubscription` fixtures;
+  partner integration **68 green**. **All test-pinned reds now green; promote unblocked.** Only the
+  proactive reservation-race (bug #2, cross-app) remains. Token-scope + saveGeneral **uncommitted**.
 
 ## Open decisions
 

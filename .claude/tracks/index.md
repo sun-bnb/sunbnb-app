@@ -9,7 +9,7 @@ Maintained by the `create` and `handoff` workflows.
 |----|-------|-------------|----------|---------|
 | [001](001-knowledge-store.md) | Knowledge Store | Phase 1 — stand up Vercel test-env log-drain adapter | — | 2026-05-20 |
 | [002](002-table-reservations.md) | Table Reservations | P1 complete (1a–1h) + pick-your-spot (`71c75e7`, committed local). **Next: `migrate:test` then push** (additive migration pending Neon TEST DB); then browser-verify, P2 live floor | — | 2026-05-27 |
-| [004](004-partner-test-architecture.md) | Partner Test Architecture | **Spine (Phase 0) COMPLETE.** Next: choose Phase 1 (backfill, green) or Phase 3 (fix the 4-item red ledger, unblock promote). Spine committed `f724891`/`95e310e`/`c082f3d`; 0.5 gate config uncommitted | — | 2026-06-16 |
+| [004](004-partner-test-architecture.md) | Partner Test Architecture | **All test-reds GREEN, promote unblocked** (getSite/products/token-scope/saveGeneral ✅; suite 775+68 green). Uncommitted: token-scope+saveGeneral. Last (proactive): reservation-race adoption, cross-app. | — | 2026-06-16 |
 
 ## Proposed / backlog
 
