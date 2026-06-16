@@ -28,6 +28,7 @@ export async function createTestSite(userId: string, overrides: Record<string, a
       locationLng: '24.9384',
       price: 10.0,
       vat: 25.5,
+      type: 'paid',
       ...overrides,
     },
   })

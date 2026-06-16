@@ -8,9 +8,8 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }))
 
-vi.mock('@/app/api/_lib/payment-ids', () => ({
-  isDemoPayment: (ref: string | null) => ref?.startsWith('pi_demo_') ?? false,
-}))
+// @/app/api/_lib/payment-ids is NOT mocked — isDemoPayment and isValidEntityId are
+// pure format helpers with no DB/side-effects; the real module is safe in integration tests.
 
 vi.mock('@/app/api/_lib/payment-provider', () => ({
   issueRefund: vi.fn().mockResolvedValue(undefined),
