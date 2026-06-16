@@ -37,13 +37,13 @@ expanded set.
 
 ## Resume here
 
-- **Next action:** **All test-pinned reds are GREEN — promote is unblocked.** Partner unit 775
-  green + integration 68 green; getSite/products/token-scope/saveGeneral all fixed. **Uncommitted:**
-  token-scope fix (`lib/auth-helpers.ts` + manage wrapper + token-scope integration test) +
-  saveGeneral fixture (`app/test/fixtures.ts` + site-actions integration test) + track docs.
-  The ONLY remaining Phase-3 item is **proactive**: adopt `reserveWithConflictGuard` for the
-  pair-expansion double-booking (suspected bug #2) — cross-app (touches apps/user), no failing
-  test pins it. Decide: do it now (finish Phase 3) or treat as a separate effort.
+- **Next action:** Bug #2 (pair-expansion double-booking) FIXED cross-app + all partner reds green
+  (partner 777 unit + 76 integration green). **Reservation-race work (R1 partner + R2 user) is
+  uncommitted.** **Promote is still blocked** — not by partner, but by **21 pre-existing
+  `apps/user` integration reds** the gate exposed (baseline-confirmed pre-existing; 2 fixture/mock
+  root causes — payment-ids mock missing `isValidEntityId`, `createTestSite` no `type:'paid'`
+  default). Next: (a) commit the reservation fix; (b) fix the 21 user-app fixture gaps (user-dev,
+  ~2 quick fixes) to truly unblock promote.
 - **Context needed:** the spine — 0.1 mock-contract, 0.2 auth-matrix (107-entry registry in
   `app/test/gated-actions.ts`), 0.3 coverage-contract (47-entry allowlist in
   `app/test/coverage-contract.test.ts`), 0.4 no-inline-money guard + `@repo/data/reservations`
@@ -187,11 +187,23 @@ intentionally blocked.
   created a plan-less partner. Fix: added `createTestPartnerAccount` + `createTestSubscription`
   fixtures and granted a real PRO subscription in the test. **Partner integration suite now 68
   green, 0 red.**
-- ☐ **Reservation race adoption (the only remaining Phase-3 item — PROACTIVE, no failing test).**
-  Suspected bug #2 (pair-expansion double-booking) + the race; adopt `reserveWithConflictGuard`.
-  See the item above for scope (4 sunbed call sites, cross-app, rental follow-up). The suite is
-  GREEN and promote is UNBLOCKED without this — it's a real latent double-booking bug to fix with
-  its own bug-revealing test, not a red to flip.
+- ✅ **Reservation race adoption / bug #2 FIXED** (2026-06-16, cross-app). Adopted
+  `@repo/data/reservations` `reserveWithConflictGuard` (expand-then-guard, free-the-bed default):
+  **partner** (R1) `manage.reserveItem`, `manage.blockBed` (gained its missing conflict check),
+  `calendar.createPartnerReservation`; **user** (R2) `saveReservationForMultipleItems` (anon flow
+  confirmed compatible — no guard extension). Unit harness: `@repo/data/reservations` mocked in
+  both apps; partner `mock-contract` extended to cover it. **Bug-revealing integration tests** (real
+  guard): partner +8 (pair-expansion + blockBed conflict), user +1 (SunbedGroup sibling) — all
+  GREEN; each would have silently double-booked before. Partner suite **777 unit + 76 integration
+  green**. `createWalkInRental` (rental quantity race) left as a flagged follow-up. **R2 introduced
+  ZERO regressions** (baseline-verified). Uncommitted.
+- ☐ **NEW — gate surfaced 21 pre-existing `apps/user` integration reds** (the architecture catching
+  real rot — they were silently broken because integration ran nowhere). Two root causes, both
+  fixture/mock gaps (NOT product bugs, NOT caused by this work — baseline-confirmed): (1)
+  `reservations/[id]/actions.integration.test.ts` ×16 — the `@/app/api/_lib/payment-ids` mock omits
+  `isValidEntityId`; (2) `sites/[id]/actions.integration.test.ts` ×5 — `createTestSite` doesn't
+  default `type:'paid'` (same class as the partner saveGeneral gap). **These block promote** until
+  fixed. Likely 2 quick fixture fixes (user-dev).
 
 ### 💤 Phase 4 — Steady state & extraction
 **Build the per-file coverage ratchet** (deferred from 0.5): a committed coverage baseline + a
