@@ -91,6 +91,21 @@ export async function createTestRentalBooking(
   })
 }
 
+export async function createTestSunbedGroup(
+  siteId: string,
+  itemIds: string[]
+) {
+  const group = await prisma.sunbedGroup.create({
+    data: { siteId },
+  })
+  // Connect each item to the group
+  await prisma.inventoryItem.updateMany({
+    where: { id: { in: itemIds } },
+    data: { sunbedGroupId: group.id },
+  })
+  return group
+}
+
 export async function createTestProduct(
   siteId: string,
   overrides: Record<string, any> = {}

@@ -31,6 +31,7 @@ export default defineConfig({
       '@repo/data/env': path.resolve(__dirname, '__mocks__/@repo/data/env'),
       '@repo/data/password-reset': path.resolve(__dirname, '__mocks__/@repo/data/password-reset'),
       '@repo/data/rate-limit': path.resolve(__dirname, '__mocks__/@repo/data/rate-limit'),
+      '@repo/data/reservations': path.resolve(__dirname, '__mocks__/@repo/data/reservations'),
     },
   },
 })

@@ -27,15 +27,19 @@ import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { getAvailability } from '@/service/availabilityService'
 import { isValidEntityId } from '@/app/api/_lib/payment-ids'
+import { reserveWithConflictGuard } from '@repo/data/reservations'
 
 const mockAuth = vi.mocked(auth)
 const mockGetAvailability = vi.mocked(getAvailability)
 const mockIsValidEntityId = vi.mocked(isValidEntityId)
+const mockReserveWithConflictGuard = vi.mocked(reserveWithConflictGuard)
 
 beforeEach(() => {
   vi.clearAllMocks()
   mockAuth.mockResolvedValue(null)
   mockIsValidEntityId.mockReturnValue(true)
+  // Default: guard returns created — override per test for conflict scenarios
+  mockReserveWithConflictGuard.mockResolvedValue({ outcome: 'created', reservationId: 'r1' })
 })
 
 // ─── saveReservationForMultipleItems ───────────────────────────────────────
@@ -162,7 +166,8 @@ describe('saveReservationForMultipleItems', () => {
       { id: 'item-1', price: 10 },
       { id: 'item-2', price: 10 },
     ] as any)
-    vi.mocked(prisma.reservation.create).mockResolvedValue({ id: 'res-ok' } as any)
+    // Guard default: { outcome: 'created', reservationId: 'r1' } — set in beforeEach
+    mockReserveWithConflictGuard.mockResolvedValueOnce({ outcome: 'created', reservationId: 'res-ok' })
 
     const res = await saveReservationForMultipleItems({
       siteId: 'site-1',
@@ -215,7 +220,7 @@ describe('saveReservationForMultipleItems', () => {
       { id: 'item-1', price: 15 },
       { id: 'item-2', price: null },
     ] as any)
-    vi.mocked(prisma.reservation.create).mockResolvedValue({ id: 'res-1' } as any)
+    mockReserveWithConflictGuard.mockResolvedValueOnce({ outcome: 'created', reservationId: 'res-1' })
 
     const res = await saveReservationForMultipleItems({
       siteId: 'site-1',
@@ -230,12 +235,10 @@ describe('saveReservationForMultipleItems', () => {
     expect(res.id).toBe('res-1')
 
     // item-1 DB price 15, item-2 falls back to site price 10 → 25 per day × 2 days = 50
-    expect(prisma.reservation.create).toHaveBeenCalledWith(
+    expect(mockReserveWithConflictGuard).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          paymentAmount: 50,
-          status: 'pending',
-        }),
+        paymentAmount: 50,
+        status: 'pending',
       })
     )
   })
@@ -247,7 +250,7 @@ describe('saveReservationForMultipleItems', () => {
       type: 'unpaid',
       price: null,
     } as any)
-    vi.mocked(prisma.reservation.create).mockResolvedValue({ id: 'res-1' } as any)
+    mockReserveWithConflictGuard.mockResolvedValueOnce({ outcome: 'created', reservationId: 'res-1' })
 
     const res = await saveReservationForMultipleItems({
       siteId: 'site-1',
@@ -258,12 +261,10 @@ describe('saveReservationForMultipleItems', () => {
     })
 
     expect(res.status).toBe('ok')
-    expect(prisma.reservation.create).toHaveBeenCalledWith(
+    expect(mockReserveWithConflictGuard).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          paymentAmount: 0,
-          status: 'complete',
-        }),
+        paymentAmount: 0,
+        status: 'complete',
       })
     )
   })
@@ -273,7 +274,7 @@ describe('saveReservationForMultipleItems', () => {
     vi.mocked(prisma.site.findUnique)
       .mockResolvedValueOnce({ userId: 'owner-1' } as any) // anonymous FK lookup
       .mockResolvedValueOnce({ id: 'site-1', type: 'unpaid', price: null } as any)
-    vi.mocked(prisma.reservation.create).mockResolvedValue({ id: 'res-1' } as any)
+    mockReserveWithConflictGuard.mockResolvedValueOnce({ outcome: 'created', reservationId: 'res-1' })
 
     const res = await saveReservationForMultipleItems({
       anonId: 'anon-1',
@@ -284,12 +285,11 @@ describe('saveReservationForMultipleItems', () => {
     })
 
     expect(res.status).toBe('ok')
-    expect(prisma.reservation.create).toHaveBeenCalledWith(
+    // Guard receives the site owner's userId (FK placeholder) and the anonId
+    expect(mockReserveWithConflictGuard).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          anonId: 'anon-1',
-          user: { connect: { id: 'owner-1' } },
-        }),
+        userId: 'owner-1',
+        anonId: 'anon-1',
       })
     )
   })
@@ -392,12 +392,7 @@ describe('saveReservationForMultipleItems', () => {
   // reservations under another user's account.
   it('rejects client-supplied userId when no session (prevents impersonation)', async () => {
     // No session, but passing someone else's userId
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({
-      id: 'site-1',
-      type: 'unpaid',
-      price: null,
-    } as any)
-    vi.mocked(prisma.reservation.create).mockResolvedValue({ id: 'res-1' } as any)
+    // Action returns error before reaching the guard — no site lookup or guard call needed
 
     const res = await saveReservationForMultipleItems({
       userId: 'victim-user-id', // client-supplied — should NOT be trusted
@@ -431,6 +426,39 @@ describe('saveReservationForMultipleItems', () => {
     expect(res.status).toBe('error')
   })
 
+  // Guard conflict path: guard returns conflict → action returns error with the
+  // same "not available" message (matches the pre-guard availability-check message).
+  it('returns error when the conflict guard reports a double-booking', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      id: 'site-1',
+      type: 'paid',
+      price: 10,
+    } as any)
+    mockGetAvailability.mockResolvedValue([
+      { itemId: 'item-1', available: true },
+    ] as any)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([
+      { id: 'item-1', price: 10 },
+    ] as any)
+    // Guard re-checks inside the transaction and finds a conflict
+    mockReserveWithConflictGuard.mockResolvedValueOnce({
+      outcome: 'conflict',
+      conflictingReservationId: 'existing-res',
+    })
+
+    const res = await saveReservationForMultipleItems({
+      siteId: 'site-1',
+      items: [{ id: 'item-1' } as any],
+      type: 'days',
+      from: '2025-07-01',
+      to: '2025-07-02',
+    })
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('not available')
+  })
+
   // BUG: Empty items on a paid site creates reservation with paymentAmount: 0
   // This effectively bypasses payment for a paid site
   it('rejects reservation with no items on a paid site', async () => {
@@ -440,7 +468,6 @@ describe('saveReservationForMultipleItems', () => {
       type: 'paid',
       price: 10,
     } as any)
-    vi.mocked(prisma.reservation.create).mockResolvedValue({ id: 'res-1' } as any)
 
     const res = await saveReservationForMultipleItems({
       siteId: 'site-1',

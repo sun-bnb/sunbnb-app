@@ -21,6 +21,7 @@ import {
   createTestUser,
   createTestSite,
   createTestInventoryItem,
+  createTestSunbedGroup,
   createTestRentalItem,
   createTestRentalBooking,
 } from '@/app/test/fixtures'
@@ -246,6 +247,74 @@ describe('saveReservationForMultipleItems', () => {
     expect(res.errors?.[0]).toContain('not available')
     const count = await prisma.reservation.count({ where: { siteId: site.id } })
     expect(count).toBe(0)
+  })
+
+  // BUG-REVEALING: pair-expansion double-booking (suspected bug #2).
+  //
+  // Before the guard: the page expands SunbedGroup siblings and sends all item IDs
+  // to this action. The action checked availability on the expanded set (correct),
+  // but used prisma.reservation.create (two separate awaits vs the conflict check).
+  // A concurrent request that already claimed the sibling between the check and the
+  // create would succeed in double-booking it.
+  //
+  // After the guard: reserveWithConflictGuard locks all candidate InventoryItem rows
+  // FOR UPDATE, re-checks conflict inside the same transaction, and returns
+  // { outcome: 'conflict' } rather than creating.
+  //
+  // This test simulates the scenario where a sibling in a SunbedGroup is already
+  // reserved (as if a concurrent request already committed), then calls the action
+  // requesting the primary — passing the full expanded set (primary + sibling).
+  // Before the fix this would silently double-book the sibling; after the fix it
+  // returns a conflict error.
+  it('rejects reservation when a SunbedGroup sibling is already reserved — prevents pair-expansion double-booking', async () => {
+    const owner = await createTestUser()
+    const customer = await createTestUser()
+    const site = await createTestSite(owner.id, { price: 20.0 })
+
+    // Create two items and group them as a SunbedGroup (the page would expand
+    // a request for item1 to include item2 as its sibling).
+    const item1 = await createTestInventoryItem(owner.id, site.id, { number: 1 })
+    const item2 = await createTestInventoryItem(owner.id, site.id, { number: 2 })
+    await createTestSunbedGroup(site.id, [item1.id, item2.id])
+
+    // Simulate item2 already reserved (concurrent request already committed).
+    await prisma.reservation.create({
+      data: {
+        userId: owner.id,
+        siteId: site.id,
+        from: new Date('2025-07-01'),
+        to: new Date('2025-07-02'),
+        type: 'days',
+        status: 'pending',
+        paymentAmount: 20,
+        items: { connect: [{ id: item2.id }] },
+      },
+    })
+
+    mockAuth.mockResolvedValue({ user: { id: customer.id } } as any)
+    // The page expanded item1 to [item1, item2] — so the action receives both.
+    // Availability service is mocked: both appear available (it hasn't learned
+    // of the concurrent commit yet — that's the race window).
+    mockGetAvailability.mockResolvedValue([
+      { itemId: item1.id, available: true },
+      { itemId: item2.id, available: true },
+    ] as any)
+
+    // The guard's in-tx re-check sees item2 is already reserved → conflict.
+    const res = await saveReservationForMultipleItems({
+      siteId: site.id,
+      items: [{ id: item1.id } as any, { id: item2.id } as any],
+      type: 'days',
+      from: '2025-07-01',
+      to: '2025-07-02',
+    })
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('not available')
+
+    // Only the pre-existing reservation for item2 exists — no double-booking created.
+    const count = await prisma.reservation.count({ where: { siteId: site.id } })
+    expect(count).toBe(1)
   })
 })
 

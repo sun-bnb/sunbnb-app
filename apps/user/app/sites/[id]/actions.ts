@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import dayjs from 'dayjs'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { reserveWithConflictGuard } from '@repo/data/reservations'
 import { getAvailability } from '@/service/availabilityService'
 import { isValidEntityId } from '@/app/api/_lib/payment-ids'
 import { InventoryItem } from '../types'
@@ -157,30 +158,36 @@ export async function saveReservationForMultipleItems(
 
   const paymentAmount = totalPrice * daysBetween
 
-  const newReservation = await prisma.reservation.create({
-    data: {
-      from,
-      to,
-      type: reservation.type,
-      status,
-      paymentAmount,
-      anonId: reservation.anonId,
-      guestEmail: reservation.email,
-      items: {
-        connect: reservation.items?.map(item => ({ id: item.id }))
-      },
-      site: {
-        connect: { id: reservation.siteId }
-      },
-      user: {
-        connect: { id: reservationUserId }
-      }
-    }
+  // Expand to the full item set the client sent (page already expands
+  // SunbedGroup / pair siblings before calling this action).
+  // Pass the full expanded set to the guard so it locks ALL candidate rows
+  // and re-checks conflict inside the transaction — prevents pair-expansion
+  // double-booking where a sibling was already reserved by a concurrent request.
+  const itemIds = reservation.items?.map(item => item.id) ?? []
+
+  const result = await reserveWithConflictGuard({
+    itemIds,
+    siteId: reservation.siteId,
+    userId: reservationUserId,
+    from,
+    to,
+    type: reservation.type,
+    status,
+    paymentAmount,
+    anonId: reservation.anonId,
+    guestEmail: reservation.email,
   })
+
+  if (result.outcome === 'conflict') {
+    return {
+      status: 'error',
+      errors: ['Some items are not available for the requested dates'],
+    }
+  }
 
   revalidatePath('/sites')
 
-  return { status: 'ok', id: newReservation.id }
+  return { status: 'ok', id: result.reservationId }
 }
 
 // ─── Rental Bookings ────────────────────────────────────────────────────────
