@@ -37,19 +37,21 @@ expanded set.
 
 ## Resume here
 
-- **Next action:** Phase 0.4 (risk chokepoints). (1) `reserveWithConflictGuard` —
-  transactional check-then-create helper + tests (call-site adoption deferred to Phase 3).
-  (2) `app/test/no-inline-money.test.ts` — grep guard failing on `toFixed(` / inline
-  `/ (1 + vat`, directing to `@repo/data` `round()`/reverse-VAT; expected RED on
-  `products/actions.ts` (the `toFixed(2)` VAT math) until Phase 3.
-- **Context needed:** spine so far — 0.1 mock-contract, 0.2 auth-matrix (107-entry registry in
-  `app/test/gated-actions.ts`), 0.3 coverage-contract (`app/test/coverage-contract.test.ts`,
-  47-entry `UNGATED_ALLOWLIST`). Money chokepoint already exists in `@repo/data` (`round()`,
-  reverse-VAT in `payment.ts`); the rule is "no inline money math in actions". Race chokepoint:
-  see Phase 2's race-prone list. Decide `reserveWithConflictGuard`'s home (partner vs
-  `@repo/data`) — open decision. Also still open: surface the pre-existing `saveGeneral`
-  integration red (subscription-plan guard fixture gap) to the user; confirm fixture-gap vs
-  real guard bug when wiring the gate (0.5).
+- **Next action:** Phase 0.5 (erosion-proof gate) — the last spine piece. (1) `test:integration`
+  turbo task (`cache:false`) + root `"test:integration": "turbo test:integration"`. (2) Wire
+  `promote-to-test.sh` to run unit **+ integration**, with a local `migrate:integration`
+  (sunbnb_test) step BEFORE the integration run — distinct from the Neon `migrate:test` step
+  already there. (3) Per-file coverage ratchet: a baseline + a gate check that fails if a
+  *touched* file's coverage drops below baseline. Decide the ratchet's storage + diff mechanism.
+- **Context needed:** spine complete except the gate — 0.1 mock-contract, 0.2 auth-matrix
+  (107-entry registry), 0.3 coverage-contract (47-entry allowlist), 0.4 money guard +
+  `@repo/data/reservations` race chokepoint. The promote script is `./promote-to-test.sh`
+  (runs `npm run test` at step [4/6]); integration runs against **local** `sunbnb_test`, so the
+  gate needs `cd packages/data && npm run migrate:integration` first. ⚠️ **Gate tension:** with
+  the suite intentionally red (getSite, money, token-scope divergence) and fail-loud chosen,
+  wiring integration into promote will BLOCK promote until Phase 3 fixes land — intended;
+  sequence Phase 3 right after. Also confirm the pre-existing `saveGeneral` integration red
+  (subscription-plan guard fixture gap vs real bug) when wiring.
 - **Blocked by:** —
 
 ## Roadmap
@@ -113,10 +115,20 @@ expanded set.
   SAFE (ownership via query-side `where: { userId }` / `requireSiteOwner` — file:line quoted in
   the allowlist), not blind-stamped. 772 tests, 770 green, 2 red (still only `getSite`). No new
   bugs. A 155th unregistered export now fails the build.
-- ☐ **0.4 Risk chokepoints** — `reserveWithConflictGuard` transactional check-then-create
-  helper + tests (call-site adoption deferred to Phase 3); `app/test/no-inline-money.test.ts`
-  grep guard (fails on `toFixed(` / inline `/ (1 + vat`, directs to `@repo/data` `round()`).
-  *no-inline-money red on products until fixed.*
+- ✅ **0.4 Risk chokepoints** (2026-06-16). **(a) Money guard:** `app/test/no-inline-money.test.ts`
+  static-scans action source for money-context `.toFixed(` + inline reverse-VAT (`/ (1 + tax`),
+  scoped by a money-identifier regex so geometry `.toFixed` is not flagged. RED on 8
+  `products/actions.ts` violations, **zero false positives**; empty allowlist + stale-entry guard.
+  **(b) `reserveWithConflictGuard`** (decided: pessimistic lock, no migration; home **@repo/data**) —
+  `packages/data/src/reservations.ts`, new `@repo/data/reservations` export. Single interactive
+  `$transaction`: `SELECT id FROM "InventoryItem" WHERE id = ANY(...) FOR UPDATE` (locks contended
+  bed rows) → re-check conflict in-tx → create-or-return-`{outcome:'conflict'}`. Reuses
+  `reservation-status` constants; default blocking set = `BLOCKING_STATUSES` with override.
+  26 unit + 15 integration tests; **headline race test green** (2 concurrent same-bed calls →
+  exactly one created, one conflict, one row). Additive — nothing imports it until Phase 3, so
+  blast radius = 0. **Two findings logged for Phase 3:** (i) blocking-status divergence — partner
+  uses `{ notIn: [CANCELED] }` so PAYMENT_FAILED/REFUNDED beds stay unavailable (likely a bug; user
+  app frees them); (ii) `blockBed` has NO conflict check (double-block, confirms audit).
 - ☐ **0.5 Real, erosion-proof gate** — `test:integration` turbo task (`cache:false`) + root
   script; `promote-to-test.sh` runs unit + integration with local `migrate:integration`
   first (distinct from Neon `migrate:test`); per-file coverage ratchet (touched file can't
@@ -136,8 +148,12 @@ pair-expansion double-booking tests (manage + calendar). Each red = one bug tick
 intentionally blocked.
 
 ### 💤 Phase 3 — Fixes (the "afterward")
-Flip reds green: `getSite` ownership; product money math; pair-expansion conflict check;
-adopt `reserveWithConflictGuard` at race-prone call sites.
+Flip reds green: `getSite` ownership; product money math (use `@repo/data` `round()`/reverse-VAT);
+pair-expansion conflict check; the `verifySiteOwnership` vs `verifySiteAccess` scope divergence
+(decide direction); adopt `reserveWithConflictGuard` at the 5 race-prone call sites (expand
+SunbedGroup/pair siblings before calling). Also surfaced in 0.4: (i) partner blocking-status
+divergence — `{ notIn: [CANCELED] }` keeps PAYMENT_FAILED/REFUNDED beds unavailable (free them,
+matching the user app / `BLOCKING_STATUSES`); (ii) `blockBed` needs a conflict check on adoption.
 
 ### 💤 Phase 4 — Steady state & extraction
 Contract + ratchet keep coverage watertight. Clean stale `BUG:` comments + the tautological
@@ -210,14 +226,30 @@ Contract + ratchet keep coverage watertight. Clean stale `BUG:` comments + the t
   (only `getSite`). No new bugs. The spine's "coverage is enforced, not remembered" mechanism is
   now live.
 
+- **2026-06-16** — Partner test-architecture **spine committed** (`f724891`, not pushed): the
+  0.1–0.3 test infra (mock-contract, auth-matrix + 107-entry registry, coverage-contract) +
+  mock additions + track/knowledge docs. 14 files, ~3,650 lines. Test-only; no app behavior
+  change. (`commit` skill, `.claude/rules/commits.md`.)
+
+- **2026-06-16** — Phase 0.4 complete (both chokepoints). Money guard
+  (`app/test/no-inline-money.test.ts`): RED on 8 `products/actions.ts` inline-VAT violations, 0
+  false positives. Race chokepoint `reserveWithConflictGuard` in `packages/data/src/reservations.ts`
+  (decided: pessimistic FOR-UPDATE lock, home `@repo/data`, no migration; new `./reservations`
+  export) — interactive `$transaction` locks candidate `InventoryItem` rows, re-checks conflict,
+  creates-or-returns-conflict; 26 unit + 15 integration tests, headline 2-concurrent-call race
+  test green (exactly one created). Additive, nothing imports it yet (blast radius 0 pre-Phase-3).
+  data-dev surfaced 2 Phase-3 findings: partner blocking-status divergence (`{notIn:[CANCELED]}`
+  keeps PAYMENT_FAILED/REFUNDED beds unavailable) and `blockBed`'s missing conflict check.
+  `packages/data` work is **uncommitted** (separate workspace from the f724891 partner commit).
+
 ## Open decisions
 
 - Cloud CI deferred — revisit once the turbo/promote gate is proven and the team grows.
 - ~~Coverage-contract enumeration mechanism~~ **Settled (0.3):** static regex parse, no
   server-module imports (avoids side effects); registry coverage matched via reverse alias-map
   at (source-file, export) granularity to handle the `toggleProductSoldOut` duplicate.
-- `reserveWithConflictGuard` final home (partner vs. straight into `@repo/data`) — decide when
-  adopting call sites in Phase 3.
+- ~~`reserveWithConflictGuard` final home~~ **Settled (0.4):** `@repo/data` (`src/reservations.ts`,
+  `./reservations` export) — shared, fixes partner + user; pessimistic FOR-UPDATE lock, no migration.
 
 ## Links
 

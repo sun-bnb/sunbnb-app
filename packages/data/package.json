@@ -23,7 +23,8 @@
     "./impersonation": "./src/impersonation.ts",
     "./mollie-tokens": "./src/mollie-tokens.ts",
     "./seat-label": "./src/seat-label.ts",
-    "./seat-label-db": "./src/seat-label-db.ts"
+    "./seat-label-db": "./src/seat-label-db.ts",
+    "./reservations": "./src/reservations.ts"
   },
   "typesVersions": {
     "*": {
@@ -80,6 +81,9 @@
       ],
       "seat-label-db": [
         "./src/seat-label-db.ts"
+      ],
+      "reservations": [
+        "./src/reservations.ts"
       ]
     }
   },
