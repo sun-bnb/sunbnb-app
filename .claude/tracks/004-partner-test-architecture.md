@@ -37,13 +37,14 @@ expanded set.
 
 ## Resume here
 
-- **Next action:** Bug #2 (pair-expansion double-booking) FIXED cross-app + all partner reds green
-  (partner 777 unit + 76 integration green). **Reservation-race work (R1 partner + R2 user) is
-  uncommitted.** **Promote is still blocked** — not by partner, but by **21 pre-existing
-  `apps/user` integration reds** the gate exposed (baseline-confirmed pre-existing; 2 fixture/mock
-  root causes — payment-ids mock missing `isValidEntityId`, `createTestSite` no `type:'paid'`
-  default). Next: (a) commit the reservation fix; (b) fix the 21 user-app fixture gaps (user-dev,
-  ~2 quick fixes) to truly unblock promote.
+- **Next action:** **Phase 3 essentially COMPLETE — full gate green, promote unblocked.** Spine
+  (Phase 0) + all Phase-3 fixes done: getSite, products VAT, token-scope, saveGeneral, bug #2
+  (pair-expansion, cross-app), and the 21 user-app fixture gaps. Whole suite green (unit 8/8 turbo
+  tasks; integration 196 across partner/user/@repo/data). Commits up to `b803462`; the user-app
+  fixture fix is being committed now. **Remaining = optional/backlog:** Phase 1 behavioral backfill
+  (rentals, working-hours, restaurant deposit cascade, etc.); Phase 4 (coverage ratchet, stale-test
+  cleanup, `@repo/test-utils` extraction); the `createWalkInRental` rental-quantity race follow-up.
+  Track could move toward `done` once Phase 1/4 scope is decided. Nothing pushed.
 - **Context needed:** the spine — 0.1 mock-contract, 0.2 auth-matrix (107-entry registry in
   `app/test/gated-actions.ts`), 0.3 coverage-contract (47-entry allowlist in
   `app/test/coverage-contract.test.ts`), 0.4 no-inline-money guard + `@repo/data/reservations`
@@ -197,13 +198,16 @@ intentionally blocked.
   GREEN; each would have silently double-booked before. Partner suite **777 unit + 76 integration
   green**. `createWalkInRental` (rental quantity race) left as a flagged follow-up. **R2 introduced
   ZERO regressions** (baseline-verified). Uncommitted.
-- ☐ **NEW — gate surfaced 21 pre-existing `apps/user` integration reds** (the architecture catching
-  real rot — they were silently broken because integration ran nowhere). Two root causes, both
-  fixture/mock gaps (NOT product bugs, NOT caused by this work — baseline-confirmed): (1)
-  `reservations/[id]/actions.integration.test.ts` ×16 — the `@/app/api/_lib/payment-ids` mock omits
-  `isValidEntityId`; (2) `sites/[id]/actions.integration.test.ts` ×5 — `createTestSite` doesn't
-  default `type:'paid'` (same class as the partner saveGeneral gap). **These block promote** until
-  fixed. Likely 2 quick fixture fixes (user-dev).
+- ✅ **21 pre-existing `apps/user` integration reds FIXED** (2026-06-16, user-dev) — both confirmed
+  fixture/mock gaps, no product bugs: (1) ×16 — removed the partial `vi.mock` of the pure
+  `payment-ids` helpers (it omitted `isValidEntityId`; pure helpers shouldn't be mocked in
+  integration); (2) ×5 — `createTestSite` now defaults `type:'paid'` (was null → silently exercised
+  the *unpaid* path; tests needing unpaid pass it explicitly). User integration now **31 green**.
+  The gate caught real rot that was invisible because integration ran nowhere — exactly the point.
+- ✅ **FULL GATE GREEN — promote unblocked** (2026-06-16). Verified the whole `promote-to-test.sh`
+  gate across all workspaces: unit **8/8 turbo tasks** (partner 777, user 255, @repo/data 160,
+  +admin/others); integration **3/3 tasks** (partner 76, @repo/data 89, user 31 = 196). Every
+  test-pinned red green; bug #2 fixed cross-app with bug-revealing tests.
 
 ### 💤 Phase 4 — Steady state & extraction
 **Build the per-file coverage ratchet** (deferred from 0.5): a committed coverage baseline + a
