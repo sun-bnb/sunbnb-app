@@ -85,6 +85,28 @@ export async function createTestRentalItem(
   })
 }
 
+/**
+ * Creates a real SecurityToken row in sunbnb_test.
+ *
+ * @param userId    - The user who owns the token (must match site.userId for ownership checks)
+ * @param resources - The resource scopes on the token (e.g. ['all'], ['manage_site'], ['all','manage_site'])
+ * @param expiresOffsetMs - Milliseconds from now for expiry. Positive = future (valid), negative = past (expired).
+ *                          Defaults to +24 hours (valid).
+ */
+export async function createTestSecurityToken(
+  userId: string,
+  resources: string[] = ['all'],
+  expiresOffsetMs: number = 24 * 60 * 60 * 1000
+) {
+  return prisma.securityToken.create({
+    data: {
+      userId,
+      resources,
+      expires: new Date(Date.now() + expiresOffsetMs),
+    },
+  })
+}
+
 export async function createTestReservation(
   userId: string,
   siteId: string,

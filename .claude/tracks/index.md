@@ -9,6 +9,7 @@ Maintained by the `create` and `handoff` workflows.
 |----|-------|-------------|----------|---------|
 | [001](001-knowledge-store.md) | Knowledge Store | Phase 1 — stand up Vercel test-env log-drain adapter | — | 2026-05-20 |
 | [002](002-table-reservations.md) | Table Reservations | P1 complete (1a–1h) + pick-your-spot (`71c75e7`, committed local). **Next: `migrate:test` then push** (additive migration pending Neon TEST DB); then browser-verify, P2 live floor | — | 2026-05-27 |
+| [004](004-partner-test-architecture.md) | Partner Test Architecture | Phase 0.4 — `reserveWithConflictGuard` chokepoint + `no-inline-money.test.ts`. (0.1/0.2/0.2b/0.2c/0.3 ✅ — spine enforcement live: 107 gated + 47 allowlisted; reds: getSite, gate-scope divergence) | — | 2026-06-16 |
 
 ## Proposed / backlog
 

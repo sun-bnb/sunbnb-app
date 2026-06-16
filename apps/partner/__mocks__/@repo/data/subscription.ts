@@ -23,3 +23,4 @@ export const getEffectiveSubscriptionForUser = vi.fn().mockResolvedValue({
   isCustom: false,
   features: { OFF_PLATFORM_BILLING: false },
 })
+export const resolveEffectiveFeatures = vi.fn().mockReturnValue({ OFF_PLATFORM_BILLING: false })

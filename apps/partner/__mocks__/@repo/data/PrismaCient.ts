@@ -53,6 +53,7 @@ const prisma = {
     findMany: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    delete: vi.fn(),
   },
   partnerAccount: {
     findUnique: vi.fn(),
@@ -129,7 +130,11 @@ const prisma = {
     delete: vi.fn(),
   },
   siteWorkingHours: {
+    findUnique: vi.fn(),
     findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
   },
   tableReservation: {
     findUnique: vi.fn(),
@@ -172,6 +177,78 @@ const prisma = {
     findFirst: vi.fn(),
     findMany: vi.fn(),
     updateMany: vi.fn(),
+  },
+  securityToken: {
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    delete: vi.fn(),
+  },
+  // ── Models not directly used by partner-app server actions but required for
+  // the mock-contract superset assertion (mock must cover every Prisma model). ──
+  settings: {
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    upsert: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+  },
+  serviceCode: {
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+  },
+  serviceFee: {
+    findMany: vi.fn(),
+  },
+  paymentProcessingFee: {
+    findMany: vi.fn(),
+  },
+  passwordResetToken: {
+    findFirst: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    deleteMany: vi.fn(),
+  },
+  account: {
+    findMany: vi.fn(),
+  },
+  orderItem: {
+    findMany: vi.fn(),
+  },
+  invoice: {
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+  },
+  settlement: {
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+  },
+  invoiceLine: {
+    createMany: vi.fn(),
+    findMany: vi.fn(),
+  },
+  session: {
+    findMany: vi.fn(),
+    deleteMany: vi.fn(),
+  },
+  verificationToken: {
+    findMany: vi.fn(),
+  },
+  authenticator: {
+    findMany: vi.fn(),
+  },
+  adminUser: {
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+  },
+  // spatial_ref_sys is a PostGIS system table exposed by Prisma; partner app
+  // never queries it via the client (uses $queryRawUnsafe for spatial ops).
+  spatial_ref_sys: {
+    findMany: vi.fn(),
   },
   $executeRaw: vi.fn(),
   $executeRawUnsafe: vi.fn(),
