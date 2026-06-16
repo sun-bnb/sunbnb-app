@@ -3,11 +3,10 @@
 import { revalidatePath } from 'next/cache'
 import { verifySiteAccess } from '@/lib/auth-helpers'
 import prisma from '@repo/data/PrismaCient'
+import { reserveWithConflictGuard } from '@repo/data/reservations'
 import dayjs from 'dayjs'
 import {
   RESERVATION_PAID_IN_CASH,
-  RESERVATION_COMPLETE,
-  RESERVATION_CANCELED,
   RENTAL_COMPLETE,
   RENTAL_CANCELED,
   OP_EXPECTED,
@@ -97,45 +96,38 @@ export async function reserveItem(
     toDate = dayjs(until).endOf('day').toDate()
   }
 
-  const itemIds = [{ id: itemId }]
+  // Expand group/pair siblings FIRST so the conflict guard checks all affected
+  // beds atomically (fixes the pair-expansion double-booking: previously the
+  // conflict check ran on only the requested itemId, then siblings were added
+  // after — so a sibling already booked was invisible to the check).
+  const allItemIds = [itemId]
   if (applyToPair) {
     const memberIds = await getGroupMemberIds(itemId)
-    for (const mid of memberIds) itemIds.push({ id: mid })
+    for (const mid of memberIds) {
+      if (!allItemIds.includes(mid)) allItemIds.push(mid)
+    }
   }
 
-  // Reject if the bed (or its group siblings) are already reserved on any day in the range.
-  // The today-only case can't conflict — the Reserve action is only offered for
-  // beds that are free today — but a multi-day hold must not collide with an
-  // existing future booking.
-  const conflicting = await prisma.reservation.findFirst({
-    where: {
-      siteId,
-      status: { notIn: [RESERVATION_CANCELED] },
-      operationalStatus: { notIn: [OP_NO_SHOW, OP_DEPARTED] },
-      from: { lte: toDate },
-      to: { gte: fromDate },
-      items: { some: { id: { in: itemIds.map(i => i.id) } } },
-    },
+  // reserveWithConflictGuard collapses availability-check + create into one
+  // $transaction with a SELECT … FOR UPDATE lock on the InventoryItem rows,
+  // eliminating the check-then-create race window.
+  const result = await reserveWithConflictGuard({
+    itemIds: allItemIds,
+    siteId,
+    userId: ownership.userId,
+    type: 'days',
+    from: fromDate,
+    to: toDate,
+    status: RESERVATION_PAID_IN_CASH,
+    operationalStatus: OP_WALKED_IN,
+    checkedInAt: new Date(),
+    guestName: guestName?.slice(0, 200) || null,
+    internalNotes: internalNotes?.slice(0, 500) || null,
   })
-  if (conflicting) {
+
+  if (result.outcome === 'conflict') {
     return { status: 'error', errors: ['Sunbed is already reserved for part of this period'] }
   }
-
-  await prisma.reservation.create({
-    data: {
-      userId: ownership.userId,
-      type: 'days',
-      from: fromDate,
-      to: toDate,
-      siteId,
-      status: RESERVATION_PAID_IN_CASH,
-      operationalStatus: OP_WALKED_IN,
-      checkedInAt: new Date(),
-      guestName: guestName?.slice(0, 200) || null,
-      internalNotes: internalNotes?.slice(0, 500) || null,
-      items: { connect: itemIds },
-    },
-  })
 
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok' }
@@ -383,25 +375,37 @@ export async function blockBed(
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
-  const itemIds = [{ id: itemId }]
+  // Expand group/pair siblings FIRST so the conflict check covers all affected
+  // beds. Without this, a sibling already occupied would go undetected (the bug).
+  const allItemIds = [itemId]
   if (applyToPair) {
     const memberIds = await getGroupMemberIds(itemId)
-    for (const mid of memberIds) itemIds.push({ id: mid })
+    for (const mid of memberIds) {
+      if (!allItemIds.includes(mid)) allItemIds.push(mid)
+    }
   }
 
-  await prisma.reservation.create({
-    data: {
-      userId: ownership.userId,
-      type: 'days',
-      from: dayjs().startOf('day').toDate(),
-      to: dayjs().endOf('day').toDate(),
-      siteId,
-      status: RESERVATION_PAID_IN_CASH,
-      operationalStatus: 'blocked',
-      internalNotes: notes?.slice(0, 500) || null,
-      items: { connect: itemIds },
-    },
+  const fromDate = dayjs().startOf('day').toDate()
+  const toDate = dayjs().endOf('day').toDate()
+
+  // reserveWithConflictGuard adds the conflict check that blockBed previously
+  // lacked entirely — blocking an already-occupied bed (walk-in, reservation,
+  // or existing block) is now rejected rather than creating a duplicate row.
+  const result = await reserveWithConflictGuard({
+    itemIds: allItemIds,
+    siteId,
+    userId: ownership.userId,
+    type: 'days',
+    from: fromDate,
+    to: toDate,
+    status: RESERVATION_PAID_IN_CASH,
+    operationalStatus: 'blocked',
+    internalNotes: notes?.slice(0, 500) || null,
   })
+
+  if (result.outcome === 'conflict') {
+    return { status: 'error', errors: ['Sunbed is already occupied or blocked'] }
+  }
 
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok' }

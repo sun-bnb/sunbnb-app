@@ -459,3 +459,131 @@ describe('getAvailableSunbeds', () => {
     expect(result.items).toEqual([])
   })
 })
+
+// ---------------------------------------------------------------------------
+// Bug-revealing: pair-expansion double-booking in createPartnerReservation
+//
+// Before this fix, createPartnerReservation checked availability on the
+// requested itemIds only, then expanded siblings AFTER — so a sibling already
+// reserved was invisible to the conflict check (silent overbook).
+// ---------------------------------------------------------------------------
+
+describe('createPartnerReservation — pair-expansion conflict detection (bug #2)', () => {
+  it('rejects booking a primary item when its SunbedGroup sibling is already booked for the same period', async () => {
+    // Bug scenario: sibling (itemB) is reserved for 2026-07-01 to 2026-07-05.
+    // Partner books itemA for overlapping 2026-07-03 to 2026-07-07.
+    // Old code: checked only itemA → passed → created reservation covering both
+    // itemA and itemB even though itemB was already taken.
+    // Fixed: siblings are expanded first, guard sees both in the conflict check.
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+
+    const group = await prisma.sunbedGroup.create({ data: { siteId: site.id } })
+    const itemA = await createTestInventoryItem(user.id, site.id, {
+      number: 1,
+      sunbedGroupId: group.id,
+    })
+    const itemB = await createTestInventoryItem(user.id, site.id, {
+      number: 2,
+      sunbedGroupId: group.id,
+    })
+    mockUserId = user.id
+
+    // Pre-existing reservation occupying the SIBLING (itemB) for the overlap period
+    await createTestReservation(user.id, site.id, [itemB.id], {
+      from: new Date('2026-07-01'),
+      to: new Date('2026-07-05'),
+      status: 'complete',
+      operationalStatus: 'expected',
+    })
+
+    // Try to reserve itemA for an overlapping period — guard must reject it
+    const result = await createPartnerReservation({
+      siteId: site.id,
+      itemIds: [itemA.id],
+      from: '2026-07-03',
+      to: '2026-07-07',
+      paymentType: 'cash',
+    })
+
+    expect(result.status).toBe('error')
+    expect(result.errors?.[0]).toContain('already reserved')
+
+    // Only the pre-existing reservation should exist
+    const count = await prisma.reservation.count({ where: { siteId: site.id } })
+    expect(count).toBe(1)
+  })
+
+  it('rejects booking a primary item when its legacy pairId sibling is already booked for the same period', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, {
+      number: 2,
+      pairId: itemA.id,
+    })
+    mockUserId = user.id
+
+    // Pre-existing reservation on the SIBLING (itemB)
+    await createTestReservation(user.id, site.id, [itemB.id], {
+      from: new Date('2026-07-01'),
+      to: new Date('2026-07-05'),
+      status: 'complete',
+      operationalStatus: 'expected',
+    })
+
+    const result = await createPartnerReservation({
+      siteId: site.id,
+      itemIds: [itemA.id],
+      from: '2026-07-03',
+      to: '2026-07-07',
+      paymentType: 'cash',
+    })
+
+    expect(result.status).toBe('error')
+    expect(result.errors?.[0]).toContain('already reserved')
+
+    const count = await prisma.reservation.count({ where: { siteId: site.id } })
+    expect(count).toBe(1)
+  })
+
+  it('allows booking when sibling reservation does not overlap the requested period', async () => {
+    // Control test: same structure, but the sibling reservation is on non-overlapping dates.
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+
+    const group = await prisma.sunbedGroup.create({ data: { siteId: site.id } })
+    const itemA = await createTestInventoryItem(user.id, site.id, {
+      number: 1,
+      sunbedGroupId: group.id,
+    })
+    const itemB = await createTestInventoryItem(user.id, site.id, {
+      number: 2,
+      sunbedGroupId: group.id,
+    })
+    mockUserId = user.id
+
+    // Sibling (itemB) reserved for a DIFFERENT period (no overlap)
+    await createTestReservation(user.id, site.id, [itemB.id], {
+      from: new Date('2026-08-01'),
+      to: new Date('2026-08-05'),
+      status: 'complete',
+      operationalStatus: 'expected',
+    })
+
+    const result = await createPartnerReservation({
+      siteId: site.id,
+      itemIds: [itemA.id],
+      from: '2026-07-01',
+      to: '2026-07-05',
+      paymentType: 'cash',
+    })
+
+    expect(result).toEqual({ status: 'ok' })
+
+    // Two reservations: the pre-existing one on itemB (Aug) and the new one on A+B (Jul)
+    const count = await prisma.reservation.count({ where: { siteId: site.id } })
+    expect(count).toBe(2)
+  })
+})

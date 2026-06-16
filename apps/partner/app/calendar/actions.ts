@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { reserveWithConflictGuard } from '@repo/data/reservations'
 import dayjs from 'dayjs'
 import {
   RESERVATION_COMPLETE,
@@ -93,26 +94,12 @@ export async function createPartnerReservation(data: {
     return { status: 'error', errors: ['Some sunbeds not found or inactive'] }
   }
 
-  // Check availability — no overlapping active reservations
-  const conflicting = await prisma.reservation.findFirst({
-    where: {
-      siteId: data.siteId,
-      status: { notIn: [RESERVATION_CANCELED] },
-      operationalStatus: { notIn: [OP_NO_SHOW, OP_DEPARTED] },
-      from: { lte: toDate },
-      to: { gte: fromDate },
-      items: { some: { id: { in: data.itemIds } } },
-    },
-  })
-
-  if (conflicting) {
-    return { status: 'error', errors: ['One or more sunbeds are already reserved for this period'] }
-  }
-
-  // Also include all other SunbedGroup members automatically
-  const allItemIds: { id: string }[] = []
+  // Expand group/pair siblings FIRST — the conflict check must cover ALL beds
+  // that will be reserved, not just the requested itemIds. Previously, the
+  // expansion happened after the conflict check, so a sibling already booked
+  // was invisible to the guard (the pair-expansion double-booking bug).
+  const expandedIdSet = new Set<string>(data.itemIds)
   for (const itemId of data.itemIds) {
-    allItemIds.push({ id: itemId })
     const item = await prisma.inventoryItem.findUnique({
       where: { id: itemId },
       select: { sunbedGroupId: true, pairId: true, pairedBy: { select: { id: true } } },
@@ -123,36 +110,41 @@ export async function createPartnerReservation(data: {
         where: { sunbedGroupId: item.sunbedGroupId, id: { not: itemId } },
         select: { id: true },
       })
-      for (const s of siblings) allItemIds.push({ id: s.id })
+      for (const s of siblings) expandedIdSet.add(s.id)
     } else if (item?.pairedBy) {
       // Legacy fallback: pairedBy self-relation
-      allItemIds.push({ id: item.pairedBy.id })
+      expandedIdSet.add(item.pairedBy.id)
     } else if (item?.pairId) {
       // Legacy fallback: pairId self-relation
-      allItemIds.push({ id: item.pairId })
+      expandedIdSet.add(item.pairId)
     }
   }
 
-  // Deduplicate
-  const uniqueItemIds = [...new Map(allItemIds.map(i => [i.id, i])).values()]
+  const allItemIds = [...expandedIdSet]
 
   const status = data.paymentType === 'free' ? RESERVATION_COMPLETE : RESERVATION_PAID_IN_CASH
 
-  await prisma.reservation.create({
-    data: {
-      userId: session.user.id,
-      type: 'days',
-      from: fromDate,
-      to: toDate,
-      siteId: data.siteId,
-      status,
-      operationalStatus: OP_EXPECTED,
-      guestName: data.guestName?.slice(0, 200) || null,
-      guestContact: data.guestContact?.slice(0, 200) || null,
-      internalNotes: data.internalNotes?.slice(0, 500) || null,
-      items: { connect: uniqueItemIds },
-    },
+  // reserveWithConflictGuard collapses conflict-check + create into one
+  // $transaction with a SELECT … FOR UPDATE lock on the InventoryItem rows.
+  // Passing the fully-expanded allItemIds means the conflict check now covers
+  // both the requested beds AND their group/pair siblings.
+  const guardResult = await reserveWithConflictGuard({
+    itemIds: allItemIds,
+    siteId: data.siteId,
+    userId: session.user.id,
+    type: 'days',
+    from: fromDate,
+    to: toDate,
+    status,
+    operationalStatus: OP_EXPECTED,
+    guestName: data.guestName?.slice(0, 200) || null,
+    guestContact: data.guestContact?.slice(0, 200) || null,
+    internalNotes: data.internalNotes?.slice(0, 500) || null,
   })
+
+  if (guardResult.outcome === 'conflict') {
+    return { status: 'error', errors: ['One or more sunbeds are already reserved for this period'] }
+  }
 
   revalidatePath('/calendar')
   revalidatePath(`/sites/${data.siteId}/manage`)

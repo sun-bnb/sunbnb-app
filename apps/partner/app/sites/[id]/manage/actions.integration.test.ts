@@ -629,3 +629,164 @@ describe('createWalkInRental', () => {
     expect(booking!.status).toBe('complete')
   })
 })
+
+// ---------------------------------------------------------------------------
+// Bug-revealing: pair-expansion double-booking (suspect bug #2)
+//
+// Before this fix, reserveItem checked availability on only the requested
+// itemId, then expanded to siblings AFTER — so a sibling already booked was
+// invisible to the conflict check. These tests would have produced a silent
+// overbook (two reservations covering the same sibling) pre-fix.
+// ---------------------------------------------------------------------------
+
+describe('reserveItem — pair-expansion conflict detection (bug #2)', () => {
+  it('rejects reserving a primary item when its SunbedGroup sibling is already booked today', async () => {
+    // Bug scenario: sibling (itemB) is already occupied. Partner tries to
+    // reserve itemA (the primary). Old code checked only itemA → passed → created
+    // a reservation covering itemA+itemB even though itemB was already taken.
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+
+    // Set up a SunbedGroup with two members (itemA = primary, itemB = sibling)
+    const group = await prisma.sunbedGroup.create({ data: { siteId: site.id } })
+    const itemA = await createTestInventoryItem(user.id, site.id, {
+      number: 1,
+      sunbedGroupId: group.id,
+    })
+    const itemB = await createTestInventoryItem(user.id, site.id, {
+      number: 2,
+      sunbedGroupId: group.id,
+    })
+    mockUserId = user.id
+
+    // Pre-existing reservation occupying the SIBLING (itemB) today
+    await createTestReservation(user.id, site.id, [itemB.id], {
+      from: new Date(new Date().setHours(0, 0, 0, 0)),
+      to: new Date(new Date().setHours(23, 59, 59, 999)),
+      status: 'complete',
+      operationalStatus: 'expected',
+    })
+
+    // Now try to reserve itemA — should detect sibling conflict and reject
+    const result = await reserveItem(site.id, itemA.id)
+
+    expect(result.status).toBe('error')
+    expect(result.errors?.[0]).toMatch(/already reserved/i)
+
+    // Verify no additional reservation was created beyond the pre-existing one
+    const count = await prisma.reservation.count({ where: { siteId: site.id } })
+    expect(count).toBe(1)
+  })
+
+  it('rejects reserving a primary item when its legacy pairId sibling is already booked today', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+
+    // Legacy pair: itemA has pairId pointing to itemB
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, {
+      number: 2,
+      pairId: itemA.id,
+    })
+    mockUserId = user.id
+
+    // Pre-existing reservation occupying the SIBLING (itemB) today
+    await createTestReservation(user.id, site.id, [itemB.id], {
+      from: new Date(new Date().setHours(0, 0, 0, 0)),
+      to: new Date(new Date().setHours(23, 59, 59, 999)),
+      status: 'complete',
+      operationalStatus: 'expected',
+    })
+
+    // Reserve itemA — should detect conflict on itemB (its pair) and reject
+    const result = await reserveItem(site.id, itemA.id)
+
+    expect(result.status).toBe('error')
+    expect(result.errors?.[0]).toMatch(/already reserved/i)
+
+    const count = await prisma.reservation.count({ where: { siteId: site.id } })
+    expect(count).toBe(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug-revealing: blockBed missing conflict check
+//
+// Before this fix, blockBed had NO conflict check — it blindly created a
+// reservation row. These tests prove that an already-occupied bed is rejected.
+// ---------------------------------------------------------------------------
+
+describe('blockBed — conflict detection (previously missing)', () => {
+  it('rejects blocking a bed that already has an active walk-in reservation today', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id)
+    mockUserId = user.id
+
+    // Walk-in reservation already occupies the bed
+    await reserveItem(site.id, item.id, 'Existing guest')
+
+    // Attempt to block the same bed
+    const blockResult = await blockBed(site.id, item.id)
+
+    expect(blockResult.status).toBe('error')
+    expect(blockResult.errors?.[0]).toMatch(/already occupied or blocked/i)
+
+    // Verify no second reservation was created
+    const count = await prisma.reservation.count({ where: { siteId: site.id } })
+    expect(count).toBe(1)
+  })
+
+  it('rejects double-blocking the same bed', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id)
+    mockUserId = user.id
+
+    // First block succeeds
+    const first = await blockBed(site.id, item.id, 'Maintenance')
+    expect(first.status).toBe('ok')
+
+    // Second block must be rejected
+    const second = await blockBed(site.id, item.id, 'Double block attempt')
+    expect(second.status).toBe('error')
+    expect(second.errors?.[0]).toMatch(/already occupied or blocked/i)
+
+    // Only one block reservation in DB
+    const count = await prisma.reservation.count({ where: { siteId: site.id } })
+    expect(count).toBe(1)
+  })
+
+  it('rejects blocking a bed whose SunbedGroup sibling is already occupied', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+
+    const group = await prisma.sunbedGroup.create({ data: { siteId: site.id } })
+    const itemA = await createTestInventoryItem(user.id, site.id, {
+      number: 1,
+      sunbedGroupId: group.id,
+    })
+    const itemB = await createTestInventoryItem(user.id, site.id, {
+      number: 2,
+      sunbedGroupId: group.id,
+    })
+    mockUserId = user.id
+
+    // Reserve itemB (the sibling)
+    await createTestReservation(user.id, site.id, [itemB.id], {
+      from: new Date(new Date().setHours(0, 0, 0, 0)),
+      to: new Date(new Date().setHours(23, 59, 59, 999)),
+      status: 'complete',
+      operationalStatus: 'expected',
+    })
+
+    // Try to block itemA — sibling itemB is occupied, should reject
+    const result = await blockBed(site.id, itemA.id)
+
+    expect(result.status).toBe('error')
+    expect(result.errors?.[0]).toMatch(/already occupied or blocked/i)
+
+    const count = await prisma.reservation.count({ where: { siteId: site.id } })
+    expect(count).toBe(1)
+  })
+})

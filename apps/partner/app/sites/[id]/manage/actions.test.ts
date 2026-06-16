@@ -8,6 +8,16 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }))
 
+// Mock the conflict guard — the real implementation does $transaction + FOR UPDATE
+// which the PrismaCient mock cannot model. Default: created (success path).
+// Override per-test for conflict scenarios.
+vi.mock('@repo/data/reservations', () => ({
+  reserveWithConflictGuard: vi.fn().mockResolvedValue({
+    outcome: 'created',
+    reservationId: 'r1',
+  }),
+}))
+
 import {
   reserveItem,
   unreserveItem,
@@ -28,9 +38,11 @@ import {
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { reserveWithConflictGuard } from '@repo/data/reservations'
 import dayjs from 'dayjs'
 
 const mockAuth = vi.mocked(auth)
+const mockGuard = vi.mocked(reserveWithConflictGuard)
 
 const OWNER_ID = 'owner-1'
 const OTHER_ID = 'other-1'
@@ -41,6 +53,8 @@ const RES_ID = 'res-1'
 beforeEach(() => {
   vi.clearAllMocks()
   mockAuth.mockResolvedValue(null)
+  // Guard default: success (created). Override in conflict-path tests.
+  mockGuard.mockResolvedValue({ outcome: 'created', reservationId: 'r1' })
 })
 
 function authenticateAsOwner() {
@@ -108,17 +122,20 @@ describe('reserveItem', () => {
   it('creates walk-in reservation with paid-in-cash status', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null) // no pair
-    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
 
     const res = await reserveItem(SITE_ID, ITEM_ID, 'John', 'VIP guest')
     expect(res.status).toBe('ok')
 
-    const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
-    expect(createCall.data.status).toBe('paid-in-cash')
-    expect(createCall.data.operationalStatus).toBe('walked-in')
-    expect(createCall.data.guestName).toBe('John')
-    expect(createCall.data.internalNotes).toBe('VIP guest')
-    expect(createCall.data.items.connect).toEqual([{ id: ITEM_ID }])
+    // Guard is called — check the data it received
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect(guardCall.status).toBe('paid-in-cash')
+    expect(guardCall.operationalStatus).toBe('walked-in')
+    expect(guardCall.guestName).toBe('John')
+    expect(guardCall.internalNotes).toBe('VIP guest')
+    expect(guardCall.itemIds).toEqual([ITEM_ID])
+    expect(guardCall.siteId).toBe(SITE_ID)
+    // prisma.reservation.create must NOT be called directly (guard owns create)
+    expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
   })
 
   it('includes paired item automatically via SunbedGroup', async () => {
@@ -132,12 +149,12 @@ describe('reserveItem', () => {
     } as any)
     // findMany for siblings
     vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ id: 'pair-1' }] as any)
-    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
 
     await reserveItem(SITE_ID, ITEM_ID)
 
-    const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
-    expect(createCall.data.items.connect).toEqual([{ id: ITEM_ID }, { id: 'pair-1' }])
+    // Guard must receive the fully expanded id list (primary + sibling)
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect(guardCall.itemIds).toEqual([ITEM_ID, 'pair-1'])
   })
 
   it('includes paired item automatically via legacy pairId fallback', async () => {
@@ -148,76 +165,72 @@ describe('reserveItem', () => {
       sunbedGroupId: null,
       pairedBy: null,
     } as any)
-    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
 
     await reserveItem(SITE_ID, ITEM_ID)
 
-    const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
-    expect(createCall.data.items.connect).toEqual([{ id: ITEM_ID }, { id: 'pair-1' }])
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect(guardCall.itemIds).toEqual([ITEM_ID, 'pair-1'])
   })
 
   it('truncates guest name to 200 chars and notes to 500', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
-    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
 
     await reserveItem(SITE_ID, ITEM_ID, 'A'.repeat(300), 'B'.repeat(600))
 
-    const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
-    expect(createCall.data.guestName).toHaveLength(200)
-    expect(createCall.data.internalNotes).toHaveLength(500)
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect(guardCall.guestName).toHaveLength(200)
+    expect(guardCall.internalNotes).toHaveLength(500)
   })
 
   it('defaults to a single-day (today) reservation when no end date given', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
-    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
 
     await reserveItem(SITE_ID, ITEM_ID)
 
-    const data = vi.mocked(prisma.reservation.create).mock.calls[0]![0].data
-    expect((data.from as Date).getTime()).toBe(dayjs().startOf('day').toDate().getTime())
-    expect((data.to as Date).getTime()).toBe(dayjs().endOf('day').toDate().getTime())
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect((guardCall.from as Date).getTime()).toBe(dayjs().startOf('day').toDate().getTime())
+    expect((guardCall.to as Date).getTime()).toBe(dayjs().endOf('day').toDate().getTime())
   })
 
   it('extends the reservation to the end of the given `until` date', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
-    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
 
     const until = dayjs().add(3, 'day').format('YYYY-MM-DD')
     const res = await reserveItem(SITE_ID, ITEM_ID, undefined, undefined, undefined, until)
     expect(res.status).toBe('ok')
 
-    const data = vi.mocked(prisma.reservation.create).mock.calls[0]![0].data
-    expect((data.from as Date).getTime()).toBe(dayjs().startOf('day').toDate().getTime())
-    expect((data.to as Date).getTime()).toBe(dayjs(until).endOf('day').toDate().getTime())
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect((guardCall.from as Date).getTime()).toBe(dayjs().startOf('day').toDate().getTime())
+    expect((guardCall.to as Date).getTime()).toBe(dayjs(until).endOf('day').toDate().getTime())
   })
 
-  it('checks the bed and its group siblings for conflicts across the whole range', async () => {
+  it('passes the expanded id list (primary + siblings) to the guard for conflict checking', async () => {
+    // This is the fix for the pair-expansion double-booking bug: siblings must
+    // be expanded BEFORE the guard call, so the guard's conflict check covers them.
     authenticateAsOwner()
     vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
       id: ITEM_ID, pairId: 'pair-1', sunbedGroupId: 'group-1', pairedBy: null,
     } as any)
     vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ id: 'pair-1' }] as any)
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
-    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
 
     const until = dayjs().add(2, 'day').format('YYYY-MM-DD')
     await reserveItem(SITE_ID, ITEM_ID, undefined, undefined, undefined, until)
 
-    const where = vi.mocked(prisma.reservation.findFirst).mock.calls[0]![0]!.where as any
-    expect(where.items.some.id.in).toEqual([ITEM_ID, 'pair-1'])
-    expect((where.from.lte as Date).getTime()).toBe(dayjs(until).endOf('day').toDate().getTime())
-    expect((where.to.gte as Date).getTime()).toBe(dayjs().startOf('day').toDate().getTime())
+    const guardCall = mockGuard.mock.calls[0][0]
+    // Both the primary item AND the sibling must reach the guard
+    expect(guardCall.itemIds).toContain(ITEM_ID)
+    expect(guardCall.itemIds).toContain('pair-1')
+    expect((guardCall.to as Date).getTime()).toBe(dayjs(until).endOf('day').toDate().getTime())
+    expect((guardCall.from as Date).getTime()).toBe(dayjs().startOf('day').toDate().getTime())
   })
 
-  it('rejects when the bed is already reserved for part of the range', async () => {
+  it('rejects when the guard returns a conflict', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({ id: 'existing' } as any)
+    mockGuard.mockResolvedValueOnce({ outcome: 'conflict', conflictingReservationId: 'existing' })
 
     const until = dayjs().add(4, 'day').format('YYYY-MM-DD')
     const res = await reserveItem(SITE_ID, ITEM_ID, undefined, undefined, undefined, until)
@@ -657,8 +670,6 @@ describe('createWalkInRental', () => {
 describe('reserveItem with applyToPair = false', () => {
   it('does NOT look up or add the group members when applyToPair is false', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
-    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
 
     const res = await reserveItem(SITE_ID, ITEM_ID, 'Solo guest', undefined, undefined, undefined, false)
     expect(res.status).toBe('ok')
@@ -666,8 +677,9 @@ describe('reserveItem with applyToPair = false', () => {
     // getGroupMemberIds calls inventoryItem.findUnique — must NOT be called
     expect(vi.mocked(prisma.inventoryItem.findUnique)).not.toHaveBeenCalled()
 
-    const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
-    expect(createCall.data.items.connect).toEqual([{ id: ITEM_ID }])
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect(guardCall.itemIds).toEqual([ITEM_ID])
+    expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
   })
 
   it('still adds group member when applyToPair is true (default behavior preserved)', async () => {
@@ -679,28 +691,28 @@ describe('reserveItem with applyToPair = false', () => {
       pairedBy: null,
     } as any)
     vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ id: 'pair-1' }] as any)
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
-    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
 
     await reserveItem(SITE_ID, ITEM_ID, undefined, undefined, undefined, undefined, true)
 
-    const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
-    expect(createCall.data.items.connect).toEqual([{ id: ITEM_ID }, { id: 'pair-1' }])
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect(guardCall.itemIds).toEqual([ITEM_ID, 'pair-1'])
   })
 })
 
 describe('blockBed with applyToPair = false', () => {
   it('does NOT look up or add group members when applyToPair is false', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
 
     const res = await blockBed(SITE_ID, ITEM_ID, undefined, undefined, false)
     expect(res.status).toBe('ok')
 
     expect(vi.mocked(prisma.inventoryItem.findUnique)).not.toHaveBeenCalled()
 
-    const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
-    expect(createCall.data.items.connect).toEqual([{ id: ITEM_ID }])
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect(guardCall.itemIds).toEqual([ITEM_ID])
+    expect(guardCall.operationalStatus).toBe('blocked')
+    // blockBed must not call prisma.reservation.create directly
+    expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
   })
 
   it('still adds group member when applyToPair is true (default behavior preserved)', async () => {
@@ -712,12 +724,22 @@ describe('blockBed with applyToPair = false', () => {
       pairedBy: null,
     } as any)
     vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ id: 'pair-1' }] as any)
-    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
 
     await blockBed(SITE_ID, ITEM_ID, undefined, undefined, true)
 
-    const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
-    expect(createCall.data.items.connect).toEqual([{ id: ITEM_ID }, { id: 'pair-1' }])
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect(guardCall.itemIds).toEqual([ITEM_ID, 'pair-1'])
+  })
+
+  it('rejects blocking an already-occupied bed (guard returns conflict)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+    mockGuard.mockResolvedValueOnce({ outcome: 'conflict', conflictingReservationId: 'existing' })
+
+    const res = await blockBed(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/already occupied or blocked/i)
+    expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
   })
 })
 
@@ -1300,9 +1322,6 @@ describe('reserveItem cascade regression: pool seat with sunbedGroupId', () => {
       { id: SIBLING_ID },
     ] as any)
 
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null) // no conflicts
-    vi.mocked(prisma.reservation.create).mockResolvedValue({} as any)
-
     const res = await reserveItem(SITE_ID, POOL_SEAT_ID, 'Guest', undefined, undefined, undefined, true)
     expect(res.status).toBe('ok')
 
@@ -1313,10 +1332,11 @@ describe('reserveItem cascade regression: pool seat with sunbedGroupId', () => {
       })
     )
 
-    // The reservation must cover both the pool seat AND the sibling
-    const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
-    const connectedIds = createCall.data.items.connect.map((c: { id: string }) => c.id)
-    expect(connectedIds).toContain(POOL_SEAT_ID)
-    expect(connectedIds).toContain(SIBLING_ID)
+    // Both the pool seat AND the sibling must reach the guard
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect(guardCall.itemIds).toContain(POOL_SEAT_ID)
+    expect(guardCall.itemIds).toContain(SIBLING_ID)
+    // prisma.reservation.create must NOT be called directly
+    expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
   })
 })
