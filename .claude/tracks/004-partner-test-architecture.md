@@ -37,15 +37,15 @@ expanded set.
 
 ## Resume here
 
-- **Next action:** **Phase 1 COMPLETE + fully green** (P1a restaurant, P1b rentals [found+fixed
-  bug #3 `deleteRentalItem`], P1c rest). Partner 901 unit + 89 integration, 0 red. Spine (Phase 0)
-  + Phase 3 fixes already pushed (up to `14993b8`). All Phase-1 work is **uncommitted** (~7 new
-  test files + restaurant/rental-booking fixtures + the deleteRentalItem source fix + mock
-  additions). Next: commit Phase 1 (proposed: deleteRentalItem-fix+rentals-tests commit, a backfill
-  commit, a docs commit), then **Phase 4** — coverage ratchet (now buildable on a green suite),
-  stale-`BUG:`/tautological-test cleanup, refresh `apps/partner/CLAUDE.md` counts.
-  (`@repo/test-utils` extraction + `createWalkInRental` rental-race stay deferred — partner-only
-  focus.) Nothing newer than `14993b8` pushed.
+- **Next action:** **PARTNER SCOPE COMPLETE.** Phases 0 (spine), 3 (fixes), 1 (backfill), 4
+  (cleanup + coverage ratchet) all done; partner 901 unit + 89 integration, 0 red; full
+  promote-gate green. Phases 0+3 pushed (≤`14993b8`); Phase 1+4 committed locally (`d4621b0` →
+  `8386e7b`, 6 commits unpushed). **No partner work remains.** Only deferred, explicitly
+  **out-of-partner-scope** items left: extract `auth-matrix`/`race`/fixtures into `@repo/test-utils`
+  so user+admin inherit the spine; the `createWalkInRental` rental-quantity race (different shape
+  from the bed-lock guard). Track can move to `done` (with those two as a spun-off backlog) once the
+  6 local commits are pushed. Decisions awaiting user: **push / promote / deploy** the local commits;
+  whether to take on the cross-app extraction (would re-open beyond partner).
 - **Context needed:** the spine — 0.1 mock-contract, 0.2 auth-matrix (107-entry registry in
   `app/test/gated-actions.ts`), 0.3 coverage-contract (47-entry allowlist in
   `app/test/coverage-contract.test.ts`), 0.4 no-inline-money guard + `@repo/data/reservations`
