@@ -86,7 +86,8 @@ describe('GET /api/reservations-cleanup', () => {
     // Second condition: payment_failed
     expect(orConditions[1].status).toBe('payment_failed')
 
-    // Third condition: paid-in-cash
+    // Third condition: paid-in-cash AND held (expired holds cleaned up alongside stale walk-ins)
     expect(orConditions[2].status.in).toContain('paid-in-cash')
+    expect(orConditions[2].status.in).toContain('held')
   })
 })

@@ -41,6 +41,16 @@ export const RESERVATION_COMPLETE = 'complete' as const
 /** Walk-in or cash booking — partner-created, no online payment. */
 export const RESERVATION_PAID_IN_CASH = 'paid-in-cash' as const
 
+/**
+ * Floor-created lightweight hold (Alonso `reservada`): a bed penciled in for
+ * today with **no payment and no invoice** — distinct from a paid walk-in
+ * (`paid-in-cash`) and a booked online reservation (`complete`). Blocking (it
+ * occupies the bed) but zero-revenue; the cleanup cron GC's it once expired.
+ * Pairs with `operationalStatus = OP_EXPECTED` so it reuses the check-in / no-show
+ * machinery and renders in the existing "expected" (reserved) lane.
+ */
+export const RESERVATION_HELD = 'held' as const
+
 /** Payment provider reported failure, cancellation, or expiry. */
 export const RESERVATION_PAYMENT_FAILED = 'payment_failed' as const
 
@@ -57,6 +67,7 @@ export const RESERVATION_STATUSES = [
   RESERVATION_PROCESSING,
   RESERVATION_COMPLETE,
   RESERVATION_PAID_IN_CASH,
+  RESERVATION_HELD,
   RESERVATION_PAYMENT_FAILED,
   RESERVATION_CANCELED,
   RESERVATION_REFUNDED,
@@ -72,6 +83,7 @@ export const BLOCKING_STATUSES: ReservationStatus[] = [
   RESERVATION_PROCESSING,
   RESERVATION_COMPLETE,
   RESERVATION_PAID_IN_CASH,
+  RESERVATION_HELD,
 ]
 
 /** Statuses that represent a successfully paid/completed reservation. */
@@ -120,6 +132,15 @@ export const OP_CHECKED_IN = 'checked-in' as const
 export const OP_WALKED_IN = 'walked-in' as const
 export const OP_DEPARTED = 'departed' as const
 export const OP_NO_SHOW = 'no-show' as const
+
+/**
+ * Complimentary occupancy — the bed is given away free (regulars, staff, comps).
+ * Occupies the bed like a walk-in but carries no charge; pair with the durable
+ * `Reservation.isComp` flag (the analytics source of truth that survives the
+ * operational lifecycle). Distinct from OP_WALKED_IN so comps never collide with
+ * walk-in release/queries, and from 'blocked' (out-of-service, not a guest).
+ */
+export const OP_COMP = 'comp' as const
 
 // Rental operational statuses
 export const OP_RESERVED = 'reserved' as const

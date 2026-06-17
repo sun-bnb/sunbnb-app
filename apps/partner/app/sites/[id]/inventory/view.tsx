@@ -178,7 +178,7 @@ export default function InventoryView() {
     const updatedSite = await getSite(siteId)
     if (updatedSite) {
       setSite(updatedSite)
-      const updatedGroupItems = (updatedSite.inventoryItems || []).filter((i: InventoryItem) => i.group === selectedParcelGroupNumber)
+      const updatedGroupItems = (updatedSite.inventoryItems || []).filter((i: InventoryItem) => i.group === selectedParcelGroupNumber && i.status !== 'pool')
       setSelectedItemIds(updatedGroupItems.map((i: InventoryItem) => i.id))
     }
   }
@@ -284,7 +284,7 @@ export default function InventoryView() {
         const updatedSite = await getSite(siteId)
         if (updatedSite) {
           setSite(updatedSite)
-          const updatedGroupItems = (updatedSite.inventoryItems || []).filter((i: InventoryItem) => i.group === group)
+          const updatedGroupItems = (updatedSite.inventoryItems || []).filter((i: InventoryItem) => i.group === group && i.status !== 'pool')
           setSelectedItemIds(updatedGroupItems.map((i: InventoryItem) => i.id))
         }
         return
@@ -310,7 +310,7 @@ export default function InventoryView() {
     const updatedSite = await getSite(siteId)
     if (updatedSite) {
       setSite(updatedSite)
-      const updatedGroupItems = (updatedSite.inventoryItems || []).filter((i: InventoryItem) => i.group === group)
+      const updatedGroupItems = (updatedSite.inventoryItems || []).filter((i: InventoryItem) => i.group === group && i.status !== 'pool')
       setSelectedItemIds(updatedGroupItems.map((i: InventoryItem) => i.id))
     }
   }
@@ -365,7 +365,7 @@ export default function InventoryView() {
         const updatedSite = await getSite(siteId)
         if (updatedSite) {
           setSite(updatedSite)
-          const newItems = (updatedSite.inventoryItems || []).filter((i: InventoryItem) => i.group === newGroup)
+          const newItems = (updatedSite.inventoryItems || []).filter((i: InventoryItem) => i.group === newGroup && i.status !== 'pool')
           setSelectedItemIds(newItems.map((i: InventoryItem) => i.id))
         }
         setEditorMode('none')

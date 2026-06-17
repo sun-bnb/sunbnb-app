@@ -3,7 +3,12 @@ import prisma from '@repo/data/PrismaCient'
 import { SiteProps } from '@/types/shared'
 import ManagementView from './view'
 import ErrorCard from '@/components/ErrorCard'
-import { OP_RETURNED, RENTAL_CANCELED } from '@repo/data/reservation-status'
+import {
+  OP_RETURNED,
+  RENTAL_CANCELED,
+  RESERVATION_CANCELED,
+  RESERVATION_REFUNDED,
+} from '@repo/data/reservation-status'
 
 
 export default async function ManagePage({ params, searchParams }: { params: { id: string }, searchParams: { [key: string]: string } }) {
@@ -39,6 +44,9 @@ export default async function ManagePage({ params, searchParams }: { params: { i
             where: {
               from: { lte: todayEnd },
               to: { gte: todayStart },
+              // Keep payment_failed (and legacy 'error') visible so staff can Remove them.
+              // Only hide truly-gone canceled/refunded rows.
+              status: { notIn: [RESERVATION_CANCELED, RESERVATION_REFUNDED] },
             },
             include: {
               user: { select: { id: true, email: true } }

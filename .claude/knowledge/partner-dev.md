@@ -11,11 +11,15 @@ sections. *(Empty — entries are added as the agent learns. Each entry: a one-l
 pointer here + the full entry in its section below.)*
 
 - **Auth & ownership** — `requireSiteOwner` / `verifySiteOwnership` / sudo edge cases — _none yet_
-- **State machines** — order / operational / rental transition gaps — _none yet_
+- **State machines** — operational status extension pattern (7-file checklist), color palette — see "Adding a new manage-page operational status"
 - **Test failures & fixes** — mock/fixture gotchas — see "Mock-contract test", "saveInventoryItemProperties", "auth-matrix ok/reject predicate"
 - **Bug patterns & fixes** — recurring partner-app bugs — see "verifySiteOwnership vs verifySiteAccess scope divergence"
+- **Component decomposition** — manage page decomposition, shared state boundary, pinch handler scroll-target — see "Decomposing view.tsx manage monolith"
+- **Manage page naming** — hold/reserve/rent action-row distinction — see "Reserve vs Rent vs Hold terminology"
+- **BedDetail state-machine patterns** — convertHoldToWalkIn in-place update + multi-day $transaction extend, pendingConfirm per-branch guards, inSync-gated toggle, walk-in disconnect depart — see "BedDetail state-machine patterns"
 - **Rejected approaches** — dead-ends, so nobody re-tries them — see "React onWheel prop"
 - **Mollie lib tests** — mocking strategy for app/api/_lib/mollie.ts — see "Testing mollie.ts: mocking boundary + scope separator"
+- **Restaurant query tests** — mocking @repo/table-reservations-core while keeping real auth-helpers — see "Mocking @repo/table-reservations-core for queries.ts tests"
 
 ---
 
@@ -29,7 +33,23 @@ pointer here + the full entry in its section below.)*
 
 ## State machines
 
-<!-- Order status, operational status, rental status — unexpected transitions or gaps -->
+### 2026-06-17: Adding a new manage-page operational status (comp example)
+**Pattern:** A new `operationalStatus` value for the manage page needs a 7-file checklist:
+1. `@repo/data/reservation-status.ts` — add the constant (e.g. `OP_COMP = 'comp' as const`).
+2. `manage/actions.ts` — add the create action (mirror `blockBed`) and the release action (mirror
+   `unblockBed`); import the new constant. Both must go through `reserveWithConflictGuard`.
+3. `app/test/gated-actions.ts` — register both actions as `token-or-session`; auth-matrix picks
+   them up automatically (coverage-contract fails if you skip this).
+4. `view.tsx` AND `ParcelView.tsx` — **both** have their own copy of `BedState` + `getBedState`;
+   both need the new case. `POOL_STATE_STYLES` and `POOL_ICONS` only exist in `ParcelView.tsx`.
+5. `ManageToolbar.tsx` — extend its local `BedState` type; add counter segment to the readout.
+6. `BedDetail.tsx` — extend its local `BedState` type, `getBedState`, `stateBadgeColors`,
+   `stateLabels`, `TOGGLE_VISIBLE_STATES`; add action from available state + state UI section.
+7. `types/shared.ts` `Reservation` interface — add any new durable field (e.g. `isComp?: boolean`).
+**Color guidance:** green=free, yellow=expected, blue=checked-in, orange=walked-in, gray=blocked,
+purple=comp. Pick the next unused hue for P5+ states.
+**Revenue exclusion:** `paymentAmount: 0` + no `processConfirmedReservation` call = no Invoice →
+automatically excluded from invoice-driven accounting. No accounting changes needed.
 
 ## Test failures & fixes
 
@@ -92,6 +112,32 @@ tokens needing full access (orders, etc.) must have `'all'`.
 
 ## Mollie lib tests
 
+### 2026-06-17: Route-level tests for Mollie OAuth + subscription routes — mocking matrix
+**Problem:** Seven route handlers (authorize, callback, client-link, readiness-check,
+setup-test-merchant, subscription/checkout, subscription/portal) had 0% coverage. Each route
+needed a different combination of mocks.
+**Solution:** Mock matrix per route:
+- `authorize`: mock `@/app/auth` + `@/app/api/_lib/mollie` (for `buildAuthorizationUrl`)
+- `callback`: mock `@/app/auth` + `@/app/api/_lib/mollie` (all three exchange/profile/bootstrap
+  fns) + `@repo/data/mollie-tokens` (for `mollieTokenExpiresAtFrom` — NOT aliased in vitest.config);
+  pass cookies via the `cookie` header in `NextRequest`
+- `client-link`: mock `@/app/auth` + `@/app/api/_lib/mollie` (createClientLink, getMollieClientId,
+  OAUTH_SCOPES as a string constant)
+- `readiness-check`: mock `@/app/auth` + `@mollie/api-client` (imported directly in the route,
+  not via _lib/mollie) + `vi.stubGlobal('fetch', vi.fn())` for the methods/all HTTP call
+- `setup-test-merchant`: mock `@/app/auth` + `@/app/api/_lib/mollie` (bootstrapMollieAccount)
+- `checkout` / `portal`: mock `@/app/auth` + `@/app/api/_lib/stripe` (getStripeClient)
+**CSRF verdict (callback route):** IMPLEMENTED CORRECTLY. The callback checks
+`request.cookies.get('mollie_oauth_state')?.value !== state` and redirects with
+`error=invalid_state` when the cookie is missing or mismatched. Tests confirm both rejection
+paths and the happy path. `stripe.ts`'s `getStripeClient` stays at 0% coverage by design —
+the function is always mocked to avoid real Stripe calls in unit tests.
+**Prevention:** When a route handler imports `@repo/data/mollie-tokens` or `@mollie/api-client`
+directly (not via `_lib/mollie`), they're NOT aliased in vitest.config.ts and must be explicitly
+`vi.mock()`ed. Redirects return status 307; check `response.headers.get('location')`. To pass
+cookies, use the `cookie` header in the `NextRequest` constructor options (NextRequest parses it
+via `RequestCookies`).
+
 ### 2026-06-17: Testing mollie.ts: mocking boundary + scope separator
 **Problem:** `app/api/_lib/mollie.ts` imports three different external concerns: raw `fetch`
 (for OAuth token endpoints), the `@mollie/api-client` SDK (for clientLinks, profiles,
@@ -118,6 +164,117 @@ form (`scope=payments.read+payments.write`).
 **Prevention:** For any `app/api/_lib/` utility that mixes raw fetch + SDK + a @repo/data helper:
 stub fetch globally, vi.mock the SDK and the data helper; let vitest.config.ts alias handle
 Prisma. Don't use `vi.importActual` for @repo/data paths — aliases redirect them to mocks anyway.
+
+## Component decomposition
+
+### 2026-06-17: Decomposing view.tsx manage monolith — shared state boundary
+**Problem:** The 1043-line `view.tsx` manage monolith mixed zoom/pinch/drag gesture state,
+per-parcel reversed-order state, inventory grouping logic, summary computation, sectioned vs
+scroll rendering paths, pool section, rental section, and modals all in one component. The
+sectioned view used `containerWidth`/ResizeObserver to compute `chunkSize`; removing it meant
+also dropping the ResizeObserver (the ref itself was still needed for the wheel-zoom handler).
+**Solution:** Keep in `ManageView`: zoom state + refs (zoomRef, containerRef), pinch handler,
+drag-to-pan handlers (passed as props to each `ParcelView`), reversed-parcel state,
+inventory-grouping logic, summary computation, modal state. Extract to `ManageToolbar.tsx`
+(occupancy pips + zoom buttons), `ParcelView.tsx` (one parcel's scroll grid + PoolSection),
+`RentalsSection.tsx` (rental block). `PoolCell`/`PoolSection` live inside `ParcelView.tsx`
+(colocated — they depend on bed-state helpers only used within the scroll grid).
+**Gotcha:** The pinch handler finds the scroll container via
+`(e.target).closest('.overflow-x-auto')`. Each `ParcelView` scroll div must keep that class
+name for pinch-scroll-nudge to work. Verified kept in the `overflow-x-auto` div in ParcelView.
+**Prevention:** When decomposing, map which gesture handlers reference which refs/state before
+splitting. The drag-to-pan handler uses `e.currentTarget` (the scroll div) but is safe to pass
+as a prop callback since the element capture (`el.setPointerCapture`) is inside the handler.
+
+## Restaurant query tests
+
+### 2026-06-17: Mocking @repo/table-reservations-core for queries.ts tests
+**Problem:** `app/restaurants/[id]/queries.ts` imports read helpers (`getRestaurantById`,
+`listTablesForRestaurant`, etc.) from `@repo/table-reservations-core`. That package uses the
+aliased `@repo/data/PrismaCient`, so importing it in tests triggers the mock — but the core
+functions still run real code, making test setup non-deterministic.
+**Solution:** Fully mock `@repo/table-reservations-core` with `vi.mock('@repo/table-reservations-core', () => ({ ... }))`, listing only the functions used by the file under test. The `lib/auth-helpers.ts` is intentionally NOT mocked — it runs its real ownership logic through `auth()` + the mocked Prisma client, which is the actual regression guard.
+**Pattern:** Mock only the "outbound calls" (core data helpers), but keep the "inbound gate" (`requireRestaurantOwner`) real. This way the tests prove that the ownership check actually runs and controls data access, not just that a mock returns null.
+**Return shape:** The queries return `null` on failure (not `{ status: 'error' }`) — assert `toBeNull()`, not `res.status`. Spy on the core mock with `.not.toHaveBeenCalled()` to prove the gate fires before any data fetch.
+**Prevention:** See `app/restaurants/[id]/queries.test.ts`. File is named `queries.ts`, not `*actions*.ts`, so the coverage-contract glob does NOT scan it — no allowlist entry needed.
+
+## Manage page — hold/reserve/rent naming
+
+### 2026-06-17: "Reserve" vs "Rent" vs "Hold" terminology on the manage page
+**Context:** The manage page had a single "Reserve" button that was actually a paid walk-in
+(status=`paid-in-cash`, operationalStatus=`walked-in`, `checkedInAt: now`). Adding a lightweight
+hold (Alonso's `reservada` concept) required distinguishing the two.
+**Decision (with user):**
+- The old "Reserve" button → renamed **"Rent"** (`reserveItem` unchanged — paid walk-in, orange).
+- A new **"Reserve"** button → lightweight hold (`holdBed`, yellow, today-only, no payment).
+- Action row: Block | Comp | Reserve | Rent (left to right: maintenance, free, hold, paid).
+**Hold implementation:** `status=RESERVATION_HELD` (`held`), `operationalStatus=OP_EXPECTED`
+(`expected`). No new bed-state/color/`Item.tsx`/`ManageToolbar` changes — the hold renders as the
+existing yellow "booked" lane and resolves via the existing check-in / no-show buttons. `RESERVATION_HELD`
+is already in `BLOCKING_STATUSES` so a hold occupies the bed correctly. No DB migration — the
+`status` column is a plain String.
+**Cleanup:** Expired holds cleaned by the cron alongside stale walk-ins (same `createdAt < today-start
++ to < now` guards). Add `RESERVATION_HELD` to the `status: { in: [...] }` clause in
+`app/api/reservations-cleanup/route.ts`.
+**Prevention:** When extending the manage-page with a new lightweight state that maps to an existing
+`operationalStatus`, check whether it needs any of the 7-file state-add checklist. A `held` hold
+maps to `OP_EXPECTED` — zero state-file changes — but still needs: `actions.ts` action, gated-actions
+registry, cleanup cron update, i18n, tests.
+
+## BedDetail state-machine patterns
+
+### 2026-06-17: convertHoldToWalkIn — in-place UPDATE vs delete+create; multi-day extension
+**Today-only path:** When a held guest arrives (staff taps "Rent" in the Held panel with no `until`),
+the hold is converted IN PLACE via `prisma.reservation.update` — same row, same items, same today
+range. NO conflict re-check is needed: the seat is already occupied by this hold.
+**Multi-day extension (`until` param):** A hold only covers TODAY. Extending `to` into future days
+opens a race window: a concurrent consumer booking on those days could land between the `findFirst` and
+the `update`. Fix: run find + conflict-check + update in one `prisma.$transaction` with a `SELECT ...
+FOR UPDATE` lock on the item rows (same pattern as `reserveWithConflictGuard`). The conflict query
+excludes the hold's own id (`id: { not: hold.id }`) — otherwise the hold itself (which overlaps today)
+appears as a false-positive conflict.
+**$transaction mock:** The PrismaCient mock implements `$transaction: vi.fn((arg) => arg(prisma))`
+(i.e. the tx callback receives the same mock prisma client). Unit tests can therefore wire up
+`reservation.findFirst` call sequences (first: hold lookup, second: conflict check) and
+`reservation.update` on the same mock without any extra setup.
+**Contract:** `toDate` is always written (including today-only), so the walk-in has an authoritative
+`to` regardless of what the original hold stored.
+
+### 2026-06-17: shared confirmPanel + pendingConfirm — extending to walk-in actions
+**Gotcha:** `runPendingConfirm` previously required a non-null `reservation` as a precondition
+before dispatching any case. When `'unreserve'` was added (which targets `item.id`, not
+`reservation.id`), the top-level null-guard had to be removed from `runPendingConfirm` and moved to
+the individual branches that actually need the reservation object (`'no-show'`, `'depart'`). The
+`'cancel'` and `'unreserve'` branches use `item.id` and don't need `reservation`.
+**Prevention:** When adding a new `PendingConfirm` case that doesn't need `reservation`, guard
+per-branch, not at the top of `runPendingConfirm`.
+
+### 2026-06-17: inSync-gated toggle + walk-in disconnect depart
+**Invariant (group/pair scope toggle):** The two-option [Group/Pair | Seat] toggle in `BedDetail`
+must only render when `inSync` (all `groupItems` share the same active reservation id as the
+selected item, or all are free). An out-of-sync group (e.g. one seat walked-in, one seat free) must
+collapse to a single non-interactive "Seat" indicator. Otherwise:
+- The "Group" button is shown for a state where only one seat can be acted on → staff confusion.
+- Attempting a Group walk-in/block/comp on a partially occupied pair hits the conflict guard.
+**Implementation:** Move `thisResId`/`inSync` computation BEFORE `pairNumber`. Use `reservation?.id`
+(not a second `getActiveReservation(item)` call — `reservation` is already computed). Gate
+`pairNumber` on `inSync` by adding `|| !inSync` to its undefined condition.
+`applyToPair` defaults to `inSync` and can only be toggled via the Group button; when `!inSync` no
+Group button renders, so `applyToPair` stays `false` even if it happens to equal the old `true` value
+from a prior `useState(inSync)` call before the item change — the `useEffect` re-sets it on `item.id`.
+
+**Walk-in Depart dispatch:** A paired walk-in shares ONE reservation row (all seats in the group are
+connected to the same Reservation record). When staff pick "Seat" mode (`!applyToPair`) and confirm
+Depart, calling `markDeparted(reservationId)` would set `operationalStatus=departed` on the whole
+row, immediately freeing the other seat. The correct "one seat left" semantic is to disconnect just
+this item: `unreserveItem(itemId, ..., false)`. Condition: `state === 'walked-in' && !applyToPair &&
+inSync && groupItems.length > 0`. All other depart paths (Group mode, non-grouped walk-in, checked-in
+depart, out-of-sync seat reservation) keep `markDeparted(reservationId)`.
+
+**`cancelReservation` applyToPair removal:** Cancel is whole-reservation by design (the status update
+covers all items in the booking). The `applyToPair` param was never used by any call site that
+actually passed it — it was always the default. Remove it so the signature is honest and the
+auth-matrix invoke and test call sites can stay simple.
 
 ## Rejected approaches
 

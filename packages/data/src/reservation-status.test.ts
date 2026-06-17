@@ -4,6 +4,7 @@ import {
   RESERVATION_PROCESSING,
   RESERVATION_COMPLETE,
   RESERVATION_PAID_IN_CASH,
+  RESERVATION_HELD,
   RESERVATION_PAYMENT_FAILED,
   RESERVATION_CANCELED,
   RESERVATION_REFUNDED,
@@ -14,11 +15,12 @@ import {
 } from './reservation-status'
 
 describe('BLOCKING_STATUSES', () => {
-  it('contains pending, processing, complete, and paid-in-cash', () => {
+  it('contains pending, processing, complete, paid-in-cash, and held', () => {
     expect(BLOCKING_STATUSES).toContain(RESERVATION_PENDING)
     expect(BLOCKING_STATUSES).toContain(RESERVATION_PROCESSING)
     expect(BLOCKING_STATUSES).toContain(RESERVATION_COMPLETE)
     expect(BLOCKING_STATUSES).toContain(RESERVATION_PAID_IN_CASH)
+    expect(BLOCKING_STATUSES).toContain(RESERVATION_HELD)
   })
 
   it('excludes canceled, refunded, and payment_failed', () => {
@@ -31,6 +33,10 @@ describe('BLOCKING_STATUSES', () => {
 describe('PAID_STATUSES', () => {
   it('contains only complete', () => {
     expect(PAID_STATUSES).toEqual([RESERVATION_COMPLETE])
+  })
+
+  it('excludes held — a hold carries no payment / revenue', () => {
+    expect(PAID_STATUSES).not.toContain(RESERVATION_HELD)
   })
 })
 
@@ -62,6 +68,7 @@ describe('RESERVATION_STATUSES', () => {
       RESERVATION_PROCESSING,
       RESERVATION_COMPLETE,
       RESERVATION_PAID_IN_CASH,
+      RESERVATION_HELD,
       RESERVATION_PAYMENT_FAILED,
       RESERVATION_CANCELED,
       RESERVATION_REFUNDED,
@@ -72,6 +79,6 @@ describe('RESERVATION_STATUSES', () => {
   })
 
   it('has no extra statuses beyond the known constants', () => {
-    expect(RESERVATION_STATUSES).toHaveLength(7)
+    expect(RESERVATION_STATUSES).toHaveLength(8)
   })
 })

@@ -8,6 +8,7 @@ import {
   RESERVATION_PROCESSING,
   RESERVATION_PAYMENT_FAILED,
   RESERVATION_PAID_IN_CASH,
+  RESERVATION_HELD,
 } from '@repo/data/reservation-status'
 
 const CRON_SECRET = process.env.CRON_SECRET
@@ -45,12 +46,12 @@ export async function GET(request: Request) {
           status: RESERVATION_PAYMENT_FAILED,
           createdAt: { lt: cutoffPaymentFailed }
         },
-        { 
-          status: { in: [ RESERVATION_PAID_IN_CASH ] },
-          createdAt: { 
+        {
+          status: { in: [ RESERVATION_PAID_IN_CASH, RESERVATION_HELD ] },
+          createdAt: {
             lt: cutoffPaidInCash,
           },
-          to: { 
+          to: {
             lt: now,
           }
         }

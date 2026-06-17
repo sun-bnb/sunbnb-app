@@ -11,6 +11,10 @@ import {
 import dayjs from 'dayjs'
 import {
   RESERVATION_PAID_IN_CASH,
+  RESERVATION_HELD,
+  RESERVATION_COMPLETE,
+  RESERVATION_CANCELED,
+  RESERVATION_PAYMENT_FAILED,
   RENTAL_COMPLETE,
   OP_EXPECTED,
   OP_CHECKED_IN,
@@ -20,6 +24,8 @@ import {
   OP_RESERVED,
   OP_RETURNED,
   OP_PICKED_UP,
+  OP_COMP,
+  BLOCKING_STATUSES,
 } from '@repo/data/reservation-status'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -484,6 +490,458 @@ export async function unblockBed(siteId: string, itemId: string, accessKey?: str
   return { status: 'ok' }
 }
 
+// ─── Comp bed (complimentary / gratis occupancy) ────────────────────────────
+
+/**
+ * Mark a bed as comp (complimentary — given free to a guest, staff, regular, etc.).
+ * Structurally identical to a walk-in but distinct in operational status (OP_COMP)
+ * so comps never collide with walk-in release queries, and the durable `isComp` flag
+ * allows clean analytics reporting independent of operational lifecycle.
+ *
+ * Revenue impact: paymentAmount=0 → no invoice will be created → automatically
+ * excluded from invoice-driven accounting. No accounting code change required.
+ */
+export async function compBed(
+  siteId: string,
+  itemId: string,
+  accessKey?: string,
+  applyToPair: boolean = true,
+  guestName?: string,
+  notes?: string
+) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const allItemIds = [itemId]
+  if (applyToPair) {
+    const memberIds = await getGroupMemberIds(itemId)
+    for (const mid of memberIds) {
+      if (!allItemIds.includes(mid)) allItemIds.push(mid)
+    }
+  }
+
+  const fromDate = dayjs().startOf('day').toDate()
+  const toDate = dayjs().endOf('day').toDate()
+
+  const result = await reserveWithConflictGuard({
+    itemIds: allItemIds,
+    siteId,
+    userId: ownership.userId,
+    type: 'days',
+    from: fromDate,
+    to: toDate,
+    status: RESERVATION_PAID_IN_CASH,
+    operationalStatus: OP_COMP,
+    isComp: true,
+    paymentAmount: 0,
+    guestName: guestName?.slice(0, 200) || null,
+    internalNotes: notes?.slice(0, 500) || null,
+  })
+
+  if (result.outcome === 'conflict') {
+    return { status: 'error', errors: ['Sunbed is already occupied or blocked'] }
+  }
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
+}
+
+// ─── Uncomp bed (end the complimentary occupancy) ───────────────────────────
+
+export async function uncompBed(siteId: string, itemId: string, accessKey?: string, applyToPair: boolean = true) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const todayStart = dayjs().startOf('day').toDate()
+  const todayEnd = dayjs().endOf('day').toDate()
+
+  if (applyToPair) {
+    // Pair mode: delete the whole comp reservation (frees both seats).
+    await prisma.reservation.deleteMany({
+      where: {
+        siteId,
+        operationalStatus: OP_COMP,
+        from: { gte: todayStart },
+        to: { lte: todayEnd },
+        items: { some: { id: itemId } },
+      },
+    })
+  } else {
+    // Single-seat mode: if the comp reservation has >1 item, disconnect just
+    // this seat; otherwise delete the whole reservation.
+    const reservation = await prisma.reservation.findFirst({
+      where: {
+        siteId,
+        operationalStatus: OP_COMP,
+        from: { gte: todayStart },
+        to: { lte: todayEnd },
+        items: { some: { id: itemId } },
+      },
+      include: { items: true },
+    })
+
+    if (reservation) {
+      if (reservation.items.length > 1) {
+        await prisma.reservation.update({
+          where: { id: reservation.id },
+          data: { items: { disconnect: [{ id: itemId }] } },
+        })
+      } else {
+        await prisma.reservation.deleteMany({
+          where: {
+            id: reservation.id,
+            siteId,
+          },
+        })
+      }
+    }
+  }
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
+}
+
+// ─── Hold bed (lightweight same-day hold, no payment) ───────────────────────
+
+/**
+ * Place a lightweight floor hold on a bed for today — "pencil someone in".
+ * No payment taken. Operationally identical to an inbound reservation:
+ * - `status: held` — distinct from paid-in-cash so it's excluded from revenue
+ *   but still occupies the bed via BLOCKING_STATUSES (conflict guard will reject
+ *   a second hold on the same bed).
+ * - `operationalStatus: expected` — renders in the yellow "booked" lane; the
+ *   existing check-in / no-show transitions work unchanged.
+ * - `paymentAmount: 0`, no `checkedInAt` (the guest isn't present yet).
+ * - Today-only: `from` = start of day, `to` = end of day. The cleanup cron
+ *   garbage-collects expired holds the same way it cleans up stale walk-ins.
+ */
+export async function holdBed(
+  siteId: string,
+  itemId: string,
+  accessKey?: string,
+  applyToPair: boolean = true,
+  guestName?: string,
+  notes?: string
+) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const allItemIds = [itemId]
+  if (applyToPair) {
+    const memberIds = await getGroupMemberIds(itemId)
+    for (const mid of memberIds) {
+      if (!allItemIds.includes(mid)) allItemIds.push(mid)
+    }
+  }
+
+  const fromDate = dayjs().startOf('day').toDate()
+  const toDate = dayjs().endOf('day').toDate()
+
+  const result = await reserveWithConflictGuard({
+    itemIds: allItemIds,
+    siteId,
+    userId: ownership.userId,
+    type: 'days',
+    from: fromDate,
+    to: toDate,
+    status: RESERVATION_HELD,
+    operationalStatus: OP_EXPECTED,
+    paymentAmount: 0,
+    guestName: guestName?.slice(0, 200) || null,
+    internalNotes: notes?.slice(0, 500) || null,
+  })
+
+  if (result.outcome === 'conflict') {
+    return { status: 'error', errors: ['Sunbed is already occupied or blocked'] }
+  }
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
+}
+
+// ─── Convert hold to walk-in (held guest arrives — collect cash) ────────────
+
+/**
+ * Convert a staff hold to a paid walk-in IN PLACE.
+ *
+ * When a held guest arrives the operator taps "Rent" in the Held panel.
+ * This updates the existing reservation row to status=paid-in-cash,
+ * operationalStatus=walked-in, checkedInAt=now.
+ *
+ * `until` extends the stay across multiple days. A hold only covers TODAY, so
+ * extending past today requires a race-safe availability re-check: we run the
+ * find + conflict-check + update atomically in a $transaction with a FOR UPDATE
+ * lock on the item rows (mirroring reserveWithConflictGuard). Today-only
+ * conversions skip the transaction — the hold already occupies the seat.
+ *
+ * guestName is updated only when a non-empty value is supplied (preserves the
+ * hold's existing guestName when the caller passes nothing).
+ */
+export async function convertHoldToWalkIn(
+  siteId: string,
+  itemId: string,
+  accessKey?: string,
+  guestName?: string,
+  until?: string
+) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const todayStart = dayjs().startOf('day').toDate()
+  const todayEnd = dayjs().endOf('day').toDate()
+
+  // Validate and compute the end date (same rules as reserveItem).
+  let toDate = todayEnd
+  if (until) {
+    if (isNaN(Date.parse(until))) {
+      return { status: 'error', errors: ['Invalid date format'] }
+    }
+    const days = dayjs(until).startOf('day').diff(dayjs().startOf('day'), 'day')
+    if (days < 0) {
+      return { status: 'error', errors: ['End date cannot be in the past'] }
+    }
+    if (days > 90) {
+      return { status: 'error', errors: ['Date range cannot exceed 90 days'] }
+    }
+    toDate = dayjs(until).endOf('day').toDate()
+  }
+
+  const updateData = {
+    status: RESERVATION_PAID_IN_CASH,
+    operationalStatus: OP_WALKED_IN,
+    checkedInAt: new Date(),
+    to: toDate,
+    ...(guestName && guestName.trim() ? { guestName: guestName.trim().slice(0, 200) } : {}),
+  }
+
+  if (until && toDate > todayEnd) {
+    // Extending beyond today: re-check availability atomically.
+    // The hold occupies today only; the extended days are open → a concurrent
+    // booking on those days must be blocked before we widen the `to` date.
+    const result = await prisma.$transaction(async (tx) => {
+      // Step 1: Find the held reservation + its connected items.
+      const hold = await tx.reservation.findFirst({
+        where: {
+          siteId,
+          status: RESERVATION_HELD,
+          from: { lte: todayEnd },
+          to: { gte: todayStart },
+          items: { some: { id: itemId } },
+        },
+        select: {
+          id: true,
+          items: { select: { id: true } },
+        },
+      })
+
+      if (!hold) {
+        return { outcome: 'not_found' as const }
+      }
+
+      const allItemIds = hold.items.map((i) => i.id)
+
+      // Step 2: Lock those InventoryItem rows FOR UPDATE so concurrent reservations
+      // for the same beds in the extended range are serialized behind this tx.
+      if (allItemIds.length > 0) {
+        await tx.$queryRaw`
+          SELECT id FROM "InventoryItem"
+          WHERE id = ANY(${allItemIds}::text[])
+          FOR UPDATE
+        `
+      }
+
+      // Step 3: Check for any OTHER blocking reservation overlapping
+      // [todayStart, toDate] on those items, excluding this hold itself.
+      const conflict = await tx.reservation.findFirst({
+        where: {
+          siteId,
+          status: { in: BLOCKING_STATUSES as string[] },
+          operationalStatus: { notIn: [OP_NO_SHOW, OP_DEPARTED] as string[] },
+          from: { lte: toDate },
+          to: { gte: todayStart },
+          items: { some: { id: { in: allItemIds } } },
+          id: { not: hold.id },
+        },
+        select: { id: true },
+      })
+
+      if (conflict) {
+        return { outcome: 'conflict' as const }
+      }
+
+      // Step 4: Update in place — extend the hold and convert it to a walk-in.
+      await tx.reservation.update({
+        where: { id: hold.id },
+        data: updateData,
+      })
+
+      return { outcome: 'updated' as const }
+    })
+
+    if (result.outcome === 'not_found') {
+      return { status: 'error', errors: ['No held reservation found to convert'] }
+    }
+    if (result.outcome === 'conflict') {
+      return { status: 'error', errors: ['Seat is already reserved for part of this period'] }
+    }
+  } else {
+    // Today-only conversion: the hold already occupies the seat — no conflict
+    // re-check needed. Simple find + update outside a transaction.
+    const reservation = await prisma.reservation.findFirst({
+      where: {
+        siteId,
+        status: RESERVATION_HELD,
+        from: { lte: todayEnd },
+        to: { gte: todayStart },
+        items: { some: { id: itemId } },
+      },
+      select: { id: true },
+    })
+
+    if (!reservation) {
+      return { status: 'error', errors: ['No held reservation found to convert'] }
+    }
+
+    await prisma.reservation.update({
+      where: { id: reservation.id },
+      data: updateData,
+    })
+  }
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
+}
+
+// ─── Cancel reservation (partner-side, refund placeholder) ──────────────────
+
+// TODO(P7b): real refund. issueRefund lives in apps/user/app/api/_lib/payment-provider.ts and
+// must be extracted into @repo/data before this can run for real. Until then this is a NO-OP.
+async function issueRefundPlaceholder(paymentRef: string | null) {
+  console.warn('[cancelReservation] P7b NOT WIRED — no refund issued for', paymentRef)
+}
+
+/**
+ * Cancel a paid online/QR reservation and free the bed.
+ *
+ * The reservation row is KEPT for audit (status → CANCELED); it is never deleted.
+ * Idempotent: if the reservation is already CANCELED, returns ok immediately.
+ *
+ * IMPORTANT — real refund wiring is deferred to P7b. `issueRefundPlaceholder`
+ * is a loud NO-OP stub. Do NOT deploy to production until P7b swaps it for the
+ * real `issueRefund` extracted into `@repo/data`.
+ *
+ * Cancel is whole-reservation by design: updating the status row covers all items
+ * in the booking regardless of how many seats the reservation spans.
+ */
+export async function cancelReservation(
+  siteId: string,
+  itemId: string,
+  accessKey?: string
+) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const todayStart = dayjs().startOf('day').toDate()
+  const todayEnd = dayjs().endOf('day').toDate()
+
+  // Find the active paid reservation for this item (overlap-with-today semantics
+  // so multi-day consumer bookings that started before today are matched correctly).
+  const reservation = await prisma.reservation.findFirst({
+    where: {
+      siteId,
+      status: RESERVATION_COMPLETE,
+      from: { lte: todayEnd },
+      to: { gte: todayStart },
+      items: { some: { id: itemId } },
+    },
+    select: { id: true, paymentRef: true },
+  })
+
+  if (!reservation) {
+    // Idempotent: if already canceled (e.g. double-tap), return ok
+    const alreadyCanceled = await prisma.reservation.findFirst({
+      where: {
+        siteId,
+        status: RESERVATION_CANCELED,
+        from: { lte: todayEnd },
+        to: { gte: todayStart },
+        items: { some: { id: itemId } },
+      },
+      select: { id: true },
+    })
+    if (alreadyCanceled) return { status: 'ok' }
+    return { status: 'error', errors: ['No active reservation found to cancel'] }
+  }
+
+  // TODO(P7b): swap this for the real issueRefund once extracted into @repo/data
+  await issueRefundPlaceholder(reservation.paymentRef)
+
+  await prisma.reservation.update({
+    where: { id: reservation.id },
+    data: { status: RESERVATION_CANCELED },
+  })
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
+}
+
+// ─── Release hold (lightweight floor hold, no payment) ──────────────────────
+
+/**
+ * Release a staff hold (status=held) and free the bed.
+ * Mirrors `unblockBed` but targets RESERVATION_HELD status.
+ * No payment involved — just deletes the hold record.
+ */
+export async function releaseHold(siteId: string, itemId: string, accessKey?: string, applyToPair: boolean = true) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const todayStart = dayjs().startOf('day').toDate()
+  const todayEnd = dayjs().endOf('day').toDate()
+
+  if (applyToPair) {
+    // Pair mode: delete the whole hold reservation (frees both seats).
+    await prisma.reservation.deleteMany({
+      where: {
+        siteId,
+        status: RESERVATION_HELD,
+        from: { gte: todayStart },
+        to: { lte: todayEnd },
+        items: { some: { id: itemId } },
+      },
+    })
+  } else {
+    // Single-seat mode: if the hold reservation has >1 item, disconnect just
+    // this seat (the partner stays held); otherwise delete the whole reservation.
+    const reservation = await prisma.reservation.findFirst({
+      where: {
+        siteId,
+        status: RESERVATION_HELD,
+        from: { gte: todayStart },
+        to: { lte: todayEnd },
+        items: { some: { id: itemId } },
+      },
+      include: { items: true },
+    })
+
+    if (reservation) {
+      if (reservation.items.length > 1) {
+        await prisma.reservation.update({
+          where: { id: reservation.id },
+          data: { items: { disconnect: [{ id: itemId }] } },
+        })
+      } else {
+        await prisma.reservation.deleteMany({
+          where: { id: reservation.id, siteId },
+        })
+      }
+    }
+  }
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // RENTAL BOOKING ACTIONS
 // ═══════════════════════════════════════════════════════════════════════════
@@ -902,6 +1360,52 @@ export async function deletePoolSeat(siteId: string, itemId: string, accessKey?:
   }
 
   await prisma.inventoryItem.delete({ where: { id: itemId } })
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
+}
+
+// ─── Remove failed reservation (payment never completed) ─────────────────────
+
+/**
+ * Permanently deletes a failed-payment reservation and frees the seat.
+ *
+ * Only targets reservations whose status is RESERVATION_PAYMENT_FAILED
+ * ('payment_failed') or the legacy literal 'error'. No refund is issued —
+ * these reservations never collected money.
+ *
+ * The guard (`status === RESERVATION_PAYMENT_FAILED || status === 'error'`)
+ * ensures this action can NEVER delete a paid, held, or active reservation.
+ *
+ * After deletion, `revalidatePath` refreshes the manage page so the seat
+ * appears free immediately.
+ */
+export async function removeFailedReservation(
+  siteId: string,
+  reservationId: string,
+  accessKey?: string
+) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const reservation = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    select: { siteId: true, status: true },
+  })
+
+  if (!reservation || reservation.siteId !== siteId) {
+    return { status: 'error', errors: ['Reservation not found'] }
+  }
+
+  // Guard: only delete genuinely failed reservations — never paid/held/active ones.
+  const isFailed = reservation.status === RESERVATION_PAYMENT_FAILED || reservation.status === 'error'
+  if (!isFailed) {
+    return { status: 'error', errors: ['Reservation is not in a failed-payment state'] }
+  }
+
+  await prisma.reservation.deleteMany({
+    where: { id: reservationId, siteId },
+  })
 
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok' }

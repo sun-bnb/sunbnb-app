@@ -29,6 +29,12 @@ import {
   moveReservation,
   blockBed,
   unblockBed,
+  holdBed,
+  compBed,
+  uncompBed,
+  cancelReservation,
+  releaseHold,
+  convertHoldToWalkIn,
   markRentalPickedUp,
   markRentalReturned,
   createWalkInRental,
@@ -36,6 +42,7 @@ import {
   addSeatToGroup,
   removeGroupSeat,
   deletePoolSeat,
+  removeFailedReservation,
 } from '@/app/sites/[id]/manage/actions'
 
 import {
@@ -295,6 +302,24 @@ export const GATED_ACTIONS: GatedAction[] = [
     invoke: (accessKey?) => unblockBed(SITE_ID, ITEM_ID, accessKey),
   },
   {
+    name: 'manage.holdBed',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => holdBed(SITE_ID, ITEM_ID, accessKey),
+  },
+  {
+    name: 'manage.compBed',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => compBed(SITE_ID, ITEM_ID, accessKey),
+  },
+  {
+    name: 'manage.uncompBed',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => uncompBed(SITE_ID, ITEM_ID, accessKey),
+  },
+  {
     name: 'manage.markRentalPickedUp',
     kind: 'action',
     gate: 'token-or-session',
@@ -343,6 +368,30 @@ export const GATED_ACTIONS: GatedAction[] = [
     kind: 'action',
     gate: 'token-or-session',
     invoke: (accessKey?) => deletePoolSeat(SITE_ID, ITEM_ID, accessKey),
+  },
+  {
+    name: 'manage.cancelReservation',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => cancelReservation(SITE_ID, ITEM_ID, accessKey),
+  },
+  {
+    name: 'manage.releaseHold',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => releaseHold(SITE_ID, ITEM_ID, accessKey),
+  },
+  {
+    name: 'manage.convertHoldToWalkIn',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => convertHoldToWalkIn(SITE_ID, ITEM_ID, accessKey),
+  },
+  {
+    name: 'manage.removeFailedReservation',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => removeFailedReservation(SITE_ID, RES_ID, accessKey),
   },
 
   // ══════════════════════════════════════════════════════════════════════════

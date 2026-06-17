@@ -40,7 +40,11 @@ export async function GET(request: NextRequest, { params } : { params: { id: str
           pair: true,
           pairedBy: true,
           sunbedGroup: {
-            include: { items: { select: { id: true } } }
+            // Only ACTIVE group members are consumer-bookable. Pool/overflow extras
+            // (status='pool', walk-in only) must never leak into the group — otherwise
+            // co-selecting a pair drags in pool ids the consumer can't book, and the
+            // booking is rejected with "some items not available".
+            include: { items: { where: { status: 'active' }, select: { id: true } } }
           }
         }
       },

@@ -35,6 +35,12 @@ import {
   moveReservation,
   blockBed,
   unblockBed,
+  holdBed,
+  compBed,
+  uncompBed,
+  cancelReservation,
+  releaseHold,
+  convertHoldToWalkIn,
   markRentalPickedUp,
   markRentalReturned,
   createWalkInRental,
@@ -42,6 +48,7 @@ import {
   deletePoolSeat,
   addSeatToGroup,
   removeGroupSeat,
+  removeFailedReservation,
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
@@ -1378,6 +1385,649 @@ describe('removeGroupSeat', () => {
   })
 })
 
+// ─── compBed ────────────────────────────────────────────────────────────────
+
+describe('compBed', () => {
+  it('creates a comp reservation with OP_COMP, isComp:true, and paymentAmount:0', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null) // no pair
+
+    const res = await compBed(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('ok')
+
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect(guardCall.status).toBe('paid-in-cash')
+    expect(guardCall.operationalStatus).toBe('comp')
+    expect(guardCall.isComp).toBe(true)
+    expect(guardCall.paymentAmount).toBe(0)
+    expect(guardCall.itemIds).toEqual([ITEM_ID])
+    expect(guardCall.siteId).toBe(SITE_ID)
+    // Guard owns the create — no direct prisma.reservation.create
+    expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
+  })
+
+  it('stores guestName and notes when provided', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+
+    await compBed(SITE_ID, ITEM_ID, undefined, true, 'VIP Guest', 'Staff member')
+
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect(guardCall.guestName).toBe('VIP Guest')
+    expect(guardCall.internalNotes).toBe('Staff member')
+  })
+
+  it('truncates guestName to 200 chars and notes to 500', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+
+    await compBed(SITE_ID, ITEM_ID, undefined, true, 'A'.repeat(300), 'B'.repeat(600))
+
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect(guardCall.guestName).toHaveLength(200)
+    expect(guardCall.internalNotes).toHaveLength(500)
+  })
+
+  it('expands paired item via SunbedGroup when applyToPair is true', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      id: ITEM_ID,
+      pairId: null,
+      sunbedGroupId: 'group-1',
+      pairedBy: null,
+    } as any)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ id: 'pair-1' }] as any)
+
+    await compBed(SITE_ID, ITEM_ID)
+
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect(guardCall.itemIds).toEqual([ITEM_ID, 'pair-1'])
+  })
+
+  it('does NOT expand pair when applyToPair is false', async () => {
+    authenticateAsOwner()
+
+    await compBed(SITE_ID, ITEM_ID, undefined, false)
+    expect(vi.mocked(prisma.inventoryItem.findUnique)).not.toHaveBeenCalled()
+
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect(guardCall.itemIds).toEqual([ITEM_ID])
+  })
+
+  it('rejects when the guard returns a conflict', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+    mockGuard.mockResolvedValueOnce({ outcome: 'conflict', conflictingReservationId: 'existing' })
+
+    const res = await compBed(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/already occupied or blocked/i)
+    expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
+  })
+
+  it('rejects unauthenticated caller', async () => {
+    const res = await compBed(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-owner', async () => {
+    authenticateAsNonOwner()
+    const res = await compBed(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authorized')
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+})
+
+// ─── uncompBed ───────────────────────────────────────────────────────────────
+
+describe('uncompBed', () => {
+  it('pair mode: deletes the whole comp reservation via deleteMany', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
+
+    const res = await uncompBed(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('ok')
+
+    const deleteCall = vi.mocked(prisma.reservation.deleteMany).mock.calls[0][0]
+    const where = deleteCall?.where as any
+    expect(where.siteId).toBe(SITE_ID)
+    expect(where.operationalStatus).toBe('comp')
+    expect(where.items.some.id).toBe(ITEM_ID)
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+  })
+
+  it('single-seat mode: disconnects this item when reservation has >1 item', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
+      id: RES_ID,
+      items: [{ id: ITEM_ID }, { id: 'pair-1' }],
+    } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
+
+    const res = await uncompBed(SITE_ID, ITEM_ID, undefined, false)
+    expect(res.status).toBe('ok')
+
+    expect(vi.mocked(prisma.reservation.update)).toHaveBeenCalledWith({
+      where: { id: RES_ID },
+      data: { items: { disconnect: [{ id: ITEM_ID }] } },
+    })
+    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
+  })
+
+  it('single-seat mode: deletes the whole comp reservation when it has only 1 item', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
+      id: RES_ID,
+      items: [{ id: ITEM_ID }],
+    } as any)
+    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
+
+    const res = await uncompBed(SITE_ID, ITEM_ID, undefined, false)
+    expect(res.status).toBe('ok')
+
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+    expect(vi.mocked(prisma.reservation.deleteMany)).toHaveBeenCalledWith({
+      where: { id: RES_ID, siteId: SITE_ID },
+    })
+  })
+
+  it('single-seat mode: returns ok and does nothing when no comp reservation found', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
+
+    const res = await uncompBed(SITE_ID, ITEM_ID, undefined, false)
+    expect(res.status).toBe('ok')
+
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
+  })
+
+  it('rejects unauthenticated caller', async () => {
+    const res = await uncompBed(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-owner', async () => {
+    authenticateAsNonOwner()
+    const res = await uncompBed(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authorized')
+    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
+  })
+})
+
+// ─── holdBed ────────────────────────────────────────────────────────────────
+
+describe('holdBed', () => {
+  it('creates a hold with status=held, operationalStatus=expected, paymentAmount=0 and no checkedInAt', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null) // no pair
+
+    const res = await holdBed(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('ok')
+
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect(guardCall.status).toBe('held')
+    expect(guardCall.operationalStatus).toBe('expected')
+    expect(guardCall.paymentAmount).toBe(0)
+    // No checkedInAt — the guest hasn't arrived yet
+    expect(guardCall).not.toHaveProperty('checkedInAt')
+    expect(guardCall.itemIds).toEqual([ITEM_ID])
+    expect(guardCall.siteId).toBe(SITE_ID)
+    // Guard owns the create — no direct prisma.reservation.create
+    expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
+  })
+
+  it('stores guestName and notes when provided', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+
+    await holdBed(SITE_ID, ITEM_ID, undefined, true, 'Maria', 'VIP table requested')
+
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect(guardCall.guestName).toBe('Maria')
+    expect(guardCall.internalNotes).toBe('VIP table requested')
+  })
+
+  it('truncates guestName to 200 chars and notes to 500', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+
+    await holdBed(SITE_ID, ITEM_ID, undefined, true, 'A'.repeat(300), 'B'.repeat(600))
+
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect(guardCall.guestName).toHaveLength(200)
+    expect(guardCall.internalNotes).toHaveLength(500)
+  })
+
+  it('sets from=today-start and to=today-end (today-only hold)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+
+    await holdBed(SITE_ID, ITEM_ID)
+
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect((guardCall.from as Date).getTime()).toBe(dayjs().startOf('day').toDate().getTime())
+    expect((guardCall.to as Date).getTime()).toBe(dayjs().endOf('day').toDate().getTime())
+  })
+
+  it('expands paired item via SunbedGroup when applyToPair is true (default)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      id: ITEM_ID,
+      pairId: null,
+      sunbedGroupId: 'group-1',
+      pairedBy: null,
+    } as any)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ id: 'pair-1' }] as any)
+
+    await holdBed(SITE_ID, ITEM_ID)
+
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect(guardCall.itemIds).toEqual([ITEM_ID, 'pair-1'])
+  })
+
+  it('does NOT expand pair when applyToPair is false', async () => {
+    authenticateAsOwner()
+
+    await holdBed(SITE_ID, ITEM_ID, undefined, false)
+    expect(vi.mocked(prisma.inventoryItem.findUnique)).not.toHaveBeenCalled()
+
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect(guardCall.itemIds).toEqual([ITEM_ID])
+  })
+
+  it('rejects when the guard returns a conflict (bed already occupied)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+    mockGuard.mockResolvedValueOnce({ outcome: 'conflict', conflictingReservationId: 'existing' })
+
+    const res = await holdBed(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/already occupied or blocked/i)
+    expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
+  })
+
+  it('rejects unauthenticated caller', async () => {
+    const res = await holdBed(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-owner', async () => {
+    authenticateAsNonOwner()
+    const res = await holdBed(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authorized')
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+})
+
+// ─── cancelReservation ─────────────────────────────────────────────────────
+
+describe('cancelReservation', () => {
+  it('rejects unauthenticated caller', async () => {
+    const res = await cancelReservation(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+    expect(vi.mocked(prisma.reservation.findFirst)).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-owner', async () => {
+    authenticateAsNonOwner()
+    const res = await cancelReservation(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authorized')
+    expect(vi.mocked(prisma.reservation.findFirst)).not.toHaveBeenCalled()
+  })
+
+  it('finds the active COMPLETE reservation by itemId and sets status=canceled', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
+      id: RES_ID,
+      paymentRef: 'tr_test123',
+    } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValueOnce({} as any)
+
+    const res = await cancelReservation(SITE_ID, ITEM_ID)
+
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(prisma.reservation.update)).toHaveBeenCalledWith({
+      where: { id: RES_ID },
+      data: { status: 'canceled' },
+    })
+  })
+
+  it('calls the refund placeholder without throwing (loud TODO, no real refund)', async () => {
+    // The issueRefundPlaceholder logs a warning and never throws.
+    // Verifying the action returns ok confirms the stub is non-fatal.
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
+      id: RES_ID,
+      paymentRef: 'tr_withRef',
+    } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValueOnce({} as any)
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const res = await cancelReservation(SITE_ID, ITEM_ID)
+
+    expect(res.status).toBe('ok')
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[cancelReservation] P7b NOT WIRED — no refund issued for',
+      'tr_withRef'
+    )
+    warnSpy.mockRestore()
+  })
+
+  it('is idempotent: returns ok without calling update when reservation already CANCELED', async () => {
+    authenticateAsOwner()
+    // First findFirst (looking for COMPLETE): no match
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(null)
+    // Second findFirst (looking for already-CANCELED): match
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({ id: RES_ID } as any)
+
+    const res = await cancelReservation(SITE_ID, ITEM_ID)
+
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+  })
+
+  it('returns error when no active or canceled reservation found', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(null)
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(null)
+
+    const res = await cancelReservation(SITE_ID, ITEM_ID)
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/no active reservation found/i)
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+  })
+})
+
+// ─── releaseHold ────────────────────────────────────────────────────────────
+
+describe('releaseHold', () => {
+  it('rejects unauthenticated caller', async () => {
+    const res = await releaseHold(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-owner', async () => {
+    authenticateAsNonOwner()
+    const res = await releaseHold(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authorized')
+    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
+  })
+
+  it('deletes the held reservation when found (pair/default mode)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.deleteMany).mockResolvedValueOnce({ count: 1 } as any)
+
+    const res = await releaseHold(SITE_ID, ITEM_ID)
+
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(prisma.reservation.deleteMany)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          siteId: SITE_ID,
+          status: 'held',
+          items: { some: { id: ITEM_ID } },
+        }),
+      })
+    )
+  })
+
+  it('returns ok (no-op) when no held reservation exists', async () => {
+    // In pair mode, deleteMany is always called — count=0 just means nothing was there.
+    // The action must NOT treat count=0 as an error (idempotent release).
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.deleteMany).mockResolvedValueOnce({ count: 0 } as any)
+
+    const res = await releaseHold(SITE_ID, ITEM_ID)
+
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(prisma.reservation.deleteMany)).toHaveBeenCalled()
+  })
+})
+
+// ─── convertHoldToWalkIn ─────────────────────────────────────────────────────
+
+describe('convertHoldToWalkIn', () => {
+  it('rejects unauthenticated caller', async () => {
+    const res = await convertHoldToWalkIn(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+    expect(vi.mocked(prisma.reservation.findFirst)).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-owner', async () => {
+    authenticateAsNonOwner()
+    const res = await convertHoldToWalkIn(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authorized')
+    expect(vi.mocked(prisma.reservation.findFirst)).not.toHaveBeenCalled()
+  })
+
+  it('finds the held reservation by itemId and updates it to paid-in-cash + walked-in', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({ id: RES_ID } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValueOnce({} as any)
+
+    const res = await convertHoldToWalkIn(SITE_ID, ITEM_ID)
+
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(prisma.reservation.update)).toHaveBeenCalledWith({
+      where: { id: RES_ID },
+      data: expect.objectContaining({
+        status: 'paid-in-cash',
+        operationalStatus: 'walked-in',
+        checkedInAt: expect.any(Date),
+      }),
+    })
+  })
+
+  it('applies the passed guestName when non-empty', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({ id: RES_ID } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValueOnce({} as any)
+
+    await convertHoldToWalkIn(SITE_ID, ITEM_ID, undefined, 'Maria')
+
+    const updateData = vi.mocked(prisma.reservation.update).mock.calls[0][0].data as any
+    expect(updateData.guestName).toBe('Maria')
+  })
+
+  it('does NOT set guestName when none is passed (preserves existing hold name)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({ id: RES_ID } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValueOnce({} as any)
+
+    await convertHoldToWalkIn(SITE_ID, ITEM_ID, undefined, undefined)
+
+    const updateData = vi.mocked(prisma.reservation.update).mock.calls[0][0].data as any
+    expect(updateData).not.toHaveProperty('guestName')
+  })
+
+  it('does NOT set guestName when an empty string is passed', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({ id: RES_ID } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValueOnce({} as any)
+
+    await convertHoldToWalkIn(SITE_ID, ITEM_ID, undefined, '')
+
+    const updateData = vi.mocked(prisma.reservation.update).mock.calls[0][0].data as any
+    expect(updateData).not.toHaveProperty('guestName')
+  })
+
+  it('returns error when no held reservation is found for this item today', async () => {
+    // Bug case: a held guest arrives on a bed that was already converted or released.
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(null)
+
+    const res = await convertHoldToWalkIn(SITE_ID, ITEM_ID)
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/no held reservation found/i)
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+  })
+
+  it('queries only status=held reservations (does not match walk-in or paid bookings)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(null) // simulates no held res
+
+    await convertHoldToWalkIn(SITE_ID, ITEM_ID)
+
+    const findFirstArgs = vi.mocked(prisma.reservation.findFirst).mock.calls[0][0] as any
+    expect(findFirstArgs.where.status).toBe('held')
+    expect(findFirstArgs.where.items.some.id).toBe(ITEM_ID)
+    expect(findFirstArgs.where.siteId).toBe(SITE_ID)
+  })
+
+  // ── until (multi-day) extension ──
+
+  it('today-only (no until): sets to=endOf(today) in the update', async () => {
+    // The hold already covers today; converting it without an end date keeps
+    // the stay as today-only (to = endOf(today)). No transaction needed.
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({ id: RES_ID } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValueOnce({} as any)
+
+    const res = await convertHoldToWalkIn(SITE_ID, ITEM_ID)
+
+    expect(res.status).toBe('ok')
+    const updateData = vi.mocked(prisma.reservation.update).mock.calls[0][0].data as any
+    // `to` must be set to endOf(today)
+    expect(updateData.to).toBeInstanceOf(Date)
+    expect((updateData.to as Date).getTime()).toBe(dayjs().endOf('day').toDate().getTime())
+    // Must not have run the $transaction path — $transaction stays uncalled for today-only
+    expect(vi.mocked(prisma.$transaction)).not.toHaveBeenCalled()
+  })
+
+  it('multi-day: sets to=endOf(until) and runs atomically inside $transaction', async () => {
+    // Extending beyond today must re-check availability. The $transaction mock
+    // executes the callback synchronously with the same prisma mock as tx, so
+    // we can verify both the hold lookup and the update in one test.
+    authenticateAsOwner()
+    const until = dayjs().add(3, 'day').format('YYYY-MM-DD')
+
+    // First findFirst (hold lookup inside tx) → found
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
+      id: RES_ID,
+      items: [{ id: ITEM_ID }],
+    } as any)
+    // Second findFirst (conflict check inside tx) → no conflict
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(null)
+    vi.mocked(prisma.reservation.update).mockResolvedValueOnce({} as any)
+
+    const res = await convertHoldToWalkIn(SITE_ID, ITEM_ID, undefined, undefined, until)
+
+    expect(res.status).toBe('ok')
+    // Transaction must have been called
+    expect(vi.mocked(prisma.$transaction)).toHaveBeenCalled()
+    // Update must set the extended to date
+    const updateData = vi.mocked(prisma.reservation.update).mock.calls[0][0].data as any
+    expect(updateData.to).toBeInstanceOf(Date)
+    expect((updateData.to as Date).getTime()).toBe(dayjs(until).endOf('day').toDate().getTime())
+    expect(updateData.status).toBe('paid-in-cash')
+    expect(updateData.operationalStatus).toBe('walked-in')
+  })
+
+  it('multi-day conflict: returns error when another booking overlaps the extended range', async () => {
+    // Bug case: operator holds a bed, then tries to extend rent to overlap with a
+    // future online booking. The conflict check (excluding the hold itself) must
+    // catch this and reject rather than double-booking.
+    authenticateAsOwner()
+    const until = dayjs().add(5, 'day').format('YYYY-MM-DD')
+
+    // First findFirst (hold lookup) → found with the item
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
+      id: RES_ID,
+      items: [{ id: ITEM_ID }],
+    } as any)
+    // Second findFirst (conflict check) → conflicting reservation exists
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
+      id: 'conflicting-res-1',
+    } as any)
+
+    const res = await convertHoldToWalkIn(SITE_ID, ITEM_ID, undefined, undefined, until)
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/already reserved for part of this period/i)
+    // Update must NOT have been called — conflict aborts the conversion
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+  })
+
+  it('multi-day: self-exclusion — hold is excluded from its own conflict check', async () => {
+    // The conflict query must carry `id: { not: hold.id }` so the hold itself
+    // does not trigger a false-positive conflict with its own today range.
+    authenticateAsOwner()
+    const until = dayjs().add(2, 'day').format('YYYY-MM-DD')
+
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
+      id: RES_ID,
+      items: [{ id: ITEM_ID }],
+    } as any)
+    // No conflict (self correctly excluded)
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(null)
+    vi.mocked(prisma.reservation.update).mockResolvedValueOnce({} as any)
+
+    const res = await convertHoldToWalkIn(SITE_ID, ITEM_ID, undefined, undefined, until)
+
+    expect(res.status).toBe('ok')
+    // Verify the conflict query excluded the hold's own id
+    const conflictArgs = vi.mocked(prisma.reservation.findFirst).mock.calls[1][0] as any
+    expect(conflictArgs.where.id).toEqual({ not: RES_ID })
+  })
+
+  it('multi-day: returns error when the held reservation is not found inside transaction', async () => {
+    authenticateAsOwner()
+    const until = dayjs().add(2, 'day').format('YYYY-MM-DD')
+    // findFirst returns null → no held reservation
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(null)
+
+    const res = await convertHoldToWalkIn(SITE_ID, ITEM_ID, undefined, undefined, until)
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/no held reservation found/i)
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+  })
+
+  it('rejects an invalid until date format', async () => {
+    authenticateAsOwner()
+    const res = await convertHoldToWalkIn(SITE_ID, ITEM_ID, undefined, undefined, 'not-a-date')
+    expect(res.status).toBe('error')
+    expect(vi.mocked(prisma.reservation.findFirst)).not.toHaveBeenCalled()
+  })
+
+  it('rejects an until date in the past', async () => {
+    authenticateAsOwner()
+    const past = dayjs().subtract(1, 'day').format('YYYY-MM-DD')
+    const res = await convertHoldToWalkIn(SITE_ID, ITEM_ID, undefined, undefined, past)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/in the past/i)
+    expect(vi.mocked(prisma.reservation.findFirst)).not.toHaveBeenCalled()
+  })
+
+  it('rejects an until range exceeding 90 days', async () => {
+    authenticateAsOwner()
+    const tooFar = dayjs().add(91, 'day').format('YYYY-MM-DD')
+    const res = await convertHoldToWalkIn(SITE_ID, ITEM_ID, undefined, undefined, tooFar)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/90 days/i)
+    expect(vi.mocked(prisma.reservation.findFirst)).not.toHaveBeenCalled()
+  })
+})
+
 // ─── Regression: group-attached pool seat cascades through reserveItem ────────
 
 describe('reserveItem cascade regression: pool seat with sunbedGroupId', () => {
@@ -1421,5 +2071,111 @@ describe('reserveItem cascade regression: pool seat with sunbedGroupId', () => {
     expect(guardCall.itemIds).toContain(SIBLING_ID)
     // prisma.reservation.create must NOT be called directly
     expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
+  })
+})
+
+// ─── removeFailedReservation ─────────────────────────────────────────────────
+
+describe('removeFailedReservation', () => {
+  it('deletes a reservation with canonical payment_failed status and returns ok', async () => {
+    // Bug case: Mollie payment fails → user app stamps 'payment_failed'; seat is
+    // orphaned until staff manually removes it.
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      status: 'payment_failed',
+    } as any)
+    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
+
+    const res = await removeFailedReservation(SITE_ID, RES_ID)
+    expect(res.status).toBe('ok')
+
+    expect(vi.mocked(prisma.reservation.deleteMany)).toHaveBeenCalledWith({
+      where: { id: RES_ID, siteId: SITE_ID },
+    })
+  })
+
+  it('deletes a legacy "error" reservation and returns ok', async () => {
+    // Legacy rows written before the canonical constant was introduced.
+    // The guard must accept 'error' in addition to 'payment_failed'.
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      status: 'error',
+    } as any)
+    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
+
+    const res = await removeFailedReservation(SITE_ID, RES_ID)
+    expect(res.status).toBe('ok')
+
+    expect(vi.mocked(prisma.reservation.deleteMany)).toHaveBeenCalledWith({
+      where: { id: RES_ID, siteId: SITE_ID },
+    })
+  })
+
+  it('rejects when the reservation status is complete (paid booking — must never be deleted)', async () => {
+    // Safety guard: a paid booking with status='complete' must NOT be removable
+    // via this action regardless of what the client sends.
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      status: 'complete',
+    } as any)
+
+    const res = await removeFailedReservation(SITE_ID, RES_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/not in a failed-payment state/i)
+    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
+  })
+
+  it('rejects when the reservation status is held (staff hold — not a failed payment)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      status: 'held',
+    } as any)
+
+    const res = await removeFailedReservation(SITE_ID, RES_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/not in a failed-payment state/i)
+    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
+  })
+
+  it('returns error when reservation is not found', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(null)
+
+    const res = await removeFailedReservation(SITE_ID, RES_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Reservation not found')
+    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
+  })
+
+  it('returns error when reservation belongs to a different site', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      siteId: 'other-site',
+      status: 'payment_failed',
+    } as any)
+
+    const res = await removeFailedReservation(SITE_ID, RES_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Reservation not found')
+    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
+  })
+
+  it('rejects unauthenticated caller', async () => {
+    const res = await removeFailedReservation(SITE_ID, RES_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+    expect(vi.mocked(prisma.reservation.findUnique)).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-owner', async () => {
+    authenticateAsNonOwner()
+    const res = await removeFailedReservation(SITE_ID, RES_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authorized')
+    expect(vi.mocked(prisma.reservation.findUnique)).not.toHaveBeenCalled()
   })
 })

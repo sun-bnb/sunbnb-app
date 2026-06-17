@@ -98,6 +98,7 @@ export interface Reservation {
   guestContact?: string | null
   internalNotes?: string | null
   paymentAmount?: number | null
+  isComp?: boolean
   user: {
     id: string
     email: string

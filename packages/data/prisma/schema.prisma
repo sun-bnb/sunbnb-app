@@ -391,6 +391,7 @@ model Reservation {
   updatedAt         DateTime        @updatedAt
   status            String          @default("pending")
   operationalStatus String          @default("expected") @map("operational_status")
+  isComp            Boolean         @default(false) @map("is_comp")
   type              String          @default("hours")
   from              DateTime        @map("from")
   to                DateTime        @map("to")
