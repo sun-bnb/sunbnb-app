@@ -266,6 +266,55 @@ export async function createTestSunbedGroup(
   })
 }
 
+// ─── Rental Item ────────────────────────────────────────────────────────────
+
+export async function createTestRentalItem(
+  siteId: string,
+  overrides: Record<string, any> = {}
+) {
+  return prisma.rentalItem.create({
+    data: {
+      siteId,
+      name: 'Test Surfboard',
+      totalQuantity: 5,
+      pricePerHour: 10.0,
+      pricePerDay: 50.0,
+      active: true,
+      ...overrides,
+    },
+  })
+}
+
+// ─── Rental Booking ─────────────────────────────────────────────────────────
+
+export async function createTestRentalBooking(
+  userId: string,
+  siteId: string,
+  rentalItemId: string,
+  overrides: Record<string, any> = {}
+) {
+  const from = overrides.from ?? new Date()
+  const to = overrides.to ?? new Date(Date.now() + 2 * 60 * 60 * 1000)
+  const { from: _f, to: _t, ...rest } = overrides
+
+  return prisma.rentalBooking.create({
+    data: {
+      userId,
+      siteId,
+      rentalItemId,
+      from,
+      to,
+      quantity: 1,
+      durationType: 'hours',
+      totalPrice: 10.0,
+      paymentAmount: 10.0,
+      status: 'complete',
+      operationalStatus: 'reserved',
+      ...rest,
+    },
+  })
+}
+
 // ─── Subscription Plan + Subscription ───────────────────────────────────────
 
 export async function createTestSubscription(

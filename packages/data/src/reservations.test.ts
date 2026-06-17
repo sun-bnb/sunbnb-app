@@ -281,3 +281,171 @@ describe('conflict predicate — custom blocking sets (partner stricter semantic
     ).toBe(false)
   })
 })
+
+// ─── Move guard: self-exclusion predicate ────────────────────────────────────
+//
+// `moveReservationWithConflictGuard` passes `excludeReservationId` to prevent
+// a reservation from conflicting with itself (a partial re-assignment that keeps
+// one existing bed would otherwise detect its own row as a conflict).
+
+describe('move conflict predicate — self-exclusion', () => {
+  const from = d('2026-07-05T00:00:00Z')
+  const to = d('2026-07-10T23:59:59Z')
+
+  it('a reservation IS a conflict when id does not match excludeId', () => {
+    // Two separate reservations: existing (id='res-1') conflicts with new request
+    const existing = makeReservation({ id: 'res-1', itemIds: ['item-1'] })
+    // No exclusion — this is the baseline (regular conflict)
+    expect(isConflicting(existing, ['item-1'], from, to)).toBe(true)
+  })
+
+  it('a reservation is NOT a conflict when id matches excludeId (self-exclusion)', () => {
+    // The reservation being moved (id='res-1') currently occupies 'item-1'.
+    // Moving it to 'item-2' (which it doesn't own) shouldn't conflict with itself.
+    // The self-exclusion check uses a separate predicate that compares reservation ids.
+    // We model this as: existing.id === excludeId → skip.
+    const existing = makeReservation({ id: 'res-move', itemIds: ['item-1'] })
+    // Simulate the exclusion: if existing.id equals the reservation being moved, skip it.
+    const isConflictingExcluded = (
+      res: typeof existing,
+      requestedItems: string[],
+      reqFrom: Date,
+      reqTo: Date,
+      excludeId: string
+    ): boolean => {
+      if (res.id === excludeId) return false
+      return isConflicting(res, requestedItems, reqFrom, reqTo)
+    }
+
+    // Moving res-move to item-1 (which it already holds) — should NOT conflict with itself
+    expect(isConflictingExcluded(existing, ['item-1'], from, to, 'res-move')).toBe(false)
+    // But a DIFFERENT reservation on item-1 DOES conflict
+    const other = makeReservation({ id: 'res-other', itemIds: ['item-1'] })
+    expect(isConflictingExcluded(other, ['item-1'], from, to, 'res-move')).toBe(true)
+  })
+
+  it('self-exclusion allows moving to current beds without spurious conflict', () => {
+    // Reservation 'res-A' holds [item-1, item-2]. Moving it to just [item-1] should succeed.
+    // Without self-exclusion, the check would find res-A on item-1 and return conflict.
+    const movingRes = makeReservation({ id: 'res-A', itemIds: ['item-1', 'item-2'] })
+
+    const isConflictingExcluded = (
+      res: typeof movingRes,
+      requestedItems: string[],
+      reqFrom: Date,
+      reqTo: Date,
+      excludeId: string
+    ): boolean => {
+      if (res.id === excludeId) return false
+      return isConflicting(res, requestedItems, reqFrom, reqTo)
+    }
+
+    // Moving res-A to [item-1] only — excluded, so no conflict
+    expect(isConflictingExcluded(movingRes, ['item-1'], from, to, 'res-A')).toBe(false)
+  })
+})
+
+// ─── Rental availability predicate (Guard 2) ─────────────────────────────────
+//
+// `createRentalBookingsWithGuard` re-aggregates booked qty and checks
+// `requested + inUse > totalQuantity`. This pure predicate logic is cheap to
+// test without a real DB.
+
+describe('rental availability predicate', () => {
+  /**
+   * Models the guard's availability check:
+   *   inUse = sum of overlapping booking quantities (excluding non-blocking statuses)
+   *   available = totalQuantity - inUse
+   *   available = requested > 0 → unavailable
+   */
+  function isRentalAvailable(
+    requested: number,
+    totalQuantity: number,
+    existingBookings: Array<{
+      quantity: number
+      from: Date
+      to: Date
+      operationalStatus: string
+    }>,
+    requestedFrom: Date,
+    requestedTo: Date,
+    nonBlockingOpStatuses: string[] = ['returned', 'canceled']
+  ): boolean {
+    const inUse = existingBookings
+      .filter(
+        (b) =>
+          !nonBlockingOpStatuses.includes(b.operationalStatus) &&
+          b.from < requestedTo && // open interval: from < to (strict)
+          b.to > requestedFrom    // open interval: to > from (strict)
+      )
+      .reduce((sum, b) => sum + b.quantity, 0)
+    return requested + inUse <= totalQuantity
+  }
+
+  const from = new Date('2026-08-01T10:00:00Z')
+  const to = new Date('2026-08-01T12:00:00Z')
+
+  it('available when no existing bookings', () => {
+    expect(isRentalAvailable(1, 5, [], from, to)).toBe(true)
+  })
+
+  it('available when requested + inUse equals totalQuantity exactly', () => {
+    const existing = [{ quantity: 4, from, to, operationalStatus: 'picked-up' }]
+    expect(isRentalAvailable(1, 5, existing, from, to)).toBe(true)
+  })
+
+  it('unavailable when requested + inUse exceeds totalQuantity', () => {
+    const existing = [{ quantity: 4, from, to, operationalStatus: 'picked-up' }]
+    expect(isRentalAvailable(2, 5, existing, from, to)).toBe(false)
+  })
+
+  it('unavailable when inUse already fills totalQuantity', () => {
+    const existing = [{ quantity: 5, from, to, operationalStatus: 'reserved' }]
+    expect(isRentalAvailable(1, 5, existing, from, to)).toBe(false)
+  })
+
+  it('returned bookings do NOT count toward inUse', () => {
+    const existing = [{ quantity: 5, from, to, operationalStatus: 'returned' }]
+    expect(isRentalAvailable(1, 5, existing, from, to)).toBe(true)
+  })
+
+  it('canceled bookings do NOT count toward inUse', () => {
+    const existing = [{ quantity: 5, from, to, operationalStatus: 'canceled' }]
+    expect(isRentalAvailable(1, 5, existing, from, to)).toBe(true)
+  })
+
+  it('non-overlapping booking does NOT count toward inUse (open interval — strict less than)', () => {
+    // existing ends exactly when requested starts: existing.to === requestedFrom
+    // Open interval: existing.to > requestedFrom is FALSE when equal → no overlap
+    const nonOverlapping = {
+      quantity: 5,
+      from: new Date('2026-08-01T08:00:00Z'),
+      to: from, // ends exactly when requested starts → NOT overlapping (strict >)
+      operationalStatus: 'picked-up',
+    }
+    expect(isRentalAvailable(1, 5, [nonOverlapping], from, to)).toBe(true)
+  })
+
+  it('booking that starts exactly when requested ends does NOT overlap (open interval)', () => {
+    // existing starts exactly when requested ends: existing.from === requestedTo
+    // Open interval: existing.from < requestedTo is FALSE when equal → no overlap
+    const nonOverlapping = {
+      quantity: 5,
+      from: to, // starts exactly when requested ends
+      to: new Date('2026-08-01T14:00:00Z'),
+      operationalStatus: 'picked-up',
+    }
+    expect(isRentalAvailable(1, 5, [nonOverlapping], from, to)).toBe(true)
+  })
+
+  it('partially overlapping booking DOES count toward inUse', () => {
+    const overlapping = {
+      quantity: 3,
+      from: new Date('2026-08-01T11:00:00Z'), // starts inside our window
+      to: new Date('2026-08-01T13:00:00Z'),
+      operationalStatus: 'reserved',
+    }
+    expect(isRentalAvailable(3, 5, [overlapping], from, to)).toBe(false) // 3+3=6 > 5
+    expect(isRentalAvailable(2, 5, [overlapping], from, to)).toBe(true)  // 2+3=5 = 5
+  })
+})

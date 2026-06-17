@@ -24,9 +24,15 @@ import {
   createTestInventoryItem,
   createTestSunbedGroup,
   createTestReservation,
+  createTestRentalItem,
+  createTestRentalBooking,
   resetCounter,
 } from './test/fixtures'
-import { reserveWithConflictGuard } from './reservations'
+import {
+  reserveWithConflictGuard,
+  moveReservationWithConflictGuard,
+  createRentalBookingsWithGuard,
+} from './reservations'
 import {
   RESERVATION_PAID_IN_CASH,
   RESERVATION_COMPLETE,
@@ -37,6 +43,8 @@ import {
   OP_EXPECTED,
   OP_NO_SHOW,
   OP_DEPARTED,
+  RENTAL_COMPLETE,
+  OP_RESERVED,
 } from './reservation-status'
 
 beforeEach(async () => {
@@ -575,3 +583,346 @@ function results_find_created(
   if (r2.outcome === 'created') return r2 as Extract<typeof r2, { outcome: 'created' }>
   throw new Error('Neither result was "created"')
 }
+
+// ─── moveReservationWithConflictGuard — correctness ─────────────────────────
+
+describe('moveReservationWithConflictGuard — correctness', () => {
+  it('clean move to a free bed returns { outcome: "moved" } and updates DB item assignments', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const bed1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const bed2 = await createTestInventoryItem(user.id, site.id, { number: 2 })
+
+    const from = new Date('2026-09-01T00:00:00Z')
+    const to = new Date('2026-09-07T23:59:59Z')
+
+    const res = await createTestReservation(user.id, site.id, [bed1.id], {
+      from,
+      to,
+      status: RESERVATION_COMPLETE,
+      operationalStatus: OP_EXPECTED,
+    })
+
+    const result = await moveReservationWithConflictGuard(res.id, [bed2.id])
+
+    expect(result.outcome).toBe('moved')
+
+    // DB: res now holds bed2, not bed1
+    const updated = await prisma.reservation.findUnique({
+      where: { id: res.id },
+      include: { items: true },
+    })
+    const itemIds = updated!.items.map((i) => i.id)
+    expect(itemIds).toContain(bed2.id)
+    expect(itemIds).not.toContain(bed1.id)
+  })
+
+  it('move onto an independently-occupied bed returns { outcome: "conflict" }', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const bed1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const bed2 = await createTestInventoryItem(user.id, site.id, { number: 2 })
+
+    const from = new Date('2026-09-01T00:00:00Z')
+    const to = new Date('2026-09-07T23:59:59Z')
+
+    // res1 on bed1 — the reservation we want to move
+    const res1 = await createTestReservation(user.id, site.id, [bed1.id], {
+      from,
+      to,
+      status: RESERVATION_COMPLETE,
+      operationalStatus: OP_EXPECTED,
+    })
+
+    // res2 on bed2 — already occupies the target
+    const res2 = await createTestReservation(user.id, site.id, [bed2.id], {
+      from,
+      to,
+      status: RESERVATION_COMPLETE,
+      operationalStatus: OP_EXPECTED,
+    })
+
+    const result = await moveReservationWithConflictGuard(res1.id, [bed2.id])
+
+    expect(result.outcome).toBe('conflict')
+    if (result.outcome !== 'conflict') throw new Error('narrowing')
+    expect(result.conflictingReservationId).toBe(res2.id)
+
+    // res1 must still hold bed1 (not moved)
+    const unchanged = await prisma.reservation.findUnique({
+      where: { id: res1.id },
+      include: { items: true },
+    })
+    expect(unchanged!.items.map((i) => i.id)).toContain(bed1.id)
+  })
+
+  it('self-exclusion: moving onto a bed occupied only by the moving reservation itself returns "moved"', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const bed1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const bed2 = await createTestInventoryItem(user.id, site.id, { number: 2 })
+
+    const from = new Date('2026-09-01T00:00:00Z')
+    const to = new Date('2026-09-07T23:59:59Z')
+
+    // res1 holds both bed1 and bed2; no other reservation is on bed1
+    const res1 = await createTestReservation(user.id, site.id, [bed1.id, bed2.id], {
+      from,
+      to,
+      status: RESERVATION_COMPLETE,
+      operationalStatus: OP_EXPECTED,
+    })
+
+    // Move res1 to just [bed1]. bed1 is already on res1 — but no OTHER reservation is there.
+    // Without excludeReservationId, res1 would conflict with itself and the move would fail.
+    const result = await moveReservationWithConflictGuard(res1.id, [bed1.id])
+
+    expect(result.outcome).toBe('moved')
+  })
+})
+
+// ─── moveReservationWithConflictGuard — concurrency race (headline test) ─────
+
+describe('moveReservationWithConflictGuard — concurrency race (headline test)', () => {
+  it('exactly one of two concurrent moves onto the same bed succeeds; only one reservation holds that bed', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const bed1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const bed2 = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const target = await createTestInventoryItem(user.id, site.id, { number: 3 })
+
+    const from = new Date('2026-09-10T00:00:00Z')
+    const to = new Date('2026-09-16T23:59:59Z')
+
+    // Two reservations on separate beds, same overlapping date range — both want to move to target
+    const res1 = await createTestReservation(user.id, site.id, [bed1.id], {
+      from,
+      to,
+      status: RESERVATION_COMPLETE,
+      operationalStatus: OP_EXPECTED,
+    })
+    const res2 = await createTestReservation(user.id, site.id, [bed2.id], {
+      from,
+      to,
+      status: RESERVATION_COMPLETE,
+      operationalStatus: OP_EXPECTED,
+    })
+
+    // Both try to move to target concurrently.
+    // The FOR UPDATE lock on target serializes them: the second blocks until the first
+    // commits, then re-checks conflict and finds the first reservation now on target.
+    const [result1, result2] = await Promise.all([
+      moveReservationWithConflictGuard(res1.id, [target.id]),
+      moveReservationWithConflictGuard(res2.id, [target.id]),
+    ])
+
+    const outcomes = [result1.outcome, result2.outcome]
+
+    // Exactly one must have moved, one must have conflicted
+    expect(outcomes.filter((o) => o === 'moved')).toHaveLength(1)
+    expect(outcomes.filter((o) => o === 'conflict')).toHaveLength(1)
+
+    // DB: exactly one reservation holds the target bed — no double-assignment
+    const holdersOfTarget = await prisma.reservation.findMany({
+      where: { items: { some: { id: target.id } } },
+    })
+    expect(holdersOfTarget).toHaveLength(1)
+
+    // The winner is whichever returned 'moved'
+    const winnerId = result1.outcome === 'moved' ? res1.id : res2.id
+    expect(holdersOfTarget[0]!.id).toBe(winnerId)
+  })
+})
+
+// ─── createRentalBookingsWithGuard — correctness ─────────────────────────────
+
+describe('createRentalBookingsWithGuard — correctness', () => {
+  it('within-capacity booking returns { outcome: "created" } and writes the booking row', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestRentalItem(site.id, { totalQuantity: 5 })
+
+    const from = new Date('2026-09-01T10:00:00Z')
+    const to = new Date('2026-09-01T12:00:00Z')
+
+    const result = await createRentalBookingsWithGuard([
+      {
+        rentalItemId: item.id,
+        siteId: site.id,
+        userId: user.id,
+        from,
+        to,
+        quantity: 2,
+        durationType: 'hours',
+        totalPrice: 20.0,
+        paymentAmount: 20.0,
+        status: RENTAL_COMPLETE,
+        operationalStatus: OP_RESERVED,
+      },
+    ])
+
+    expect(result.outcome).toBe('created')
+    if (result.outcome !== 'created') throw new Error('narrowing')
+    expect(result.bookingIds).toHaveLength(1)
+
+    const booking = await prisma.rentalBooking.findUnique({
+      where: { id: result.bookingIds[0] },
+    })
+    expect(booking).not.toBeNull()
+    expect(booking!.quantity).toBe(2)
+    expect(booking!.rentalItemId).toBe(item.id)
+  })
+
+  it('over-capacity booking returns { outcome: "unavailable" } and writes NO rows', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestRentalItem(site.id, { totalQuantity: 2 })
+
+    const from = new Date('2026-09-01T10:00:00Z')
+    const to = new Date('2026-09-01T12:00:00Z')
+
+    // Pre-fill capacity: 2 already booked (fills the item completely)
+    await createTestRentalBooking(user.id, site.id, item.id, {
+      from,
+      to,
+      quantity: 2,
+      operationalStatus: OP_RESERVED,
+    })
+
+    const result = await createRentalBookingsWithGuard([
+      {
+        rentalItemId: item.id,
+        siteId: site.id,
+        userId: user.id,
+        from,
+        to,
+        quantity: 1,
+        durationType: 'hours',
+        totalPrice: 10.0,
+        paymentAmount: 10.0,
+        status: RENTAL_COMPLETE,
+        operationalStatus: OP_RESERVED,
+      },
+    ])
+
+    expect(result.outcome).toBe('unavailable')
+    if (result.outcome !== 'unavailable') throw new Error('narrowing')
+    expect(result.rentalItemId).toBe(item.id)
+
+    // Only the pre-existing booking exists — the guard wrote nothing
+    const bookings = await prisma.rentalBooking.findMany({ where: { rentalItemId: item.id } })
+    expect(bookings).toHaveLength(1)
+  })
+
+  it('all-or-nothing: if any booking in the batch is unavailable, no bookings in the batch are written', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item1 = await createTestRentalItem(site.id, { totalQuantity: 10 })
+    const item2 = await createTestRentalItem(site.id, { totalQuantity: 1 })
+
+    const from = new Date('2026-09-01T10:00:00Z')
+    const to = new Date('2026-09-01T12:00:00Z')
+
+    // item2 is at capacity
+    await createTestRentalBooking(user.id, site.id, item2.id, {
+      from,
+      to,
+      quantity: 1,
+      operationalStatus: OP_RESERVED,
+    })
+
+    // Batch: item1 passes availability, item2 fails — guard must write nothing at all
+    const result = await createRentalBookingsWithGuard([
+      {
+        rentalItemId: item1.id,
+        siteId: site.id,
+        userId: user.id,
+        from,
+        to,
+        quantity: 1,
+        durationType: 'hours',
+        totalPrice: 10.0,
+        paymentAmount: 10.0,
+        status: RENTAL_COMPLETE,
+        operationalStatus: OP_RESERVED,
+      },
+      {
+        rentalItemId: item2.id,
+        siteId: site.id,
+        userId: user.id,
+        from,
+        to,
+        quantity: 1,
+        durationType: 'hours',
+        totalPrice: 10.0,
+        paymentAmount: 10.0,
+        status: RENTAL_COMPLETE,
+        operationalStatus: OP_RESERVED,
+      },
+    ])
+
+    expect(result.outcome).toBe('unavailable')
+
+    // item1's booking must NOT have been created — the guard checks all before writing any
+    const item1Bookings = await prisma.rentalBooking.findMany({
+      where: { rentalItemId: item1.id },
+    })
+    expect(item1Bookings).toHaveLength(0)
+  })
+})
+
+// ─── createRentalBookingsWithGuard — concurrency race (headline test) ─────────
+
+describe('createRentalBookingsWithGuard — concurrency race (headline test)', () => {
+  it('exactly one of two concurrent over-capacity bookings succeeds; quantity never exceeded in DB', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    // Each call requests qty 2; totalQuantity 3 fits one call (2 ≤ 3) but not both (2+2=4 > 3)
+    const item = await createTestRentalItem(site.id, { totalQuantity: 3 })
+
+    const from = new Date('2026-09-10T10:00:00Z')
+    const to = new Date('2026-09-10T12:00:00Z')
+
+    const makeBooking = () =>
+      createRentalBookingsWithGuard([
+        {
+          rentalItemId: item.id,
+          siteId: site.id,
+          userId: user.id,
+          from,
+          to,
+          quantity: 2,
+          durationType: 'hours',
+          totalPrice: 20.0,
+          paymentAmount: 20.0,
+          status: RENTAL_COMPLETE,
+          operationalStatus: OP_RESERVED,
+        },
+      ])
+
+    // Fire both concurrently — the FOR UPDATE lock on RentalItem serializes them.
+    // The second blocks until the first commits, then re-aggregates and finds
+    // 2 already booked: 2+2=4 > totalQuantity 3 → unavailable.
+    const [result1, result2] = await Promise.all([makeBooking(), makeBooking()])
+
+    const outcomes = [result1.outcome, result2.outcome]
+
+    // Exactly one booking succeeded, one found it unavailable
+    expect(outcomes.filter((o) => o === 'created')).toHaveLength(1)
+    expect(outcomes.filter((o) => o === 'unavailable')).toHaveLength(1)
+
+    // DB: only the winner's booking exists — quantity never exceeded totalQuantity (3)
+    const allBookings = await prisma.rentalBooking.findMany({
+      where: { rentalItemId: item.id },
+    })
+    expect(allBookings).toHaveLength(1)
+
+    const totalBooked = allBookings.reduce((sum, b) => sum + b.quantity, 0)
+    expect(totalBooked).toBeLessThanOrEqual(3)
+
+    // The 'unavailable' result correctly identifies the item
+    const unavailable = result1.outcome === 'unavailable' ? result1 : result2
+    if (unavailable.outcome !== 'unavailable') throw new Error('narrowing')
+    expect(unavailable.rentalItemId).toBe(item.id)
+  })
+})

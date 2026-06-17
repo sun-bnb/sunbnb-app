@@ -38,7 +38,14 @@ import {
   BLOCKING_STATUSES,
   OP_NO_SHOW,
   OP_DEPARTED,
+  OP_RETURNED,
+  RENTAL_CANCELED,
 } from './reservation-status'
+
+// ─── Shared private type ─────────────────────────────────────────────────────
+
+/** Prisma transaction client — the argument type for $transaction callbacks. */
+type Tx = Prisma.TransactionClient
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -70,7 +77,49 @@ export type ConflictGuardResult =
   | { outcome: 'created'; reservationId: string }
   | { outcome: 'conflict'; conflictingReservationId: string }
 
-// ─── Main helper ────────────────────────────────────────────────────────────
+// ─── Shared conflict check helper ────────────────────────────────────────────
+
+/**
+ * Find a conflicting reservation inside a transaction.
+ *
+ * Called from both `reserveWithConflictGuard` (create) and
+ * `moveReservationWithConflictGuard` (move). The `excludeReservationId`
+ * parameter lets the move guard exclude the reservation being relocated from
+ * its own conflict check (a move must not conflict with itself).
+ *
+ * Must be called via `tx`, not the outer `prisma` client, so it operates on
+ * the locked, consistent snapshot.
+ */
+async function findConflictingReservation(
+  tx: Tx,
+  params: {
+    siteId: string
+    from: Date
+    to: Date
+    itemIds: string[]
+    blockingStatuses: readonly string[]
+    nonBlockingOpStatuses: readonly string[]
+    /** Exclude this reservation id from the conflict check (used by the move guard). */
+    excludeReservationId?: string
+  }
+): Promise<{ id: string } | null> {
+  return tx.reservation.findFirst({
+    where: {
+      siteId: params.siteId,
+      status: { in: params.blockingStatuses as string[] },
+      operationalStatus: { notIn: params.nonBlockingOpStatuses as string[] },
+      from: { lte: params.to },
+      to: { gte: params.from },
+      items: { some: { id: { in: params.itemIds } } },
+      ...(params.excludeReservationId
+        ? { id: { not: params.excludeReservationId } }
+        : {}),
+    },
+    select: { id: true },
+  })
+}
+
+// ─── Guard 1a: reserveWithConflictGuard ─────────────────────────────────────
 
 /**
  * Create a reservation inside a serialized transaction.
@@ -121,16 +170,13 @@ export async function reserveWithConflictGuard(
     // Must run via `tx`, not the outer `prisma` client, so it sees the locked
     // state and any rows committed by a concurrent transaction that just released
     // the lock.
-    const conflict = await tx.reservation.findFirst({
-      where: {
-        siteId,
-        status: { in: blockingStatuses as string[] },
-        operationalStatus: { notIn: nonBlockingOpStatuses as string[] },
-        from: { lte: data.to as Date },
-        to: { gte: data.from as Date },
-        items: { some: { id: { in: itemIds } } },
-      },
-      select: { id: true },
+    const conflict = await findConflictingReservation(tx, {
+      siteId,
+      from: data.from as Date,
+      to: data.to as Date,
+      itemIds,
+      blockingStatuses,
+      nonBlockingOpStatuses,
     })
 
     if (conflict) {
@@ -156,5 +202,258 @@ export async function reserveWithConflictGuard(
     })
 
     return { outcome: 'created' as const, reservationId: reservation.id }
+  })
+}
+
+// ─── Guard 1b: moveReservationWithConflictGuard ───────────────────────────────
+
+/**
+ * Relocate an existing reservation onto new beds, with a transactional conflict
+ * check that prevents double-booking.
+ *
+ * The partner `moveReservation` action previously disconnected old items and
+ * connected new ones with NO availability check — a concurrent request could
+ * race and double-book the target bed. This guard closes that window.
+ *
+ * 1. Acquires a FOR UPDATE lock on the TARGET InventoryItem rows.
+ * 2. Loads the reservation's current date range inside the transaction.
+ * 3. Checks for conflicts on newItemIds over [from, to], **excluding this
+ *    reservation's own id** — a move is allowed onto beds the reservation
+ *    already occupies (self-move is not a conflict).
+ * 4. If conflict → returns { outcome: 'conflict' } without writing.
+ * 5. If clear → disconnects old items, connects new ones → { outcome: 'moved' }.
+ */
+export type MoveConflictGuardResult =
+  | { outcome: 'moved' }
+  | { outcome: 'conflict'; conflictingReservationId: string }
+  | { outcome: 'not_found' }
+
+export async function moveReservationWithConflictGuard(
+  reservationId: string,
+  newItemIds: string[],
+  options: ConflictGuardOptions = {}
+): Promise<MoveConflictGuardResult> {
+  const {
+    blockingStatuses = BLOCKING_STATUSES,
+    nonBlockingOpStatuses = [OP_NO_SHOW, OP_DEPARTED],
+  } = options
+
+  return prisma.$transaction(async (tx) => {
+    // ── Step 1: Lock the TARGET InventoryItem rows FOR UPDATE ─────────────────
+    //
+    // Concurrent move attempts onto the same bed will both try to lock these
+    // rows. The second one blocks until the first commits (or rolls back), then
+    // re-runs the conflict check and finds the first move already committed.
+    if (newItemIds.length > 0) {
+      await tx.$queryRaw`
+        SELECT id FROM "InventoryItem"
+        WHERE id = ANY(${newItemIds}::text[])
+        FOR UPDATE
+      `
+    }
+
+    // ── Step 2: Load the reservation inside the tx ────────────────────────────
+    //
+    // Must be inside the tx so we see the locked state. We need from/to to
+    // scope the conflict check, and current items to disconnect them on success.
+    const reservation = await tx.reservation.findUnique({
+      where: { id: reservationId },
+      select: {
+        siteId: true,
+        from: true,
+        to: true,
+        items: { select: { id: true } },
+      },
+    })
+
+    if (!reservation) {
+      return { outcome: 'not_found' as const }
+    }
+
+    // ── Step 3: Conflict check, excluding this reservation ────────────────────
+    //
+    // `excludeReservationId` prevents the guard from treating the reservation's
+    // OWN row as a conflict. Without this, a move that keeps one existing bed
+    // (partial re-assignment) would always return 'conflict' because the
+    // reservation's own row overlaps the target date range.
+    const conflict = await findConflictingReservation(tx, {
+      siteId: reservation.siteId,
+      from: reservation.from,
+      to: reservation.to,
+      itemIds: newItemIds,
+      blockingStatuses,
+      nonBlockingOpStatuses,
+      excludeReservationId: reservationId,
+    })
+
+    if (conflict) {
+      return { outcome: 'conflict' as const, conflictingReservationId: conflict.id }
+    }
+
+    // ── Step 4: Move — disconnect old items, connect new ones ─────────────────
+    const currentItemIds = reservation.items.map((i) => i.id)
+    await tx.reservation.update({
+      where: { id: reservationId },
+      data: {
+        items: {
+          disconnect: currentItemIds.map((id) => ({ id })),
+          connect: newItemIds.map((id) => ({ id })),
+        },
+      },
+    })
+
+    return { outcome: 'moved' as const }
+  })
+}
+
+// ─── Guard 2: createRentalBookingsWithGuard ───────────────────────────────────
+
+/**
+ * The data for a single rental booking to be created atomically.
+ * Prices must be computed by the caller (from DB-fetched rates, never client
+ * values) before passing to this function — this guard does not recompute money.
+ */
+export type RentalBookingInput = {
+  rentalItemId: string
+  siteId: string
+  userId: string
+  from: Date
+  to: Date
+  quantity: number
+  durationType: string
+  totalPrice: number
+  paymentAmount: number
+  status: string
+  operationalStatus: string
+  pickedUpAt?: Date | null
+  guestName?: string | null
+}
+
+export type RentalGuardResult =
+  | { outcome: 'created'; bookingIds: string[] }
+  | { outcome: 'unavailable'; rentalItemId: string }
+
+export type RentalGuardOptions = {
+  /**
+   * Operational statuses that are NON-blocking (excluded from the booked-qty
+   * aggregate). Defaults to [OP_RETURNED, RENTAL_CANCELED] — returned and
+   * canceled bookings no longer consume stock.
+   *
+   * Note: RENTAL_CANCELED ('canceled') shares the same string value as the
+   * payment status constant; it is used here as an operational status value
+   * because some call sites set operationalStatus = 'canceled' on cancellations.
+   * This matches the semantics of the existing createWalkInRental call site.
+   */
+  nonBlockingOpStatuses?: readonly string[]
+}
+
+/**
+ * Create one or more rental bookings atomically, with a transactional quantity
+ * guard that prevents over-booking under concurrency.
+ *
+ * `createWalkInRental` checked availability and created bookings in two
+ * separate steps (aggregate → loop create). This creates two races:
+ *  a) Two concurrent requests both pass the aggregate check before either
+ *     creates a booking, both then create → total quantity exceeded.
+ *  b) A mid-loop failure after some bookings are created → partial write.
+ *
+ * This guard collapses both into one atomic interactive transaction:
+ *
+ * 1. Acquires FOR UPDATE locks on all involved RentalItem rows.
+ * 2. Re-aggregates booked quantity for each booking inside the tx (consistent
+ *    read, no stale data from before the lock was acquired).
+ * 3. If any booking would exceed its item's totalQuantity → returns
+ *    { outcome: 'unavailable', rentalItemId } with NO rows written (all-or-nothing).
+ * 4. If all fit → creates all bookings → { outcome: 'created', bookingIds }.
+ *
+ * Callers must pass pre-computed prices from DB-fetched rates. This function
+ * does not recompute any money values.
+ *
+ * @throws Only for unexpected DB / Prisma errors (not for normal unavailability).
+ */
+export async function createRentalBookingsWithGuard(
+  bookings: RentalBookingInput[],
+  options: RentalGuardOptions = {}
+): Promise<RentalGuardResult> {
+  const { nonBlockingOpStatuses = [OP_RETURNED, RENTAL_CANCELED] } = options
+
+  // Deduplicate rental item IDs so we lock each item exactly once.
+  const rentalItemIds = [...new Set(bookings.map((b) => b.rentalItemId))]
+
+  return prisma.$transaction(async (tx) => {
+    // ── Step 1: Lock all involved RentalItem rows FOR UPDATE ──────────────────
+    //
+    // All concurrent walk-in bookings for these items will contend on these
+    // locks. The second concurrent request blocks until the first commits,
+    // then re-runs the aggregate and sees the already-created bookings.
+    if (rentalItemIds.length > 0) {
+      await tx.$queryRaw`
+        SELECT id FROM "RentalItem"
+        WHERE id = ANY(${rentalItemIds}::text[])
+        FOR UPDATE
+      `
+    }
+
+    // ── Step 2: Load total quantities (consistent read after lock) ────────────
+    const rentalItems = await tx.rentalItem.findMany({
+      where: { id: { in: rentalItemIds } },
+      select: { id: true, totalQuantity: true },
+    })
+    const totalQtyById = new Map(rentalItems.map((ri) => [ri.id, ri.totalQuantity]))
+
+    // ── Step 3: Availability check for each booking inside the tx ────────────
+    //
+    // Re-aggregate booked quantity using the same overlap predicate as the
+    // original createWalkInRental: open interval (from < to, to > from).
+    // Check ALL bookings before writing ANY — ensures all-or-nothing semantics.
+    for (const booking of bookings) {
+      const totalQty = totalQtyById.get(booking.rentalItemId) ?? 0
+
+      const bookedAgg = await tx.rentalBooking.aggregate({
+        where: {
+          rentalItemId: booking.rentalItemId,
+          siteId: booking.siteId,
+          operationalStatus: { notIn: nonBlockingOpStatuses as string[] },
+          from: { lt: booking.to },
+          to: { gt: booking.from },
+        },
+        _sum: { quantity: true },
+      })
+
+      const inUse = bookedAgg._sum?.quantity ?? 0
+      if (booking.quantity + inUse > totalQty) {
+        // Return early — nothing has been written yet, so this is a clean no-op.
+        return { outcome: 'unavailable' as const, rentalItemId: booking.rentalItemId }
+      }
+    }
+
+    // ── Step 4: All availability checks passed — create all bookings ──────────
+    //
+    // All-or-nothing: because we're inside $transaction, a failure on any create
+    // rolls back every preceding create in this tx automatically.
+    const createdIds: string[] = []
+    for (const booking of bookings) {
+      const created = await tx.rentalBooking.create({
+        data: {
+          siteId: booking.siteId,
+          rentalItemId: booking.rentalItemId,
+          userId: booking.userId,
+          from: booking.from,
+          to: booking.to,
+          quantity: booking.quantity,
+          durationType: booking.durationType,
+          totalPrice: booking.totalPrice,
+          paymentAmount: booking.paymentAmount,
+          status: booking.status,
+          operationalStatus: booking.operationalStatus,
+          pickedUpAt: booking.pickedUpAt ?? null,
+          guestName: booking.guestName ?? null,
+        },
+        select: { id: true },
+      })
+      createdIds.push(created.id)
+    }
+
+    return { outcome: 'created' as const, bookingIds: createdIds }
   })
 }
