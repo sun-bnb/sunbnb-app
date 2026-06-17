@@ -20,10 +20,10 @@ export default defineConfig({
       // real per-export guarantee). Set just under the current level; raise them
       // deliberately as coverage grows. Unit-only (integration is not measured).
       thresholds: {
-        lines: 64,
-        statements: 63,
-        functions: 64,
-        branches: 61,
+        lines: 74,
+        statements: 73,
+        functions: 71,
+        branches: 68,
       },
     },
   },
