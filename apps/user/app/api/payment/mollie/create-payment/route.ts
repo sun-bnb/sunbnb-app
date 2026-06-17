@@ -23,7 +23,7 @@ import {
   round,
 } from '@repo/data/payment'
 import { isTestMode } from '@repo/data/env'
-import { RESERVATION_PENDING, RESERVATION_PROCESSING } from '@repo/data/reservation-status'
+import { RESERVATION_PENDING, RESERVATION_PROCESSING, RESERVATION_PAYMENT_FAILED } from '@repo/data/reservation-status'
 import { NextRequest } from 'next/server'
 import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
 import { getMollieClientForPartner, getValidMollieToken } from '@/app/api/_lib/mollie'
@@ -200,9 +200,13 @@ export async function POST(request: NextRequest) {
       statusCode: error?.statusCode,
       message: error?.message,
     })
+    // Canonical terminal status (NOT the ad-hoc 'error' string): payment_failed
+    // is in TERMINAL_STATUSES so the cleanup cron GCs it after 24h, and the
+    // partner manage grid renders it as a removable failed seat (red ✕) rather
+    // than an orphan that blocks the seat forever.
     await prisma.reservation.update({
       where: { id: reservationId },
-      data: { status: 'error' },
+      data: { status: RESERVATION_PAYMENT_FAILED },
     })
 
     // 422 — typically "payment method not activated" or missing profile

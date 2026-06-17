@@ -23,7 +23,7 @@ import {
   round,
 } from '@repo/data/payment'
 import { isTestMode } from '@repo/data/env'
-import { ORDER_PROCESSING } from '@repo/data/reservation-status'
+import { ORDER_PROCESSING, ORDER_PAYMENT_FAILED } from '@repo/data/reservation-status'
 import { NextRequest } from 'next/server'
 import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
 import { getMollieClientForPartner, getValidMollieToken } from '@/app/api/_lib/mollie'
@@ -197,9 +197,11 @@ export async function POST(request: NextRequest) {
       statusCode: error?.statusCode,
       message: error?.message,
     })
+    // Canonical terminal status (not the ad-hoc 'error' string) so the order is
+    // in a known state for cleanup/queries rather than an orphan.
     await prisma.order.update({
       where: { id: orderId },
-      data: { status: 'error' },
+      data: { status: ORDER_PAYMENT_FAILED },
     })
 
     // 422 — typically "payment method not activated" or missing profile

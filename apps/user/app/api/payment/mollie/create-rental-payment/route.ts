@@ -19,7 +19,7 @@ import {
   round,
 } from '@repo/data/payment'
 import { isTestMode } from '@repo/data/env'
-import { RENTAL_PENDING, RENTAL_PROCESSING } from '@repo/data/reservation-status'
+import { RENTAL_PENDING, RENTAL_PROCESSING, RENTAL_PAYMENT_FAILED } from '@repo/data/reservation-status'
 import { NextRequest } from 'next/server'
 import { getRequestIdentity } from '@/app/api/_lib/auth'
 import { getMollieClientForPartner, getValidMollieToken } from '@/app/api/_lib/mollie'
@@ -211,10 +211,11 @@ export async function POST(request: NextRequest) {
       message: error?.message,
     })
 
-    // Mark bookings as error
+    // Mark bookings failed with the canonical terminal status (not the ad-hoc
+    // 'error' string) so they're in a known state for cleanup/queries.
     await prisma.rentalBooking.updateMany({
       where: { id: { in: rentalBookingIds } },
-      data: { status: 'error' },
+      data: { status: RENTAL_PAYMENT_FAILED },
     })
 
     if (error?.statusCode === 422) {
