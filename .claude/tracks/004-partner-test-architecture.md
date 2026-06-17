@@ -37,15 +37,15 @@ expanded set.
 
 ## Resume here
 
-- **Next action:** **PARTNER SCOPE COMPLETE.** Phases 0 (spine), 3 (fixes), 1 (backfill), 4
-  (cleanup + coverage ratchet) all done; partner 901 unit + 89 integration, 0 red; full
-  promote-gate green. Phases 0+3 pushed (≤`14993b8`); Phase 1+4 committed locally (`d4621b0` →
-  `8386e7b`, 6 commits unpushed). **No partner work remains.** Only deferred, explicitly
-  **out-of-partner-scope** items left: extract `auth-matrix`/`race`/fixtures into `@repo/test-utils`
-  so user+admin inherit the spine; the `createWalkInRental` rental-quantity race (different shape
-  from the bed-lock guard). Track can move to `done` (with those two as a spun-off backlog) once the
-  6 local commits are pushed. Decisions awaiting user: **push / promote / deploy** the local commits;
-  whether to take on the cross-app extraction (would re-open beyond partner).
+- **Next action:** **PARTNER SCOPE COMPLETE — all phases (0,1,2,3,4) done.** Phase 2 just closed:
+  `moveReservation` (confirmed double-booking, fixed via `@repo/data` `moveReservationWithConflictGuard`)
+  + `createWalkInRental` (rental race, fixed via `createRentalBookingsWithGuard`) + `setOrderStatus`
+  (accepted low-risk). Partner **903 unit + 91 integration green**; `@repo/data` 172 + 97. Phases 0+3
+  pushed (≤`14993b8`); Phase 1/4/coverage-swap/2 committed locally (`d4621b0` → HEAD, **unpushed**).
+  **No partner work remains.** Deferred, out-of-partner-scope: extract `auth-matrix`/`race`/fixtures
+  into `@repo/test-utils` so user+admin inherit the spine (the user app's `saveRentalBooking` shares
+  the rental race the new guard could fix). Track → `done` once the local commits are pushed.
+  Awaiting user: **push / promote / deploy**; whether to take the cross-app extraction.
 - **Context needed:** the spine — 0.1 mock-contract, 0.2 auth-matrix (107-entry registry in
   `app/test/gated-actions.ts`), 0.3 coverage-contract (47-entry allowlist in
   `app/test/coverage-contract.test.ts`), 0.4 no-inline-money guard + `@repo/data/reservations`
@@ -179,11 +179,25 @@ integration-if-stateful), requirements-driven/bug-revealing. Sequenced by risk, 
   Phase-1 work + the bug #3 fix are **uncommitted**. Next: commit Phase 1, then Phase 4 ratchet
   locks the raised coverage.
 
-### ☐ Phase 2 — Remaining bug-revealing tests (intentionally RED)
-`app/test/race.ts` `expectExactlyOneSucceeds(...)` over `reserveItem`, `blockBed`,
-`moveReservation`, `createPartnerReservation`, `createWalkInRental`, `setOrderStatus`;
-pair-expansion double-booking tests (manage + calendar). Each red = one bug ticket. Promote
-intentionally blocked.
+### ✅ Phase 2 — Race-prone actions (CLOSED 2026-06-17)
+The 6 race-prone actions, resolved:
+- ✅ `reserveItem`, `blockBed`, `createPartnerReservation` — guarded in Phase 3 (bug #2 adoption of
+  `reserveWithConflictGuard`); pair-expansion bug-revealing tests green.
+- ✅ **`moveReservation` — CONFIRMED double-booking bug, FIXED.** It disconnected old + connected new
+  items with NO conflict check → moving onto an occupied bed silently double-booked. New
+  `@repo/data` **`moveReservationWithConflictGuard`** (FOR-UPDATE lock on target beds + conflict
+  re-check excluding the reservation's own row); partner `moveReservation` expands siblings → guard.
+  Bug-revealing integration test green (move onto occupied bed → rejected; was a silent double-book).
+- ✅ **`createWalkInRental` — rental quantity race + partial-create, FIXED.** New `@repo/data`
+  **`createRentalBookingsWithGuard`** (FOR-UPDATE lock on all `RentalItem`s + re-aggregate + atomic
+  all-or-nothing create). Partner adopted; over-quantity → rejected.
+- ◑ **`setOrderStatus` — ACCEPTED low-risk (per decision, not fixed).** Concurrent kitchen-tab
+  transitions can both pass `isValidTransition` (no optimistic lock) → at worst duplicate
+  `acceptedAt`/`readyAt` stamps; not data-corrupting. Cheap fix available if it ever bites: make the
+  status update conditional (`updateMany WHERE status = <expected>`, 0 rows → error).
+`@repo/data` guards race-proven (`Promise.all` exactly-one-succeeds for move + rental); partner
+`mock-contract` caught the new exports (red→green). Partner **903 unit + 91 integration**; `@repo/data`
+**172 unit + 97 integration**.
 
 ### ▶ Phase 3 — Fixes (the "afterward")
 - ✅ **`getSite` ownership** (2026-06-16) — query-side `where: { id, userId }` (mirrors `getBrand`)
