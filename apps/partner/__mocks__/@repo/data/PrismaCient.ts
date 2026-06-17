@@ -58,6 +58,7 @@ const prisma = {
   },
   partnerAccount: {
     findUnique: vi.fn(),
+    create: vi.fn(),
     update: vi.fn(),
   },
   siteBrand: {
@@ -65,6 +66,7 @@ const prisma = {
   },
   subscription: {
     findUnique: vi.fn(),
+    create: vi.fn(),
     update: vi.fn(),
   },
   subscriptionPlan: {
