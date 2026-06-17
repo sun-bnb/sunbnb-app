@@ -13,7 +13,7 @@ export default defineConfig({
         'app/**/*.integration.test.ts',
         '**/__mocks__/**',
       ],
-      reporter: ['text', 'html', 'lcov'],
+      reporter: ['text', 'html', 'lcov', 'json-summary'],
       reportsDirectory: './coverage',
     },
   },

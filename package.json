@@ -7,7 +7,9 @@
     "lint": "turbo lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "test": "turbo test",
-    "test:integration": "turbo run test:integration --concurrency=1"
+    "test:integration": "turbo run test:integration --concurrency=1",
+    "coverage:ratchet": "(cd apps/partner && npm run test:coverage) && node scripts/coverage-ratchet.mjs",
+    "coverage:baseline": "(cd apps/partner && npm run test:coverage) && node scripts/coverage-ratchet.mjs --update"
   },
   "devDependencies": {
     "@types/qrcode": "^1.5.5",
