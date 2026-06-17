@@ -242,14 +242,17 @@ intentionally blocked.
   401 status); the `paymentAmount === totalPrice` walk-in-cash test confirmed **correct** (renamed,
   not a bug); refreshed `apps/partner/CLAUDE.md` Testing section (159 → 901 unit / 89 integration,
   full file table + "test-architecture spine" subsection).
-- ✅ **Per-file coverage ratchet** (2026-06-17; decided: Full). `apps/partner/vitest.config.ts` adds
-  the `json-summary` reporter; `scripts/coverage-ratchet.mjs` compares touched partner source files
-  (`BASE...HEAD` + working changes) against the committed `apps/partner/coverage-baseline.json` (62
-  files), failing on any line% drop below baseline (epsilon 0.01); new files skipped (the
-  coverage-contract already forces new exports tested). Root scripts `coverage:ratchet` (check) +
-  `coverage:baseline` (regen to ratchet up). Wired into `promote-to-test.sh` step [4/6] with
-  `BASE=origin/test` + a `SKIP_RATCHET=1` bypass. **Verified:** green check passes; canary (doctor a
-  touched file's baseline to 100%) correctly fails naming the −drop.
+- ✅ **Coverage floor** (2026-06-17). *Originally built the Full per-file ratchet
+  (`scripts/coverage-ratchet.mjs` + committed `coverage-baseline.json`); on review of its
+  maintenance cost (a generated baseline that churns + merge-conflicts; a `coverage:baseline`
+  ceremony on every legit drop that decays into a rubber-stamp; line% noise; a unit-only blind spot
+  for integration-covered files; bespoke code to own) the user chose to **swap it for the lighter,
+  vitest-native option**.* Final: `apps/partner/vitest.config.ts` `coverage.thresholds`
+  (lines 64 / statements 63 / functions 64 / branches 61 — just under current unit coverage); enforced
+  by `npm run coverage` (= partner `test:coverage`); wired into `promote-to-test.sh` step [4/6] with a
+  `SKIP_COVERAGE=1` bypass. Ratchet machinery removed. **Verified:** green at current coverage; canary
+  (branches→99) correctly fails with vitest's "does not meet global threshold". Coarse by design — the
+  coverage-contract remains the real per-export guarantee.
 - ☐ **Deferred (out of partner-only scope):** extract `auth-matrix`/`race`/fixtures into
   `@repo/test-utils` for user + admin; the `createWalkInRental` rental-quantity race.
 

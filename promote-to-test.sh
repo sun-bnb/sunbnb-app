@@ -42,12 +42,11 @@ else
     ( cd "$DATA" && npm run migrate:integration )
     npm run test:integration
   fi
-  if [ "${SKIP_RATCHET:-0}" = "1" ]; then
-    echo "    coverage ratchet SKIPPED (SKIP_RATCHET=1)"
+  if [ "${SKIP_COVERAGE:-0}" = "1" ]; then
+    echo "    coverage threshold SKIPPED (SKIP_COVERAGE=1)"
   else
-    echo "    coverage ratchet (partner — touched files vs baseline; BASE=origin/test)"
-    git fetch --quiet origin test || true
-    BASE=origin/test npm run coverage:ratchet
+    echo "    coverage threshold (partner — vitest coverage.thresholds floor)"
+    npm run coverage
   fi
 fi
 

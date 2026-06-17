@@ -13,8 +13,18 @@ export default defineConfig({
         'app/**/*.integration.test.ts',
         '**/__mocks__/**',
       ],
-      reporter: ['text', 'html', 'lcov', 'json-summary'],
+      reporter: ['text', 'html', 'lcov'],
       reportsDirectory: './coverage',
+      // Coverage floor — vitest fails `test:coverage` if overall unit coverage
+      // drops below these. A coarse erosion guard (the coverage-contract is the
+      // real per-export guarantee). Set just under the current level; raise them
+      // deliberately as coverage grows. Unit-only (integration is not measured).
+      thresholds: {
+        lines: 64,
+        statements: 63,
+        functions: 64,
+        branches: 61,
+      },
     },
   },
   resolve: {
