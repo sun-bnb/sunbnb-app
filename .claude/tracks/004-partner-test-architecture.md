@@ -37,14 +37,15 @@ expanded set.
 
 ## Resume here
 
-- **Next action:** **Phase 3 essentially COMPLETE — full gate green, promote unblocked.** Spine
-  (Phase 0) + all Phase-3 fixes done: getSite, products VAT, token-scope, saveGeneral, bug #2
-  (pair-expansion, cross-app), and the 21 user-app fixture gaps. Whole suite green (unit 8/8 turbo
-  tasks; integration 196 across partner/user/@repo/data). Commits up to `b803462`; the user-app
-  fixture fix is being committed now. **Remaining = optional/backlog:** Phase 1 behavioral backfill
-  (rentals, working-hours, restaurant deposit cascade, etc.); Phase 4 (coverage ratchet, stale-test
-  cleanup, `@repo/test-utils` extraction); the `createWalkInRental` rental-quantity race follow-up.
-  Track could move toward `done` once Phase 1/4 scope is decided. Nothing pushed.
+- **Next action:** **Phase 1 COMPLETE + fully green** (P1a restaurant, P1b rentals [found+fixed
+  bug #3 `deleteRentalItem`], P1c rest). Partner 901 unit + 89 integration, 0 red. Spine (Phase 0)
+  + Phase 3 fixes already pushed (up to `14993b8`). All Phase-1 work is **uncommitted** (~7 new
+  test files + restaurant/rental-booking fixtures + the deleteRentalItem source fix + mock
+  additions). Next: commit Phase 1 (proposed: deleteRentalItem-fix+rentals-tests commit, a backfill
+  commit, a docs commit), then **Phase 4** — coverage ratchet (now buildable on a green suite),
+  stale-`BUG:`/tautological-test cleanup, refresh `apps/partner/CLAUDE.md` counts.
+  (`@repo/test-utils` extraction + `createWalkInRental` rental-race stay deferred — partner-only
+  focus.) Nothing newer than `14993b8` pushed.
 - **Context needed:** the spine — 0.1 mock-contract, 0.2 auth-matrix (107-entry registry in
   `app/test/gated-actions.ts`), 0.3 coverage-contract (47-entry allowlist in
   `app/test/coverage-contract.test.ts`), 0.4 no-inline-money guard + `@repo/data/reservations`
@@ -145,12 +146,38 @@ expanded set.
   Per-file **coverage ratchet deferred to Phase 4** — can't validate against a red suite; it's
   steady-state erosion protection that only matters once green.
 
-### ☐ Phase 1 — Behavioral backfill (flows through the contract; green)
+### ▶ Phase 1 — Behavioral backfill (flows through the contract; green unless a bug surfaces)
 Close the contract's to-do list with the non-auth dimensions (happy / error / state-machine /
-integration-if-stateful): all 7 `rentals/actions.ts`, 3 working-hours actions, `addProduct`,
-orders-version `toggleProductSoldOut`, `modifyRestaurantReservation`,
-`setRestaurantServiceShifts`, `duplicateTableForRestaurant`, untested validation guards,
-restaurant deposit→invoice integration cascade. Ratchet prevents backslide.
+integration-if-stateful), requirements-driven/bug-revealing. Sequenced by risk, partner-only:
+- ✅ **P1a — restaurant reservations (money + double-booking)** (2026-06-17). New restaurant
+  fixtures (`createTestRestaurant`/`createTestTable`/`createTestTableReservation`). Integration:
+  `chargeRestaurantReservationDeposit` real deposit→invoice cascade (PARTNER+PLATFORM pair incl.
+  bootstrap `no-show-deposit` fee, hash chain, **idempotency**); `modifyRestaurantReservation`
+  double-booking — **bug-revealing test GREEN** (no bug: core `reapplyReservation` has a
+  transactional overlap check excluding the row's own reservation → rejects with 'Slot no longer
+  available'). Unit: `setRestaurantServiceShifts` (8), `duplicateTableForRestaurant` (7). Partner
+  **792 unit + 84 integration green**. (kb: `importOriginal` partial-mock doesn't rebind a module's
+  internal closures → fully mock the core pkg; `processChargedTableDeposit` always bootstraps a
+  €1 default fee so empty-DB cascade yields 2 invoices.)
+- ✅ **P1b — rentals** (2026-06-17). Behavioral coverage for all 7 `rentals/actions.ts` (65 unit +
+  5 integration); new `createTestRentalBooking` fixture. **FOUND A REAL BUG (#3): `deleteRentalItem`
+  silently cascade-deletes active bookings** — no guard + `RentalBooking.rentalItemId onDelete:
+  Cascade`, so `prisma.rentalItem.delete()` destroys paid/pending bookings and returns `{status:
+  'ok'}`. 2 integration tests RED (fail-loud) until fixed. **Fix needs a decision** (reject-if-active
+  vs soft-delete; and what counts as "active" — any booking vs only future/non-returned). Partner
+  838 unit green; 87 integration green + 2 reds.
+- ✅ **P1c — the rest** (2026-06-17). 64 unit tests, no bugs: working-hours ×3 (incl. the manual
+  `auth()+wh.site.userId` non-owner path), `addProduct` (17 — real-number VAT via
+  `computeVatAndBaseAmounts`), orders-version `toggleProductSoldOut` (6, token path), validation
+  guards `isValidPaymentProvider`/`isValidRentalPaymentType`/`isValidItemStatus`/`safeBlobKey` (20).
+- ✅ **Bug #3 `deleteRentalItem` FIXED** (2026-06-17; decided: reject-with-guard) — added a
+  `rentalBooking.count` guard; any booking → `{status:'error', errors:['Cannot delete item with
+  bookings — deactivate it instead']}`; hard-delete only when zero bookings. The 2 P1b reds flipped
+  GREEN. (Also added `rentalBooking.count` to the Prisma mock + an auth-matrix `beforeEach` stub —
+  a method-level mock gap the model-level mock-contract doesn't cover by design.)
+- **Phase 1 backfill COMPLETE + fully GREEN.** Partner **901 unit + 89 integration, 0 red.** All
+  Phase-1 work + the bug #3 fix are **uncommitted**. Next: commit Phase 1, then Phase 4 ratchet
+  locks the raised coverage.
 
 ### ☐ Phase 2 — Remaining bug-revealing tests (intentionally RED)
 `app/test/race.ts` `expectExactlyOneSucceeds(...)` over `reserveItem`, `blockBed`,
