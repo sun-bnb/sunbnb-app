@@ -23,6 +23,7 @@ vi.mock('sharp', () => ({
 }))
 
 import {
+  addProduct,
   toggleAppSales,
   setOrderPaymentType,
   updateProduct,
@@ -222,5 +223,185 @@ describe('getProducts', () => {
 
     const findCall = vi.mocked(prisma.product.findMany).mock.calls[0][0]
     expect(findCall.where.active).toBe(true)
+  })
+})
+
+// ─── addProduct ─────────────────────────────────────────────────────────────
+
+describe('addProduct', () => {
+  function makeFormData(fields: Record<string, string | File | null>): FormData {
+    const fd = new FormData()
+    for (const [k, v] of Object.entries(fields)) {
+      if (v !== null) fd.append(k, v as any)
+    }
+    return fd
+  }
+
+  function validFormData(overrides: Record<string, string> = {}): FormData {
+    return makeFormData({
+      siteId: SITE_ID,
+      name: 'Fresh Lemonade',
+      description: 'Cold and refreshing',
+      totalPrice: '5.00',
+      tax: '14',
+      category: 'drink',
+      prepTime: '5',
+      ...overrides,
+    })
+  }
+
+  // ── Auth ──
+
+  it('rejects unauthenticated user', async () => {
+    // mockAuth returns null (beforeEach default)
+    const res = await addProduct(validFormData())
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+  })
+
+  it('rejects non-owner (requireSiteOwner returns error)', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    mockRequireSiteOwner.mockResolvedValue({ session: null, error: 'Not authorized' })
+    const res = await addProduct(validFormData())
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authorized')
+  })
+
+  // ── Validation ──
+
+  it('rejects missing name', async () => {
+    authorizeOwner()
+    const res = await addProduct(validFormData({ name: '' }))
+    expect(res.status).toBe('error')
+    expect(res.errors![0]).toContain('name')
+  })
+
+  it('rejects name over 200 characters', async () => {
+    authorizeOwner()
+    const res = await addProduct(validFormData({ name: 'x'.repeat(201) }))
+    expect(res.status).toBe('error')
+    expect(res.errors![0]).toContain('200')
+  })
+
+  it('rejects description over 1000 characters', async () => {
+    authorizeOwner()
+    const res = await addProduct(validFormData({ description: 'd'.repeat(1001) }))
+    expect(res.status).toBe('error')
+    expect(res.errors![0]).toContain('1000')
+  })
+
+  it('rejects zero price', async () => {
+    authorizeOwner()
+    const res = await addProduct(validFormData({ totalPrice: '0' }))
+    expect(res.status).toBe('error')
+    expect(res.errors![0]).toContain('Price')
+  })
+
+  it('rejects negative price', async () => {
+    authorizeOwner()
+    const res = await addProduct(validFormData({ totalPrice: '-1' }))
+    expect(res.status).toBe('error')
+    expect(res.errors![0]).toContain('Price')
+  })
+
+  it('rejects price above 100000', async () => {
+    authorizeOwner()
+    const res = await addProduct(validFormData({ totalPrice: '100001' }))
+    expect(res.status).toBe('error')
+    expect(res.errors![0]).toContain('Price')
+  })
+
+  it('rejects tax above 100', async () => {
+    authorizeOwner()
+    const res = await addProduct(validFormData({ tax: '101' }))
+    expect(res.status).toBe('error')
+    expect(res.errors![0]).toContain('Tax')
+  })
+
+  it('rejects negative tax', async () => {
+    authorizeOwner()
+    const res = await addProduct(validFormData({ tax: '-1' }))
+    expect(res.status).toBe('error')
+    expect(res.errors![0]).toContain('Tax')
+  })
+
+  it('rejects invalid product category', async () => {
+    authorizeOwner()
+    const res = await addProduct(validFormData({ category: 'cigarettes' }))
+    expect(res.status).toBe('error')
+    expect(res.errors![0]).toContain('category')
+  })
+
+  // ── VAT computation — the stored `price` must be the ex-VAT base ──
+
+  it('computes correct ex-VAT base price using computeVatAndBaseAmounts (round real numbers)', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.product.create).mockResolvedValue({} as any)
+
+    // totalPrice=10.99, tax=14% → baseAmount = round(10.99 / 1.14) = round(9.6403...) = 9.64
+    const res = await addProduct(validFormData({ totalPrice: '10.99', tax: '14' }))
+    expect(res.status).toBe('ok')
+
+    const createCall = vi.mocked(prisma.product.create).mock.calls[0][0]
+    expect(createCall.data.price).toBe(9.64)
+    expect(createCall.data.totalPrice).toBe(10.99)
+    expect(createCall.data.tax).toBe(14)
+  })
+
+  it('computes correct ex-VAT base price with round(12 / 1.20) = 10', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.product.create).mockResolvedValue({} as any)
+
+    const res = await addProduct(validFormData({ totalPrice: '12', tax: '20' }))
+    expect(res.status).toBe('ok')
+
+    const createCall = vi.mocked(prisma.product.create).mock.calls[0][0]
+    expect(createCall.data.price).toBe(10)
+  })
+
+  it('stores 0-tax correctly: price equals totalPrice when tax is 0', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.product.create).mockResolvedValue({} as any)
+
+    const res = await addProduct(validFormData({ totalPrice: '8.50', tax: '0' }))
+    expect(res.status).toBe('ok')
+
+    const createCall = vi.mocked(prisma.product.create).mock.calls[0][0]
+    expect(createCall.data.price).toBe(8.50)
+    expect(createCall.data.totalPrice).toBe(8.50)
+  })
+
+  // ── Happy path (no image) ──
+
+  it('creates product and returns ok', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.product.create).mockResolvedValue({} as any)
+
+    const res = await addProduct(validFormData())
+    expect(res.status).toBe('ok')
+
+    const createCall = vi.mocked(prisma.product.create).mock.calls[0][0]
+    expect(createCall.data.siteId).toBe(SITE_ID)
+    expect(createCall.data.name).toBe('Fresh Lemonade')
+    expect(createCall.data.category).toBe('drink')
+    expect(createCall.data.prepTime).toBe(5)
+  })
+
+  it('defaults category to food when not provided', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.product.create).mockResolvedValue({} as any)
+
+    // Omit category from FormData — addProduct defaults to 'food'
+    const fd = makeFormData({
+      siteId: SITE_ID,
+      name: 'Sandwich',
+      totalPrice: '6.00',
+      tax: '14',
+    })
+    const res = await addProduct(fd)
+    expect(res.status).toBe('ok')
+
+    const createCall = vi.mocked(prisma.product.create).mock.calls[0][0]
+    expect(createCall.data.category).toBe('food')
   })
 })

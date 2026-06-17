@@ -161,6 +161,109 @@ export async function createTestSecurityToken(
   })
 }
 
+// ─── Restaurant fixtures ─────────────────────────────────────────────────────
+
+/**
+ * Creates a Restaurant owned by the given partner account. The restaurant is
+ * site-linked by default (pass `siteId: undefined` to make it standalone).
+ */
+export async function createTestRestaurant(
+  partnerAccountId: string,
+  overrides: Record<string, any> = {}
+) {
+  return prisma.restaurant.create({
+    data: {
+      partnerAccountId,
+      name: 'Test Restaurant',
+      slug: `test-restaurant-${nextId()}`,
+      ...overrides,
+    },
+  })
+}
+
+/**
+ * Creates a Table inside a restaurant with sensible defaults.
+ */
+export async function createTestTable(
+  restaurantId: string,
+  overrides: Record<string, any> = {}
+) {
+  const number = overrides.number ?? 1
+  const { number: _n, ...rest } = overrides
+  return prisma.table.create({
+    data: {
+      restaurantId,
+      number,
+      capacity: 4,
+      shape: 'square',
+      status: 'active',
+      ...rest,
+    },
+  })
+}
+
+/**
+ * Creates a TableReservation for integration tests.
+ *
+ * Defaults: confirmed status, expected operational status, no deposit.
+ * Pass `depositStatus`, `depositAmount`, and `paymentRef` to create a
+ * held-deposit booking that can be charged.
+ */
+export async function createTestTableReservation(
+  restaurantId: string,
+  overrides: Record<string, any> = {}
+) {
+  const from = overrides.from ?? new Date(Date.now() + 2 * 60 * 60 * 1000) // 2h from now
+  const to = overrides.to ?? new Date(Date.now() + 4 * 60 * 60 * 1000)     // 4h from now
+  const { from: _f, to: _t, ...rest } = overrides
+  return prisma.tableReservation.create({
+    data: {
+      restaurantId,
+      from,
+      to,
+      partySize: 2,
+      guestName: 'Test Guest',
+      guestEmail: 'guest@test.com',
+      status: 'confirmed',
+      operationalStatus: 'expected',
+      depositStatus: 'none',
+      ...rest,
+    },
+  })
+}
+
+/**
+ * Creates a RentalBooking for a given rental item + user + site.
+ *
+ * Defaults: status='complete' (active/paid booking), operationalStatus='reserved',
+ * durationType='hours'. Override `status` to 'pending' for in-flight bookings, etc.
+ */
+export async function createTestRentalBooking(
+  userId: string,
+  siteId: string,
+  rentalItemId: string,
+  overrides: Record<string, any> = {}
+) {
+  const from = overrides.from ?? new Date(Date.now() + 60 * 60 * 1000)          // 1h from now
+  const to = overrides.to ?? new Date(Date.now() + 3 * 60 * 60 * 1000)          // 3h from now
+  const { from: _f, to: _t, ...rest } = overrides
+  return prisma.rentalBooking.create({
+    data: {
+      userId,
+      siteId,
+      rentalItemId,
+      from,
+      to,
+      quantity: 1,
+      durationType: 'hours',
+      totalPrice: 30.0,
+      status: 'complete',
+      operationalStatus: 'reserved',
+      ...rest,
+    },
+  })
+}
+
 export async function createTestReservation(
   userId: string,
   siteId: string,

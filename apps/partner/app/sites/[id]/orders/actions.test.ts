@@ -8,7 +8,7 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }))
 
-import { setOrderStatus, getOrders } from './actions'
+import { setOrderStatus, getOrders, toggleProductSoldOut } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 
@@ -175,5 +175,79 @@ describe('getOrders', () => {
 
     const findCall = vi.mocked(prisma.order.findMany).mock.calls[0][0]
     expect(findCall.where.status.in).toContain('complete')
+  })
+})
+
+// ─── toggleProductSoldOut (orders/actions version) ────────────────────────
+//
+// This is DISTINCT from products/actions.toggleProductSoldOut — it:
+//   • is gated by verifySiteAccess (session OR accessKey, hasSome ['all','manage_site'])
+//   • takes siteId + productId (cross-entity ownership check: product must belong to site)
+//   • accepts an optional accessKey for token-gated access from the orders dashboard
+
+describe('toggleProductSoldOut (orders-dashboard version)', () => {
+  it('rejects unauthenticated with no accessKey', async () => {
+    const res = await toggleProductSoldOut(SITE_ID, 'prod-1', true)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+  })
+
+  it('marks product as sold out when caller owns the site', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.product.findUnique).mockResolvedValue({ siteId: SITE_ID } as any)
+    vi.mocked(prisma.product.update).mockResolvedValue({} as any)
+
+    const res = await toggleProductSoldOut(SITE_ID, 'prod-1', true)
+    expect(res.status).toBe('ok')
+
+    const updateCall = vi.mocked(prisma.product.update).mock.calls[0][0]
+    expect(updateCall.data.soldOut).toBe(true)
+    expect(updateCall.where.id).toBe('prod-1')
+  })
+
+  it('marks product as available (soldOut=false)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.product.findUnique).mockResolvedValue({ siteId: SITE_ID } as any)
+    vi.mocked(prisma.product.update).mockResolvedValue({} as any)
+
+    const res = await toggleProductSoldOut(SITE_ID, 'prod-1', false)
+    expect(res.status).toBe('ok')
+
+    const updateCall = vi.mocked(prisma.product.update).mock.calls[0][0]
+    expect(updateCall.data.soldOut).toBe(false)
+  })
+
+  it('rejects product that belongs to a different site', async () => {
+    authenticateAsOwner()
+    // product.siteId is a different site
+    vi.mocked(prisma.product.findUnique).mockResolvedValue({ siteId: 'other-site' } as any)
+
+    const res = await toggleProductSoldOut(SITE_ID, 'prod-1', true)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Product not found')
+  })
+
+  it('rejects when product does not exist', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.product.findUnique).mockResolvedValue(null)
+
+    const res = await toggleProductSoldOut(SITE_ID, 'prod-1', true)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Product not found')
+  })
+
+  it('accepts an accessKey in place of a session (token-gated orders dashboard)', async () => {
+    // No session — token path only
+    // verifySiteAccess queries securityToken then site
+    vi.mocked(prisma.securityToken.findUnique).mockResolvedValue({
+      id: 'tok-1',
+      userId: OWNER_ID,
+    } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(prisma.product.findUnique).mockResolvedValue({ siteId: SITE_ID } as any)
+    vi.mocked(prisma.product.update).mockResolvedValue({} as any)
+
+    const res = await toggleProductSoldOut(SITE_ID, 'prod-1', true, 'valid-access-key')
+    expect(res.status).toBe('ok')
   })
 })
