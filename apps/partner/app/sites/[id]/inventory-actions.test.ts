@@ -286,9 +286,8 @@ describe('saveInventoryItemProperties', () => {
     expect(updateCall.data.pair).toBeUndefined()
   })
 
-  // BUG: pairId from a different site should be rejected but isn't.
-  // The code looks up the pair item but never checks pairItem.siteId === item.siteId.
-  // This test documents the expected correct behavior and will FAIL against current code.
+  // saveInventoryItemProperties validates that the pair item belongs to the same site —
+  // pairItem.siteId !== item.siteId triggers a 'Pair item must belong to the same site' error.
   it('should reject pairId belonging to a different site', async () => {
     mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
     vi.mocked(prisma.inventoryItem.findUnique)
@@ -458,9 +457,8 @@ describe('deleteItemsByGroup', () => {
     })
   })
 
-  // BUG: deleteItemsByGroup returns the raw Prisma deleteMany result ({ count: N })
-  // instead of { status: 'ok' } like all other actions. This test documents the
-  // expected correct behavior and will FAIL against current code.
+  // deleteItemsByGroup returns the standard { status: 'ok' } shape on success,
+  // consistent with all other partner server actions.
   it('should return { status: "ok" } on success', async () => {
     authorizeOwner()
     vi.mocked(prisma.inventoryItem.deleteMany).mockResolvedValue({ count: 4 } as any)

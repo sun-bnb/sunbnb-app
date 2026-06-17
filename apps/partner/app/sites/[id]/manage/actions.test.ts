@@ -639,7 +639,7 @@ describe('createWalkInRental', () => {
     expect(res.errors?.[0]).toContain('Only 1')
   })
 
-  it('BUG: sets paymentAmount equal to totalPrice on booking creation', async () => {
+  it('sets paymentAmount equal to totalPrice on booking creation', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
       { id: 'ri-1', siteId: SITE_ID, active: true, totalQuantity: 10, pricePerDay: 20, pricePerHour: null },
@@ -657,10 +657,11 @@ describe('createWalkInRental', () => {
     expect(res.status).toBe('ok')
 
     const createCall = vi.mocked(prisma.rentalBooking.create).mock.calls[0][0]
-    // totalPrice should be 20 (pricePerDay) * 1 (day) * 3 (quantity) = 60
+    // totalPrice: 20 (pricePerDay) * 1 (day) * 3 (quantity) = 60
     expect(createCall.data.totalPrice).toBe(60)
-    // paymentAmount must match totalPrice — without it, payment reconciliation
-    // and invoicing will see null and potentially break downstream processing
+    // paymentAmount === totalPrice for walk-in cash rentals — the operator
+    // collects the full price in cash, so the amounts must match for reconciliation
+    // and downstream invoicing to work correctly.
     expect(createCall.data.paymentAmount).toBe(60)
   })
 })

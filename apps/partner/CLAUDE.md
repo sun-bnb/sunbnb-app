@@ -56,27 +56,74 @@ Redux slices: `reservationsSlice` (key-value store). RTK Query (`apiSlice`): `ge
 ## Testing
 
 ```bash
-npm run test              # unit tests (159 tests, Prisma mocked)
+npm run test              # unit tests (901 tests across 31 files, Prisma mocked)
 npm run test:watch        # vitest in watch mode
 npm run test:coverage     # unit tests with Istanbul coverage report
+npm run test:integration  # integration tests (89 tests across 7 files, real sunbnb_test DB)
 ```
+
+### Test architecture spine
+
+The test suite includes four meta-guards that enforce architecture invariants:
+
+- **`app/test/auth-matrix.test.ts`** (376 tests) — Drives every action in the gated-action registry (`app/test/gated-actions.ts`) through all auth scenarios (no session, wrong owner, token-only, sudo). The single source of truth for "which actions exist and which gates they must respect."
+- **`app/test/coverage-contract.test.ts`** (4 tests) — Fails if the gated-action registry omits an exported server action that has an auth gate in its source. Prevents new actions from silently skipping the matrix.
+- **`app/test/mock-contract.test.ts`** (9 tests) — Verifies that the `@repo/data` mock modules expose every export from the real source packages. Prevents silent mock drift (new real export never added to mock → tests silently skip code paths).
+- **`app/test/no-inline-money.test.ts`** (2 tests) — Rejects hardcoded monetary literals (`0.XX`, `XX.00`) in server-action source files; enforces use of DB-fetched prices.
 
 ### Unit tests (`vitest.config.ts`)
 
-- Path aliases redirect `@repo/data/PrismaCient` → mock, `@repo/data/password-reset` → mock, `@repo/data/rate-limit` → mock, `@repo/data/subscription` → mock
-- **Mock modules** (`__mocks__/@repo/data/`): `PrismaCient.ts`, `password-reset.ts`, `rate-limit.ts`, `subscription.ts`, `reservation-emails.ts`
-- `lib/validation.test.ts` — validateImageFile, validatePassword, enum validators (25 tests)
-- `app/sites/[id]/site-actions.test.ts` — saveGeneral, submitForm, deleteSite, setSiteStatus, setPaymentProvider, checkSlug, saveBrand (25 tests)
-- `app/sites/[id]/inventory-actions.test.ts` — CRUD, auto-increment, ownership checks (10 tests)
-- `app/sites/[id]/products/actions.test.ts` — toggleAppSales, setOrderPaymentType, updateProduct VAT recalc, soft-delete, soldOut (13 tests)
-- `app/sites/[id]/orders/actions.test.ts` — order status transitions (complete→accepted→preparing→ready→delivered), rejection, discard (13 tests)
-- `app/sites/[id]/manage/actions.test.ts` — walk-in reserveItem, checkIn/departure/noShow state machine, moveReservation, blockBed, rental pickup/return, createWalkInRental availability (30 tests)
-- `app/calendar/actions.test.ts` — createPartnerReservation (auth, availability, double-booking, paired items), getAvailableSunbeds (11 tests)
-- `app/api/reservations-cleanup/route.test.ts` — cron auth, stale reservation cleanup (5 tests)
-- `app/api/subscription/webhook/route.test.ts` — Stripe signature verification, subscription events, status mapping (7 tests)
-- `app/api/auth/forgot-password/route.test.ts` — rate limiting, email validation, enumeration protection (7 tests)
-- `app/api/auth/reset-password/route.test.ts` — rate limiting, token/password validation (7 tests)
-- `app/api/reservations/[siteId]/route.test.ts` — ownership, date/month queries (6 tests)
+Path aliases redirect `@repo/data/PrismaCient` → mock, `@repo/data/password-reset` → mock, `@repo/data/rate-limit` → mock, `@repo/data/subscription` → mock.
+
+Mock modules (`__mocks__/@repo/data/`): `PrismaCient.ts`, `password-reset.ts`, `rate-limit.ts`, `subscription.ts`, `reservation-emails.ts`.
+
+| File | What it tests | Tests |
+|---|---|---|
+| `lib/validation.test.ts` | validateImageFile, validatePassword, enum validators | 45 |
+| `app/sites/[id]/site-actions.test.ts` | saveGeneral, submitForm, deleteSite, setSiteStatus, setPaymentProvider, checkSlug, saveBrand | 37 |
+| `app/sites/[id]/inventory-actions.test.ts` | CRUD, auto-increment, ownership, cross-site pair validation | 28 |
+| `app/sites/[id]/inventory/actions.test.ts` | schematic/pool seat inventory actions | 10 |
+| `app/sites/[id]/schematic/actions.test.ts` | schematic layout actions | 16 |
+| `app/sites/[id]/products/actions.test.ts` | toggleAppSales, setOrderPaymentType, updateProduct VAT recalc, soft-delete, soldOut | 30 |
+| `app/sites/[id]/orders/actions.test.ts` | order status transitions (complete→accepted→preparing→ready→delivered), rejection, discard | 19 |
+| `app/sites/[id]/manage/actions.test.ts` | walk-in reserveItem, checkIn/departure/noShow state machine, moveReservation, blockBed, rental pickup/return, createWalkInRental | 84 |
+| `app/sites/[id]/manage/grid-helpers.test.ts` | manage grid layout and seat ordering helpers | 28 |
+| `app/sites/[id]/rentals/actions.test.ts` | getRentalItems, createRentalItem, updateRentalItem, deleteRentalItem, toggleSiteFeature | 46 |
+| `app/sites/[id]/working-hours-actions.test.ts` | addWorkingHours, deleteWorkingHours, overlap validation | 21 |
+| `app/sites/[id]/queries.test.ts` | getSite query | 3 |
+| `app/sites/create/actions.test.ts` | site creation wizard actions | 6 |
+| `app/calendar/actions.test.ts` | createPartnerReservation (auth, availability, double-booking, paired items), getAvailableSunbeds | 12 |
+| `app/restaurants/[id]/actions.test.ts` | restaurant CRUD, settings | 20 |
+| `app/restaurants/[id]/actions.shifts-and-duplicate.test.ts` | shift management and duplicate-opening guard | 15 |
+| `app/restaurants/[id]/menu/actions.test.ts` | menu item CRUD | 9 |
+| `app/restaurants/[id]/tables/actions.test.ts` | table CRUD and combination management | 13 |
+| `app/restaurants/[id]/reservations/actions.test.ts` | table reservation lifecycle | 20 |
+| `app/api/reservations-cleanup/route.test.ts` | cron auth, stale reservation cleanup | 5 |
+| `app/api/subscription/webhook/route.test.ts` | Stripe signature verification, subscription events, status mapping | 7 |
+| `app/api/auth/forgot-password/route.test.ts` | rate limiting, email validation, enumeration protection | 7 |
+| `app/api/auth/reset-password/route.test.ts` | rate limiting, token/password validation | 7 |
+| `app/api/auth/impersonate/route.test.ts` | sudo impersonation start | 4 |
+| `app/api/auth/end-impersonation/route.test.ts` | impersonation end | 4 |
+| `app/api/onboarding-status/route.test.ts` | Mollie onboarding status sync and caching | 7 |
+| `app/api/reservations/[siteId]/route.test.ts` | ownership, date/month queries, HTTP status codes | 7 |
+| `app/test/auth-matrix.test.ts` | auth gate matrix over all gated actions | 376 |
+| `app/test/coverage-contract.test.ts` | gated-action registry completeness | 4 |
+| `app/test/mock-contract.test.ts` | mock module superset of real exports | 9 |
+| `app/test/no-inline-money.test.ts` | no hardcoded monetary literals in server actions | 2 |
+
+### Integration tests (`vitest.integration.config.ts`)
+
+Requires local Docker Postgres with `sunbnb_test` DB. No `@repo/data` mocks — all DB logic runs against real Postgres.
+
+| File | What it tests | Tests |
+|---|---|---|
+| `app/sites/[id]/manage/actions.integration.test.ts` | reserveItem, checkIn, blockBed, rental pickup/return, walk-in rental (real conflict guard) | 27 |
+| `app/calendar/actions.integration.test.ts` | createPartnerReservation (real DB writes, availability, cash payment) | 19 |
+| `app/sites/[id]/orders/actions.integration.test.ts` | order status transitions and invoice creation against real DB | 13 |
+| `app/sites/[id]/site-actions.integration.test.ts` | saveGeneral persists to DB, PostGIS coords, entitlement gate | 12 |
+| `app/restaurants/[id]/reservations/actions.integration.test.ts` | table reservation lifecycle, deposit invoicing, double-booking guard | 8 |
+| `app/sites/[id]/token-scope.integration.test.ts` | SecurityToken scope policy — manage vs orders gates (real DB) | 5 |
+| `app/sites/[id]/rentals/actions.integration.test.ts` | deleteRentalItem active-booking guard, getRentalItems booking count | 5 |
 
 ### Mocking patterns
 

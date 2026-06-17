@@ -31,7 +31,7 @@ describe('GET /api/reservations/[siteId]', () => {
     expect(data.errors).toContain('Not authenticated')
   })
 
-  // BUG-REVEALING: route.ts line 11 returns 200 instead of 401 for unauthenticated requests
+  // route.ts returns HTTP 401 (not 200) for unauthenticated requests
   it('returns HTTP 401 status code when not authenticated', async () => {
     const request = makeRequest('?date=2025-07-01')
     const response = await GET(request, { params: { siteId: SITE_ID } })

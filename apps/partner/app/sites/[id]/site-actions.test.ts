@@ -130,9 +130,8 @@ describe('saveGeneral', () => {
     expect(updateCall.data.vat).toBeNull()
   })
 
-  // BUG: saveGeneral does not validate the `type` field against known values.
-  // Any arbitrary string (e.g. 'hacked') is written directly to the DB.
-  // This test expects the function to reject invalid types — it will FAIL against current code.
+  // saveGeneral validates the `type` field against the known values ('paid', 'unpaid').
+  // An arbitrary string (e.g. 'hacked') is rejected before the DB is touched.
   it('rejects invalid site type', async () => {
     authorizeOwner()
     vi.mocked(prisma.site.update).mockResolvedValue({} as any)
@@ -155,10 +154,8 @@ describe('saveGeneral', () => {
     expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
   })
 
-  // BUG: When type is 'paid' and price is non-numeric (e.g. 'abc'), Number('abc') → NaN,
-  // and NaN > 0 is false, so price becomes null. This silently leaves a paid site
-  // with no price — an inconsistent state. The function should return an error.
-  // This test will FAIL against current code.
+  // saveGeneral validates that price is numeric — Number('abc') → NaN triggers an
+  // 'Invalid price' error, preventing a paid site from being saved with a null price.
   it('rejects non-numeric price when type is paid', async () => {
     authorizeOwner()
     vi.mocked(prisma.site.update).mockResolvedValue({} as any)

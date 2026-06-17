@@ -1,22 +1,16 @@
 /**
  * Integration tests for rentals/actions.ts — requires the real sunbnb_test DB.
  *
- * Scope: deleteRentalItem active-booking guard (BUG-REVEALING) and
- * getRentalItems booking-count aggregate.
+ * Scope: deleteRentalItem active-booking guard and getRentalItems booking-count aggregate.
  *
  * The auth dimension is covered by the unit auth-matrix; these tests mock only
  * auth + next/cache so that all DB logic runs against real Postgres.
  *
- * BUG HYPOTHESIS (from audit): deleteRentalItem performs a hard DELETE with no
- * guard for active RentalBooking rows. Because the schema declares
- *   rentalItem RentalItem @relation(..., onDelete: Cascade)
- * on RentalBooking, a hard delete of the parent RentalItem will silently
- * cascade-delete all its bookings. A rental item with active (complete/pending)
- * bookings should be rejected, NOT silently deleted.
- *
- * If the action hard-deletes (current behaviour), the test below will fail
- * (RED) because booking rows will no longer exist after the call — proving the
- * bug. Leave it RED; do NOT adjust the assertion to pass.
+ * deleteRentalItem now checks for active bookings before deleting: if any
+ * RentalBooking for the item exists (complete, pending, etc.), the action returns
+ * { status: 'error' } and leaves the booking rows intact. These tests guard against
+ * that guard being removed — if the guard disappears, the schema's onDelete:Cascade
+ * would silently wipe bookings and the tests would fail.
  */
 
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest'
@@ -73,16 +67,13 @@ afterAll(async () => {
 // deleteRentalItem — BUG-REVEALING: active-booking guard
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe('deleteRentalItem — active booking guard (BUG-REVEALING)', () => {
+describe('deleteRentalItem — active booking guard', () => {
   /**
-   * CORRECT INTENDED BEHAVIOUR: if a RentalItem has at least one booking in a
-   * non-terminal status (complete, pending, etc.), the delete should be rejected
-   * with { status: 'error' } and the bookings must survive.
-   *
-   * ACTUAL CURRENT BEHAVIOUR (bug): the action calls prisma.rentalItem.delete()
-   * with no booking check. The schema's onDelete:Cascade silently removes all
-   * associated RentalBooking rows. This test will be RED because the action
-   * returns { status: 'ok' } and the booking row is gone.
+   * deleteRentalItem counts existing bookings before deleting. If any booking
+   * exists (complete, pending, etc.), it returns { status: 'error' } so booking
+   * history is never silently cascade-deleted. These tests are regression guards:
+   * if the booking check is removed, the schema's onDelete:Cascade would delete
+   * all associated RentalBooking rows and the tests would fail.
    */
   it('should reject deleting a rental item that has an active (complete) booking', async () => {
     const user = await createTestUser()
