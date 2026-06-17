@@ -1,5 +1,6 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import { requireSiteOwner } from '@/lib/auth-helpers'
 import { isValidItemStatus } from '@/lib/validation'
@@ -22,6 +23,17 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
 
   const { session, error } = await requireSiteOwner(siteId)
   if (error) return { status: 'error', errors: [error] }
+
+  // Validate ChairConfig before any DB writes
+  if (typeof config.price === 'number' && config.price < 0) {
+    return { status: 'error', errors: ['Price must be non-negative'] }
+  }
+  if (config.rows < 1) {
+    return { status: 'error', errors: ['rows must be at least 1'] }
+  }
+  if (config.seatsPerRow < 1) {
+    return { status: 'error', errors: ['Seats per row must be at least 1'] }
+  }
 
   const layoutMode = await getSiteLayoutMode(siteId)
   const isSchematic = layoutMode === 'schematic'
@@ -238,6 +250,7 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
   await assignChairPairings({ generated, group, siteId })
 
   await recomputeSeatLabels(siteId)
+  revalidatePath('/sites')
 }
 
 
@@ -628,6 +641,13 @@ export async function adjustItemSpacing(
   axis: 'horizontal' | 'vertical',
   factor: number
 ) {
+  // Guard against non-positive spacing factors before any DB read:
+  // factor=0 collapses all items onto the centroid; factor<0 mirrors the layout.
+  // Both corrupt coordinates in a way the user cannot undo.
+  if (!Number.isFinite(factor) || factor <= 0) {
+    return { status: 'error', errors: ['Spacing factor must be a positive number'] }
+  }
+
   const { error } = await requireSiteOwner(siteId)
   if (error) return { status: 'error', errors: [error] }
   if (itemIds.length < 2) return { status: 'ok' }
