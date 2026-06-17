@@ -8,13 +8,20 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }))
 
-// Mock the conflict guard — the real implementation does $transaction + FOR UPDATE
-// which the PrismaCient mock cannot model. Default: created (success path).
-// Override per-test for conflict scenarios.
+// Mock the conflict guards — the real implementations use $transaction + FOR UPDATE
+// which the PrismaCient mock cannot model. Default success paths.
+// Override per-test for conflict/unavailable scenarios.
 vi.mock('@repo/data/reservations', () => ({
   reserveWithConflictGuard: vi.fn().mockResolvedValue({
     outcome: 'created',
     reservationId: 'r1',
+  }),
+  moveReservationWithConflictGuard: vi.fn().mockResolvedValue({
+    outcome: 'moved',
+  }),
+  createRentalBookingsWithGuard: vi.fn().mockResolvedValue({
+    outcome: 'created',
+    bookingIds: ['rb1'],
   }),
 }))
 
@@ -38,11 +45,17 @@ import {
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
-import { reserveWithConflictGuard } from '@repo/data/reservations'
+import {
+  reserveWithConflictGuard,
+  moveReservationWithConflictGuard,
+  createRentalBookingsWithGuard,
+} from '@repo/data/reservations'
 import dayjs from 'dayjs'
 
 const mockAuth = vi.mocked(auth)
 const mockGuard = vi.mocked(reserveWithConflictGuard)
+const mockMoveGuard = vi.mocked(moveReservationWithConflictGuard)
+const mockRentalGuard = vi.mocked(createRentalBookingsWithGuard)
 
 const OWNER_ID = 'owner-1'
 const OTHER_ID = 'other-1'
@@ -53,8 +66,10 @@ const RES_ID = 'res-1'
 beforeEach(() => {
   vi.clearAllMocks()
   mockAuth.mockResolvedValue(null)
-  // Guard default: success (created). Override in conflict-path tests.
+  // Guard defaults: success paths. Override in conflict/unavailable tests.
   mockGuard.mockResolvedValue({ outcome: 'created', reservationId: 'r1' })
+  mockMoveGuard.mockResolvedValue({ outcome: 'moved' })
+  mockRentalGuard.mockResolvedValue({ outcome: 'created', bookingIds: ['rb1'] })
 })
 
 function authenticateAsOwner() {
@@ -445,25 +460,83 @@ describe('updateReservationNotes', () => {
 // ─── moveReservation ────────────────────────────────────────────────────────
 
 describe('moveReservation', () => {
-  it('disconnects old items and connects new ones', async () => {
+  it('calls move guard with expanded item list and returns ok', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
       operationalStatus: 'checked-in',
-      items: [{ id: 'old-item' }],
     } as any)
     vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([
       { id: 'new-item-1' },
       { id: 'new-item-2' },
     ] as any)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
+    // getGroupMemberIds: no siblings for either new item
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
 
     const res = await moveReservation(SITE_ID, RES_ID, ['new-item-1', 'new-item-2'])
     expect(res.status).toBe('ok')
 
-    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
-    expect(updateCall.data.items.disconnect).toEqual([{ id: 'old-item' }])
-    expect(updateCall.data.items.connect).toEqual([{ id: 'new-item-1' }, { id: 'new-item-2' }])
+    // Guard must be called with the reservation id and the (un-expanded) item list
+    expect(mockMoveGuard).toHaveBeenCalledWith(RES_ID, ['new-item-1', 'new-item-2'])
+    // prisma.reservation.update must NOT be called directly — guard owns the write
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+  })
+
+  it('expands SunbedGroup siblings of newItemIds before calling the guard', async () => {
+    // Ensures the conflict check sees the full pair, not just the requested item.
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      operationalStatus: 'checked-in',
+    } as any)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([
+      { id: 'new-item-1' },
+    ] as any)
+    // getGroupMemberIds for 'new-item-1' → SunbedGroup sibling 'sibling-1'
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
+      pairId: null,
+      sunbedGroupId: 'group-1',
+      pairedBy: null,
+    } as any)
+    // findMany for group members
+    vi.mocked(prisma.inventoryItem.findMany)
+      .mockResolvedValueOnce([{ id: 'new-item-1' }] as any) // validation findMany
+      .mockResolvedValueOnce([{ id: 'sibling-1' }] as any) // group siblings findMany
+
+    const res = await moveReservation(SITE_ID, RES_ID, ['new-item-1'])
+    expect(res.status).toBe('ok')
+
+    // Guard must receive the expanded list including the sibling
+    const guardArgs = mockMoveGuard.mock.calls[0]
+    expect(guardArgs[0]).toBe(RES_ID)
+    expect(guardArgs[1]).toContain('new-item-1')
+    expect(guardArgs[1]).toContain('sibling-1')
+  })
+
+  it('rejects move when guard returns conflict (target bed already occupied)', async () => {
+    // This is the bug that moveReservationWithConflictGuard fixes: the old code
+    // used a bare prisma.reservation.update with no conflict check, allowing the
+    // move to double-book a bed already reserved by another reservation.
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      operationalStatus: 'checked-in',
+    } as any)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([
+      { id: 'new-item-1' },
+    ] as any)
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+
+    mockMoveGuard.mockResolvedValueOnce({
+      outcome: 'conflict',
+      conflictingReservationId: 'other-res',
+    })
+
+    const res = await moveReservation(SITE_ID, RES_ID, ['new-item-1'])
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/already reserved/i)
+    // Guard ran; prisma.reservation.update must NOT have been called
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
   })
 
   it('rejects move for departed reservation', async () => {
@@ -471,7 +544,6 @@ describe('moveReservation', () => {
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
       operationalStatus: 'departed',
-      items: [],
     } as any)
 
     const res = await moveReservation(SITE_ID, RES_ID, ['new-1'])
@@ -484,7 +556,6 @@ describe('moveReservation', () => {
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
       operationalStatus: 'no-show',
-      items: [],
     } as any)
 
     const res = await moveReservation(SITE_ID, RES_ID, ['new-1'])
@@ -496,7 +567,6 @@ describe('moveReservation', () => {
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
       operationalStatus: 'checked-in',
-      items: [{ id: 'old' }],
     } as any)
     vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ id: 'new-1' }] as any) // only 1 of 2
 
@@ -563,13 +633,12 @@ describe('markRentalReturned', () => {
 // ─── createWalkInRental ─────────────────────────────────────────────────────
 
 describe('createWalkInRental', () => {
-  it('creates rental booking with correct daily pricing', async () => {
+  it('calls the rental guard with correct daily pricing data and returns ok', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
-      { id: 'ri-1', siteId: SITE_ID, active: true, totalQuantity: 10, pricePerDay: 15, pricePerHour: null },
+      { id: 'ri-1', name: 'Surfboard', siteId: SITE_ID, active: true, totalQuantity: 10, pricePerDay: 15, pricePerHour: null },
     ] as any)
-    vi.mocked(prisma.rentalBooking.aggregate).mockResolvedValue({ _sum: { quantity: 0 } } as any)
-    vi.mocked(prisma.rentalBooking.create).mockResolvedValue({ id: 'booking-1' } as any)
+    // Guard default: created (success). No aggregate/create calls expected.
 
     const res = await createWalkInRental({
       siteId: SITE_ID,
@@ -579,21 +648,25 @@ describe('createWalkInRental', () => {
     })
 
     expect(res.status).toBe('ok')
-    expect(res.bookingIds).toEqual(['booking-1'])
+    expect(res.bookingIds).toEqual(['rb1']) // from guard mock
 
-    const createCall = vi.mocked(prisma.rentalBooking.create).mock.calls[0][0]
-    expect(createCall.data.status).toBe('paid-in-cash')
-    expect(createCall.data.operationalStatus).toBe('picked-up')
-    expect(createCall.data.quantity).toBe(2)
+    // Guard must be called with correctly-priced booking data
+    const [guardInputs] = mockRentalGuard.mock.calls[0]
+    expect(guardInputs).toHaveLength(1)
+    expect(guardInputs[0].rentalItemId).toBe('ri-1')
+    expect(guardInputs[0].status).toBe('paid-in-cash')
+    expect(guardInputs[0].operationalStatus).toBe('picked-up')
+    expect(guardInputs[0].quantity).toBe(2)
+
+    // prisma.rentalBooking.create must NOT be called directly — guard owns creation
+    expect(vi.mocked(prisma.rentalBooking.create)).not.toHaveBeenCalled()
   })
 
-  it('sets zero price for free walk-in rental', async () => {
+  it('sets zero totalPrice and paymentAmount for free walk-in rental', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
-      { id: 'ri-1', siteId: SITE_ID, active: true, totalQuantity: 10, pricePerDay: 15, pricePerHour: null },
+      { id: 'ri-1', name: 'Kayak', siteId: SITE_ID, active: true, totalQuantity: 10, pricePerDay: 15, pricePerHour: null },
     ] as any)
-    vi.mocked(prisma.rentalBooking.aggregate).mockResolvedValue({ _sum: { quantity: 0 } } as any)
-    vi.mocked(prisma.rentalBooking.create).mockResolvedValue({ id: 'booking-1' } as any)
 
     await createWalkInRental({
       siteId: SITE_ID,
@@ -602,11 +675,12 @@ describe('createWalkInRental', () => {
       paymentType: 'free',
     })
 
-    const createCall = vi.mocked(prisma.rentalBooking.create).mock.calls[0][0]
-    expect(createCall.data.totalPrice).toBe(0)
+    const [guardInputs] = mockRentalGuard.mock.calls[0]
+    expect(guardInputs[0].totalPrice).toBe(0)
+    expect(guardInputs[0].paymentAmount).toBe(0)
   })
 
-  it('rejects when rental item not found', async () => {
+  it('rejects when rental item not found or inactive (pre-guard check)', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([]) // none found
 
@@ -619,33 +693,44 @@ describe('createWalkInRental', () => {
 
     expect(res.status).toBe('error')
     expect(res.errors?.[0]).toContain('not available')
+    // Guard must NOT be called — rejected before reaching it
+    expect(mockRentalGuard).not.toHaveBeenCalled()
   })
 
-  it('rejects when quantity exceeds availability', async () => {
+  it('rejects when guard returns unavailable (quantity race closed)', async () => {
+    // This is the bug createRentalBookingsWithGuard fixes: the old code checked
+    // availability then created in a loop — two concurrent requests could both
+    // pass the check and both create, exceeding totalQuantity. The guard
+    // collapses check + create into one transaction so the second request sees
+    // the first one's bookings before writing.
     authenticateAsOwner()
     vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
-      { id: 'ri-1', siteId: SITE_ID, active: true, totalQuantity: 3, pricePerDay: 10, pricePerHour: null },
+      { id: 'ri-1', name: 'Paddle Board', siteId: SITE_ID, active: true, totalQuantity: 3, pricePerDay: 10, pricePerHour: null },
     ] as any)
-    vi.mocked(prisma.rentalBooking.aggregate).mockResolvedValue({ _sum: { quantity: 2 } } as any) // 2 in use
+    mockRentalGuard.mockResolvedValueOnce({ outcome: 'unavailable', rentalItemId: 'ri-1' })
 
     const res = await createWalkInRental({
       siteId: SITE_ID,
-      items: [{ rentalItemId: 'ri-1', quantity: 2 }], // only 1 available
+      items: [{ rentalItemId: 'ri-1', quantity: 2 }],
       durationType: 'days',
       paymentType: 'cash',
     })
 
     expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Only 1')
+    expect(res.errors?.[0]).toContain('available')
+    expect(res.errors?.[0]).toContain('Paddle Board')
+    // prisma.rentalBooking.create must NOT have been called
+    expect(vi.mocked(prisma.rentalBooking.create)).not.toHaveBeenCalled()
   })
 
-  it('sets paymentAmount equal to totalPrice on booking creation', async () => {
+  it('passes correct paymentAmount (= totalPrice) to guard for cash walk-in', async () => {
+    // paymentAmount === totalPrice for walk-in cash rentals — the operator
+    // collects the full price in cash, so the amounts must match for reconciliation
+    // and downstream invoicing to work correctly.
     authenticateAsOwner()
     vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
-      { id: 'ri-1', siteId: SITE_ID, active: true, totalQuantity: 10, pricePerDay: 20, pricePerHour: null },
+      { id: 'ri-1', name: 'Snorkel', siteId: SITE_ID, active: true, totalQuantity: 10, pricePerDay: 20, pricePerHour: null },
     ] as any)
-    vi.mocked(prisma.rentalBooking.aggregate).mockResolvedValue({ _sum: { quantity: 0 } } as any)
-    vi.mocked(prisma.rentalBooking.create).mockResolvedValue({ id: 'booking-1' } as any)
 
     const res = await createWalkInRental({
       siteId: SITE_ID,
@@ -656,13 +741,10 @@ describe('createWalkInRental', () => {
 
     expect(res.status).toBe('ok')
 
-    const createCall = vi.mocked(prisma.rentalBooking.create).mock.calls[0][0]
+    const [guardInputs] = mockRentalGuard.mock.calls[0]
     // totalPrice: 20 (pricePerDay) * 1 (day) * 3 (quantity) = 60
-    expect(createCall.data.totalPrice).toBe(60)
-    // paymentAmount === totalPrice for walk-in cash rentals — the operator
-    // collects the full price in cash, so the amounts must match for reconciliation
-    // and downstream invoicing to work correctly.
-    expect(createCall.data.paymentAmount).toBe(60)
+    expect(guardInputs[0].totalPrice).toBe(60)
+    expect(guardInputs[0].paymentAmount).toBe(60)
   })
 })
 

@@ -3,12 +3,15 @@
 import { revalidatePath } from 'next/cache'
 import { verifySiteAccess } from '@/lib/auth-helpers'
 import prisma from '@repo/data/PrismaCient'
-import { reserveWithConflictGuard } from '@repo/data/reservations'
+import {
+  reserveWithConflictGuard,
+  moveReservationWithConflictGuard,
+  createRentalBookingsWithGuard,
+} from '@repo/data/reservations'
 import dayjs from 'dayjs'
 import {
   RESERVATION_PAID_IN_CASH,
   RENTAL_COMPLETE,
-  RENTAL_CANCELED,
   OP_EXPECTED,
   OP_CHECKED_IN,
   OP_WALKED_IN,
@@ -329,9 +332,12 @@ export async function moveReservation(
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
+  // Fast pre-check: reservation exists, belongs to this site, not in a terminal
+  // operational state. (The guard also loads the reservation inside the tx — this
+  // is a cheap early-fail that avoids acquiring the FOR UPDATE lock unnecessarily.)
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
-    include: { items: true },
+    select: { siteId: true, operationalStatus: true },
   })
   if (!reservation || reservation.siteId !== siteId) {
     return { status: 'error', errors: ['Reservation not found'] }
@@ -348,16 +354,28 @@ export async function moveReservation(
     return { status: 'error', errors: ['Some items not found or inactive'] }
   }
 
-  // Disconnect old items, connect new ones
-  await prisma.reservation.update({
-    where: { id: reservationId },
-    data: {
-      items: {
-        disconnect: reservation.items.map(i => ({ id: i.id })),
-        connect: newItemIds.map(id => ({ id })),
-      },
-    },
-  })
+  // Expand SunbedGroup/pair siblings of the target items BEFORE calling the guard
+  // so the conflict check covers all affected beds atomically. Without expansion
+  // a sibling of a target item that is already occupied goes undetected.
+  const allNewItemIds = [...newItemIds]
+  for (const itemId of newItemIds) {
+    const memberIds = await getGroupMemberIds(itemId)
+    for (const mid of memberIds) {
+      if (!allNewItemIds.includes(mid)) allNewItemIds.push(mid)
+    }
+  }
+
+  // moveReservationWithConflictGuard collapses the conflict check + item swap into
+  // one $transaction with SELECT … FOR UPDATE on the target InventoryItem rows,
+  // eliminating the check-then-move race that previously allowed double-booking.
+  const result = await moveReservationWithConflictGuard(reservationId, allNewItemIds)
+
+  if (result.outcome === 'conflict') {
+    return { status: 'error', errors: ['Target bed is already reserved for this period'] }
+  }
+  if (result.outcome === 'not_found') {
+    return { status: 'error', errors: ['Reservation not found'] }
+  }
 
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok' }
@@ -580,39 +598,15 @@ export async function createWalkInRental(input: {
     return { status: 'error', errors: ['Some items are not available'] }
   }
 
-  // Check availability
-  for (const cartItem of input.items) {
-    const rentalItem = rentalItems.find(ri => ri.id === cartItem.rentalItemId)
-    if (!rentalItem) continue
+  // Build booking inputs with DB-fetched pricing.
+  // createRentalBookingsWithGuard owns the availability check and all-or-nothing
+  // creation inside a transaction — we must NOT recompute money here; just
+  // translate the already-computed prices into the guard's input shape.
+  const hours = (to.getTime() - from.getTime()) / (1000 * 60 * 60)
+  const days = Math.max(1, Math.ceil(hours / 24))
 
-    const bookedQty = await prisma.rentalBooking.aggregate({
-      where: {
-        rentalItemId: cartItem.rentalItemId,
-        siteId: input.siteId,
-        operationalStatus: { notIn: [OP_RETURNED, RENTAL_CANCELED] },
-        from: { lt: to },
-        to: { gt: from },
-      },
-      _sum: { quantity: true },
-    })
-
-    const inUse = bookedQty._sum?.quantity || 0
-    const available = rentalItem.totalQuantity - inUse
-    if (cartItem.quantity > available) {
-      return {
-        status: 'error',
-        errors: [`Only ${available} of "${rentalItem.name}" available`],
-      }
-    }
-  }
-
-  // Create bookings
-  const bookings = []
-  for (const cartItem of input.items) {
+  const bookingInputs = input.items.map(cartItem => {
     const rentalItem = rentalItems.find(ri => ri.id === cartItem.rentalItemId)!
-
-    const hours = (to.getTime() - from.getTime()) / (1000 * 60 * 60)
-    const days = Math.max(1, Math.ceil(hours / 24))
 
     let totalPrice = 0
     if (input.paymentType === 'free') {
@@ -625,28 +619,38 @@ export async function createWalkInRental(input: {
       totalPrice = rentalItem.pricePerHour * Math.ceil(hours) * cartItem.quantity
     }
 
-    const booking = await prisma.rentalBooking.create({
-      data: {
-        siteId: input.siteId,
-        rentalItemId: cartItem.rentalItemId,
-        userId: ownership.userId,
-        from,
-        to,
-        quantity: cartItem.quantity,
-        durationType: input.durationType,
-        totalPrice,
-        paymentAmount: totalPrice,
-        status: input.paymentType === 'cash' ? RESERVATION_PAID_IN_CASH : RENTAL_COMPLETE,
-        operationalStatus: OP_PICKED_UP,
-        pickedUpAt: new Date(),
-        guestName: input.guestName?.slice(0, 200) || null,
-      },
-    })
-    bookings.push(booking)
+    return {
+      rentalItemId: cartItem.rentalItemId,
+      siteId: input.siteId,
+      userId: ownership.userId,
+      from,
+      to,
+      quantity: cartItem.quantity,
+      durationType: input.durationType,
+      totalPrice,
+      paymentAmount: totalPrice,
+      status: input.paymentType === 'cash' ? RESERVATION_PAID_IN_CASH : RENTAL_COMPLETE,
+      operationalStatus: OP_PICKED_UP,
+      pickedUpAt: new Date(),
+      guestName: input.guestName?.slice(0, 200) || null,
+    }
+  })
+
+  // createRentalBookingsWithGuard collapses availability-check + create into one
+  // $transaction with SELECT … FOR UPDATE on the RentalItem rows. The second
+  // concurrent request blocks until the first commits, then re-aggregates and
+  // sees the already-created bookings — eliminating the race that previously
+  // allowed total bookings to exceed totalQuantity.
+  const guardResult = await createRentalBookingsWithGuard(bookingInputs)
+
+  if (guardResult.outcome === 'unavailable') {
+    const unavailableItem = rentalItems.find(ri => ri.id === guardResult.rentalItemId)
+    const name = unavailableItem?.name ?? 'Requested item'
+    return { status: 'error', errors: [`Not enough "${name}" available`] }
   }
 
   revalidatePath(`/sites/${input.siteId}/manage`)
-  return { status: 'ok', bookingIds: bookings.map(b => b.id) }
+  return { status: 'ok', bookingIds: guardResult.bookingIds }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

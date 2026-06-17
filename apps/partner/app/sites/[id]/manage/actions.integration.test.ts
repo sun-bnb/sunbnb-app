@@ -598,7 +598,6 @@ describe('createWalkInRental', () => {
     })
 
     expect(result.status).toBe('error')
-    expect(result.errors![0]).toContain('1')
     expect(result.errors![0]).toContain('available')
 
     // Verify nothing was created beyond the pre-existing one
@@ -627,6 +626,86 @@ describe('createWalkInRental', () => {
     expect(booking!.totalPrice).toBe(0)
     expect(booking!.paymentAmount).toBe(0)
     expect(booking!.status).toBe('complete')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug-revealing: moveReservation double-booking (bug closed by
+// moveReservationWithConflictGuard).
+//
+// Before this fix, moveReservation used a bare prisma.reservation.update with
+// NO conflict check. A move onto a bed already reserved by a different guest
+// would silently succeed, leaving two reservations covering the same bed.
+// ---------------------------------------------------------------------------
+
+describe('moveReservation — conflict detection (was a silent double-book before)', () => {
+  it('rejects moving a reservation onto a bed already occupied by another reservation', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    mockUserId = user.id
+
+    const today0 = new Date(new Date().setHours(0, 0, 0, 0))
+    const today23 = new Date(new Date().setHours(23, 59, 59, 999))
+
+    // reservation1 sits on itemA — we will attempt to move this to itemB
+    const reservation1 = await createTestReservation(user.id, site.id, [itemA.id], {
+      from: today0,
+      to: today23,
+      status: 'complete',
+      operationalStatus: 'expected',
+    })
+
+    // reservation2 already occupies itemB — this is the conflict
+    await createTestReservation(user.id, site.id, [itemB.id], {
+      from: today0,
+      to: today23,
+      status: 'complete',
+      operationalStatus: 'expected',
+    })
+
+    // Attempt to move reservation1 onto itemB (already occupied by reservation2)
+    const result = await moveReservation(site.id, reservation1.id, [itemB.id])
+
+    // Guard must detect the conflict and reject
+    expect(result.status).toBe('error')
+    expect(result.errors![0]).toMatch(/already reserved/i)
+
+    // reservation1 must still be on itemA (the move must have been rolled back)
+    const unchanged = await prisma.reservation.findUnique({
+      where: { id: reservation1.id },
+      include: { items: true },
+    })
+    expect(unchanged!.items).toHaveLength(1)
+    expect(unchanged!.items[0].id).toBe(itemA.id)
+
+    // Both reservations must still exist (nothing was corrupted)
+    const totalCount = await prisma.reservation.count({ where: { siteId: site.id } })
+    expect(totalCount).toBe(2)
+  })
+
+  it('succeeds when the target bed is genuinely free (clean move path)', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    mockUserId = user.id
+
+    const reservation = await createTestReservation(user.id, site.id, [itemA.id], {
+      status: 'complete',
+      operationalStatus: 'expected',
+    })
+
+    const result = await moveReservation(site.id, reservation.id, [itemB.id])
+    expect(result.status).toBe('ok')
+
+    const updated = await prisma.reservation.findUnique({
+      where: { id: reservation.id },
+      include: { items: true },
+    })
+    expect(updated!.items).toHaveLength(1)
+    expect(updated!.items[0].id).toBe(itemB.id)
   })
 })
 
