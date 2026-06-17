@@ -236,13 +236,22 @@ intentionally blocked.
   +admin/others); integration **3/3 tasks** (partner 76, @repo/data 89, user 31 = 196). Every
   test-pinned red green; bug #2 fixed cross-app with bug-revealing tests.
 
-### 💤 Phase 4 — Steady state & extraction
-**Build the per-file coverage ratchet** (deferred from 0.5): a committed coverage baseline + a
-gate check that fails if a *touched* file's coverage drops below it — best built once the suite
-is green so it can be validated. Contract + ratchet then keep coverage watertight. Clean stale
-`BUG:` comments + the tautological `paymentAmount === totalPrice` test; refresh
-`apps/partner/CLAUDE.md` counts; extract `auth-matrix` / `race` / fixtures into `@repo/test-utils`
-for user + admin.
+### ▶ Phase 4 — Steady state & extraction
+- ✅ **Cleanup** (2026-06-17) — removed all 5 stale `BUG:`/"will FAIL" comments (every described
+  bug was already fixed: type/NaN-price validation, cross-site pairing, `deleteItemsByGroup` shape,
+  401 status); the `paymentAmount === totalPrice` walk-in-cash test confirmed **correct** (renamed,
+  not a bug); refreshed `apps/partner/CLAUDE.md` Testing section (159 → 901 unit / 89 integration,
+  full file table + "test-architecture spine" subsection).
+- ✅ **Per-file coverage ratchet** (2026-06-17; decided: Full). `apps/partner/vitest.config.ts` adds
+  the `json-summary` reporter; `scripts/coverage-ratchet.mjs` compares touched partner source files
+  (`BASE...HEAD` + working changes) against the committed `apps/partner/coverage-baseline.json` (62
+  files), failing on any line% drop below baseline (epsilon 0.01); new files skipped (the
+  coverage-contract already forces new exports tested). Root scripts `coverage:ratchet` (check) +
+  `coverage:baseline` (regen to ratchet up). Wired into `promote-to-test.sh` step [4/6] with
+  `BASE=origin/test` + a `SKIP_RATCHET=1` bypass. **Verified:** green check passes; canary (doctor a
+  touched file's baseline to 100%) correctly fails naming the −drop.
+- ☐ **Deferred (out of partner-only scope):** extract `auth-matrix`/`race`/fixtures into
+  `@repo/test-utils` for user + admin; the `createWalkInRental` rental-quantity race.
 
 ## Log
 
