@@ -6,7 +6,7 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-postgres",
-        "${POSTGRES_LOCAL_URL}"
+        "${POSTGRES_URL}"
       ]
     },
     "postgres-test": {
@@ -15,7 +15,7 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-postgres",
-        "${POSTGRES_TEST_URL}"
+        "${POSTGRES_URL_TEST}"
       ]
     },
     "postgres-production": {
@@ -24,7 +24,7 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-postgres",
-        "${POSTGRES_PRODUCTION_URL}"
+        "${POSTGRES_URL_PRODUCTION}"
       ]
     },
     "prisma": {
