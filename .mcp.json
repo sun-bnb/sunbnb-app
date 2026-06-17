@@ -36,24 +36,9 @@
         "mcp"
       ]
     },
-    "stripe": {
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "-y",
-        "@stripe/mcp",
-        "--tools=all"
-      ],
-      "env": {
-        "STRIPE_SECRET_KEY": "${STRIPE_SECRET_KEY}"
-      }
-    },
     "vercel": {
       "type": "http",
-      "url": "https://mcp.vercel.com",
-      "headers": {
-        "Authorization": "Bearer ${VERCEL_API_TOKEN}"
-      }
+      "url": "https://mcp.vercel.com"
     },
     "obsidian": {
       "type": "stdio",
