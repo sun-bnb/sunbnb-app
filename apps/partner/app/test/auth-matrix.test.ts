@@ -268,6 +268,7 @@ beforeEach(() => {
   vi.mocked(prisma.rentalBooking.create).mockResolvedValue({ id: 'new-booking' } as any)
   vi.mocked(prisma.rentalBooking.update).mockResolvedValue({} as any)
   vi.mocked(prisma.rentalBooking.aggregate).mockResolvedValue({ _sum: { quantity: 0 } } as any)
+  vi.mocked(prisma.rentalBooking.count).mockResolvedValue(0)
 
   // RentalItem stubs (for createWalkInRental, updateRentalItem, deleteRentalItem)
   vi.mocked(prisma.rentalItem.findUnique).mockResolvedValue({

@@ -47,6 +47,7 @@ const prisma = {
     create: vi.fn(),
     update: vi.fn(),
     aggregate: vi.fn(),
+    count: vi.fn(),
   },
   rentalItem: {
     findUnique: vi.fn(),

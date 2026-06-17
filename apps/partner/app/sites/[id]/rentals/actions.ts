@@ -143,6 +143,11 @@ export async function deleteRentalItem(siteId: string, itemId: string) {
     return { status: 'error', errors: ['Item not found'] }
   }
 
+  const bookingCount = await prisma.rentalBooking.count({ where: { rentalItemId: itemId } })
+  if (bookingCount > 0) {
+    return { status: 'error', errors: ['Cannot delete item with bookings — deactivate it instead'] }
+  }
+
   await prisma.rentalItem.delete({ where: { id: itemId } })
 
   revalidatePath('/sites')
