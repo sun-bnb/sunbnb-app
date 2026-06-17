@@ -15,6 +15,7 @@ pointer here + the full entry in its section below.)*
 - **Test failures & fixes** — mock/fixture gotchas — see "Mock-contract test", "saveInventoryItemProperties", "auth-matrix ok/reject predicate"
 - **Bug patterns & fixes** — recurring partner-app bugs — see "verifySiteOwnership vs verifySiteAccess scope divergence"
 - **Rejected approaches** — dead-ends, so nobody re-tries them — see "React onWheel prop"
+- **Mollie lib tests** — mocking strategy for app/api/_lib/mollie.ts — see "Testing mollie.ts: mocking boundary + scope separator"
 
 ---
 
@@ -88,6 +89,35 @@ tokens needing full access (orders, etc.) must have `'all'`.
 ## Bug patterns & fixes
 
 <!-- Recurring bug shapes specific to apps/partner -->
+
+## Mollie lib tests
+
+### 2026-06-17: Testing mollie.ts: mocking boundary + scope separator
+**Problem:** `app/api/_lib/mollie.ts` imports three different external concerns: raw `fetch`
+(for OAuth token endpoints), the `@mollie/api-client` SDK (for clientLinks, profiles,
+profileMethods, payments, paymentRefunds), and `@repo/data/mollie-tokens` (centralized
+token manager that imports Prisma). The file also has a dynamic `import('@repo/data/PrismaCient')`
+inside `bootstrapMollieAccount`. Getting all of these mocked without a real DB took three separate
+strategies.
+**Solution:**
+- `vi.mock('@mollie/api-client', () => ({ default: vi.fn() }))` — replaces the SDK entirely.
+  Each test sets `mockCreateMollieClient.mockReturnValue({ payments: {...}, ... })` locally.
+- `vi.mock('@repo/data/mollie-tokens', ...)` + `vi.mock('@repo/data/env', ...)` — prevents
+  the centralized token manager (which imports Prisma) from loading. Both resolved as mocked
+  module paths, not as aliased paths.
+- `vi.stubGlobal('fetch', vi.fn())` in `beforeEach` + `vi.unstubAllGlobals()` in `afterEach` —
+  intercepts all raw `fetch(...)` calls at the global level.
+- The dynamic `import('@repo/data/PrismaCient')` inside `bootstrapMollieAccount` resolves via the
+  vitest.config.ts alias (no extra work needed — alias applies to dynamic imports too).
+**Observation:** `OAUTH_SCOPES` joins scope names with `+`, but `URLSearchParams` encodes `+`
+as `%2B`. The authorization URL ends up with `scope=payments.read%2Bpayments.write%2B...`.
+Mollie's parser accepts this in production (partners connect successfully), so this is
+functionally correct but non-standard (RFC 6749 specifies space-separated). If Mollie changes
+behavior, switching `OAUTH_SCOPES` to use space (` `) as separator would produce the standard
+form (`scope=payments.read+payments.write`).
+**Prevention:** For any `app/api/_lib/` utility that mixes raw fetch + SDK + a @repo/data helper:
+stub fetch globally, vi.mock the SDK and the data helper; let vitest.config.ts alias handle
+Prisma. Don't use `vi.importActual` for @repo/data paths — aliases redirect them to mocks anyway.
 
 ## Rejected approaches
 
