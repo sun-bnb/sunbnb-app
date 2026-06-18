@@ -224,6 +224,26 @@ describe('POST /api/webhooks/mollie', () => {
     })
   })
 
+  it('reverts a failed QR walk-in collection to paid-in-cash (not payment_failed)', async () => {
+    mockMollieGet.mockResolvedValue({
+      status: 'failed',
+      metadata: JSON.stringify({
+        type: 'reservation',
+        entityId: 'res-1',
+        siteId: 'site-1',
+        collect: true,
+      }),
+    })
+    vi.mocked(prisma.reservation.updateMany).mockResolvedValue({ count: 1 } as any)
+
+    const res = await POST(makeWebhookRequest('tr_abc123'))
+    expect(res.status).toBe(200)
+    expect(prisma.reservation.updateMany).toHaveBeenCalledWith({
+      where: { id: 'res-1' },
+      data: { status: 'paid-in-cash', paymentRef: null },
+    })
+  })
+
   it('marks reservation as refunded', async () => {
     mockMollieGet.mockResolvedValue({
       status: 'refunded',

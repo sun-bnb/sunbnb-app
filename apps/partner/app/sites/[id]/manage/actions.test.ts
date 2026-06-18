@@ -51,10 +51,17 @@ import {
   addSeatToGroup,
   removeGroupSeat,
   removeFailedReservation,
+  collectReservationPayment,
+  getCollectStatus,
+  cancelCollection,
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { issueReservationRefund } from '@repo/data/refund'
+import {
+  createReservationMolliePayment,
+  reverifyAndFinalizeReservation,
+} from '@repo/data/reservation-payment'
 import {
   reserveWithConflictGuard,
   moveReservationWithConflictGuard,
@@ -2383,5 +2390,164 @@ describe('removeFailedReservation', () => {
     expect(res.status).toBe('error')
     expect(res.errors).toContain('Not authorized')
     expect(vi.mocked(prisma.reservation.findUnique)).not.toHaveBeenCalled()
+  })
+})
+
+// ─── collectReservationPayment / getCollectStatus / cancelCollection ─────────
+
+const COLLECT_FROM = new Date('2026-06-18T00:00:00.000Z')
+const COLLECT_TO = new Date('2026-06-18T23:59:59.000Z') // ~1 day → round() = 1
+const mockCreatePayment = vi.mocked(createReservationMolliePayment)
+const mockReverify = vi.mocked(reverifyAndFinalizeReservation)
+
+function walkInForCollect(overrides: Record<string, any> = {}) {
+  return {
+    siteId: SITE_ID,
+    status: 'paid-in-cash',
+    operationalStatus: 'walked-in',
+    from: COLLECT_FROM,
+    to: COLLECT_TO,
+    items: [{ price: 10 }, { price: 10 }],
+    site: { type: 'paid', price: 8 },
+    ...overrides,
+  }
+}
+
+describe('collectReservationPayment', () => {
+  it('rejects a bed that is not a walk-in', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(
+      walkInForCollect({ status: 'complete', operationalStatus: 'checked-in' }) as any,
+    )
+    const res = await collectReservationPayment(SITE_ID, RES_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('walk-in')
+    expect(mockCreatePayment).not.toHaveBeenCalled()
+  })
+
+  it('rejects a free (non-paid) site', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(
+      walkInForCollect({ site: { type: 'free', price: null } }) as any,
+    )
+    const res = await collectReservationPayment(SITE_ID, RES_ID)
+    expect(res.status).toBe('error')
+    expect(mockCreatePayment).not.toHaveBeenCalled()
+  })
+
+  it('computes the amount from DB prices, persists it, and creates the payment', async () => {
+    process.env.CONSUMER_APP_URL = 'https://app.test'
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(walkInForCollect() as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
+
+    const res = await collectReservationPayment(SITE_ID, RES_ID)
+    expect(res.status).toBe('ok')
+    expect((res as any).amount).toBe(20) // (10 + 10) * 1 day
+    expect((res as any).checkoutUrl).toBeTruthy()
+
+    // Amount persisted before the provider call (never client-supplied).
+    expect(vi.mocked(prisma.reservation.update).mock.calls[0][0].data.paymentAmount).toBe(20)
+    // Provider called with the collect metadata + consumer-app URLs.
+    const arg = mockCreatePayment.mock.calls[0]
+    expect(arg[0]).toBe(RES_ID)
+    expect(arg[1].metadataExtra).toEqual({ collect: true })
+    expect(arg[1].webhookUrl).toContain('app.test')
+    expect(arg[1].redirectUrl).toContain('reservationId=')
+  })
+
+  it('reverts to cash (and clears paymentRef) when the provider fails', async () => {
+    process.env.CONSUMER_APP_URL = 'https://app.test'
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(walkInForCollect() as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
+    mockCreatePayment.mockResolvedValueOnce({ status: 'error', error: 'No Mollie', reason: 'no_mollie' })
+
+    const res = await collectReservationPayment(SITE_ID, RES_ID)
+    expect(res.status).toBe('error')
+    const lastUpdate = vi.mocked(prisma.reservation.update).mock.calls.at(-1)![0]
+    expect(lastUpdate.data.status).toBe('paid-in-cash')
+    expect(lastUpdate.data.paymentRef).toBeNull()
+  })
+
+  it('errors when the consumer app URL is not configured', async () => {
+    delete process.env.CONSUMER_APP_URL
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(walkInForCollect() as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
+
+    const res = await collectReservationPayment(SITE_ID, RES_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('CONSUMER_APP_URL')
+    expect(mockCreatePayment).not.toHaveBeenCalled()
+  })
+})
+
+describe('getCollectStatus', () => {
+  it('reports complete without re-verifying', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID, status: 'complete', paymentRef: 'tr_x' } as any)
+    const res = await getCollectStatus(SITE_ID, RES_ID)
+    expect((res as any).paymentStatus).toBe('complete')
+    expect(mockReverify).not.toHaveBeenCalled()
+  })
+
+  it('finalizes a processing payment that has been paid', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID, status: 'processing', paymentRef: 'tr_x' } as any)
+    mockReverify.mockResolvedValueOnce({ settled: 'complete', providerStatus: 'paid' })
+    const res = await getCollectStatus(SITE_ID, RES_ID)
+    expect((res as any).paymentStatus).toBe('complete')
+  })
+
+  it('reverts a processing payment that has failed back to cash', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID, status: 'processing', paymentRef: 'tr_x' } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
+    mockReverify.mockResolvedValueOnce({ settled: 'failed', providerStatus: 'expired' })
+    const res = await getCollectStatus(SITE_ID, RES_ID)
+    expect((res as any).paymentStatus).toBe('failed')
+    const u = vi.mocked(prisma.reservation.update).mock.calls.at(-1)![0]
+    expect(u.data.status).toBe('paid-in-cash')
+    expect(u.data.paymentRef).toBeNull()
+  })
+
+  it('reports a plain cash walk-in as cash', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID, status: 'paid-in-cash', paymentRef: null } as any)
+    const res = await getCollectStatus(SITE_ID, RES_ID)
+    expect((res as any).paymentStatus).toBe('cash')
+    expect(mockReverify).not.toHaveBeenCalled()
+  })
+})
+
+describe('cancelCollection', () => {
+  it('reverts an unpaid in-flight collection to cash', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID, status: 'processing', paymentRef: 'tr_x' } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
+    mockReverify.mockResolvedValueOnce({ settled: 'pending' })
+    const res = await cancelCollection(SITE_ID, RES_ID)
+    expect((res as any).paymentStatus).toBe('cash')
+    const u = vi.mocked(prisma.reservation.update).mock.calls.at(-1)![0]
+    expect(u.data.status).toBe('paid-in-cash')
+    expect(u.data.paymentRef).toBeNull()
+  })
+
+  it('finalizes instead of reverting when the payment actually went through', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID, status: 'processing', paymentRef: 'tr_x' } as any)
+    mockReverify.mockResolvedValueOnce({ settled: 'complete', providerStatus: 'paid' })
+    const res = await cancelCollection(SITE_ID, RES_ID)
+    expect((res as any).paymentStatus).toBe('complete')
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+  })
+
+  it('is a no-op for a reservation that is not mid-collection', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID, status: 'paid-in-cash', paymentRef: null } as any)
+    const res = await cancelCollection(SITE_ID, RES_ID)
+    expect((res as any).paymentStatus).toBe('cash')
+    expect(mockReverify).not.toHaveBeenCalled()
   })
 })
