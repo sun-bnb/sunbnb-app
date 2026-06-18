@@ -753,6 +753,7 @@
     "bulkSomeFailed": "{n} ei voitu päivittää"
   },
   "BedDetail": {
+    "collectPayment": "Peri maksu",
     "free": "Vapaa",
     "booked": "Varattu",
     "here": "Paikalla",
@@ -804,6 +805,20 @@
     "paymentFailed": "Maksu epäonnistui",
     "remove": "Poista",
     "confirmRemove": "Poistetaan tämä varaus — maksua ei koskaan suoritettu. Paikka vapautuu heti."
+  },
+  "CollectPayment": {
+    "title": "Peri maksu",
+    "amountDue": "Maksettava summa",
+    "scanToPay": "Skannaa maksaaksesi",
+    "creating": "Valmistellaan maksua…",
+    "waiting": "Odotetaan maksua…",
+    "paid": "Maksettu",
+    "failedTitle": "Maksu epäonnistui",
+    "failedBody": "Edelleen käteinen — voit yrittää uudelleen.",
+    "done": "Valmis",
+    "close": "Sulje",
+    "demoNote": "Demotila — maksu suoritetaan automaattisesti.",
+    "errorGeneric": "Maksua ei voitu aloittaa."
   },
   "CreateRentalModal": {
     "title": "Vuokraa",

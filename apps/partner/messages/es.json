@@ -753,6 +753,7 @@
     "bulkSomeFailed": "{n} no se pudieron actualizar"
   },
   "BedDetail": {
+    "collectPayment": "Cobrar",
     "free": "Libre",
     "booked": "Reservada",
     "here": "Presente",
@@ -804,6 +805,20 @@
     "paymentFailed": "Pago fallido",
     "remove": "Eliminar",
     "confirmRemove": "Eliminando esta reserva — el pago nunca fue realizado. La hamaca queda libre inmediatamente."
+  },
+  "CollectPayment": {
+    "title": "Cobrar pago",
+    "amountDue": "Importe a pagar",
+    "scanToPay": "Escanea para pagar",
+    "creating": "Preparando el pago…",
+    "waiting": "Esperando el pago…",
+    "paid": "Pagado",
+    "failedTitle": "Pago fallido",
+    "failedBody": "Sigue en efectivo: puedes intentarlo de nuevo.",
+    "done": "Hecho",
+    "close": "Cerrar",
+    "demoNote": "Modo demo: el pago se completa automáticamente.",
+    "errorGeneric": "No se pudo iniciar el pago."
   },
   "CreateRentalModal": {
     "title": "Alquilar",

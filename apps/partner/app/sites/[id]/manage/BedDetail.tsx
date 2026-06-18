@@ -30,6 +30,7 @@ import {
   RESERVATION_COMPLETE, RESERVATION_HELD,
 } from '@repo/data/reservation-status'
 import { groupExtraSeatLabel } from './grid-helpers'
+import CollectPaymentModal from './CollectPaymentModal'
 import {
   getActiveReservation,
   getBedState,
@@ -81,6 +82,8 @@ export default function BedDetail({
   onGroupSeatAdded,
   onGroupSeatRemoved,
   onMove,
+  siteIsPaid = false,
+  onCollected,
 }: {
   siteId: string
   item: InventoryItem
@@ -96,6 +99,10 @@ export default function BedDetail({
   onGroupSeatRemoved?: () => void
   /** Enter move-mode for this seat's reservation (relocate to a free destination). */
   onMove?: (reservationId: string) => void
+  /** Whether the site charges for sunbeds — gates the "Collect payment" action. */
+  siteIsPaid?: boolean
+  /** Refresh the grid after a collection settles. */
+  onCollected?: () => void
 }) {
   const t = useTranslations('BedDetail')
   const [isPending, startTransition] = useTransition()
@@ -104,6 +111,8 @@ export default function BedDetail({
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null)
   const [until, setUntil] = useState('')
   const [error, setError] = useState<string | null>(null)
+  /** Full-screen "Collect payment" QR view for a walk-in. */
+  const [showCollect, setShowCollect] = useState(false)
   /** Set once a refund succeeds in this dialog (drives the "Refunded" badge). */
   const [refunded, setRefunded] = useState(false)
   /** Set when a refund 403s for missing permission → offer Mollie re-consent. */
@@ -842,6 +851,15 @@ export default function BedDetail({
                     <span className="text-lg font-bold tabular-nums leading-none">{formatTime(reservation.checkedInAt)}</span>
                   </div>
                 </div>
+                {siteIsPaid && (
+                  <button
+                    disabled={isPending}
+                    onClick={() => setShowCollect(true)}
+                    className="w-full bg-blue-600 text-white font-bold text-lg py-4 rounded-xl active:bg-blue-700 disabled:opacity-50"
+                  >
+                    💳 {t('collectPayment')}
+                  </button>
+                )}
                 <div className="flex gap-3">
                   <button
                     disabled={isPending}
@@ -904,6 +922,17 @@ export default function BedDetail({
           </div>
         )}
       </div>
+
+      {/* Full-screen Collect payment (QR → Mollie) for the walk-in */}
+      {showCollect && reservation && (
+        <CollectPaymentModal
+          siteId={siteId}
+          reservationId={reservation.id}
+          accessKey={accessKey}
+          onClose={() => setShowCollect(false)}
+          onSettled={() => onCollected?.()}
+        />
+      )}
     </div>
   )
 }

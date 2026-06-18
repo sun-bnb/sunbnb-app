@@ -753,6 +753,7 @@
     "bulkSomeFailed": "{n} couldn't be updated"
   },
   "BedDetail": {
+    "collectPayment": "Collect payment",
     "free": "Free",
     "booked": "Booked",
     "here": "Here",
@@ -804,6 +805,20 @@
     "paymentFailed": "Payment failed",
     "remove": "Remove",
     "confirmRemove": "Removing this reservation — the payment was never taken. The seat frees up immediately."
+  },
+  "CollectPayment": {
+    "title": "Collect payment",
+    "amountDue": "Amount due",
+    "scanToPay": "Scan to pay",
+    "creating": "Preparing payment…",
+    "waiting": "Waiting for payment…",
+    "paid": "Paid",
+    "failedTitle": "Payment failed",
+    "failedBody": "Still cash — you can try again.",
+    "done": "Done",
+    "close": "Close",
+    "demoNote": "Demo mode — the payment completes automatically.",
+    "errorGeneric": "Could not start the payment."
   },
   "CreateRentalModal": {
     "title": "Rent Out",

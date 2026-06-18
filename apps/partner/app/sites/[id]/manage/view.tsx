@@ -847,6 +847,8 @@ export default function ManageView({
           onGroupSeatAdded={() => { router.refresh() }}
           onGroupSeatRemoved={() => { setSelectedItem(null); setSelectedItemIsPool(false); setSelectedItemIsGroupExtra(false); router.refresh() }}
           onMove={handleStartMove}
+          siteIsPaid={site.type === 'paid'}
+          onCollected={() => router.refresh()}
         />
       )}
 
