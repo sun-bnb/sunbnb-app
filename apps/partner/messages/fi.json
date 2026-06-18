@@ -734,7 +734,13 @@
     "zoomOut": "Loitonna",
     "resetZoom": "Nollaa zoom",
     "comp": "Ilmainen",
-    "toggleTheme": "Vaihda tumma tila"
+    "toggleTheme": "Vaihda tumma tila",
+    "movePrompt": "Napauta vapaata paikkaa siirtääksesi tähän",
+    "movePromptGroup": "Napauta vapaata {n} paikan ryhmää siirtääksesi tähän",
+    "moveCancel": "Peruuta",
+    "moveDestOccupied": "Paikka on varattu — valitse vapaa",
+    "moveDestSize": "Valitse vapaa {n} paikan ryhmä",
+    "moveDestInvalid": "Ylivuotopaikkaan ei voi siirtää"
   },
   "BedDetail": {
     "free": "Vapaa",
@@ -782,6 +788,7 @@
     "issueRefund": "Tee hyvitys",
     "refunded": "Hyvitetty",
     "enableRefunds": "Ota hyvitykset käyttöön",
+    "move": "Siirrä",
     "confirmDepart": "Merkitään lähteneeksi. Maksu pidätetään; paikka vapautuu.",
     "confirmUnreserve": "Lopetetaan tämä walk-in. Hoida mahdollinen käteispalautus asiakkaan kanssa; paikka vapautuu.",
     "paymentFailed": "Maksu epäonnistui",

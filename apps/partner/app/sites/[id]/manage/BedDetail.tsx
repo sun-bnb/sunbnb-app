@@ -80,6 +80,7 @@ export default function BedDetail({
   onPoolSeatRemoved,
   onGroupSeatAdded,
   onGroupSeatRemoved,
+  onMove,
 }: {
   siteId: string
   item: InventoryItem
@@ -93,6 +94,8 @@ export default function BedDetail({
   onPoolSeatRemoved?: () => void
   onGroupSeatAdded?: () => void
   onGroupSeatRemoved?: () => void
+  /** Enter move-mode for this seat's reservation (relocate to a free destination). */
+  onMove?: (reservationId: string) => void
 }) {
   const t = useTranslations('BedDetail')
   const [isPending, startTransition] = useTransition()
@@ -273,6 +276,22 @@ export default function BedDetail({
         </button>
       </div>
     </div>
+  )
+
+  // Square "Move" button — sits on the dominant action's row, to its right.
+  // Enters move-mode (tap-to-move / relocate) for this seat's reservation.
+  const moveSquare = (
+    <button
+      onClick={() => { if (reservation) onMove?.(reservation.id) }}
+      aria-label={t('move')}
+      title={t('move')}
+      className="w-16 self-stretch flex flex-col items-center justify-center gap-0.5 border-2 border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 rounded-xl active:bg-gray-50 dark:active:bg-gray-800"
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M8 7l-4 5 4 5M16 7l4 5-4 5M4 12h16" />
+      </svg>
+      <span className="text-[10px] font-semibold leading-none">{t('move')}</span>
+    </button>
   )
 
   // Badge label: show "Hold" for staff holds so staff can tell them from paid bookings
@@ -586,13 +605,16 @@ export default function BedDetail({
                     <div className="text-gray-500 dark:text-gray-400 italic">{reservation.internalNotes}</div>
                   )}
                 </div>
-                <button
-                  disabled={isPending}
-                  onClick={() => runAction(() => checkInReservation(siteId, reservation.id, accessKey))}
-                  className="w-full bg-blue-500 text-white font-bold text-lg py-4 rounded-xl active:bg-blue-600 disabled:opacity-50"
-                >
-                  {isPending ? '...' : t('checkIn')}
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    disabled={isPending}
+                    onClick={() => runAction(() => checkInReservation(siteId, reservation.id, accessKey))}
+                    className="flex-1 bg-blue-500 text-white font-bold text-lg py-4 rounded-xl active:bg-blue-600 disabled:opacity-50"
+                  >
+                    {isPending ? '...' : t('checkIn')}
+                  </button>
+                  {moveSquare}
+                </div>
                 <div className="flex gap-3">
                   <button
                     onClick={() => setPendingConfirm('no-show')}
@@ -689,19 +711,22 @@ export default function BedDetail({
 
             {/* Rent — convert hold to paid walk-in, with the chosen period.
                 Effective name: existing hold name if set, else the typed name. */}
-            <button
-              disabled={isPending}
-              onClick={() => runAction(() => convertHoldToWalkIn(
-                siteId, item.id, accessKey,
-                reservation.guestName
-                  ? reservation.guestName
-                  : (guestName || undefined),
-                until || undefined
-              ))}
-              className="w-full bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50"
-            >
-              {isPending ? '...' : days > 1 ? t('rentDays', { n: days }) : t('rent')}
-            </button>
+            <div className="flex gap-3">
+              <button
+                disabled={isPending}
+                onClick={() => runAction(() => convertHoldToWalkIn(
+                  siteId, item.id, accessKey,
+                  reservation.guestName
+                    ? reservation.guestName
+                    : (guestName || undefined),
+                  until || undefined
+                ))}
+                className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50"
+              >
+                {isPending ? '...' : days > 1 ? t('rentDays', { n: days }) : t('rent')}
+              </button>
+              {moveSquare}
+            </div>
 
             {/* Release — delete the hold with no confirmation (no money at stake) */}
             <button
@@ -778,13 +803,16 @@ export default function BedDetail({
                     <span className="text-lg font-bold tabular-nums leading-none">{formatTime(reservation.checkedInAt)}</span>
                   </div>
                 </div>
-                <button
-                  disabled={isPending}
-                  onClick={() => setPendingConfirm('depart')}
-                  className="w-full bg-gray-700 text-white font-bold text-lg py-4 rounded-xl active:bg-gray-800 disabled:opacity-50"
-                >
-                  {isPending ? '...' : t('markDeparted')}
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    disabled={isPending}
+                    onClick={() => setPendingConfirm('depart')}
+                    className="flex-1 bg-gray-700 text-white font-bold text-lg py-4 rounded-xl active:bg-gray-800 disabled:opacity-50"
+                  >
+                    {isPending ? '...' : t('markDeparted')}
+                  </button>
+                  {moveSquare}
+                </div>
                 <button
                   onClick={() => setPendingConfirm('cancel')}
                   className="w-full text-red-400 text-sm py-2 active:text-red-600"
@@ -815,13 +843,16 @@ export default function BedDetail({
                     <span className="text-lg font-bold tabular-nums leading-none">{formatTime(reservation.checkedInAt)}</span>
                   </div>
                 </div>
-                <button
-                  disabled={isPending}
-                  onClick={() => setPendingConfirm('depart')}
-                  className="w-full bg-gray-700 text-white font-bold text-lg py-4 rounded-xl active:bg-gray-800 disabled:opacity-50"
-                >
-                  {isPending ? '...' : t('markDeparted')}
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    disabled={isPending}
+                    onClick={() => setPendingConfirm('depart')}
+                    className="flex-1 bg-gray-700 text-white font-bold text-lg py-4 rounded-xl active:bg-gray-800 disabled:opacity-50"
+                  >
+                    {isPending ? '...' : t('markDeparted')}
+                  </button>
+                  {moveSquare}
+                </div>
                 <button
                   disabled={isPending}
                   onClick={() => setPendingConfirm('unreserve')}

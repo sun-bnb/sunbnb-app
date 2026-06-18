@@ -734,7 +734,13 @@
     "zoomOut": "Reducir",
     "resetZoom": "Restablecer zoom",
     "comp": "Cortesía",
-    "toggleTheme": "Alternar modo oscuro"
+    "toggleTheme": "Alternar modo oscuro",
+    "movePrompt": "Toca una hamaca libre para mover aquí",
+    "movePromptGroup": "Toca un grupo libre de {n} hamacas para mover aquí",
+    "moveCancel": "Cancelar",
+    "moveDestOccupied": "Esa hamaca está ocupada — elige una libre",
+    "moveDestSize": "Elige un grupo libre de {n} hamacas",
+    "moveDestInvalid": "No se puede mover a una hamaca extra"
   },
   "BedDetail": {
     "free": "Libre",
@@ -782,6 +788,7 @@
     "issueRefund": "Emitir reembolso",
     "refunded": "Reembolsado",
     "enableRefunds": "Activar reembolsos",
+    "move": "Mover",
     "confirmDepart": "Marcando como salido. El pago se mantiene; la hamaca queda libre.",
     "confirmUnreserve": "Finalizando este walk-in. Gestiona el reembolso en efectivo con el cliente; la hamaca queda libre.",
     "paymentFailed": "Pago fallido",

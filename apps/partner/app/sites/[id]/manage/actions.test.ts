@@ -33,6 +33,7 @@ import {
   markNoShow,
   updateReservationNotes,
   moveReservation,
+  moveReservationToSeats,
   blockBed,
   unblockBed,
   holdBed,
@@ -1861,6 +1862,98 @@ describe('refundReservation', () => {
     expect(res.status).toBe('error')
     expect(res.errors?.[0]).toMatch(/no paid reservation found/i)
     expect(vi.mocked(issueReservationRefund)).not.toHaveBeenCalled()
+  })
+})
+
+// ─── moveReservationToSeats ─────────────────────────────────────────────────
+
+describe('moveReservationToSeats', () => {
+  it('rejects unauthenticated caller', async () => {
+    const res = await moveReservationToSeats(SITE_ID, RES_ID, [ITEM_ID])
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+    expect(mockMoveGuard).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-owner', async () => {
+    authenticateAsNonOwner()
+    const res = await moveReservationToSeats(SITE_ID, RES_ID, [ITEM_ID])
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authorized')
+    expect(mockMoveGuard).not.toHaveBeenCalled()
+  })
+
+  it('errors when destination count != reservation seat count', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+      siteId: SITE_ID, operationalStatus: 'expected', items: [{ id: 'a' }],
+    } as any)
+    const res = await moveReservationToSeats(SITE_ID, RES_ID, ['d1', 'd2'])
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/same number of seats/i)
+    expect(mockMoveGuard).not.toHaveBeenCalled()
+  })
+
+  it('relocates a single-seat reservation to the exact destination (no group expansion)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+      siteId: SITE_ID, operationalStatus: 'expected', items: [{ id: 'a' }],
+    } as any)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValueOnce([{ id: 'd1' }] as any)
+    mockMoveGuard.mockResolvedValueOnce({ outcome: 'moved' } as any)
+
+    const res = await moveReservationToSeats(SITE_ID, RES_ID, ['d1'])
+    expect(res.status).toBe('ok')
+    expect(mockMoveGuard).toHaveBeenCalledWith(RES_ID, ['d1'])
+  })
+
+  it('relocates a 3-seat group booking (active + pool extra) to a 3-seat destination', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+      siteId: SITE_ID, operationalStatus: 'walked-in', items: [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
+    } as any)
+    // destination resolves to 3 real seats (2 active + 1 pool extra)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValueOnce([{ id: 'd1' }, { id: 'd2' }, { id: 'd3' }] as any)
+    mockMoveGuard.mockResolvedValueOnce({ outcome: 'moved' } as any)
+
+    const res = await moveReservationToSeats(SITE_ID, RES_ID, ['d1', 'd2', 'd3'])
+    expect(res.status).toBe('ok')
+    expect(mockMoveGuard).toHaveBeenCalledWith(RES_ID, ['d1', 'd2', 'd3'])
+  })
+
+  it('errors when a destination seat is not found or inactive', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+      siteId: SITE_ID, operationalStatus: 'expected', items: [{ id: 'a' }],
+    } as any)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValueOnce([] as any)
+    const res = await moveReservationToSeats(SITE_ID, RES_ID, ['d1'])
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/not available/i)
+    expect(mockMoveGuard).not.toHaveBeenCalled()
+  })
+
+  it('surfaces a conflict from the guard', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+      siteId: SITE_ID, operationalStatus: 'expected', items: [{ id: 'a' }],
+    } as any)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValueOnce([{ id: 'd1' }] as any)
+    mockMoveGuard.mockResolvedValueOnce({ outcome: 'conflict' } as any)
+    const res = await moveReservationToSeats(SITE_ID, RES_ID, ['d1'])
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/already reserved/i)
+  })
+
+  it('refuses to move a departed/terminal reservation', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+      siteId: SITE_ID, operationalStatus: 'departed', items: [{ id: 'a' }],
+    } as any)
+    const res = await moveReservationToSeats(SITE_ID, RES_ID, ['d1'])
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/completed reservation/i)
+    expect(mockMoveGuard).not.toHaveBeenCalled()
   })
 })
 

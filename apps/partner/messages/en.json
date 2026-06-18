@@ -734,7 +734,13 @@
     "zoomOut": "Zoom out",
     "resetZoom": "Reset zoom",
     "comp": "Comp",
-    "toggleTheme": "Toggle dark mode"
+    "toggleTheme": "Toggle dark mode",
+    "movePrompt": "Tap a free seat to move here",
+    "movePromptGroup": "Tap a free group of {n} seats to move here",
+    "moveCancel": "Cancel",
+    "moveDestOccupied": "That seat is occupied — pick a free one",
+    "moveDestSize": "Pick a free group of {n} seats",
+    "moveDestInvalid": "Can't move onto an overflow seat"
   },
   "BedDetail": {
     "free": "Free",
@@ -782,6 +788,7 @@
     "issueRefund": "Issue refund",
     "refunded": "Refunded",
     "enableRefunds": "Enable refunds",
+    "move": "Move",
     "confirmDepart": "Marking as departed. The payment is kept; the seat frees up.",
     "confirmUnreserve": "Ending this walk-in. Settle any cash refund with the customer directly; the seat frees up.",
     "paymentFailed": "Payment failed",

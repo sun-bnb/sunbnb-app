@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { InventoryItem, SiteProps } from '@/types/shared'
@@ -9,7 +9,8 @@ import CreateRentalModal from './CreateRentalModal'
 import ManageToolbar, { type ManageViewKey } from './ManageToolbar'
 import ParcelView from './ParcelView'
 import RentalsSection from './RentalsSection'
-import { getBedState, type BedState } from './bed-state'
+import { getActiveReservation, getBedState, type BedState } from './bed-state'
+import { moveReservationToSeats } from './actions'
 
 function parseSunbedNumber(num: number) {
   const str = String(num)
@@ -75,6 +76,14 @@ export default function ManageView({
   const [selectedItemIsPool, setSelectedItemIsPool] = useState(false)
   const [selectedItemIsGroupExtra, setSelectedItemIsGroupExtra] = useState(false)
   const [showRentalModal, setShowRentalModal] = useState(false)
+
+  // ── Move mode (tap-to-move / Cambio de Lugar) ─────────────────────────────
+  // When set, the next free seat tapped becomes the relocation destination for
+  // this reservation (instead of opening the bed-detail sheet). `count` is how
+  // many seats the booking occupies — the destination must match.
+  const [movingRes, setMovingRes] = useState<{ id: string; count: number } | null>(null)
+  const [moveError, setMoveError] = useState<string | null>(null)
+  const [, startMoveTransition] = useTransition()
 
   // ── View switcher — one destination (parcel / rentals) at a time ──────────
   // Default to the lowest parcel number; fall back to rentals if the site has
@@ -320,6 +329,54 @@ export default function ManageView({
   // Sorted parcel numbers
   const parcelNums = Object.keys(regularByParcel).map(Number).sort((a, b) => a - b)
 
+  // ── Move-mode handlers ────────────────────────────────────────────────────
+  // Enter move mode for a reservation: count how many seats it occupies (the
+  // destination must match), then close the detail sheet.
+  const handleStartMove = (reservationId: string) => {
+    const count = inventoryItems.filter(i => getActiveReservation(i)?.id === reservationId).length || 1
+    setMoveError(null)
+    setMovingRes({ id: reservationId, count })
+    setSelectedItem(null)
+    setSelectedItemIsPool(false)
+    setSelectedItemIsGroupExtra(false)
+  }
+
+  // A tap while in move mode → resolve the destination seat(s) and relocate.
+  const handleMoveDestination = (item: InventoryItem) => {
+    if (!movingRes) return
+    setMoveError(null)
+    if (getBedState(item) !== 'available') { setMoveError(t('moveDestOccupied')); return }
+
+    let destIds: string[]
+    if (movingRes.count === 1) {
+      destIds = [item.id]
+    } else {
+      // N-seat booking → needs a fully-free group of the same size. Include the
+      // group's EXTRA (pool) members: a group booking's footprint counts them, so
+      // the destination group must too (e.g. a "group of 3" = 2 active + 1 extra).
+      const grp = item.sunbedGroupId
+        ? inventoryItems.filter(i => i.sunbedGroupId === item.sunbedGroupId)
+        : []
+      const allFree = grp.length > 0 && grp.every(i => getBedState(i) === 'available')
+      if (grp.length !== movingRes.count || !allFree) {
+        setMoveError(t('moveDestSize', { n: movingRes.count }))
+        return
+      }
+      destIds = grp.map(i => i.id)
+    }
+
+    const resId = movingRes.id
+    startMoveTransition(async () => {
+      const res = await moveReservationToSeats(site.id!, resId, destIds, accessKey)
+      if (res.status === 'ok') {
+        setMovingRes(null)
+        router.refresh()
+      } else {
+        setMoveError(res.errors?.[0] || 'Move failed')
+      }
+    })
+  }
+
   // ── Resolve the visible destination from the switcher selection ───────────
   const hasRentals = !!site.features?.includes('rentals')
   const showRentals = selectedView === 'rentals' && hasRentals
@@ -411,6 +468,25 @@ export default function ManageView({
         />
       )}
 
+      {/* Move-mode banner — tap a free seat to relocate the picked reservation */}
+      {movingRes && (
+        <div className="mb-2 px-3 py-2 rounded-xl border-2 border-blue-300 dark:border-blue-800/40 bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-200 text-sm">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-semibold">
+              {movingRes.count > 1 ? t('movePromptGroup', { n: movingRes.count }) : t('movePrompt')}
+            </span>
+            <button
+              type="button"
+              onClick={() => { setMovingRes(null); setMoveError(null) }}
+              className="flex-shrink-0 px-3 min-h-[36px] rounded-lg border border-blue-300 dark:border-blue-700 active:bg-blue-100 dark:active:bg-blue-900/40 font-semibold"
+            >
+              {t('moveCancel')}
+            </button>
+          </div>
+          {moveError && <div className="mt-1 text-red-600 dark:text-red-400">{moveError}</div>}
+        </div>
+      )}
+
       {/* One destination at a time — the selected parcel (pan/zoom canvas), or
           the rentals view (normal vertical scroll). */}
       {showRentals ? (
@@ -448,6 +524,7 @@ export default function ManageView({
             ty={ty}
             wasPannedRef={wasPannedRef}
             onSelectItem={(item, isPool, isGroupExtra) => {
+              if (movingRes) { handleMoveDestination(item); return }
               setSelectedItem(item)
               setSelectedItemIsPool(isPool)
               setSelectedItemIsGroupExtra(isGroupExtra)
@@ -487,6 +564,7 @@ export default function ManageView({
           onPoolSeatRemoved={() => { setSelectedItem(null); setSelectedItemIsPool(false); setSelectedItemIsGroupExtra(false); router.refresh() }}
           onGroupSeatAdded={() => { router.refresh() }}
           onGroupSeatRemoved={() => { setSelectedItem(null); setSelectedItemIsPool(false); setSelectedItemIsGroupExtra(false); router.refresh() }}
+          onMove={handleStartMove}
         />
       )}
 

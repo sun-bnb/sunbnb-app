@@ -27,6 +27,7 @@ import {
   markNoShow,
   updateReservationNotes,
   moveReservation,
+  moveReservationToSeats,
   blockBed,
   unblockBed,
   holdBed,
@@ -289,6 +290,12 @@ export const GATED_ACTIONS: GatedAction[] = [
     kind: 'action',
     gate: 'token-or-session',
     invoke: (accessKey?) => moveReservation(SITE_ID, RES_ID, [ITEM_ID], accessKey),
+  },
+  {
+    name: 'manage.moveReservationToSeats',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => moveReservationToSeats(SITE_ID, RES_ID, [ITEM_ID], accessKey),
   },
   {
     name: 'manage.blockBed',

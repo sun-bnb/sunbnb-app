@@ -253,6 +253,19 @@ branching the expected lane by payment class.
   Rewire user app (existing references) and swap the `issueRefundPlaceholder` in
   `manage/actions.ts:cancelReservation` for the real call. Blast radius: `@repo/data`, both apps,
   both apps' mocks. Must go through `data-dev` + architecture pass before coding.
+- ☐ **P8 — Move / Cambio de Lugar (tap-to-move).** Wire the manage-page UI for relocating an
+  occupancy to a free seat, modelled on Alonso's `ul()` (positional 1:1 transfer that preserves
+  identity/clock/revenue, frees the origin, no money movement). The server primitive
+  (`moveReservationWithConflictGuard`) already exists; this adds a **count-preserving**
+  `moveReservationToSeats` action (validates `dest.length === reservation.items.length`, no group
+  auto-expansion — unlike the legacy `moveReservation`) + a **move-mode** UI: occupied bed → Move →
+  tap a free destination (single → 1:1; pair/group → a fully-free group of the same size) → relocate.
+  Invoices are untouched (InvoiceLine has no seat FK — it's immutable text + amounts; the receipt
+  keeps the original seat number, which is correct). Move offered on Reserved/Checked-in/Walk-in/Comp;
+  destination must be free (no swap-onto-occupied in v1).
+- ☐ **Manage multiselect (Alonso gap, prerequisite work).** The staff UI has no multi-seat
+  selection. Needed for N-seat moves to *non-grouped* destinations (tap-to-move v1 only relocates a
+  pair/group onto an equally-sized free group), and for bulk comp/block/reserve. Its own slice.
 - 💤 **Backlog (out of scope, noted for continuity):** daily per-employee till / cash-close +
   floor-staff attribution (Alonso lessons 3–4); realtime push transport; plain CSV/TXT export +
   rolling-window accounting lens. These live in `.claude/alonso/model/synthesis-sunbnb.md` and
@@ -489,6 +502,29 @@ branching the expected lane by payment class.
   (`migrate status` showed it as the only pending; `migrate deploy` applied it + regenerated the
   client; verified `Reservation.is_comp` exists on test). Pre-push hook unblocked for `main`. Still
   owed before promote: ES/FI copy review; and P7b (real refund — Cancel still placeholdered).
+
+- **2026-06-18** — Shipped to prod since the last log: **P7b real refund** (not the planned
+  user-app extraction — a self-contained `@repo/data/refund.ts` `issueReservationRefund`, a manual
+  decoupled `refundReservation` action + durable `Reservation.refundedAt`, the **`refunds.write`
+  OAuth scope fix**, and an **"Enable refunds" re-consent flow** with same-origin `returnTo`);
+  **dark mode** (manage-only dark chrome + persisted toggle, seat colors preserved); and the
+  **zoom/pan rework** (transform `translate+scale` canvas — pinch anywhere / 2D pan / wheel-to-cursor,
+  fit-to-width on open, top-aligned, replaces CSS `zoom` which scaled inconsistently on mobile).
+  All committed, promoted to test, and deployed to production. ES/FI copy still machine-translated
+  (no NEW user-facing strings in the dark/zoom delta).
+- **2026-06-18** — **P8 (Move) design locked with the user.** Studied Alonso's `ul()` /
+  Cambio de Lugar ([[reservations-and-rentals]] §"Cambio de Lugar"): a positional 1:1 transfer that
+  copies bed state to the destination, frees the origin, **rewrites the open history row in place**
+  (preserving identity + running clock + revenue — no −€8/+€8). Mapped to Sunbnb: `moveReservation`
+  already keeps the same `Reservation` row, so identity/`checkedInAt`/payment/Invoice are preserved
+  for free, and it's race-safe (vs Alonso's last-write-wins) — but it has **no UI caller** and
+  **auto-expands the destination's group** (would grow a single booking into a pair). Decisions:
+  build a **count-preserving** `moveReservationToSeats` (validate `dest.length === origin items
+  length`, no expansion) + **tap-to-move** UI (single → any free seat; pair/group → a fully-free
+  same-size group; non-grouped N-seat destinations wait on multiselect). Move on
+  Reserved/Checked-in/Walk-in/Comp; destination must be free. **Invoices untouched** — `InvoiceLine`
+  has no seat FK, the seat is captured as immutable description text, so the receipt keeps the
+  original seat number (correct). Recorded multiselect as a separate gap.
 
 ## Open decisions
 

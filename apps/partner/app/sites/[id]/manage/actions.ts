@@ -389,6 +389,77 @@ export async function moveReservation(
   return { status: 'ok' }
 }
 
+// ─── Move reservation to exact seats (tap-to-move / Cambio de Lugar) ─────────
+
+/**
+ * Relocate an occupancy to an EXACT set of destination seats, count-preserving
+ * (Alonso's `ul()`: destination.length must equal the reservation's seat count).
+ *
+ * Unlike `moveReservation`, this does NOT auto-expand the destination's group —
+ * the caller passes the precise destination ids (a single seat, or a same-size
+ * free group). That keeps a 1-seat booking 1 seat (auto-expansion would grow it
+ * onto a destination's pair partner). The same `Reservation` row is re-pointed,
+ * so identity, `checkedInAt` clock, payment, and the Invoice are all preserved;
+ * no money moves. Race-safe via `moveReservationWithConflictGuard`.
+ */
+export async function moveReservationToSeats(
+  siteId: string,
+  reservationId: string,
+  destItemIds: string[],
+  accessKey?: string
+) {
+  if (!destItemIds.length) {
+    return { status: 'error', errors: ['Select a destination'] }
+  }
+  if (destItemIds.length > 20) {
+    return { status: 'error', errors: ['Too many items (max 20)'] }
+  }
+
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const reservation = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    select: { siteId: true, operationalStatus: true, items: { select: { id: true } } },
+  })
+  if (!reservation || reservation.siteId !== siteId) {
+    return { status: 'error', errors: ['Reservation not found'] }
+  }
+  if (([OP_NO_SHOW, OP_DEPARTED] as string[]).includes(reservation.operationalStatus)) {
+    return { status: 'error', errors: ['Cannot move a completed reservation'] }
+  }
+
+  // Count-preserving 1:1 relocate — the destination must hold exactly the same
+  // number of seats the booking occupies.
+  if (destItemIds.length !== reservation.items.length) {
+    return { status: 'error', errors: ['Destination must be the same number of seats'] }
+  }
+
+  // Destinations must exist on this site and be real seats — active (regular) OR
+  // pool (group-extra / overflow) seats, since a group booking can span extras.
+  const destItems = await prisma.inventoryItem.findMany({
+    where: { id: { in: destItemIds }, siteId, status: { in: ['active', 'pool'] } },
+    select: { id: true },
+  })
+  if (destItems.length !== destItemIds.length) {
+    return { status: 'error', errors: ['Some destination seats are not available'] }
+  }
+
+  // moveReservationWithConflictGuard re-points the reservation's items to exactly
+  // destItemIds inside a $transaction with FOR UPDATE + a self-excluding conflict
+  // check — no double-book window.
+  const result = await moveReservationWithConflictGuard(reservationId, destItemIds)
+  if (result.outcome === 'conflict') {
+    return { status: 'error', errors: ['Destination is already reserved for this period'] }
+  }
+  if (result.outcome === 'not_found') {
+    return { status: 'error', errors: ['Reservation not found'] }
+  }
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
+}
+
 // ─── Block bed (maintenance / VIP hold) ─────────────────────────────────────
 
 export async function blockBed(
