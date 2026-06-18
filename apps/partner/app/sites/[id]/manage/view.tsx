@@ -40,6 +40,10 @@ const ZOOM_MAX = 2.5
 const ZOOM_STEP = 0.25
 // Default open zoom — fraction of fit-to-width, so the parcel shows with margins.
 const DEFAULT_ZOOM_RATIO = 0.8
+// Floor for the open zoom. Parcels wider than the viewport would otherwise open
+// at fit-to-width × ratio (e.g. 16–34% on a phone) — uncomfortably small. Floor
+// it here so a wide parcel opens at a readable zoom and the user pans to the rest.
+const MIN_OPEN_ZOOM = 0.4
 const TAP_THRESHOLD = 6 // px of pointer travel before a gesture counts as pan, not tap
 const LONG_PRESS_MS = 450 // hold a seat this long (without moving) to enter multiselect
 
@@ -224,8 +228,9 @@ export default function ManageView({
     const { w: cw } = contentSizeRef.current
     if (!vp || !cw) return
     // Open at 80% of fit-to-width so the whole parcel shows with side margins,
-    // not edge-to-edge.
-    const fit = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, (vp.clientWidth / cw) * DEFAULT_ZOOM_RATIO))
+    // not edge-to-edge — but never below MIN_OPEN_ZOOM, so a parcel much wider
+    // than the viewport opens at a readable zoom (and pans) instead of tiny.
+    const fit = Math.min(ZOOM_MAX, Math.max(MIN_OPEN_ZOOM, (vp.clientWidth / cw) * DEFAULT_ZOOM_RATIO))
     commit(fit, 0, 0) // clampAxis centers
   }
 
