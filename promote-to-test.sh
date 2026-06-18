@@ -26,8 +26,10 @@ echo "==> [2/6] Schema captured by migrations? (local DB vs schema.prisma)"
 echo "==> [3/6] TEST database migration status"
 # `prisma migrate status` exits non-zero when migrations are pending (the normal
 # pre-promote state) — informational only, so don't let it trip `set -e`. The
-# actual migrate at [5/6] still fails loudly on a real problem.
-( cd "$DATA" && npm run migrate:status:test ) || true
+# actual migrate at [5/6] still fails loudly on a real problem. `-s` keeps the
+# Prisma pending-list output but suppresses npm's "npm error code 1" noise (the
+# non-zero exit is expected and swallowed by `|| true`).
+( cd "$DATA" && npm run -s migrate:status:test ) || true
 
 if [ "${SKIP_TESTS:-0}" = "1" ]; then
   echo "==> [4/6] lint + unit + integration tests SKIPPED (SKIP_TESTS=1)"
