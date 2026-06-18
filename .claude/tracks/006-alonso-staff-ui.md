@@ -3,7 +3,7 @@ id: 006-alonso-staff-ui
 title: Alonso → Staff UI Migration
 status: active
 created: 2026-06-17
-updated: 2026-06-17
+updated: 2026-06-18
 worktree: null
 ---
 
@@ -163,42 +163,28 @@ branching the expected lane by payment class.
 
 ## Resume here
 
-- **Multiselect is COMPLETE (2026-06-18).** Slices 1–2 (selection mechanics + creation/free verbs),
-  the paid lane (Check-in/No-show/Depart/Cancel, ⚠-confirmed, non-silent paid cancel), and bulk
-  Move (queue of single moves) all shipped in `view.tsx`. P8 single tap-to-move was already done.
-  The Alonso staff-UI feature set is now at parity. **Next session, the only outstanding work is the
-  copy-review gate before promote** (accumulated ES/FI machine translations — see below) and an
-  optional cleanup of now-unused `bulkBlock/bulkComp/bulkReserve/bulkRent` SiteManage i18n keys
-  (the sheet renders BedDetail `tb` labels instead).
-- **P7b — refund extraction (DONE 2026-06-18).** `issueReservationRefund` lives in
-  `@repo/data/refund`; `manage/actions.ts:cancelReservation`/`refundReservation` wired; manual
-  refund + "Enable refunds" re-consent in the cancel dialog. (Superseded the placeholder note below.)
-- **P7b — NEXT (cross-app refund extraction).** P7 shipped the partner `cancelReservation` action
-  (status → CANCELED, `revalidatePath`) with a loud `issueRefundPlaceholder` NO-OP stub. The real
-  work: extract `issueRefund` / `getPaymentStatus` from `apps/user/app/api/_lib/payment-provider.ts`
-  into `@repo/data` (a data-dev + architecture pass — blast radius is both apps + `@repo/data`
-  exports), then swap the `issueRefundPlaceholder` call in `manage/actions.ts:cancelReservation` for
-  the real thing. **The manage-page cancel is NOT deployable until P7b completes.** Until then, the
-  action sets the status but does not issue a refund. See Log 2026-06-17 P7 entry for details.
-- **Copy review owed before `promote-to-test`:** new i18n keys `held`/`release`/`cancelReservation`/
-  `back`/`confirmNoShow`/`confirmCancel`/`confirmDepart` in BedDetail have first-pass ES/FI machine
-  translations — flag for human review per `.claude/rules/deploys.md` user-facing copy gate. Prior
-  outstanding keys: `rent`/`rentDays` (from P6).
-- **Owed before any `main` push:** `migrate:test` (Neon TEST DB) for the `isComp` migration
-  (`20260617135331_add_reservation_iscomp`). Pre-push hook enforces this.
-- **P5 — `desactivada` out-of-service lifecycle is DEFERRED (optional).** Today's `blockBed` /
-  `unblockBed` (operationalStatus='blocked') already behaves as a workable out-of-service state —
-  ephemeral block for maintenance, deleted on unblock. The conceptual difference from Alonso's
-  `desactivada` (sticky, one-way exit) is a UX/lifecycle refinement, not a missing capability.
-  Revisit only if the operator workflow reveals a real friction. No data changes required to defer.
-- **Roadmap is essentially complete.** P1–P4 + P6 all shipped. P5 is the only open item and is
-  explicitly deferred pending user feedback. The track is in a stable, shippable state.
-- **`migrate:test` DONE (2026-06-17):** the `isComp` migration (`20260617135331_add_reservation_iscomp`)
-  is now applied to the Neon TEST DB (verified `Reservation.is_comp` exists). The pre-push hook is
-  unblocked for a `main` push. `RESERVATION_HELD` needed no migration (string-value status only).
-- **Copy review owed before `promote-to-test`:** the new i18n keys `rent` / `rentDays` in
-  `BedDetail` have first-pass ES/FI machine translations (`Alquilar` / `Vuokraa`) — flag for
-  human review per the user-facing copy gate in `.claude/rules/deploys.md`.
+- **Track is functionally COMPLETE and LIVE on test + production (promoted manually 2026-06-18).**
+  Every roadmap item shipped: P1 shell/toolbar/kill-sectioned-view, P2–P4 bed-state model (hold /
+  comp / walk-in / block), P6 walk-in/reserve relabel, P7 paid-booking guard + manage cancel, P7b
+  refund (`@repo/data/refund` + manual refund / "Enable refunds" re-consent), P8 tap-to-move, the
+  full **multiselect** (selection mechanics → creation/free verbs → paid lane → bulk Move), plus
+  the dark-chrome toggle, transform pan/zoom canvas, and the 80%-of-fit default zoom. The Alonso
+  staff-UI feature set is at parity.
+- **⚠ ONE follow-up — ES/FI copy review, NOW IN PRODUCTION unreviewed.** The whole track's Spanish
+  and Finnish strings are first-pass machine translations that shipped to prod ahead of the
+  `.claude/rules/deploys.md` copy-review gate (the manual promote bypassed it). Spanish matters most
+  (target market is Spanish-speaking beach venues). Keys to spot-check live in `messages/es.json` +
+  `messages/fi.json` under the `SiteManage` and `BedDetail` namespaces — the move/multiselect/refund
+  families: `move`/`movePrompt*`/`moveQueueRemaining`/`moveDest*`, `selectedCount`/`bulk*`/
+  `bulkCancelPaidNote`, `issueRefund`/`refunded`/`enableRefunds`, `held`/`release`/`rent`/`rentDays`,
+  `confirmNoShow`/`confirmCancel`/`confirmDepart`/`back`/`toggleTheme`. Fix-forward via a normal
+  `main`→promote→deploy when reviewed.
+- **Optional cleanup:** the `bulkBlock`/`bulkComp`/`bulkReserve`/`bulkRent` SiteManage i18n keys are
+  now dead (the multiselect sheet renders BedDetail `tb` labels). Safe to delete in all three locales.
+- **P5 — `desactivada` out-of-service lifecycle DEFERRED (optional).** Today's `blockBed`/`unblockBed`
+  (operationalStatus='blocked') already works as an ephemeral out-of-service state. Alonso's sticky
+  one-way `desactivada` is a UX refinement, not a missing capability — revisit only on real operator
+  friction. No data changes required to defer.
 
 ## Roadmap
 
