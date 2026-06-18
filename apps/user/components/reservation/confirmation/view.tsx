@@ -5,7 +5,6 @@ import logger from '@/utils/logger'
 import { requestReceipt } from '@/app/reservations/[id]/receipt/actions'
 
 import LaunchIcon from '@mui/icons-material/Launch'
-import QrCode2Icon from '@mui/icons-material/QrCode2'
 import CircularProgress from '@mui/material/CircularProgress'
 import { useTranslations } from 'next-intl'
 import { useSession } from 'next-auth/react'
@@ -100,7 +99,6 @@ export default function ReservationConfirmationView({
   const cfg = STATUS_CONFIG[effectiveStatus] ?? STATUS_CONFIG.default!
 
   const seats = reservation.items?.map(item => formatSeat(item)).join(', ')
-  const showQr = status === RESERVATION_COMPLETE || status === 'reserved'
   const showReceipt = status === RESERVATION_COMPLETE && !isUnpaid
 
   return (
@@ -148,26 +146,6 @@ export default function ReservationConfirmationView({
             </div>
           )}
         </div>
-
-        {/* ── QR section ── */}
-        {showQr && (
-          <>
-            <div className="relative h-6 flex items-center">
-              <div className="absolute -left-3 w-6 h-6 rounded-full bg-cream" />
-              <div className="absolute -right-3 w-6 h-6 rounded-full bg-cream" />
-              <div className="w-full border-t-2 border-dashed border-neutral-200 mx-5" />
-            </div>
-            <div className="px-6 pt-4 pb-5 flex flex-col items-center">
-              <button
-                onClick={() => window.open(authUrl(`/reservations/${reservation.id}/pass`), '_blank')}
-                className="text-brand-gold active:scale-95 transition-transform"
-              >
-                <QrCode2Icon sx={{ fontSize: 72 }} />
-              </button>
-              <span className="mt-1 text-[10px] text-neutral-400 tracking-wide">{t('Tap to open pass')}</span>
-            </div>
-          </>
-        )}
 
         {/* ── Receipt footer ── */}
         {showReceipt && (
