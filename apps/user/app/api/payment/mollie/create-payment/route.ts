@@ -16,17 +16,10 @@
  */
 
 import prisma from '@repo/data/PrismaCient'
-import {
-  loadFeeContext,
-  resolveServiceFee,
-  calculateServiceFeeAmount,
-  round,
-} from '@repo/data/payment'
-import { isTestMode } from '@repo/data/env'
-import { RESERVATION_PENDING, RESERVATION_PROCESSING, RESERVATION_PAYMENT_FAILED } from '@repo/data/reservation-status'
+import { createReservationMolliePayment } from '@repo/data/reservation-payment'
+import { RESERVATION_PENDING } from '@repo/data/reservation-status'
 import { NextRequest } from 'next/server'
 import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
-import { getMollieClientForPartner, getValidMollieToken } from '@/app/api/_lib/mollie'
 import { isValidEntityId } from '@/app/api/_lib/payment-ids'
 
 export async function POST(request: NextRequest) {
@@ -85,161 +78,32 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Reservation is not in pending state' }, { status: 400 })
   }
 
-  // Calculate amount from DB (don't trust client-supplied amount)
-  const paymentAmount = reservation.paymentAmount ?? 0
-  if (paymentAmount <= 0) {
-    return Response.json({ error: 'Invalid payment amount' }, { status: 400 })
-  }
-
-  // ── Load partner's Mollie credentials ────────────────────────────────────
-  const { site, partnerAccount, settings } = await loadFeeContext(
-    reservation.siteId,
-    'sunbed-rental'
-  )
-
-  if (!partnerAccount?.mollieAccessToken) {
-    return Response.json(
-      { error: 'Partner has not connected their Mollie account' },
-      { status: 400 }
-    )
-  }
-
-  // ── Ensure the access token is valid (auto-refresh if expired) ───────────
-  let validAccessToken: string
-  try {
-    validAccessToken = await getValidMollieToken(partnerAccount.userId)
-  } catch (err) {
-    console.error('[MolliePayment] Token refresh failed:', err)
-    return Response.json(
-      { error: 'Partner Mollie session has expired. Please ask the merchant to reconnect their Mollie account.' },
-      { status: 401 }
-    )
-  }
-
-  // ── Compute application fee (our platform commission) ────────────────────
-  const tier = partnerAccount.subscription?.plan?.tier ?? null
-  const matchedFee = resolveServiceFee(
-    site.serviceFees,
-    partnerAccount.serviceFees,
-    settings?.serviceFees ?? [],
-    'sunbed-rental',
-    tier
-  )
-  const applicationFeeAmount = round(calculateServiceFeeAmount(matchedFee, paymentAmount))
-
-  // Mollie expects amounts as strings with 2 decimal places (e.g. "10.00")
-  const amountValue = paymentAmount.toFixed(2)
-  const feeValue = applicationFeeAmount.toFixed(2)
-
   // Build webhook URL using WHATWG URL API (avoids DEP0169 url.parse warning)
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
     || `${request.headers.get('x-forwarded-proto') || 'https'}://${request.headers.get('x-forwarded-host') || request.headers.get('host') || 'localhost:3002'}`
   const webhookUrl = new URL('/api/webhooks/mollie', baseUrl).toString()
 
-  // Create payment on the PARTNER's Mollie account (partner = Merchant of Record)
-  const mollie = getMollieClientForPartner(validAccessToken)
+  // Fee calc, profile resolution, Mollie create, and paymentRef/status storage
+  // all live in the shared @repo/data helper (reused by the partner QR collect
+  // flow). Map its `reason` back to this route's existing HTTP status codes so
+  // the consumer behavior is unchanged.
+  const result = await createReservationMolliePayment(reservationId, { redirectUrl, webhookUrl })
 
-  // ── Resolve profile ID dynamically ───────────────────────────────────────
-  let profileId = partnerAccount.mollieProfileId
-  if (!profileId) {
-    try {
-      const profiles = await mollie.profiles.page()
-      const active = profiles.find((p: any) => p.status === 'verified' || p.status === 'unverified')
-      if (!active) {
-        return Response.json(
-          { error: 'Merchant has no active website profile. Please create one in the Mollie Dashboard.' },
-          { status: 400 }
-        )
-      }
-      profileId = active.id
-    } catch (err) {
-      console.error('[MolliePayment] Failed to fetch profiles:', err)
-      return Response.json(
-        { error: 'Failed to retrieve merchant website profiles' },
-        { status: 500 }
-      )
+  if (result.status === 'error') {
+    const statusByReason: Record<string, number> = {
+      invalid_amount: 400,
+      no_mollie: 400,
+      token: 401,
+      no_profile: 400,
+      provider_422: 422,
+      provider_error: 500,
+      no_checkout: 500,
     }
-  }
-
-  // When using OAuth tokens, Mollie defaults to live mode. In development/test
-  // environments we must pass testmode: true so that pending-boarding methods work.
-
-  let payment
-  try {
-    payment = await mollie.payments.create({
-      profileId: profileId!,
-      amount: {
-        value: amountValue,
-        currency: 'EUR',
-      },
-      description: `Reservation ${reservationId}`,
-      redirectUrl,
-      webhookUrl,
-      metadata: JSON.stringify({
-        type: 'reservation',
-        entityId: reservationId,
-        siteId: reservation.siteId,
-      }),
-      // Platform commission — routed to our organization automatically by Mollie
-      ...(applicationFeeAmount > 0 && {
-        applicationFee: {
-          amount: {
-            value: feeValue,
-            currency: 'EUR',
-          },
-          description: 'Platform fee',
-        },
-      }),
-      ...(isTestMode() && { testmode: true }),
-    })
-  } catch (error: any) {
-    console.error('[MolliePayment] Mollie error:', {
-      title: error?.title,
-      detail: error?.detail,
-      field: error?.field,
-      statusCode: error?.statusCode,
-      message: error?.message,
-    })
-    // Canonical terminal status (NOT the ad-hoc 'error' string): payment_failed
-    // is in TERMINAL_STATUSES so the cleanup cron GCs it after 24h, and the
-    // partner manage grid renders it as a removable failed seat (red ✕) rather
-    // than an orphan that blocks the seat forever.
-    await prisma.reservation.update({
-      where: { id: reservationId },
-      data: { status: RESERVATION_PAYMENT_FAILED },
-    })
-
-    // 422 — typically "payment method not activated" or missing profile
-    if (error?.statusCode === 422) {
-      return Response.json(
-        {
-          error: 'Payment could not be processed. Please try again or contact support.',
-        },
-        { status: 422 }
-      )
-    }
-
-    return Response.json({ error: 'Failed to create payment' }, { status: 500 })
-  }
-
-  // Store paymentRef server-side (atomic — no client round-trip needed)
-  await prisma.reservation.update({
-    where: { id: reservationId },
-    data: {
-      paymentRef: payment.id,
-      status: RESERVATION_PROCESSING,
-    },
-  })
-
-  // Mollie returns a checkout URL where the customer completes the payment
-  const checkoutUrl = payment.getCheckoutUrl()
-  if (!checkoutUrl) {
-    console.error('[MolliePayment] No checkout URL returned for payment:', payment.id)
-    return Response.json({ error: 'Failed to get checkout URL' }, { status: 500 })
+    return Response.json({ error: result.error }, { status: statusByReason[result.reason] ?? 500 })
   }
 
   return Response.json({
-    checkoutUrl,
-    paymentId: payment.id,
+    checkoutUrl: result.checkoutUrl,
+    paymentId: result.paymentId,
   })
 }

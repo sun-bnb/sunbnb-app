@@ -185,6 +185,11 @@ const SUBMODULE_SPECS: SubmoduleSpec[] = [
     realFile: 'refund.ts',
     mockFile: 'refund.ts',
   },
+  {
+    name: 'reservation-payment',
+    realFile: 'reservation-payment.ts',
+    mockFile: 'reservation-payment.ts',
+  },
 ]
 
 describe.each(SUBMODULE_SPECS)('$name mock — function superset', ({ name, realFile, mockFile }) => {
