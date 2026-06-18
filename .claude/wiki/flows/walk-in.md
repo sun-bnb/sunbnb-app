@@ -4,22 +4,23 @@ slug: walk-in
 status: stable
 sources:
   - apps/partner/app/sites/[id]/manage/actions.ts
-  - apps/partner/CLAUDE.md
+  - apps/partner/app/api/reservations-cleanup/route.ts
   - packages/data/src/reservation-status.ts
+  - apps/partner/CLAUDE.md
 related:
   - entity:reservation
   - subsystem:auth
   - flow:reservation-payment
-last_verified: 2026-05-21
+last_verified: 2026-06-18
 ---
 
 # Flow: Walk-In / On-Site Management
 
-The partner manage page (`apps/partner/app/sites/[id]/manage`) operates the on-site sunbed grid: walk-in reservations, check-ins, departures, no-shows, bed-blocking. **Token-gated, not session-authenticated** — so on-site staff can use it without an account.
+The partner manage page (`apps/partner/app/sites/[id]/manage`) operates the on-site sunbed grid: walk-ins, holds, comps, bed-blocks, check-ins, departures, no-shows, plus rental pickup/return. **Token-gated, not session-authenticated** — so on-site staff can use it without an account.
 
 ## Trigger
 
-Staff opens `/sites/[id]/manage?accessKey=<token>` (or `/sites/[id]/manage` with stored token cookie). All server actions on this page accept an optional `accessKey` parameter.
+Staff opens `/sites/[id]/manage?accessKey=<token>` (or `/sites/[id]/manage` with a stored token cookie). All server actions on this page accept an optional `accessKey` parameter.
 
 ## Pre-conditions
 
@@ -28,80 +29,111 @@ Staff opens `/sites/[id]/manage?accessKey=<token>` (or `/sites/[id]/manage` with
 
 The token check is **not** session auth — it allows un-logged-in staff/devices to manipulate state on a specific site. Sessions still work in parallel for the site owner.
 
-## Available actions
+## The core model: every occupancy is one `Reservation` row
 
-All in `apps/partner/app/sites/[id]/manage/actions.ts`. Each validates the token (or the session owner) before mutating.
+Every way to occupy a bed on the floor — walk-in, hold, comp, block, or an inbound online booking — is **a single `Reservation` row** carrying three orthogonal axes:
 
-| Action | What it does | Resulting status |
+| Axis | Field | Answers | Time-driven? |
+|---|---|---|---|
+| **Booking period** | `from` → `to` | which calendar days the bed is held | yes — drives grid visibility + GC eligibility |
+| **Operational status** | `operationalStatus` (`OP_*`) | what's happening within the stay | no — event-driven (operator taps) |
+| **Payment status** | `status` | how/whether money changed hands | mostly fixed at creation |
+
+A bed renders occupied when a **non-terminal** reservation's `[from, to]` overlaps **today**. There is no "indefinite" occupancy — everything is a bounded window.
+
+## Actions: occupancy *creators* vs *transitions*
+
+All in `apps/partner/app/sites/[id]/manage/actions.ts`; each validates the token (or session owner) first. The key split: a handful of actions **create** a new today-scoped row; the rest **mutate or delete** an existing one.
+
+### Creators — insert a new today-scoped `Reservation`
+
+| Action | `status` / `operationalStatus` | Period | Notes |
+|---|---|---|---|
+| `reserveItem(siteId,itemId,guestName?,…,until?)` | `paid-in-cash` / `walked-in`, `checkedInAt`=now | today, **or `until` +1..90d** | The **only** multi-day floor action |
+| `holdBed(…)` | `held` / `expected`, amount 0 | today only | "Pencil someone in", no payment |
+| `compBed(…)` | `paid-in-cash` / `comp`, `isComp:true`, amount 0 | today only | Free occupancy; amount 0 ⇒ no invoice |
+| `blockBed(…,notes?)` | `paid-in-cash` / `blocked` | today only | Maintenance / out-of-service |
+
+All four auto-include the bed's SunbedGroup/pair siblings and run through `reserveWithConflictGuard` (`@repo/data/reservations`) — availability-check + insert in one `$transaction` with `SELECT … FOR UPDATE`, so a sibling already booked is rejected, not double-booked.
+
+### Transitions — mutate the existing row (no new row)
+
+| Action | Effect | Guard |
 |---|---|---|
-| `reserveItem(siteId, itemId, guestName?, …, until?)` | Create a walk-in for one item (+ its pair). Starts **today**; optional `until` extends the stay across multiple days (max 90) | `status: paid_in_cash`, `operationalStatus: walked-in`, `checkedInAt` set |
-| `unreserveItem(reservationId)` | Cancel a not-yet-paid reservation | terminal cancel |
-| `checkInReservation(reservationId)` | Mark guest as arrived | `operationalStatus: checked-in`, `checkedInAt` set |
-| `markDeparted(reservationId)` | Mark guest as departed | `operationalStatus: departed`, `departedAt` set |
-| `markNoShow(reservationId)` | Mark no-show after deadline | `operationalStatus: no-show` |
-| `updateReservationNotes(reservationId, notes)` | Edit `internalNotes` | (notes only, no status change) |
-| `moveReservation(reservationId, newItemId)` | Reassign a reservation to a different bed | (link change) |
-| `blockBed(siteId, itemId, notes?)` | Mark a bed (+ its pair) unavailable for **today** (maintenance, broken, reserved-for-staff) | A `Reservation` row with `operationalStatus: blocked`. Counts as `BLOCKING_STATUSES` |
-| `unblockBed(reservationId)` | Remove a bed-block | terminal cancel |
-| `markRentalPickedUp(rentalBookingId)` | Rental equipment handed over | `operationalStatus: picked-up`, `pickedUpAt` set |
-| `markRentalReturned(rentalBookingId)` | Rental equipment returned | `operationalStatus: returned`, `returnedAt` set |
-| `createWalkInRental(siteId, rentalItemId, duration, quantity, guestName?)` | On-site rental booking | See `[[flow:rental-booking]]` |
+| `checkInReservation` | `expected` → `checked-in` (+`checkedInAt`) | from `expected` only |
+| `markDeparted` | → `departed` (+`departedAt`) | from `checked-in`/`walked-in` |
+| `markNoShow` | → `no-show` | from `expected` only |
+| `convertHoldToWalkIn(…,until?)` | held row → `paid-in-cash`/`walked-in` **in place**; optional `until` extend (race-safe) | finds the `held` row |
+| `moveReservation` / `moveReservationToSeats` | re-point items to new beds — **same `id`**, clock/payment/invoice preserved | not `departed`/`no-show` |
+| `updateReservationNotes` | edit `internalNotes` | — |
+| `refundReservation` | stamp `refundedAt`, **bed stays occupied**; idempotent | online `complete` only |
+| `cancelReservation` | `complete` → `canceled` (or `refunded` if `refundedAt`), **keeps row for audit**, frees bed | idempotent on terminal |
+
+### Deleters — remove the row, free the bed
+
+`unreserveItem` (walk-in), `releaseHold` (hold), `uncompBed` (comp), `unblockBed` (block) delete the floor row (no invoice trail). `removeFailedReservation` deletes a `payment_failed` row only (guarded so it can never touch a paid/held/active booking). Pair-mode deletes the whole reservation; single-seat mode disconnects just one item when >1 remain.
 
 ## Operational state machines
 
-Sunbed reservation operational status:
-
 ```
-expected → checked-in → departed
-        ↘ no-show
-
-walked-in → checked-in → departed
-         ↘ no-show
-
-blocked (terminal-by-purpose)
+online booking:  expected → checked-in → departed
+                         ↘ no-show
+walk-in:         walked-in → departed
+                          ↘ no-show            (already present — no check-in step)
+hold:            expected → convertHoldToWalkIn → walked-in → …
+                         ↘ no-show / releaseHold
+block, comp:     single-state; cleared by unblock / uncomp
 ```
 
-Rental booking operational status:
+Transitions are **event-driven, never timed**. `Site.noShowDeadlineMinutes` only gates *eligibility* in the UI; nothing auto-fires a transition. Constants: `packages/data/src/reservation-status.ts#OP_`.
 
-```
-reserved → picked-up → returned
-```
+## Lifespan: two independent clocks
 
-Constants live in `packages/data/src/reservation-status.ts` under `OP_*`.
+How long a state "remains" has two separate answers — freeing the bed and deleting the row are decoupled:
 
-## Important rules
+1. **Freeing the bed is an operational flip.** `markDeparted`/`markNoShow` set `operationalStatus` to `departed`/`no-show`. The conflict/availability guard filters `operationalStatus notIn [departed, no-show]`, so the bed frees **immediately** — even though the row still exists as `paid-in-cash`.
+2. **Deleting the row is the cleanup cron's job.** `app/api/reservations-cleanup/route.ts` (Vercel cron, every 15 min) `deleteMany` by age:
+   - `pending`/`processing` → `createdAt` older than **15 min** (abandoned online checkouts)
+   - `payment_failed` → `createdAt` older than **24 h**
+   - `paid-in-cash` **and** `held` → `createdAt < start-of-today` **AND** `to < now`
 
-1. **`paid_in_cash` is a real payment status.** A walk-in reservation has `status: paid_in_cash` (not `pending`/`processing`). It still counts as a `BLOCKING_STATUS` for availability.
-2. **`blocked` is a real operational status** on a `Reservation` row. It's stored as a reservation (so the grid shows it) but is not a customer-facing booking. Don't email about blocked beds.
-3. **No-show transitions are deadline-driven.** `Site.noShowDeadlineMinutes` (when set) defines when an `expected` reservation becomes eligible for no-show marking. Currently a manual action, not auto-applied.
-4. **Move reservation is a link change**, not a copy. Same `id`, new `itemId` / join row. Beware of double-booking checks — the move should re-check availability for the target.
-5. **The manage page is the only public-route mutation surface in the partner app.** Every other partner action goes through Google OAuth.
-6. **Walk-ins and bed-blocks start today; only `reserveItem` extends forward.** Both set `from` to the start of today (the guest is seated now) — no back-dating. `reserveItem` takes an optional `until` to extend the stay across multiple days (capped at 90, validated as not-past); `blockBed` is today-only. Future-dated bookings are *not* made here — they go through the calendar's `createPartnerReservation` (`apps/partner/app/calendar/actions.ts`). Both auto-include the bed's **pair**, and `reserveItem` rejects the create if the item or its pair already has a non-terminal reservation overlapping any day in the range.
+So an uncleared block/comp/hold/walk-in (all `to` = end of today) is swept by the **first cron run after midnight** — that's the "until further notice" illusion. A walk-in extended with `until` survives until *that* `to` passes. Online `complete` rows are **never** GC'd — after `to` passes they simply stop overlapping today and drop off the grid, but the row is kept for invoicing/audit.
+
+## Period selection (`until`)
+
+The only period control in `/manage` (the calendar toggle in `BedDetail.tsx`), fed to exactly two actions: `reserveItem` and `convertHoldToWalkIn`. **Forward-only**: the stay always starts today (no back-dating), `until` only pushes `to` later, validated not-past and ≤ 90 days. It changes the validity window — not the type (still `paid-in-cash`/`walked-in`). Arbitrary future-dated or historical ranges are **not** creatable here — those go through the calendar's `createPartnerReservation` (`apps/partner/app/calendar/actions.ts`).
+
+## Pool seats
+
+`status:'pool'` overflow loungers (sentinel coords `(0,0)`, number `parcel*10000 + 9900 + seq`). Invisible to consumers (consumer side filters `status:'active'`) and excluded from the headline occupancy summary. `createPoolSeat`/`deletePoolSeat` manage free ones; `addSeatToGroup`/`removeGroupSeat` manage group-extras (a pool seat linked to a `SunbedGroup`). Deletion is rejected while the seat has an active (non-departed/no-show) reservation today.
 
 ## Side effects
 
-- DB writes: `Reservation` (status/operational changes), `RentalBooking` (status changes), occasional inserts for walk-in / bed-block.
-- No email by default on operational transitions — partner-side state only.
+- DB writes: `Reservation` (inserts for creators; status/operational updates for transitions), `RentalBooking`, `InventoryItem` (pool seats). `refundReservation` calls Mollie via `issueReservationRefund`.
+- No email on operational transitions — partner-side state only.
 
 ## Failure modes
 
 | Failure | Detection | Recovery |
 |---|---|---|
-| Invalid / expired `accessKey` | Action returns auth error | Staff must get a fresh token from `/security` |
-| Token scope mismatch | Action returns auth error | Token needs `resources` including `'all'` or `'manage_site'` |
-| Conflicting walk-in (item or its pair already booked for any day in the range) | Overlap check inside `reserveItem` (excludes canceled / no-show / departed) | `{ status: 'error', errors: [...] }` |
-| `markNoShow` before deadline | Action enforces it (where applicable) | Wait until eligible |
+| Invalid / expired `accessKey` | Action returns auth error | Fresh token from `/security` |
+| Token scope mismatch | Auth error | Token needs `'all'` or `'manage_site'` |
+| Conflicting create (item or sibling already booked in range) | `reserveWithConflictGuard` `outcome:'conflict'` | `{ status:'error', errors:[…] }` |
+| Refund fails (Mollie permission/403) | `refundReservation` returns `needsReconnect:true` | UI offers Mollie re-consent; cancel can still proceed |
+| Extend-via-`until` races a concurrent booking | `convertHoldToWalkIn` re-checks in a `FOR UPDATE` tx | `outcome:'conflict'` |
 
 ## Related
 
 - `[[entity:reservation]]` — the entity being mutated
 - `[[subsystem:auth]]` — token model (`SecurityToken`)
-- `[[flow:reservation-payment]]` — sibling flow (online path)
-- `[[flow:rental-booking]]` — rental-specific actions live here too
+- `[[flow:reservation-payment]]` — sibling online path
+- `[[flow:rental-booking]]` — rental pickup/return + `createWalkInRental`
 
 ## Common pitfalls
 
-- **Treating manage actions like authenticated actions.** They run without an authenticated user. Don't rely on `session.user.id` anywhere in the manage path.
-- **Bypassing the token check.** Every action validates. Don't add a new action that skips the check.
-- **Forgetting that `blocked` beds count as unavailable.** Availability service excludes them as expected; if you bypass the service, you'll double-book.
-- **Mixing sunbed and rental status constants.** Different operational chains.
+- **Assuming a state is "indefinite."** Block/comp/hold/walk-in are all today-only rows; they persist only because nobody cleared them and the cron sweeps after `to`.
+- **Conflating "bed freed" with "row deleted."** `departed`/`no-show` free the bed instantly; the row lingers until the cron GC.
+- **Treating manage actions like authenticated actions.** They run without an authenticated user — never rely on `session.user.id` in the manage path.
+- **Forgetting `blocked`/`comp`/`held` count as occupied.** They block via `BLOCKING_STATUSES`; bypassing the availability service double-books.
+- **Mixing sunbed and rental status constants.** Different operational chains (`OP_RESERVED/PICKED_UP/RETURNED`).
+- **Expecting `/manage` to make future-dated bookings.** It can't — only forward-extend a walk-in via `until`; ranged/future bookings are the calendar's job.
