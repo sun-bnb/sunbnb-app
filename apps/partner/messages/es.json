@@ -737,6 +737,7 @@
     "toggleTheme": "Alternar modo oscuro",
     "movePrompt": "Toca una hamaca libre para mover aquí",
     "movePromptGroup": "Toca un grupo libre de {n} hamacas para mover aquí",
+    "moveQueueRemaining": "{n} más después de esta",
     "moveCancel": "Cancelar",
     "moveDestOccupied": "Esa hamaca está ocupada — elige una libre",
     "moveDestSize": "Elige un grupo libre de {n} hamacas",
@@ -748,6 +749,7 @@
     "bulkRent": "Alquilar",
     "bulkFree": "Liberar",
     "bulkNoAction": "No hay acción en lote para esta selección",
+    "bulkCancelPaidNote": "Cancela las reservas pagadas de una en una para gestionar el reembolso",
     "bulkSomeFailed": "{n} no se pudieron actualizar"
   },
   "BedDetail": {

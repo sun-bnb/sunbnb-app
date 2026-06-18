@@ -163,6 +163,16 @@ branching the expected lane by payment class.
 
 ## Resume here
 
+- **Multiselect is COMPLETE (2026-06-18).** Slices 1–2 (selection mechanics + creation/free verbs),
+  the paid lane (Check-in/No-show/Depart/Cancel, ⚠-confirmed, non-silent paid cancel), and bulk
+  Move (queue of single moves) all shipped in `view.tsx`. P8 single tap-to-move was already done.
+  The Alonso staff-UI feature set is now at parity. **Next session, the only outstanding work is the
+  copy-review gate before promote** (accumulated ES/FI machine translations — see below) and an
+  optional cleanup of now-unused `bulkBlock/bulkComp/bulkReserve/bulkRent` SiteManage i18n keys
+  (the sheet renders BedDetail `tb` labels instead).
+- **P7b — refund extraction (DONE 2026-06-18).** `issueReservationRefund` lives in
+  `@repo/data/refund`; `manage/actions.ts:cancelReservation`/`refundReservation` wired; manual
+  refund + "Enable refunds" re-consent in the cancel dialog. (Superseded the placeholder note below.)
 - **P7b — NEXT (cross-app refund extraction).** P7 shipped the partner `cancelReservation` action
   (status → CANCELED, `revalidatePath`) with a loud `issueRefundPlaceholder` NO-OP stub. The real
   work: extract `issueRefund` / `getPaymentStatus` from `apps/user/app/api/_lib/payment-provider.ts`
@@ -253,7 +263,7 @@ branching the expected lane by payment class.
   Rewire user app (existing references) and swap the `issueRefundPlaceholder` in
   `manage/actions.ts:cancelReservation` for the real call. Blast radius: `@repo/data`, both apps,
   both apps' mocks. Must go through `data-dev` + architecture pass before coding.
-- ☐ **P8 — Move / Cambio de Lugar (tap-to-move).** Wire the manage-page UI for relocating an
+- ✅ **P8 — Move / Cambio de Lugar (tap-to-move). DONE 2026-06-18.** Wire the manage-page UI for relocating an
   occupancy to a free seat, modelled on Alonso's `ul()` (positional 1:1 transfer that preserves
   identity/clock/revenue, frees the origin, no money movement). The server primitive
   (`moveReservationWithConflictGuard`) already exists; this adds a **count-preserving**
@@ -263,9 +273,10 @@ branching the expected lane by payment class.
   Invoices are untouched (InvoiceLine has no seat FK — it's immutable text + amounts; the receipt
   keeps the original seat number, which is correct). Move offered on Reserved/Checked-in/Walk-in/Comp;
   destination must be free (no swap-onto-occupied in v1).
-- ☐ **Manage multiselect (Alonso gap, prerequisite work).** The staff UI has no multi-seat
-  selection. Needed for N-seat moves to *non-grouped* destinations (tap-to-move v1 only relocates a
-  pair/group onto an equally-sized free group), and for bulk comp/block/reserve. Its own slice.
+- ✅ **Manage multiselect (Alonso gap). DONE 2026-06-18.** Long-press to start; tap to toggle;
+  non-modal bottom sheet mirroring the tap dialog with intersection-of-valid-verbs. Covers bulk
+  create/comp/block/reserve/rent, free/clear, the paid lane (check-in/no-show/depart/cancel,
+  ⚠-confirmed, non-silent paid cancel), and bulk Move (queue of single moves). Three slices.
 - 💤 **Backlog (out of scope, noted for continuity):** daily per-employee till / cash-close +
   floor-staff attribution (Alonso lessons 3–4); realtime push transport; plain CSV/TXT export +
   rolling-window accounting lens. These live in `.claude/alonso/model/synthesis-sunbnb.md` and
@@ -273,6 +284,20 @@ branching the expected lane by payment class.
 
 ## Log
 
+- **2026-06-18** — **Multiselect Move + paid lane (final slice).** Extended the non-modal
+  multiselect bottom sheet (`view.tsx`) with the reservation-level verbs, mirroring the tap dialog:
+  Check-in (safe, direct), No-show / Depart / Cancel (⚠, shared confirm step reusing BedDetail
+  `tb` labels). All run via `bulkByReservation` — group selected seats by reservation, call ONCE
+  per reservation, sequentially (whole-reservation semantics). **Paid cancellations stay
+  non-silent:** bulk Cancel is hidden when any selected booking is Mollie-paid (`paymentRef`
+  starts `tr_`), with a `bulkCancelPaidNote` telling staff to cancel those one at a time (the tap
+  dialog surfaces the manual refund). **Bulk Move = a QUEUE of single moves** (`moveQueue` state):
+  relocate each distinct selected booking in turn, reusing the exact `handleMoveDestination`
+  resolution (single seat / same-size free group) and the move banner (now shows "{n} more after
+  this"). ◻Move square rides the dominant row (Rent/Check-in/Depart), standalone full-width when
+  Move is the only shared verb. New i18n: `bulkCancelPaidNote`, `moveQueueRemaining` (ES/FI
+  machine-translated — copy review owed). tsc + lint clean; 639 partner unit tests pass (incl. the
+  full auth-matrix/coverage/mock/no-money spine). Completes the multiselect work.
 - **2026-06-17** — Track created off [[track:005-alonso-beach-model]] (now done). User scoped the
   effort to the staff/manage UI, asked to borrow Alonso's simpler states + clearer chrome without
   wholesale replacement. Three forks resolved with the user: **interleave** UI+data as vertical

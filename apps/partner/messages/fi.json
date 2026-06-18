@@ -737,6 +737,7 @@
     "toggleTheme": "Vaihda tumma tila",
     "movePrompt": "Napauta vapaata paikkaa siirtääksesi tähän",
     "movePromptGroup": "Napauta vapaata {n} paikan ryhmää siirtääksesi tähän",
+    "moveQueueRemaining": "{n} lisää tämän jälkeen",
     "moveCancel": "Peruuta",
     "moveDestOccupied": "Paikka on varattu — valitse vapaa",
     "moveDestSize": "Valitse vapaa {n} paikan ryhmä",
@@ -748,6 +749,7 @@
     "bulkRent": "Vuokraa",
     "bulkFree": "Vapauta",
     "bulkNoAction": "Tälle valinnalle ei ole joukkotoimintoa",
+    "bulkCancelPaidNote": "Peru maksetut varaukset yksitellen hyvityksen hoitamiseksi",
     "bulkSomeFailed": "{n} ei voitu päivittää"
   },
   "BedDetail": {

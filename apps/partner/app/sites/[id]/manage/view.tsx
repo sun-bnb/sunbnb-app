@@ -15,6 +15,7 @@ import {
   moveReservationToSeats,
   blockBed, compBed, holdBed, reserveItem, convertHoldToWalkIn,
   unblockBed, uncompBed, releaseHold, unreserveItem, removeFailedReservation,
+  checkInReservation, markNoShow, markDeparted, cancelReservation,
 } from './actions'
 import { RESERVATION_COMPLETE, RESERVATION_HELD } from '@repo/data/reservation-status'
 
@@ -91,6 +92,10 @@ export default function ManageView({
   // many seats the booking occupies — the destination must match.
   const [movingRes, setMovingRes] = useState<{ id: string; count: number } | null>(null)
   const [moveError, setMoveError] = useState<string | null>(null)
+  // Bulk move is a QUEUE of single moves: relocate each selected booking in turn,
+  // reusing the exact tap-to-move destination logic. Holds the bookings still
+  // waiting after the one currently in `movingRes`.
+  const [moveQueue, setMoveQueue] = useState<string[]>([])
   const [, startMoveTransition] = useTransition()
 
   // ── Multiselect (slice 1: selection mechanics only) ───────────────────────
@@ -102,12 +107,14 @@ export default function ManageView({
   // Shared Guest name + multi-day period for bulk Rent (mirrors the tap dialog).
   const [bulkGuestName, setBulkGuestName] = useState('')
   const [bulkUntil, setBulkUntil] = useState('')
+  // Shared confirm step for the ⚠ bulk verbs (no-show / cancel / depart).
+  const [bulkConfirm, setBulkConfirm] = useState<'no-show' | 'cancel' | 'depart' | null>(null)
   const tomorrow = dayjs().add(1, 'day').format('YYYY-MM-DD')
   const maxUntil = dayjs().add(90, 'day').format('YYYY-MM-DD')
   const bulkDays = bulkUntil ? dayjs(bulkUntil).startOf('day').diff(dayjs().startOf('day'), 'day') + 1 : 1
   // Reset the shared inputs whenever the selection is cleared/exited.
   useEffect(() => {
-    if (selectedIds.length === 0) { setBulkGuestName(''); setBulkUntil('') }
+    if (selectedIds.length === 0) { setBulkGuestName(''); setBulkUntil(''); setBulkConfirm(null) }
   }, [selectedIds.length])
 
   // ── View switcher — one destination (parcel / rentals) at a time ──────────
@@ -388,10 +395,33 @@ export default function ManageView({
   const handleStartMove = (reservationId: string) => {
     const count = inventoryItems.filter(i => getActiveReservation(i)?.id === reservationId).length || 1
     setMoveError(null)
+    setMoveQueue([]) // single move from the tap dialog — no queue behind it
     setMovingRes({ id: reservationId, count })
     setSelectedItem(null)
     setSelectedItemIsPool(false)
     setSelectedItemIsGroupExtra(false)
+  }
+
+  // Bulk move: queue every DISTINCT booking touched by the selection (in seat
+  // order), then enter move mode on the first. Each completed move advances to the
+  // next. Moving relocates the WHOLE booking regardless of how many of its seats
+  // were selected — the selection only picks which bookings to move.
+  const handleStartBulkMove = () => {
+    const seen = new Set<string>()
+    const resIds: string[] = []
+    for (const i of inventoryItems) {
+      if (!selectedIds.includes(i.id)) continue
+      const r = getActiveReservation(i)
+      if (r && !seen.has(r.id)) { seen.add(r.id); resIds.push(r.id) }
+    }
+    const first = resIds[0]
+    if (!first) return
+    const rest = resIds.slice(1)
+    const count = inventoryItems.filter(i => getActiveReservation(i)?.id === first).length || 1
+    setMoveError(null)
+    setSelectedIds([])     // leave multiselect; the move banner takes over
+    setMoveQueue(rest)
+    setMovingRes({ id: first, count })
   }
 
   // A tap while in move mode → resolve the destination seat(s) and relocate.
@@ -422,7 +452,16 @@ export default function ManageView({
     startMoveTransition(async () => {
       const res = await moveReservationToSeats(site.id!, resId, destIds, accessKey)
       if (res.status === 'ok') {
-        setMovingRes(null)
+        const next = moveQueue[0]
+        if (next) {
+          // Advance to the next queued booking. Its seat count is read from the
+          // current inventory — accurate, since only the just-moved booking changed.
+          const count = inventoryItems.filter(i => getActiveReservation(i)?.id === next).length || 1
+          setMoveQueue(moveQueue.slice(1))
+          setMovingRes({ id: next, count })
+        } else {
+          setMovingRes(null)
+        }
         router.refresh()
       } else {
         setMoveError(res.errors?.[0] || 'Move failed')
@@ -502,6 +541,42 @@ export default function ManageView({
     })
   }
 
+  // Reservation-level bulk verbs (check-in / no-show / depart / cancel): group the
+  // selected seats by reservation and call the action ONCE per reservation,
+  // SEQUENTIALLY. Whole-reservation semantics — selecting one seat of a multi-seat
+  // booking acts on the whole booking (use the tap dialog for per-seat disconnects).
+  const bulkByReservation = (fn: (resId: string, firstItemId: string) => Promise<{ status: string }>) => {
+    const items = inventoryItems.filter(i => selectedIds.includes(i.id))
+    const firstItemOf = new Map<string, string>() // reservationId → one of its selected itemIds
+    for (const i of items) {
+      const res = getActiveReservation(i)
+      if (res && !firstItemOf.has(res.id)) firstItemOf.set(res.id, i.id)
+    }
+    if (firstItemOf.size === 0) return
+    setBulkError(null)
+    startBulkTransition(async () => {
+      let failed = 0
+      for (const [resId, itemId] of firstItemOf) {
+        try { const r = await fn(resId, itemId); if (r?.status === 'error') failed++ } catch { failed++ }
+      }
+      router.refresh()
+      if (failed > 0) setBulkError(t('bulkSomeFailed', { n: failed }))
+      else setSelectedIds([])
+    })
+  }
+  const bulkCheckIn = () => bulkByReservation((resId) => checkInReservation(site.id!, resId, accessKey))
+  const bulkDepart = () => bulkByReservation((resId) => markDeparted(site.id!, resId, accessKey))
+  const bulkNoShow = () => bulkByReservation((resId) => markNoShow(site.id!, resId, accessKey))
+  const bulkCancel = () => bulkByReservation((_resId, itemId) => cancelReservation(site.id!, itemId, accessKey))
+  // The ⚠ bulk verbs route through a shared confirm step (mirrors the tap dialog).
+  const runBulkConfirm = () => {
+    const v = bulkConfirm
+    setBulkConfirm(null)
+    if (v === 'no-show') bulkNoShow()
+    else if (v === 'cancel') bulkCancel()
+    else if (v === 'depart') bulkDepart()
+  }
+
   // The panel offers the INTERSECTION of each selected seat's valid actions — a
   // verb shows only when every selected seat's state supports it.
   //   Rent: available → create walk-in · held → convert hold to walk-in
@@ -514,6 +589,42 @@ export default function ManageView({
   const canFree = can(['held', 'walked-in', 'comp', 'blocked', 'failed'])
   const selKinds = new Set(selItems.map(seatKind))
   const homogeneous = selKinds.size === 1 ? [...selKinds][0] : null
+
+  // Paid lane — reservation-level transitions (whole-reservation semantics).
+  const canCheckIn = can(['reserved'])
+  const canDepart = can(['checked-in', 'walked-in'])
+  const canNoShow = can(['reserved'])
+  // Real Mollie-paid bookings must NEVER be canceled silently (no refund). Cancel
+  // is hidden in bulk when any selected booking is Mollie-paid — those are canceled
+  // one at a time via the tap dialog, which surfaces the manual refund control.
+  const canCancelStates = can(['reserved', 'checked-in'])
+  const hasMolliePaid = selItems.some(i => {
+    const r = getActiveReservation(i)
+    return !!r?.paymentRef && r.paymentRef.startsWith('tr_')
+  })
+  const canCancel = canCancelStates && !hasMolliePaid
+  const cancelBlockedByPaid = canCancelStates && hasMolliePaid
+
+  // Move applies to any selection of relocatable bookings (same states the tap
+  // dialog shows Move on). Each booking is relocated in turn via the move queue.
+  const canMove = can(['reserved', 'held', 'checked-in', 'walked-in'])
+  // Square Move button — sits on the dominant action's row (like the tap dialog);
+  // rendered standalone when Move is the only applicable verb.
+  const bulkMoveSquare = (
+    <button
+      type="button"
+      disabled={isBulkPending}
+      onClick={handleStartBulkMove}
+      aria-label={tb('move')}
+      title={tb('move')}
+      className="w-16 self-stretch flex flex-col items-center justify-center gap-0.5 border-2 border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 rounded-xl active:bg-gray-50 dark:active:bg-gray-800 disabled:opacity-50"
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M8 7l-4 5 4 5M16 7l4 5-4 5M4 12h16" />
+      </svg>
+      <span className="text-[10px] font-semibold leading-none">{tb('move')}</span>
+    </button>
+  )
 
   // The vacate button mirrors the tap dialog when the selection is one state
   // (Release / Unblock / End comp / Unreserve / Remove); a mixed freeable
@@ -626,10 +737,11 @@ export default function ManageView({
           <div className="flex items-center justify-between gap-2">
             <span className="font-semibold">
               {movingRes.count > 1 ? t('movePromptGroup', { n: movingRes.count }) : t('movePrompt')}
+              {moveQueue.length > 0 && <span className="font-normal"> · {t('moveQueueRemaining', { n: moveQueue.length })}</span>}
             </span>
             <button
               type="button"
-              onClick={() => { setMovingRes(null); setMoveError(null) }}
+              onClick={() => { setMovingRes(null); setMoveError(null); setMoveQueue([]) }}
               className="flex-shrink-0 px-3 min-h-[36px] rounded-lg border border-blue-300 dark:border-blue-700 active:bg-blue-100 dark:active:bg-blue-900/40 font-semibold"
             >
               {t('moveCancel')}
@@ -769,6 +881,19 @@ export default function ManageView({
                 <div className="bg-red-50 dark:bg-red-950/30 border-2 border-red-200 dark:border-red-800/40 text-red-700 dark:text-red-400 text-sm rounded-xl px-4 py-3">{bulkError}</div>
               )}
 
+              {bulkConfirm ? (
+                /* ⚠ confirm step — mirrors the BedDetail confirm panel */
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
+                    {bulkConfirm === 'no-show' ? tb('confirmNoShow') : bulkConfirm === 'depart' ? tb('confirmDepart') : tb('confirmCancel')}
+                  </p>
+                  <div className="flex gap-3">
+                    <button disabled={isBulkPending} onClick={runBulkConfirm} className="flex-1 bg-red-500 text-white font-bold text-lg py-4 rounded-xl active:bg-red-600 disabled:opacity-50">{isBulkPending ? '...' : tb('confirm')}</button>
+                    <button onClick={() => setBulkConfirm(null)} className="flex-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-bold text-lg py-4 rounded-xl active:bg-gray-200 dark:active:bg-gray-700">{tb('back')}</button>
+                  </div>
+                </div>
+              ) : (
+                <>
               {/* Guest name + multi-day period — shown when Rent applies (available/held) */}
               {canRent && (
                 <>
@@ -819,13 +944,50 @@ export default function ManageView({
                   <button disabled={isBulkPending} onClick={bulkRent} className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50">{bulkDays > 1 ? tb('rentDays', { n: bulkDays }) : tb('rent')}</button>
                 </div>
               ) : canRent ? (
-                <button disabled={isBulkPending} onClick={bulkRent} className="w-full bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50">{bulkDays > 1 ? tb('rentDays', { n: bulkDays }) : tb('rent')}</button>
+                <div className="flex gap-3">
+                  <button disabled={isBulkPending} onClick={bulkRent} className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50">{bulkDays > 1 ? tb('rentDays', { n: bulkDays }) : tb('rent')}</button>
+                  {canMove && bulkMoveSquare}
+                </div>
               ) : null}
+
+              {/* Paid lane — Check-in (safe) · Depart (⚠) as the dominant button, with Move alongside */}
+              {canCheckIn && (
+                <div className="flex gap-3">
+                  <button disabled={isBulkPending} onClick={bulkCheckIn} className="flex-1 bg-blue-500 text-white font-bold text-lg py-4 rounded-xl active:bg-blue-600 disabled:opacity-50">{tb('checkIn')}</button>
+                  {canMove && bulkMoveSquare}
+                </div>
+              )}
+              {canDepart && (
+                <div className="flex gap-3">
+                  <button disabled={isBulkPending} onClick={() => setBulkConfirm('depart')} className="flex-1 bg-gray-700 text-white font-bold text-lg py-4 rounded-xl active:bg-gray-800 disabled:opacity-50">{tb('markDeparted')}</button>
+                  {canMove && bulkMoveSquare}
+                </div>
+              )}
+              {/* Standalone Move — mixed relocatable states with no shared dominant verb */}
+              {canMove && !(canRent && !allAvailable) && !canCheckIn && !canDepart && (
+                <button disabled={isBulkPending} onClick={handleStartBulkMove} className="w-full flex items-center justify-center gap-2 border-2 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 font-bold text-lg py-4 rounded-xl active:bg-gray-50 dark:active:bg-gray-800 disabled:opacity-50">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 7l-4 5 4 5M16 7l4 5-4 5M4 12h16" /></svg>
+                  {tb('move')}
+                </button>
+              )}
 
               {freeButton}
 
-              {!allAvailable && !canRent && !freeButton && (
+              {/* No-show / Cancel — secondary ⚠ links, mirror the tap dialog */}
+              {(canNoShow || canCancel) && (
+                <div className="flex gap-3">
+                  {canNoShow && <button onClick={() => setBulkConfirm('no-show')} className="flex-1 text-gray-400 text-sm py-2 active:text-gray-600">{tb('markNoShow')}</button>}
+                  {canCancel && <button onClick={() => setBulkConfirm('cancel')} className="flex-1 text-red-400 text-sm py-2 active:text-red-600">{tb('cancelReservation')}</button>}
+                </div>
+              )}
+              {cancelBlockedByPaid && (
+                <div className="text-gray-500 dark:text-gray-400 text-center text-sm py-2">{t('bulkCancelPaidNote')}</div>
+              )}
+
+              {!allAvailable && !canRent && !canCheckIn && !canDepart && !canMove && !freeButton && !canCancel && !cancelBlockedByPaid && (
                 <div className="text-gray-500 dark:text-gray-400 text-center py-2">{t('bulkNoAction')}</div>
+              )}
+                </>
               )}
             </div>
           </div>

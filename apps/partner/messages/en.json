@@ -737,6 +737,7 @@
     "toggleTheme": "Toggle dark mode",
     "movePrompt": "Tap a free seat to move here",
     "movePromptGroup": "Tap a free group of {n} seats to move here",
+    "moveQueueRemaining": "{n} more after this",
     "moveCancel": "Cancel",
     "moveDestOccupied": "That seat is occupied — pick a free one",
     "moveDestSize": "Pick a free group of {n} seats",
@@ -748,6 +749,7 @@
     "bulkRent": "Rent",
     "bulkFree": "Make available",
     "bulkNoAction": "No bulk action for this selection",
+    "bulkCancelPaidNote": "Cancel paid bookings one at a time to handle the refund",
     "bulkSomeFailed": "{n} couldn't be updated"
   },
   "BedDetail": {
