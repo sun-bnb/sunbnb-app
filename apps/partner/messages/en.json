@@ -740,7 +740,8 @@
     "moveCancel": "Cancel",
     "moveDestOccupied": "That seat is occupied — pick a free one",
     "moveDestSize": "Pick a free group of {n} seats",
-    "moveDestInvalid": "Can't move onto an overflow seat"
+    "moveDestInvalid": "Can't move onto an overflow seat",
+    "selectedCount": "{n} selected"
   },
   "BedDetail": {
     "free": "Free",

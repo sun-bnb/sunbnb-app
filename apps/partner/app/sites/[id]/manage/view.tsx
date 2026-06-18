@@ -32,6 +32,7 @@ const ZOOM_MIN = 0.1
 const ZOOM_MAX = 2.5
 const ZOOM_STEP = 0.25
 const TAP_THRESHOLD = 6 // px of pointer travel before a gesture counts as pan, not tap
+const LONG_PRESS_MS = 450 // hold a seat this long (without moving) to enter multiselect
 
 // ── ManageView ────────────────────────────────────────────────────────────────
 
@@ -84,6 +85,11 @@ export default function ManageView({
   const [movingRes, setMovingRes] = useState<{ id: string; count: number } | null>(null)
   const [moveError, setMoveError] = useState<string | null>(null)
   const [, startMoveTransition] = useTransition()
+
+  // ── Multiselect (slice 1: selection mechanics only) ───────────────────────
+  // Long-press a seat to enter; tap toggles seats; selected seats are ringed.
+  // Exits when the selection panel is dismissed or empty space is tapped.
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
 
   // ── View switcher — one destination (parcel / rentals) at a time ──────────
   // Default to the lowest parcel number; fall back to rentals if the site has
@@ -205,6 +211,10 @@ export default function ManageView({
   const panLast = useRef<{ x: number; y: number } | null>(null)
   const movedRef = useRef(0)
   const wasPannedRef = useRef(false)
+  // Long-press tracking (enter multiselect on a held, still seat press).
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const longPressSeatId = useRef<string | null>(null)
+  useEffect(() => () => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }, [])
 
   const onCanvasPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
@@ -213,7 +223,22 @@ export default function ManageView({
     if (pointers.current.size === 1) {
       panLast.current = { x: e.clientX, y: e.clientY }
       pinchRef.current = null
+      // Long-press on a seat → enter/extend multiselect. Cancelled by movement
+      // (pan), a second finger (pinch), or pointer up before the timer fires.
+      const seatEl = (e.target as HTMLElement).closest('[data-item-id]')
+      longPressSeatId.current = seatEl?.getAttribute('data-item-id') ?? null
+      if (longPressTimer.current) clearTimeout(longPressTimer.current)
+      if (longPressSeatId.current) {
+        longPressTimer.current = setTimeout(() => {
+          const sid = longPressSeatId.current
+          longPressTimer.current = undefined
+          if (!sid) return
+          wasPannedRef.current = true // suppress the click that would open the sheet
+          setSelectedIds(prev => (prev.includes(sid) ? prev : [...prev, sid]))
+        }, LONG_PRESS_MS)
+      }
     } else if (pointers.current.size === 2) {
+      if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = undefined }
       const pts = Array.from(pointers.current.values())
       const p0 = pts[0]!, p1 = pts[1]!
       const dist = Math.hypot(p1.x - p0.x, p1.y - p0.y) || 1
@@ -242,12 +267,21 @@ export default function ManageView({
       const dy = e.clientY - panLast.current.y
       panLast.current = { x: e.clientX, y: e.clientY }
       movedRef.current += Math.abs(dx) + Math.abs(dy)
-      if (movedRef.current > TAP_THRESHOLD) wasPannedRef.current = true
+      if (movedRef.current > TAP_THRESHOLD) {
+        wasPannedRef.current = true
+        if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = undefined }
+      }
       commit(scaleRef.current, txRef.current + dx, tyRef.current + dy)
     }
   }
 
   const onCanvasPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = undefined }
+    // Tap on the viewport background (outside the parcel content) while selecting
+    // → clear/exit multiselect. Tapping a gap between seats stays in multiselect.
+    if (selectedIds.length > 0 && !wasPannedRef.current && !(e.target as HTMLElement).closest('.parcel-canvas-content')) {
+      setSelectedIds([])
+    }
     pointers.current.delete(e.pointerId)
     if (pointers.current.size < 2) pinchRef.current = null
     if (pointers.current.size === 0) {
@@ -468,6 +502,23 @@ export default function ManageView({
         />
       )}
 
+      {/* Multiselect panel (slice 1: count + dismiss; bulk actions land later).
+          Dismissing it exits multiselect — same lifecycle as the selection. */}
+      {selectedIds.length > 0 && (
+        <div className="mb-2 px-3 py-2 rounded-xl border-2 border-blue-300 dark:border-blue-800/40 bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-200 text-sm">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-semibold">{t('selectedCount', { n: selectedIds.length })}</span>
+            <button
+              type="button"
+              onClick={() => setSelectedIds([])}
+              className="flex-shrink-0 px-3 min-h-[36px] rounded-lg border border-blue-300 dark:border-blue-700 active:bg-blue-100 dark:active:bg-blue-900/40 font-semibold"
+            >
+              {t('moveCancel')}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Move-mode banner — tap a free seat to relocate the picked reservation */}
       {movingRes && (
         <div className="mb-2 px-3 py-2 rounded-xl border-2 border-blue-300 dark:border-blue-800/40 bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-200 text-sm">
@@ -524,11 +575,16 @@ export default function ManageView({
             ty={ty}
             wasPannedRef={wasPannedRef}
             onSelectItem={(item, isPool, isGroupExtra) => {
+              if (selectedIds.length > 0) {
+                setSelectedIds(prev => prev.includes(item.id) ? prev.filter(x => x !== item.id) : [...prev, item.id])
+                return
+              }
               if (movingRes) { handleMoveDestination(item); return }
               setSelectedItem(item)
               setSelectedItemIsPool(isPool)
               setSelectedItemIsGroupExtra(isGroupExtra)
             }}
+            selectedIds={selectedIds}
           />
         </div>
       ) : null}

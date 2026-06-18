@@ -16,10 +16,12 @@ function PoolCell({
   item,
   onSelect,
   hideDetail = false,
+  selected = false,
 }: {
   item: InventoryItem
   onSelect: () => void
   hideDetail?: boolean
+  selected?: boolean
 }) {
   const parcel = parseInt(String(item.number)[0]!, 10)
   const POOL_BAND_BASE = 9900
@@ -28,12 +30,14 @@ function PoolCell({
 
   return (
     <button
+      data-item-id={item.id}
       onClick={onSelect}
       className={`
         ${bg} border-2 rounded-lg
         min-w-[44px] min-h-[44px] w-14
         py-2 px-1 flex flex-col items-center justify-center
         active:brightness-90 transition-colors select-none
+        ${selected ? 'ring-2 ring-blue-500' : ''}
       `}
       title={`Seat ${seq}`}
     >
@@ -53,6 +57,7 @@ function PoolSection({
   onSelectPool,
   onAddSeat,
   hideDetail,
+  selectedIds,
   t,
 }: {
   poolItems: InventoryItem[]
@@ -60,6 +65,7 @@ function PoolSection({
   onSelectPool: (item: InventoryItem) => void
   onAddSeat: () => void
   hideDetail: boolean
+  selectedIds: string[]
   t: ReturnType<typeof useTranslations<'SiteManage'>>
 }) {
   const occupied = poolItems.filter(i => getBedState(i) !== 'available').length
@@ -79,6 +85,7 @@ function PoolSection({
             item={item}
             onSelect={() => onSelectPool(item)}
             hideDetail={hideDetail}
+            selected={selectedIds.includes(item.id)}
           />
         ))}
 
@@ -143,6 +150,8 @@ interface ParcelViewProps {
   ty: number
   /** True right after a pan/pinch so a seat tap that followed a drag is ignored. */
   wasPannedRef: React.MutableRefObject<boolean>
+  /** Ids of seats currently multiselected (ringed). Empty = not in multiselect. */
+  selectedIds: string[]
   onSelectItem: (item: InventoryItem, isPool: boolean, isGroupExtra: boolean) => void
 }
 
@@ -160,6 +169,7 @@ export default function ParcelView({
   tx,
   ty,
   wasPannedRef,
+  selectedIds,
   onSelectItem,
 }: ParcelViewProps) {
   const t = useTranslations('SiteManage')
@@ -291,6 +301,7 @@ export default function ParcelView({
                     item={resolved.item}
                     onSelect={() => select(resolved.item, false, false)}
                     hideDetail={hideDetail}
+                    selected={selectedIds.includes(resolved.item.id)}
                   />
                 </div>
               )
@@ -300,12 +311,14 @@ export default function ParcelView({
             return (
               <div key={key} className="flex-shrink-0" style={{ width: 48 }}>
                 <button
+                  data-item-id={resolved.item.id}
                   onClick={() => select(resolved.item, false, true)}
                   className={`
                     ${extraBg} border-2 rounded-lg
                     w-full min-h-[44px]
                     py-2 px-0.5 flex flex-col items-center justify-center
                     active:brightness-90 transition-colors select-none
+                    ${selectedIds.includes(resolved.item.id) ? 'ring-2 ring-blue-500' : ''}
                   `}
                   title={`Seat ${resolved.label}`}
                 >
@@ -336,6 +349,7 @@ export default function ParcelView({
           })
         }}
         hideDetail={hideDetail}
+        selectedIds={selectedIds}
         t={t}
       />
     </div>

@@ -740,7 +740,8 @@
     "moveCancel": "Peruuta",
     "moveDestOccupied": "Paikka on varattu — valitse vapaa",
     "moveDestSize": "Valitse vapaa {n} paikan ryhmä",
-    "moveDestInvalid": "Ylivuotopaikkaan ei voi siirtää"
+    "moveDestInvalid": "Ylivuotopaikkaan ei voi siirtää",
+    "selectedCount": "{n} valittu"
   },
   "BedDetail": {
     "free": "Vapaa",

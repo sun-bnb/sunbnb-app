@@ -10,12 +10,15 @@ export default function SunbedItem({
   item,
   onSelect,
   hideDetail = false,
+  selected = false,
 }: {
   siteId: string
   item: InventoryItem
   onSelect: () => void
   /** At small zoom, render the colored block only (no number/icon) for orientation. */
   hideDetail?: boolean
+  /** Multiselected — draws a ring. */
+  selected?: boolean
 }) {
   if (item.status === 'disabled') {
     return <div className="basis-0 flex-1 p-2" />
@@ -27,12 +30,14 @@ export default function SunbedItem({
   // expressed with dedicated gap columns in the grid (see view.tsx).
   return (
     <button
+      data-item-id={item.id}
       onClick={onSelect}
       className={`
         ${bg} border-2 rounded-lg
         min-w-0 min-h-[44px]
         py-2 sm:py-3 px-0.5 flex flex-col items-center justify-center
         active:brightness-90 transition-colors select-none
+        ${selected ? 'ring-2 ring-blue-500' : ''}
       `}
     >
       {!hideDetail && (
