@@ -137,12 +137,13 @@ interface ParcelViewProps {
   /** All inventory items across ALL parcels (for group membership queries). */
   allInventoryItems: InventoryItem[]
   isParcelReversed: boolean
-  zoom: number
+  /** Canvas transform driven by the parent ManageView pan/zoom surface. */
+  scale: number
+  tx: number
+  ty: number
+  /** True right after a pan/pinch so a seat tap that followed a drag is ignored. */
+  wasPannedRef: React.MutableRefObject<boolean>
   onSelectItem: (item: InventoryItem, isPool: boolean, isGroupExtra: boolean) => void
-  /** Pointer handlers for the scroll container (drag-to-pan). */
-  onScrollPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void
-  onScrollPointerMove: (e: React.PointerEvent<HTMLDivElement>) => void
-  onScrollPointerUp: () => void
 }
 
 export default function ParcelView({
@@ -155,18 +156,25 @@ export default function ParcelView({
   poolItems,
   allInventoryItems,
   isParcelReversed,
-  zoom,
+  scale,
+  tx,
+  ty,
+  wasPannedRef,
   onSelectItem,
-  onScrollPointerDown,
-  onScrollPointerMove,
-  onScrollPointerUp,
 }: ParcelViewProps) {
   const t = useTranslations('SiteManage')
   const router = useRouter()
   const [isPendingPool, startPoolTransition] = useTransition()
 
   // At small zoom, drop per-chair number/icon — just colored blocks to orient.
-  const hideDetail = zoom < DETAIL_HIDE_BELOW
+  const hideDetail = scale < DETAIL_HIDE_BELOW
+
+  // Selection guard: ignore the click that fires at the end of a pan/pinch so
+  // dragging the canvas never selects a seat.
+  const select = (item: InventoryItem, isPool: boolean, isGroupExtra: boolean) => {
+    if (wasPannedRef.current) return
+    onSelectItem(item, isPool, isGroupExtra)
+  }
 
   // Sort row entries ascending (front row first)
   const grouped = regularItems.reduce((acc, item) => {
@@ -234,123 +242,102 @@ export default function ParcelView({
   const sortedPoolItems = poolItems.slice().sort((a, b) => a.number - b.number)
 
   return (
-    <div className="mb-5">
-      {/* Scroll+zoom grid
-          - overflow-x-auto keeps the class name that the pinch handler finds via .closest()
-          - drag-to-pan handlers attached here for desktop mouse panning */}
-      <div
-        className={`overflow-x-auto select-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${zoom !== 1 ? 'cursor-grab active:cursor-grabbing' : ''}`}
-        style={{ touchAction: 'pan-x pan-y' }}
-        onPointerDown={onScrollPointerDown}
-        onPointerMove={onScrollPointerMove}
-        onPointerUp={onScrollPointerUp}
-        onPointerLeave={onScrollPointerUp}
-      >
-        {/* CSS zoom scales the rendered content; sticky row labels pin within the zoom frame. */}
-        <div style={{ zoom }}>
-          {rowEntries.map(([rowNum, positions]) => (
-            <div
-              key={rowNum}
-              className={`
-                flex items-stretch gap-1 mb-0.5 rounded-lg py-0.5
-                ${rowNum % 2 === 0 ? 'bg-gray-50 dark:bg-gray-800/40' : ''}
-              `}
-            >
-              {/* Sticky row label */}
-              <div
-                className={`
-                  sticky left-0 z-10 flex-shrink-0
-                  flex items-center justify-center
-                  ${rowNum % 2 === 0 ? 'bg-gray-50 dark:bg-gray-800/40' : 'bg-white dark:bg-gray-950'}
-                `}
-                style={{ width: ROW_LABEL_WIDTH }}
-              >
-                <span className="text-[10px] font-bold text-gray-500 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5 leading-none whitespace-nowrap">
-                  {t('rowLabel', { n: rowNum })}
-                </span>
+    // Single transform layer — the parent ManageView viewport clips + drives
+    // pan/zoom. `transform: translate scale` (origin top-left) scales uniformly
+    // across mobile/desktop (unlike CSS `zoom`). `w-max` so it sizes to the
+    // widest row; `absolute` so it doesn't stretch to the viewport.
+    <div
+      className="parcel-canvas-content absolute top-0 left-0 origin-top-left w-max select-none"
+      style={{ transform: `translate(${tx}px, ${ty}px) scale(${scale})` }}
+    >
+      {rowEntries.map(([rowNum, positions]) => (
+        <div
+          key={rowNum}
+          className={`
+            flex items-stretch gap-1 mb-0.5 rounded-lg py-0.5
+            ${rowNum % 2 === 0 ? 'bg-gray-50 dark:bg-gray-800/40' : ''}
+          `}
+        >
+          {/* Row label — pans/scales with the content (no longer sticky) */}
+          <div
+            className={`
+              flex-shrink-0 flex items-center justify-center
+              ${rowNum % 2 === 0 ? 'bg-gray-50 dark:bg-gray-800/40' : 'bg-white dark:bg-gray-950'}
+            `}
+            style={{ width: ROW_LABEL_WIDTH }}
+          >
+            <span className="text-[10px] font-bold text-gray-500 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5 leading-none whitespace-nowrap">
+              {t('rowLabel', { n: rowNum })}
+            </span>
+          </div>
+
+          {/* Bed cells */}
+          {displayColumns.map((col, colIdx) => {
+            if (col.kind === 'gap') {
+              return <div key={`g${colIdx}`} className="flex-shrink-0" style={{ width: GROUP_GAP_PX }} />
+            }
+            const key = col.kind === 'pos' ? `p${col.pos}` : `x${col.afterPos}-${col.slot}`
+            const resolved = resolveColumn(col, positions)
+            if (resolved.kind === 'empty') {
+              return (
+                <div key={key} className="flex-shrink-0 min-h-[44px]" style={{ width: 48 }} />
+              )
+            }
+            if (resolved.kind === 'seat') {
+              return (
+                <div key={key} className="flex-shrink-0" style={{ display: 'grid', width: 48 }}>
+                  <Item
+                    siteId={siteId}
+                    item={resolved.item}
+                    onSelect={() => select(resolved.item, false, false)}
+                    hideDetail={hideDetail}
+                  />
+                </div>
+              )
+            }
+            // Group-extra seat
+            const { bg: extraBg, icon: extraIcon } = getCellAppearance(resolved.item)
+            return (
+              <div key={key} className="flex-shrink-0" style={{ width: 48 }}>
+                <button
+                  onClick={() => select(resolved.item, false, true)}
+                  className={`
+                    ${extraBg} border-2 rounded-lg
+                    w-full min-h-[44px]
+                    py-2 px-0.5 flex flex-col items-center justify-center
+                    active:brightness-90 transition-colors select-none
+                  `}
+                  title={`Seat ${resolved.label}`}
+                >
+                  {!hideDetail && (
+                    <>
+                      {extraIcon && <span className="text-[10px] leading-none">{extraIcon}</span>}
+                      <span className="text-[10px] leading-none opacity-70">{resolved.label}</span>
+                    </>
+                  )}
+                </button>
               </div>
-
-              {/* Bed cells */}
-              {displayColumns.map((col, colIdx) => {
-                if (col.kind === 'gap') {
-                  return <div key={`g${colIdx}`} className="flex-shrink-0" style={{ width: GROUP_GAP_PX }} />
-                }
-                const key = col.kind === 'pos' ? `p${col.pos}` : `x${col.afterPos}-${col.slot}`
-                const resolved = resolveColumn(col, positions)
-                if (resolved.kind === 'empty') {
-                  return (
-                    <div
-                      key={key}
-                      className="flex-shrink-0 min-h-[44px]"
-                      style={{ width: 48 }}
-                    />
-                  )
-                }
-                if (resolved.kind === 'seat') {
-                  return (
-                    <div
-                      key={key}
-                      className="flex-shrink-0"
-                      style={{ display: 'grid', width: 48 }}
-                    >
-                      <Item
-                        siteId={siteId}
-                        item={resolved.item}
-                        onSelect={() => onSelectItem(resolved.item, false, false)}
-                        hideDetail={hideDetail}
-                      />
-                    </div>
-                  )
-                }
-                // Group-extra seat
-                const { bg: extraBg, icon: extraIcon } = getCellAppearance(resolved.item)
-                return (
-                  <div
-                    key={key}
-                    className="flex-shrink-0"
-                    style={{ width: 48 }}
-                  >
-                    <button
-                      onClick={() => onSelectItem(resolved.item, false, true)}
-                      className={`
-                        ${extraBg} border-2 rounded-lg
-                        w-full min-h-[44px]
-                        py-2 px-0.5 flex flex-col items-center justify-center
-                        active:brightness-90 transition-colors select-none
-                      `}
-                      title={`Seat ${resolved.label}`}
-                    >
-                      {!hideDetail && (
-                        <>
-                          {extraIcon && <span className="text-[10px] leading-none">{extraIcon}</span>}
-                          <span className="text-[10px] leading-none opacity-70">{resolved.label}</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          ))}
-
-          {/* Per-parcel pool section — lives INSIDE the zoom+scroll frame so the
-              ungrouped extra seats zoom and pan together with the parcel grid as
-              one continuous area (previously it sat outside and stayed fixed). */}
-          <PoolSection
-            poolItems={sortedPoolItems}
-            isPendingPool={isPendingPool}
-            onSelectPool={(item) => onSelectItem(item, true, false)}
-            onAddSeat={() => {
-              startPoolTransition(async () => {
-                await createPoolSeat(siteId, parcelNum, accessKey)
-                router.refresh()
-              })
-            }}
-            hideDetail={hideDetail}
-            t={t}
-          />
+            )
+          })}
         </div>
-      </div>
+      ))}
+
+      {/* Per-parcel pool section — same transform layer, so the ungrouped extra
+          seats pan/zoom with the parcel as one continuous area. */}
+      <PoolSection
+        poolItems={sortedPoolItems}
+        isPendingPool={isPendingPool}
+        onSelectPool={(item) => select(item, true, false)}
+        onAddSeat={() => {
+          if (wasPannedRef.current) return
+          startPoolTransition(async () => {
+            await createPoolSeat(siteId, parcelNum, accessKey)
+            router.refresh()
+          })
+        }}
+        hideDetail={hideDetail}
+        t={t}
+      />
     </div>
   )
 }

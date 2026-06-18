@@ -22,15 +22,15 @@ function parseSunbedNumber(num: number) {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const SEAT_ORDER_REVERSED_KEY = 'sunbnb-manage-seat-order-reversed'
-const MANAGE_ZOOM_KEY = 'sunbnb-manage-zoom'
 const DARK_MODE_KEY = 'sunbnb-manage-dark'
 
-// Zoom-out floor is intentionally low so the whole parcel (even very wide ones)
-// can be pulled fully into view; chair labels auto-hide below DETAIL_HIDE_BELOW
-// (ParcelView), so far-out zoom reads as plain colored blocks for orientation.
+// Scale floor is intentionally low so even very wide parcels fit fully in view;
+// chair labels auto-hide below DETAIL_HIDE_BELOW (ParcelView), so far-out zoom
+// reads as plain colored blocks for orientation. The view opens fit-to-width.
 const ZOOM_MIN = 0.1
 const ZOOM_MAX = 2.5
 const ZOOM_STEP = 0.25
+const TAP_THRESHOLD = 6 // px of pointer travel before a gesture counts as pan, not tap
 
 // ── ManageView ────────────────────────────────────────────────────────────────
 
@@ -124,125 +124,147 @@ export default function ManageView({
     })
   }
 
-  // ── Zoom state ────────────────────────────────────────────────────────────
-  // Initialised to 1 so SSR and first client render match; overridden from
-  // localStorage in useEffect. zoomRef mirrors zoom so the wheel handler
-  // (registered once) always reads the latest value without a stale closure.
-  const [zoom, setZoom] = useState(1)
-  const zoomRef = useRef(1)
+  // ── Pan / zoom canvas ───────────────────────────────────────────────────────
+  // The whole parcel view is ONE transformable surface. Content is positioned
+  // with `transform: translate(tx,ty) scale(scale)` (origin top-left) inside a
+  // clipping viewport; pinch / drag / wheel drive scale+pan directly. No CSS
+  // `zoom` (non-standard — scaled min-sizes inconsistently on mobile) and no
+  // native scroll container, so pinch works anywhere on the visible view and
+  // every cell (incl. pool seats) scales uniformly across mobile/desktop.
+  const [scale, setScale] = useState(1)
+  const [tx, setTx] = useState(0)
+  const [ty, setTy] = useState(0)
+  const scaleRef = useRef(1)
+  const txRef = useRef(0)
+  const tyRef = useRef(0)
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const contentSizeRef = useRef({ w: 0, h: 0 })
 
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(`${MANAGE_ZOOM_KEY}-${site.id}`)
-      if (stored !== null) {
-        const v = parseFloat(stored)
-        if (!isNaN(v)) {
-          const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, v))
-          setZoom(clamped)
-          zoomRef.current = clamped
-        }
-      }
-    } catch {
-      /* ignore malformed value */
-    }
-  }, [site.id])
-
-  const applyZoom = (next: number) => {
-    const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next))
-    zoomRef.current = clamped
-    setZoom(clamped)
-    try { localStorage.setItem(`${MANAGE_ZOOM_KEY}-${site.id}`, String(clamped)) } catch { /* ignore */ }
+  function measureContent() {
+    const content = viewportRef.current?.querySelector<HTMLElement>('.parcel-canvas-content')
+    if (content) contentSizeRef.current = { w: content.offsetWidth, h: content.offsetHeight }
   }
-  const zoomIn  = () => applyZoom(Math.round((zoom + ZOOM_STEP) * 100) / 100)
-  const zoomOut = () => applyZoom(Math.round((zoom - ZOOM_STEP) * 100) / 100)
-  const resetZoom = () => applyZoom(1)
 
-  // ── Trackpad pinch / ctrl+wheel zoom (desktop) ────────────────────────────
-  // Must be registered as a non-passive listener so preventDefault() works.
-  const containerRef = useRef<HTMLDivElement>(null)
+  // Clamp one axis. When the (scaled) content fits the viewport, rest it at the
+  // `align` anchor ('center' or 'start'=top/left); otherwise keep its edges flush
+  // so empty space can't be dragged into view. Vertical uses 'start' so a short
+  // parcel sits at the top rather than floating in the middle.
+  function clampAxis(t: number, contentScaled: number, viewport: number, align: 'center' | 'start' = 'center') {
+    if (contentScaled <= viewport) return align === 'start' ? 0 : Math.round((viewport - contentScaled) / 2)
+    return Math.min(0, Math.max(viewport - contentScaled, t))
+  }
 
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey) return
+  function commit(nextScale: number, nextTx: number, nextTy: number) {
+    const vp = viewportRef.current
+    const s = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, nextScale))
+    const { w: cw, h: ch } = contentSizeRef.current
+    const vw = vp?.clientWidth ?? 0
+    const vh = vp?.clientHeight ?? 0
+    const ctx = cw && vw ? clampAxis(nextTx, cw * s, vw) : nextTx
+    const cty = ch && vh ? clampAxis(nextTy, ch * s, vh, 'start') : nextTy
+    scaleRef.current = s; txRef.current = ctx; tyRef.current = cty
+    setScale(s); setTx(ctx); setTy(cty)
+  }
+
+  // Zoom keeping a focal point (cursor / pinch midpoint, in viewport coords) fixed.
+  function zoomAround(focalX: number, focalY: number, nextScale: number) {
+    const s0 = scaleRef.current
+    const s1 = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, nextScale))
+    const cx = (focalX - txRef.current) / s0
+    const cy = (focalY - tyRef.current) / s0
+    commit(s1, focalX - cx * s1, focalY - cy * s1)
+  }
+
+  function fitToView() {
+    measureContent()
+    const vp = viewportRef.current
+    const { w: cw } = contentSizeRef.current
+    if (!vp || !cw) return
+    const fit = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, vp.clientWidth / cw))
+    commit(fit, 0, 0) // clampAxis centers
+  }
+
+  function toLocal(clientX: number, clientY: number) {
+    const r = viewportRef.current?.getBoundingClientRect()
+    return { x: clientX - (r?.left ?? 0), y: clientY - (r?.top ?? 0) }
+  }
+
+  // Active pointers + gesture baselines. wasPannedRef tells the seat cells to
+  // ignore the click that follows a drag/pinch (so panning never selects a seat).
+  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map())
+  const pinchRef = useRef<{ startDist: number; startScale: number; cx: number; cy: number } | null>(null)
+  const panLast = useRef<{ x: number; y: number } | null>(null)
+  const movedRef = useRef(0)
+  const wasPannedRef = useRef(false)
+
+  const onCanvasPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    wasPannedRef.current = false
+    movedRef.current = 0
+    if (pointers.current.size === 1) {
+      panLast.current = { x: e.clientX, y: e.clientY }
+      pinchRef.current = null
+    } else if (pointers.current.size === 2) {
+      const pts = Array.from(pointers.current.values())
+      const p0 = pts[0]!, p1 = pts[1]!
+      const dist = Math.hypot(p1.x - p0.x, p1.y - p0.y) || 1
+      const mid = toLocal((p0.x + p1.x) / 2, (p0.y + p1.y) / 2)
+      const s0 = scaleRef.current
+      pinchRef.current = { startDist: dist, startScale: s0, cx: (mid.x - txRef.current) / s0, cy: (mid.y - tyRef.current) / s0 }
+      panLast.current = null
+    }
+  }
+
+  const onCanvasPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!pointers.current.has(e.pointerId)) return
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    const pinch = pinchRef.current
+    if (pinch && pointers.current.size >= 2) {
       e.preventDefault()
-      const factor = Math.exp(-e.deltaY * 0.01)
-      const nextZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoomRef.current * factor))
-      applyZoom(nextZoom)
+      const pts = Array.from(pointers.current.values())
+      const p0 = pts[0]!, p1 = pts[1]!
+      const dist = Math.hypot(p1.x - p0.x, p1.y - p0.y)
+      const mid = toLocal((p0.x + p1.x) / 2, (p0.y + p1.y) / 2)
+      const s1 = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, pinch.startScale * (dist / pinch.startDist)))
+      wasPannedRef.current = true
+      commit(s1, mid.x - pinch.cx * s1, mid.y - pinch.cy * s1)
+    } else if (panLast.current && pointers.current.size === 1) {
+      const dx = e.clientX - panLast.current.x
+      const dy = e.clientY - panLast.current.y
+      panLast.current = { x: e.clientX, y: e.clientY }
+      movedRef.current += Math.abs(dx) + Math.abs(dy)
+      if (movedRef.current > TAP_THRESHOLD) wasPannedRef.current = true
+      commit(scaleRef.current, txRef.current + dx, tyRef.current + dy)
     }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
+  }
+
+  const onCanvasPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    pointers.current.delete(e.pointerId)
+    if (pointers.current.size < 2) pinchRef.current = null
+    if (pointers.current.size === 0) {
+      panLast.current = null
+    } else {
+      const p = Array.from(pointers.current.values())[0]!
+      panLast.current = { x: p.x, y: p.y }
+    }
+  }
+
+  const viewportCenter = () => {
+    const vp = viewportRef.current
+    return { x: (vp?.clientWidth ?? 0) / 2, y: (vp?.clientHeight ?? 0) / 2 }
+  }
+  const zoomIn = () => { const c = viewportCenter(); zoomAround(c.x, c.y, scaleRef.current + ZOOM_STEP) }
+  const zoomOut = () => { const c = viewportCenter(); zoomAround(c.x, c.y, scaleRef.current - ZOOM_STEP) }
+  const resetZoom = () => fitToView()
+
+  // Re-measure + re-clamp on viewport resize (keeps content in view, recenters
+  // when it now fits).
+  useEffect(() => {
+    const onResize = () => { measureContent(); commit(scaleRef.current, txRef.current, tyRef.current) }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // intentionally empty — handler reads zoomRef, applyZoom is stable
-
-  // ── Two-finger pinch-to-zoom (touch) ─────────────────────────────────────
-  const pinchPointers = useRef<Map<number, { x: number; y: number }>>(new Map())
-  const pinchStart = useRef<{ dist: number; zoom: number } | null>(null)
-
-  const handleGridPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    pinchPointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
-    if (pinchPointers.current.size === 2) {
-      const pts = Array.from(pinchPointers.current.values())
-      const p0 = pts[0]!
-      const p1 = pts[1]!
-      pinchStart.current = { dist: Math.hypot(p1.x - p0.x, p1.y - p0.y), zoom }
-    }
-  }
-
-  const handleGridPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!pinchPointers.current.has(e.pointerId)) return
-    pinchPointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
-    const ps = pinchStart.current
-    if (!ps || pinchPointers.current.size < 2) return
-    e.preventDefault()
-    const pts = Array.from(pinchPointers.current.values())
-    const p0 = pts[0]!
-    const p1 = pts[1]!
-    const currentDist = Math.hypot(p1.x - p0.x, p1.y - p0.y)
-    const ratio = ps.dist > 0 ? currentDist / ps.dist : 1
-    const nextZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, ps.zoom * ratio))
-    // Nudge scroll container so content under the fingers doesn't jump.
-    // The pinch handler finds the scroll container via .overflow-x-auto — this
-    // class is on each ParcelView's scroll div, matching the original behaviour.
-    if (nextZoom !== zoom) {
-      const zoomRatio = nextZoom / zoom
-      const scrollEl = (e.target as HTMLElement).closest<HTMLElement>('.overflow-x-auto')
-      if (scrollEl) scrollEl.scrollLeft = scrollEl.scrollLeft * zoomRatio
-    }
-    applyZoom(nextZoom)
-  }
-
-  const handleGridPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    pinchPointers.current.delete(e.pointerId)
-    if (pinchPointers.current.size < 2) pinchStart.current = null
-  }
-
-  // ── Drag-to-pan (desktop mouse) ───────────────────────────────────────────
-  const dragState = useRef<{
-    el: HTMLElement
-    startX: number
-    scrollLeft: number
-    moved: boolean
-  } | null>(null)
-
-  const handleScrollPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === 'touch') return
-    const el = e.currentTarget
-    dragState.current = { el, startX: e.clientX, scrollLeft: el.scrollLeft, moved: false }
-    el.setPointerCapture(e.pointerId)
-  }
-
-  const handleScrollPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const ds = dragState.current
-    if (!ds || e.pointerType === 'touch') return
-    const dx = e.clientX - ds.startX
-    if (!ds.moved && Math.abs(dx) <= 5) return
-    ds.moved = true
-    ds.el.scrollLeft = ds.scrollLeft - dx
-  }
-
-  const handleScrollPointerUp = () => { dragState.current = null }
+  }, [])
 
   // ── Auto-refresh every 30 seconds ────────────────────────────────────────
   useEffect(() => {
@@ -316,16 +338,39 @@ export default function ManageView({
   // exist (rentals feature on AND at least one parcel to return to).
   const showRentalsFab = hasRentals && parcelNums.length > 0
 
+  // Open each parcel fit-to-width + centered (rAF so the new content is laid out
+  // before we measure). The keyed ParcelView remounts per parcel, so this fires
+  // on every switch.
+  useEffect(() => {
+    if (showRentals) return
+    const id = requestAnimationFrame(fitToView)
+    return () => cancelAnimationFrame(id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveParcel, showRentals])
+
+  // Wheel zoom (ctrl/⌘ or trackpad-pinch → zoom to cursor; plain wheel → pan).
+  // Non-passive so preventDefault works; re-attached when the viewport mounts.
+  useEffect(() => {
+    const el = viewportRef.current
+    if (!el || showRentals) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      if (e.ctrlKey || e.metaKey) {
+        const { x, y } = toLocal(e.clientX, e.clientY)
+        zoomAround(x, y, scaleRef.current * Math.exp(-e.deltaY * 0.01))
+      } else {
+        commit(scaleRef.current, txRef.current - e.deltaX, tyRef.current - e.deltaY)
+      }
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveParcel, showRentals])
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div
-      ref={containerRef}
-      className={`px-2 pt-2 pb-20 mx-auto w-full max-w-screen-lg transition-colors dark:bg-gray-950 dark:text-gray-100 ${isDark ? 'dark' : ''}`}
-      style={{ touchAction: 'pan-x pan-y' }}
-      onPointerDown={handleGridPointerDown}
-      onPointerMove={handleGridPointerMove}
-      onPointerUp={handleGridPointerUp}
-      onPointerCancel={handleGridPointerUp}
+      className={`flex flex-col h-[100dvh] overflow-hidden px-2 pt-2 mx-auto w-full max-w-screen-lg transition-colors dark:bg-gray-950 dark:text-gray-100 ${isDark ? 'dark' : ''}`}
     >
       {/* Header — parcel toolbar (stats / zoom / parcel tabs) in a parcel view;
           a minimal placeholder title in the rentals view. */}
@@ -353,7 +398,7 @@ export default function ManageView({
           parcelNums={parcelNums}
           selectedView={selectedView}
           onSelectView={selectView}
-          zoom={zoom}
+          zoom={scale}
           zoomMin={ZOOM_MIN}
           zoomMax={ZOOM_MAX}
           onZoomIn={zoomIn}
@@ -366,36 +411,49 @@ export default function ManageView({
         />
       )}
 
-      {/* One destination at a time — the selected parcel, or the rentals view */}
+      {/* One destination at a time — the selected parcel (pan/zoom canvas), or
+          the rentals view (normal vertical scroll). */}
       {showRentals ? (
-        <RentalsSection
-          siteId={site.id!}
-          accessKey={accessKey}
-          rentalBookings={site.rentalBookings}
-          onRentOut={() => setShowRentalModal(true)}
-        />
+        <div className="flex-1 overflow-y-auto">
+          <RentalsSection
+            siteId={site.id!}
+            accessKey={accessKey}
+            rentalBookings={site.rentalBookings}
+            onRentOut={() => setShowRentalModal(true)}
+          />
+        </div>
       ) : effectiveParcel !== undefined ? (
-        <ParcelView
-          key={effectiveParcel}
-          siteId={site.id!}
-          accessKey={accessKey}
-          parcelNum={effectiveParcel}
-          regularItems={regularByParcel[effectiveParcel] ?? []}
-          allRegularItems={regularItems}
-          groupExtrasByGroupId={groupExtrasByGroupId}
-          poolItems={poolByParcel[effectiveParcel] ?? []}
-          allInventoryItems={inventoryItems}
-          isParcelReversed={isParcelReversed(effectiveParcel)}
-          zoom={zoom}
-          onSelectItem={(item, isPool, isGroupExtra) => {
-            setSelectedItem(item)
-            setSelectedItemIsPool(isPool)
-            setSelectedItemIsGroupExtra(isGroupExtra)
-          }}
-          onScrollPointerDown={handleScrollPointerDown}
-          onScrollPointerMove={handleScrollPointerMove}
-          onScrollPointerUp={handleScrollPointerUp}
-        />
+        <div
+          ref={viewportRef}
+          className="flex-1 relative overflow-hidden touch-none select-none"
+          onPointerDown={onCanvasPointerDown}
+          onPointerMove={onCanvasPointerMove}
+          onPointerUp={onCanvasPointerUp}
+          onPointerCancel={onCanvasPointerUp}
+          onPointerLeave={onCanvasPointerUp}
+        >
+          <ParcelView
+            key={effectiveParcel}
+            siteId={site.id!}
+            accessKey={accessKey}
+            parcelNum={effectiveParcel}
+            regularItems={regularByParcel[effectiveParcel] ?? []}
+            allRegularItems={regularItems}
+            groupExtrasByGroupId={groupExtrasByGroupId}
+            poolItems={poolByParcel[effectiveParcel] ?? []}
+            allInventoryItems={inventoryItems}
+            isParcelReversed={isParcelReversed(effectiveParcel)}
+            scale={scale}
+            tx={tx}
+            ty={ty}
+            wasPannedRef={wasPannedRef}
+            onSelectItem={(item, isPool, isGroupExtra) => {
+              setSelectedItem(item)
+              setSelectedItemIsPool(isPool)
+              setSelectedItemIsGroupExtra(isGroupExtra)
+            }}
+          />
+        </div>
       ) : null}
 
       {/* Floating rentals ⇄ parcels toggle — always visible, bottom-right.
