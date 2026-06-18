@@ -14,6 +14,11 @@ import { createWalkInRental } from './actions'
  *
  * Items are big tappable cards. Single tap = add 1. Tap again = add more.
  * Green highlight + big number = selected. Obvious in sunlight.
+ *
+ * Dark mode: chrome (panel, inputs, neutral toggles) carries `dark:` variants —
+ * the modal is rendered inside the manage page's `.dark` root. The green
+ * selected/GO colors and the active gray-900 toggles get dark variants so they
+ * stay legible on a dark sheet (gray-900 active → gray-100 in dark).
  */
 export default function CreateRentalModal({
   siteId,
@@ -117,11 +122,11 @@ export default function CreateRentalModal({
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 sm:p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl overflow-hidden max-h-[92vh] sm:max-h-[90vh] flex flex-col">
+      <div className="bg-white dark:bg-gray-900 dark:text-gray-100 w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl overflow-hidden max-h-[92vh] sm:max-h-[90vh] flex flex-col">
         {/* Header — big close target */}
-        <div className="flex items-center justify-between px-5 py-3 border-b-2 border-gray-200">
-          <h2 className="text-xl font-black text-gray-900">🏄 {t('title')}</h2>
-          <button onClick={onClose} className="text-gray-400 text-4xl leading-none p-3 -mr-2">&times;</button>
+        <div className="flex items-center justify-between px-5 py-3 border-b-2 border-gray-200 dark:border-gray-700">
+          <h2 className="text-xl font-black text-gray-900 dark:text-gray-100">🏄 {t('title')}</h2>
+          <button onClick={onClose} className="text-gray-400 dark:text-gray-500 text-4xl leading-none p-3 -mr-2">&times;</button>
         </div>
 
         {/* Body */}
@@ -138,42 +143,42 @@ export default function CreateRentalModal({
                   key={item.id}
                   className={`
                     rounded-2xl border-3 overflow-hidden transition-colors select-none
-                    ${selected ? 'border-green-500 bg-green-50' : 'border-gray-200 bg-white'}
+                    ${selected ? 'border-green-500 bg-green-50 dark:bg-green-950/30' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'}
                   `}
                 >
                   {/* Tappable area — tap anywhere to add 1 */}
                   <button
                     onClick={() => addOne(item.id, item.totalQuantity - (rentedOut[item.id] || 0))}
-                    className="w-full text-left px-4 py-4 active:bg-gray-50"
+                    className="w-full text-left px-4 py-4 active:bg-gray-50 dark:active:bg-gray-700"
                   >
                     <div className="flex items-center justify-between">
                       <div className="min-w-0">
                         <div className="text-lg font-black truncate">{item.name}</div>
-                        <div className="text-sm font-bold text-gray-400">
+                        <div className="text-sm font-bold text-gray-400 dark:text-gray-500">
                           {t('available', { n: item.totalQuantity - (rentedOut[item.id] || 0) })}
                         </div>
                       </div>
                       {selected ? (
-                        <span className="text-3xl font-black text-green-600 flex-shrink-0 ml-3">
+                        <span className="text-3xl font-black text-green-600 dark:text-green-400 flex-shrink-0 ml-3">
                           {qty}
                         </span>
                       ) : (
-                        <span className="text-2xl text-gray-300 flex-shrink-0 ml-3">+</span>
+                        <span className="text-2xl text-gray-300 dark:text-gray-500 flex-shrink-0 ml-3">+</span>
                       )}
                     </div>
                   </button>
 
                   {/* Quantity adjust — only shows when selected */}
                   {selected && (
-                    <div className="flex border-t-2 border-green-200">
+                    <div className="flex border-t-2 border-green-200 dark:border-green-800/40">
                       <button
                         onClick={() => removeOne(item.id)}
-                        className="flex-1 py-3 text-xl font-black text-red-500 active:bg-red-50 border-r border-green-200"
+                        className="flex-1 py-3 text-xl font-black text-red-500 active:bg-red-50 dark:active:bg-red-950/30 border-r border-green-200 dark:border-green-800/40"
                       >−</button>
                       <button
                         onClick={() => addOne(item.id, item.totalQuantity - (rentedOut[item.id] || 0))}
                         disabled={qty >= item.totalQuantity - (rentedOut[item.id] || 0)}
-                        className="flex-1 py-3 text-xl font-black text-green-600 active:bg-green-100 disabled:opacity-30"
+                        className="flex-1 py-3 text-xl font-black text-green-600 dark:text-green-400 active:bg-green-100 dark:active:bg-green-900/30 disabled:opacity-30"
                       >+</button>
                     </div>
                   )}
@@ -191,8 +196,8 @@ export default function CreateRentalModal({
                 className={`
                   flex-1 py-3 text-base font-black rounded-xl border-2 select-none
                   ${durationType === 'hours' && hours === h
-                    ? 'bg-gray-900 text-white border-gray-900'
-                    : 'bg-white text-gray-600 border-gray-300 active:border-gray-500'
+                    ? 'bg-gray-900 text-white border-gray-900 dark:bg-gray-100 dark:text-gray-900 dark:border-gray-100'
+                    : 'bg-white text-gray-600 border-gray-300 active:border-gray-500 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600'
                   }
                 `}
               >
@@ -204,8 +209,8 @@ export default function CreateRentalModal({
               className={`
                 flex-1 py-3 text-base font-black rounded-xl border-2 select-none
                 ${durationType === 'days'
-                  ? 'bg-gray-900 text-white border-gray-900'
-                  : 'bg-white text-gray-600 border-gray-300 active:border-gray-500'
+                  ? 'bg-gray-900 text-white border-gray-900 dark:bg-gray-100 dark:text-gray-900 dark:border-gray-100'
+                  : 'bg-white text-gray-600 border-gray-300 active:border-gray-500 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600'
                 }
               `}
             >
@@ -216,7 +221,7 @@ export default function CreateRentalModal({
           {/* ── More options — hidden by default ── */}
           <button
             onClick={() => setShowMore(v => !v)}
-            className="w-full text-sm font-bold text-gray-400 py-1 active:text-gray-600 select-none"
+            className="w-full text-sm font-bold text-gray-400 dark:text-gray-500 py-1 active:text-gray-600 dark:active:text-gray-300 select-none"
           >
             {showMore ? t('lessOptions') : t('moreOptions')}
           </button>
@@ -229,7 +234,7 @@ export default function CreateRentalModal({
                 value={guestName}
                 onChange={e => setGuestName(e.target.value)}
                 placeholder={t('guestNameOptional')}
-                className="w-full border-2 rounded-xl px-4 py-3.5 text-base"
+                className="w-full border-2 rounded-xl px-4 py-3.5 text-base dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-500"
               />
 
               {/* Custom hours (if > 3) */}
@@ -237,12 +242,12 @@ export default function CreateRentalModal({
                 <div className="flex items-center gap-3 justify-center">
                   <button
                     onClick={() => setHours(h => Math.max(1, h - 1))}
-                    className="w-14 h-14 text-2xl font-black rounded-xl border-2 border-gray-300 active:bg-gray-100 select-none"
+                    className="w-14 h-14 text-2xl font-black rounded-xl border-2 border-gray-300 dark:border-gray-600 active:bg-gray-100 dark:active:bg-gray-700 select-none"
                   >−</button>
                   <span className="text-2xl font-black w-16 text-center">{hours}h</span>
                   <button
                     onClick={() => setHours(h => Math.min(12, h + 1))}
-                    className="w-14 h-14 text-2xl font-black rounded-xl border-2 border-gray-300 active:bg-gray-100 select-none"
+                    className="w-14 h-14 text-2xl font-black rounded-xl border-2 border-gray-300 dark:border-gray-600 active:bg-gray-100 dark:active:bg-gray-700 select-none"
                   >+</button>
                 </div>
               )}
@@ -253,8 +258,8 @@ export default function CreateRentalModal({
                   onClick={() => setPaymentType('cash')}
                   className={`flex-1 py-3.5 text-base font-black rounded-xl border-2 select-none ${
                     paymentType === 'cash'
-                      ? 'bg-gray-900 text-white border-gray-900'
-                      : 'bg-white text-gray-600 border-gray-300'
+                      ? 'bg-gray-900 text-white border-gray-900 dark:bg-gray-100 dark:text-gray-900 dark:border-gray-100'
+                      : 'bg-white text-gray-600 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600'
                   }`}
                 >
                   💵 {t('cash')}
@@ -263,8 +268,8 @@ export default function CreateRentalModal({
                   onClick={() => setPaymentType('free')}
                   className={`flex-1 py-3.5 text-base font-black rounded-xl border-2 select-none ${
                     paymentType === 'free'
-                      ? 'bg-gray-900 text-white border-gray-900'
-                      : 'bg-white text-gray-600 border-gray-300'
+                      ? 'bg-gray-900 text-white border-gray-900 dark:bg-gray-100 dark:text-gray-900 dark:border-gray-100'
+                      : 'bg-white text-gray-600 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600'
                   }`}
                 >
                   🆓 {t('free')}
@@ -275,14 +280,14 @@ export default function CreateRentalModal({
 
           {/* Error */}
           {error && (
-            <div className="text-lg font-black text-red-600 bg-red-50 px-4 py-3 rounded-xl border-2 border-red-200 text-center">
+            <div className="text-lg font-black text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 px-4 py-3 rounded-xl border-2 border-red-200 dark:border-red-800/40 text-center">
               {error}
             </div>
           )}
         </div>
 
         {/* Footer — giant GO button */}
-        <div className="px-3 sm:px-4 py-3 border-t-2 border-gray-200"
+        <div className="px-3 sm:px-4 py-3 border-t-2 border-gray-200 dark:border-gray-700"
              style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))' }}>
           <button
             disabled={isPending || totalItems === 0}
@@ -291,7 +296,7 @@ export default function CreateRentalModal({
               w-full font-black py-5 rounded-2xl text-xl select-none transition-colors
               ${totalItems > 0
                 ? 'bg-green-600 text-white active:bg-green-700'
-                : 'bg-gray-200 text-gray-400'
+                : 'bg-gray-200 text-gray-400 dark:bg-gray-800 dark:text-gray-500'
               }
               disabled:opacity-50
             `}

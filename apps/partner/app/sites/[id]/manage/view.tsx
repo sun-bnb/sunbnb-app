@@ -23,6 +23,7 @@ function parseSunbedNumber(num: number) {
 
 const SEAT_ORDER_REVERSED_KEY = 'sunbnb-manage-seat-order-reversed'
 const MANAGE_ZOOM_KEY = 'sunbnb-manage-zoom'
+const DARK_MODE_KEY = 'sunbnb-manage-dark'
 
 const ZOOM_MIN = 0.5
 const ZOOM_MAX = 2.5
@@ -39,6 +40,32 @@ export default function ManageView({
 }) {
   const router = useRouter()
   const t = useTranslations('SiteManage')
+
+  // ── Dark mode ─────────────────────────────────────────────────────────────
+  // Default false so SSR/first render matches (no hydration mismatch).
+  // Overridden from localStorage in a mount useEffect, same pattern as zoom.
+  const [isDark, setIsDark] = useState(false)
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(DARK_MODE_KEY) === '1') setIsDark(true)
+    } catch { /* ignore */ }
+  }, [])
+
+  const toggleDark = () => {
+    setIsDark(prev => {
+      const next = !prev
+      try { localStorage.setItem(DARK_MODE_KEY, next ? '1' : '0') } catch { /* ignore */ }
+      return next
+    })
+  }
+
+  // Extend the body background to cover the area outside the max-w-screen-lg container.
+  useEffect(() => {
+    const prev = document.body.style.backgroundColor
+    document.body.style.backgroundColor = isDark ? '#0a0a0a' : ''
+    return () => { document.body.style.backgroundColor = prev }
+  }, [isDark])
 
   // ── Selection state ───────────────────────────────────────────────────────
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
@@ -290,7 +317,7 @@ export default function ManageView({
   return (
     <div
       ref={containerRef}
-      className="px-2 pt-2 pb-20 mx-auto w-full max-w-screen-lg"
+      className={`px-2 pt-2 pb-20 mx-auto w-full max-w-screen-lg transition-colors dark:bg-gray-950 dark:text-gray-100 ${isDark ? 'dark' : ''}`}
       style={{ touchAction: 'pan-x pan-y' }}
       onPointerDown={handleGridPointerDown}
       onPointerMove={handleGridPointerMove}
@@ -300,9 +327,21 @@ export default function ManageView({
       {/* Header — parcel toolbar (stats / zoom / parcel tabs) in a parcel view;
           a minimal placeholder title in the rentals view. */}
       {showRentals ? (
-        <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-white rounded-xl border border-gray-200 shadow-sm sticky top-0 z-10">
-          <span aria-hidden="true" className="text-xl">🏄</span>
-          <span className="text-base font-bold text-gray-900">{t('rentals')}</span>
+        <div className="flex items-center justify-between gap-2 mb-3 px-3 py-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm sticky top-0 z-10">
+          <div className="flex items-center gap-2">
+            <span aria-hidden="true" className="text-xl">🏄</span>
+            <span className="text-base font-bold text-gray-900 dark:text-gray-100">{t('rentals')}</span>
+          </div>
+          <button
+            type="button"
+            onClick={toggleDark}
+            aria-label={t('toggleTheme')}
+            aria-pressed={isDark}
+            title={t('toggleTheme')}
+            className="flex items-center justify-center px-3 min-h-[36px] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors font-semibold"
+          >
+            <span aria-hidden="true">{isDark ? '☀' : '☾'}</span>
+          </button>
         </div>
       ) : (
         <ManageToolbar
@@ -319,6 +358,8 @@ export default function ManageView({
           onResetZoom={resetZoom}
           isReversed={effectiveParcel !== undefined && isParcelReversed(effectiveParcel)}
           onToggleReversed={() => { if (effectiveParcel !== undefined) toggleParcelReversed(effectiveParcel) }}
+          isDark={isDark}
+          onToggleDark={toggleDark}
         />
       )}
 
@@ -362,7 +403,7 @@ export default function ManageView({
           onClick={() => selectView(showRentals ? backParcel! : 'rentals')}
           aria-label={showRentals ? t('parcel', { n: '' }).trim() : t('rentals')}
           title={showRentals ? t('parcel', { n: '' }).trim() : t('rentals')}
-          className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-accent text-white text-2xl shadow-lg flex items-center justify-center hover:bg-accent-hover active:scale-95 transition select-none"
+          className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-accent dark:bg-gray-700 text-white text-2xl shadow-lg flex items-center justify-center hover:bg-accent-hover dark:hover:bg-gray-600 active:scale-95 transition select-none"
         >
           <span aria-hidden="true">{showRentals ? '⛱️' : '🏄'}</span>
         </button>

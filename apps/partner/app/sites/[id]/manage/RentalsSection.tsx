@@ -30,7 +30,7 @@ export default function RentalsSection({
         <div className="flex items-center gap-2">
           <span className="text-xl font-black">🏄</span>
           {bookings.length > 0 && (
-            <span className="text-base font-black text-gray-600">
+            <span className="text-base font-black text-gray-600 dark:text-gray-300">
               {outCount} {t('out')}
               {waitingCount > 0 && (
                 <span className="text-yellow-600 ml-2">
@@ -49,7 +49,7 @@ export default function RentalsSection({
       </div>
 
       {bookings.length === 0 ? (
-        <div className="text-center py-6 text-gray-300 text-lg font-bold">
+        <div className="text-center py-6 text-gray-300 dark:text-gray-500 text-lg font-bold">
           {t('noRentals')}
         </div>
       ) : (

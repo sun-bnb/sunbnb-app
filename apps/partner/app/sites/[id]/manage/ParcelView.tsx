@@ -57,9 +57,9 @@ function PoolSection({
   const occupied = poolItems.filter(i => getBedState(i) !== 'available').length
 
   return (
-    <div className="mt-3 pt-3 border-t border-gray-200">
+    <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
       {poolItems.length > 0 && (
-        <div className="text-xs text-gray-400 mb-1.5 px-0.5 leading-none tabular-nums">
+        <div className="text-xs text-gray-400 dark:text-gray-500 mb-1.5 px-0.5 leading-none tabular-nums">
           {occupied}/{poolItems.length}
         </div>
       )}
@@ -78,10 +78,10 @@ function PoolSection({
           disabled={isPendingPool}
           aria-label={t('poolAddSeat')}
           className="
-            border-2 border-dashed border-gray-400 rounded-lg bg-transparent
+            border-2 border-dashed border-gray-400 dark:border-gray-600 rounded-lg bg-transparent
             min-w-[44px] min-h-[44px] w-14
             py-2 px-1 flex items-center justify-center
-            text-gray-400 text-lg font-light
+            text-gray-400 dark:text-gray-500 text-lg font-light
             active:bg-gray-200 disabled:opacity-40 transition-colors select-none
           "
         >
@@ -237,7 +237,7 @@ export default function ParcelView({
               key={rowNum}
               className={`
                 flex items-stretch gap-1 mb-0.5 rounded-lg py-0.5
-                ${rowNum % 2 === 0 ? 'bg-gray-50' : ''}
+                ${rowNum % 2 === 0 ? 'bg-gray-50 dark:bg-gray-800/40' : ''}
               `}
             >
               {/* Sticky row label */}
@@ -245,11 +245,11 @@ export default function ParcelView({
                 className={`
                   sticky left-0 z-10 flex-shrink-0
                   flex items-center justify-center
-                  ${rowNum % 2 === 0 ? 'bg-gray-50' : 'bg-white'}
+                  ${rowNum % 2 === 0 ? 'bg-gray-50 dark:bg-gray-800/40' : 'bg-white dark:bg-gray-950'}
                 `}
                 style={{ width: ROW_LABEL_WIDTH }}
               >
-                <span className="text-[10px] font-bold text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 leading-none whitespace-nowrap">
+                <span className="text-[10px] font-bold text-gray-500 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5 leading-none whitespace-nowrap">
                   {t('rowLabel', { n: rowNum })}
                 </span>
               </div>
