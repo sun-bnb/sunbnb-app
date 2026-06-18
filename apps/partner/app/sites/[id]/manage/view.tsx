@@ -353,6 +353,15 @@ export default function ManageView({
   // ── Inventory grouping ────────────────────────────────────────────────────
   const { inventoryItems = [] } = site
 
+  // Re-resolve the open bed against the freshest inventory so the detail drawer
+  // reflects server-state changes after a router.refresh() (e.g. a collected
+  // payment flipping the bed to paid) instead of the snapshot captured at tap
+  // time. Falls back to the snapshot if the item is gone (e.g. a removed seat —
+  // the drawer is closing anyway).
+  const liveSelectedItem = selectedItem
+    ? (inventoryItems.find(i => i.id === selectedItem.id) ?? selectedItem)
+    : null
+
   const freePoolItems   = inventoryItems.filter(i => i.status === 'pool' && !i.sunbedGroupId)
   const groupExtraItems = inventoryItems.filter(i => i.status === 'pool' && !!i.sunbedGroupId)
   const regularItems    = inventoryItems.filter(i => i.status !== 'pool')
@@ -830,13 +839,13 @@ export default function ManageView({
       )}
 
       {/* Bed detail modal */}
-      {selectedItem && (
+      {liveSelectedItem && (
         <BedDetail
           siteId={site.id!}
-          item={selectedItem}
+          item={liveSelectedItem}
           groupItems={
-            selectedItem.sunbedGroupId
-              ? inventoryItems.filter(i => i.id !== selectedItem.id && i.sunbedGroupId === selectedItem.sunbedGroupId)
+            liveSelectedItem.sunbedGroupId
+              ? inventoryItems.filter(i => i.id !== liveSelectedItem.id && i.sunbedGroupId === liveSelectedItem.sunbedGroupId)
               : []
           }
           accessKey={accessKey}
