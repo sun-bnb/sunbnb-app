@@ -605,17 +605,20 @@ export default function BedDetail({
           <div className="space-y-3">
             {pendingConfirm ? confirmPanel : (
               <>
-                <div className="bg-yellow-50 dark:bg-yellow-950/30 rounded-xl p-4 space-y-2 text-base border-2 border-yellow-200 dark:border-yellow-800/40">
-                  {reservation.guestName && (
-                    <div className="font-bold text-lg">{reservation.guestName}</div>
-                  )}
-                  <div className="text-gray-600 dark:text-gray-300">{reservation.user.email}</div>
-                  {reservation.guestContact && (
-                    <div className="text-gray-600 dark:text-gray-300">{reservation.guestContact}</div>
-                  )}
-                  {reservation.internalNotes && (
-                    <div className="text-gray-500 dark:text-gray-400 italic">{reservation.internalNotes}</div>
-                  )}
+                <div className="bg-yellow-50 dark:bg-yellow-950/30 rounded-xl p-4 border-2 border-yellow-200 dark:border-yellow-800/40 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    {reservation.guestName && (
+                      <div className="font-bold text-lg truncate">{reservation.guestName}</div>
+                    )}
+                    <div className="text-gray-600 dark:text-gray-300 text-sm truncate">{reservation.user.email}</div>
+                    {reservation.guestContact && (
+                      <div className="text-gray-600 dark:text-gray-300 text-sm truncate">{reservation.guestContact}</div>
+                    )}
+                    {reservation.internalNotes && (
+                      <div className="text-gray-500 dark:text-gray-400 text-sm italic truncate">{reservation.internalNotes}</div>
+                    )}
+                  </div>
+                  <span className="flex-shrink-0 text-xl font-bold leading-none text-yellow-600 dark:text-yellow-400" aria-label={t('paid')} title={t('paid')}>€</span>
                 </div>
                 <div className="flex gap-3">
                   <button
@@ -758,12 +761,14 @@ export default function BedDetail({
           <div className="space-y-3">
             {pendingConfirm ? confirmPanel : (
               <>
-                <div className="bg-red-50 dark:bg-red-950/30 rounded-xl p-4 space-y-2 text-base border-2 border-red-200 dark:border-red-800/40">
-                  {reservation.guestName && (
-                    <div className="font-bold text-lg">{reservation.guestName}</div>
-                  )}
-                  <div className="text-gray-600 dark:text-gray-300">{reservation.user.email}</div>
-                  <div className="text-xs text-red-600 dark:text-red-400 font-semibold">{t('paymentFailed')}</div>
+                <div className="bg-red-50 dark:bg-red-950/30 rounded-xl p-4 border-2 border-red-200 dark:border-red-800/40 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    {reservation.guestName && (
+                      <div className="font-bold text-lg truncate">{reservation.guestName}</div>
+                    )}
+                    <div className="text-gray-600 dark:text-gray-300 text-sm truncate">{reservation.user.email}</div>
+                  </div>
+                  <span className="flex-shrink-0 text-xs font-semibold text-red-600 dark:text-red-400 whitespace-nowrap">{t('paymentFailed')}</span>
                 </div>
                 <button
                   disabled={isPending}
@@ -785,12 +790,14 @@ export default function BedDetail({
           && reservation.status !== RESERVATION_HELD
           && !isFailedReservationStatus(reservation.status) && (
           <div className="space-y-3">
-            <div className="bg-yellow-50 dark:bg-yellow-950/30 rounded-xl p-4 space-y-2 text-base border-2 border-yellow-100 dark:border-yellow-800/40">
-              {reservation.guestName && (
-                <div className="font-bold text-lg">{reservation.guestName}</div>
-              )}
-              <div className="text-gray-600 dark:text-gray-300">{reservation.user.email}</div>
-              <div className="text-xs text-yellow-600 dark:text-yellow-400 font-semibold">{reservation.status}</div>
+            <div className="bg-yellow-50 dark:bg-yellow-950/30 rounded-xl p-4 border-2 border-yellow-100 dark:border-yellow-800/40 flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                {reservation.guestName && (
+                  <div className="font-bold text-lg truncate">{reservation.guestName}</div>
+                )}
+                <div className="text-gray-600 dark:text-gray-300 text-sm truncate">{reservation.user.email}</div>
+              </div>
+              <span className="flex-shrink-0 text-xs font-semibold text-yellow-600 dark:text-yellow-400 whitespace-nowrap">{reservation.status}</span>
             </div>
           </div>
         )}
@@ -901,11 +908,14 @@ export default function BedDetail({
         {/* ── BLOCKED — one button to free it ── */}
         {state === 'blocked' && (
           <div className="space-y-3">
-            {reservation?.internalNotes && (
-              <div className="bg-gray-50 rounded-xl p-4 text-base border-2 border-gray-200">
-                {reservation.internalNotes}
+            <div className="bg-gray-50 dark:bg-gray-800/40 rounded-xl p-4 border-2 border-gray-200 dark:border-gray-700 flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                {reservation?.internalNotes
+                  ? <div className="font-medium text-base truncate">{reservation.internalNotes}</div>
+                  : <div className="text-gray-400 dark:text-gray-500 text-sm italic">{t('blocked')}</div>}
               </div>
-            )}
+              <span className="flex-shrink-0 text-xl leading-none text-gray-400 dark:text-gray-500" aria-label={t('blocked')} title={t('blocked')}>✕</span>
+            </div>
             <button
               disabled={isPending}
               onClick={() => runAction(() => unblockBed(siteId, item.id, accessKey, applyToPair))}
@@ -919,14 +929,16 @@ export default function BedDetail({
         {/* ── COMP — complimentary guest, end comp action ── */}
         {state === 'comp' && (
           <div className="space-y-3">
-            <div className="bg-purple-50 rounded-xl p-4 space-y-2 text-base border-2 border-purple-200">
-              {reservation?.guestName && (
-                <div className="font-bold text-lg">{reservation.guestName}</div>
-              )}
-              <div className="text-purple-600 text-sm font-semibold">★ {t('comp')}</div>
-              {reservation?.internalNotes && (
-                <div className="text-gray-500 italic">{reservation.internalNotes}</div>
-              )}
+            <div className="bg-purple-50 dark:bg-purple-950/30 rounded-xl p-4 border-2 border-purple-200 dark:border-purple-800/40 flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                {reservation?.guestName
+                  ? <div className="font-bold text-lg truncate">{reservation.guestName}</div>
+                  : <div className="text-gray-400 dark:text-gray-500 text-sm italic">{t('comp')}</div>}
+                {reservation?.internalNotes && (
+                  <div className="text-gray-500 dark:text-gray-400 text-sm italic truncate">{reservation.internalNotes}</div>
+                )}
+              </div>
+              <span className="flex-shrink-0 text-2xl leading-none text-purple-500 dark:text-purple-400" aria-label={t('comp')} title={t('comp')}>★</span>
             </div>
             <button
               disabled={isPending}
