@@ -178,6 +178,82 @@ function cancellationHtml(data: ReservationEmailData): string {
   `)
 }
 
+// ─── Template: Receipt ──────────────────────────────────────────────────────
+
+interface ReceiptInvoice {
+  invoiceNumber: string | null
+  invoicedAt: Date
+  issuerCompanyName: string | null
+  issuerVatNumber: string | null
+  issuerCompanyAddress: string | null
+  totalCharge: number
+  totalTax: number
+  totalAmount: number
+  invoiceLines: {
+    description: string | null
+    charge: number
+    tax: number
+    amount: number
+    vatRate: number | null
+  }[]
+}
+
+function receiptHtml(invoice: ReceiptInvoice, siteName: string): string {
+  const merchant = invoice.issuerCompanyName ?? siteName
+  const lineRows = invoice.invoiceLines
+    .map(
+      (l) => `
+      <tr>
+        <td style="padding:8px 0;border-bottom:1px solid #f0f0f0;color:#333;">${l.description ?? '—'}</td>
+        <td style="padding:8px 0;border-bottom:1px solid #f0f0f0;text-align:right;color:#888;">${l.vatRate != null ? `${l.vatRate}%` : '—'}</td>
+        <td style="padding:8px 0;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;">€${l.amount.toFixed(2)}</td>
+      </tr>`,
+    )
+    .join('')
+
+  return emailLayout(`
+    <h1 style="margin:0 0 4px;font-size:22px;color:#1a1a2e;">Receipt</h1>
+    <p style="color:#666;margin:0 0 20px;font-size:15px;">${merchant}</p>
+
+    <table style="width:100%;border-collapse:collapse;font-size:13px;color:#333;margin-bottom:16px;">
+      <tr>
+        <td style="padding:4px 0;color:#888;width:130px;">Receipt no.</td>
+        <td style="padding:4px 0;font-weight:600;">${invoice.invoiceNumber ?? '—'}</td>
+      </tr>
+      <tr>
+        <td style="padding:4px 0;color:#888;">Date</td>
+        <td style="padding:4px 0;">${formatDate(invoice.invoicedAt)}</td>
+      </tr>
+      ${invoice.issuerVatNumber ? `<tr><td style="padding:4px 0;color:#888;">VAT no.</td><td style="padding:4px 0;">${invoice.issuerVatNumber}</td></tr>` : ''}
+      ${invoice.issuerCompanyAddress ? `<tr><td style="padding:4px 0;color:#888;vertical-align:top;">Address</td><td style="padding:4px 0;">${invoice.issuerCompanyAddress}</td></tr>` : ''}
+    </table>
+
+    <table style="width:100%;border-collapse:collapse;font-size:14px;color:#333;">
+      <tr>
+        <td style="padding:8px 0;border-bottom:2px solid #eee;color:#888;font-size:12px;text-transform:uppercase;">Item</td>
+        <td style="padding:8px 0;border-bottom:2px solid #eee;text-align:right;color:#888;font-size:12px;text-transform:uppercase;">VAT</td>
+        <td style="padding:8px 0;border-bottom:2px solid #eee;text-align:right;color:#888;font-size:12px;text-transform:uppercase;">Total</td>
+      </tr>
+      ${lineRows}
+    </table>
+
+    <table style="width:100%;border-collapse:collapse;font-size:14px;color:#333;margin-top:12px;">
+      <tr>
+        <td style="padding:4px 0;text-align:right;color:#888;">Net</td>
+        <td style="padding:4px 0;text-align:right;width:100px;">€${invoice.totalCharge.toFixed(2)}</td>
+      </tr>
+      <tr>
+        <td style="padding:4px 0;text-align:right;color:#888;">VAT</td>
+        <td style="padding:4px 0;text-align:right;">€${invoice.totalTax.toFixed(2)}</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 0;text-align:right;font-weight:700;border-top:1px solid #eee;">Total paid</td>
+        <td style="padding:8px 0;text-align:right;font-weight:700;border-top:1px solid #eee;">€${invoice.totalAmount.toFixed(2)}</td>
+      </tr>
+    </table>
+  `)
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 async function loadReservationEmailData(reservationId: string): Promise<ReservationEmailData | null> {
@@ -255,6 +331,46 @@ export async function sendCancellationEmail(reservationId: string): Promise<void
     })
   } catch (err) {
     console.error(`[sendCancellationEmail] Failed for ${reservationId}:`, err)
+  }
+}
+
+/**
+ * Send a VAT receipt for a paid reservation to a customer-supplied address.
+ *
+ * Built from the PARTNER (gross) invoice created by `processConfirmedReservation`,
+ * so it only works once the payment has been finalized. Used by the self-serve
+ * "email me a receipt" step after a QR walk-in collection. Returns a result the
+ * caller can surface to the customer (rather than throwing).
+ */
+export async function sendReceiptEmail(
+  reservationId: string,
+  toEmail: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const reservation = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    include: {
+      site: { select: { name: true } },
+      invoices: {
+        where: { issuerType: 'PARTNER' },
+        include: { invoiceLines: true },
+      },
+    },
+  })
+  if (!reservation) return { ok: false, error: 'Reservation not found' }
+
+  const invoice = reservation.invoices[0]
+  if (!invoice) return { ok: false, error: 'Receipt is not ready yet' }
+
+  try {
+    await sendEmail({
+      to: toEmail,
+      subject: `Your receipt — ${reservation.site?.name ?? 'Sunbnb'}`,
+      html: receiptHtml(invoice, reservation.site?.name ?? 'Sunbnb'),
+    })
+    return { ok: true }
+  } catch (err) {
+    console.error(`[sendReceiptEmail] Failed for ${reservationId}:`, err)
+    return { ok: false, error: 'Could not send the receipt' }
   }
 }
 

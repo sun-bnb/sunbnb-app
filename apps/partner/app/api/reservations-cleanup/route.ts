@@ -9,6 +9,8 @@ import {
   RESERVATION_PAYMENT_FAILED,
   RESERVATION_PAID_IN_CASH,
   RESERVATION_HELD,
+  OP_WALKED_IN,
+  OP_CHECKED_IN,
 } from '@repo/data/reservation-status'
 
 const CRON_SECRET = process.env.CRON_SECRET
@@ -38,9 +40,14 @@ export async function GET(request: Request) {
   const result = await prisma.reservation.deleteMany({
     where: {
       OR: [
-        { 
+        {
           status: { in: [ RESERVATION_PENDING, RESERVATION_PROCESSING ] },
-          createdAt: { lt: cutoffPending }
+          createdAt: { lt: cutoffPending },
+          // Never GC an occupied walk-in mid-collection: a QR collection flips an
+          // already-seated walk-in (old createdAt) to PROCESSING, which would
+          // otherwise be swept on the next run. Abandoned ONLINE checkouts are
+          // operationalStatus 'expected' and still cleaned.
+          operationalStatus: { notIn: [ OP_WALKED_IN, OP_CHECKED_IN ] },
         },
         {
           status: RESERVATION_PAYMENT_FAILED,

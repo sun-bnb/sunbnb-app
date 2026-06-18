@@ -1,4 +1,13 @@
 {
+  "PaymentThankYou": {
+    "title": "Pago recibido",
+    "subtitle": "¡Gracias! Tu hamaca está pagada.",
+    "receiptLabel": "¿Quieres un recibo? Introduce tu correo",
+    "emailPlaceholder": "tu@correo.com",
+    "sendReceipt": "Enviarme un recibo",
+    "sent": "Recibo enviado: revisa tu bandeja de entrada.",
+    "error": "No se pudo enviar el recibo."
+  },
   "HomePage": {
     "Profile": "Perfil",
     "Reservations": "Reservas",

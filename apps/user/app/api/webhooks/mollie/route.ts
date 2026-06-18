@@ -38,6 +38,7 @@ import {
 } from '@/app/api/_lib/mollie'
 import {
   RESERVATION_PAYMENT_FAILED,
+  RESERVATION_PAID_IN_CASH,
   RESERVATION_REFUNDED,
   ORDER_PAYMENT_FAILED,
   ORDER_REFUNDED,
@@ -59,6 +60,12 @@ interface MollieMetadata {
   siteId?: string
   restaurantId?: string
   bookingIds?: string[]
+  /**
+   * Set by the partner QR walk-in collection flow. A failed/expired collection
+   * must NOT mark the reservation payment_failed (that would strand the occupied
+   * walk-in) — it reverts to paid-in-cash so the guest keeps the bed.
+   */
+  collect?: boolean
 }
 
 /**
@@ -127,10 +134,19 @@ async function handlePaymentPaid(meta: MollieMetadata, paymentId: string): Promi
 
 async function handlePaymentFailed(meta: MollieMetadata): Promise<void> {
   if (meta.type === 'reservation') {
-    await prisma.reservation.updateMany({
-      where: { id: meta.entityId },
-      data: { status: RESERVATION_PAYMENT_FAILED },
-    })
+    // A QR walk-in collection that fails reverts to paid-in-cash (keep the
+    // occupied bed); only a genuine online reservation goes payment_failed.
+    if (meta.collect) {
+      await prisma.reservation.updateMany({
+        where: { id: meta.entityId },
+        data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
+      })
+    } else {
+      await prisma.reservation.updateMany({
+        where: { id: meta.entityId },
+        data: { status: RESERVATION_PAYMENT_FAILED },
+      })
+    }
   } else if (meta.type === 'order') {
     await prisma.order.updateMany({
       where: { id: meta.entityId },

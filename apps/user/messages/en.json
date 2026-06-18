@@ -1,4 +1,13 @@
 {
+  "PaymentThankYou": {
+    "title": "Payment received",
+    "subtitle": "Thanks! Your sunbed is paid.",
+    "receiptLabel": "Want a receipt? Enter your email",
+    "emailPlaceholder": "you@email.com",
+    "sendReceipt": "Email me a receipt",
+    "sent": "Receipt sent — check your inbox.",
+    "error": "Could not send the receipt."
+  },
   "HomePage": {
     "Profile": "Profile",
     "Reservations": "Reservations",
