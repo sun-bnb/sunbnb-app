@@ -407,7 +407,6 @@ export default function BedDetail({
                 value={guestName}
                 onChange={e => setGuestName(e.target.value)}
                 className="flex-1 border-2 rounded-xl px-4 py-3.5 text-base dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-500"
-                autoFocus
               />
               {/* Calendar toggle — opens the date picker row below. Hidden for pool
                   seats (today-only, walk-in only). Highlighted while active. */}
