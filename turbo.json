@@ -27,7 +27,8 @@
     "NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY",
     "NODE_ENV",
     "ALLOWED_ORIGINS",
-    "FF_RESTAURANTS"
+    "FF_RESTAURANTS",
+    "CONSUMER_APP_URL"
   ],
   "tasks": {
     "build": {

@@ -9,11 +9,16 @@ import {
   createRentalBookingsWithGuard,
 } from '@repo/data/reservations'
 import { issueReservationRefund } from '@repo/data/refund'
+import {
+  createReservationMolliePayment,
+  reverifyAndFinalizeReservation,
+} from '@repo/data/reservation-payment'
 import dayjs from 'dayjs'
 import {
   RESERVATION_PAID_IN_CASH,
   RESERVATION_HELD,
   RESERVATION_COMPLETE,
+  RESERVATION_PROCESSING,
   RESERVATION_CANCELED,
   RESERVATION_REFUNDED,
   RESERVATION_PAYMENT_FAILED,
@@ -1085,6 +1090,219 @@ export async function releaseHold(siteId: string, itemId: string, accessKey?: st
 
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok' }
+}
+
+// ─── Collect payment (QR → Mollie) for a walk-in ────────────────────────────
+
+const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
+
+/**
+ * Amount owed for a walk-in's chairs, computed from DB prices only (never a
+ * client value — payments.md). Mirrors the consumer calc in
+ * apps/user/app/sites/[id]/actions.ts: per-seat price (item.price ?? site.price)
+ * summed across the reservation's items, times the number of days in [from, to].
+ */
+function computeWalkInAmount(
+  items: { price: number | null }[],
+  sitePrice: number | null,
+  from: Date,
+  to: Date,
+): number {
+  const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)))
+  const perDay = items.reduce((sum, it) => sum + ((it.price ?? null) || sitePrice || 0), 0)
+  return perDay * days
+}
+
+/**
+ * Begin collecting an online (Mollie) payment for an existing cash walk-in.
+ *
+ * Computes the amount from DB chair prices, persists it, then creates a Mollie
+ * payment on the partner's account (platform fee included) via the shared
+ * `@repo/data` helper. The QR shown to the beachgoer encodes the returned
+ * `checkoutUrl`. On success the walk-in is left `processing`; the webhook (or the
+ * `getCollectStatus` poll) flips it to `complete` + invoices once paid. A failed
+ * creation reverts to `paid-in-cash` so the bed is never lost.
+ *
+ * Demo mode short-circuits to a `pi_demo_` ref that `getCollectStatus` settles
+ * as paid on the next poll (no real checkout).
+ */
+export async function collectReservationPayment(
+  siteId: string,
+  reservationId: string,
+  accessKey?: string,
+) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const reservation = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    select: {
+      siteId: true,
+      status: true,
+      operationalStatus: true,
+      from: true,
+      to: true,
+      items: { select: { price: true } },
+      site: { select: { type: true, price: true } },
+    },
+  })
+  if (!reservation || reservation.siteId !== siteId) {
+    return { status: 'error', errors: ['Reservation not found'] }
+  }
+  // Walk-in only: a cash walk-in that hasn't started a collection yet.
+  if (reservation.operationalStatus !== OP_WALKED_IN || reservation.status !== RESERVATION_PAID_IN_CASH) {
+    return { status: 'error', errors: ['Payment can only be collected for a walk-in'] }
+  }
+  if (reservation.site.type !== 'paid') {
+    return { status: 'error', errors: ['This site does not charge for sunbeds'] }
+  }
+
+  const amount = computeWalkInAmount(
+    reservation.items,
+    reservation.site.price,
+    reservation.from,
+    reservation.to,
+  )
+  if (amount <= 0) {
+    return { status: 'error', errors: ['Nothing to charge for this sunbed'] }
+  }
+
+  // Persist the DB-computed amount before creating the payment — the shared
+  // helper reads paymentAmount off the reservation row.
+  await prisma.reservation.update({
+    where: { id: reservationId },
+    data: { paymentAmount: amount },
+  })
+
+  // Demo: skip the real provider — assign a demo ref and move to processing.
+  if (DEMO_MODE) {
+    await prisma.reservation.update({
+      where: { id: reservationId },
+      data: { paymentRef: `pi_demo_${Date.now()}`, status: RESERVATION_PROCESSING },
+    })
+    revalidatePath(`/sites/${siteId}/manage`)
+    return { status: 'ok', amount, demo: true }
+  }
+
+  const consumerAppUrl = process.env.CONSUMER_APP_URL
+  if (!consumerAppUrl) {
+    return { status: 'error', errors: ['Online payments are not configured (CONSUMER_APP_URL)'] }
+  }
+  const redirectUrl = new URL(`/payment/thank-you?reservationId=${reservationId}`, consumerAppUrl).toString()
+  const webhookUrl = new URL('/api/webhooks/mollie', consumerAppUrl).toString()
+
+  const result = await createReservationMolliePayment(reservationId, {
+    redirectUrl,
+    webhookUrl,
+    metadataExtra: { collect: true },
+  })
+
+  if (result.status === 'error') {
+    // The shared helper marks payment_failed only on a provider error; for a
+    // walk-in we must keep the bed as cash, never strand it as a failed seat.
+    await prisma.reservation.update({
+      where: { id: reservationId },
+      data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
+    })
+    return { status: 'error', errors: [result.error] }
+  }
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok', amount, checkoutUrl: result.checkoutUrl }
+}
+
+/**
+ * Poll the live payment status of a walk-in collection (the manage screen calls
+ * this on an interval while the QR is shown). Reads the webhook-updated status
+ * and, as a fallback, re-verifies with Mollie: a confirmed payment is finalized
+ * (idempotent invoices, status → complete); a failed/expired one reverts to
+ * `paid-in-cash` so the walk-in (and the bed) survive.
+ */
+export async function getCollectStatus(
+  siteId: string,
+  reservationId: string,
+  accessKey?: string,
+) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const reservation = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    select: { siteId: true, status: true, paymentRef: true },
+  })
+  if (!reservation || reservation.siteId !== siteId) {
+    return { status: 'error', errors: ['Reservation not found'] }
+  }
+
+  if (reservation.status === RESERVATION_COMPLETE) {
+    return { status: 'ok', paymentStatus: 'complete' as const }
+  }
+
+  if (reservation.status === RESERVATION_PROCESSING && reservation.paymentRef) {
+    const fin = await reverifyAndFinalizeReservation(reservationId)
+    if (fin.settled === 'complete') {
+      revalidatePath(`/sites/${siteId}/manage`)
+      return { status: 'ok', paymentStatus: 'complete' as const }
+    }
+    if (fin.settled === 'failed') {
+      // Failed collection → keep the walk-in as cash, free nothing.
+      await prisma.reservation.update({
+        where: { id: reservationId },
+        data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
+      })
+      revalidatePath(`/sites/${siteId}/manage`)
+      return { status: 'ok', paymentStatus: 'failed' as const }
+    }
+    return { status: 'ok', paymentStatus: 'processing' as const }
+  }
+
+  return { status: 'ok', paymentStatus: 'cash' as const }
+}
+
+/**
+ * Abandon an in-flight collection (operator closed the QR before the beachgoer
+ * paid). Re-verifies once: a payment that actually went through is finalized
+ * (complete + invoices); otherwise the walk-in reverts to `paid-in-cash` and the
+ * paymentRef is cleared, so the occupied bed is safe from the PENDING/PROCESSING
+ * cleanup cron (which keys on the walk-in's old `createdAt`) and can be
+ * re-collected. Idempotent / no-op for a reservation that isn't mid-collection.
+ */
+export async function cancelCollection(
+  siteId: string,
+  reservationId: string,
+  accessKey?: string,
+) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const reservation = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    select: { siteId: true, status: true, paymentRef: true },
+  })
+  if (!reservation || reservation.siteId !== siteId) {
+    return { status: 'error', errors: ['Reservation not found'] }
+  }
+  // Only a processing collection is abandonable. Anything else (already complete,
+  // already cash) is a no-op success.
+  if (reservation.status !== RESERVATION_PROCESSING) {
+    return { status: 'ok', paymentStatus: reservation.status === RESERVATION_COMPLETE ? 'complete' as const : 'cash' as const }
+  }
+
+  if (reservation.paymentRef) {
+    const fin = await reverifyAndFinalizeReservation(reservationId)
+    if (fin.settled === 'complete') {
+      revalidatePath(`/sites/${siteId}/manage`)
+      return { status: 'ok', paymentStatus: 'complete' as const }
+    }
+  }
+
+  // Not paid — revert to a plain cash walk-in (bed kept, re-collectable).
+  await prisma.reservation.update({
+    where: { id: reservationId },
+    data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
+  })
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok', paymentStatus: 'cash' as const }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -45,6 +45,9 @@ import {
   removeGroupSeat,
   deletePoolSeat,
   removeFailedReservation,
+  collectReservationPayment,
+  getCollectStatus,
+  cancelCollection,
 } from '@/app/sites/[id]/manage/actions'
 
 import {
@@ -406,6 +409,24 @@ export const GATED_ACTIONS: GatedAction[] = [
     kind: 'action',
     gate: 'token-or-session',
     invoke: (accessKey?) => removeFailedReservation(SITE_ID, RES_ID, accessKey),
+  },
+  {
+    name: 'manage.collectReservationPayment',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => collectReservationPayment(SITE_ID, RES_ID, accessKey),
+  },
+  {
+    name: 'manage.getCollectStatus',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => getCollectStatus(SITE_ID, RES_ID, accessKey),
+  },
+  {
+    name: 'manage.cancelCollection',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => cancelCollection(SITE_ID, RES_ID, accessKey),
   },
 
   // ══════════════════════════════════════════════════════════════════════════
