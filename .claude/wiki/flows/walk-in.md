@@ -5,6 +5,8 @@ status: stable
 sources:
   - apps/partner/app/sites/[id]/manage/actions.ts
   - apps/partner/app/api/reservations-cleanup/route.ts
+  - packages/data/src/reservation-payment.ts
+  - apps/user/app/api/webhooks/mollie/route.ts
   - packages/data/src/reservation-status.ts
   - apps/partner/CLAUDE.md
 related:
@@ -68,10 +70,23 @@ All four auto-include the bed's SunbedGroup/pair siblings and run through `reser
 | `updateReservationNotes` | edit `internalNotes` | — |
 | `refundReservation` | stamp `refundedAt`, **bed stays occupied**; idempotent | online `complete` only |
 | `cancelReservation` | `complete` → `canceled` (or `refunded` if `refundedAt`), **keeps row for audit**, frees bed | idempotent on terminal |
+| `collectReservationPayment` / `getCollectStatus` / `cancelCollection` | take an online QR payment for a walk-in → `complete` (see § Collecting a walk-in payment) | walk-in / `paid-in-cash` |
 
 ### Deleters — remove the row, free the bed
 
 `unreserveItem` (walk-in), `releaseHold` (hold), `uncompBed` (comp), `unblockBed` (block) delete the floor row (no invoice trail). `removeFailedReservation` deletes a `payment_failed` row only (guarded so it can never touch a paid/held/active booking). Pair-mode deletes the whole reservation; single-seat mode disconnects just one item when >1 remain.
+
+## Collecting a walk-in payment (QR → Mollie)
+
+A cash walk-in can be upgraded to a real online sale on the floor. `BedDetail.tsx` shows a **Collect payment** button on a `walked-in` bed (paid sites only); `collectReservationPayment`:
+
+1. Computes the amount from **DB chair prices** (`item.price ?? site.price` × days — never client-supplied), persists it.
+2. Mints an **`anonId` capability** on the partner-created walk-in (it has none) so the beachgoer's browser can later claim *this one* reservation — same bearer model as an anonymous POS booking.
+3. Creates a Mollie payment on the partner's account (platform fee via `applicationFee`) through the shared `createReservationMolliePayment` in `packages/data/src/reservation-payment.ts` — the **same** primitive the consumer online flow uses (extracted like `[[entity:invoice]]`'s refund). Metadata carries `collect:true`.
+
+`status` goes `paid-in-cash → processing` while `operationalStatus` **stays `walked-in`** (the bed never frees). The operator screen polls `getCollectStatus`; the QR encodes the Mollie checkout URL. On **paid** (webhook `[[flow:reservation-payment]]`, or the poll's `reverifyAndFinalizeReservation` fallback → `processConfirmedReservation`): `status → complete`, invoices created, BedDetail swaps the button for a paid badge. The beachgoer is redirected to the standard `/payment/complete?reservationId=&anonId=` → `/reservations/[id]` (PDF receipt + a self-serve "email me a receipt" via `sendReceiptEmail`).
+
+**A failed/expired/abandoned collection reverts to `paid-in-cash`** (never `payment_failed`) so the occupied bed survives — handled on three paths: `cancelCollection` (operator closes the QR), `getCollectStatus` (poll sees failure), and the Mollie webhook (the `collect` metadata branch). Demo mode (`NEXT_PUBLIC_DEMO_MODE`) skips the provider: a `pi_demo_` ref settles as paid on the next poll.
 
 ## Operational state machines
 
@@ -80,6 +95,8 @@ online booking:  expected → checked-in → departed
                          ↘ no-show
 walk-in:         walked-in → departed
                           ↘ no-show            (already present — no check-in step)
+                 walked-in → (collect QR) processing → complete (paid online)
+                                        ↘ failed → back to paid-in-cash
 hold:            expected → convertHoldToWalkIn → walked-in → …
                          ↘ no-show / releaseHold
 block, comp:     single-state; cleared by unblock / uncomp
@@ -93,7 +110,7 @@ How long a state "remains" has two separate answers — freeing the bed and dele
 
 1. **Freeing the bed is an operational flip.** `markDeparted`/`markNoShow` set `operationalStatus` to `departed`/`no-show`. The conflict/availability guard filters `operationalStatus notIn [departed, no-show]`, so the bed frees **immediately** — even though the row still exists as `paid-in-cash`.
 2. **Deleting the row is the cleanup cron's job.** `app/api/reservations-cleanup/route.ts` (Vercel cron, every 15 min) `deleteMany` by age:
-   - `pending`/`processing` → `createdAt` older than **15 min** (abandoned online checkouts)
+   - `pending`/`processing` → `createdAt` older than **15 min** (abandoned online checkouts), **excluding** `walked-in`/`checked-in` occupants — a QR collection flips an already-seated walk-in (old `createdAt`) to `processing`, which would otherwise be swept on the next run
    - `payment_failed` → `createdAt` older than **24 h**
    - `paid-in-cash` **and** `held` → `createdAt < start-of-today` **AND** `to < now`
 
@@ -137,3 +154,4 @@ The only period control in `/manage` (the calendar toggle in `BedDetail.tsx`), f
 - **Forgetting `blocked`/`comp`/`held` count as occupied.** They block via `BLOCKING_STATUSES`; bypassing the availability service double-books.
 - **Mixing sunbed and rental status constants.** Different operational chains (`OP_RESERVED/PICKED_UP/RETURNED`).
 - **Expecting `/manage` to make future-dated bookings.** It can't — only forward-extend a walk-in via `until`; ranged/future bookings are the calendar's job.
+- **Letting a collection strand the walk-in.** Collecting flips an old-`createdAt` walk-in to `processing`: a failed/abandoned one must revert to `paid-in-cash` (all three paths: `cancelCollection`, poll, webhook `collect` branch), and the cleanup cron must skip occupied (`walked-in`/`checked-in`) `processing` rows — else the seated guest's bed is deleted mid-payment.
