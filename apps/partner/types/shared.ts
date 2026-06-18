@@ -98,6 +98,8 @@ export interface Reservation {
   guestContact?: string | null
   internalNotes?: string | null
   paymentAmount?: number | null
+  paymentRef?: string | null
+  refundedAt?: Date | null
   isComp?: boolean
   user: {
     id: string

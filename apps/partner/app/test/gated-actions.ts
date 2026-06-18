@@ -33,6 +33,7 @@ import {
   compBed,
   uncompBed,
   cancelReservation,
+  refundReservation,
   releaseHold,
   convertHoldToWalkIn,
   markRentalPickedUp,
@@ -374,6 +375,12 @@ export const GATED_ACTIONS: GatedAction[] = [
     kind: 'action',
     gate: 'token-or-session',
     invoke: (accessKey?) => cancelReservation(SITE_ID, ITEM_ID, accessKey),
+  },
+  {
+    name: 'manage.refundReservation',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => refundReservation(SITE_ID, ITEM_ID, accessKey),
   },
   {
     name: 'manage.releaseHold',

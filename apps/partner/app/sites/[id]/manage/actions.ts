@@ -8,12 +8,14 @@ import {
   moveReservationWithConflictGuard,
   createRentalBookingsWithGuard,
 } from '@repo/data/reservations'
+import { issueReservationRefund } from '@repo/data/refund'
 import dayjs from 'dayjs'
 import {
   RESERVATION_PAID_IN_CASH,
   RESERVATION_HELD,
   RESERVATION_COMPLETE,
   RESERVATION_CANCELED,
+  RESERVATION_REFUNDED,
   RESERVATION_PAYMENT_FAILED,
   RENTAL_COMPLETE,
   OP_EXPECTED,
@@ -812,23 +814,94 @@ export async function convertHoldToWalkIn(
   return { status: 'ok' }
 }
 
-// ─── Cancel reservation (partner-side, refund placeholder) ──────────────────
+// ─── Refund reservation (manual, Mollie) ────────────────────────────────────
 
-// TODO(P7b): real refund. issueRefund lives in apps/user/app/api/_lib/payment-provider.ts and
-// must be extracted into @repo/data before this can run for real. Until then this is a NO-OP.
-async function issueRefundPlaceholder(paymentRef: string | null) {
-  console.warn('[cancelReservation] P7b NOT WIRED — no refund issued for', paymentRef)
+/**
+ * Resolve the PartnerAccount.userId that owns a site's Mollie account.
+ * (`PartnerAccount.userId` === the site owner's User id.) Returns null when the
+ * site has no connected partner account.
+ */
+async function resolvePartnerAccountId(siteId: string): Promise<string | null> {
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { user: { select: { partnerAccount: { select: { userId: true } } } } },
+  })
+  return site?.user?.partnerAccount?.userId ?? null
 }
+
+/**
+ * Issue a refund for a paid online/QR reservation, in place — WITHOUT freeing the
+ * bed. The booking stays `complete` (the seat is still occupied) and only the
+ * durable `refundedAt` marker is stamped. Freeing the seat is the separate
+ * `cancelReservation` step; once refunded it terminates the booking as REFUNDED.
+ *
+ * Decoupling refund from cancel lets staff issue the money-back manually from the
+ * cancel confirmation dialog and see it confirmed before committing the cancel.
+ *
+ * Idempotent: a reservation already carrying `refundedAt` returns ok without
+ * calling Mollie again (guards against a double refund on re-tap / re-open).
+ */
+export async function refundReservation(
+  siteId: string,
+  itemId: string,
+  accessKey?: string
+) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const todayStart = dayjs().startOf('day').toDate()
+  const todayEnd = dayjs().endOf('day').toDate()
+
+  const reservation = await prisma.reservation.findFirst({
+    where: {
+      siteId,
+      status: RESERVATION_COMPLETE,
+      from: { lte: todayEnd },
+      to: { gte: todayStart },
+      items: { some: { id: itemId } },
+    },
+    select: { id: true, paymentRef: true, refundedAt: true },
+  })
+
+  if (!reservation) {
+    return { status: 'error', errors: ['No paid reservation found to refund'] }
+  }
+  // Idempotent: already refunded → no second Mollie call.
+  if (reservation.refundedAt) return { status: 'ok' }
+
+  const partnerAccountId = await resolvePartnerAccountId(siteId)
+  const result = await issueReservationRefund(reservation.paymentRef, partnerAccountId)
+  if (result.status === 'error') {
+    // `needsReconnect` lets the UI offer the Mollie re-consent ("Enable refunds")
+    // action for a missing-permission (403) failure, vs a plain retry for transient ones.
+    return {
+      status: 'error',
+      errors: [result.error],
+      needsReconnect: result.reason === 'permission',
+    }
+  }
+
+  await prisma.reservation.update({
+    where: { id: reservation.id },
+    data: { refundedAt: new Date() },
+  })
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
+}
+
+// ─── Cancel reservation (partner-side) ──────────────────────────────────────
 
 /**
  * Cancel a paid online/QR reservation and free the bed.
  *
- * The reservation row is KEPT for audit (status → CANCELED); it is never deleted.
- * Idempotent: if the reservation is already CANCELED, returns ok immediately.
+ * Cancel no longer issues a refund itself — refunding is the separate, manual
+ * `refundReservation` action surfaced in the cancel confirmation dialog. Cancel
+ * only frees the seat: the terminal status reflects whether a refund was already
+ * issued (REFUNDED when `refundedAt` is set, otherwise CANCELED).
  *
- * IMPORTANT — real refund wiring is deferred to P7b. `issueRefundPlaceholder`
- * is a loud NO-OP stub. Do NOT deploy to production until P7b swaps it for the
- * real `issueRefund` extracted into `@repo/data`.
+ * The reservation row is KEPT for audit; it is never deleted. Idempotent: if the
+ * reservation is already in a terminal CANCELED/REFUNDED state, returns ok.
  *
  * Cancel is whole-reservation by design: updating the status row covers all items
  * in the booking regardless of how many seats the reservation spans.
@@ -854,31 +927,32 @@ export async function cancelReservation(
       to: { gte: todayStart },
       items: { some: { id: itemId } },
     },
-    select: { id: true, paymentRef: true },
+    select: { id: true, refundedAt: true },
   })
 
   if (!reservation) {
-    // Idempotent: if already canceled (e.g. double-tap), return ok
-    const alreadyCanceled = await prisma.reservation.findFirst({
+    // Idempotent: if already terminal (canceled or refunded), return ok
+    const alreadyTerminal = await prisma.reservation.findFirst({
       where: {
         siteId,
-        status: RESERVATION_CANCELED,
+        status: { in: [RESERVATION_CANCELED, RESERVATION_REFUNDED] },
         from: { lte: todayEnd },
         to: { gte: todayStart },
         items: { some: { id: itemId } },
       },
       select: { id: true },
     })
-    if (alreadyCanceled) return { status: 'ok' }
+    if (alreadyTerminal) return { status: 'ok' }
     return { status: 'error', errors: ['No active reservation found to cancel'] }
   }
 
-  // TODO(P7b): swap this for the real issueRefund once extracted into @repo/data
-  await issueRefundPlaceholder(reservation.paymentRef)
+  // A refund issued earlier (via refundReservation) sets refundedAt — reflect that
+  // in the terminal status so the booking reads as REFUNDED, not merely CANCELED.
+  const finalStatus = reservation.refundedAt ? RESERVATION_REFUNDED : RESERVATION_CANCELED
 
   await prisma.reservation.update({
     where: { id: reservation.id },
-    data: { status: RESERVATION_CANCELED },
+    data: { status: finalStatus },
   })
 
   revalidatePath(`/sites/${siteId}/manage`)

@@ -733,7 +733,8 @@
     "zoomIn": "Lähennä",
     "zoomOut": "Loitonna",
     "resetZoom": "Nollaa zoom",
-    "comp": "Ilmainen"
+    "comp": "Ilmainen",
+    "toggleTheme": "Vaihda tumma tila"
   },
   "BedDetail": {
     "free": "Vapaa",
@@ -777,7 +778,10 @@
     "cancelReservation": "Peruuta varaus",
     "back": "Takaisin",
     "confirmNoShow": "Merkitään ei-saapuneeksi: vieras ei tullut. Maksu pidätetään; paikka vapautuu.",
-    "confirmCancel": "Perutaan tämä varaus. Maksu palautetaan asiakkaalle; paikka vapautuu.",
+    "confirmCancel": "Tämän varauksen peruminen vapauttaa paikan. Tee hyvitys alta, jos vieras maksoi verkossa.",
+    "issueRefund": "Tee hyvitys",
+    "refunded": "Hyvitetty",
+    "enableRefunds": "Ota hyvitykset käyttöön",
     "confirmDepart": "Merkitään lähteneeksi. Maksu pidätetään; paikka vapautuu.",
     "confirmUnreserve": "Lopetetaan tämä walk-in. Hoida mahdollinen käteispalautus asiakkaan kanssa; paikka vapautuu.",
     "paymentFailed": "Maksu epäonnistui",

@@ -39,6 +39,7 @@ import {
   compBed,
   uncompBed,
   cancelReservation,
+  refundReservation,
   releaseHold,
   convertHoldToWalkIn,
   markRentalPickedUp,
@@ -52,6 +53,7 @@ import {
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { issueReservationRefund } from '@repo/data/refund'
 import {
   reserveWithConflictGuard,
   moveReservationWithConflictGuard,
@@ -1687,11 +1689,11 @@ describe('cancelReservation', () => {
     expect(vi.mocked(prisma.reservation.findFirst)).not.toHaveBeenCalled()
   })
 
-  it('finds the active COMPLETE reservation by itemId and sets status=canceled', async () => {
+  it('finds the active COMPLETE reservation and sets status=canceled when not refunded', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
       id: RES_ID,
-      paymentRef: 'tr_test123',
+      refundedAt: null,
     } as any)
     vi.mocked(prisma.reservation.update).mockResolvedValueOnce({} as any)
 
@@ -1704,32 +1706,28 @@ describe('cancelReservation', () => {
     })
   })
 
-  it('calls the refund placeholder without throwing (loud TODO, no real refund)', async () => {
-    // The issueRefundPlaceholder logs a warning and never throws.
-    // Verifying the action returns ok confirms the stub is non-fatal.
+  it('sets status=refunded when a refund was already issued (refundedAt set)', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
       id: RES_ID,
-      paymentRef: 'tr_withRef',
+      refundedAt: new Date(),
     } as any)
     vi.mocked(prisma.reservation.update).mockResolvedValueOnce({} as any)
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     const res = await cancelReservation(SITE_ID, ITEM_ID)
 
     expect(res.status).toBe('ok')
-    expect(warnSpy).toHaveBeenCalledWith(
-      '[cancelReservation] P7b NOT WIRED — no refund issued for',
-      'tr_withRef'
-    )
-    warnSpy.mockRestore()
+    expect(vi.mocked(prisma.reservation.update)).toHaveBeenCalledWith({
+      where: { id: RES_ID },
+      data: { status: 'refunded' },
+    })
   })
 
-  it('is idempotent: returns ok without calling update when reservation already CANCELED', async () => {
+  it('is idempotent: returns ok without calling update when already terminal (canceled/refunded)', async () => {
     authenticateAsOwner()
     // First findFirst (looking for COMPLETE): no match
     vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(null)
-    // Second findFirst (looking for already-CANCELED): match
+    // Second findFirst (looking for already-terminal): match
     vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({ id: RES_ID } as any)
 
     const res = await cancelReservation(SITE_ID, ITEM_ID)
@@ -1748,6 +1746,121 @@ describe('cancelReservation', () => {
     expect(res.status).toBe('error')
     expect(res.errors?.[0]).toMatch(/no active reservation found/i)
     expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+  })
+})
+
+// ─── refundReservation ──────────────────────────────────────────────────────
+
+describe('refundReservation', () => {
+  it('rejects unauthenticated caller', async () => {
+    const res = await refundReservation(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+    expect(vi.mocked(issueReservationRefund)).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-owner', async () => {
+    authenticateAsNonOwner()
+    const res = await refundReservation(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authorized')
+    expect(vi.mocked(issueReservationRefund)).not.toHaveBeenCalled()
+  })
+
+  it('issues the refund and stamps refundedAt (bed stays occupied — no status change)', async () => {
+    authenticateAsOwner()
+    // site.findUnique must satisfy BOTH the auth lookup (.userId) and the
+    // partner-account resolution (.user.partnerAccount.userId).
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      userId: OWNER_ID,
+      user: { partnerAccount: { userId: 'pa-1' } },
+    } as any)
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
+      id: RES_ID,
+      paymentRef: 'tr_test123',
+      refundedAt: null,
+    } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValueOnce({} as any)
+
+    const res = await refundReservation(SITE_ID, ITEM_ID)
+
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(issueReservationRefund)).toHaveBeenCalledWith('tr_test123', 'pa-1')
+    const updateArg = vi.mocked(prisma.reservation.update).mock.calls[0]![0] as any
+    expect(updateArg.where).toEqual({ id: RES_ID })
+    expect(updateArg.data.refundedAt).toBeInstanceOf(Date)
+    // Refund must NOT change the payment status — the bed stays occupied.
+    expect(updateArg.data.status).toBeUndefined()
+  })
+
+  it('is idempotent: already-refunded reservation does not call Mollie again', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
+      id: RES_ID,
+      paymentRef: 'tr_test123',
+      refundedAt: new Date(),
+    } as any)
+
+    const res = await refundReservation(SITE_ID, ITEM_ID)
+
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(issueReservationRefund)).not.toHaveBeenCalled()
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+  })
+
+  it('returns the provider error without stamping refundedAt when the refund fails', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
+      id: RES_ID,
+      paymentRef: 'tr_test123',
+      refundedAt: null,
+    } as any)
+    vi.mocked(issueReservationRefund).mockResolvedValueOnce({
+      status: 'error',
+      error: 'Mollie refund failed (422)',
+    })
+
+    const res = await refundReservation(SITE_ID, ITEM_ID)
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/mollie refund failed/i)
+    expect((res as { needsReconnect?: boolean }).needsReconnect).toBe(false)
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+  })
+
+  it('flags needsReconnect when the refund 403s for missing permission', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      userId: OWNER_ID,
+      user: { partnerAccount: { userId: 'pa-1' } },
+    } as any)
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
+      id: RES_ID,
+      paymentRef: 'tr_test123',
+      refundedAt: null,
+    } as any)
+    vi.mocked(issueReservationRefund).mockResolvedValueOnce({
+      status: 'error',
+      error: 'Refunds are not enabled on this Mollie connection — reconnect Mollie to grant refund permission.',
+      reason: 'permission',
+    })
+
+    const res = await refundReservation(SITE_ID, ITEM_ID)
+
+    expect(res.status).toBe('error')
+    expect((res as { needsReconnect?: boolean }).needsReconnect).toBe(true)
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+  })
+
+  it('returns error when no paid reservation is found', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(null)
+
+    const res = await refundReservation(SITE_ID, ITEM_ID)
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/no paid reservation found/i)
+    expect(vi.mocked(issueReservationRefund)).not.toHaveBeenCalled()
   })
 })
 

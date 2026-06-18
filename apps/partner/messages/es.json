@@ -733,7 +733,8 @@
     "zoomIn": "Ampliar",
     "zoomOut": "Reducir",
     "resetZoom": "Restablecer zoom",
-    "comp": "Cortesía"
+    "comp": "Cortesía",
+    "toggleTheme": "Alternar modo oscuro"
   },
   "BedDetail": {
     "free": "Libre",
@@ -777,7 +778,10 @@
     "cancelReservation": "Cancelar reserva",
     "back": "Volver",
     "confirmNoShow": "Marcando como no presentado: el huésped no llegó. El pago se mantiene; la hamaca queda libre.",
-    "confirmCancel": "Cancelando esta reserva. El pago se reembolsa al cliente; la hamaca queda libre.",
+    "confirmCancel": "Cancelar esta reserva libera la hamaca. Emite un reembolso abajo si el cliente pagó en línea.",
+    "issueRefund": "Emitir reembolso",
+    "refunded": "Reembolsado",
+    "enableRefunds": "Activar reembolsos",
     "confirmDepart": "Marcando como salido. El pago se mantiene; la hamaca queda libre.",
     "confirmUnreserve": "Finalizando este walk-in. Gestiona el reembolso en efectivo con el cliente; la hamaca queda libre.",
     "paymentFailed": "Pago fallido",

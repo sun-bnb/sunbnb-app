@@ -22,6 +22,7 @@
     "./flags": "./src/flags.ts",
     "./impersonation": "./src/impersonation.ts",
     "./mollie-tokens": "./src/mollie-tokens.ts",
+    "./refund": "./src/refund.ts",
     "./seat-label": "./src/seat-label.ts",
     "./seat-label-db": "./src/seat-label-db.ts",
     "./reservations": "./src/reservations.ts"
@@ -75,6 +76,9 @@
       ],
       "mollie-tokens": [
         "./src/mollie-tokens.ts"
+      ],
+      "refund": [
+        "./src/refund.ts"
       ],
       "seat-label": [
         "./src/seat-label.ts"

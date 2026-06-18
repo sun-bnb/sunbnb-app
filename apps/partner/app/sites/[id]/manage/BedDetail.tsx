@@ -18,6 +18,7 @@ import {
   compBed,
   uncompBed,
   cancelReservation,
+  refundReservation,
   releaseHold,
   convertHoldToWalkIn,
   deletePoolSeat,
@@ -100,6 +101,10 @@ export default function BedDetail({
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null)
   const [until, setUntil] = useState('')
   const [error, setError] = useState<string | null>(null)
+  /** Set once a refund succeeds in this dialog (drives the "Refunded" badge). */
+  const [refunded, setRefunded] = useState(false)
+  /** Set when a refund 403s for missing permission → offer Mollie re-consent. */
+  const [needsReconnect, setNeedsReconnect] = useState(false)
 
   const tomorrow = dayjs().add(1, 'day').format('YYYY-MM-DD')
   const maxUntil = dayjs().add(90, 'day').format('YYYY-MM-DD')
@@ -139,8 +144,30 @@ export default function BedDetail({
   // Re-initialize when the selected item changes
   useEffect(() => {
     setApplyToPair(inSync)
+    setRefunded(false)
+    setNeedsReconnect(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.id])
+
+  // A refund is offered only for a real Mollie payment (tr_…). Demo/cash/comp/held
+  // bookings carry no refundable Mollie payment, so no refund control is shown.
+  const isMolliePaid = !!reservation?.paymentRef && reservation.paymentRef.startsWith('tr_')
+  const alreadyRefunded = refunded || !!reservation?.refundedAt
+
+  /** Issue the Mollie refund without closing the dialog — flip the button to "Refunded". */
+  function runRefund() {
+    setError(null)
+    setNeedsReconnect(false)
+    startTransition(async () => {
+      const result = await refundReservation(siteId, item.id, accessKey)
+      if (result.status === 'ok') {
+        setRefunded(true)
+      } else {
+        setError(result.errors?.[0] || 'Refund failed')
+        if ((result as { needsReconnect?: boolean }).needsReconnect) setNeedsReconnect(true)
+      }
+    })
+  }
 
   function runAction(fn: () => Promise<{ status: string; errors?: (string | undefined)[] }>) {
     setError(null)
@@ -181,7 +208,7 @@ export default function BedDetail({
   /** Shared inline confirm panel — renders instead of normal action buttons. */
   const confirmPanel = (
     <div className="space-y-3">
-      <p className="text-sm text-gray-600">
+      <p className="text-sm text-gray-600 dark:text-gray-300">
         {pendingConfirm === 'no-show'
           ? t('confirmNoShow')
           : pendingConfirm === 'depart'
@@ -192,6 +219,44 @@ export default function BedDetail({
           ? t('confirmRemove')
           : t('confirmCancel')}
       </p>
+      {/* Refund control — only when canceling a real Mollie payment. Manual:
+          tap to issue the refund, which flips to a static "Refunded" confirmation.
+          Canceling afterwards terminates the booking as REFUNDED. */}
+      {pendingConfirm === 'cancel' && isMolliePaid && (
+        alreadyRefunded ? (
+          <div
+            role="status"
+            className="flex items-center justify-center gap-2 bg-green-50 dark:bg-green-950/30 border-2 border-green-200 dark:border-green-800/40 text-green-700 dark:text-green-400 font-semibold text-sm rounded-xl py-3"
+          >
+            <span aria-hidden="true">✓</span>
+            {t('refunded')}
+          </div>
+        ) : needsReconnect ? (
+          /* Refund was rejected for missing permission (403). Re-consent is the
+             only fix — deep-link to the Mollie authorize flow. NOTE: that endpoint
+             needs the OWNER's partner session, so this only completes for an owner
+             logged into the partner app in this browser (fine for testing); on a
+             pure token-gated manage session it will 401. */
+          <button
+            onClick={() => {
+              // Return to this exact manage page (incl. ?key=) after re-consent.
+              const returnTo = encodeURIComponent(window.location.pathname + window.location.search)
+              window.location.href = `/api/mollie/authorize?returnTo=${returnTo}`
+            }}
+            className="block w-full text-center bg-amber-500 text-white font-bold text-base py-3.5 rounded-xl active:bg-amber-600"
+          >
+            {t('enableRefunds')}
+          </button>
+        ) : (
+          <button
+            disabled={isPending}
+            onClick={runRefund}
+            className="w-full bg-blue-500 text-white font-bold text-base py-3.5 rounded-xl active:bg-blue-600 disabled:opacity-50"
+          >
+            {isPending ? '...' : t('issueRefund')}
+          </button>
+        )
+      )}
       <div className="flex gap-3">
         <button
           disabled={isPending}
@@ -202,7 +267,7 @@ export default function BedDetail({
         </button>
         <button
           onClick={() => setPendingConfirm(null)}
-          className="flex-1 bg-gray-100 text-gray-600 font-bold text-lg py-4 rounded-xl active:bg-gray-200"
+          className="flex-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-bold text-lg py-4 rounded-xl active:bg-gray-200 dark:active:bg-gray-700"
         >
           {t('back')}
         </button>
@@ -220,7 +285,7 @@ export default function BedDetail({
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-white w-full max-w-lg rounded-t-2xl p-4 sm:p-5 shadow-xl animate-slide-up"
+      <div className="bg-white dark:bg-gray-900 dark:text-gray-100 w-full max-w-lg rounded-t-2xl p-4 sm:p-5 shadow-xl animate-slide-up"
            style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom, 2rem))' }}>
         {/* Header — big number, plain status */}
         <div className="flex items-center justify-between mb-4 sm:mb-5">
@@ -230,7 +295,7 @@ export default function BedDetail({
                 <span className="text-2xl sm:text-3xl font-black">
                   {isGroupExtra ? `#${groupExtraLabel}` : `+${poolSeq}`}
                 </span>
-                <span className="text-[10px] text-gray-400 font-normal leading-none">
+                <span className="text-[10px] text-gray-400 dark:text-gray-500 font-normal leading-none">
                   {isGroupExtra && pairItem
                     ? t('groupExtraSeat', { n: formatSeat(pairItem, { parcel: true }) })
                     : t('additionalSeat')}
@@ -240,13 +305,13 @@ export default function BedDetail({
               <span className="text-2xl sm:text-3xl font-black">#{formatSeat(item, { parcel: true })}</span>
             )}
             {pairNumber && !isGroupExtra && (
-              <span className="text-base sm:text-lg text-gray-400 font-medium">+ #{pairNumber}</span>
+              <span className="text-base sm:text-lg text-gray-400 dark:text-gray-500 font-medium">+ #{pairNumber}</span>
             )}
             <span className={`text-xs sm:text-sm font-bold px-2.5 sm:px-3 py-1 rounded-full ${stateBadgeColors[state]}`}>
               {badgeLabel}
             </span>
           </div>
-          <button onClick={onClose} className="text-gray-400 text-3xl leading-none p-2">&times;</button>
+          <button onClick={onClose} className="text-gray-400 dark:text-gray-500 text-3xl leading-none p-2">&times;</button>
         </div>
 
         {/* Group-scope toggle — visible only when in a group AND the current state has a
@@ -261,15 +326,15 @@ export default function BedDetail({
         {groupItems.length > 0 && TOGGLE_VISIBLE_STATES.includes(state) && !pendingConfirm && (
           <div className="mb-4">
             {inSync ? (
-              <div className="flex rounded-lg overflow-hidden border border-gray-200 font-semibold">
+              <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 font-semibold">
                 <button
                   onClick={() => setApplyToPair(true)}
                   aria-pressed={applyToPair}
                   className={`
                     flex-1 flex items-center justify-center px-3 min-h-[44px] text-sm transition-colors
                     ${applyToPair
-                      ? 'bg-gray-900 text-white'
-                      : 'bg-white text-gray-400 hover:text-gray-700 hover:bg-gray-50'}
+                      ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
+                      : 'bg-white text-gray-400 hover:text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400'}
                   `}
                 >
                   {groupItems.length >= 2 ? t('group') : t('pair')}
@@ -278,10 +343,10 @@ export default function BedDetail({
                   onClick={() => setApplyToPair(false)}
                   aria-pressed={!applyToPair}
                   className={`
-                    flex-1 flex items-center justify-center px-3 min-h-[44px] text-sm border-l border-gray-200 transition-colors
+                    flex-1 flex items-center justify-center px-3 min-h-[44px] text-sm border-l border-gray-200 dark:border-gray-700 transition-colors
                     ${!applyToPair
-                      ? 'bg-gray-900 text-white'
-                      : 'bg-white text-gray-400 hover:text-gray-700 hover:bg-gray-50'}
+                      ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
+                      : 'bg-white text-gray-400 hover:text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400'}
                   `}
                 >
                   {t('seat')}
@@ -294,9 +359,9 @@ export default function BedDetail({
               <div
                 role="img"
                 aria-label={t('seat')}
-                className="flex rounded-lg overflow-hidden border border-gray-200 font-semibold"
+                className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 font-semibold"
               >
-                <div className="flex-1 flex items-center justify-center px-3 min-h-[44px] text-sm bg-gray-900 text-white">
+                <div className="flex-1 flex items-center justify-center px-3 min-h-[44px] text-sm bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900">
                   {t('seat')}
                 </div>
               </div>
@@ -305,7 +370,7 @@ export default function BedDetail({
         )}
 
         {error && (
-          <div className="mb-3 bg-red-50 border-2 border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+          <div className="mb-3 bg-red-50 dark:bg-red-950/30 border-2 border-red-200 dark:border-red-800/40 text-red-700 dark:text-red-400 text-sm rounded-xl px-4 py-3">
             {error}
           </div>
         )}
@@ -322,7 +387,7 @@ export default function BedDetail({
                 placeholder={t('guestName')}
                 value={guestName}
                 onChange={e => setGuestName(e.target.value)}
-                className="flex-1 border-2 rounded-xl px-4 py-3.5 text-base"
+                className="flex-1 border-2 rounded-xl px-4 py-3.5 text-base dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-500"
                 autoFocus
               />
               {/* Calendar toggle — opens the date picker row below. Hidden for pool
@@ -336,7 +401,7 @@ export default function BedDetail({
                   className={`w-14 self-stretch flex flex-col items-center justify-center gap-0.5 rounded-xl border-2 transition-colors ${
                     until !== ''
                       ? 'border-orange-400 bg-orange-50 text-orange-600'
-                      : 'border-gray-300 text-gray-500 active:bg-gray-50'
+                      : 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 active:bg-gray-50'
                   }`}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -352,19 +417,19 @@ export default function BedDetail({
 
             {/* Date range picker — shown when the multi-day toggle is on */}
             {!isPool && until !== '' && (
-              <div className="flex items-center gap-2 bg-gray-50 border-2 rounded-xl px-3 py-2.5">
-                <span className="text-sm font-medium text-gray-500 flex-shrink-0">{t('until')}</span>
+              <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800/40 border-2 dark:border-gray-600 rounded-xl px-3 py-2.5">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400 flex-shrink-0">{t('until')}</span>
                 <input
                   type="date"
                   value={until}
                   min={tomorrow}
                   max={maxUntil}
                   onChange={e => setUntil(e.target.value || tomorrow)}
-                  className="flex-1 bg-transparent text-base font-medium outline-none"
+                  className="flex-1 bg-transparent text-base font-medium outline-none dark:text-gray-100"
                 />
                 <button
                   onClick={() => setUntil('')}
-                  className="text-gray-400 text-2xl leading-none px-1 flex-shrink-0"
+                  className="text-gray-400 dark:text-gray-500 text-2xl leading-none px-1 flex-shrink-0"
                   aria-label={t('cancel')}
                 >
                   &times;
@@ -432,7 +497,7 @@ export default function BedDetail({
                 larger reservation controls above. Add + Remove share the row at
                 equal width. ── */}
             {(groupItems.length > 0 || (isPool && !isGroupExtra)) && (
-              <div className="mt-2 pt-2.5 border-t border-gray-200 flex items-center gap-3">
+              <div className="mt-2 pt-2.5 border-t border-gray-200 dark:border-gray-700 flex items-center gap-3">
                 {/* Add another seat to the group — works from a regular member OR a
                     group extra. */}
                 {groupItems.length > 0 && (
@@ -450,7 +515,7 @@ export default function BedDetail({
                         }
                       })
                     }}
-                    className="flex-1 text-gray-500 text-sm py-2 active:text-gray-700 disabled:opacity-50"
+                    className="flex-1 text-gray-500 dark:text-gray-400 text-sm py-2 active:text-gray-700 dark:active:text-gray-200 disabled:opacity-50"
                   >
                     {t('addSeatToGroup')}
                   </button>
@@ -509,16 +574,16 @@ export default function BedDetail({
           <div className="space-y-3">
             {pendingConfirm ? confirmPanel : (
               <>
-                <div className="bg-yellow-50 rounded-xl p-4 space-y-2 text-base border-2 border-yellow-200">
+                <div className="bg-yellow-50 dark:bg-yellow-950/30 rounded-xl p-4 space-y-2 text-base border-2 border-yellow-200 dark:border-yellow-800/40">
                   {reservation.guestName && (
                     <div className="font-bold text-lg">{reservation.guestName}</div>
                   )}
-                  <div className="text-gray-600">{reservation.user.email}</div>
+                  <div className="text-gray-600 dark:text-gray-300">{reservation.user.email}</div>
                   {reservation.guestContact && (
-                    <div className="text-gray-600">{reservation.guestContact}</div>
+                    <div className="text-gray-600 dark:text-gray-300">{reservation.guestContact}</div>
                   )}
                   {reservation.internalNotes && (
-                    <div className="text-gray-500 italic">{reservation.internalNotes}</div>
+                    <div className="text-gray-500 dark:text-gray-400 italic">{reservation.internalNotes}</div>
                   )}
                 </div>
                 <button
@@ -559,10 +624,10 @@ export default function BedDetail({
                 calendar toggle sits on the SAME row, to the right. */}
             <div className="flex gap-2 items-stretch">
               {reservation.guestName ? (
-                <div className="flex-1 min-w-0 bg-yellow-50 rounded-xl p-4 border-2 border-dashed border-yellow-300 flex flex-col justify-center">
+                <div className="flex-1 min-w-0 bg-yellow-50 dark:bg-yellow-950/30 rounded-xl p-4 border-2 border-dashed border-yellow-300 dark:border-yellow-800/40 flex flex-col justify-center">
                   <div className="font-bold text-lg truncate">{reservation.guestName}</div>
                   {reservation.internalNotes && (
-                    <div className="text-gray-500 italic text-sm truncate">{reservation.internalNotes}</div>
+                    <div className="text-gray-500 dark:text-gray-400 italic text-sm truncate">{reservation.internalNotes}</div>
                   )}
                 </div>
               ) : (
@@ -571,7 +636,7 @@ export default function BedDetail({
                   placeholder={t('guestName')}
                   value={guestName}
                   onChange={e => setGuestName(e.target.value)}
-                  className="flex-1 border-2 rounded-xl px-4 py-3.5 text-base"
+                  className="flex-1 border-2 rounded-xl px-4 py-3.5 text-base dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-500"
                 />
               )}
               <button
@@ -582,7 +647,7 @@ export default function BedDetail({
                 className={`w-14 self-stretch flex flex-col items-center justify-center gap-0.5 rounded-xl border-2 transition-colors ${
                   until !== ''
                     ? 'border-orange-400 bg-orange-50 text-orange-600'
-                    : 'border-gray-300 text-gray-500 active:bg-gray-50'
+                    : 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 active:bg-gray-50'
                 }`}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -597,24 +662,24 @@ export default function BedDetail({
 
             {/* Notes on an unnamed hold (rare) — shown below so they aren't lost */}
             {!reservation.guestName && reservation.internalNotes && (
-              <div className="text-gray-500 italic text-sm px-1">{reservation.internalNotes}</div>
+              <div className="text-gray-500 dark:text-gray-400 italic text-sm px-1">{reservation.internalNotes}</div>
             )}
 
             {/* Date range picker — shown when multi-day toggle is on */}
             {until !== '' && (
-              <div className="flex items-center gap-2 bg-gray-50 border-2 rounded-xl px-3 py-2.5">
-                <span className="text-sm font-medium text-gray-500 flex-shrink-0">{t('until')}</span>
+              <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800/40 border-2 dark:border-gray-600 rounded-xl px-3 py-2.5">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400 flex-shrink-0">{t('until')}</span>
                 <input
                   type="date"
                   value={until}
                   min={tomorrow}
                   max={maxUntil}
                   onChange={e => setUntil(e.target.value || tomorrow)}
-                  className="flex-1 bg-transparent text-base font-medium outline-none"
+                  className="flex-1 bg-transparent text-base font-medium outline-none dark:text-gray-100"
                 />
                 <button
                   onClick={() => setUntil('')}
-                  className="text-gray-400 text-2xl leading-none px-1 flex-shrink-0"
+                  className="text-gray-400 dark:text-gray-500 text-2xl leading-none px-1 flex-shrink-0"
                   aria-label={t('cancel')}
                 >
                   &times;
@@ -656,12 +721,12 @@ export default function BedDetail({
           <div className="space-y-3">
             {pendingConfirm ? confirmPanel : (
               <>
-                <div className="bg-red-50 rounded-xl p-4 space-y-2 text-base border-2 border-red-200">
+                <div className="bg-red-50 dark:bg-red-950/30 rounded-xl p-4 space-y-2 text-base border-2 border-red-200 dark:border-red-800/40">
                   {reservation.guestName && (
                     <div className="font-bold text-lg">{reservation.guestName}</div>
                   )}
-                  <div className="text-gray-600">{reservation.user.email}</div>
-                  <div className="text-xs text-red-600 font-semibold">{t('paymentFailed')}</div>
+                  <div className="text-gray-600 dark:text-gray-300">{reservation.user.email}</div>
+                  <div className="text-xs text-red-600 dark:text-red-400 font-semibold">{t('paymentFailed')}</div>
                 </div>
                 <button
                   disabled={isPending}
@@ -683,12 +748,12 @@ export default function BedDetail({
           && reservation.status !== RESERVATION_HELD
           && !isFailedReservationStatus(reservation.status) && (
           <div className="space-y-3">
-            <div className="bg-yellow-50 rounded-xl p-4 space-y-2 text-base border-2 border-yellow-100">
+            <div className="bg-yellow-50 dark:bg-yellow-950/30 rounded-xl p-4 space-y-2 text-base border-2 border-yellow-100 dark:border-yellow-800/40">
               {reservation.guestName && (
                 <div className="font-bold text-lg">{reservation.guestName}</div>
               )}
-              <div className="text-gray-600">{reservation.user.email}</div>
-              <div className="text-xs text-yellow-600 font-semibold">{reservation.status}</div>
+              <div className="text-gray-600 dark:text-gray-300">{reservation.user.email}</div>
+              <div className="text-xs text-yellow-600 dark:text-yellow-400 font-semibold">{reservation.status}</div>
             </div>
           </div>
         )}
@@ -699,12 +764,12 @@ export default function BedDetail({
           <div className="space-y-3">
             {pendingConfirm ? confirmPanel : (
               <>
-                <div className="bg-blue-50 rounded-xl p-4 border-2 border-blue-200 flex items-center gap-3">
+                <div className="bg-blue-50 dark:bg-blue-950/30 rounded-xl p-4 border-2 border-blue-200 dark:border-blue-800/40 flex items-center gap-3">
                   <div className="flex-1 min-w-0">
                     {reservation.guestName && (
                       <div className="font-bold text-lg truncate">{reservation.guestName}</div>
                     )}
-                    <div className="text-gray-600 text-sm truncate">{reservation.user.email}</div>
+                    <div className="text-gray-600 dark:text-gray-300 text-sm truncate">{reservation.user.email}</div>
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0 text-blue-700">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -737,11 +802,11 @@ export default function BedDetail({
           <div className="space-y-3">
             {pendingConfirm ? confirmPanel : (
               <>
-                <div className="bg-orange-50 rounded-xl p-4 border-2 border-orange-200 flex items-center gap-3">
+                <div className="bg-orange-50 dark:bg-orange-950/30 rounded-xl p-4 border-2 border-orange-200 dark:border-orange-800/40 flex items-center gap-3">
                   <div className="flex-1 min-w-0">
                     {reservation.guestName
                       ? <div className="font-bold text-lg truncate">{reservation.guestName}</div>
-                      : <div className="text-gray-400 text-sm italic">{t('walkIn')}</div>}
+                      : <div className="text-gray-400 dark:text-gray-500 text-sm italic">{t('walkIn')}</div>}
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0 text-orange-700">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

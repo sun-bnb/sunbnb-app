@@ -39,6 +39,7 @@ export default defineConfig({
       '@repo/data/seat-label': path.resolve(__dirname, '__mocks__/@repo/data/seat-label'),
       '@repo/data/seat-label-db': path.resolve(__dirname, '__mocks__/@repo/data/seat-label-db'),
       '@repo/data/reservations': path.resolve(__dirname, '__mocks__/@repo/data/reservations'),
+      '@repo/data/refund': path.resolve(__dirname, '__mocks__/@repo/data/refund'),
     },
   },
 })

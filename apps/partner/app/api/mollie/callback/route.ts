@@ -19,6 +19,7 @@ import {
   exchangeCodeForTokens,
   fetchMollieProfile,
   bootstrapMollieAccount,
+  sanitizeReturnTo,
 } from '@/app/api/_lib/mollie'
 
 export async function GET(request: NextRequest) {
@@ -106,9 +107,14 @@ export async function GET(request: NextRequest) {
       console.error('[Mollie OAuth] Auto-bootstrap error (non-fatal):', err)
     }
 
-    // Clear the state cookie and redirect to success page
-    const response = NextResponse.redirect(new URL('/account/mollie?success=true', baseUrl))
+    // Redirect back to where the flow started if a (same-origin) returnTo was
+    // captured at authorize time — e.g. the manage page that launched the
+    // "Enable refunds" re-consent — otherwise the default account success page.
+    const returnTo = sanitizeReturnTo(request.cookies.get('mollie_oauth_return')?.value)
+    const successUrl = returnTo ?? '/account/mollie?success=true'
+    const response = NextResponse.redirect(new URL(successUrl, baseUrl))
     response.cookies.delete('mollie_oauth_state')
+    response.cookies.delete('mollie_oauth_return')
     return response
 
   } catch (err) {

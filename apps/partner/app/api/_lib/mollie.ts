@@ -10,8 +10,15 @@
  * Scopes:
  *  - payments.read   → check payment status
  *  - payments.write  → create payments on partner's account
+ *  - refunds.read    → read refunds on partner's account
+ *  - refunds.write   → issue refunds (reservation cancel, deposit refund)
  *  - profiles.read   → read partner's Mollie profile info
  *  - onboarding.read → check partner's onboarding status
+ *
+ * NOTE: adding a scope here only affects NEW authorizations. Already-connected
+ * partners keep their old (narrower) grant — a refresh-token exchange never
+ * widens scope — so they must RECONNECT Mollie before a refund will succeed.
+ * Until then `refunds.write` calls return 403 (Forbidden, missing permission).
  */
 
 // ── Environment ─────────────────────────────────────────────────────────────
@@ -38,6 +45,8 @@ const MOLLIE_TOKEN_URL = 'https://api.mollie.com/oauth2/tokens'
 export const OAUTH_SCOPES = [
   'payments.read',
   'payments.write',
+  'refunds.read',
+  'refunds.write',
   'profiles.read',
   'profiles.write',
   'onboarding.read',
@@ -57,9 +66,27 @@ export function buildAuthorizationUrl(state: string, redirectUri: string): strin
     state,
     scope: OAUTH_SCOPES,
     response_type: 'code',
-    approval_prompt: 'auto', // 'force' to always show consent screen
+    // 'force' (not 'auto') so an already-connected partner is re-prompted and the
+    // grant is re-issued with the CURRENT scope set — otherwise a newly-added
+    // scope (e.g. refunds.write) may be skipped for accounts that connected before.
+    approval_prompt: 'force',
   })
   return `${MOLLIE_AUTH_URL}?${params.toString()}`
+}
+
+/**
+ * Validate an optional post-connect return path so it can't be abused as an
+ * open redirect. Accepts SAME-ORIGIN relative paths only (a single leading '/',
+ * no protocol-relative '//' or absolute URL). Returns the path or null.
+ *
+ * Used by the "Enable refunds" re-consent flow to return staff to the manage
+ * page (carried in an httpOnly cookie, never sent to Mollie).
+ */
+export function sanitizeReturnTo(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  if (!raw.startsWith('/') || raw.startsWith('//')) return null
+  if (raw.includes('://')) return null
+  return raw
 }
 
 // ── Token Exchange ──────────────────────────────────────────────────────────
