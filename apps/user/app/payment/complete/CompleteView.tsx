@@ -10,9 +10,14 @@ import { RESERVATION_PROCESSING, RESERVATION_COMPLETE } from '@repo/data/reserva
 
 
 export default function CompleteView({
-  reservation
+  reservation,
+  urlAnonId,
 } : {
   reservation: Reservation
+  /** anonId carried in the redirect URL (a QR walk-in beachgoer has none in
+   *  localStorage) — adopt it so the polling query + onward links can claim
+   *  this reservation. */
+  urlAnonId?: string
 }) {
 
   const [status, setStatus] = useState<string | undefined>('default')
@@ -20,13 +25,19 @@ export default function CompleteView({
   const router = useRouter()
   const { data: session } = useSession()
 
-  // Read anonId from localStorage inside useEffect to avoid SSR errors
+  // Resolve the anonId inside useEffect to avoid SSR errors. Prefer the one from
+  // the redirect URL and persist it, so the RTK polling query (which reads
+  // localStorage) can verify ownership; fall back to an existing stored anonId.
   useEffect(() => {
     if (!session?.user?.id) {
       const storedAnonId = localStorage.getItem('sunbnb-anonId')
-      setAnonId(storedAnonId)
+      const effective = urlAnonId || storedAnonId
+      if (urlAnonId && urlAnonId !== storedAnonId) {
+        localStorage.setItem('sunbnb-anonId', urlAnonId)
+      }
+      setAnonId(effective)
     }
-  }, [session?.user?.id])
+  }, [session?.user?.id, urlAnonId])
 
   const { data: fetchedReservation, error: reservationFetchError } = useGetReservationByIdQuery({
     id: reservation.id,

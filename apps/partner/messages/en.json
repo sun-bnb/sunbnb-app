@@ -754,6 +754,7 @@
   },
   "BedDetail": {
     "collectPayment": "Collect payment",
+    "paid": "Paid",
     "free": "Free",
     "booked": "Booked",
     "here": "Here",

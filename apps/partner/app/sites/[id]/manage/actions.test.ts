@@ -2453,7 +2453,12 @@ describe('collectReservationPayment', () => {
     expect(arg[0]).toBe(RES_ID)
     expect(arg[1].metadataExtra).toEqual({ collect: true })
     expect(arg[1].webhookUrl).toContain('app.test')
+    // Standard post-payment redirect, carrying a minted anonId capability.
+    expect(arg[1].redirectUrl).toContain('/payment/complete')
     expect(arg[1].redirectUrl).toContain('reservationId=')
+    expect(arg[1].redirectUrl).toMatch(/anonId=[0-9a-f-]{36}/)
+    // The freshly minted anonId is persisted on the reservation.
+    expect(vi.mocked(prisma.reservation.update).mock.calls[0][0].data.anonId).toMatch(/[0-9a-f-]{36}/)
   })
 
   it('reverts to cash (and clears paymentRef) when the provider fails', async () => {

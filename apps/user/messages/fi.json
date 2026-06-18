@@ -1,13 +1,4 @@
 {
-  "PaymentThankYou": {
-    "title": "Maksu vastaanotettu",
-    "subtitle": "Kiitos! Aurinkotuolisi on maksettu.",
-    "receiptLabel": "Haluatko kuitin? Anna sähköpostisi",
-    "emailPlaceholder": "sina@sahkoposti.fi",
-    "sendReceipt": "Lähetä minulle kuitti",
-    "sent": "Kuitti lähetetty — tarkista sähköpostisi.",
-    "error": "Kuittia ei voitu lähettää."
-  },
   "HomePage": {
     "Profile": "Profiili",
     "Reservations": "Varaukset",
@@ -96,6 +87,11 @@
     "Back to Reservation": "Takaisin varaukseen"
   },
   "Reservation": {
+    "Email me a receipt": "Lähetä minulle kuitti",
+    "Email receipt": "Lähetä kuitti",
+    "Receipt sent": "Kuitti lähetetty — tarkista sähköpostisi",
+    "Enter your email": "Anna sähköpostisi",
+    "Could not send the receipt": "Kuittia ei voitu lähettää",
     "SEATS": "PAIKAT",
     "Amount": "Summa",
     "VALID": "VOIMASSA",

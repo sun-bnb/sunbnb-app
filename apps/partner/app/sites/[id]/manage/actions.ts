@@ -1,5 +1,6 @@
 'use server'
 
+import { randomUUID } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { verifySiteAccess } from '@/lib/auth-helpers'
 import prisma from '@repo/data/PrismaCient'
@@ -1140,6 +1141,7 @@ export async function collectReservationPayment(
       siteId: true,
       status: true,
       operationalStatus: true,
+      anonId: true,
       from: true,
       to: true,
       items: { select: { price: true } },
@@ -1167,11 +1169,17 @@ export async function collectReservationPayment(
     return { status: 'error', errors: ['Nothing to charge for this sunbed'] }
   }
 
-  // Persist the DB-computed amount before creating the payment — the shared
-  // helper reads paymentAmount off the reservation row.
+  // Mint an anonId capability so the beachgoer's browser can claim THIS one
+  // reservation after paying (the walk-in was partner-created, so it has none) —
+  // it then flows through /payment/complete → /reservations/[id] → receipt exactly
+  // like an anonymous POS booking. Reuse an existing anonId if one is already set.
+  const anonId = reservation.anonId ?? randomUUID()
+
+  // Persist the DB-computed amount (and the new anonId) before creating the
+  // payment — the shared helper reads paymentAmount off the reservation row.
   await prisma.reservation.update({
     where: { id: reservationId },
-    data: { paymentAmount: amount },
+    data: { paymentAmount: amount, ...(reservation.anonId ? {} : { anonId }) },
   })
 
   // Demo: skip the real provider — assign a demo ref and move to processing.
@@ -1188,7 +1196,12 @@ export async function collectReservationPayment(
   if (!consumerAppUrl) {
     return { status: 'error', errors: ['Online payments are not configured (CONSUMER_APP_URL)'] }
   }
-  const redirectUrl = new URL(`/payment/thank-you?reservationId=${reservationId}`, consumerAppUrl).toString()
+  // Standard post-payment redirect (same as every other payment): the beachgoer
+  // lands on /payment/complete, which polls then forwards to /reservations/[id].
+  const redirectUrl = new URL(
+    `/payment/complete?reservationId=${reservationId}&anonId=${anonId}`,
+    consumerAppUrl,
+  ).toString()
   const webhookUrl = new URL('/api/webhooks/mollie', consumerAppUrl).toString()
 
   const result = await createReservationMolliePayment(reservationId, {

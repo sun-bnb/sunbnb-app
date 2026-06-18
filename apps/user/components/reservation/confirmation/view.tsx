@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useTransition, type FormEvent } from 'react'
 import logger from '@/utils/logger'
+import { requestReceipt } from '@/app/reservations/[id]/receipt/actions'
 
 import LaunchIcon from '@mui/icons-material/Launch'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
@@ -62,6 +63,23 @@ export default function ReservationConfirmationView({
   const authUrl = (path: string) => {
     if (session?.user?.id) return path
     return anonId ? `${path}?anonId=${anonId}` : path
+  }
+
+  // Self-serve receipt-by-email for anonymous viewers (POS / QR walk-in have no
+  // account and no captured email).
+  const [email, setEmail] = useState('')
+  const [receiptSent, setReceiptSent] = useState(false)
+  const [receiptError, setReceiptError] = useState<string | null>(null)
+  const [isSending, startSending] = useTransition()
+
+  const handleEmailReceipt = (e: FormEvent) => {
+    e.preventDefault()
+    setReceiptError(null)
+    startSending(async () => {
+      const res = await requestReceipt(reservation.id, email)
+      if (res.status === 'ok') setReceiptSent(true)
+      else setReceiptError(res.errors?.[0] ?? t('Could not send the receipt'))
+    })
   }
 
   logger.debug('Reservation confirmation', reservation)
@@ -161,6 +179,39 @@ export default function ReservationConfirmationView({
             {t('Open receipt')}
             <LaunchIcon sx={{ fontSize: 14 }} />
           </button>
+        )}
+
+        {/* ── Email-me-a-receipt — anonymous viewers only ── */}
+        {showReceipt && !session?.user?.id && (
+          <div className="border-t border-neutral-100 px-6 py-4">
+            {receiptSent ? (
+              <p className="text-xs text-center text-green-700 font-medium">{t('Receipt sent')}</p>
+            ) : (
+              <form onSubmit={handleEmailReceipt} className="flex flex-col gap-2">
+                <label htmlFor="receipt-email" className="text-[10px] uppercase tracking-widest text-neutral-400 text-center">
+                  {t('Email me a receipt')}
+                </label>
+                <input
+                  id="receipt-email"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder={t('Enter your email')}
+                  className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:border-brand-gold focus:outline-none"
+                />
+                {receiptError && <p className="text-xs text-red-600 text-center" role="status">{receiptError}</p>}
+                <button
+                  type="submit"
+                  disabled={isSending || email.trim().length === 0}
+                  className="w-full rounded-lg bg-brand-gold py-2 text-sm font-semibold text-white active:scale-95 transition-transform disabled:opacity-50"
+                >
+                  {isSending ? '…' : t('Email receipt')}
+                </button>
+              </form>
+            )}
+          </div>
         )}
 
       </div>

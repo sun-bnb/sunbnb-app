@@ -9,13 +9,12 @@ import { isValidEntityId } from '@/app/api/_lib/payment-ids'
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 /**
- * Self-serve receipt request from the post-payment thank-you page.
- *
- * Public + unauthenticated by design (the beachgoer paid via QR and has no
- * account), so it is deliberately narrow: it only acts on a reservation that is
- * already `complete` (paid), only sends to the address just entered, and is
- * rate-limited per reservation. It stores the address on `guestEmail` for the
- * record, then sends the PARTNER-invoice receipt.
+ * Self-serve receipt request — surfaced on the reservation confirmation view for
+ * anonymous (not-logged-in) viewers of a paid reservation. Public by design (a
+ * QR/POS beachgoer has no account), so it is deliberately narrow: it only acts
+ * on a reservation that is already `complete`, only sends to the address just
+ * entered, and is rate-limited per reservation. Stores the address on
+ * `guestEmail`, then sends the PARTNER-invoice receipt.
  */
 export async function requestReceipt(
   reservationId: string,

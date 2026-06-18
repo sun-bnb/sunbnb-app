@@ -64,7 +64,7 @@ export default async function Complete({ searchParams }: SearchParams) {
       return <ErrorCard title="Not authorized" message="You don't have permission to view this reservation." showHomeLink />
     }
 
-    return <CompletePage reservation={reservation} />
+    return <CompletePage reservation={reservation} anonId={anonId} />
   }
 
   // Demo redirect: completes via the payment_intent (paymentRef) query shape —

@@ -1,13 +1,4 @@
 {
-  "PaymentThankYou": {
-    "title": "Pago recibido",
-    "subtitle": "¡Gracias! Tu hamaca está pagada.",
-    "receiptLabel": "¿Quieres un recibo? Introduce tu correo",
-    "emailPlaceholder": "tu@correo.com",
-    "sendReceipt": "Enviarme un recibo",
-    "sent": "Recibo enviado: revisa tu bandeja de entrada.",
-    "error": "No se pudo enviar el recibo."
-  },
   "HomePage": {
     "Profile": "Perfil",
     "Reservations": "Reservas",
@@ -96,6 +87,11 @@
     "Back to Reservation": "Volver a la reserva"
   },
   "Reservation": {
+    "Email me a receipt": "Enviarme un recibo",
+    "Email receipt": "Enviar recibo",
+    "Receipt sent": "Recibo enviado: revisa tu bandeja de entrada",
+    "Enter your email": "Introduce tu correo",
+    "Could not send the receipt": "No se pudo enviar el recibo",
     "SEATS": "ASIENTOS",
     "Amount": "Importe",
     "VALID": "VÁLIDO",

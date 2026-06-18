@@ -754,6 +754,7 @@
   },
   "BedDetail": {
     "collectPayment": "Cobrar",
+    "paid": "Pagado",
     "free": "Libre",
     "booked": "Reservada",
     "here": "Presente",
