@@ -24,6 +24,7 @@
     "./mollie-tokens": "./src/mollie-tokens.ts",
     "./refund": "./src/refund.ts",
     "./reservation-payment": "./src/reservation-payment.ts",
+    "./analytics": "./src/analytics.ts",
     "./seat-label": "./src/seat-label.ts",
     "./seat-label-db": "./src/seat-label-db.ts",
     "./reservations": "./src/reservations.ts"
@@ -83,6 +84,9 @@
       ],
       "reservation-payment": [
         "./src/reservation-payment.ts"
+      ],
+      "analytics": [
+        "./src/analytics.ts"
       ],
       "seat-label": [
         "./src/seat-label.ts"

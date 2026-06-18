@@ -34,9 +34,19 @@ cross-partner settlement oversight), not the consumer app.
 
 ## Resume here
 
-- **Next action:** start **Phase 1** — write `packages/data/src/analytics.ts` (the four helpers
-  roughed out below) + tests, and wire the `@repo/data` export + the three apps' mock contracts.
-  Everything else composes these.
+- **Phase 1 DONE (2026-06-18, uncommitted).** `packages/data/src/analytics.ts` shipped with all four
+  helpers exactly as roughed out; `./analytics` export added to `package.json` (both blocks). Tests
+  green: `analytics.test.ts` (7 unit — the pure pair) + `analytics.integration.test.ts` (2 against
+  `sunbnb_test` — site-scoped/PARTNER-only revenue grouping; occupancy vs capacity excluding
+  no-show/departed, comps counted). Data suite 190 unit, typecheck (`tsc --rootDir .` — only
+  pre-existing `payment.test.ts` `product` errors remain) + lint clean. No app mock added (no
+  unit-tested surface imports it yet — revisit at Phase 2).
+- **Next action:** **Phase 2** — the rolling revenue lens on the partner **dashboard**. Add a thin
+  auth-wrapping partner action (`auth()` + site ownership, like `accounting/actions.ts`) that calls
+  `getRevenueByDay` + `summarizeRevenue` over a 7/30/365 window; render the trend + total + best-day
+  on `apps/partner/app/dashboard`. Prime `/ui partner`. Decide the mock question then (a client
+  component calling the action needs an `analytics` app mock + the partner `mock-contract` spec entry;
+  a server component does not).
 - **Context needed:**
   - Existing accounting actions to generalize: `apps/partner/app/sites/[id]/accounting/actions.ts`
     — `getPaidItemsByMonth(siteId, year, month)` (orders+reservations with a PARTNER invoice in a
@@ -99,12 +109,10 @@ Notes / decisions baked in:
 
 ## Roadmap
 
-- ▶ **Phase 1 — `@repo/data/analytics` helpers + tests.** New `packages/data/src/analytics.ts`
-  (the four above). Add the `./analytics` export to `packages/data/package.json` (both blocks).
-  Add it to the three apps' `@repo/data` mocks + the partner `mock-contract` spec **only if** a
-  unit-tested partner/user surface imports it (the accounting page is server-rendered — likely no
-  mock needed; decide when wiring Phase 2). Unit-test the pure pair; integration-test the two DB
-  helpers against `sunbnb_test`.
+- ✅ **Phase 1 — `@repo/data/analytics` helpers + tests. DONE 2026-06-18.** `analytics.ts` with
+  `summarizeRevenue`/`toFiguresCsv` (pure) + `getRevenueByDay`/`getOccupancyByDay` (DB); `./analytics`
+  export wired; 7 unit + 2 integration tests green; typecheck + lint clean. No app mock yet (no
+  unit-tested surface imports it). Uncommitted.
 - ☐ **Phase 2 — B2 rolling revenue lens (dashboard).** `apps/partner/app/dashboard` already has KPI
   cards + a revenue chart. Add a 7/30/365 rolling window selector that composes `getRevenueByDay` +
   `summarizeRevenue` (total, count, best day) via a thin auth-wrapping partner action. Keep the
