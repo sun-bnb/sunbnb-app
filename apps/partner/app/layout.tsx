@@ -75,7 +75,13 @@ export default async function RootLayout({
   return (
     <html lang={locale}>
       <StoreProvider>
-        <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased ${isImpersonating ? 'pt-10' : ''}`}>
+        <body
+          className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased ${isImpersonating ? 'pt-10' : ''}`}
+          // Exposes the impersonation banner height so full-viewport pages
+          // (e.g. the manage view's h-[100dvh]) can subtract it and avoid the
+          // 40px overflow that lets content pan under the fixed banner on iOS.
+          style={{ ['--impersonation-offset' as string]: isImpersonating ? '2.5rem' : '0px' }}
+        >
           {isImpersonating && <ImpersonationBanner email={impersonatingUser?.email} />}
           <FlagsProvider value={flags}>
             <NextAuthProvider>

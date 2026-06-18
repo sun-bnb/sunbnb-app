@@ -698,7 +698,7 @@ export default function ManageView({
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div
-      className={`flex flex-col h-[100dvh] overflow-hidden px-2 pt-2 mx-auto w-full max-w-screen-lg transition-colors dark:bg-gray-950 dark:text-gray-100 ${isDark ? 'dark' : ''}`}
+      className={`flex flex-col h-[calc(100dvh-var(--impersonation-offset,0px))] overflow-hidden px-2 pt-2 mx-auto w-full max-w-screen-lg transition-colors dark:bg-gray-950 dark:text-gray-100 ${isDark ? 'dark' : ''}`}
     >
       {/* Header — parcel toolbar (stats / zoom / parcel tabs) in a parcel view;
           a minimal placeholder title in the rentals view. */}
