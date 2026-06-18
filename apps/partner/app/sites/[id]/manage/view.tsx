@@ -96,7 +96,7 @@ export default function ManageView({
   // reusing the exact tap-to-move destination logic. Holds the bookings still
   // waiting after the one currently in `movingRes`.
   const [moveQueue, setMoveQueue] = useState<string[]>([])
-  const [, startMoveTransition] = useTransition()
+  const [isMovePending, startMoveTransition] = useTransition()
 
   // ── Multiselect (slice 1: selection mechanics only) ───────────────────────
   // Long-press a seat to enter; tap toggles seats; selected seats are ringed.
@@ -427,6 +427,10 @@ export default function ManageView({
   // A tap while in move mode → resolve the destination seat(s) and relocate.
   const handleMoveDestination = (item: InventoryItem) => {
     if (!movingRes) return
+    // Block re-entry while a move is in flight — otherwise a quick second tap fires
+    // with the SAME (not-yet-advanced) `movingRes`, re-moving the current booking
+    // and skipping the next one in the queue (only one seat ends up relocated).
+    if (isMovePending) return
     setMoveError(null)
     if (getBedState(item) !== 'available') { setMoveError(t('moveDestOccupied')); return }
 
