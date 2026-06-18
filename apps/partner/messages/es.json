@@ -741,7 +741,14 @@
     "moveDestOccupied": "Esa hamaca está ocupada — elige una libre",
     "moveDestSize": "Elige un grupo libre de {n} hamacas",
     "moveDestInvalid": "No se puede mover a una hamaca extra",
-    "selectedCount": "{n} seleccionadas"
+    "selectedCount": "{n} seleccionadas",
+    "bulkBlock": "Bloquear",
+    "bulkComp": "Cortesía",
+    "bulkReserve": "Reservar",
+    "bulkRent": "Alquilar",
+    "bulkFree": "Liberar",
+    "bulkNoAction": "No hay acción en lote para esta selección",
+    "bulkSomeFailed": "{n} no se pudieron actualizar"
   },
   "BedDetail": {
     "free": "Libre",

@@ -741,7 +741,14 @@
     "moveDestOccupied": "Paikka on varattu — valitse vapaa",
     "moveDestSize": "Valitse vapaa {n} paikan ryhmä",
     "moveDestInvalid": "Ylivuotopaikkaan ei voi siirtää",
-    "selectedCount": "{n} valittu"
+    "selectedCount": "{n} valittu",
+    "bulkBlock": "Estä",
+    "bulkComp": "Ilmainen",
+    "bulkReserve": "Varaa",
+    "bulkRent": "Vuokraa",
+    "bulkFree": "Vapauta",
+    "bulkNoAction": "Tälle valinnalle ei ole joukkotoimintoa",
+    "bulkSomeFailed": "{n} ei voitu päivittää"
   },
   "BedDetail": {
     "free": "Vapaa",

@@ -741,7 +741,14 @@
     "moveDestOccupied": "That seat is occupied — pick a free one",
     "moveDestSize": "Pick a free group of {n} seats",
     "moveDestInvalid": "Can't move onto an overflow seat",
-    "selectedCount": "{n} selected"
+    "selectedCount": "{n} selected",
+    "bulkBlock": "Block",
+    "bulkComp": "Comp",
+    "bulkReserve": "Reserve",
+    "bulkRent": "Rent",
+    "bulkFree": "Make available",
+    "bulkNoAction": "No bulk action for this selection",
+    "bulkSomeFailed": "{n} couldn't be updated"
   },
   "BedDetail": {
     "free": "Free",

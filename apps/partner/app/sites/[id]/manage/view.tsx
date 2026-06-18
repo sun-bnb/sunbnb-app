@@ -3,14 +3,20 @@
 import React, { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import dayjs from 'dayjs'
 import { InventoryItem, SiteProps } from '@/types/shared'
 import BedDetail from './BedDetail'
 import CreateRentalModal from './CreateRentalModal'
 import ManageToolbar, { type ManageViewKey } from './ManageToolbar'
 import ParcelView from './ParcelView'
 import RentalsSection from './RentalsSection'
-import { getActiveReservation, getBedState, type BedState } from './bed-state'
-import { moveReservationToSeats } from './actions'
+import { getActiveReservation, getBedState, isFailedReservationStatus, type BedState } from './bed-state'
+import {
+  moveReservationToSeats,
+  blockBed, compBed, holdBed, reserveItem, convertHoldToWalkIn,
+  unblockBed, uncompBed, releaseHold, unreserveItem, removeFailedReservation,
+} from './actions'
+import { RESERVATION_COMPLETE, RESERVATION_HELD } from '@repo/data/reservation-status'
 
 function parseSunbedNumber(num: number) {
   const str = String(num)
@@ -45,6 +51,7 @@ export default function ManageView({
 }) {
   const router = useRouter()
   const t = useTranslations('SiteManage')
+  const tb = useTranslations('BedDetail') // reuse the tap-dialog labels in the multiselect sheet
 
   // ── Dark mode ─────────────────────────────────────────────────────────────
   // Default false so SSR/first render matches (no hydration mismatch).
@@ -90,6 +97,18 @@ export default function ManageView({
   // Long-press a seat to enter; tap toggles seats; selected seats are ringed.
   // Exits when the selection panel is dismissed or empty space is tapped.
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [bulkError, setBulkError] = useState<string | null>(null)
+  const [isBulkPending, startBulkTransition] = useTransition()
+  // Shared Guest name + multi-day period for bulk Rent (mirrors the tap dialog).
+  const [bulkGuestName, setBulkGuestName] = useState('')
+  const [bulkUntil, setBulkUntil] = useState('')
+  const tomorrow = dayjs().add(1, 'day').format('YYYY-MM-DD')
+  const maxUntil = dayjs().add(90, 'day').format('YYYY-MM-DD')
+  const bulkDays = bulkUntil ? dayjs(bulkUntil).startOf('day').diff(dayjs().startOf('day'), 'day') + 1 : 1
+  // Reset the shared inputs whenever the selection is cleared/exited.
+  useEffect(() => {
+    if (selectedIds.length === 0) { setBulkGuestName(''); setBulkUntil('') }
+  }, [selectedIds.length])
 
   // ── View switcher — one destination (parcel / rentals) at a time ──────────
   // Default to the lowest parcel number; fall back to rentals if the site has
@@ -411,6 +430,105 @@ export default function ManageView({
     })
   }
 
+  // ── Bulk actions (multiselect slice 2) ────────────────────────────────────
+  // The selection's composition decides which bulk verbs apply. Slice 2 covers
+  // the safe ones: bulk Create on an all-free selection, and Free/clear on a
+  // selection of no-money / cash-offline states. Paid bookings (reserved /
+  // checked-in) are deliberately excluded — their bulk cancel+refund is slice 4.
+  type SeatKind = 'available' | 'reserved' | 'held' | 'failed' | 'inflight' | 'checked-in' | 'walked-in' | 'comp' | 'blocked'
+  const seatKind = (item: InventoryItem): SeatKind => {
+    const st = getBedState(item)
+    if (st !== 'expected') return st as SeatKind // available / checked-in / walked-in / blocked / comp
+    const res = getActiveReservation(item)
+    if (!res) return 'available'
+    if (isFailedReservationStatus(res.status)) return 'failed'
+    if (res.status === RESERVATION_HELD) return 'held'
+    if (res.status === RESERVATION_COMPLETE) return 'reserved'
+    return 'inflight'
+  }
+
+  // Run a per-seat action over the selection SEQUENTIALLY (so concurrent calls
+  // can't race on a reservation shared by several selected seats), then refresh.
+  // Clears the selection on full success; keeps it + shows a count on partial failure.
+  const runBulkSeq = (fn: (item: InventoryItem) => Promise<{ status: string }>) => {
+    const items = inventoryItems.filter(i => selectedIds.includes(i.id))
+    if (items.length === 0) return
+    setBulkError(null)
+    startBulkTransition(async () => {
+      let failed = 0
+      for (const item of items) {
+        try { const r = await fn(item); if (r?.status === 'error') failed++ } catch { failed++ }
+      }
+      router.refresh()
+      if (failed > 0) setBulkError(t('bulkSomeFailed', { n: failed }))
+      else setSelectedIds([])
+    })
+  }
+
+  // applyToPair=false on every call → act on EXACTLY the selected seats.
+  // The shared Guest name applies to create/comp/hold; the period only to Rent.
+  const bulkBlock = () => runBulkSeq(i => blockBed(site.id!, i.id, undefined, accessKey, false))
+  const bulkComp = () => runBulkSeq(i => compBed(site.id!, i.id, accessKey, false, bulkGuestName.trim() || undefined))
+  const bulkReserve = () => runBulkSeq(i => holdBed(site.id!, i.id, accessKey, false, bulkGuestName.trim() || undefined))
+  const bulkRent = () => {
+    const seenHolds = new Set<string>() // a held reservation spanning several selected seats converts once
+    const name = bulkGuestName.trim() || undefined
+    const until = bulkUntil || undefined
+    runBulkSeq((i) => {
+      if (seatKind(i) === 'held') {
+        const res = getActiveReservation(i)
+        if (!res || seenHolds.has(res.id)) return Promise.resolve({ status: 'ok' as const })
+        seenHolds.add(res.id)
+        return convertHoldToWalkIn(site.id!, i.id, accessKey, name, until)
+      }
+      return reserveItem(site.id!, i.id, name, undefined, accessKey, until, false)
+    })
+  }
+  const bulkFree = () => {
+    const seen = new Set<string>() // dedupe a failed reservation shared by >1 selected seat
+    runBulkSeq((i) => {
+      const kind = seatKind(i)
+      if (kind === 'blocked') return unblockBed(site.id!, i.id, accessKey, false)
+      if (kind === 'comp') return uncompBed(site.id!, i.id, accessKey, false)
+      if (kind === 'held') return releaseHold(site.id!, i.id, accessKey, false)
+      if (kind === 'walked-in') return unreserveItem(site.id!, i.id, accessKey, false)
+      if (kind === 'failed') {
+        const res = getActiveReservation(i)
+        if (!res || seen.has(res.id)) return Promise.resolve({ status: 'ok' as const })
+        seen.add(res.id)
+        return removeFailedReservation(site.id!, res.id, accessKey)
+      }
+      return Promise.resolve({ status: 'ok' as const })
+    })
+  }
+
+  // The panel offers the INTERSECTION of each selected seat's valid actions — a
+  // verb shows only when every selected seat's state supports it.
+  //   Rent: available → create walk-in · held → convert hold to walk-in
+  //   Reserve/Comp/Block: available only
+  //   Free (make available): held/walk-in/comp/blocked/failed (no-money vacates)
+  const selItems = inventoryItems.filter(i => selectedIds.includes(i.id))
+  const can = (states: SeatKind[]) => selItems.length > 0 && selItems.every(i => states.includes(seatKind(i)))
+  const allAvailable = can(['available'])                         // → the full create row
+  const canRent = can(['available', 'held'])
+  const canFree = can(['held', 'walked-in', 'comp', 'blocked', 'failed'])
+  const selKinds = new Set(selItems.map(seatKind))
+  const homogeneous = selKinds.size === 1 ? [...selKinds][0] : null
+
+  // The vacate button mirrors the tap dialog when the selection is one state
+  // (Release / Unblock / End comp / Unreserve / Remove); a mixed freeable
+  // selection falls back to the generic "Make available". Always runs bulkFree
+  // (which dispatches the right per-seat vacate). Null when not freeable.
+  const freeButton = (() => {
+    if (homogeneous === 'held') return <button disabled={isBulkPending} onClick={bulkFree} className="w-full text-gray-400 dark:text-gray-500 text-sm py-2 active:text-gray-600 dark:active:text-gray-200 disabled:opacity-50">{tb('release')}</button>
+    if (homogeneous === 'blocked') return <button disabled={isBulkPending} onClick={bulkFree} className="w-full bg-green-500 text-white font-bold text-lg py-4 rounded-xl active:bg-green-600 disabled:opacity-50">{tb('unblock')}</button>
+    if (homogeneous === 'comp') return <button disabled={isBulkPending} onClick={bulkFree} className="w-full bg-green-500 text-white font-bold text-lg py-4 rounded-xl active:bg-green-600 disabled:opacity-50">{tb('endComp')}</button>
+    if (homogeneous === 'walked-in') return <button disabled={isBulkPending} onClick={bulkFree} className="w-full text-red-500 text-sm py-2 active:text-red-700 disabled:opacity-50">{tb('unreserve')}</button>
+    if (homogeneous === 'failed') return <button disabled={isBulkPending} onClick={bulkFree} className="w-full bg-red-500 text-white font-bold text-lg py-4 rounded-xl active:bg-red-600 disabled:opacity-50">{tb('remove')}</button>
+    if (!homogeneous && canFree) return <button disabled={isBulkPending} onClick={bulkFree} className="w-full bg-green-500 text-white font-bold text-lg py-4 rounded-xl active:bg-green-600 disabled:opacity-50">{t('bulkFree')}</button>
+    return null
+  })()
+
   // ── Resolve the visible destination from the switcher selection ───────────
   const hasRentals = !!site.features?.includes('rentals')
   const showRentals = selectedView === 'rentals' && hasRentals
@@ -502,23 +620,6 @@ export default function ManageView({
         />
       )}
 
-      {/* Multiselect panel (slice 1: count + dismiss; bulk actions land later).
-          Dismissing it exits multiselect — same lifecycle as the selection. */}
-      {selectedIds.length > 0 && (
-        <div className="mb-2 px-3 py-2 rounded-xl border-2 border-blue-300 dark:border-blue-800/40 bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-200 text-sm">
-          <div className="flex items-center justify-between gap-2">
-            <span className="font-semibold">{t('selectedCount', { n: selectedIds.length })}</span>
-            <button
-              type="button"
-              onClick={() => setSelectedIds([])}
-              className="flex-shrink-0 px-3 min-h-[36px] rounded-lg border border-blue-300 dark:border-blue-700 active:bg-blue-100 dark:active:bg-blue-900/40 font-semibold"
-            >
-              {t('moveCancel')}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Move-mode banner — tap a free seat to relocate the picked reservation */}
       {movingRes && (
         <div className="mb-2 px-3 py-2 rounded-xl border-2 border-blue-300 dark:border-blue-800/40 bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-200 text-sm">
@@ -589,9 +690,9 @@ export default function ManageView({
         </div>
       ) : null}
 
-      {/* Floating rentals ⇄ parcels toggle — always visible, bottom-right.
-          Shows the destination it switches to: 🏄 from a parcel, ⛱️ from rentals. */}
-      {showRentalsFab && (
+      {/* Floating rentals ⇄ parcels toggle — bottom-right; hidden during
+          multiselect so it doesn't overlap the selection sheet. */}
+      {showRentalsFab && selectedIds.length === 0 && (
         <button
           type="button"
           onClick={() => selectView(showRentals ? backParcel! : 'rentals')}
@@ -637,6 +738,98 @@ export default function ManageView({
             router.refresh()
           }}
         />
+      )}
+
+      {/* Multiselect bottom sheet — BedDetail-style but NON-modal: no backdrop,
+          and a pointer-events-none wrapper (only the panel itself is interactive)
+          so the parcel stays pan/zoom/select-able underneath. Shows the selection
+          count + the bulk verbs that apply to the current composition; the × ends
+          multiselect (same lifecycle as the selection). */}
+      {selectedIds.length > 0 && (
+        <div className="fixed inset-x-0 bottom-0 z-40 flex justify-center pointer-events-none">
+          <div
+            className="pointer-events-auto bg-white dark:bg-gray-900 dark:text-gray-100 w-full max-w-lg rounded-t-2xl border-t border-x border-gray-200 dark:border-gray-800 p-4 sm:p-5 shadow-xl animate-slide-up"
+            style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom, 2rem))' }}
+          >
+            {/* Header — count where the seat number sits in BedDetail */}
+            <div className="flex items-center justify-between mb-4 sm:mb-5">
+              <span className="text-2xl sm:text-3xl font-black">{t('selectedCount', { n: selectedIds.length })}</span>
+              <button
+                type="button"
+                onClick={() => setSelectedIds([])}
+                aria-label={t('moveCancel')}
+                className="text-gray-400 dark:text-gray-500 text-3xl leading-none p-2"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {bulkError && (
+                <div className="bg-red-50 dark:bg-red-950/30 border-2 border-red-200 dark:border-red-800/40 text-red-700 dark:text-red-400 text-sm rounded-xl px-4 py-3">{bulkError}</div>
+              )}
+
+              {/* Guest name + multi-day period — shown when Rent applies (available/held) */}
+              {canRent && (
+                <>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder={tb('guestName')}
+                      value={bulkGuestName}
+                      onChange={e => setBulkGuestName(e.target.value)}
+                      className="flex-1 border-2 rounded-xl px-4 py-3.5 text-base dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setBulkUntil(bulkUntil === '' ? tomorrow : '')}
+                      aria-label={tb('multipleDays')}
+                      aria-pressed={bulkUntil !== ''}
+                      title={tb('multipleDays')}
+                      className={`w-14 self-stretch flex flex-col items-center justify-center gap-0.5 rounded-xl border-2 transition-colors ${bulkUntil !== '' ? 'border-orange-400 bg-orange-50 text-orange-600' : 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 active:bg-gray-50'}`}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+                      </svg>
+                      {bulkUntil !== '' && <span className="text-[10px] font-bold leading-none tabular-nums">{bulkDays}d</span>}
+                    </button>
+                  </div>
+                  {bulkUntil !== '' && (
+                    <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800/40 border-2 dark:border-gray-600 rounded-xl px-3 py-2.5">
+                      <span className="text-sm font-medium text-gray-500 dark:text-gray-400 flex-shrink-0">{tb('until')}</span>
+                      <input type="date" value={bulkUntil} min={tomorrow} max={maxUntil} onChange={e => setBulkUntil(e.target.value || tomorrow)} className="flex-1 bg-transparent text-base font-medium outline-none" />
+                      <button type="button" onClick={() => setBulkUntil('')} className="text-gray-400 text-2xl leading-none px-1 flex-shrink-0" aria-label={tb('cancel')}>&times;</button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Action buttons — mirror the tap dialog for the verbs common to the selection */}
+              {allAvailable ? (
+                <div className="flex gap-3">
+                  <button disabled={isBulkPending} onClick={bulkBlock} aria-label={tb('block')} title={tb('block')} className="w-16 self-stretch flex flex-col items-center justify-center gap-0.5 border-2 border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 rounded-xl active:bg-gray-50 dark:active:bg-gray-800 disabled:opacity-50">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M5.6 5.6l12.8 12.8" /></svg>
+                    <span className="text-[10px] font-semibold leading-none">{tb('block')}</span>
+                  </button>
+                  <button disabled={isBulkPending} onClick={bulkComp} aria-label={tb('comp')} title={tb('comp')} className="w-16 self-stretch flex flex-col items-center justify-center gap-0.5 border-2 border-purple-300 text-purple-600 dark:text-purple-300 rounded-xl active:bg-purple-50 dark:active:bg-purple-950/30 disabled:opacity-50">
+                    <span className="text-base leading-none" aria-hidden="true">★</span>
+                    <span className="text-[10px] font-semibold leading-none">{tb('comp')}</span>
+                  </button>
+                  <button disabled={isBulkPending} onClick={bulkReserve} className="flex-1 bg-yellow-400 text-yellow-900 font-bold text-lg py-4 rounded-xl active:bg-yellow-500 disabled:opacity-50">{tb('reserve')}</button>
+                  <button disabled={isBulkPending} onClick={bulkRent} className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50">{bulkDays > 1 ? tb('rentDays', { n: bulkDays }) : tb('rent')}</button>
+                </div>
+              ) : canRent ? (
+                <button disabled={isBulkPending} onClick={bulkRent} className="w-full bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50">{bulkDays > 1 ? tb('rentDays', { n: bulkDays }) : tb('rent')}</button>
+              ) : null}
+
+              {freeButton}
+
+              {!allAvailable && !canRent && !freeButton && (
+                <div className="text-gray-500 dark:text-gray-400 text-center py-2">{t('bulkNoAction')}</div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
