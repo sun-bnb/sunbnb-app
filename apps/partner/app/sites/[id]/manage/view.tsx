@@ -38,6 +38,8 @@ const DARK_MODE_KEY = 'sunbnb-manage-dark'
 const ZOOM_MIN = 0.1
 const ZOOM_MAX = 2.5
 const ZOOM_STEP = 0.25
+// Default open zoom — fraction of fit-to-width, so the parcel shows with margins.
+const DEFAULT_ZOOM_RATIO = 0.8
 const TAP_THRESHOLD = 6 // px of pointer travel before a gesture counts as pan, not tap
 const LONG_PRESS_MS = 450 // hold a seat this long (without moving) to enter multiselect
 
@@ -221,7 +223,9 @@ export default function ManageView({
     const vp = viewportRef.current
     const { w: cw } = contentSizeRef.current
     if (!vp || !cw) return
-    const fit = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, vp.clientWidth / cw))
+    // Open at 80% of fit-to-width so the whole parcel shows with side margins,
+    // not edge-to-edge.
+    const fit = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, (vp.clientWidth / cw) * DEFAULT_ZOOM_RATIO))
     commit(fit, 0, 0) // clampAxis centers
   }
 
