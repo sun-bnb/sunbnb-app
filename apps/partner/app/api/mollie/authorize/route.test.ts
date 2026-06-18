@@ -12,6 +12,9 @@ vi.mock('@/app/auth', () => ({
 
 vi.mock('@/app/api/_lib/mollie', () => ({
   buildAuthorizationUrl: vi.fn(),
+  sanitizeReturnTo: vi.fn((raw?: string | null) =>
+    raw && raw.startsWith('/') && !raw.startsWith('//') && !raw.includes('://') ? raw : null,
+  ),
 }))
 
 import { GET } from './route'

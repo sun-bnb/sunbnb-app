@@ -22,6 +22,9 @@ vi.mock('@/app/api/_lib/mollie', () => ({
   exchangeCodeForTokens: vi.fn(),
   fetchMollieProfile: vi.fn(),
   bootstrapMollieAccount: vi.fn(),
+  sanitizeReturnTo: vi.fn((raw?: string | null) =>
+    raw && raw.startsWith('/') && !raw.startsWith('//') && !raw.includes('://') ? raw : null,
+  ),
 }))
 
 import { GET } from './route'

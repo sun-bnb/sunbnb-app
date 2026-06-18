@@ -128,18 +128,20 @@ describe('getOrgAccessToken', () => {
 // ── OAUTH_SCOPES ──────────────────────────────────────────────────────────────
 
 describe('OAUTH_SCOPES', () => {
-  // The file header comment lists only 4 scopes, but bootstrapMollieAccount
-  // requires profiles.write (for profileMethods.enable) and onboarding.write
-  // (for POST /v2/onboarding/me). All six are legitimately needed.
-  it('contains all six required OAuth scopes separated by +', () => {
+  // bootstrapMollieAccount needs profiles.write (profileMethods.enable) and
+  // onboarding.write (POST /v2/onboarding/me); refunds.read/refunds.write were
+  // added so the partner grant can issue reservation + deposit refunds.
+  it('contains all eight required OAuth scopes separated by +', () => {
     const scopes = OAUTH_SCOPES.split('+')
     expect(scopes).toContain('payments.read')
     expect(scopes).toContain('payments.write')
+    expect(scopes).toContain('refunds.read')
+    expect(scopes).toContain('refunds.write')    // needed to issue refunds
     expect(scopes).toContain('profiles.read')
     expect(scopes).toContain('profiles.write')   // needed for profileMethods.enable
     expect(scopes).toContain('onboarding.read')
     expect(scopes).toContain('onboarding.write') // needed for POST /v2/onboarding/me
-    expect(scopes).toHaveLength(6)
+    expect(scopes).toHaveLength(8)
   })
 })
 
