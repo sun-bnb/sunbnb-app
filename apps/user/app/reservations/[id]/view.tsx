@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useLayoutEffect, useEffect } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { Reservation } from '@/app/sites/types'
 import ReservationConfirmationView from '@/components/reservation/confirmation/view'
 import Menu from './Menu'
@@ -37,7 +37,6 @@ export default function ReservationView({ serviceFee, siteType, orderPaymentType
   const touchStartY = useRef<number>(0)
 
   const [page, setPage] = useState<0 | 1>(order ? 1 : 0)
-  const [resScrollable, setResScrollable] = useState(false)
   const [orderStatus, setOrderStatus] = useState<string>(order?.status || ORDER_PROCESSING)
   const [reservationStatus, setReservationStatus] = useState<string>(reservation?.status || RESERVATION_PROCESSING)
   const [displayTerms, setDisplayTerms] = useState<boolean>(showTerms || false)
@@ -80,26 +79,6 @@ export default function ReservationView({ serviceFee, siteType, orderPaymentType
       setOrderStatus(finalOrder.status);
     }
   }, [finalOrder?.status])
-
-  // Measure whether reservation content overflows
-  useLayoutEffect(() => {
-    const el = resRef.current
-    if (el) {
-      setResScrollable(el.scrollHeight > el.clientHeight)
-    }
-  }, [reservation])
-
-  // Update on resize
-  useEffect(() => {
-    const handleResize = () => {
-      const el = resRef.current
-      if (el) {
-        setResScrollable(el.scrollHeight > el.clientHeight)
-      }
-    }
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
 
   // Switch pages and reset scroll positions
   const goToPage = (p: 0 | 1) => {
@@ -163,7 +142,11 @@ export default function ReservationView({ serviceFee, siteType, orderPaymentType
           )}
           <div
             ref={resRef}
-            className={`${resScrollable ? 'overflow-y-auto' : 'overflow-hidden'} flex-1`}
+            // Always a scroll container (like the menu page) so its
+            // overscroll-behavior:contain absorbs the swipe instead of chaining
+            // to the body — which otherwise stacked on the page transform and
+            // overshot the menu when the (short) reservation card fit on screen.
+            className="overflow-y-auto flex-1"
             style={{ overscrollBehavior: 'contain' }}
           >
             <ReservationConfirmationView reservation={reservation} />
