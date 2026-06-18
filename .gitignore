@@ -62,3 +62,6 @@ yarn-error.log*
 
 # Ad-hoc read-only diag scripts (tracked tooling here is .ts/.sh)
 packages/data/scripts/*.mjs
+
+# Local-only competitor-app reference model (private feature-migration source)
+.claude/alonso/
