@@ -9,10 +9,13 @@ export default function SunbedItem({
   siteId,
   item,
   onSelect,
+  hideDetail = false,
 }: {
   siteId: string
   item: InventoryItem
   onSelect: () => void
+  /** At small zoom, render the colored block only (no number/icon) for orientation. */
+  hideDetail?: boolean
 }) {
   if (item.status === 'disabled') {
     return <div className="basis-0 flex-1 p-2" />
@@ -32,10 +35,14 @@ export default function SunbedItem({
         active:brightness-90 transition-colors select-none
       `}
     >
-      {icon && <span className="text-[10px] leading-none">{icon}</span>}
-      <span className="text-[10px] leading-none opacity-70">
-        {formatSeat(item, { parcel: false })}
-      </span>
+      {!hideDetail && (
+        <>
+          {icon && <span className="text-[10px] leading-none">{icon}</span>}
+          <span className="text-[10px] leading-none opacity-70">
+            {formatSeat(item, { parcel: false })}
+          </span>
+        </>
+      )}
     </button>
   )
 }

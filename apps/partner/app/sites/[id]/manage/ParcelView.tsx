@@ -15,9 +15,11 @@ import { getBedState, getCellAppearance } from './bed-state'
 function PoolCell({
   item,
   onSelect,
+  hideDetail = false,
 }: {
   item: InventoryItem
   onSelect: () => void
+  hideDetail?: boolean
 }) {
   const parcel = parseInt(String(item.number)[0]!, 10)
   const POOL_BAND_BASE = 9900
@@ -35,8 +37,12 @@ function PoolCell({
       `}
       title={`Seat ${seq}`}
     >
-      {icon && <span className="text-[10px] leading-none">{icon}</span>}
-      <span className="text-[10px] leading-none opacity-70">{seq}</span>
+      {!hideDetail && (
+        <>
+          {icon && <span className="text-[10px] leading-none">{icon}</span>}
+          <span className="text-[10px] leading-none opacity-70">{seq}</span>
+        </>
+      )}
     </button>
   )
 }
@@ -46,12 +52,14 @@ function PoolSection({
   isPendingPool,
   onSelectPool,
   onAddSeat,
+  hideDetail,
   t,
 }: {
   poolItems: InventoryItem[]
   isPendingPool: boolean
   onSelectPool: (item: InventoryItem) => void
   onAddSeat: () => void
+  hideDetail: boolean
   t: ReturnType<typeof useTranslations<'SiteManage'>>
 }) {
   const occupied = poolItems.filter(i => getBedState(i) !== 'available').length
@@ -70,6 +78,7 @@ function PoolSection({
             key={item.id}
             item={item}
             onSelect={() => onSelectPool(item)}
+            hideDetail={hideDetail}
           />
         ))}
 
@@ -98,6 +107,10 @@ function PoolSection({
 
 // ── Fixed-width track (px) of the gap between groups in the scroll view ──────
 const GROUP_GAP_PX = 14
+
+// Below this zoom the per-chair number/icon is hidden — at small scale the text
+// is illegible anyway, so cells become plain colored blocks for orientation.
+const DETAIL_HIDE_BELOW = 0.6
 
 // ── ParcelView ────────────────────────────────────────────────────────────────
 
@@ -151,6 +164,9 @@ export default function ParcelView({
   const t = useTranslations('SiteManage')
   const router = useRouter()
   const [isPendingPool, startPoolTransition] = useTransition()
+
+  // At small zoom, drop per-chair number/icon — just colored blocks to orient.
+  const hideDetail = zoom < DETAIL_HIDE_BELOW
 
   // Sort row entries ascending (front row first)
   const grouped = regularItems.reduce((acc, item) => {
@@ -281,6 +297,7 @@ export default function ParcelView({
                         siteId={siteId}
                         item={resolved.item}
                         onSelect={() => onSelectItem(resolved.item, false, false)}
+                        hideDetail={hideDetail}
                       />
                     </div>
                   )
@@ -303,30 +320,37 @@ export default function ParcelView({
                       `}
                       title={`Seat ${resolved.label}`}
                     >
-                      {extraIcon && <span className="text-[10px] leading-none">{extraIcon}</span>}
-                      <span className="text-[10px] leading-none opacity-70">{resolved.label}</span>
+                      {!hideDetail && (
+                        <>
+                          {extraIcon && <span className="text-[10px] leading-none">{extraIcon}</span>}
+                          <span className="text-[10px] leading-none opacity-70">{resolved.label}</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 )
               })}
             </div>
           ))}
+
+          {/* Per-parcel pool section — lives INSIDE the zoom+scroll frame so the
+              ungrouped extra seats zoom and pan together with the parcel grid as
+              one continuous area (previously it sat outside and stayed fixed). */}
+          <PoolSection
+            poolItems={sortedPoolItems}
+            isPendingPool={isPendingPool}
+            onSelectPool={(item) => onSelectItem(item, true, false)}
+            onAddSeat={() => {
+              startPoolTransition(async () => {
+                await createPoolSeat(siteId, parcelNum, accessKey)
+                router.refresh()
+              })
+            }}
+            hideDetail={hideDetail}
+            t={t}
+          />
         </div>
       </div>
-
-      {/* Per-parcel pool section */}
-      <PoolSection
-        poolItems={sortedPoolItems}
-        isPendingPool={isPendingPool}
-        onSelectPool={(item) => onSelectItem(item, true, false)}
-        onAddSeat={() => {
-          startPoolTransition(async () => {
-            await createPoolSeat(siteId, parcelNum, accessKey)
-            router.refresh()
-          })
-        }}
-        t={t}
-      />
     </div>
   )
 }

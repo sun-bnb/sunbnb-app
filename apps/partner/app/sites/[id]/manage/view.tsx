@@ -25,7 +25,10 @@ const SEAT_ORDER_REVERSED_KEY = 'sunbnb-manage-seat-order-reversed'
 const MANAGE_ZOOM_KEY = 'sunbnb-manage-zoom'
 const DARK_MODE_KEY = 'sunbnb-manage-dark'
 
-const ZOOM_MIN = 0.5
+// Zoom-out floor is intentionally low so the whole parcel (even very wide ones)
+// can be pulled fully into view; chair labels auto-hide below DETAIL_HIDE_BELOW
+// (ParcelView), so far-out zoom reads as plain colored blocks for orientation.
+const ZOOM_MIN = 0.1
 const ZOOM_MAX = 2.5
 const ZOOM_STEP = 0.25
 
