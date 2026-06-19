@@ -75,6 +75,7 @@ export default function BedDetail({
   item,
   groupItems,
   accessKey,
+  currentWorkerId,
   isPool = false,
   isGroupExtra = false,
   onClose,
@@ -90,6 +91,8 @@ export default function BedDetail({
   /** All OTHER members of the item's SunbedGroup (empty array when not in a group). */
   groupItems: InventoryItem[]
   accessKey?: string
+  /** Current floor-staff worker id — stamped on every create action. */
+  currentWorkerId?: string
   isPool?: boolean
   /** True when this item is a group-attached extra (status='pool' && sunbedGroupId set). */
   isGroupExtra?: boolean
@@ -472,7 +475,7 @@ export default function BedDetail({
             <div className="flex gap-3">
               <button
                 disabled={isPending}
-                onClick={() => runAction(() => blockBed(siteId, item.id, undefined, accessKey, applyToPair))}
+                onClick={() => runAction(() => blockBed(siteId, item.id, undefined, accessKey, applyToPair, currentWorkerId))}
                 aria-label={t('block')}
                 title={t('block')}
                 className="w-16 self-stretch flex flex-col items-center justify-center gap-0.5 border-2 border-gray-300 text-gray-500 rounded-xl active:bg-gray-50 disabled:opacity-50"
@@ -489,7 +492,8 @@ export default function BedDetail({
                   siteId, item.id, accessKey,
                   groupItems.length > 0 ? applyToPair : false,
                   guestName || undefined,
-                  undefined
+                  undefined,
+                  currentWorkerId
                 ))}
                 aria-label={t('comp')}
                 title={t('comp')}
@@ -505,7 +509,8 @@ export default function BedDetail({
                   siteId, item.id, accessKey,
                   groupItems.length > 0 ? applyToPair : false,
                   guestName || undefined,
-                  undefined
+                  undefined,
+                  currentWorkerId
                 ))}
                 className="flex-1 bg-yellow-400 text-yellow-900 font-bold text-lg py-4 rounded-xl active:bg-yellow-500 disabled:opacity-50"
               >
@@ -517,7 +522,8 @@ export default function BedDetail({
                 onClick={() => runAction(() => reserveItem(
                   siteId, item.id, guestName || undefined, undefined, accessKey,
                   (isPool && !isGroupExtra) ? undefined : (until || undefined),
-                  groupItems.length > 0 ? applyToPair : false
+                  groupItems.length > 0 ? applyToPair : false,
+                  currentWorkerId
                 ))}
                 className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50"
               >
@@ -734,7 +740,8 @@ export default function BedDetail({
                   reservation.guestName
                     ? reservation.guestName
                     : (guestName || undefined),
-                  until || undefined
+                  until || undefined,
+                  currentWorkerId
                 ))}
                 className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50"
               >

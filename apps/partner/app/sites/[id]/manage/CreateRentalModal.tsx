@@ -25,6 +25,7 @@ export default function CreateRentalModal({
   rentalItems,
   activeBookings,
   accessKey,
+  currentWorkerId,
   onClose,
   onCreated,
 }: {
@@ -32,6 +33,8 @@ export default function CreateRentalModal({
   rentalItems: RentalItemProps[]
   activeBookings?: { rentalItemId: string; quantity: number }[]
   accessKey?: string
+  /** Current floor-staff worker id — attributes the walk-in rental's cash. */
+  currentWorkerId?: string
   onClose: () => void
   onCreated: () => void
 }) {
@@ -108,6 +111,7 @@ export default function CreateRentalModal({
         guestName: guestName || undefined,
         paymentType,
         accessKey,
+        employeeId: currentWorkerId,
       })
       if (result.status === 'ok') {
         onCreated()

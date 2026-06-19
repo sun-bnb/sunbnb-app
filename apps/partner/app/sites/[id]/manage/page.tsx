@@ -89,9 +89,18 @@ export default async function ManagePage({ params, searchParams }: { params: { i
     return <ErrorCard title="Not authorized" message="This access key is not valid for this site. Please contact the site operator." showBackLink={false} />
   }
 
+  // The roster is per-account (PartnerAccount keyed by userId === site.userId).
+  // Read server-side and pass down so the (token-gated, session-less) manage page
+  // can show the current-worker chip without a separate roster-read action.
+  const employees = await prisma.employee.findMany({
+    where: { accountId: site.userId, active: true },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  })
+
   return (
     <div className="w-screen">
-      <ManagementView site={site as SiteProps} accessKey={key} />
+      <ManagementView site={site as SiteProps} accessKey={key} employees={employees} />
     </div>
   )
 

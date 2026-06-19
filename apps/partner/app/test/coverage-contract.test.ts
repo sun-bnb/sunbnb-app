@@ -539,6 +539,33 @@ const UNGATED_ALLOWLIST: AllowlistEntry[] = [
     reason: 'No-auth locale cookie write — sets NEXT_LOCALE cookie only; no data access, no user-scoped resource mutations',
   },
 
+  // ── Server actions: account/staff (session-account-scoped employee CRUD) ────
+  {
+    export: 'getEmployees',
+    file: 'app/account/staff/actions.ts',
+    reason: 'Session-gated: employee.findMany where { accountId: session.user.id }; throws if not authenticated',
+  },
+  {
+    export: 'createEmployee',
+    file: 'app/account/staff/actions.ts',
+    reason: 'Session-gated: creates Employee scoped to session.user.id (accountId); throws if not authenticated',
+  },
+  {
+    export: 'renameEmployee',
+    file: 'app/account/staff/actions.ts',
+    reason: 'Session-gated: employee.updateMany where { id, accountId: session.user.id }; throws if not authenticated; cannot rename another account\'s employee',
+  },
+  {
+    export: 'setEmployeeActive',
+    file: 'app/account/staff/actions.ts',
+    reason: 'Session-gated: employee.updateMany where { id, accountId: session.user.id }; throws if not authenticated',
+  },
+  {
+    export: 'deleteEmployee',
+    file: 'app/account/staff/actions.ts',
+    reason: 'Session-gated: employee.deleteMany where { id, accountId: session.user.id }; throws if not authenticated; cannot delete another account\'s employee',
+  },
+
   // ── Server actions excluded from gated-actions by design ──────────────────
   {
     export: 'createSite',

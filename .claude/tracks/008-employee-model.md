@@ -35,30 +35,42 @@ Full design: `/Users/vhalme/.claude/plans/fuzzy-jumping-fountain.md` (approved 2
 
 ## Resume here
 
-- **Phase 1 DONE (2026-06-19, uncommitted).** Migration `20260619080811_add_employee_attribution`
+- **Phase 1 DONE (2026-06-19, committed `dfc0512`).** Migration `20260619080811_add_employee_attribution`
   (additive: `Employee` per-account + `TillClose` + nullable `employeeId` FK on
   Reservation/RentalBooking) applied to local + `sunbnb_test`. `employeeId` threaded through
-  `ReservationCreateData`/`RentalBookingInput` + both create helpers. New
-  `packages/data/src/till.ts` (`getOpenTill` = cash walk-ins + cash rentals attributed to a worker
-  since their last close, today-scoped; `getTillByEmployee` = per-roster day-breakdown) — comps/
-  blocks/holds excluded. `./till` export wired; partner `PrismaCient` mock gains `employee`/`tillClose`
-  delegates. 3 till integration tests (attribution persists, close resets, breakdown). data 192 unit /
-  102 integration, partner 182 + typecheck/lint clean. **`migrate:test` (Neon TEST DB) owed before any
-  `main` push** (pre-push hook enforces). **Deferred to Phase 2:** promote `computeWalkInAmount` to
-  `@repo/data` + have `reserveItem` record the walk-in cash amount (lands with the `employeeId`
-  threading into the manage actions).
-- **Next action:** **Phase 2** — `account/staff/` roster CRUD (mirror `apps/partner/app/security/`);
-  current-worker chip in `ManageToolbar` (localStorage `sunbnb-manage-worker-${site.id}`); add an
-  `employeeId` param to the manage create actions (reserveItem/holdBed/compBed/blockBed/
-  createWalkInRental) that validates `employee.accountId === site.userId` then stamps it; record the
-  walk-in cash amount in `reserveItem`. Register new gates in `gated-actions.ts`. Prime `/ui partner`.
-- **Context needed:** schema is greenfield for this (no Employee model; `SecurityToken` carries no
-  holder; transactions carry only `userId` = owner). Create helpers: `ReservationCreateData` /
-  `RentalBookingInput` in `packages/data/src/reservations.ts` (add optional `employeeId`, spreads to
-  `prisma.create` like `isComp` did). `computeWalkInAmount` currently lives in
-  `apps/partner/app/sites/[id]/manage/actions.ts` (from the QR-collect flow). Migration doctrine:
-  `.claude/rules/migrations.md` (additive/expand-safe; `migrate:local` foreground only).
-- **Blocked by:** nothing. Architecture/data pass applies (schema + cross-app).
+  `ReservationCreateData`/`RentalBookingInput` + both create helpers. `packages/data/src/till.ts`
+  (`getOpenTill`/`getTillByEmployee`) + 3 till integration tests. `./till` export + partner mock
+  `employee`/`tillClose` delegates. **`migrate:test` (Neon TEST DB) owed before any `main` push.**
+- **Phase 2 DONE (2026-06-19, UNCOMMITTED — awaiting "commit it").** Roster CRUD + current-worker chip
+  + attribution all built & green. **Slice 1 (partner-dev):** `apps/partner/app/account/staff/`
+  (`actions.ts` getEmployees/createEmployee/renameEmployee/setEmployeeActive/deleteEmployee — session/
+  account-scoped via `accountId: session.user.id`, `updateMany`/`deleteMany` compound-where; `page.tsx`
+  + `view.tsx` mirroring `security/`); Staff nav link in `header.tsx`; `Staff`/`Header.staff` i18n in
+  en/es/fi; 5 coverage-contract `UNGATED_ALLOWLIST` entries; mock gains `employee.updateMany`; 28 unit
+  tests. **Slice 2 (me):** `employeeId` threaded into the manage create actions (`reserveItem`/`holdBed`/
+  `compBed`/`blockBed`/`createWalkInRental` **+ `convertHoldToWalkIn`**) — trailing optional param,
+  validated via new `resolveEmployeeId(id, accountUserId)` (drops cross-account/stale → null, never
+  blocks the booking). **Walk-in cash € recorded** on `reserveItem` AND `convertHoldToWalkIn` (reuse
+  `computeWalkInAmount`, paid sites only) so the till has money. Current-worker chip: server-fetched
+  active roster passed from `manage/page.tsx` → `ManageView` → `ManageToolbar` `WorkerChip`
+  (localStorage `sunbnb-manage-worker-${site.id}`, re-validated vs roster; hidden when roster empty);
+  threaded into `BedDetail` + `CreateRentalModal` + the bulk handlers; `setWorker`/`noWorker` i18n.
+  No new gated-actions (param is orthogonal to the gate). Verify: partner **1455 unit** (spine green) +
+  **33 manage integration** (4 new attribution: stamp / cross-account drop / free-site / rental) +
+  tsc/lint clean. `computeWalkInAmount` kept LOCAL to manage/actions.ts (both callers live there — no
+  `@repo/data` promote needed).
+- **Next action:** **Phase 3** — per-worker till + "close my till" on the manage page. From the chip,
+  a till panel (sheet) showing `getOpenTill(siteId, currentWorkerId)` (already in `@repo/data/till`) —
+  cash this shift — and a **Close till** action. New gated manage action `closeTill` (token-or-session,
+  add to `gated-actions.ts` registry) snapshots the open total into a `TillClose` row (worker, site,
+  total, count, closedAt); open till then reads zero. Prime `/ui partner`.
+- **Context needed:** the chip's `currentWorkerId` lives in `ManageView` (view.tsx, localStorage
+  `sunbnb-manage-worker-${site.id}`) — the till panel hangs off the same chip. `getOpenTill` returns
+  `{ total, count }` since the worker's last `TillClose.closedAt` (today-scoped). `closeTill` is a new
+  manage action → MUST be added to `app/test/gated-actions.ts` (token-or-session) or coverage-contract
+  fails. Manage page is token-gated/session-less; the till read can be a new token-gated action OR
+  server-fetched in `page.tsx` like the roster.
+- **Blocked by:** nothing. `migrate:test` still owed before the eventual `main` push.
 
 ## Roadmap
 
@@ -66,9 +78,12 @@ Full design: `/Users/vhalme/.claude/plans/fuzzy-jumping-fountain.md` (approved 2
   `sunbnb_test`); `employeeId` threaded through both create helpers; `till.ts` (`getOpenTill`/
   `getTillByEmployee`) + 3 integration tests; `./till` export; partner mock delegates. data 192/102,
   partner 182 green. Walk-in cash-amount recording moved to Phase 2. `migrate:test` owed before push.
-- ☐ **Phase 2 — roster CRUD + current-worker chip + attribution.** `account/staff/` roster (mirror
-  `security/`); toolbar chip (localStorage); thread `employeeId` into the manage actions with
-  cross-account validation; gated-actions registry.
+- ✅ **Phase 2 — roster CRUD + current-worker chip + attribution. DONE 2026-06-19 (uncommitted).**
+  `account/staff/` roster (mirror `security/`, account-scoped); `WorkerChip` in `ManageToolbar`
+  (localStorage, roster-validated, hidden when empty); `employeeId` threaded into all manage create
+  actions + `convertHoldToWalkIn` via `resolveEmployeeId` (cross-account drop, never blocks); walk-in
+  cash € recorded on `reserveItem` + `convertHoldToWalkIn`. partner 1455 unit + 33 manage integration,
+  tsc/lint clean. No new gated-actions (param orthogonal to the gate); staff actions allowlisted.
 - ☐ **Phase 3 — per-worker till + "close my till" (manage).** Till panel (`getOpenTill`) + `closeTill`
   writing a `TillClose` snapshot; open till resets after close.
 - ☐ **Phase 4 — manager per-employee day-breakdown (accounting).** Staff-till section + `TillClose`

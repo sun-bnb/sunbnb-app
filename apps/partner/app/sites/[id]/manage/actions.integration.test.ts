@@ -3,6 +3,7 @@ import dayjs from 'dayjs'
 import { cleanDatabase, disconnectDatabase, prisma } from '@/app/test/setup'
 import {
   createTestUser,
+  createTestPartnerAccount,
   createTestSite,
   createTestInventoryItem,
   createTestRentalItem,
@@ -867,5 +868,78 @@ describe('blockBed — conflict detection (previously missing)', () => {
 
     const count = await prisma.reservation.count({ where: { siteId: site.id } })
     expect(count).toBe(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Floor-staff attribution (track 008) — employeeId stamping + walk-in cash €
+// ---------------------------------------------------------------------------
+
+describe('floor-staff attribution', () => {
+  // A roster employee requires a PartnerAccount (Employee.accountId → userId).
+  async function setupWithEmployee(siteOverrides: Record<string, any> = {}) {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id, siteOverrides)
+    const item = await createTestInventoryItem(user.id, site.id)
+    const employee = await prisma.employee.create({
+      data: { accountId: user.id, name: 'Alice' },
+    })
+    mockUserId = user.id
+    return { user, site, item, employee }
+  }
+
+  it('reserveItem stamps a valid worker and records the walk-in cash on a paid site', async () => {
+    const { site, item, employee } = await setupWithEmployee({ type: 'paid', price: 12 })
+
+    const result = await reserveItem(site.id, item.id, undefined, undefined, undefined, undefined, true, employee.id)
+    expect(result).toEqual({ status: 'ok' })
+
+    const res = await prisma.reservation.findFirstOrThrow({ where: { siteId: site.id } })
+    expect(res.employeeId).toBe(employee.id)
+    // Single chair, one day, site price 12 → € recorded so the till has money.
+    expect(res.paymentAmount).toBe(12)
+  })
+
+  it('reserveItem drops a cross-account worker id (no spoofing) but still books', async () => {
+    const { site, item } = await setupWithEmployee({ type: 'paid', price: 12 })
+    // An employee belonging to a DIFFERENT account.
+    const otherUser = await createTestUser()
+    await createTestPartnerAccount(otherUser.id)
+    const foreign = await prisma.employee.create({ data: { accountId: otherUser.id, name: 'Mallory' } })
+
+    const result = await reserveItem(site.id, item.id, undefined, undefined, undefined, undefined, true, foreign.id)
+    expect(result).toEqual({ status: 'ok' })
+
+    const res = await prisma.reservation.findFirstOrThrow({ where: { siteId: site.id } })
+    expect(res.employeeId).toBeNull()
+  })
+
+  it('reserveItem records no cash on a free site but still attributes the worker', async () => {
+    const { site, item, employee } = await setupWithEmployee({ type: 'free', price: 12 })
+
+    await reserveItem(site.id, item.id, undefined, undefined, undefined, undefined, true, employee.id)
+
+    const res = await prisma.reservation.findFirstOrThrow({ where: { siteId: site.id } })
+    expect(res.employeeId).toBe(employee.id)
+    expect(res.paymentAmount).toBe(0)
+  })
+
+  it('createWalkInRental stamps the worker on each booking', async () => {
+    const { site, employee } = await setupWithEmployee()
+    const rentalItem = await createTestRentalItem(site.id)
+
+    const result = await createWalkInRental({
+      siteId: site.id,
+      items: [{ rentalItemId: rentalItem.id, quantity: 1 }],
+      durationType: 'hours',
+      hours: 2,
+      paymentType: 'cash',
+      employeeId: employee.id,
+    })
+    expect(result.status).toBe('ok')
+
+    const booking = await prisma.rentalBooking.findFirstOrThrow({ where: { siteId: site.id } })
+    expect(booking.employeeId).toBe(employee.id)
   })
 })

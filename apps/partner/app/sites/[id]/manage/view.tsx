@@ -31,6 +31,15 @@ function parseSunbedNumber(num: number) {
 
 const SEAT_ORDER_REVERSED_KEY = 'sunbnb-manage-seat-order-reversed'
 const DARK_MODE_KEY = 'sunbnb-manage-dark'
+// Current floor-staff worker — remembered per-device-per-site (like dark mode);
+// every on-site action auto-stamps it. `${KEY}-${site.id}`.
+const WORKER_KEY = 'sunbnb-manage-worker'
+
+/** A selectable roster member for the current-worker chip. */
+export interface WorkerOption {
+  id: string
+  name: string
+}
 
 // Scale floor is intentionally low so even very wide parcels fit fully in view;
 // chair labels auto-hide below DETAIL_HIDE_BELOW (ParcelView), so far-out zoom
@@ -52,9 +61,12 @@ const LONG_PRESS_MS = 450 // hold a seat this long (without moving) to enter mul
 export default function ManageView({
   site,
   accessKey,
+  employees = [],
 }: {
   site: SiteProps
   accessKey: string
+  /** Active roster for this site's account — empty hides the worker chip. */
+  employees?: WorkerOption[]
 }) {
   const router = useRouter()
   const t = useTranslations('SiteManage')
@@ -85,6 +97,31 @@ export default function ManageView({
     document.body.style.backgroundColor = isDark ? '#0a0a0a' : ''
     return () => { document.body.style.backgroundColor = prev }
   }, [isDark])
+
+  // ── Current worker (floor-staff attribution) ──────────────────────────────
+  // Chosen once via the toolbar chip, remembered per-device-per-site, and passed
+  // to every on-site create action so the booking is auto-attributed. Default
+  // null (no hydration mismatch); restored from localStorage on mount and
+  // re-validated against the live roster so a removed/renamed worker drops out.
+  const [currentWorkerId, setCurrentWorkerId] = useState<string | null>(null)
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`${WORKER_KEY}-${site.id}`)
+      if (stored && employees.some(e => e.id === stored)) setCurrentWorkerId(stored)
+      else if (stored) localStorage.removeItem(`${WORKER_KEY}-${site.id}`)
+    } catch { /* ignore */ }
+  }, [site.id, employees])
+
+  const selectWorker = (id: string | null) => {
+    setCurrentWorkerId(id)
+    try {
+      if (id) localStorage.setItem(`${WORKER_KEY}-${site.id}`, id)
+      else localStorage.removeItem(`${WORKER_KEY}-${site.id}`)
+    } catch { /* ignore */ }
+  }
+  // Undefined (not null) when unset, so it omits cleanly from action arg lists.
+  const workerArg = currentWorkerId ?? undefined
 
   // ── Selection state ───────────────────────────────────────────────────────
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
@@ -528,9 +565,9 @@ export default function ManageView({
 
   // applyToPair=false on every call → act on EXACTLY the selected seats.
   // The shared Guest name applies to create/comp/hold; the period only to Rent.
-  const bulkBlock = () => runBulkSeq(i => blockBed(site.id!, i.id, undefined, accessKey, false))
-  const bulkComp = () => runBulkSeq(i => compBed(site.id!, i.id, accessKey, false, bulkGuestName.trim() || undefined))
-  const bulkReserve = () => runBulkSeq(i => holdBed(site.id!, i.id, accessKey, false, bulkGuestName.trim() || undefined))
+  const bulkBlock = () => runBulkSeq(i => blockBed(site.id!, i.id, undefined, accessKey, false, workerArg))
+  const bulkComp = () => runBulkSeq(i => compBed(site.id!, i.id, accessKey, false, bulkGuestName.trim() || undefined, undefined, workerArg))
+  const bulkReserve = () => runBulkSeq(i => holdBed(site.id!, i.id, accessKey, false, bulkGuestName.trim() || undefined, undefined, workerArg))
   const bulkRent = () => {
     const seenHolds = new Set<string>() // a held reservation spanning several selected seats converts once
     const name = bulkGuestName.trim() || undefined
@@ -540,9 +577,9 @@ export default function ManageView({
         const res = getActiveReservation(i)
         if (!res || seenHolds.has(res.id)) return Promise.resolve({ status: 'ok' as const })
         seenHolds.add(res.id)
-        return convertHoldToWalkIn(site.id!, i.id, accessKey, name, until)
+        return convertHoldToWalkIn(site.id!, i.id, accessKey, name, until, workerArg)
       }
-      return reserveItem(site.id!, i.id, name, undefined, accessKey, until, false)
+      return reserveItem(site.id!, i.id, name, undefined, accessKey, until, false, workerArg)
     })
   }
   const bulkFree = () => {
@@ -750,6 +787,9 @@ export default function ManageView({
           onToggleReversed={() => { if (effectiveParcel !== undefined) toggleParcelReversed(effectiveParcel) }}
           isDark={isDark}
           onToggleDark={toggleDark}
+          employees={employees}
+          currentWorkerId={currentWorkerId}
+          onSelectWorker={selectWorker}
         />
       )}
 
@@ -849,6 +889,7 @@ export default function ManageView({
               : []
           }
           accessKey={accessKey}
+          currentWorkerId={workerArg}
           isPool={selectedItemIsPool}
           isGroupExtra={selectedItemIsGroupExtra}
           onClose={() => { setSelectedItem(null); setSelectedItemIsPool(false); setSelectedItemIsGroupExtra(false) }}
@@ -868,6 +909,7 @@ export default function ManageView({
           rentalItems={site.rentalItems}
           activeBookings={site.rentalBookings}
           accessKey={accessKey}
+          currentWorkerId={workerArg}
           onClose={() => setShowRentalModal(false)}
           onCreated={() => {
             setShowRentalModal(false)

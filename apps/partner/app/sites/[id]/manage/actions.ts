@@ -50,6 +50,28 @@ async function verifySiteOwnership(siteId: string, accessKey?: string) {
 }
 
 /**
+ * Resolve a floor-staff attribution id for stamping on an on-site transaction.
+ *
+ * The current worker is chosen on the device (a toolbar chip) and passed to the
+ * action; we validate it belongs to THIS account before trusting it. Returns the
+ * id only when the employee exists and `employee.accountId === accountUserId`
+ * (the site owner's userId === the account key). Anything else — unset, unknown,
+ * or a cross-account id — resolves to `null` so a stale/spoofed selection is
+ * silently dropped rather than blocking the booking or mis-attributing it.
+ */
+async function resolveEmployeeId(
+  employeeId: string | undefined,
+  accountUserId: string,
+): Promise<string | null> {
+  if (!employeeId) return null
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    select: { accountId: true },
+  })
+  return employee && employee.accountId === accountUserId ? employeeId : null
+}
+
+/**
  * Returns all other member IDs of the item's SunbedGroup.
  * Falls back to pairId/pairedBy for beds that pre-date SunbedGroup migration.
  * For a 2-member group this returns exactly one id — identical to the old
@@ -90,7 +112,8 @@ export async function reserveItem(
   internalNotes?: string,
   accessKey?: string,
   until?: string,
-  applyToPair: boolean = true
+  applyToPair: boolean = true,
+  employeeId?: string
 ) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
@@ -125,6 +148,19 @@ export async function reserveItem(
     }
   }
 
+  // Record the cash taken so the per-worker till has € (paymentAmount is null on
+  // walk-ins today — the till would be countless). Computed from DB chair prices
+  // only (never a client value — payments.md); a free site charges nothing.
+  const [site, priceRows] = await Promise.all([
+    prisma.site.findUnique({ where: { id: siteId }, select: { type: true, price: true } }),
+    prisma.inventoryItem.findMany({ where: { id: { in: allItemIds } }, select: { price: true } }),
+  ])
+  const paymentAmount = site?.type === 'paid'
+    ? computeWalkInAmount(priceRows, site.price, fromDate, toDate)
+    : 0
+
+  const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
+
   // reserveWithConflictGuard collapses availability-check + create into one
   // $transaction with a SELECT … FOR UPDATE lock on the InventoryItem rows,
   // eliminating the check-then-create race window.
@@ -132,12 +168,14 @@ export async function reserveItem(
     itemIds: allItemIds,
     siteId,
     userId: ownership.userId,
+    employeeId: stampedEmployeeId,
     type: 'days',
     from: fromDate,
     to: toDate,
     status: RESERVATION_PAID_IN_CASH,
     operationalStatus: OP_WALKED_IN,
     checkedInAt: new Date(),
+    paymentAmount,
     guestName: guestName?.slice(0, 200) || null,
     internalNotes: internalNotes?.slice(0, 500) || null,
   })
@@ -473,7 +511,8 @@ export async function blockBed(
   itemId: string,
   notes?: string,
   accessKey?: string,
-  applyToPair: boolean = true
+  applyToPair: boolean = true,
+  employeeId?: string
 ) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
@@ -491,6 +530,8 @@ export async function blockBed(
   const fromDate = dayjs().startOf('day').toDate()
   const toDate = dayjs().endOf('day').toDate()
 
+  const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
+
   // reserveWithConflictGuard adds the conflict check that blockBed previously
   // lacked entirely — blocking an already-occupied bed (walk-in, reservation,
   // or existing block) is now rejected rather than creating a duplicate row.
@@ -498,6 +539,7 @@ export async function blockBed(
     itemIds: allItemIds,
     siteId,
     userId: ownership.userId,
+    employeeId: stampedEmployeeId,
     type: 'days',
     from: fromDate,
     to: toDate,
@@ -586,7 +628,8 @@ export async function compBed(
   accessKey?: string,
   applyToPair: boolean = true,
   guestName?: string,
-  notes?: string
+  notes?: string,
+  employeeId?: string
 ) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
@@ -602,10 +645,13 @@ export async function compBed(
   const fromDate = dayjs().startOf('day').toDate()
   const toDate = dayjs().endOf('day').toDate()
 
+  const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
+
   const result = await reserveWithConflictGuard({
     itemIds: allItemIds,
     siteId,
     userId: ownership.userId,
+    employeeId: stampedEmployeeId,
     type: 'days',
     from: fromDate,
     to: toDate,
@@ -700,7 +746,8 @@ export async function holdBed(
   accessKey?: string,
   applyToPair: boolean = true,
   guestName?: string,
-  notes?: string
+  notes?: string,
+  employeeId?: string
 ) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
@@ -716,10 +763,13 @@ export async function holdBed(
   const fromDate = dayjs().startOf('day').toDate()
   const toDate = dayjs().endOf('day').toDate()
 
+  const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
+
   const result = await reserveWithConflictGuard({
     itemIds: allItemIds,
     siteId,
     userId: ownership.userId,
+    employeeId: stampedEmployeeId,
     type: 'days',
     from: fromDate,
     to: toDate,
@@ -761,7 +811,8 @@ export async function convertHoldToWalkIn(
   itemId: string,
   accessKey?: string,
   guestName?: string,
-  until?: string
+  until?: string,
+  employeeId?: string
 ) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
@@ -785,11 +836,21 @@ export async function convertHoldToWalkIn(
     toDate = dayjs(until).endOf('day').toDate()
   }
 
+  // The conversion turns a free hold into a paid cash walk-in, so it must record
+  // the € for the till (else the converted seat undercounts) and attribute it to
+  // the worker who collected. Price from DB only (payments.md); free site → 0.
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { type: true, price: true },
+  })
+  const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
+
   const updateData = {
     status: RESERVATION_PAID_IN_CASH,
     operationalStatus: OP_WALKED_IN,
     checkedInAt: new Date(),
     to: toDate,
+    ...(stampedEmployeeId ? { employeeId: stampedEmployeeId } : {}),
     ...(guestName && guestName.trim() ? { guestName: guestName.trim().slice(0, 200) } : {}),
   }
 
@@ -809,7 +870,7 @@ export async function convertHoldToWalkIn(
         },
         select: {
           id: true,
-          items: { select: { id: true } },
+          items: { select: { id: true, price: true } },
         },
       })
 
@@ -818,6 +879,9 @@ export async function convertHoldToWalkIn(
       }
 
       const allItemIds = hold.items.map((i) => i.id)
+      const paymentAmount = site?.type === 'paid'
+        ? computeWalkInAmount(hold.items, site.price, todayStart, toDate)
+        : 0
 
       // Step 2: Lock those InventoryItem rows FOR UPDATE so concurrent reservations
       // for the same beds in the extended range are serialized behind this tx.
@@ -851,7 +915,7 @@ export async function convertHoldToWalkIn(
       // Step 4: Update in place — extend the hold and convert it to a walk-in.
       await tx.reservation.update({
         where: { id: hold.id },
-        data: updateData,
+        data: { ...updateData, paymentAmount },
       })
 
       return { outcome: 'updated' as const }
@@ -874,16 +938,20 @@ export async function convertHoldToWalkIn(
         to: { gte: todayStart },
         items: { some: { id: itemId } },
       },
-      select: { id: true },
+      select: { id: true, items: { select: { price: true } } },
     })
 
     if (!reservation) {
       return { status: 'error', errors: ['No held reservation found to convert'] }
     }
 
+    const paymentAmount = site?.type === 'paid'
+      ? computeWalkInAmount(reservation.items, site.price, todayStart, toDate)
+      : 0
+
     await prisma.reservation.update({
       where: { id: reservation.id },
-      data: updateData,
+      data: { ...updateData, paymentAmount },
     })
   }
 
@@ -1390,6 +1458,7 @@ export async function createWalkInRental(input: {
   guestName?: string
   paymentType: 'cash' | 'free'
   accessKey?: string
+  employeeId?: string
 }) {
   // Input validation
   if (!input.items.length) {
@@ -1415,6 +1484,8 @@ export async function createWalkInRental(input: {
 
   const ownership = await verifySiteOwnership(input.siteId, input.accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const stampedEmployeeId = await resolveEmployeeId(input.employeeId, ownership.userId)
 
   const now = new Date()
   const from = now
@@ -1467,6 +1538,7 @@ export async function createWalkInRental(input: {
       operationalStatus: OP_PICKED_UP,
       pickedUpAt: new Date(),
       guestName: input.guestName?.slice(0, 200) || null,
+      employeeId: stampedEmployeeId,
     }
   })
 
