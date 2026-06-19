@@ -175,10 +175,19 @@ branching the expected lane by payment class.
   (The user owns translation review — no further copy-review reminders.)
 - **Optional cleanup:** the `bulkBlock`/`bulkComp`/`bulkReserve`/`bulkRent` SiteManage i18n keys are
   now dead (the multiselect sheet renders BedDetail `tb` labels). Safe to delete in all three locales.
-- **P5 — `desactivada` out-of-service lifecycle DEFERRED (optional).** Today's `blockBed`/`unblockBed`
-  (operationalStatus='blocked') already works as an ephemeral out-of-service state. Alonso's sticky
-  one-way `desactivada` is a UX refinement, not a missing capability — revisit only on real operator
-  friction. No data changes required to defer.
+- **P5 — sticky out-of-service. DONE 2026-06-19 (uncommitted).** Per the user, made the existing
+  **Block sticky** (keeping the "block" vocabulary — no new state/color/i18n) rather than adding a
+  separate `desactivada`. `blockBed` now ends the block at a far-future sentinel
+  (`OUT_OF_SERVICE_TO = 2999-12-31`) instead of end-of-today, so it survives the daily rollover
+  (overlaps every day's manage query), stays out of online inventory until cleared, and is never swept
+  by the cleanup cron (`to` is never `< now`). `unblockBed`'s date predicate changed to overlap-with-
+  today (`from ≤ todayEnd && to ≥ todayStart`) so it still finds a sticky/past-dated block. Conflict
+  window is now `[today, ∞)`: a bed with a future paid booking can't be blocked until that booking is
+  cleared (correct, matches invariant 1). No migration, no UI change (the blocked panel shows ✕+Unblock,
+  not a date). 1 unit + 2 integration tests (sticky `to`, clear-a-previous-day block). **NOTE:**
+  `manage/actions.ts` currently also holds an *uncommitted* `settleReservation` refactor (walk-ins start
+  unsettled) interleaved with this P5 work — its `getTillStatus … only after settled` integration test
+  is red (in-progress, not P5). P5 + settle must be untangled or landed together at commit time.
 
 ## Roadmap
 
@@ -208,9 +217,11 @@ branching the expected lane by payment class.
   are first-pass machine translations, need review before promote). 16 new unit tests
   (manage/actions.test.ts 84→100). tsc clean, lint clean, 1256 tests all green. `isComp` added to
   `types/shared.ts` Reservation interface.
-- 💤 **P5 — Out-of-service lifecycle (`desactivada`). DEFERRED.** Today's ephemeral block
-  already covers the core use case. Revisit only if operator feedback reveals friction. No data
-  changes pending.
+- ✅ **P5 — Sticky out-of-service. DONE 2026-06-19 (uncommitted).** Kept the "block" term but made it
+  durable: `blockBed` ends at a far-future sentinel (survives day rollover, out of online inventory,
+  cron never sweeps it); `unblockBed` uses overlap-with-today so it still clears a sticky/past-dated
+  block. No migration, no new state/UI/i18n. 1 unit + 2 integration tests. (Interleaved in
+  `manage/actions.ts` with an unrelated uncommitted `settleReservation` refactor — see Resume.)
 - ✅ **P6 — Lightweight same-day hold.** DONE 2026-06-17. `holdBed` server action added to
   `manage/actions.ts` (mirroring `blockBed`/`compBed`: same ownership check, pair-expansion via
   `getGroupMemberIds`, `reserveWithConflictGuard`, `revalidatePath`). Status: `RESERVATION_HELD`

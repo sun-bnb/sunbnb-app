@@ -73,6 +73,18 @@ async function resolveEmployeeId(
 }
 
 /**
+ * End-of-window for a "blocked" (out-of-service) bed. A block is **sticky**: it
+ * survives the daily rollover (overlaps every day's manage query) and stays out
+ * of online inventory until the operator taps Unblock — modelling Alonso's
+ * `desactivada` lifecycle while keeping our "block" vocabulary. Walk-ins/holds
+ * keep a today-scoped `to` and still expire via the cleanup cron; a block's `to`
+ * is never `< now`, so the cron never sweeps it. A far-future sentinel (not a
+ * true "infinity") keeps it a plain timestamp that ordinary date-overlap queries
+ * match without special-casing.
+ */
+const OUT_OF_SERVICE_TO = new Date('2999-12-31T23:59:59.999Z')
+
+/**
  * Returns all other member IDs of the item's SunbedGroup.
  * Falls back to pairId/pairedBy for beds that pre-date SunbedGroup migration.
  * For a 2-member group this returns exactly one id — identical to the old
@@ -529,13 +541,18 @@ export async function blockBed(
   }
 
   const fromDate = dayjs().startOf('day').toDate()
-  const toDate = dayjs().endOf('day').toDate()
+  // Sticky out-of-service: end the block far in the future so it persists across
+  // days and stays out of online inventory until Unblock (see OUT_OF_SERVICE_TO).
+  const toDate = OUT_OF_SERVICE_TO
 
   const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
 
   // reserveWithConflictGuard adds the conflict check that blockBed previously
   // lacked entirely — blocking an already-occupied bed (walk-in, reservation,
   // or existing block) is now rejected rather than creating a duplicate row.
+  // With the far-future `to`, the conflict window is [today, ∞): a bed with any
+  // future paid booking can't be blocked until that booking is cleared (correct —
+  // you can't take a seat out of service while it still owes a guest).
   const result = await reserveWithConflictGuard({
     itemIds: allItemIds,
     siteId,
@@ -568,12 +585,14 @@ export async function unblockBed(siteId: string, itemId: string, accessKey?: str
 
   if (applyToPair) {
     // Pair mode: delete the whole block reservation (frees both seats).
+    // Overlap-with-today (from <= todayEnd && to >= todayStart) matches a sticky
+    // block whose `to` is far in the future, not just a same-day window.
     await prisma.reservation.deleteMany({
       where: {
         siteId,
         operationalStatus: 'blocked',
-        from: { gte: todayStart },
-        to: { lte: todayEnd },
+        from: { lte: todayEnd },
+        to: { gte: todayStart },
         items: { some: { id: itemId } },
       },
     })
@@ -584,8 +603,8 @@ export async function unblockBed(siteId: string, itemId: string, accessKey?: str
       where: {
         siteId,
         operationalStatus: 'blocked',
-        from: { gte: todayStart },
-        to: { lte: todayEnd },
+        from: { lte: todayEnd },
+        to: { gte: todayStart },
         items: { some: { id: itemId } },
       },
       include: { items: true },

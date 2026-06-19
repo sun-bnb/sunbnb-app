@@ -433,6 +433,46 @@ describe('blockBed / unblockBed', () => {
     expect(remaining).toHaveLength(1)
     expect(remaining[0].operationalStatus).toBe('expected')
   })
+
+  it('blockBed is sticky — stores a far-future end date (survives the day rollover)', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id)
+    mockUserId = user.id
+
+    await blockBed(site.id, item.id, 'Broken slat')
+
+    const res = await prisma.reservation.findFirstOrThrow({
+      where: { siteId: site.id, operationalStatus: 'blocked' },
+    })
+    // Far-future `to` ⇒ overlaps every future day's manage query (sticky) and is
+    // never < now, so the cleanup cron never sweeps it — only Unblock clears it.
+    expect(res.to.getUTCFullYear()).toBe(2999)
+  })
+
+  it('unblockBed clears a block placed on a previous day (durable across rollover)', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id)
+    mockUserId = user.id
+
+    // A sticky block placed days ago: `from` in the past, far-future `to`.
+    await createTestReservation(user.id, site.id, [item.id], {
+      status: 'paid-in-cash',
+      operationalStatus: 'blocked',
+      from: dayjs().subtract(5, 'day').startOf('day').toDate(),
+      to: new Date('2999-12-31T23:59:59.999Z'),
+    })
+
+    const result = await unblockBed(site.id, item.id)
+    expect(result).toEqual({ status: 'ok' })
+
+    const remaining = await prisma.reservation.count({
+      where: { siteId: site.id, operationalStatus: 'blocked' },
+    })
+    expect(remaining).toBe(0)
+  })
+
 })
 
 // ---------------------------------------------------------------------------

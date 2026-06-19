@@ -841,6 +841,18 @@ describe('blockBed with applyToPair = false', () => {
     expect(res.errors?.[0]).toMatch(/already occupied or blocked/i)
     expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
   })
+
+  it('blocks stickily — passes a far-future out-of-service end date to the guard', async () => {
+    authenticateAsOwner()
+
+    await blockBed(SITE_ID, ITEM_ID, undefined, undefined, false)
+
+    const guardCall = mockGuard.mock.calls[0][0]
+    // A block is sticky: `to` is far in the future so it survives the daily
+    // rollover (overlaps every day) and the cleanup cron (to is never < now)
+    // until the operator taps Unblock.
+    expect((guardCall.to as Date).getUTCFullYear()).toBe(2999)
+  })
 })
 
 describe('unreserveItem with applyToPair = false', () => {
