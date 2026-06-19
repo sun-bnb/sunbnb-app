@@ -1,6 +1,6 @@
 ---
 id: 010-floor-reservation-lookup
-title: Floor Reservation Lookup — "Guests" sheet on the manage page
+title: Floor Reservation Lookup & Arrivals — the "Guests" host stand
 status: proposed
 created: 2026-06-19
 updated: 2026-06-19
@@ -9,11 +9,13 @@ worktree: null
 
 ## Goal
 
-Bring **reservation lookup + today's arrivals** to the token-gated partner **manage page** (the
-on-site floor surface), as a **"Guests" bottom sheet**:
+Turn the token-gated partner **manage page** into a **digital host stand / arrivals board** via a
+**"Guests" bottom sheet**. The **spine is reservation lookup + today's arrivals** (this is the part
+that reaches parity with Alonso); the **value** is making it the *active* surface that drives the
+**arrival → seat → turnover** loop, not a passive search box:
 
 - **Default view = today's expected arrivals** — online `expected` + staff `held` reservations not
-  yet checked in, as a scannable list (name · bed(s) · time/period · status chip), far faster than
+  yet checked in, as a scannable list (name · bed(s) · period · status chip), far faster than
   hunting yellow beds on the grid.
 - **Name / phone search** — matches `guestName` / `guestContact`, and **reaches beyond today's grid**
   (surfaces future-dated bookings the floor can't currently see at all).
@@ -35,9 +37,30 @@ handoff) because Sunbnb has the richer substrate. Everything *more* (extend-stay
 cancel/refund) is **post-Alonso** — Alonso's dateless, money-less reservation model can't even express
 those — so they are deferred to their own tracks (see Roadmap → Deferred), not folded in here.
 
-**Read-only by design.** Lookup mutates nothing; the inline Check-in/Rent are existing floor actions.
-So it adds **no new access-key blast radius** — a deliberate contrast with the deferred non-today
-cancel/refund (which *would* widen what a leaked manage token can do, and so needs guarding).
+**Read-only by design.** Lookup mutates nothing; the inline Check-in/Rent/Release are existing floor
+actions. So it adds **no new access-key blast radius** — a deliberate contrast with the deferred
+non-today cancel/refund (which *would* widen what a leaked manage token can do, and so needs guarding).
+
+**Beyond Alonso — the host-stand layer (what makes it *really* useful).** Alonso's *Reservas* is a
+passive name-on-beds book; Sunbnb has dates, payment, lifecycle, notes, staff attribution, **and a
+scannable pass per booking**, so the same surface can be the *active* host stand. Three differentiated
+drivers (each leans on data Alonso doesn't have):
+
+- **Scan the guest's pass → instant check-in.** Every booking already issues a QR ticket
+  (`apps/user/app/reservations/[id]/pass`). The strongest entry isn't typing "García" (spelling,
+  shared names, language) — it's **scan the confirmation QR → that booking opens → check in.** Zero
+  ambiguity; name/phone search becomes the *fallback*. Squarely beyond Alonso.
+- **A proactive arrivals roster, not just a lookup.** The default view carries name · bed(s) · party
+  size · **paid-vs-hold** · **notes** (VIP / "always bed 1" / allergy) + a **not-arrived / unfulfilled**
+  state — so staff *prep* in the morning, greet by name, and route food/messages. A CRM-lite the bed
+  grid (just yellow) can't be.
+- **Turnover → revenue.** The roster surfaces **unfulfilled holds/bookings** (still `expected`, never
+  checked in) so staff **release and resell** dead beds on a sold-out day — a real revenue lever
+  (€40–50/bed), via the *existing* token-gated release/no-show actions (no new mutation surface).
+  Alonso has no "did they show?" signal at all.
+
+*(Honest caveat: sunbed bookings are **day-scoped, not timed**, so this is a "who's expected today"
+roster, not a minute-by-minute schedule — the timed version applies to tables/rentals.)*
 
 ## Resume here
 
@@ -74,8 +97,17 @@ cancel/refund (which *would* widen what a leaked manage token can do, and so nee
   Guests + rentals bottom-right) hidden during multiselect, like the existing two. `view.tsx`: sheet
   state + **Locate** handoff (jump to the bed's parcel + open `BedDetail`, reusing the existing
   selection), inline `checkInReservation` / `convertHoldToWalkIn`. `Guests` i18n in en/es/fi.
-- ☐ **P3 (optional) — polish.** Party-size grouping (+N), a near-future "Upcoming" section, empty /
-  no-match states, recent-search.
+- ☐ **P3 — Arrivals roster enrichment (host-stand layer).** Rows carry party size (+N), **paid-vs-hold**
+  chip, **notes** (VIP/allergy), and a **not-arrived / unfulfilled** state; empty / no-match / loading
+  states; optional recent-search. Turns the list from "names" into a roster staff prep against.
+- ☐ **P4 — Scan-the-pass entry.** A "Scan pass" affordance on the sheet: device camera → read the
+  guest's confirmation QR (`/reservations/[id]/pass`) → resolve the reservation (id / anonId) → open it
+  → check in. Error-proof, beyond Alonso; name/phone search stays the fallback. (Needs a QR-scan path +
+  camera permission — see Open decisions.)
+- ☐ **P5 — Resell-the-no-shows nudge.** Surface today's **unfulfilled** holds/bookings (still `expected`,
+  never checked in) as a distinct group so staff can **release and resell** dead beds — wired to the
+  *existing* token-gated `releaseHold` / `markNoShow` / `unreserveItem`, so no new mutation surface.
+  v1 = passive (surface + one-tap release); an active "free N beds?" prompt is a later option.
 - 💤 **Deferred — separate post-Alonso tracks (NOT lookup, NOT Alonso parity).** These are Sunbnb-model
   obligations born of real dates + online prepayment, which Alonso's model can't express:
   - **Extend / shorten a present guest's stay** (change `to` → re-availability check + price delta).
@@ -105,6 +137,15 @@ cancel/refund (which *would* widen what a leaked manage token can do, and so nee
   bottom-left; Guests + rentals bottom-right) hidden during multiselect; 🔍 search glyph so Guests reads
   distinctly from the worker *person*-icon FAB. Fallback if three FABs feel heavy in practice: demote
   Guests to a toolbar 🔍.
+- **2026-06-19** — **Vision expanded: from lookup to a host stand / arrivals board.** Beyond the search
+  spine (P1–P2), folded in three differentiated "really useful" drivers (P3–P5): (1) **scan-the-pass**
+  check-in — leverages the existing `/reservations/[id]/pass` QR; error-proof vs typing names, so name/
+  phone search becomes the *fallback*; (2) a **proactive arrivals roster** with notes / paid-vs-hold /
+  party size / unfulfilled state (CRM-lite — prep + greet by name + route service); (3) **resell
+  unfulfilled holds** as a turnover/revenue lever, via the *existing* release/no-show actions (no new
+  mutation surface). Honesty caveat recorded: sunbed bookings are **day-scoped, not timed**, so it's a
+  "today's expected" roster, not a timed schedule (timed applies to tables/rentals). The lookup remains
+  the Alonso-parity spine; the host-stand layer is the surpass.
 
 ## Open decisions
 
@@ -115,6 +156,11 @@ cancel/refund (which *would* widen what a leaked manage token can do, and so nee
   row expansion.
 - **Contact search privacy** — matching `guestContact`/phone on the token-gated floor (staff already
   see `guestName` in `BedDetail`, so consistent; confirm the posture).
+- **Scan-the-pass mechanics (P4)** — device-camera QR scan (a scanner lib + camera permission on the
+  token-gated page) vs manual code entry; what the pass QR encodes and how the floor resolves it to a
+  reservation (reservation id / `anonId` / a signed token) without a session.
+- **Resell nudge scope (P5)** — passive (surface unfulfilled rows + the existing one-tap release) vs an
+  active prompt ("3 holds unfulfilled — free 5 beds?"). Lean passive for v1.
 
 ## Links
 
@@ -126,5 +172,6 @@ cancel/refund (which *would* widen what a leaked manage token can do, and so nee
   edit-less — context for why the richer flows are deferred, not copied).
 - Reference impls: `apps/partner/app/frontdesk/actions.ts#searchAllReservations` (owner-only search to
   port to the token floor); `apps/partner/app/sites/[id]/manage/page.tsx` (today-only grid query);
-  `apps/partner/app/sites/[id]/manage/{TillSheet,CollectPaymentModal,BedDetail}.tsx`.
+  `apps/partner/app/sites/[id]/manage/{TillSheet,CollectPaymentModal,BedDetail}.tsx`;
+  `apps/user/app/reservations/[id]/pass` (the QR ticket pass the **scan-the-pass** entry reads).
 - Rules: `.claude/rules/{ui,data-access,auth}.md`; UI: `/ui partner`.
