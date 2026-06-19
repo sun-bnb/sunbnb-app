@@ -27,6 +27,7 @@ Google OAuth only. `app.tsx` checks session; redirects unauthenticated to `/api/
 | `/sites/[id]/rentals` | Equipment rental item CRUD | Auth |
 | `/calendar` | Monthly reservation calendar — site selector, day detail panel | Auth |
 | `/account` | Partner account settings — personal info, company, billing (IBAN) | Auth |
+| `/account/staff` | Staff roster — per-account `Employee` CRUD (current-worker chip source) | Auth |
 | `/security` | API token management — create, list, delete | Auth |
 | `/reservations/[id]` | Individual reservation detail | Auth |
 | `/info` | Marketing landing page with animated chapters | Public |
@@ -46,8 +47,11 @@ Google OAuth only. `app.tsx` checks session; redirects unauthenticated to `/api/
 - **`sites/[id]/inventory-actions.ts`**: `createInventoryItem`, `deleteInventoryItem`, `saveInventoryItemLocation`, `saveInventoryItemProperties`, `deleteItemsByGroup`
 - **`sites/[id]/working-hours-actions.ts`**: `addWorkingHours`, `deleteWorkingHours`
 - **`sites/[id]/queries.ts`**: `getSite` (exported), `resolveServiceFees` (private helper)
-- **`sites/[id]/manage/actions.ts`**: `reserveItem`, `unreserveItem`, `checkInReservation`, `markDeparted`, `markNoShow`, `updateReservationNotes`, `moveReservation`, `blockBed`, `unblockBed`, `markRentalPickedUp`, `markRentalReturned`, `createWalkInRental` (token-gated)
+- **`sites/[id]/manage/actions.ts`**: `reserveItem`, `unreserveItem`, `checkInReservation`, `markDeparted`, `markNoShow`, `updateReservationNotes`, `moveReservation`, `blockBed`, `unblockBed`, `holdBed`, `compBed`, `convertHoldToWalkIn`, `markRentalPickedUp`, `markRentalReturned`, `createWalkInRental`, `collectReservationPayment`/`getCollectStatus`/`cancelCollection` (QR collect), `getTillStatus`/`closeTill` (per-worker till) (all token-or-session). On-site create actions take an optional trailing `employeeId` (current-worker attribution), validated against the account via `resolveEmployeeId`; cash walk-ins record `paymentAmount` for the till.
 - **`sites/[id]/rentals/actions.ts`**: `getRentalItems`, `createRentalItem`, `updateRentalItem`, `deleteRentalItem`, `toggleSiteFeature`
+- **`sites/[id]/accounting/actions.ts`**: `getPaidItemsByMonth`, `getInvoicesByMonth`, `getRevenueTrend`/`getOccupancyTrend`/`getRevenueCsv` (track 007 analytics), `getStaffTill` (per-employee monthly cash breakdown) — session + site-owner
+- **`account/staff/actions.ts`**: `getEmployees`, `createEmployee`, `renameEmployee`, `setEmployeeActive`, `deleteEmployee` — per-account `Employee` roster (session-scoped, `accountId === session.user.id`)
+- **`security/actions.ts`**: `getTokens`, `getOwnedSites`, `createToken`, `deleteToken` — SecurityToken (access-key) management (session-scoped)
 
 ## State Management
 
@@ -136,6 +140,7 @@ Requires local Docker Postgres with `sunbnb_test` DB. No `@repo/data` mocks — 
 - Site ownership: all mutations go through `requireSiteOwner()` or `verifySiteOwnership()` which check `session.user.id === site.userId` (sudo users bypass)
 - Auto-save: debounced (1.5–2s) field changes trigger server actions → `revalidatePath` refreshes site context
 - Manage page: token-gated (no auth, uses site-specific `accessKey` from SecurityToken table). All manage server actions accept optional `accessKey` parameter — validates token expiry and resource permissions (`'all'` or `'manage_site'`). Supports walk-in reservations, check-in/departure, bed blocking, hourly/daily rental operations
+- Floor-staff attribution & till (track 008): a per-`PartnerAccount` `Employee` roster (`/account/staff`) feeds a current-worker chip in `ManageToolbar` (localStorage `sunbnb-manage-worker-${site.id}`, server-fetched roster passed from `manage/page.tsx`). On-site create actions auto-stamp the chosen `employeeId` (no per-transaction input; cross-account/stale ids drop to null via `resolveEmployeeId`); cash walk-ins record `paymentAmount`. The worker's open till (`getOpenTill`) + "Close my till" (`closeTill` → `TillClose` snapshot) live in `TillSheet`; the manager's monthly per-worker cash roll-up (`getStaffTill` → `getTillByEmployee`) is a card on the accounting page. Till aggregation in `@repo/data/till` (unit tests alias it to `__mocks__/@repo/data/till.ts`). Attribution is orthogonal to the `accessKey` gate.
 - Inventory: items have `status` (new/active/inactive), coordinates for map placement, optional pairing (double sunbeds). Parcels (grouped items) support drag-and-drop repositioning on the map — dragging any item in a group moves the entire parcel via `moveParcel()` server action. Physical sunbed size: 2.1m (must match `getScaledSize()` in InventoryMap, InventoryField, and `generateChairs()` in chair-util)
 - Equipment rentals: `RentalItem` supports `pricePerHour` and `pricePerDay`. Walk-in rentals via `CreateRentalModal` with quick-pick duration (1h, 2h, 3h, all day). `RentalBookingCard` shows time range and overdue status for hourly bookings
 - Image upload: Vercel Blob `put()` in server actions; remote patterns whitelisted in `next.config.mjs`
