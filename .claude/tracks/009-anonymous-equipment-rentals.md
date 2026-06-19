@@ -39,10 +39,15 @@ Partner walk-in (`createWalkInRental`) is on-site/staff-attributed — **out of 
 
 ## Resume here
 
-- **Next action:** Phase 1 — `saveRentalBooking` accepts `anonId?` + `guestEmail?`; drop the
-  auth-hard-fail; site-owner FK placeholder; adopt `createRentalBookingsWithGuard`. `user-dev`.
-  Schema migration (Phase 0) applied locally + to `sunbnb_test`; pending `migrate:test` before
-  pushing `main` (per `.claude/rules/migrations.md` pre-push hook).
+- **Next action:** Phase 5 — consumer equipment UI / anon entry (`user-dev`). The equipment booking
+  UI reads `anonId` from `localStorage('sunbnb-anonId')` and books anonymously like the sunbed POS
+  flow; `/payment/complete` rental path renders the result with `anonId`; and the consumer
+  rental-cancellation action (mirroring `cancelReservation`, wiring `sendRentalCancellationEmail`
+  from Phase 4) is built here. Open: dedicated QR/POS rental entry vs. in-app equipment tab going anon.
+- **Pending before any `main` push:** TWO additive migrations owed to the Neon TEST DB via
+  `migrate:test` — `20260619090109_rental_booking_anon_fields` (Phase 0) and
+  `20260619130551_rental_booking_reminder_sent_at` (Phase 4). The pre-push hook blocks the push
+  until applied. Committed locally (`main` ahead): Phases 0–4 (`29df253`…`97e674c`).
 - **Context needed:** reference = `Reservation` anon fields (`schema.prisma` ~387–418) +
   `saveReservationForMultipleItems` (`apps/user/app/sites/[id]/actions.ts` ~28–191, the
   site-owner-FK trick at ~91–100, the guard call at ~168–179). Rental side: `RentalBooking`
@@ -81,12 +86,17 @@ tests, bug-revealing where it touches ownership/money (the track-004 discipline)
   bodyAnonId)` + `verifyOwnership`. `/payment/complete` rental rendering verifies via `anonId`.
   Tests: anon lookup + the API route's anon ownership, incl. a real-DB **cross-anon isolation**
   integration test (another anon's booking is not returned).
-- ☐ **Phase 4 — Email parity (data-dev).** Mirror the sunbed email set for rentals — the sunbed
-  flow sends confirmation (`sendConfirmationEmail` after `processConfirmedReservation`), reminder
-  (`sendDueReminders` cron), and cancellation, all to `anonId ? guestEmail : user.email`
-  (`loadReservationEmailData`). Rentals today send **none**, so add the rental-equivalent of each
-  (confirmation from `processConfirmedRentalBooking`, reminder, cancellation) + rental email
-  templates, with the same recipient-selection rule. Tests: recipient selection + email-sent.
+- ☑ **Phase 4 — Email parity (data-dev + user-dev).** New `@repo/data/rental-emails` module
+  (`sendRentalConfirmationEmail`, `sendRentalCancellationEmail`, `sendRentalDueReminders`) mirrors
+  the sunbed set, same `anonId ? guestEmail : user.email` recipient rule + rental templates.
+  **Confirmation** wired: `processConfirmedRentalBooking` fires it best-effort after invoice creation
+  (`1657020`). **Reminder** wired into the user `/api/cron/send-reminders` cron alongside
+  `sendDueReminders`, independent try/catch per batch (`97e674c`); made idempotent by adding
+  `RentalBooking.reminderSentAt` (migration `20260619130551`, the mirror Phase 0 missed) + activating
+  the `reminderSentAt: null` filter / post-send stamp (`8e1c84d`). **Cancellation** function exists +
+  unit-tested but **deferred to Phase 5**: there is no consumer-initiated rental-cancellation action
+  (only the Mollie webhook payment-failure path), so it gets its caller when the consumer cancel flow
+  is built, mirroring `cancelReservation`. data 214 unit + 113 integration green; user 304 unit green.
 - ☐ **Phase 5 — Consumer UI / anon entry (user-dev).** The equipment booking UI
   (`EquipmentSelection` / equipment `viewMode`) reads `anonId` from `localStorage('sunbnb-anonId')`
   and books anonymously like the sunbed POS flow; `/payment/complete` renders the rental result
@@ -124,6 +134,21 @@ The earlier "open decisions" are all resolved *by alignment*, not by preference:
   Applied to local Docker DB + `sunbnb_test` (lockstep). 102/102 integration tests pass. No app
   mock changes needed (mocks are operation-level `vi.fn()` stubs, not field-enumerating). Pending
   `migrate:test` (Neon test DB) before pushing `main` — the pre-push hook will enforce it.
+- **2026-06-19** — Phases 1–3 complete (anon booking create / payment / lookup), committed
+  `6601cc8`…`2b50a65`. Phase 2 fixed the latent Mollie ownership bypass (the rental create-payment
+  route checked `userId` only, silently skipping the check for anon callers) by switching to
+  `verifyOwnership(identity, booking)` per booking.
+- **2026-06-19** — Phase 4 complete (email parity). New `@repo/data/rental-emails` mirrors the
+  sunbed email set; confirmation wired into `processConfirmedRentalBooking` (`1657020`); reminder
+  wired into the user reminder cron with independent per-batch error handling (`97e674c`).
+  Discovered the Phase-0 mirror had **missed `reminderSentAt`** — without it the rental reminder
+  double-sends on repeat cron runs (sunbed dedups via `Reservation.reminderSentAt`). Per the
+  faithful-mirror directive, added `RentalBooking.reminderSentAt` (migration `20260619130551`) and
+  activated the `reminderSentAt: null` filter + send-before-mark stamp (`8e1c84d`). Cancellation
+  email function exists but has **no consumer caller yet** (no user-initiated rental cancellation —
+  only the Mollie webhook payment-failure path), so it's wired in Phase 5 with the cancel flow.
+  Transient flaky integration failures seen during Phase 4 were DB contention from concurrent vitest
+  runs against shared `sunbnb_test`, not a defect — suites are stable green run sequentially.
 
 ## Links
 
