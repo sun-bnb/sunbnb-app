@@ -8,6 +8,7 @@ import { InventoryItem, SiteProps } from '@/types/shared'
 import BedDetail from './BedDetail'
 import CreateRentalModal from './CreateRentalModal'
 import ManageToolbar, { type ManageViewKey } from './ManageToolbar'
+import ManageWorkerFab from './ManageWorkerFab'
 import TillSheet from './TillSheet'
 import ParcelView from './ParcelView'
 import RentalsSection from './RentalsSection'
@@ -789,10 +790,6 @@ export default function ManageView({
           onToggleReversed={() => { if (effectiveParcel !== undefined) toggleParcelReversed(effectiveParcel) }}
           isDark={isDark}
           onToggleDark={toggleDark}
-          employees={employees}
-          currentWorkerId={currentWorkerId}
-          onSelectWorker={selectWorker}
-          onOpenTill={() => setShowTill(true)}
         />
       )}
 
@@ -866,6 +863,17 @@ export default function ManageView({
           />
         </div>
       ) : null}
+
+      {/* Current-worker FAB — bottom-left; only when the account has a roster,
+          hidden during multiselect (mirrors the rentals FAB on the right). */}
+      {employees.length > 0 && selectedIds.length === 0 && (
+        <ManageWorkerFab
+          employees={employees}
+          currentWorkerId={currentWorkerId}
+          onSelectWorker={selectWorker}
+          onOpenTill={() => setShowTill(true)}
+        />
+      )}
 
       {/* Floating rentals ⇄ parcels toggle — bottom-right; hidden during
           multiselect so it doesn't overlap the selection sheet. */}
