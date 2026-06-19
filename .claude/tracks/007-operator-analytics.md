@@ -41,12 +41,18 @@ cross-partner settlement oversight), not the consumer app.
   no-show/departed, comps counted). Data suite 190 unit, typecheck (`tsc --rootDir .` — only
   pre-existing `payment.test.ts` `product` errors remain) + lint clean. No app mock added (no
   unit-tested surface imports it yet — revisit at Phase 2).
-- **Next action:** **Phase 2** — the rolling revenue lens on the partner **dashboard**. Add a thin
-  auth-wrapping partner action (`auth()` + site ownership, like `accounting/actions.ts`) that calls
-  `getRevenueByDay` + `summarizeRevenue` over a 7/30/365 window; render the trend + total + best-day
-  on `apps/partner/app/dashboard`. Prime `/ui partner`. Decide the mock question then (a client
-  component calling the action needs an `analytics` app mock + the partner `mock-contract` spec entry;
-  a server component does not).
+- **Phase 2 DONE (2026-06-18, uncommitted).** Rolling lens landed on the **per-site accounting page**
+  (decision below — the dashboard is account-wide, so B2 went where the per-site helper + B1/B3 live).
+  `getRevenueTrend(siteId, days)` action in `accounting/actions.ts` (session + ownership; clamps to
+  7/30/365; composes `getRevenueByDay`+`summarizeRevenue`). `accounting/view.tsx` gained a window
+  selector + total/sales/best-day cards + a daily revenue bar trend. Wired the partner
+  `@repo/data/analytics` mock + alias + `mock-contract` spec + `coverage-contract` entry; 4 new action
+  tests. i18n (`recentTrend`/`sales`/`bestDay`/`noRevenueYet`, ES/FI machine — copy review owed).
+  Full partner suite 1420, typecheck + lint clean.
+- **Next action:** **Phase 3 (B1)** — comp & occupancy on the same accounting view. Add a
+  `getOccupancyTrend(siteId, days)` action (same auth wrapper) over `getOccupancyByDay`; render an
+  occupancy-% + comp-count block. The `analytics` mock already stubs `getOccupancyByDay`. Then
+  **Phase 4 (B3)** — a "Download figures (CSV)" button using `toFiguresCsv` over the trend rows.
 - **Context needed:**
   - Existing accounting actions to generalize: `apps/partner/app/sites/[id]/accounting/actions.ts`
     — `getPaidItemsByMonth(siteId, year, month)` (orders+reservations with a PARTNER invoice in a
@@ -113,10 +119,10 @@ Notes / decisions baked in:
   `summarizeRevenue`/`toFiguresCsv` (pure) + `getRevenueByDay`/`getOccupancyByDay` (DB); `./analytics`
   export wired; 7 unit + 2 integration tests green; typecheck + lint clean. No app mock yet (no
   unit-tested surface imports it). Uncommitted.
-- ☐ **Phase 2 — B2 rolling revenue lens (dashboard).** `apps/partner/app/dashboard` already has KPI
-  cards + a revenue chart. Add a 7/30/365 rolling window selector that composes `getRevenueByDay` +
-  `summarizeRevenue` (total, count, best day) via a thin auth-wrapping partner action. Keep the
-  calendar-month accounting view untouched — this is the *additional* lens.
+- ✅ **Phase 2 — B2 rolling revenue lens. DONE 2026-06-18** (on the **accounting page**, not the
+  dashboard — the dashboard is account-wide while the helper is per-site; see decision below).
+  `getRevenueTrend` action + window selector + total/sales/best-day + daily bar trend on
+  `accounting/view.tsx`; partner `analytics` mock/alias/contract wired; 4 action tests; 1420 green.
 - ☐ **Phase 3 — B1 comp & occupancy (accounting page).** On `apps/partner/app/sites/[id]/accounting`,
   add an occupancy % + comp-count block fed by `getOccupancyByDay` (the new non-invoice query).
   Surfaces the "gave away N beds / ran at X% full" the invoice-driven page can't show.
@@ -129,9 +135,11 @@ any order (or be cherry-picked). Each is small.
 
 ## Open decisions
 
-- **Rolling vs calendar home.** Rolling lens proposed on the **dashboard** (operational pulse),
-  calendar-month stays on **accounting** (truth). Confirm the dashboard is the right home vs adding
-  a toggle to the accounting page. (Lean: dashboard.)
+- **Rolling vs calendar home — RESOLVED (2026-06-18, with user): the per-site accounting page.**
+  The dashboard is account-wide (`accountId`-scoped) while the Phase-1 helpers are per-site, and
+  B1/B3 are per-site too — so the whole B-set co-locates on `/sites/[id]/accounting`, calendar-month
+  truth + rolling pulse side by side. (An account-wide dashboard lens would need a separate
+  `getAccountRevenueByDay` helper — not pursued.)
 - **Occupancy denominator.** Capacity = active `InventoryItem` count *today*, or capacity *as of
   each historical day*? Inventory rarely changes; v1 uses current active count and notes the
   caveat. Revisit if operators add/remove beds mid-season.

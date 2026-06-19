@@ -4,9 +4,10 @@ vi.mock('@/app/auth', () => ({
   auth: vi.fn().mockResolvedValue(null),
 }))
 
-import { getInvoicesByMonth, getPaidItemsByMonth } from './actions'
+import { getInvoicesByMonth, getPaidItemsByMonth, getRevenueTrend } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { getRevenueByDay, summarizeRevenue } from '@repo/data/analytics'
 import { RESERVATION_COMPLETE, ORDER_COMPLETE } from '@repo/data/reservation-status'
 
 const mockAuth = vi.mocked(auth)
@@ -258,5 +259,53 @@ describe('getPaidItemsByMonth', () => {
     const result = await getPaidItemsByMonth(SITE_ID, 2024, 3)
 
     expect(result).toEqual({ orders: fakeOrders, reservations: fakeReservations })
+  })
+})
+
+// ─── getRevenueTrend ──────────────────────────────────────────────────────────
+
+describe('getRevenueTrend', () => {
+  const mockRevenueByDay = vi.mocked(getRevenueByDay)
+  const mockSummarize = vi.mocked(summarizeRevenue)
+
+  it('throws when not authenticated', async () => {
+    await expect(getRevenueTrend(SITE_ID, 30)).rejects.toThrow('Not authenticated')
+    expect(mockRevenueByDay).not.toHaveBeenCalled()
+  })
+
+  it('throws when the site belongs to another partner', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OTHER_ID } as any)
+    await expect(getRevenueTrend(SITE_ID, 30)).rejects.toThrow('Not authorized')
+    expect(mockRevenueByDay).not.toHaveBeenCalled()
+  })
+
+  it('aggregates a 7-day window and returns rows + summary', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    const rows = [{ date: '2026-06-18', revenue: 16, count: 2 }]
+    mockRevenueByDay.mockResolvedValue(rows)
+    mockSummarize.mockReturnValue({ totalRevenue: 16, totalCount: 2, bestDay: rows[0]! })
+
+    const res = await getRevenueTrend(SITE_ID, 7)
+
+    expect(res).toEqual({ rows, summary: { totalRevenue: 16, totalCount: 2, bestDay: rows[0] } })
+    const [siteId, from, to] = mockRevenueByDay.mock.calls[0]!
+    expect(siteId).toBe(SITE_ID)
+    const spanDays = Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000))
+    expect(spanDays).toBe(6) // 7-day inclusive window → 6 day span
+    expect(mockSummarize).toHaveBeenCalledWith(rows)
+  })
+
+  it('clamps an invalid window to 30 days', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    mockRevenueByDay.mockResolvedValue([])
+
+    await getRevenueTrend(SITE_ID, 999)
+
+    const [, from, to] = mockRevenueByDay.mock.calls[0]!
+    const spanDays = Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000))
+    expect(spanDays).toBe(29) // clamped 30-day window
   })
 })

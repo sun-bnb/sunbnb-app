@@ -637,6 +637,10 @@
     "productCount": "{count, plural, one {# producto} other {# productos}}"
   },
   "SiteAccounting": {
+    "recentTrend": "Tendencia reciente",
+    "sales": "Ventas",
+    "bestDay": "Mejor día",
+    "noRevenueYet": "Aún no hay ingresos en este periodo",
     "revenue": "Ingresos",
     "taxCollected": "IVA recaudado",
     "breakdown": "Desglose",

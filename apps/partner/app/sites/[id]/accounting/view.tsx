@@ -14,10 +14,17 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import { useTranslations } from 'next-intl'
 
 import { useSite } from '@/app/sites/site-context'
-import { getPaidItemsByMonth } from './actions'
+import { getPaidItemsByMonth, getRevenueTrend } from './actions'
 import { formatSeat } from '@repo/data/seat-label'
 
 const MONTH_KEYS = ['january','february','march','april','may','june','july','august','september','october','november','december'] as const
+const TREND_WINDOWS = [7, 30, 365] as const
+
+interface DailyRevenue { date: string; revenue: number; count: number }
+interface RevenueTrend {
+  rows: DailyRevenue[]
+  summary: { totalRevenue: number; totalCount: number; bestDay: DailyRevenue | null }
+}
 
 export default function AccountingView() {
   const { site } = useSite()
@@ -36,6 +43,11 @@ export default function AccountingView() {
   const [ordersExpanded, setOrdersExpanded] = useState(true)
   const [reservationsExpanded, setReservationsExpanded] = useState(true)
 
+  // Rolling-window revenue trend (operational pulse, alongside the monthly view)
+  const [trendWindow, setTrendWindow] = useState<(typeof TREND_WINDOWS)[number]>(30)
+  const [trend, setTrend] = useState<RevenueTrend | null>(null)
+  const [trendLoading, setTrendLoading] = useState(true)
+
   useEffect(() => {
     if (!site?.id) return
     setLoading(true)
@@ -44,6 +56,15 @@ export default function AccountingView() {
       setLoading(false)
     })
   }, [selectedYear, selectedMonth, site?.id])
+
+  useEffect(() => {
+    if (!site?.id) return
+    setTrendLoading(true)
+    getRevenueTrend(site.id, trendWindow).then((data) => {
+      setTrend(data)
+      setTrendLoading(false)
+    })
+  }, [site?.id, trendWindow])
 
   // Navigate months
   const goToPrevMonth = () => {
@@ -84,6 +105,8 @@ export default function AccountingView() {
     const date = new Date(d)
     return date.toLocaleDateString('default', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
   }
+  const formatDay = (iso: string) =>
+    new Date(`${iso}T00:00:00Z`).toLocaleDateString('default', { day: 'numeric', month: 'short' })
 
   return (
     <div className="pt-2">
@@ -93,6 +116,73 @@ export default function AccountingView() {
         <p className="text-sm text-gray-500 mt-1">
           {t('subtitle')}
         </p>
+      </div>
+
+      {/* Recent trend — rolling-window pulse alongside the monthly view below */}
+      <div className="mb-6 border border-gray-200 rounded-lg bg-white p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-800">{t('recentTrend')}</h3>
+          <div className="flex gap-1">
+            {TREND_WINDOWS.map((w) => (
+              <button
+                key={w}
+                onClick={() => setTrendWindow(w)}
+                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                  trendWindow === w
+                    ? 'bg-accent text-white'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+              >
+                {w === 365 ? '1y' : `${w}d`}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {trendLoading || !trend ? (
+          <div className="flex justify-center py-8">
+            <CircularProgress size={20} sx={{ color: '#9ca3af' }} />
+          </div>
+        ) : trend.summary.totalCount === 0 ? (
+          <div className="py-8 text-center text-sm text-gray-400">{t('noRevenueYet')}</div>
+        ) : (
+          <>
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div>
+                <div className="text-xs text-gray-500 font-medium">{t('revenue')}</div>
+                <div className="text-lg font-bold text-gray-900 mt-0.5">€{trend.summary.totalRevenue.toFixed(2)}</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 font-medium">{t('sales')}</div>
+                <div className="text-lg font-bold text-gray-900 mt-0.5">{trend.summary.totalCount}</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 font-medium">{t('bestDay')}</div>
+                <div className="text-lg font-bold text-gray-900 mt-0.5">
+                  {trend.summary.bestDay ? `€${trend.summary.bestDay.revenue.toFixed(2)}` : '—'}
+                </div>
+                {trend.summary.bestDay && (
+                  <div className="text-[10px] text-gray-400">{formatDay(trend.summary.bestDay.date)}</div>
+                )}
+              </div>
+            </div>
+
+            {/* Daily revenue bars (height ∝ revenue) */}
+            <div className="flex items-end gap-px h-20" aria-hidden="true">
+              {(() => {
+                const max = Math.max(...trend.rows.map((r) => r.revenue), 1)
+                return trend.rows.map((r) => (
+                  <div
+                    key={r.date}
+                    className="flex-1 bg-accent/70 rounded-sm min-h-[2px]"
+                    style={{ height: `${(r.revenue / max) * 100}%` }}
+                    title={`${formatDay(r.date)}: €${r.revenue.toFixed(2)}`}
+                  />
+                ))
+              })()}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Month navigator */}

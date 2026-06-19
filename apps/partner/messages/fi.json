@@ -637,6 +637,10 @@
     "productCount": "{count, plural, one {# tuote} other {# tuotetta}}"
   },
   "SiteAccounting": {
+    "recentTrend": "Viimeaikainen kehitys",
+    "sales": "Myynnit",
+    "bestDay": "Paras päivä",
+    "noRevenueYet": "Ei vielä tuloja tällä jaksolla",
     "revenue": "Tulot",
     "taxCollected": "Kerätty vero",
     "breakdown": "Erittely",

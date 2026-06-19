@@ -637,6 +637,10 @@
     "productCount": "{count, plural, one {# product} other {# products}}"
   },
   "SiteAccounting": {
+    "recentTrend": "Recent trend",
+    "sales": "Sales",
+    "bestDay": "Best day",
+    "noRevenueYet": "No revenue in this window yet",
     "revenue": "Revenue",
     "taxCollected": "Tax collected",
     "breakdown": "Breakdown",
