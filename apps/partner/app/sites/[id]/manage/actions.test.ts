@@ -54,6 +54,7 @@ import {
   collectReservationPayment,
   getCollectStatus,
   cancelCollection,
+  findReservations,
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
@@ -2605,5 +2606,79 @@ describe('cancelCollection', () => {
     const res = await cancelCollection(SITE_ID, RES_ID)
     expect((res as any).paymentStatus).toBe('cash')
     expect(mockReverify).not.toHaveBeenCalled()
+  })
+})
+
+describe('findReservations', () => {
+  it('rejects unauthenticated caller', async () => {
+    const res = await findReservations(SITE_ID)
+    expect(res.status).toBe('error')
+    expect(vi.mocked(prisma.reservation.findMany)).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-owner', async () => {
+    authenticateAsNonOwner()
+    const res = await findReservations(SITE_ID)
+    expect(res.status).toBe('error')
+    expect(vi.mocked(prisma.reservation.findMany)).not.toHaveBeenCalled()
+  })
+
+  it('no query → today arrivals: expected, complete|held, today overlap, scoped to the site', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findMany).mockResolvedValueOnce([])
+
+    const res = await findReservations(SITE_ID)
+    expect(res.status).toBe('ok')
+
+    const args = vi.mocked(prisma.reservation.findMany).mock.calls[0]![0] as any
+    expect(args.where.siteId).toBe(SITE_ID)
+    expect(args.where.operationalStatus).toBe('expected')
+    expect(args.where.status).toEqual({ in: ['complete', 'held'] })
+    // overlap-with-today, no name search
+    expect(args.where.from).toBeDefined()
+    expect(args.where.to).toBeDefined()
+    expect(args.where.OR).toBeUndefined()
+    // capped + date-sorted
+    expect(args.take).toBeGreaterThan(0)
+    expect(args.orderBy).toEqual({ from: 'asc' })
+  })
+
+  it('query → name/contact/email/name OR search; excludes canceled/refunded; reaches future', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findMany).mockResolvedValueOnce([])
+
+    await findReservations(SITE_ID, '  garcia  ') // trims
+
+    const args = vi.mocked(prisma.reservation.findMany).mock.calls[0]![0] as any
+    expect(args.where.siteId).toBe(SITE_ID)
+    expect(args.where.status).toEqual({ notIn: ['canceled', 'refunded'] })
+    // not constrained to the `expected` arrivals state — search spans the lifecycle
+    expect(args.where.operationalStatus).toBeUndefined()
+    const or = args.where.OR as any[]
+    expect(or.find((c) => c.guestName)?.guestName).toEqual({ contains: 'garcia', mode: 'insensitive' })
+    expect(or.some((c) => c.guestContact)).toBe(true)
+    expect(or.some((c) => c.user?.email)).toBe(true)
+    expect(or.some((c) => c.user?.name)).toBe(true)
+  })
+
+  it('maps rows to summaries with partySize, bed numbers, and account email', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findMany).mockResolvedValueOnce([
+      {
+        id: 'r1', status: 'complete', operationalStatus: 'expected',
+        from: new Date('2026-06-20'), to: new Date('2026-06-20'),
+        guestName: 'Maria Garcia', guestContact: null, internalNotes: 'VIP', paymentRef: 'tr_x',
+        items: [{ id: 'i1', number: 12, seatLabel: null }, { id: 'i2', number: 13, seatLabel: null }],
+        user: { email: 'm@x.com' },
+      },
+    ] as any)
+
+    const res = await findReservations(SITE_ID, 'garcia')
+    expect(res.status).toBe('ok')
+    const row = (res as any).reservations[0]
+    expect(row.partySize).toBe(2)
+    expect(row.items.map((i: any) => i.number)).toEqual([12, 13])
+    expect(row.userEmail).toBe('m@x.com')
+    expect(row.guestName).toBe('Maria Garcia')
   })
 })

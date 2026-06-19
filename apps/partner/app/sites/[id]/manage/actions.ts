@@ -15,6 +15,7 @@ import {
   reverifyAndFinalizeReservation,
 } from '@repo/data/reservation-payment'
 import { getOpenTill } from '@repo/data/till'
+import type { Prisma } from '@prisma/client'
 import dayjs from 'dayjs'
 import {
   RESERVATION_PAID_IN_CASH,
@@ -1463,6 +1464,120 @@ export async function closeTill(
 
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok', total, count, closed: true }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GUEST LOOKUP / ARRIVALS (track 010 — the "Guests" host stand)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** How far ahead a name/phone search reaches (the grid only shows today). */
+const RESERVATION_SEARCH_WINDOW_DAYS = 90
+/** Cap on rows returned so a broad query can't pull the whole reservation book. */
+const RESERVATION_SEARCH_CAP = 50
+
+/** A reservation summary row for the Guests sheet (arrivals list + search). */
+export type ReservationMatch = {
+  id: string
+  status: string
+  operationalStatus: string
+  from: Date
+  to: Date
+  guestName: string | null
+  guestContact: string | null
+  internalNotes: string | null
+  paymentRef: string | null
+  /** Number of seats on the booking (party size). */
+  partySize: number
+  items: { id: string; number: number; seatLabel: string | null }[]
+  /** Email of the linked account (online bookings); null for staff-created. */
+  userEmail: string | null
+}
+
+/**
+ * Floor reservation lookup + today's arrivals for the manage page (track 010).
+ *
+ * **No `query` → today's ARRIVALS:** bookings overlapping today that are still
+ * `expected` (not yet checked in) — online paid (`complete`) + staff holds
+ * (`held`). The bed grid only shows today as colour; this is the scannable
+ * "who's coming" list staff can prep against.
+ *
+ * **With `query` → name / phone / email SEARCH** across `[today, +90d]`, so the
+ * floor can find a booking that ISN'T on today's grid (future-dated, early
+ * arrival) — the gap the token-gated page can't otherwise reach (the only other
+ * search, frontdesk `searchAllReservations`, is owner-session-only). Matches
+ * `guestName` / `guestContact` and the linked account's email/name,
+ * case-insensitively; canceled/refunded excluded; capped + date-sorted.
+ *
+ * Read-only — no mutation, so no new access-key blast radius. token-or-session.
+ */
+export async function findReservations(
+  siteId: string,
+  query?: string,
+  accessKey?: string,
+) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const todayStart = dayjs().startOf('day').toDate()
+  const todayEnd = dayjs().endOf('day').toDate()
+  const q = query?.trim()
+
+  const where: Prisma.ReservationWhereInput = q
+    ? {
+        siteId,
+        status: { notIn: [RESERVATION_CANCELED, RESERVATION_REFUNDED] },
+        from: { lte: dayjs().add(RESERVATION_SEARCH_WINDOW_DAYS, 'day').endOf('day').toDate() },
+        to: { gte: todayStart },
+        OR: [
+          { guestName: { contains: q, mode: 'insensitive' } },
+          { guestContact: { contains: q, mode: 'insensitive' } },
+          { user: { email: { contains: q, mode: 'insensitive' } } },
+          { user: { name: { contains: q, mode: 'insensitive' } } },
+        ],
+      }
+    : {
+        siteId,
+        operationalStatus: OP_EXPECTED,
+        status: { in: [RESERVATION_COMPLETE, RESERVATION_HELD] },
+        from: { lte: todayEnd },
+        to: { gte: todayStart },
+      }
+
+  const rows = (await prisma.reservation.findMany({
+    where,
+    select: {
+      id: true,
+      status: true,
+      operationalStatus: true,
+      from: true,
+      to: true,
+      guestName: true,
+      guestContact: true,
+      internalNotes: true,
+      paymentRef: true,
+      items: { select: { id: true, number: true, seatLabel: true }, orderBy: { number: 'asc' } },
+      user: { select: { email: true } },
+    },
+    orderBy: { from: 'asc' },
+    take: RESERVATION_SEARCH_CAP,
+  })) ?? []
+
+  const reservations: ReservationMatch[] = rows.map((r) => ({
+    id: r.id,
+    status: r.status,
+    operationalStatus: r.operationalStatus,
+    from: r.from,
+    to: r.to,
+    guestName: r.guestName,
+    guestContact: r.guestContact,
+    internalNotes: r.internalNotes,
+    paymentRef: r.paymentRef,
+    partySize: r.items.length,
+    items: r.items,
+    userEmail: r.user?.email ?? null,
+  }))
+
+  return { status: 'ok' as const, reservations }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

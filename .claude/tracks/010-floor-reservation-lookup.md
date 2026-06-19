@@ -64,10 +64,18 @@ roster, not a minute-by-minute schedule — the timed version applies to tables/
 
 ## Resume here
 
-- **Next action:** **Awaiting go-ahead.** Start **P1** — add `findReservations(siteId, query?,
-  accessKey?)` to `apps/partner/app/sites/[id]/manage/actions.ts` (token-or-session gated), register it
-  in `app/test/gated-actions.ts`, and cover it (unit gate + query shape; integration: arrivals +
-  name/phone matches incl. a future booking). Prime `/ui partner`.
+- **P1 DONE (2026-06-19, uncommitted).** `findReservations(siteId, query?, accessKey?)` in
+  `manage/actions.ts` (token-or-session): no query → today's `expected` complete+held arrivals; query →
+  `guestName`/`guestContact`/`user.email`/`user.name` case-insensitive `contains` across `[today, +90d]`
+  (canceled/refunded excluded, capped 50, date-sorted), returning `ReservationMatch` rows (party size +
+  bed numbers + paid-vs-hold + notes + account email). Registered in `gated-actions.ts` (auth-matrix
+  481, coverage-contract green). 5 unit (gate + query shape + row mapping) + 4 integration (arrivals
+  excl. seated walk-ins; case-insensitive name; **future booking surfaced**; canceled excluded). partner
+  1489 unit + 43 manage integration, tsc/lint clean. No schema change.
+- **Next action:** **P2 — the Guests sheet UI.** `GuestSearchSheet.tsx` (bottom sheet over
+  `findReservations`) + the bottom-right anchor **FAB** (rentals stacks above) + `view.tsx` Locate
+  handoff (jump to parcel + open `BedDetail`) + inline Check-in/Rent + `Guests` i18n (en/es/fi).
+  Prime `/ui partner`.
 - **Context needed:** the manage page is **token-gated** (`accessKey`/`SecurityToken` via
   `verifySiteAccess`, no session) and renders a **today-overlap** grid (`page.tsx`). Reference query:
   `app/frontdesk/actions.ts#searchAllReservations` (owner-only) — bring it to the token-gated floor,
@@ -81,13 +89,15 @@ roster, not a minute-by-minute schedule — the timed version applies to tables/
 
 ## Roadmap
 
-- ☐ **P1 — Backend: `findReservations` (data + gate).** `findReservations(siteId, query?, accessKey?)`,
-  token-or-session: **no query** → today's `expected` + `held` (the Arrivals list); **query** →
-  `guestName` / `guestContact` (case-insensitive `contains`) across `[startOfToday, +N days]`, capped
-  and date-sorted, each row carrying bed number(s) + status + period. Register in `gated-actions.ts`
-  (auth-matrix + coverage-contract stay green). Unit: gate + the query keys on `siteId` and is
-  ownership-scoped, no cross-site leak. Integration (`sunbnb_test`): returns today's expected/held;
-  name + phone match; **surfaces a future-dated booking** not on today's grid.
+- ✅ **P1 — Backend: `findReservations` (data + gate). DONE 2026-06-19 (uncommitted).**
+  `findReservations(siteId, query?, accessKey?)`, token-or-session: no query → today's `expected`
+  complete+held arrivals; query → `guestName`/`guestContact`/`user.email`/`user.name` case-insensitive
+  `contains` across `[today, +90d]` (canceled/refunded excluded, capped 50, date-sorted), returning
+  `ReservationMatch` rows (party size + bed numbers + paid-vs-hold + notes + email). Registered in
+  `gated-actions.ts` (auth-matrix 481, coverage-contract green). 5 unit + 4 integration (incl. a
+  future-dated booking surfaced by search). partner 1489 unit + 43 integration, tsc/lint clean. No
+  schema change. **Accent-insensitive search (García vs garcia) noted as a future refinement** —
+  needs the Postgres `unaccent` extension; P1 is plain case-insensitive `contains`.
 - ☐ **P2 — UI: the Guests sheet.** `GuestSearchSheet.tsx` bottom sheet (mirrors `TillSheet` chrome,
   dark-mode aware): search field + Arrivals default + results; context-aware row actions — today
   expected → **Locate** / **Check in**; today hold → **Locate** / **Rent**; today walk-in/checked-in →
@@ -147,9 +157,19 @@ roster, not a minute-by-minute schedule — the timed version applies to tables/
   "today's expected" roster, not a timed schedule (timed applies to tables/rentals). The lookup remains
   the Alonso-parity spine; the host-stand layer is the surpass.
 
+- **2026-06-19** — **P1 built** (`findReservations`, the backend). No-query arrivals + name/contact/
+  email/account-name search across `[today, +90d]`, token-or-session, read-only, no schema change.
+  Surfaced a real i18n gotcha: plain `contains mode:'insensitive'` is case-insensitive but **accent-
+  sensitive** — "garcia" won't match "García" (the í), though "garc" does. Accepted for P1 (tests use
+  non-accented names); accent-insensitive search (Postgres `unaccent`) is a noted future refinement.
+  Search-window default set to **90 days**, result cap **50** (resolves one open decision).
+
 ## Open decisions
 
-- **Future search window depth** — how far ahead `query` reaches (default **90 days**?).
+- ~~**Future search window depth**~~ — resolved P1: **90 days**, cap 50.
+- **Accent-insensitive search** — "García"/"José" vs "garcia"/"jose". Needs the Postgres `unaccent`
+  extension (+ `unaccent()` in the query or a generated column). Real for Spanish/Finnish names; a
+  follow-up, not P1.
 - **Default view scope** — Arrivals only (today), or also a small near-future "Upcoming" section in the
   no-query state? (Lean Arrivals-only; future via search.)
 - **Locate handoff** — jump-to-parcel + open `BedDetail` (recommended, reuses everything) vs an inline

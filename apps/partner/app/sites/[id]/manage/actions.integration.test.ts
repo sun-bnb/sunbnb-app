@@ -45,6 +45,7 @@ import {
   createWalkInRental,
   getTillStatus,
   closeTill,
+  findReservations,
 } from './actions'
 
 // ---------------------------------------------------------------------------
@@ -1036,5 +1037,75 @@ describe('per-worker till', () => {
     const { site } = await setupWithEmployee()
     const res = await getTillStatus(site.id, 'no-such-employee')
     expect(res.status).toBe('error')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Floor reservation lookup / arrivals (track 010) — findReservations
+// ---------------------------------------------------------------------------
+
+describe('findReservations', () => {
+  it('no query → today arrivals (expected complete + held); excludes already-seated walk-ins', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const i1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const i2 = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const i3 = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    await createTestReservation(user.id, site.id, [i1.id], { status: 'complete', operationalStatus: 'expected', guestName: 'Online Expected' })
+    await createTestReservation(user.id, site.id, [i2.id], { status: 'held', operationalStatus: 'expected', guestName: 'Pencilled In' })
+    // already seated → not an "arrival"
+    await createTestReservation(user.id, site.id, [i3.id], { status: 'paid-in-cash', operationalStatus: 'walked-in', guestName: 'Already Here' })
+
+    const res = await findReservations(site.id)
+    expect(res.status).toBe('ok')
+    expect(res.reservations.map((r) => r.guestName).sort()).toEqual(['Online Expected', 'Pencilled In'])
+    // carries party size + bed numbers for the row + Locate
+    const online = res.reservations.find((r) => r.guestName === 'Online Expected')!
+    expect(online.partySize).toBe(1)
+    expect(online.items.map((i) => i.number)).toEqual([1])
+  })
+
+  it('search by name matches case-insensitively', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id)
+    mockUserId = user.id
+    await createTestReservation(user.id, site.id, [item.id], { status: 'complete', operationalStatus: 'expected', guestName: 'Pedro Garcia' })
+
+    const res = await findReservations(site.id, 'GARCIA')
+    expect(res.reservations).toHaveLength(1)
+    expect(res.reservations[0].guestName).toBe('Pedro Garcia')
+  })
+
+  it('search surfaces a FUTURE booking that is not on today\'s grid', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id)
+    mockUserId = user.id
+    await createTestReservation(user.id, site.id, [item.id], {
+      status: 'complete', operationalStatus: 'expected', guestName: 'Future Garcia',
+      from: dayjs().add(7, 'day').startOf('day').toDate(),
+      to: dayjs().add(7, 'day').endOf('day').toDate(),
+    })
+
+    // The default arrivals view (today) can't see it…
+    expect((await findReservations(site.id)).reservations).toHaveLength(0)
+    // …but search reaches into the near future.
+    const res = await findReservations(site.id, 'garcia')
+    expect(res.reservations).toHaveLength(1)
+    expect(res.reservations[0].guestName).toBe('Future Garcia')
+  })
+
+  it('search excludes canceled / refunded bookings', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id)
+    mockUserId = user.id
+    await createTestReservation(user.id, site.id, [item.id], { status: 'canceled', operationalStatus: 'expected', guestName: 'Canceled Garcia' })
+
+    const res = await findReservations(site.id, 'garcia')
+    expect(res.reservations).toHaveLength(0)
   })
 })

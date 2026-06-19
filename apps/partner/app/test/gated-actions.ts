@@ -50,6 +50,7 @@ import {
   cancelCollection,
   getTillStatus,
   closeTill,
+  findReservations,
 } from '@/app/sites/[id]/manage/actions'
 
 import {
@@ -441,6 +442,12 @@ export const GATED_ACTIONS: GatedAction[] = [
     kind: 'action',
     gate: 'token-or-session',
     invoke: (accessKey?) => closeTill(SITE_ID, 'matrix-emp-1', accessKey),
+  },
+  {
+    name: 'manage.findReservations',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => findReservations(SITE_ID, undefined, accessKey),
   },
 
   // ══════════════════════════════════════════════════════════════════════════
