@@ -391,7 +391,9 @@ describe('saveRentalBooking', () => {
     })
 
     expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Only 1')
+    // The guard returns a "not enough ... available" message (not the old inline
+    // "Only N available" message from the pre-guard aggregate-then-create path).
+    expect(res.errors?.[0]).toContain('Beach Umbrella')
     const count = await prisma.rentalBooking.count({ where: { siteId: site.id } })
     expect(count).toBe(1) // only the pre-existing booking
   })
@@ -437,6 +439,85 @@ describe('saveRentalBooking', () => {
     })
 
     expect(res.status).toBe('error')
+    const count = await prisma.rentalBooking.count({ where: { siteId: site.id } })
+    expect(count).toBe(0)
+  })
+
+  // ── Anonymous path integration tests ─────────────────────────────────────
+
+  // BUG-REVEALING: before Phase 1b, saveRentalBooking was auth-only. An anonymous
+  // user (no session, only anonId) would receive "Authentication required" and no
+  // booking would be created. After the fix, anon bookings succeed with the site
+  // owner's userId as the FK placeholder and the anonId persisted on the row.
+  it('anon path: persists anonId and uses site owner userId as FK', async () => {
+    const owner = await createTestUser()
+    const site = await createTestSite(owner.id, { type: 'paid', price: 10.0 })
+    const item = await createTestRentalItem(site.id, { pricePerDay: 20.0, totalQuantity: 5 })
+
+    // No session — anonymous user
+    const res = await saveRentalBooking({
+      siteId: site.id,
+      items: [{ rentalItemId: item.id, quantity: 1 }],
+      durationType: 'days',
+      from: '2025-07-01T10:00:00Z',
+      to: '2025-07-02T10:00:00Z',
+      anonId: 'anon-test-uuid-1234',
+      guestEmail: 'anon@example.com',
+    })
+
+    expect(res.status).toBe('ok')
+    expect(res.bookingIds).toHaveLength(1)
+
+    const booking = await prisma.rentalBooking.findUnique({ where: { id: res.bookingIds![0] } })
+    expect(booking).not.toBeNull()
+    // Site owner's userId used as FK placeholder
+    expect(booking!.userId).toBe(owner.id)
+    // Real anonymous customer identity stored
+    expect(booking!.anonId).toBe('anon-test-uuid-1234')
+    expect(booking!.guestEmail).toBe('anon@example.com')
+  })
+
+  // The auth path must continue to set the real userId (no regression).
+  it('auth path: still sets real userId (not owner FK)', async () => {
+    const owner = await createTestUser()
+    const customer = await createTestUser()
+    const site = await createTestSite(owner.id)
+    const item = await createTestRentalItem(site.id, { totalQuantity: 5 })
+
+    mockAuth.mockResolvedValue({ user: { id: customer.id } } as any)
+
+    const res = await saveRentalBooking({
+      siteId: site.id,
+      items: [{ rentalItemId: item.id, quantity: 1 }],
+      durationType: 'days',
+      from: '2025-07-01T10:00:00Z',
+      to: '2025-07-02T10:00:00Z',
+    })
+
+    expect(res.status).toBe('ok')
+    const booking = await prisma.rentalBooking.findUnique({ where: { id: res.bookingIds![0] } })
+    // Real customer userId, not owner FK
+    expect(booking!.userId).toBe(customer.id)
+    expect(booking!.anonId).toBeNull()
+  })
+
+  // Missing-both guard: no session AND no anonId → rejected (no booking written).
+  it('anon path: rejected when no session and no anonId', async () => {
+    const owner = await createTestUser()
+    const site = await createTestSite(owner.id)
+    const item = await createTestRentalItem(site.id, { totalQuantity: 5 })
+
+    // No session, no anonId
+    const res = await saveRentalBooking({
+      siteId: site.id,
+      items: [{ rentalItemId: item.id, quantity: 1 }],
+      durationType: 'days',
+      from: '2025-07-01T10:00:00Z',
+      to: '2025-07-02T10:00:00Z',
+    })
+
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Authentication required')
     const count = await prisma.rentalBooking.count({ where: { siteId: site.id } })
     expect(count).toBe(0)
   })

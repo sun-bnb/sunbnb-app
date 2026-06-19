@@ -27,19 +27,21 @@ import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { getAvailability } from '@/service/availabilityService'
 import { isValidEntityId } from '@/app/api/_lib/payment-ids'
-import { reserveWithConflictGuard } from '@repo/data/reservations'
+import { reserveWithConflictGuard, createRentalBookingsWithGuard } from '@repo/data/reservations'
 
 const mockAuth = vi.mocked(auth)
 const mockGetAvailability = vi.mocked(getAvailability)
 const mockIsValidEntityId = vi.mocked(isValidEntityId)
 const mockReserveWithConflictGuard = vi.mocked(reserveWithConflictGuard)
+const mockCreateRentalBookingsWithGuard = vi.mocked(createRentalBookingsWithGuard)
 
 beforeEach(() => {
   vi.clearAllMocks()
   mockAuth.mockResolvedValue(null)
   mockIsValidEntityId.mockReturnValue(true)
-  // Default: guard returns created — override per test for conflict scenarios
+  // Default: guards return created — override per test for conflict/unavailable scenarios
   mockReserveWithConflictGuard.mockResolvedValue({ outcome: 'created', reservationId: 'r1' })
+  mockCreateRentalBookingsWithGuard.mockResolvedValue({ outcome: 'created', bookingIds: ['rb1'] })
 })
 
 // ─── saveReservationForMultipleItems ───────────────────────────────────────
@@ -485,7 +487,7 @@ describe('saveReservationForMultipleItems', () => {
 // ─── saveRentalBooking ─────────────────────────────────────────────────────
 
 describe('saveRentalBooking', () => {
-  it('returns error when not authenticated', async () => {
+  it('returns error when not authenticated and no anonId', async () => {
     const res = await saveRentalBooking({
       siteId: 'site-1',
       items: [{ rentalItemId: 'ri-1', quantity: 1 }],
@@ -497,7 +499,7 @@ describe('saveRentalBooking', () => {
     expect(res.errors).toContain('Authentication required')
   })
 
-  it('returns error when site not found', async () => {
+  it('returns error when site not found (authenticated path)', async () => {
     mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
     vi.mocked(prisma.site.findUnique).mockResolvedValue(null)
 
@@ -514,7 +516,7 @@ describe('saveRentalBooking', () => {
 
   it('returns error when rental items not found', async () => {
     mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({ id: 'site-1' } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ id: 'site-1', type: 'paid', rentalPaymentType: null } as any)
     vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([]) // none found
 
     const res = await saveRentalBooking({
@@ -528,28 +530,7 @@ describe('saveRentalBooking', () => {
     expect(res.errors?.[0]).toContain('not available')
   })
 
-  it('returns error when quantity exceeds availability', async () => {
-    mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({ id: 'site-1' } as any)
-    vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
-      { id: 'ri-1', totalQuantity: 5, pricePerDay: 10 } as any,
-    ])
-    vi.mocked(prisma.rentalBooking.aggregate).mockResolvedValue({
-      _sum: { quantity: 4 },
-    } as any)
-
-    const res = await saveRentalBooking({
-      siteId: 'site-1',
-      items: [{ rentalItemId: 'ri-1', quantity: 3 }], // only 1 available
-      durationType: 'days',
-      from: '2025-07-01T10:00:00Z',
-      to: '2025-07-02T10:00:00Z',
-    })
-    expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Only 1')
-  })
-
-  it('creates booking with daily pricing', async () => {
+  it('creates booking with daily pricing (auth path)', async () => {
     mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
     vi.mocked(prisma.site.findUnique).mockResolvedValue({
       id: 'site-1',
@@ -559,10 +540,8 @@ describe('saveRentalBooking', () => {
     vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
       { id: 'ri-1', totalQuantity: 10, pricePerDay: 20, pricePerHour: 5 } as any,
     ])
-    vi.mocked(prisma.rentalBooking.aggregate).mockResolvedValue({
-      _sum: { quantity: 0 },
-    } as any)
-    vi.mocked(prisma.rentalBooking.create).mockResolvedValue({ id: 'rb-1' } as any)
+    // Guard default returns created — set per-test to assert call args
+    mockCreateRentalBookingsWithGuard.mockResolvedValueOnce({ outcome: 'created', bookingIds: ['rb-1'] })
 
     const res = await saveRentalBooking({
       siteId: 'site-1',
@@ -575,13 +554,15 @@ describe('saveRentalBooking', () => {
     expect(res.status).toBe('ok')
     expect(res.bookingIds).toEqual(['rb-1'])
     // 20 per day × 2 days × 2 qty = 80
-    expect(prisma.rentalBooking.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
+    expect(mockCreateRentalBookingsWithGuard).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
           totalPrice: 80,
+          paymentAmount: 80,
           status: 'pending',
+          userId: 'user-1',
         }),
-      })
+      ])
     )
   })
 
@@ -595,10 +576,7 @@ describe('saveRentalBooking', () => {
     vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
       { id: 'ri-1', totalQuantity: 10, pricePerDay: null, pricePerHour: 5 } as any,
     ])
-    vi.mocked(prisma.rentalBooking.aggregate).mockResolvedValue({
-      _sum: { quantity: 0 },
-    } as any)
-    vi.mocked(prisma.rentalBooking.create).mockResolvedValue({ id: 'rb-1' } as any)
+    mockCreateRentalBookingsWithGuard.mockResolvedValueOnce({ outcome: 'created', bookingIds: ['rb-1'] })
 
     const res = await saveRentalBooking({
       siteId: 'site-1',
@@ -610,12 +588,10 @@ describe('saveRentalBooking', () => {
 
     expect(res.status).toBe('ok')
     // 5 per hour × 3 hours × 1 qty = 15
-    expect(prisma.rentalBooking.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          totalPrice: 15,
-        }),
-      })
+    expect(mockCreateRentalBookingsWithGuard).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ totalPrice: 15 }),
+      ])
     )
   })
 
@@ -629,10 +605,7 @@ describe('saveRentalBooking', () => {
     vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
       { id: 'ri-1', totalQuantity: 10, pricePerDay: 10 } as any,
     ])
-    vi.mocked(prisma.rentalBooking.aggregate).mockResolvedValue({
-      _sum: { quantity: 0 },
-    } as any)
-    vi.mocked(prisma.rentalBooking.create).mockResolvedValue({ id: 'rb-1' } as any)
+    mockCreateRentalBookingsWithGuard.mockResolvedValueOnce({ outcome: 'created', bookingIds: ['rb-1'] })
 
     await saveRentalBooking({
       siteId: 'site-1',
@@ -642,13 +615,119 @@ describe('saveRentalBooking', () => {
       to: '2025-07-02T10:00:00Z',
     })
 
-    expect(prisma.rentalBooking.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          status: 'complete',
-        }),
-      })
+    expect(mockCreateRentalBookingsWithGuard).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ status: 'complete' }),
+      ])
     )
+  })
+
+  // ── Anonymous path ────────────────────────────────────────────────────────
+
+  // Uses site owner's userId as FK, stores anonId + guestEmail on the booking.
+  // Mirrors saveReservationForMultipleItems anonymous path exactly.
+  it('anon path: uses site owner userId, stores anonId and guestEmail', async () => {
+    // No session
+    vi.mocked(prisma.site.findUnique)
+      .mockResolvedValueOnce({ userId: 'owner-1' } as any) // anon FK lookup
+      .mockResolvedValueOnce({ id: 'site-1', type: 'paid', rentalPaymentType: null } as any)
+    vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
+      { id: 'ri-1', totalQuantity: 10, pricePerDay: 15 } as any,
+    ])
+    mockCreateRentalBookingsWithGuard.mockResolvedValueOnce({ outcome: 'created', bookingIds: ['rb-anon-1'] })
+
+    const res = await saveRentalBooking({
+      siteId: 'site-1',
+      items: [{ rentalItemId: 'ri-1', quantity: 1 }],
+      durationType: 'days',
+      from: '2025-07-01T10:00:00Z',
+      to: '2025-07-02T10:00:00Z',
+      anonId: 'anon-uuid-1234',
+      guestEmail: 'guest@example.com',
+    })
+
+    expect(res.status).toBe('ok')
+    expect(res.bookingIds).toEqual(['rb-anon-1'])
+    // Guard receives owner FK + anonId + guestEmail
+    expect(mockCreateRentalBookingsWithGuard).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          userId: 'owner-1',
+          anonId: 'anon-uuid-1234',
+          guestEmail: 'guest@example.com',
+        }),
+      ])
+    )
+  })
+
+  it('anon path: also passes guestContact when provided', async () => {
+    vi.mocked(prisma.site.findUnique)
+      .mockResolvedValueOnce({ userId: 'owner-1' } as any)
+      .mockResolvedValueOnce({ id: 'site-1', type: 'paid', rentalPaymentType: null } as any)
+    vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
+      { id: 'ri-1', totalQuantity: 5, pricePerDay: 10 } as any,
+    ])
+    mockCreateRentalBookingsWithGuard.mockResolvedValueOnce({ outcome: 'created', bookingIds: ['rb-1'] })
+
+    await saveRentalBooking({
+      siteId: 'site-1',
+      items: [{ rentalItemId: 'ri-1', quantity: 1 }],
+      durationType: 'days',
+      from: '2025-07-01T10:00:00Z',
+      to: '2025-07-02T10:00:00Z',
+      anonId: 'anon-uuid-1234',
+      guestContact: '+358401234567',
+    })
+
+    expect(mockCreateRentalBookingsWithGuard).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ guestContact: '+358401234567' }),
+      ])
+    )
+  })
+
+  it('anon path: returns error when site not found (anon FK lookup)', async () => {
+    vi.mocked(prisma.site.findUnique).mockResolvedValueOnce(null) // anon FK lookup returns nothing
+
+    const res = await saveRentalBooking({
+      siteId: 'site-1',
+      items: [{ rentalItemId: 'ri-1', quantity: 1 }],
+      durationType: 'days',
+      from: '2025-07-01T10:00:00Z',
+      to: '2025-07-02T10:00:00Z',
+      anonId: 'anon-uuid-1234',
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Site not found')
+  })
+
+  // Guard unavailable path — mirrors the conflict guard path in sunbed action.
+  it('returns error when the rental guard reports unavailability', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      id: 'site-1',
+      type: 'paid',
+      rentalPaymentType: null,
+    } as any)
+    vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
+      { id: 'ri-1', name: 'Kayak', totalQuantity: 2, pricePerDay: 30 } as any,
+    ])
+    // Guard finds quantity exceeded inside the transaction
+    mockCreateRentalBookingsWithGuard.mockResolvedValueOnce({
+      outcome: 'unavailable',
+      rentalItemId: 'ri-1',
+    })
+
+    const res = await saveRentalBooking({
+      siteId: 'site-1',
+      items: [{ rentalItemId: 'ri-1', quantity: 3 }],
+      durationType: 'days',
+      from: '2025-07-01T10:00:00Z',
+      to: '2025-07-02T10:00:00Z',
+    })
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Kayak')
   })
 
   // ── Input validation tests ────────────────────────────────────────────────
@@ -733,6 +812,33 @@ describe('saveRentalBooking', () => {
     expect(res.errors?.[0]).toContain('Invalid quantity')
   })
 
+  it('returns error when anonId exceeds 36 characters', async () => {
+    const res = await saveRentalBooking({
+      siteId: 'site-1',
+      items: [{ rentalItemId: 'ri-1', quantity: 1 }],
+      durationType: 'days',
+      from: '2025-07-01T10:00:00Z',
+      to: '2025-07-02T10:00:00Z',
+      anonId: 'a'.repeat(37),
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Invalid anonymous ID')
+  })
+
+  it('returns error when guestEmail is malformed', async () => {
+    const res = await saveRentalBooking({
+      siteId: 'site-1',
+      items: [{ rentalItemId: 'ri-1', quantity: 1 }],
+      durationType: 'days',
+      from: '2025-07-01T10:00:00Z',
+      to: '2025-07-02T10:00:00Z',
+      anonId: 'anon-uuid-1234',
+      guestEmail: 'not-an-email',
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Invalid email address')
+  })
+
   // ── BUG-REVEALING TESTS ──────────────────────────────────────────────────
 
   // BUG: No date validation — from >= to should be rejected
@@ -746,9 +852,6 @@ describe('saveRentalBooking', () => {
     vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
       { id: 'ri-1', totalQuantity: 10, pricePerDay: 20 } as any,
     ])
-    vi.mocked(prisma.rentalBooking.aggregate).mockResolvedValue({
-      _sum: { quantity: 0 },
-    } as any)
 
     const res = await saveRentalBooking({
       siteId: 'site-1',

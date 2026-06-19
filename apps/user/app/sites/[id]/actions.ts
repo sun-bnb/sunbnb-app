@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import dayjs from 'dayjs'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
-import { reserveWithConflictGuard } from '@repo/data/reservations'
+import { reserveWithConflictGuard, createRentalBookingsWithGuard } from '@repo/data/reservations'
 import { getAvailability } from '@/service/availabilityService'
 import { isValidEntityId } from '@/app/api/_lib/payment-ids'
 import { InventoryItem } from '../types'
@@ -13,8 +13,7 @@ import {
   RESERVATION_COMPLETE,
   RENTAL_PENDING,
   RENTAL_COMPLETE,
-  RENTAL_CANCELED,
-  OP_RETURNED,
+  OP_RESERVED,
 } from '@repo/data/reservation-status'
 
 const VALID_RESERVATION_TYPES = ['days', 'hours'] as const
@@ -198,6 +197,9 @@ export async function saveRentalBooking(input: {
   durationType: string
   from: string
   to: string
+  anonId?: string
+  guestEmail?: string
+  guestContact?: string
 }) {
   // ── Input validation ────────────────────────────────────────────────────
   if (!isValidEntityId(input.siteId)) {
@@ -221,9 +223,35 @@ export async function saveRentalBooking(input: {
     }
   }
 
+  if (input.anonId && input.anonId.length > 36) {
+    return { status: 'error', errors: ['Invalid anonymous ID'] }
+  }
+
+  if (input.guestEmail !== undefined) {
+    if (input.guestEmail.length > 254 || !EMAIL_REGEX.test(input.guestEmail)) {
+      return { status: 'error', errors: ['Invalid email address'] }
+    }
+  }
+
+  // Authenticate: require either a session user or an anonId
+  // Never trust client-supplied userId — always derive from session
   const session = await auth()
-  if (!session?.user?.id) {
-    return { status: 'error', errors: ['Authentication required'] }
+  let bookingUserId = session?.user?.id
+
+  if (!bookingUserId) {
+    if (!input.anonId) {
+      return { status: 'error', errors: ['Authentication required'] }
+    }
+    // For anonymous bookings: use the site owner's userId to satisfy the FK constraint.
+    // The anonId field identifies the actual anonymous customer.
+    const site = await prisma.site.findUnique({
+      where: { id: input.siteId },
+      select: { userId: true },
+    })
+    if (!site?.userId) {
+      return { status: 'error', errors: ['Site not found'] }
+    }
+    bookingUserId = site.userId
   }
 
   const site = await prisma.site.findUnique({ where: { id: input.siteId } })
@@ -236,7 +264,7 @@ export async function saveRentalBooking(input: {
     return { status: 'error', errors: ['End date must be after start date'] }
   }
 
-  // Load rental items to calculate pricing
+  // Load rental items to calculate pricing — never trust client-supplied prices
   const rentalItemIds = input.items.map(i => i.rentalItemId)
   const rentalItems = await prisma.rentalItem.findMany({
     where: { id: { in: rentalItemIds }, siteId: input.siteId, active: true },
@@ -246,41 +274,14 @@ export async function saveRentalBooking(input: {
     return { status: 'error', errors: ['Some items are not available'] }
   }
 
-  // TODO: Check availability (compare booked quantities for the time range)
-  // For each item, count how many are already booked (excluding returned) in the overlapping time window
-  for (const cartItem of input.items) {
-    const rentalItem = rentalItems.find(ri => ri.id === cartItem.rentalItemId)
-    if (!rentalItem) continue
+  const status = (site.rentalPaymentType ?? site.type) === 'paid' ? RENTAL_PENDING : RENTAL_COMPLETE
 
-    const bookedQty = await prisma.rentalBooking.aggregate({
-      where: {
-        rentalItemId: cartItem.rentalItemId,
-        siteId: input.siteId,
-        operationalStatus: { notIn: [OP_RETURNED, RENTAL_CANCELED] },
-        from: { lt: to },
-        to: { gt: from },
-      },
-      _sum: { quantity: true },
-    })
+  const hours = (to.getTime() - from.getTime()) / (1000 * 60 * 60)
+  const days = Math.max(1, Math.ceil(hours / 24))
 
-    const inUse = bookedQty._sum.quantity || 0
-    const available = rentalItem.totalQuantity - inUse
-    if (cartItem.quantity > available) {
-      return {
-        status: 'error',
-        errors: [`Only ${available} of "${rentalItem.name}" available (${inUse} already booked)`],
-      }
-    }
-  }
-
-  // Create one booking per item type
-  const bookings = []
-  for (const cartItem of input.items) {
-    const rentalItem = rentalItems.find(ri => ri.id === cartItem.rentalItemId)
-    if (!rentalItem) continue
-
-    const hours = (to.getTime() - from.getTime()) / (1000 * 60 * 60)
-    const days = Math.max(1, Math.ceil(hours / 24))
+  // Build the booking inputs with DB-sourced prices
+  const bookingInputs = input.items.map(cartItem => {
+    const rentalItem = rentalItems.find(ri => ri.id === cartItem.rentalItemId)!
 
     let totalPrice = 0
     if (input.durationType === 'hours' && rentalItem.pricePerHour) {
@@ -291,25 +292,42 @@ export async function saveRentalBooking(input: {
       totalPrice = rentalItem.pricePerHour * Math.ceil(hours) * cartItem.quantity
     }
 
-    const booking = await prisma.rentalBooking.create({
-      data: {
-        siteId: input.siteId,
-        rentalItemId: cartItem.rentalItemId,
-        userId: session.user.id,
-        from,
-        to,
-        quantity: cartItem.quantity,
-        durationType: input.durationType,
-        totalPrice,
-        paymentAmount: totalPrice,
-        status: (site.rentalPaymentType ?? site.type) === 'paid' ? RENTAL_PENDING : RENTAL_COMPLETE,
-      },
-    })
-    bookings.push(booking)
+    return {
+      siteId: input.siteId,
+      rentalItemId: cartItem.rentalItemId,
+      userId: bookingUserId!,
+      from,
+      to,
+      quantity: cartItem.quantity,
+      durationType: input.durationType,
+      totalPrice,
+      paymentAmount: totalPrice,
+      status,
+      operationalStatus: OP_RESERVED,
+      anonId: input.anonId ?? null,
+      guestEmail: input.guestEmail ?? null,
+      guestContact: input.guestContact ?? null,
+    }
+  })
+
+  // Transactional guard: locks RentalItem rows, re-checks availability inside
+  // the tx, and creates all bookings atomically — prevents quantity race conditions.
+  const result = await createRentalBookingsWithGuard(bookingInputs)
+
+  if (result.outcome === 'unavailable') {
+    const unavailableItem = rentalItems.find(ri => ri.id === result.rentalItemId)
+    return {
+      status: 'error',
+      errors: [
+        unavailableItem
+          ? `Not enough "${unavailableItem.name}" available for the requested time`
+          : 'Some items are not available for the requested time',
+      ],
+    }
   }
 
   revalidatePath('/sites')
-  return { status: 'ok', bookingIds: bookings.map(b => b.id) }
+  return { status: 'ok', bookingIds: result.bookingIds }
 }
 
 // ─── Queries ────────────────────────────────────────────────────────────────
