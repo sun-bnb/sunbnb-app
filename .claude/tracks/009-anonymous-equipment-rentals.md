@@ -1,7 +1,7 @@
 ---
 id: 009-anonymous-equipment-rentals
 title: Anonymous Equipment Rentals
-status: proposed
+status: active
 created: 2026-06-19
 updated: 2026-06-19
 worktree: null
@@ -39,15 +39,14 @@ Partner walk-in (`createWalkInRental`) is on-site/staff-attributed — **out of 
 
 ## Resume here
 
-- **Next action:** Phase 5 — consumer equipment UI / anon entry (`user-dev`). The equipment booking
-  UI reads `anonId` from `localStorage('sunbnb-anonId')` and books anonymously like the sunbed POS
-  flow; `/payment/complete` rental path renders the result with `anonId`; and the consumer
-  rental-cancellation action (mirroring `cancelReservation`, wiring `sendRentalCancellationEmail`
-  from Phase 4) is built here. Open: dedicated QR/POS rental entry vs. in-app equipment tab going anon.
+- **Next action:** NONE — all 6 phases (0–5) functionally complete and committed locally. The track
+  is **functionally complete, pending push**. Remaining is operational, at the user's discretion:
+  (1) `migrate:test` (Neon TEST DB), then push `main`; (2) ES/FI copy review of the 3 new
+  `Reservation` cancellation keys before promote; (3) browser-verify the anon book→pay→cancel flow.
 - **Pending before any `main` push:** TWO additive migrations owed to the Neon TEST DB via
   `migrate:test` — `20260619090109_rental_booking_anon_fields` (Phase 0) and
   `20260619130551_rental_booking_reminder_sent_at` (Phase 4). The pre-push hook blocks the push
-  until applied. Committed locally (`main` ahead): Phases 0–4 (`29df253`…`97e674c`).
+  until applied. Committed locally (`main` ahead): Phases 0–5 (`29df253`…`97ae532`).
 - **Context needed:** reference = `Reservation` anon fields (`schema.prisma` ~387–418) +
   `saveReservationForMultipleItems` (`apps/user/app/sites/[id]/actions.ts` ~28–191, the
   site-owner-FK trick at ~91–100, the guard call at ~168–179). Rental side: `RentalBooking`
@@ -97,11 +96,16 @@ tests, bug-revealing where it touches ownership/money (the track-004 discipline)
   unit-tested but **deferred to Phase 5**: there is no consumer-initiated rental-cancellation action
   (only the Mollie webhook payment-failure path), so it gets its caller when the consumer cancel flow
   is built, mirroring `cancelReservation`. data 214 unit + 113 integration green; user 304 unit green.
-- ☐ **Phase 5 — Consumer UI / anon entry (user-dev).** The equipment booking UI
-  (`EquipmentSelection` / equipment `viewMode`) reads `anonId` from `localStorage('sunbnb-anonId')`
-  and books anonymously like the sunbed POS flow; `/payment/complete` renders the rental result
-  with `anonId`. *(Open: a dedicated QR/POS rental entry like `/sites/[id]/pos`, or just the
-  in-app equipment tab going anon?)*
+- ☑ **Phase 5 — Consumer UI / anon entry (user-dev).** Resolved the open question by alignment:
+  **in-app equipment tab goes anon** (mirror the sunbed in-app `ReservationButton`), not a separate
+  POS route. **5a** (`adb3613`): `EquipmentBookingSection` in `Reservation.tsx` drops the login gate
+  — guest-email capture + `sunbnb-anonId` read/generate, `anonId`+`guestEmail` threaded into
+  `saveRentalBooking`; logged-out users see "Reserve as guest" (no new i18n keys — all reused from
+  the sunbed flow). **5b** (`97ae532`): consumer rental cancellation — new `cancelRentalBooking`
+  action (session-or-anon ownership, paymentRef-group cancel + single `issueRefund`, terminal/
+  past-pickup guards, fires `sendRentalCancellationEmail`), rental detail page mirrors the sunbed
+  session-vs-anon ownership branch, cancel button in the detail view. 3 new `Reservation` i18n keys
+  (ES/FI machine-assisted — **need copy review before promote**). user 323 unit + 45 integration green.
 
 ## Design principle — faithful mirror (no open decisions)
 
@@ -149,6 +153,15 @@ The earlier "open decisions" are all resolved *by alignment*, not by preference:
   only the Mollie webhook payment-failure path), so it's wired in Phase 5 with the cancel flow.
   Transient flaky integration failures seen during Phase 4 were DB contention from concurrent vitest
   runs against shared `sunbnb_test`, not a defect — suites are stable green run sequentially.
+- **2026-06-19** — Phase 5 complete; **track functionally complete (all 6 phases)**. Open entry-point
+  question resolved by alignment: in-app equipment tab goes anon (mirror sunbed `ReservationButton`),
+  not a dedicated POS route. 5a (`adb3613`) — equipment booking drops the login gate, captures guest
+  email + anonId, threads both into `saveRentalBooking` (no new i18n keys). 5b (`97ae532`) —
+  `cancelRentalBooking` (session-or-anon ownership, paymentRef-group cancel + single refund,
+  terminal/past-pickup guards, fires `sendRentalCancellationEmail`), anon access to the rental detail
+  page, cancel button. 3 new ES/FI cancellation keys are machine-assisted (copy review owed before
+  promote). Final state: user 323 unit + 45 integration green, data 214 + 113 green; `main` ahead by
+  Phases 0–5; two additive migrations owed to the Neon TEST DB before push.
 
 ## Links
 
