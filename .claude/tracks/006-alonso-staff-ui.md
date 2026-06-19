@@ -173,8 +173,10 @@ branching the expected lane by payment class.
 - **ES/FI copy — REVIEWED by the user (2026-06-19).** The track's Spanish/Finnish strings in
   `messages/es.json` + `messages/fi.json` have been reviewed; the copy-review follow-up is closed.
   (The user owns translation review — no further copy-review reminders.)
-- **Optional cleanup:** the `bulkBlock`/`bulkComp`/`bulkReserve`/`bulkRent` SiteManage i18n keys are
-  now dead (the multiselect sheet renders BedDetail `tb` labels). Safe to delete in all three locales.
+- **Cleanup — DONE 2026-06-19 (uncommitted).** Deleted the dead `bulkBlock`/`bulkComp`/`bulkReserve`/
+  `bulkRent` SiteManage i18n keys in en/es/fi (the multiselect sheet renders BedDetail `tb` labels;
+  the `bulk*` JS handler names in `view.tsx` are unaffected — they're not i18n keys). `bulkFree`/
+  `bulkNoAction` are still in use and kept. JSON valid, tsc/lint clean.
 - **P5 — sticky out-of-service. DONE 2026-06-19 (uncommitted).** Per the user, made the existing
   **Block sticky** (keeping the "block" vocabulary — no new state/color/i18n) rather than adding a
   separate `desactivada`. `blockBed` now ends the block at a far-future sentinel
