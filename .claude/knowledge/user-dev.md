@@ -12,7 +12,7 @@ sections.
 - **Payment flow** — Stripe / Mollie / demo issues — _none yet_
 - **Anonymous (anonId) flow** — POS/QR ownership, localStorage — `anonId` must be a valid UUID v4 in tests (2026-03-17)
 - **Webhook & polling** — webhook failures, polling races, reconciliation — _none yet_
-- **Test failures & fixes** — mock/fixture gotchas — _none yet_
+- **Test failures & fixes** — mock/fixture gotchas — `rentalBooking.findUnique` missing from mock (2026-06-19)
 - **i18n & locale** — next-intl edge cases — _none yet_
 - **Rejected approaches** — dead-ends, so nobody re-tries them — _none yet_
 
@@ -48,7 +48,10 @@ sections.
 
 ## Test failures & fixes
 
-<!-- Non-obvious mock setups, fixture issues, integration-test gotchas -->
+### 2026-06-19: rentalBooking mock missing `findUnique` broke route unit tests
+**Problem:** `__mocks__/@repo/data/PrismaCient.ts` had `rentalBooking` with `findFirst/findMany/create/updateMany/aggregate` but NOT `findUnique`. The `GET /api/rental-bookings/[id]` route calls `prisma.rentalBooking.findUnique(...)`. Without the mock entry, calling the route in unit tests silently calls `undefined()` and throws, rather than returning a controlled mock response.
+**Solution:** Add `findUnique: vi.fn()` to the `rentalBooking` section of the mock.
+**Prevention:** Before writing route unit tests, verify the mock shape matches every Prisma method the route calls. If it's missing, add it — `undefined()` errors are confusing because they surface as test errors rather than mock setup warnings.
 
 ## i18n & locale
 

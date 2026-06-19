@@ -18,6 +18,7 @@ const prisma = {
     updateMany: vi.fn(),
   },
   rentalBooking: {
+    findUnique: vi.fn(),
     findFirst: vi.fn(),
     findMany: vi.fn(),
     create: vi.fn(),

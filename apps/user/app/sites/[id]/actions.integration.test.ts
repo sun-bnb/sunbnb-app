@@ -13,7 +13,7 @@ vi.mock('@/service/availabilityService', () => ({
   getAvailability: vi.fn().mockResolvedValue([]),
 }))
 
-import { saveReservationForMultipleItems, saveRentalBooking } from './actions'
+import { saveReservationForMultipleItems, saveRentalBooking, findAnonRentalBooking } from './actions'
 import { auth } from '@/app/auth'
 import { getAvailability } from '@/service/availabilityService'
 import { cleanDatabase, disconnectDatabase, prisma } from '@/app/test/setup'
@@ -520,5 +520,105 @@ describe('saveRentalBooking', () => {
     expect(res.errors).toContain('Authentication required')
     const count = await prisma.rentalBooking.count({ where: { siteId: site.id } })
     expect(count).toBe(0)
+  })
+})
+
+// ─── findAnonRentalBooking — cross-anon isolation ─────────────────────────
+//
+// Key regression guard: anon A's lookup must ONLY return A's bookings, never B's.
+// This test uses real DB writes to verify isolation holds end-to-end through
+// Prisma, mirroring the pattern in partner search-isolation tests.
+
+describe('findAnonRentalBooking (cross-anon isolation)', () => {
+  it('returns only the calling anon\'s booking, not another anon\'s', async () => {
+    const owner = await createTestUser()
+    const site = await createTestSite(owner.id)
+    const item = await createTestRentalItem(site.id, { totalQuantity: 10 })
+
+    const anonA = 'aaaaaaaa-0000-0000-0000-000000000001'
+    const anonB = 'bbbbbbbb-0000-0000-0000-000000000002'
+
+    // Both anon A and anon B have active (complete) bookings on the same site/item,
+    // with a time range that includes "now" so the active window filter passes.
+    const now = new Date()
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+
+    const bookingA = await createTestRentalBooking(site.id, item.id, owner.id, {
+      anonId: anonA,
+      status: 'complete',
+      from: yesterday,
+      to: tomorrow,
+    })
+    const bookingB = await createTestRentalBooking(site.id, item.id, owner.id, {
+      anonId: anonB,
+      status: 'complete',
+      from: yesterday,
+      to: tomorrow,
+    })
+
+    // A's lookup returns only A's booking
+    const resultA = await findAnonRentalBooking(anonA, site.id)
+    expect(resultA).not.toBeNull()
+    expect(resultA!.id).toBe(bookingA.id)
+    expect(resultA!.anonId).toBe(anonA)
+
+    // B's lookup returns only B's booking, not A's
+    const resultB = await findAnonRentalBooking(anonB, site.id)
+    expect(resultB).not.toBeNull()
+    expect(resultB!.id).toBe(bookingB.id)
+    expect(resultB!.anonId).toBe(anonB)
+
+    // Critically: A's result is NOT B's booking, and vice versa
+    expect(resultA!.id).not.toBe(bookingB.id)
+    expect(resultB!.id).not.toBe(bookingA.id)
+  })
+
+  it('returns null for an anon with no bookings on the site', async () => {
+    const owner = await createTestUser()
+    const site = await createTestSite(owner.id)
+    const item = await createTestRentalItem(site.id, { totalQuantity: 5 })
+
+    const anonA = 'aaaaaaaa-0000-0000-0000-000000000001'
+    const anonUnknown = 'cccccccc-0000-0000-0000-000000000003'
+
+    const now = new Date()
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+
+    // Only anon A has a booking
+    await createTestRentalBooking(site.id, item.id, owner.id, {
+      anonId: anonA,
+      status: 'complete',
+      from: yesterday,
+      to: tomorrow,
+    })
+
+    // An unrelated anon gets null
+    const result = await findAnonRentalBooking(anonUnknown, site.id)
+    expect(result).toBeNull()
+  })
+
+  it('ignores bookings outside the active time window (expired)', async () => {
+    const owner = await createTestUser()
+    const site = await createTestSite(owner.id)
+    const item = await createTestRentalItem(site.id, { totalQuantity: 5 })
+
+    const anonA = 'aaaaaaaa-0000-0000-0000-000000000001'
+
+    // Booking that ended yesterday — not "active" anymore
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
+
+    await createTestRentalBooking(site.id, item.id, owner.id, {
+      anonId: anonA,
+      status: 'complete',
+      from: twoDaysAgo,
+      to: yesterday, // expired — ends before now
+    })
+
+    // findAnonRentalBooking should not return expired bookings
+    const result = await findAnonRentalBooking(anonA, site.id)
+    expect(result).toBeNull()
   })
 })

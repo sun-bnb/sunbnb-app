@@ -389,5 +389,30 @@ export async function findUserReservation(
 
 
   return reservation
-  
+
+}
+
+export async function findAnonRentalBooking(
+  anonId: string,
+  siteId: string
+) {
+
+  const now = new Date()
+
+  const booking = await prisma.rentalBooking.findFirst({
+    where: {
+      anonId,
+      siteId,
+      status: RENTAL_COMPLETE,
+      from: { lte: now },
+      to: { gte: now },
+    },
+    include: {
+      rentalItem: true,
+      site: true,
+    },
+  })
+
+  return booking
+
 }

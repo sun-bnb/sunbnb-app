@@ -22,6 +22,7 @@ import {
   saveRentalBooking,
   findAnonReservation,
   findUserReservation,
+  findAnonRentalBooking,
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
@@ -902,6 +903,78 @@ describe('findUserReservation', () => {
         where: expect.objectContaining({
           userId: 'user-1',
           status: 'complete',
+        }),
+      })
+    )
+  })
+})
+
+// ─── findAnonRentalBooking ─────────────────────────────────────────────────
+
+describe('findAnonRentalBooking', () => {
+  it('returns active booking matching anonId and siteId', async () => {
+    const booking = { id: 'rb-1', anonId: 'anon-1', siteId: 'site-1', rentalItem: {}, site: {} }
+    vi.mocked(prisma.rentalBooking.findFirst).mockResolvedValue(booking as any)
+
+    const result = await findAnonRentalBooking('anon-1', 'site-1')
+    expect(result).toEqual(booking)
+    expect(prisma.rentalBooking.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          anonId: 'anon-1',
+          siteId: 'site-1',
+          status: 'complete',
+        }),
+      })
+    )
+  })
+
+  it('returns null when no matching booking exists', async () => {
+    vi.mocked(prisma.rentalBooking.findFirst).mockResolvedValue(null)
+    const result = await findAnonRentalBooking('anon-1', 'site-1')
+    expect(result).toBeNull()
+  })
+
+  // BUG-REVEALING: ensure the query scopes by both anonId and siteId.
+  // If siteId were omitted, a booking on a different site would be returned.
+  it('scopes query by both anonId and siteId (not just anonId)', async () => {
+    vi.mocked(prisma.rentalBooking.findFirst).mockResolvedValue(null)
+
+    await findAnonRentalBooking('anon-1', 'site-A')
+
+    expect(prisma.rentalBooking.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          anonId: 'anon-1',
+          siteId: 'site-A',
+        }),
+      })
+    )
+    // Verify siteId is actually in the where clause (not just anonId)
+    const callArg = vi.mocked(prisma.rentalBooking.findFirst).mock.calls[0][0]
+    expect((callArg as any).where.siteId).toBe('site-A')
+  })
+
+  it('only returns complete bookings (not pending or processing)', async () => {
+    vi.mocked(prisma.rentalBooking.findFirst).mockResolvedValue(null)
+
+    await findAnonRentalBooking('anon-1', 'site-1')
+
+    const callArg = vi.mocked(prisma.rentalBooking.findFirst).mock.calls[0][0]
+    expect((callArg as any).where.status).toBe('complete')
+  })
+
+  it('includes rentalItem and site in the result', async () => {
+    const booking = { id: 'rb-1', anonId: 'anon-1', siteId: 'site-1', rentalItem: { id: 'ri-1' }, site: { id: 'site-1' } }
+    vi.mocked(prisma.rentalBooking.findFirst).mockResolvedValue(booking as any)
+
+    await findAnonRentalBooking('anon-1', 'site-1')
+
+    expect(prisma.rentalBooking.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          rentalItem: true,
+          site: true,
         }),
       })
     )
