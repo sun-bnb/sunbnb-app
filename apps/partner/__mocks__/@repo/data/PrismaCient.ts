@@ -187,6 +187,23 @@ const prisma = {
     create: vi.fn(),
     delete: vi.fn(),
   },
+  employee: {
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    deleteMany: vi.fn(),
+    count: vi.fn(),
+  },
+  tillClose: {
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    count: vi.fn(),
+    aggregate: vi.fn(),
+  },
   // ── Models not directly used by partner-app server actions but required for
   // the mock-contract superset assertion (mock must cover every Prisma model). ──
   settings: {

@@ -52,12 +52,14 @@ type Tx = Prisma.TransactionClient
 /** The data needed to create a Reservation (without the items connect — that's separate). */
 export type ReservationCreateData = Omit<
   Prisma.ReservationCreateInput,
-  'items' | 'site' | 'user'
+  'items' | 'site' | 'user' | 'employee'
 > & {
   /** Connect by id — use the already-expanded list (SunbedGroup + pair siblings). */
   itemIds: string[]
   siteId: string
   userId: string
+  /** Floor-staff attribution (manage page current worker); null/undefined when unset. */
+  employeeId?: string | null
 }
 
 export type ConflictGuardOptions = {
@@ -144,7 +146,7 @@ export async function reserveWithConflictGuard(
     nonBlockingOpStatuses = [OP_NO_SHOW, OP_DEPARTED],
   } = options
 
-  const { itemIds, siteId, userId, ...reservationFields } = data
+  const { itemIds, siteId, userId, employeeId, ...reservationFields } = data
 
   return prisma.$transaction(async (tx) => {
     // ── Step 1: Lock the candidate InventoryItem rows FOR UPDATE ──────────────
@@ -194,6 +196,7 @@ export async function reserveWithConflictGuard(
         ...reservationFields,
         site: { connect: { id: siteId } },
         user: { connect: { id: userId } },
+        ...(employeeId ? { employee: { connect: { id: employeeId } } } : {}),
         items: {
           connect: itemIds.map((id) => ({ id })),
         },
@@ -325,6 +328,7 @@ export type RentalBookingInput = {
   paymentAmount: number
   status: string
   operationalStatus: string
+  employeeId?: string | null
   pickedUpAt?: Date | null
   guestName?: string | null
 }
@@ -446,6 +450,7 @@ export async function createRentalBookingsWithGuard(
           paymentAmount: booking.paymentAmount,
           status: booking.status,
           operationalStatus: booking.operationalStatus,
+          employeeId: booking.employeeId ?? null,
           pickedUpAt: booking.pickedUpAt ?? null,
           guestName: booking.guestName ?? null,
         },

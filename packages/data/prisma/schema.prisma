@@ -192,6 +192,7 @@ model PartnerAccount {
   user                User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   serviceFees         ServiceFee[]
   restaurants         Restaurant[]
+  employees           Employee[]
 }
 
 model CustomSubscription {
@@ -258,6 +259,7 @@ model Site {
 
   workingHours    SiteWorkingHours[]
   brand           SiteBrand?
+  tillCloses      TillClose[]
 
   @@index([coords], map: "site_coords_idx", type: Gist)
 }
@@ -406,10 +408,12 @@ model Reservation {
   guestEmail        String?         @map("guest_email")
   internalNotes     String?         @map("internal_notes")
   reminderSentAt    DateTime?       @map("reminder_sent_at")
+  employeeId        String?         @map("employee_id")
   orders            Order[]
   invoices          Invoice[]
   site              Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
   user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employee          Employee?       @relation(fields: [employeeId], references: [id], onDelete: SetNull)
   items             InventoryItem[] @relation("InventoryItemToReservation")
 }
 
@@ -642,9 +646,44 @@ model RentalBooking {
   returnedAt        DateTime?  @map("returned_at")
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
+  employeeId        String?    @map("employee_id")
   site              Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
   rentalItem        RentalItem @relation(fields: [rentalItemId], references: [id], onDelete: Cascade)
   user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employee          Employee?  @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+}
+
+// Floor-staff roster — scoped to the PartnerAccount (workers rotate across a
+// partner's sites). Attribution only; authorization stays on the SecurityToken.
+model Employee {
+  id             String          @id @default(cuid())
+  accountId      String          @map("account_id")
+  name           String
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  account        PartnerAccount  @relation(fields: [accountId], references: [userId], onDelete: Cascade)
+  reservations   Reservation[]
+  rentalBookings RentalBooking[]
+  tillCloses     TillClose[]
+
+  @@index([accountId])
+}
+
+// A shift-close reconciliation snapshot: cash a worker handed in at a site.
+// The "open till" is cash attributed to the worker at the site since their last
+// close; this row marks the boundary (persists — Sunbnb never day-resets).
+model TillClose {
+  id          String   @id @default(cuid())
+  siteId      String   @map("site_id")
+  employeeId  String   @map("employee_id")
+  closedAt    DateTime @default(now()) @map("closed_at")
+  totalAmount Float    @map("total_amount")
+  txnCount    Int      @map("txn_count")
+  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, employeeId])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
