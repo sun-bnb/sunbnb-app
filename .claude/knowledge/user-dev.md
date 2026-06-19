@@ -46,6 +46,18 @@ sections.
 
 <!-- Stripe/Mollie webhook failures, polling race conditions, reconciliation -->
 
+## Cron route patterns
+
+### 2026-06-19: Independent try/catch per email type in the cron route
+**Problem:** If two email batches share a single try/catch, a failure in the first batch 500s the whole request and discards the already-sent work of the second batch (which hasn't run yet).
+**Solution:** Separate try/catch blocks with counters defaulting to 0. Each batch runs regardless of the other's outcome. The route always returns 200 with whatever counts were produced. Errors are `console.error`-logged.
+**Prevention:** When adding a second async batch to a cron route, never wrap both in one try — use independent catches so partial success is always reported. See `app/api/cron/send-reminders/route.ts`.
+
+### 2026-06-19: `sendDueReminders` missing from reservation-emails mock
+**Problem:** `__mocks__/@repo/data/reservation-emails.ts` had individual email helpers but not the batch `sendDueReminders`. The cron route imports `sendDueReminders`, so any cron unit test would fall through to the real Prisma-backed function and fail with a DB error.
+**Solution:** Add `export const sendDueReminders = vi.fn().mockResolvedValue(0)` to the reservation-emails mock.
+**Prevention:** Before writing route tests that import a cron-level batch function, verify it's in the mock. The mock only had per-reservation email helpers, not the cron-facing aggregator.
+
 ## Test failures & fixes
 
 ### 2026-06-19: rentalBooking mock missing `findUnique` broke route unit tests
