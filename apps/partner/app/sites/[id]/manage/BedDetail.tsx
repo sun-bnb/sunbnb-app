@@ -294,7 +294,11 @@ export default function BedDetail({
       // so departing one seat must disconnect it rather than marking the whole
       // reservation departed. unreserveItem with applyToPair=false disconnects
       // just this item (leaving the partner still walked-in).
-      if (state === 'walked-in' && !applyToPair && inSync && groupItems.length > 0) {
+      // A collected (paid-online, `complete`) walk-in never disconnects per-seat —
+      // it's whole-reservation (you can't partial-refund one seat of one payment),
+      // and unreserveItem wouldn't match a `complete` row anyway. Depart it as a
+      // whole reservation (money kept).
+      if (state === 'walked-in' && !collected && !applyToPair && inSync && groupItems.length > 0) {
         runAction(() => unreserveItem(siteId, item.id, accessKey, false))
       } else {
         runAction(() => markDeparted(siteId, reservation.id, accessKey))
@@ -441,7 +445,7 @@ export default function BedDetail({
             - NOT inSync (e.g. one seat held, one free): the action can only target
               this seat — show a single non-interactive "Seat" indicator so staff see
               the scope is locked to this seat. */}
-        {groupItems.length > 0 && TOGGLE_VISIBLE_STATES.includes(state) && !pendingConfirm && (
+        {groupItems.length > 0 && TOGGLE_VISIBLE_STATES.includes(state) && !pendingConfirm && !(state === 'walked-in' && collected) && (
           <div className="mb-4">
             {inSync ? (
               <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 font-semibold">
@@ -948,12 +952,18 @@ export default function BedDetail({
                   </button>
                   {moveSquare}
                 </div>
+                {/* A cash walk-in is removed via Unreserve (delete, cash settled
+                    offline). A walk-in PAID ONLINE (QR-collected → `complete`) is a
+                    real Mollie payment, so it's Canceled instead — routing through
+                    the shared confirm panel, which surfaces the refund control just
+                    like an online reservation (Unreserve wouldn't even match a
+                    `complete` row). */}
                 <button
                   disabled={isPending}
-                  onClick={() => setPendingConfirm('unreserve')}
+                  onClick={() => setPendingConfirm(collected ? 'cancel' : 'unreserve')}
                   className="w-full text-red-500 text-sm py-2 active:text-red-700"
                 >
-                  {t('unreserve')}
+                  {collected ? t('cancelReservation') : t('unreserve')}
                 </button>
               </>
             )}

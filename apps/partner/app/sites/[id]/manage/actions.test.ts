@@ -1726,6 +1726,22 @@ describe('cancelReservation', () => {
     })
   })
 
+  it('matches a QR-collected walk-in: the lookup keys on status=complete, not operationalStatus', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({ id: RES_ID, refundedAt: null } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValueOnce({} as any)
+
+    const res = await cancelReservation(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('ok')
+
+    // A walk-in paid online (QR collect) is (complete, walked-in). The cancel
+    // lookup filters on status=complete and does NOT constrain operationalStatus,
+    // so it matches that row — paid-walk-in cancel/refund parity depends on this.
+    const whereArg = (vi.mocked(prisma.reservation.findFirst).mock.calls[0]![0] as any).where
+    expect(whereArg.status).toBe('complete')
+    expect(whereArg).not.toHaveProperty('operationalStatus')
+  })
+
   it('sets status=refunded when a refund was already issued (refundedAt set)', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
@@ -1811,6 +1827,29 @@ describe('refundReservation', () => {
     expect(updateArg.data.refundedAt).toBeInstanceOf(Date)
     // Refund must NOT change the payment status — the bed stays occupied.
     expect(updateArg.data.status).toBeUndefined()
+  })
+
+  it('matches a QR-collected walk-in: the lookup keys on status=complete, not operationalStatus', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      userId: OWNER_ID,
+      user: { partnerAccount: { userId: 'pa-1' } },
+    } as any)
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
+      id: RES_ID,
+      paymentRef: 'tr_test123',
+      refundedAt: null,
+    } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValueOnce({} as any)
+
+    const res = await refundReservation(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('ok')
+
+    // Same as cancel: a paid-online walk-in (complete, walked-in) is refundable
+    // because the lookup keys on status=complete with no operationalStatus filter.
+    const whereArg = (vi.mocked(prisma.reservation.findFirst).mock.calls[0]![0] as any).where
+    expect(whereArg.status).toBe('complete')
+    expect(whereArg).not.toHaveProperty('operationalStatus')
   })
 
   it('is idempotent: already-refunded reservation does not call Mollie again', async () => {

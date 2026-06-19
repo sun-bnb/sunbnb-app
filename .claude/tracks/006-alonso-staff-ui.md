@@ -275,6 +275,18 @@ branching the expected lane by payment class.
 
 ## Log
 
+- **2026-06-19** — **Paid-walk-in refund parity (P7b extended to QR-collect).** A walk-in paid online
+  via QR collection reads `(complete, walked-in)` with a Mollie `paymentRef`; its removal previously
+  fell to the "Unreserve" link → `unreserveItem`, which only matches `paid-in-cash` walk-ins (so it
+  errored on a `complete` row and never refunded). `BedDetail` now branches the walk-in panel's bottom
+  link on `collected` (`status === complete`): collected → **"Cancel"** → `pendingConfirm('cancel')` →
+  `cancelReservation`, reusing the shared confirm panel's refund control (`issueRefund` / "Refunded"
+  badge / "Enable refunds" re-consent) exactly like an online reservation; not-collected → "Unreserve"
+  (unchanged). Depart on a collected walk-in is forced whole-reservation (`markDeparted`, never the
+  per-seat `unreserveItem`), and the Group/Seat scope toggle is hidden (whole-reservation refund — no
+  partial Mollie refund). **No server changes** — `cancelReservation`/`refundReservation` already key on
+  `status=complete` with no `operationalStatus` filter; **no new i18n** (reused existing keys). 2 guard
+  unit tests lock the no-`operationalStatus`-filter lookup. tsc/lint clean; partner 1477 unit green.
 - **2026-06-18** — **Multiselect Move + paid lane (final slice).** Extended the non-modal
   multiselect bottom sheet (`view.tsx`) with the reservation-level verbs, mirroring the tap dialog:
   Check-in (safe, direct), No-show / Depart / Cancel (⚠, shared confirm step reusing BedDetail
