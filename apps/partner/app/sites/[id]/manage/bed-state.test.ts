@@ -7,7 +7,7 @@ import {
 } from './bed-state'
 import {
   OP_EXPECTED, OP_CHECKED_IN, OP_WALKED_IN, OP_DEPARTED, OP_NO_SHOW, OP_COMP,
-  RESERVATION_COMPLETE, RESERVATION_PAYMENT_FAILED,
+  RESERVATION_COMPLETE, RESERVATION_PAYMENT_FAILED, RESERVATION_HELD,
 } from '@repo/data/reservation-status'
 
 // Minimal InventoryItem-shaped factory — bed-state only reads `reservations`,
@@ -102,7 +102,14 @@ describe('getCellAppearance', () => {
       expect(a.icon).toBe('€')
       expect(a.bg).not.toContain('animate-pulse')
     })
-    it('held / pending → yellow ⏳ with pulse', () => {
+    it('held → calm yellow ● (filled circle), no pulse', () => {
+      const a = getCellAppearance(item([res(OP_EXPECTED, RESERVATION_HELD)]))
+      expect(a.icon).toBe('●')
+      expect(a.bg).toContain('bg-yellow-300')
+      expect(a.bg).not.toContain('animate-pulse')
+    })
+
+    it('pending / processing → yellow ⏳ with pulse', () => {
       const a = getCellAppearance(item([res(OP_EXPECTED, 'pending')]))
       expect(a.icon).toBe('⏳')
       expect(a.bg).toContain('animate-pulse-slow')

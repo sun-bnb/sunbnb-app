@@ -8,7 +8,7 @@
 import { InventoryItem, Reservation } from '@/types/shared'
 import {
   OP_EXPECTED, OP_CHECKED_IN, OP_WALKED_IN, OP_DEPARTED, OP_NO_SHOW, OP_COMP,
-  RESERVATION_COMPLETE, RESERVATION_PAYMENT_FAILED,
+  RESERVATION_COMPLETE, RESERVATION_PAYMENT_FAILED, RESERVATION_HELD,
 } from '@repo/data/reservation-status'
 
 export type BedState = 'available' | 'expected' | 'checked-in' | 'walked-in' | 'blocked' | 'comp'
@@ -80,8 +80,14 @@ export function getCellAppearance(item: InventoryItem): { bg: string; icon: stri
         // Paid booking — solid yellow, no pulse (guest has paid, no urgency)
         return { bg: 'bg-yellow-300 border-yellow-500', icon: '€' }
       }
+      if (res.status === RESERVATION_HELD) {
+        // Staff hold — a deliberate, stable state, not an in-flight one. Keep it
+        // calm (no pulse) and use the same filled-circle glyph as a rented seat,
+        // in held yellow rather than the hourglass.
+        return { bg: 'bg-yellow-300 border-yellow-500', icon: '●' }
+      }
     }
-    // Held / pending / processing — pulse to indicate in-flight state
+    // Pending / processing — in-flight payment, pulse to signal the transient state
     return { bg: 'bg-yellow-300 border-yellow-500 animate-pulse-slow', icon: '⏳' }
   }
 
