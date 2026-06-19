@@ -139,15 +139,23 @@ export async function initiateDemoOrderPayment(orderId: string, anonId?: string)
 /**
  * Process a demo payment for rental bookings.
  * Only available when NEXT_PUBLIC_DEMO_MODE is enabled.
- * Verifies ownership via session userId.
+ * Verifies ownership via session userId or anonId (mirrors initiateDemoReservationPayment).
  */
-export async function initiateDemoRentalPayment(rentalBookingIds: string[]) {
+export async function initiateDemoRentalPayment(rentalBookingIds: string[], anonId?: string) {
   if (!DEMO_MODE_ENABLED) {
     return { status: 'error', errors: ['Demo mode is not enabled'] }
   }
 
   if (!rentalBookingIds.length) {
     return { status: 'error', errors: ['No booking IDs provided'] }
+  }
+
+  // Validate anonId format if supplied (UUID v4, max 36 chars)
+  if (anonId !== undefined) {
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (anonId.length > 36 || !UUID_REGEX.test(anonId)) {
+      return { status: 'error', errors: ['Invalid anonId format'] }
+    }
   }
 
   const bookings = await prisma.rentalBooking.findMany({
@@ -158,14 +166,22 @@ export async function initiateDemoRentalPayment(rentalBookingIds: string[]) {
     return { status: 'error', errors: ['Some bookings not found'] }
   }
 
-  // Verify ownership
+  // Verify ownership: session user or matching anonId (mirror initiateDemoReservationPayment)
   const session = await auth()
-  if (!session?.user?.id) {
-    return { status: 'error', errors: ['Not authenticated'] }
-  }
 
-  if (bookings.some(b => b.userId !== session.user!.id)) {
-    return { status: 'error', errors: ['Not authorized'] }
+  if (session?.user?.id) {
+    if (bookings.some(b => b.userId !== session.user!.id)) {
+      return { status: 'error', errors: ['Not authorized'] }
+    }
+  } else {
+    // Anonymous path: every booking must have an anonId that matches the caller's
+    const allHaveAnonId = bookings.every(b => b.anonId)
+    if (!allHaveAnonId || !anonId) {
+      return { status: 'error', errors: ['Not authenticated'] }
+    }
+    if (bookings.some(b => b.anonId !== anonId)) {
+      return { status: 'error', errors: ['Not authorized'] }
+    }
   }
 
   // Skip if already has paymentRef

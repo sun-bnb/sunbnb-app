@@ -21,7 +21,7 @@ import {
 import { isTestMode } from '@repo/data/env'
 import { RENTAL_PENDING, RENTAL_PROCESSING, RENTAL_PAYMENT_FAILED } from '@repo/data/reservation-status'
 import { NextRequest } from 'next/server'
-import { getRequestIdentity } from '@/app/api/_lib/auth'
+import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
 import { getMollieClientForPartner, getValidMollieToken } from '@/app/api/_lib/mollie'
 import { isValidEntityId } from '@/app/api/_lib/payment-ids'
 
@@ -74,9 +74,10 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Some bookings not found' }, { status: 404 })
   }
 
-  // Verify ownership — all bookings must belong to the requesting user
+  // Verify ownership — all bookings must belong to the requesting user.
+  // Uses verifyOwnership so anon users are verified via anonId (not skipped).
   for (const booking of bookings) {
-    if (identity.userId && booking.userId !== identity.userId) {
+    if (!verifyOwnership(identity, booking)) {
       return Response.json({ error: 'Not authorized' }, { status: 403 })
     }
   }

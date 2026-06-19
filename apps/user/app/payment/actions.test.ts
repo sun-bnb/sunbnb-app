@@ -284,6 +284,62 @@ describe('initiateDemoRentalPayment', () => {
     })
     expect(mockProcessRentalBooking).toHaveBeenCalled()
   })
+
+  // ── Anon path (Phase 2 parity) ─────────────────────────────────────────────
+
+  // Use valid UUID v4 values — the anonId validator enforces UUID format
+  const VALID_ANON_ID = '550e8400-e29b-41d4-a716-446655440000'
+  const OTHER_ANON_ID = '660e8400-e29b-41d4-a716-446655440001'
+
+  it('allows anon user with matching anonId on all bookings', async () => {
+    // No session — anon caller with correct UUID anonId
+    vi.mocked(prisma.rentalBooking.findMany).mockResolvedValue([
+      { id: 'rb-1', userId: 'owner-1', anonId: VALID_ANON_ID, paymentRef: null } as any,
+    ])
+    vi.mocked(prisma.rentalBooking.updateMany).mockResolvedValue({ count: 1 } as any)
+
+    const res = await initiateDemoRentalPayment(['rb-1'], VALID_ANON_ID)
+    expect(res.status).toBe('ok')
+    expect(res.paymentRef).toMatch(/^pi_demo_/)
+  })
+
+  it('rejects anon user with wrong anonId (bug-revealing: was accepted before Phase 2 fix)', async () => {
+    // No session — anon caller with a valid UUID but NOT the one on the booking
+    vi.mocked(prisma.rentalBooking.findMany).mockResolvedValue([
+      { id: 'rb-1', userId: 'owner-1', anonId: VALID_ANON_ID, paymentRef: null } as any,
+    ])
+
+    const res = await initiateDemoRentalPayment(['rb-1'], OTHER_ANON_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authorized')
+  })
+
+  it('rejects anon user when no anonId provided and bookings have anonId', async () => {
+    vi.mocked(prisma.rentalBooking.findMany).mockResolvedValue([
+      { id: 'rb-1', userId: 'owner-1', anonId: VALID_ANON_ID, paymentRef: null } as any,
+    ])
+
+    const res = await initiateDemoRentalPayment(['rb-1'])
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+  })
+
+  it('rejects when no session and bookings have no anonId', async () => {
+    vi.mocked(prisma.rentalBooking.findMany).mockResolvedValue([
+      { id: 'rb-1', userId: 'owner-1', anonId: null, paymentRef: null } as any,
+    ])
+
+    const res = await initiateDemoRentalPayment(['rb-1'], VALID_ANON_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+  })
+
+  it('rejects invalid anonId format', async () => {
+    // The UUID validator fires before any DB lookup
+    const res = await initiateDemoRentalPayment(['rb-1'], 'not-a-uuid')
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Invalid anonId format')
+  })
 })
 
 // ─── Query Actions ─────────────────────────────────────────────────────────

@@ -33,6 +33,15 @@ sections.
 **Solution:** Updated the test values in `route.test.ts` files for `/api/reservations/[id]` and `/api/payment/stripe/payment-intent` to use a valid UUID (`550e8400-e29b-41d4-a716-446655440000`).
 **Prevention:** Any test that exercises anonymous auth must use a valid UUID v4 string for `anonId`. The format is `/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i`.
 
+### 2026-06-19: Conditional-skip ownership bug pattern in rental Mollie route
+**Problem:** `app/api/payment/mollie/create-rental-payment/route.ts` had `if (identity.userId && booking.userId !== identity.userId) { reject }`. When `identity.userId` is falsy (anon path), the entire condition body is skipped — an anon caller with the wrong `anonId` (or no `anonId`) was let through silently.
+**Solution:** Replace with `verifyOwnership(identity, booking)` (the shared helper from `app/api/_lib/auth.ts`), called unconditionally for every booking in the group. The helper returns `false` for any identity that doesn't match, anon or session.
+**Prevention:** Never write `if (identity.userId && ...)` as an ownership guard — the identity may legitimately have no `userId` (anon path). Always use `verifyOwnership(identity, entity)` which handles both paths and returns `false` (deny) by default.
+
+### 2026-06-19: anonId UUID validation must fire before ownership check in server actions
+**Problem:** In `initiateDemoRentalPayment`, adding `anonId` format validation at the top of the function (before DB access) meant that test fixtures using informal strings like `'anon-real'` or `'anon-wrong'` got `'Invalid anonId format'` instead of reaching the ownership logic, masking the actual bug being tested.
+**Solution:** In tests for anon ownership paths, use valid UUID v4 strings (e.g. `'550e8400-e29b-41d4-a716-446655440000'` and `'660e8400-e29b-41d4-a716-446655440001'`) to ensure the UUID validator passes and the ownership logic is actually exercised.
+
 ## Webhook & polling
 
 <!-- Stripe/Mollie webhook failures, polling race conditions, reconciliation -->

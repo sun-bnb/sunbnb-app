@@ -511,9 +511,14 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
     setRentalPaymentLoading(true)
     setRentalPaymentError(null)
 
+    // Read anonId for anonymous ownership verification throughout the payment flow
+    const anonId = typeof window !== 'undefined'
+      ? localStorage.getItem('sunbnb-anonId') ?? undefined
+      : undefined
+
     try {
       if (DEMO_MODE) {
-        const result = await initiateDemoRentalPayment(bookingIds)
+        const result = await initiateDemoRentalPayment(bookingIds, anonId)
         if (result.status === 'ok') {
           setShowConfirmation(false)
           setBookingComplete(true)
@@ -526,14 +531,16 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
         return
       }
 
-      // Mollie payment
-      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/payment/complete/rental?rentalBookingId=${bookingIds[0]}`
+      // Mollie payment — thread anonId through redirect URL and request body
+      const anonSuffix = anonId ? `&anonId=${anonId}` : ''
+      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/payment/complete/rental?rentalBookingId=${bookingIds[0]}${anonSuffix}`
 
       const res = await fetch('/api/payment/mollie/create-rental-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           rentalBookingIds: bookingIds,
+          anonId: anonId ?? null,
           redirectUrl,
         }),
       })

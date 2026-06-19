@@ -6,8 +6,26 @@ interface SearchParams {
   searchParams: { [key: string]: string }
 }
 
+/**
+ * Verify that the requesting user owns the rental booking.
+ * Supports both authenticated (session) and anonymous (anonId query param) users.
+ */
+function verifyRentalOwner(
+  booking: { userId: string; anonId?: string | null },
+  sessionUserId: string | undefined,
+  anonId: string | undefined
+): boolean {
+  if (sessionUserId) {
+    return booking.userId === sessionUserId
+  }
+  if (anonId && booking.anonId) {
+    return booking.anonId === anonId
+  }
+  return false
+}
+
 export default async function RentalComplete({ searchParams }: SearchParams) {
-  const { rentalBookingId } = searchParams
+  const { rentalBookingId, anonId } = searchParams
 
   if (!rentalBookingId) {
     return <div>Missing booking reference</div>
@@ -25,7 +43,7 @@ export default async function RentalComplete({ searchParams }: SearchParams) {
     return <div>Booking not found</div>
   }
 
-  if (sessionUserId && booking.userId !== sessionUserId) {
+  if (!verifyRentalOwner(booking, sessionUserId, anonId)) {
     return <div>Not authorized</div>
   }
 
