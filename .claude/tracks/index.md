@@ -18,6 +18,7 @@ Maintained by the `create` and `handoff` workflows.
 
 | ID | Track | Why deferred | Updated |
 |----|-------|--------------|---------|
+| [010](010-floor-reservation-lookup.md) | Floor Reservation Lookup — "Guests" sheet | **Scoped, awaiting go-ahead.** Bring reservation lookup + today's arrivals to the token-gated manage page (floor staff): a "Guests" bottom sheet — today's expected list + name/phone search that reaches **beyond today's grid** (future bookings), with Locate→`BedDetail` + inline Check-in/Rent. Closes the one reservation capability where Alonso's floor beats Sunbnb's (its *Reservas* list) and surpasses it. **Read-only** (no new access-key risk). `findReservations` action, no schema change. Extend-stay + guarded non-today refund explicitly deferred to their own post-Alonso tracks. **Next: P1 backend.** | 2026-06-19 |
 | [003](003-stripe-connect-compliance.md) | Stripe Connect compliance | **Green-field — consumer Stripe code removed (2026-05-23).** Stripe is subs-only; consumer = Mollie + Demo. Build on Connect from scratch if/when consumer Stripe is reintroduced. | 2026-05-23 |
 
 ## Done / archived
