@@ -7,6 +7,9 @@
  *   - Auth user email used when no anonId
  *   - Confirmation, reminder, and cancellation functions call sendEmail once when data is present
  *   - Functions are non-throwing (errors logged, not re-thrown)
+ *   - sendRentalDueReminders: findMany where includes reminderSentAt: null (dedup filter)
+ *   - sendRentalDueReminders: after successful send, rentalBooking.update called with reminderSentAt
+ *   - sendRentalDueReminders: if sendEmail throws, update NOT called (retry will re-send)
  *
  * No DB: prisma is mocked.
  */
@@ -279,5 +282,40 @@ describe('sendRentalDueReminders', () => {
 
     expect(count).toBe(1)
     expect(mockSendEmail).toHaveBeenCalledTimes(2)
+  })
+
+  it('passes reminderSentAt: null in the findMany where clause (dedup filter)', async () => {
+    mockPrisma.rentalBooking.findMany.mockResolvedValue([])
+
+    await sendRentalDueReminders()
+
+    expect(mockPrisma.rentalBooking.findMany).toHaveBeenCalledOnce()
+    const callArg = mockPrisma.rentalBooking.findMany.mock.calls[0]![0]
+    expect(callArg.where).toMatchObject({ reminderSentAt: null })
+  })
+
+  it('calls rentalBooking.update with reminderSentAt after a successful send', async () => {
+    const booking = makeBooking({ id: 'b-mark', user: { email: 'user@example.com', name: 'U' } })
+    mockPrisma.rentalBooking.findMany.mockResolvedValue([booking])
+    mockPrisma.rentalBooking.update.mockResolvedValue(booking as any)
+
+    await sendRentalDueReminders()
+
+    expect(mockPrisma.rentalBooking.update).toHaveBeenCalledOnce()
+    const updateCall = mockPrisma.rentalBooking.update.mock.calls[0]![0]
+    expect(updateCall.where).toEqual({ id: 'b-mark' })
+    expect(updateCall.data.reminderSentAt).toBeInstanceOf(Date)
+  })
+
+  it('does NOT call rentalBooking.update when sendEmail throws (retry must re-send)', async () => {
+    const booking = makeBooking({ id: 'b-fail', user: { email: 'user@example.com', name: 'U' } })
+    mockPrisma.rentalBooking.findMany.mockResolvedValue([booking])
+    mockSendEmail.mockRejectedValueOnce(new Error('SMTP failure'))
+
+    const count = await sendRentalDueReminders()
+
+    // Failed send → not marked as reminded → retry cron will attempt again
+    expect(count).toBe(0)
+    expect(mockPrisma.rentalBooking.update).not.toHaveBeenCalled()
   })
 })

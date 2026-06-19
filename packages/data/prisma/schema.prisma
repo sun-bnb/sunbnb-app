@@ -647,6 +647,7 @@ model RentalBooking {
   anonId            String?    @map("anon_id")
   guestEmail        String?    @map("guest_email")
   guestContact      String?    @map("guest_contact")
+  reminderSentAt    DateTime?  @map("reminder_sent_at")
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
   employeeId        String?    @map("employee_id")

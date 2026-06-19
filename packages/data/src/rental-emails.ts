@@ -15,8 +15,7 @@
  *
  * Phase 4b app-level wiring still needed:
  *   - sendRentalDueReminders: call from apps/user /api/cron/send-reminders (or a
- *     dedicated rental-reminder cron route). Requires a schema migration to add
- *     `reminderSentAt` to RentalBooking (not yet present; see note in function).
+ *     dedicated rental-reminder cron route). The reminderSentAt dedup is now active.
  *   - sendRentalCancellationEmail: call from the cancelRentalBooking server action
  *     in apps/user (analogous to how sendCancellationEmail is called for sunbeds).
  */
@@ -314,20 +313,11 @@ export async function sendRentalCancellationEmail(bookingId: string): Promise<vo
  *   - status is complete or processing (paid, not cancelled)
  *   - from date falls today (works for both days and hours bookings)
  *   - operationalStatus is 'reserved' (not yet picked up)
- *
- * PHASE 4b NOTE — deduplication gap:
- *   RentalBooking does NOT yet have a reminderSentAt column (Reservation does).
- *   Without it this function will send a duplicate reminder on every cron run
- *   within the same day. A schema migration adding `reminderSentAt DateTime?
- *   @map("reminder_sent_at")` to RentalBooking (additive, nullable — safe expand)
- *   is the correct fix. Until that migration is applied and the `reminderSentAt`
- *   filter + update are uncommented below, deploy this function but call it only
- *   from a once-per-day cron to avoid duplicates.
+ *   - reminderSentAt is null (not yet reminded — idempotent dedup)
  *
  * Phase 4b app-level wiring (apps/user):
  *   - Call sendRentalDueReminders() from /api/cron/send-reminders alongside
  *     sendDueReminders(), OR add a dedicated rental-reminder cron route.
- *   - Apply the reminderSentAt migration before enabling the cron.
  *
  * Returns the count of reminders sent.
  */
@@ -342,7 +332,7 @@ export async function sendRentalDueReminders(): Promise<number> {
       operationalStatus: 'reserved',
       status: { in: [RENTAL_COMPLETE, RENTAL_PROCESSING] },
       from: { gte: today, lt: tomorrow },
-      // reminderSentAt: null,  // uncomment once migration adds reminderSentAt
+      reminderSentAt: null,
     },
     include: {
       user: { select: { email: true, name: true } },
@@ -382,11 +372,10 @@ export async function sendRentalDueReminders(): Promise<number> {
         html: rentalReminderHtml(data),
       })
 
-      // Uncomment once reminderSentAt migration is applied:
-      // await prisma.rentalBooking.update({
-      //   where: { id: booking.id },
-      //   data: { reminderSentAt: new Date() },
-      // })
+      await prisma.rentalBooking.update({
+        where: { id: booking.id },
+        data: { reminderSentAt: new Date() },
+      })
 
       sent++
     } catch (err) {
