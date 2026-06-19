@@ -331,6 +331,10 @@ export type RentalBookingInput = {
   employeeId?: string | null
   pickedUpAt?: Date | null
   guestName?: string | null
+  /** Anonymous guest identity — mirrors the same fields on Reservation. */
+  anonId?: string | null
+  guestEmail?: string | null
+  guestContact?: string | null
 }
 
 export type RentalGuardResult =
@@ -453,6 +457,9 @@ export async function createRentalBookingsWithGuard(
           employeeId: booking.employeeId ?? null,
           pickedUpAt: booking.pickedUpAt ?? null,
           guestName: booking.guestName ?? null,
+          anonId: booking.anonId ?? null,
+          guestEmail: booking.guestEmail ?? null,
+          guestContact: booking.guestContact ?? null,
         },
         select: { id: true },
       })

@@ -926,3 +926,91 @@ describe('createRentalBookingsWithGuard — concurrency race (headline test)', (
     expect(unavailable.rentalItemId).toBe(item.id)
   })
 })
+
+// ─── createRentalBookingsWithGuard — anon fields (Phase 1a / track-009) ──────
+//
+// Requirements:
+//  1. When anonId + guestEmail (+ guestContact) are provided in RentalBookingInput,
+//     the created RentalBooking row persists all three.
+//  2. When they are omitted (authenticated booking), the DB row has them null —
+//     existing authenticated bookings are unaffected.
+
+describe('createRentalBookingsWithGuard — anon fields persisted to DB', () => {
+  it('persists anonId, guestEmail, and guestContact on the created row when supplied', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestRentalItem(site.id, { totalQuantity: 5 })
+
+    const from = new Date('2026-10-01T10:00:00Z')
+    const to = new Date('2026-10-01T12:00:00Z')
+
+    const result = await createRentalBookingsWithGuard([
+      {
+        rentalItemId: item.id,
+        siteId: site.id,
+        userId: user.id,
+        from,
+        to,
+        quantity: 1,
+        durationType: 'hours',
+        totalPrice: 10.0,
+        paymentAmount: 10.0,
+        status: RENTAL_COMPLETE,
+        operationalStatus: OP_RESERVED,
+        anonId: 'c0ffee00-0000-4000-8000-000000000001',
+        guestEmail: 'guest@example.com',
+        guestContact: '+358401234567',
+      },
+    ])
+
+    expect(result.outcome).toBe('created')
+    if (result.outcome !== 'created') throw new Error('narrowing')
+
+    const booking = await prisma.rentalBooking.findUnique({
+      where: { id: result.bookingIds[0] },
+    })
+    expect(booking).not.toBeNull()
+    // All three anon fields must be persisted exactly as supplied
+    expect(booking!.anonId).toBe('c0ffee00-0000-4000-8000-000000000001')
+    expect(booking!.guestEmail).toBe('guest@example.com')
+    expect(booking!.guestContact).toBe('+358401234567')
+  })
+
+  it('leaves anonId, guestEmail, and guestContact null when omitted (authenticated path)', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestRentalItem(site.id, { totalQuantity: 5 })
+
+    const from = new Date('2026-10-02T10:00:00Z')
+    const to = new Date('2026-10-02T12:00:00Z')
+
+    const result = await createRentalBookingsWithGuard([
+      {
+        rentalItemId: item.id,
+        siteId: site.id,
+        userId: user.id,
+        from,
+        to,
+        quantity: 1,
+        durationType: 'hours',
+        totalPrice: 10.0,
+        paymentAmount: 10.0,
+        status: RENTAL_COMPLETE,
+        operationalStatus: OP_RESERVED,
+        // anonId / guestEmail / guestContact intentionally omitted
+      },
+    ])
+
+    expect(result.outcome).toBe('created')
+    if (result.outcome !== 'created') throw new Error('narrowing')
+
+    const booking = await prisma.rentalBooking.findUnique({
+      where: { id: result.bookingIds[0] },
+    })
+    expect(booking).not.toBeNull()
+    // Authenticated booking: all three anon fields must be null
+    expect(booking!.anonId).toBeNull()
+    expect(booking!.guestEmail).toBeNull()
+    expect(booking!.guestContact).toBeNull()
+  })
+})
