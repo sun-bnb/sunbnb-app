@@ -637,6 +637,7 @@
     "productCount": "{count, plural, one {# product} other {# products}}"
   },
   "SiteAccounting": {
+    "downloadCsv": "Download CSV",
     "occupancy": "Occupancy",
     "peak": "Peak",
     "comps": "Comps",

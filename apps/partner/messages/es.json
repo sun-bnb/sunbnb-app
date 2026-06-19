@@ -637,6 +637,7 @@
     "productCount": "{count, plural, one {# producto} other {# productos}}"
   },
   "SiteAccounting": {
+    "downloadCsv": "Descargar CSV",
     "occupancy": "Ocupación",
     "peak": "Máximo",
     "comps": "Cortesías",

@@ -637,6 +637,7 @@
     "productCount": "{count, plural, one {# tuote} other {# tuotetta}}"
   },
   "SiteAccounting": {
+    "downloadCsv": "Lataa CSV",
     "occupancy": "Käyttöaste",
     "peak": "Huippu",
     "comps": "Veloituksettomat",

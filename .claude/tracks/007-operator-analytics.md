@@ -3,7 +3,7 @@ id: 007-operator-analytics
 title: Operator Analytics & Exports
 status: active
 created: 2026-06-18
-updated: 2026-06-18
+updated: 2026-06-19
 worktree: null
 ---
 
@@ -33,6 +33,20 @@ daily cash close) — that's a separate, higher-effort track gated on cash-heavy
 cross-partner settlement oversight), not the consumer app.
 
 ## Resume here
+
+- **TRACK FUNCTIONALLY COMPLETE (2026-06-19, uncommitted Phase 4).** The whole B-set landed on the
+  per-site accounting page: B2 rolling revenue lens, B1 comp/occupancy, B3 CSV export. `@repo/data/
+  analytics` holds the 5 helpers (2 DB + 3 pure); the accounting page composes them via 3 gated
+  actions (`getRevenueTrend`/`getOccupancyTrend`/`getRevenueCsv`). **Owed before promote:** ES/FI
+  copy review for the new `SiteAccounting` keys (`recentTrend`/`sales`/`bestDay`/`noRevenueYet`/
+  `occupancy`/`peak`/`comps`/`downloadCsv` — machine-first). **Verify on a real device** that the
+  trend card + CSV download work end-to-end (and that `next build` is clean — the CSV is serialized
+  server-side specifically so `@repo/data/analytics` never enters the client bundle).
+- **Possible follow-ups (not committed scope):** a `next build` smoke before promote; the
+  account-wide dashboard lens (needs `getAccountRevenueByDay`) if a multi-site partner wants an
+  all-sites pulse; wiki note on the analytics subsystem. None blocking.
+
+### Prior resume notes (history)
 
 - **Phase 1 DONE (2026-06-18, uncommitted).** `packages/data/src/analytics.ts` shipped with all four
   helpers exactly as roughed out; `./analytics` export added to `package.json` (both blocks). Tests
@@ -132,9 +146,10 @@ Notes / decisions baked in:
 - ✅ **Phase 3 — B1 comp & occupancy. DONE 2026-06-19.** `summarizeOccupancy` helper +
   `getOccupancyTrend` action + occupancy block (avg/peak %/comps + daily bars) on the trend card;
   surfaces the "ran at X% full / gave away N beds" the invoice-driven view can't. data 192 / partner 1424.
-- ☐ **Phase 4 — B3 figures export.** A "Download figures (CSV)" button on the accounting page using
-  `toFiguresCsv` over the period's `getRevenueByDay` rows (client-download, no server round-trip,
-  mirroring the receipt-PDF pattern). Optional TXT variant.
+- ✅ **Phase 4 — B3 figures export. DONE 2026-06-19.** `getRevenueCsv(siteId, days)` action
+  (server-side `toFiguresCsv` — keeps the prisma-importing analytics module out of the client
+  bundle) + a "Download CSV" button on the trend card (client Blob download). +3 action tests,
+  +1 coverage-contract entry, i18n `downloadCsv`. partner 1427 green.
 
 Sequencing: Phase 1 is the foundation; 2/3/4 are independent vertical slices on top and can land in
 any order (or be cherry-picked). Each is small.

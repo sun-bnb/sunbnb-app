@@ -11,6 +11,7 @@ import {
   summarizeRevenue,
   getOccupancyByDay,
   summarizeOccupancy,
+  toFiguresCsv,
 } from '@repo/data/analytics'
 
 /** Rolling-window days the trend lens offers (operational pulse vs the
@@ -57,6 +58,26 @@ export async function getOccupancyTrend(siteId: string, days: number) {
 
   const rows = await getOccupancyByDay(siteId, from, to)
   return { rows, summary: summarizeOccupancy(rows) }
+}
+
+/**
+ * Plain CSV figures dump (date, rentals, revenue) for a rolling window — the
+ * "just give me the numbers" export. Serialized SERVER-side (the analytics module
+ * transitively imports prisma, so it must not be pulled into the client bundle);
+ * the client downloads the returned string. Same session + ownership gate.
+ */
+export async function getRevenueCsv(siteId: string, days: number): Promise<string> {
+  const session = await auth()
+  if (!session?.user) throw new Error('Not authenticated')
+
+  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
+  if (!site || site.userId !== session.user.id) throw new Error('Not authorized')
+
+  const window = (TREND_WINDOWS as readonly number[]).includes(days) ? days : 30
+  const to = new Date()
+  const from = new Date(to.getTime() - (window - 1) * DAY_MS)
+
+  return toFiguresCsv(await getRevenueByDay(siteId, from, to))
 }
 
 export async function getInvoicesByMonth(

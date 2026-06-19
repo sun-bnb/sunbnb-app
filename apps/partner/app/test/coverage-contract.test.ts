@@ -452,6 +452,11 @@ const UNGATED_ALLOWLIST: AllowlistEntry[] = [
     file: 'app/sites/[id]/accounting/actions.ts',
     reason: 'Session-gated + site ownership: fetches site, checks site.userId !== session.user.id → throws; occupancy aggregation scoped to verified siteId via @repo/data/analytics',
   },
+  {
+    export: 'getRevenueCsv',
+    file: 'app/sites/[id]/accounting/actions.ts',
+    reason: 'Session-gated + site ownership: fetches site, checks site.userId !== session.user.id → throws; serializes verified-siteId revenue to CSV via @repo/data/analytics',
+  },
 
   // ── Server actions: reservations/[id] (session + reservation ownership) ────
   {

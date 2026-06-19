@@ -14,7 +14,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import { useTranslations } from 'next-intl'
 
 import { useSite } from '@/app/sites/site-context'
-import { getPaidItemsByMonth, getRevenueTrend, getOccupancyTrend } from './actions'
+import { getPaidItemsByMonth, getRevenueTrend, getOccupancyTrend, getRevenueCsv } from './actions'
 import { formatSeat } from '@repo/data/seat-label'
 
 const MONTH_KEYS = ['january','february','march','april','may','june','july','august','september','october','november','december'] as const
@@ -119,6 +119,25 @@ export default function AccountingView() {
   }
   const formatDay = (iso: string) =>
     new Date(`${iso}T00:00:00Z`).toLocaleDateString('default', { day: 'numeric', month: 'short' })
+
+  // Plain figures export — serialized server-side (the analytics module pulls
+  // prisma, so it must not enter the client bundle), downloaded client-side.
+  const [downloading, setDownloading] = useState(false)
+  const downloadCsv = async () => {
+    if (!site?.id) return
+    setDownloading(true)
+    try {
+      const csv = await getRevenueCsv(site.id, trendWindow)
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${site.name ?? 'site'}-figures-${trendWindow}d.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   return (
     <div className="pt-2">
@@ -225,6 +244,19 @@ export default function AccountingView() {
                 />
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Plain figures export */}
+        {trend && trend.rows.length > 0 && (
+          <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end">
+            <button
+              onClick={downloadCsv}
+              disabled={downloading}
+              className="text-xs font-semibold text-gray-500 hover:text-gray-800 disabled:opacity-50 transition-colors"
+            >
+              {downloading ? '…' : `↓ ${t('downloadCsv')}`}
+            </button>
           </div>
         )}
       </div>

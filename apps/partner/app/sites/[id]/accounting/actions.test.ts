@@ -4,10 +4,10 @@ vi.mock('@/app/auth', () => ({
   auth: vi.fn().mockResolvedValue(null),
 }))
 
-import { getInvoicesByMonth, getPaidItemsByMonth, getRevenueTrend, getOccupancyTrend } from './actions'
+import { getInvoicesByMonth, getPaidItemsByMonth, getRevenueTrend, getOccupancyTrend, getRevenueCsv } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
-import { getRevenueByDay, summarizeRevenue, getOccupancyByDay, summarizeOccupancy } from '@repo/data/analytics'
+import { getRevenueByDay, summarizeRevenue, getOccupancyByDay, summarizeOccupancy, toFiguresCsv } from '@repo/data/analytics'
 import { RESERVATION_COMPLETE, ORDER_COMPLETE } from '@repo/data/reservation-status'
 
 const mockAuth = vi.mocked(auth)
@@ -352,5 +352,37 @@ describe('getOccupancyTrend', () => {
     const [, from, to] = mockOccByDay.mock.calls[0]!
     const spanDays = Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000))
     expect(spanDays).toBe(29)
+  })
+})
+
+// ─── getRevenueCsv ────────────────────────────────────────────────────────────
+
+describe('getRevenueCsv', () => {
+  const mockRevenueByDay = vi.mocked(getRevenueByDay)
+  const mockCsv = vi.mocked(toFiguresCsv)
+
+  it('throws when not authenticated', async () => {
+    await expect(getRevenueCsv(SITE_ID, 30)).rejects.toThrow('Not authenticated')
+    expect(mockRevenueByDay).not.toHaveBeenCalled()
+  })
+
+  it('throws when the site belongs to another partner', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OTHER_ID } as any)
+    await expect(getRevenueCsv(SITE_ID, 30)).rejects.toThrow('Not authorized')
+    expect(mockRevenueByDay).not.toHaveBeenCalled()
+  })
+
+  it('serializes the window rows to CSV', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    const rows = [{ date: '2026-06-18', revenue: 16, count: 2 }]
+    mockRevenueByDay.mockResolvedValue(rows)
+    mockCsv.mockReturnValue('date,rentals,revenue\n2026-06-18,2,16.00\n')
+
+    const csv = await getRevenueCsv(SITE_ID, 7)
+
+    expect(mockCsv).toHaveBeenCalledWith(rows)
+    expect(csv).toBe('date,rentals,revenue\n2026-06-18,2,16.00\n')
   })
 })
