@@ -644,6 +644,9 @@ model RentalBooking {
   paymentAmount     Float?     @map("payment_amount")
   pickedUpAt        DateTime?  @map("picked_up_at")
   returnedAt        DateTime?  @map("returned_at")
+  anonId            String?    @map("anon_id")
+  guestEmail        String?    @map("guest_email")
+  guestContact      String?    @map("guest_contact")
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
   employeeId        String?    @map("employee_id")
