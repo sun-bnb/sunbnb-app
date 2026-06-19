@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import dayjs from 'dayjs'
 import { useTranslations } from 'next-intl'
 import SurfingIcon from '@mui/icons-material/Surfing'
@@ -11,16 +12,19 @@ import {
   RENTAL_COMPLETE,
   RENTAL_CANCELED,
   RENTAL_PAYMENT_FAILED,
+  RENTAL_REFUNDED,
   OP_RESERVED,
   OP_PICKED_UP,
   OP_RETURNED,
 } from '@repo/data/reservation-status'
+import { cancelRentalBooking } from './actions'
 
 type Booking = {
   id: string
   siteId: string
   rentalItemId: string
   userId: string
+  anonId?: string | null
   from: Date
   to: Date
   quantity: number
@@ -46,25 +50,42 @@ const STATUS_CONFIG: Record<string, { text: string; textColor: string; dotColor:
   [RENTAL_PAYMENT_FAILED]: { text: 'Payment failed', textColor: '#dc2626', dotColor: '#ef4444' },
 }
 
-export default function RentalBookingDetail({ booking }: { booking: Booking }) {
+// Bookings that are already terminal or past-pickup cannot be cancelled
+function isCancellable(booking: Booking): boolean {
+  if (booking.status === RENTAL_CANCELED || booking.status === RENTAL_REFUNDED) return false
+  if (booking.operationalStatus === OP_PICKED_UP || booking.operationalStatus === OP_RETURNED) return false
+  return true
+}
 
+export default function RentalBookingDetail({
+  booking,
+  anonId,
+}: {
+  booking: Booking
+  anonId?: string
+}) {
   const t = useTranslations('Reservations')
   const tr = useTranslations('Reservation')
 
-  const isUnpaid = booking.status === RENTAL_COMPLETE && !booking.totalPrice
-  const showReceipt = (booking.status === RENTAL_COMPLETE) && !isUnpaid && !!booking.paymentRef
+  const [isCancelling, setIsCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
+  const [currentStatus, setCurrentStatus] = useState(booking.status)
+  const [currentOpStatus, setCurrentOpStatus] = useState(booking.operationalStatus)
+
+  const isUnpaid = currentStatus === RENTAL_COMPLETE && !booking.totalPrice
+  const showReceipt = (currentStatus === RENTAL_COMPLETE) && !isUnpaid && !!booking.paymentRef
 
   const siteName = booking.site?.name
   const itemName = booking.rentalItem?.name || 'Equipment'
   const category = booking.rentalItem?.category
 
   // Determine display status — prefer operational status if meaningful
-  const displayStatus = booking.operationalStatus !== OP_RESERVED
-    ? booking.operationalStatus
-    : booking.status === RENTAL_COMPLETE && !booking.totalPrice
+  const displayStatus = currentOpStatus !== OP_RESERVED
+    ? currentOpStatus
+    : currentStatus === RENTAL_COMPLETE && !booking.totalPrice
       ? OP_RESERVED
-      : booking.status
-  const cfg = STATUS_CONFIG[displayStatus] ?? STATUS_CONFIG.pending!
+      : currentStatus
+  const cfg = STATUS_CONFIG[displayStatus] ?? STATUS_CONFIG[RENTAL_PENDING]!
 
   // Format dates/times
   const isHours = booking.durationType === 'hours'
@@ -79,6 +100,38 @@ export default function RentalBookingDetail({ booking }: { booking: Booking }) {
     : fromDate === toDate
       ? fromDate
       : `${fromDate} – ${toDate}`
+
+  // Read anonId from localStorage on the client side when not passed via prop
+  // (prop covers the SSR-render path; localStorage covers client-only rerenders)
+  const resolveAnonId = (): string | undefined => {
+    if (anonId) return anonId
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('sunbnb-anonId') ?? undefined
+    }
+    return undefined
+  }
+
+  const handleCancel = async () => {
+    if (!isCancellable({ ...booking, status: currentStatus, operationalStatus: currentOpStatus })) return
+    setIsCancelling(true)
+    setCancelError(null)
+    try {
+      const effectiveAnonId = resolveAnonId()
+      const result = await cancelRentalBooking(booking.id, effectiveAnonId)
+      if (result.status === 'ok') {
+        setCurrentStatus(RENTAL_CANCELED)
+        setCurrentOpStatus(OP_RESERVED) // reset op status — booking is now terminal
+      } else {
+        setCancelError(result.errors?.[0] ?? tr('Cancel failed'))
+      }
+    } catch {
+      setCancelError(tr('Cancel failed'))
+    } finally {
+      setIsCancelling(false)
+    }
+  }
+
+  const showCancel = isCancellable({ ...booking, status: currentStatus, operationalStatus: currentOpStatus })
 
   return (
     <div className="bg-cream min-h-screen flex flex-col px-5" style={{ paddingTop: '80px' }}>
@@ -164,6 +217,23 @@ export default function RentalBookingDetail({ booking }: { booking: Booking }) {
             {tr('Open receipt')}
             <LaunchIcon sx={{ fontSize: 14 }} />
           </button>
+        )}
+
+        {/* ── Cancel footer ── */}
+        {showCancel && (
+          <div className="border-t border-neutral-100 px-6 py-3 flex flex-col items-center gap-1">
+            <button
+              type="button"
+              disabled={isCancelling}
+              onClick={handleCancel}
+              className="text-xs text-neutral-400 hover:text-red-500 disabled:opacity-50 transition-colors"
+            >
+              {isCancelling ? tr('Canceling') : tr('Cancel booking')}
+            </button>
+            {cancelError && (
+              <div className="text-xs text-red-500 text-center">{cancelError}</div>
+            )}
+          </div>
         )}
 
       </div>

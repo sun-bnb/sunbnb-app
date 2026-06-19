@@ -99,7 +99,10 @@
     "Tap to open pass": "Avaa kulkulupa napauttamalla",
     "EQUIPMENT": "VARUSTEET",
     "Picked up": "Noudettu",
-    "Returned at": "Palautettu"
+    "Returned at": "Palautettu",
+    "Cancel booking": "Peruuta varaus",
+    "Canceling": "Peruutetaan…",
+    "Cancel failed": "Peruutus epäonnistui — ota yhteyttä tukeen"
   },
   "Payment": {
     "Payment confirms acceptance of": "Maksu vahvistaa suostumisen",

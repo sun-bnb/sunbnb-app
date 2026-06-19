@@ -100,7 +100,10 @@
     "Tap to open pass": "Tap to open pass",
     "EQUIPMENT": "EQUIPMENT",
     "Picked up": "Picked up",
-    "Returned at": "Returned at"
+    "Returned at": "Returned at",
+    "Cancel booking": "Cancel booking",
+    "Canceling": "Canceling…",
+    "Cancel failed": "Cancellation failed — please contact support"
   },
   "Payment": {
     "Payment confirms acceptance of": "Payment confirms acceptance of",

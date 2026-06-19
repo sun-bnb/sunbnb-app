@@ -99,7 +99,10 @@
     "Tap to open pass": "Toca para abrir el pase",
     "EQUIPMENT": "EQUIPAMIENTO",
     "Picked up": "Recogido",
-    "Returned at": "Devuelto el"
+    "Returned at": "Devuelto el",
+    "Cancel booking": "Cancelar reserva",
+    "Canceling": "Cancelando…",
+    "Cancel failed": "La cancelación ha fallado — contacta con soporte"
   },
   "Payment": {
     "Payment confirms acceptance of": "El pago implica aceptación de",

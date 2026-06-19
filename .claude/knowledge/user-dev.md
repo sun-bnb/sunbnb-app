@@ -83,6 +83,23 @@ sections.
 **Solution:** Added `guestEmail` + `emailError` state to `EquipmentBookingSection`, added email validation in `handleBook` (mirrors `ReservationButton`), removed both `!session?.user?.id` early-returns, read/generated `anonId` in `handleConfirmBooking` (same localStorage pattern as sunbed flow), passed `anonId` + `guestEmail` into `saveRentalBooking`, threaded `anonId` into the unpaid-site navigation URL. Replaced the login-only button render with the anon affordance (email input + "Reserve as guest" + "Sign in instead" link).
 **Prevention:** When adding auth-gated features, check that the backend server action already supports anon (look for `anonId?` parameter). If it does, the UI is the only change. All i18n keys for the anon affordance (`Email`, `Enter a valid email`, `Reserve as guest`, `Sign in instead`) already existed in `SiteView` from the sunbed flow — no new keys needed.
 
+## Rental cancellation (Track 009 Phase 5b)
+
+### 2026-06-19: paymentRef-group cancel — one refund for all bookings sharing a payment
+**Problem:** A single Mollie payment can cover multiple `RentalBooking` rows (see `processConfirmedRentalBooking` — groups by `paymentRef`). Cancelling one booking must cancel all siblings and issue exactly one `issueRefund(paymentRef)`, not one per row.
+**Solution:** In `cancelRentalBooking`, after the ownership/terminal-state guard, cancel by `paymentRef` via `updateMany({ where: { paymentRef } })` when a `paymentRef` exists; fall back to `updateMany({ where: { id } })` for unpaid (no paymentRef) bookings. Issue at most one `issueRefund(paymentRef)` call.
+**Prevention:** Any rental cancel action must think in paymentRef groups, not individual rows. The test for this is "create two bookings with same paymentRef → cancel one → assert both canceled + one refund".
+
+### 2026-06-19: Past-pickup terminal guard for rental cancellations
+**Problem:** Rental cancellation must not be allowed once the item has been picked up or returned — the service has been delivered. The status groupings (`TERMINAL_STATUSES`) apply to reservation payments, not rental operational statuses.
+**Solution:** Explicit guard: reject if `operationalStatus === OP_PICKED_UP || operationalStatus === OP_RETURNED`. Also guard `status === RENTAL_CANCELED || status === RENTAL_REFUNDED` (already terminal) — return idempotent ok.
+**Prevention:** Always check both the payment status AND the operational status for rental cancellation. The rental analogue of the sunbed TERMINAL_STATUSES list does not exist as a shared constant — write explicit guards.
+
+### 2026-06-19: Anon ownership in a server action (no getRequestIdentity helper)
+**Problem:** `getRequestIdentity` is an API-route helper that reads the session via `NextRequest`. Server actions can't call it. The pattern for server actions is explicit: `if (session?.user?.id) { check userId } else { check anonId }`.
+**Solution:** After fetching the booking, use `if (session?.user?.id) { if (booking.userId !== session.user.id) reject } else { if (!booking.anonId || booking.anonId !== anonId) reject }`. Validate anonId as UUID v4 before the DB fetch to fail fast.
+**Prevention:** Server actions own their identity check inline. API routes use `verifyOwnership`; server actions use the two-branch pattern above. Never write `if (identity.userId && ...)` — always use an else to cover the anon path.
+
 ## Rejected approaches
 
 <!-- Approaches tried and rejected — record so a future session doesn't re-try them -->
