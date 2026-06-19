@@ -7,6 +7,9 @@ vi.mock('./email', () => ({
 vi.mock('./reservation-emails', () => ({
   sendConfirmationEmail: vi.fn().mockResolvedValue(undefined),
 }))
+vi.mock('./rental-emails', () => ({
+  sendRentalConfirmationEmail: vi.fn().mockResolvedValue(undefined),
+}))
 
 import { cleanDatabase, disconnectDatabase, prisma } from './test/setup'
 import {
@@ -20,14 +23,18 @@ import {
   createTestOrder,
   createTestOrderItem,
   createTestProduct,
+  createTestRentalItem,
+  createTestRentalBooking,
   resetCounter,
 } from './test/fixtures'
 import {
   processConfirmedReservation,
   processConfirmedOrder,
+  processConfirmedRentalBooking,
   computeVatAndBaseAmounts,
 } from './payment'
-import { RESERVATION_COMPLETE, ORDER_COMPLETE } from './reservation-status'
+import { sendRentalConfirmationEmail } from './rental-emails'
+import { RESERVATION_COMPLETE, ORDER_COMPLETE, RENTAL_COMPLETE } from './reservation-status'
 
 beforeEach(async () => {
   await cleanDatabase()
@@ -489,5 +496,170 @@ describe('processConfirmedOrder', () => {
     })
     expect(partnerInvoices).toHaveLength(2)
     expect(partnerInvoices[1]!.previousHash).toBe(partnerInvoices[0]!.hash)
+  })
+})
+
+// ─── processConfirmedRentalBooking ──────────────────────────────────────────
+
+describe('processConfirmedRentalBooking', () => {
+  const mockSendRentalConfirmationEmail = vi.mocked(sendRentalConfirmationEmail)
+
+  async function setupRental(overrides?: {
+    siteOverrides?: Record<string, any>
+    feeOverrides?: Record<string, any>
+    bookingOverrides?: Record<string, any>
+    rentalItemOverrides?: Record<string, any>
+  }) {
+    const user = await createTestUser()
+    const partner = await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id, {
+      rentalVat: 25.5,
+      ...overrides?.siteOverrides,
+    })
+    const settings = await createTestSettings()
+    const fee = await createTestServiceFee(settings.id, {
+      serviceCode: 'equipment-rental',
+      chargeType: 'fixed',
+      feeAmount: 1.0,
+      ...overrides?.feeOverrides,
+    })
+    const rentalItem = await createTestRentalItem(site.id, {
+      name: 'Surfboard',
+      ...overrides?.rentalItemOverrides,
+    })
+    const paymentRef = `pi_demo_${Date.now()}`
+    const booking = await createTestRentalBooking(user.id, site.id, rentalItem.id, {
+      paymentRef,
+      status: 'pending',
+      paymentAmount: 10.0,
+      totalPrice: 10.0,
+      ...overrides?.bookingOverrides,
+    })
+
+    return { user, partner, site, settings, fee, rentalItem, booking, paymentRef }
+  }
+
+  beforeEach(() => {
+    mockSendRentalConfirmationEmail.mockClear()
+  })
+
+  it('creates PARTNER and PLATFORM invoices with correct amounts', async () => {
+    const { paymentRef } = await setupRental()
+
+    await processConfirmedRentalBooking(paymentRef)
+
+    const invoices = await prisma.invoice.findMany({
+      where: { paymentRef },
+    })
+
+    expect(invoices).toHaveLength(2)
+    const partnerInvoice = invoices.find((i) => i.issuerType === 'PARTNER')!
+    const platformInvoice = invoices.find((i) => i.issuerType === 'PLATFORM')!
+
+    // Agent model: PARTNER is GROSS (10.0 full consumer price), PLATFORM is commission (1.0)
+    expect(partnerInvoice.totalAmount).toBe(10.0)
+    expect(platformInvoice.totalAmount).toBe(1.0)
+  })
+
+  it('creates one invoice line per rental booking', async () => {
+    const { paymentRef, user, site, rentalItem } = await setupRental()
+
+    // Add a second booking to the same paymentRef
+    await createTestRentalBooking(user.id, site.id, rentalItem.id, {
+      paymentRef,
+      status: 'pending',
+      paymentAmount: 15.0,
+      totalPrice: 15.0,
+    })
+
+    await processConfirmedRentalBooking(paymentRef)
+
+    const partnerInvoice = await prisma.invoice.findFirst({
+      where: { paymentRef, issuerType: 'PARTNER' },
+      include: { invoiceLines: true },
+    })
+
+    // One line per booking
+    expect(partnerInvoice!.invoiceLines).toHaveLength(2)
+    const amounts = partnerInvoice!.invoiceLines.map((l) => l.amount).sort((a, b) => a - b)
+    expect(amounts).toEqual([10.0, 15.0])
+  })
+
+  it('marks all bookings in the group as complete', async () => {
+    const { paymentRef, booking } = await setupRental()
+
+    await processConfirmedRentalBooking(paymentRef)
+
+    const updated = await prisma.rentalBooking.findUnique({ where: { id: booking.id } })
+    expect(updated!.status).toBe(RENTAL_COMPLETE)
+  })
+
+  it('is idempotent — calling twice does not create duplicate invoices', async () => {
+    const { paymentRef } = await setupRental()
+
+    await processConfirmedRentalBooking(paymentRef)
+    await processConfirmedRentalBooking(paymentRef)
+
+    const invoices = await prisma.invoice.findMany({ where: { paymentRef } })
+    expect(invoices).toHaveLength(2)
+  })
+
+  it('skips processing when all bookings are already complete', async () => {
+    const { paymentRef } = await setupRental({
+      bookingOverrides: { status: RENTAL_COMPLETE },
+    })
+
+    await processConfirmedRentalBooking(paymentRef)
+
+    const invoices = await prisma.invoice.findMany({ where: { paymentRef } })
+    expect(invoices).toHaveLength(0)
+  })
+
+  it('calls sendRentalConfirmationEmail after invoices are created', async () => {
+    const { paymentRef, booking } = await setupRental()
+
+    await processConfirmedRentalBooking(paymentRef)
+
+    // Email is called asynchronously (fire-and-forget), so allow the microtask queue to flush
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(mockSendRentalConfirmationEmail).toHaveBeenCalledOnce()
+    expect(mockSendRentalConfirmationEmail).toHaveBeenCalledWith(booking.id)
+  })
+
+  it('does not call sendRentalConfirmationEmail when already complete (idempotent skip)', async () => {
+    const { paymentRef } = await setupRental({
+      bookingOverrides: { status: RENTAL_COMPLETE },
+    })
+
+    await processConfirmedRentalBooking(paymentRef)
+
+    // No invoice created = no email sent
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(mockSendRentalConfirmationEmail).not.toHaveBeenCalled()
+  })
+
+  it('throws for non-existent paymentRef', async () => {
+    await expect(
+      processConfirmedRentalBooking('nonexistent-ref')
+    ).rejects.toThrow('No rental bookings found for paymentRef')
+  })
+
+  it('computes VAT reverse calculation correctly on partner invoice lines', async () => {
+    const { paymentRef } = await setupRental()
+
+    await processConfirmedRentalBooking(paymentRef)
+
+    const partnerInvoice = await prisma.invoice.findFirst({
+      where: { paymentRef, issuerType: 'PARTNER' },
+      include: { invoiceLines: true },
+    })
+
+    const line = partnerInvoice!.invoiceLines[0]!
+    // 10.0 at 25.5%: base = round(10.0 / 1.255)
+    const expected = computeVatAndBaseAmounts(10.0, 25.5)
+    expect(line.charge).toBe(expected.baseAmount)
+    expect(line.tax).toBe(expected.vatAmount)
+    expect(line.vatRate).toBe(25.5)
   })
 })

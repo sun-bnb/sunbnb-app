@@ -824,6 +824,18 @@ export async function processConfirmedRentalBooking(
       data: { status: RENTAL_COMPLETE },
     })
   })
+
+  // Send confirmation email to the first booking's recipient (non-blocking, non-throwing).
+  // The first booking is a representative for the paymentRef group — site, item, and
+  // time window are shared for typical single-item rentals. Multi-item groups use the
+  // first booking's data (matches the paymentRef's primary booking).
+  const firstBookingId = bookings[0]!.id
+  try {
+    const { sendRentalConfirmationEmail } = await import('./rental-emails')
+    sendRentalConfirmationEmail(firstBookingId).catch(() => {})
+  } catch {
+    // best-effort: a confirmation-email failure must not block invoice creation
+  }
 }
 
 // ─── Idempotent Order Processing ────────────────────────────────────────────

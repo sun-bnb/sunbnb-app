@@ -16,6 +16,7 @@
     "./business-entity": "./src/business-entity.ts",
     "./email": "./src/email.ts",
     "./reservation-emails": "./src/reservation-emails.ts",
+    "./rental-emails": "./src/rental-emails.ts",
     "./password-reset": "./src/password-reset.ts",
     "./rate-limit": "./src/rate-limit.ts",
     "./reservation-status": "./src/reservation-status.ts",
