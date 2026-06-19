@@ -170,15 +170,9 @@ branching the expected lane by payment class.
   full **multiselect** (selection mechanics → creation/free verbs → paid lane → bulk Move), plus
   the dark-chrome toggle, transform pan/zoom canvas, and the 80%-of-fit default zoom. The Alonso
   staff-UI feature set is at parity.
-- **⚠ ONE follow-up — ES/FI copy review, NOW IN PRODUCTION unreviewed.** The whole track's Spanish
-  and Finnish strings are first-pass machine translations that shipped to prod ahead of the
-  `.claude/rules/deploys.md` copy-review gate (the manual promote bypassed it). Spanish matters most
-  (target market is Spanish-speaking beach venues). Keys to spot-check live in `messages/es.json` +
-  `messages/fi.json` under the `SiteManage` and `BedDetail` namespaces — the move/multiselect/refund
-  families: `move`/`movePrompt*`/`moveQueueRemaining`/`moveDest*`, `selectedCount`/`bulk*`/
-  `bulkCancelPaidNote`, `issueRefund`/`refunded`/`enableRefunds`, `held`/`release`/`rent`/`rentDays`,
-  `confirmNoShow`/`confirmCancel`/`confirmDepart`/`back`/`toggleTheme`. Fix-forward via a normal
-  `main`→promote→deploy when reviewed.
+- **ES/FI copy — REVIEWED by the user (2026-06-19).** The track's Spanish/Finnish strings in
+  `messages/es.json` + `messages/fi.json` have been reviewed; the copy-review follow-up is closed.
+  (The user owns translation review — no further copy-review reminders.)
 - **Optional cleanup:** the `bulkBlock`/`bulkComp`/`bulkReserve`/`bulkRent` SiteManage i18n keys are
   now dead (the multiselect sheet renders BedDetail `tb` labels). Safe to delete in all three locales.
 - **P5 — `desactivada` out-of-service lifecycle DEFERRED (optional).** Today's `blockBed`/`unblockBed`
