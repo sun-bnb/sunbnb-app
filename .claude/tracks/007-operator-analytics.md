@@ -1,7 +1,7 @@
 ---
 id: 007-operator-analytics
 title: Operator Analytics & Exports
-status: active
+status: done
 created: 2026-06-18
 updated: 2026-06-19
 worktree: null
@@ -34,16 +34,15 @@ cross-partner settlement oversight), not the consumer app.
 
 ## Resume here
 
-- **TRACK FUNCTIONALLY COMPLETE (2026-06-19, uncommitted Phase 4).** The whole B-set landed on the
-  per-site accounting page: B2 rolling revenue lens, B1 comp/occupancy, B3 CSV export. `@repo/data/
-  analytics` holds the 5 helpers (2 DB + 3 pure); the accounting page composes them via 3 gated
-  actions (`getRevenueTrend`/`getOccupancyTrend`/`getRevenueCsv`). ES/FI copy for the new
-  `SiteAccounting` keys was reviewed by the user (2026-06-19). **Before promote:** verify on a real
-  device that the trend card + CSV download work end-to-end (and that `next build` is clean — the CSV
-  is serialized server-side specifically so `@repo/data/analytics` never enters the client bundle).
-- **Possible follow-ups (not committed scope):** a `next build` smoke before promote; the
-  account-wide dashboard lens (needs `getAccountRevenueByDay`) if a multi-site partner wants an
-  all-sites pulse; wiki note on the analytics subsystem. None blocking.
+- **TRACK DONE (2026-06-19).** The whole B-set shipped on the per-site accounting page: B2 rolling
+  revenue lens, B1 comp/occupancy, B3 CSV export. `@repo/data/analytics` holds the 5 helpers (2 DB +
+  3 pure); the accounting page composes them via 3 gated actions
+  (`getRevenueTrend`/`getOccupancyTrend`/`getRevenueCsv`). Committed + pushed (`3260316`→`aee7141`);
+  partner preview `next build` Ready (confirms the CSV is serialized server-side so
+  `@repo/data/analytics` never enters the client bundle). ES/FI copy reviewed by the user.
+- **Optional later (not part of this track):** the account-wide dashboard lens (needs
+  `getAccountRevenueByDay`) if a multi-site partner wants an all-sites pulse; a wiki note on the
+  analytics subsystem. Promote/deploy is at the user's discretion.
 
 ### Prior resume notes (history)
 
