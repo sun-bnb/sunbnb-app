@@ -383,6 +383,11 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
   const [rentalPaymentLoading, setRentalPaymentLoading] = useState(false)
   const [rentalPaymentError, setRentalPaymentError] = useState<string | null>(null)
   const [datePickerOpen, setDatePickerOpen] = useState(false)
+  const [guestEmail, setGuestEmail] = useState('')
+  const [emailError, setEmailError] = useState(false)
+
+  // Same lightweight format check as ReservationButton — server enforces strictly too
+  const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
 
   const t = useTranslations('SiteView')
   const tp = useTranslations('Payment')
@@ -437,8 +442,15 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
   const [bookingError, setBookingError] = useState<string | null>(null)
 
   const handleBook = () => {
-    if (!session?.user?.id) return
     if (totalItems === 0) return
+    // Anonymous path: validate guest email before proceeding to confirmation
+    if (!loggedIn) {
+      const trimmed = guestEmail.trim()
+      if (!isValidEmail(trimmed)) {
+        setEmailError(true)
+        return
+      }
+    }
     setBookingError(null)
     setRentalPaymentError(null)
     // Snapshot the cart & total for the confirmation view
@@ -464,12 +476,25 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
   }
 
   const handleConfirmBooking = async () => {
-    if (!session?.user?.id) return
     setBooking(true)
     setBookingError(null)
 
     const dates = getBookingDates()
     if (!dates) { setBooking(false); return }
+
+    // Resolve identity: session user or anonymous (anonId from localStorage)
+    let anonId: string | undefined
+    if (!loggedIn) {
+      anonId = typeof window !== 'undefined'
+        ? localStorage.getItem('sunbnb-anonId') ?? undefined
+        : undefined
+      if (!anonId) {
+        anonId = uuidv4()
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('sunbnb-anonId', anonId)
+        }
+      }
+    }
 
     try {
       const result = await saveRentalBooking({
@@ -478,6 +503,8 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
         durationType: reservationMode,
         from: dates.from,
         to: dates.to,
+        anonId,
+        guestEmail: !loggedIn ? guestEmail.trim() : undefined,
       })
 
       setBooking(false)
@@ -492,7 +519,8 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
           setCart([])
           setTimeout(() => {
             setBookingComplete(false)
-            router.push(`/reservations/rental/${result.bookingIds![0]}`)
+            const anonSuffix = anonId ? `?anonId=${anonId}` : ''
+            router.push(`/reservations/rental/${result.bookingIds![0]}${anonSuffix}`)
           }, 2000)
         }
       } else {
@@ -715,16 +743,48 @@ function EquipmentBookingSection({ site }: { site: SiteProps }) {
               <div className="text-red-600 text-xs text-center mb-1.5">{bookingError}</div>
             )}
             {!loggedIn ? (
-              <Button
-                variant="contained"
-                fullWidth
-                onClick={() => {
-                  const callbackUrl = pathname.startsWith('/s/') ? pathname : `/sites/${site.id}`
-                  router.push('/api/auth/signin?callbackUrl=' + callbackUrl)
-                }}
-              >
-                {t('Login to reserve')}
-              </Button>
+              <>
+                <TextField
+                  type="email"
+                  size="small"
+                  fullWidth
+                  label={t('Email')}
+                  value={guestEmail}
+                  onChange={(e) => {
+                    setGuestEmail(e.target.value)
+                    if (emailError) setEmailError(false)
+                  }}
+                  error={emailError}
+                  helperText={emailError ? t('Enter a valid email') : ''}
+                  sx={{ mb: 1 }}
+                />
+                <Button
+                  variant="contained"
+                  fullWidth
+                  disabled={totalItems === 0 || booking}
+                  onClick={handleBook}
+                >
+                  {booking ? (
+                    <CircularProgress size={20} color="inherit" />
+                  ) : totalItems > 0 ? (
+                    `${t('Reserve as guest')} · ${totalItems} ${totalItems !== 1 ? t('items') : t('item')} · €${totalPrice.toFixed(2)}`
+                  ) : (
+                    t('Reserve as guest')
+                  )}
+                </Button>
+                <div className="text-center mt-2 text-xs text-gray-500">
+                  <button
+                    type="button"
+                    className="underline hover:text-gray-700"
+                    onClick={() => {
+                      const callbackUrl = pathname.startsWith('/s/') ? pathname : `/sites/${site.id}`
+                      router.push('/api/auth/signin?callbackUrl=' + callbackUrl)
+                    }}
+                  >
+                    {t('Sign in instead')}
+                  </button>
+                </div>
+              </>
             ) : (
               <Button
                 variant="contained"

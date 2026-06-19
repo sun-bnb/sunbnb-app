@@ -840,6 +840,81 @@ describe('saveRentalBooking', () => {
     expect(res.errors?.[0]).toContain('Invalid email address')
   })
 
+  // ── Anon equipment booking — Phase 5a coverage ────────────────────────────
+  // These tests verify the full anon equipment path that the UI now enables
+  // (previously blocked by the !session?.user?.id guard in EquipmentBookingSection).
+
+  // BUG this test reveals: if saveRentalBooking re-introduced a session-only guard
+  // (e.g. `if (!session?.user?.id) return error`), this test would fail —
+  // proving anon equipment bookings require the action to accept anonId.
+  it('anon equipment path: succeeds for paid site with anonId + guestEmail (mirrors UI handleConfirmBooking output)', async () => {
+    // No session — mirrors logged-out user clicking "Reserve as guest" in EquipmentBookingSection
+    vi.mocked(prisma.site.findUnique)
+      .mockResolvedValueOnce({ userId: 'venue-owner-1' } as any) // anon FK lookup
+      .mockResolvedValueOnce({ id: 'site-1', type: 'paid', rentalPaymentType: null } as any)
+    vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
+      { id: 'kayak-1', totalQuantity: 3, pricePerDay: 25, pricePerHour: null } as any,
+    ])
+    mockCreateRentalBookingsWithGuard.mockResolvedValueOnce({ outcome: 'created', bookingIds: ['rb-anon-equipment-1'] })
+
+    const res = await saveRentalBooking({
+      siteId: 'site-1',
+      items: [{ rentalItemId: 'kayak-1', quantity: 1 }],
+      durationType: 'days',
+      from: '2025-08-01T10:00:00Z',
+      to: '2025-08-02T10:00:00Z',
+      anonId: '550e8400-e29b-41d4-a716-446655440000', // valid UUID v4 from localStorage
+      guestEmail: 'guest@beach.com',
+    })
+
+    expect(res.status).toBe('ok')
+    expect(res.bookingIds).toEqual(['rb-anon-equipment-1'])
+    expect(mockCreateRentalBookingsWithGuard).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          userId: 'venue-owner-1',           // site-owner FK placeholder
+          anonId: '550e8400-e29b-41d4-a716-446655440000',
+          guestEmail: 'guest@beach.com',
+          totalPrice: 25,                    // 25/day × 1 day × 1 qty, from DB
+          status: 'pending',                 // paid site → enters payment flow
+        }),
+      ])
+    )
+  })
+
+  // BUG this test reveals: if the action required a session for hourly rentals,
+  // an anon user booking surfboards by the hour would be incorrectly blocked.
+  it('anon equipment path: succeeds for hourly rental with anonId', async () => {
+    vi.mocked(prisma.site.findUnique)
+      .mockResolvedValueOnce({ userId: 'venue-owner-1' } as any)
+      .mockResolvedValueOnce({ id: 'site-1', type: 'paid', rentalPaymentType: null } as any)
+    vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
+      { id: 'surf-1', totalQuantity: 5, pricePerDay: null, pricePerHour: 8 } as any,
+    ])
+    mockCreateRentalBookingsWithGuard.mockResolvedValueOnce({ outcome: 'created', bookingIds: ['rb-anon-hourly-1'] })
+
+    const res = await saveRentalBooking({
+      siteId: 'site-1',
+      items: [{ rentalItemId: 'surf-1', quantity: 2 }],
+      durationType: 'hours',
+      from: '2025-08-01T10:00:00Z',
+      to: '2025-08-01T13:00:00Z', // 3 hours
+      anonId: '550e8400-e29b-41d4-a716-446655440000',
+      guestEmail: 'surfer@beach.com',
+    })
+
+    expect(res.status).toBe('ok')
+    // 8/hour × 3 hours × 2 qty = 48
+    expect(mockCreateRentalBookingsWithGuard).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          totalPrice: 48,
+          anonId: '550e8400-e29b-41d4-a716-446655440000',
+        }),
+      ])
+    )
+  })
+
   // ── BUG-REVEALING TESTS ──────────────────────────────────────────────────
 
   // BUG: No date validation — from >= to should be rejected

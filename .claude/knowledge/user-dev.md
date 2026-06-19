@@ -76,6 +76,13 @@ sections.
 **Solution:** In the `sunbedGroup` include, switch from `items: { select: { id: true } }` to `items: { include: { reservations: true } }` so sibling items carry all scalar fields + reservations (same shape as the top-level `item`). Resolution: filter `sunbedGroup.items` to exclude `item.id`, use `[item, ...otherGroupMembers]`. Fall back to `pair || pairedBy` when no group is present (un-migrated beds).
 **Prevention:** When expanding a `sunbedGroup.items` include to carry sub-relations, use `include: { ... }` not `select: { ... }` — Prisma can't combine both at the same nesting level. All scalar fields are returned automatically with `include`.
 
+## Equipment rental anon flow (Track 009)
+
+### 2026-06-19: EquipmentBookingSection anon gate was UI-only, backend was already ready
+**Problem:** `EquipmentBookingSection` had `!session?.user?.id` early-returns in `handleBook` and `handleConfirmBooking`, plus a "Login to reserve" hard-gate in the render — blocking anon users entirely. The backend (`saveRentalBooking`) already accepted `anonId` + `guestEmail` from Phase 1–3 work.
+**Solution:** Added `guestEmail` + `emailError` state to `EquipmentBookingSection`, added email validation in `handleBook` (mirrors `ReservationButton`), removed both `!session?.user?.id` early-returns, read/generated `anonId` in `handleConfirmBooking` (same localStorage pattern as sunbed flow), passed `anonId` + `guestEmail` into `saveRentalBooking`, threaded `anonId` into the unpaid-site navigation URL. Replaced the login-only button render with the anon affordance (email input + "Reserve as guest" + "Sign in instead" link).
+**Prevention:** When adding auth-gated features, check that the backend server action already supports anon (look for `anonId?` parameter). If it does, the UI is the only change. All i18n keys for the anon affordance (`Email`, `Enter a valid email`, `Reserve as guest`, `Sign in instead`) already existed in `SiteView` from the sunbed flow — no new keys needed.
+
 ## Rejected approaches
 
 <!-- Approaches tried and rejected — record so a future session doesn't re-try them -->
