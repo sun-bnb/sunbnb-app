@@ -6,7 +6,12 @@ import {
   RESERVATION_COMPLETE,
   ORDER_COMPLETE,
 } from '@repo/data/reservation-status'
-import { getRevenueByDay, summarizeRevenue } from '@repo/data/analytics'
+import {
+  getRevenueByDay,
+  summarizeRevenue,
+  getOccupancyByDay,
+  summarizeOccupancy,
+} from '@repo/data/analytics'
 
 /** Rolling-window days the trend lens offers (operational pulse vs the
  *  calendar-month accounting view). */
@@ -32,6 +37,26 @@ export async function getRevenueTrend(siteId: string, days: number) {
 
   const rows = await getRevenueByDay(siteId, from, to)
   return { rows, summary: summarizeRevenue(rows) }
+}
+
+/**
+ * Per-day occupancy + a summary (avg/peak %, comp bed-days) for a rolling window
+ * ending today — the comp/occupancy visibility the invoice-driven view can't show
+ * (comps carry no revenue). Same session + site-ownership gate as getRevenueTrend.
+ */
+export async function getOccupancyTrend(siteId: string, days: number) {
+  const session = await auth()
+  if (!session?.user) throw new Error('Not authenticated')
+
+  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
+  if (!site || site.userId !== session.user.id) throw new Error('Not authorized')
+
+  const window = (TREND_WINDOWS as readonly number[]).includes(days) ? days : 30
+  const to = new Date()
+  const from = new Date(to.getTime() - (window - 1) * DAY_MS)
+
+  const rows = await getOccupancyByDay(siteId, from, to)
+  return { rows, summary: summarizeOccupancy(rows) }
 }
 
 export async function getInvoicesByMonth(

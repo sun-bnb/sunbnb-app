@@ -1,7 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { summarizeRevenue, toFiguresCsv, type DailyRevenue } from './analytics'
+import {
+  summarizeRevenue,
+  summarizeOccupancy,
+  toFiguresCsv,
+  type DailyRevenue,
+  type DailyOccupancy,
+} from './analytics'
 
 const row = (date: string, revenue: number, count: number): DailyRevenue => ({ date, revenue, count })
+const occ = (date: string, capacity: number, occupied: number, comps: number, occupancyPct: number): DailyOccupancy =>
+  ({ date, capacity, occupied, comps, occupancyPct })
 
 describe('summarizeRevenue', () => {
   it('returns zeros and no best day for an empty set', () => {
@@ -30,6 +38,21 @@ describe('summarizeRevenue', () => {
     const first = row('2026-06-01', 50, 5)
     const res = summarizeRevenue([first, row('2026-06-02', 50, 5)])
     expect(res.bestDay).toEqual(first)
+  })
+})
+
+describe('summarizeOccupancy', () => {
+  it('returns zeros for an empty set', () => {
+    expect(summarizeOccupancy([])).toEqual({ avgOccupancyPct: 0, peakOccupancyPct: 0, totalComps: 0 })
+  })
+
+  it('averages occupancy %, tracks the peak, and sums comp bed-days', () => {
+    const res = summarizeOccupancy([
+      occ('2026-06-01', 4, 1, 0, 25),
+      occ('2026-06-02', 4, 3, 1, 75),
+      occ('2026-06-03', 4, 2, 2, 50),
+    ])
+    expect(res).toEqual({ avgOccupancyPct: 50, peakOccupancyPct: 75, totalComps: 3 })
   })
 })
 

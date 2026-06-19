@@ -4,10 +4,10 @@ vi.mock('@/app/auth', () => ({
   auth: vi.fn().mockResolvedValue(null),
 }))
 
-import { getInvoicesByMonth, getPaidItemsByMonth, getRevenueTrend } from './actions'
+import { getInvoicesByMonth, getPaidItemsByMonth, getRevenueTrend, getOccupancyTrend } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
-import { getRevenueByDay, summarizeRevenue } from '@repo/data/analytics'
+import { getRevenueByDay, summarizeRevenue, getOccupancyByDay, summarizeOccupancy } from '@repo/data/analytics'
 import { RESERVATION_COMPLETE, ORDER_COMPLETE } from '@repo/data/reservation-status'
 
 const mockAuth = vi.mocked(auth)
@@ -307,5 +307,50 @@ describe('getRevenueTrend', () => {
     const [, from, to] = mockRevenueByDay.mock.calls[0]!
     const spanDays = Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000))
     expect(spanDays).toBe(29) // clamped 30-day window
+  })
+})
+
+// ─── getOccupancyTrend ────────────────────────────────────────────────────────
+
+describe('getOccupancyTrend', () => {
+  const mockOccByDay = vi.mocked(getOccupancyByDay)
+  const mockSummarizeOcc = vi.mocked(summarizeOccupancy)
+
+  it('throws when not authenticated', async () => {
+    await expect(getOccupancyTrend(SITE_ID, 30)).rejects.toThrow('Not authenticated')
+    expect(mockOccByDay).not.toHaveBeenCalled()
+  })
+
+  it('throws when the site belongs to another partner', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OTHER_ID } as any)
+    await expect(getOccupancyTrend(SITE_ID, 30)).rejects.toThrow('Not authorized')
+    expect(mockOccByDay).not.toHaveBeenCalled()
+  })
+
+  it('aggregates the window and returns rows + summary', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    const rows = [{ date: '2026-06-18', capacity: 4, occupied: 2, comps: 1, occupancyPct: 50 }]
+    mockOccByDay.mockResolvedValue(rows)
+    mockSummarizeOcc.mockReturnValue({ avgOccupancyPct: 50, peakOccupancyPct: 50, totalComps: 1 })
+
+    const res = await getOccupancyTrend(SITE_ID, 30)
+
+    expect(res).toEqual({ rows, summary: { avgOccupancyPct: 50, peakOccupancyPct: 50, totalComps: 1 } })
+    expect(mockOccByDay.mock.calls[0]![0]).toBe(SITE_ID)
+    expect(mockSummarizeOcc).toHaveBeenCalledWith(rows)
+  })
+
+  it('clamps an invalid window to 30 days', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    mockOccByDay.mockResolvedValue([])
+
+    await getOccupancyTrend(SITE_ID, -1)
+
+    const [, from, to] = mockOccByDay.mock.calls[0]!
+    const spanDays = Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000))
+    expect(spanDays).toBe(29)
   })
 })

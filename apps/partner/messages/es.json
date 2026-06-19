@@ -637,6 +637,9 @@
     "productCount": "{count, plural, one {# producto} other {# productos}}"
   },
   "SiteAccounting": {
+    "occupancy": "Ocupación",
+    "peak": "Máximo",
+    "comps": "Cortesías",
     "recentTrend": "Tendencia reciente",
     "sales": "Ventas",
     "bestDay": "Mejor día",

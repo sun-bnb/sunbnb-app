@@ -47,6 +47,15 @@ export interface DailyOccupancy {
   occupancyPct: number
 }
 
+export interface OccupancySummary {
+  /** Mean daily occupancy % across the window. */
+  avgOccupancyPct: number
+  /** Highest single-day occupancy %. */
+  peakOccupancyPct: number
+  /** Comp bed-days over the window (sum of daily comp counts). */
+  totalComps: number
+}
+
 // ─── Date helpers (UTC) ───────────────────────────────────────────────────────
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -82,6 +91,20 @@ export function summarizeRevenue(rows: DailyRevenue[]): RevenueSummary {
     if (r.revenue > 0 && (!bestDay || r.revenue > bestDay.revenue)) bestDay = r
   }
   return { totalRevenue: round(totalRevenue), totalCount, bestDay }
+}
+
+/** Window aggregates over a per-day occupancy set (avg/peak %, comp bed-days). */
+export function summarizeOccupancy(rows: DailyOccupancy[]): OccupancySummary {
+  if (rows.length === 0) return { avgOccupancyPct: 0, peakOccupancyPct: 0, totalComps: 0 }
+  let sumPct = 0
+  let peak = 0
+  let comps = 0
+  for (const r of rows) {
+    sumPct += r.occupancyPct
+    if (r.occupancyPct > peak) peak = r.occupancyPct
+    comps += r.comps
+  }
+  return { avgOccupancyPct: round(sumPct / rows.length), peakOccupancyPct: peak, totalComps: comps }
 }
 
 /**

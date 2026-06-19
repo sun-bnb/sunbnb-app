@@ -49,10 +49,16 @@ cross-partner settlement oversight), not the consumer app.
   `@repo/data/analytics` mock + alias + `mock-contract` spec + `coverage-contract` entry; 4 new action
   tests. i18n (`recentTrend`/`sales`/`bestDay`/`noRevenueYet`, ES/FI machine — copy review owed).
   Full partner suite 1420, typecheck + lint clean.
-- **Next action:** **Phase 3 (B1)** — comp & occupancy on the same accounting view. Add a
-  `getOccupancyTrend(siteId, days)` action (same auth wrapper) over `getOccupancyByDay`; render an
-  occupancy-% + comp-count block. The `analytics` mock already stubs `getOccupancyByDay`. Then
-  **Phase 4 (B3)** — a "Download figures (CSV)" button using `toFiguresCsv` over the trend rows.
+- **Phase 3 DONE (2026-06-19, uncommitted).** Comp & occupancy on the Recent-trend card. Added
+  `summarizeOccupancy` (pure) to `@repo/data/analytics` (+2 unit tests, mock updated);
+  `getOccupancyTrend(siteId, days)` action (+coverage-contract entry, +4 tests); occupancy block in
+  `accounting/view.tsx` (avg %/peak %/comps + purple daily occupancy bars, shares the window, shows
+  even at zero revenue). i18n `occupancy`/`peak`/`comps` (ES/FI machine). data 192, partner 1424,
+  typecheck+lint clean.
+- **Next action:** **Phase 4 (B3)** — a "Download figures (CSV)" button on the trend card using
+  `toFiguresCsv` over the current `trend.rows` (client download via Blob + object URL, mirroring the
+  receipt-PDF download pattern). `toFiguresCsv` + mock already exist; likely no new action needed
+  (serialize the rows already in client state). Add one i18n key (`downloadCsv`).
 - **Context needed:**
   - Existing accounting actions to generalize: `apps/partner/app/sites/[id]/accounting/actions.ts`
     — `getPaidItemsByMonth(siteId, year, month)` (orders+reservations with a PARTNER invoice in a
@@ -123,9 +129,9 @@ Notes / decisions baked in:
   dashboard — the dashboard is account-wide while the helper is per-site; see decision below).
   `getRevenueTrend` action + window selector + total/sales/best-day + daily bar trend on
   `accounting/view.tsx`; partner `analytics` mock/alias/contract wired; 4 action tests; 1420 green.
-- ☐ **Phase 3 — B1 comp & occupancy (accounting page).** On `apps/partner/app/sites/[id]/accounting`,
-  add an occupancy % + comp-count block fed by `getOccupancyByDay` (the new non-invoice query).
-  Surfaces the "gave away N beds / ran at X% full" the invoice-driven page can't show.
+- ✅ **Phase 3 — B1 comp & occupancy. DONE 2026-06-19.** `summarizeOccupancy` helper +
+  `getOccupancyTrend` action + occupancy block (avg/peak %/comps + daily bars) on the trend card;
+  surfaces the "ran at X% full / gave away N beds" the invoice-driven view can't. data 192 / partner 1424.
 - ☐ **Phase 4 — B3 figures export.** A "Download figures (CSV)" button on the accounting page using
   `toFiguresCsv` over the period's `getRevenueByDay` rows (client-download, no server round-trip,
   mirroring the receipt-PDF pattern). Optional TXT variant.

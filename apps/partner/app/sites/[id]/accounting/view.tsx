@@ -14,7 +14,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import { useTranslations } from 'next-intl'
 
 import { useSite } from '@/app/sites/site-context'
-import { getPaidItemsByMonth, getRevenueTrend } from './actions'
+import { getPaidItemsByMonth, getRevenueTrend, getOccupancyTrend } from './actions'
 import { formatSeat } from '@repo/data/seat-label'
 
 const MONTH_KEYS = ['january','february','march','april','may','june','july','august','september','october','november','december'] as const
@@ -24,6 +24,11 @@ interface DailyRevenue { date: string; revenue: number; count: number }
 interface RevenueTrend {
   rows: DailyRevenue[]
   summary: { totalRevenue: number; totalCount: number; bestDay: DailyRevenue | null }
+}
+interface DailyOccupancy { date: string; capacity: number; occupied: number; comps: number; occupancyPct: number }
+interface OccupancyTrend {
+  rows: DailyOccupancy[]
+  summary: { avgOccupancyPct: number; peakOccupancyPct: number; totalComps: number }
 }
 
 export default function AccountingView() {
@@ -47,6 +52,8 @@ export default function AccountingView() {
   const [trendWindow, setTrendWindow] = useState<(typeof TREND_WINDOWS)[number]>(30)
   const [trend, setTrend] = useState<RevenueTrend | null>(null)
   const [trendLoading, setTrendLoading] = useState(true)
+  const [occupancy, setOccupancy] = useState<OccupancyTrend | null>(null)
+  const [occupancyLoading, setOccupancyLoading] = useState(true)
 
   useEffect(() => {
     if (!site?.id) return
@@ -63,6 +70,11 @@ export default function AccountingView() {
     getRevenueTrend(site.id, trendWindow).then((data) => {
       setTrend(data)
       setTrendLoading(false)
+    })
+    setOccupancyLoading(true)
+    getOccupancyTrend(site.id, trendWindow).then((data) => {
+      setOccupancy(data)
+      setOccupancyLoading(false)
     })
   }, [site?.id, trendWindow])
 
@@ -182,6 +194,38 @@ export default function AccountingView() {
               })()}
             </div>
           </>
+        )}
+
+        {/* Occupancy — visible even with zero revenue (comps/blocks carry none) */}
+        {!occupancyLoading && occupancy && occupancy.rows.some((r) => r.capacity > 0) && (
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div>
+                <div className="text-xs text-gray-500 font-medium">{t('occupancy')}</div>
+                <div className="text-lg font-bold text-gray-900 mt-0.5">{occupancy.summary.avgOccupancyPct}%</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 font-medium">{t('peak')}</div>
+                <div className="text-lg font-bold text-gray-900 mt-0.5">{occupancy.summary.peakOccupancyPct}%</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 font-medium">{t('comps')}</div>
+                <div className="text-lg font-bold text-gray-900 mt-0.5">{occupancy.summary.totalComps}</div>
+              </div>
+            </div>
+
+            {/* Daily occupancy bars (height = occupancy %) */}
+            <div className="flex items-end gap-px h-16" aria-hidden="true">
+              {occupancy.rows.map((r) => (
+                <div
+                  key={r.date}
+                  className="flex-1 bg-purple-400/70 rounded-sm min-h-[2px]"
+                  style={{ height: `${Math.min(100, r.occupancyPct)}%` }}
+                  title={`${formatDay(r.date)}: ${r.occupancyPct}%${r.comps > 0 ? ` · ${r.comps} comp` : ''}`}
+                />
+              ))}
+            </div>
+          </div>
         )}
       </div>
 

@@ -10,4 +10,5 @@ import { vi } from 'vitest'
 export const getRevenueByDay = vi.fn().mockResolvedValue([])
 export const getOccupancyByDay = vi.fn().mockResolvedValue([])
 export const summarizeRevenue = vi.fn().mockReturnValue({ totalRevenue: 0, totalCount: 0, bestDay: null })
+export const summarizeOccupancy = vi.fn().mockReturnValue({ avgOccupancyPct: 0, peakOccupancyPct: 0, totalComps: 0 })
 export const toFiguresCsv = vi.fn().mockReturnValue('date,rentals,revenue\n')

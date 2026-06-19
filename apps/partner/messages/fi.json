@@ -637,6 +637,9 @@
     "productCount": "{count, plural, one {# tuote} other {# tuotetta}}"
   },
   "SiteAccounting": {
+    "occupancy": "Käyttöaste",
+    "peak": "Huippu",
+    "comps": "Veloituksettomat",
     "recentTrend": "Viimeaikainen kehitys",
     "sales": "Myynnit",
     "bestDay": "Paras päivä",
