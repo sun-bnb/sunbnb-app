@@ -3,6 +3,8 @@
 import React, { useEffect, useState, useTransition } from 'react'
 import { useTranslations } from 'next-intl'
 import dayjs from 'dayjs'
+import NoteIcon from '@mui/icons-material/Note'
+import PaymentIcon from '@mui/icons-material/Payment'
 import { formatSeat } from '@repo/data/seat-label'
 import { InventoryItem, Reservation } from '@/types/shared'
 import {
@@ -55,6 +57,11 @@ function formatTime(date: Date | string | null | undefined): string {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+function remainingDays(to: Date | string | null | undefined): number {
+  if (!to) return 1
+  return dayjs(to).startOf('day').diff(dayjs().startOf('day'), 'day') + 1
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 // States where the pair toggle governs a creation/release action
@@ -69,6 +76,82 @@ function getPoolSeq(item: InventoryItem): number {
 
 // Shared confirm prompt type across all ⚠ transitions
 type PendingConfirm = 'no-show' | 'cancel' | 'depart' | 'unreserve' | 'remove' | null
+
+// ─── OccupantInfo ────────────────────────────────────────────────────────────
+// Unified single-line info row used by the expected/checked-in/walked-in branches.
+
+function OccupantInfo({
+  t,
+  reservation,
+  tintClass,
+  paymentState,
+  fallbackName,
+}: {
+  t: ReturnType<typeof useTranslations<'BedDetail'>>
+  reservation: Reservation
+  /** Tailwind classes for the card background + border (tint-50 / tint-200). */
+  tintClass: string
+  paymentState: 'paid' | 'none'
+  /** Italic gray fallback when guestName is absent (e.g. t('walkIn')). */
+  fallbackName?: string
+}) {
+  const rd = remainingDays(reservation.to)
+  const validUntilLabel = t('validUntil', { date: dayjs(reservation.to).format('ddd D MMM') })
+
+  return (
+    <div className={`${tintClass} rounded-xl p-4 flex items-center gap-3`}>
+      {/* Name — truncates */}
+      <div className="flex-1 min-w-0">
+        {reservation.guestName
+          ? <span className="font-bold text-lg truncate block">{reservation.guestName}</span>
+          : fallbackName
+            ? <span className="text-gray-400 dark:text-gray-500 text-lg italic">{fallbackName}</span>
+            : null}
+      </div>
+
+      {/* Cluster — never wraps */}
+      <div className="flex-shrink-0 flex items-center gap-2">
+        {/* Note indicator */}
+        {reservation.internalNotes && (
+          <span title={reservation.internalNotes} aria-label={t('note')}>
+            <NoteIcon
+              sx={{ fontSize: 18 }}
+              className="text-gray-400"
+            />
+          </span>
+        )}
+
+        {/* Payment chip — green icon when paid online; nothing when unsettled cash */}
+        {paymentState === 'paid' && (
+          <span title={t('paid')} aria-label={t('paid')}>
+            <PaymentIcon
+              sx={{ fontSize: 18 }}
+              className="text-green-600 dark:text-green-400"
+            />
+          </span>
+        )}
+
+        {/* Time — inside a badge, no clock icon */}
+        {reservation.checkedInAt && (
+          <span className="rounded-full bg-white/60 dark:bg-black/20 border border-gray-300/60 dark:border-gray-600/60 px-2 py-0.5 text-sm font-bold tabular-nums text-gray-700 dark:text-gray-300">
+            {formatTime(reservation.checkedInAt)}
+          </span>
+        )}
+
+        {/* Period indicator — plain text, no badge, always last */}
+        {rd > 1 && (
+          <span
+            className="text-s font-bold tabular-nums text-gray-500 dark:text-gray-400"
+            title={validUntilLabel}
+            aria-label={validUntilLabel}
+          >
+            {rd}D
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export default function BedDetail({
   siteId,
@@ -611,21 +694,12 @@ export default function BedDetail({
           <div className="space-y-3">
             {pendingConfirm ? confirmPanel : (
               <>
-                <div className="bg-yellow-50 dark:bg-yellow-950/30 rounded-xl p-4 border-2 border-yellow-200 dark:border-yellow-800/40 flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    {reservation.guestName && (
-                      <div className="font-bold text-lg truncate">{reservation.guestName}</div>
-                    )}
-                    <div className="text-gray-600 dark:text-gray-300 text-sm truncate">{reservation.user.email}</div>
-                    {reservation.guestContact && (
-                      <div className="text-gray-600 dark:text-gray-300 text-sm truncate">{reservation.guestContact}</div>
-                    )}
-                    {reservation.internalNotes && (
-                      <div className="text-gray-500 dark:text-gray-400 text-sm italic truncate">{reservation.internalNotes}</div>
-                    )}
-                  </div>
-                  <span className="flex-shrink-0 text-xl font-bold leading-none text-yellow-600 dark:text-yellow-400" aria-label={t('paid')} title={t('paid')}>€</span>
-                </div>
+                <OccupantInfo
+                  t={t}
+                  reservation={reservation}
+                  tintClass="bg-yellow-50 dark:bg-yellow-950/30 border-2 border-yellow-200 dark:border-yellow-800/40"
+                  paymentState="paid"
+                />
                 <div className="flex gap-3">
                   <button
                     disabled={isPending}
@@ -815,20 +889,12 @@ export default function BedDetail({
           <div className="space-y-3">
             {pendingConfirm ? confirmPanel : (
               <>
-                <div className="bg-blue-50 dark:bg-blue-950/30 rounded-xl p-4 border-2 border-blue-200 dark:border-blue-800/40 flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    {reservation.guestName && (
-                      <div className="font-bold text-lg truncate">{reservation.guestName}</div>
-                    )}
-                    <div className="text-gray-600 dark:text-gray-300 text-sm truncate">{reservation.user.email}</div>
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0 text-blue-700">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
-                    </svg>
-                    <span className="text-lg font-bold tabular-nums leading-none">{formatTime(reservation.checkedInAt)}</span>
-                  </div>
-                </div>
+                <OccupantInfo
+                  t={t}
+                  reservation={reservation}
+                  tintClass="bg-blue-50 dark:bg-blue-950/30 border-2 border-blue-200 dark:border-blue-800/40"
+                  paymentState="paid"
+                />
                 <div className="flex gap-3">
                   <button
                     disabled={isPending}
@@ -856,31 +922,13 @@ export default function BedDetail({
           <div className="space-y-3">
             {pendingConfirm ? confirmPanel : (
               <>
-                <div className="bg-orange-50 dark:bg-orange-950/30 rounded-xl p-4 border-2 border-orange-200 dark:border-orange-800/40 flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    {reservation.guestName
-                      ? <div className="font-bold text-lg truncate">{reservation.guestName}</div>
-                      : <div className="text-gray-400 dark:text-gray-500 text-sm italic">{t('walkIn')}</div>}
-                  </div>
-                  {/* Payment-collected badge — shown once the online payment succeeded. */}
-                  {collected && (
-                    <span
-                      title={t('paid')}
-                      aria-label={t('paid')}
-                      className="flex-shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-500 text-white"
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M20 6 9 17l-5-5" />
-                      </svg>
-                    </span>
-                  )}
-                  <div className="flex items-center gap-1.5 flex-shrink-0 text-orange-700">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
-                    </svg>
-                    <span className="text-lg font-bold tabular-nums leading-none">{formatTime(reservation.checkedInAt)}</span>
-                  </div>
-                </div>
+                <OccupantInfo
+                  t={t}
+                  reservation={reservation}
+                  tintClass="bg-orange-50 dark:bg-orange-950/30 border-2 border-orange-200 dark:border-orange-800/40"
+                  paymentState={collected ? 'paid' : 'none'}
+                  fallbackName={t('walkIn')}
+                />
                 {siteIsPaid && !collected && (
                   <button
                     disabled={isPending}

@@ -772,6 +772,8 @@
   "BedDetail": {
     "collectPayment": "Peri maksu",
     "paid": "Maksettu",
+    "validUntil": "Until {date}",
+    "note": "Note",
     "free": "Vapaa",
     "booked": "Varattu",
     "here": "Paikalla",

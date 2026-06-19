@@ -772,6 +772,8 @@
   "BedDetail": {
     "collectPayment": "Cobrar",
     "paid": "Pagado",
+    "validUntil": "Until {date}",
+    "note": "Note",
     "free": "Libre",
     "booked": "Reservada",
     "here": "Presente",

@@ -772,6 +772,8 @@
   "BedDetail": {
     "collectPayment": "Collect payment",
     "paid": "Paid",
+    "validUntil": "Until {date}",
+    "note": "Note",
     "free": "Free",
     "booked": "Booked",
     "here": "Here",
