@@ -746,6 +746,7 @@
     "toggleTheme": "Alternar modo oscuro",
     "setWorker": "Elegir empleado",
     "noWorker": "Sin empleado",
+    "till": "Caja",
     "movePrompt": "Toca una hamaca libre para mover aquí",
     "movePromptGroup": "Toca un grupo libre de {n} hamacas para mover aquí",
     "moveQueueRemaining": "{n} más después de esta",
@@ -831,6 +832,23 @@
     "close": "Cerrar",
     "demoNote": "Modo demo: el pago se completa automáticamente.",
     "errorGeneric": "No se pudo iniciar el pago."
+  },
+  "Till": {
+    "title": "Caja de {name}",
+    "openTill": "Caja abierta",
+    "salesCount": "{count} ventas en efectivo este turno",
+    "closeTill": "Cerrar caja",
+    "confirmBody": "¿Entregar {total} y empezar una caja nueva?",
+    "confirmClose": "Confirmar",
+    "cancel": "Cancelar",
+    "closing": "Cerrando…",
+    "closedTitle": "Caja cerrada",
+    "closedBody": "{total} entregados · {count} ventas",
+    "nothingToClose": "Aún no hay efectivo este turno.",
+    "loading": "Cargando…",
+    "done": "Hecho",
+    "close": "Cerrar",
+    "errorGeneric": "Algo salió mal."
   },
   "CreateRentalModal": {
     "title": "Alquilar",

@@ -42,6 +42,7 @@ export default defineConfig({
       '@repo/data/refund': path.resolve(__dirname, '__mocks__/@repo/data/refund'),
       '@repo/data/reservation-payment': path.resolve(__dirname, '__mocks__/@repo/data/reservation-payment'),
       '@repo/data/analytics': path.resolve(__dirname, '__mocks__/@repo/data/analytics'),
+      '@repo/data/till': path.resolve(__dirname, '__mocks__/@repo/data/till'),
     },
   },
 })

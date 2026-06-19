@@ -43,6 +43,8 @@ import {
   markRentalPickedUp,
   markRentalReturned,
   createWalkInRental,
+  getTillStatus,
+  closeTill,
 } from './actions'
 
 // ---------------------------------------------------------------------------
@@ -941,5 +943,58 @@ describe('floor-staff attribution', () => {
 
     const booking = await prisma.rentalBooking.findFirstOrThrow({ where: { siteId: site.id } })
     expect(booking.employeeId).toBe(employee.id)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Per-worker till (track 008 Phase 3) — getTillStatus + closeTill
+// ---------------------------------------------------------------------------
+
+describe('per-worker till', () => {
+  async function setupWithEmployee(siteOverrides: Record<string, any> = {}) {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id, siteOverrides)
+    const item = await createTestInventoryItem(user.id, site.id)
+    const employee = await prisma.employee.create({ data: { accountId: user.id, name: 'Alice' } })
+    mockUserId = user.id
+    return { user, site, item, employee }
+  }
+
+  it('getTillStatus reflects a cash walk-in attributed to the worker', async () => {
+    const { site, item, employee } = await setupWithEmployee({ type: 'paid', price: 10 })
+    await reserveItem(site.id, item.id, undefined, undefined, undefined, undefined, true, employee.id)
+
+    expect(await getTillStatus(site.id, employee.id)).toEqual({ status: 'ok', total: 10, count: 1 })
+  })
+
+  it('closeTill snapshots the open total and resets the open till to zero', async () => {
+    const { site, item, employee } = await setupWithEmployee({ type: 'paid', price: 10 })
+    await reserveItem(site.id, item.id, undefined, undefined, undefined, undefined, true, employee.id)
+
+    const closed = await closeTill(site.id, employee.id)
+    expect(closed).toMatchObject({ status: 'ok', total: 10, count: 1, closed: true })
+
+    const snaps = await prisma.tillClose.findMany({ where: { siteId: site.id, employeeId: employee.id } })
+    expect(snaps).toHaveLength(1)
+    expect(snaps[0].totalAmount).toBe(10)
+    expect(snaps[0].txnCount).toBe(1)
+
+    // Open till now reads zero — only cash AFTER the close counts.
+    expect(await getTillStatus(site.id, employee.id)).toEqual({ status: 'ok', total: 0, count: 0 })
+  })
+
+  it('closeTill on an empty till is a no-op (no snapshot written)', async () => {
+    const { site, employee } = await setupWithEmployee()
+
+    const res = await closeTill(site.id, employee.id)
+    expect(res).toEqual({ status: 'ok', total: 0, count: 0, closed: false })
+    expect(await prisma.tillClose.count({ where: { siteId: site.id } })).toBe(0)
+  })
+
+  it('getTillStatus rejects an unknown / cross-account worker', async () => {
+    const { site } = await setupWithEmployee()
+    const res = await getTillStatus(site.id, 'no-such-employee')
+    expect(res.status).toBe('error')
   })
 })

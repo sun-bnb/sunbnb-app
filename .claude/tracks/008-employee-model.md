@@ -59,17 +59,34 @@ Full design: `/Users/vhalme/.claude/plans/fuzzy-jumping-fountain.md` (approved 2
   **33 manage integration** (4 new attribution: stamp / cross-account drop / free-site / rental) +
   tsc/lint clean. `computeWalkInAmount` kept LOCAL to manage/actions.ts (both callers live there — no
   `@repo/data` promote needed).
-- **Next action:** **Phase 3** — per-worker till + "close my till" on the manage page. From the chip,
-  a till panel (sheet) showing `getOpenTill(siteId, currentWorkerId)` (already in `@repo/data/till`) —
-  cash this shift — and a **Close till** action. New gated manage action `closeTill` (token-or-session,
-  add to `gated-actions.ts` registry) snapshots the open total into a `TillClose` row (worker, site,
-  total, count, closedAt); open till then reads zero. Prime `/ui partner`.
-- **Context needed:** the chip's `currentWorkerId` lives in `ManageView` (view.tsx, localStorage
-  `sunbnb-manage-worker-${site.id}`) — the till panel hangs off the same chip. `getOpenTill` returns
-  `{ total, count }` since the worker's last `TillClose.closedAt` (today-scoped). `closeTill` is a new
-  manage action → MUST be added to `app/test/gated-actions.ts` (token-or-session) or coverage-contract
-  fails. Manage page is token-gated/session-less; the till read can be a new token-gated action OR
-  server-fetched in `page.tsx` like the roster.
+- **Phase 3 DONE (2026-06-19, UNCOMMITTED — awaiting "commit it").** Per-worker till + "close my till"
+  on the manage page. Two new token-or-session manage actions: `getTillStatus(siteId, employeeId,
+  accessKey?)` (validates the worker via `resolveEmployeeId`, returns `getOpenTill` `{ total, count }`)
+  and `closeTill(...)` (snapshots the open total into a `TillClose` row; empty till = no-op
+  `closed:false`, no snapshot). Both registered in `gated-actions.ts` (auth-matrix +14 → 474).
+  **Mock-aliasing trap handled:** `@repo/data/till` uses real prisma via `../index`, so unit tests need
+  it stubbed — added `__mocks__/@repo/data/till.ts` (`getOpenTill`/`getTillByEmployee`), the
+  `@repo/data/till` alias in `vitest.config.ts`, and a `till` entry in `mock-contract` SUBMODULE_SPECS
+  (mock-contract +1 → 13). **UI:** `TillSheet.tsx` (bottom-sheet, mirrors `CollectPaymentModal`) shows
+  open till € + sales count + two-step **Close till**; `ManageToolbar` gains a `💶 Till` button next to
+  the worker chip (shown once a worker is set) → `onOpenTill` → `view.tsx` `showTill` → `TillSheet`
+  (fetches `getTillStatus` on open, `closeTill` then `router.refresh()`). `Till` i18n namespace + the
+  `SiteManage.till` key in en/es/fi. Verify: partner **1470 unit** (spine green) + **37 manage
+  integration** (4 new till: open reflects walk-in, close snapshots+resets, empty no-op, unknown worker
+  rejected); tsc/lint clean.
+- **Next action:** **Phase 4** — manager per-employee day-breakdown on the **accounting** page
+  (`apps/partner/app/sites/[id]/accounting/{view,actions}.tsx`, session-gated — NOT the token-gated
+  manage page). New gated action `getStaffTill(siteId, date)` (session + site-owner, mirror the
+  track-007 `getRevenueTrend` allowlist pattern) calling `getTillByEmployee(siteId, from, to)` (already
+  in `@repo/data/till`, already mocked) → per-worker `{ employeeId, name, active, total, count }[]` for
+  the selected day, zero-filled across the roster. Render a "Staff till" card mirroring the track-007
+  trend-card/expandable-section pattern; optionally surface `TillClose` history. Read-only retrospective.
+  Prime `/ui partner`.
+- **Context needed:** accounting actions are **session + site-owner** (`site.userId === session.user.id`
+  → throw), returns are non-standard (data, not `{ status }`) → they go on the coverage-contract
+  `UNGATED_ALLOWLIST` like `getRevenueTrend`/`getRevenueCsv` (track 007), NOT `gated-actions.ts`.
+  `getTillByEmployee` is already exported + mocked. The track-007 card pattern lives in
+  `accounting/view.tsx` (revenue trend / occupancy / CSV).
 - **Blocked by:** nothing. `migrate:test` still owed before the eventual `main` push.
 
 ## Roadmap
@@ -84,8 +101,11 @@ Full design: `/Users/vhalme/.claude/plans/fuzzy-jumping-fountain.md` (approved 2
   actions + `convertHoldToWalkIn` via `resolveEmployeeId` (cross-account drop, never blocks); walk-in
   cash € recorded on `reserveItem` + `convertHoldToWalkIn`. partner 1455 unit + 33 manage integration,
   tsc/lint clean. No new gated-actions (param orthogonal to the gate); staff actions allowlisted.
-- ☐ **Phase 3 — per-worker till + "close my till" (manage).** Till panel (`getOpenTill`) + `closeTill`
-  writing a `TillClose` snapshot; open till resets after close.
+- ✅ **Phase 3 — per-worker till + "close my till" (manage). DONE 2026-06-19 (uncommitted).**
+  `getTillStatus` + `closeTill` (token-or-session, gated-actions registered); `TillSheet` + `💶 Till`
+  toolbar button (shown when a worker is set); `TillClose` snapshot, empty-till no-op; open till resets
+  after close. `@repo/data/till` mock + alias + mock-contract entry (real-prisma submodule). partner
+  1470 unit + 37 manage integration green.
 - ☐ **Phase 4 — manager per-employee day-breakdown (accounting).** Staff-till section + `TillClose`
   history (mirror the track-007 trend card).
 

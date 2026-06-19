@@ -48,6 +48,8 @@ import {
   collectReservationPayment,
   getCollectStatus,
   cancelCollection,
+  getTillStatus,
+  closeTill,
 } from '@/app/sites/[id]/manage/actions'
 
 import {
@@ -427,6 +429,18 @@ export const GATED_ACTIONS: GatedAction[] = [
     kind: 'action',
     gate: 'token-or-session',
     invoke: (accessKey?) => cancelCollection(SITE_ID, RES_ID, accessKey),
+  },
+  {
+    name: 'manage.getTillStatus',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => getTillStatus(SITE_ID, 'matrix-emp-1', accessKey),
+  },
+  {
+    name: 'manage.closeTill',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => closeTill(SITE_ID, 'matrix-emp-1', accessKey),
   },
 
   // ══════════════════════════════════════════════════════════════════════════

@@ -746,6 +746,7 @@
     "toggleTheme": "Toggle dark mode",
     "setWorker": "Set worker",
     "noWorker": "No worker",
+    "till": "Till",
     "movePrompt": "Tap a free seat to move here",
     "movePromptGroup": "Tap a free group of {n} seats to move here",
     "moveQueueRemaining": "{n} more after this",
@@ -831,6 +832,23 @@
     "close": "Close",
     "demoNote": "Demo mode — the payment completes automatically.",
     "errorGeneric": "Could not start the payment."
+  },
+  "Till": {
+    "title": "{name}'s till",
+    "openTill": "Open till",
+    "salesCount": "{count} cash sales this shift",
+    "closeTill": "Close till",
+    "confirmBody": "Hand over {total} and start a fresh till?",
+    "confirmClose": "Confirm",
+    "cancel": "Cancel",
+    "closing": "Closing…",
+    "closedTitle": "Till closed",
+    "closedBody": "{total} handed over · {count} sales",
+    "nothingToClose": "No cash taken yet this shift.",
+    "loading": "Loading…",
+    "done": "Done",
+    "close": "Close",
+    "errorGeneric": "Something went wrong."
   },
   "CreateRentalModal": {
     "title": "Rent Out",

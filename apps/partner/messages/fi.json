@@ -746,6 +746,7 @@
     "toggleTheme": "Vaihda tumma tila",
     "setWorker": "Valitse työntekijä",
     "noWorker": "Ei työntekijää",
+    "till": "Kassa",
     "movePrompt": "Napauta vapaata paikkaa siirtääksesi tähän",
     "movePromptGroup": "Napauta vapaata {n} paikan ryhmää siirtääksesi tähän",
     "moveQueueRemaining": "{n} lisää tämän jälkeen",
@@ -831,6 +832,23 @@
     "close": "Sulje",
     "demoNote": "Demotila — maksu suoritetaan automaattisesti.",
     "errorGeneric": "Maksua ei voitu aloittaa."
+  },
+  "Till": {
+    "title": "{name} – kassa",
+    "openTill": "Avoin kassa",
+    "salesCount": "{count} käteismyyntiä tässä vuorossa",
+    "closeTill": "Sulje kassa",
+    "confirmBody": "Luovutetaanko {total} ja aloitetaan uusi kassa?",
+    "confirmClose": "Vahvista",
+    "cancel": "Peruuta",
+    "closing": "Suljetaan…",
+    "closedTitle": "Kassa suljettu",
+    "closedBody": "{total} luovutettu · {count} myyntiä",
+    "nothingToClose": "Ei vielä käteistä tässä vuorossa.",
+    "loading": "Ladataan…",
+    "done": "Valmis",
+    "close": "Sulje",
+    "errorGeneric": "Jotain meni pieleen."
   },
   "CreateRentalModal": {
     "title": "Vuokraa",

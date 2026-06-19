@@ -195,6 +195,11 @@ const SUBMODULE_SPECS: SubmoduleSpec[] = [
     realFile: 'analytics.ts',
     mockFile: 'analytics.ts',
   },
+  {
+    name: 'till',
+    realFile: 'till.ts',
+    mockFile: 'till.ts',
+  },
 ]
 
 describe.each(SUBMODULE_SPECS)('$name mock — function superset', ({ name, realFile, mockFile }) => {

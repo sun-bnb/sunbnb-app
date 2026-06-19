@@ -42,7 +42,7 @@ function WorkerChip({
   }, [open])
 
   return (
-    <div className="relative mb-2" ref={ref}>
+    <div className="relative" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
@@ -131,6 +131,7 @@ interface ManageToolbarProps {
   employees: WorkerOption[]
   currentWorkerId: string | null
   onSelectWorker: (id: string | null) => void
+  onOpenTill: () => void
 }
 
 export default function ManageToolbar({
@@ -152,6 +153,7 @@ export default function ManageToolbar({
   employees,
   currentWorkerId,
   onSelectWorker,
+  onOpenTill,
 }: ManageToolbarProps) {
   const t = useTranslations('SiteManage')
 
@@ -243,13 +245,27 @@ export default function ManageToolbar({
       </div>
 
       {/* Current-worker chip — only when the account has a roster (single-operator
-          venues see nothing). Sets who every on-site action is attributed to. */}
+          venues see nothing). Sets who every on-site action is attributed to.
+          The Till button (open till + close) appears once a worker is set. */}
       {employees.length > 0 && (
-        <WorkerChip
-          employees={employees}
-          currentWorkerId={currentWorkerId}
-          onSelectWorker={onSelectWorker}
-        />
+        <div className="flex items-center gap-2 mb-2">
+          <WorkerChip
+            employees={employees}
+            currentWorkerId={currentWorkerId}
+            onSelectWorker={onSelectWorker}
+          />
+          {currentWorkerId && (
+            <button
+              type="button"
+              onClick={onOpenTill}
+              title={t('till')}
+              className="flex items-center gap-1.5 px-3 min-h-[36px] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm font-semibold transition-colors"
+            >
+              <span aria-hidden="true">💶</span>
+              <span>{t('till')}</span>
+            </button>
+          )}
+        </div>
       )}
 
       {/* View switcher — a bare pill row OUTSIDE the header card; always a single

@@ -8,6 +8,7 @@ import { InventoryItem, SiteProps } from '@/types/shared'
 import BedDetail from './BedDetail'
 import CreateRentalModal from './CreateRentalModal'
 import ManageToolbar, { type ManageViewKey } from './ManageToolbar'
+import TillSheet from './TillSheet'
 import ParcelView from './ParcelView'
 import RentalsSection from './RentalsSection'
 import { getActiveReservation, getBedState, isFailedReservationStatus, type BedState } from './bed-state'
@@ -104,6 +105,7 @@ export default function ManageView({
   // null (no hydration mismatch); restored from localStorage on mount and
   // re-validated against the live roster so a removed/renamed worker drops out.
   const [currentWorkerId, setCurrentWorkerId] = useState<string | null>(null)
+  const [showTill, setShowTill] = useState(false)
 
   useEffect(() => {
     try {
@@ -790,6 +792,7 @@ export default function ManageView({
           employees={employees}
           currentWorkerId={currentWorkerId}
           onSelectWorker={selectWorker}
+          onOpenTill={() => setShowTill(true)}
         />
       )}
 
@@ -917,6 +920,21 @@ export default function ManageView({
           }}
         />
       )}
+
+      {/* Per-worker till sheet — open till + close-my-till */}
+      {showTill && currentWorkerId && (() => {
+        const worker = employees.find(e => e.id === currentWorkerId)
+        if (!worker) return null
+        return (
+          <TillSheet
+            siteId={site.id!}
+            worker={worker}
+            accessKey={accessKey}
+            onClose={() => setShowTill(false)}
+            onClosed={() => router.refresh()}
+          />
+        )
+      })()}
 
       {/* Multiselect bottom sheet — BedDetail-style but NON-modal: no backdrop,
           and a pointer-events-none wrapper (only the panel itself is interactive)

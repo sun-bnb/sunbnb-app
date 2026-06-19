@@ -14,6 +14,7 @@ import {
   createReservationMolliePayment,
   reverifyAndFinalizeReservation,
 } from '@repo/data/reservation-payment'
+import { getOpenTill } from '@repo/data/till'
 import dayjs from 'dayjs'
 import {
   RESERVATION_PAID_IN_CASH,
@@ -1384,6 +1385,65 @@ export async function cancelCollection(
   })
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok', paymentStatus: 'cash' as const }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TILL ACTIONS (per-worker cash reconciliation)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Read the current worker's OPEN till at this site — cash they've taken since
+ * their last `TillClose` (today-scoped). The current worker is client state
+ * (the toolbar chip's localStorage), so this is a thin token-gated read of the
+ * shared `getOpenTill` aggregation. Validates the worker belongs to the account
+ * before reading so a stale/foreign id can't probe another account's till.
+ */
+export async function getTillStatus(
+  siteId: string,
+  employeeId: string,
+  accessKey?: string,
+) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const valid = await resolveEmployeeId(employeeId, ownership.userId)
+  if (!valid) return { status: 'error', errors: ['Unknown worker'] }
+
+  const { total, count } = await getOpenTill(siteId, valid)
+  return { status: 'ok', total, count }
+}
+
+/**
+ * Close the current worker's till — the cash-handoff ritual at shift end.
+ *
+ * Snapshots the open total into a `TillClose` row (worker, site, total, count,
+ * closedAt = now); `getOpenTill` then reads zero because it only counts cash
+ * taken AFTER the latest close. Closing an already-empty till is a no-op (no
+ * snapshot written) so the history isn't littered with empty rows. Idempotent
+ * in effect: a second close right after the first sees count 0 → no-op.
+ */
+export async function closeTill(
+  siteId: string,
+  employeeId: string,
+  accessKey?: string,
+) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const valid = await resolveEmployeeId(employeeId, ownership.userId)
+  if (!valid) return { status: 'error', errors: ['Unknown worker'] }
+
+  const { total, count } = await getOpenTill(siteId, valid)
+  if (count === 0) {
+    return { status: 'ok', total, count, closed: false }
+  }
+
+  await prisma.tillClose.create({
+    data: { siteId, employeeId: valid, totalAmount: total, txnCount: count },
+  })
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok', total, count, closed: true }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
