@@ -13,6 +13,28 @@ import {
   summarizeOccupancy,
   toFiguresCsv,
 } from '@repo/data/analytics'
+import { getTillByEmployee } from '@repo/data/till'
+
+/**
+ * Per-employee cash breakdown for the selected accounting month — the manager
+ * retrospective on who rang up how much floor cash (walk-ins + cash rentals).
+ * The on-site till (manage page) is the live per-shift view; this is the durable
+ * monthly roll-up Alonso's day-reset model can't keep. Session-gated + site
+ * ownership (mirrors getPaidItemsByMonth); aggregation in `@repo/data/till`.
+ * Returns the roster zero-filled (empty array ⇒ the account has no staff).
+ */
+export async function getStaffTill(siteId: string, year: number, month: number) {
+  const session = await auth()
+  if (!session?.user) throw new Error('Not authenticated')
+
+  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
+  if (!site || site.userId !== session.user.id) throw new Error('Not authorized')
+
+  // Whole-month bounds (getTillByEmployee uses createdAt gte..lte, inclusive).
+  const from = new Date(Date.UTC(year, month - 1, 1))
+  const to = new Date(Date.UTC(year, month, 1) - 1)
+  return getTillByEmployee(siteId, from, to)
+}
 
 /** Rolling-window days the trend lens offers (operational pulse vs the
  *  calendar-month accounting view). */

@@ -4,10 +4,11 @@ vi.mock('@/app/auth', () => ({
   auth: vi.fn().mockResolvedValue(null),
 }))
 
-import { getInvoicesByMonth, getPaidItemsByMonth, getRevenueTrend, getOccupancyTrend, getRevenueCsv } from './actions'
+import { getInvoicesByMonth, getPaidItemsByMonth, getRevenueTrend, getOccupancyTrend, getRevenueCsv, getStaffTill } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { getRevenueByDay, summarizeRevenue, getOccupancyByDay, summarizeOccupancy, toFiguresCsv } from '@repo/data/analytics'
+import { getTillByEmployee } from '@repo/data/till'
 import { RESERVATION_COMPLETE, ORDER_COMPLETE } from '@repo/data/reservation-status'
 
 const mockAuth = vi.mocked(auth)
@@ -384,5 +385,37 @@ describe('getRevenueCsv', () => {
 
     expect(mockCsv).toHaveBeenCalledWith(rows)
     expect(csv).toBe('date,rentals,revenue\n2026-06-18,2,16.00\n')
+  })
+})
+
+describe('getStaffTill', () => {
+  const mockTillByEmployee = vi.mocked(getTillByEmployee)
+
+  it('throws when not authenticated', async () => {
+    await expect(getStaffTill(SITE_ID, 2026, 6)).rejects.toThrow('Not authenticated')
+    expect(mockTillByEmployee).not.toHaveBeenCalled()
+  })
+
+  it('throws when the site belongs to another partner', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OTHER_ID } as any)
+    await expect(getStaffTill(SITE_ID, 2026, 6)).rejects.toThrow('Not authorized')
+    expect(mockTillByEmployee).not.toHaveBeenCalled()
+  })
+
+  it('delegates to getTillByEmployee with whole-month bounds', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    const rows = [{ employeeId: 'e1', name: 'Alice', active: true, total: 30, count: 3 }]
+    mockTillByEmployee.mockResolvedValue(rows)
+
+    const res = await getStaffTill(SITE_ID, 2026, 6)
+
+    expect(res).toEqual(rows)
+    const [siteId, from, to] = mockTillByEmployee.mock.calls[0]!
+    expect(siteId).toBe(SITE_ID)
+    // June 2026: from = 1 Jun 00:00 UTC, to = last ms of 30 Jun.
+    expect(from.toISOString()).toBe('2026-06-01T00:00:00.000Z')
+    expect(to.toISOString()).toBe('2026-06-30T23:59:59.999Z')
   })
 })

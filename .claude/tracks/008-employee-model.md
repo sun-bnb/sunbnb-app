@@ -74,20 +74,25 @@ Full design: `/Users/vhalme/.claude/plans/fuzzy-jumping-fountain.md` (approved 2
   `SiteManage.till` key in en/es/fi. Verify: partner **1470 unit** (spine green) + **37 manage
   integration** (4 new till: open reflects walk-in, close snapshots+resets, empty no-op, unknown worker
   rejected); tsc/lint clean.
-- **Next action:** **Phase 4** — manager per-employee day-breakdown on the **accounting** page
-  (`apps/partner/app/sites/[id]/accounting/{view,actions}.tsx`, session-gated — NOT the token-gated
-  manage page). New gated action `getStaffTill(siteId, date)` (session + site-owner, mirror the
-  track-007 `getRevenueTrend` allowlist pattern) calling `getTillByEmployee(siteId, from, to)` (already
-  in `@repo/data/till`, already mocked) → per-worker `{ employeeId, name, active, total, count }[]` for
-  the selected day, zero-filled across the roster. Render a "Staff till" card mirroring the track-007
-  trend-card/expandable-section pattern; optionally surface `TillClose` history. Read-only retrospective.
-  Prime `/ui partner`.
-- **Context needed:** accounting actions are **session + site-owner** (`site.userId === session.user.id`
-  → throw), returns are non-standard (data, not `{ status }`) → they go on the coverage-contract
-  `UNGATED_ALLOWLIST` like `getRevenueTrend`/`getRevenueCsv` (track 007), NOT `gated-actions.ts`.
-  `getTillByEmployee` is already exported + mocked. The track-007 card pattern lives in
-  `accounting/view.tsx` (revenue trend / occupancy / CSV).
-- **Blocked by:** nothing. `migrate:test` still owed before the eventual `main` push.
+- **Phase 4 DONE (2026-06-19, UNCOMMITTED — awaiting "commit it"). ALL FOUR PHASES COMPLETE.**
+  Manager per-employee cash breakdown on the **accounting** page. New session+site-owner action
+  `getStaffTill(siteId, year, month)` (`accounting/actions.ts`) → `getTillByEmployee` with whole-month
+  bounds → per-worker `{ employeeId, name, active, total, count }[]`; added to coverage-contract
+  `UNGATED_ALLOWLIST` (data-returning, like `getRevenueTrend`). **Deviation from plan:** scoped to the
+  selected **month** (reuses the page's existing month selector) rather than a single day — cleaner on a
+  month-axis page, no redundant day-picker; revisit if daily granularity is wanted. `accounting/view.tsx`
+  renders a "Staff cash till" card after the summary cards (workers with cash, sorted by total desc,
+  month total) — **hidden when the roster is empty** so single-operator venues see nothing. `SiteAccounting`
+  i18n (staffTill/staffTillHint/noStaffCash/staffSales/inactiveStaff) in en/es/fi. 3 unit tests
+  (auth/ownership reject, month-bounds delegation). partner **1473 unit** + tsc/lint clean. `TillClose`
+  history surfacing deferred (the cash breakdown is the core value).
+- **Next action:** **none — feature complete.** Remaining to ship: (1) **commit Phase 4**; (2) **docs
+  sync** — `apps/partner/CLAUDE.md` (route `/account/staff`, new server actions: staff CRUD, manage
+  `getTillStatus`/`closeTill`, accounting `getStaffTill`) + `/wiki ingest` the employee/till subsystem;
+  (3) **`migrate:test`** (Neon TEST DB) before any `main` push (pre-push hook enforces) — the
+  `20260619080811_add_employee_attribution` migration must reach the shared test DB first; (4) promote/
+  deploy at the user's discretion.
+- **Blocked by:** nothing.
 
 ## Roadmap
 
@@ -106,8 +111,11 @@ Full design: `/Users/vhalme/.claude/plans/fuzzy-jumping-fountain.md` (approved 2
   toolbar button (shown when a worker is set); `TillClose` snapshot, empty-till no-op; open till resets
   after close. `@repo/data/till` mock + alias + mock-contract entry (real-prisma submodule). partner
   1470 unit + 37 manage integration green.
-- ☐ **Phase 4 — manager per-employee day-breakdown (accounting).** Staff-till section + `TillClose`
-  history (mirror the track-007 trend card).
+- ✅ **Phase 4 — manager per-employee breakdown (accounting). DONE 2026-06-19 (uncommitted).**
+  `getStaffTill(siteId, year, month)` → `getTillByEmployee` (month bounds); "Staff cash till" card on
+  `accounting/view.tsx` (per-worker cash, month total, hidden when no roster). Scoped to the selected
+  **month** (not a single day) to reuse the page's month selector. coverage-contract allowlisted; 3 unit
+  tests. partner 1473 unit green. `TillClose` history surfacing deferred.
 
 ## Open decisions
 

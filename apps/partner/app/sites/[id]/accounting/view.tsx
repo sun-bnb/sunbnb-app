@@ -14,7 +14,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import { useTranslations } from 'next-intl'
 
 import { useSite } from '@/app/sites/site-context'
-import { getPaidItemsByMonth, getRevenueTrend, getOccupancyTrend, getRevenueCsv } from './actions'
+import { getPaidItemsByMonth, getRevenueTrend, getOccupancyTrend, getRevenueCsv, getStaffTill } from './actions'
 import { formatSeat } from '@repo/data/seat-label'
 
 const MONTH_KEYS = ['january','february','march','april','may','june','july','august','september','october','november','december'] as const
@@ -30,6 +30,7 @@ interface OccupancyTrend {
   rows: DailyOccupancy[]
   summary: { avgOccupancyPct: number; peakOccupancyPct: number; totalComps: number }
 }
+interface EmployeeTill { employeeId: string; name: string; active: boolean; total: number; count: number }
 
 export default function AccountingView() {
   const { site } = useSite()
@@ -55,6 +56,10 @@ export default function AccountingView() {
   const [occupancy, setOccupancy] = useState<OccupancyTrend | null>(null)
   const [occupancyLoading, setOccupancyLoading] = useState(true)
 
+  // Per-employee floor cash for the selected month (null until loaded; empty
+  // array ⇒ the account has no staff roster → the card stays hidden).
+  const [staffTill, setStaffTill] = useState<EmployeeTill[] | null>(null)
+
   useEffect(() => {
     if (!site?.id) return
     setLoading(true)
@@ -62,6 +67,7 @@ export default function AccountingView() {
       setPaidItems(data)
       setLoading(false)
     })
+    getStaffTill(site.id, selectedYear, selectedMonth).then(setStaffTill)
   }, [selectedYear, selectedMonth, site?.id])
 
   useEffect(() => {
@@ -310,6 +316,41 @@ export default function AccountingView() {
           </div>
         </div>
       </div>
+
+      {/* Staff cash till — per-worker floor cash (walk-ins + cash rentals) for the
+          selected month. Hidden when the account has no roster, so single-operator
+          venues see nothing. Read-only retrospective; the manage-page till is live. */}
+      {staffTill && staffTill.length > 0 && (() => {
+        const withCash = staffTill.filter(w => w.count > 0).sort((a, b) => b.total - a.total)
+        const monthTotal = withCash.reduce((s, w) => s + w.total, 0)
+        return (
+          <div className="mb-6 border border-gray-200 rounded-lg bg-white p-4">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-sm font-semibold text-gray-800">{t('staffTill')}</h3>
+              <span className="text-sm font-bold text-gray-900 tabular-nums">€{monthTotal.toFixed(2)}</span>
+            </div>
+            <p className="text-xs text-gray-400 mb-3">{t('staffTillHint')}</p>
+            {withCash.length === 0 ? (
+              <p className="text-sm text-gray-400 py-2">{t('noStaffCash')}</p>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {withCash.map(w => (
+                  <li key={w.employeeId} className="flex items-center justify-between py-2">
+                    <span className="text-sm text-gray-800 truncate">
+                      {w.name}
+                      {!w.active && <span className="ml-2 text-[11px] text-gray-400">{t('inactiveStaff')}</span>}
+                    </span>
+                    <span className="text-sm text-gray-700 tabular-nums whitespace-nowrap">
+                      <span className="font-semibold">€{w.total.toFixed(2)}</span>
+                      <span className="text-gray-400 ml-2">{t('staffSales', { count: w.count })}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )
+      })()}
 
       {loading ? (
         <div className="flex justify-center py-12">
