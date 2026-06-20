@@ -56,11 +56,19 @@ schema, no migration (the `Reservation`↔`items` relation is already many-to-ma
   Dropped unused `holdBed`/`reserveItem` imports; new conflict i18n key in en/es/fi. tsc/lint
   clean, partner 1522 unit green. (Registry `index.md` 011 row not updated here — it carries the
   parallel track-012 agent's uncommitted edit; update when 012 docs land.)
-- **Next action: P3 — verify downstream + browser-verify.** Confirm a grouped reservation
-  displays across all its seats and that check-in / depart / no-show / cancel / move behave on
-  the grouped booking (reservation-level already, but verify with a real grouped row). Add
-  integration coverage for move/cancel of a grouped walk-in. Browser-verify multiselect → group
-  → act. tsc/lint + partner suite green.
+- **P3 automated half DONE (`135cbee`, 2026-06-20).** 10 integration tests (manage, 51→61):
+  check-in marks the group; depart/no-show free all N seats; cancel via ONE seat's id cancels
+  the whole booking + frees every seat; move (same-count + count-change) preserves identity.
+  **False-bug caught & corrected:** the verification agent flagged releaseHold/unreserveItem
+  `applyToPair=false` as "stranded siblings" — but that's CORRECT partial-free (vacate the tapped
+  seat, leave the party booked; the freed seat is rebookable — now asserted). No production change;
+  "fixing" it would have made a single Free delete the whole party.
+- **Next action: P3 browser-verify (manual).** Run the partner app, open a token-gated manage
+  page, multiselect free seats → Reserve and → Rent, confirm ONE reservation spans the seats
+  (BedDetail shows the group; check-in/depart/cancel/move behave). Then track is functionally
+  complete. (Observation to weigh, not a bug: Cancel-one-seat cancels the whole grouped booking
+  while Free-one-seat vacates just that seat — defensible different verbs, but confirm it reads
+  right on the floor.)
 - **Context needed:**
   - Create primitive: `reserveWithConflictGuard` (`packages/data/src/reservations.ts`).
   - Today's singular actions: `reserveItem` (`actions.ts:122`), `holdBed` (`actions.ts:764`)
@@ -86,11 +94,11 @@ schema, no migration (the `Reservation`↔`items` relation is already many-to-ma
   on conflict) + per-reservation `convertHoldToWalkIn` for holds. `bulkBlock`/`bulkComp` stay
   per-seat. `SiteManage.bulkGroupConflict` banner copy in en/es/fi. tsc/lint clean, partner 1522
   unit green.
-- ☐ **P3 — Verify downstream + browser-verify.** Confirm a grouped reservation displays
-  correctly across all its seats, and that check-in / depart / no-show / cancel / move all
-  behave on the grouped reservation (they're reservation-level already, but verify with a
-  real grouped booking). Integration coverage for the move/cancel of a grouped walk-in.
-  Browser-verify the end-to-end multiselect → group → act flow. tsc/lint + partner suite green.
+- ◐ **P3 — Verify downstream + browser-verify.** ✅ **Automated half DONE (`135cbee`):** 10
+  integration tests — check-in / depart / no-show / cancel-via-one-seat / move all span the
+  grouped row; partial-free correctness for releaseHold/unreserveItem (false-bug caught — see
+  Resume here). ☐ **Remaining: browser-verify** the end-to-end multiselect → group → act flow
+  on a token-gated manage page. partner 61 integration + 1522 unit, tsc/lint green.
 
 ## Open decisions (defaults chosen; flag to revisit)
 
