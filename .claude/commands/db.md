@@ -66,8 +66,11 @@ landmines). Before composing non-trivial queries:
   camelCase and **must be double-quoted** (`"createdAt"`), and short fields are bare lowercase
   (`status`, `type`, `from`, `to`, `id`, `price`, `tax`). **Always check the field's `@map` in
   `schema.prisma`** before naming a column.
-- **Statuses are strings, not enums** — `status = 'complete'`, `operational_status =
-  'checked_in'`. Wrong casing or an invented value silently matches zero rows.
+- **Statuses are strings, not enums, and their VALUES are hyphen-delimited** even though the
+  *column names* are snake_case — `status = 'paid-in-cash'`, `operational_status =
+  'checked-in'` / `'walked-in'` / `'no-show'` (NOT `paid_in_cash` / `checked_in`). Wrong
+  casing or delimiter silently matches zero rows. Copy the exact value from
+  `packages/data/src/reservation-status.ts` — never hand-type it.
 - **Money is `Float` and VAT-inclusive.** Don't sum invoices expecting them to reconcile to the
   consumer payment: the **PARTNER** invoice (gross sale) and the **PLATFORM** invoice (B2B
   commission billed to the partner) do *not* sum to what the consumer paid — agent model. See
@@ -121,7 +124,7 @@ Daily paid revenue for a site (gross, partner-booked):
 ```sql
 SELECT date_trunc('day', "createdAt") AS day, count(*), sum(payment_amount)
 FROM "Reservation"
-WHERE site_id = '<siteId>' AND status IN ('complete', 'paid_in_cash')
+WHERE site_id = '<siteId>' AND status IN ('complete', 'paid-in-cash')
 GROUP BY 1 ORDER BY 1 DESC;
 ```
 
