@@ -21,6 +21,7 @@
 
 import {
   reserveItem,
+  reserveItems,
   unreserveItem,
   checkInReservation,
   markDeparted,
@@ -31,6 +32,7 @@ import {
   blockBed,
   unblockBed,
   holdBed,
+  holdBeds,
   compBed,
   uncompBed,
   cancelReservation,
@@ -448,6 +450,18 @@ export const GATED_ACTIONS: GatedAction[] = [
     kind: 'action',
     gate: 'token-or-session',
     invoke: (accessKey?) => findReservations(SITE_ID, undefined, accessKey),
+  },
+  {
+    name: 'manage.reserveItems',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => reserveItems(SITE_ID, [ITEM_ID], undefined, undefined, accessKey),
+  },
+  {
+    name: 'manage.holdBeds',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => holdBeds(SITE_ID, [ITEM_ID], accessKey),
   },
 
   // ══════════════════════════════════════════════════════════════════════════

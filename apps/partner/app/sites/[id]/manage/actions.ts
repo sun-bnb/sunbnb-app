@@ -809,6 +809,151 @@ export async function holdBed(
   return { status: 'ok' }
 }
 
+// ─── Grouped walk-in: seat an entire multiselect party as ONE reservation ────
+
+/**
+ * Create a single walk-in reservation spanning ALL the selected `itemIds`.
+ *
+ * This is the multiselect analogue of `reserveItem`: instead of one seat (+ pair
+ * expansion), the caller supplies the full selection and it is booked atomically
+ * under one `Reservation` row.  The `reserveWithConflictGuard` primitive already
+ * creates one reservation over an `itemIds[]` array with a `SELECT … FOR UPDATE`
+ * lock, so all-or-nothing falls out naturally: a conflict on ANY seat fails the
+ * whole group and creates nothing.
+ *
+ * Decisions (track 011 P1):
+ * - No pair expansion (`applyToPair = false` semantics): the UI sends the full
+ *   selection; we act on exactly those ids.
+ * - `paymentAmount` is the SUM across ALL seats × days, computed from DB prices
+ *   only — never a client value (payments.md, no-inline-money guard).
+ * - One till line for the whole group (same employeeId on the one reservation).
+ */
+export async function reserveItems(
+  siteId: string,
+  itemIds: string[],
+  guestName?: string,
+  internalNotes?: string,
+  accessKey?: string,
+  until?: string,
+  employeeId?: string,
+) {
+  if (!itemIds || itemIds.length === 0) {
+    return { status: 'error', errors: ['No items selected'] }
+  }
+
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const fromDate = dayjs().startOf('day').toDate()
+  let toDate = dayjs().endOf('day').toDate()
+  if (until) {
+    if (isNaN(Date.parse(until))) {
+      return { status: 'error', errors: ['Invalid date format'] }
+    }
+    const days = dayjs(until).startOf('day').diff(dayjs().startOf('day'), 'day')
+    if (days < 0) {
+      return { status: 'error', errors: ['End date cannot be in the past'] }
+    }
+    if (days > 90) {
+      return { status: 'error', errors: ['Date range cannot exceed 90 days'] }
+    }
+    toDate = dayjs(until).endOf('day').toDate()
+  }
+
+  // Summed paymentAmount across all selected seats from DB prices only.
+  const [site, priceRows] = await Promise.all([
+    prisma.site.findUnique({ where: { id: siteId }, select: { type: true, price: true } }),
+    prisma.inventoryItem.findMany({ where: { id: { in: itemIds } }, select: { price: true } }),
+  ])
+  const paymentAmount = site?.type === 'paid'
+    ? computeWalkInAmount(priceRows, site.price, fromDate, toDate)
+    : 0
+
+  const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
+
+  const result = await reserveWithConflictGuard({
+    itemIds,
+    siteId,
+    userId: ownership.userId,
+    employeeId: stampedEmployeeId,
+    type: 'days',
+    from: fromDate,
+    to: toDate,
+    status: RESERVATION_PAID_IN_CASH,
+    operationalStatus: OP_WALKED_IN,
+    checkedInAt: new Date(),
+    paymentAmount,
+    guestName: guestName?.slice(0, 200) || null,
+    internalNotes: internalNotes?.slice(0, 500) || null,
+  })
+
+  if (result.outcome === 'conflict') {
+    return { status: 'error', errors: ['One or more selected sunbeds are already reserved for this period'] }
+  }
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
+}
+
+// ─── Grouped hold: pencil in an entire multiselect party as ONE hold ─────────
+
+/**
+ * Create a single lightweight floor hold spanning ALL the selected `itemIds`.
+ *
+ * This is the multiselect analogue of `holdBed`: instead of one seat (+ pair
+ * expansion), the full selection is held atomically under one `Reservation` row.
+ * All-or-nothing atomicity is provided by `reserveWithConflictGuard`'s
+ * `SELECT … FOR UPDATE` transaction over the whole `itemIds` set.
+ *
+ * Decisions (track 011 P1):
+ * - No pair expansion: act on exactly the passed `itemIds`.
+ * - `paymentAmount: 0` (hold, no cash taken).
+ * - `status: held`, `operationalStatus: expected` — same as singular `holdBed`.
+ * - Today-only (`to` = end of day); the cleanup cron garbage-collects expired holds.
+ */
+export async function holdBeds(
+  siteId: string,
+  itemIds: string[],
+  accessKey?: string,
+  guestName?: string,
+  notes?: string,
+  employeeId?: string,
+) {
+  if (!itemIds || itemIds.length === 0) {
+    return { status: 'error', errors: ['No items selected'] }
+  }
+
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const fromDate = dayjs().startOf('day').toDate()
+  const toDate = dayjs().endOf('day').toDate()
+
+  const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
+
+  const result = await reserveWithConflictGuard({
+    itemIds,
+    siteId,
+    userId: ownership.userId,
+    employeeId: stampedEmployeeId,
+    type: 'days',
+    from: fromDate,
+    to: toDate,
+    status: RESERVATION_HELD,
+    operationalStatus: OP_EXPECTED,
+    paymentAmount: 0,
+    guestName: guestName?.slice(0, 200) || null,
+    internalNotes: notes?.slice(0, 500) || null,
+  })
+
+  if (result.outcome === 'conflict') {
+    return { status: 'error', errors: ['One or more selected sunbeds are already occupied or blocked'] }
+  }
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
+}
+
 // ─── Convert hold to walk-in (held guest arrives — collect cash) ────────────
 
 /**

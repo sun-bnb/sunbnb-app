@@ -33,6 +33,7 @@ vi.mock('next/cache', () => ({
 
 import {
   reserveItem,
+  reserveItems,
   unreserveItem,
   checkInReservation,
   markDeparted,
@@ -40,6 +41,7 @@ import {
   moveReservation,
   blockBed,
   unblockBed,
+  holdBeds,
   markRentalPickedUp,
   markRentalReturned,
   createWalkInRental,
@@ -1107,5 +1109,199 @@ describe('findReservations', () => {
 
     const res = await findReservations(site.id, 'garcia')
     expect(res.reservations).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Grouped walk-in: reserveItems (track 011 P1)
+// ---------------------------------------------------------------------------
+
+describe('reserveItems — grouped walk-in', () => {
+  it('creates ONE Reservation row with all N items connected', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    const result = await reserveItems(site.id, [itemA.id, itemB.id, itemC.id], 'Group A')
+    expect(result).toEqual({ status: 'ok' })
+
+    const reservations = await prisma.reservation.findMany({
+      where: { siteId: site.id },
+      include: { items: true },
+    })
+    // Exactly ONE reservation created
+    expect(reservations).toHaveLength(1)
+
+    const res = reservations[0]
+    expect(res.status).toBe('paid-in-cash')
+    expect(res.operationalStatus).toBe('walked-in')
+    expect(res.checkedInAt).toBeTruthy()
+    expect(res.guestName).toBe('Group A')
+
+    // All 3 items are connected to the single reservation
+    const connectedIds = res.items.map((i) => i.id).sort()
+    expect(connectedIds).toEqual([itemA.id, itemB.id, itemC.id].sort())
+  })
+
+  it('sums paymentAmount across all seats from DB prices (paid site, 1 day)', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id, { type: 'paid', price: 10 })
+    // item-level prices: 20 and 15; site fallback would be 10 but won't be used here
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1, price: 20 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2, price: 15 })
+    mockUserId = user.id
+
+    await reserveItems(site.id, [itemA.id, itemB.id])
+
+    const res = await prisma.reservation.findFirstOrThrow({ where: { siteId: site.id } })
+    // 20 + 15 = 35 for today (1 day)
+    expect(res.paymentAmount).toBe(35)
+  })
+
+  it('falls back to site price when items have no individual price', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id, { type: 'paid', price: 12 })
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    mockUserId = user.id
+
+    await reserveItems(site.id, [itemA.id, itemB.id])
+
+    const res = await prisma.reservation.findFirstOrThrow({ where: { siteId: site.id } })
+    // 12 + 12 = 24 (both fall back to site price) × 1 day
+    expect(res.paymentAmount).toBe(24)
+  })
+
+  it('conflict atomicity: if ONE seat is already taken, NOTHING is created', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    // Pre-existing reservation occupying itemB only
+    await createTestReservation(user.id, site.id, [itemB.id], {
+      from: new Date(new Date().setHours(0, 0, 0, 0)),
+      to: new Date(new Date().setHours(23, 59, 59, 999)),
+      status: 'complete',
+      operationalStatus: 'expected',
+    })
+
+    // Attempt to group-reserve all three — itemB conflict must fail everything
+    const result = await reserveItems(site.id, [itemA.id, itemB.id, itemC.id])
+    expect(result.status).toBe('error')
+    expect(result.errors?.[0]).toMatch(/already reserved/i)
+
+    // Only the pre-existing reservation survives; no partial reservation created
+    const allReservations = await prisma.reservation.findMany({ where: { siteId: site.id } })
+    expect(allReservations).toHaveLength(1)
+
+    // itemA and itemC remain free (not connected to any new reservation)
+    const newRes = allReservations[0]
+    expect(newRes.status).toBe('complete')
+    const connectedItems = await prisma.reservation.findFirst({
+      where: { siteId: site.id },
+      include: { items: true },
+    })
+    const connectedIds = connectedItems!.items.map((i) => i.id)
+    expect(connectedIds).not.toContain(itemA.id)
+    expect(connectedIds).not.toContain(itemC.id)
+  })
+
+  it('till records ONE summed walk-in amount (one line) for the group', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id, { type: 'paid', price: 10 })
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const employee = await prisma.employee.create({ data: { accountId: user.id, name: 'Beach Staff' } })
+    mockUserId = user.id
+
+    await reserveItems(site.id, [itemA.id, itemB.id], 'Couple', undefined, undefined, undefined, employee.id)
+
+    // Till should show ONE transaction worth 2 × 10 = 20
+    const till = await getTillStatus(site.id, employee.id)
+    expect(till.status).toBe('ok')
+    expect((till as any).count).toBe(1)
+    expect((till as any).total).toBe(20)
+  })
+
+  it('rejects non-owner and creates nothing in DB', async () => {
+    const owner = await createTestUser()
+    const stranger = await createTestUser()
+    const site = await createTestSite(owner.id)
+    const item = await createTestInventoryItem(owner.id, site.id)
+    mockUserId = stranger.id
+
+    const result = await reserveItems(site.id, [item.id])
+    expect(result.status).toBe('error')
+
+    expect(await prisma.reservation.count({ where: { siteId: site.id } })).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Grouped hold: holdBeds (track 011 P1)
+// ---------------------------------------------------------------------------
+
+describe('holdBeds — grouped hold', () => {
+  it('creates ONE held Reservation row with all N items connected', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    mockUserId = user.id
+
+    const result = await holdBeds(site.id, [itemA.id, itemB.id], undefined, 'Group B')
+    expect(result).toEqual({ status: 'ok' })
+
+    const reservations = await prisma.reservation.findMany({
+      where: { siteId: site.id },
+      include: { items: true },
+    })
+    expect(reservations).toHaveLength(1)
+
+    const res = reservations[0]
+    expect(res.status).toBe('held')
+    expect(res.operationalStatus).toBe('expected')
+    expect(res.checkedInAt).toBeNull()
+    expect(res.guestName).toBe('Group B')
+    expect(res.paymentAmount).toBe(0)
+
+    const connectedIds = res.items.map((i) => i.id).sort()
+    expect(connectedIds).toEqual([itemA.id, itemB.id].sort())
+  })
+
+  it('conflict atomicity: if ONE seat is taken, NOTHING is created', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    mockUserId = user.id
+
+    // Pre-occupy itemA
+    await reserveItem(site.id, itemA.id, 'Existing guest')
+
+    // Attempt to hold both — conflict on itemA must roll back everything
+    const result = await holdBeds(site.id, [itemA.id, itemB.id])
+    expect(result.status).toBe('error')
+    expect(result.errors?.[0]).toMatch(/already occupied or blocked/i)
+
+    // Only the walk-in from reserveItem survives; no hold reservation created
+    const allReservations = await prisma.reservation.findMany({ where: { siteId: site.id } })
+    expect(allReservations).toHaveLength(1)
+    expect(allReservations[0].status).toBe('paid-in-cash')
+
+    // itemB is still free (not connected to any new reservation)
+    const holdRes = await prisma.reservation.findFirst({
+      where: { siteId: site.id, status: 'held' },
+    })
+    expect(holdRes).toBeNull()
   })
 })
