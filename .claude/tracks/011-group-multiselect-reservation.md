@@ -49,12 +49,18 @@ schema, no migration (the `Reservation`↔`items` relation is already many-to-ma
   verified: one taken seat → nothing created). No pair expansion. Singular actions untouched.
   Registered in gated-actions (auth-matrix +10 → 495, coverage-contract + no-inline-money
   green). 16 unit + 13 integration. partner 1522 unit + 118 integration, tsc/lint clean.
-- **Next action: P2 — wire the manage UI.** `bulkReserve` → `holdBeds(site.id!, selectedIds,
-  apiKey, bulkGuestName, undefined, workerArg)` once; `bulkRent` → `reserveItems(site.id!,
-  <free selectedIds>, bulkGuestName, undefined, apiKey, bulkUntil, workerArg)` once, and
-  `convertHoldToWalkIn` individually for any pre-existing holds in the selection. Drop the
-  per-seat `runBulkSeq` loop for these two verbs. Surface the all-or-nothing conflict via the
-  existing `bulkError` banner. Keep selection on failure, clear on success. Prime `/ui partner`.
+- **P2 DONE (`e16ef74`, 2026-06-20).** `bulkReserve` → single `holdBeds(...)`; `bulkRent` splits
+  free seats → one `reserveItems(...)` (all-or-nothing; on conflict surfaces
+  `SiteManage.bulkGroupConflict`, keeps selection, skips holds) + per-reservation
+  `convertHoldToWalkIn` for pre-existing holds (deduped). `bulkBlock`/`bulkComp` stay per-seat.
+  Dropped unused `holdBed`/`reserveItem` imports; new conflict i18n key in en/es/fi. tsc/lint
+  clean, partner 1522 unit green. (Registry `index.md` 011 row not updated here — it carries the
+  parallel track-012 agent's uncommitted edit; update when 012 docs land.)
+- **Next action: P3 — verify downstream + browser-verify.** Confirm a grouped reservation
+  displays across all its seats and that check-in / depart / no-show / cancel / move behave on
+  the grouped booking (reservation-level already, but verify with a real grouped row). Add
+  integration coverage for move/cancel of a grouped walk-in. Browser-verify multiselect → group
+  → act. tsc/lint + partner suite green.
 - **Context needed:**
   - Create primitive: `reserveWithConflictGuard` (`packages/data/src/reservations.ts`).
   - Today's singular actions: `reserveItem` (`actions.ts:122`), `holdBed` (`actions.ts:764`)
@@ -75,12 +81,11 @@ schema, no migration (the `Reservation`↔`items` relation is already many-to-ma
   no-inline-money green). 16 unit + 13 integration (incl. conflict-atomicity: one taken seat →
   nothing created; till one summed amount). Singular actions untouched. partner 1522 unit + 118
   integration, tsc/lint clean.
-- ☐ **P2 — Wire the manage UI.** `bulkReserve` / `bulkRent` call the grouped action ONCE with
-  all selected ids instead of `runBulkSeq` looping per seat. **Mixed free+held Rent rule:**
-  group the *free* seats into one new walk-in; convert any *pre-existing holds* individually
-  (keep their identity — don't merge holds into the new row). On an all-or-nothing conflict,
-  surface a clear message (adapt the existing `bulkError` banner — e.g. "Couldn't book — one
-  or more seats are taken"). Keep the selection on failure, clear on success.
+- ✅ **P2 — Wire the manage UI. DONE (`e16ef74`, 2026-06-20).** `bulkReserve` → one `holdBeds`;
+  `bulkRent` → one `reserveItems` for free seats (all-or-nothing, aborts before touching holds
+  on conflict) + per-reservation `convertHoldToWalkIn` for holds. `bulkBlock`/`bulkComp` stay
+  per-seat. `SiteManage.bulkGroupConflict` banner copy in en/es/fi. tsc/lint clean, partner 1522
+  unit green.
 - ☐ **P3 — Verify downstream + browser-verify.** Confirm a grouped reservation displays
   correctly across all its seats, and that check-in / depart / no-show / cancel / move all
   behave on the grouped reservation (they're reservation-level already, but verify with a
@@ -111,6 +116,11 @@ schema, no migration (the `Reservation`↔`items` relation is already many-to-ma
   create actions (`reserveItem` / `convertHoldToWalkIn`).
 - Reference for grouped multi-seat create done right: the consumer
   `saveReservationForMultipleItems` (`apps/user/app/sites/[id]/actions.ts`).
+- [[track:012-multiday-per-day-operational-state]] — **future integration point.** 012 adds
+  per-day `ReservationDay` operational rows for multiday stays. 011's `reserveItems` already
+  creates multiday grouped walk-ins (`until`), so when 012 lands, a grouped multiday booking
+  must seed per-day rows for ALL its seats. No collision today (012 is scope-only); flag so the
+  grouped-create path is covered when 012 is built.
 
 ## Log
 
