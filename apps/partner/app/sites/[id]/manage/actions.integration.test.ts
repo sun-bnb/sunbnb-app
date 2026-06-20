@@ -39,9 +39,12 @@ import {
   markDeparted,
   markNoShow,
   moveReservation,
+  moveReservationToSeats,
   blockBed,
   unblockBed,
   holdBeds,
+  releaseHold,
+  cancelReservation,
   markRentalPickedUp,
   markRentalReturned,
   createWalkInRental,
@@ -1303,5 +1306,423 @@ describe('holdBeds — grouped hold', () => {
       where: { siteId: site.id, status: 'held' },
     })
     expect(holdRes).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// P3 — Grouped-reservation lifecycle (track 011)
+//
+// A grouped reservation is ONE Reservation row connected to N InventoryItems.
+// These tests verify that check-in / depart / no-show / cancel / move all act
+// on the WHOLE booking — no seat left behind — when the reservation was
+// created by reserveItems (walk-in) or holdBeds (hold).
+// ---------------------------------------------------------------------------
+
+describe('grouped reservation lifecycle (track 011 P3)', () => {
+  // ─── Helper: build a 3-seat grouped walk-in ────────────────────────────────
+
+  async function buildGroupedWalkIn() {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    const result = await reserveItems(site.id, [itemA.id, itemB.id, itemC.id], 'Group Test')
+    expect(result).toEqual({ status: 'ok' })
+
+    const reservation = await prisma.reservation.findFirstOrThrow({
+      where: { siteId: site.id },
+      include: { items: true },
+    })
+    expect(reservation.items).toHaveLength(3)
+
+    return { user, site, items: [itemA, itemB, itemC], reservation }
+  }
+
+  async function buildGroupedHold() {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    const result = await holdBeds(site.id, [itemA.id, itemB.id, itemC.id], undefined, 'Hold Group')
+    expect(result).toEqual({ status: 'ok' })
+
+    const reservation = await prisma.reservation.findFirstOrThrow({
+      where: { siteId: site.id },
+      include: { items: true },
+    })
+    expect(reservation.items).toHaveLength(3)
+
+    return { user, site, items: [itemA, itemB, itemC], reservation }
+  }
+
+  // ─── 1. Check-in spans all N seats ─────────────────────────────────────────
+
+  it('checkInReservation: sets checked-in on the grouped reservation row (covers all N seats)', async () => {
+    // A grouped reservation is one row; check-in on the reservationId naturally
+    // covers all connected seats. This test confirms that.
+    const { site, items, reservation } = await buildGroupedWalkIn()
+    // Walk-ins already have operationalStatus=walked-in; create a grouped
+    // consumer-style reservation with operationalStatus=expected to exercise the
+    // expected→checked-in transition.
+    const user2 = await createTestUser()
+    const site2 = await createTestSite(user2.id)
+    const i1 = await createTestInventoryItem(user2.id, site2.id, { number: 1 })
+    const i2 = await createTestInventoryItem(user2.id, site2.id, { number: 2 })
+    const i3 = await createTestInventoryItem(user2.id, site2.id, { number: 3 })
+    mockUserId = user2.id
+
+    const groupRes = await createTestReservation(user2.id, site2.id, [i1.id, i2.id, i3.id], {
+      status: 'complete',
+      operationalStatus: 'expected',
+      from: new Date(new Date().setHours(0, 0, 0, 0)),
+      to: new Date(new Date().setHours(23, 59, 59, 999)),
+    })
+
+    const checkInResult = await checkInReservation(site2.id, groupRes.id)
+    expect(checkInResult).toEqual({ status: 'ok' })
+
+    // The ONE reservation row is checked-in.
+    const updated = await prisma.reservation.findUnique({
+      where: { id: groupRes.id },
+      include: { items: true },
+    })
+    expect(updated!.operationalStatus).toBe('checked-in')
+    expect(updated!.checkedInAt).toBeTruthy()
+
+    // All 3 seats are still connected — none were dropped.
+    const connectedIds = updated!.items.map((i) => i.id).sort()
+    expect(connectedIds).toEqual([i1.id, i2.id, i3.id].sort())
+  })
+
+  // ─── 2. Depart frees all N seats ───────────────────────────────────────────
+
+  it('markDeparted: departed grouped walk-in frees all its seats (no stranded sibling)', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const i1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const i2 = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const i3 = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    // Build grouped walk-in with walked-in status (allows markDeparted).
+    const groupRes = await createTestReservation(user.id, site.id, [i1.id, i2.id, i3.id], {
+      status: 'paid-in-cash',
+      operationalStatus: 'walked-in',
+      from: new Date(new Date().setHours(0, 0, 0, 0)),
+      to: new Date(new Date().setHours(23, 59, 59, 999)),
+    })
+
+    const departResult = await markDeparted(site.id, groupRes.id)
+    expect(departResult).toEqual({ status: 'ok' })
+
+    const departed = await prisma.reservation.findUnique({
+      where: { id: groupRes.id },
+      include: { items: true },
+    })
+    expect(departed!.operationalStatus).toBe('departed')
+    expect(departed!.departedAt).toBeTruthy()
+
+    // All 3 seats remain connected (departed reservation still owns them).
+    // The freed-seat check: a new reservation on any of these 3 items must succeed.
+    const newResResult = await reserveItems(site.id, [i1.id, i2.id, i3.id], 'New Group')
+    // departed reservations use BLOCKING_STATUSES which does NOT include 'departed',
+    // so all 3 seats should be available for rebooking.
+    expect(newResResult).toEqual({ status: 'ok' })
+
+    // One original + one new reservation.
+    const allReservations = await prisma.reservation.findMany({ where: { siteId: site.id } })
+    expect(allReservations).toHaveLength(2)
+  })
+
+  // ─── 3. No-show applies to whole reservation ───────────────────────────────
+
+  it('markNoShow: applied to grouped reservation — single row updated, all seats handled', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const i1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const i2 = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const i3 = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    const groupRes = await createTestReservation(user.id, site.id, [i1.id, i2.id, i3.id], {
+      status: 'complete',
+      operationalStatus: 'expected',
+      from: new Date(new Date().setHours(0, 0, 0, 0)),
+      to: new Date(new Date().setHours(23, 59, 59, 999)),
+    })
+
+    const noShowResult = await markNoShow(site.id, groupRes.id)
+    expect(noShowResult).toEqual({ status: 'ok' })
+
+    const updated = await prisma.reservation.findUnique({
+      where: { id: groupRes.id },
+      include: { items: true },
+    })
+    expect(updated!.operationalStatus).toBe('no-show')
+
+    // All 3 seats still connected — the row was updated, not deleted.
+    expect(updated!.items).toHaveLength(3)
+
+    // Seats are now free for rebooking (no-show is not in BLOCKING_STATUSES).
+    const newRes = await reserveItems(site.id, [i1.id, i2.id, i3.id], 'Replacement Group')
+    expect(newRes).toEqual({ status: 'ok' })
+  })
+
+  // ─── 4. Cancel via one itemId cancels the entire grouped reservation ────────
+
+  it('cancelReservation: canceling via ONE itemId of the group cancels the WHOLE reservation (all N seats freed)', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const i1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const i2 = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const i3 = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    // Extra seat to verify it stays free (scope check)
+    const i4 = await createTestInventoryItem(user.id, site.id, { number: 4 })
+    mockUserId = user.id
+
+    // A grouped consumer reservation (status=complete so cancelReservation finds it)
+    const groupRes = await createTestReservation(user.id, site.id, [i1.id, i2.id, i3.id], {
+      status: 'complete',
+      operationalStatus: 'expected',
+      from: new Date(new Date().setHours(0, 0, 0, 0)),
+      to: new Date(new Date().setHours(23, 59, 59, 999)),
+    })
+
+    // Cancel using just ONE of the 3 item ids (i1).
+    const cancelResult = await cancelReservation(site.id, i1.id)
+    expect(cancelResult).toEqual({ status: 'ok' })
+
+    // The entire reservation is now canceled (one row).
+    const canceled = await prisma.reservation.findUnique({
+      where: { id: groupRes.id },
+    })
+    expect(canceled!.status).toBe('canceled')
+
+    // All 3 previously-grouped seats are now free — verify by rebooking all 3.
+    const newRes = await reserveItems(site.id, [i1.id, i2.id, i3.id], 'Post-Cancel Group')
+    expect(newRes).toEqual({ status: 'ok' })
+
+    // i2 and i3 in particular must not be stranded / still show as occupied.
+    const finalReservations = await prisma.reservation.findMany({
+      where: { siteId: site.id },
+      include: { items: true },
+    })
+    // canceled row + new walk-in row
+    expect(finalReservations).toHaveLength(2)
+    const newWalkIn = finalReservations.find((r) => r.status === 'paid-in-cash')!
+    const newIds = newWalkIn.items.map((i) => i.id).sort()
+    expect(newIds).toEqual([i1.id, i2.id, i3.id].sort())
+
+    // i4 remains unconnected to any new reservation (scope check)
+    expect(newIds).not.toContain(i4.id)
+  })
+
+  // ─── 5. Move relocates entire grouped reservation (preserves identity) ──────
+
+  it('moveReservationToSeats: moves a grouped reservation to a same-size set of free seats (identity preserved)', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    // Original 3 seats
+    const i1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const i2 = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const i3 = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    // Destination 3 seats (free)
+    const d1 = await createTestInventoryItem(user.id, site.id, { number: 4 })
+    const d2 = await createTestInventoryItem(user.id, site.id, { number: 5 })
+    const d3 = await createTestInventoryItem(user.id, site.id, { number: 6 })
+    mockUserId = user.id
+
+    const today0 = new Date(new Date().setHours(0, 0, 0, 0))
+    const today23 = new Date(new Date().setHours(23, 59, 59, 999))
+
+    const groupRes = await createTestReservation(user.id, site.id, [i1.id, i2.id, i3.id], {
+      status: 'complete',
+      operationalStatus: 'expected',
+      from: today0,
+      to: today23,
+      guestName: 'Moving Group',
+    })
+
+    // Move to the 3 destination seats.
+    const moveResult = await moveReservationToSeats(site.id, groupRes.id, [d1.id, d2.id, d3.id])
+    expect(moveResult).toEqual({ status: 'ok' })
+
+    // Same reservation id — identity preserved.
+    const updated = await prisma.reservation.findUnique({
+      where: { id: groupRes.id },
+      include: { items: true },
+    })
+    expect(updated).toBeTruthy()
+    expect(updated!.guestName).toBe('Moving Group') // payment/identity preserved
+    expect(updated!.status).toBe('complete')
+
+    // Now points at the 3 destination seats.
+    const newIds = updated!.items.map((i) => i.id).sort()
+    expect(newIds).toEqual([d1.id, d2.id, d3.id].sort())
+
+    // Old seats are fully free — rebooking them must succeed.
+    const oldSeatRes = await reserveItems(site.id, [i1.id, i2.id, i3.id], 'Reclaimed')
+    expect(oldSeatRes).toEqual({ status: 'ok' })
+
+    // Total: original (moved) + reclaimed new walk-in.
+    const allRes = await prisma.reservation.findMany({ where: { siteId: site.id } })
+    expect(allRes).toHaveLength(2)
+  })
+
+  it('moveReservation: count-change move of grouped reservation — old seats freed, new seats occupied', async () => {
+    // moveReservation (not ToSeats) allows changing seat count.
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const i1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const i2 = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const i3 = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    const d1 = await createTestInventoryItem(user.id, site.id, { number: 4 })
+    const d2 = await createTestInventoryItem(user.id, site.id, { number: 5 })
+    mockUserId = user.id
+
+    const today0 = new Date(new Date().setHours(0, 0, 0, 0))
+    const today23 = new Date(new Date().setHours(23, 59, 59, 999))
+
+    const groupRes = await createTestReservation(user.id, site.id, [i1.id, i2.id, i3.id], {
+      status: 'complete',
+      operationalStatus: 'expected',
+      from: today0,
+      to: today23,
+    })
+
+    // Move 3-seat group to 2 destination seats (count change is allowed by moveReservation).
+    const moveResult = await moveReservation(site.id, groupRes.id, [d1.id, d2.id])
+    expect(moveResult).toEqual({ status: 'ok' })
+
+    const updated = await prisma.reservation.findUnique({
+      where: { id: groupRes.id },
+      include: { items: true },
+    })
+    // Reservation now covers exactly d1, d2 — old seats i1,i2,i3 are disconnected.
+    const newIds = updated!.items.map((i) => i.id).sort()
+    expect(newIds).toEqual([d1.id, d2.id].sort())
+    expect(newIds).not.toContain(i1.id)
+    expect(newIds).not.toContain(i2.id)
+    expect(newIds).not.toContain(i3.id)
+
+    // All 3 old seats are free.
+    const reclaimResult = await reserveItems(site.id, [i1.id, i2.id, i3.id])
+    expect(reclaimResult).toEqual({ status: 'ok' })
+  })
+
+  // ─── 6. Hold: releaseHold via one itemId — partial vs whole-group release ────
+  //
+  // view.tsx frees a single tapped seat with applyToPair=false (line 651). On a
+  // grouped hold (N>1 items) this is PARTIAL release BY DESIGN: it frees exactly
+  // the tapped seat and leaves the rest of the party held — the same single-seat
+  // semantics (originally for pair partners) that let an operator release one
+  // guest's bed without dropping the whole booking. The bulk "Free" path frees
+  // every selected seat by calling this once per seat (the final seat deletes the
+  // now-single-item row). applyToPair=true is the whole-group release. Both verified.
+
+  it('releaseHold (applyToPair=false) on a grouped hold frees only the tapped seat; the rest stay held', async () => {
+    const { site, items, reservation } = await buildGroupedHold()
+    const [itemA, itemB, itemC] = items
+    mockUserId = (await prisma.site.findUniqueOrThrow({ where: { id: site.id }, select: { userId: true } })).userId
+
+    // The view.tsx single-tap path: applyToPair=false → partial release.
+    const releaseResult = await releaseHold(site.id, itemA.id, undefined, false)
+    expect(releaseResult).toEqual({ status: 'ok' })
+
+    // The hold row survives, now without itemA.
+    const holdRes = await prisma.reservation.findUnique({
+      where: { id: reservation.id },
+      include: { items: true },
+    })
+    expect(holdRes).not.toBeNull()
+    const remainingIds = holdRes!.items.map((i) => i.id)
+    expect(remainingIds).not.toContain(itemA.id)
+
+    // itemB and itemC remain held — CORRECT: only the tapped guest's bed was freed,
+    // so they stay occupied and (correctly) are not rebookable.
+    expect(remainingIds).toContain(itemB.id)
+    expect(remainingIds).toContain(itemC.id)
+    expect((await reserveItems(site.id, [itemB.id])).status).toBe('error')
+
+    // The freed seat A is genuinely available again — rebooking it succeeds.
+    expect((await reserveItems(site.id, [itemA.id], 'Rebooked A')).status).toBe('ok')
+  })
+
+  it('releaseHold (applyToPair=true) on a grouped hold releases the WHOLE party (deletes the row)', async () => {
+    const { site, items, reservation } = await buildGroupedHold()
+    const [itemA, itemB, itemC] = items
+    mockUserId = (await prisma.site.findUniqueOrThrow({ where: { id: site.id }, select: { userId: true } })).userId
+
+    // applyToPair=true is the whole-group release: deletes the entire hold row.
+    const releaseResult = await releaseHold(site.id, itemA.id, undefined, true)
+    expect(releaseResult).toEqual({ status: 'ok' })
+
+    // The entire hold reservation is gone.
+    const holdRes = await prisma.reservation.findUnique({ where: { id: reservation.id } })
+    expect(holdRes).toBeNull()
+
+    // All 3 seats are free — rebooking all 3 must succeed.
+    const rebook = await reserveItems(site.id, [itemA.id, itemB.id, itemC.id], 'After Full Release')
+    expect(rebook).toEqual({ status: 'ok' })
+  })
+
+  // ─── 7. Walk-in release: unreserveItem via one itemId — partial vs whole-group ─
+  //
+  // Same single-seat semantics as releaseHold. view.tsx frees a tapped seat with
+  // applyToPair=false (line 652); on a grouped walk-in (N>1 items) that frees just
+  // that seat and leaves the rest of the party walked-in — by design. The bulk
+  // "Free" path frees all selected seats one-by-one. applyToPair=true releases the
+  // whole walk-in.
+
+  it('unreserveItem (applyToPair=false) on a grouped walk-in frees only the tapped seat; the rest stay walked-in', async () => {
+    const { site, items, reservation } = await buildGroupedWalkIn()
+    const [itemA, itemB, itemC] = items
+    mockUserId = (await prisma.site.findUniqueOrThrow({ where: { id: site.id }, select: { userId: true } })).userId
+
+    // The view.tsx single-tap path: applyToPair=false → partial release.
+    const releaseResult = await unreserveItem(site.id, itemA.id, undefined, false)
+    expect(releaseResult).toEqual({ status: 'ok' })
+
+    // The walk-in row survives, now without itemA.
+    const walkInRes = await prisma.reservation.findUnique({
+      where: { id: reservation.id },
+      include: { items: true },
+    })
+    expect(walkInRes).not.toBeNull()
+    const remainingIds = walkInRes!.items.map((i) => i.id)
+    expect(remainingIds).not.toContain(itemA.id)
+
+    // itemB and itemC remain walked-in — CORRECT: only the tapped seat was freed,
+    // so they stay occupied and (correctly) are not rebookable.
+    expect(remainingIds).toContain(itemB.id)
+    expect(remainingIds).toContain(itemC.id)
+    expect((await reserveItems(site.id, [itemB.id])).status).toBe('error')
+
+    // The freed seat A is genuinely available again — rebooking it succeeds.
+    expect((await reserveItems(site.id, [itemA.id], 'Rebooked A')).status).toBe('ok')
+  })
+
+  it('unreserveItem (applyToPair=true) on a grouped walk-in releases the WHOLE party (deletes the row)', async () => {
+    const { site, items, reservation } = await buildGroupedWalkIn()
+    const [itemA, itemB, itemC] = items
+    mockUserId = (await prisma.site.findUniqueOrThrow({ where: { id: site.id }, select: { userId: true } })).userId
+
+    // applyToPair=true deletes the whole walk-in row.
+    const releaseResult = await unreserveItem(site.id, itemA.id, undefined, true)
+    expect(releaseResult).toEqual({ status: 'ok' })
+
+    // The entire walk-in reservation is gone.
+    const walkInRes = await prisma.reservation.findUnique({ where: { id: reservation.id } })
+    expect(walkInRes).toBeNull()
+
+    // All 3 seats are free — rebooking all 3 must succeed.
+    const rebook = await reserveItems(site.id, [itemA.id, itemB.id, itemC.id], 'After Full Unreserve')
+    expect(rebook).toEqual({ status: 'ok' })
   })
 })
