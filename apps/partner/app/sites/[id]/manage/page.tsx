@@ -76,7 +76,7 @@ export default async function ManagePage({ params, searchParams }: { params: { i
         },
         include: {
           rentalItem: true,
-          user: { select: { id: true, email: true } },
+          user: { select: { id: true, name: true, email: true } },
         },
         orderBy: { createdAt: 'asc' },
       },

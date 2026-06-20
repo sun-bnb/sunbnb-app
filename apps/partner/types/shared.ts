@@ -215,5 +215,5 @@ export interface RentalBookingProps {
   pickedUpAt?: Date | null
   returnedAt?: Date | null
   rentalItem: RentalItemProps
-  user: { id: string; email: string }
+  user: { id: string; name?: string | null; email: string }
 }

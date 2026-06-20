@@ -35,6 +35,10 @@ export default function RentalBookingCard({
   const isReserved = booking.operationalStatus === OP_RESERVED
   const isOut = booking.operationalStatus === OP_PICKED_UP
 
+  // Walk-ins carry a guestName; online reservations fall back to the
+  // booking user's name, then their email.
+  const customerLabel = booking.guestName || booking.user?.name || booking.user?.email
+
   function runAction(fn: () => Promise<{ status: string }>) {
     startTransition(async () => { await fn() })
   }
@@ -77,8 +81,8 @@ export default function RentalBookingCard({
             </span>
           )}
         </div>
-        {booking.guestName && (
-          <div className="text-sm font-medium text-gray-600 truncate">{booking.guestName}</div>
+        {customerLabel && (
+          <div className="text-sm font-medium text-gray-600 truncate">{customerLabel}</div>
         )}
       </div>
 
