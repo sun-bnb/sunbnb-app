@@ -75,36 +75,48 @@ RTK Query: `reservationApi` (getReservation, getReservationByDate, etc.), `place
 ## Testing
 
 ```bash
-npm run test              # unit + route + server action tests (194 tests, Prisma mocked)
+npm run test              # unit + route + server action tests (326 tests, Prisma mocked)
 npm run test:watch        # vitest in watch mode
-npm run test:integration  # integration tests against local sunbnb_test DB (19 tests, real Prisma)
+npm run test:integration  # integration tests against local sunbnb_test DB (45 tests, real Prisma)
 ```
 
 ### Unit / route tests (`vitest.config.ts`)
 
-- Excludes `*.integration.test.ts`
+- Excludes `*.integration.test.ts`; scans `app/**` and `store/**`
 - Path aliases redirect `@repo/data/PrismaCient` → mock, `@repo/data/payment` → mock
 - **Mock modules** (`__mocks__/@repo/data/`): `PrismaCient.ts`, `payment.ts`, `reservation-emails.ts`, `env.ts`
 - `app/api/_lib/payment-ids.test.ts` — isDemoPayment, isValidEntityId (6 tests)
 - `app/api/_lib/payment-provider.test.ts` — detectProvider (Mollie/demo), isPaymentSucceeded/Failed (16 tests)
 - `app/api/reservations/[id]/route.test.ts` — reservation fetch, payment verification (9 tests)
+- `app/api/rental-bookings/[id]/route.test.ts` — rental booking fetch, payment verification, anon ownership (10 tests)
 - `app/api/sites/[id]/route.test.ts` — single-site fetch (2 tests)
 - `app/api/restaurants/[id]/availability/route.test.ts` — restaurant table availability query (5 tests)
-- `app/api/webhooks/mollie/route.test.ts` — Mollie webhook handling (13 tests)
+- `app/api/restaurants/[id]/layout/route.test.ts` — restaurant table layout fetch (5 tests)
+- `app/api/table-reservations/[id]/route.test.ts` — table reservation fetch + ownership (8 tests)
+- `app/api/table-reservations/[id]/deposit/mollie/route.test.ts` — table reservation deposit Mollie payment (23 tests)
+- `app/api/payment/mollie/create-rental-payment/route.test.ts` — create Mollie payment for rental booking (7 tests)
+- `app/api/webhooks/mollie/route.test.ts` — Mollie webhook handling (22 tests)
 - `app/api/reconcile/route.test.ts` — stuck payment reconciliation (9 tests)
+- `app/api/cron/send-reminders/route.test.ts` — daily reminder cron auth + email sending (10 tests)
 - `app/api/auth/forgot-password/route.test.ts` — rate limiting, email validation, enumeration protection (10 tests)
 - `app/api/auth/reset-password/route.test.ts` — rate limiting, token/password validation (12 tests)
 - `app/api/auth/impersonate/route.test.ts` — sudo impersonation start (4 tests)
 - `app/api/auth/end-impersonation/route.test.ts` — impersonation end (4 tests)
-- `app/sites/[id]/actions.test.ts` — reservation/rental creation, availability, pricing (35 tests)
+- `app/sites/[id]/actions.test.ts` — reservation/rental creation, availability, pricing (51 tests)
+- `app/sites/[id]/table/actions.test.ts` — table reservation creation actions (10 tests)
 - `app/reservations/[id]/actions.test.ts` — cancel, createOrder, completeUnpaidOrder (40 tests)
-- `app/payment/actions.test.ts` — demo payments, query actions (29 tests)
+- `app/reservations/[id]/receipt/actions.test.ts` — receipt / invoice actions (6 tests)
+- `app/reservations/rental/[id]/actions.test.ts` — rental booking detail actions (17 tests)
+- `app/payment/actions.test.ts` — demo payments, query actions (34 tests)
+- `app/embed/[restaurantId]/page.test.ts` — embedded restaurant page (3 tests)
+- `store/features/api/apiSlice.test.ts` — anonGetQuery anonId forwarding for anon-owned lookups (3 tests)
 
 ### Integration tests (`vitest.integration.config.ts`)
 
 Requires local Docker Postgres with `sunbnb_test` DB (same DB as `packages/data` integration tests — no extra setup needed). `POSTGRES_URL` set via CLI in the npm script. No mock for `@repo/data/PrismaCient` or `@repo/data/payment` — real DB writes verified.
-- `app/sites/[id]/actions.integration.test.ts` — saveReservationForMultipleItems (DB writes, payment calc, unpaid, anonymous), saveRentalBooking (pricing, real aggregate availability check) (10 tests)
-- `app/reservations/[id]/actions.integration.test.ts` — createOrder (DB prices, soldOut, appSalesEnabled, anonymous), cancelReservation (status update, refund logic) (9 tests)
+- `app/sites/[id]/actions.integration.test.ts` — saveReservationForMultipleItems (DB writes, payment calc, unpaid, anonymous), saveRentalBooking (pricing, real aggregate availability check) (21 tests)
+- `app/reservations/[id]/actions.integration.test.ts` — createOrder (DB prices, soldOut, appSalesEnabled, anonymous), cancelReservation (status update, refund logic) (16 tests)
+- `app/reservations/rental/[id]/actions.integration.test.ts` — rental booking detail actions against real DB (8 tests)
 - **Test helpers**: `app/test/setup.ts` (cleanDatabase, prisma), `app/test/fixtures.ts` (factory functions for all needed models)
 
 ### Mocking patterns
