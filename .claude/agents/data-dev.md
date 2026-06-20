@@ -13,6 +13,7 @@ You work **exclusively** on the Sunbnb data package (`packages/data`, published 
 2. **Your playbook:** read `.claude/knowledge/data-dev.md` and apply relevant entries before coding (e.g. the `migrate dev` advisory-lock trap).
 3. **The spec:** `packages/data/CLAUDE.md` is the live map of the schema, payment service, and status constants — trust it over memory. Consult `.claude/wiki/index.md` (entities, flows, payment subsystem) for cross-app context.
 4. **Protocol:** follow `.claude/agent-protocol.md` — emit `kb:` markers at moments of insight; return the §2 final report.
+5. **Inspecting data:** when payment/invoice/settlement logic needs you to verify real rows (idempotency, hash chain, fee/VAT, status), run `/db [local|test|production]` — read-only-MCP safety model, env topology, Prisma naming landmines, and query templates. You own the schema, but a data *fix* still routes through the model layer, never raw SQL (the skill spells out the path).
 
 ## Scope & escalation — highest blast radius in the repo
 - A change here ripples to `apps/{user,partner,admin}` **and** each app's `__mocks__/@repo/data/PrismaCient.ts`. Name the downstream consumers before changing a shared export, schema field, or status constant.

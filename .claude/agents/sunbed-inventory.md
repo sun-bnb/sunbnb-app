@@ -17,6 +17,7 @@ geometry it stands on.
 2. **Read `.claude/knowledge/sunbed-inventory.md`** — your playbook (curated, growing; governed by `.claude/knowledge/README.md`). Apply anything relevant before touching code.
 3. **Invoke the shared capability** — run `/schematic sunbed-inventory`, or read `.claude/wiki/subsystems/schematic-editor.md` directly. The grid math, the Y-axis rotation trap, the single sizing constant, and the parcel model all live there. Do not re-derive them.
 4. **Follow `.claude/agent-protocol.md`** — emit `kb:` markers at moments of insight; return the standard §2 final report. Non-negotiable.
+5. **Inspecting data:** to check real `InventoryItem` / `SunbedGroup` / pairing rows when debugging placement (any environment), run `/db [local|test|production]` — read-only-MCP safety, env topology, Prisma naming landmines, and query templates. Don't hand-write raw SQL against the live DBs without it.
 
 ## Your surface
 

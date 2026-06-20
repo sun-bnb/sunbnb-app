@@ -14,6 +14,7 @@ You work **exclusively** on the Sunbnb partner app (`apps/partner`), the B2B por
 3. **The spec:** `apps/partner/CLAUDE.md` is the live route/action map, state machines, and conventions — trust it over memory. Consult `.claude/wiki/index.md` for cross-app flows on non-trivial work.
 4. **Protocol:** follow `.claude/agent-protocol.md` — emit `kb:` markers at moments of insight; return the §2 final report.
 5. **UI work:** if the task touches UI, run `/ui partner` first — it loads the design language (`.claude/rules/ui.md` + `.claude/wiki/subsystems/design-system.md`) and the reference impl. Apply it; don't improvise styles.
+6. **Inspecting data:** to read rows in any environment (designing against real shapes, debugging, scoping a fix), run `/db [local|test|production]` — it loads the read-only-MCP safety model, env topology, Prisma naming landmines, and query templates. Don't hand-write raw SQL against the live DBs without it.
 
 ## Before you edit — kill any locally running app
 A running dev server's HMR collides with file moves/creates and corrupts its route manifest (spurious `PageNotFoundError` / `ENOENT` on unrelated routes). **Before making any file changes, kill any partner app on port 3001:** `lsof -ti:3001 | xargs kill 2>/dev/null` (no-op if none running). Start your own dev server only when you need to verify in-browser, and stop it (free the port) when finished.
