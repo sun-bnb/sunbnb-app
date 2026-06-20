@@ -17,6 +17,7 @@ Maintained by the `create` and `handoff` workflows.
 
 | ID | Track | Why deferred | Updated |
 |----|-------|--------------|---------|
+| [011](011-group-multiselect-reservation.md) | Group multiselect Reserve/Rent into one reservation | **Scoped, ready to build (awaiting go-ahead).** Partner manage multiselect Reserve/Rent currently makes one reservation PER SEAT — N bookings for one party on N loungers. Fix: a grouped create over the existing `reserveWithConflictGuard({ itemIds })` primitive (already used by the consumer flow + pair-expansion) so a multiselect = one reservation. **Decisions locked: always group (no toggle) + all-or-nothing (one taken seat fails the group).** Small, partner-only, **no schema/migration** (Reservation↔items already many-to-many; downstream already handles multi-item reservations). **Next: P1 — grouped action(s) + gated-actions/auth-matrix registration.** | 2026-06-20 |
 | [003](003-stripe-connect-compliance.md) | Stripe Connect compliance | **Green-field — consumer Stripe code removed (2026-05-23).** Stripe is subs-only; consumer = Mollie + Demo. Build on Connect from scratch if/when consumer Stripe is reintroduced. | 2026-05-23 |
 
 ## Done / archived
