@@ -72,10 +72,19 @@ roster, not a minute-by-minute schedule — the timed version applies to tables/
   481, coverage-contract green). 5 unit (gate + query shape + row mapping) + 4 integration (arrivals
   excl. seated walk-ins; case-insensitive name; **future booking surfaced**; canceled excluded). partner
   1489 unit + 43 manage integration, tsc/lint clean. No schema change.
-- **Next action:** **P2 — the Guests sheet UI.** `GuestSearchSheet.tsx` (bottom sheet over
-  `findReservations`) + the bottom-right anchor **FAB** (rentals stacks above) + `view.tsx` Locate
-  handoff (jump to parcel + open `BedDetail`) + inline Check-in/Rent + `Guests` i18n (en/es/fi).
-  Prime `/ui partner`.
+- **P2 DONE (2026-06-19, uncommitted).** `GuestSearchSheet.tsx` (bottom sheet over `findReservations`:
+  arrivals default + debounced name/phone search, status chips paid/hold/seated/upcoming, party size +
+  bed labels + notes, context actions Locate/Check-in/Rent, future = read-only). Wired into `view.tsx`:
+  a bottom-right **🔍 anchor FAB** (always present off-multiselect) with the rentals toggle bumped to
+  `bottom-24` above it; `locateReservation` jumps to the bed's parcel + opens `BedDetail`; inline
+  `checkInReservation` / `convertHoldToWalkIn` refetch + `router.refresh()`. `SiteManage.guests` +
+  `Guests` i18n in en/es/fi. tsc/lint clean; partner 1489 unit green (UI — no new unit tests; the
+  action is covered by P1). `ReservationMatch` exported from the 'use server' actions file (precedent:
+  `orders/actions.ts`, `restaurants/[id]/queries.ts`); client sheet only imports pure `reservation-
+  status` constants (no prisma in the bundle).
+- **Next action:** **P3 — arrivals roster enrichment** (the host-stand layer): the chips/party/notes
+  are in; add a distinct **not-arrived / unfulfilled** treatment + empty/no-match polish. Then **P4**
+  scan-the-pass, **P5** resell nudge. Prime `/ui partner`.
 - **Context needed:** the manage page is **token-gated** (`accessKey`/`SecurityToken` via
   `verifySiteAccess`, no session) and renders a **today-overlap** grid (`page.tsx`). Reference query:
   `app/frontdesk/actions.ts#searchAllReservations` (owner-only) — bring it to the token-gated floor,
@@ -98,7 +107,7 @@ roster, not a minute-by-minute schedule — the timed version applies to tables/
   future-dated booking surfaced by search). partner 1489 unit + 43 integration, tsc/lint clean. No
   schema change. **Accent-insensitive search (García vs garcia) noted as a future refinement** —
   needs the Postgres `unaccent` extension; P1 is plain case-insensitive `contains`.
-- ☐ **P2 — UI: the Guests sheet.** `GuestSearchSheet.tsx` bottom sheet (mirrors `TillSheet` chrome,
+- ✅ **P2 — UI: the Guests sheet. DONE 2026-06-19 (uncommitted).** `GuestSearchSheet.tsx` bottom sheet (mirrors `TillSheet` chrome,
   dark-mode aware): search field + Arrivals default + results; context-aware row actions — today
   expected → **Locate** / **Check in**; today hold → **Locate** / **Rent**; today walk-in/checked-in →
   **Locate**; future → **Details** (read-only). **Entry = a bottom-right anchor FAB** (🔍 search icon,
@@ -163,6 +172,13 @@ roster, not a minute-by-minute schedule — the timed version applies to tables/
   sensitive** — "garcia" won't match "García" (the í), though "garc" does. Accepted for P1 (tests use
   non-accented names); accent-insensitive search (Postgres `unaccent`) is a noted future refinement.
   Search-window default set to **90 days**, result cap **50** (resolves one open decision).
+- **2026-06-19** — **P2 built** (the Guests sheet UI). `GuestSearchSheet` over `findReservations`
+  (arrivals default + debounced search, chips, party/notes, Locate/Check-in/Rent). FAB decision shipped
+  as designed: **🔍 anchor at `bottom-6 right-6`**, rentals toggle bumped to `bottom-24` above it.
+  Locate handoff resolves the bed in `inventoryItems` → switches parcel → opens `BedDetail` (the
+  surface staff know). The floor-lookup gap vs Alonso is now **closed end-to-end** (a token-gated
+  employee can find a booking by name/phone, see today's arrivals, and act — none of which the
+  today-only grid allowed). P3–P5 (richer roster, scan-the-pass, resell) are the *surpass*.
 
 ## Open decisions
 

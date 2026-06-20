@@ -752,6 +752,7 @@
     "setWorker": "Elegir empleado",
     "noWorker": "Sin empleado",
     "till": "Caja",
+    "guests": "Clientes",
     "movePrompt": "Toca una hamaca libre para mover aquí",
     "movePromptGroup": "Toca un grupo libre de {n} hamacas para mover aquí",
     "moveQueueRemaining": "{n} más después de esta",
@@ -852,6 +853,23 @@
     "done": "Hecho",
     "close": "Cerrar",
     "errorGeneric": "Algo salió mal."
+  },
+  "Guests": {
+    "title": "Clientes",
+    "close": "Cerrar",
+    "searchPlaceholder": "Buscar nombre o teléfono…",
+    "expectedToday": "Esperados hoy",
+    "loading": "Cargando…",
+    "noArrivals": "Nadie esperado todavía",
+    "noMatches": "Ninguna reserva coincide",
+    "guest": "Cliente",
+    "upcomingOn": "Próxima · {date}",
+    "paid": "Pagado",
+    "hold": "Reserva",
+    "seated": "Sentado",
+    "locate": "Localizar",
+    "checkIn": "Registrar",
+    "rent": "Alquilar"
   },
   "CreateRentalModal": {
     "title": "Alquilar",

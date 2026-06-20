@@ -752,6 +752,7 @@
     "setWorker": "Valitse työntekijä",
     "noWorker": "Ei työntekijää",
     "till": "Kassa",
+    "guests": "Asiakkaat",
     "movePrompt": "Napauta vapaata paikkaa siirtääksesi tähän",
     "movePromptGroup": "Napauta vapaata {n} paikan ryhmää siirtääksesi tähän",
     "moveQueueRemaining": "{n} lisää tämän jälkeen",
@@ -852,6 +853,23 @@
     "done": "Valmis",
     "close": "Sulje",
     "errorGeneric": "Jotain meni pieleen."
+  },
+  "Guests": {
+    "title": "Asiakkaat",
+    "close": "Sulje",
+    "searchPlaceholder": "Hae nimi tai puhelin…",
+    "expectedToday": "Odotetaan tänään",
+    "loading": "Ladataan…",
+    "noArrivals": "Ei odotettuja vielä",
+    "noMatches": "Ei osumia",
+    "guest": "Asiakas",
+    "upcomingOn": "Tulossa · {date}",
+    "paid": "Maksettu",
+    "hold": "Varaus",
+    "seated": "Paikalla",
+    "locate": "Paikanna",
+    "checkIn": "Kirjaa saapuneeksi",
+    "rent": "Vuokraa"
   },
   "CreateRentalModal": {
     "title": "Vuokraa",

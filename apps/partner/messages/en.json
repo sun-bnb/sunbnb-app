@@ -752,6 +752,7 @@
     "setWorker": "Set worker",
     "noWorker": "No worker",
     "till": "Till",
+    "guests": "Guests",
     "movePrompt": "Tap a free seat to move here",
     "movePromptGroup": "Tap a free group of {n} seats to move here",
     "moveQueueRemaining": "{n} more after this",
@@ -852,6 +853,23 @@
     "done": "Done",
     "close": "Close",
     "errorGeneric": "Something went wrong."
+  },
+  "Guests": {
+    "title": "Guests",
+    "close": "Close",
+    "searchPlaceholder": "Search name or phone…",
+    "expectedToday": "Expected today",
+    "loading": "Loading…",
+    "noArrivals": "No one expected yet",
+    "noMatches": "No bookings match",
+    "guest": "Guest",
+    "upcomingOn": "Upcoming · {date}",
+    "paid": "Paid",
+    "hold": "Hold",
+    "seated": "Seated",
+    "locate": "Locate",
+    "checkIn": "Check in",
+    "rent": "Rent"
   },
   "CreateRentalModal": {
     "title": "Rent Out",

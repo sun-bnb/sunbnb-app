@@ -10,6 +10,7 @@ import CreateRentalModal from './CreateRentalModal'
 import ManageToolbar, { type ManageViewKey } from './ManageToolbar'
 import ManageWorkerFab from './ManageWorkerFab'
 import TillSheet from './TillSheet'
+import GuestSearchSheet from './GuestSearchSheet'
 import ParcelView from './ParcelView'
 import RentalsSection from './RentalsSection'
 import { getActiveReservation, getBedState, isFailedReservationStatus, type BedState } from './bed-state'
@@ -18,6 +19,7 @@ import {
   blockBed, compBed, holdBed, reserveItem, convertHoldToWalkIn,
   unblockBed, uncompBed, releaseHold, unreserveItem, removeFailedReservation,
   checkInReservation, markNoShow, markDeparted, cancelReservation,
+  type ReservationMatch,
 } from './actions'
 import { RESERVATION_COMPLETE, RESERVATION_HELD } from '@repo/data/reservation-status'
 
@@ -107,6 +109,7 @@ export default function ManageView({
   // re-validated against the live roster so a removed/renamed worker drops out.
   const [currentWorkerId, setCurrentWorkerId] = useState<string | null>(null)
   const [showTill, setShowTill] = useState(false)
+  const [showGuests, setShowGuests] = useState(false)
 
   useEffect(() => {
     try {
@@ -456,6 +459,21 @@ export default function ManageView({
     setMoveQueue([]) // single move from the tap dialog — no queue behind it
     setMovingRes({ id: reservationId, count })
     setSelectedItem(null)
+    setSelectedItemIsPool(false)
+    setSelectedItemIsGroupExtra(false)
+  }
+
+  // Locate handoff from the Guests sheet: jump to the booking's first bed's
+  // parcel and open its BedDetail — reusing the surface staff already know.
+  const locateReservation = (r: ReservationMatch) => {
+    setShowGuests(false)
+    const itemId = r.items[0]?.id
+    if (!itemId) return
+    const item = inventoryItems.find(i => i.id === itemId)
+    if (!item) return
+    const parcel = parseInt(String(item.number)[0]!, 10)
+    if (!Number.isNaN(parcel) && parcelNums.includes(parcel)) selectView(parcel)
+    setSelectedItem(item)
     setSelectedItemIsPool(false)
     setSelectedItemIsGroupExtra(false)
   }
@@ -875,15 +893,29 @@ export default function ManageView({
         />
       )}
 
-      {/* Floating rentals ⇄ parcels toggle — bottom-right; hidden during
-          multiselect so it doesn't overlap the selection sheet. */}
+      {/* Guests host stand — bottom-right ANCHOR FAB (always present when not
+          multiselecting); the conditional rentals toggle stacks above it. */}
+      {selectedIds.length === 0 && (
+        <button
+          type="button"
+          onClick={() => setShowGuests(true)}
+          aria-label={t('guests')}
+          title={t('guests')}
+          className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-accent dark:bg-gray-700 text-white text-2xl shadow-lg flex items-center justify-center hover:bg-accent-hover dark:hover:bg-gray-600 active:scale-95 transition select-none"
+        >
+          <span aria-hidden="true">🔍</span>
+        </button>
+      )}
+
+      {/* Floating rentals ⇄ parcels toggle — stacks ABOVE the Guests anchor;
+          hidden during multiselect so it doesn't overlap the selection sheet. */}
       {showRentalsFab && selectedIds.length === 0 && (
         <button
           type="button"
           onClick={() => selectView(showRentals ? backParcel! : 'rentals')}
           aria-label={showRentals ? t('parcel', { n: '' }).trim() : t('rentals')}
           title={showRentals ? t('parcel', { n: '' }).trim() : t('rentals')}
-          className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-accent dark:bg-gray-700 text-white text-2xl shadow-lg flex items-center justify-center hover:bg-accent-hover dark:hover:bg-gray-600 active:scale-95 transition select-none"
+          className="fixed bottom-24 right-6 z-40 w-14 h-14 rounded-full bg-accent dark:bg-gray-700 text-white text-2xl shadow-lg flex items-center justify-center hover:bg-accent-hover dark:hover:bg-gray-600 active:scale-95 transition select-none"
         >
           <span aria-hidden="true">{showRentals ? '⛱️' : '🏄'}</span>
         </button>
@@ -943,6 +975,17 @@ export default function ManageView({
           />
         )
       })()}
+
+      {/* Guests host stand — reservation lookup + today's arrivals */}
+      {showGuests && (
+        <GuestSearchSheet
+          siteId={site.id!}
+          accessKey={accessKey}
+          onClose={() => setShowGuests(false)}
+          onLocate={locateReservation}
+          onRefresh={() => router.refresh()}
+        />
+      )}
 
       {/* Multiselect bottom sheet — BedDetail-style but NON-modal: no backdrop,
           and a pointer-events-none wrapper (only the panel itself is interactive)
