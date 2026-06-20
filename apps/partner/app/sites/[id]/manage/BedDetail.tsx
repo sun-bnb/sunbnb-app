@@ -57,9 +57,11 @@ function formatTime(date: Date | string | null | undefined): string {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-function remainingDays(to: Date | string | null | undefined): number {
-  if (!to) return 1
-  return dayjs(to).startOf('day').diff(dayjs().startOf('day'), 'day') + 1
+// Extra days a booking runs PAST today: 0 for a same-day booking, 1 for one
+// ending tomorrow, N for N days out. Drives the "{n}D" period badge below.
+function extraDays(to: Date | string | null | undefined): number {
+  if (!to) return 0
+  return dayjs(to).startOf('day').diff(dayjs().startOf('day'), 'day')
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -95,7 +97,7 @@ function OccupantInfo({
   /** Italic gray fallback when guestName is absent (e.g. t('walkIn')). */
   fallbackName?: string
 }) {
-  const rd = remainingDays(reservation.to)
+  const rd = extraDays(reservation.to)
   const validUntilLabel = t('validUntil', { date: dayjs(reservation.to).format('ddd D MMM') })
 
   return (
@@ -139,7 +141,7 @@ function OccupantInfo({
         )}
 
         {/* Period indicator — plain text, no badge, always last */}
-        {rd > 1 && (
+        {rd > 0 && (
           <span
             className="text-s font-bold tabular-nums text-gray-500 dark:text-gray-400"
             title={validUntilLabel}
