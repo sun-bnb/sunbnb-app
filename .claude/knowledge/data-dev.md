@@ -10,7 +10,7 @@ What this playbook knows, by theme. Maintained by grooming; scan it before readi
 sections.
 
 - **Schema & migrations** — `prisma migrate dev` advisory-lock contention (never background it) (2026-05-20)
-- **Payment / invoice / fee / subscription** — `resolveEffectiveSubscription` override convention (2026-05-20); feature-entitlement catalog/resolver + circular-import avoidance (2026-05-20)
+- **Payment / invoice / fee / subscription** — `resolveEffectiveSubscription` override convention (2026-05-20); feature-entitlement catalog/resolver + circular-import avoidance (2026-05-20); `rental-payment.ts` shared Mollie create/verify/finalize for RentalBooking (2026-06-20)
 - **Reservation conflict guard** — `reserveWithConflictGuard` (FOR UPDATE on InventoryItem, structured conflict return, race test) (2026-06-16)
 - **Integration test failures & fixes** — _none yet_
 - **PostGIS notes** — _none yet_
@@ -72,6 +72,15 @@ sections.
 **Divergence note:** Partner = stricter (PAYMENT_FAILED + REFUNDED block). User = BLOCKING_STATUSES only (PAYMENT_FAILED + REFUNDED are non-blocking). Default uses user semantics; override for partner if adopting those call sites.
 **Race test:** `src/reservations.integration.test.ts` has a `Promise.all([makeCall(), makeCall()])` test that fires two concurrent claims on the same bed. Asserts exactly one `{ outcome: 'created' }` and one `{ outcome: 'conflict' }`, and exactly one reservation row in the DB. Passes consistently — the FOR UPDATE lock serializes them.
 **Prevention:** Always expand SunbedGroup + pair sibling IDs BEFORE calling this helper — the helper does not expand items itself (caller responsibility, matches existing call-site pattern).
+
+## Payment modules — shared Mollie create/verify/finalize
+
+### 2026-06-20: rental-payment.ts — list-based create, single-id verify/finalize for RentalBooking
+**Pattern:** `createRentalBookingMolliePayment(bookingIds: string[], opts)` accepts 1–20 booking ids; validates they're all real and share the same `siteId`. Amount = `round(sum of paymentAmount)` from DB only. Creates ONE Mollie payment and writes the same `paymentRef` + `RENTAL_PROCESSING` to ALL bookings via `updateMany`. On provider failure, sets ALL to `RENTAL_PAYMENT_FAILED` via `updateMany`. Single-card collect = `[bookingId]`; walk-in multi-item = all booking ids from the session.
+**Finalize path:** `getRentalBookingPaymentStatus(bookingId)` and `reverifyAndFinalizeRentalBooking(bookingId)` are single-booking. `reverifyAndFinalizeRentalBooking` retrieves the booking's `paymentRef` before delegating to `processConfirmedRentalBooking(paymentRef)` — that finalizer is group-keyed, so it closes all bookings sharing the ref. Finalizing any one representative booking finalizes the group.
+**Integration test coverage:** validation guards (empty list, missing booking, cross-site); no_mollie guard; two-booking group shares paymentRef and both flip to RENTAL_COMPLETE + 2 invoices after finalizing via representative; idempotency; amount pulled from `paymentAmount` not `totalPrice`; unknown ref stays pending without mutating status.
+**Export path:** `"./rental-payment"` in both `exports` and `typesVersions` of `packages/data/package.json`.
+**Prevention:** When the create path uses `updateMany`, the error path must also use `updateMany { id: { in: bookingIds } }` — not a single `update`. The user app's own `/api/payment/mollie/create-rental-payment/route.ts` is an independent implementation (uses `@mollie/api-client`, not `createRentalBookingMolliePayment`) — that route is NOT a caller of this module.
 
 ## Rejected approaches
 

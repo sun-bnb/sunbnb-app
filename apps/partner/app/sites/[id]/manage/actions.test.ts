@@ -54,6 +54,9 @@ import {
   collectReservationPayment,
   getCollectStatus,
   cancelCollection,
+  collectRentalPayment,
+  getRentalCollectStatus,
+  cancelRentalCollection,
   findReservations,
   reserveItems,
   holdBeds,
@@ -65,6 +68,10 @@ import {
   createReservationMolliePayment,
   reverifyAndFinalizeReservation,
 } from '@repo/data/reservation-payment'
+import {
+  createRentalBookingMolliePayment,
+  reverifyAndFinalizeRentalBooking,
+} from '@repo/data/rental-payment'
 import {
   reserveWithConflictGuard,
   moveReservationWithConflictGuard,
@@ -2895,5 +2902,313 @@ describe('holdBeds', () => {
     expect(res.status).toBe('error')
     expect(res.errors?.[0]).toMatch(/already occupied or blocked/i)
     expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
+  })
+})
+
+// ─── collectRentalPayment / getRentalCollectStatus / cancelRentalCollection ──
+
+const BOOKING_ID = 'rb-1'
+const mockCreateRentalPayment = vi.mocked(createRentalBookingMolliePayment)
+const mockReverifyRental = vi.mocked(reverifyAndFinalizeRentalBooking)
+
+/** A cash walk-in rental booking that is ready to be collected. */
+function cashWalkInBooking(overrides: Record<string, any> = {}) {
+  return {
+    id: BOOKING_ID,
+    siteId: SITE_ID,
+    status: 'paid-in-cash',
+    paymentAmount: 15,
+    anonId: null,
+    ...overrides,
+  }
+}
+
+describe('collectRentalPayment', () => {
+  it('rejects an empty booking list', async () => {
+    authenticateAsOwner()
+    const res = await collectRentalPayment(SITE_ID, [])
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/no rental bookings/i)
+    expect(vi.mocked(prisma.rentalBooking.findMany)).not.toHaveBeenCalled()
+  })
+
+  it('rejects a booking that belongs to a different site', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.rentalBooking.findMany).mockResolvedValueOnce([
+      cashWalkInBooking({ siteId: 'other-site' }),
+    ] as any)
+    const res = await collectRentalPayment(SITE_ID, [BOOKING_ID])
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/does not belong/i)
+    expect(mockCreateRentalPayment).not.toHaveBeenCalled()
+  })
+
+  it('rejects a booking that is not a cash walk-in (already processing)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.rentalBooking.findMany).mockResolvedValueOnce([
+      cashWalkInBooking({ status: 'processing' }),
+    ] as any)
+    const res = await collectRentalPayment(SITE_ID, [BOOKING_ID])
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/cash walk-in/i)
+    expect(mockCreateRentalPayment).not.toHaveBeenCalled()
+  })
+
+  it('rejects a booking that is already complete', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.rentalBooking.findMany).mockResolvedValueOnce([
+      cashWalkInBooking({ status: 'complete' }),
+    ] as any)
+    const res = await collectRentalPayment(SITE_ID, [BOOKING_ID])
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/cash walk-in/i)
+    expect(mockCreateRentalPayment).not.toHaveBeenCalled()
+  })
+
+  it('mints an anonId, stamps all bookings, and creates the payment (happy path)', async () => {
+    process.env.CONSUMER_APP_URL = 'https://app.test'
+    authenticateAsOwner()
+    vi.mocked(prisma.rentalBooking.findMany).mockResolvedValueOnce([
+      cashWalkInBooking({ paymentAmount: 10 }),
+      cashWalkInBooking({ id: 'rb-2', paymentAmount: 20 }),
+    ] as any)
+    vi.mocked(prisma.rentalBooking.updateMany).mockResolvedValueOnce({ count: 2 } as any)
+
+    const res = await collectRentalPayment(SITE_ID, [BOOKING_ID, 'rb-2'])
+    expect(res.status).toBe('ok')
+    expect((res as any).amount).toBe(30) // 10 + 20
+    expect((res as any).checkoutUrl).toBeTruthy()
+    expect((res as any).bookingId).toBe(BOOKING_ID)
+
+    // anonId stamped on bookings missing it
+    const anonUpdate = vi.mocked(prisma.rentalBooking.updateMany).mock.calls[0][0] as any
+    expect(anonUpdate.data.anonId).toMatch(/[0-9a-f-]{36}/)
+
+    // Provider called with redirect URL including primaryId and anonId
+    const [ids, opts] = mockCreateRentalPayment.mock.calls[0]
+    expect(ids).toEqual([BOOKING_ID, 'rb-2'])
+    expect(opts.metadataExtra).toEqual({ collect: true })
+    expect(opts.redirectUrl).toContain('/payment/complete/rental')
+    expect(opts.redirectUrl).toContain(`rentalBookingId=${BOOKING_ID}`)
+    expect(opts.redirectUrl).toMatch(/anonId=[0-9a-f-]{36}/)
+    expect(opts.webhookUrl).toContain('app.test')
+  })
+
+  it('reuses an existing anonId rather than minting a new one', async () => {
+    process.env.CONSUMER_APP_URL = 'https://app.test'
+    authenticateAsOwner()
+    vi.mocked(prisma.rentalBooking.findMany).mockResolvedValueOnce([
+      cashWalkInBooking({ anonId: 'existing-anon-id' }),
+    ] as any)
+    // No updateMany for anonId expected (anonId already exists); but mock it in
+    // case the action somehow calls it (returns empty count — safe).
+    vi.mocked(prisma.rentalBooking.updateMany).mockResolvedValueOnce({ count: 0 } as any)
+
+    await collectRentalPayment(SITE_ID, [BOOKING_ID])
+
+    // No extra updateMany to stamp anonId (it already existed)
+    const anonUpdateCalls = vi.mocked(prisma.rentalBooking.updateMany).mock.calls.filter(
+      (c) => (c[0] as any).data?.anonId !== undefined,
+    )
+    expect(anonUpdateCalls).toHaveLength(0)
+
+    const [, opts] = mockCreateRentalPayment.mock.calls[0]
+    expect(opts.redirectUrl).toContain('anonId=existing-anon-id')
+  })
+
+  // NOTE: The `DEMO_MODE` constant is captured at module load time
+  // (`process.env.NEXT_PUBLIC_DEMO_MODE === 'true'`), so the demo branch cannot
+  // be exercised in unit tests by toggling the env var at runtime. The demo path
+  // is covered by the reservation-payment module's own tests and by
+  // e2e/integration tests that load the module fresh with the env set.
+
+  it('reverts all bookings to cash (clears paymentRef) when the provider fails', async () => {
+    process.env.CONSUMER_APP_URL = 'https://app.test'
+    authenticateAsOwner()
+    vi.mocked(prisma.rentalBooking.findMany).mockResolvedValueOnce([
+      cashWalkInBooking(),
+      cashWalkInBooking({ id: 'rb-2', paymentAmount: 5 }),
+    ] as any)
+    // Two updateMany calls: (1) stamp anonId, (2) revert to paid-in-cash on failure
+    vi.mocked(prisma.rentalBooking.updateMany)
+      .mockResolvedValueOnce({ count: 2 } as any) // anonId stamp
+      .mockResolvedValueOnce({ count: 2 } as any) // revert
+    mockCreateRentalPayment.mockResolvedValueOnce({
+      status: 'error',
+      error: 'No Mollie',
+      reason: 'no_mollie',
+    })
+
+    const res = await collectRentalPayment(SITE_ID, [BOOKING_ID, 'rb-2'])
+    expect(res.status).toBe('error')
+    // Revert call: status → paid-in-cash, paymentRef → null on all booking ids
+    const revertCall = vi.mocked(prisma.rentalBooking.updateMany).mock.calls.find(
+      (c) => (c[0] as any).data?.status === 'paid-in-cash',
+    )
+    expect(revertCall).toBeDefined()
+    expect((revertCall![0] as any).data.paymentRef).toBeNull()
+    expect((revertCall![0] as any).where.id.in).toEqual([BOOKING_ID, 'rb-2'])
+  })
+
+  it('errors when CONSUMER_APP_URL is not configured', async () => {
+    delete process.env.CONSUMER_APP_URL
+    authenticateAsOwner()
+    vi.mocked(prisma.rentalBooking.findMany).mockResolvedValueOnce([cashWalkInBooking()] as any)
+    vi.mocked(prisma.rentalBooking.updateMany).mockResolvedValueOnce({ count: 1 } as any)
+
+    const res = await collectRentalPayment(SITE_ID, [BOOKING_ID])
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('CONSUMER_APP_URL')
+    expect(mockCreateRentalPayment).not.toHaveBeenCalled()
+  })
+
+  it('rejects unauthenticated caller', async () => {
+    const res = await collectRentalPayment(SITE_ID, [BOOKING_ID])
+    expect(res.status).toBe('error')
+    expect(mockCreateRentalPayment).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-owner', async () => {
+    authenticateAsNonOwner()
+    const res = await collectRentalPayment(SITE_ID, [BOOKING_ID])
+    expect(res.status).toBe('error')
+    expect(mockCreateRentalPayment).not.toHaveBeenCalled()
+  })
+})
+
+describe('getRentalCollectStatus', () => {
+  it('reports complete without re-verifying when booking is already complete', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.rentalBooking.findUnique).mockResolvedValueOnce({
+      siteId: SITE_ID, status: 'complete', paymentRef: 'tr_x',
+    } as any)
+    const res = await getRentalCollectStatus(SITE_ID, BOOKING_ID)
+    expect((res as any).paymentStatus).toBe('complete')
+    expect(mockReverifyRental).not.toHaveBeenCalled()
+  })
+
+  it('finalizes a processing payment that has been paid', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.rentalBooking.findUnique).mockResolvedValueOnce({
+      siteId: SITE_ID, status: 'processing', paymentRef: 'tr_x',
+    } as any)
+    mockReverifyRental.mockResolvedValueOnce({ settled: 'complete', providerStatus: 'paid' })
+    const res = await getRentalCollectStatus(SITE_ID, BOOKING_ID)
+    expect((res as any).paymentStatus).toBe('complete')
+  })
+
+  it('reverts the whole group to cash when the payment failed', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.rentalBooking.findUnique).mockResolvedValueOnce({
+      siteId: SITE_ID, status: 'processing', paymentRef: 'tr_shared_ref',
+    } as any)
+    vi.mocked(prisma.rentalBooking.updateMany).mockResolvedValue({ count: 2 } as any)
+    mockReverifyRental.mockResolvedValueOnce({ settled: 'failed', providerStatus: 'expired' })
+
+    const res = await getRentalCollectStatus(SITE_ID, BOOKING_ID)
+    expect((res as any).paymentStatus).toBe('failed')
+    // Revert must key on the shared paymentRef (not just the bookingId)
+    const revertCall = vi.mocked(prisma.rentalBooking.updateMany).mock.calls.at(-1)![0] as any
+    expect(revertCall.where.paymentRef).toBe('tr_shared_ref')
+    expect(revertCall.where.siteId).toBe(SITE_ID)
+    expect(revertCall.data.status).toBe('paid-in-cash')
+    expect(revertCall.data.paymentRef).toBeNull()
+  })
+
+  it('reports cash for a plain cash walk-in booking', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.rentalBooking.findUnique).mockResolvedValueOnce({
+      siteId: SITE_ID, status: 'paid-in-cash', paymentRef: null,
+    } as any)
+    const res = await getRentalCollectStatus(SITE_ID, BOOKING_ID)
+    expect((res as any).paymentStatus).toBe('cash')
+    expect(mockReverifyRental).not.toHaveBeenCalled()
+  })
+
+  it('reports processing while payment is still in flight', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.rentalBooking.findUnique).mockResolvedValueOnce({
+      siteId: SITE_ID, status: 'processing', paymentRef: 'tr_x',
+    } as any)
+    mockReverifyRental.mockResolvedValueOnce({ settled: 'pending' })
+    const res = await getRentalCollectStatus(SITE_ID, BOOKING_ID)
+    expect((res as any).paymentStatus).toBe('processing')
+  })
+
+  it('rejects unauthenticated caller', async () => {
+    const res = await getRentalCollectStatus(SITE_ID, BOOKING_ID)
+    expect(res.status).toBe('error')
+  })
+
+  it('rejects non-owner', async () => {
+    authenticateAsNonOwner()
+    const res = await getRentalCollectStatus(SITE_ID, BOOKING_ID)
+    expect(res.status).toBe('error')
+  })
+})
+
+describe('cancelRentalCollection', () => {
+  it('reverts an unpaid in-flight collection to cash (whole group)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.rentalBooking.findUnique).mockResolvedValueOnce({
+      siteId: SITE_ID, status: 'processing', paymentRef: 'tr_shared_ref',
+    } as any)
+    vi.mocked(prisma.rentalBooking.updateMany).mockResolvedValue({ count: 2 } as any)
+    mockReverifyRental.mockResolvedValueOnce({ settled: 'pending' })
+
+    const res = await cancelRentalCollection(SITE_ID, BOOKING_ID)
+    expect((res as any).paymentStatus).toBe('cash')
+    const revertCall = vi.mocked(prisma.rentalBooking.updateMany).mock.calls.at(-1)![0] as any
+    expect(revertCall.where.paymentRef).toBe('tr_shared_ref')
+    expect(revertCall.data.status).toBe('paid-in-cash')
+    expect(revertCall.data.paymentRef).toBeNull()
+  })
+
+  it('finalizes instead of reverting when the payment actually went through', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.rentalBooking.findUnique).mockResolvedValueOnce({
+      siteId: SITE_ID, status: 'processing', paymentRef: 'tr_x',
+    } as any)
+    mockReverifyRental.mockResolvedValueOnce({ settled: 'complete', providerStatus: 'paid' })
+
+    const res = await cancelRentalCollection(SITE_ID, BOOKING_ID)
+    expect((res as any).paymentStatus).toBe('complete')
+    expect(vi.mocked(prisma.rentalBooking.updateMany)).not.toHaveBeenCalled()
+    expect(vi.mocked(prisma.rentalBooking.update)).not.toHaveBeenCalled()
+  })
+
+  it('is a no-op for a cash booking (not mid-collection)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.rentalBooking.findUnique).mockResolvedValueOnce({
+      siteId: SITE_ID, status: 'paid-in-cash', paymentRef: null,
+    } as any)
+
+    const res = await cancelRentalCollection(SITE_ID, BOOKING_ID)
+    expect((res as any).paymentStatus).toBe('cash')
+    expect(mockReverifyRental).not.toHaveBeenCalled()
+    expect(vi.mocked(prisma.rentalBooking.updateMany)).not.toHaveBeenCalled()
+    expect(vi.mocked(prisma.rentalBooking.update)).not.toHaveBeenCalled()
+  })
+
+  it('is a no-op for an already-complete booking', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.rentalBooking.findUnique).mockResolvedValueOnce({
+      siteId: SITE_ID, status: 'complete', paymentRef: 'tr_x',
+    } as any)
+
+    const res = await cancelRentalCollection(SITE_ID, BOOKING_ID)
+    expect((res as any).paymentStatus).toBe('complete')
+    expect(mockReverifyRental).not.toHaveBeenCalled()
+  })
+
+  it('rejects unauthenticated caller', async () => {
+    const res = await cancelRentalCollection(SITE_ID, BOOKING_ID)
+    expect(res.status).toBe('error')
+  })
+
+  it('rejects non-owner', async () => {
+    authenticateAsNonOwner()
+    const res = await cancelRentalCollection(SITE_ID, BOOKING_ID)
+    expect(res.status).toBe('error')
   })
 })

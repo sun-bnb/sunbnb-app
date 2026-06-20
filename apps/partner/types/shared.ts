@@ -212,6 +212,7 @@ export interface RentalBookingProps {
   status: string
   operationalStatus: string
   guestName?: string | null
+  paymentRef?: string | null
   pickedUpAt?: Date | null
   returnedAt?: Date | null
   rentalItem: RentalItemProps

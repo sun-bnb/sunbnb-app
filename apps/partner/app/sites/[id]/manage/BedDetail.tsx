@@ -27,6 +27,9 @@ import {
   addSeatToGroup,
   removeGroupSeat,
   removeFailedReservation,
+  collectReservationPayment,
+  getCollectStatus,
+  cancelCollection,
 } from './actions'
 import {
   RESERVATION_COMPLETE, RESERVATION_HELD,
@@ -1021,9 +1024,11 @@ export default function BedDetail({
       {/* Full-screen Collect payment (QR → Mollie) for the walk-in */}
       {showCollect && reservation && (
         <CollectPaymentModal
-          siteId={siteId}
-          reservationId={reservation.id}
-          accessKey={accessKey}
+          actions={{
+            create: () => collectReservationPayment(siteId, reservation.id, accessKey),
+            poll:   () => getCollectStatus(siteId, reservation.id, accessKey),
+            cancel: () => cancelCollection(siteId, reservation.id, accessKey),
+          }}
           onClose={() => setShowCollect(false)}
           onSettled={() => onCollected?.()}
         />

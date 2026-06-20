@@ -259,14 +259,27 @@ beforeEach(() => {
   vi.mocked(prisma.inventoryItem.deleteMany).mockResolvedValue({ count: 1 } as any)
   vi.mocked(prisma.inventoryItem.count).mockResolvedValue(0)
 
-  // RentalBooking stubs (for markRentalPickedUp/Returned, createWalkInRental)
+  // RentalBooking stubs (for markRentalPickedUp/Returned, createWalkInRental,
+  // collectRentalPayment, getRentalCollectStatus, cancelRentalCollection)
   vi.mocked(prisma.rentalBooking.findUnique).mockResolvedValue({
     id: BOOKING_ID,
     siteId: SITE_ID,
+    status: 'paid-in-cash',
+    paymentRef: null,
     operationalStatus: 'reserved',
   } as any)
+  vi.mocked(prisma.rentalBooking.findMany).mockResolvedValue([
+    {
+      id: BOOKING_ID,
+      siteId: SITE_ID,
+      status: 'paid-in-cash',
+      paymentAmount: 10,
+      anonId: null,
+    },
+  ] as any)
   vi.mocked(prisma.rentalBooking.create).mockResolvedValue({ id: 'new-booking' } as any)
   vi.mocked(prisma.rentalBooking.update).mockResolvedValue({} as any)
+  vi.mocked(prisma.rentalBooking.updateMany).mockResolvedValue({ count: 1 } as any)
   vi.mocked(prisma.rentalBooking.aggregate).mockResolvedValue({ _sum: { quantity: 0 } } as any)
   vi.mocked(prisma.rentalBooking.count).mockResolvedValue(0)
 

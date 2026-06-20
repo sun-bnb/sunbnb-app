@@ -10,6 +10,8 @@ interface RentalsSectionProps {
   accessKey: string
   rentalBookings: RentalBookingProps[] | undefined
   onRentOut: () => void
+  /** Called when a rental card's state changes (e.g. collect payment settled). */
+  onChanged?: () => void
 }
 
 export default function RentalsSection({
@@ -17,6 +19,7 @@ export default function RentalsSection({
   accessKey,
   rentalBookings,
   onRentOut,
+  onChanged,
 }: RentalsSectionProps) {
   const t = useTranslations('SiteManage')
   const bookings = rentalBookings ?? []
@@ -60,6 +63,7 @@ export default function RentalsSection({
               siteId={siteId}
               booking={booking}
               accessKey={accessKey}
+              onChanged={onChanged}
             />
           ))}
         </div>

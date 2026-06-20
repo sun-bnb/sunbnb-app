@@ -62,8 +62,10 @@ interface MollieMetadata {
   bookingIds?: string[]
   /**
    * Set by the partner QR walk-in collection flow. A failed/expired collection
-   * must NOT mark the reservation payment_failed (that would strand the occupied
-   * walk-in) — it reverts to paid-in-cash so the guest keeps the bed.
+   * must NOT mark the entity payment_failed — it reverts to paid-in-cash so the
+   * guest keeps the bed (reservation) or the already-handed-over rental is not
+   * stranded (rental-booking). Applies to both reservation and rental-booking
+   * types.
    */
   collect?: boolean
 }
@@ -155,10 +157,19 @@ async function handlePaymentFailed(meta: MollieMetadata): Promise<void> {
   } else if (meta.type === 'rental-booking') {
     // Update all bookings that share this payment group
     const bookingIds = meta.bookingIds ?? [meta.entityId]
-    await prisma.rentalBooking.updateMany({
-      where: { id: { in: bookingIds } },
-      data: { status: RENTAL_PAYMENT_FAILED },
-    })
+    if (meta.collect) {
+      // A QR walk-in rental collection that fails reverts to paid-in-cash so an
+      // already-handed-over rental is never stranded as payment_failed.
+      await prisma.rentalBooking.updateMany({
+        where: { id: { in: bookingIds } },
+        data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
+      })
+    } else {
+      await prisma.rentalBooking.updateMany({
+        where: { id: { in: bookingIds } },
+        data: { status: RENTAL_PAYMENT_FAILED },
+      })
+    }
   }
 }
 

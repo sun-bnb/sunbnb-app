@@ -296,6 +296,127 @@ describe('POST /api/webhooks/mollie', () => {
   })
 })
 
+// ── rental-booking collect branch ────────────────────────────────────────────
+
+describe('POST /api/webhooks/mollie — rental-booking collect branch', () => {
+  beforeEach(() => {
+    vi.mocked(prisma.rentalBooking.updateMany).mockResolvedValue({ count: 1 } as any)
+  })
+
+  it('marks rental booking payment_failed when collect is absent (normal online failure)', async () => {
+    mockMollieGet.mockResolvedValue({
+      status: 'failed',
+      metadata: JSON.stringify({
+        type: 'rental-booking',
+        entityId: 'booking-1',
+        siteId: 'site-1',
+      }),
+    })
+
+    const res = await POST(makeWebhookRequest('tr_abc123'))
+    expect(res.status).toBe(200)
+    expect(prisma.rentalBooking.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['booking-1'] } },
+      data: { status: 'payment_failed' },
+    })
+  })
+
+  it('marks rental booking payment_failed when collect is absent (expired)', async () => {
+    mockMollieGet.mockResolvedValue({
+      status: 'expired',
+      metadata: JSON.stringify({
+        type: 'rental-booking',
+        entityId: 'booking-1',
+        siteId: 'site-1',
+      }),
+    })
+
+    const res = await POST(makeWebhookRequest('tr_abc123'))
+    expect(res.status).toBe(200)
+    expect(prisma.rentalBooking.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['booking-1'] } },
+      data: { status: 'payment_failed' },
+    })
+  })
+
+  it('reverts a failed QR walk-in rental collect to paid-in-cash (not payment_failed)', async () => {
+    mockMollieGet.mockResolvedValue({
+      status: 'failed',
+      metadata: JSON.stringify({
+        type: 'rental-booking',
+        entityId: 'booking-1',
+        siteId: 'site-1',
+        collect: true,
+      }),
+    })
+
+    const res = await POST(makeWebhookRequest('tr_abc123'))
+    expect(res.status).toBe(200)
+    expect(prisma.rentalBooking.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['booking-1'] } },
+      data: { status: 'paid-in-cash', paymentRef: null },
+    })
+  })
+
+  it('reverts an expired QR walk-in rental collect to paid-in-cash (not payment_failed)', async () => {
+    mockMollieGet.mockResolvedValue({
+      status: 'expired',
+      metadata: JSON.stringify({
+        type: 'rental-booking',
+        entityId: 'booking-1',
+        siteId: 'site-1',
+        collect: true,
+      }),
+    })
+
+    const res = await POST(makeWebhookRequest('tr_abc123'))
+    expect(res.status).toBe(200)
+    expect(prisma.rentalBooking.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['booking-1'] } },
+      data: { status: 'paid-in-cash', paymentRef: null },
+    })
+  })
+
+  it('reverts all bookings in a multi-booking group to paid-in-cash on collect failure', async () => {
+    mockMollieGet.mockResolvedValue({
+      status: 'failed',
+      metadata: JSON.stringify({
+        type: 'rental-booking',
+        entityId: 'booking-1',
+        siteId: 'site-1',
+        bookingIds: ['booking-1', 'booking-2', 'booking-3'],
+        collect: true,
+      }),
+    })
+
+    const res = await POST(makeWebhookRequest('tr_abc123'))
+    expect(res.status).toBe(200)
+    expect(prisma.rentalBooking.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['booking-1', 'booking-2', 'booking-3'] } },
+      data: { status: 'paid-in-cash', paymentRef: null },
+    })
+  })
+
+  it('marks all bookings in a multi-booking group as payment_failed without collect', async () => {
+    mockMollieGet.mockResolvedValue({
+      status: 'failed',
+      metadata: JSON.stringify({
+        type: 'rental-booking',
+        entityId: 'booking-1',
+        siteId: 'site-1',
+        bookingIds: ['booking-1', 'booking-2', 'booking-3'],
+      }),
+    })
+
+    const res = await POST(makeWebhookRequest('tr_abc123'))
+    expect(res.status).toBe(200)
+    expect(prisma.rentalBooking.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['booking-1', 'booking-2', 'booking-3'] } },
+      data: { status: 'payment_failed' },
+    })
+  })
+})
+
 // ── table-deposit webhook branch ─────────────────────────────────────────────
 
 describe('POST /api/webhooks/mollie — table-deposit branch', () => {

@@ -900,12 +900,14 @@
     "moreOptions": "Más opciones ▼",
     "lessOptions": "Menos opciones ▲",
     "cash": "Efectivo",
+    "card": "Tarjeta",
     "free": "Gratis",
     "tapItem": "Toca un artículo ☝️",
     "tapItemFirst": "Selecciona un artículo primero",
     "failed": "Error",
     "goFree": "IR — {n, plural, one {# artículo} other {# artículos}} gratis",
-    "goPrice": "IR — €{price}"
+    "goPrice": "IR — €{price}",
+    "goCard": "IR — €{price} (Tarjeta)"
   },
   "RentalBookingCard": {
     "give": "Entregar",
@@ -916,7 +918,10 @@
     "allDay": "Todo el día",
     "hourly": "Por horas",
     "pickedUp": "Retirado",
-    "returned": "Devuelto"
+    "returned": "Devuelto",
+    "collectPayment": "Cobrar",
+    "paidOnline": "Pagado online",
+    "paid": "Pagado"
   },
   "SiteRentals": {
     "title": "Alquiler de equipos",

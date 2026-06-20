@@ -46,6 +46,7 @@ const prisma = {
     findMany: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
     aggregate: vi.fn(),
     count: vi.fn(),
   },
@@ -207,6 +208,13 @@ const prisma = {
   },
   // ── Models not directly used by partner-app server actions but required for
   // the mock-contract superset assertion (mock must cover every Prisma model). ──
+  reservationDay: {
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    upsert: vi.fn(),
+    updateMany: vi.fn(),
+    deleteMany: vi.fn(),
+  },
   settings: {
     findFirst: vi.fn(),
     findMany: vi.fn(),

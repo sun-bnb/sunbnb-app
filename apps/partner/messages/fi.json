@@ -900,12 +900,14 @@
     "moreOptions": "Lisää asetuksia ▼",
     "lessOptions": "Vähemmän asetuksia ▲",
     "cash": "Käteinen",
+    "card": "Kortti",
     "free": "Ilmainen",
     "tapItem": "Valitse tuote ☝️",
     "tapItemFirst": "Valitse tuote ensin",
     "failed": "Epäonnistui",
     "goFree": "MENE — {n, plural, one {# tuote} other {# tuotetta}} ilmaiseksi",
-    "goPrice": "MENE — €{price}"
+    "goPrice": "MENE — €{price}",
+    "goCard": "MENE — €{price} (Kortti)"
   },
   "RentalBookingCard": {
     "give": "Anna",
@@ -916,7 +918,10 @@
     "allDay": "Koko päivä",
     "hourly": "Tuntihinta",
     "pickedUp": "Noudettu",
-    "returned": "Palautettu"
+    "returned": "Palautettu",
+    "collectPayment": "Peri maksu",
+    "paidOnline": "Maksettu verkossa",
+    "paid": "Maksettu"
   },
   "SiteRentals": {
     "title": "Laitteiden vuokraus",

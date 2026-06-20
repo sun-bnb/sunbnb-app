@@ -3,40 +3,49 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import QRCode from 'qrcode'
-import { collectReservationPayment, getCollectStatus, cancelCollection } from './actions'
 
 /**
- * Full-screen "Collect payment" view for a walk-in sunbed.
+ * Full-screen "Collect payment" view — entity-agnostic.
  *
- * On open it creates a Mollie payment on the partner's account (via
- * `collectReservationPayment`) and shows the amount + a QR code of the Mollie
- * checkout URL. The beachgoer scans and pays on their own phone; this screen
- * polls `getCollectStatus` every ~2.5s and reflects the live result. Closing
- * before payment calls `cancelCollection` so the occupied walk-in reverts to
- * cash and is never stranded as `processing` (the cleanup cron would otherwise
- * GC it on the walk-in's old createdAt).
+ * The three operations are injected as thunks so this modal works for BOTH
+ * sunbed reservations and equipment rental bookings. The caller binds the
+ * concrete server actions (and their ids/keys) before passing them in.
+ *
+ * On open it calls `actions.create()` which returns an amount + checkout URL
+ * (or a demo flag). The customer scans the QR and pays on their own phone;
+ * this screen polls `actions.poll()` every ~2.5s and reflects the live result.
+ * Closing before payment calls `actions.cancel()` so the entity reverts to
+ * cash and is never stranded as `processing`.
  *
  * Chrome mirrors CreateRentalModal: a bottom sheet on mobile, centered card on
  * desktop, with `dark:` variants (rendered inside the manage page's `.dark` root).
  */
+
+export type CollectActions = {
+  /** Initiate the payment — called once on open. */
+  create: () => Promise<{ status: string; amount?: number; demo?: boolean; checkoutUrl?: string; errors?: string[] }>
+  /** Poll for the live payment status. */
+  poll: () => Promise<{ status: string; paymentStatus?: string; errors?: string[] }>
+  /** Cancel an unpaid collection so the entity reverts to cash. */
+  cancel: () => Promise<{ status: string; paymentStatus?: string }>
+}
 
 type Phase = 'creating' | 'awaiting' | 'complete' | 'failed' | 'error'
 
 const POLL_MS = 2500
 
 export default function CollectPaymentModal({
-  siteId,
-  reservationId,
-  accessKey,
+  actions,
   onClose,
   onSettled,
+  title,
 }: {
-  siteId: string
-  reservationId: string
-  accessKey?: string
+  actions: CollectActions
   onClose: () => void
   /** Called after a terminal result so the parent can refresh the grid. */
   onSettled: () => void
+  /** Override the modal title; defaults to the `CollectPayment.title` i18n key. */
+  title?: string
 }) {
   const t = useTranslations('CollectPayment')
   const [phase, setPhase] = useState<Phase>('creating')
@@ -53,7 +62,7 @@ export default function CollectPaymentModal({
     if (startedRef.current) return
     startedRef.current = true
     ;(async () => {
-      const res = await collectReservationPayment(siteId, reservationId, accessKey)
+      const res = await actions.create()
       if (res.status !== 'ok') {
         setErrorMsg(res.errors?.[0] ?? t('errorGeneric'))
         setPhase('error')
@@ -83,7 +92,7 @@ export default function CollectPaymentModal({
     if (phase !== 'awaiting') return
     let cancelled = false
     const id = setInterval(async () => {
-      const res = await getCollectStatus(siteId, reservationId, accessKey)
+      const res = await actions.poll()
       if (cancelled || res.status !== 'ok') return
       if (res.paymentStatus === 'complete') {
         settledRef.current = true
@@ -99,16 +108,17 @@ export default function CollectPaymentModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
 
-  // ── Close: abandon an unpaid collection so the bed reverts to cash ─────────
+  // ── Close: abandon an unpaid collection so the entity reverts to cash ─────
   const handleClose = useCallback(() => {
     if (!settledRef.current && (phase === 'awaiting' || phase === 'creating')) {
       // Fire-and-forget; the parent refreshes on close regardless.
-      cancelCollection(siteId, reservationId, accessKey).finally(onSettled)
+      actions.cancel().finally(onSettled)
     }
     onClose()
-  }, [phase, siteId, reservationId, accessKey, onClose, onSettled])
+  }, [phase, actions, onClose, onSettled])
 
   const amountLabel = amount != null ? `€${amount.toFixed(2)}` : '—'
+  const modalTitle = title ?? t('title')
 
   return (
     <div
@@ -118,7 +128,7 @@ export default function CollectPaymentModal({
       <div className="bg-white dark:bg-gray-900 dark:text-gray-100 w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl overflow-hidden max-h-[92vh] sm:max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b-2 border-gray-200 dark:border-gray-700">
-          <h2 className="text-xl font-black text-gray-900 dark:text-gray-100">💳 {t('title')}</h2>
+          <h2 className="text-xl font-black text-gray-900 dark:text-gray-100">💳 {modalTitle}</h2>
           <button onClick={handleClose} aria-label={t('close')} className="text-gray-400 dark:text-gray-500 text-4xl leading-none p-3 -mr-2">&times;</button>
         </div>
 

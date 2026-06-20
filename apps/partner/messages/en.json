@@ -900,12 +900,14 @@
     "moreOptions": "More options ▼",
     "lessOptions": "Less options ▲",
     "cash": "Cash",
+    "card": "Card",
     "free": "Free",
     "tapItem": "Tap an item ☝️",
     "tapItemFirst": "Select an item first",
     "failed": "Failed",
     "goFree": "GO — {n, plural, one {# item} other {# items}} free",
-    "goPrice": "GO — €{price}"
+    "goPrice": "GO — €{price}",
+    "goCard": "GO — €{price} (Card)"
   },
   "RentalBookingCard": {
     "give": "Give",
@@ -916,7 +918,10 @@
     "allDay": "All day",
     "hourly": "Hourly",
     "pickedUp": "Picked up",
-    "returned": "Returned"
+    "returned": "Returned",
+    "collectPayment": "Collect payment",
+    "paidOnline": "Paid online",
+    "paid": "Paid"
   },
   "SiteRentals": {
     "title": "Equipment Rentals",

@@ -14,6 +14,10 @@ import {
   createReservationMolliePayment,
   reverifyAndFinalizeReservation,
 } from '@repo/data/reservation-payment'
+import {
+  createRentalBookingMolliePayment,
+  reverifyAndFinalizeRentalBooking,
+} from '@repo/data/rental-payment'
 import { getOpenTill } from '@repo/data/till'
 import type { Prisma } from '@prisma/client'
 import dayjs from 'dayjs'
@@ -26,6 +30,7 @@ import {
   RESERVATION_REFUNDED,
   RESERVATION_PAYMENT_FAILED,
   RENTAL_COMPLETE,
+  RENTAL_PROCESSING,
   OP_EXPECTED,
   OP_CHECKED_IN,
   OP_WALKED_IN,
@@ -46,7 +51,10 @@ import {
  * sites inside this file are untouched; the single-implementation guarantee lives in
  * `verifySiteAccess`.
  */
-async function verifySiteOwnership(siteId: string, accessKey?: string) {
+async function verifySiteOwnership(
+  siteId: string,
+  accessKey?: string,
+): Promise<{ error: string } | { userId: string }> {
   const { userId, error } = await verifySiteAccess(siteId, accessKey)
   return error ? { error } : { userId: userId! }
 }
@@ -1451,7 +1459,7 @@ export async function collectReservationPayment(
       where: { id: reservationId },
       data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
     })
-    return { status: 'error', errors: [result.error] }
+    return { status: 'error', errors: [result.error ?? 'Payment could not be created'] }
   }
 
   revalidatePath(`/sites/${siteId}/manage`)
@@ -1548,6 +1556,226 @@ export async function cancelCollection(
     where: { id: reservationId },
     data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
   })
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok', paymentStatus: 'cash' as const }
+}
+
+// ─── Collect payment (QR → Mollie) for a cash walk-in rental ────────────────
+
+/**
+ * Begin collecting an online (Mollie) payment for one or more cash walk-in
+ * rental bookings. A single walk-in session may create several bookings (one
+ * per distinct rental item); all of them are settled under one Mollie payment
+ * so the QR encodes a single `checkoutUrl` and `processConfirmedRentalBooking`
+ * finalises the whole group at once via the shared `paymentRef`.
+ *
+ * Amount is the sum of `paymentAmount` across the bookings — persisted at
+ * creation time from DB prices, never recomputed here (payments.md).
+ * The `anonId` capability is minted so the renter can later access the receipt
+ * at `/payment/complete/rental?rentalBookingId=...&anonId=...`. Reuse an
+ * existing `anonId` if any booking already has one (idempotent re-mint).
+ *
+ * Demo mode short-circuits to a `pi_demo_` ref and leaves all bookings in
+ * `processing`; the next `getRentalCollectStatus` poll sees the demo ref and
+ * settles as paid.
+ *
+ * On provider error the helper already marks the bookings `payment_failed`;
+ * we revert the whole group to `paid-in-cash` so the occupied item is never
+ * abandoned as a terminal state on the manage page.
+ */
+export async function collectRentalPayment(
+  siteId: string,
+  bookingIds: string[],
+  accessKey?: string,
+) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  if (bookingIds.length === 0) {
+    return { status: 'error', errors: ['No rental bookings specified'] }
+  }
+
+  // Load all bookings and verify they belong to the right site + are collectible.
+  const bookings = await prisma.rentalBooking.findMany({
+    where: { id: { in: bookingIds } },
+    select: { id: true, siteId: true, status: true, paymentAmount: true, anonId: true },
+  })
+
+  if (bookings.length !== bookingIds.length) {
+    return { status: 'error', errors: ['One or more rental bookings not found'] }
+  }
+  if (bookings.some((b) => b.siteId !== siteId)) {
+    return { status: 'error', errors: ['Rental booking does not belong to this site'] }
+  }
+  // Only an un-collected cash walk-in is collectible — reject anything else
+  // (already processing / complete / free) so we don't double-charge.
+  if (bookings.some((b) => b.status !== RESERVATION_PAID_IN_CASH)) {
+    return { status: 'error', errors: ['Payment can only be collected for a cash walk-in rental'] }
+  }
+
+  // Total amount shown to the operator in the QR modal (already DB-persisted at
+  // creation — no monetary computation happens here; no-inline-money guard).
+  const amount = bookings.reduce((sum, b) => sum + (b.paymentAmount ?? 0), 0)
+
+  // Mint an anonId capability so the renter can reach their receipt after
+  // paying. Reuse an existing one if any booking already has it (idempotent).
+  const existingAnonId = bookings.find((b) => b.anonId)?.anonId
+  const anonId = existingAnonId ?? randomUUID()
+  if (!existingAnonId) {
+    // Stamp anonId on every booking in the group (only those missing it).
+    await prisma.rentalBooking.updateMany({
+      where: { id: { in: bookingIds }, anonId: null },
+      data: { anonId },
+    })
+  }
+
+  // Representative booking id — the modal polls this one via getRentalCollectStatus.
+  const primaryId = bookingIds[0]
+
+  // Demo: skip the real provider — stamp a shared demo ref and move to processing.
+  if (DEMO_MODE) {
+    await prisma.rentalBooking.updateMany({
+      where: { id: { in: bookingIds } },
+      data: { paymentRef: `pi_demo_${Date.now()}`, status: RENTAL_PROCESSING },
+    })
+    revalidatePath(`/sites/${siteId}/manage`)
+    return { status: 'ok', amount, demo: true, bookingId: primaryId }
+  }
+
+  const consumerAppUrl = process.env.CONSUMER_APP_URL
+  if (!consumerAppUrl) {
+    return { status: 'error', errors: ['Online payments are not configured (CONSUMER_APP_URL)'] }
+  }
+  // Standard post-payment redirect for rentals — the renter lands on
+  // /payment/complete/rental which verifies and forwards to the rental receipt.
+  const redirectUrl = new URL(
+    `/payment/complete/rental?rentalBookingId=${primaryId}&anonId=${anonId}`,
+    consumerAppUrl,
+  ).toString()
+  const webhookUrl = new URL('/api/webhooks/mollie', consumerAppUrl).toString()
+
+  const result = await createRentalBookingMolliePayment(bookingIds, {
+    redirectUrl,
+    webhookUrl,
+    metadataExtra: { collect: true },
+  })
+
+  if (result.status === 'error') {
+    // The shared helper may have already marked bookings as payment_failed;
+    // revert the whole group to paid-in-cash so the occupied item is never
+    // stranded as a terminal state and can be re-collected or cashed out.
+    await prisma.rentalBooking.updateMany({
+      where: { id: { in: bookingIds } },
+      data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
+    })
+    return { status: 'error', errors: [result.error ?? 'Payment could not be created'] }
+  }
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok', amount, checkoutUrl: result.checkoutUrl, bookingId: primaryId }
+}
+
+/**
+ * Poll the live payment status of a rental collection (the manage screen calls
+ * this on an interval while the QR is shown). Reads the webhook-updated status
+ * and, as a fallback, re-verifies with Mollie: a confirmed payment is finalised
+ * (idempotent invoices, status → complete for all bookings sharing the ref); a
+ * failed/expired one reverts the whole group to `paid-in-cash` so the rented
+ * items survive.
+ */
+export async function getRentalCollectStatus(
+  siteId: string,
+  bookingId: string,
+  accessKey?: string,
+) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const booking = await prisma.rentalBooking.findUnique({
+    where: { id: bookingId },
+    select: { siteId: true, status: true, paymentRef: true },
+  })
+  if (!booking || booking.siteId !== siteId) {
+    return { status: 'error', errors: ['Rental booking not found'] }
+  }
+
+  if (booking.status === RENTAL_COMPLETE) {
+    return { status: 'ok', paymentStatus: 'complete' as const }
+  }
+
+  if (booking.status === RENTAL_PROCESSING && booking.paymentRef) {
+    const fin = await reverifyAndFinalizeRentalBooking(bookingId)
+    if (fin.settled === 'complete') {
+      revalidatePath(`/sites/${siteId}/manage`)
+      return { status: 'ok', paymentStatus: 'complete' as const }
+    }
+    if (fin.settled === 'failed') {
+      // Failed collection → revert the WHOLE group (every booking sharing this
+      // paymentRef) to cash so no rental is abandoned as a failed terminal state.
+      await prisma.rentalBooking.updateMany({
+        where: { siteId, paymentRef: booking.paymentRef },
+        data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
+      })
+      revalidatePath(`/sites/${siteId}/manage`)
+      return { status: 'ok', paymentStatus: 'failed' as const }
+    }
+    return { status: 'ok', paymentStatus: 'processing' as const }
+  }
+
+  return { status: 'ok', paymentStatus: 'cash' as const }
+}
+
+/**
+ * Abandon an in-flight rental collection (operator closed the QR before the
+ * renter paid). Re-verifies once: a payment that actually went through is
+ * finalised (complete + invoices); otherwise the whole booking group reverts to
+ * `paid-in-cash` and the paymentRef is cleared, keeping the rented items in a
+ * safe state that can be re-collected or settled in cash. Idempotent / no-op
+ * for a booking that isn't mid-collection.
+ */
+export async function cancelRentalCollection(
+  siteId: string,
+  bookingId: string,
+  accessKey?: string,
+) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const booking = await prisma.rentalBooking.findUnique({
+    where: { id: bookingId },
+    select: { siteId: true, status: true, paymentRef: true },
+  })
+  if (!booking || booking.siteId !== siteId) {
+    return { status: 'error', errors: ['Rental booking not found'] }
+  }
+  // Only a processing collection is abandonable. Already complete or plain cash
+  // is a no-op success — nothing to cancel.
+  if (booking.status !== RENTAL_PROCESSING) {
+    return { status: 'ok', paymentStatus: booking.status === RENTAL_COMPLETE ? 'complete' as const : 'cash' as const }
+  }
+
+  if (booking.paymentRef) {
+    const fin = await reverifyAndFinalizeRentalBooking(bookingId)
+    if (fin.settled === 'complete') {
+      revalidatePath(`/sites/${siteId}/manage`)
+      return { status: 'ok', paymentStatus: 'complete' as const }
+    }
+  }
+
+  // Not paid — revert the whole group (every booking sharing this paymentRef)
+  // to a plain cash walk-in (items kept, re-collectable).
+  const ref = booking.paymentRef
+  if (ref) {
+    await prisma.rentalBooking.updateMany({
+      where: { siteId, paymentRef: ref },
+      data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
+    })
+  } else {
+    await prisma.rentalBooking.update({
+      where: { id: bookingId },
+      data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
+    })
+  }
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok', paymentStatus: 'cash' as const }
 }

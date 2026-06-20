@@ -879,6 +879,7 @@ export default function ManageView({
             accessKey={accessKey}
             rentalBookings={site.rentalBookings}
             onRentOut={() => setShowRentalModal(true)}
+            onChanged={() => router.refresh()}
           />
         </div>
       ) : effectiveParcel !== undefined ? (
