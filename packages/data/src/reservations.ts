@@ -19,8 +19,12 @@
  *   - Default `blockingStatuses`: PENDING, PROCESSING, COMPLETE, PAID_IN_CASH
  *     (i.e. BLOCKING_STATUSES from reservation-status.ts). PAYMENT_FAILED,
  *     CANCELED, REFUNDED are non-blocking by default — those beds are free again.
- *   - Default `blockingOpStatuses` excluded (i.e. non-blocking op statuses):
- *     OP_NO_SHOW, OP_DEPARTED. All other operational statuses block.
+ *   - Operational status does NOT free a bed (track 012, decision: availability
+ *     blocks on date-range + payment status only). A reservation blocks its whole
+ *     date range regardless of operationalStatus — a no-show/departed bed is
+ *     reused by an explicit release (status -> canceled), not by op-status. The
+ *     `nonBlockingOpStatuses` param still exists for callers that need it, but
+ *     defaults to [] (nothing freed by op-status).
  *   - Date overlap: standard half-open / closed interval —
  *     existing.from <= requested.to AND existing.to >= requested.from
  *
@@ -36,8 +40,6 @@ import { Prisma } from '@prisma/client'
 import prisma from '../index'
 import {
   BLOCKING_STATUSES,
-  OP_NO_SHOW,
-  OP_DEPARTED,
   OP_RETURNED,
   RENTAL_CANCELED,
 } from './reservation-status'
@@ -70,7 +72,9 @@ export type ConflictGuardOptions = {
   blockingStatuses?: readonly string[]
   /**
    * Operational statuses that are NON-blocking (i.e. excluded from the conflict check).
-   * Defaults to [OP_NO_SHOW, OP_DEPARTED] — those guests are gone.
+   * Defaults to [] — operational status never frees a bed; availability blocks on
+   * date-range + payment status only (track 012). Reuse a no-show/departed bed via
+   * an explicit release (status -> canceled), not via op-status.
    */
   nonBlockingOpStatuses?: readonly string[]
 }
@@ -143,7 +147,7 @@ export async function reserveWithConflictGuard(
 ): Promise<ConflictGuardResult> {
   const {
     blockingStatuses = BLOCKING_STATUSES,
-    nonBlockingOpStatuses = [OP_NO_SHOW, OP_DEPARTED],
+    nonBlockingOpStatuses = [],
   } = options
 
   const { itemIds, siteId, userId, employeeId, ...reservationFields } = data
@@ -238,7 +242,7 @@ export async function moveReservationWithConflictGuard(
 ): Promise<MoveConflictGuardResult> {
   const {
     blockingStatuses = BLOCKING_STATUSES,
-    nonBlockingOpStatuses = [OP_NO_SHOW, OP_DEPARTED],
+    nonBlockingOpStatuses = [],
   } = options
 
   return prisma.$transaction(async (tx) => {

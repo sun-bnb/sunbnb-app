@@ -3,7 +3,6 @@ import dayjs from 'dayjs'
 import isBetween from 'dayjs/plugin/isBetween'
 import { Reservation } from '@/app/sites/types'
 import { BLOCKING_STATUSES } from '@repo/data/reservation-status'
-import { OP_NO_SHOW, OP_DEPARTED } from '@repo/data/reservation-status'
 
 dayjs.extend(isBetween)
 
@@ -60,13 +59,14 @@ export async function getAvailability(siteId: string, from: Date, to: Date) {
   // Collect just their ids
   const itemIds = items.map(item => item.id)
 
-  // Find all reservations overlapping [from, to]
-  // Exclude no-show and departed reservations — those beds are available again.
+  // Find all reservations overlapping [from, to]. Operational status does NOT
+  // free a bed (track 012): a no-show/departed reservation still blocks its date
+  // range — those beds are reused via an explicit release (status -> canceled),
+  // not by op-status. Availability blocks on date-range + payment status only.
   const reservations = await prisma.reservation.findMany({
     where: {
       siteId,
       status: { in: BLOCKING_STATUSES },
-      operationalStatus: { notIn: [OP_NO_SHOW, OP_DEPARTED] },
       from: { lte: to },
       to: { gte: from },
     },

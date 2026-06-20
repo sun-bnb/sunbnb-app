@@ -1402,7 +1402,7 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
 
   // ─── 2. Depart frees all N seats ───────────────────────────────────────────
 
-  it('markDeparted: departed grouped walk-in frees all its seats (no stranded sibling)', async () => {
+  it('markDeparted: grouped walk-in marked departed across all seats; seats stay held (op-status never frees)', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id)
     const i1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
@@ -1428,16 +1428,15 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
     expect(departed!.operationalStatus).toBe('departed')
     expect(departed!.departedAt).toBeTruthy()
 
-    // All 3 seats remain connected (departed reservation still owns them).
-    // The freed-seat check: a new reservation on any of these 3 items must succeed.
+    // track 012: operational status never frees a bed — the departed seats stay
+    // HELD (a departed day-1 of a multiday stay must not free later days), so
+    // rebooking the same seats is now rejected; reuse requires an explicit release.
     const newResResult = await reserveItems(site.id, [i1.id, i2.id, i3.id], 'New Group')
-    // departed reservations use BLOCKING_STATUSES which does NOT include 'departed',
-    // so all 3 seats should be available for rebooking.
-    expect(newResResult).toEqual({ status: 'ok' })
+    expect(newResResult.status).toBe('error')
 
-    // One original + one new reservation.
+    // Only the original reservation exists — the rebook was rejected.
     const allReservations = await prisma.reservation.findMany({ where: { siteId: site.id } })
-    expect(allReservations).toHaveLength(2)
+    expect(allReservations).toHaveLength(1)
   })
 
   // ─── 3. No-show applies to whole reservation ───────────────────────────────
@@ -1469,9 +1468,10 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
     // All 3 seats still connected — the row was updated, not deleted.
     expect(updated!.items).toHaveLength(3)
 
-    // Seats are now free for rebooking (no-show is not in BLOCKING_STATUSES).
+    // track 012: op-status never frees a bed — a no-show seat stays held until an
+    // explicit release, so rebooking the same seats is now rejected.
     const newRes = await reserveItems(site.id, [i1.id, i2.id, i3.id], 'Replacement Group')
-    expect(newRes).toEqual({ status: 'ok' })
+    expect(newRes.status).toBe('error')
   })
 
   // ─── 4. Cancel via one itemId cancels the entire grouped reservation ────────

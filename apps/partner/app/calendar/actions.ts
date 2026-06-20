@@ -10,8 +10,6 @@ import {
   RESERVATION_PAID_IN_CASH,
   RESERVATION_CANCELED,
   OP_EXPECTED,
-  OP_NO_SHOW,
-  OP_DEPARTED,
 } from '@repo/data/reservation-status'
 
 /**
@@ -190,7 +188,8 @@ export async function getAvailableSunbeds(
     where: {
       siteId,
       status: { notIn: [RESERVATION_CANCELED] },
-      operationalStatus: { notIn: [OP_NO_SHOW, OP_DEPARTED] },
+      // Operational status does NOT free a bed — a no-show/departed reservation
+      // still blocks its date range (track 012); reuse via explicit release.
       from: { lte: toDate },
       to: { gte: fromDate },
     },

@@ -263,7 +263,11 @@ describe('reserveWithConflictGuard — non-blocking statuses', () => {
     expect(true).toBe(true) // documentation test — see unit suite for predicate coverage
   })
 
-  it('NO_SHOW operational status does NOT block (guest never arrived)', async () => {
+  // track 012: operational status NEVER frees a bed — availability blocks on
+  // date-range + payment status only. A no-show/departed reservation still holds
+  // its range (a departed day-1 of a multiday stay must not free days 2–3);
+  // reuse is an explicit release (status -> canceled), not an op-status side effect.
+  it('NO_SHOW operational status STILL blocks (op-status never frees a bed)', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id)
     const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
@@ -289,10 +293,10 @@ describe('reserveWithConflictGuard — non-blocking statuses', () => {
       operationalStatus: OP_WALKED_IN,
     })
 
-    expect(result.outcome).toBe('created')
+    expect(result.outcome).toBe('conflict')
   })
 
-  it('DEPARTED operational status does NOT block (guest has left)', async () => {
+  it('DEPARTED operational status STILL blocks (op-status never frees a bed)', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id)
     const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
@@ -318,7 +322,7 @@ describe('reserveWithConflictGuard — non-blocking statuses', () => {
       operationalStatus: OP_WALKED_IN,
     })
 
-    expect(result.outcome).toBe('created')
+    expect(result.outcome).toBe('conflict')
   })
 })
 

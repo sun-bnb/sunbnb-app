@@ -196,7 +196,10 @@ describe('createPartnerReservation', () => {
     expect(reservations).toHaveLength(2)
   })
 
-  it('allows booking on dates where existing reservation is no-show or departed', async () => {
+  // track 012: operational status never frees a bed. A no-show/departed
+  // reservation still blocks its date range (a departed day-1 of a multiday stay
+  // must not free days 2–3); reuse is an explicit release, not an op-status effect.
+  it('rejects booking over a no-show/departed reservation (op-status never frees a bed)', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id)
     const item1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
@@ -219,7 +222,7 @@ describe('createPartnerReservation', () => {
       operationalStatus: 'departed',
     })
 
-    // Book both items for the same dates — should succeed
+    // Book both items for the same dates — now rejected (both beds still held).
     const result = await createPartnerReservation({
       siteId: site.id,
       itemIds: [item1.id, item2.id],
@@ -228,7 +231,7 @@ describe('createPartnerReservation', () => {
       paymentType: 'cash',
     })
 
-    expect(result).toEqual({ status: 'ok' })
+    expect(result.status).toBe('error')
   })
 
   it('rejects booking inactive items and creates nothing in DB', async () => {
@@ -394,7 +397,10 @@ describe('getAvailableSunbeds', () => {
     expect(result.items[0].id).toBe(item2.id)
   })
 
-  it('includes items whose only reservations are canceled, no-show, or departed', async () => {
+  // track 012: a CANCELED reservation frees the bed (non-blocking payment status),
+  // but no-show/departed do NOT — operational status never frees a bed, so those
+  // beds stay held until an explicit release.
+  it('frees only the canceled item; no-show/departed still block (op-status never frees)', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id)
     const item1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
@@ -402,7 +408,7 @@ describe('getAvailableSunbeds', () => {
     const item3 = await createTestInventoryItem(user.id, site.id, { number: 3 })
     mockUserId = user.id
 
-    // canceled reservation
+    // canceled reservation — frees item1 (canceled is non-blocking by status)
     await createTestReservation(user.id, site.id, [item1.id], {
       from: new Date('2026-07-01'),
       to: new Date('2026-07-05'),
@@ -410,7 +416,7 @@ describe('getAvailableSunbeds', () => {
       operationalStatus: 'expected',
     })
 
-    // no-show reservation
+    // no-show reservation — item2 STILL blocked (op-status never frees)
     await createTestReservation(user.id, site.id, [item2.id], {
       from: new Date('2026-07-01'),
       to: new Date('2026-07-05'),
@@ -418,7 +424,7 @@ describe('getAvailableSunbeds', () => {
       operationalStatus: 'no-show',
     })
 
-    // departed reservation
+    // departed reservation — item3 STILL blocked
     await createTestReservation(user.id, site.id, [item3.id], {
       from: new Date('2026-07-01'),
       to: new Date('2026-07-05'),
@@ -429,7 +435,9 @@ describe('getAvailableSunbeds', () => {
     const result = await getAvailableSunbeds(site.id, '2026-07-01', '2026-07-05')
 
     expect(result.status).toBe('ok')
-    expect(result.items).toHaveLength(3)
+    // Only the canceled item is free; the no-show and departed beds stay held.
+    expect(result.items).toHaveLength(1)
+    expect(result.items?.[0]?.id).toBe(item1.id)
   })
 
   it('does not return inactive items', async () => {

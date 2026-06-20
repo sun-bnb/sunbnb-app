@@ -35,19 +35,20 @@ cycle). Early-checkout / release-rest-of-stay is a separate cancel/edit concern,
 
 ## Resume here
 
-- **Next action:** Start **P2** — reader migration: (1) `@repo/data/analytics.ts:getOccupancyByDay`
-  → per-day (count a bed occupied on day D unless THAT day's row is no-show/departed), accepted as
-  a correction (decision Q5); (2) lock the double-sell with an **integration** test (P1 proved it in
-  unit tests via `effectiveOpStatus`, but add a real-DB assertion: parent departed day-1 → bed still
-  reserved day-2); (3) availability (`calendar/actions.ts`, `@repo/data/reservations.ts`,
-  `availabilityService.ts`) **stays whole-stay** — add a guard test that a departed day does NOT free
-  the bed for a new sale. analytics swap is `@repo/data` → `data-dev`; the partner guard test →
-  `partner-dev`.
-- **Context needed:** This file; P1's `manage/reservation-day.ts` (`resolveTodayRow`/
-  `applyDayTransition`) + `bed-state.ts:effectiveOpStatus` (the per-day filter, already live);
-  `@repo/data/site-day`. **P1 follow-ups to fold in:** no real-DB integration test for the per-day
-  behaviors yet (unit-only); `manage/page.tsx` lazy-upserts sequentially in a loop (N awaited writes
-  per load — consider `Promise.all`/batch if it shows up in perf).
+- **Next action:** Finish **P2** — only **occupancy** remains. The availability double-sell is
+  DONE (see Log). `@repo/data/analytics.ts:getOccupancyByDay` → per-day: a bed counts occupied on
+  day D unless its `(reservation, D)` row is no-show/departed, falling back to the parent
+  `operationalStatus` when no row exists (historical months have no rows — keeps their numbers
+  stable; only current/future occupancy goes per-day). Mirror the `bed-state.ts:effectiveOpStatus`
+  pattern. `@repo/data` → `data-dev`. Accepted as a correction (Q5). LOW immediate value (most
+  analytics days are historical → fall back to parent), so fine to defer if other work is hotter.
+- **Optional follow-ups (not blocking):** the manage **move/relocate** guards
+  (`manage/actions.ts:~468,~543`) and the check-in precondition still read the *parent*
+  `operationalStatus` for some decisions — consider per-day (`effectiveOpStatus`) so a
+  departed-today multiday booking is still movable; `manage/page.tsx` lazy-upserts sequentially
+  (batch with `Promise.all` if perf shows up).
+- **Context needed:** This file; P1's `manage/reservation-day.ts` + `bed-state.ts:effectiveOpStatus`;
+  `@repo/data/site-day`. Availability is now date-range + payment only (decision below).
 - **Blocked by:** nothing — P1 landed (partner tsc clean, 1575 unit + 128 integration green).
 
 ## Roadmap
@@ -110,6 +111,20 @@ cycle). Early-checkout / release-rest-of-stay is a separate cancel/edit concern,
 
 ## Log
 
+- **2026-06-20 — P2 (availability double-sell) landed; DECISION on the availability invariant.**
+  Discovered while scoping P2: the plan's "don't touch availability, it already blocks whole-stay"
+  was wrong — the conflict guard (`reservations.ts`), calendar `getAvailableSunbeds`, and the user
+  `availabilityService` ALL excluded `[OP_NO_SHOW, OP_DEPARTED]`, so a multiday booking departed on
+  day-1 (P1 mirrors that onto the parent) freed days 2–3 for a NEW consumer/calendar/walk-in
+  booking. P1 fixed the manage grid but not this. **User chose: availability blocks on date-range +
+  payment status only — operational status NEVER frees a bed** (reuse a no-show/departed bed via an
+  explicit release → status `canceled`, not as an op-status side effect). Removed the
+  `[OP_NO_SHOW, OP_DEPARTED]` exclusion from all three paths (conflict-guard default → `[]`,
+  `getAvailableSunbeds`, `availabilityService`). Flipped 6 existing tests that encoded the old
+  "no-show/departed frees the bed" contract (2 data conflict-guard, 2 calendar, 2 manage-grouped) —
+  they now double as the double-sell guard (a departed reservation still blocks its range). Green:
+  data 235u+131i, partner 1575u+128i, user 332u+45i; all lints clean. Done by orchestrator (tightly
+  coupled cross-app semantic change). Remaining P2: occupancy per-day (low immediate value).
 - **2026-06-20 — P1 landed.** Manage now reads/writes today's `ReservationDay` row.
   `manage/reservation-day.ts`: `resolveTodayRow` (lazy-upsert, default `expected`, mirror parent for
   walk-in/comp, blocked skipped) + `applyDayTransition` (today-row + legacy-mirror in one
