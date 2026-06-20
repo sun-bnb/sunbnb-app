@@ -764,7 +764,8 @@
     "bulkFree": "Vapauta",
     "bulkNoAction": "Tälle valinnalle ei ole joukkotoimintoa",
     "bulkCancelPaidNote": "Peru maksetut varaukset yksitellen hyvityksen hoitamiseksi",
-    "bulkSomeFailed": "{n} ei voitu päivittää"
+    "bulkSomeFailed": "{n} ei voitu päivittää",
+    "bulkGroupConflict": "Varaus epäonnistui — yksi tai useampi valituista aurinkovuoteista on jo varattu."
   },
   "BedDetail": {
     "collectPayment": "Peri maksu",

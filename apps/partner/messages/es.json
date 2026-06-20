@@ -764,7 +764,8 @@
     "bulkFree": "Liberar",
     "bulkNoAction": "No hay acción en lote para esta selección",
     "bulkCancelPaidNote": "Cancela las reservas pagadas de una en una para gestionar el reembolso",
-    "bulkSomeFailed": "{n} no se pudieron actualizar"
+    "bulkSomeFailed": "{n} no se pudieron actualizar",
+    "bulkGroupConflict": "No se pudo reservar — una o más tumbonas seleccionadas ya están ocupadas."
   },
   "BedDetail": {
     "collectPayment": "Cobrar",

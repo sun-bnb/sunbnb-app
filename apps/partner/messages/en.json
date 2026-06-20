@@ -764,7 +764,8 @@
     "bulkFree": "Make available",
     "bulkNoAction": "No bulk action for this selection",
     "bulkCancelPaidNote": "Cancel paid bookings one at a time to handle the refund",
-    "bulkSomeFailed": "{n} couldn't be updated"
+    "bulkSomeFailed": "{n} couldn't be updated",
+    "bulkGroupConflict": "Couldn't book — one or more selected sunbeds are already taken."
   },
   "BedDetail": {
     "collectPayment": "Collect payment",

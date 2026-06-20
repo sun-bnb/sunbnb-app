@@ -16,7 +16,8 @@ import RentalsSection from './RentalsSection'
 import { getActiveReservation, getBedState, isFailedReservationStatus, type BedState } from './bed-state'
 import {
   moveReservationToSeats,
-  blockBed, compBed, holdBed, reserveItem, convertHoldToWalkIn,
+  blockBed, compBed, convertHoldToWalkIn,
+  holdBeds, reserveItems,
   unblockBed, uncompBed, releaseHold, unreserveItem, removeFailedReservation,
   checkInReservation, markNoShow, markDeparted, cancelReservation,
   type ReservationMatch,
@@ -588,19 +589,57 @@ export default function ManageView({
   // The shared Guest name applies to create/comp/hold; the period only to Rent.
   const bulkBlock = () => runBulkSeq(i => blockBed(site.id!, i.id, undefined, accessKey, false, workerArg))
   const bulkComp = () => runBulkSeq(i => compBed(site.id!, i.id, accessKey, false, bulkGuestName.trim() || undefined, undefined, workerArg))
-  const bulkReserve = () => runBulkSeq(i => holdBed(site.id!, i.id, accessKey, false, bulkGuestName.trim() || undefined, undefined, workerArg))
+  const bulkReserve = () => {
+    if (selectedIds.length === 0) return
+    setBulkError(null)
+    startBulkTransition(async () => {
+      const res = await holdBeds(site.id!, selectedIds, accessKey, bulkGuestName.trim() || undefined, undefined, workerArg)
+      if (res.status === 'error') {
+        setBulkError(t('bulkGroupConflict'))
+      } else {
+        router.refresh()
+        setSelectedIds([])
+      }
+    })
+  }
   const bulkRent = () => {
-    const seenHolds = new Set<string>() // a held reservation spanning several selected seats converts once
+    if (selectedIds.length === 0) return
     const name = bulkGuestName.trim() || undefined
     const until = bulkUntil || undefined
-    runBulkSeq((i) => {
-      if (seatKind(i) === 'held') {
-        const res = getActiveReservation(i)
-        if (!res || seenHolds.has(res.id)) return Promise.resolve({ status: 'ok' as const })
-        seenHolds.add(res.id)
-        return convertHoldToWalkIn(site.id!, i.id, accessKey, name, until, workerArg)
+    // Split selection: free seats → one grouped walk-in; held reservations → convert individually.
+    const selItems_ = inventoryItems.filter(i => selectedIds.includes(i.id))
+    const freeIds = selItems_.filter(i => seatKind(i) === 'available').map(i => i.id)
+    // Deduplicate held reservations: a multi-seat held reservation converts once.
+    const seenHolds = new Set<string>()
+    const heldItemIds: string[] = []
+    for (const i of selItems_) {
+      if (seatKind(i) !== 'held') continue
+      const res = getActiveReservation(i)
+      if (!res || seenHolds.has(res.id)) continue
+      seenHolds.add(res.id)
+      heldItemIds.push(i.id)
+    }
+    setBulkError(null)
+    startBulkTransition(async () => {
+      // 1. Attempt grouped free-seat create first (all-or-nothing). If it fails, abort entirely.
+      if (freeIds.length > 0) {
+        const r = await reserveItems(site.id!, freeIds, name, undefined, accessKey, until, workerArg)
+        if (r.status === 'error') {
+          setBulkError(t('bulkGroupConflict'))
+          return // keep selection, do NOT convert any holds
+        }
       }
-      return reserveItem(site.id!, i.id, name, undefined, accessKey, until, false, workerArg)
+      // 2. Convert each distinct held reservation.
+      let failed = 0
+      for (const itemId of heldItemIds) {
+        try {
+          const r = await convertHoldToWalkIn(site.id!, itemId, accessKey, name, until, workerArg)
+          if (r.status === 'error') failed++
+        } catch { failed++ }
+      }
+      router.refresh()
+      if (failed > 0) setBulkError(t('bulkSomeFailed', { n: failed }))
+      else setSelectedIds([])
     })
   }
   const bulkFree = () => {
