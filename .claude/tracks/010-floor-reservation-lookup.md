@@ -85,9 +85,13 @@ roster, not a minute-by-minute schedule — the timed version applies to tables/
   action is covered by P1). `ReservationMatch` exported from the 'use server' actions file (precedent:
   `orders/actions.ts`, `restaurants/[id]/queries.ts`); client sheet only imports pure `reservation-
   status` constants (no prisma in the bundle).
-- **Next action:** **P3 — arrivals roster enrichment** (the host-stand layer): the chips/party/notes
-  are in; add a distinct **not-arrived / unfulfilled** treatment + empty/no-match polish. Then **P4**
-  scan-the-pass, **P5** resell nudge. Prime `/ui partner`.
+- **Next action:** **VALIDATE before building more.** The P3 *correctness* slice shipped (`80bacc5`);
+  the rest of P3 (roster CRM decoration) + P4 (scan-the-pass) + P5 (resell) are **parked as
+  unvalidated demand** (2026-06-20 decision — they're Alonso-model hypotheses, not operator requests).
+  The cheapest real next move is to **instrument the hypotheses**, not build them: are guests opening
+  `/reservations/[id]/pass` (→ informs P4)? how often does a held bed end the day `expected` and never
+  checked in (→ informs P5)? Build a phase only once a signal — or an operator ask — pulls it. If/when
+  building resumes, prime `/ui partner`.
 - **Context needed:** the manage page is **token-gated** (`accessKey`/`SecurityToken` via
   `verifySiteAccess`, no session) and renders a **today-overlap** grid (`page.tsx`). Reference query:
   `app/frontdesk/actions.ts#searchAllReservations` (owner-only) — bring it to the token-gated floor,
@@ -119,9 +123,15 @@ roster, not a minute-by-minute schedule — the timed version applies to tables/
   Guests + rentals bottom-right) hidden during multiselect, like the existing two. `view.tsx`: sheet
   state + **Locate** handoff (jump to the bed's parcel + open `BedDetail`, reusing the existing
   selection), inline `checkInReservation` / `convertHoldToWalkIn`. `Guests` i18n in en/es/fi.
-- ☐ **P3 — Arrivals roster enrichment (host-stand layer).** Rows carry party size (+N), **paid-vs-hold**
-  chip, **notes** (VIP/allergy), and a **not-arrived / unfulfilled** state; empty / no-match / loading
-  states; optional recent-search. Turns the list from "names" into a roster staff prep against.
+- ◐ **P3 — Arrivals roster enrichment (host-stand layer). CORRECTNESS SLICE DONE (`80bacc5`, 2026-06-20);
+  the rest PARKED pending operator signal.** ✅ Shipped: distinct **error state** + Retry (was: error
+  return coerced to `[]`, so a failed fetch looked identical to "no arrivals"), `aria-busy`/`role=status`
+  a11y, and stale-dimming on re-search instead of blanking to "loading". 💤 Parked (speculative
+  decoration, not built): party-size/paid-hold/notes chips as a CRM roster + the **not-arrived /
+  unfulfilled** treatment. **Decision (2026-06-20):** these are hypotheses reasoned from the Alonso model,
+  not requests from real Sunbnb operators — building them risks spending usability budget (already 3 FABs
+  on the manage screen) on unvalidated demand. Validate first (do operators want it? is there a pain
+  signal?) before building. See Log.
 - ☐ **P4 — Scan-the-pass entry.** A "Scan pass" affordance on the sheet: device camera → read the
   guest's confirmation QR (`/reservations/[id]/pass`) → resolve the reservation (id / anonId) → open it
   → check in. Error-proof, beyond Alonso; name/phone search stays the fallback. (Needs a QR-scan path +
@@ -182,6 +192,15 @@ roster, not a minute-by-minute schedule — the timed version applies to tables/
   surface staff know). The floor-lookup gap vs Alonso is now **closed end-to-end** (a token-gated
   employee can find a booking by name/phone, see today's arrivals, and act — none of which the
   today-only grid allowed). P3–P5 (richer roster, scan-the-pass, resell) are the *surpass*.
+- **2026-06-20** — **Surpass layer PAUSED — validate before building.** On reviewing P3–P5, the call was
+  that these are *hypothetically* useful (reasoned from the Alonso competitor model), not features real
+  Sunbnb operators have asked for — and each adds a surface/chip/mode every operator pays for so a
+  hypothetical one benefits (the manage screen already carries 3 FABs). The parity layer (P1–P2) closed
+  an *observed* gap vs a real competitor and is the known-valuable part; the surpass layer is demand-side
+  hypothesis. **Decision:** ship only the P3 *correctness* slice (error/empty/loading/a11y robustness —
+  not a feature, just finishing P2 properly; `80bacc5`) and **park** the roster-CRM decoration + P4 + P5
+  until a signal pulls them — an operator request, or instrumentation showing the pain (pass-QR usage for
+  P4, unfulfilled-hold rate for P5). Resist building the floor's features on the floor's behalf.
 
 ## Open decisions
 
