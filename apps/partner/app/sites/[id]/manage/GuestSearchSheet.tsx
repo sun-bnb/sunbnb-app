@@ -53,7 +53,12 @@ export default function GuestSearchSheet({
   const t = useTranslations('Guests')
   const [query, setQuery] = useState('')
   const [rows, setRows] = useState<ReservationMatch[]>([])
+  /** True only on the initial load (no prior rows to show). */
   const [loading, setLoading] = useState(true)
+  /** True while a debounced re-fetch is in flight (prior rows remain visible). */
+  const [stale, setStale] = useState(false)
+  /** Non-null when findReservations returned an error shape. */
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
   const q = query.trim()
@@ -61,22 +66,59 @@ export default function GuestSearchSheet({
 
   async function fetchRows() {
     const res = await findReservations(siteId, q || undefined, accessKey)
-    setRows('reservations' in res ? (res.reservations ?? []) : [])
+    if ('reservations' in res) {
+      setRows(res.reservations ?? [])
+      setFetchError(null)
+    } else {
+      // Error shape: { status: 'error', errors: string[] }
+      setFetchError(res.errors?.[0] ?? t('error'))
+    }
   }
 
   // Initial arrivals load + debounced re-fetch as the query changes.
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
+
+    // On the initial mount rows is empty so we show the full loading state.
+    // On subsequent query changes we keep existing rows visible (stale) and
+    // only switch to the full loading spinner when there are no prior rows.
+    if (rows.length === 0) {
+      setLoading(true)
+      setStale(false)
+    } else {
+      setStale(true)
+    }
+    setFetchError(null)
+
     const id = setTimeout(async () => {
       const res = await findReservations(siteId, q || undefined, accessKey)
       if (cancelled) return
-      setRows('reservations' in res ? (res.reservations ?? []) : [])
+      if ('reservations' in res) {
+        setRows(res.reservations ?? [])
+        setFetchError(null)
+      } else {
+        setFetchError(res.errors?.[0] ?? t('error'))
+      }
       setLoading(false)
+      setStale(false)
     }, hasQuery ? 250 : 0)
     return () => { cancelled = true; clearTimeout(id) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, siteId, accessKey])
+
+  function retry() {
+    setFetchError(null)
+    setLoading(true)
+    findReservations(siteId, q || undefined, accessKey).then((res) => {
+      if ('reservations' in res) {
+        setRows(res.reservations ?? [])
+        setFetchError(null)
+      } else {
+        setFetchError(res.errors?.[0] ?? t('error'))
+      }
+      setLoading(false)
+    })
+  }
 
   function checkIn(r: ReservationMatch) {
     startTransition(async () => {
@@ -116,8 +158,11 @@ export default function GuestSearchSheet({
           />
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        {/* Body — aria-busy signals screen readers when a fetch is in flight */}
+        <div
+          className="flex-1 overflow-y-auto p-3 space-y-2"
+          aria-busy={loading || stale}
+        >
           {!hasQuery && (
             <div className="px-1 pt-1 text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">
               {t('expectedToday')}
@@ -125,78 +170,94 @@ export default function GuestSearchSheet({
           )}
 
           {loading ? (
-            <div className="py-12 text-center text-gray-400 dark:text-gray-500 font-bold">{t('loading')}</div>
+            <div role="status" className="py-12 text-center text-gray-400 dark:text-gray-500 font-bold">
+              {t('loading')}
+            </div>
+          ) : fetchError ? (
+            /* Error state — distinct from empty; offers a Retry affordance */
+            <div role="status" className="py-10 flex flex-col items-center gap-3 text-center">
+              <p className="text-red-600 dark:text-red-400 font-semibold text-sm">{t('error')}</p>
+              <button
+                onClick={retry}
+                className="px-4 py-2 rounded-lg text-sm font-bold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 active:bg-gray-200 dark:active:bg-gray-700"
+              >
+                {t('retry')}
+              </button>
+            </div>
           ) : rows.length === 0 ? (
-            <div className="py-12 text-center text-gray-400 dark:text-gray-500 font-bold">
+            <div role="status" className="py-12 text-center text-gray-400 dark:text-gray-500 font-bold">
               {hasQuery ? t('noMatches') : t('noArrivals')}
             </div>
           ) : (
-            rows.map((r) => {
-              const today = overlapsToday(r)
-              const paid = r.status === RESERVATION_COMPLETE
-              const held = r.status === RESERVATION_HELD
-              const name = r.guestName || r.userEmail || t('guest')
-              const beds = bedLabel(r.items)
-              return (
-                <div key={r.id} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="font-bold truncate">
-                        {name}
-                        {r.partySize > 1 && <span className="text-gray-400 font-semibold"> +{r.partySize - 1}</span>}
+            /* Rows — subtly dimmed while a re-search is pending (stale) */
+            <div className={stale ? 'opacity-50 pointer-events-none' : undefined}>
+              {rows.map((r) => {
+                const today = overlapsToday(r)
+                const paid = r.status === RESERVATION_COMPLETE
+                const held = r.status === RESERVATION_HELD
+                const name = r.guestName || r.userEmail || t('guest')
+                const beds = bedLabel(r.items)
+                return (
+                  <div key={r.id} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-bold truncate">
+                          {name}
+                          {r.partySize > 1 && <span className="text-gray-400 font-semibold"> +{r.partySize - 1}</span>}
+                        </div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                          {beds && <span aria-hidden="true">🛏 </span>}{beds}
+                          {r.internalNotes && <span className="italic"> · {r.internalNotes}</span>}
+                        </div>
                       </div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                        {beds && <span aria-hidden="true">🛏 </span>}{beds}
-                        {r.internalNotes && <span className="italic"> · {r.internalNotes}</span>}
-                      </div>
+                      <span className={`flex-shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                        !today
+                          ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+                          : paid
+                            ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400'
+                            : held
+                              ? 'bg-yellow-50 text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-400'
+                              : 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400'
+                      }`}>
+                        {!today
+                          ? t('upcomingOn', { date: dayjs(r.from).format('ddd D MMM') })
+                          : paid ? t('paid') : held ? t('hold') : t('seated')}
+                      </span>
                     </div>
-                    <span className={`flex-shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                      !today
-                        ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
-                        : paid
-                          ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400'
-                          : held
-                            ? 'bg-yellow-50 text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-400'
-                            : 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400'
-                    }`}>
-                      {!today
-                        ? t('upcomingOn', { date: dayjs(r.from).format('ddd D MMM') })
-                        : paid ? t('paid') : held ? t('hold') : t('seated')}
-                    </span>
-                  </div>
 
-                  {today && (
-                    <div className="mt-2 flex gap-2">
-                      <button
-                        onClick={() => onLocate(r)}
-                        disabled={pending}
-                        className="flex-1 py-2.5 rounded-lg text-sm font-bold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 active:bg-gray-200 dark:active:bg-gray-700 disabled:opacity-50"
-                      >
-                        {t('locate')}
-                      </button>
-                      {paid && r.operationalStatus === OP_EXPECTED && (
+                    {today && (
+                      <div className="mt-2 flex gap-2">
                         <button
-                          onClick={() => checkIn(r)}
+                          onClick={() => onLocate(r)}
                           disabled={pending}
-                          className="flex-1 py-2.5 rounded-lg text-sm font-bold bg-accent text-white active:bg-accent-hover disabled:opacity-50"
+                          className="flex-1 py-2.5 rounded-lg text-sm font-bold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 active:bg-gray-200 dark:active:bg-gray-700 disabled:opacity-50"
                         >
-                          {pending ? '…' : t('checkIn')}
+                          {t('locate')}
                         </button>
-                      )}
-                      {held && r.operationalStatus === OP_EXPECTED && (
-                        <button
-                          onClick={() => rent(r)}
-                          disabled={pending}
-                          className="flex-1 py-2.5 rounded-lg text-sm font-bold bg-orange-500 text-white active:bg-orange-600 disabled:opacity-50"
-                        >
-                          {pending ? '…' : t('rent')}
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )
-            })
+                        {paid && r.operationalStatus === OP_EXPECTED && (
+                          <button
+                            onClick={() => checkIn(r)}
+                            disabled={pending}
+                            className="flex-1 py-2.5 rounded-lg text-sm font-bold bg-accent text-white active:bg-accent-hover disabled:opacity-50"
+                          >
+                            {pending ? '…' : t('checkIn')}
+                          </button>
+                        )}
+                        {held && r.operationalStatus === OP_EXPECTED && (
+                          <button
+                            onClick={() => rent(r)}
+                            disabled={pending}
+                            className="flex-1 py-2.5 rounded-lg text-sm font-bold bg-orange-500 text-white active:bg-orange-600 disabled:opacity-50"
+                          >
+                            {pending ? '…' : t('rent')}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           )}
         </div>
       </div>

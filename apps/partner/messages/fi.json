@@ -869,7 +869,9 @@
     "seated": "Paikalla",
     "locate": "Paikanna",
     "checkIn": "Kirjaa saapuneeksi",
-    "rent": "Vuokraa"
+    "rent": "Vuokraa",
+    "error": "Vieraiden lataaminen epäonnistui",
+    "retry": "Yritä uudelleen"
   },
   "CreateRentalModal": {
     "title": "Vuokraa",

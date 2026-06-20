@@ -869,7 +869,9 @@
     "seated": "Seated",
     "locate": "Locate",
     "checkIn": "Check in",
-    "rent": "Rent"
+    "rent": "Rent",
+    "error": "Could not load guests",
+    "retry": "Try again"
   },
   "CreateRentalModal": {
     "title": "Rent Out",

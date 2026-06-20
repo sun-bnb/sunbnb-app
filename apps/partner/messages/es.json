@@ -869,7 +869,9 @@
     "seated": "Sentado",
     "locate": "Localizar",
     "checkIn": "Registrar",
-    "rent": "Alquilar"
+    "rent": "Alquilar",
+    "error": "No se pudieron cargar los clientes",
+    "retry": "Reintentar"
   },
   "CreateRentalModal": {
     "title": "Alquilar",
