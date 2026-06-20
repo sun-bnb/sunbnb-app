@@ -25,11 +25,13 @@
     "./mollie-tokens": "./src/mollie-tokens.ts",
     "./refund": "./src/refund.ts",
     "./reservation-payment": "./src/reservation-payment.ts",
+    "./rental-payment": "./src/rental-payment.ts",
     "./analytics": "./src/analytics.ts",
     "./till": "./src/till.ts",
     "./seat-label": "./src/seat-label.ts",
     "./seat-label-db": "./src/seat-label-db.ts",
-    "./reservations": "./src/reservations.ts"
+    "./reservations": "./src/reservations.ts",
+    "./site-day": "./src/site-day.ts"
   },
   "typesVersions": {
     "*": {
@@ -87,6 +89,9 @@
       "reservation-payment": [
         "./src/reservation-payment.ts"
       ],
+      "rental-payment": [
+        "./src/rental-payment.ts"
+      ],
       "analytics": [
         "./src/analytics.ts"
       ],
@@ -101,6 +106,9 @@
       ],
       "reservations": [
         "./src/reservations.ts"
+      ],
+      "site-day": [
+        "./src/site-day.ts"
       ]
     }
   },
@@ -126,7 +134,6 @@
   },
   "devDependencies": {
     "@repo/eslint-config": "*",
-    "@vitest/coverage-istanbul": "^3.2.4",
     "@repo/typescript-config": "*",
     "@turbo/gen": "^1.12.4",
     "@types/eslint": "^8.56.5",
@@ -134,6 +141,8 @@
     "@types/pg": "^8.18.0",
     "@types/react": "^18.2.61",
     "@types/react-dom": "^18.2.19",
+    "@types/tz-lookup": "^6.1.2",
+    "@vitest/coverage-istanbul": "^3.2.4",
     "eslint": "^8.57.0",
     "postcss": "^8.4.40",
     "tailwindcss": "^3.4.7",
@@ -147,6 +156,7 @@
     "prisma": "^7",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "resend": "^6.9.3"
+    "resend": "^6.9.3",
+    "tz-lookup": "^6.1.25"
   }
 }

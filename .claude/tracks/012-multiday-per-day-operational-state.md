@@ -1,7 +1,7 @@
 ---
 id: 012-multiday-per-day-operational-state
 title: Per-day operational state for multiday sunbed reservations
-status: proposed
+status: active
 created: 2026-06-20
 updated: 2026-06-20
 worktree: null
@@ -35,20 +35,23 @@ cycle). Early-checkout / release-rest-of-stay is a separate cancel/edit concern,
 
 ## Resume here
 
-- **Next action:** Decisions Q1–Q5 are **LOCKED** (see Open decisions). Awaiting user
-  go-ahead to start **P0** (schema expand: `ReservationDay` + `Site.timeZone` + `site-day.ts`
-  helper + coord→IANA derivation, additive migration + idempotent backfill). P0 begins with a
-  schema migration → confirm before running `migrate:local`.
-- **Context needed:** This file; `.claude/rules/migrations.md` (expand/contract, migrate-before-
-  push to shared TEST DB); `.claude/rules/architecture.md` (schema change = architecture pass).
-  Precedent for the timezone field: `Restaurant.timeZone` (schema ~line 720, IANA string).
-  Coordinate→tz: recommend the offline `tz-lookup` lib (tiny, no network) — CONFIRM lib choice
-  at P0 start; sites store lat/lng as PostGIS geometry, so backfill `Site.timeZone` from coords.
-- **Blocked by:** user go-ahead to begin P0 (schema migration).
+- **Next action:** Start **P1** — manage reads/writes TODAY's `ReservationDay` row (lazy-upsert
+  via `siteDayBounds(site)`), `checkInReservation`/`markDeparted`/`markNoShow` mutate today's row
+  **and** mirror onto the legacy parent fields (expand parallel-write), resolving "today"
+  server-side so action signatures (and the gated-action/auth-matrix spine) are unchanged. Thread
+  today's row through `bed-state.ts` / `view.tsx` / `BedDetail.tsx`. **Skip `blocked`** (sticky,
+  reads parent). Add the `reservationDay` delegate to partner + user `__mocks__/@repo/data/
+  PrismaCient.ts` now (P1 tests use it). This is partner-app work → route to `partner-dev`.
+- **Context needed:** This file; `@repo/data/site-day` (`siteDayKey`/`siteDayBounds`, shipped P0);
+  `apps/partner/app/sites/[id]/manage/{page,bed-state,BedDetail,actions}.tsx`; the manage today-
+  overlap query at `page.tsx:33-49`. P0 is committed?-check git log.
+- **Blocked by:** nothing — P0 landed (local + sunbnb_test migrated, 235 unit + 113 integration
+  green). P0 commit pending user go-ahead.
 
 ## Roadmap
 
-- ☐ **P0 — Schema expand + timezone dependency** (additive migration, no behavior change).
+- ✅ **P0 — Schema expand + timezone dependency** (additive migration, no behavior change). DONE
+  2026-06-20 — applied to local + `sunbnb_test`; 235 unit (incl. 21 site-day) + 113 integration green.
   `model ReservationDay { reservationId, date, operationalStatus, checkedInAt, departedAt,
   @@unique([reservationId, date]), @@index([date]) }` + `Site.timeZone String?`. New pure
   helper `packages/data/src/site-day.ts` (`siteDayKey`/`siteDayBounds`, DST-aware, null-tz
@@ -57,7 +60,7 @@ cycle). Early-checkout / release-rest-of-stay is a separate cancel/edit concern,
   with `ON CONFLICT DO NOTHING`. Update **both** partner + user `__mocks__/@repo/data/
   PrismaCient.ts` (`reservationDay` delegate → satisfies `mock-contract.test.ts`). Unit
   tests for `site-day.ts`; data integration test for backfill idempotency.
-- ☐ **P1 — Day-row write path + lazy lifecycle (manage).** `manage/page.tsx` window →
+- ▶ **P1 — Day-row write path + lazy lifecycle (manage).** `manage/page.tsx` window →
   `siteDayBounds(site.timeZone)`, lazy-upsert today's row per in-range reservation (skip
   `blocked`). `checkInReservation`/`markDeparted`/`markNoShow` mutate today's row **and**
   mirror onto legacy parent fields (expand parallel-write). **Resolve "today" server-side →
@@ -96,6 +99,19 @@ cycle). Early-checkout / release-rest-of-stay is a separate cancel/edit concern,
 
 ## Log
 
+- **2026-06-20 — P0 landed.** Schema: `ReservationDay` (`@db.Date`, `@@unique([reservationId,
+  date])`, `@@index([date])`, cascade FK) + `Reservation.days` back-rel + `Site.timeZone`. Pure
+  helper `@repo/data/site-day` (`resolveSiteTimeZone`/`siteDayKey`/`siteDayBounds`, native `Intl`
+  DST-correct, `tz-lookup` from `Site.locationLat`/`locationLng`, `Europe/Madrid` fallback) — 21
+  unit tests. Migration `20260620125353_…` applied to local + `sunbnb_test`; 235 data unit + 113
+  integration green; `migrate:check` clean. **Incident:** first backfill blew up to 355k rows —
+  one `blocked` bed has a year-2999 sentinel `to`, so `generate_series` exploded. Fixed by
+  excluding `operational_status='blocked'` from the backfill (matches D5: blocked is sticky, reads
+  parent, no per-day rows). Migration was uncommitted/unshipped (local + docker test only), so
+  corrected in place + cleaned junk rows + reconciled the recorded checksum on both DBs (sanctioned
+  local-drift patch); both report no drift, `migrate deploy` to `sunbnb_test` clean. **Agent note:**
+  `data-dev` overstepped (touched 3 P1 partner files — reverted, no real diff) and didn't generate
+  the migration (orchestrator wrote it).
 - **2026-06-20** — Created. Surfaced while fixing the `BedDetail` period indicator + arrival-time
   display (the stale-arrival-time symptom). User chose the "correct model" (per-day records) over
   a daily-reset-of-single-field or display-only stopgap. Plan-agent design pass completed; it

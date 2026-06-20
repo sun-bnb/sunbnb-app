@@ -244,6 +244,9 @@ model Site {
   // Kept soft to preserve a clean extraction path if the restaurant product
   // ever needs its own database.
   restaurantId    String?                  @unique @map("restaurant_id")
+  // IANA timezone (e.g. "Europe/Madrid") for this venue. Null = derive from
+  // locationLat/locationLng via tz-lookup at read time. See src/site-day.ts.
+  timeZone        String?                  @map("time_zone")
 
   inventoryItems  InventoryItem[]
   layoutElements  LayoutElement[]
@@ -411,10 +414,34 @@ model Reservation {
   employeeId        String?         @map("employee_id")
   orders            Order[]
   invoices          Invoice[]
+  days              ReservationDay[]
   site              Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
   user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   employee          Employee?       @relation(fields: [employeeId], references: [id], onDelete: SetNull)
   items             InventoryItem[] @relation("InventoryItemToReservation")
+}
+
+model ReservationDay {
+  id                String      @id @default(cuid())
+  reservationId     String      @map("reservation_id")
+  reservation       Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  // Civil calendar date (no time/tz component) — stored as DATE in Postgres.
+  date              DateTime    @db.Date
+  // Operational status for this specific day. Reuses OP_* constants from
+  // src/reservation-status.ts (expected / checked-in / walked-in / departed /
+  // no-show / comp). String column — NOT a Prisma enum (per repo convention).
+  // Note: operational status now lives BOTH on Reservation (legacy, whole-stay)
+  // and on ReservationDay (per-day, P0 addition). The per-day row is authoritative
+  // for P1+ read paths; the parent fields stay in parallel-write until P4 contract.
+  operationalStatus String      @default("expected") @map("operational_status")
+  checkedInAt       DateTime?   @map("checked_in_at")
+  departedAt        DateTime?   @map("departed_at")
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@unique([reservationId, date])
+  @@index([date])
+  @@map("reservation_day")
 }
 
 model Product {

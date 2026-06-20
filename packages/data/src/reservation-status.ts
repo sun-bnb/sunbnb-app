@@ -126,6 +126,9 @@ export const RENTAL_CANCELED = 'canceled' as const
 export const RENTAL_REFUNDED = 'refunded' as const
 
 // ─── Operational Statuses (orthogonal to payment status) ────────────────────
+// These values live on TWO columns: Reservation.operationalStatus (whole-stay
+// legacy, will be retired in P4) and ReservationDay.operationalStatus (per-day
+// authoritative record, introduced in track 012). Use these constants for both.
 
 export const OP_EXPECTED = 'expected' as const
 export const OP_CHECKED_IN = 'checked-in' as const
