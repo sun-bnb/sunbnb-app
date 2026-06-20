@@ -12,6 +12,22 @@ function getAnonId(): string | null {
   return localStorage.getItem('sunbnb-anonId')
 }
 
+/**
+ * Build a single-entity GET query that forwards the anonymous owner's `anonId`
+ * as proof of ownership when present (omitted entirely for logged-in users).
+ *
+ * All anon-owned entity lookups (reservation, order, rental booking) MUST go
+ * through this so none can silently drop the param — a rental-booking poll that
+ * omitted anonId left anonymous users stuck on "Processing payment" (401 loop).
+ * Exported for unit testing.
+ */
+export function anonGetQuery(path: string, id: string, anonId: string | null) {
+  return {
+    url: `${path}/${id}`,
+    params: anonId ? { anonId } : undefined,
+  }
+}
+
 export const httpApi = createApi({
   reducerPath: 'api',
   baseQuery: fetchBaseQuery({
@@ -43,29 +59,15 @@ export const httpApi = createApi({
       transformResponse: (response: { availability: { itemId: string, available: boolean }[] }) => response
     }),
     getReservationById: builder.query({
-      query: ({ id }) => {
-        const anonId = getAnonId()
-        return {
-          url: `reservations/${id}`,
-          params: anonId ? { anonId } : undefined,
-        }
-      },
+      query: ({ id }) => anonGetQuery('reservations', id, getAnonId()),
       transformResponse: (response: Reservation) => response
     }),
     getOrderById: builder.query({
-      query: ({ id }) => {
-        const anonId = getAnonId()
-        return {
-          url: `orders/${id}`,
-          params: anonId ? { anonId } : undefined,
-        }
-      },
+      query: ({ id }) => anonGetQuery('orders', id, getAnonId()),
       transformResponse: (response: Order) => response
     }),
     getRentalBookingById: builder.query({
-      query: ({ id }) => ({
-        url: `rental-bookings/${id}`,
-      }),
+      query: ({ id }) => anonGetQuery('rental-bookings', id, getAnonId()),
       transformResponse: (response: any) => response
     }),
     getRentalAvailability: builder.query({

@@ -6,8 +6,8 @@ export default defineConfig({
   // components returning JSX) don't need an explicit `import React`.
   esbuild: { jsx: 'automatic' },
   test: {
-    include: ['app/**/*.test.ts'],
-    exclude: ['app/**/*.integration.test.ts'],
+    include: ['app/**/*.test.ts', 'store/**/*.test.ts'],
+    exclude: ['app/**/*.integration.test.ts', 'store/**/*.integration.test.ts'],
     coverage: {
       provider: 'istanbul',
       include: ['app/**/*.ts'],
