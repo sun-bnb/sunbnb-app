@@ -86,12 +86,10 @@ Full design: `/Users/vhalme/.claude/plans/fuzzy-jumping-fountain.md` (approved 2
   i18n (staffTill/staffTillHint/noStaffCash/staffSales/inactiveStaff) in en/es/fi. 3 unit tests
   (auth/ownership reject, month-bounds delegation). partner **1473 unit** + tsc/lint clean. `TillClose`
   history surfacing deferred (the cash breakdown is the core value).
-- **Next action:** **none — feature complete.** Remaining to ship: (1) **commit Phase 4**; (2) **docs
-  sync** — `apps/partner/CLAUDE.md` (route `/account/staff`, new server actions: staff CRUD, manage
-  `getTillStatus`/`closeTill`, accounting `getStaffTill`) + `/wiki ingest` the employee/till subsystem;
-  (3) **`migrate:test`** (Neon TEST DB) before any `main` push (pre-push hook enforces) — the
-  `20260619080811_add_employee_attribution` migration must reach the shared test DB first; (4) promote/
-  deploy at the user's discretion.
+- **Next action:** **NONE — DONE & LIVE on test+prod (deployed 2026-06-20).** All 4 phases committed
+  (`dfc0512`…`2005640`), docs synced, the `20260619080811_add_employee_attribution` migration applied
+  to TEST + PROD Neon DBs, and `main`→test→production deployed (all at `e7952fd`). Full Alonso "Group A"
+  closed. Track moved to **Done/archived** in the registry.
 - **Blocked by:** nothing.
 
 ## Roadmap

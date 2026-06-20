@@ -39,14 +39,11 @@ Partner walk-in (`createWalkInRental`) is on-site/staff-attributed — **out of 
 
 ## Resume here
 
-- **Next action:** NONE — all 6 phases (0–5) functionally complete and committed locally. The track
-  is **functionally complete, pending push**. Remaining is operational, at the user's discretion:
-  (1) `migrate:test` (Neon TEST DB), then push `main`; (2) ES/FI copy review of the 3 new
-  `Reservation` cancellation keys before promote; (3) browser-verify the anon book→pay→cancel flow.
-- **Pending before any `main` push:** TWO additive migrations owed to the Neon TEST DB via
-  `migrate:test` — `20260619090109_rental_booking_anon_fields` (Phase 0) and
-  `20260619130551_rental_booking_reminder_sent_at` (Phase 4). The pre-push hook blocks the push
-  until applied. Committed locally (`main` ahead): Phases 0–5 (`29df253`…`97ae532`).
+- **Next action:** **NONE — DONE & LIVE on test+prod (deployed 2026-06-20).** All 6 phases (0–5)
+  committed (`29df253`…`97ae532`), both additive migrations (`20260619090109_rental_booking_anon_fields`,
+  `20260619130551_rental_booking_reminder_sent_at`) applied to TEST + PROD Neon DBs, and `main`→test→
+  production deployed (all at `e7952fd`). Track moved to **Done/archived** in the registry. Browser-verify
+  of the anon book→pay→cancel flow remains available as an optional post-deploy smoke test.
 - **Context needed:** reference = `Reservation` anon fields (`schema.prisma` ~387–418) +
   `saveReservationForMultipleItems` (`apps/user/app/sites/[id]/actions.ts` ~28–191, the
   site-owner-FK trick at ~91–100, the guard call at ~168–179). Rental side: `RentalBooking`

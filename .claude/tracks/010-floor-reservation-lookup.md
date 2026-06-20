@@ -64,7 +64,10 @@ roster, not a minute-by-minute schedule — the timed version applies to tables/
 
 ## Resume here
 
-- **P1 DONE (2026-06-19, uncommitted).** `findReservations(siteId, query?, accessKey?)` in
+- **P1+P2 SHIPPED & LIVE on test+prod (deployed 2026-06-20).** Committed `06a0224` (P1) + `e7952fd`
+  (P2); `main`→test→production all at `e7952fd`. No schema change, so no migration was owed. The
+  floor-lookup gap vs Alonso is now closed end-to-end in production. Phase detail below.
+- **P1 DONE (2026-06-19, committed `06a0224`).** `findReservations(siteId, query?, accessKey?)` in
   `manage/actions.ts` (token-or-session): no query → today's `expected` complete+held arrivals; query →
   `guestName`/`guestContact`/`user.email`/`user.name` case-insensitive `contains` across `[today, +90d]`
   (canceled/refunded excluded, capped 50, date-sorted), returning `ReservationMatch` rows (party size +
@@ -72,7 +75,7 @@ roster, not a minute-by-minute schedule — the timed version applies to tables/
   481, coverage-contract green). 5 unit (gate + query shape + row mapping) + 4 integration (arrivals
   excl. seated walk-ins; case-insensitive name; **future booking surfaced**; canceled excluded). partner
   1489 unit + 43 manage integration, tsc/lint clean. No schema change.
-- **P2 DONE (2026-06-19, uncommitted).** `GuestSearchSheet.tsx` (bottom sheet over `findReservations`:
+- **P2 DONE (2026-06-19, committed `e7952fd`).** `GuestSearchSheet.tsx` (bottom sheet over `findReservations`:
   arrivals default + debounced name/phone search, status chips paid/hold/seated/upcoming, party size +
   bed labels + notes, context actions Locate/Check-in/Rent, future = read-only). Wired into `view.tsx`:
   a bottom-right **🔍 anchor FAB** (always present off-multiselect) with the rentals toggle bumped to
