@@ -63,12 +63,13 @@ schema, no migration (the `Reservation`↔`items` relation is already many-to-ma
   `applyToPair=false` as "stranded siblings" — but that's CORRECT partial-free (vacate the tapped
   seat, leave the party booked; the freed seat is rebookable — now asserted). No production change;
   "fixing" it would have made a single Free delete the whole party.
-- **Next action: P3 browser-verify (manual).** Run the partner app, open a token-gated manage
-  page, multiselect free seats → Reserve and → Rent, confirm ONE reservation spans the seats
-  (BedDetail shows the group; check-in/depart/cancel/move behave). Then track is functionally
-  complete. (Observation to weigh, not a bug: Cancel-one-seat cancels the whole grouped booking
-  while Free-one-seat vacates just that seat — defensible different verbs, but confirm it reads
-  right on the floor.)
+- **Next action: NONE — FUNCTIONALLY COMPLETE (2026-06-20).** P1+P2+P3 done and browser-verified
+  end-to-end (grouped Reserve/Rent → one reservation; all-or-nothing conflict banner). Remaining is
+  operational at the user's discretion: commit the P3-done doc, then push / promote / deploy. **Not
+  yet pushed.** Two observations logged (neither a bug, both for the user to weigh): (1) Cancel-one-
+  seat cancels the whole grouped booking while Free-one-seat vacates just that seat (defensible
+  different verbs); (2) the losing side of a concurrent booking has a stale grid (polling, no
+  realtime) — server guard still protects; resolves if realtime push (Alonso lesson 6) is built.
 - **Context needed:**
   - Create primitive: `reserveWithConflictGuard` (`packages/data/src/reservations.ts`).
   - Today's singular actions: `reserveItem` (`actions.ts:122`), `holdBed` (`actions.ts:764`)
@@ -94,11 +95,14 @@ schema, no migration (the `Reservation`↔`items` relation is already many-to-ma
   on conflict) + per-reservation `convertHoldToWalkIn` for holds. `bulkBlock`/`bulkComp` stay
   per-seat. `SiteManage.bulkGroupConflict` banner copy in en/es/fi. tsc/lint clean, partner 1522
   unit green.
-- ◐ **P3 — Verify downstream + browser-verify.** ✅ **Automated half DONE (`135cbee`):** 10
+- ✅ **P3 — Verify downstream + browser-verify. DONE (2026-06-20).** Automated (`135cbee`): 10
   integration tests — check-in / depart / no-show / cancel-via-one-seat / move all span the
-  grouped row; partial-free correctness for releaseHold/unreserveItem (false-bug caught — see
-  Resume here). ☐ **Remaining: browser-verify** the end-to-end multiselect → group → act flow
-  on a token-gated manage page. partner 61 integration + 1522 unit, tsc/lint green.
+  grouped row; partial-free correctness for releaseHold/unreserveItem (false-bug caught). **Browser-
+  verified end-to-end** on the live token-gated manage page (Playwright/Chromium): grouped Reserve →
+  ONE held reservation (3 items); grouped Rent → ONE walk-in (3 items, summed payment 38.85 = one
+  till line); two-context race → all-or-nothing conflict banner, nothing booked. Observation logged:
+  losing-side client grid is stale (polling, no realtime) but the server guard correctly rejects —
+  a harmless instance of the realtime gap (Alonso lesson 6). **Track functionally complete.**
 
 ## Open decisions (defaults chosen; flag to revisit)
 
