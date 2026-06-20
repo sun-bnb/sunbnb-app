@@ -16,6 +16,31 @@ set -euo pipefail
 cd "$(dirname "$0")"
 DATA="packages/data"
 
+# Flags mirror the SKIP_* env vars (CLAUDE.md / header above); the flag and the
+# env var are equivalent, so `--skip-tests` and `SKIP_TESTS=1` both work.
+usage() {
+  cat <<'EOF'
+Usage: ./promote-to-test.sh [--skip-tests] [--skip-integration] [--skip-coverage]
+
+  --skip-tests        Skip lint + unit + integration + coverage (docs-only promotes).
+                      Equivalent to SKIP_TESTS=1. Migration guards still run.
+  --skip-integration  Skip only the integration tests (SKIP_INTEGRATION=1).
+  --skip-coverage     Skip only the coverage threshold (SKIP_COVERAGE=1).
+  -h, --help          Show this help.
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --skip-tests)       SKIP_TESTS=1 ;;
+    --skip-integration) SKIP_INTEGRATION=1 ;;
+    --skip-coverage)    SKIP_COVERAGE=1 ;;
+    -h|--help)          usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
 echo "==> [1/6] Switching to latest main (aborts if the tree is dirty)"
 git checkout main
 git pull origin main
