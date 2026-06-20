@@ -23,7 +23,24 @@ export function isFailedReservationStatus(status: string): boolean {
 }
 
 /**
- * Returns the active reservation for a seat, filtering out departed / no-show ones.
+ * Resolve the effective operational status for a reservation.
+ *
+ * For blocked reservations the parent's operationalStatus is always used
+ * (blocked is sticky; no per-day row exists for it — D5).
+ *
+ * For all other reservations: if a today-row is attached (`r.today`), that
+ * row's operationalStatus is the source of truth. This is the core of the
+ * double-sell fix: a parent `departed` on day-1 no longer hides a still-reserved
+ * future day — day-2's row starts `expected` so the bed shows as reserved.
+ */
+function effectiveOpStatus(r: Reservation): string {
+  if (r.operationalStatus === 'blocked') return 'blocked'
+  return r.today?.operationalStatus ?? r.operationalStatus
+}
+
+/**
+ * Returns the active reservation for a seat, filtering out departed / no-show
+ * ones based on TODAY's operational state (not the parent's legacy field).
  *
  * Prefers a non-failed reservation: if multiple candidates remain, the first
  * non-failed one is returned. A failed reservation is returned only when it is
@@ -33,7 +50,7 @@ export function isFailedReservationStatus(status: string): boolean {
 export function getActiveReservation(item: InventoryItem): Reservation | null {
   if (!item.reservations?.length) return null
   const candidates = item.reservations.filter(r =>
-    !([OP_DEPARTED, OP_NO_SHOW] as string[]).includes(r.operationalStatus)
+    !([OP_DEPARTED, OP_NO_SHOW] as string[]).includes(effectiveOpStatus(r))
   )
   if (candidates.length === 0) return null
   const nonFailed = candidates.find(r => !isFailedReservationStatus(r.status))
@@ -42,11 +59,14 @@ export function getActiveReservation(item: InventoryItem): Reservation | null {
 
 /**
  * Maps a seat's active reservation state to a BedState identifier.
+ * Uses today's per-day operational status (via effectiveOpStatus) so multiday
+ * bookings re-cycle daily rather than carrying stale day-1 state.
  */
 export function getBedState(item: InventoryItem): BedState {
   const res = getActiveReservation(item)
   if (!res) return 'available'
-  switch (res.operationalStatus) {
+  const opStatus = effectiveOpStatus(res)
+  switch (opStatus) {
     case OP_EXPECTED: return 'expected'
     case OP_CHECKED_IN: return 'checked-in'
     case OP_WALKED_IN: return 'walked-in'

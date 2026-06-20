@@ -11,10 +11,10 @@ import {
 } from '@repo/data/reservation-status'
 
 // Minimal InventoryItem-shaped factory — bed-state only reads `reservations`,
-// and within each reservation only `operationalStatus` and `status`.
-const item = (reservations: Array<{ operationalStatus: string; status?: string }>) =>
+// and within each reservation only `operationalStatus`, `status`, and `today`.
+const item = (reservations: Array<{ operationalStatus: string; status?: string; today?: any }>) =>
   ({ reservations }) as any
-const res = (operationalStatus: string, status = 'paid-in-cash') => ({ operationalStatus, status })
+const res = (operationalStatus: string, status = 'paid-in-cash', today?: any) => ({ operationalStatus, status, today })
 
 describe('isFailedReservationStatus', () => {
   it('is true for the canonical payment_failed constant', () => {
@@ -52,6 +52,35 @@ describe('getActiveReservation', () => {
     const active = getActiveReservation(item([res(OP_EXPECTED, RESERVATION_PAYMENT_FAILED)]))
     expect(active?.status).toBe(RESERVATION_PAYMENT_FAILED)
   })
+
+  // ── Per-day today-row precedence (P1) ──────────────────────────────────────
+  it('reads today-row status when present (double-sell fix): parent departed but today expected → still active', () => {
+    // The core multiday fix: parent says departed (day-1) but today's row says expected (day-2).
+    // effectiveOpStatus reads today.operationalStatus → bed stays reserved.
+    const todayRow = { id: 'rd-2', reservationId: 'r1', date: new Date(), operationalStatus: OP_EXPECTED, checkedInAt: null, departedAt: null }
+    const active = getActiveReservation(item([res(OP_DEPARTED, RESERVATION_COMPLETE, todayRow)]))
+    expect(active).not.toBeNull()
+    expect(active?.today?.operationalStatus).toBe(OP_EXPECTED)
+  })
+
+  it('blocked reservation always reads parent status (sticky — no today row bypass)', () => {
+    // A blocked reservation with a today row should still read the parent 'blocked' status.
+    // effectiveOpStatus returns 'blocked' regardless of any today row.
+    const todayRow = { id: 'rd-1', reservationId: 'r1', date: new Date(), operationalStatus: OP_EXPECTED, checkedInAt: null, departedAt: null }
+    // blocked + today(expected): effectiveOpStatus = 'blocked' (not expected)
+    const active = getActiveReservation(item([res('blocked', 'paid-in-cash', todayRow)]))
+    // Blocked is NOT in [OP_DEPARTED, OP_NO_SHOW], so it's still returned as active
+    expect(active).not.toBeNull()
+    expect(active?.operationalStatus).toBe('blocked')
+  })
+
+  it('parent no-show + today expected → active (D4: no-show non-propagating, day-2 re-cycles)', () => {
+    // D4: a no-show on day-1 does NOT propagate to day-2.
+    // Day-2's row starts 'expected' → getActiveReservation must return it.
+    const todayRow = { id: 'rd-2', reservationId: 'r1', date: new Date(), operationalStatus: OP_EXPECTED, checkedInAt: null, departedAt: null }
+    const active = getActiveReservation(item([res(OP_NO_SHOW, RESERVATION_COMPLETE, todayRow)]))
+    expect(active).not.toBeNull()
+  })
 })
 
 describe('getBedState', () => {
@@ -71,6 +100,20 @@ describe('getBedState', () => {
   })
   it('falls back to available for an unknown operational status', () => {
     expect(getBedState(item([res('something-else')]))).toBe('available')
+  })
+
+  // ── Per-day today-row (P1) ─────────────────────────────────────────────────
+  it('uses today-row status over parent status (multiday recycle)', () => {
+    // Parent says checked-in (day-1 stale), but today row says expected (day-2 fresh).
+    // getBedState must reflect the today row.
+    const todayRow = { id: 'rd-2', reservationId: 'r1', date: new Date(), operationalStatus: OP_EXPECTED, checkedInAt: null, departedAt: null }
+    expect(getBedState(item([res(OP_CHECKED_IN, 'complete', todayRow)]))).toBe('expected')
+  })
+
+  it('blocked reservation derives state from parent only (no today-row bypass)', () => {
+    // Even with a today row showing 'expected', a blocked reservation stays 'blocked'.
+    const todayRow = { id: 'rd-1', reservationId: 'r1', date: new Date(), operationalStatus: OP_EXPECTED, checkedInAt: null, departedAt: null }
+    expect(getBedState(item([res('blocked', 'paid-in-cash', todayRow)]))).toBe('blocked')
   })
 })
 

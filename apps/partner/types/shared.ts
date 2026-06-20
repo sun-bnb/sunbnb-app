@@ -83,6 +83,16 @@ export interface Product {
   prepTime?: number | null
 }
 
+/** Per-day operational state row (ReservationDay model). */
+export interface ReservationDayRow {
+  id: string
+  reservationId: string
+  date: Date
+  operationalStatus: string
+  checkedInAt: Date | null
+  departedAt: Date | null
+}
+
 export interface Reservation {
   id: string
   siteId: string
@@ -106,6 +116,8 @@ export interface Reservation {
     email: string
   }
   items?: InventoryItem[] | null
+  /** Today's per-day operational state row. Absent for blocked reservations. */
+  today?: ReservationDayRow | null
 }
 
 export interface InventoryItem {

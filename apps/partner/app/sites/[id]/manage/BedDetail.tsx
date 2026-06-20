@@ -136,10 +136,11 @@ function OccupantInfo({
           </span>
         )}
 
-        {/* Time — inside a badge, no clock icon */}
-        {reservation.checkedInAt && (
+        {/* Time — prefer today's per-day checkedInAt (accurate for multiday guests);
+            fall back to parent's legacy field for walk-ins / same-day bookings. */}
+        {(reservation.today?.checkedInAt ?? reservation.checkedInAt) && (
           <span className="rounded-full bg-white/60 dark:bg-black/20 border border-gray-300/60 dark:border-gray-600/60 px-2 py-0.5 text-sm font-bold tabular-nums text-gray-700 dark:text-gray-300">
-            {formatTime(reservation.checkedInAt)}
+            {formatTime(reservation.today?.checkedInAt ?? reservation.checkedInAt)}
           </span>
         )}
 

@@ -220,7 +220,12 @@ beforeEach(() => {
     siteId: SITE_ID,
     operationalStatus: 'expected',
     items: [],
+    // P1: checkIn/depart/noShow now request the site relation for tz-resolution
+    site: { timeZone: 'Europe/Madrid', locationLat: '40.4', locationLng: '-3.7' },
   } as any)
+  // P1: getTodayStatus reads reservationDay; return null so actions fall back to parent status
+  vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue(null)
+  vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({ id: 'rd-1', operationalStatus: 'expected', checkedInAt: null, departedAt: null } as any)
   vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
   vi.mocked(prisma.reservation.create).mockResolvedValue({ id: 'new-res' } as any)
   vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)

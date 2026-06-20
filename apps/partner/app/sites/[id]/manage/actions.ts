@@ -19,6 +19,8 @@ import {
   reverifyAndFinalizeRentalBooking,
 } from '@repo/data/rental-payment'
 import { getOpenTill } from '@repo/data/till'
+import { applyDayTransition } from './reservation-day'
+import { siteDayKey } from '@repo/data/site-day'
 import type { Prisma } from '@prisma/client'
 import dayjs from 'dayjs'
 import {
@@ -123,6 +125,29 @@ async function getGroupMemberIds(itemId: string): Promise<string[]> {
   if (item.pairedBy) return [item.pairedBy.id]
   if (item.pairId) return [item.pairId]
   return []
+}
+
+// ─── Per-day status helpers ──────────────────────────────────────────────────
+
+/**
+ * Returns the operationalStatus from today's ReservationDay row, or null when
+ * no row exists yet (row will be created lazily by resolveTodayRow / page load).
+ * Used by the transition actions to check today's actual state before mutating.
+ */
+async function getTodayStatus(
+  reservationId: string,
+  site: { timeZone?: string | null; locationLat?: string | null; locationLng?: string | null },
+): Promise<string | null> {
+  const todayKey = siteDayKey({
+    timeZone: site.timeZone,
+    latitude: site.locationLat ? parseFloat(site.locationLat) : undefined,
+    longitude: site.locationLng ? parseFloat(site.locationLng) : undefined,
+  })
+  const row = await prisma.reservationDay.findUnique({
+    where: { reservationId_date: { reservationId, date: new Date(todayKey) } },
+    select: { operationalStatus: true },
+  })
+  return row?.operationalStatus ?? null
 }
 
 // ─── Walk-in: Place a customer on an empty bed ──────────────────────────────
@@ -284,22 +309,30 @@ export async function checkInReservation(siteId: string, reservationId: string, 
 
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
-    select: { siteId: true, operationalStatus: true },
+    select: {
+      siteId: true,
+      operationalStatus: true,
+      site: { select: { timeZone: true, locationLat: true, locationLng: true } },
+    },
   })
   if (!reservation || reservation.siteId !== siteId) {
     return { status: 'error', errors: ['Reservation not found'] }
   }
-  if (reservation.operationalStatus !== OP_EXPECTED) {
-    return { status: 'error', errors: [`Cannot check in from status: ${reservation.operationalStatus}`] }
+
+  // Precondition: read from today's row if it exists, else fall back to parent.
+  // We load the today-row to get the real current-day operational status.
+  const todayStatus = await getTodayStatus(reservationId, reservation.site)
+  const effectiveStatus = todayStatus ?? reservation.operationalStatus
+  if (effectiveStatus !== OP_EXPECTED) {
+    return { status: 'error', errors: [`Cannot check in from status: ${effectiveStatus}`] }
   }
 
-  await prisma.reservation.update({
-    where: { id: reservationId },
-    data: {
-      operationalStatus: OP_CHECKED_IN,
-      checkedInAt: new Date(),
-    },
-  })
+  const now = new Date()
+  await applyDayTransition(
+    { id: reservationId },
+    reservation.site,
+    { operationalStatus: OP_CHECKED_IN, checkedInAt: now },
+  )
 
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok' }
@@ -313,22 +346,29 @@ export async function markDeparted(siteId: string, reservationId: string, access
 
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
-    select: { siteId: true, operationalStatus: true },
+    select: {
+      siteId: true,
+      operationalStatus: true,
+      site: { select: { timeZone: true, locationLat: true, locationLng: true } },
+    },
   })
   if (!reservation || reservation.siteId !== siteId) {
     return { status: 'error', errors: ['Reservation not found'] }
   }
-  if (!([OP_CHECKED_IN, OP_WALKED_IN] as string[]).includes(reservation.operationalStatus)) {
-    return { status: 'error', errors: [`Cannot mark departed from: ${reservation.operationalStatus}`] }
+
+  // Precondition: derive from today's row (may not exist yet → fall back to parent).
+  const todayStatus = await getTodayStatus(reservationId, reservation.site)
+  const effectiveStatus = todayStatus ?? reservation.operationalStatus
+  if (!([OP_CHECKED_IN, OP_WALKED_IN] as string[]).includes(effectiveStatus)) {
+    return { status: 'error', errors: [`Cannot mark departed from: ${effectiveStatus}`] }
   }
 
-  await prisma.reservation.update({
-    where: { id: reservationId },
-    data: {
-      operationalStatus: OP_DEPARTED,
-      departedAt: new Date(),
-    },
-  })
+  const now = new Date()
+  await applyDayTransition(
+    { id: reservationId },
+    reservation.site,
+    { operationalStatus: OP_DEPARTED, departedAt: now },
+  )
 
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok' }
@@ -342,19 +382,28 @@ export async function markNoShow(siteId: string, reservationId: string, accessKe
 
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
-    select: { siteId: true, operationalStatus: true },
+    select: {
+      siteId: true,
+      operationalStatus: true,
+      site: { select: { timeZone: true, locationLat: true, locationLng: true } },
+    },
   })
   if (!reservation || reservation.siteId !== siteId) {
     return { status: 'error', errors: ['Reservation not found'] }
   }
-  if (reservation.operationalStatus !== OP_EXPECTED) {
-    return { status: 'error', errors: [`Cannot mark no-show from: ${reservation.operationalStatus}`] }
+
+  // Precondition: derive from today's row (may not exist yet → fall back to parent).
+  const todayStatus = await getTodayStatus(reservationId, reservation.site)
+  const effectiveStatus = todayStatus ?? reservation.operationalStatus
+  if (effectiveStatus !== OP_EXPECTED) {
+    return { status: 'error', errors: [`Cannot mark no-show from: ${effectiveStatus}`] }
   }
 
-  await prisma.reservation.update({
-    where: { id: reservationId },
-    data: { operationalStatus: OP_NO_SHOW },
-  })
+  await applyDayTransition(
+    { id: reservationId },
+    reservation.site,
+    { operationalStatus: OP_NO_SHOW },
+  )
 
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok' }

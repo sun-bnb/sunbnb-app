@@ -35,18 +35,20 @@ cycle). Early-checkout / release-rest-of-stay is a separate cancel/edit concern,
 
 ## Resume here
 
-- **Next action:** Start **P1** — manage reads/writes TODAY's `ReservationDay` row (lazy-upsert
-  via `siteDayBounds(site)`), `checkInReservation`/`markDeparted`/`markNoShow` mutate today's row
-  **and** mirror onto the legacy parent fields (expand parallel-write), resolving "today"
-  server-side so action signatures (and the gated-action/auth-matrix spine) are unchanged. Thread
-  today's row through `bed-state.ts` / `view.tsx` / `BedDetail.tsx`. **Skip `blocked`** (sticky,
-  reads parent). Add the `reservationDay` delegate to partner + user `__mocks__/@repo/data/
-  PrismaCient.ts` now (P1 tests use it). This is partner-app work → route to `partner-dev`.
-- **Context needed:** This file; `@repo/data/site-day` (`siteDayKey`/`siteDayBounds`, shipped P0);
-  `apps/partner/app/sites/[id]/manage/{page,bed-state,BedDetail,actions}.tsx`; the manage today-
-  overlap query at `page.tsx:33-49`. P0 is committed?-check git log.
-- **Blocked by:** nothing — P0 landed (local + sunbnb_test migrated, 235 unit + 113 integration
-  green). P0 commit pending user go-ahead.
+- **Next action:** Start **P2** — reader migration: (1) `@repo/data/analytics.ts:getOccupancyByDay`
+  → per-day (count a bed occupied on day D unless THAT day's row is no-show/departed), accepted as
+  a correction (decision Q5); (2) lock the double-sell with an **integration** test (P1 proved it in
+  unit tests via `effectiveOpStatus`, but add a real-DB assertion: parent departed day-1 → bed still
+  reserved day-2); (3) availability (`calendar/actions.ts`, `@repo/data/reservations.ts`,
+  `availabilityService.ts`) **stays whole-stay** — add a guard test that a departed day does NOT free
+  the bed for a new sale. analytics swap is `@repo/data` → `data-dev`; the partner guard test →
+  `partner-dev`.
+- **Context needed:** This file; P1's `manage/reservation-day.ts` (`resolveTodayRow`/
+  `applyDayTransition`) + `bed-state.ts:effectiveOpStatus` (the per-day filter, already live);
+  `@repo/data/site-day`. **P1 follow-ups to fold in:** no real-DB integration test for the per-day
+  behaviors yet (unit-only); `manage/page.tsx` lazy-upserts sequentially in a loop (N awaited writes
+  per load — consider `Promise.all`/batch if it shows up in perf).
+- **Blocked by:** nothing — P1 landed (partner tsc clean, 1575 unit + 128 integration green).
 
 ## Roadmap
 
@@ -60,14 +62,23 @@ cycle). Early-checkout / release-rest-of-stay is a separate cancel/edit concern,
   with `ON CONFLICT DO NOTHING`. Update **both** partner + user `__mocks__/@repo/data/
   PrismaCient.ts` (`reservationDay` delegate → satisfies `mock-contract.test.ts`). Unit
   tests for `site-day.ts`; data integration test for backfill idempotency.
-- ▶ **P1 — Day-row write path + lazy lifecycle (manage).** `manage/page.tsx` window →
+- ✅ **P1 — Day-row write path + lazy lifecycle (manage).** DONE 2026-06-20 — partner tsc clean,
+  1575 unit (+8) + 128 integration green; signatures unchanged (auth-matrix/coverage/mock-contract
+  green, no registry edits). New `manage/reservation-day.ts` (`resolveTodayRow` lazy-upsert +
+  `applyDayTransition` per-day-row + legacy-mirror in one txn). `page.tsx` windows on
+  `siteDayBounds(site)` and lazy-attaches today's row to each non-blocked reservation;
+  `bed-state.ts:effectiveOpStatus` derives appearance from today's row (blocked → parent) — the
+  **double-sell fix** (parent departed day-1 no longer hides a still-reserved day-2);
+  `BedDetail` shows today's `checkedInAt`. `view.tsx` unchanged (forwards the threaded `today`).
+  Original P1 line below for reference:
+- ░ **P1 (spec, for reference).** `manage/page.tsx` window →
   `siteDayBounds(site.timeZone)`, lazy-upsert today's row per in-range reservation (skip
   `blocked`). `checkInReservation`/`markDeparted`/`markNoShow` mutate today's row **and**
   mirror onto legacy parent fields (expand parallel-write). **Resolve "today" server-side →
   signatures unchanged → no gated-action/auth-matrix churn** (verify both green). `bed-state`,
   `view.tsx`, `BedDetail.tsx`, `types/shared.ts` thread today's row. Extend manage unit +
   integration tests (day-2 = expected; depart day-1 keeps bed reserved day-2; per-day arrival).
-- ☐ **P2 — Reader migration: double-sell fix + occupancy.** Lock the `getActiveReservation`
+- ▶ **P2 — Reader migration: double-sell fix + occupancy.** Lock the `getActiveReservation`
   per-day filter with a test (parent `departed` no longer hides a still-reserved future day).
   `analytics.ts:getOccupancyByDay` → per-day occupancy (read-only swap). **Availability
   (`calendar/actions.ts`, `@repo/data/reservations.ts`, `availabilityService.ts`) explicitly
@@ -99,6 +110,20 @@ cycle). Early-checkout / release-rest-of-stay is a separate cancel/edit concern,
 
 ## Log
 
+- **2026-06-20 — P1 landed.** Manage now reads/writes today's `ReservationDay` row.
+  `manage/reservation-day.ts`: `resolveTodayRow` (lazy-upsert, default `expected`, mirror parent for
+  walk-in/comp, blocked skipped) + `applyDayTransition` (today-row + legacy-mirror in one
+  `$transaction`). `page.tsx` windows on `siteDayBounds(site)` (venue-local, replacing server-tz
+  `dayjs().startOf('day')`) and attaches `today` per non-blocked reservation;
+  `checkIn/markDeparted/markNoShow` route through `applyDayTransition` (signatures unchanged, "today"
+  resolved server-side — auth-matrix/coverage/mock-contract stay green). `bed-state.ts` adds
+  `effectiveOpStatus` (today's row, blocked→parent) so the `[departed,no-show]` filter is per-day =
+  **double-sell fix**. `BedDetail` shows today's `checkedInAt`. `types/shared.ts` gains
+  `Reservation.today`. +8 unit tests (day-2 re-cycle, depart-day-1-keeps-reserved, per-day arrival,
+  blocked sticky, no-show non-propagating). Green: partner tsc + 1575 unit + 128 integration.
+  **Deferred to P2/follow-up:** real-DB integration test for the per-day behaviors (unit-only so far);
+  `page.tsx` sequential lazy-upsert loop (perf — batch if needed). Done by `partner-dev`; orchestrator
+  reviewed the diff + removed a stray unused field.
 - **2026-06-20 — P0 landed.** Schema: `ReservationDay` (`@db.Date`, `@@unique([reservationId,
   date])`, `@@index([date])`, cascade FK) + `Reservation.days` back-rel + `Site.timeZone`. Pure
   helper `@repo/data/site-day` (`resolveSiteTimeZone`/`siteDayKey`/`siteDayBounds`, native `Intl`

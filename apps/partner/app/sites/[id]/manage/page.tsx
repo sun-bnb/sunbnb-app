@@ -1,4 +1,3 @@
-import dayjs from 'dayjs'
 import prisma from '@repo/data/PrismaCient'
 import { SiteProps } from '@/types/shared'
 import ManagementView from './view'
@@ -9,6 +8,8 @@ import {
   RESERVATION_CANCELED,
   RESERVATION_REFUNDED,
 } from '@repo/data/reservation-status'
+import { siteDayBounds } from '@repo/data/site-day'
+import { resolveTodayRow } from './reservation-day'
 
 
 export default async function ManagePage({ params, searchParams }: { params: { id: string }, searchParams: { [key: string]: string } }) {
@@ -30,12 +31,24 @@ export default async function ManagePage({ params, searchParams }: { params: { i
     return <ErrorCard title="Invalid or expired access key" message="This access key is no longer valid. Please contact the site operator to get a new link." showBackLink={false} />
   }
 
-  const todayStart = dayjs().startOf('day').toDate()
-  const todayEnd = dayjs().endOf('day').toDate()
+  // Fetch the site first (minimal) to resolve the venue-local timezone,
+  // then compute the today-overlap window in venue-local time.
+  const siteMeta = await prisma.site.findFirst({
+    where: { id: params.id },
+    select: { id: true, userId: true, timeZone: true, locationLat: true, locationLng: true },
+  })
+  if (!siteMeta) return <ErrorCard title="Site not found" message="This site does not exist or has been removed. Please contact the site operator." showBackLink={false} />
+
+  const siteForDay = {
+    timeZone: siteMeta.timeZone,
+    locationLat: siteMeta.locationLat,
+    locationLng: siteMeta.locationLng,
+  }
+  const { start: todayStart, end: todayEnd } = siteDayBounds(siteForDay)
 
   const site = await prisma.site.findFirst({
     where: { id: params.id },
-    include: { 
+    include: {
       workingHours: true,
       inventoryItems: {
         orderBy: { number: 'asc' },
@@ -82,11 +95,24 @@ export default async function ManagePage({ params, searchParams }: { params: { i
       },
     } 
   })
+  // site is guaranteed non-null here (siteMeta check above would have returned early)
   if (!site) return <ErrorCard title="Site not found" message="This site does not exist or has been removed. Please contact the site operator." showBackLink={false} />
 
   // Verify the access key belongs to the site's owner
   if (site.userId !== securityToken.userId) {
     return <ErrorCard title="Not authorized" message="This access key is not valid for this site. Please contact the site operator." showBackLink={false} />
+  }
+
+  // Lazy-upsert today's ReservationDay row for each non-blocked reservation,
+  // then attach the resulting row to the reservation object so the view and
+  // BedDetail can read today's operational state without an extra query.
+  for (const item of site.inventoryItems ?? []) {
+    for (const res of item.reservations ?? []) {
+      if (res.operationalStatus === 'blocked') continue
+      const todayRow = await resolveTodayRow(res, siteForDay)
+      // Mutate in place — the site object is only read once (server render).
+      ;(res as any).today = todayRow
+    }
   }
 
   // The roster is per-account (PartnerAccount keyed by userId === site.userId).

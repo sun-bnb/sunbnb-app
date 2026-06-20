@@ -78,6 +78,7 @@ import {
   createRentalBookingsWithGuard,
 } from '@repo/data/reservations'
 import dayjs from 'dayjs'
+import { getActiveReservation } from './bed-state'
 
 const mockAuth = vi.mocked(auth)
 const mockGuard = vi.mocked(reserveWithConflictGuard)
@@ -358,27 +359,47 @@ describe('unreserveItem', () => {
 
 // ─── checkInReservation ─────────────────────────────────────────────────────
 
+// Shared site stub with tz/coord fields for the three lifecycle actions.
+const SITE_TZ_STUB = { timeZone: 'Europe/Madrid', locationLat: '40.416', locationLng: '-3.703' }
+
 describe('checkInReservation', () => {
-  it('transitions expected -> checked-in', async () => {
+  it('transitions expected -> checked-in (writes today row + mirrors legacy field)', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
       operationalStatus: 'expected',
+      site: SITE_TZ_STUB,
+    } as any)
+    // No today-row yet → getTodayStatus returns null → falls back to parent status
+    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({
+      id: 'rd-1', reservationId: RES_ID, date: new Date(), operationalStatus: 'checked-in',
+      checkedInAt: new Date(), departedAt: null,
     } as any)
     vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
 
     const res = await checkInReservation(SITE_ID, RES_ID)
     expect(res.status).toBe('ok')
 
+    // The legacy Reservation update must still happen (parallel-write / expand).
     const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
     expect(updateCall.data.operationalStatus).toBe('checked-in')
     expect(updateCall.data.checkedInAt).toBeInstanceOf(Date)
+    // Today's row must have been upserted too.
+    expect(vi.mocked(prisma.reservationDay.upsert)).toHaveBeenCalledOnce()
+    const upsertCall = vi.mocked(prisma.reservationDay.upsert).mock.calls[0][0]
+    expect(upsertCall.update.operationalStatus).toBe('checked-in')
   })
 
-  it('rejects check-in from non-expected status', async () => {
+  it('rejects check-in from non-expected status (reads today row if present)', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
+      operationalStatus: 'checked-in',
+      site: SITE_TZ_STUB,
+    } as any)
+    // Today row also says checked-in
+    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({
       operationalStatus: 'checked-in',
     } as any)
 
@@ -392,6 +413,7 @@ describe('checkInReservation', () => {
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: 'other-site',
       operationalStatus: 'expected',
+      site: SITE_TZ_STUB,
     } as any)
 
     const res = await checkInReservation(SITE_ID, RES_ID)
@@ -403,17 +425,27 @@ describe('checkInReservation', () => {
 // ─── markDeparted ───────────────────────────────────────────────────────────
 
 describe('markDeparted', () => {
-  it('transitions checked-in -> departed', async () => {
+  it('transitions checked-in -> departed (writes today row + mirrors legacy field)', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
       operationalStatus: 'checked-in',
+      site: SITE_TZ_STUB,
+    } as any)
+    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({
+      operationalStatus: 'checked-in',
+    } as any)
+    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({
+      id: 'rd-1', reservationId: RES_ID, date: new Date(), operationalStatus: 'departed',
+      checkedInAt: null, departedAt: new Date(),
     } as any)
     vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
 
     const res = await markDeparted(SITE_ID, RES_ID)
     expect(res.status).toBe('ok')
-    expect(vi.mocked(prisma.reservation.update).mock.calls[0][0].data.operationalStatus).toBe('departed')
+    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
+    expect(updateCall.data.operationalStatus).toBe('departed')
+    expect(vi.mocked(prisma.reservationDay.upsert)).toHaveBeenCalledOnce()
   })
 
   it('transitions walked-in -> departed', async () => {
@@ -421,7 +453,12 @@ describe('markDeparted', () => {
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
       operationalStatus: 'walked-in',
+      site: SITE_TZ_STUB,
     } as any)
+    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({
+      operationalStatus: 'walked-in',
+    } as any)
+    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({} as any)
     vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
 
     const res = await markDeparted(SITE_ID, RES_ID)
@@ -432,6 +469,10 @@ describe('markDeparted', () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
+      operationalStatus: 'expected',
+      site: SITE_TZ_STUB,
+    } as any)
+    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({
       operationalStatus: 'expected',
     } as any)
 
@@ -444,28 +485,148 @@ describe('markDeparted', () => {
 // ─── markNoShow ─────────────────────────────────────────────────────────────
 
 describe('markNoShow', () => {
-  it('transitions expected -> no-show', async () => {
+  it('transitions expected -> no-show (writes today row + mirrors legacy field)', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
       operationalStatus: 'expected',
+      site: SITE_TZ_STUB,
+    } as any)
+    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({
+      id: 'rd-1', reservationId: RES_ID, date: new Date(), operationalStatus: 'no-show',
+      checkedInAt: null, departedAt: null,
     } as any)
     vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
 
     const res = await markNoShow(SITE_ID, RES_ID)
     expect(res.status).toBe('ok')
-    expect(vi.mocked(prisma.reservation.update).mock.calls[0][0].data.operationalStatus).toBe('no-show')
+    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
+    expect(updateCall.data.operationalStatus).toBe('no-show')
+    expect(vi.mocked(prisma.reservationDay.upsert)).toHaveBeenCalledOnce()
   })
 
-  it('rejects no-show from checked-in', async () => {
+  it('rejects no-show from checked-in (reads today row)', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
+      operationalStatus: 'checked-in',
+      site: SITE_TZ_STUB,
+    } as any)
+    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({
       operationalStatus: 'checked-in',
     } as any)
 
     const res = await markNoShow(SITE_ID, RES_ID)
     expect(res.status).toBe('error')
+  })
+})
+
+// ─── Per-day lifecycle — multiday booking behavior ─────────────────────────
+//
+// These tests verify the three P1 bugs are fixed:
+//   (a) A booking checked in on day-1 shows TODAY's row as `expected` on day-2.
+//   (b) Departing on day-1 leaves the bed RESERVED for day-2 (double-sell fix).
+//   (c) Per-day checkedInAt is today's, not the stale day-1 value.
+
+describe('multiday per-day lifecycle', () => {
+  it('(a) day-2: today row expected → bed reads as expected (not checked-in from day-1)', async () => {
+    // Day-2 scenario: parent says checked-in (day-1 state), but today's row is expected.
+    // getTodayStatus returns 'expected' → precondition for checkIn passes.
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      operationalStatus: 'checked-in', // parent is stale day-1
+      site: SITE_TZ_STUB,
+    } as any)
+    // Today row says expected (it was lazy-created at day-2 rollover)
+    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({
+      operationalStatus: 'expected',
+    } as any)
+    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({
+      id: 'rd-2', reservationId: RES_ID, date: new Date(), operationalStatus: 'checked-in',
+      checkedInAt: new Date(), departedAt: null,
+    } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
+
+    // checkIn should SUCCEED because today's row is 'expected' (not stale 'checked-in')
+    const res = await checkInReservation(SITE_ID, RES_ID)
+    expect(res.status).toBe('ok')
+    // The today row should have been transitioned to checked-in
+    const upsertCall = vi.mocked(prisma.reservationDay.upsert).mock.calls[0][0]
+    expect(upsertCall.update.operationalStatus).toBe('checked-in')
+  })
+
+  it('(b) day-1 departure leaves bed reserved for day-2 (getActiveReservation still returns it)', () => {
+    // Simulate: parent says departed (day-1 action), but today (day-2) row says expected.
+    // bed-state.ts effectiveOpStatus must read today's row, NOT the parent.
+    const item = {
+      id: ITEM_ID,
+      number: 10101,
+      group: 1,
+      status: 'active',
+      reservations: [
+        {
+          id: RES_ID,
+          siteId: SITE_ID,
+          type: 'days',
+          status: 'complete',
+          operationalStatus: 'departed', // parent: day-1 departure
+          from: dayjs().subtract(1, 'day').toDate(),
+          to: dayjs().add(2, 'day').toDate(), // still ongoing
+          user: { id: 'u1', email: 'g@test.com' },
+          today: {
+            id: 'rd-2',
+            reservationId: RES_ID,
+            date: new Date(),
+            operationalStatus: 'expected', // day-2 row: expected (re-cycled)
+            checkedInAt: null,
+            departedAt: null,
+          },
+        },
+      ],
+    } as any
+
+    // With today row: bed should still be ACTIVE (not filter it out) because today = expected
+    const activeRes = getActiveReservation(item)
+    expect(activeRes).not.toBeNull()
+    expect(activeRes?.today?.operationalStatus).toBe('expected')
+  })
+
+  it('(c) OccupantInfo uses today checkedInAt, not day-1 stale value', async () => {
+    // Per-day checkedInAt: checkIn on day-2 writes today's row with today's time,
+    // NOT the day-1 legacy field. The legacy field mirrors day-2 checkedInAt too.
+    authenticateAsOwner()
+    const day1CheckedInAt = new Date(Date.now() - 86_400_000) // 24h ago
+    const day2Now = new Date()
+
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      operationalStatus: 'expected', // today row says expected (day-2 fresh)
+      site: SITE_TZ_STUB,
+      checkedInAt: day1CheckedInAt, // legacy field still has day-1 time
+    } as any)
+    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({
+      operationalStatus: 'expected',
+    } as any)
+    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({
+      id: 'rd-2', reservationId: RES_ID, date: new Date(),
+      operationalStatus: 'checked-in',
+      checkedInAt: day2Now, // today's check-in time
+      departedAt: null,
+    } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
+
+    const res = await checkInReservation(SITE_ID, RES_ID)
+    expect(res.status).toBe('ok')
+
+    // The reservation.update (legacy mirror) must set checkedInAt to NOW (day-2),
+    // not preserve day-1's value. This is verified by the upsert + update data.
+    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
+    expect(updateCall.data.checkedInAt).toBeInstanceOf(Date)
+    // The new timestamp must be after day-1 (within a 1-minute window of "now")
+    const delta = Math.abs(updateCall.data.checkedInAt.getTime() - day2Now.getTime())
+    expect(delta).toBeLessThan(5_000) // within 5s of test execution
   })
 })
 
