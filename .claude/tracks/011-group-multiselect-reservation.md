@@ -41,16 +41,20 @@ schema, no migration (the `Reservation`↔`items` relation is already many-to-ma
 
 ## Resume here
 
-- **Next action: P1 — the grouped create action(s).** Add an `itemIds: string[]`-accepting
-  grouped variant of the walk-in create (`reserveItem`) and the hold create (`holdBed`) —
-  either thin `reserveItems` / `holdBeds` wrappers or an overload — that pass the full
-  selection to `reserveWithConflictGuard` as one reservation, with a **summed**
-  `paymentAmount` (one till line) computed from DB chair prices via `computeWalkInAmount`
-  (never client prices — `payments.md`). All-or-nothing falls out of the guard. Keep the
-  **singular** `reserveItem`/`holdBed` signatures intact (the single-tap path uses them).
-  Register the new action(s) in `app/test/gated-actions.ts` (the auth-matrix meta-guard
-  will otherwise fail) and `coverage-contract`. Token-or-session gated like the rest of
-  `manage/actions.ts`.
+- **P1 DONE (`ad1bf09`, 2026-06-20).** `reserveItems(siteId, itemIds[], guestName?,
+  internalNotes?, accessKey?, until?, employeeId?)` (grouped walk-in: paid-in-cash/walked-in,
+  summed `paymentAmount` via `computeWalkInAmount` → one till line) + `holdBeds(siteId,
+  itemIds[], accessKey?, guestName?, notes?, employeeId?)` (grouped hold, `paymentAmount` 0).
+  Both reuse `reserveWithConflictGuard({ itemIds })` → all-or-nothing for free (integration-
+  verified: one taken seat → nothing created). No pair expansion. Singular actions untouched.
+  Registered in gated-actions (auth-matrix +10 → 495, coverage-contract + no-inline-money
+  green). 16 unit + 13 integration. partner 1522 unit + 118 integration, tsc/lint clean.
+- **Next action: P2 — wire the manage UI.** `bulkReserve` → `holdBeds(site.id!, selectedIds,
+  apiKey, bulkGuestName, undefined, workerArg)` once; `bulkRent` → `reserveItems(site.id!,
+  <free selectedIds>, bulkGuestName, undefined, apiKey, bulkUntil, workerArg)` once, and
+  `convertHoldToWalkIn` individually for any pre-existing holds in the selection. Drop the
+  per-seat `runBulkSeq` loop for these two verbs. Surface the all-or-nothing conflict via the
+  existing `bulkError` banner. Keep selection on failure, clear on success. Prime `/ui partner`.
 - **Context needed:**
   - Create primitive: `reserveWithConflictGuard` (`packages/data/src/reservations.ts`).
   - Today's singular actions: `reserveItem` (`actions.ts:122`), `holdBed` (`actions.ts:764`)
@@ -65,13 +69,12 @@ schema, no migration (the `Reservation`↔`items` relation is already many-to-ma
 
 ## Roadmap
 
-- ☐ **P1 — Data/action layer: grouped create.** New `itemIds[]`-accepting grouped walk-in +
-  grouped hold create over `reserveWithConflictGuard` (one reservation, summed
-  `paymentAmount` → one till line, all-or-nothing). Register in gated-actions / auth-matrix /
-  coverage-contract. Unit tests (grouped shape, ownership/gate, summed amount, no inline
-  money) + integration (1 reservation with N items; conflict on ONE selected seat fails the
-  WHOLE group atomically — nothing created; till records one summed amount). Singular actions
-  untouched.
+- ✅ **P1 — Data/action layer: grouped create. DONE (`ad1bf09`, 2026-06-20).** `reserveItems`
+  + `holdBeds` over `reserveWithConflictGuard` (one reservation, summed `paymentAmount` → one
+  till line, all-or-nothing). Registered in gated-actions (auth-matrix 495, coverage-contract +
+  no-inline-money green). 16 unit + 13 integration (incl. conflict-atomicity: one taken seat →
+  nothing created; till one summed amount). Singular actions untouched. partner 1522 unit + 118
+  integration, tsc/lint clean.
 - ☐ **P2 — Wire the manage UI.** `bulkReserve` / `bulkRent` call the grouped action ONCE with
   all selected ids instead of `runBulkSeq` looping per seat. **Mixed free+held Rent rule:**
   group the *free* seats into one new walk-in; convert any *pre-existing holds* individually
