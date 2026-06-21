@@ -13,7 +13,7 @@ pointer here + the full entry in its section below.)*
 - **Auth & ownership** — `requireSiteOwner` / `verifySiteOwnership` / sudo edge cases — _none yet_
 - **State machines** — operational status extension pattern (7-file checklist), color palette — see "Adding a new manage-page operational status"
 - **Test failures & fixes** — mock/fixture gotchas — see "Mock-contract test", "saveInventoryItemProperties", "auth-matrix ok/reject predicate"
-- **Bug patterns & fixes** — recurring partner-app bugs — see "verifySiteOwnership vs verifySiteAccess scope divergence"
+- **Bug patterns & fixes** — recurring partner-app bugs — see "verifySiteOwnership vs verifySiteAccess scope divergence", "Prisma upsert is not atomic — RSC-prefetch concurrency crash on manage page"
 - **Component decomposition** — manage page decomposition, shared state boundary, pinch handler scroll-target — see "Decomposing view.tsx manage monolith"
 - **Manage page naming** — hold/reserve/rent action-row distinction — see "Reserve vs Rent vs Hold terminology"
 - **BedDetail state-machine patterns** — convertHoldToWalkIn in-place update + multi-day $transaction extend, pendingConfirm per-branch guards, inSync-gated toggle, walk-in disconnect depart — see "BedDetail state-machine patterns"
@@ -275,6 +275,18 @@ depart, out-of-sync seat reservation) keep `markDeparted(reservationId)`.
 covers all items in the booking). The `applyToPair` param was never used by any call site that
 actually passed it — it was always the default. Remove it so the signature is honest and the
 auth-matrix invoke and test call sites can stay simple.
+
+## Bug patterns & fixes
+
+### 2026-06-21: Prisma upsert is not atomic — RSC-prefetch concurrency crash on manage page
+**Problem:** `prisma.reservationDay.upsert()` with `update: {}` (no-op) is implemented as SELECT-then-INSERT/UPDATE inside Prisma — NOT a single atomic statement. Next.js RSC prefetch fires the manage page route 4× simultaneously. Two renders both see "no row" for the same `(reservationId, date)` pair, both attempt INSERT, and the loser throws `PrismaClientKnownRequestError: P2002 Unique constraint failed`. The error surfaced at `resolveTodayRow` inside `ManagePage` — page crashed for all concurrent prefetch requests.
+**Fix (two cases):**
+- **`resolveTodayRow`** — `update: {}` is a no-op; the row the winner wrote is exactly what we want. Wrap the upsert in try/catch; on `P2002` re-fetch with `findUniqueOrThrow` on the same composite key and return that. Never re-throw P2002 from this path.
+- **`applyDayTransition`** — `update` carries real state; re-fetching the winner's row would lose our transition. Wrap the entire `$transaction` call in a helper `runTransaction()`, catch P2002 at the outer level, and RETRY (call `runTransaction()` again). The retry finds the row and takes the update branch. The legacy mirror write stays inside the same transaction — both writes happen together or not at all.
+**P2002 detection idiom** (repo convention): `(err as { code?: string }).code === 'P2002'` — duck-typed, no `PrismaClientKnownRequestError` import needed (follows `packages/data/src/impersonation.ts`).
+**File:** `apps/partner/app/sites/[id]/manage/reservation-day.ts`
+**Test:** Added two bug-revealing integration tests in `actions.integration.test.ts` (describe `resolveTodayRow — concurrent upsert race safety`): `Promise.all` on the same reservation+date asserts both calls resolve to the same row id without throwing; a second test confirms different-reservation concurrent calls all succeed.
+**Prevention:** Any lazy get-or-create (`upsert` with `update: {}`) that runs under RSC-prefetch or other concurrent request patterns hits this race. Either (a) add a DB-level partial unique index + `INSERT ... ON CONFLICT DO NOTHING RETURNING *` via `$queryRaw`, or (b) use the try/catch P2002 + re-fetch pattern above. Option (b) keeps Prisma ergonomics and is the established repo pattern.
 
 ## Rejected approaches
 

@@ -52,6 +52,7 @@ import {
   closeTill,
   findReservations,
 } from './actions'
+import { resolveTodayRow } from './reservation-day'
 
 // ---------------------------------------------------------------------------
 // Lifecycle
@@ -1724,5 +1725,89 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
     // All 3 seats are free — rebooking all 3 must succeed.
     const rebook = await reserveItems(site.id, [itemA.id, itemB.id, itemC.id], 'After Full Unreserve')
     expect(rebook).toEqual({ status: 'ok' })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bug-revealing: resolveTodayRow concurrent RSC prefetch race (P2002)
+//
+// Prisma upsert is SELECT-then-INSERT/UPDATE — NOT atomic. Next.js RSC prefetch
+// fires the same manage page route 4× simultaneously. If two renders call
+// resolveTodayRow for the same (reservationId, date) and both see "no row", both
+// attempt INSERT, and the loser throws P2002. Before the fix this crashed the
+// manage page render. After the fix both callers resolve to the same row id with
+// no throw.
+// ---------------------------------------------------------------------------
+
+describe('resolveTodayRow — concurrent upsert race safety (P2002 fix)', () => {
+  it('two concurrent calls for the same reservation+date both resolve to the SAME row id without throwing', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id)
+    mockUserId = user.id
+
+    const reservation = await createTestReservation(user.id, site.id, [item.id], {
+      status: 'complete',
+      operationalStatus: 'expected',
+    })
+
+    const siteForDay = {
+      timeZone: site.timeZone ?? null,
+      locationLat: site.locationLat ?? null,
+      locationLng: site.locationLng ?? null,
+    }
+
+    // Fire two concurrent resolveTodayRow calls for the same (reservationId, date).
+    // Before the fix: the loser throws PrismaClientKnownRequestError P2002.
+    // After the fix: both resolve successfully to the same row id.
+    const [rowA, rowB] = await Promise.all([
+      resolveTodayRow(reservation, siteForDay),
+      resolveTodayRow(reservation, siteForDay),
+    ])
+
+    expect(rowA.id).toBe(rowB.id)
+    expect(rowA.reservationId).toBe(reservation.id)
+    expect(rowA.operationalStatus).toBe('expected')
+
+    // Exactly one row was created in the DB — not two.
+    const count = await prisma.reservationDay.count({ where: { reservationId: reservation.id } })
+    expect(count).toBe(1)
+  })
+
+  it('concurrent calls for DIFFERENT reservations all succeed (no cross-contamination)', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    const resA = await createTestReservation(user.id, site.id, [itemA.id], { status: 'complete', operationalStatus: 'expected' })
+    const resB = await createTestReservation(user.id, site.id, [itemB.id], { status: 'complete', operationalStatus: 'expected' })
+    const resC = await createTestReservation(user.id, site.id, [itemC.id], { status: 'complete', operationalStatus: 'expected' })
+
+    const siteForDay = {
+      timeZone: site.timeZone ?? null,
+      locationLat: site.locationLat ?? null,
+      locationLng: site.locationLng ?? null,
+    }
+
+    // Simulate the manage page rendering 3 reservations concurrently — all different
+    // (reservation_id, date) pairs, so no constraint collision, but must all succeed.
+    const results = await Promise.all([
+      resolveTodayRow(resA, siteForDay),
+      resolveTodayRow(resB, siteForDay),
+      resolveTodayRow(resC, siteForDay),
+    ])
+
+    expect(results[0].reservationId).toBe(resA.id)
+    expect(results[1].reservationId).toBe(resB.id)
+    expect(results[2].reservationId).toBe(resC.id)
+
+    // One row per reservation — three total.
+    const count = await prisma.reservationDay.count({
+      where: { reservationId: { in: [resA.id, resB.id, resC.id] } },
+    })
+    expect(count).toBe(3)
   })
 })

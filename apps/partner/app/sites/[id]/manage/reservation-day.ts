@@ -87,26 +87,44 @@ export async function resolveTodayRow(
     ? reservation.operationalStatus
     : OP_EXPECTED
 
-  const row = await prisma.reservationDay.upsert({
-    where: {
-      reservationId_date: {
+  try {
+    const row = await prisma.reservationDay.upsert({
+      where: {
+        reservationId_date: {
+          reservationId: reservation.id,
+          date: new Date(todayKey),
+        },
+      },
+      create: {
         reservationId: reservation.id,
         date: new Date(todayKey),
+        operationalStatus: initialStatus,
+        checkedInAt: reservation.operationalStatus === OP_WALKED_IN
+          ? (reservation.checkedInAt ?? null)
+          : null,
+        departedAt: null,
       },
-    },
-    create: {
-      reservationId: reservation.id,
-      date: new Date(todayKey),
-      operationalStatus: initialStatus,
-      checkedInAt: reservation.operationalStatus === OP_WALKED_IN
-        ? (reservation.checkedInAt ?? null)
-        : null,
-      departedAt: null,
-    },
-    update: {}, // no-op if the row already exists — keep what's there
-  })
-
-  return row as ReservationDayRow
+      update: {}, // no-op if the row already exists — keep what's there
+    })
+    return row as ReservationDayRow
+  } catch (err) {
+    // Prisma upsert is SELECT-then-INSERT/UPDATE — not atomic. Under concurrent
+    // RSC renders (e.g. Next.js prefetch fires the same route 4× simultaneously)
+    // two renders can both see "no row", both attempt the INSERT, and the loser
+    // gets a unique-constraint violation on (reservation_id, date). The update
+    // branch is a no-op here, so we can simply re-fetch the row the winner wrote.
+    if ((err as { code?: string }).code === 'P2002') {
+      return prisma.reservationDay.findUniqueOrThrow({
+        where: {
+          reservationId_date: {
+            reservationId: reservation.id,
+            date: new Date(todayKey),
+          },
+        },
+      }) as Promise<ReservationDayRow>
+    }
+    throw err
+  }
 }
 
 // ── applyDayTransition ────────────────────────────────────────────────────────
@@ -131,38 +149,56 @@ export async function applyDayTransition(
   const tz = toSiteTimezone(site)
   const todayKey = siteDayKey(tz)
 
-  const [updatedDay] = await prisma.$transaction([
-    // 1. Upsert today's per-day row with the new state.
-    prisma.reservationDay.upsert({
-      where: {
-        reservationId_date: {
+  // Prisma upsert is SELECT-then-INSERT/UPDATE — not atomic. Under concurrent
+  // renders the INSERT can race and the loser gets P2002. Unlike resolveTodayRow
+  // (where update:{} is a no-op), here the update branch carries real state, so
+  // re-fetching the winner's row would lose our transition. Instead we RETRY the
+  // whole transaction: the second attempt finds the row and takes the update branch.
+  async function runTransaction() {
+    const [updatedDay] = await prisma.$transaction([
+      // 1. Upsert today's per-day row with the new state.
+      prisma.reservationDay.upsert({
+        where: {
+          reservationId_date: {
+            reservationId: reservation.id,
+            date: new Date(todayKey),
+          },
+        },
+        create: {
           reservationId: reservation.id,
           date: new Date(todayKey),
+          operationalStatus: transition.operationalStatus,
+          checkedInAt: transition.checkedInAt ?? null,
+          departedAt: transition.departedAt ?? null,
         },
-      },
-      create: {
-        reservationId: reservation.id,
-        date: new Date(todayKey),
-        operationalStatus: transition.operationalStatus,
-        checkedInAt: transition.checkedInAt ?? null,
-        departedAt: transition.departedAt ?? null,
-      },
-      update: {
-        operationalStatus: transition.operationalStatus,
-        ...(transition.checkedInAt !== undefined ? { checkedInAt: transition.checkedInAt } : {}),
-        ...(transition.departedAt !== undefined ? { departedAt: transition.departedAt } : {}),
-      },
-    }),
-    // 2. Mirror onto legacy Reservation fields (expand/parallel-write).
-    prisma.reservation.update({
-      where: { id: reservation.id },
-      data: {
-        operationalStatus: transition.operationalStatus,
-        ...(transition.checkedInAt !== undefined ? { checkedInAt: transition.checkedInAt } : {}),
-        ...(transition.departedAt !== undefined ? { departedAt: transition.departedAt } : {}),
-      },
-    }),
-  ])
+        update: {
+          operationalStatus: transition.operationalStatus,
+          ...(transition.checkedInAt !== undefined ? { checkedInAt: transition.checkedInAt } : {}),
+          ...(transition.departedAt !== undefined ? { departedAt: transition.departedAt } : {}),
+        },
+      }),
+      // 2. Mirror onto legacy Reservation fields (expand/parallel-write).
+      prisma.reservation.update({
+        where: { id: reservation.id },
+        data: {
+          operationalStatus: transition.operationalStatus,
+          ...(transition.checkedInAt !== undefined ? { checkedInAt: transition.checkedInAt } : {}),
+          ...(transition.departedAt !== undefined ? { departedAt: transition.departedAt } : {}),
+        },
+      }),
+    ])
+    return updatedDay as ReservationDayRow
+  }
 
-  return updatedDay as ReservationDayRow
+  try {
+    return await runTransaction()
+  } catch (err) {
+    if ((err as { code?: string }).code === 'P2002') {
+      // The row was created by a concurrent request between our SELECT and INSERT.
+      // Retry: the row now exists, so upsert takes the update branch and applies
+      // the transition. The legacy mirror write runs in the same transaction.
+      return runTransaction()
+    }
+    throw err
+  }
 }
