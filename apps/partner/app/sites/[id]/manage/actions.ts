@@ -266,12 +266,16 @@ export async function unreserveItem(siteId: string, itemId: string, accessKey?: 
     }
   } else {
     // Single-seat mode: if the reservation has >1 item, disconnect just this
-    // seat (the partner stays walked-in); otherwise delete the whole reservation.
+    // seat (the partner stays); otherwise delete the whole reservation.
+    // Match a cash walk-in in ANY operational state — including the between-days
+    // 'expected' leg of a multiday walk-in (track 012). The pair branch above
+    // already dropped this constraint; the single branch must mirror it, or
+    // unreserving a multiday cash booking that reads 'expected' today fails with
+    // "No walk-in reservation found to release".
     const reservation = await prisma.reservation.findFirst({
       where: {
         siteId,
         status: RESERVATION_PAID_IN_CASH,
-        operationalStatus: OP_WALKED_IN,
         from: { lte: todayEnd },
         to: { gte: todayStart },
         items: { some: { id: itemId } },

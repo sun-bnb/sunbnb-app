@@ -1030,6 +1030,29 @@ describe('blockBed with applyToPair = false', () => {
 })
 
 describe('unreserveItem with applyToPair = false', () => {
+  // Regression (track 012): a multiday cash walk-in reads 'expected' on its
+  // between-days legs. The single-seat lookup must match a cash walk-in in ANY
+  // operational state — constraining to walked-in made unreserve fail with
+  // "No walk-in reservation found to release" for the expected leg.
+  it('matches a cash walk-in in any operational state — no operationalStatus filter', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
+      id: RES_ID,
+      items: [{ id: ITEM_ID }],
+    } as any)
+    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
+
+    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, false)
+    expect(res.status).toBe('ok')
+
+    const where = vi.mocked(prisma.reservation.findFirst).mock.calls[0][0]?.where as any
+    expect(where.status).toBe('paid-in-cash')
+    expect(where.operationalStatus).toBeUndefined()
+    expect(where.from).toHaveProperty('lte')
+    expect(where.to).toHaveProperty('gte')
+    expect(where.items.some.id).toBe(ITEM_ID)
+  })
+
   it('disconnects this item from a 2-item reservation (partner stays walked-in)', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
