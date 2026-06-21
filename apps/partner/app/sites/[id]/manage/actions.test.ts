@@ -1249,6 +1249,82 @@ describe('createWalkInRental', () => {
     expect(guardInputs[0].totalPrice).toBe(60)
     expect(guardInputs[0].paymentAmount).toBe(60)
   })
+
+  it('records a TillEntry per booking when recordCashSettlement=true (genuine cash)', async () => {
+    // Genuine cash: recordCashSettlement=true, paymentType='cash' → recordSettlement
+    // called for each created booking with the booking's paymentAmount (not a literal).
+    // Guard returns two booking ids → two settlements recorded.
+    authenticateAsOwner()
+    mockRentalGuard.mockResolvedValueOnce({ outcome: 'created', bookingIds: ['rb-a', 'rb-b'] })
+    vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
+      { id: 'ri-1', name: 'Surfboard', siteId: SITE_ID, active: true, totalQuantity: 10, pricePerDay: 30, pricePerHour: null },
+      { id: 'ri-2', name: 'Kayak', siteId: SITE_ID, active: true, totalQuantity: 5, pricePerDay: 25, pricePerHour: null },
+    ] as any)
+
+    const res = await createWalkInRental({
+      siteId: SITE_ID,
+      items: [
+        { rentalItemId: 'ri-1', quantity: 1 }, // 30 * 1 * 1 = 30
+        { rentalItemId: 'ri-2', quantity: 2 }, // 25 * 1 * 2 = 50
+      ],
+      durationType: 'days',
+      paymentType: 'cash',
+      recordCashSettlement: true,
+    })
+
+    expect(res.status).toBe('ok')
+
+    const mockRecord = vi.mocked(recordSettlement)
+    expect(mockRecord).toHaveBeenCalledTimes(2)
+    // First booking (rb-a) → 30; second booking (rb-b) → 50
+    expect(mockRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ siteId: SITE_ID, rentalBookingId: 'rb-a', amount: 30 }),
+    )
+    expect(mockRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ siteId: SITE_ID, rentalBookingId: 'rb-b', amount: 50 }),
+    )
+  })
+
+  it('does NOT record a TillEntry when recordCashSettlement is omitted (Card / QR path)', async () => {
+    // The Card(QR) path creates bookings as cash so paymentAmount is persisted,
+    // then calls collectRentalPayment (Mollie) separately. If a TillEntry were
+    // recorded here it would double-count the transaction.
+    // CreateRentalModal passes recordCashSettlement: false (via wirePaymentType='cash')
+    // when paymentType === 'card'; omitting the flag must also skip settlement.
+    authenticateAsOwner()
+    vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
+      { id: 'ri-1', name: 'Paddleboard', siteId: SITE_ID, active: true, totalQuantity: 5, pricePerDay: 20, pricePerHour: null },
+    ] as any)
+
+    const res = await createWalkInRental({
+      siteId: SITE_ID,
+      items: [{ rentalItemId: 'ri-1', quantity: 1 }],
+      durationType: 'days',
+      paymentType: 'cash',
+      // recordCashSettlement omitted — default false (Card path omits it)
+    })
+
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(recordSettlement)).not.toHaveBeenCalled()
+  })
+
+  it('does NOT record a TillEntry for a free walk-in rental', async () => {
+    // Free bookings have paymentAmount 0 — nothing to put in the drawer.
+    authenticateAsOwner()
+    vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
+      { id: 'ri-1', name: 'Kayak', siteId: SITE_ID, active: true, totalQuantity: 10, pricePerDay: 15, pricePerHour: null },
+    ] as any)
+
+    await createWalkInRental({
+      siteId: SITE_ID,
+      items: [{ rentalItemId: 'ri-1', quantity: 1 }],
+      durationType: 'days',
+      paymentType: 'free',
+      recordCashSettlement: true, // would be no-op even if passed for free
+    })
+
+    expect(vi.mocked(recordSettlement)).not.toHaveBeenCalled()
+  })
 })
 
 // ─── applyToPair = false — single-seat mode ─────────────────────────────────
@@ -3648,7 +3724,7 @@ describe('findReservations', () => {
     expect(args.orderBy).toEqual({ from: 'asc' })
   })
 
-  it('query → name/contact/email/name OR search; excludes canceled/refunded; reaches future', async () => {
+  it('query → name/contact/SEAT/consumer OR search; excludes canceled/refunded + blocks; owner-scoped user match', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findMany).mockResolvedValueOnce([])
 
@@ -3657,13 +3733,20 @@ describe('findReservations', () => {
     const args = vi.mocked(prisma.reservation.findMany).mock.calls[0]![0] as any
     expect(args.where.siteId).toBe(SITE_ID)
     expect(args.where.status).toEqual({ notIn: ['canceled', 'refunded'] })
-    // not constrained to the `expected` arrivals state — search spans the lifecycle
-    expect(args.where.operationalStatus).toBeUndefined()
+    // blocks are out-of-service markers, not guests — excluded from results
+    expect(args.where.operationalStatus).toEqual({ not: 'blocked' })
     const or = args.where.OR as any[]
     expect(or.find((c) => c.guestName)?.guestName).toEqual({ contains: 'garcia', mode: 'insensitive' })
     expect(or.some((c) => c.guestContact)).toBe(true)
-    expect(or.some((c) => c.user?.email)).toBe(true)
-    expect(or.some((c) => c.user?.name)).toBe(true)
+    // seat / bed number search (matches the on-grid seatLabel)
+    expect(or.some((c) => c.items?.some?.seatLabel)).toBe(true)
+    // user.email / user.name matched ONLY on consumer bookings (userId ≠ owner),
+    // so the owner's identity never surfaces their staff-created bookings.
+    const emailClause = or.find((c) => Array.isArray(c.AND) && c.AND.some((x: any) => x.user?.email))
+    expect(emailClause).toBeTruthy()
+    expect(emailClause.AND.some((x: any) => x.userId?.not)).toBe(true)
+    const nameClause = or.find((c) => Array.isArray(c.AND) && c.AND.some((x: any) => x.user?.name))
+    expect(nameClause.AND.some((x: any) => x.userId?.not)).toBe(true)
   })
 
   it('maps rows to summaries with partySize, bed numbers, and account email', async () => {

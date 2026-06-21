@@ -864,7 +864,7 @@
   "Guests": {
     "title": "Clientes",
     "close": "Cerrar",
-    "searchPlaceholder": "Buscar nombre o teléfono…",
+    "searchPlaceholder": "Buscar nombre, teléfono o asiento…",
     "expectedToday": "Esperados hoy",
     "loading": "Cargando…",
     "noArrivals": "Nadie esperado todavía",

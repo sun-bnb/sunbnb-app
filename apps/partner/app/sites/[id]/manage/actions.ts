@@ -18,7 +18,7 @@ import {
   createRentalBookingMolliePayment,
   reverifyAndFinalizeRentalBooking,
 } from '@repo/data/rental-payment'
-import { getOpenTill, recordSettlement, voidSettlementsForReservation } from '@repo/data/till'
+import { getOpenTill, recordSettlement, voidSettlementsForReservation, voidSettlementsForRentalBooking } from '@repo/data/till'
 import { applyDayTransition } from './reservation-day'
 import { siteDayKey } from '@repo/data/site-day'
 import type { Prisma } from '@prisma/client'
@@ -2677,13 +2677,21 @@ export async function findReservations(
     ? {
         siteId,
         status: { notIn: [RESERVATION_CANCELED, RESERVATION_REFUNDED] },
+        // Blocks are out-of-service markers, not guests — managed on the grid, not
+        // found here. (Operational floor search; investigation/history is owner-side.)
+        operationalStatus: { not: 'blocked' },
         from: { lte: dayjs().add(RESERVATION_SEARCH_WINDOW_DAYS, 'day').endOf('day').toDate() },
         to: { gte: todayStart },
         OR: [
           { guestName: { contains: q, mode: 'insensitive' } },
           { guestContact: { contains: q, mode: 'insensitive' } },
-          { user: { email: { contains: q, mode: 'insensitive' } } },
-          { user: { name: { contains: q, mode: 'insensitive' } } },
+          // Seat / bed number — "who's on 101?". seatLabel is the on-grid label.
+          { items: { some: { seatLabel: { contains: q, mode: 'insensitive' } } } },
+          // The consumer's own email/name — ONLY on consumer bookings. Staff-created
+          // bookings (walk-in/hold/block) have user = the site owner, so matching
+          // user.* there would surface every staff booking by the owner's name.
+          { AND: [{ userId: { not: ownership.userId } }, { user: { email: { contains: q, mode: 'insensitive' } } }] },
+          { AND: [{ userId: { not: ownership.userId } }, { user: { name: { contains: q, mode: 'insensitive' } } }] },
         ],
       }
     : {
@@ -2802,6 +2810,13 @@ export async function createWalkInRental(input: {
   hours?: number
   guestName?: string
   paymentType: 'cash' | 'free'
+  /**
+   * When true (genuine cash only), record a TillEntry for each created booking
+   * so the ledger-sourced till reflects the cash taken. The Card(QR) path MUST
+   * pass false here — the online Mollie collect is the payment; a cash entry
+   * would double-count the same transaction. Defaults to false (no settlement).
+   */
+  recordCashSettlement?: boolean
   accessKey?: string
   employeeId?: string
 }) {
@@ -2898,6 +2913,32 @@ export async function createWalkInRental(input: {
     const unavailableItem = rentalItems.find(ri => ri.id === guardResult.rentalItemId)
     const name = unavailableItem?.name ?? 'Requested item'
     return { status: 'error', errors: [`Not enough "${name}" available`] }
+  }
+
+  // Record a cash TillEntry for each created booking — ONLY for genuine cash.
+  // The Card(QR) path MUST NOT record a settlement here; that path creates
+  // bookings as paid-in-cash so paymentAmount is persisted, then routes to
+  // collectRentalPayment (Mollie). Recording a TillEntry here for the card
+  // path would double-count: once as cash below, once when Mollie settles.
+  // Free bookings have paymentAmount 0 — skip them even if flag is somehow set.
+  if (input.recordCashSettlement && input.paymentType === 'cash') {
+    const bookingIdToAmount = new Map<string, number>()
+    for (let i = 0; i < guardResult.bookingIds.length; i++) {
+      const bi = bookingInputs[i]
+      if (bi && bi.paymentAmount > 0) {
+        bookingIdToAmount.set(guardResult.bookingIds[i]!, bi.paymentAmount)
+      }
+    }
+    await Promise.all(
+      Array.from(bookingIdToAmount.entries()).map(([rentalBookingId, amount]) =>
+        recordSettlement({
+          siteId: input.siteId,
+          rentalBookingId,
+          employeeId: stampedEmployeeId,
+          amount,
+        }),
+      ),
+    )
   }
 
   revalidatePath(`/sites/${input.siteId}/manage`)

@@ -864,7 +864,7 @@
   "Guests": {
     "title": "Asiakkaat",
     "close": "Sulje",
-    "searchPlaceholder": "Hae nimi tai puhelin…",
+    "searchPlaceholder": "Hae nimi, puhelin tai paikka…",
     "expectedToday": "Odotetaan tänään",
     "loading": "Ladataan…",
     "noArrivals": "Ei odotettuja vielä",

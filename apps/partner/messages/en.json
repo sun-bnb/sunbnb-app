@@ -864,7 +864,7 @@
   "Guests": {
     "title": "Guests",
     "close": "Close",
-    "searchPlaceholder": "Search name or phone…",
+    "searchPlaceholder": "Search name, phone or seat…",
     "expectedToday": "Expected today",
     "loading": "Loading…",
     "noArrivals": "No one expected yet",

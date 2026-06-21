@@ -713,6 +713,100 @@ describe('createWalkInRental', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Rental cash settlement (track 013 P3b) — TillEntry ledger for cash walk-in
+// rentals. The Card(QR) path must NOT double-count via a cash TillEntry.
+// ---------------------------------------------------------------------------
+
+describe('createWalkInRental — cash TillEntry ledger (track 013 P3b)', () => {
+  it('records a non-voided TillEntry per booking and open till reflects amount for the worker', async () => {
+    // Genuine cash: recordCashSettlement=true → TillEntry created per booking.
+    // getTillStatus must reflect the sum attributed to the worker.
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id)
+    const employee = await prisma.employee.create({ data: { accountId: user.id, name: 'Beach Bob' } })
+    const rentalItem = await createTestRentalItem(site.id, { pricePerDay: 20, totalQuantity: 5 })
+    mockUserId = user.id
+
+    const result = await createWalkInRental({
+      siteId: site.id,
+      items: [{ rentalItemId: rentalItem.id, quantity: 2 }], // 20 * 1 day * 2 = 40
+      durationType: 'days',
+      paymentType: 'cash',
+      recordCashSettlement: true,
+      employeeId: employee.id,
+    })
+
+    expect(result.status).toBe('ok')
+    expect(result.bookingIds).toHaveLength(1)
+
+    const bookingId = result.bookingIds![0]!
+
+    // TillEntry must exist for the booking, be non-voided, attributed to the worker
+    const entries = await prisma.tillEntry.findMany({
+      where: { rentalBookingId: bookingId },
+    })
+    expect(entries).toHaveLength(1)
+    expect(entries[0]!.amount).toBe(40)
+    expect(entries[0]!.voidedAt).toBeNull()
+    expect(entries[0]!.employeeId).toBe(employee.id)
+
+    // Open till for the worker reflects the rental cash
+    const till = await getTillStatus(site.id, employee.id)
+    expect(till).toMatchObject({ status: 'ok', total: 40, count: 1 })
+  })
+
+  it('does NOT create a TillEntry when recordCashSettlement is omitted (Card / QR path)', async () => {
+    // The Card(QR) path wires paymentType='cash' but omits recordCashSettlement.
+    // A TillEntry here would double-count — the Mollie collect is the actual payment.
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const rentalItem = await createTestRentalItem(site.id, { pricePerDay: 15, totalQuantity: 5 })
+    mockUserId = user.id
+
+    const result = await createWalkInRental({
+      siteId: site.id,
+      items: [{ rentalItemId: rentalItem.id, quantity: 1 }],
+      durationType: 'days',
+      paymentType: 'cash',
+      // recordCashSettlement omitted — simulates the Card(QR) path
+    })
+
+    expect(result.status).toBe('ok')
+    const bookingId = result.bookingIds![0]!
+
+    const entries = await prisma.tillEntry.count({ where: { rentalBookingId: bookingId } })
+    expect(entries).toBe(0)
+  })
+
+  it('does NOT create a TillEntry for a free walk-in rental even with recordCashSettlement=true', async () => {
+    // Free bookings have paymentAmount 0 — the guard sets zero and the action
+    // skips settlement for zero-amount bookings.
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const rentalItem = await createTestRentalItem(site.id, { pricePerDay: 25, totalQuantity: 5 })
+    mockUserId = user.id
+
+    const result = await createWalkInRental({
+      siteId: site.id,
+      items: [{ rentalItemId: rentalItem.id, quantity: 1 }],
+      durationType: 'days',
+      paymentType: 'free',
+      recordCashSettlement: true,
+    })
+
+    expect(result.status).toBe('ok')
+    const bookingId = result.bookingIds![0]!
+
+    const entries = await prisma.tillEntry.count({ where: { siteId: site.id } })
+    expect(entries).toBe(0)
+
+    const booking = await prisma.rentalBooking.findUnique({ where: { id: bookingId } })
+    expect(booking!.paymentAmount).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Bug-revealing: moveReservation double-booking (bug closed by
 // moveReservationWithConflictGuard).
 //
@@ -1318,6 +1412,51 @@ describe('findReservations', () => {
 
     const res = await findReservations(site.id, 'garcia')
     expect(res.reservations).toHaveLength(0)
+  })
+
+  it('search by SEAT number / label finds the booking on that bed ("who\'s on 201?")', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id, { number: 201, seatLabel: '1-201-1' })
+    mockUserId = user.id
+    // An unnamed walk-in — found by its seat, not its (absent) name.
+    await createTestReservation(user.id, site.id, [item.id], { status: 'paid-in-cash', operationalStatus: 'walked-in' })
+
+    const res = await findReservations(site.id, '201')
+    expect(res.reservations).toHaveLength(1)
+    expect(res.reservations[0].items.map((i) => i.seatLabel)).toEqual(['1-201-1'])
+  })
+
+  it('excludes blocks — even when the seat number matches', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id, { number: 202, seatLabel: '1-202-1' })
+    mockUserId = user.id
+    // A block: out-of-service marker (op=blocked, far-future `to`, no guest).
+    await createTestReservation(user.id, site.id, [item.id], {
+      status: 'paid-in-cash', operationalStatus: 'blocked',
+      to: new Date('2999-12-31T23:59:59.999Z'),
+    })
+
+    expect((await findReservations(site.id, '202')).reservations).toHaveLength(0)
+  })
+
+  it('matches the consumer email/name only on consumer bookings — never the site owner', async () => {
+    const owner = await createTestUser({ email: 'owner-acme@test.com', name: 'Acme Owner' })
+    const site = await createTestSite(owner.id)
+    const consumer = await createTestUser({ email: 'jane.consumer@test.com', name: 'Jane Consumer' })
+    const i1 = await createTestInventoryItem(owner.id, site.id, { number: 1 })
+    const i2 = await createTestInventoryItem(owner.id, site.id, { number: 2 })
+    mockUserId = owner.id
+    // staff walk-in (userId = owner) + an online consumer booking (userId = consumer)
+    await createTestReservation(owner.id, site.id, [i1.id], { status: 'paid-in-cash', operationalStatus: 'walked-in', guestName: 'Floor Walkin' })
+    await createTestReservation(consumer.id, site.id, [i2.id], { status: 'complete', operationalStatus: 'expected' })
+
+    // Searching the OWNER's identity must NOT surface their staff-created bookings.
+    expect((await findReservations(site.id, 'Acme Owner')).reservations).toHaveLength(0)
+    expect((await findReservations(site.id, 'owner-acme')).reservations).toHaveLength(0)
+    // Searching the CONSUMER returns their online booking.
+    expect((await findReservations(site.id, 'jane.consumer')).reservations).toHaveLength(1)
   })
 })
 
