@@ -32,7 +32,7 @@ import {
   cancelCollection,
 } from './actions'
 import {
-  RESERVATION_COMPLETE, RESERVATION_HELD,
+  RESERVATION_COMPLETE, RESERVATION_HELD, RESERVATION_PAID_IN_CASH,
 } from '@repo/data/reservation-status'
 import { groupExtraSeatLabel } from './grid-helpers'
 import CollectPaymentModal from './CollectPaymentModal'
@@ -739,6 +739,45 @@ export default function BedDetail({
           </div>
         )}
 
+        {/* ── RESERVED — paid-in-cash walk-in between days ──
+            A multiday walk-in that departed for the day; reserved for the rest of
+            its stay (status=paid-in-cash, op=expected, the Walk-in→Depart→reserved
+            leg of the daily cycle). Re-seat it (Check-in) or free it (Unreserve —
+            delete, cash already settled offline). Without this branch it fell to the
+            buttonless IN-FLIGHT fallback below → an out-of-control reservation. */}
+        {state === 'expected' && reservation && reservation.status === RESERVATION_PAID_IN_CASH && (
+          <div className="space-y-3">
+            {pendingConfirm ? confirmPanel : (
+              <>
+                <OccupantInfo
+                  t={t}
+                  reservation={reservation}
+                  tintClass="bg-yellow-50 dark:bg-yellow-950/30 border-2 border-yellow-200 dark:border-yellow-800/40"
+                  paymentState="paid"
+                  fallbackName={t('walkIn')}
+                />
+                <div className="flex gap-3">
+                  <button
+                    disabled={isPending}
+                    onClick={() => runAction(() => checkInReservation(siteId, reservation.id, accessKey))}
+                    className="flex-1 bg-blue-500 text-white font-bold text-lg py-4 rounded-xl active:bg-blue-600 disabled:opacity-50"
+                  >
+                    {isPending ? '...' : t('checkIn')}
+                  </button>
+                  {moveSquare}
+                </div>
+                <button
+                  disabled={isPending}
+                  onClick={() => setPendingConfirm('unreserve')}
+                  className="w-full text-red-500 text-sm py-2 active:text-red-700"
+                >
+                  {t('unreserve')}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
         {/* ── HELD — staff hold, no payment ──
             Lane: status=held, operationalStatus=expected
             Actions: Rent (convert hold → walk-in) · Release (no confirm — no money at stake)
@@ -879,6 +918,7 @@ export default function BedDetail({
         {state === 'expected' && reservation
           && reservation.status !== RESERVATION_COMPLETE
           && reservation.status !== RESERVATION_HELD
+          && reservation.status !== RESERVATION_PAID_IN_CASH
           && !isFailedReservationStatus(reservation.status) && (
           <div className="space-y-3">
             <div className="bg-yellow-50 dark:bg-yellow-950/30 rounded-xl p-4 border-2 border-yellow-100 dark:border-yellow-800/40 flex items-center gap-3">
