@@ -783,7 +783,6 @@
     "reserve": "Varaa",
     "reserveDays": "Varaa · {n} päivää",
     "rent": "Vuokraa",
-    "rentDays": "Vuokraa · {n} päivää",
     "multipleDays": "Useita päiviä",
     "until": "Päättyy",
     "unreserve": "Peruuta varaus",

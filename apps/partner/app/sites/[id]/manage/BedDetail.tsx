@@ -620,7 +620,7 @@ export default function BedDetail({
                 ))}
                 className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50"
               >
-                {isPending ? '...' : (!isPool && days > 1) ? t('rentDays', { n: days }) : t('rent')}
+                {isPending ? '...' : t('rent')}
               </button>
             </div>
             {/* ── Seat management — compact link-style actions, divided off from the
@@ -829,7 +829,7 @@ export default function BedDetail({
                 ))}
                 className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50"
               >
-                {isPending ? '...' : days > 1 ? t('rentDays', { n: days }) : t('rent')}
+                {isPending ? '...' : t('rent')}
               </button>
               {moveSquare}
             </div>

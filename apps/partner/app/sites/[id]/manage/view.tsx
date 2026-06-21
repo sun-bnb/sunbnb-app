@@ -358,7 +358,11 @@ export default function ManageView({
     if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = undefined }
     // Tap on the viewport background (outside the parcel content) while selecting
     // → clear/exit multiselect. Tapping a gap between seats stays in multiselect.
-    if (selectedIds.length > 0 && !wasPannedRef.current && !(e.target as HTMLElement).closest('.parcel-canvas-content')) {
+    // Gate on a real pointerup: this handler is ALSO wired to onPointerLeave (to
+    // end a pan when the pointer exits the canvas), and with a mouse, moving off
+    // the canvas into the bulk action sheet fires pointerleave — which must NOT
+    // clear the selection (touch never fires it, which is why it only bit mouse).
+    if (e.type === 'pointerup' && selectedIds.length > 0 && !wasPannedRef.current && !(e.target as HTMLElement).closest('.parcel-canvas-content')) {
       setSelectedIds([])
     }
     pointers.current.delete(e.pointerId)
@@ -1116,11 +1120,11 @@ export default function ManageView({
                     <span className="text-[10px] font-semibold leading-none">{tb('comp')}</span>
                   </button>
                   <button disabled={isBulkPending} onClick={bulkReserve} className="flex-1 bg-yellow-400 text-yellow-900 font-bold text-lg py-4 rounded-xl active:bg-yellow-500 disabled:opacity-50">{tb('reserve')}</button>
-                  <button disabled={isBulkPending} onClick={bulkRent} className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50">{bulkDays > 1 ? tb('rentDays', { n: bulkDays }) : tb('rent')}</button>
+                  <button disabled={isBulkPending} onClick={bulkRent} className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50">{tb('rent')}</button>
                 </div>
               ) : canRent ? (
                 <div className="flex gap-3">
-                  <button disabled={isBulkPending} onClick={bulkRent} className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50">{bulkDays > 1 ? tb('rentDays', { n: bulkDays }) : tb('rent')}</button>
+                  <button disabled={isBulkPending} onClick={bulkRent} className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50">{tb('rent')}</button>
                   {canMove && bulkMoveSquare}
                 </div>
               ) : null}
