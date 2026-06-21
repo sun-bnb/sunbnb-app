@@ -46,6 +46,12 @@ const Backdrop = ({ onClick }: { onClick?: () => void }) => {
   return (
     <div
       onClick={onClick} // Optional: handle clicks to close
+      // Mobile-only scrim: it pairs with the lg:hidden reservation drawer (z-11).
+      // On desktop there is no drawer — the reservation panel is the sticky
+      // sidebar (no elevated z-index), so an un-guarded backdrop would shadow and
+      // disable the whole page until clicked. Switching the Equipment tab sets
+      // `focused: true`, which is what surfaced this. Keep it hidden at lg+.
+      className="lg:hidden"
       style={{
         position: 'fixed',
         top: 0,
