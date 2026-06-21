@@ -62,6 +62,8 @@ import {
   findReservations,
   reserveItems,
   holdBeds,
+  blockBeds,
+  compBeds,
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
@@ -4243,5 +4245,162 @@ describe('resumeWalkIn', () => {
     expect(res.status).toBe('error')
     expect(res.errors).toContain('Not authorized')
     expect(vi.mocked(prisma.reservation.findUnique)).not.toHaveBeenCalled()
+  })
+})
+
+// ─── blockBeds: grouped block ────────────────────────────────────────────────
+
+describe('blockBeds', () => {
+  it('rejects unauthenticated caller', async () => {
+    const res = await blockBeds(SITE_ID, [ITEM_ID])
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-owner', async () => {
+    authenticateAsNonOwner()
+    const res = await blockBeds(SITE_ID, [ITEM_ID])
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authorized')
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+
+  it('rejects empty itemIds array', async () => {
+    authenticateAsOwner()
+    const res = await blockBeds(SITE_ID, [])
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/no items selected/i)
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+
+  it('creates ONE blocked reservation over ALL selected ids', async () => {
+    authenticateAsOwner()
+
+    const res = await blockBeds(SITE_ID, [ITEM_ID, 'item-2', 'item-3'])
+    expect(res.status).toBe('ok')
+
+    expect(mockGuard).toHaveBeenCalledTimes(1)
+    const call = mockGuard.mock.calls[0][0]
+    expect(call.itemIds).toEqual([ITEM_ID, 'item-2', 'item-3'])
+    expect(call.siteId).toBe(SITE_ID)
+    expect(call.status).toBe('paid-in-cash')
+    expect(call.operationalStatus).toBe('blocked')
+  })
+
+  it('uses the sticky OUT_OF_SERVICE_TO far-future sentinel', async () => {
+    authenticateAsOwner()
+
+    await blockBeds(SITE_ID, [ITEM_ID, 'item-2'])
+
+    const call = mockGuard.mock.calls[0][0]
+    // The sticky block must survive the day rollover — `to` must be well into the future
+    const fiveYearsFromNow = new Date(Date.now() + 5 * 365 * 24 * 60 * 60 * 1000)
+    expect(call.to.getTime()).toBeGreaterThan(fiveYearsFromNow.getTime())
+  })
+
+  it('passes notes (truncated to 500) to guard', async () => {
+    authenticateAsOwner()
+
+    await blockBeds(SITE_ID, [ITEM_ID], 'N'.repeat(600))
+
+    const call = mockGuard.mock.calls[0][0]
+    expect(call.internalNotes).toHaveLength(500)
+  })
+
+  it('returns error when guard detects a conflict', async () => {
+    authenticateAsOwner()
+    mockGuard.mockResolvedValueOnce({ outcome: 'conflict', conflictingReservationId: 'existing' })
+
+    const res = await blockBeds(SITE_ID, [ITEM_ID, 'item-2'])
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/already occupied or blocked/i)
+    expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
+  })
+})
+
+// ─── compBeds: grouped comp ──────────────────────────────────────────────────
+
+describe('compBeds', () => {
+  it('rejects unauthenticated caller', async () => {
+    const res = await compBeds(SITE_ID, [ITEM_ID])
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-owner', async () => {
+    authenticateAsNonOwner()
+    const res = await compBeds(SITE_ID, [ITEM_ID])
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authorized')
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+
+  it('rejects empty itemIds array', async () => {
+    authenticateAsOwner()
+    const res = await compBeds(SITE_ID, [])
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/no items selected/i)
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+
+  it('creates ONE comp reservation over ALL selected ids', async () => {
+    authenticateAsOwner()
+
+    const res = await compBeds(SITE_ID, [ITEM_ID, 'item-2', 'item-3'])
+    expect(res.status).toBe('ok')
+
+    expect(mockGuard).toHaveBeenCalledTimes(1)
+    const call = mockGuard.mock.calls[0][0]
+    expect(call.itemIds).toEqual([ITEM_ID, 'item-2', 'item-3'])
+    expect(call.siteId).toBe(SITE_ID)
+    expect(call.status).toBe('paid-in-cash')
+    expect(call.operationalStatus).toBe('comp')
+  })
+
+  it('sets isComp=true and paymentAmount=0', async () => {
+    authenticateAsOwner()
+
+    await compBeds(SITE_ID, [ITEM_ID, 'item-2'])
+
+    const call = mockGuard.mock.calls[0][0]
+    expect(call.isComp).toBe(true)
+    expect(call.paymentAmount).toBe(0)
+  })
+
+  it('uses today-only window (to = end of today, not sticky)', async () => {
+    authenticateAsOwner()
+
+    const before = Date.now()
+    await compBeds(SITE_ID, [ITEM_ID])
+    const after = Date.now()
+
+    const call = mockGuard.mock.calls[0][0]
+    // `to` must fall within today's end-of-day (within a few seconds of test execution)
+    const endOfToday = new Date(new Date().setHours(23, 59, 59, 999))
+    expect(call.to.getTime()).toBeLessThanOrEqual(endOfToday.getTime() + 1000)
+    expect(call.to.getTime()).toBeGreaterThan(before)
+    void after // used for temporal context
+  })
+
+  it('passes guestName (truncated) and notes (truncated) to guard', async () => {
+    authenticateAsOwner()
+
+    await compBeds(SITE_ID, [ITEM_ID], undefined, 'G'.repeat(300), 'N'.repeat(600))
+
+    const call = mockGuard.mock.calls[0][0]
+    expect(call.guestName).toHaveLength(200)
+    expect(call.internalNotes).toHaveLength(500)
+  })
+
+  it('returns error when guard detects a conflict', async () => {
+    authenticateAsOwner()
+    mockGuard.mockResolvedValueOnce({ outcome: 'conflict', conflictingReservationId: 'existing' })
+
+    const res = await compBeds(SITE_ID, [ITEM_ID, 'item-2'])
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/already occupied or blocked/i)
+    expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
   })
 })

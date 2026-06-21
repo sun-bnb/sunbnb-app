@@ -73,9 +73,12 @@ function extraDays(to: Date | string | null | undefined): number {
 // ─── Component ──────────────────────────────────────────────────────────────
 
 // States where the SunbedGroup pair toggle governs a creation/release action.
-// 'walked-in' is intentionally excluded: the walked-in branch uses the
-// reservation-based applyToGroup toggle instead of the physical-group applyToPair.
-const TOGGLE_VISIBLE_STATES: BedState[] = ['available', 'blocked', 'comp']
+// 'walked-in', 'blocked', and 'comp' are intentionally excluded:
+//   - 'walked-in' uses the reservation-based applyToGroup toggle.
+//   - 'blocked' and 'comp' also use the reservation-based applyToGroup toggle
+//     (multiselect block/comp now creates ONE grouped reservation; the tap-dialog
+//     unblock/uncomp uses applyToGroup to decide Group vs Seat scope).
+const TOGGLE_VISIBLE_STATES: BedState[] = ['available']
 
 // Pool seat numbering: number = parcel*10000 + 9900 + seq
 const POOL_BAND_BASE = 9900
@@ -1167,9 +1170,42 @@ export default function BedDetail({
           </div>
         )}
 
-        {/* ── BLOCKED — one button to free it ── */}
+        {/* ── BLOCKED — reservation-based Group/Seat toggle + unblock ── */}
         {state === 'blocked' && (
           <div className="space-y-3">
+            {/* Group / Seat scope toggle — only when this block covers multiple seats
+                (i.e. it was created via bulk-block → one grouped reservation).
+                Group (default): delete the whole block reservation (frees all seats).
+                Seat: disconnect just this seat, leaving the rest blocked.
+                Mirrors the HELD and WALKED-IN branches (applyToGroup / groupedReservation). */}
+            {groupedReservation && (
+              <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 font-semibold">
+                <button
+                  onClick={() => setApplyToGroup(true)}
+                  aria-pressed={applyToGroup}
+                  className={`
+                    flex-1 flex items-center justify-center px-3 min-h-[44px] text-sm transition-colors
+                    ${applyToGroup
+                      ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
+                      : 'bg-white text-gray-400 hover:text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400'}
+                  `}
+                >
+                  {t('group')}
+                </button>
+                <button
+                  onClick={() => setApplyToGroup(false)}
+                  aria-pressed={!applyToGroup}
+                  className={`
+                    flex-1 flex items-center justify-center px-3 min-h-[44px] text-sm border-l border-gray-200 dark:border-gray-700 transition-colors
+                    ${!applyToGroup
+                      ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
+                      : 'bg-white text-gray-400 hover:text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400'}
+                  `}
+                >
+                  {t('seat')}
+                </button>
+              </div>
+            )}
             <div className="bg-gray-50 dark:bg-gray-800/40 rounded-xl p-4 border-2 border-gray-200 dark:border-gray-700 flex items-center gap-3">
               <div className="flex-1 min-w-0">
                 {reservation?.internalNotes
@@ -1180,7 +1216,7 @@ export default function BedDetail({
             </div>
             <button
               disabled={isPending}
-              onClick={() => runAction(() => unblockBed(siteId, item.id, accessKey, applyToPair))}
+              onClick={() => runAction(() => unblockBed(siteId, item.id, accessKey, applyToGroup))}
               className="w-full bg-green-500 text-white font-bold text-lg py-4 rounded-xl active:bg-green-600 disabled:opacity-50"
             >
               {isPending ? '...' : t('unblock')}
@@ -1188,9 +1224,42 @@ export default function BedDetail({
           </div>
         )}
 
-        {/* ── COMP — complimentary guest, end comp action ── */}
+        {/* ── COMP — reservation-based Group/Seat toggle + end comp ── */}
         {state === 'comp' && (
           <div className="space-y-3">
+            {/* Group / Seat scope toggle — only when this comp covers multiple seats
+                (i.e. it was created via bulk-comp → one grouped reservation).
+                Group (default): delete the whole comp reservation (frees all seats).
+                Seat: disconnect just this seat, leaving the rest comped.
+                Mirrors the HELD and WALKED-IN branches (applyToGroup / groupedReservation). */}
+            {groupedReservation && (
+              <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 font-semibold">
+                <button
+                  onClick={() => setApplyToGroup(true)}
+                  aria-pressed={applyToGroup}
+                  className={`
+                    flex-1 flex items-center justify-center px-3 min-h-[44px] text-sm transition-colors
+                    ${applyToGroup
+                      ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
+                      : 'bg-white text-gray-400 hover:text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400'}
+                  `}
+                >
+                  {t('group')}
+                </button>
+                <button
+                  onClick={() => setApplyToGroup(false)}
+                  aria-pressed={!applyToGroup}
+                  className={`
+                    flex-1 flex items-center justify-center px-3 min-h-[44px] text-sm border-l border-gray-200 dark:border-gray-700 transition-colors
+                    ${!applyToGroup
+                      ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
+                      : 'bg-white text-gray-400 hover:text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400'}
+                  `}
+                >
+                  {t('seat')}
+                </button>
+              </div>
+            )}
             <div className="bg-purple-50 dark:bg-purple-950/30 rounded-xl p-4 border-2 border-purple-200 dark:border-purple-800/40 flex items-center gap-3">
               <div className="flex-1 min-w-0">
                 {reservation?.guestName
@@ -1204,7 +1273,7 @@ export default function BedDetail({
             </div>
             <button
               disabled={isPending}
-              onClick={() => runAction(() => uncompBed(siteId, item.id, accessKey, applyToPair))}
+              onClick={() => runAction(() => uncompBed(siteId, item.id, accessKey, applyToGroup))}
               className="w-full bg-green-500 text-white font-bold text-lg py-4 rounded-xl active:bg-green-600 disabled:opacity-50"
             >
               {isPending ? '...' : t('endComp')}

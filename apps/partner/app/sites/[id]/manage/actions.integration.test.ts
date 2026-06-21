@@ -41,10 +41,13 @@ import {
   moveReservation,
   moveReservationToSeats,
   blockBed,
+  blockBeds,
   unblockBed,
   holdBeds,
   releaseHold,
   cancelReservation,
+  compBeds,
+  uncompBed,
   markRentalPickedUp,
   markRentalReturned,
   createWalkInRental,
@@ -2451,5 +2454,180 @@ describe('unreserveItem disconnect — till conservation', () => {
     expect(remaining!.items.map(i => i.id)).not.toContain(itemA.id)
     // 2 seats × 10€ × 1 day = 20€ (freed seat's 10€ leaves the till)
     expect(remaining!.paymentAmount).toBe(20)
+  })
+})
+
+// ─── blockBeds: grouped block (track 011 Block/Comp parity) ─────────────────
+
+describe('blockBeds — grouped block', () => {
+  it('creates ONE blocked reservation with all 3 selected items', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    const result = await blockBeds(site.id, [itemA.id, itemB.id, itemC.id], 'VIP area')
+    expect(result).toEqual({ status: 'ok' })
+
+    const reservations = await prisma.reservation.findMany({
+      where: { siteId: site.id },
+      include: { items: true },
+    })
+    // Exactly ONE reservation
+    expect(reservations).toHaveLength(1)
+
+    const res = reservations[0]!
+    expect(res.operationalStatus).toBe('blocked')
+    expect(res.status).toBe('paid-in-cash')
+    expect(res.items).toHaveLength(3)
+    expect(res.items.map(i => i.id).sort()).toEqual([itemA.id, itemB.id, itemC.id].sort())
+    // Sticky: far-future `to`
+    const fiveYearsFromNow = new Date(Date.now() + 5 * 365 * 24 * 60 * 60 * 1000)
+    expect(res.to.getTime()).toBeGreaterThan(fiveYearsFromNow.getTime())
+    // Notes stored
+    expect(res.internalNotes).toBe('VIP area')
+  })
+
+  it('unblock ONE seat (applyToGroup=false) leaves the other 2 still blocked', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    await blockBeds(site.id, [itemA.id, itemB.id, itemC.id])
+
+    // Peel off itemA only (Seat mode → applyToGroup=false).
+    const unblockResult = await unblockBed(site.id, itemA.id, undefined, false)
+    expect(unblockResult).toEqual({ status: 'ok' })
+
+    const reservations = await prisma.reservation.findMany({
+      where: { siteId: site.id },
+      include: { items: true },
+    })
+    // ONE block reservation still exists (itemB + itemC remain blocked)
+    expect(reservations).toHaveLength(1)
+    const remaining = reservations[0]!
+    expect(remaining.operationalStatus).toBe('blocked')
+    expect(remaining.items).toHaveLength(2)
+    expect(remaining.items.map(i => i.id)).not.toContain(itemA.id)
+    expect(remaining.items.map(i => i.id).sort()).toEqual([itemB.id, itemC.id].sort())
+
+    // itemA is now free — can be reserved
+    const newRes = await reserveItem(site.id, itemA.id, 'Guest After Partial Unblock')
+    expect(newRes).toEqual({ status: 'ok' })
+  })
+
+  it('conflict on one taken seat → nothing created (all-or-nothing)', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    // itemB is already occupied
+    await reserveItem(site.id, itemB.id, 'Occupant')
+
+    const result = await blockBeds(site.id, [itemA.id, itemB.id, itemC.id])
+    expect(result.status).toBe('error')
+    expect(result.errors?.[0]).toMatch(/already occupied or blocked/i)
+
+    // No block reservation was created
+    const blockReservations = await prisma.reservation.findMany({
+      where: { siteId: site.id, operationalStatus: 'blocked' },
+    })
+    expect(blockReservations).toHaveLength(0)
+  })
+})
+
+// ─── compBeds: grouped comp (track 011 Block/Comp parity) ────────────────────
+
+describe('compBeds — grouped comp', () => {
+  it('creates ONE comp reservation with all 3 selected items', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    const result = await compBeds(site.id, [itemA.id, itemB.id, itemC.id], undefined, 'VIP Guest')
+    expect(result).toEqual({ status: 'ok' })
+
+    const reservations = await prisma.reservation.findMany({
+      where: { siteId: site.id },
+      include: { items: true },
+    })
+    // Exactly ONE reservation
+    expect(reservations).toHaveLength(1)
+
+    const res = reservations[0]!
+    expect(res.operationalStatus).toBe('comp')
+    expect(res.status).toBe('paid-in-cash')
+    expect(res.isComp).toBe(true)
+    expect(res.paymentAmount).toBe(0)
+    expect(res.guestName).toBe('VIP Guest')
+    expect(res.items).toHaveLength(3)
+    expect(res.items.map(i => i.id).sort()).toEqual([itemA.id, itemB.id, itemC.id].sort())
+    // Today-only window (not sticky)
+    const endOfToday = new Date(new Date().setHours(23, 59, 59, 999))
+    expect(res.to.getTime()).toBeLessThanOrEqual(endOfToday.getTime() + 1000)
+  })
+
+  it('uncomp ONE seat (applyToGroup=false) leaves the other 2 still comped', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    await compBeds(site.id, [itemA.id, itemB.id, itemC.id], undefined, 'Party of 3')
+
+    // Peel off itemA only (Seat mode → applyToGroup=false).
+    const uncompResult = await uncompBed(site.id, itemA.id, undefined, false)
+    expect(uncompResult).toEqual({ status: 'ok' })
+
+    const reservations = await prisma.reservation.findMany({
+      where: { siteId: site.id },
+      include: { items: true },
+    })
+    // ONE comp reservation still exists (itemB + itemC remain comped)
+    expect(reservations).toHaveLength(1)
+    const remaining = reservations[0]!
+    expect(remaining.operationalStatus).toBe('comp')
+    expect(remaining.items).toHaveLength(2)
+    expect(remaining.items.map(i => i.id)).not.toContain(itemA.id)
+    expect(remaining.items.map(i => i.id).sort()).toEqual([itemB.id, itemC.id].sort())
+
+    // itemA is now free — can be reserved
+    const newRes = await reserveItem(site.id, itemA.id, 'Guest After Partial Uncomp')
+    expect(newRes).toEqual({ status: 'ok' })
+  })
+
+  it('conflict on one taken seat → nothing created (all-or-nothing)', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    // itemB is already occupied
+    await reserveItem(site.id, itemB.id, 'Occupant')
+
+    const result = await compBeds(site.id, [itemA.id, itemB.id, itemC.id])
+    expect(result.status).toBe('error')
+    expect(result.errors?.[0]).toMatch(/already occupied or blocked/i)
+
+    // No comp reservation was created
+    const compReservations = await prisma.reservation.findMany({
+      where: { siteId: site.id, operationalStatus: 'comp' },
+    })
+    expect(compReservations).toHaveLength(0)
   })
 })

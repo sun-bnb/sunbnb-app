@@ -1296,6 +1296,121 @@ export async function holdBeds(
   return { status: 'ok' }
 }
 
+// ─── Grouped block: take an entire multiselect out of service as ONE reservation ──
+
+/**
+ * Create a single blocked (out-of-service) reservation spanning ALL the selected `itemIds`.
+ *
+ * This is the multiselect analogue of `blockBed`: instead of one seat (+ pair
+ * expansion), the full selection is blocked atomically under one `Reservation` row.
+ * All-or-nothing atomicity is provided by `reserveWithConflictGuard`'s
+ * `SELECT … FOR UPDATE` transaction over the whole `itemIds` set.
+ *
+ * Decisions (track 011 Block/Comp parity):
+ * - No pair expansion: act on exactly the passed `itemIds`.
+ * - Same sticky `OUT_OF_SERVICE_TO` sentinel as `blockBed` — block survives rollover.
+ * - Conflict on ANY seat → nothing created.
+ */
+export async function blockBeds(
+  siteId: string,
+  itemIds: string[],
+  notes?: string,
+  accessKey?: string,
+  employeeId?: string,
+) {
+  if (!itemIds || itemIds.length === 0) {
+    return { status: 'error', errors: ['No items selected'] }
+  }
+
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const fromDate = dayjs().startOf('day').toDate()
+  const toDate = OUT_OF_SERVICE_TO
+
+  const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
+
+  const result = await reserveWithConflictGuard({
+    itemIds,
+    siteId,
+    userId: ownership.userId,
+    employeeId: stampedEmployeeId,
+    type: 'days',
+    from: fromDate,
+    to: toDate,
+    status: RESERVATION_PAID_IN_CASH,
+    operationalStatus: 'blocked',
+    internalNotes: notes?.slice(0, 500) || null,
+  })
+
+  if (result.outcome === 'conflict') {
+    return { status: 'error', errors: ['One or more selected sunbeds are already occupied or blocked'] }
+  }
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
+}
+
+// ─── Grouped comp: mark an entire multiselect as complimentary as ONE reservation ──
+
+/**
+ * Create a single comp reservation spanning ALL the selected `itemIds`.
+ *
+ * This is the multiselect analogue of `compBed`: instead of one seat (+ pair
+ * expansion), the full selection is comped atomically under one `Reservation` row.
+ * All-or-nothing atomicity is provided by `reserveWithConflictGuard`'s
+ * `SELECT … FOR UPDATE` transaction over the whole `itemIds` set.
+ *
+ * Decisions (track 011 Block/Comp parity):
+ * - No pair expansion: act on exactly the passed `itemIds`.
+ * - Same `isComp: true`, `paymentAmount: 0`, `OP_COMP` semantics as `compBed`.
+ * - Today-only (`to` = end of day); same as `compBed`.
+ * - Conflict on ANY seat → nothing created.
+ */
+export async function compBeds(
+  siteId: string,
+  itemIds: string[],
+  accessKey?: string,
+  guestName?: string,
+  notes?: string,
+  employeeId?: string,
+) {
+  if (!itemIds || itemIds.length === 0) {
+    return { status: 'error', errors: ['No items selected'] }
+  }
+
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const fromDate = dayjs().startOf('day').toDate()
+  const toDate = dayjs().endOf('day').toDate()
+
+  const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
+
+  const result = await reserveWithConflictGuard({
+    itemIds,
+    siteId,
+    userId: ownership.userId,
+    employeeId: stampedEmployeeId,
+    type: 'days',
+    from: fromDate,
+    to: toDate,
+    status: RESERVATION_PAID_IN_CASH,
+    operationalStatus: OP_COMP,
+    isComp: true,
+    paymentAmount: 0,
+    guestName: guestName?.slice(0, 200) || null,
+    internalNotes: notes?.slice(0, 500) || null,
+  })
+
+  if (result.outcome === 'conflict') {
+    return { status: 'error', errors: ['One or more selected sunbeds are already occupied or blocked'] }
+  }
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
+}
+
 // ─── Convert hold to walk-in (held guest arrives — collect cash) ────────────
 
 /**

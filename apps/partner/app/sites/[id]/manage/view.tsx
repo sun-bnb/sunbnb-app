@@ -16,7 +16,7 @@ import RentalsSection from './RentalsSection'
 import { getActiveReservation, getBedState, isFailedReservationStatus, type BedState } from './bed-state'
 import {
   moveReservationToSeats,
-  blockBed, compBed, convertHoldToWalkIn,
+  blockBed, compBed, blockBeds, compBeds, convertHoldToWalkIn,
   holdBeds, reserveItems,
   unblockBed, uncompBed, releaseHold, unreserveItem, removeFailedReservation,
   checkInReservation, markNoShow, markDeparted, cancelReservation,
@@ -589,10 +589,35 @@ export default function ManageView({
     })
   }
 
-  // applyToPair=false on every call → act on EXACTLY the selected seats.
-  // The shared Guest name applies to create/comp/hold; the period only to Rent.
-  const bulkBlock = () => runBulkSeq(i => blockBed(site.id!, i.id, undefined, accessKey, false, workerArg))
-  const bulkComp = () => runBulkSeq(i => compBed(site.id!, i.id, accessKey, false, bulkGuestName.trim() || undefined, undefined, workerArg))
+  // Grouped Block: one all-or-nothing reservation over all selected seats (mirrors bulkReserve).
+  // A conflict on ANY seat → nothing created, conflict error shown, selection preserved.
+  const bulkBlock = () => {
+    if (selectedIds.length === 0) return
+    setBulkError(null)
+    startBulkTransition(async () => {
+      const res = await blockBeds(site.id!, selectedIds, undefined, accessKey, workerArg)
+      if (res.status === 'error') {
+        setBulkError(t('bulkGroupConflict'))
+      } else {
+        router.refresh()
+        setSelectedIds([])
+      }
+    })
+  }
+  // Grouped Comp: one all-or-nothing comp reservation over all selected seats.
+  const bulkComp = () => {
+    if (selectedIds.length === 0) return
+    setBulkError(null)
+    startBulkTransition(async () => {
+      const res = await compBeds(site.id!, selectedIds, accessKey, bulkGuestName.trim() || undefined, undefined, workerArg)
+      if (res.status === 'error') {
+        setBulkError(t('bulkGroupConflict'))
+      } else {
+        router.refresh()
+        setSelectedIds([])
+      }
+    })
+  }
   const bulkReserve = () => {
     if (selectedIds.length === 0) return
     setBulkError(null)
