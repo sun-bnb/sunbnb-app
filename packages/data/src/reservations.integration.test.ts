@@ -263,11 +263,12 @@ describe('reserveWithConflictGuard — non-blocking statuses', () => {
     expect(true).toBe(true) // documentation test — see unit suite for predicate coverage
   })
 
-  // track 012: operational status NEVER frees a bed — availability blocks on
-  // date-range + payment status only. A no-show/departed reservation still holds
-  // its range (a departed day-1 of a multiday stay must not free days 2–3);
-  // reuse is an explicit release (status -> canceled), not an op-status side effect.
-  it('NO_SHOW operational status STILL blocks (op-status never frees a bed)', async () => {
+  // track 012 stay-over rule: a no-show/departed booking frees its bed only once
+  // its stay is OVER (no remaining reserved days, to <= end of today). These two
+  // use a FUTURE range (08-01..08-07), so the booking still has days left → it
+  // stays blocking (a departed day-1 of a multiday stay must not free days 2–3).
+  // The released (stay-over) case is the test below them.
+  it('NO_SHOW with remaining days STILL blocks (stay not over)', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id)
     const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
@@ -296,7 +297,7 @@ describe('reserveWithConflictGuard — non-blocking statuses', () => {
     expect(result.outcome).toBe('conflict')
   })
 
-  it('DEPARTED operational status STILL blocks (op-status never frees a bed)', async () => {
+  it('DEPARTED with remaining days STILL blocks (stay not over)', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id)
     const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
@@ -323,6 +324,38 @@ describe('reserveWithConflictGuard — non-blocking statuses', () => {
     })
 
     expect(result.outcome).toBe('conflict')
+  })
+
+  // The released case: a SAME-DAY booking (to = end of today), departed → stay is
+  // over → the bed is freed, so a new booking on the same item is created. This is
+  // what makes single-day and last-day departures re-bookable (the turnover case).
+  it('DEPARTED whose stay is OVER frees the bed (same-day → re-bookable)', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
+
+    const from = new Date(new Date().setHours(0, 0, 0, 0))
+    const to = new Date(new Date().setHours(23, 59, 59, 999))
+
+    await createTestReservation(user.id, site.id, [item.id], {
+      from,
+      to,
+      status: RESERVATION_COMPLETE,
+      operationalStatus: OP_DEPARTED,
+    })
+
+    const result = await reserveWithConflictGuard({
+      itemIds: [item.id],
+      siteId: site.id,
+      userId: user.id,
+      from,
+      to,
+      type: 'days',
+      status: RESERVATION_PAID_IN_CASH,
+      operationalStatus: OP_WALKED_IN,
+    })
+
+    expect(result.outcome).toBe('created')
   })
 })
 

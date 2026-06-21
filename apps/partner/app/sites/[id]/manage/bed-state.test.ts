@@ -11,10 +11,13 @@ import {
 } from '@repo/data/reservation-status'
 
 // Minimal InventoryItem-shaped factory — bed-state only reads `reservations`,
-// and within each reservation only `operationalStatus`, `status`, and `today`.
-const item = (reservations: Array<{ operationalStatus: string; status?: string; today?: any }>) =>
+// and within each reservation only `operationalStatus`, `status`, `today`, `stayOver`.
+const item = (reservations: Array<{ operationalStatus: string; status?: string; today?: any; stayOver?: boolean }>) =>
   ({ reservations }) as any
-const res = (operationalStatus: string, status = 'paid-in-cash', today?: any) => ({ operationalStatus, status, today })
+// `stayOver` = the booking's stay is over (no remaining reserved days). A
+// departed/no-show booking only releases its bed when stayOver is true.
+const res = (operationalStatus: string, status = 'paid-in-cash', today?: any, stayOver?: boolean) =>
+  ({ operationalStatus, status, today, stayOver })
 
 describe('isFailedReservationStatus', () => {
   it('is true for the canonical payment_failed constant', () => {
@@ -34,12 +37,28 @@ describe('getActiveReservation', () => {
   it('returns null when there are no reservations', () => {
     expect(getActiveReservation(item([]))).toBeNull()
   })
-  it('filters out departed / no-show reservations', () => {
-    expect(getActiveReservation(item([res(OP_DEPARTED), res(OP_NO_SHOW)]))).toBeNull()
+  it('filters out departed / no-show reservations whose stay is over (released)', () => {
+    expect(getActiveReservation(item([
+      res(OP_DEPARTED, undefined, undefined, true),
+      res(OP_NO_SHOW, undefined, undefined, true),
+    ]))).toBeNull()
   })
-  it('returns the live reservation, ignoring a departed one on the same seat', () => {
-    const active = getActiveReservation(item([res(OP_DEPARTED), res(OP_CHECKED_IN)]))
+  it('returns the live reservation, ignoring a released departed one on the same seat', () => {
+    const active = getActiveReservation(item([res(OP_DEPARTED, undefined, undefined, true), res(OP_CHECKED_IN)]))
     expect(active?.operationalStatus).toBe(OP_CHECKED_IN)
+  })
+
+  // ── Stay-over rule (track 012): departed/no-show only releases when stay is over ──
+  it('keeps a departed booking whose stay is NOT over (multiday, future days) as active', () => {
+    // departedAt today but to is in the future → stayOver=false → still held.
+    const active = getActiveReservation(item([res(OP_DEPARTED, undefined, undefined, false)]))
+    expect(active?.operationalStatus).toBe(OP_DEPARTED)
+  })
+  it('a mid-stay departed bed renders as reserved (expected), never available/green', () => {
+    expect(getBedState(item([res(OP_DEPARTED, undefined, undefined, false)]))).toBe('expected')
+  })
+  it('a released (stay-over) departed bed renders as available/green', () => {
+    expect(getBedState(item([res(OP_DEPARTED, undefined, undefined, true)]))).toBe('available')
   })
   it('prefers a non-failed reservation when both a failed and a paid one coexist', () => {
     const active = getActiveReservation(item([

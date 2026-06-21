@@ -10,6 +10,8 @@ import {
   RESERVATION_PAID_IN_CASH,
   RESERVATION_CANCELED,
   OP_EXPECTED,
+  OP_NO_SHOW,
+  OP_DEPARTED,
 } from '@repo/data/reservation-status'
 
 /**
@@ -183,15 +185,23 @@ export async function getAvailableSunbeds(
     select: { id: true, number: true, category: true, pairId: true },
   })
 
+  // A no-show/departed booking frees its bed ONLY once its stay is over (no
+  // remaining reserved days, `to` <= end of today); a multiday booking departed
+  // mid-stay keeps blocking its future days. (track 012)
+  const endOfToday = new Date()
+  endOfToday.setHours(23, 59, 59, 999)
+
   // Get item IDs that have overlapping reservations
   const reservedItems = await prisma.reservation.findMany({
     where: {
       siteId,
       status: { notIn: [RESERVATION_CANCELED] },
-      // Operational status does NOT free a bed — a no-show/departed reservation
-      // still blocks its date range (track 012); reuse via explicit release.
       from: { lte: toDate },
       to: { gte: fromDate },
+      NOT: {
+        operationalStatus: { in: [OP_NO_SHOW, OP_DEPARTED] },
+        to: { lte: endOfToday },
+      },
     },
     select: { items: { select: { id: true } } },
   })

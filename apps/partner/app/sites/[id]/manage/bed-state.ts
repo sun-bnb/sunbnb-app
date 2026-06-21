@@ -39,8 +39,22 @@ function effectiveOpStatus(r: Reservation): string {
 }
 
 /**
- * Returns the active reservation for a seat, filtering out departed / no-show
- * ones based on TODAY's operational state (not the parent's legacy field).
+ * A departed/no-show booking only RELEASES the bed once its stay is over — i.e.
+ * it has no remaining reserved days (`r.stayOver`, computed server-side). A
+ * single-day or last-day departure is released (bed free); a multiday booking
+ * departed mid-stay keeps holding the bed for its future days. (track 012)
+ *
+ * Keeps availability and the grid in lockstep: this is the same condition the
+ * conflict guard / availability queries use, so "green" always means "bookable".
+ */
+function isReleased(r: Reservation): boolean {
+  const eff = effectiveOpStatus(r)
+  return (eff === OP_DEPARTED || eff === OP_NO_SHOW) && r.stayOver === true
+}
+
+/**
+ * Returns the active reservation for a seat. A departed/no-show booking is only
+ * dropped once its stay is over (released); mid-stay it is still the active hold.
  *
  * Prefers a non-failed reservation: if multiple candidates remain, the first
  * non-failed one is returned. A failed reservation is returned only when it is
@@ -49,9 +63,7 @@ function effectiveOpStatus(r: Reservation): string {
  */
 export function getActiveReservation(item: InventoryItem): Reservation | null {
   if (!item.reservations?.length) return null
-  const candidates = item.reservations.filter(r =>
-    !([OP_DEPARTED, OP_NO_SHOW] as string[]).includes(effectiveOpStatus(r))
-  )
+  const candidates = item.reservations.filter(r => !isReleased(r))
   if (candidates.length === 0) return null
   const nonFailed = candidates.find(r => !isFailedReservationStatus(r.status))
   return nonFailed ?? candidates[0]!
@@ -66,6 +78,10 @@ export function getBedState(item: InventoryItem): BedState {
   const res = getActiveReservation(item)
   if (!res) return 'available'
   const opStatus = effectiveOpStatus(res)
+  // A departed/no-show booking that survived getActiveReservation is NOT yet
+  // released (multiday, future days remain) — it still holds the bed. Render it
+  // as reserved ("expected"), never green: not bookable ⇒ not green. (track 012)
+  if (opStatus === OP_DEPARTED || opStatus === OP_NO_SHOW) return 'expected'
   switch (opStatus) {
     case OP_EXPECTED: return 'expected'
     case OP_CHECKED_IN: return 'checked-in'

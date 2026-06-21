@@ -103,14 +103,23 @@ export default async function ManagePage({ params, searchParams }: { params: { i
     return <ErrorCard title="Not authorized" message="This access key is not valid for this site. Please contact the site operator." showBackLink={false} />
   }
 
+  // A booking's stay is "over" when it has no remaining reserved days — `to` is on
+  // or before the end of today. `to` is stored as server-tz end-of-day, so compute
+  // the boundary server-side (here) and pass a flag down, so the client grid never
+  // does a tz-skewed comparison. A departed/no-show booking frees its bed (green +
+  // bookable) only when stayOver; mid-stay it stays held. (track 012)
+  const endOfToday = new Date()
+  endOfToday.setHours(23, 59, 59, 999)
+
   // Lazy-upsert today's ReservationDay row for each non-blocked reservation,
-  // then attach the resulting row to the reservation object so the view and
-  // BedDetail can read today's operational state without an extra query.
+  // then attach the resulting row (+ the stayOver flag) to the reservation object
+  // so the view and BedDetail can read today's state without an extra query.
   for (const item of site.inventoryItems ?? []) {
     for (const res of item.reservations ?? []) {
+      // Mutate in place — the site object is only read once (server render).
+      ;(res as any).stayOver = res.to <= endOfToday
       if (res.operationalStatus === 'blocked') continue
       const todayRow = await resolveTodayRow(res, siteForDay)
-      // Mutate in place — the site object is only read once (server render).
       ;(res as any).today = todayRow
     }
   }

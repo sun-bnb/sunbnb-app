@@ -19,12 +19,13 @@
  *   - Default `blockingStatuses`: PENDING, PROCESSING, COMPLETE, PAID_IN_CASH
  *     (i.e. BLOCKING_STATUSES from reservation-status.ts). PAYMENT_FAILED,
  *     CANCELED, REFUNDED are non-blocking by default — those beds are free again.
- *   - Operational status does NOT free a bed (track 012, decision: availability
- *     blocks on date-range + payment status only). A reservation blocks its whole
- *     date range regardless of operationalStatus — a no-show/departed bed is
- *     reused by an explicit release (status -> canceled), not by op-status. The
- *     `nonBlockingOpStatuses` param still exists for callers that need it, but
- *     defaults to [] (nothing freed by op-status).
+ *   - Operational status frees a bed ONLY when the booking's stay is OVER, i.e. it
+ *     has no remaining reserved days (`to` <= end of today). So a no-show/departed
+ *     single-day or last-day booking frees its bed (rebookable); a multiday booking
+ *     departed mid-stay keeps its future days (no double-sell). A reservation with
+ *     future days is reused only by an explicit release (status -> canceled).
+ *     (track 012). The `nonBlockingOpStatuses` param unconditionally frees the
+ *     listed op-statuses on top of this; defaults to [].
  *   - Date overlap: standard half-open / closed interval —
  *     existing.from <= requested.to AND existing.to >= requested.from
  *
@@ -40,6 +41,8 @@ import { Prisma } from '@prisma/client'
 import prisma from '../index'
 import {
   BLOCKING_STATUSES,
+  OP_DEPARTED,
+  OP_NO_SHOW,
   OP_RETURNED,
   RENTAL_CANCELED,
 } from './reservation-status'
@@ -71,10 +74,10 @@ export type ConflictGuardOptions = {
    */
   blockingStatuses?: readonly string[]
   /**
-   * Operational statuses that are NON-blocking (i.e. excluded from the conflict check).
-   * Defaults to [] — operational status never frees a bed; availability blocks on
-   * date-range + payment status only (track 012). Reuse a no-show/departed bed via
-   * an explicit release (status -> canceled), not via op-status.
+   * Operational statuses that UNCONDITIONALLY free the bed (excluded from the
+   * conflict check regardless of dates). Defaults to []. Note: no-show/departed
+   * are handled separately by the stay-over rule (freed only once `to` <= today),
+   * so they do NOT belong here.
    */
   nonBlockingOpStatuses?: readonly string[]
 }
@@ -109,6 +112,14 @@ async function findConflictingReservation(
     excludeReservationId?: string
   }
 ): Promise<{ id: string } | null> {
+  // A departed/no-show booking still HOLDS its bed until its stay is over — i.e.
+  // until it has no remaining reserved days (`to` is on/before the end of today).
+  // Once over it frees the bed: single-day and last-day departures become
+  // rebookable; a multiday booking departed mid-stay keeps its future days (no
+  // double-sell). `to` is stored as server-tz end-of-day (dayjs().endOf('day')),
+  // so the boundary is server-tz end of today — matched by construction. (track 012)
+  const endOfToday = new Date()
+  endOfToday.setHours(23, 59, 59, 999)
   return tx.reservation.findFirst({
     where: {
       siteId: params.siteId,
@@ -117,6 +128,12 @@ async function findConflictingReservation(
       from: { lte: params.to },
       to: { gte: params.from },
       items: { some: { id: { in: params.itemIds } } },
+      // Stay-over exception: a no-show/departed booking whose stay is over is
+      // non-blocking (its bed is free); one with future days still blocks.
+      NOT: {
+        operationalStatus: { in: [OP_DEPARTED, OP_NO_SHOW] },
+        to: { lte: endOfToday },
+      },
       ...(params.excludeReservationId
         ? { id: { not: params.excludeReservationId } }
         : {}),

@@ -118,6 +118,13 @@ export interface Reservation {
   items?: InventoryItem[] | null
   /** Today's per-day operational state row. Absent for blocked reservations. */
   today?: ReservationDayRow | null
+  /**
+   * Whether the booking's stay is over (no remaining reserved days — `to` is on
+   * or before the end of today). Computed server-side so client/server timezones
+   * can't skew the comparison. A departed/no-show booking only frees its bed when
+   * this is true (single-day or last day); mid-stay it stays held. (track 012)
+   */
+  stayOver?: boolean
 }
 
 export interface InventoryItem {

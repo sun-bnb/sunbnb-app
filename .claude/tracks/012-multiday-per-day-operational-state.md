@@ -111,6 +111,21 @@ cycle). Early-checkout / release-rest-of-stay is a separate cancel/edit concern,
 
 ## Log
 
+- **2026-06-21 — P2 refined to the STAY-OVER rule (corrects the day before).** The earlier P2
+  "op-status never frees a bed" was too blunt: it broke same-day walk-in turnover (rent → depart →
+  re-rent failed "already reserved for part of this period") AND left the grid lying (the departed
+  seat painted green/available but wasn't bookable). **User decision:** a no-show/departed booking
+  frees its bed only once its **stay is over** — no remaining reserved days (`to` <= end of today,
+  server-tz, matching how walk-in `to` is stored). So single-day and last-day departures are
+  re-bookable; a multiday booking departed mid-stay stays held (no double-sell). Applied the SAME
+  `stayOver`/`to <= endOfToday` exception consistently to all three availability paths
+  (`reserveWithConflictGuard` NOT-clause, `getAvailableSunbeds`, `availabilityService`) AND to
+  `bed-state` (via a server-computed `Reservation.stayOver` flag threaded from `page.tsx`) — so
+  "green ⟺ bookable" by construction. A mid-stay departed bed renders as reserved (`expected`), never
+  green. Re-revised the P2 tests: same-day manage-grouped depart/no-show → re-rent SUCCEEDS again;
+  future-dated guard tests still block; added direct "same-day departed → guard returns created" +
+  3 bed-state stay-over unit tests. Green: data 235u+132i, partner 1578u+130i, user 332u+45i, lints
+  clean. (Browser-verify skipped at user's request.) Orchestrator (coupled cross-app + consumer-facing).
 - **2026-06-20 — P2 (availability double-sell) landed; DECISION on the availability invariant.**
   Discovered while scoping P2: the plan's "don't touch availability, it already blocks whole-stay"
   was wrong — the conflict guard (`reservations.ts`), calendar `getAvailableSunbeds`, and the user
