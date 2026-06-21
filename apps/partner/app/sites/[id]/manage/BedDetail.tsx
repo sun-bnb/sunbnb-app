@@ -423,9 +423,9 @@ export default function BedDetail({
   )
 
   // Badge label: show "Hold" for staff holds so staff can tell them from paid bookings
-  const badgeLabel = (state === 'expected' && reservation?.status === RESERVATION_HELD)
-    ? t('held')
-    : stateLabels[state]
+  // A hold and an online booking both read as "Reserved" (unified) — the €/●
+  // marker carries the paid-vs-hold distinction, not a separate label. (track 012)
+  const badgeLabel = stateLabels[state]
 
   return (
     <div
