@@ -112,6 +112,8 @@ export default function CreateRentalModal({
 
       // For 'card', create as cash so paymentAmount is persisted, then open the
       // QR collect modal. The collect modal handles reverting to cash on cancel.
+      // recordCashSettlement=true ONLY for genuine cash — the card path must NOT
+      // record a TillEntry here; the online Mollie collect is the actual payment.
       const wirePaymentType = paymentType === 'card' ? 'cash' : paymentType
 
       const result = await createWalkInRental({
@@ -121,6 +123,7 @@ export default function CreateRentalModal({
         hours: durationType === 'hours' ? hours : undefined,
         guestName: guestName || undefined,
         paymentType: wirePaymentType,
+        recordCashSettlement: paymentType === 'cash',
         accessKey,
         employeeId: currentWorkerId,
       })

@@ -11,5 +11,6 @@ import { vi } from 'vitest'
  */
 export const getOpenTill = vi.fn().mockResolvedValue({ total: 0, count: 0 })
 export const getTillByEmployee = vi.fn().mockResolvedValue([])
-export const recordSettlement = vi.fn().mockResolvedValue({ id: 'te-mock-1', amount: 10, siteId: 'site-1', reservationId: null, employeeId: null, settledAt: new Date(), voidedAt: null, createdAt: new Date() })
+export const recordSettlement = vi.fn().mockResolvedValue({ id: 'te-mock-1', amount: 10, siteId: 'site-1', reservationId: null, rentalBookingId: null, employeeId: null, settledAt: new Date(), voidedAt: null, createdAt: new Date() })
 export const voidSettlementsForReservation = vi.fn().mockResolvedValue(0)
+export const voidSettlementsForRentalBooking = vi.fn().mockResolvedValue(0)

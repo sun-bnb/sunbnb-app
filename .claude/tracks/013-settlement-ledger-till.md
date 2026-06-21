@@ -90,15 +90,27 @@ settlement `voided_at` set + reservation deleted + entry survives via `reservati
 SetNull. Test data cleaned up. **READY TO COMMIT** (P0a+P1+P2, uncommitted — includes the
 `TillEntry` migration). Then **P3** rentals onto the ledger (deferred).
 
-**Uncommitted footprint so far (P0a + P1):** `packages/data` schema + migration
-`20260621151602_add_till_entry_ledger` + `src/till.ts` + till tests; `apps/partner` actions/
-BedDetail/view/page/types/mock/gated-actions/messages + tests. Schema migration is additive
-(adds to the test-DB migration queue already gated behind track-012).
+**P3a DONE** (data) — `packages/data/src/till.ts` gained `TillEntry.rentalBookingId`,
+`recordSettlement` generalized (accepts `rentalBookingId?`), `voidSettlementsForRentalBooking`
+added; `getOpenTill`/`getTillByEmployee` re-sourced from ledger (no separate rentalBooking
+aggregate). Cash rentals no longer reach the till until a `TillEntry` is recorded.
 
-- **Context:** `packages/data/src/till.ts` (current `getOpenTill`/`getTillByEmployee`,
-  both filter `operationalStatus: OP_WALKED_IN`); `packages/data/prisma/schema.prisma`
-  Reservation/Employee/Settlement(payout) models; `apps/partner/.../manage/actions.ts`
-  `reserveItems` (walk-in create) + `getTillStatus`/`closeTill`; the per-worker till UI
-  in `TillSheet`/accounting.
+**P3b DONE** (2026-06-21) — `createWalkInRental` (manage/actions.ts) gained `recordCashSettlement?: boolean`.
+Genuine cash path: `CreateRentalModal` passes `recordCashSettlement: true` → `recordSettlement`
+called per booking (amount from guard inputs, never a literal). Card(QR) path: modal wires
+`paymentType='cash'` but omits `recordCashSettlement` (defaults false) — no TillEntry,
+preventing double-count when `collectRentalPayment` (Mollie) settles. Free bookings
+(paymentAmount 0) skip settlement even if flag is set. `voidSettlementsForRentalBooking`
+added to till mock so mock-contract guard passes. 1685 unit + 159 integration green,
+tsc/lint clean. 3 new unit tests (cash/card/free) + 3 new integration tests (genuine-cash
+TillEntry → till reflects; card path no entry; free no entry). **UNCOMMITTED.**
+
+**Uncommitted footprint (P0a + P1 + P2 + P3a + P3b):** `packages/data` schema + migrations
+`20260621151602_add_till_entry_ledger` + `20260621162554_add_till_entry_rental_booking`
++ `src/till.ts` + till tests; `apps/partner` actions (`createWalkInRental` + imports),
+`CreateRentalModal.tsx` (recordCashSettlement wiring), till mock, unit tests, integration
+tests. Schema migrations are additive; push to `main` gated on track-012 test-DB migration.
+
+- **Context:** `packages/data/src/till.ts` owns all ledger helpers; `apps/partner/app/sites/[id]/manage/actions.ts` `createWalkInRental` is the entry point for rental cash settlement; `apps/partner/app/sites/[id]/manage/CreateRentalModal.tsx` is the UI that distinguishes cash vs card vs free.
 - **Blocked by:** nothing (additive). Note: pushing `main` is already gated on the
   track-012 test-DB migration; this adds another additive migration to that queue.

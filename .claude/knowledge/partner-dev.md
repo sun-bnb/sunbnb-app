@@ -17,6 +17,7 @@ pointer here + the full entry in its section below.)*
 - **Component decomposition** — manage page decomposition, shared state boundary, pinch handler scroll-target — see "Decomposing view.tsx manage monolith"
 - **Manage page naming** — hold/reserve/rent action-row distinction — see "Reserve vs Rent vs Hold terminology"
 - **Till conservation** — unreserveItem disconnect + splitWalkInSeat reduce paymentAmount; depart-split pattern — see "Till conservation in per-seat walk-in operations"
+- **Cash rental settlement (track 013 P3b)** — `createWalkInRental` `recordCashSettlement` param; Card(QR) path must NOT pass it; free path auto-skips — see "Cash walk-in rental TillEntry (P3b)"
 - **BedDetail state-machine patterns** — convertHoldToWalkIn in-place update + multi-day $transaction extend, pendingConfirm per-branch guards, inSync-gated toggle, walk-in disconnect depart — see "BedDetail state-machine patterns"
 - **Rejected approaches** — dead-ends, so nobody re-tries them — see "React onWheel prop"
 - **Mollie lib tests** — mocking strategy for app/api/_lib/mollie.ts — see "Testing mollie.ts: mocking boundary + scope separator"
@@ -249,6 +250,20 @@ registry, cleanup cron update, i18n, tests.
 **Registration:** `splitWalkInSeat` is a gated action — registered in `app/test/gated-actions.ts` as `token-or-session`, same as all other manage actions.
 
 **Test pattern for `$transaction` with captured tx args:** Mock `prisma.$transaction.mockImplementationOnce(async (fn: any) => fn({ reservation: { update: vi.fn().mockImplementation((args) => { captured = args; return {} }), create: vi.fn()... } }))`. This intercepts both sides of the transaction with independent captures.
+
+## Cash walk-in rental TillEntry (track 013 P3b)
+
+### 2026-06-21: createWalkInRental — genuine cash vs Card(QR) settlement distinction
+
+**Problem:** After P3a re-sourced the till from the ledger, cash walk-in rentals no longer hit the till because no `TillEntry` was recorded. The fix needed to call `recordSettlement` for genuine cash — but the Card(QR) path also calls `createWalkInRental` with `paymentType='cash'` (so paymentAmount is persisted before `collectRentalPayment`/Mollie). Recording a TillEntry on the card path would double-count: once as cash, once when Mollie settles.
+
+**Distinguishing signal — `recordCashSettlement: boolean` param:** `CreateRentalModal` distinguishes cash/card/free in its own state (`paymentType: 'cash' | 'free' | 'card'`). It wires `paymentType = paymentType === 'card' ? 'cash' : paymentType` for the action, then passes `recordCashSettlement: paymentType === 'cash'` (so card → false, cash → true, free → false because paymentType becomes 'free'). The action records a `TillEntry` per booking only when both `recordCashSettlement === true` AND `paymentType === 'cash'` AND `paymentAmount > 0`. Free bookings auto-skip even if the flag were somehow set (paymentAmount 0 guard).
+
+**Amount source:** Per-booking amount comes from `bookingInputs[i].paymentAmount` — the already-computed DB-fetched price passed to the guard. Never recomputed after guard returns (payments.md). Map booking index → amount before the Promise.all.
+
+**Mock update:** `voidSettlementsForRentalBooking` must be added to `apps/partner/__mocks__/@repo/data/till.ts` whenever the real `@repo/data/till` gains it — the mock-contract guard enforces this.
+
+**Test invariants:** (1) genuine cash → `recordSettlement` called with `rentalBookingId` + the per-booking amount; (2) card path (recordCashSettlement omitted) → `recordSettlement` NOT called; (3) free → NOT called. Assert all three in unit tests. Integration: cash → `TillEntry` exists with `voidedAt: null`, `getTillStatus` reflects it; card path / free → zero entries.
 
 ## BedDetail state-machine patterns
 

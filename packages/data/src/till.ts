@@ -1,16 +1,16 @@
 /**
  * Per-worker cash till — the operational cash-reconciliation layer (track 008,
  * Alonso "Group A"). A worker's "open till" is the cash they've physically taken
- * at a site this shift, recorded as explicit TillEntry ledger rows. The
- * reservation portion of the till is sourced from TillEntry (track 013 P0);
- * the rental portion still comes from RentalBooking.paymentAmount (moves to
- * the ledger in track 013 P3). Closing snapshots the total into a TillClose row;
- * the open till then reads zero.
+ * at a site this shift, recorded as explicit TillEntry ledger rows. The till is
+ * fully ledger-sourced (track 013 P3): reservation settlements and rental
+ * settlements are both TillEntry rows. Closing snapshots the total into a
+ * TillClose row; the open till then reads zero.
  *
  * Ledger helpers exported here:
- *   recordSettlement   — write a TillEntry for cash taken on a reservation
- *   voidSettlementsForReservation — mark cash returned (voids all non-voided
- *                        entries for that reservation so they stop counting)
+ *   recordSettlement              — write a TillEntry for cash taken (reservation
+ *                                   OR rental booking; pass whichever id applies)
+ *   voidSettlementsForReservation — mark cash returned for a reservation
+ *   voidSettlementsForRentalBooking — mark cash returned for a rental booking
  *
  * Read-only aggregation; the caller (partner action) owns auth/ownership. Mirrors
  * the `@repo/data/analytics` pattern. Integration-tested against sunbnb_test.
@@ -18,7 +18,6 @@
 
 import prisma from '../index'
 import { round } from './payment'
-import { RESERVATION_PAID_IN_CASH } from './reservation-status'
 
 export interface OpenTill {
   total: number
@@ -37,6 +36,7 @@ export interface TillEntryRow {
   id: string
   siteId: string
   reservationId: string | null
+  rentalBookingId: string | null
   employeeId: string | null
   amount: number
   settledAt: Date
@@ -47,20 +47,30 @@ export interface TillEntryRow {
 // ─── Ledger Helpers ──────────────────────────────────────────────────────────
 
 /**
- * Record a cash settlement for a reservation.
+ * Record a cash settlement for a reservation OR a rental booking.
+ * Exactly one of reservationId / rentalBookingId should be set (both are
+ * optional so existing callers passing only reservationId keep working).
  * Creates a TillEntry that immediately contributes to the open till.
  * settledAt defaults to now() — pass a specific date only for historical backfills.
  */
 export async function recordSettlement(opts: {
   siteId: string
   reservationId?: string | null
+  rentalBookingId?: string | null
   employeeId?: string | null
   amount: number
   settledAt?: Date
 }): Promise<TillEntryRow> {
-  const { siteId, reservationId = null, employeeId = null, amount, settledAt = new Date() } = opts
+  const {
+    siteId,
+    reservationId = null,
+    rentalBookingId = null,
+    employeeId = null,
+    amount,
+    settledAt = new Date(),
+  } = opts
   return prisma.tillEntry.create({
-    data: { siteId, reservationId, employeeId, amount, settledAt },
+    data: { siteId, reservationId, rentalBookingId, employeeId, amount, settledAt },
   })
 }
 
@@ -72,6 +82,19 @@ export async function recordSettlement(opts: {
 export async function voidSettlementsForReservation(reservationId: string): Promise<number> {
   const result = await prisma.tillEntry.updateMany({
     where: { reservationId, voidedAt: null },
+    data: { voidedAt: new Date() },
+  })
+  return result.count
+}
+
+/**
+ * Void all non-voided TillEntry rows for a rental booking, recording that cash
+ * left the drawer (future rental-refund flow). Returns the number of rows voided
+ * (0 if none existed or all already voided).
+ */
+export async function voidSettlementsForRentalBooking(rentalBookingId: string): Promise<number> {
+  const result = await prisma.tillEntry.updateMany({
+    where: { rentalBookingId, voidedAt: null },
     data: { voidedAt: new Date() },
   })
   return result.count
@@ -90,10 +113,10 @@ function startOfToday(): Date {
  * The worker's open till at a site: cash taken since the later of their last
  * close and the start of today (a till is a daily drawer).
  *
- * Reservation portion: sum of non-voided TillEntry rows attributed to this
- * employee in the window.
- * Rental portion: cash rental bookings (paymentAmount) by this employee in
- * the window — unchanged until track 013 P3 moves rentals to the ledger.
+ * Fully ledger-sourced (track 013 P3): sums all non-voided TillEntry rows
+ * attributed to this employee in the window. Rental settlements are now
+ * TillEntry rows (backfilled by migration 20260621162554_add_till_entry_rental_booking),
+ * so no separate rentalBooking aggregate is needed.
  */
 export async function getOpenTill(siteId: string, employeeId: string): Promise<OpenTill> {
   const lastClose = await prisma.tillClose.findFirst({
@@ -104,24 +127,15 @@ export async function getOpenTill(siteId: string, employeeId: string): Promise<O
   const today = startOfToday()
   const since = lastClose && lastClose.closedAt > today ? lastClose.closedAt : today
 
-  const [entries, rent] = await Promise.all([
-    // Reservation portion: explicit ledger entries
-    prisma.tillEntry.aggregate({
-      where: { siteId, employeeId, voidedAt: null, settledAt: { gt: since } },
-      _sum: { amount: true },
-      _count: true,
-    }),
-    // Rental portion: cash rental bookings (unchanged until P3)
-    prisma.rentalBooking.aggregate({
-      where: { siteId, employeeId, status: RESERVATION_PAID_IN_CASH, createdAt: { gt: since } },
-      _sum: { paymentAmount: true },
-      _count: true,
-    }),
-  ])
+  const entries = await prisma.tillEntry.aggregate({
+    where: { siteId, employeeId, voidedAt: null, settledAt: { gt: since } },
+    _sum: { amount: true },
+    _count: true,
+  })
 
   return {
-    total: round((entries._sum.amount ?? 0) + (rent._sum.paymentAmount ?? 0)),
-    count: entries._count + rent._count,
+    total: round(entries._sum.amount ?? 0),
+    count: entries._count,
   }
 }
 
@@ -130,8 +144,9 @@ export async function getOpenTill(siteId: string, employeeId: string): Promise<O
  * Returns every roster employee of the site's account (zero rows included), plus
  * any departed/removed employee who still has attributed cash in-window.
  *
- * Reservation portion: non-voided TillEntry rows with settledAt in [from, to].
- * Rental portion: cash rental bookings with createdAt in [from, to].
+ * Fully ledger-sourced (track 013 P3): sums non-voided TillEntry rows with
+ * settledAt in [from, to]. Both reservation and rental settlements are ledger
+ * rows, so no separate rentalBooking groupBy is needed.
  */
 export async function getTillByEmployee(siteId: string, from: Date, to: Date): Promise<EmployeeTill[]> {
   const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
@@ -143,22 +158,12 @@ export async function getTillByEmployee(siteId: string, from: Date, to: Date): P
     orderBy: { name: 'asc' },
   })
 
-  const [entriesByEmp, rentByEmp] = await Promise.all([
-    // Reservation portion: non-voided ledger entries in window
-    prisma.tillEntry.groupBy({
-      by: ['employeeId'],
-      where: { siteId, employeeId: { not: null }, voidedAt: null, settledAt: { gte: from, lte: to } },
-      _sum: { amount: true },
-      _count: true,
-    }),
-    // Rental portion: cash rental bookings in window
-    prisma.rentalBooking.groupBy({
-      by: ['employeeId'],
-      where: { siteId, status: RESERVATION_PAID_IN_CASH, employeeId: { not: null }, createdAt: { gte: from, lte: to } },
-      _sum: { paymentAmount: true },
-      _count: true,
-    }),
-  ])
+  const entriesByEmp = await prisma.tillEntry.groupBy({
+    by: ['employeeId'],
+    where: { siteId, employeeId: { not: null }, voidedAt: null, settledAt: { gte: from, lte: to } },
+    _sum: { amount: true },
+    _count: true,
+  })
 
   const tally = new Map<string, { total: number; count: number }>()
   const add = (id: string | null, amount: number | null, count: number) => {
@@ -169,7 +174,6 @@ export async function getTillByEmployee(siteId: string, from: Date, to: Date): P
     tally.set(id, cur)
   }
   for (const r of entriesByEmp) add(r.employeeId, r._sum.amount, r._count)
-  for (const r of rentByEmp) add(r.employeeId, r._sum.paymentAmount, r._count)
 
   // Every account employee maps to a tally (zero when no in-window sales). Deleting
   // an Employee SetNulls the FK and inactive ones stay on the roster, so there are

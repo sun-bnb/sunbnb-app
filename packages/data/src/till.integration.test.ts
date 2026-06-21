@@ -10,7 +10,13 @@ import {
   createTestRentalBooking,
   resetCounter,
 } from './test/fixtures'
-import { getOpenTill, getTillByEmployee, recordSettlement, voidSettlementsForReservation } from './till'
+import {
+  getOpenTill,
+  getTillByEmployee,
+  recordSettlement,
+  voidSettlementsForReservation,
+  voidSettlementsForRentalBooking,
+} from './till'
 
 beforeEach(async () => {
   await cleanDatabase()
@@ -30,9 +36,9 @@ async function setup() {
   return { user, site, item, rentalItem, mkEmp }
 }
 
-// ─── recordSettlement ────────────────────────────────────────────────────────
+// ─── recordSettlement (reservation) ─────────────────────────────────────────
 
-describe('recordSettlement', () => {
+describe('recordSettlement (reservation)', () => {
   it('creates a TillEntry row with the given fields', async () => {
     const { user, site, item, mkEmp } = await setup()
     const alice = await mkEmp('Alice')
@@ -44,6 +50,7 @@ describe('recordSettlement', () => {
 
     expect(entry.siteId).toBe(site.id)
     expect(entry.reservationId).toBe(res.id)
+    expect(entry.rentalBookingId).toBeNull()
     expect(entry.employeeId).toBe(alice.id)
     expect(entry.amount).toBe(25)
     expect(entry.voidedAt).toBeNull()
@@ -66,6 +73,58 @@ describe('recordSettlement', () => {
     const alice = await mkEmp('Alice')
     const entry = await recordSettlement({ siteId: site.id, employeeId: alice.id, amount: 10 })
     expect(entry.reservationId).toBeNull()
+    expect(entry.rentalBookingId).toBeNull()
+  })
+})
+
+// ─── recordSettlement (rental booking) ──────────────────────────────────────
+
+describe('recordSettlement (rentalBookingId)', () => {
+  it('creates a TillEntry row linked to the rental booking', async () => {
+    const { user, site, rentalItem, mkEmp } = await setup()
+    const alice = await mkEmp('Alice')
+    const rb = await createTestRentalBooking(user.id, site.id, rentalItem.id, {
+      status: 'paid-in-cash',
+      paymentAmount: 30,
+      employeeId: alice.id,
+    })
+
+    const before = Date.now()
+    const entry = await recordSettlement({ siteId: site.id, rentalBookingId: rb.id, employeeId: alice.id, amount: 30 })
+    const after = Date.now()
+
+    expect(entry.siteId).toBe(site.id)
+    expect(entry.rentalBookingId).toBe(rb.id)
+    expect(entry.reservationId).toBeNull()
+    expect(entry.employeeId).toBe(alice.id)
+    expect(entry.amount).toBe(30)
+    expect(entry.voidedAt).toBeNull()
+    expect(entry.settledAt.getTime()).toBeGreaterThanOrEqual(before)
+    expect(entry.settledAt.getTime()).toBeLessThanOrEqual(after)
+  })
+
+  it('rental booking entry contributes to the open till', async () => {
+    const { user, site, rentalItem, mkEmp } = await setup()
+    const alice = await mkEmp('Alice')
+    const rb = await createTestRentalBooking(user.id, site.id, rentalItem.id, {
+      status: 'paid-in-cash',
+      paymentAmount: 20,
+      employeeId: alice.id,
+    })
+
+    await recordSettlement({ siteId: site.id, rentalBookingId: rb.id, employeeId: alice.id, amount: 20 })
+
+    expect(await getOpenTill(site.id, alice.id)).toEqual({ total: 20, count: 1 })
+  })
+
+  it('accepts a custom settledAt for rental booking (historical backfill)', async () => {
+    const { user, site, rentalItem, mkEmp } = await setup()
+    const alice = await mkEmp('Alice')
+    const rb = await createTestRentalBooking(user.id, site.id, rentalItem.id, { status: 'paid-in-cash', paymentAmount: 15, employeeId: alice.id })
+    const historical = new Date('2024-06-01T08:00:00Z')
+
+    const entry = await recordSettlement({ siteId: site.id, rentalBookingId: rb.id, employeeId: alice.id, amount: 15, settledAt: historical })
+    expect(entry.settledAt).toEqual(historical)
   })
 })
 
@@ -102,19 +161,64 @@ describe('voidSettlementsForReservation', () => {
   })
 })
 
+// ─── voidSettlementsForRentalBooking ────────────────────────────────────────
+
+describe('voidSettlementsForRentalBooking', () => {
+  it('voids all non-voided entries for a rental booking and returns the count', async () => {
+    const { user, site, rentalItem, mkEmp } = await setup()
+    const alice = await mkEmp('Alice')
+    const rb = await createTestRentalBooking(user.id, site.id, rentalItem.id, { status: 'paid-in-cash', paymentAmount: 18, employeeId: alice.id })
+
+    await recordSettlement({ siteId: site.id, rentalBookingId: rb.id, employeeId: alice.id, amount: 18 })
+    expect(await voidSettlementsForRentalBooking(rb.id)).toBe(1)
+
+    const entries = await prisma.tillEntry.findMany({ where: { rentalBookingId: rb.id } })
+    expect(entries).toHaveLength(1)
+    expect(entries[0].voidedAt).not.toBeNull()
+  })
+
+  it('voided rental entry is excluded from the open till', async () => {
+    const { user, site, rentalItem, mkEmp } = await setup()
+    const alice = await mkEmp('Alice')
+    const rb = await createTestRentalBooking(user.id, site.id, rentalItem.id, { status: 'paid-in-cash', paymentAmount: 25, employeeId: alice.id })
+
+    await recordSettlement({ siteId: site.id, rentalBookingId: rb.id, employeeId: alice.id, amount: 25 })
+    await voidSettlementsForRentalBooking(rb.id)
+
+    expect(await getOpenTill(site.id, alice.id)).toEqual({ total: 0, count: 0 })
+  })
+
+  it('is idempotent — voiding a second time returns 0', async () => {
+    const { user, site, rentalItem, mkEmp } = await setup()
+    const alice = await mkEmp('Alice')
+    const rb = await createTestRentalBooking(user.id, site.id, rentalItem.id, { status: 'paid-in-cash', paymentAmount: 12, employeeId: alice.id })
+
+    await recordSettlement({ siteId: site.id, rentalBookingId: rb.id, employeeId: alice.id, amount: 12 })
+    await voidSettlementsForRentalBooking(rb.id)
+    expect(await voidSettlementsForRentalBooking(rb.id)).toBe(0)
+  })
+
+  it('returns 0 when no entries exist for the rental booking', async () => {
+    const { user, site, rentalItem } = await setup()
+    const rb = await createTestRentalBooking(user.id, site.id, rentalItem.id, { status: 'paid-in-cash', paymentAmount: 10 })
+    expect(await voidSettlementsForRentalBooking(rb.id)).toBe(0)
+  })
+})
+
 // ─── getOpenTill — ledger-based ──────────────────────────────────────────────
 
 describe('getOpenTill (ledger-based)', () => {
-  it('sums non-voided TillEntry in the window for the employee', async () => {
+  it('sums reservation + rental TillEntry rows for the employee', async () => {
     const { user, site, item, rentalItem, mkEmp } = await setup()
     const alice = await mkEmp('Alice')
 
     const res1 = await createTestReservation(user.id, site.id, [item.id], { status: 'paid-in-cash', operationalStatus: 'walked-in', paymentAmount: 10, employeeId: alice.id })
     const res2 = await createTestReservation(user.id, site.id, [item.id], { status: 'paid-in-cash', operationalStatus: 'walked-in', paymentAmount: 20, employeeId: alice.id })
+    const rb = await createTestRentalBooking(user.id, site.id, rentalItem.id, { status: 'paid-in-cash', paymentAmount: 15, employeeId: alice.id })
+
     await recordSettlement({ siteId: site.id, reservationId: res1.id, employeeId: alice.id, amount: 10 })
     await recordSettlement({ siteId: site.id, reservationId: res2.id, employeeId: alice.id, amount: 20 })
-    // Cash rental still contributes via the old path
-    await createTestRentalBooking(user.id, site.id, rentalItem.id, { status: 'paid-in-cash', paymentAmount: 15, employeeId: alice.id })
+    await recordSettlement({ siteId: site.id, rentalBookingId: rb.id, employeeId: alice.id, amount: 15 })
 
     expect(await getOpenTill(site.id, alice.id)).toEqual({ total: 45, count: 3 })
   })
@@ -204,6 +308,19 @@ describe('getOpenTill (ledger-based)', () => {
 
     expect(await getOpenTill(site.id, alice.id)).toEqual({ total: 30, count: 1 })
   })
+
+  it('reservation + rental settlements sum together for the same employee', async () => {
+    const { user, site, item, rentalItem, mkEmp } = await setup()
+    const alice = await mkEmp('Alice')
+
+    const res = await createTestReservation(user.id, site.id, [item.id], { status: 'paid-in-cash', operationalStatus: 'walked-in', paymentAmount: 40, employeeId: alice.id })
+    const rb = await createTestRentalBooking(user.id, site.id, rentalItem.id, { status: 'paid-in-cash', paymentAmount: 35, employeeId: alice.id })
+
+    await recordSettlement({ siteId: site.id, reservationId: res.id, employeeId: alice.id, amount: 40 })
+    await recordSettlement({ siteId: site.id, rentalBookingId: rb.id, employeeId: alice.id, amount: 35 })
+
+    expect(await getOpenTill(site.id, alice.id)).toEqual({ total: 75, count: 2 })
+  })
 })
 
 // ─── getTillByEmployee — ledger-based ────────────────────────────────────────
@@ -269,10 +386,13 @@ describe('getTillByEmployee (ledger-based)', () => {
     expect(result).toEqual([{ employeeId: alice.id, name: 'Alice', active: true, total: 35, count: 1 }])
   })
 
-  it('rentals still contribute via the rental booking path', async () => {
+  it('rental settlements contribute via the ledger path (not the old rentalBooking.aggregate)', async () => {
     const { user, site, rentalItem, mkEmp } = await setup()
     const alice = await mkEmp('Alice')
-    await createTestRentalBooking(user.id, site.id, rentalItem.id, { status: 'paid-in-cash', paymentAmount: 22, employeeId: alice.id })
+    const rb = await createTestRentalBooking(user.id, site.id, rentalItem.id, { status: 'paid-in-cash', paymentAmount: 22, employeeId: alice.id })
+
+    // Record the settlement explicitly (as the partner action now does)
+    await recordSettlement({ siteId: site.id, rentalBookingId: rb.id, employeeId: alice.id, amount: 22 })
 
     const n = new Date()
     const from = new Date(n.getFullYear(), n.getMonth(), n.getDate())
@@ -281,17 +401,188 @@ describe('getTillByEmployee (ledger-based)', () => {
     const result = await getTillByEmployee(site.id, from, to)
     expect(result).toEqual([{ employeeId: alice.id, name: 'Alice', active: true, total: 22, count: 1 }])
   })
+
+  it('reservation + rental settlements sum together per employee', async () => {
+    const { user, site, item, rentalItem, mkEmp } = await setup()
+    const alice = await mkEmp('Alice')
+    const bob = await mkEmp('Bob')
+
+    const res = await createTestReservation(user.id, site.id, [item.id], { status: 'paid-in-cash', operationalStatus: 'walked-in', paymentAmount: 30, employeeId: alice.id })
+    const rb1 = await createTestRentalBooking(user.id, site.id, rentalItem.id, { status: 'paid-in-cash', paymentAmount: 20, employeeId: alice.id })
+    const rb2 = await createTestRentalBooking(user.id, site.id, rentalItem.id, { status: 'paid-in-cash', paymentAmount: 50, employeeId: bob.id })
+
+    await recordSettlement({ siteId: site.id, reservationId: res.id, employeeId: alice.id, amount: 30 })
+    await recordSettlement({ siteId: site.id, rentalBookingId: rb1.id, employeeId: alice.id, amount: 20 })
+    await recordSettlement({ siteId: site.id, rentalBookingId: rb2.id, employeeId: bob.id, amount: 50 })
+
+    const n = new Date()
+    const from = new Date(n.getFullYear(), n.getMonth(), n.getDate())
+    const to = new Date(n.getFullYear(), n.getMonth(), n.getDate(), 23, 59, 59)
+
+    const result = await getTillByEmployee(site.id, from, to)
+    expect(result).toEqual([
+      { employeeId: alice.id, name: 'Alice', active: true, total: 50, count: 2 },
+      { employeeId: bob.id, name: 'Bob', active: true, total: 50, count: 1 },
+    ])
+  })
 })
 
 // ─── Backfill correctness ────────────────────────────────────────────────────
 
-describe('backfill — idempotent backfill reproduces the prior till exactly', () => {
-  it('pre-existing walked-in cash reservations have matching TillEntry rows after migration', async () => {
+describe('backfill — rental booking backfill reproduces the prior rental-till total', () => {
+  it('a paid-in-cash rental booking gets a backfilled TillEntry', async () => {
+    const { user, site, rentalItem, mkEmp } = await setup()
+    const alice = await mkEmp('Alice')
+
+    const rb = await createTestRentalBooking(user.id, site.id, rentalItem.id, {
+      status: 'paid-in-cash',
+      paymentAmount: 42,
+      employeeId: alice.id,
+    })
+
+    // Insert the backfill row the same way the migration SQL does (idempotent guard).
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO "till_entry" ("id", "site_id", "rental_booking_id", "employee_id", "amount", "settled_at", "created_at")
+      SELECT
+        concat('te_rb_', rb.id),
+        rb."site_id",
+        rb."id",
+        rb."employee_id",
+        rb."payment_amount",
+        rb."createdAt",
+        NOW()
+      FROM "RentalBooking" rb
+      WHERE rb."id" = '${rb.id}'
+        AND rb."status" = 'paid-in-cash'
+        AND rb."payment_amount" > 0
+        AND NOT EXISTS (
+          SELECT 1 FROM "till_entry" te WHERE te."rental_booking_id" = rb."id"
+        )
+    `)
+
+    const entries = await prisma.tillEntry.findMany({ where: { rentalBookingId: rb.id } })
+    expect(entries).toHaveLength(1)
+    expect(entries[0].amount).toBe(42)
+    expect(entries[0].employeeId).toBe(alice.id)
+    expect(entries[0].voidedAt).toBeNull()
+    expect(entries[0].id).toBe(`te_rb_${rb.id}`)
+  })
+
+  it('backfill is idempotent — running again inserts 0 rows', async () => {
+    const { user, site, rentalItem, mkEmp } = await setup()
+    const alice = await mkEmp('Alice')
+
+    const rb = await createTestRentalBooking(user.id, site.id, rentalItem.id, {
+      status: 'paid-in-cash',
+      paymentAmount: 18,
+      employeeId: alice.id,
+    })
+
+    const backfillSql = `
+      INSERT INTO "till_entry" ("id", "site_id", "rental_booking_id", "employee_id", "amount", "settled_at", "created_at")
+      SELECT
+        concat('te_rb_', rb.id),
+        rb."site_id",
+        rb."id",
+        rb."employee_id",
+        rb."payment_amount",
+        rb."createdAt",
+        NOW()
+      FROM "RentalBooking" rb
+      WHERE rb."id" = '${rb.id}'
+        AND rb."status" = 'paid-in-cash'
+        AND rb."payment_amount" > 0
+        AND NOT EXISTS (
+          SELECT 1 FROM "till_entry" te WHERE te."rental_booking_id" = rb."id"
+        )
+    `
+    await prisma.$executeRawUnsafe(backfillSql)
+    const countAfterFirst = await prisma.tillEntry.count({ where: { rentalBookingId: rb.id } })
+
+    await prisma.$executeRawUnsafe(backfillSql) // run again
+    const countAfterSecond = await prisma.tillEntry.count({ where: { rentalBookingId: rb.id } })
+
+    expect(countAfterFirst).toBe(1)
+    expect(countAfterSecond).toBe(1) // idempotent
+  })
+
+  it('backfill total == prior rental-till total (sum of paymentAmount for paid-in-cash rentals)', async () => {
+    // This test asserts the backfill reproduces the prior till: the pre-P3 till
+    // summed RentalBooking.paymentAmount for all status='paid-in-cash' rows.
+    // After backfill, the TillEntry sum for those bookings must equal that total.
+    const { user, site, rentalItem, mkEmp } = await setup()
+    const alice = await mkEmp('Alice')
+    const bob = await mkEmp('Bob')
+
+    // Create a set of paid-in-cash rental bookings
+    const rb1 = await createTestRentalBooking(user.id, site.id, rentalItem.id, { status: 'paid-in-cash', paymentAmount: 20, employeeId: alice.id })
+    const rb2 = await createTestRentalBooking(user.id, site.id, rentalItem.id, { status: 'paid-in-cash', paymentAmount: 35, employeeId: bob.id })
+    const rb3 = await createTestRentalBooking(user.id, site.id, rentalItem.id, { status: 'paid-in-cash', paymentAmount: 15, employeeId: alice.id })
+    // This one should NOT be backfilled (not paid-in-cash)
+    await createTestRentalBooking(user.id, site.id, rentalItem.id, { status: 'complete', paymentAmount: 50, employeeId: alice.id })
+
+    // The "prior" rental till total: sum of paymentAmount for paid-in-cash bookings
+    const priorTotal = 20 + 35 + 15 // 70
+
+    // Run the backfill for all three
+    for (const rb of [rb1, rb2, rb3]) {
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO "till_entry" ("id", "site_id", "rental_booking_id", "employee_id", "amount", "settled_at", "created_at")
+        SELECT
+          concat('te_rb_', rb.id),
+          rb."site_id",
+          rb."id",
+          rb."employee_id",
+          rb."payment_amount",
+          rb."createdAt",
+          NOW()
+        FROM "RentalBooking" rb
+        WHERE rb."id" = '${rb.id}'
+          AND rb."status" = 'paid-in-cash'
+          AND rb."payment_amount" > 0
+          AND NOT EXISTS (
+            SELECT 1 FROM "till_entry" te WHERE te."rental_booking_id" = rb."id"
+          )
+      `)
+    }
+
+    // TillEntry sum for rental bookings must match the prior till total exactly
+    const result = await prisma.tillEntry.aggregate({
+      where: { siteId: site.id, rentalBookingId: { not: null }, voidedAt: null },
+      _sum: { amount: true },
+    })
+    expect(result._sum.amount).toBe(priorTotal)
+  })
+
+  it('non-paid-in-cash rental bookings are NOT backfilled', async () => {
+    const { user, site, rentalItem, mkEmp } = await setup()
+    const alice = await mkEmp('Alice')
+
+    const rb = await createTestRentalBooking(user.id, site.id, rentalItem.id, {
+      status: 'complete', // not paid-in-cash
+      paymentAmount: 40,
+      employeeId: alice.id,
+    })
+
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO "till_entry" ("id", "site_id", "rental_booking_id", "employee_id", "amount", "settled_at", "created_at")
+      SELECT concat('te_rb_', rb.id), rb."site_id", rb."id", rb."employee_id", rb."payment_amount", rb."createdAt", NOW()
+      FROM "RentalBooking" rb
+      WHERE rb."id" = '${rb.id}'
+        AND rb."status" = 'paid-in-cash'
+        AND rb."payment_amount" > 0
+        AND NOT EXISTS (SELECT 1 FROM "till_entry" te WHERE te."rental_booking_id" = rb."id")
+    `)
+
+    // Should not have been backfilled
+    const entries = await prisma.tillEntry.findMany({ where: { rentalBookingId: rb.id } })
+    expect(entries).toHaveLength(0)
+  })
+
+  it('pre-existing reservation backfill still works (regression)', async () => {
     const { user, site, item, mkEmp } = await setup()
     const alice = await mkEmp('Alice')
 
-    // Simulate a "pre-existing" cash walk-in reservation by creating it directly
-    // (as it would have existed before the backfill migration).
     const res = await createTestReservation(user.id, site.id, [item.id], {
       status: 'paid-in-cash',
       operationalStatus: 'walked-in',
@@ -299,7 +590,6 @@ describe('backfill — idempotent backfill reproduces the prior till exactly', (
       employeeId: alice.id,
     })
 
-    // Insert the backfill row the same way the migration SQL does (idempotent guard).
     await prisma.$executeRawUnsafe(`
       INSERT INTO "till_entry" ("id", "site_id", "reservation_id", "employee_id", "amount", "settled_at", "created_at")
       SELECT
@@ -320,63 +610,9 @@ describe('backfill — idempotent backfill reproduces the prior till exactly', (
         )
     `)
 
-    // The backfill is idempotent — running again inserts 0 rows
-    const countBefore = await prisma.tillEntry.count({ where: { reservationId: res.id } })
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO "till_entry" ("id", "site_id", "reservation_id", "employee_id", "amount", "settled_at", "created_at")
-      SELECT
-        concat('te_', r.id),
-        r."site_id",
-        r."id",
-        r."employee_id",
-        r."payment_amount",
-        r."createdAt",
-        NOW()
-      FROM "Reservation" r
-      WHERE r."id" = '${res.id}'
-        AND r."status" = 'paid-in-cash'
-        AND r."operational_status" = 'walked-in'
-        AND r."payment_amount" > 0
-        AND NOT EXISTS (
-          SELECT 1 FROM "till_entry" te WHERE te."reservation_id" = r."id"
-        )
-    `)
-    const countAfter = await prisma.tillEntry.count({ where: { reservationId: res.id } })
-    expect(countAfter).toBe(countBefore) // idempotent
-
-    // The backfilled entry matches the reservation's paymentAmount exactly
     const entries = await prisma.tillEntry.findMany({ where: { reservationId: res.id } })
     expect(entries).toHaveLength(1)
     expect(entries[0].amount).toBe(42)
-    expect(entries[0].employeeId).toBe(alice.id)
-    expect(entries[0].voidedAt).toBeNull()
-  })
-
-  it('non-walked-in reservations (departed) are NOT backfilled — only walked-in is the prior behavior', async () => {
-    const { user, site, item, mkEmp } = await setup()
-    const alice = await mkEmp('Alice')
-
-    const departed = await createTestReservation(user.id, site.id, [item.id], {
-      status: 'paid-in-cash',
-      operationalStatus: 'departed', // was counted when departed, but backfill matches OLD logic
-      paymentAmount: 50,
-      employeeId: alice.id,
-    })
-
-    // Backfill only targets walked-in
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO "till_entry" ("id", "site_id", "reservation_id", "employee_id", "amount", "settled_at", "created_at")
-      SELECT concat('te_', r.id), r."site_id", r."id", r."employee_id", r."payment_amount", r."createdAt", NOW()
-      FROM "Reservation" r
-      WHERE r."id" = '${departed.id}'
-        AND r."status" = 'paid-in-cash'
-        AND r."operational_status" = 'walked-in'
-        AND r."payment_amount" > 0
-        AND NOT EXISTS (SELECT 1 FROM "till_entry" te WHERE te."reservation_id" = r."id")
-    `)
-
-    // departed reservation has no TillEntry from backfill
-    const entries = await prisma.tillEntry.findMany({ where: { reservationId: departed.id } })
-    expect(entries).toHaveLength(0)
+    expect(entries[0].rentalBookingId).toBeNull()
   })
 })

@@ -680,10 +680,11 @@ model RentalBooking {
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
   employeeId        String?    @map("employee_id")
-  site              Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  rentalItem        RentalItem @relation(fields: [rentalItemId], references: [id], onDelete: Cascade)
-  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  employee          Employee?  @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  site              Site        @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  rentalItem        RentalItem  @relation(fields: [rentalItemId], references: [id], onDelete: Cascade)
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employee          Employee?   @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  tillEntries       TillEntry[]
 }
 
 // Floor-staff roster — scoped to the PartnerAccount (workers rotate across a
@@ -727,20 +728,23 @@ model TillClose {
 // onDelete: SetNull on reservation — an unreserve deletes the reservation but a
 // forfeited/retained settlement must persist and keep counting.
 model TillEntry {
-  id             String       @id @default(cuid())
-  siteId         String       @map("site_id")
-  reservationId  String?      @map("reservation_id")
-  employeeId     String?      @map("employee_id")
-  amount         Float
-  settledAt      DateTime     @map("settled_at")
-  voidedAt       DateTime?    @map("voided_at")
-  createdAt      DateTime     @default(now()) @map("created_at")
-  site           Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  reservation    Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
-  employee       Employee?    @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  id               String        @id @default(cuid())
+  siteId           String        @map("site_id")
+  reservationId    String?       @map("reservation_id")
+  rentalBookingId  String?       @map("rental_booking_id")
+  employeeId       String?       @map("employee_id")
+  amount           Float
+  settledAt        DateTime      @map("settled_at")
+  voidedAt         DateTime?     @map("voided_at")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  site             Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  reservation      Reservation?  @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  rentalBooking    RentalBooking? @relation(fields: [rentalBookingId], references: [id], onDelete: SetNull)
+  employee         Employee?     @relation(fields: [employeeId], references: [id], onDelete: SetNull)
 
   @@index([siteId, employeeId, settledAt])
   @@index([reservationId])
+  @@index([rentalBookingId])
   @@map("till_entry")
 }
 
