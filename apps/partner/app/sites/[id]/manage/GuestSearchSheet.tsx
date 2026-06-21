@@ -1,15 +1,13 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import dayjs from 'dayjs'
 import {
   findReservations,
-  checkInReservation,
-  convertHoldToWalkIn,
   type ReservationMatch,
 } from './actions'
-import { RESERVATION_COMPLETE, RESERVATION_HELD, OP_EXPECTED } from '@repo/data/reservation-status'
+import { RESERVATION_COMPLETE, RESERVATION_HELD } from '@repo/data/reservation-status'
 
 /**
  * The "Guests" host stand (track 010 P2) — reservation lookup + today's arrivals
@@ -17,9 +15,9 @@ import { RESERVATION_COMPLETE, RESERVATION_HELD, OP_EXPECTED } from '@repo/data/
  *
  * Default (no query) shows today's expected arrivals; typing searches name /
  * phone / email across the near future (so the floor reaches bookings the bed
- * grid can't show). Rows hand off to what staff already use: **Locate** jumps to
- * the bed (`onLocate` → `BedDetail` in the parent), and inline **Check in** /
- * **Rent** reuse the existing token-gated actions. Chrome mirrors `TillSheet`.
+ * grid can't show). The sheet is lookup-only: a row is a single tap that jumps
+ * to the booking's bed and opens `BedDetail` (`onLocate` in the parent) — every
+ * action lives there, not here. Chrome mirrors `TillSheet`.
  */
 
 /** Comma-joined bed labels (seatLabel ?? number) for a booking's seats. */
@@ -40,15 +38,12 @@ export default function GuestSearchSheet({
   accessKey,
   onClose,
   onLocate,
-  onRefresh,
 }: {
   siteId: string
   accessKey?: string
   onClose: () => void
   /** Jump to the booking's bed + open BedDetail (resolved by the parent). */
   onLocate: (r: ReservationMatch) => void
-  /** Refresh the grid after an inline check-in / rent. */
-  onRefresh: () => void
 }) {
   const t = useTranslations('Guests')
   const [query, setQuery] = useState('')
@@ -59,21 +54,9 @@ export default function GuestSearchSheet({
   const [stale, setStale] = useState(false)
   /** Non-null when findReservations returned an error shape. */
   const [fetchError, setFetchError] = useState<string | null>(null)
-  const [pending, startTransition] = useTransition()
 
   const q = query.trim()
   const hasQuery = q.length > 0
-
-  async function fetchRows() {
-    const res = await findReservations(siteId, q || undefined, accessKey)
-    if ('reservations' in res) {
-      setRows(res.reservations ?? [])
-      setFetchError(null)
-    } else {
-      // Error shape: { status: 'error', errors: string[] }
-      setFetchError(res.errors?.[0] ?? t('error'))
-    }
-  }
 
   // Initial arrivals load + debounced re-fetch as the query changes.
   useEffect(() => {
@@ -117,21 +100,6 @@ export default function GuestSearchSheet({
         setFetchError(res.errors?.[0] ?? t('error'))
       }
       setLoading(false)
-    })
-  }
-
-  function checkIn(r: ReservationMatch) {
-    startTransition(async () => {
-      const res = await checkInReservation(siteId, r.id, accessKey)
-      if (res.status === 'ok') { await fetchRows(); onRefresh() }
-    })
-  }
-  function rent(r: ReservationMatch) {
-    const itemId = r.items[0]?.id
-    if (!itemId) return
-    startTransition(async () => {
-      const res = await convertHoldToWalkIn(siteId, itemId, accessKey)
-      if (res.status === 'ok') { await fetchRows(); onRefresh() }
     })
   }
 
@@ -197,8 +165,21 @@ export default function GuestSearchSheet({
                 const held = r.status === RESERVATION_HELD
                 const name = r.guestName || r.userEmail || t('guest')
                 const beds = bedLabel(r.items)
+                const fromD = dayjs(r.from)
+                const toD = dayjs(r.to)
+                const days = toD.startOf('day').diff(fromD.startOf('day'), 'day') + 1
+                const dateLabel = days <= 1
+                  ? fromD.format('ddd D MMM')
+                  : `${fromD.format('D MMM')} – ${toD.format('D MMM')}`
                 return (
-                  <div key={r.id} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+                  // The whole row is the action: a single tap jumps to the bed +
+                  // opens BedDetail, where every reservation action lives.
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => onLocate(r)}
+                    className="w-full text-left rounded-xl border border-gray-200 dark:border-gray-700 p-3 active:bg-gray-50 dark:active:bg-gray-800/50"
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="font-bold truncate">
@@ -208,6 +189,10 @@ export default function GuestSearchSheet({
                         <div className="text-sm text-gray-500 dark:text-gray-400 truncate">
                           {beds && <span aria-hidden="true">🛏 </span>}{beds}
                           {r.internalNotes && <span className="italic"> · {r.internalNotes}</span>}
+                        </div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                          <span aria-hidden="true">📅 </span>{dateLabel}
+                          <span className="text-gray-400"> · {days}d</span>
                         </div>
                       </div>
                       <span className={`flex-shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-full ${
@@ -224,37 +209,7 @@ export default function GuestSearchSheet({
                           : paid ? t('paid') : held ? t('hold') : t('seated')}
                       </span>
                     </div>
-
-                    {today && (
-                      <div className="mt-2 flex gap-2">
-                        <button
-                          onClick={() => onLocate(r)}
-                          disabled={pending}
-                          className="flex-1 py-2.5 rounded-lg text-sm font-bold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 active:bg-gray-200 dark:active:bg-gray-700 disabled:opacity-50"
-                        >
-                          {t('locate')}
-                        </button>
-                        {paid && r.operationalStatus === OP_EXPECTED && (
-                          <button
-                            onClick={() => checkIn(r)}
-                            disabled={pending}
-                            className="flex-1 py-2.5 rounded-lg text-sm font-bold bg-accent text-white active:bg-accent-hover disabled:opacity-50"
-                          >
-                            {pending ? '…' : t('checkIn')}
-                          </button>
-                        )}
-                        {held && r.operationalStatus === OP_EXPECTED && (
-                          <button
-                            onClick={() => rent(r)}
-                            disabled={pending}
-                            className="flex-1 py-2.5 rounded-lg text-sm font-bold bg-orange-500 text-white active:bg-orange-600 disabled:opacity-50"
-                          >
-                            {pending ? '…' : t('rent')}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  </button>
                 )
               })}
             </div>

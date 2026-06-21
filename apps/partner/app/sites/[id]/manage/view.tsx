@@ -1135,7 +1135,6 @@ export default function ManageView({
           accessKey={accessKey}
           onClose={() => setShowGuests(false)}
           onLocate={locateReservation}
-          onRefresh={() => router.refresh()}
         />
       )}
 
