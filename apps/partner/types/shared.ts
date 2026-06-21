@@ -125,6 +125,12 @@ export interface Reservation {
    * this is true (single-day or last day); mid-stay it stays held. (track 012)
    */
   stayOver?: boolean
+  /**
+   * Non-voided TillEntry rows for this reservation — present when the page query
+   * includes tillEntries (manage page). One entry per Settle event. Used to derive
+   * the "settled" indicator in BedDetail without a separate query.
+   */
+  tillEntries?: { id: string; amount: number }[]
 }
 
 export interface InventoryItem {

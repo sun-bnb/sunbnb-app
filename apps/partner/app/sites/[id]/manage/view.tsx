@@ -717,6 +717,9 @@ export default function ManageView({
       if (kind === 'blocked') return unblockBed(site.id!, i.id, accessKey, false)
       if (kind === 'comp') return uncompBed(site.id!, i.id, accessKey, false)
       if (kind === 'held') return releaseHold(site.id!, i.id, accessKey, false)
+      // Bulk unreserve: applyToPair=false (Seat/disconnect), voidSettlements defaults
+      // to true (money-returned). The per-seat tap dialog is the only place staff
+      // can mark cash retained (unchecked) before confirming.
       if (kind === 'walked-in') return unreserveItem(site.id!, i.id, accessKey, false)
       if (kind === 'failed') {
         const res = getActiveReservation(i)
@@ -1225,11 +1228,12 @@ export default function ManageView({
                     <span className="text-[10px] font-semibold leading-none">{tb('comp')}</span>
                   </button>
                   <button disabled={isBulkPending} onClick={bulkReserve} className="flex-1 bg-yellow-400 text-yellow-900 font-bold text-lg py-4 rounded-xl active:bg-yellow-500 disabled:opacity-50">{tb('reserve')}</button>
-                  <button disabled={isBulkPending} onClick={bulkRent} className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50">{tb('rent')}</button>
+                  <button disabled={isBulkPending} onClick={bulkRent} className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50">{tb('walkInAction')}</button>
                 </div>
               ) : canRent ? (
                 <div className="flex gap-3">
-                  <button disabled={isBulkPending} onClick={bulkRent} className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50">{tb('rent')}</button>
+                  {/* All held — the verb is Check-in (convert hold to walk-in) */}
+                  <button disabled={isBulkPending} onClick={bulkRent} className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50">{tb('checkIn')}</button>
                   {canMove && bulkMoveSquare}
                 </div>
               ) : null}

@@ -56,6 +56,7 @@ import {
   getTillStatus,
   closeTill,
   findReservations,
+  settleReservation,
 } from './actions'
 import { resolveTodayRow } from './reservation-day'
 
@@ -1204,16 +1205,24 @@ describe('per-worker till', () => {
     return { user, site, item, employee }
   }
 
-  it('getTillStatus reflects a cash walk-in attributed to the worker', async () => {
+  it('getTillStatus reflects a SETTLED cash walk-in attributed to the worker', async () => {
     const { site, item, employee } = await setupWithEmployee({ type: 'paid', price: 10 })
     await reserveItem(site.id, item.id, undefined, undefined, undefined, undefined, true, employee.id)
+
+    // track 013: a walk-in OCCUPIES but does not settle — the till is empty until Settle.
+    expect(await getTillStatus(site.id, employee.id)).toEqual({ status: 'ok', total: 0, count: 0 })
+
+    const res = await prisma.reservation.findFirstOrThrow({ where: { siteId: site.id } })
+    await settleReservation(site.id, res.id, 10, undefined, employee.id)
 
     expect(await getTillStatus(site.id, employee.id)).toEqual({ status: 'ok', total: 10, count: 1 })
   })
 
-  it('closeTill snapshots the open total and resets the open till to zero', async () => {
+  it('closeTill snapshots the settled total and resets the open till to zero', async () => {
     const { site, item, employee } = await setupWithEmployee({ type: 'paid', price: 10 })
     await reserveItem(site.id, item.id, undefined, undefined, undefined, undefined, true, employee.id)
+    const res = await prisma.reservation.findFirstOrThrow({ where: { siteId: site.id } })
+    await settleReservation(site.id, res.id, 10, undefined, employee.id)
 
     const closed = await closeTill(site.id, employee.id)
     expect(closed).toMatchObject({ status: 'ok', total: 10, count: 1, closed: true })
@@ -1414,7 +1423,7 @@ describe('reserveItems — grouped walk-in', () => {
     expect(connectedIds).not.toContain(itemC.id)
   })
 
-  it('till records ONE summed walk-in amount (one line) for the group', async () => {
+  it('settling a grouped walk-in records ONE summed line for the group', async () => {
     const user = await createTestUser()
     await createTestPartnerAccount(user.id)
     const site = await createTestSite(user.id, { type: 'paid', price: 10 })
@@ -1425,7 +1434,11 @@ describe('reserveItems — grouped walk-in', () => {
 
     await reserveItems(site.id, [itemA.id, itemB.id], 'Couple', undefined, undefined, undefined, employee.id)
 
-    // Till should show ONE transaction worth 2 × 10 = 20
+    // track 013: the grouped walk-in occupies; settling the single reservation
+    // records ONE TillEntry for the summed amount (2 × 10 = 20), not one per seat.
+    const res = await prisma.reservation.findFirstOrThrow({ where: { siteId: site.id } })
+    await settleReservation(site.id, res.id, 20, undefined, employee.id)
+
     const till = await getTillStatus(site.id, employee.id)
     expect(till.status).toBe('ok')
     expect((till as any).count).toBe(1)
@@ -2629,5 +2642,164 @@ describe('compBeds — grouped comp', () => {
       where: { siteId: site.id, operationalStatus: 'comp' },
     })
     expect(compReservations).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// settleReservation
+// ---------------------------------------------------------------------------
+
+describe('settleReservation', () => {
+  it('writes a non-voided TillEntry for a walked-in cash walk-in', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id)
+    mockUserId = user.id
+
+    // Create the walk-in
+    await reserveItem(site.id, item.id, 'Anna')
+    const reservation = await prisma.reservation.findFirst({ where: { siteId: site.id } })
+    expect(reservation).toBeTruthy()
+
+    // Settle it
+    const result = await settleReservation(site.id, reservation!.id, 25)
+    expect(result.status).toBe('ok')
+
+    // TillEntry must exist, be non-voided, and carry the right amount
+    const entries = await prisma.tillEntry.findMany({
+      where: { reservationId: reservation!.id, voidedAt: null },
+    })
+    expect(entries).toHaveLength(1)
+    expect(entries[0]!.amount).toBe(25)
+    expect(entries[0]!.siteId).toBe(site.id)
+  })
+
+  it('rejects settling a non-cash-walk-in reservation', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id)
+    mockUserId = user.id
+
+    // Create a reservation in 'complete' status (online payment) via createTestReservation
+    const reservation = await createTestReservation(user.id, site.id, [item.id], {
+      status: 'complete',
+      operationalStatus: 'checked-in',
+    })
+
+    const result = await settleReservation(site.id, reservation.id, 25)
+    expect(result.status).toBe('error')
+    expect(result.errors?.[0]).toMatch(/cash walk-in/i)
+
+    // No TillEntry was written
+    const count = await prisma.tillEntry.count({ where: { reservationId: reservation.id } })
+    expect(count).toBe(0)
+  })
+
+  it('open till reflects the settled amount after settling', async () => {
+    const user = await createTestUser()
+    // Employee.accountId FK requires PartnerAccount to exist first.
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id)
+    mockUserId = user.id
+
+    // Create employee for till attribution
+    const employee = await prisma.employee.create({
+      data: { accountId: user.id, name: 'Staff A', active: true },
+    })
+
+    // Walk-in and settle, attributing to the employee
+    await reserveItem(site.id, item.id)
+    const reservation = await prisma.reservation.findFirst({ where: { siteId: site.id } })
+
+    await settleReservation(site.id, reservation!.id, 30, undefined, employee.id)
+
+    // Till reflects the cash
+    const tillResult = await getTillStatus(site.id, employee.id)
+    expect(tillResult.status).toBe('ok')
+    if (tillResult.status === 'ok') {
+      expect(tillResult.total).toBe(30)
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// unreserveItem — void settlements on money-returned
+// ---------------------------------------------------------------------------
+
+describe('unreserveItem void settlements (integration)', () => {
+  it('voidSettlements=true: TillEntry is voided and open till drops to 0 after unreserve', async () => {
+    const user = await createTestUser()
+    // Employee.accountId references PartnerAccount.userId — must exist first.
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id)
+    const employee = await prisma.employee.create({
+      data: { accountId: user.id, name: 'Floor A', active: true },
+    })
+    mockUserId = user.id
+
+    // Walk-in and settle
+    await reserveItem(site.id, item.id, 'Guest A')
+    const reservation = await prisma.reservation.findFirst({ where: { siteId: site.id } })
+    expect(reservation).toBeTruthy()
+
+    await settleReservation(site.id, reservation!.id, 25, undefined, employee.id)
+
+    // Till has 25 before unreserve
+    const before = await getTillStatus(site.id, employee.id)
+    expect(before.status).toBe('ok')
+    if (before.status === 'ok') expect(before.total).toBe(25)
+
+    // Unreserve with moneyReturned=true (the default) — voids the settlement.
+    // NOTE: void happens BEFORE deleteMany (so the reservationId FK is still live
+    // when updateMany runs). After delete, TillEntry.reservationId is SetNull'd —
+    // so we can't query by reservationId; use siteId instead.
+    const result = await unreserveItem(site.id, item.id, undefined, true, true)
+    expect(result.status).toBe('ok')
+
+    // TillEntry must be voided (voidedAt set); reservationId is now null (SetNull cascade)
+    const entries = await prisma.tillEntry.findMany({ where: { siteId: site.id } })
+    expect(entries).toHaveLength(1)
+    expect(entries[0]!.voidedAt).not.toBeNull()
+
+    // Open till drops to 0 (the voided entry no longer counts)
+    const after = await getTillStatus(site.id, employee.id)
+    expect(after.status).toBe('ok')
+    if (after.status === 'ok') expect(after.total).toBe(0)
+  })
+
+  it('voidSettlements=false: TillEntry survives unreserve and till keeps the amount', async () => {
+    const user = await createTestUser()
+    // Employee.accountId references PartnerAccount.userId — must exist first.
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id)
+    const employee = await prisma.employee.create({
+      data: { accountId: user.id, name: 'Floor B', active: true },
+    })
+    mockUserId = user.id
+
+    // Walk-in and settle
+    await reserveItem(site.id, item.id, 'Guest B')
+    const reservation = await prisma.reservation.findFirst({ where: { siteId: site.id } })
+    expect(reservation).toBeTruthy()
+
+    await settleReservation(site.id, reservation!.id, 30, undefined, employee.id)
+
+    // Unreserve with moneyReturned=false (cash retained) — settlement survives
+    const result = await unreserveItem(site.id, item.id, undefined, true, false)
+    expect(result.status).toBe('ok')
+
+    // TillEntry survives (voidedAt remains null); reservation row is gone
+    // (reservationId SetNull'd by the cascade) — query by site instead
+    const entries = await prisma.tillEntry.findMany({ where: { siteId: site.id } })
+    expect(entries).toHaveLength(1)
+    expect(entries[0]!.voidedAt).toBeNull()
+
+    // Open till still has the 30 (entry persists, attributable to the employee)
+    const after = await getTillStatus(site.id, employee.id)
+    expect(after.status).toBe('ok')
+    if (after.status === 'ok') expect(after.total).toBe(30)
   })
 })

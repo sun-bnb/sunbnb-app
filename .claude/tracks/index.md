@@ -7,6 +7,7 @@ Maintained by the `create` and `handoff` workflows.
 
 | ID | Track | Next action | Worktree | Updated |
 |----|-------|-------------|----------|---------|
+| [013](013-settlement-ledger-till.md) | Settlement ledger — offline cash till source | **Building (P0a).** Replace the operational-status-derived till with an explicit cash-settlement ledger (`TillEntry`): a "Settle" cash event (alternative to card "Collect payment") is the till source, decoupled from check-in churn / seat turnover. Walk-in just occupies; Rent→Walk-in/Check-in rename; refund = "money returned" checkbox voids the settlement. Additive schema + cross-app. | — | 2026-06-21 |
 | [001](001-knowledge-store.md) | Knowledge Store | Phase 1 — stand up Vercel test-env log-drain adapter | — | 2026-05-20 |
 | [002](002-table-reservations.md) | Table Reservations | P1 complete (1a–1h) + pick-your-spot (`71c75e7`, committed local). **Next: `migrate:test` then push** (additive migration pending Neon TEST DB); then browser-verify, P2 live floor | — | 2026-05-27 |
 | [004](004-partner-test-architecture.md) | Partner Test Architecture | **PARTNER SCOPE COMPLETE** (Phases 0/3/1/4 — spine, fixes, backfill, cleanup+coverage-ratchet; 901 unit + 89 integration green, full gate green). Phase 1+4 local (`d4621b0`→`8386e7b`, 6 unpushed). Deferred: @repo/test-utils extraction, createWalkInRental race. | — | 2026-06-17 |

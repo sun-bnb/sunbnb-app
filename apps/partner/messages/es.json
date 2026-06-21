@@ -785,6 +785,10 @@
     "reserve": "Reservar",
     "reserveDays": "Reservar · {n} días",
     "rent": "Alquilar",
+    "walkInAction": "Entrada directa",
+    "settle": "Cobrar",
+    "settleAmount": "Efectivo recibido",
+    "settleConfirm": "Confirmar cobro",
     "multipleDays": "Varios días",
     "until": "Hasta",
     "unreserve": "Cancelar reserva",
@@ -821,6 +825,7 @@
     "move": "Mover",
     "confirmDepart": "Marcando como salido. El pago se mantiene; la hamaca queda libre.",
     "confirmUnreserve": "Finalizando este walk-in. Gestiona el reembolso en efectivo con el cliente; la hamaca queda libre.",
+    "moneyReturned": "Dinero devuelto",
     "paymentFailed": "Pago fallido",
     "remove": "Eliminar",
     "confirmRemove": "Eliminando esta reserva — el pago nunca fue realizado. La hamaca queda libre inmediatamente."

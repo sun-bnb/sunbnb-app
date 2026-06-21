@@ -785,6 +785,10 @@
     "reserve": "Varaa",
     "reserveDays": "Varaa · {n} päivää",
     "rent": "Vuokraa",
+    "walkInAction": "Kävelee sisään",
+    "settle": "Maksu",
+    "settleAmount": "Käteinen vastaanotettu",
+    "settleConfirm": "Vahvista maksu",
     "multipleDays": "Useita päiviä",
     "until": "Päättyy",
     "unreserve": "Peruuta varaus",
@@ -821,6 +825,7 @@
     "move": "Siirrä",
     "confirmDepart": "Merkitään lähteneeksi. Maksu pidätetään; paikka vapautuu.",
     "confirmUnreserve": "Lopetetaan tämä walk-in. Hoida mahdollinen käteispalautus asiakkaan kanssa; paikka vapautuu.",
+    "moneyReturned": "Rahat palautettu",
     "paymentFailed": "Maksu epäonnistui",
     "remove": "Poista",
     "confirmRemove": "Poistetaan tämä varaus — maksua ei koskaan suoritettu. Paikka vapautuu heti."

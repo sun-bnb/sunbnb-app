@@ -18,7 +18,7 @@ import {
   createRentalBookingMolliePayment,
   reverifyAndFinalizeRentalBooking,
 } from '@repo/data/rental-payment'
-import { getOpenTill } from '@repo/data/till'
+import { getOpenTill, recordSettlement, voidSettlementsForReservation } from '@repo/data/till'
 import { applyDayTransition } from './reservation-day'
 import { siteDayKey } from '@repo/data/site-day'
 import type { Prisma } from '@prisma/client'
@@ -237,7 +237,13 @@ export async function reserveItem(
 
 // ─── Release bed: walk-in departs or no-show ────────────────────────────────
 
-export async function unreserveItem(siteId: string, itemId: string, accessKey?: string, applyToPair: boolean = true) {
+export async function unreserveItem(
+  siteId: string,
+  itemId: string,
+  accessKey?: string,
+  applyToPair: boolean = true,
+  voidSettlements: boolean = true,
+) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
@@ -249,17 +255,33 @@ export async function unreserveItem(siteId: string, itemId: string, accessKey?: 
     // For walk-ins (paid-in-cash), delete them entirely (no invoice trail).
     // Use overlap-with-today semantics so multi-day walk-ins (to > todayEnd)
     // and in-progress stays (from < todayStart) are matched correctly.
-    const result = await prisma.reservation.deleteMany({
-      where: {
-        siteId,
-        status: RESERVATION_PAID_IN_CASH,
-        // Any operational state — a cash walk-in can be unreserved at any time,
-        // including after it's been departed or marked no-show (track 012).
-        from: { lte: todayEnd },
-        to: { gte: todayStart },
-        items: { some: { id: itemId } },
-      },
-    })
+    //
+    // Void settlements BEFORE delete: after deleteMany the reservationId FKs are
+    // SetNull'd and voidSettlementsForReservation can no longer find the rows.
+    const matchWhere = {
+      siteId,
+      status: RESERVATION_PAID_IN_CASH,
+      // Any operational state — a cash walk-in can be unreserved at any time,
+      // including after it's been departed or marked no-show (track 012).
+      from: { lte: todayEnd },
+      to: { gte: todayStart },
+      items: { some: { id: itemId } },
+    }
+
+    if (voidSettlements) {
+      // Fetch the reservation ids that will be deleted so we can void their
+      // settlements before the delete clears the FK. (Shouldn't be more than
+      // one, but safe to handle any count.)
+      const toDelete = await prisma.reservation.findMany({
+        where: matchWhere,
+        select: { id: true },
+      })
+      for (const r of toDelete) {
+        await voidSettlementsForReservation(r.id)
+      }
+    }
+
+    const result = await prisma.reservation.deleteMany({ where: matchWhere })
 
     if (result.count === 0) {
       return { status: 'error', errors: ['No walk-in reservation found to release'] }
@@ -294,6 +316,11 @@ export async function unreserveItem(siteId: string, itemId: string, accessKey?: 
     }
 
     if (reservation.items.length > 1) {
+      // Multi-seat disconnect: freeing one seat from a group reservation.
+      // Never void settlements here — the settlement belongs to the whole
+      // reservation (the remaining seats still occupy the drawer). The
+      // paymentAmount reduction below maintains the "expected price" prefill
+      // for a later Settle; the till itself reads from TillEntry (unaffected).
       const remainingItems = reservation.items.filter((i) => i.id !== itemId)
       // Till conservation: reduce paymentAmount to the remaining seats' share so
       // the refunded seat's cash leaves the till (mirrors the depart-split logic).
@@ -315,6 +342,10 @@ export async function unreserveItem(siteId: string, itemId: string, accessKey?: 
         },
       })
     } else {
+      // Single-seat delete path: void settlements before delete (same FK-SetNull risk).
+      if (voidSettlements) {
+        await voidSettlementsForReservation(reservation.id)
+      }
       await prisma.reservation.deleteMany({
         where: {
           id: reservation.id,
@@ -1908,6 +1939,75 @@ function computeWalkInAmount(
   const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)))
   const perDay = items.reduce((sum, it) => sum + ((it.price ?? null) || sitePrice || 0), 0)
   return perDay * days
+}
+
+// ─── Settle reservation (record cash taken at the till) ─────────────────────
+
+/**
+ * Record cash collected for a walk-in reservation: writes a non-voided `TillEntry`
+ * that immediately contributes to the worker's open till. This is the CASH
+ * counterpart to the card-based `collectReservationPayment` flow.
+ *
+ * The amount is staff-entered (prefilled from the DB price in the UI, but the
+ * operator may adjust for rounding, discounts, or partial payments). It must be
+ * a positive finite number not exceeding 100,000.
+ *
+ * Preconditions checked:
+ *   - Reservation exists and belongs to this site.
+ *   - Reservation is an offline cash walk-in: status === paid-in-cash AND
+ *     operationalStatus is walked-in or expected (multiday between-day leg).
+ *   - Amount is a finite number > 0 and <= 100000.
+ *
+ * No invoice is created — cash settlements are till-only (Settle vs Collect).
+ */
+export async function settleReservation(
+  siteId: string,
+  reservationId: string,
+  amount: number,
+  accessKey?: string,
+  employeeId?: string,
+) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  // Amount validation: staff-entered cash, editable in the UI.
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 100000) {
+    return { status: 'error', errors: ['Amount must be a positive number up to 100,000'] }
+  }
+
+  const reservation = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    select: {
+      siteId: true,
+      status: true,
+      operationalStatus: true,
+    },
+  })
+
+  if (!reservation || reservation.siteId !== siteId) {
+    return { status: 'error', errors: ['Reservation not found'] }
+  }
+
+  // Only offline cash walk-ins can be settled this way. Operational status may be
+  // walked-in (guest currently seated) or expected (multiday between-day leg).
+  if (reservation.status !== RESERVATION_PAID_IN_CASH) {
+    return { status: 'error', errors: ['Only cash walk-in reservations can be settled'] }
+  }
+  if (!([OP_WALKED_IN, OP_EXPECTED] as string[]).includes(reservation.operationalStatus)) {
+    return { status: 'error', errors: [`Cannot settle a reservation in state: ${reservation.operationalStatus}`] }
+  }
+
+  const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
+
+  await recordSettlement({
+    siteId,
+    reservationId,
+    employeeId: stampedEmployeeId,
+    amount,
+  })
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
 }
 
 /**

@@ -62,7 +62,11 @@ export default async function ManagePage({ params, searchParams }: { params: { i
               status: { notIn: [RESERVATION_CANCELED, RESERVATION_REFUNDED] },
             },
             include: {
-              user: { select: { id: true, email: true } }
+              user: { select: { id: true, email: true } },
+              tillEntries: {
+                where: { voidedAt: null },
+                select: { id: true, amount: true },
+              },
             },
             orderBy: { from: 'asc' }
           },

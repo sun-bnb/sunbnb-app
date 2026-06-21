@@ -60,6 +60,7 @@ import {
   getTillStatus,
   closeTill,
   findReservations,
+  settleReservation,
 } from '@/app/sites/[id]/manage/actions'
 
 import {
@@ -511,6 +512,12 @@ export const GATED_ACTIONS: GatedAction[] = [
     kind: 'action',
     gate: 'token-or-session',
     invoke: (accessKey?) => resumeWalkIn(SITE_ID, RES_ID, accessKey),
+  },
+  {
+    name: 'manage.settleReservation',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => settleReservation(SITE_ID, RES_ID, 10, accessKey),
   },
 
   // ══════════════════════════════════════════════════════════════════════════

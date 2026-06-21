@@ -32,6 +32,7 @@ import {
   getCollectStatus,
   cancelCollection,
   splitWalkInSeat,
+  settleReservation,
 } from './actions'
 import {
   RESERVATION_COMPLETE, RESERVATION_HELD, RESERVATION_PAID_IN_CASH,
@@ -218,6 +219,17 @@ export default function BedDetail({
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null)
   const [until, setUntil] = useState('')
   const [error, setError] = useState<string | null>(null)
+  /**
+   * Whether the cash was returned when unreserving a settled walk-in.
+   * Default true (money returned = void the settlement). Shown in the unreserve
+   * confirm panel only when the reservation has been settled.
+   * Reset on item change so it doesn't carry over to a different seat.
+   */
+  const [moneyReturned, setMoneyReturned] = useState(true)
+  /** Settle modal state — open when the staff taps the cash Settle button. */
+  const [showSettle, setShowSettle] = useState(false)
+  /** Editable amount in the settle modal, prefilled from reservation.paymentAmount. */
+  const [settleAmount, setSettleAmount] = useState('')
   /** Full-screen "Collect payment" QR view for a walk-in. */
   const [showCollect, setShowCollect] = useState(false)
   /**
@@ -253,6 +265,9 @@ export default function BedDetail({
   // (operationalStatus stays walked-in). Gates the Collect-payment button off
   // and shows a "paid" badge instead.
   const collected = !!reservation && reservation.status === RESERVATION_COMPLETE
+  // A walk-in is "settled" when at least one non-voided TillEntry exists for it
+  // (the Settle action has been used). Both settled and collected show as paid.
+  const settled = (reservation?.tillEntries?.length ?? 0) > 0
 
   // Sync: all group members share the same reservation (or all are free).
   // Must be computed BEFORE pairNumber — pairNumber is only shown when inSync
@@ -286,6 +301,7 @@ export default function BedDetail({
   useEffect(() => {
     setApplyToPair(inSync)
     setApplyToGroup(true)
+    setMoneyReturned(true)
     setRefunded(false)
     setNeedsReconnect(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -365,10 +381,16 @@ export default function BedDetail({
       // In the walked-in branch, unreserve scope is driven by applyToGroup (the
       // reservation-based toggle, not the physical-group applyToPair toggle).
       // Group → delete whole reservation; Seat → disconnect this item only.
+      //
+      // voidSettlements: pass moneyReturned for the whole-delete paths (Group mode
+      // or single-seat reservation). The multi-seat disconnect path never voids —
+      // the settlement belongs to the remaining seats (unreserveItem ignores the
+      // flag there anyway, but we pass false for clarity).
       if (state === 'walked-in') {
-        runAction(() => unreserveItem(siteId, item.id, accessKey, applyToGroup))
+        const isWholeDelete = applyToGroup || !groupedReservation
+        runAction(() => unreserveItem(siteId, item.id, accessKey, applyToGroup, isWholeDelete ? moneyReturned : false))
       } else {
-        runAction(() => unreserveItem(siteId, item.id, accessKey, applyToPair))
+        runAction(() => unreserveItem(siteId, item.id, accessKey, applyToPair, moneyReturned))
       }
     } else if (pendingConfirm === 'remove') {
       if (!reservation) return
@@ -393,6 +415,34 @@ export default function BedDetail({
       {/* Refund control — only when canceling a real Mollie payment. Manual:
           tap to issue the refund, which flips to a static "Refunded" confirmation.
           Canceling afterwards terminates the booking as REFUNDED. */}
+      {/* Money-returned checkbox — shown when unreserving a settled walk-in
+          (at least one non-voided TillEntry) on a whole-delete path.
+          Checked (default) → void the settlement (cash left the drawer).
+          Unchecked → leave the entry (cash forfeited / retained by the venue). */}
+      {pendingConfirm === 'unreserve' && settled && (
+        (() => {
+          // Determine whether this unreserve will delete the whole reservation
+          // (vs. a partial seat-disconnect). Checkbox only makes sense for a
+          // whole delete — a disconnect leaves the settlement with the remaining seats.
+          const isWholeDeletePath =
+            state !== 'walked-in'
+              ? true  // expected (cash walk-in between days) — always whole delete
+              : applyToGroup || !groupedReservation  // walked-in: Group mode or single-seat
+          return isWholeDeletePath ? (
+            <label className="flex items-center gap-3 py-1 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={moneyReturned}
+                onChange={e => setMoneyReturned(e.target.checked)}
+                className="w-5 h-5 rounded border-gray-300 dark:border-gray-600 accent-gray-900 dark:accent-gray-100 cursor-pointer"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-200 font-medium">
+                {t('moneyReturned')}
+              </span>
+            </label>
+          ) : null
+        })()
+      )}
       {pendingConfirm === 'cancel' && isMolliePaid && (
         alreadyRefunded ? (
           <div
@@ -670,7 +720,7 @@ export default function BedDetail({
               >
                 {isPending ? '...' : t('reserve')}
               </button>
-              {/* Rent — paid walk-in (immediately checked in, cash payment) */}
+              {/* Walk-in — paid walk-in (immediately checked in, cash payment) */}
               <button
                 disabled={isPending}
                 onClick={() => runAction(() => reserveItem(
@@ -681,7 +731,7 @@ export default function BedDetail({
                 ))}
                 className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50"
               >
-                {isPending ? '...' : t('rent')}
+                {isPending ? '...' : t('walkInAction')}
               </button>
             </div>
             {/* ── Seat management — compact link-style actions, divided off from the
@@ -948,7 +998,7 @@ export default function BedDetail({
               </div>
             )}
 
-            {/* Rent — convert hold to paid walk-in, with the chosen period and scope.
+            {/* Check-in — convert hold to paid walk-in, with the chosen period and scope.
                 Effective name: existing hold name if set, else the typed name.
                 applyToGroup controls whether the whole hold converts (Group mode)
                 or just this seat splits off into its own walk-in (Seat mode). */}
@@ -1108,39 +1158,117 @@ export default function BedDetail({
                   t={t}
                   reservation={reservation}
                   tintClass="bg-orange-50 dark:bg-orange-950/30 border-2 border-orange-200 dark:border-orange-800/40"
-                  paymentState={collected ? 'paid' : 'none'}
+                  paymentState={(collected || settled) ? 'paid' : 'none'}
                   fallbackName={t('walkIn')}
                 />
-                {siteIsPaid && !collected && (
-                  <button
-                    disabled={isPending}
-                    onClick={() => {
-                      if (!reservation) return
-                      // Seat mode on a multi-seat walk-in: split off this seat into
-                      // its own walk-in first so the QR charges only this seat's share.
-                      // If the operator abandons the QR (cancelCollection), the new
-                      // single-seat reservation reverts to cash — never stranded.
-                      if (groupedReservation && !applyToGroup) {
-                        setError(null)
-                        startTransition(async () => {
-                          const result = await splitWalkInSeat(siteId, reservation.id, item.id, accessKey)
-                          if (result.status === 'ok') {
-                            setCollectTargetId(result.reservationId)
-                            setShowCollect(true)
-                          } else {
-                            setError(result.errors?.[0] || 'Could not split seat for collection')
+                {siteIsPaid && !collected && !settled && (
+                  <div className="flex gap-3">
+                    {/* Settle — cash counterpart to Collect. Opens an amount editor
+                        prefilled from the DB price; staff can adjust for rounding or
+                        discounts. On confirm, writes a TillEntry (no invoice). */}
+                    <button
+                      disabled={isPending}
+                      onClick={() => {
+                        setSettleAmount(
+                          reservation.paymentAmount != null && reservation.paymentAmount > 0
+                            ? String(reservation.paymentAmount)
+                            : ''
+                        )
+                        setShowSettle(true)
+                      }}
+                      aria-label={t('settle')}
+                      title={t('settle')}
+                      className="w-16 self-stretch flex flex-col items-center justify-center gap-0.5 border-2 border-green-400 text-green-700 dark:text-green-400 rounded-xl active:bg-green-50 dark:active:bg-green-950/30 disabled:opacity-50"
+                    >
+                      {/* Banknote icon — distinct from the credit-card on Collect */}
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="1" y="5" width="22" height="14" rx="2" />
+                        <circle cx="12" cy="12" r="3" />
+                        <path d="M6 9v.01M18 15v.01" />
+                      </svg>
+                      <span className="text-[10px] font-semibold leading-none">{t('settle')}</span>
+                    </button>
+                    {/* Collect payment — card / Mollie QR */}
+                    <button
+                      disabled={isPending}
+                      onClick={() => {
+                        if (!reservation) return
+                        // Seat mode on a multi-seat walk-in: split off this seat into
+                        // its own walk-in first so the QR charges only this seat's share.
+                        // If the operator abandons the QR (cancelCollection), the new
+                        // single-seat reservation reverts to cash — never stranded.
+                        if (groupedReservation && !applyToGroup) {
+                          setError(null)
+                          startTransition(async () => {
+                            const result = await splitWalkInSeat(siteId, reservation.id, item.id, accessKey)
+                            if (result.status === 'ok') {
+                              setCollectTargetId(result.reservationId)
+                              setShowCollect(true)
+                            } else {
+                              setError(result.errors?.[0] || 'Could not split seat for collection')
+                            }
+                          })
+                        } else {
+                          // Group mode (or a single-seat walk-in): collect the whole reservation.
+                          setCollectTargetId(reservation.id)
+                          setShowCollect(true)
+                        }
+                      }}
+                      className="flex-1 bg-blue-600 text-white font-bold text-lg py-4 rounded-xl active:bg-blue-700 disabled:opacity-50"
+                    >
+                      💳 {t('collectPayment')}
+                    </button>
+                  </div>
+                )}
+                {/* Settle amount editor — lightweight inline panel shown when
+                    the Settle button is tapped. Prefilled from paymentAmount. */}
+                {showSettle && reservation && (
+                  <div className="bg-green-50 dark:bg-green-950/30 border-2 border-green-200 dark:border-green-800/40 rounded-xl p-4 space-y-3">
+                    <p className="text-sm font-medium text-green-800 dark:text-green-300">{t('settleAmount')}</p>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="0.01"
+                      step="0.01"
+                      value={settleAmount}
+                      onChange={e => setSettleAmount(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent dark:bg-gray-800 dark:text-gray-100"
+                      placeholder="0.00"
+                      autoFocus
+                    />
+                    <div className="flex gap-3">
+                      <button
+                        disabled={isPending}
+                        onClick={() => {
+                          const amt = parseFloat(settleAmount)
+                          if (!Number.isFinite(amt) || amt <= 0) {
+                            setError('Enter a valid amount')
+                            return
                           }
-                        })
-                      } else {
-                        // Group mode (or a single-seat walk-in): collect the whole reservation.
-                        setCollectTargetId(reservation.id)
-                        setShowCollect(true)
-                      }
-                    }}
-                    className="w-full bg-blue-600 text-white font-bold text-lg py-4 rounded-xl active:bg-blue-700 disabled:opacity-50"
-                  >
-                    💳 {t('collectPayment')}
-                  </button>
+                          runAction(async () => {
+                            const result = await settleReservation(
+                              siteId,
+                              reservation.id,
+                              amt,
+                              accessKey,
+                              currentWorkerId ?? undefined,
+                            )
+                            if (result.status === 'ok') setShowSettle(false)
+                            return result
+                          })
+                        }}
+                        className="flex-1 bg-green-600 text-white font-bold text-base py-3 rounded-xl active:bg-green-700 disabled:opacity-50"
+                      >
+                        {isPending ? '...' : t('settleConfirm')}
+                      </button>
+                      <button
+                        onClick={() => setShowSettle(false)}
+                        className="flex-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-bold text-base py-3 rounded-xl active:bg-gray-200 dark:active:bg-gray-700"
+                      >
+                        {t('cancel')}
+                      </button>
+                    </div>
+                  </div>
                 )}
                 <div className="flex gap-3">
                   <button

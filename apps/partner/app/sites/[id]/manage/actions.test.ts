@@ -64,6 +64,7 @@ import {
   holdBeds,
   blockBeds,
   compBeds,
+  settleReservation,
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
@@ -81,6 +82,7 @@ import {
   moveReservationWithConflictGuard,
   createRentalBookingsWithGuard,
 } from '@repo/data/reservations'
+import { recordSettlement, voidSettlementsForReservation } from '@repo/data/till'
 import dayjs from 'dayjs'
 import { getActiveReservation } from './bed-state'
 
@@ -316,6 +318,8 @@ describe('reserveItem', () => {
 describe('unreserveItem', () => {
   it('deletes walk-in with overlap-with-today filter and returns ok when count > 0', async () => {
     authenticateAsOwner()
+    // Pair mode pre-fetches the reservation ids for voiding before deleteMany
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([{ id: RES_ID } as any])
     vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
 
     const res = await unreserveItem(SITE_ID, ITEM_ID)
@@ -340,6 +344,7 @@ describe('unreserveItem', () => {
 
   it('returns error when deleteMany finds nothing (count === 0)', async () => {
     authenticateAsOwner()
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([{ id: RES_ID } as any])
     vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 0 } as any)
 
     const res = await unreserveItem(SITE_ID, ITEM_ID)
@@ -350,6 +355,7 @@ describe('unreserveItem', () => {
   it('does not call revalidatePath when nothing was deleted', async () => {
     const { revalidatePath } = await import('next/cache')
     authenticateAsOwner()
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([{ id: RES_ID } as any])
     vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 0 } as any)
 
     await unreserveItem(SITE_ID, ITEM_ID)
@@ -1433,6 +1439,7 @@ describe('unreserveItem with applyToPair = false', () => {
 
   it('pair mode (true) still uses deleteMany to free both seats', async () => {
     authenticateAsOwner()
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([{ id: RES_ID } as any])
     vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
 
     const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, true)
@@ -1440,6 +1447,102 @@ describe('unreserveItem with applyToPair = false', () => {
 
     expect(vi.mocked(prisma.reservation.deleteMany)).toHaveBeenCalled()
     expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+  })
+})
+
+// ─── unreserveItem — void settlements ─────────────────────────────────────
+
+describe('unreserveItem void settlements', () => {
+  // applyToPair=true (Group/pair mode) — whole reservation delete
+
+  it('pair mode: voids settlements for each matched reservation before deleteMany when voidSettlements=true', async () => {
+    authenticateAsOwner()
+    // findMany returns the reservation ids that will be deleted
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([{ id: RES_ID } as any])
+    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
+
+    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, true, true)
+    expect(res.status).toBe('ok')
+
+    // voidSettlementsForReservation called with the matched reservation id
+    expect(vi.mocked(voidSettlementsForReservation)).toHaveBeenCalledWith(RES_ID)
+    // delete still happens after voiding
+    expect(vi.mocked(prisma.reservation.deleteMany)).toHaveBeenCalled()
+  })
+
+  it('pair mode: does NOT void settlements when voidSettlements=false (cash retained)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([{ id: RES_ID } as any])
+    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
+
+    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, true, false)
+    expect(res.status).toBe('ok')
+
+    expect(vi.mocked(voidSettlementsForReservation)).not.toHaveBeenCalled()
+    expect(vi.mocked(prisma.reservation.deleteMany)).toHaveBeenCalled()
+  })
+
+  // applyToPair=false, single-item reservation — whole delete path
+
+  it('single mode, 1-item reservation: voids settlements before deleteMany when voidSettlements=true', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
+      id: RES_ID,
+      from: new Date('2026-06-21T00:00:00.000Z'),
+      to: new Date('2026-06-21T23:59:59.999Z'),
+      items: [{ id: ITEM_ID, price: 10 }],
+      site: { type: 'paid', price: 10 },
+    } as any)
+    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
+
+    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, false, true)
+    expect(res.status).toBe('ok')
+
+    // void called before delete (order: void → deleteMany)
+    const voidCall = vi.mocked(voidSettlementsForReservation).mock.invocationCallOrder[0]
+    const deleteCall = vi.mocked(prisma.reservation.deleteMany).mock.invocationCallOrder[0]
+    expect(voidCall).toBeLessThan(deleteCall!)
+    expect(vi.mocked(voidSettlementsForReservation)).toHaveBeenCalledWith(RES_ID)
+  })
+
+  it('single mode, 1-item reservation: does NOT void when voidSettlements=false', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
+      id: RES_ID,
+      from: new Date('2026-06-21T00:00:00.000Z'),
+      to: new Date('2026-06-21T23:59:59.999Z'),
+      items: [{ id: ITEM_ID, price: 10 }],
+      site: { type: 'paid', price: 10 },
+    } as any)
+    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
+
+    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, false, false)
+    expect(res.status).toBe('ok')
+
+    expect(vi.mocked(voidSettlementsForReservation)).not.toHaveBeenCalled()
+  })
+
+  // applyToPair=false, multi-item reservation — disconnect path, never voids
+
+  it('single mode, 2-item reservation: NEVER voids even when voidSettlements=true (disconnect path)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
+      id: RES_ID,
+      from: new Date('2026-06-21T00:00:00.000Z'),
+      to: new Date('2026-06-21T23:59:59.999Z'),
+      items: [{ id: ITEM_ID, price: 10 }, { id: 'pair-1', price: 15 }],
+      site: { type: 'paid', price: 20 },
+    } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
+
+    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, false, true)
+    expect(res.status).toBe('ok')
+
+    // Disconnect happened, NOT delete
+    expect(vi.mocked(prisma.reservation.update)).toHaveBeenCalled()
+    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
+    // Settlement must NOT be voided — it belongs to the remaining seats
+    expect(vi.mocked(voidSettlementsForReservation)).not.toHaveBeenCalled()
   })
 })
 
@@ -4402,5 +4505,119 @@ describe('compBeds', () => {
     expect(res.status).toBe('error')
     expect(res.errors?.[0]).toMatch(/already occupied or blocked/i)
     expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
+  })
+})
+
+// ─── settleReservation ────────────────────────────────────────────────────────
+
+describe('settleReservation', () => {
+  function stubCashWalkIn(operationalStatus = 'walked-in') {
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      status: 'paid-in-cash',
+      operationalStatus,
+    } as any)
+  }
+
+  it('rejects unauthenticated request', async () => {
+    const res = await settleReservation(SITE_ID, RES_ID, 10)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/not authenticated/i)
+  })
+
+  it('rejects non-owner', async () => {
+    authenticateAsNonOwner()
+    const res = await settleReservation(SITE_ID, RES_ID, 10)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/not authorized/i)
+  })
+
+  it('rejects amount <= 0', async () => {
+    authenticateAsOwner()
+    stubCashWalkIn()
+    const res = await settleReservation(SITE_ID, RES_ID, 0)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/positive number/i)
+  })
+
+  it('rejects negative amount', async () => {
+    authenticateAsOwner()
+    stubCashWalkIn()
+    const res = await settleReservation(SITE_ID, RES_ID, -5)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/positive number/i)
+  })
+
+  it('rejects amount > 100000', async () => {
+    authenticateAsOwner()
+    stubCashWalkIn()
+    const res = await settleReservation(SITE_ID, RES_ID, 100001)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/positive number/i)
+  })
+
+  it('rejects non-cash-walk-in reservation', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      status: 'complete',
+      operationalStatus: 'walked-in',
+    } as any)
+    const res = await settleReservation(SITE_ID, RES_ID, 25)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/cash walk-in/i)
+  })
+
+  it('rejects cash walk-in in a non-occupiable state', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      status: 'paid-in-cash',
+      operationalStatus: 'departed',
+    } as any)
+    const res = await settleReservation(SITE_ID, RES_ID, 25)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/cannot settle/i)
+  })
+
+  it('calls recordSettlement with correct args for a walked-in reservation', async () => {
+    authenticateAsOwner()
+    stubCashWalkIn('walked-in')
+    // no employee
+    vi.mocked(prisma.employee.findUnique).mockResolvedValue(null)
+    const mockRecord = vi.mocked(recordSettlement)
+    mockRecord.mockResolvedValueOnce({ id: 'te-1', amount: 25, siteId: SITE_ID, reservationId: RES_ID, employeeId: null, settledAt: new Date(), voidedAt: null, createdAt: new Date() })
+
+    const res = await settleReservation(SITE_ID, RES_ID, 25)
+    expect(res.status).toBe('ok')
+    expect(mockRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ siteId: SITE_ID, reservationId: RES_ID, amount: 25 })
+    )
+  })
+
+  it('also accepts expected operationalStatus (multiday between-day leg)', async () => {
+    authenticateAsOwner()
+    stubCashWalkIn('expected')
+    vi.mocked(prisma.employee.findUnique).mockResolvedValue(null)
+    const mockRecord = vi.mocked(recordSettlement)
+    mockRecord.mockResolvedValueOnce({ id: 'te-2', amount: 30, siteId: SITE_ID, reservationId: RES_ID, employeeId: null, settledAt: new Date(), voidedAt: null, createdAt: new Date() })
+
+    const res = await settleReservation(SITE_ID, RES_ID, 30)
+    expect(res.status).toBe('ok')
+    expect(mockRecord).toHaveBeenCalledWith(expect.objectContaining({ amount: 30 }))
+  })
+
+  it('resolves and stamps employeeId when valid', async () => {
+    authenticateAsOwner()
+    stubCashWalkIn()
+    vi.mocked(prisma.employee.findUnique).mockResolvedValue({ accountId: OWNER_ID } as any)
+    const mockRecord = vi.mocked(recordSettlement)
+    mockRecord.mockResolvedValueOnce({ id: 'te-3', amount: 20, siteId: SITE_ID, reservationId: RES_ID, employeeId: 'emp-1', settledAt: new Date(), voidedAt: null, createdAt: new Date() })
+
+    const res = await settleReservation(SITE_ID, RES_ID, 20, undefined, 'emp-1')
+    expect(res.status).toBe('ok')
+    expect(mockRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ employeeId: 'emp-1' })
+    )
   })
 })
