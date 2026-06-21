@@ -51,6 +51,7 @@ import {
   collectReservationPayment,
   getCollectStatus,
   cancelCollection,
+  splitWalkInSeat,
   collectRentalPayment,
   getRentalCollectStatus,
   cancelRentalCollection,
@@ -436,6 +437,12 @@ export const GATED_ACTIONS: GatedAction[] = [
     kind: 'action',
     gate: 'token-or-session',
     invoke: (accessKey?) => cancelCollection(SITE_ID, RES_ID, accessKey),
+  },
+  {
+    name: 'manage.splitWalkInSeat',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => splitWalkInSeat(SITE_ID, RES_ID, ITEM_ID, accessKey),
   },
   {
     name: 'manage.collectRentalPayment',

@@ -48,6 +48,8 @@ import {
   markRentalPickedUp,
   markRentalReturned,
   createWalkInRental,
+  convertHoldToWalkIn,
+  splitWalkInSeat,
   getTillStatus,
   closeTill,
   findReservations,
@@ -783,6 +785,170 @@ describe('moveReservation — conflict detection (was a silent double-book befor
     })
     expect(updated!.items).toHaveLength(1)
     expect(updated!.items[0].id).toBe(itemB.id)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// markDeparted — split-then-depart (cash walk-in per-seat)
+//
+// These tests verify the split path added to `markDeparted`:
+//   - 3-seat cash walk-in → split-depart one seat → original keeps 2 items
+//     walked-in with reduced amount; new 1-item reservation departed with
+//     per-seat amount and original employeeId.
+//   - Till conservation: sum of both amounts equals the original total.
+//   - Multi-day variant: new reservation expected (not departed) on a non-last day.
+//   - Last-day variant: new reservation departed.
+// ---------------------------------------------------------------------------
+
+describe('markDeparted — split-then-depart (cash walk-in)', () => {
+  it('3-seat multi-day cash walk-in: splits one seat, original keeps 2 items walked-in', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { type: 'paid', price: 10 })
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    // Create a 3-seat multi-day cash walk-in (today → tomorrow)
+    const today0 = dayjs().startOf('day').toDate()
+    const tomorrow23 = dayjs().add(1, 'day').endOf('day').toDate()
+    const reservation = await createTestReservation(user.id, site.id, [itemA.id, itemB.id, itemC.id], {
+      from: today0,
+      to: tomorrow23,
+      status: 'paid-in-cash',
+      operationalStatus: 'walked-in',
+      checkedInAt: new Date(),
+      paymentAmount: 30, // 3 seats × 10€ × 1 day (initial, will be split)
+      employeeId: null,
+    })
+
+    // Split-depart itemA
+    const result = await markDeparted(site.id, reservation.id, undefined, [itemA.id])
+    expect(result.status).toBe('ok')
+
+    // Original reservation must still have 2 items
+    const original = await prisma.reservation.findUnique({
+      where: { id: reservation.id },
+      include: { items: true },
+    })
+    expect(original).not.toBeNull()
+    const originalItemIds = original!.items.map((i) => i.id).sort()
+    expect(originalItemIds).toEqual([itemB.id, itemC.id].sort())
+    // Original stays walked-in
+    expect(original!.operationalStatus).toBe('walked-in')
+    // Original's amount = 2 remaining seats × 10€ × 2 days = 40
+    // (computeWalkInAmount: days = Math.max(1, Math.round((tomorrow23 - today0) / 86400000)) = 2)
+    expect(original!.paymentAmount).toBe(40) // 2 seats × 10€ × 2 days
+
+    // A new reservation must exist for itemA
+    const newRes = await prisma.reservation.findFirst({
+      where: {
+        siteId: site.id,
+        id: { not: reservation.id },
+      },
+      include: { items: true },
+    })
+    expect(newRes).not.toBeNull()
+    expect(newRes!.items).toHaveLength(1)
+    expect(newRes!.items[0].id).toBe(itemA.id)
+    expect(newRes!.status).toBe('paid-in-cash')
+    // Multi-day → new reservation should be expected (departed today, re-rentable tomorrow)
+    expect(newRes!.operationalStatus).toBe('expected')
+    expect(newRes!.paymentAmount).toBe(20) // 1 seat × 10€ × 2 days
+  })
+
+  it('till is conserved: split amounts sum to original total', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { type: 'paid', price: 15 })
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    const today0 = dayjs().startOf('day').toDate()
+    const today23 = dayjs().endOf('day').toDate()
+    const reservation = await createTestReservation(user.id, site.id, [itemA.id, itemB.id, itemC.id], {
+      from: today0,
+      to: today23,
+      status: 'paid-in-cash',
+      operationalStatus: 'walked-in',
+      checkedInAt: new Date(),
+      paymentAmount: 45, // 3 × 15€ × 1 day
+      employeeId: null,
+    })
+
+    await markDeparted(site.id, reservation.id, undefined, [itemA.id])
+
+    const original = await prisma.reservation.findUnique({ where: { id: reservation.id } })
+    const newRes = await prisma.reservation.findFirst({
+      where: { siteId: site.id, id: { not: reservation.id } },
+    })
+
+    expect(original!.paymentAmount! + newRes!.paymentAmount!).toBe(45)
+  })
+
+  it('last-day split: new reservation is departed (bed freed)', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { type: 'paid', price: 10 })
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    mockUserId = user.id
+
+    // Today-only (last day)
+    const today0 = dayjs().startOf('day').toDate()
+    const today23 = dayjs().endOf('day').toDate()
+    const reservation = await createTestReservation(user.id, site.id, [itemA.id, itemB.id], {
+      from: today0,
+      to: today23,
+      status: 'paid-in-cash',
+      operationalStatus: 'walked-in',
+      checkedInAt: new Date(),
+      paymentAmount: 20,
+      employeeId: null,
+    })
+
+    await markDeparted(site.id, reservation.id, undefined, [itemA.id])
+
+    const newRes = await prisma.reservation.findFirst({
+      where: { siteId: site.id, id: { not: reservation.id } },
+    })
+    expect(newRes!.operationalStatus).toBe('departed')
+    expect(newRes!.departedAt).toBeInstanceOf(Date)
+  })
+
+  it('original employeeId is preserved on the new reservation', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { type: 'paid', price: 10 })
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    mockUserId = user.id
+
+    // Create a PartnerAccount (Employee.accountId FK points to PartnerAccount)
+    const account = await createTestPartnerAccount(user.id)
+    // Create an employee to attribute
+    const employee = await prisma.employee.create({
+      data: { accountId: account.userId, name: 'Staff Member', active: true },
+    })
+
+    const today0 = dayjs().startOf('day').toDate()
+    const today23 = dayjs().endOf('day').toDate()
+    const reservation = await createTestReservation(user.id, site.id, [itemA.id, itemB.id], {
+      from: today0,
+      to: today23,
+      status: 'paid-in-cash',
+      operationalStatus: 'walked-in',
+      checkedInAt: new Date(),
+      paymentAmount: 20,
+      employeeId: employee.id,
+    })
+
+    await markDeparted(site.id, reservation.id, undefined, [itemA.id])
+
+    const newRes = await prisma.reservation.findFirst({
+      where: { siteId: site.id, id: { not: reservation.id } },
+    })
+    // Original employeeId preserved on the new reservation (not the departing worker)
+    expect(newRes!.employeeId).toBe(employee.id)
   })
 })
 
@@ -1838,5 +2004,452 @@ describe('resolveTodayRow — concurrent upsert race safety (P2002 fix)', () => 
       where: { reservationId: { in: [resA.id, resB.id, resC.id] } },
     })
     expect(count).toBe(3)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// convertHoldToWalkIn — single-seat split path (real DB)
+// ---------------------------------------------------------------------------
+
+describe('convertHoldToWalkIn split-seat path', () => {
+  it('3-seat hold + applyToGroup=false: splits one seat off, original hold keeps 2 seats', async () => {
+    // Happy-path split: a 3-seat hold exists; staff tap one seat and choose Seat scope.
+    // Expected outcome:
+    //   - Original hold: 2 remaining items, status still `held`
+    //   - New walk-in: 1 item (the tapped seat), status `paid-in-cash`, operationalStatus `walked-in`
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { type: 'paid', price: 10 })
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    // Create a 3-seat hold (today-scoped, as holdBeds produces)
+    const holdRes = await createTestReservation(user.id, site.id, [itemA.id, itemB.id, itemC.id], {
+      status: 'held',
+      operationalStatus: 'expected',
+      paymentAmount: 0,
+      from: new Date(new Date().setHours(0, 0, 0, 0)),
+      to: new Date(new Date().setHours(23, 59, 59, 999)),
+    })
+
+    // Split item A off as a walk-in
+    const result = await convertHoldToWalkIn(site.id, itemA.id, undefined, 'Maria', undefined, undefined, false)
+    expect(result).toEqual({ status: 'ok' })
+
+    // Original hold: must still exist with 2 items (B + C) and stay `held`
+    const updatedHold = await prisma.reservation.findUnique({
+      where: { id: holdRes.id },
+      include: { items: { orderBy: { number: 'asc' } } },
+    })
+    expect(updatedHold).not.toBeNull()
+    expect(updatedHold!.status).toBe('held')
+    expect(updatedHold!.operationalStatus).toBe('expected')
+    expect(updatedHold!.items).toHaveLength(2)
+    const remainingIds = updatedHold!.items.map(i => i.id).sort()
+    expect(remainingIds).toEqual([itemB.id, itemC.id].sort())
+    expect(remainingIds).not.toContain(itemA.id)
+
+    // New walk-in: must exist with only item A
+    const allReservations = await prisma.reservation.findMany({
+      where: { siteId: site.id },
+      include: { items: true },
+    })
+    const newWalkIn = allReservations.find(r => r.id !== holdRes.id)
+    expect(newWalkIn).toBeDefined()
+    expect(newWalkIn!.status).toBe('paid-in-cash')
+    expect(newWalkIn!.operationalStatus).toBe('walked-in')
+    expect(newWalkIn!.checkedInAt).toBeTruthy()
+    expect(newWalkIn!.items).toHaveLength(1)
+    expect(newWalkIn!.items[0]!.id).toBe(itemA.id)
+    // guestName passed through
+    expect(newWalkIn!.guestName).toBe('Maria')
+  })
+
+  it('per-seat paymentAmount: split walk-in records site price for 1 day (not all 3 seats)', async () => {
+    // Site charges 10€/day. A 3-seat hold split off 1 seat should record 10€,
+    // NOT 30€ (which would be the whole-hold amount).
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { type: 'paid', price: 10 })
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    await createTestReservation(user.id, site.id, [itemA.id, itemB.id, itemC.id], {
+      status: 'held',
+      operationalStatus: 'expected',
+      paymentAmount: 0,
+      from: new Date(new Date().setHours(0, 0, 0, 0)),
+      to: new Date(new Date().setHours(23, 59, 59, 999)),
+    })
+
+    await convertHoldToWalkIn(site.id, itemA.id, undefined, undefined, undefined, undefined, false)
+
+    const allRes = await prisma.reservation.findMany({ where: { siteId: site.id } })
+    const walkIn = allRes.find(r => r.status === 'paid-in-cash')
+    expect(walkIn).toBeDefined()
+    // 10€ × 1 day × 1 seat = 10
+    expect(walkIn!.paymentAmount).toBe(10)
+  })
+
+  it('applyToGroup=true on a 3-seat hold whole-converts (existing Group behaviour unchanged)', async () => {
+    // Regression guard: Group scope must not split — it converts the whole hold.
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { type: 'paid', price: 10 })
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    const holdRes = await createTestReservation(user.id, site.id, [itemA.id, itemB.id, itemC.id], {
+      status: 'held',
+      operationalStatus: 'expected',
+      paymentAmount: 0,
+      from: new Date(new Date().setHours(0, 0, 0, 0)),
+      to: new Date(new Date().setHours(23, 59, 59, 999)),
+    })
+
+    const result = await convertHoldToWalkIn(site.id, itemA.id, undefined, undefined, undefined, undefined, true)
+    expect(result).toEqual({ status: 'ok' })
+
+    // Still only ONE reservation — the original hold, now a walk-in
+    const allRes = await prisma.reservation.findMany({
+      where: { siteId: site.id },
+      include: { items: true },
+    })
+    expect(allRes).toHaveLength(1)
+    expect(allRes[0]!.id).toBe(holdRes.id)
+    expect(allRes[0]!.status).toBe('paid-in-cash')
+    expect(allRes[0]!.items).toHaveLength(3)
+    // Whole-hold amount: 30€ (10€ × 3 seats × 1 day)
+    expect(allRes[0]!.paymentAmount).toBe(30)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// markDeparted — 2-of-3 subset split (bulk Depart via multiselect)
+// ---------------------------------------------------------------------------
+
+describe('markDeparted — bulk multiselect 2-of-3 subset split', () => {
+  it('splits 2 selected seats into ONE new reservation, original keeps 1 — amounts conserved', async () => {
+    // Scenario: 3-seat cash walk-in; operator selects 2 seats in multiselect and taps Depart.
+    // Expected:
+    //   - original reservation keeps 1 seat (walked-in), reduced paymentAmount
+    //   - ONE new reservation with the 2 selected seats → departed (last-day)
+    //   - sum of both paymentAmounts === original total
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { type: 'paid', price: 10 })
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    // Today-only 3-seat walk-in (last day → subset should be departed)
+    const today0 = dayjs().startOf('day').toDate()
+    const today23 = dayjs().endOf('day').toDate()
+    const reservation = await createTestReservation(user.id, site.id, [itemA.id, itemB.id, itemC.id], {
+      from: today0,
+      to: today23,
+      status: 'paid-in-cash',
+      operationalStatus: 'walked-in',
+      checkedInAt: new Date(),
+      paymentAmount: 30, // 3 × 10€ × 1 day
+      employeeId: null,
+    })
+
+    // Bulk depart: select 2 seats (A + B), leave C on the original
+    const result = await markDeparted(site.id, reservation.id, undefined, [itemA.id, itemB.id])
+    expect(result.status).toBe('ok')
+
+    // Original must keep only itemC
+    const original = await prisma.reservation.findUnique({
+      where: { id: reservation.id },
+      include: { items: true },
+    })
+    expect(original).not.toBeNull()
+    expect(original!.items).toHaveLength(1)
+    expect(original!.items[0]!.id).toBe(itemC.id)
+    // Original stays walked-in (not departed)
+    expect(original!.operationalStatus).toBe('walked-in')
+    // 1 seat × 10€ × 1 day = 10€
+    expect(original!.paymentAmount).toBe(10)
+
+    // ONE new reservation with the 2 selected seats
+    const allRes = await prisma.reservation.findMany({
+      where: { siteId: site.id, id: { not: reservation.id } },
+      include: { items: true },
+    })
+    expect(allRes).toHaveLength(1)
+    const newRes = allRes[0]!
+    const newItemIds = newRes.items.map(i => i.id).sort()
+    expect(newItemIds).toEqual([itemA.id, itemB.id].sort())
+    // Last day → departed
+    expect(newRes.operationalStatus).toBe('departed')
+    expect(newRes.departedAt).toBeInstanceOf(Date)
+    // 2 seats × 10€ × 1 day = 20€
+    expect(newRes.paymentAmount).toBe(20)
+
+    // Till conservation: original + new = 30€
+    expect(original!.paymentAmount! + newRes.paymentAmount!).toBe(30)
+  })
+
+  it('attribution (employeeId, guestName) is preserved on the new subset reservation', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { type: 'paid', price: 10 })
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    const account = await createTestPartnerAccount(user.id)
+    const employee = await prisma.employee.create({
+      data: { accountId: account.userId, name: 'Beach Staff', active: true },
+    })
+
+    const today0 = dayjs().startOf('day').toDate()
+    const today23 = dayjs().endOf('day').toDate()
+    const reservation = await createTestReservation(user.id, site.id, [itemA.id, itemB.id, itemC.id], {
+      from: today0,
+      to: today23,
+      status: 'paid-in-cash',
+      operationalStatus: 'walked-in',
+      checkedInAt: new Date(),
+      paymentAmount: 30,
+      employeeId: employee.id,
+      guestName: 'Alice',
+    })
+
+    await markDeparted(site.id, reservation.id, undefined, [itemA.id, itemB.id])
+
+    const newRes = await prisma.reservation.findFirst({
+      where: { siteId: site.id, id: { not: reservation.id } },
+    })
+    expect(newRes!.employeeId).toBe(employee.id)
+    expect(newRes!.guestName).toBe('Alice')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// convertHoldToWalkIn — 2-of-3 subset split (bulk Rent via multiselect)
+// ---------------------------------------------------------------------------
+
+describe('convertHoldToWalkIn — bulk multiselect 2-of-3 subset split', () => {
+  it('splits 2 selected seats into ONE new walk-in, hold keeps 1 — amounts conserved', async () => {
+    // Scenario: 3-seat hold; operator selects 2 seats in multiselect and taps Rent.
+    // Expected:
+    //   - hold keeps 1 seat (still held, paymentAmount stays 0)
+    //   - ONE new walk-in with 2 seats (paid-in-cash, walked-in)
+    //   - new walk-in paymentAmount = 2 seats × site price
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { type: 'paid', price: 10 })
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    // Today-scoped 3-seat hold (as holdBeds produces)
+    const holdRes = await createTestReservation(user.id, site.id, [itemA.id, itemB.id, itemC.id], {
+      status: 'held',
+      operationalStatus: 'expected',
+      paymentAmount: 0,
+      from: new Date(new Date().setHours(0, 0, 0, 0)),
+      to: new Date(new Date().setHours(23, 59, 59, 999)),
+    })
+
+    // Bulk rent: select 2 seats (A + B), leave C on the hold
+    const result = await convertHoldToWalkIn(
+      site.id, itemA.id, undefined, 'Bob', undefined, undefined,
+      false, [itemA.id, itemB.id],
+    )
+    expect(result.status).toBe('ok')
+
+    // Hold must keep only itemC, still held
+    const updatedHold = await prisma.reservation.findUnique({
+      where: { id: holdRes.id },
+      include: { items: true },
+    })
+    expect(updatedHold).not.toBeNull()
+    expect(updatedHold!.status).toBe('held')
+    expect(updatedHold!.items).toHaveLength(1)
+    expect(updatedHold!.items[0]!.id).toBe(itemC.id)
+
+    // ONE new walk-in with items A + B
+    const allRes = await prisma.reservation.findMany({
+      where: { siteId: site.id },
+      include: { items: true },
+    })
+    const newWalkIn = allRes.find(r => r.id !== holdRes.id)
+    expect(newWalkIn).toBeDefined()
+    expect(newWalkIn!.status).toBe('paid-in-cash')
+    expect(newWalkIn!.operationalStatus).toBe('walked-in')
+    expect(newWalkIn!.checkedInAt).toBeTruthy()
+    const walkInItemIds = newWalkIn!.items.map(i => i.id).sort()
+    expect(walkInItemIds).toEqual([itemA.id, itemB.id].sort())
+    expect(newWalkIn!.guestName).toBe('Bob')
+    // 2 seats × 10€ × 1 day = 20€
+    expect(newWalkIn!.paymentAmount).toBe(20)
+
+    // Exactly ONE new reservation (not two separate single-seat ones)
+    expect(allRes.filter(r => r.id !== holdRes.id)).toHaveLength(1)
+  })
+
+  it('subset covering all hold items: whole-convert in place (no split)', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { type: 'paid', price: 10 })
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    const holdRes = await createTestReservation(user.id, site.id, [itemA.id, itemB.id, itemC.id], {
+      status: 'held',
+      operationalStatus: 'expected',
+      paymentAmount: 0,
+      from: new Date(new Date().setHours(0, 0, 0, 0)),
+      to: new Date(new Date().setHours(23, 59, 59, 999)),
+    })
+
+    // Pass ALL 3 seats — should whole-convert, not split
+    const result = await convertHoldToWalkIn(
+      site.id, itemA.id, undefined, undefined, undefined, undefined,
+      false, [itemA.id, itemB.id, itemC.id],
+    )
+    expect(result.status).toBe('ok')
+
+    // Still only ONE reservation — the original hold, now a walk-in
+    const allRes = await prisma.reservation.findMany({
+      where: { siteId: site.id },
+      include: { items: true },
+    })
+    expect(allRes).toHaveLength(1)
+    expect(allRes[0]!.id).toBe(holdRes.id)
+    expect(allRes[0]!.status).toBe('paid-in-cash')
+    expect(allRes[0]!.items).toHaveLength(3)
+    // 3 × 10€ × 1 day = 30€
+    expect(allRes[0]!.paymentAmount).toBe(30)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// splitWalkInSeat — real DB
+// ---------------------------------------------------------------------------
+
+describe('splitWalkInSeat', () => {
+  it('3-seat cash walk-in → original keeps 2 items + reduced amount; new 1-item walked-in has per-seat amount + copied employeeId', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { type: 'paid', price: 10 })
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    // Walk-in with 3 seats, 10€ each, 1 day → total 30€
+    const walkIn = await createTestReservation(user.id, site.id, [itemA.id, itemB.id, itemC.id], {
+      status: 'paid-in-cash',
+      operationalStatus: 'walked-in',
+      paymentAmount: 30,
+      from: new Date(new Date().setHours(0, 0, 0, 0)),
+      to: new Date(new Date().setHours(23, 59, 59, 999)),
+    })
+
+    const result = await splitWalkInSeat(site.id, walkIn.id, itemA.id)
+    expect(result.status).toBe('ok')
+    if (result.status !== 'ok') return
+
+    // Original: still has 2 items, reduced paymentAmount.
+    const original = await prisma.reservation.findUnique({
+      where: { id: walkIn.id },
+      include: { items: true },
+    })
+    expect(original).not.toBeNull()
+    expect(original!.items).toHaveLength(2)
+    const remainingIds = original!.items.map(i => i.id)
+    expect(remainingIds).not.toContain(itemA.id)
+    expect(remainingIds).toContain(itemB.id)
+    expect(remainingIds).toContain(itemC.id)
+    // 2 seats × 10€ × 1 day = 20€
+    expect(original!.paymentAmount).toBe(20)
+    expect(original!.operationalStatus).toBe('walked-in')
+
+    // New: single-seat reservation pointing at itemA.
+    const newRes = await prisma.reservation.findUnique({
+      where: { id: result.reservationId },
+      include: { items: true },
+    })
+    expect(newRes).not.toBeNull()
+    expect(newRes!.status).toBe('paid-in-cash')
+    expect(newRes!.operationalStatus).toBe('walked-in')
+    expect(newRes!.items).toHaveLength(1)
+    expect(newRes!.items[0]!.id).toBe(itemA.id)
+    // 1 seat × 10€ × 1 day = 10€
+    expect(newRes!.paymentAmount).toBe(10)
+  })
+
+  it('till total conserved: sum of original + new paymentAmount equals the original total', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { type: 'paid', price: 10 })
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    const originalTotal = 30
+    const walkIn = await createTestReservation(user.id, site.id, [itemA.id, itemB.id, itemC.id], {
+      status: 'paid-in-cash',
+      operationalStatus: 'walked-in',
+      paymentAmount: originalTotal,
+      from: new Date(new Date().setHours(0, 0, 0, 0)),
+      to: new Date(new Date().setHours(23, 59, 59, 999)),
+    })
+
+    const result = await splitWalkInSeat(site.id, walkIn.id, itemA.id)
+    expect(result.status).toBe('ok')
+    if (result.status !== 'ok') return
+
+    const original = await prisma.reservation.findUnique({ where: { id: walkIn.id } })
+    const newRes = await prisma.reservation.findUnique({ where: { id: result.reservationId } })
+
+    // Till conservation invariant: sum across both equals the original total.
+    expect((original!.paymentAmount ?? 0) + (newRes!.paymentAmount ?? 0)).toBe(originalTotal)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// unreserveItem disconnect: till conservation (real DB)
+// ---------------------------------------------------------------------------
+
+describe('unreserveItem disconnect — till conservation', () => {
+  it('disconnecting one seat of a 3-seat walk-in reduces paymentAmount to the remaining 2 seats share', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { type: 'paid', price: 10 })
+    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const itemC = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    // 3-seat walk-in, 10€ each, 1 day → 30€
+    const walkIn = await createTestReservation(user.id, site.id, [itemA.id, itemB.id, itemC.id], {
+      status: 'paid-in-cash',
+      operationalStatus: 'walked-in',
+      paymentAmount: 30,
+      from: new Date(new Date().setHours(0, 0, 0, 0)),
+      to: new Date(new Date().setHours(23, 59, 59, 999)),
+    })
+
+    // Unreserve one seat (Seat mode).
+    const result = await unreserveItem(site.id, itemA.id, undefined, false)
+    expect(result).toEqual({ status: 'ok' })
+
+    // Original reservation survives with 2 items and reduced paymentAmount.
+    const remaining = await prisma.reservation.findUnique({
+      where: { id: walkIn.id },
+      include: { items: true },
+    })
+    expect(remaining).not.toBeNull()
+    expect(remaining!.items).toHaveLength(2)
+    expect(remaining!.items.map(i => i.id)).not.toContain(itemA.id)
+    // 2 seats × 10€ × 1 day = 20€ (freed seat's 10€ leaves the till)
+    expect(remaining!.paymentAmount).toBe(20)
   })
 })

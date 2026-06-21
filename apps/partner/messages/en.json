@@ -761,7 +761,7 @@
     "moveDestSize": "Pick a free group of {n} seats",
     "moveDestInvalid": "Can't move onto an overflow seat",
     "selectedCount": "{n} selected",
-    "bulkFree": "Make available",
+    "bulkMixedStatus": "Select seats of the same status to act on them",
     "bulkNoAction": "No bulk action for this selection",
     "bulkCancelPaidNote": "Cancel paid bookings one at a time to handle the refund",
     "bulkSomeFailed": "{n} couldn't be updated",

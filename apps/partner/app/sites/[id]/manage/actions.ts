@@ -280,7 +280,13 @@ export async function unreserveItem(siteId: string, itemId: string, accessKey?: 
         to: { gte: todayStart },
         items: { some: { id: itemId } },
       },
-      include: { items: true },
+      select: {
+        id: true,
+        from: true,
+        to: true,
+        items: { select: { id: true, price: true } },
+        site: { select: { type: true, price: true } },
+      },
     })
 
     if (!reservation) {
@@ -288,9 +294,25 @@ export async function unreserveItem(siteId: string, itemId: string, accessKey?: 
     }
 
     if (reservation.items.length > 1) {
+      const remainingItems = reservation.items.filter((i) => i.id !== itemId)
+      // Till conservation: reduce paymentAmount to the remaining seats' share so
+      // the refunded seat's cash leaves the till (mirrors the depart-split logic).
+      // Free sites always record 0; paid sites compute from DB prices only (payments.md).
+      const remainingAmount =
+        reservation.site.type === 'paid'
+          ? computeWalkInAmount(
+              remainingItems,
+              reservation.site.price,
+              reservation.from ?? dayjs().startOf('day').toDate(),
+              reservation.to,
+            )
+          : 0
       await prisma.reservation.update({
         where: { id: reservation.id },
-        data: { items: { disconnect: [{ id: itemId }] } },
+        data: {
+          paymentAmount: remainingAmount,
+          items: { disconnect: [{ id: itemId }] },
+        },
       })
     } else {
       await prisma.reservation.deleteMany({
@@ -392,7 +414,34 @@ export async function resumeWalkIn(siteId: string, reservationId: string, access
 
 // ─── Mark departed: customer left ───────────────────────────────────────────
 
-export async function markDeparted(siteId: string, reservationId: string, accessKey?: string) {
+/**
+ * Mark a reservation (or a subset of seats of a multi-seat cash walk-in) as departed.
+ *
+ * `splitItemIds` — optional array; only honoured for `paid-in-cash` + walked-in
+ * reservations. When set AND the subset is smaller than the reservation's full item
+ * count, the selected seats are peeled into ONE new reservation:
+ *   1. In a $transaction: disconnect the subset from the original reservation
+ *      (remaining seats stay walked-in with the reduced paymentAmount), create a
+ *      new reservation for the subset copying the original's attribution
+ *      (employeeId, guestName, userId, from/to, status, checkedInAt), then apply
+ *      the depart transition to the NEW reservation only.
+ *   2. The original reservation is NOT transitioned — its remaining seats stay
+ *      walked-in and the bed remains occupied.
+ *   3. Till conservation: paymentAmount on both the original (reduced) and the new
+ *      (per-subset) sum to the original total when prices are unchanged.
+ * When `splitItemIds` covers ALL the reservation's items (or is empty), the
+ * whole-reservation depart runs in place (no pointless split).
+ *
+ * Online checked-in (RESERVATION_COMPLETE) and QR-collected (complete + walked-in)
+ * reservations are NOT splittable — `splitItemIds` is silently ignored for them and
+ * the whole-reservation depart runs instead (invoice / refund complexity).
+ */
+export async function markDeparted(
+  siteId: string,
+  reservationId: string,
+  accessKey?: string,
+  splitItemIds?: string[],
+) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
@@ -400,9 +449,24 @@ export async function markDeparted(siteId: string, reservationId: string, access
     where: { id: reservationId },
     select: {
       siteId: true,
+      status: true,
       operationalStatus: true,
       to: true,
-      site: { select: { timeZone: true, locationLat: true, locationLng: true } },
+      from: true,
+      checkedInAt: true,
+      guestName: true,
+      userId: true,
+      employeeId: true,
+      items: { select: { id: true, price: true } },
+      site: {
+        select: {
+          type: true,
+          price: true,
+          timeZone: true,
+          locationLat: true,
+          locationLng: true,
+        },
+      },
     },
   })
   if (!reservation || reservation.siteId !== siteId) {
@@ -416,6 +480,144 @@ export async function markDeparted(siteId: string, reservationId: string, access
     return { status: 'error', errors: [`Cannot mark departed from: ${effectiveStatus}`] }
   }
 
+  // Split-then-depart path: only for paid-in-cash + walked-in multi-seat walk-ins.
+  // Online (complete) and QR-collected (complete + walked-in) are excluded: their
+  // invoice complexity makes per-seat partial operations unsafe here.
+  const isCashWalkIn =
+    reservation.status === RESERVATION_PAID_IN_CASH &&
+    effectiveStatus === OP_WALKED_IN
+
+  // Normalise the split set: filter to item ids that actually belong to this reservation.
+  const validSplitIds = (splitItemIds ?? []).filter((id) =>
+    reservation.items.some((i) => i.id === id),
+  )
+
+  // A split is only meaningful when:
+  //   - this is a cash walk-in
+  //   - the caller specified a non-empty subset
+  //   - the subset is SMALLER than the full item count (otherwise it's just a whole depart)
+  const canSplit =
+    isCashWalkIn &&
+    validSplitIds.length > 0 &&
+    reservation.items.length > 1 &&
+    validSplitIds.length < reservation.items.length
+
+  if (canSplit) {
+    const splitItems = reservation.items.filter((i) => validSplitIds.includes(i.id))
+    const remainingItems = reservation.items.filter((i) => !validSplitIds.includes(i.id))
+
+    // Conserve the till: subset + remaining amounts sum to the original total
+    // when prices are unchanged. Both computed from DB prices only (payments.md).
+    const fromDate = reservation.from ?? dayjs().startOf('day').toDate()
+    const toDate = reservation.to
+    const newSubsetAmount =
+      reservation.site.type === 'paid'
+        ? computeWalkInAmount(splitItems, reservation.site.price, fromDate, toDate)
+        : 0
+    const remainingAmount =
+      reservation.site.type === 'paid'
+        ? computeWalkInAmount(remainingItems, reservation.site.price, fromDate, toDate)
+        : 0
+
+    // Determine departure transition BEFORE entering the transaction (uses site tz).
+    const endOfToday = new Date()
+    endOfToday.setHours(23, 59, 59, 999)
+    const hasFutureDays = toDate > endOfToday
+
+    // Compute todayKey BEFORE the transaction — it's a pure timezone calculation.
+    const todayKey = siteDayKey({
+      timeZone: reservation.site.timeZone,
+      latitude: reservation.site.locationLat
+        ? parseFloat(reservation.site.locationLat)
+        : undefined,
+      longitude: reservation.site.locationLng
+        ? parseFloat(reservation.site.locationLng)
+        : undefined,
+    })
+    const todayDate = new Date(todayKey)
+    const departNow = new Date()
+
+    // All DB mutations in one atomic transaction: disconnect → create → depart.
+    await prisma.$transaction(async (tx) => {
+      // 1. Disconnect the splitting subset from the original; reduce the original's amount.
+      await tx.reservation.update({
+        where: { id: reservationId },
+        data: {
+          paymentAmount: remainingAmount,
+          items: { disconnect: validSplitIds.map((id) => ({ id })) },
+        },
+      })
+
+      // 2. Create ONE new reservation for the entire subset, copying original attribution.
+      //    Preserve: employeeId (who collected the cash), guestName, userId, from, to,
+      //    status (paid-in-cash), operationalStatus (walked-in), checkedInAt.
+      const newRes = await tx.reservation.create({
+        data: {
+          siteId,
+          userId: reservation.userId,
+          type: 'days',
+          status: RESERVATION_PAID_IN_CASH,
+          operationalStatus: OP_WALKED_IN,
+          checkedInAt: reservation.checkedInAt,
+          from: fromDate,
+          to: toDate,
+          paymentAmount: newSubsetAmount,
+          ...(reservation.employeeId ? { employeeId: reservation.employeeId } : {}),
+          ...(reservation.guestName ? { guestName: reservation.guestName } : {}),
+          items: { connect: validSplitIds.map((id) => ({ id })) },
+        },
+        select: { id: true },
+      })
+
+      // 3. Apply the depart transition to the NEW single-seat reservation.
+      //    future-days → expected (re-rentable tomorrow); last-day → departed (bed freed).
+      if (hasFutureDays) {
+        await tx.reservationDay.upsert({
+          where: { reservationId_date: { reservationId: newRes.id, date: todayDate } },
+          create: {
+            reservationId: newRes.id,
+            date: todayDate,
+            operationalStatus: OP_EXPECTED,
+            checkedInAt: null,
+            departedAt: null,
+          },
+          update: {
+            operationalStatus: OP_EXPECTED,
+            checkedInAt: null,
+            departedAt: null,
+          },
+        })
+        await tx.reservation.update({
+          where: { id: newRes.id },
+          data: { operationalStatus: OP_EXPECTED, checkedInAt: null, departedAt: null },
+        })
+      } else {
+        await tx.reservationDay.upsert({
+          where: { reservationId_date: { reservationId: newRes.id, date: todayDate } },
+          create: {
+            reservationId: newRes.id,
+            date: todayDate,
+            operationalStatus: OP_DEPARTED,
+            checkedInAt: null,
+            departedAt: departNow,
+          },
+          update: {
+            operationalStatus: OP_DEPARTED,
+            departedAt: departNow,
+          },
+        })
+        await tx.reservation.update({
+          where: { id: newRes.id },
+          data: { operationalStatus: OP_DEPARTED, departedAt: departNow },
+        })
+      }
+    })
+
+    revalidatePath(`/sites/${siteId}/manage`)
+    return { status: 'ok' }
+  }
+
+  // Whole-reservation depart path (unchanged).
   // Depart returns the bed to RESERVED for the rest of the stay, not a terminal
   // "departed" — that's the daily cycle (state machine): a guest who leaves but is
   // booked again tomorrow goes back to reserved (re-rentable tomorrow). Only on the
@@ -1118,7 +1320,9 @@ export async function convertHoldToWalkIn(
   accessKey?: string,
   guestName?: string,
   until?: string,
-  employeeId?: string
+  employeeId?: string,
+  applyToGroup: boolean = true,
+  splitItemIds?: string[],
 ) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
@@ -1176,12 +1380,75 @@ export async function convertHoldToWalkIn(
         },
         select: {
           id: true,
+          from: true,
           items: { select: { id: true, price: true } },
         },
       })
 
       if (!hold) {
         return { outcome: 'not_found' as const }
+      }
+
+      // Subset split path: hold has more items than the split set and caller chose
+      // Seat scope (applyToGroup=false). Disconnect the subset from the hold (hold
+      // stays held, paymentAmount stays 0) and create ONE new walk-in for the subset.
+      // splitItemIds ?? [itemId] → single-seat when no bulk set provided; multi-seat
+      // when bulkRent passes a subset of selected ids from a grouped hold.
+      const splitSet = (splitItemIds ?? [itemId]).filter((id) =>
+        hold.items.some((i) => i.id === id),
+      )
+      if (!applyToGroup && hold.items.length > splitSet.length && splitSet.length > 0) {
+        const splitSetItems = hold.items.filter((i) => splitSet.includes(i.id))
+        const perSubsetAmount = site?.type === 'paid'
+          ? computeWalkInAmount(splitSetItems, site.price, todayStart, toDate)
+          : 0
+
+        // Re-check availability for the split seats on the extended days before creating —
+        // the hold covers today only; the extra days could have a concurrent booking.
+        await tx.$queryRaw`
+          SELECT id FROM "InventoryItem"
+          WHERE id = ANY(${splitSet}::text[])
+          FOR UPDATE
+        `
+        const conflict = await tx.reservation.findFirst({
+          where: {
+            siteId,
+            status: { in: BLOCKING_STATUSES as string[] },
+            operationalStatus: { notIn: [OP_NO_SHOW, OP_DEPARTED] as string[] },
+            from: { lte: toDate },
+            to: { gte: todayStart },
+            items: { some: { id: { in: splitSet } } },
+            id: { not: hold.id },
+          },
+          select: { id: true },
+        })
+        if (conflict) {
+          return { outcome: 'conflict' as const }
+        }
+
+        // Disconnect the subset from the hold; hold keeps its remaining items + held status.
+        await tx.reservation.update({
+          where: { id: hold.id },
+          data: { items: { disconnect: splitSet.map((id) => ({ id })) } },
+        })
+        // Create ONE new walk-in for the whole subset.
+        await tx.reservation.create({
+          data: {
+            siteId,
+            userId: ownership.userId,
+            type: 'days',
+            status: RESERVATION_PAID_IN_CASH,
+            operationalStatus: OP_WALKED_IN,
+            checkedInAt: new Date(),
+            from: hold.from ?? todayStart,
+            to: toDate,
+            paymentAmount: perSubsetAmount,
+            ...(stampedEmployeeId ? { employeeId: stampedEmployeeId } : {}),
+            ...(guestName && guestName.trim() ? { guestName: guestName.trim().slice(0, 200) } : {}),
+            items: { connect: splitSet.map((id) => ({ id })) },
+          },
+        })
+        return { outcome: 'split' as const }
       }
 
       const allItemIds = hold.items.map((i) => i.id)
@@ -1235,7 +1502,7 @@ export async function convertHoldToWalkIn(
     }
   } else {
     // Today-only conversion: the hold already occupies the seat — no conflict
-    // re-check needed. Simple find + update outside a transaction.
+    // re-check needed. Simple find + update outside a transaction (or a split).
     const reservation = await prisma.reservation.findFirst({
       where: {
         siteId,
@@ -1244,21 +1511,61 @@ export async function convertHoldToWalkIn(
         to: { gte: todayStart },
         items: { some: { id: itemId } },
       },
-      select: { id: true, items: { select: { price: true } } },
+      select: { id: true, from: true, items: { select: { id: true, price: true } } },
     })
 
     if (!reservation) {
       return { status: 'error', errors: ['No held reservation found to convert'] }
     }
 
-    const paymentAmount = site?.type === 'paid'
-      ? computeWalkInAmount(reservation.items, site.price, todayStart, toDate)
-      : 0
+    // Subset split path: hold has more items than the split set and caller chose
+    // Seat scope (applyToGroup=false). The hold already covers today for all seats,
+    // so no conflict re-check needed — disconnecting and re-connecting are safe.
+    // splitItemIds ?? [itemId] → single-seat fallback; multi-seat when bulk passes a set.
+    // Compute splitSet lazily inside the guard so tests that mock findFirst without
+    // `items` don't crash when applyToGroup=true (items never accessed on that path).
+    const splitSet = !applyToGroup && reservation.items
+      ? (splitItemIds ?? [itemId]).filter((id) => reservation.items.some((i) => i.id === id))
+      : []
+    if (!applyToGroup && reservation.items && reservation.items.length > splitSet.length && splitSet.length > 0) {
+      const splitSetItems = reservation.items.filter((i) => splitSet.includes(i.id))
+      const perSubsetAmount = site?.type === 'paid'
+        ? computeWalkInAmount(splitSetItems, site.price, todayStart, toDate)
+        : 0
 
-    await prisma.reservation.update({
-      where: { id: reservation.id },
-      data: { ...updateData, paymentAmount },
-    })
+      await prisma.$transaction([
+        prisma.reservation.update({
+          where: { id: reservation.id },
+          data: { items: { disconnect: splitSet.map((id) => ({ id })) } },
+        }),
+        prisma.reservation.create({
+          data: {
+            siteId,
+            userId: ownership.userId,
+            type: 'days',
+            status: RESERVATION_PAID_IN_CASH,
+            operationalStatus: OP_WALKED_IN,
+            checkedInAt: new Date(),
+            from: reservation.from ?? todayStart,
+            to: toDate,
+            paymentAmount: perSubsetAmount,
+            ...(stampedEmployeeId ? { employeeId: stampedEmployeeId } : {}),
+            ...(guestName && guestName.trim() ? { guestName: guestName.trim().slice(0, 200) } : {}),
+            items: { connect: splitSet.map((id) => ({ id })) },
+          },
+        }),
+      ])
+    } else {
+      // Whole-hold conversion (single-item hold OR Group scope): update in place.
+      const paymentAmount = site?.type === 'paid'
+        ? computeWalkInAmount(reservation.items, site.price, todayStart, toDate)
+        : 0
+
+      await prisma.reservation.update({
+        where: { id: reservation.id },
+        data: { ...updateData, paymentAmount },
+      })
+    }
   }
 
   revalidatePath(`/sites/${siteId}/manage`)
@@ -1690,6 +1997,130 @@ export async function cancelCollection(
   })
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok', paymentStatus: 'cash' as const }
+}
+
+// ─── Split one seat off a multi-seat walk-in (Seat-collect primitive) ────────
+
+/**
+ * Peel a single seat from a multi-seat cash walk-in into its own walk-in
+ * reservation, so the Collect Payment QR can target that one seat independently.
+ *
+ * This is the split-without-depart analogue of the depart-split in markDeparted:
+ * the new reservation stays `walked-in` (not departed) and carries the per-seat
+ * paymentAmount. The original keeps its remaining seats with a reduced amount.
+ *
+ * Only valid for `paid-in-cash` + `walked-in` multi-seat reservations. Online
+ * checked-in (complete) and QR-collected (complete + walked-in) are excluded —
+ * their invoice complexity makes per-seat partial operations unsafe.
+ *
+ * Side effect (intentional): if the operator opens the QR modal and then abandons
+ * it, `cancelCollection` reverts the new single-seat reservation to `paid-in-cash`
+ * — the seat remains its own cash walk-in (revertible to cash, never stranded).
+ *
+ * Returns `{ status: 'ok', reservationId: <new id> }` on success.
+ */
+export async function splitWalkInSeat(
+  siteId: string,
+  reservationId: string,
+  itemId: string,
+  accessKey?: string,
+): Promise<{ status: 'ok'; reservationId: string } | { status: 'error'; errors: string[] }> {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const reservation = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    select: {
+      siteId: true,
+      status: true,
+      operationalStatus: true,
+      from: true,
+      to: true,
+      checkedInAt: true,
+      guestName: true,
+      userId: true,
+      employeeId: true,
+      items: { select: { id: true, price: true } },
+      site: { select: { type: true, price: true } },
+    },
+  })
+
+  if (!reservation || reservation.siteId !== siteId) {
+    return { status: 'error', errors: ['Reservation not found'] }
+  }
+
+  // Only cash walk-ins that are currently walked-in are splittable. Online
+  // collected (complete) and any single-item reservation are rejected.
+  if (
+    reservation.status !== RESERVATION_PAID_IN_CASH ||
+    reservation.operationalStatus !== OP_WALKED_IN
+  ) {
+    return { status: 'error', errors: ['Can only split a cash walk-in in walked-in state'] }
+  }
+
+  if (reservation.items.length <= 1) {
+    return { status: 'error', errors: ['Reservation has only one seat — nothing to split'] }
+  }
+
+  const splitItem = reservation.items.find((i) => i.id === itemId)
+  if (!splitItem) {
+    return { status: 'error', errors: ['Item not found on this reservation'] }
+  }
+
+  const remainingItems = reservation.items.filter((i) => i.id !== itemId)
+  const fromDate = reservation.from
+  const toDate = reservation.to
+
+  // Till conservation: per-seat and remaining amounts sum to the original total
+  // when prices are unchanged. Both computed from DB prices only (payments.md).
+  const newSeatAmount =
+    reservation.site.type === 'paid'
+      ? computeWalkInAmount([splitItem], reservation.site.price, fromDate, toDate)
+      : 0
+  const remainingAmount =
+    reservation.site.type === 'paid'
+      ? computeWalkInAmount(remainingItems, reservation.site.price, fromDate, toDate)
+      : 0
+
+  // All mutations in one atomic transaction: disconnect → create new walk-in.
+  // Attribution (employeeId, guestName, userId, from/to, checkedInAt) is copied
+  // to the new reservation so till/accounting traces back to the original worker.
+  const newRes = await prisma.$transaction(async (tx) => {
+    // 1. Disconnect the splitting seat from the original; reduce the original's amount.
+    await tx.reservation.update({
+      where: { id: reservationId },
+      data: {
+        paymentAmount: remainingAmount,
+        items: { disconnect: [{ id: itemId }] },
+      },
+    })
+
+    // 2. Create the new single-seat cash walk-in, copying original attribution.
+    //    Preserve: employeeId (who collected the cash), guestName, userId,
+    //    from, to, checkedInAt, status (paid-in-cash), operationalStatus (walked-in).
+    const created = await tx.reservation.create({
+      data: {
+        siteId,
+        userId: reservation.userId,
+        type: 'days',
+        status: RESERVATION_PAID_IN_CASH,
+        operationalStatus: OP_WALKED_IN,
+        checkedInAt: reservation.checkedInAt,
+        from: fromDate,
+        to: toDate,
+        paymentAmount: newSeatAmount,
+        ...(reservation.employeeId ? { employeeId: reservation.employeeId } : {}),
+        ...(reservation.guestName ? { guestName: reservation.guestName } : {}),
+        items: { connect: [{ id: itemId }] },
+      },
+      select: { id: true },
+    })
+
+    return created
+  })
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok', reservationId: newRes.id }
 }
 
 // ─── Collect payment (QR → Mollie) for a cash walk-in rental ────────────────

@@ -761,7 +761,7 @@
     "moveDestSize": "Valitse vapaa {n} paikan ryhmä",
     "moveDestInvalid": "Ylivuotopaikkaan ei voi siirtää",
     "selectedCount": "{n} valittu",
-    "bulkFree": "Vapauta",
+    "bulkMixedStatus": "Valitse samassa tilassa olevia paikkoja",
     "bulkNoAction": "Tälle valinnalle ei ole joukkotoimintoa",
     "bulkCancelPaidNote": "Peru maksetut varaukset yksitellen hyvityksen hoitamiseksi",
     "bulkSomeFailed": "{n} ei voitu päivittää",

@@ -31,6 +31,7 @@ import {
   collectReservationPayment,
   getCollectStatus,
   cancelCollection,
+  splitWalkInSeat,
 } from './actions'
 import {
   RESERVATION_COMPLETE, RESERVATION_HELD, RESERVATION_PAID_IN_CASH,
@@ -71,8 +72,10 @@ function extraDays(to: Date | string | null | undefined): number {
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-// States where the pair toggle governs a creation/release action
-const TOGGLE_VISIBLE_STATES: BedState[] = ['available', 'blocked', 'walked-in', 'comp']
+// States where the SunbedGroup pair toggle governs a creation/release action.
+// 'walked-in' is intentionally excluded: the walked-in branch uses the
+// reservation-based applyToGroup toggle instead of the physical-group applyToPair.
+const TOGGLE_VISIBLE_STATES: BedState[] = ['available', 'blocked', 'comp']
 
 // Pool seat numbering: number = parcel*10000 + 9900 + seq
 const POOL_BAND_BASE = 9900
@@ -165,6 +168,7 @@ export default function BedDetail({
   siteId,
   item,
   groupItems,
+  reservationItemIds = [],
   accessKey,
   currentWorkerId,
   isPool = false,
@@ -181,6 +185,12 @@ export default function BedDetail({
   item: InventoryItem
   /** All OTHER members of the item's SunbedGroup (empty array when not in a group). */
   groupItems: InventoryItem[]
+  /**
+   * Ids of ALL seats (including this one) that share the tapped seat's active
+   * reservation. Length > 1 signals a multi-seat hold so the HELD branch can show
+   * a Group / Seat scope toggle. Empty when the seat is solo or has no active reservation.
+   */
+  reservationItemIds?: string[]
   accessKey?: string
   /** Current floor-staff worker id — stamped on every create action. */
   currentWorkerId?: string
@@ -207,6 +217,14 @@ export default function BedDetail({
   const [error, setError] = useState<string | null>(null)
   /** Full-screen "Collect payment" QR view for a walk-in. */
   const [showCollect, setShowCollect] = useState(false)
+  /**
+   * The reservation id that CollectPaymentModal targets. In Group mode (or a
+   * single-seat walk-in) this is `reservation.id`. In Seat mode on a
+   * multi-seat walk-in, `splitWalkInSeat` creates a NEW single-seat reservation
+   * first; this state is set to that new id before the modal opens so the QR
+   * charges only this seat's share.
+   */
+  const [collectTargetId, setCollectTargetId] = useState<string | null>(null)
   /** Set once a refund succeeds in this dialog (drives the "Refunded" badge). */
   const [refunded, setRefunded] = useState(false)
   /** Set when a refund 403s for missing permission → offer Mollie re-consent. */
@@ -252,9 +270,19 @@ export default function BedDetail({
   // Default: apply to all group members when in sync; single only when out of sync
   const [applyToPair, setApplyToPair] = useState(inSync)
 
+  // True when this seat's active hold spans multiple items — drives the Group / Seat
+  // toggle in the HELD branch. Distinct from the SunbedGroup toggle (applyToPair)
+  // which is driven by physical grouping; this is driven by reservation seat-count.
+  const groupedReservation = reservationItemIds.length > 1
+
+  // Group scope is the safe default: converting the whole hold avoids leaving a
+  // partially-held group in a confusing state. Staff opt into Seat split explicitly.
+  const [applyToGroup, setApplyToGroup] = useState(true)
+
   // Re-initialize when the selected item changes
   useEffect(() => {
     setApplyToPair(inSync)
+    setApplyToGroup(true)
     setRefunded(false)
     setNeedsReconnect(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -315,21 +343,30 @@ export default function BedDetail({
       runAction(() => cancelReservation(siteId, item.id, accessKey))
     } else if (pendingConfirm === 'depart') {
       if (!reservation) return
-      // Walk-in + Seat mode on an in-sync group: the pair shares ONE reservation,
-      // so departing one seat must disconnect it rather than marking the whole
-      // reservation departed. unreserveItem with applyToPair=false disconnects
-      // just this item (leaving the partner still walked-in).
-      // A collected (paid-online, `complete`) walk-in never disconnects per-seat —
-      // it's whole-reservation (you can't partial-refund one seat of one payment),
-      // and unreserveItem wouldn't match a `complete` row anyway. Depart it as a
-      // whole reservation (money kept).
-      if (state === 'walked-in' && !collected && !applyToPair && inSync && groupItems.length > 0) {
-        runAction(() => unreserveItem(siteId, item.id, accessKey, false))
+      // Walk-in Seat mode on a multi-seat cash walk-in: split-then-depart this one
+      // seat. The new single-seat reservation is created and departed; the original
+      // keeps its remaining seats walked-in with the reduced paymentAmount.
+      // Online checked-in (complete) and QR-collected (complete + walked-in) use the
+      // whole-reservation path — invoice complexity makes per-seat splits unsafe.
+      if (
+        state === 'walked-in' &&
+        !collected &&
+        !applyToGroup &&
+        groupedReservation
+      ) {
+        runAction(() => markDeparted(siteId, reservation.id, accessKey, [item.id]))
       } else {
         runAction(() => markDeparted(siteId, reservation.id, accessKey))
       }
     } else if (pendingConfirm === 'unreserve') {
-      runAction(() => unreserveItem(siteId, item.id, accessKey, applyToPair))
+      // In the walked-in branch, unreserve scope is driven by applyToGroup (the
+      // reservation-based toggle, not the physical-group applyToPair toggle).
+      // Group → delete whole reservation; Seat → disconnect this item only.
+      if (state === 'walked-in') {
+        runAction(() => unreserveItem(siteId, item.id, accessKey, applyToGroup))
+      } else {
+        runAction(() => unreserveItem(siteId, item.id, accessKey, applyToPair))
+      }
     } else if (pendingConfirm === 'remove') {
       if (!reservation) return
       runAction(() => removeFailedReservation(siteId, reservation.id, accessKey))
@@ -808,6 +845,39 @@ export default function BedDetail({
             Period picker ALWAYS; name input ONLY if the hold has no name yet. */}
         {state === 'expected' && reservation && reservation.status === RESERVATION_HELD && (
           <div className="space-y-3">
+            {/* Group / Seat scope toggle — only when this hold covers multiple seats.
+                Group (default): convert all seats in the hold at once.
+                Seat: split off just this seat as a new walk-in; the hold keeps the rest.
+                Styled to match the SunbedGroup pair toggle above (same segmented pill). */}
+            {groupedReservation && (
+              <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 font-semibold">
+                <button
+                  onClick={() => setApplyToGroup(true)}
+                  aria-pressed={applyToGroup}
+                  className={`
+                    flex-1 flex items-center justify-center px-3 min-h-[44px] text-sm transition-colors
+                    ${applyToGroup
+                      ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
+                      : 'bg-white text-gray-400 hover:text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400'}
+                  `}
+                >
+                  {t('group')}
+                </button>
+                <button
+                  onClick={() => setApplyToGroup(false)}
+                  aria-pressed={!applyToGroup}
+                  className={`
+                    flex-1 flex items-center justify-center px-3 min-h-[44px] text-sm border-l border-gray-200 dark:border-gray-700 transition-colors
+                    ${!applyToGroup
+                      ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
+                      : 'bg-white text-gray-400 hover:text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400'}
+                  `}
+                >
+                  {t('seat')}
+                </button>
+              </div>
+            )}
+
             {/* Left: info card (named hold) OR name input (unnamed). The multi-day
                 calendar toggle sits on the SAME row, to the right. */}
             <div className="flex gap-2 items-stretch">
@@ -875,8 +945,10 @@ export default function BedDetail({
               </div>
             )}
 
-            {/* Rent — convert hold to paid walk-in, with the chosen period.
-                Effective name: existing hold name if set, else the typed name. */}
+            {/* Rent — convert hold to paid walk-in, with the chosen period and scope.
+                Effective name: existing hold name if set, else the typed name.
+                applyToGroup controls whether the whole hold converts (Group mode)
+                or just this seat splits off into its own walk-in (Seat mode). */}
             <div className="flex gap-3">
               <button
                 disabled={isPending}
@@ -886,7 +958,8 @@ export default function BedDetail({
                     ? reservation.guestName
                     : (guestName || undefined),
                   until || undefined,
-                  currentWorkerId
+                  currentWorkerId,
+                  applyToGroup,
                 ))}
                 className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50"
               >
@@ -994,6 +1067,40 @@ export default function BedDetail({
           <div className="space-y-3">
             {pendingConfirm ? confirmPanel : (
               <>
+                {/* Reservation-based Group / Seat toggle for multi-seat cash walk-ins.
+                    Shown only when this is a true cash walk-in (not QR-collected) and
+                    the active reservation spans more than one seat. Mirrors the pattern
+                    used by the HELD branch (applyToGroup / groupedReservation). */}
+                {groupedReservation && !collected && (
+                  <div className="mb-1">
+                    <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 font-semibold">
+                      <button
+                        onClick={() => setApplyToGroup(true)}
+                        aria-pressed={applyToGroup}
+                        className={`
+                          flex-1 flex items-center justify-center px-3 min-h-[44px] text-sm transition-colors
+                          ${applyToGroup
+                            ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
+                            : 'bg-white text-gray-400 hover:text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400'}
+                        `}
+                      >
+                        {t('group')}
+                      </button>
+                      <button
+                        onClick={() => setApplyToGroup(false)}
+                        aria-pressed={!applyToGroup}
+                        className={`
+                          flex-1 flex items-center justify-center px-3 min-h-[44px] text-sm border-l border-gray-200 dark:border-gray-700 transition-colors
+                          ${!applyToGroup
+                            ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
+                            : 'bg-white text-gray-400 hover:text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400'}
+                        `}
+                      >
+                        {t('seat')}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <OccupantInfo
                   t={t}
                   reservation={reservation}
@@ -1004,7 +1111,29 @@ export default function BedDetail({
                 {siteIsPaid && !collected && (
                   <button
                     disabled={isPending}
-                    onClick={() => setShowCollect(true)}
+                    onClick={() => {
+                      if (!reservation) return
+                      // Seat mode on a multi-seat walk-in: split off this seat into
+                      // its own walk-in first so the QR charges only this seat's share.
+                      // If the operator abandons the QR (cancelCollection), the new
+                      // single-seat reservation reverts to cash — never stranded.
+                      if (groupedReservation && !applyToGroup) {
+                        setError(null)
+                        startTransition(async () => {
+                          const result = await splitWalkInSeat(siteId, reservation.id, item.id, accessKey)
+                          if (result.status === 'ok') {
+                            setCollectTargetId(result.reservationId)
+                            setShowCollect(true)
+                          } else {
+                            setError(result.errors?.[0] || 'Could not split seat for collection')
+                          }
+                        })
+                      } else {
+                        // Group mode (or a single-seat walk-in): collect the whole reservation.
+                        setCollectTargetId(reservation.id)
+                        setShowCollect(true)
+                      }
+                    }}
                     className="w-full bg-blue-600 text-white font-bold text-lg py-4 rounded-xl active:bg-blue-700 disabled:opacity-50"
                   >
                     💳 {t('collectPayment')}
@@ -1084,15 +1213,19 @@ export default function BedDetail({
         )}
       </div>
 
-      {/* Full-screen Collect payment (QR → Mollie) for the walk-in */}
-      {showCollect && reservation && (
+      {/* Full-screen Collect payment (QR → Mollie) for the walk-in.
+          collectTargetId is either the original reservation.id (Group mode / single-seat)
+          or the newly split single-seat reservation id (Seat mode on a multi-seat walk-in).
+          Seat-mode split happens before the modal opens — the QR always points at a
+          single-seat reservation so the collected amount is per-seat, not whole-group. */}
+      {showCollect && collectTargetId && (
         <CollectPaymentModal
           actions={{
-            create: () => collectReservationPayment(siteId, reservation.id, accessKey),
-            poll:   () => getCollectStatus(siteId, reservation.id, accessKey),
-            cancel: () => cancelCollection(siteId, reservation.id, accessKey),
+            create: () => collectReservationPayment(siteId, collectTargetId, accessKey),
+            poll:   () => getCollectStatus(siteId, collectTargetId, accessKey),
+            cancel: () => cancelCollection(siteId, collectTargetId, accessKey),
           }}
-          onClose={() => setShowCollect(false)}
+          onClose={() => { setShowCollect(false); setCollectTargetId(null) }}
           onSettled={() => onCollected?.()}
         />
       )}

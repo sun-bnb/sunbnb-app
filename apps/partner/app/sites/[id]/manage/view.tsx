@@ -606,23 +606,55 @@ export default function ManageView({
       }
     })
   }
+  /**
+   * For each distinct active reservation in the current selection, compute:
+   *   - `selectedItemIds`: which of the reservation's seats are selected
+   *   - `totalSeats`: how many seats the reservation has in total (on this floor)
+   *   - `isSubset`: selectedItemIds.length < totalSeats → a partial selection
+   * Returns a Map from reservationId → { anySelectedItemId, selectedItemIds, isSubset }.
+   */
+  const getSelectionGroups = () => {
+    const selItems_ = inventoryItems.filter(i => selectedIds.includes(i.id))
+    // Count total seats per reservation across ALL inventoryItems (not just the selection).
+    const totalSeatsByRes = new Map<string, number>()
+    for (const item of inventoryItems) {
+      const res = getActiveReservation(item)
+      if (!res) continue
+      totalSeatsByRes.set(res.id, (totalSeatsByRes.get(res.id) ?? 0) + 1)
+    }
+    const groups = new Map<string, { anyItemId: string; selectedItemIds: string[]; isSubset: boolean }>()
+    for (const i of selItems_) {
+      const res = getActiveReservation(i)
+      if (!res) continue
+      const existing = groups.get(res.id)
+      if (existing) {
+        existing.selectedItemIds.push(i.id)
+        existing.isSubset = existing.selectedItemIds.length < (totalSeatsByRes.get(res.id) ?? existing.selectedItemIds.length)
+      } else {
+        groups.set(res.id, {
+          anyItemId: i.id,
+          selectedItemIds: [i.id],
+          isSubset: 1 < (totalSeatsByRes.get(res.id) ?? 1),
+        })
+      }
+    }
+    return groups
+  }
+
   const bulkRent = () => {
     if (selectedIds.length === 0) return
     const name = bulkGuestName.trim() || undefined
     const until = bulkUntil || undefined
-    // Split selection: free seats → one grouped walk-in; held reservations → convert individually.
+    // Split selection: free seats → one grouped walk-in; held reservations → subset-aware convert.
     const selItems_ = inventoryItems.filter(i => selectedIds.includes(i.id))
     const freeIds = selItems_.filter(i => seatKind(i) === 'available').map(i => i.id)
-    // Deduplicate held reservations: a multi-seat held reservation converts once.
-    const seenHolds = new Set<string>()
-    const heldItemIds: string[] = []
-    for (const i of selItems_) {
-      if (seatKind(i) !== 'held') continue
-      const res = getActiveReservation(i)
-      if (!res || seenHolds.has(res.id)) continue
-      seenHolds.add(res.id)
-      heldItemIds.push(i.id)
-    }
+    // Group held seats by reservation with subset detection.
+    const heldGroups = getSelectionGroups()
+    // Retain only held-reservation groups (free seats handled via reserveItems above).
+    const heldEntries = [...heldGroups.entries()].filter(([, g]) => {
+      const item = inventoryItems.find(i => i.id === g.anyItemId)
+      return item && seatKind(item) === 'held'
+    })
     setBulkError(null)
     startBulkTransition(async () => {
       // 1. Attempt grouped free-seat create first (all-or-nothing). If it fails, abort entirely.
@@ -633,11 +665,18 @@ export default function ManageView({
           return // keep selection, do NOT convert any holds
         }
       }
-      // 2. Convert each distinct held reservation.
+      // 2. Convert each distinct held reservation — subset if partial, whole if all selected.
       let failed = 0
-      for (const itemId of heldItemIds) {
+      for (const [, g] of heldEntries) {
         try {
-          const r = await convertHoldToWalkIn(site.id!, itemId, accessKey, name, until, workerArg)
+          let r: { status: string }
+          if (g.isSubset) {
+            // Partial hold selection: peel off exactly the selected seats as ONE new walk-in.
+            r = await convertHoldToWalkIn(site.id!, g.anyItemId, accessKey, name, until, workerArg, false, g.selectedItemIds)
+          } else {
+            // All seats in this hold selected: whole-hold convert in place.
+            r = await convertHoldToWalkIn(site.id!, g.anyItemId, accessKey, name, until, workerArg, true)
+          }
           if (r.status === 'error') failed++
         } catch { failed++ }
       }
@@ -688,7 +727,35 @@ export default function ManageView({
     })
   }
   const bulkCheckIn = () => bulkByReservation((resId) => checkInReservation(site.id!, resId, accessKey))
-  const bulkDepart = () => bulkByReservation((resId) => markDeparted(site.id!, resId, accessKey))
+  const bulkDepart = () => {
+    // Subset-aware depart: cash walk-ins with a partial selection split off the
+    // selected seats as ONE new reservation (which is then departed); online
+    // checked-in (RESERVATION_COMPLETE) and whole selections whole-depart in place.
+    const groups = getSelectionGroups()
+    if (groups.size === 0) return
+    setBulkError(null)
+    startBulkTransition(async () => {
+      let failed = 0
+      for (const [resId, g] of groups) {
+        try {
+          let r: { status: string }
+          if (g.isSubset) {
+            // Partial selection: markDeparted will peel the subset into a new reservation
+            // and depart it. For non-cash-walk-in reservations the action falls through
+            // to whole-depart (which is safe — the guard lives in the action, not here).
+            r = await markDeparted(site.id!, resId, accessKey, g.selectedItemIds)
+          } else {
+            // Whole reservation selected: whole-depart in place.
+            r = await markDeparted(site.id!, resId, accessKey)
+          }
+          if (r?.status === 'error') failed++
+        } catch { failed++ }
+      }
+      router.refresh()
+      if (failed > 0) setBulkError(t('bulkSomeFailed', { n: failed }))
+      else setSelectedIds([])
+    })
+  }
   const bulkNoShow = () => bulkByReservation((resId) => markNoShow(site.id!, resId, accessKey))
   const bulkCancel = () => bulkByReservation((_resId, itemId) => cancelReservation(site.id!, itemId, accessKey))
   // The ⚠ bulk verbs route through a shared confirm step (mirrors the tap dialog).
@@ -707,20 +774,24 @@ export default function ManageView({
   //   Free (make available): held/walk-in/comp/blocked/failed (no-money vacates)
   const selItems = inventoryItems.filter(i => selectedIds.includes(i.id))
   const can = (states: SeatKind[]) => selItems.length > 0 && selItems.every(i => states.includes(seatKind(i)))
+  // Bulk actions are offered only for a SINGLE status — a mixed selection (e.g.
+  // blocked + occupied) gets no action, for clarity. checked-in and walked-in
+  // count as one "occupied" status (same colour, same depart / move / vacate verbs).
+  const statusGroup = (k: SeatKind) => (k === 'checked-in' || k === 'walked-in') ? 'occupied' : k
+  const sameStatus = selItems.length > 0 && new Set(selItems.map(i => statusGroup(seatKind(i)))).size === 1
   const allAvailable = can(['available'])                         // → the full create row
-  const canRent = can(['available', 'held'])
-  const canFree = can(['held', 'walked-in', 'comp', 'blocked', 'failed'])
+  const canRent = can(['available', 'held']) && sameStatus
   const selKinds = new Set(selItems.map(seatKind))
   const homogeneous = selKinds.size === 1 ? [...selKinds][0] : null
 
   // Paid lane — reservation-level transitions (whole-reservation semantics).
   const canCheckIn = can(['reserved'])
-  const canDepart = can(['checked-in', 'walked-in'])
+  const canDepart = can(['checked-in', 'walked-in']) && sameStatus
   const canNoShow = can(['reserved'])
   // Real Mollie-paid bookings must NEVER be canceled silently (no refund). Cancel
   // is hidden in bulk when any selected booking is Mollie-paid — those are canceled
   // one at a time via the tap dialog, which surfaces the manual refund control.
-  const canCancelStates = can(['reserved', 'checked-in'])
+  const canCancelStates = can(['reserved', 'checked-in']) && sameStatus
   const hasMolliePaid = selItems.some(i => {
     const r = getActiveReservation(i)
     return !!r?.paymentRef && r.paymentRef.startsWith('tr_')
@@ -730,7 +801,7 @@ export default function ManageView({
 
   // Move applies to any selection of relocatable bookings (same states the tap
   // dialog shows Move on). Each booking is relocated in turn via the move queue.
-  const canMove = can(['reserved', 'held', 'checked-in', 'walked-in'])
+  const canMove = can(['reserved', 'held', 'checked-in', 'walked-in']) && sameStatus
   // Square Move button — sits on the dominant action's row (like the tap dialog);
   // rendered standalone when Move is the only applicable verb.
   const bulkMoveSquare = (
@@ -749,17 +820,16 @@ export default function ManageView({
     </button>
   )
 
-  // The vacate button mirrors the tap dialog when the selection is one state
-  // (Release / Unblock / End comp / Unreserve / Remove); a mixed freeable
-  // selection falls back to the generic "Make available". Always runs bulkFree
-  // (which dispatches the right per-seat vacate). Null when not freeable.
+  // The vacate button mirrors the tap dialog, shown only for a single-status
+  // selection (Release / Unblock / End comp / Unreserve / Remove). A mixed
+  // selection offers no vacate — same-status-only, for clarity. Always runs
+  // bulkFree (which dispatches the right per-seat vacate). Null when not freeable.
   const freeButton = (() => {
     if (homogeneous === 'held') return <button disabled={isBulkPending} onClick={bulkFree} className="w-full text-gray-400 dark:text-gray-500 text-sm py-2 active:text-gray-600 dark:active:text-gray-200 disabled:opacity-50">{tb('release')}</button>
     if (homogeneous === 'blocked') return <button disabled={isBulkPending} onClick={bulkFree} className="w-full bg-green-500 text-white font-bold text-lg py-4 rounded-xl active:bg-green-600 disabled:opacity-50">{tb('unblock')}</button>
     if (homogeneous === 'comp') return <button disabled={isBulkPending} onClick={bulkFree} className="w-full bg-green-500 text-white font-bold text-lg py-4 rounded-xl active:bg-green-600 disabled:opacity-50">{tb('endComp')}</button>
     if (homogeneous === 'walked-in') return <button disabled={isBulkPending} onClick={bulkFree} className="w-full text-red-500 text-sm py-2 active:text-red-700 disabled:opacity-50">{tb('unreserve')}</button>
     if (homogeneous === 'failed') return <button disabled={isBulkPending} onClick={bulkFree} className="w-full bg-red-500 text-white font-bold text-lg py-4 rounded-xl active:bg-red-600 disabled:opacity-50">{tb('remove')}</button>
-    if (!homogeneous && canFree) return <button disabled={isBulkPending} onClick={bulkFree} className="w-full bg-green-500 text-white font-bold text-lg py-4 rounded-xl active:bg-green-600 disabled:opacity-50">{t('bulkFree')}</button>
     return null
   })()
 
@@ -975,6 +1045,16 @@ export default function ManageView({
               ? inventoryItems.filter(i => i.id !== liveSelectedItem.id && i.sunbedGroupId === liveSelectedItem.sunbedGroupId)
               : []
           }
+          reservationItemIds={(() => {
+            // Ids of all seats sharing the tapped seat's active reservation.
+            // Used by the HELD branch to offer a Group / Seat split toggle when
+            // the hold covers more than one item.
+            const activeRes = getActiveReservation(liveSelectedItem)
+            if (!activeRes) return []
+            return inventoryItems
+              .filter(i => getActiveReservation(i)?.id === activeRes.id)
+              .map(i => i.id)
+          })()}
           accessKey={accessKey}
           currentWorkerId={workerArg}
           isPool={selectedItemIsPool}
@@ -1164,7 +1244,7 @@ export default function ManageView({
               )}
 
               {!allAvailable && !canRent && !canCheckIn && !canDepart && !canMove && !freeButton && !canCancel && !cancelBlockedByPaid && (
-                <div className="text-gray-500 dark:text-gray-400 text-center py-2">{t('bulkNoAction')}</div>
+                <div className="text-gray-500 dark:text-gray-400 text-center py-2">{!sameStatus ? t('bulkMixedStatus') : t('bulkNoAction')}</div>
               )}
                 </>
               )}

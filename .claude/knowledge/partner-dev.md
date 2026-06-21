@@ -16,6 +16,7 @@ pointer here + the full entry in its section below.)*
 - **Bug patterns & fixes** — recurring partner-app bugs — see "verifySiteOwnership vs verifySiteAccess scope divergence", "Prisma upsert is not atomic — RSC-prefetch concurrency crash on manage page"
 - **Component decomposition** — manage page decomposition, shared state boundary, pinch handler scroll-target — see "Decomposing view.tsx manage monolith"
 - **Manage page naming** — hold/reserve/rent action-row distinction — see "Reserve vs Rent vs Hold terminology"
+- **Till conservation** — unreserveItem disconnect + splitWalkInSeat reduce paymentAmount; depart-split pattern — see "Till conservation in per-seat walk-in operations"
 - **BedDetail state-machine patterns** — convertHoldToWalkIn in-place update + multi-day $transaction extend, pendingConfirm per-branch guards, inSync-gated toggle, walk-in disconnect depart — see "BedDetail state-machine patterns"
 - **Rejected approaches** — dead-ends, so nobody re-tries them — see "React onWheel prop"
 - **Mollie lib tests** — mocking strategy for app/api/_lib/mollie.ts — see "Testing mollie.ts: mocking boundary + scope separator"
@@ -220,6 +221,34 @@ is already in `BLOCKING_STATUSES` so a hold occupies the bed correctly. No DB mi
 `operationalStatus`, check whether it needs any of the 7-file state-add checklist. A `held` hold
 maps to `OP_EXPECTED` — zero state-file changes — but still needs: `actions.ts` action, gated-actions
 registry, cleanup cron update, i18n, tests.
+
+## Multiselect subset split
+
+### 2026-06-21: Generalising per-seat split to multi-seat MULTISELECT subset
+**Pattern:** `markDeparted(siteId, resId, accessKey, splitItemIds?: string[])` and `convertHoldToWalkIn(..., applyToGroup, splitItemIds?: string[])` now accept an array. When the array covers a PROPER SUBSET of the reservation's items, ONE new reservation is created with the whole subset (not one-per-seat). When the array covers ALL items, the action falls through to whole-depart/whole-convert.
+
+**Gotcha 1 — lazy splitSet:** Computing `splitSet = (splitItemIds ?? [...]).filter(id => reservation.items.some(...))` unconditionally crashes when existing tests mock `findFirst` without `items`. Fix: wrap in `!applyToGroup && reservation.items ? ... : []` so `.some()` is never called when `applyToGroup=true` or `items` is absent.
+
+**Gotcha 2 — existing callers must be updated to array form:** BedDetail.tsx passed `item.id` (string); integration tests passed `itemA.id` (string). Both must become `[item.id]` / `[itemA.id]`. TypeScript won't flag it because `string | undefined` matches `string[] | undefined` in some interpretations — only `(splitItemIds ?? []).filter is not a function` reveals the bug at runtime.
+
+**view.tsx helper:** `getSelectionGroups()` maps selectedIds → `{ anyItemId, selectedItemIds, isSubset }` per reservationId, using `inventoryItems` (full floor, not just selection) for `totalSeats`. `bulkRent` uses `isSubset` to pick `applyToGroup=false` + `splitItemIds` vs `applyToGroup=true`; `bulkDepart` uses it to pass `selectedItemIds` or no-ids.
+
+## Till conservation in per-seat walk-in operations
+
+### 2026-06-21: unreserveItem disconnect + splitWalkInSeat — till conservation pattern
+**Problem:** Freeing one seat of a multi-seat cash walk-in (Seat-unreserve or Seat-collect split) without reducing `paymentAmount` leaves the freed seat's cash counted in the till even though the guest is no longer there. The depart-split in `markDeparted` handled this correctly; the disconnect path in `unreserveItem` and the new `splitWalkInSeat` action needed the same treatment.
+
+**Fix — `unreserveItem` disconnect path:** The `findFirst` select was changed from `include: { items: true }` to `select: { id, from, to, items: { select: { id, price } }, site: { select: { type, price } } }`. On the `items.length > 1` branch, `computeWalkInAmount(remainingItems, site.price, from, to)` is called and the update now carries `paymentAmount: remainingAmount` alongside `items: { disconnect }`. The whole-delete path (single item or `applyToPair=true`) is unchanged — deleting removes all cash from the till naturally.
+
+**New action — `splitWalkInSeat(siteId, reservationId, itemId, accessKey)`:** "Peel without departing." Same `$transaction` shape as depart-split in `markDeparted` but without the depart transition — the new reservation stays `walked-in`. Returns `{ status: 'ok', reservationId: <newId> }`. Only valid for `paid-in-cash` + `walked-in` + `items.length > 1`. Returns errors for: online collected (complete), single-item, item not on reservation. Attribution (employeeId, guestName, userId, from, to, checkedInAt) is copied to the new reservation.
+
+**BedDetail wiring (Collect button):** Added `collectTargetId` state (default null). In Seat mode (`groupedReservation && !applyToGroup`): call `splitWalkInSeat` inside a transition, set `collectTargetId = result.reservationId`, then open the modal. In Group mode: set `collectTargetId = reservation.id` directly. `CollectPaymentModal` actions now bind to `collectTargetId`. On close: reset both `setShowCollect(false)` AND `setCollectTargetId(null)` — if only one resets, a stale id leaks into the next open.
+
+**Till conservation invariant:** `original.paymentAmount + new.paymentAmount == originalTotal` when prices are unchanged. Assert this in integration tests, not just that the individual values are correct.
+
+**Registration:** `splitWalkInSeat` is a gated action — registered in `app/test/gated-actions.ts` as `token-or-session`, same as all other manage actions.
+
+**Test pattern for `$transaction` with captured tx args:** Mock `prisma.$transaction.mockImplementationOnce(async (fn: any) => fn({ reservation: { update: vi.fn().mockImplementation((args) => { captured = args; return {} }), create: vi.fn()... } }))`. This intercepts both sides of the transaction with independent captures.
 
 ## BedDetail state-machine patterns
 
