@@ -111,6 +111,23 @@ cycle). Early-checkout / release-rest-of-stay is a separate cancel/edit concern,
 
 ## Log
 
+- **2026-06-21 — Aligned to the user's offline/online state machine (the real model).** User
+  spelled out the crux: Available →Reserve→ **Held**; Available →Rent→ **Walk-in**; Held →Release→
+  Available; Held →Rent→ Walk-in; Walk-in →**Depart**→ **Held** *(if valid tomorrow)*; Walk-in
+  →**Unreserve**→ Available *(last day)*. Online follows the same cycle. **Key fix: `markDeparted`
+  now returns a MULTIDAY booking to RESERVED (`expected`), not a terminal `departed`** — that IS the
+  daily reset, and it keeps the bed held (re-rentable tomorrow) without per-day double-sell math.
+  Only on the LAST day (no future days, `to <= end of today`) does depart mark `departed` → freed
+  via the stay-over rule. Also: (a) **appearance** — a reserved bed is now calm yellow ● (or € when
+  paid online), never the flashing ⏳ hourglass; only a genuinely in-flight `processing` payment
+  pulses; (b) **`resolveTodayRow`** now syncs walk-in/comp from the parent so a held→walk-in convert
+  isn't left as a stale reserved/⏳; (c) **`unreserveItem`** works in ANY operational state (free a
+  cash walk-in any time, incl. after depart/no-show). +1 integration test (multiday depart → reserved
+  + still blocks) + appearance/unreserve unit-test updates. Green: partner 1579u+131i; data/user
+  unchanged. NOTE: this leans toward retiring the per-day-row complexity P1 added — the machine gives
+  daily-reset natively; the rows are now largely vestigial (kept dormant, can be dropped later). UI
+  follow-up: BedDetail could relabel "Depart" → "Check out"/"Unreserve" on the last day, and the
+  online present-state shows blue checked-in vs orange walk-in after the first cycle (cosmetic).
 - **2026-06-21 — P2 refined to the STAY-OVER rule (corrects the day before).** The earlier P2
   "op-status never frees a bed" was too blunt: it broke same-day walk-in turnover (rent → depart →
   re-rent failed "already reserved for part of this period") AND left the grid lying (the departed

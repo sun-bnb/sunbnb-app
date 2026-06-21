@@ -8,7 +8,7 @@
 import { InventoryItem, Reservation } from '@/types/shared'
 import {
   OP_EXPECTED, OP_CHECKED_IN, OP_WALKED_IN, OP_DEPARTED, OP_NO_SHOW, OP_COMP,
-  RESERVATION_COMPLETE, RESERVATION_PAYMENT_FAILED, RESERVATION_HELD,
+  RESERVATION_COMPLETE, RESERVATION_PAYMENT_FAILED, RESERVATION_PROCESSING,
 } from '@repo/data/reservation-status'
 
 export type BedState = 'available' | 'expected' | 'checked-in' | 'walked-in' | 'blocked' | 'comp'
@@ -95,11 +95,11 @@ export function getBedState(item: InventoryItem): BedState {
 /**
  * Returns the Tailwind CSS classes and icon string for a seat grid cell.
  *
- * Within the 'expected' state the appearance branches on the active reservation's
- * payment status:
- * - Failed payment (payment_failed / legacy 'error'): red ✕, no blink
- * - Paid online (complete): yellow €, NO animate-pulse-slow
- * - Held / pending / processing: yellow ⏳ + animate-pulse-slow (unchanged)
+ * A reserved/held bed is a calm, stable state — never a flashing hourglass:
+ * - Failed payment (payment_failed / legacy 'error'): red ✕
+ * - Paid online (complete): yellow € (paid marker)
+ * - Everything else reserved (held / paid-in-cash / pending): yellow ● (dot)
+ * Only a genuinely in-flight online payment (processing) keeps the ⏳ + pulse.
  *
  * All other states use fixed colors (unchanged from before).
  */
@@ -113,23 +113,22 @@ export function getCellAppearance(item: InventoryItem): { bg: string; icon: stri
         return { bg: 'bg-red-200 border-red-500 text-red-700', icon: '✕' }
       }
       if (res.status === RESERVATION_COMPLETE) {
-        // Paid booking — solid yellow, no pulse (guest has paid, no urgency)
+        // Paid online — solid yellow €, no pulse.
         return { bg: 'bg-yellow-300 border-yellow-500', icon: '€' }
       }
-      if (res.status === RESERVATION_HELD) {
-        // Staff hold — a deliberate, stable state, not an in-flight one. Keep it
-        // calm (no pulse) and use the same filled-circle glyph as a rented seat,
-        // in held yellow rather than the hourglass.
-        return { bg: 'bg-yellow-300 border-yellow-500', icon: '●' }
+      // A genuinely in-flight online payment is the only transient case worth a
+      // pulse; everything else reserved is a calm, stable yellow dot.
+      if (res.status === RESERVATION_PROCESSING) {
+        return { bg: 'bg-yellow-300 border-yellow-500 animate-pulse-slow', icon: '⏳' }
       }
     }
-    // Pending / processing — in-flight payment, pulse to signal the transient state
-    return { bg: 'bg-yellow-300 border-yellow-500 animate-pulse-slow', icon: '⏳' }
+    // Reserved/held (held / paid-in-cash / pending) — calm yellow dot, no pulse.
+    return { bg: 'bg-yellow-300 border-yellow-500', icon: '●' }
   }
 
   const stateStyles: Record<BedState, { bg: string; icon: string }> = {
     'available':  { bg: 'bg-green-300 border-green-500', icon: '' },
-    'expected':   { bg: 'bg-yellow-300 border-yellow-500 animate-pulse-slow', icon: '⏳' },
+    'expected':   { bg: 'bg-yellow-300 border-yellow-500', icon: '●' },
     'checked-in': { bg: 'bg-blue-400 border-blue-600 text-white', icon: '✓' },
     'walked-in':  { bg: 'bg-orange-400 border-orange-600 text-white', icon: '●' },
     'blocked':    { bg: 'bg-gray-400 border-gray-600 text-white', icon: '✕' },

@@ -78,14 +78,14 @@ export async function resolveTodayRow(
   const tz = toSiteTimezone(site)
   const todayKey = siteDayKey(tz)
 
-  // Determine the initial operationalStatus for a freshly-created row.
-  // Walk-ins and comps are already "arrived" kinds — mirror parent on create.
-  const initialStatus = (
+  // Walk-ins and comps are "present-now" kinds: the bed reflects the parent's
+  // current status directly (no daily re-cycle). The per-day-cycling kinds
+  // (checked-in / departed / no-show) default to `expected` on a fresh day and
+  // are then driven by the explicit transition actions (applyDayTransition).
+  const presentState =
     reservation.operationalStatus === OP_WALKED_IN ||
     reservation.operationalStatus === OP_COMP
-  )
-    ? reservation.operationalStatus
-    : OP_EXPECTED
+  const initialStatus = presentState ? reservation.operationalStatus : OP_EXPECTED
 
   try {
     const row = await prisma.reservationDay.upsert({
@@ -104,7 +104,12 @@ export async function resolveTodayRow(
           : null,
         departedAt: null,
       },
-      update: {}, // no-op if the row already exists — keep what's there
+      // Keep a present-state row (walked-in/comp) IN SYNC with the parent — this
+      // catches in-place transitions that don't go through applyDayTransition,
+      // e.g. converting a held seat to a walk-in (held row was 'expected', the
+      // convert flips the parent to walked-in → sync so the grid shows rented,
+      // not a stale reserved/⏳). Per-day-cycling kinds keep their row untouched.
+      update: presentState ? { operationalStatus: reservation.operationalStatus } : {},
     })
     return row as ReservationDayRow
   } catch (err) {

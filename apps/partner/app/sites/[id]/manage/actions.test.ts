@@ -328,7 +328,9 @@ describe('unreserveItem', () => {
     // Core ownership + status filters must remain
     expect(where.siteId).toBe(SITE_ID)
     expect(where.status).toBe('paid-in-cash')
-    expect(where.operationalStatus).toBe('walked-in')
+    // A cash walk-in can be unreserved in ANY operational state (incl. departed /
+    // no-show) — no operationalStatus constraint. (track 012)
+    expect(where.operationalStatus).toBeUndefined()
     expect(where.items.some.id).toBe(ITEM_ID)
   })
 

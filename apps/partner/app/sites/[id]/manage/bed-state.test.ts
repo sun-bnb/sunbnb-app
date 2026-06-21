@@ -171,8 +171,16 @@ describe('getCellAppearance', () => {
       expect(a.bg).not.toContain('animate-pulse')
     })
 
-    it('pending / processing → yellow ⏳ with pulse', () => {
-      const a = getCellAppearance(item([res(OP_EXPECTED, 'pending')]))
+    it('paid-in-cash / pending reserved → calm yellow ● (no pulse, no hourglass)', () => {
+      for (const status of ['paid-in-cash', 'pending']) {
+        const a = getCellAppearance(item([res(OP_EXPECTED, status)]))
+        expect(a.icon).toBe('●')
+        expect(a.bg).toContain('bg-yellow-300')
+        expect(a.bg).not.toContain('animate-pulse')
+      }
+    })
+    it('only a genuinely in-flight online payment (processing) → yellow ⏳ with pulse', () => {
+      const a = getCellAppearance(item([res(OP_EXPECTED, 'processing')]))
       expect(a.icon).toBe('⏳')
       expect(a.bg).toContain('animate-pulse-slow')
     })

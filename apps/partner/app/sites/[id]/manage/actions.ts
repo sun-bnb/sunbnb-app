@@ -253,7 +253,8 @@ export async function unreserveItem(siteId: string, itemId: string, accessKey?: 
       where: {
         siteId,
         status: RESERVATION_PAID_IN_CASH,
-        operationalStatus: OP_WALKED_IN,
+        // Any operational state — a cash walk-in can be unreserved at any time,
+        // including after it's been departed or marked no-show (track 012).
         from: { lte: todayEnd },
         to: { gte: todayStart },
         items: { some: { id: itemId } },
@@ -349,6 +350,7 @@ export async function markDeparted(siteId: string, reservationId: string, access
     select: {
       siteId: true,
       operationalStatus: true,
+      to: true,
       site: { select: { timeZone: true, locationLat: true, locationLng: true } },
     },
   })
@@ -363,12 +365,28 @@ export async function markDeparted(siteId: string, reservationId: string, access
     return { status: 'error', errors: [`Cannot mark departed from: ${effectiveStatus}`] }
   }
 
-  const now = new Date()
-  await applyDayTransition(
-    { id: reservationId },
-    reservation.site,
-    { operationalStatus: OP_DEPARTED, departedAt: now },
-  )
+  // Depart returns the bed to RESERVED for the rest of the stay, not a terminal
+  // "departed" — that's the daily cycle (state machine): a guest who leaves but is
+  // booked again tomorrow goes back to reserved (re-rentable tomorrow). Only on the
+  // LAST day (no remaining reserved days) does departing end the stay → `departed`,
+  // which frees the bed via the stay-over rule. (track 012)
+  const endOfToday = new Date()
+  endOfToday.setHours(23, 59, 59, 999)
+  const hasFutureDays = reservation.to > endOfToday
+
+  if (hasFutureDays) {
+    await applyDayTransition(
+      { id: reservationId },
+      reservation.site,
+      { operationalStatus: OP_EXPECTED, checkedInAt: null, departedAt: null },
+    )
+  } else {
+    await applyDayTransition(
+      { id: reservationId },
+      reservation.site,
+      { operationalStatus: OP_DEPARTED, departedAt: new Date() },
+    )
+  }
 
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok' }

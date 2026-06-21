@@ -255,6 +255,33 @@ describe('check-in / departure lifecycle', () => {
     expect(afterDepart!.departedAt).toBeTruthy()
   })
 
+  it('markDeparted on a MULTIDAY booking returns it to RESERVED (expected), not departed — daily cycle', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id)
+    mockUserId = user.id
+
+    // A booking that extends past today (future reserved days remain).
+    const reservation = await createTestReservation(user.id, site.id, [item.id], {
+      status: 'complete',
+      operationalStatus: 'checked-in',
+      from: new Date(new Date().setHours(0, 0, 0, 0)),
+      to: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+    })
+
+    const departResult = await markDeparted(site.id, reservation.id)
+    expect(departResult).toEqual({ status: 'ok' })
+
+    // Returned to reserved for the rest of the stay — NOT a terminal 'departed'.
+    const after = await prisma.reservation.findUnique({ where: { id: reservation.id } })
+    expect(after!.operationalStatus).toBe('expected')
+    expect(after!.departedAt).toBeNull()
+
+    // Still HELD: the bed blocks a new booking on the same seat (future days remain).
+    const reRent = await reserveItems(site.id, [item.id], 'New Party')
+    expect(reRent.status).toBe('error')
+  })
+
   it('checkInReservation rejects non-expected status and DB stays unchanged', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id)
