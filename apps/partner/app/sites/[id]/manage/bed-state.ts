@@ -126,10 +126,21 @@ export function getCellAppearance(item: InventoryItem): { bg: string; icon: stri
     return { bg: 'bg-yellow-300 border-yellow-500', icon: '●' }
   }
 
+  // OCCUPIED — a present guest, online or offline. One colour (orange); online vs
+  // offline is shown only by the marker (€ when paid online, ● otherwise). This
+  // unifies the old checked-in (blue ✓) and walked-in (orange ●) into one state.
+  if (state === 'checked-in' || state === 'walked-in') {
+    const res = getActiveReservation(item)
+    return {
+      bg: 'bg-orange-400 border-orange-600 text-white',
+      icon: res?.status === RESERVATION_COMPLETE ? '€' : '●',
+    }
+  }
+
   const stateStyles: Record<BedState, { bg: string; icon: string }> = {
     'available':  { bg: 'bg-green-300 border-green-500', icon: '' },
     'expected':   { bg: 'bg-yellow-300 border-yellow-500', icon: '●' },
-    'checked-in': { bg: 'bg-blue-400 border-blue-600 text-white', icon: '✓' },
+    'checked-in': { bg: 'bg-orange-400 border-orange-600 text-white', icon: '€' },
     'walked-in':  { bg: 'bg-orange-400 border-orange-600 text-white', icon: '●' },
     'blocked':    { bg: 'bg-gray-400 border-gray-600 text-white', icon: '✕' },
     'comp':       { bg: 'bg-purple-300 border-purple-500', icon: '★' },

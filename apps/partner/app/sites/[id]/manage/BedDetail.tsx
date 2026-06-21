@@ -11,6 +11,7 @@ import {
   reserveItem,
   unreserveItem,
   checkInReservation,
+  resumeWalkIn,
   markDeparted,
   markNoShow,
   updateReservationNotes,
@@ -48,7 +49,8 @@ import {
 const stateBadgeColors: Record<BedState, string> = {
   'available': 'bg-green-200 text-green-900',
   'expected': 'bg-yellow-200 text-yellow-900',
-  'checked-in': 'bg-blue-200 text-blue-900',
+  // Occupied (online checked-in + offline walk-in) share one colour — orange.
+  'checked-in': 'bg-orange-200 text-orange-900',
   'walked-in': 'bg-orange-200 text-orange-900',
   'blocked': 'bg-gray-300 text-gray-800',
   'comp': 'bg-purple-200 text-purple-900',
@@ -216,9 +218,10 @@ export default function BedDetail({
 
   const stateLabels: Record<BedState, string> = {
     'available': t('free'),
-    'expected': t('booked'),
-    'checked-in': t('here'),
-    'walked-in': t('walkIn'),
+    'expected': t('reserved'),
+    // Occupied — one name for online (checked-in) and offline (walk-in).
+    'checked-in': t('occupied'),
+    'walked-in': t('occupied'),
     'blocked': t('blocked'),
     'comp': t('comp'),
   }
@@ -256,6 +259,22 @@ export default function BedDetail({
     setNeedsReconnect(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.id])
+
+  // Pre-fill `until` from a multi-day reservation so the period carries into
+  // the Rent / Walk-in panel without staff having to re-enter it. Only when the
+  // reservation's `to` is strictly AFTER end-of-today (a genuine multi-day stay).
+  useEffect(() => {
+    if (reservation && reservation.to) {
+      const resToEnd = dayjs(reservation.to).startOf('day')
+      const todayEnd = dayjs().startOf('day')
+      if (resToEnd.isAfter(todayEnd)) {
+        setUntil(dayjs(reservation.to).format('YYYY-MM-DD'))
+        return
+      }
+    }
+    setUntil('')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reservation?.id, reservation?.to])
 
   // A refund is offered only for a real Mollie payment (tr_…). Demo/cash/comp/held
   // bookings carry no refundable Mollie payment, so no refund control is shown.
@@ -595,7 +614,8 @@ export default function BedDetail({
                 <span className="text-base leading-none" aria-hidden="true">★</span>
                 <span className="text-[10px] font-semibold leading-none">{t('comp')}</span>
               </button>
-              {/* Reserve — lightweight today-only hold (no payment, shows as yellow "booked") */}
+              {/* Reserve — lightweight hold (no payment, shows as yellow "booked").
+                  Until is passed so a multi-day period picked here is saved. */}
               <button
                 disabled={isPending}
                 onClick={() => runAction(() => holdBed(
@@ -603,7 +623,8 @@ export default function BedDetail({
                   groupItems.length > 0 ? applyToPair : false,
                   guestName || undefined,
                   undefined,
-                  currentWorkerId
+                  currentWorkerId,
+                  (isPool && !isGroupExtra) ? undefined : (until || undefined)
                 ))}
                 className="flex-1 bg-yellow-400 text-yellow-900 font-bold text-lg py-4 rounded-xl active:bg-yellow-500 disabled:opacity-50"
               >
@@ -741,10 +762,11 @@ export default function BedDetail({
 
         {/* ── RESERVED — paid-in-cash walk-in between days ──
             A multiday walk-in that departed for the day; reserved for the rest of
-            its stay (status=paid-in-cash, op=expected, the Walk-in→Depart→reserved
-            leg of the daily cycle). Re-seat it (Check-in) or free it (Unreserve —
-            delete, cash already settled offline). Without this branch it fell to the
-            buttonless IN-FLIGHT fallback below → an out-of-control reservation. */}
+            its stay (status=paid-in-cash, op=expected, the Walk-in→Depart→expected
+            leg of the daily cycle). Re-seat it ("Walk-in" → orange walked-in, no
+            re-charge) or free it (Unreserve — delete, cash already settled offline).
+            Uses resumeWalkIn (not checkInReservation) so the bed goes orange, not blue
+            (this is a returning cash guest, not an online booking arrival). */}
         {state === 'expected' && reservation && reservation.status === RESERVATION_PAID_IN_CASH && (
           <div className="space-y-3">
             {pendingConfirm ? confirmPanel : (
@@ -759,8 +781,8 @@ export default function BedDetail({
                 <div className="flex gap-3">
                   <button
                     disabled={isPending}
-                    onClick={() => runAction(() => checkInReservation(siteId, reservation.id, accessKey))}
-                    className="flex-1 bg-blue-500 text-white font-bold text-lg py-4 rounded-xl active:bg-blue-600 disabled:opacity-50"
+                    onClick={() => runAction(() => resumeWalkIn(siteId, reservation.id, accessKey))}
+                    className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50"
                   >
                     {isPending ? '...' : t('checkIn')}
                   </button>
@@ -868,7 +890,7 @@ export default function BedDetail({
                 ))}
                 className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50"
               >
-                {isPending ? '...' : t('rent')}
+                {isPending ? '...' : t('checkIn')}
               </button>
               {moveSquare}
             </div>
@@ -942,7 +964,7 @@ export default function BedDetail({
                 <OccupantInfo
                   t={t}
                   reservation={reservation}
-                  tintClass="bg-blue-50 dark:bg-blue-950/30 border-2 border-blue-200 dark:border-blue-800/40"
+                  tintClass="bg-orange-50 dark:bg-orange-950/30 border-2 border-orange-200 dark:border-orange-800/40"
                   paymentState="paid"
                 />
                 <div className="flex gap-3">

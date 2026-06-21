@@ -774,6 +774,8 @@
     "note": "Note",
     "free": "Vapaa",
     "booked": "Varattu",
+    "reserved": "Varattu",
+    "occupied": "Käytössä",
     "here": "Paikalla",
     "walkIn": "Ilman varausta",
     "blocked": "Estetty",

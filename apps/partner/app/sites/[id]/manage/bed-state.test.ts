@@ -146,9 +146,18 @@ describe('getCellAppearance', () => {
 
   it('renders the fixed-color states', () => {
     expect(getCellAppearance(item([])).bg).toContain('bg-green-300')              // available
-    expect(getCellAppearance(item([res(OP_CHECKED_IN)])).bg).toContain('bg-blue-400')
+    // Occupied — one colour (orange) for both online checked-in and offline walk-in.
+    expect(getCellAppearance(item([res(OP_CHECKED_IN)])).bg).toContain('bg-orange-400')
     expect(getCellAppearance(item([res(OP_WALKED_IN)])).bg).toContain('bg-orange-400')
     expect(getCellAppearance(item([res('blocked')])).bg).toContain('bg-gray-400')
+  })
+  it('occupied differentiates online vs offline by the marker only (€ vs ●), same colour', () => {
+    const online = getCellAppearance(item([res(OP_CHECKED_IN, RESERVATION_COMPLETE)]))
+    const offline = getCellAppearance(item([res(OP_WALKED_IN, 'paid-in-cash')]))
+    expect(online.bg).toContain('bg-orange-400')
+    expect(offline.bg).toContain('bg-orange-400')
+    expect(online.icon).toBe('€')
+    expect(offline.icon).toBe('●')
   })
 
   describe('expected-state payment branches', () => {

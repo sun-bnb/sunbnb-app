@@ -24,6 +24,7 @@ import {
   reserveItems,
   unreserveItem,
   checkInReservation,
+  resumeWalkIn,
   markDeparted,
   markNoShow,
   updateReservationNotes,
@@ -483,6 +484,12 @@ export const GATED_ACTIONS: GatedAction[] = [
     kind: 'action',
     gate: 'token-or-session',
     invoke: (accessKey?) => holdBeds(SITE_ID, [ITEM_ID], accessKey),
+  },
+  {
+    name: 'manage.resumeWalkIn',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => resumeWalkIn(SITE_ID, RES_ID, accessKey),
   },
 
   // ══════════════════════════════════════════════════════════════════════════

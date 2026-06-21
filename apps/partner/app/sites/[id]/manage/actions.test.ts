@@ -29,6 +29,7 @@ import {
   reserveItem,
   unreserveItem,
   checkInReservation,
+  resumeWalkIn,
   markDeparted,
   markNoShow,
   updateReservationNotes,
@@ -3373,5 +3374,147 @@ describe('cancelRentalCollection', () => {
     authenticateAsNonOwner()
     const res = await cancelRentalCollection(SITE_ID, BOOKING_ID)
     expect(res.status).toBe('error')
+  })
+})
+
+// ─── holdBed — multi-day until param ────────────────────────────────────────
+
+describe('holdBed — multi-day until param', () => {
+  it('saves the multi-day period when until is provided', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+    const until = dayjs().add(3, 'day').format('YYYY-MM-DD')
+
+    const res = await holdBed(SITE_ID, ITEM_ID, undefined, false, undefined, undefined, undefined, until)
+    expect(res.status).toBe('ok')
+
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect((guardCall.from as Date).getTime()).toBe(dayjs().startOf('day').toDate().getTime())
+    // to should be end-of the until day, not end-of-today
+    const expectedTo = dayjs(until).endOf('day').toDate().getTime()
+    expect((guardCall.to as Date).getTime()).toBe(expectedTo)
+  })
+
+  it('falls back to today-only when until is not provided', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+
+    await holdBed(SITE_ID, ITEM_ID, undefined, false)
+
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect((guardCall.to as Date).getTime()).toBe(dayjs().endOf('day').toDate().getTime())
+  })
+
+  it('rejects an invalid until date', async () => {
+    authenticateAsOwner()
+    const res = await holdBed(SITE_ID, ITEM_ID, undefined, false, undefined, undefined, undefined, 'not-a-date')
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/invalid date/i)
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+
+  it('rejects until in the past', async () => {
+    authenticateAsOwner()
+    const past = dayjs().subtract(1, 'day').format('YYYY-MM-DD')
+    const res = await holdBed(SITE_ID, ITEM_ID, undefined, false, undefined, undefined, undefined, past)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/past/i)
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+
+  it('rejects until more than 90 days out', async () => {
+    authenticateAsOwner()
+    const far = dayjs().add(91, 'day').format('YYYY-MM-DD')
+    const res = await holdBed(SITE_ID, ITEM_ID, undefined, false, undefined, undefined, undefined, far)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/90 days/i)
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+})
+
+// ─── resumeWalkIn ────────────────────────────────────────────────────────────
+
+describe('resumeWalkIn', () => {
+  it('transitions expected -> walked-in with checkedInAt stamped', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      operationalStatus: 'expected',
+      site: SITE_TZ_STUB,
+    } as any)
+    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({
+      id: 'rd-1', reservationId: RES_ID, date: new Date(), operationalStatus: 'walked-in',
+      checkedInAt: new Date(), departedAt: null,
+    } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
+
+    const res = await resumeWalkIn(SITE_ID, RES_ID)
+    expect(res.status).toBe('ok')
+
+    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
+    expect(updateCall.data.operationalStatus).toBe('walked-in')
+    expect(updateCall.data.checkedInAt).toBeInstanceOf(Date)
+    expect(vi.mocked(prisma.reservationDay.upsert)).toHaveBeenCalledOnce()
+  })
+
+  it('rejects when effective status is already walked-in (not expected)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      operationalStatus: 'walked-in',
+      site: SITE_TZ_STUB,
+    } as any)
+    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({
+      operationalStatus: 'walked-in',
+    } as any)
+
+    const res = await resumeWalkIn(SITE_ID, RES_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Cannot resume walk-in')
+  })
+
+  it('rejects when effective status is checked-in', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      operationalStatus: 'checked-in',
+      site: SITE_TZ_STUB,
+    } as any)
+    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({
+      operationalStatus: 'checked-in',
+    } as any)
+
+    const res = await resumeWalkIn(SITE_ID, RES_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Cannot resume walk-in')
+  })
+
+  it('rejects when reservation belongs to a different site', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      siteId: 'other-site',
+      operationalStatus: 'expected',
+      site: SITE_TZ_STUB,
+    } as any)
+
+    const res = await resumeWalkIn(SITE_ID, RES_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Reservation not found')
+  })
+
+  it('rejects unauthenticated caller', async () => {
+    const res = await resumeWalkIn(SITE_ID, RES_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authenticated')
+    expect(vi.mocked(prisma.reservation.findUnique)).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-owner', async () => {
+    authenticateAsNonOwner()
+    const res = await resumeWalkIn(SITE_ID, RES_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Not authorized')
+    expect(vi.mocked(prisma.reservation.findUnique)).not.toHaveBeenCalled()
   })
 })

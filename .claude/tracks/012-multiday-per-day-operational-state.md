@@ -111,7 +111,20 @@ cycle). Early-checkout / release-rest-of-stay is a separate cancel/edit concern,
 
 ## Log
 
-- **2026-06-21 — Aligned to the user's offline/online state machine (the real model).** User
+- **2026-06-21 — Floor UX: carry the hold period + unify states/colours/labels.** (1) Reserve
+  now SAVES the multi-day period: `holdBed` takes a trailing `until?` (mirrors `reserveItem`);
+  BedDetail's Reserve passes it and a `useEffect` pre-fills `until` from the reservation's `to`,
+  so the period carries Reserve→Rent and shows on any reserved bed. (2) New `resumeWalkIn` action
+  (op `expected`→`walked-in`, no re-charge) re-seats a returning multiday cash guest; registered
+  in gated-actions (auth-matrix picks it up). (3) **State unification (user spec):** the old
+  checked-in (blue ✓) + walked-in (orange ●) collapse into one **Occupied** state — **orange** for
+  both; online vs offline shown only by the marker (**€** when paid online, **●** otherwise). The
+  old `expected` reads as **Reserved** (yellow, €/●). The seat action is **"Check-in"** in every
+  reserved branch (online/held/paid-reserved); Available keeps Reserve/Rent (user's call). New i18n
+  keys `reserved`/`occupied` (en/es/fi). Internal op-statuses kept distinct (till/accounting), only
+  the render unifies. Green: partner 1598 unit + 131 integration, lint clean. Issue 1 by partner-dev;
+  unification + i18n by orchestrator (i18n added surgically after a json re-dump reformatted the
+  whole file — reverted, +2 lines each instead). User
   spelled out the crux: Available →Reserve→ **Held**; Available →Rent→ **Walk-in**; Held →Release→
   Available; Held →Rent→ Walk-in; Walk-in →**Depart**→ **Held** *(if valid tomorrow)*; Walk-in
   →**Unreserve**→ Available *(last day)*. Online follows the same cycle. **Key fix: `markDeparted`

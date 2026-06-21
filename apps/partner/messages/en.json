@@ -774,6 +774,8 @@
     "note": "Note",
     "free": "Free",
     "booked": "Booked",
+    "reserved": "Reserved",
+    "occupied": "Occupied",
     "here": "Here",
     "walkIn": "Walk-in",
     "blocked": "Blocked",

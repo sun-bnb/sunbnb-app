@@ -339,6 +339,53 @@ export async function checkInReservation(siteId: string, reservationId: string, 
   return { status: 'ok' }
 }
 
+// ─── Resume walk-in: returning multiday cash guest re-seats for the day ─────
+
+/**
+ * Re-seat a multiday cash walk-in that departed yesterday and is now back for
+ * another day (the daily Depart→expected cycle). Operationally: expected →
+ * walked-in, with checkedInAt stamped now.
+ *
+ * This is NOT a new payment: the cash was collected at the original Rent; no
+ * till entry and no paymentAmount change. It mirrors the "Check-in" transition
+ * but produces orange walked-in (not blue checked-in) because this is a walk-in
+ * re-seat, not an online booking arrival.
+ *
+ * Precondition: effectiveStatus must be OP_EXPECTED (walked-in → departed →
+ * expected is the multiday daily cycle). Any other status is rejected.
+ */
+export async function resumeWalkIn(siteId: string, reservationId: string, accessKey?: string) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const reservation = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    select: {
+      siteId: true,
+      operationalStatus: true,
+      site: { select: { timeZone: true, locationLat: true, locationLng: true } },
+    },
+  })
+  if (!reservation || reservation.siteId !== siteId) {
+    return { status: 'error', errors: ['Reservation not found'] }
+  }
+
+  const todayStatus = await getTodayStatus(reservationId, reservation.site)
+  const effectiveStatus = todayStatus ?? reservation.operationalStatus
+  if (effectiveStatus !== OP_EXPECTED) {
+    return { status: 'error', errors: [`Cannot resume walk-in from status: ${effectiveStatus}`] }
+  }
+
+  await applyDayTransition(
+    { id: reservationId },
+    reservation.site,
+    { operationalStatus: OP_WALKED_IN, checkedInAt: new Date() },
+  )
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
+}
+
 // ─── Mark departed: customer left ───────────────────────────────────────────
 
 export async function markDeparted(siteId: string, reservationId: string, accessKey?: string) {
@@ -843,7 +890,8 @@ export async function holdBed(
   applyToPair: boolean = true,
   guestName?: string,
   notes?: string,
-  employeeId?: string
+  employeeId?: string,
+  until?: string
 ) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
@@ -857,7 +905,20 @@ export async function holdBed(
   }
 
   const fromDate = dayjs().startOf('day').toDate()
-  const toDate = dayjs().endOf('day').toDate()
+  let toDate = dayjs().endOf('day').toDate()
+  if (until) {
+    if (isNaN(Date.parse(until))) {
+      return { status: 'error', errors: ['Invalid date format'] }
+    }
+    const days = dayjs(until).startOf('day').diff(dayjs().startOf('day'), 'day')
+    if (days < 0) {
+      return { status: 'error', errors: ['End date cannot be in the past'] }
+    }
+    if (days > 90) {
+      return { status: 'error', errors: ['Date range cannot exceed 90 days'] }
+    }
+    toDate = dayjs(until).endOf('day').toDate()
+  }
 
   const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
 
