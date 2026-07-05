@@ -160,7 +160,7 @@ export function getCellAppearance(item: InventoryItem): { bg: string; icon: stri
     'checked-in': { bg: 'bg-red-400 border-red-600 text-white', icon: '' },
     'walked-in':  { bg: 'bg-red-400 border-red-600 text-white', icon: '' },
     'blocked':    { bg: 'bg-gray-400 border-gray-600 text-white', icon: '✕' },
-    'comp':       { bg: 'bg-sky-400 border-sky-600 text-white', icon: '★' },
+    'comp':       { bg: 'bg-sky-400 border-sky-600 text-white', icon: '' },
   }
   return stateStyles[state]
 }

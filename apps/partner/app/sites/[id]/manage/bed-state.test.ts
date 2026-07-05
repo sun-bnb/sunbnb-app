@@ -137,11 +137,11 @@ describe('getBedState', () => {
 })
 
 describe('getCellAppearance', () => {
-  it('renders a comp seat (G) as sky blue with a star', () => {
+  it('renders a comp seat (G) as sky blue, no glyph (color alone signals comp)', () => {
     // The reported bug: comp not reflected in the main-grid seat color.
     const { bg, icon } = getCellAppearance(item([res(OP_COMP)]))
     expect(bg).toContain('bg-sky-400')
-    expect(icon).toBe('★')
+    expect(icon).toBe('')
   })
 
   it('renders the fixed-color states', () => {
