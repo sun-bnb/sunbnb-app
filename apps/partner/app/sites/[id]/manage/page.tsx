@@ -108,12 +108,11 @@ export default async function ManagePage({ params, searchParams }: { params: { i
   }
 
   // A booking's stay is "over" when it has no remaining reserved days — `to` is on
-  // or before the end of today. `to` is stored as server-tz end-of-day, so compute
-  // the boundary server-side (here) and pass a flag down, so the client grid never
-  // does a tz-skewed comparison. A departed/no-show booking frees its bed (green +
-  // bookable) only when stayOver; mid-stay it stays held. (track 012)
-  const endOfToday = new Date()
-  endOfToday.setHours(23, 59, 59, 999)
+  // or before the end of today. Compute the boundary in venue-local time (not the
+  // server TZ) so `stayOver` is correct regardless of where the server runs.
+  // A departed/no-show booking frees its bed (green + bookable) only when stayOver;
+  // mid-stay it stays held. (track 012)
+  const { end: endOfToday } = siteDayBounds(siteForDay)
 
   // Lazy-upsert today's ReservationDay row for each non-blocked reservation,
   // then attach the resulting row (+ the stayOver flag) to the reservation object

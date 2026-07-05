@@ -20,7 +20,8 @@ import {
 } from '@repo/data/rental-payment'
 import { getOpenTill, recordSettlement, voidSettlementsForReservation, voidSettlementsForRentalBooking } from '@repo/data/till'
 import { applyDayTransition } from './reservation-day'
-import { siteDayKey } from '@repo/data/site-day'
+import { siteDayKey, siteDayBounds } from '@repo/data/site-day'
+import type { SiteTimezone } from '@repo/data/site-day'
 import type { Prisma } from '@prisma/client'
 import dayjs from 'dayjs'
 import {
@@ -96,6 +97,23 @@ async function resolveEmployeeId(
 const OUT_OF_SERVICE_TO = new Date('2999-12-31T23:59:59.999Z')
 
 /**
+ * Build the SiteTimezone input for siteDayBounds / siteDayKey from raw Prisma
+ * site fields (String lat/lng columns). Used by every on-site create action so
+ * from/to dates are anchored to the venue's civil day, not the server's TZ.
+ */
+function buildSiteTimezone(site: {
+  timeZone?: string | null
+  locationLat?: string | null
+  locationLng?: string | null
+}): SiteTimezone {
+  return {
+    timeZone: site.timeZone,
+    latitude: site.locationLat ? parseFloat(site.locationLat) : undefined,
+    longitude: site.locationLng ? parseFloat(site.locationLng) : undefined,
+  }
+}
+
+/**
  * Returns all other member IDs of the item's SunbedGroup.
  * Falls back to pairId/pairedBy for beds that pre-date SunbedGroup migration.
  * For a 2-member group this returns exactly one id — identical to the old
@@ -165,24 +183,6 @@ export async function reserveItem(
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
-  // The guest is being seated now, so the stay always starts today. `until`
-  // optionally extends it across multiple days; omitted means today only.
-  const fromDate = dayjs().startOf('day').toDate()
-  let toDate = dayjs().endOf('day').toDate()
-  if (until) {
-    if (isNaN(Date.parse(until))) {
-      return { status: 'error', errors: ['Invalid date format'] }
-    }
-    const days = dayjs(until).startOf('day').diff(dayjs().startOf('day'), 'day')
-    if (days < 0) {
-      return { status: 'error', errors: ['End date cannot be in the past'] }
-    }
-    if (days > 90) {
-      return { status: 'error', errors: ['Date range cannot exceed 90 days'] }
-    }
-    toDate = dayjs(until).endOf('day').toDate()
-  }
-
   // Expand group/pair siblings FIRST so the conflict guard checks all affected
   // beds atomically (fixes the pair-expansion double-booking: previously the
   // conflict check ran on only the requested itemId, then siblings were added
@@ -199,9 +199,36 @@ export async function reserveItem(
   // walk-ins today — the till would be countless). Computed from DB chair prices
   // only (never a client value — payments.md); a free site charges nothing.
   const [site, priceRows] = await Promise.all([
-    prisma.site.findUnique({ where: { id: siteId }, select: { type: true, price: true } }),
+    prisma.site.findUnique({
+      where: { id: siteId },
+      select: { type: true, price: true, timeZone: true, locationLat: true, locationLng: true },
+    }),
     prisma.inventoryItem.findMany({ where: { id: { in: allItemIds } }, select: { price: true } }),
   ])
+
+  // The guest is being seated now, so the stay always starts today. `until`
+  // optionally extends it across multiple days; omitted means today only.
+  // Dates are anchored to the venue-local civil day (not the server TZ).
+  const siteTz = buildSiteTimezone(site ?? {})
+  const { start: fromDate, end: todayEnd } = siteDayBounds(siteTz)
+  let toDate = todayEnd
+  if (until) {
+    if (isNaN(Date.parse(until))) {
+      return { status: 'error', errors: ['Invalid date format'] }
+    }
+    const days = dayjs(until).startOf('day').diff(dayjs().startOf('day'), 'day')
+    if (days < 0) {
+      return { status: 'error', errors: ['End date cannot be in the past'] }
+    }
+    if (days > 90) {
+      return { status: 'error', errors: ['Date range cannot exceed 90 days'] }
+    }
+    // Compute the venue-local end of the picked day.
+    // Noon UTC (12:00:00Z) is safely within the civil day for all real venue
+    // offsets (UTC-12 to UTC+14), so passing it as `now` to siteDayBounds gives
+    // the correct day's end regardless of server timezone.
+    toDate = siteDayBounds(siteTz, new Date(until + 'T12:00:00.000Z')).end
+  }
   const paymentAmount = site?.type === 'paid'
     ? computeWalkInAmount(priceRows, site.price, fromDate, toDate)
     : 0
@@ -551,8 +578,7 @@ export async function markDeparted(
         : 0
 
     // Determine departure transition BEFORE entering the transaction (uses site tz).
-    const endOfToday = new Date()
-    endOfToday.setHours(23, 59, 59, 999)
+    const endOfToday = siteDayBounds(buildSiteTimezone(reservation.site)).end
     const hasFutureDays = toDate > endOfToday
 
     // Compute todayKey BEFORE the transaction — it's a pure timezone calculation.
@@ -654,8 +680,7 @@ export async function markDeparted(
   // booked again tomorrow goes back to reserved (re-rentable tomorrow). Only on the
   // LAST day (no remaining reserved days) does departing end the stay → `departed`,
   // which frees the bed via the stay-over rule. (track 012)
-  const endOfToday = new Date()
-  endOfToday.setHours(23, 59, 59, 999)
+  const endOfToday = siteDayBounds(buildSiteTimezone(reservation.site)).end
   const hasFutureDays = reservation.to > endOfToday
 
   if (hasFutureDays) {
@@ -1022,8 +1047,12 @@ export async function compBed(
     }
   }
 
-  const fromDate = dayjs().startOf('day').toDate()
-  const toDate = dayjs().endOf('day').toDate()
+  // Load timezone fields for venue-local day bounds.
+  const compSite = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { timeZone: true, locationLat: true, locationLng: true },
+  })
+  const { start: fromDate, end: toDate } = siteDayBounds(buildSiteTimezone(compSite ?? {}))
 
   const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
 
@@ -1141,8 +1170,14 @@ export async function holdBed(
     }
   }
 
-  const fromDate = dayjs().startOf('day').toDate()
-  let toDate = dayjs().endOf('day').toDate()
+  // Load timezone fields for venue-local day bounds.
+  const holdSite = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { timeZone: true, locationLat: true, locationLng: true },
+  })
+  const holdSiteTz = buildSiteTimezone(holdSite ?? {})
+  const { start: fromDate, end: todayEnd } = siteDayBounds(holdSiteTz)
+  let toDate = todayEnd
   if (until) {
     if (isNaN(Date.parse(until))) {
       return { status: 'error', errors: ['Invalid date format'] }
@@ -1154,7 +1189,7 @@ export async function holdBed(
     if (days > 90) {
       return { status: 'error', errors: ['Date range cannot exceed 90 days'] }
     }
-    toDate = dayjs(until).endOf('day').toDate()
+    toDate = siteDayBounds(holdSiteTz, new Date(until + 'T12:00:00.000Z')).end
   }
 
   const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
@@ -1217,8 +1252,19 @@ export async function reserveItems(
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
-  const fromDate = dayjs().startOf('day').toDate()
-  let toDate = dayjs().endOf('day').toDate()
+  // Summed paymentAmount across all selected seats from DB prices only.
+  const [site, priceRows] = await Promise.all([
+    prisma.site.findUnique({
+      where: { id: siteId },
+      select: { type: true, price: true, timeZone: true, locationLat: true, locationLng: true },
+    }),
+    prisma.inventoryItem.findMany({ where: { id: { in: itemIds } }, select: { price: true } }),
+  ])
+
+  // Dates anchored to the venue-local civil day (not the server TZ).
+  const siteTz = buildSiteTimezone(site ?? {})
+  const { start: fromDate, end: todayEnd } = siteDayBounds(siteTz)
+  let toDate = todayEnd
   if (until) {
     if (isNaN(Date.parse(until))) {
       return { status: 'error', errors: ['Invalid date format'] }
@@ -1230,14 +1276,8 @@ export async function reserveItems(
     if (days > 90) {
       return { status: 'error', errors: ['Date range cannot exceed 90 days'] }
     }
-    toDate = dayjs(until).endOf('day').toDate()
+    toDate = siteDayBounds(siteTz, new Date(until + 'T12:00:00.000Z')).end
   }
-
-  // Summed paymentAmount across all selected seats from DB prices only.
-  const [site, priceRows] = await Promise.all([
-    prisma.site.findUnique({ where: { id: siteId }, select: { type: true, price: true } }),
-    prisma.inventoryItem.findMany({ where: { id: { in: itemIds } }, select: { price: true } }),
-  ])
   const paymentAmount = site?.type === 'paid'
     ? computeWalkInAmount(priceRows, site.price, fromDate, toDate)
     : 0
@@ -1299,8 +1339,12 @@ export async function holdBeds(
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
-  const fromDate = dayjs().startOf('day').toDate()
-  const toDate = dayjs().endOf('day').toDate()
+  // Load timezone fields for venue-local day bounds.
+  const holdBedsSite = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { timeZone: true, locationLat: true, locationLng: true },
+  })
+  const { start: fromDate, end: toDate } = siteDayBounds(buildSiteTimezone(holdBedsSite ?? {}))
 
   const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
 
@@ -1413,8 +1457,12 @@ export async function compBeds(
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
-  const fromDate = dayjs().startOf('day').toDate()
-  const toDate = dayjs().endOf('day').toDate()
+  // Load timezone fields for venue-local day bounds.
+  const compBedsSite = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { timeZone: true, locationLat: true, locationLng: true },
+  })
+  const { start: fromDate, end: toDate } = siteDayBounds(buildSiteTimezone(compBedsSite ?? {}))
 
   const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
 
@@ -1473,8 +1521,16 @@ export async function convertHoldToWalkIn(
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
-  const todayStart = dayjs().startOf('day').toDate()
-  const todayEnd = dayjs().endOf('day').toDate()
+  // Load site including timezone fields for venue-local day bounds.
+  // The conversion turns a free hold into a paid cash walk-in, so it must record
+  // the € for the till (else the converted seat undercounts) and attribute it to
+  // the worker who collected. Price from DB only (payments.md); free site → 0.
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { type: true, price: true, timeZone: true, locationLat: true, locationLng: true },
+  })
+  const convertSiteTz = buildSiteTimezone(site ?? {})
+  const { start: todayStart, end: todayEnd } = siteDayBounds(convertSiteTz)
 
   // Validate and compute the end date (same rules as reserveItem).
   let toDate = todayEnd
@@ -1489,16 +1545,8 @@ export async function convertHoldToWalkIn(
     if (days > 90) {
       return { status: 'error', errors: ['Date range cannot exceed 90 days'] }
     }
-    toDate = dayjs(until).endOf('day').toDate()
+    toDate = siteDayBounds(convertSiteTz, new Date(until + 'T12:00:00.000Z')).end
   }
-
-  // The conversion turns a free hold into a paid cash walk-in, so it must record
-  // the € for the till (else the converted seat undercounts) and attribute it to
-  // the worker who collected. Price from DB only (payments.md); free site → 0.
-  const site = await prisma.site.findUnique({
-    where: { id: siteId },
-    select: { type: true, price: true },
-  })
   const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
 
   const updateData = {
@@ -2849,9 +2897,20 @@ export async function createWalkInRental(input: {
 
   const now = new Date()
   const from = now
-  const to = input.durationType === 'days'
-    ? dayjs(now).endOf('day').toDate()
-    : dayjs(now).add(input.hours || 1, 'hour').toDate()
+
+  // For the all-day branch, anchor `to` to the venue-local end-of-day (not the
+  // server TZ). Hourly bookings use a simple duration offset from `now` — the
+  // venue TZ is irrelevant for hour arithmetic, only for civil-day boundaries.
+  let to: Date
+  if (input.durationType === 'days') {
+    const rentalSite = await prisma.site.findUnique({
+      where: { id: input.siteId },
+      select: { timeZone: true, locationLat: true, locationLng: true },
+    })
+    to = siteDayBounds(buildSiteTimezone(rentalSite ?? {})).end
+  } else {
+    to = dayjs(now).add(input.hours || 1, 'hour').toDate()
+  }
 
   // Load rental items to calculate pricing
   const rentalItemIds = input.items.map(i => i.rentalItemId)

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { siteDayBounds } from '@repo/data/site-day'
 
 vi.mock('@/app/auth', () => ({
   auth: vi.fn().mockResolvedValue(null),
@@ -238,9 +239,12 @@ describe('reserveItem', () => {
 
     await reserveItem(SITE_ID, ITEM_ID)
 
+    // With no tz fields in the mock, the fallback is 'Europe/Madrid'.
+    // Compare against siteDayBounds to prove venue-local anchoring (not server-tz dayjs).
+    const { start: expectedFrom, end: expectedTo } = siteDayBounds({})
     const guardCall = mockGuard.mock.calls[0][0]
-    expect((guardCall.from as Date).getTime()).toBe(dayjs().startOf('day').toDate().getTime())
-    expect((guardCall.to as Date).getTime()).toBe(dayjs().endOf('day').toDate().getTime())
+    expect((guardCall.from as Date).getTime()).toBe(expectedFrom.getTime())
+    expect((guardCall.to as Date).getTime()).toBe(expectedTo.getTime())
   })
 
   it('extends the reservation to the end of the given `until` date', async () => {
@@ -251,9 +255,11 @@ describe('reserveItem', () => {
     const res = await reserveItem(SITE_ID, ITEM_ID, undefined, undefined, undefined, until)
     expect(res.status).toBe('ok')
 
+    const { start: expectedFrom } = siteDayBounds({})
+    const expectedTo = siteDayBounds({}, new Date(until + 'T12:00:00.000Z')).end
     const guardCall = mockGuard.mock.calls[0][0]
-    expect((guardCall.from as Date).getTime()).toBe(dayjs().startOf('day').toDate().getTime())
-    expect((guardCall.to as Date).getTime()).toBe(dayjs(until).endOf('day').toDate().getTime())
+    expect((guardCall.from as Date).getTime()).toBe(expectedFrom.getTime())
+    expect((guardCall.to as Date).getTime()).toBe(expectedTo.getTime())
   })
 
   it('passes the expanded id list (primary + siblings) to the guard for conflict checking', async () => {
@@ -268,12 +274,14 @@ describe('reserveItem', () => {
     const until = dayjs().add(2, 'day').format('YYYY-MM-DD')
     await reserveItem(SITE_ID, ITEM_ID, undefined, undefined, undefined, until)
 
+    const { start: expectedFrom } = siteDayBounds({})
+    const expectedTo = siteDayBounds({}, new Date(until + 'T12:00:00.000Z')).end
     const guardCall = mockGuard.mock.calls[0][0]
     // Both the primary item AND the sibling must reach the guard
     expect(guardCall.itemIds).toContain(ITEM_ID)
     expect(guardCall.itemIds).toContain('pair-1')
-    expect((guardCall.to as Date).getTime()).toBe(dayjs(until).endOf('day').toDate().getTime())
-    expect((guardCall.from as Date).getTime()).toBe(dayjs().startOf('day').toDate().getTime())
+    expect((guardCall.to as Date).getTime()).toBe(expectedTo.getTime())
+    expect((guardCall.from as Date).getTime()).toBe(expectedFrom.getTime())
   })
 
   it('rejects when the guard returns a conflict', async () => {
@@ -310,6 +318,163 @@ describe('reserveItem', () => {
     const res = await reserveItem(SITE_ID, ITEM_ID, undefined, undefined, undefined, until)
     expect(res.status).toBe('error')
     expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
+  })
+})
+
+// ─── Venue-local timezone correctness for create actions ───────────────────
+//
+// These tests prove that on-site create actions anchor from/to to the venue's
+// civil day, not the server timezone. The bug: a server in UTC creates a walk-in
+// whose `to` lands at midnight UTC (= 02:00 venue time next day), so the
+// occupancy query (venue-local) sees it as occupying tomorrow's window too.
+//
+// Strategy: mock the site with a timezone several hours ahead of the test runner
+// (which is typically UTC in CI). For 'Pacific/Kiritimati' (UTC+14) the venue
+// end-of-day is 10:00 UTC of the same wall-clock day. A server-tz `endOf('day')`
+// in UTC = 23:59:59 UTC — far later than 10:00 UTC — so the two approaches
+// produce measurably different timestamps.
+
+describe('venue-local timezone anchoring for create actions', () => {
+  // A timezone far ahead of UTC so the divergence is maximally visible in tests.
+  // UTC+14 means civil-day ends at 10:00:00 UTC (23:59:59 Kiritimati − 14h).
+  const KIRITIMATI_TZ = 'Pacific/Kiritimati'
+  const HAWAII_TZ = 'Pacific/Honolulu' // UTC-10
+
+  // Mock site with explicit timezone; no lat/lng needed (timeZone takes priority).
+  function siteWithTz(timeZone: string) {
+    return { userId: OWNER_ID, type: 'free', price: null, timeZone, locationLat: null, locationLng: null }
+  }
+
+  it('reserveItem: `from` and `to` match venue-local siteDayBounds, not server-tz dayjs', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue(siteWithTz(KIRITIMATI_TZ) as any)
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([])
+
+    await reserveItem(SITE_ID, ITEM_ID)
+
+    const { start: expectedFrom, end: expectedTo } = siteDayBounds({ timeZone: KIRITIMATI_TZ })
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect((guardCall.from as Date).getTime()).toBe(expectedFrom.getTime())
+    expect((guardCall.to as Date).getTime()).toBe(expectedTo.getTime())
+
+    // Prove the fix matters: server-tz end-of-day diverges from venue end-of-day.
+    // In UTC CI, dayjs().endOf('day') = 23:59:59 UTC; Kiritimati end = ~10:00 UTC.
+    const serverTzEnd = dayjs().endOf('day').toDate()
+    // They should differ (unless tests run in Kiritimati tz, which is never the case).
+    expect(expectedTo.getTime()).not.toBe(serverTzEnd.getTime())
+  })
+
+  it('reserveItem `until` extension: `to` is venue-local end of the picked day', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue(siteWithTz(HAWAII_TZ) as any)
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([])
+
+    const until = dayjs().add(3, 'day').format('YYYY-MM-DD')
+    await reserveItem(SITE_ID, ITEM_ID, undefined, undefined, undefined, until)
+
+    // Expected: end of `until` day in Hawaii time (UTC-10 → adds 10h to midnight)
+    const expectedTo = siteDayBounds({ timeZone: HAWAII_TZ }, new Date(until + 'T12:00:00.000Z')).end
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect((guardCall.to as Date).getTime()).toBe(expectedTo.getTime())
+
+    // Prove it differs from a naive server-tz calculation
+    const naiveTo = dayjs(until).endOf('day').toDate()
+    expect(expectedTo.getTime()).not.toBe(naiveTo.getTime())
+  })
+
+  it('holdBed: `from`/`to` use venue-local day bounds', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue(siteWithTz(KIRITIMATI_TZ) as any)
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([])
+    vi.mocked(prisma.employee.findUnique).mockResolvedValue(null)
+
+    await holdBed(SITE_ID, ITEM_ID)
+
+    const { start: expectedFrom, end: expectedTo } = siteDayBounds({ timeZone: KIRITIMATI_TZ })
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect((guardCall.from as Date).getTime()).toBe(expectedFrom.getTime())
+    expect((guardCall.to as Date).getTime()).toBe(expectedTo.getTime())
+  })
+
+  it('compBed: `from`/`to` use venue-local day bounds', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue(siteWithTz(KIRITIMATI_TZ) as any)
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([])
+    vi.mocked(prisma.employee.findUnique).mockResolvedValue(null)
+
+    await compBed(SITE_ID, ITEM_ID)
+
+    const { start: expectedFrom, end: expectedTo } = siteDayBounds({ timeZone: KIRITIMATI_TZ })
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect((guardCall.from as Date).getTime()).toBe(expectedFrom.getTime())
+    expect((guardCall.to as Date).getTime()).toBe(expectedTo.getTime())
+  })
+
+  it('createWalkInRental all-day: `to` is venue-local end-of-day, not server-tz', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue(siteWithTz(KIRITIMATI_TZ) as any)
+    vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
+      { id: 'ri-1', siteId: SITE_ID, name: 'Board', active: true, pricePerDay: 20, pricePerHour: null },
+    ] as any)
+    vi.mocked(prisma.employee.findUnique).mockResolvedValue(null)
+    mockRentalGuard.mockResolvedValueOnce({ outcome: 'created', bookingIds: ['rb1'] })
+
+    await createWalkInRental({
+      siteId: SITE_ID,
+      items: [{ rentalItemId: 'ri-1', quantity: 1 }],
+      durationType: 'days',
+      paymentType: 'cash',
+    })
+
+    const rentalCall = mockRentalGuard.mock.calls[0][0]
+    const storedTo = rentalCall[0].to as Date
+    const { end: expectedTo } = siteDayBounds({ timeZone: KIRITIMATI_TZ })
+    expect(storedTo.getTime()).toBe(expectedTo.getTime())
+
+    // Verify it diverges from server-tz end-of-day
+    const serverTzEnd = dayjs().endOf('day').toDate()
+    expect(storedTo.getTime()).not.toBe(serverTzEnd.getTime())
+  })
+
+  it('markDeparted hasFutureDays: uses venue-local end-of-today, not server-tz setHours', async () => {
+    authenticateAsOwner()
+    // A reservation whose `to` is beyond the venue's end-of-today (has future days)
+    // but is before the server-tz midnight. This would have been wrongly treated as
+    // "last day" (hasFutureDays=false) by the old server-tz setHours(23,59,59,999).
+    // Hawaii (UTC-10): venue end-of-today = 09:59:59 UTC next calendar day at UTC.
+    // Set `to` = 10:30 UTC, which is still in Hawaii's today (10:30 < 09:59+24h,
+    // simplified: use siteDayBounds to get the future end directly).
+    const tomorrowNoon = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
+    const futureEnd = siteDayBounds({ timeZone: HAWAII_TZ }, tomorrowNoon).end
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      siteId: SITE_ID,
+      status: 'paid-in-cash',
+      operationalStatus: 'walked-in',
+      to: futureEnd,
+      from: siteDayBounds({ timeZone: HAWAII_TZ }).start,
+      checkedInAt: new Date(),
+      guestName: null,
+      userId: OWNER_ID,
+      employeeId: null,
+      items: [{ id: ITEM_ID, price: null }],
+      site: { type: 'free', price: null, timeZone: HAWAII_TZ, locationLat: null, locationLng: null },
+    } as any)
+    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({ operationalStatus: 'walked-in' } as any)
+    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({} as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
+
+    const res = await markDeparted(SITE_ID, RES_ID)
+    expect(res.status).toBe('ok')
+
+    // hasFutureDays=true → transition to OP_EXPECTED (not departed)
+    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
+    expect(updateCall.data.operationalStatus).toBe('expected')
+    // departedAt is explicitly cleared to null when transitioning to expected
+    expect((updateCall.data as any).departedAt).toBeNull()
   })
 })
 
@@ -517,10 +682,14 @@ describe('markDeparted split-then-depart', () => {
     sitePrice?: number
   }) {
     authenticateAsOwner()
+    // Use venue-local bounds (Madrid tz from SITE_TZ_STUB) so `hasFutureDays` in the
+    // action (which now uses siteDayBounds) is computed against the same base.
+    const madridTz = { timeZone: 'Europe/Madrid' }
+    const { start: fromDate, end: todayVenueEnd } = siteDayBounds(madridTz)
+    const tomorrowNoon = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
     const toDate = hasFutureDays
-      ? dayjs().add(2, 'day').endOf('day').toDate()
-      : dayjs().endOf('day').toDate()
-    const fromDate = dayjs().startOf('day').toDate()
+      ? siteDayBounds(madridTz, tomorrowNoon).end
+      : todayVenueEnd
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
       status,
@@ -696,12 +865,14 @@ describe('markDeparted split-then-depart', () => {
 
   it('whole depart (no splitItemIds) is unchanged', async () => {
     authenticateAsOwner()
+    // Use venue-local end-of-today (Madrid tz) so hasFutureDays=false in the action.
+    const { start: fromDate, end: toDate } = siteDayBounds({ timeZone: 'Europe/Madrid' })
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
       status: 'paid-in-cash',
       operationalStatus: 'walked-in',
-      to: dayjs().endOf('day').toDate(),
-      from: dayjs().startOf('day').toDate(),
+      to: toDate,
+      from: fromDate,
       checkedInAt: new Date(),
       guestName: null,
       userId: OWNER_ID,
@@ -723,12 +894,13 @@ describe('markDeparted split-then-depart', () => {
 
   it('single-item reservation with splitItemIds: falls through to whole depart', async () => {
     authenticateAsOwner()
+    const { start: fromDate, end: toDate } = siteDayBounds({ timeZone: 'Europe/Madrid' })
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
       status: 'paid-in-cash',
       operationalStatus: 'walked-in',
-      to: dayjs().endOf('day').toDate(),
-      from: dayjs().startOf('day').toDate(),
+      to: toDate,
+      from: fromDate,
       checkedInAt: new Date(),
       guestName: null,
       userId: OWNER_ID,
@@ -748,12 +920,13 @@ describe('markDeparted split-then-depart', () => {
 
   it('online checked-in (complete status) with splitItemIds: whole depart only', async () => {
     authenticateAsOwner()
+    const { start: fromDate, end: toDate } = siteDayBounds({ timeZone: 'Europe/Madrid' })
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
       status: 'complete',           // NOT paid-in-cash
       operationalStatus: 'checked-in',
-      to: dayjs().endOf('day').toDate(),
-      from: dayjs().startOf('day').toDate(),
+      to: toDate,
+      from: fromDate,
       checkedInAt: new Date(),
       guestName: null,
       userId: OWNER_ID,
@@ -773,12 +946,13 @@ describe('markDeparted split-then-depart', () => {
 
   it('QR-collected walk-in (complete + walked-in) with splitItemIds: whole depart only', async () => {
     authenticateAsOwner()
+    const { start: fromDate, end: toDate } = siteDayBounds({ timeZone: 'Europe/Madrid' })
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
       status: 'complete',           // paid online via QR collect
       operationalStatus: 'walked-in',
-      to: dayjs().endOf('day').toDate(),
-      from: dayjs().startOf('day').toDate(),
+      to: toDate,
+      from: fromDate,
       checkedInAt: new Date(),
       guestName: null,
       userId: OWNER_ID,
@@ -2336,15 +2510,18 @@ describe('holdBed', () => {
     expect(guardCall.internalNotes).toHaveLength(500)
   })
 
-  it('sets from=today-start and to=today-end (today-only hold)', async () => {
+  it('sets from=venue-local-today-start and to=venue-local-today-end (today-only hold)', async () => {
+    // With no tz fields in the mock (returns { userId: OWNER_ID }), the action falls
+    // back to 'Europe/Madrid'. Compare against siteDayBounds to confirm venue-local anchoring.
     authenticateAsOwner()
     vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
 
     await holdBed(SITE_ID, ITEM_ID)
 
+    const { start: expectedFrom, end: expectedTo } = siteDayBounds({})
     const guardCall = mockGuard.mock.calls[0][0]
-    expect((guardCall.from as Date).getTime()).toBe(dayjs().startOf('day').toDate().getTime())
-    expect((guardCall.to as Date).getTime()).toBe(dayjs().endOf('day').toDate().getTime())
+    expect((guardCall.from as Date).getTime()).toBe(expectedFrom.getTime())
+    expect((guardCall.to as Date).getTime()).toBe(expectedTo.getTime())
   })
 
   it('expands paired item via SunbedGroup when applyToPair is true (default)', async () => {
@@ -2868,9 +3045,10 @@ describe('convertHoldToWalkIn', () => {
 
   // ── until (multi-day) extension ──
 
-  it('today-only (no until): sets to=endOf(today) in the update', async () => {
+  it('today-only (no until): sets to=venue-local end-of-today in the update', async () => {
     // The hold already covers today; converting it without an end date keeps
-    // the stay as today-only (to = endOf(today)). No transaction needed.
+    // the stay as today-only (to = venue end-of-today). No transaction needed.
+    // With no tz fields in the mock, the action falls back to 'Europe/Madrid'.
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({ id: RES_ID } as any)
     vi.mocked(prisma.reservation.update).mockResolvedValueOnce({} as any)
@@ -2879,14 +3057,15 @@ describe('convertHoldToWalkIn', () => {
 
     expect(res.status).toBe('ok')
     const updateData = vi.mocked(prisma.reservation.update).mock.calls[0][0].data as any
-    // `to` must be set to endOf(today)
+    // `to` must be set to venue-local end-of-today (Madrid fallback)
     expect(updateData.to).toBeInstanceOf(Date)
-    expect((updateData.to as Date).getTime()).toBe(dayjs().endOf('day').toDate().getTime())
+    const { end: expectedTo } = siteDayBounds({}) // fallback = 'Europe/Madrid'
+    expect((updateData.to as Date).getTime()).toBe(expectedTo.getTime())
     // Must not have run the $transaction path — $transaction stays uncalled for today-only
     expect(vi.mocked(prisma.$transaction)).not.toHaveBeenCalled()
   })
 
-  it('multi-day: sets to=endOf(until) and runs atomically inside $transaction', async () => {
+  it('multi-day: sets to=venue-local end of `until` day and runs atomically inside $transaction', async () => {
     // Extending beyond today must re-check availability. The $transaction mock
     // executes the callback synchronously with the same prisma mock as tx, so
     // we can verify both the hold lookup and the update in one test.
@@ -2907,10 +3086,11 @@ describe('convertHoldToWalkIn', () => {
     expect(res.status).toBe('ok')
     // Transaction must have been called
     expect(vi.mocked(prisma.$transaction)).toHaveBeenCalled()
-    // Update must set the extended to date
+    // Update must set the extended to date (venue-local end of until day, Madrid fallback)
     const updateData = vi.mocked(prisma.reservation.update).mock.calls[0][0].data as any
     expect(updateData.to).toBeInstanceOf(Date)
-    expect((updateData.to as Date).getTime()).toBe(dayjs(until).endOf('day').toDate().getTime())
+    const expectedTo = siteDayBounds({}, new Date(until + 'T12:00:00.000Z')).end
+    expect((updateData.to as Date).getTime()).toBe(expectedTo.getTime())
     expect(updateData.status).toBe('paid-in-cash')
     expect(updateData.operationalStatus).toBe('walked-in')
   })
@@ -4303,11 +4483,12 @@ describe('holdBed — multi-day until param', () => {
     const res = await holdBed(SITE_ID, ITEM_ID, undefined, false, undefined, undefined, undefined, until)
     expect(res.status).toBe('ok')
 
+    const { start: expectedFrom } = siteDayBounds({}) // Madrid fallback
+    const expectedTo = siteDayBounds({}, new Date(until + 'T12:00:00.000Z')).end
     const guardCall = mockGuard.mock.calls[0][0]
-    expect((guardCall.from as Date).getTime()).toBe(dayjs().startOf('day').toDate().getTime())
-    // to should be end-of the until day, not end-of-today
-    const expectedTo = dayjs(until).endOf('day').toDate().getTime()
-    expect((guardCall.to as Date).getTime()).toBe(expectedTo)
+    expect((guardCall.from as Date).getTime()).toBe(expectedFrom.getTime())
+    // to should be venue-local end of the until day, not server-tz end-of-today
+    expect((guardCall.to as Date).getTime()).toBe(expectedTo.getTime())
   })
 
   it('falls back to today-only when until is not provided', async () => {
@@ -4316,8 +4497,9 @@ describe('holdBed — multi-day until param', () => {
 
     await holdBed(SITE_ID, ITEM_ID, undefined, false)
 
+    const { end: expectedTo } = siteDayBounds({}) // Madrid fallback
     const guardCall = mockGuard.mock.calls[0][0]
-    expect((guardCall.to as Date).getTime()).toBe(dayjs().endOf('day').toDate().getTime())
+    expect((guardCall.to as Date).getTime()).toBe(expectedTo.getTime())
   })
 
   it('rejects an invalid until date', async () => {
@@ -4555,19 +4737,17 @@ describe('compBeds', () => {
     expect(call.paymentAmount).toBe(0)
   })
 
-  it('uses today-only window (to = end of today, not sticky)', async () => {
+  it('uses today-only window (to = venue-local end of today, not sticky sentinel)', async () => {
     authenticateAsOwner()
 
-    const before = Date.now()
     await compBeds(SITE_ID, [ITEM_ID])
-    const after = Date.now()
 
     const call = mockGuard.mock.calls[0][0]
-    // `to` must fall within today's end-of-day (within a few seconds of test execution)
-    const endOfToday = new Date(new Date().setHours(23, 59, 59, 999))
-    expect(call.to.getTime()).toBeLessThanOrEqual(endOfToday.getTime() + 1000)
-    expect(call.to.getTime()).toBeGreaterThan(before)
-    void after // used for temporal context
+    // `to` must be the venue-local end-of-today (Madrid fallback from mock with no tz fields).
+    const { end: expectedTo } = siteDayBounds({})
+    expect(call.to.getTime()).toBe(expectedTo.getTime())
+    // Confirm it is NOT the sticky far-future sentinel used for blocks
+    expect(call.to.getFullYear()).toBeLessThan(2999)
   })
 
   it('passes guestName (truncated) and notes (truncated) to guard', async () => {
