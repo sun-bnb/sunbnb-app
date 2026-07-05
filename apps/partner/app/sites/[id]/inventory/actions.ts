@@ -873,3 +873,34 @@ export async function reverseParcelNumbering(siteId: string, group: number) {
   await recomputeSeatLabels(siteId)
   return { status: 'ok' }
 }
+
+/**
+ * Reverse the orientation of every seat in a parcel — turn each 180°.
+ *
+ * Beds stay physically in place (coordinates untouched); only each seat's
+ * `rotation` field is flipped by 180°, normalised into [0, 360). A null
+ * rotation is treated as 0, so it becomes 180. Numbering and labels are
+ * unaffected, so no `recomputeSeatLabels` is needed.
+ */
+export async function reverseParcelOrientation(siteId: string, group: number) {
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
+
+  const items = await prisma.inventoryItem.findMany({
+    where: { siteId, group },
+    select: { id: true, rotation: true },
+  })
+
+  if (items.length === 0) return { status: 'ok' }
+
+  await prisma.$transaction(
+    items.map((item) =>
+      prisma.inventoryItem.update({
+        where: { id: item.id },
+        data: { rotation: ((((item.rotation ?? 0) + 180) % 360) + 360) % 360 },
+      })
+    )
+  )
+
+  return { status: 'ok' }
+}

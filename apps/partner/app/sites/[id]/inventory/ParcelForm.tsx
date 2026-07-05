@@ -11,7 +11,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { useSite } from '@/app/sites/site-context'
 import { ChairConfig } from './chair-util'
-import { syncChairsWithLayout, setItemStatusByGroup, reverseParcelNumbering } from './actions'
+import { syncChairsWithLayout, setItemStatusByGroup, reverseParcelNumbering, reverseParcelOrientation } from './actions'
 import { deleteItemsByGroup } from '../inventory-actions'
 import { getSite } from '../queries'
 import PriceBreakdown from '@/components/PriceBreakdown'
@@ -267,6 +267,23 @@ export default function ParcelFormView({
             sx={{ textTransform: 'none', mb: 2 }}
           >
             Reverse seat numbering
+          </Button>
+        )}
+
+        {/* Reverse orientation */}
+        {mode === 'edit' && editGroup && (
+          <Button
+            fullWidth
+            variant="outlined"
+            size="small"
+            onClick={async () => {
+              await reverseParcelOrientation(siteId, editGroup)
+              const updatedSite = await getSite(siteId)
+              setSite(updatedSite!)
+            }}
+            sx={{ textTransform: 'none', mb: 2 }}
+          >
+            Reverse orientation
           </Button>
         )}
 

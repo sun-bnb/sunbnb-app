@@ -107,6 +107,7 @@ import {
   assignItemsToGroup,
   removeItemsFromGroup,
   reverseParcelNumbering,
+  reverseParcelOrientation,
 } from '@/app/sites/[id]/inventory/actions'
 
 import {
@@ -748,6 +749,12 @@ export const GATED_ACTIONS: GatedAction[] = [
     kind: 'action',
     gate: 'session-owner',
     invoke: (_accessKey?) => reverseParcelNumbering(SITE_ID, 1),
+  },
+  {
+    name: 'inventory.reverseParcelOrientation',
+    kind: 'action',
+    gate: 'session-owner',
+    invoke: (_accessKey?) => reverseParcelOrientation(SITE_ID, 1),
   },
 
   // ══════════════════════════════════════════════════════════════════════════

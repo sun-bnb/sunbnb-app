@@ -21,6 +21,7 @@ import {
   moveParcel,
   rotateSelection,
   reverseParcelNumbering,
+  reverseParcelOrientation,
   adjustItemSpacing,
   syncChairsWithLayout,
   setItemStatusByGroup,
@@ -247,6 +248,71 @@ describe('reverseParcelNumbering', () => {
       const data = call[0].data as Record<string, unknown>
       // Only `number` should be written — no lat/lng, schematic coords, or rotation
       expect(Object.keys(data)).toEqual(['number'])
+    }
+  })
+})
+
+// ─── reverseParcelOrientation ──────────────────────────────────────────────
+
+describe('reverseParcelOrientation', () => {
+  it('rejects unauthenticated callers', async () => {
+    mockRequireSiteOwner.mockResolvedValueOnce({ session: null, error: 'Not authenticated' } as any)
+    const res = await reverseParcelOrientation(SITE_ID, 1)
+    expect(res).toEqual({ status: 'error', errors: ['Not authenticated'] })
+    expect(vi.mocked(prisma.inventoryItem.findMany)).not.toHaveBeenCalled()
+  })
+
+  it('returns ok with no items (empty parcel)', async () => {
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValueOnce([] as any)
+    const res = await reverseParcelOrientation(SITE_ID, 1)
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(prisma.$transaction)).not.toHaveBeenCalled()
+  })
+
+  it('adds 180° to each seat, normalised into [0, 360)', async () => {
+    // 0 → 180, 90 → 270, 270 → 90 (wraps), 180 → 0 (wraps)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValueOnce([
+      { id: 'a', rotation: 0 },
+      { id: 'b', rotation: 90 },
+      { id: 'c', rotation: 270 },
+      { id: 'd', rotation: 180 },
+    ] as any)
+    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
+
+    const res = await reverseParcelOrientation(SITE_ID, 1)
+    expect(res.status).toBe('ok')
+
+    const updateCalls = vi.mocked(prisma.inventoryItem.update).mock.calls
+    const result = new Map(updateCalls.map(c => [c[0].where.id, (c[0].data as any).rotation]))
+    expect(result.get('a')).toBe(180)
+    expect(result.get('b')).toBe(270)
+    expect(result.get('c')).toBe(90)
+    expect(result.get('d')).toBe(0)
+  })
+
+  it('treats a null rotation as 0 → 180', async () => {
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValueOnce([
+      { id: 'a', rotation: null },
+    ] as any)
+    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
+
+    await reverseParcelOrientation(SITE_ID, 1)
+
+    const updateCalls = vi.mocked(prisma.inventoryItem.update).mock.calls
+    expect((updateCalls[0]![0].data as any).rotation).toBe(180)
+  })
+
+  it('writes only rotation — coordinates and number untouched', async () => {
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValueOnce([
+      { id: 'x', rotation: 45 },
+    ] as any)
+    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
+
+    await reverseParcelOrientation(SITE_ID, 1)
+
+    const updateCalls = vi.mocked(prisma.inventoryItem.update).mock.calls
+    for (const call of updateCalls) {
+      expect(Object.keys(call[0].data as Record<string, unknown>)).toEqual(['rotation'])
     }
   })
 })
