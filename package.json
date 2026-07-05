@@ -8,7 +8,8 @@
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "test": "turbo test",
     "test:integration": "turbo run test:integration --concurrency=1",
-    "coverage": "(cd apps/partner && npm run test:coverage)"
+    "coverage": "(cd apps/partner && npm run test:coverage)",
+    "e2e": "npm run e2e -w @repo/e2e"
   },
   "devDependencies": {
     "@types/qrcode": "^1.5.5",
@@ -22,7 +23,8 @@
   "packageManager": "npm@10.8.2",
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "e2e"
   ],
   "dependencies": {
   }

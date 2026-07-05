@@ -1,0 +1,21 @@
+{
+  "name": "@repo/e2e",
+  "private": true,
+  "version": "0.0.0",
+  "description": "On-demand end-to-end browser suite (Playwright). Deliberately excluded from automated runs — see README.md.",
+  "scripts": {
+    "e2e": "playwright test",
+    "e2e:smoke": "playwright test --project=smoke",
+    "e2e:critical": "playwright test --project=smoke --project=layer-0",
+    "e2e:l0": "playwright test --project=layer-0",
+    "e2e:l1": "playwright test --project=layer-1",
+    "e2e:l2": "playwright test --project=layer-2",
+    "e2e:l3": "playwright test --project=layer-3",
+    "e2e:ui": "playwright test --ui",
+    "e2e:headed": "playwright test --headed",
+    "e2e:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.0"
+  }
+}
