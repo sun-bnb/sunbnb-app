@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import CreditCardIcon from '@mui/icons-material/CreditCard'
 import { InventoryItem } from '@/types/shared'
 import { getCellAppearance } from './bed-state'
 import { formatSeat } from '@repo/data/seat-label'
@@ -42,7 +43,11 @@ export default function SunbedItem({
     >
       {!hideDetail && (
         <>
-          {icon && <span className="text-[10px] leading-none">{icon}</span>}
+          {icon && (
+            icon === 'card'
+              ? <CreditCardIcon sx={{ fontSize: 12 }} />
+              : <span className="text-[10px] leading-none">{icon}</span>
+          )}
           <span className="text-[10px] leading-none opacity-70">
             {formatSeat(item, { parcel: false })}
           </span>

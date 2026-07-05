@@ -11,13 +11,13 @@ import {
 } from '@repo/data/reservation-status'
 
 // Minimal InventoryItem-shaped factory — bed-state only reads `reservations`,
-// and within each reservation only `operationalStatus`, `status`, `today`, `stayOver`.
-const item = (reservations: Array<{ operationalStatus: string; status?: string; today?: any; stayOver?: boolean }>) =>
+// and within each reservation only `operationalStatus`, `status`, `today`, `stayOver`, `tillEntries`.
+const item = (reservations: Array<{ operationalStatus: string; status?: string; today?: any; stayOver?: boolean; tillEntries?: { id: string; amount: number }[] }>) =>
   ({ reservations }) as any
 // `stayOver` = the booking's stay is over (no remaining reserved days). A
 // departed/no-show booking only releases its bed when stayOver is true.
-const res = (operationalStatus: string, status = 'paid-in-cash', today?: any, stayOver?: boolean) =>
-  ({ operationalStatus, status, today, stayOver })
+const res = (operationalStatus: string, status = 'paid-in-cash', today?: any, stayOver?: boolean, tillEntries?: { id: string; amount: number }[]) =>
+  ({ operationalStatus, status, today, stayOver, tillEntries })
 
 describe('isFailedReservationStatus', () => {
   it('is true for the canonical payment_failed constant', () => {
@@ -137,61 +137,87 @@ describe('getBedState', () => {
 })
 
 describe('getCellAppearance', () => {
-  it('renders a comp seat as purple with a star', () => {
+  it('renders a comp seat (G) as sky blue with a star', () => {
     // The reported bug: comp not reflected in the main-grid seat color.
     const { bg, icon } = getCellAppearance(item([res(OP_COMP)]))
-    expect(bg).toContain('bg-purple-300')
+    expect(bg).toContain('bg-sky-400')
     expect(icon).toBe('★')
   })
 
   it('renders the fixed-color states', () => {
     expect(getCellAppearance(item([])).bg).toContain('bg-green-300')              // available
-    // Occupied — one colour (orange) for both online checked-in and offline walk-in.
-    expect(getCellAppearance(item([res(OP_CHECKED_IN)])).bg).toContain('bg-orange-400')
-    expect(getCellAppearance(item([res(OP_WALKED_IN)])).bg).toContain('bg-orange-400')
+    // Occupied (A — alquilada) — one colour (red) for online checked-in and offline walk-in.
+    expect(getCellAppearance(item([res(OP_CHECKED_IN)])).bg).toContain('bg-red-400')
+    expect(getCellAppearance(item([res(OP_WALKED_IN)])).bg).toContain('bg-red-400')
     expect(getCellAppearance(item([res('blocked')])).bg).toContain('bg-gray-400')
   })
-  it('occupied differentiates online vs offline by the marker only (€ vs ●), same colour', () => {
-    const online = getCellAppearance(item([res(OP_CHECKED_IN, RESERVATION_COMPLETE)]))
-    const offline = getCellAppearance(item([res(OP_WALKED_IN, 'paid-in-cash')]))
-    expect(online.bg).toContain('bg-orange-400')
-    expect(offline.bg).toContain('bg-orange-400')
-    expect(online.icon).toBe('€')
-    expect(offline.icon).toBe('●')
-  })
 
-  describe('expected-state payment branches', () => {
+  describe('payment glyph — reserved (expected) state', () => {
+    it("online collected (complete) → 'card' sentinel (rendered as CreditCardIcon), no pulse", () => {
+      const a = getCellAppearance(item([res(OP_EXPECTED, RESERVATION_COMPLETE)]))
+      expect(a.bg).toContain('bg-fuchsia-400')
+      expect(a.icon).toBe('card')
+      expect(a.bg).not.toContain('animate-pulse')
+    })
+    it('cash settled (tillEntries present) → € currency symbol, no pulse', () => {
+      const a = getCellAppearance(item([res(OP_EXPECTED, 'paid-in-cash', undefined, undefined, [{ id: 'te1', amount: 20 }])]))
+      expect(a.bg).toContain('bg-fuchsia-400')
+      expect(a.icon).toBe('€')
+      expect(a.bg).not.toContain('animate-pulse')
+    })
+    it('not yet collected (held, no tillEntries) → no glyph, no pulse', () => {
+      const a = getCellAppearance(item([res(OP_EXPECTED, RESERVATION_HELD)]))
+      expect(a.icon).toBe('')
+      expect(a.bg).toContain('bg-fuchsia-400')
+      expect(a.bg).not.toContain('animate-pulse')
+    })
+    it('unsettled walk-in (pending/paid-in-cash, no tillEntries) → no glyph', () => {
+      for (const status of ['paid-in-cash', 'pending']) {
+        const a = getCellAppearance(item([res(OP_EXPECTED, status)]))
+        expect(a.icon).toBe('')
+        expect(a.bg).toContain('bg-fuchsia-400')
+        expect(a.bg).not.toContain('animate-pulse')
+      }
+    })
+    it("online collected takes precedence over tillEntries (complete + tillEntries → 'card')", () => {
+      const a = getCellAppearance(item([res(OP_EXPECTED, RESERVATION_COMPLETE, undefined, undefined, [{ id: 'te1', amount: 20 }])]))
+      expect(a.icon).toBe('card')
+    })
     it('failed payment → red ✕, no pulse', () => {
       const a = getCellAppearance(item([res(OP_EXPECTED, RESERVATION_PAYMENT_FAILED)]))
       expect(a.bg).toContain('bg-red-200')
       expect(a.icon).toBe('✕')
       expect(a.bg).not.toContain('animate-pulse')
     })
-    it('paid online (complete) → solid yellow €, no pulse', () => {
-      const a = getCellAppearance(item([res(OP_EXPECTED, RESERVATION_COMPLETE)]))
-      expect(a.bg).toContain('bg-yellow-300')
-      expect(a.icon).toBe('€')
-      expect(a.bg).not.toContain('animate-pulse')
-    })
-    it('held → calm yellow ● (filled circle), no pulse', () => {
-      const a = getCellAppearance(item([res(OP_EXPECTED, RESERVATION_HELD)]))
-      expect(a.icon).toBe('●')
-      expect(a.bg).toContain('bg-yellow-300')
-      expect(a.bg).not.toContain('animate-pulse')
-    })
-
-    it('paid-in-cash / pending reserved → calm yellow ● (no pulse, no hourglass)', () => {
-      for (const status of ['paid-in-cash', 'pending']) {
-        const a = getCellAppearance(item([res(OP_EXPECTED, status)]))
-        expect(a.icon).toBe('●')
-        expect(a.bg).toContain('bg-yellow-300')
-        expect(a.bg).not.toContain('animate-pulse')
-      }
-    })
-    it('only a genuinely in-flight online payment (processing) → yellow ⏳ with pulse', () => {
+    it('only a genuinely in-flight online payment (processing) → ⏳ with pulse', () => {
       const a = getCellAppearance(item([res(OP_EXPECTED, 'processing')]))
       expect(a.icon).toBe('⏳')
       expect(a.bg).toContain('animate-pulse-slow')
+    })
+  })
+
+  describe('payment glyph — occupied (checked-in / walked-in) state', () => {
+    it("online collected (complete) → 'card' sentinel, same red colour for both occupancy types", () => {
+      const checkedIn = getCellAppearance(item([res(OP_CHECKED_IN, RESERVATION_COMPLETE)]))
+      const walkedIn  = getCellAppearance(item([res(OP_WALKED_IN,  RESERVATION_COMPLETE)]))
+      expect(checkedIn.bg).toContain('bg-red-400')
+      expect(walkedIn.bg).toContain('bg-red-400')
+      expect(checkedIn.icon).toBe('card')
+      expect(walkedIn.icon).toBe('card')
+    })
+    it('cash settled (tillEntries present) → € currency symbol', () => {
+      const a = getCellAppearance(item([res(OP_WALKED_IN, 'paid-in-cash', undefined, undefined, [{ id: 'te1', amount: 20 }])]))
+      expect(a.bg).toContain('bg-red-400')
+      expect(a.icon).toBe('€')
+    })
+    it('not yet collected (unsettled walk-in, no tillEntries) → no glyph', () => {
+      const a = getCellAppearance(item([res(OP_WALKED_IN, 'paid-in-cash')]))
+      expect(a.bg).toContain('bg-red-400')
+      expect(a.icon).toBe('')
+    })
+    it("online collected takes precedence over tillEntries for occupied state (→ 'card')", () => {
+      const a = getCellAppearance(item([res(OP_WALKED_IN, RESERVATION_COMPLETE, undefined, undefined, [{ id: 'te1', amount: 20 }])]))
+      expect(a.icon).toBe('card')
     })
   })
 })

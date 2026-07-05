@@ -50,12 +50,12 @@ import {
 
 const stateBadgeColors: Record<BedState, string> = {
   'available': 'bg-green-200 text-green-900',
-  'expected': 'bg-yellow-200 text-yellow-900',
-  // Occupied (online checked-in + offline walk-in) share one colour — orange.
-  'checked-in': 'bg-orange-200 text-orange-900',
-  'walked-in': 'bg-orange-200 text-orange-900',
+  'expected': 'bg-fuchsia-200 text-fuchsia-900',
+  // Occupied (online checked-in + offline walk-in) share one colour — red (A).
+  'checked-in': 'bg-red-200 text-red-900',
+  'walked-in': 'bg-red-200 text-red-900',
   'blocked': 'bg-gray-300 text-gray-800',
-  'comp': 'bg-purple-200 text-purple-900',
+  'comp': 'bg-sky-200 text-sky-900',
 }
 
 function formatTime(date: Date | string | null | undefined): string {
@@ -636,7 +636,7 @@ export default function BedDetail({
                   title={t('multipleDays')}
                   className={`w-14 self-stretch flex flex-col items-center justify-center gap-0.5 rounded-xl border-2 transition-colors ${
                     until !== ''
-                      ? 'border-orange-400 bg-orange-50 text-orange-600'
+                      ? 'border-fuchsia-400 bg-fuchsia-50 text-fuchsia-600'
                       : 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 active:bg-gray-50'
                   }`}
                 >
@@ -673,7 +673,7 @@ export default function BedDetail({
               </div>
             )}
 
-            {/* Block (square) + Comp (square) + Reserve (hold, yellow) + Rent (paid walk-in, orange primary) */}
+            {/* Block (square) + Comp (square, G/sky) + Reserve (hold, R/fuchsia) + Rent (paid walk-in, A/red primary) */}
             <div className="flex gap-3">
               <button
                 disabled={isPending}
@@ -699,12 +699,12 @@ export default function BedDetail({
                 ))}
                 aria-label={t('comp')}
                 title={t('comp')}
-                className="w-16 self-stretch flex flex-col items-center justify-center gap-0.5 border-2 border-purple-300 text-purple-600 rounded-xl active:bg-purple-50 disabled:opacity-50"
+                className="w-16 self-stretch flex flex-col items-center justify-center gap-0.5 border-2 border-sky-300 text-sky-600 rounded-xl active:bg-sky-50 disabled:opacity-50"
               >
                 <span className="text-base leading-none" aria-hidden="true">★</span>
                 <span className="text-[10px] font-semibold leading-none">{t('comp')}</span>
               </button>
-              {/* Reserve — lightweight hold (no payment, shows as yellow "booked").
+              {/* Reserve — lightweight hold (no payment, shows as R/fuchsia "booked").
                   Until is passed so a multi-day period picked here is saved. */}
               <button
                 disabled={isPending}
@@ -716,7 +716,7 @@ export default function BedDetail({
                   currentWorkerId,
                   (isPool && !isGroupExtra) ? undefined : (until || undefined)
                 ))}
-                className="flex-1 bg-yellow-400 text-yellow-900 font-bold text-lg py-4 rounded-xl active:bg-yellow-500 disabled:opacity-50"
+                className="flex-1 bg-fuchsia-500 text-white font-bold text-lg py-4 rounded-xl active:bg-fuchsia-600 disabled:opacity-50"
               >
                 {isPending ? '...' : t('reserve')}
               </button>
@@ -729,7 +729,7 @@ export default function BedDetail({
                   groupItems.length > 0 ? applyToPair : false,
                   currentWorkerId
                 ))}
-                className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50"
+                className="flex-1 bg-red-500 text-white font-bold text-lg py-4 rounded-xl active:bg-red-600 disabled:opacity-50"
               >
                 {isPending ? '...' : t('walkInAction')}
               </button>
@@ -818,7 +818,7 @@ export default function BedDetail({
                 <OccupantInfo
                   t={t}
                   reservation={reservation}
-                  tintClass="bg-yellow-50 dark:bg-yellow-950/30 border-2 border-yellow-200 dark:border-yellow-800/40"
+                  tintClass="bg-fuchsia-50 dark:bg-fuchsia-950/30 border-2 border-fuchsia-200 dark:border-fuchsia-800/40"
                   paymentState="paid"
                 />
                 <div className="flex gap-3">
@@ -853,9 +853,9 @@ export default function BedDetail({
         {/* ── RESERVED — paid-in-cash walk-in between days ──
             A multiday walk-in that departed for the day; reserved for the rest of
             its stay (status=paid-in-cash, op=expected, the Walk-in→Depart→expected
-            leg of the daily cycle). Re-seat it ("Walk-in" → orange walked-in, no
+            leg of the daily cycle). Re-seat it ("Walk-in" → A/red walked-in, no
             re-charge) or free it (Unreserve — delete, cash already settled offline).
-            Uses resumeWalkIn (not checkInReservation) so the bed goes orange, not blue
+            Uses resumeWalkIn (not checkInReservation) so the bed goes A/red, not blue
             (this is a returning cash guest, not an online booking arrival). */}
         {state === 'expected' && reservation && reservation.status === RESERVATION_PAID_IN_CASH && (
           <div className="space-y-3">
@@ -864,7 +864,7 @@ export default function BedDetail({
                 <OccupantInfo
                   t={t}
                   reservation={reservation}
-                  tintClass="bg-yellow-50 dark:bg-yellow-950/30 border-2 border-yellow-200 dark:border-yellow-800/40"
+                  tintClass="bg-fuchsia-50 dark:bg-fuchsia-950/30 border-2 border-fuchsia-200 dark:border-fuchsia-800/40"
                   paymentState="paid"
                   fallbackName={t('walkIn')}
                 />
@@ -872,7 +872,7 @@ export default function BedDetail({
                   <button
                     disabled={isPending}
                     onClick={() => runAction(() => resumeWalkIn(siteId, reservation.id, accessKey))}
-                    className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50"
+                    className="flex-1 bg-red-500 text-white font-bold text-lg py-4 rounded-xl active:bg-red-600 disabled:opacity-50"
                   >
                     {isPending ? '...' : t('checkIn')}
                   </button>
@@ -935,7 +935,7 @@ export default function BedDetail({
                 calendar toggle sits on the SAME row, to the right. */}
             <div className="flex gap-2 items-stretch">
               {reservation.guestName ? (
-                <div className="flex-1 min-w-0 bg-yellow-50 dark:bg-yellow-950/30 rounded-xl p-4 border-2 border-dashed border-yellow-300 dark:border-yellow-800/40 flex flex-col justify-center">
+                <div className="flex-1 min-w-0 bg-fuchsia-50 dark:bg-fuchsia-950/30 rounded-xl p-4 border-2 border-dashed border-fuchsia-300 dark:border-fuchsia-800/40 flex flex-col justify-center">
                   <div className="font-bold text-lg truncate">{reservation.guestName}</div>
                   {reservation.internalNotes && (
                     <div className="text-gray-500 dark:text-gray-400 italic text-sm truncate">{reservation.internalNotes}</div>
@@ -957,7 +957,7 @@ export default function BedDetail({
                 title={t('multipleDays')}
                 className={`w-14 self-stretch flex flex-col items-center justify-center gap-0.5 rounded-xl border-2 transition-colors ${
                   until !== ''
-                    ? 'border-orange-400 bg-orange-50 text-orange-600'
+                    ? 'border-fuchsia-400 bg-fuchsia-50 text-fuchsia-600'
                     : 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 active:bg-gray-50'
                 }`}
               >
@@ -1014,7 +1014,7 @@ export default function BedDetail({
                   currentWorkerId,
                   applyToGroup,
                 ))}
-                className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50"
+                className="flex-1 bg-red-500 text-white font-bold text-lg py-4 rounded-xl active:bg-red-600 disabled:opacity-50"
               >
                 {isPending ? '...' : t('checkIn')}
               </button>
@@ -1069,14 +1069,14 @@ export default function BedDetail({
           && reservation.status !== RESERVATION_PAID_IN_CASH
           && !isFailedReservationStatus(reservation.status) && (
           <div className="space-y-3">
-            <div className="bg-yellow-50 dark:bg-yellow-950/30 rounded-xl p-4 border-2 border-yellow-100 dark:border-yellow-800/40 flex items-center gap-3">
+            <div className="bg-fuchsia-50 dark:bg-fuchsia-950/30 rounded-xl p-4 border-2 border-fuchsia-100 dark:border-fuchsia-800/40 flex items-center gap-3">
               <div className="flex-1 min-w-0">
                 {reservation.guestName && (
                   <div className="font-bold text-lg truncate">{reservation.guestName}</div>
                 )}
                 <div className="text-gray-600 dark:text-gray-300 text-sm truncate">{reservation.user.email}</div>
               </div>
-              <span className="flex-shrink-0 text-xs font-semibold text-yellow-600 dark:text-yellow-400 whitespace-nowrap">{reservation.status}</span>
+              <span className="flex-shrink-0 text-xs font-semibold text-fuchsia-600 dark:text-fuchsia-400 whitespace-nowrap">{reservation.status}</span>
             </div>
           </div>
         )}
@@ -1090,7 +1090,7 @@ export default function BedDetail({
                 <OccupantInfo
                   t={t}
                   reservation={reservation}
-                  tintClass="bg-orange-50 dark:bg-orange-950/30 border-2 border-orange-200 dark:border-orange-800/40"
+                  tintClass="bg-red-50 dark:bg-red-950/30 border-2 border-red-200 dark:border-red-800/40"
                   paymentState="paid"
                 />
                 <div className="flex gap-3">
@@ -1157,7 +1157,7 @@ export default function BedDetail({
                 <OccupantInfo
                   t={t}
                   reservation={reservation}
-                  tintClass="bg-orange-50 dark:bg-orange-950/30 border-2 border-orange-200 dark:border-orange-800/40"
+                  tintClass="bg-red-50 dark:bg-red-950/30 border-2 border-red-200 dark:border-red-800/40"
                   paymentState={(collected || settled) ? 'paid' : 'none'}
                   fallbackName={t('walkIn')}
                 />
@@ -1388,7 +1388,7 @@ export default function BedDetail({
                 </button>
               </div>
             )}
-            <div className="bg-purple-50 dark:bg-purple-950/30 rounded-xl p-4 border-2 border-purple-200 dark:border-purple-800/40 flex items-center gap-3">
+            <div className="bg-sky-50 dark:bg-sky-950/30 rounded-xl p-4 border-2 border-sky-200 dark:border-sky-800/40 flex items-center gap-3">
               <div className="flex-1 min-w-0">
                 {reservation?.guestName
                   ? <div className="font-bold text-lg truncate">{reservation.guestName}</div>
@@ -1397,7 +1397,7 @@ export default function BedDetail({
                   <div className="text-gray-500 dark:text-gray-400 text-sm italic truncate">{reservation.internalNotes}</div>
                 )}
               </div>
-              <span className="flex-shrink-0 text-2xl leading-none text-purple-500 dark:text-purple-400" aria-label={t('comp')} title={t('comp')}>★</span>
+              <span className="flex-shrink-0 text-2xl leading-none text-sky-500 dark:text-sky-400" aria-label={t('comp')} title={t('comp')}>★</span>
             </div>
             <button
               disabled={isPending}

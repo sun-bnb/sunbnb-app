@@ -93,15 +93,37 @@ export function getBedState(item: InventoryItem): BedState {
 }
 
 /**
+ * Returns the payment-collection glyph for a reservation based on how money was collected.
+ *
+ * Precedence:
+ *   1. Online / QR collected (status === RESERVATION_COMPLETE) → 'card' sentinel
+ *      (consumers render this as a MUI CreditCardIcon; the string 'card' is never
+ *      displayed as text)
+ *   2. Cash settled (at least one non-voided TillEntry) → '€'
+ *   3. Not yet collected (held / pending / unsettled cash walk-in) → '' (no glyph)
+ */
+function paymentGlyph(res: Reservation | null): string {
+  if (!res) return ''
+  if (res.status === RESERVATION_COMPLETE) return 'card'
+  if ((res.tillEntries?.length ?? 0) > 0) return '€'
+  return ''
+}
+
+/**
  * Returns the Tailwind CSS classes and icon string for a seat grid cell.
  *
- * A reserved/held bed is a calm, stable state — never a flashing hourglass:
+ * The icon communicates HOW money was collected (not just whether the seat is booked):
  * - Failed payment (payment_failed / legacy 'error'): red ✕
- * - Paid online (complete): yellow € (paid marker)
- * - Everything else reserved (held / paid-in-cash / pending): yellow ● (dot)
- * Only a genuinely in-flight online payment (processing) keeps the ⏳ + pulse.
+ * - In-flight online payment (processing): R (fuchsia) ⏳ animate-pulse-slow
+ * - Online / QR collected (complete): R or A colour 'card' sentinel (→ CreditCardIcon)
+ * - Cash settled (non-voided TillEntry): R or A colour € (currency)
+ * - Not yet collected (held / pending / unsettled walk-in): R or A colour, no glyph
  *
- * All other states use fixed colors (unchanged from before).
+ * The '●' dot is removed entirely — it conveyed nothing actionable.
+ * The ⏳ pulse is kept: it correctly signals a genuinely in-flight state.
+ *
+ * State colours mirror the staff grid legend — R reserved (fuchsia), A alquilada/
+ * occupied (red), G comp (sky), available (green), blocked (gray).
  */
 export function getCellAppearance(item: InventoryItem): { bg: string; icon: string } {
   const state = getBedState(item)
@@ -112,38 +134,33 @@ export function getCellAppearance(item: InventoryItem): { bg: string; icon: stri
       if (isFailedReservationStatus(res.status)) {
         return { bg: 'bg-red-200 border-red-500 text-red-700', icon: '✕' }
       }
-      if (res.status === RESERVATION_COMPLETE) {
-        // Paid online — solid yellow €, no pulse.
-        return { bg: 'bg-yellow-300 border-yellow-500', icon: '€' }
-      }
-      // A genuinely in-flight online payment is the only transient case worth a
-      // pulse; everything else reserved is a calm, stable yellow dot.
+      // A genuinely in-flight online payment is the only transient case worth a pulse.
       if (res.status === RESERVATION_PROCESSING) {
-        return { bg: 'bg-yellow-300 border-yellow-500 animate-pulse-slow', icon: '⏳' }
+        return { bg: 'bg-fuchsia-400 border-fuchsia-600 animate-pulse-slow', icon: '⏳' }
       }
     }
-    // Reserved/held (held / paid-in-cash / pending) — calm yellow dot, no pulse.
-    return { bg: 'bg-yellow-300 border-yellow-500', icon: '●' }
+    // All other reserved states: use payment glyph (✓ / € / no glyph), no pulse.
+    return { bg: 'bg-fuchsia-400 border-fuchsia-600', icon: paymentGlyph(res) }
   }
 
-  // OCCUPIED — a present guest, online or offline. One colour (orange); online vs
-  // offline is shown only by the marker (€ when paid online, ● otherwise). This
-  // unifies the old checked-in (blue ✓) and walked-in (orange ●) into one state.
+  // OCCUPIED (A — alquilada) — a present guest, online or offline. One colour
+  // (red); collection method is shown by the payment glyph (✓ online, € cash, none unpaid).
+  // Unifies the old checked-in and walked-in into one state.
   if (state === 'checked-in' || state === 'walked-in') {
     const res = getActiveReservation(item)
     return {
-      bg: 'bg-orange-400 border-orange-600 text-white',
-      icon: res?.status === RESERVATION_COMPLETE ? '€' : '●',
+      bg: 'bg-red-400 border-red-600 text-white',
+      icon: paymentGlyph(res),
     }
   }
 
   const stateStyles: Record<BedState, { bg: string; icon: string }> = {
     'available':  { bg: 'bg-green-300 border-green-500', icon: '' },
-    'expected':   { bg: 'bg-yellow-300 border-yellow-500', icon: '●' },
-    'checked-in': { bg: 'bg-orange-400 border-orange-600 text-white', icon: '€' },
-    'walked-in':  { bg: 'bg-orange-400 border-orange-600 text-white', icon: '●' },
+    'expected':   { bg: 'bg-fuchsia-400 border-fuchsia-600', icon: '' },
+    'checked-in': { bg: 'bg-red-400 border-red-600 text-white', icon: '' },
+    'walked-in':  { bg: 'bg-red-400 border-red-600 text-white', icon: '' },
     'blocked':    { bg: 'bg-gray-400 border-gray-600 text-white', icon: '✕' },
-    'comp':       { bg: 'bg-purple-300 border-purple-500', icon: '★' },
+    'comp':       { bg: 'bg-sky-400 border-sky-600 text-white', icon: '★' },
   }
   return stateStyles[state]
 }

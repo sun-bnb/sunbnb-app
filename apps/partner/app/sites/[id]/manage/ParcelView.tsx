@@ -3,6 +3,7 @@
 import React, { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import CreditCardIcon from '@mui/icons-material/CreditCard'
 import { InventoryItem } from '@/types/shared'
 import Item from './Item'
 import {
@@ -43,7 +44,11 @@ function PoolCell({
     >
       {!hideDetail && (
         <>
-          {icon && <span className="text-[10px] leading-none">{icon}</span>}
+          {icon && (
+            icon === 'card'
+              ? <CreditCardIcon sx={{ fontSize: 12 }} />
+              : <span className="text-[10px] leading-none">{icon}</span>
+          )}
           <span className="text-[10px] leading-none opacity-70">{seq}</span>
         </>
       )}
@@ -324,7 +329,11 @@ export default function ParcelView({
                 >
                   {!hideDetail && (
                     <>
-                      {extraIcon && <span className="text-[10px] leading-none">{extraIcon}</span>}
+                      {extraIcon && (
+                        extraIcon === 'card'
+                          ? <CreditCardIcon sx={{ fontSize: 12 }} />
+                          : <span className="text-[10px] leading-none">{extraIcon}</span>
+                      )}
                       <span className="text-[10px] leading-none opacity-70">{resolved.label}</span>
                     </>
                   )}
