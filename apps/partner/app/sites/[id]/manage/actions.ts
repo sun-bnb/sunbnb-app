@@ -114,6 +114,26 @@ function buildSiteTimezone(site: {
 }
 
 /**
+ * Venue-local "today" civil-day bounds for a site — the SAME window the on-site
+ * create actions (reserveItem/holdBed/compBed…) use to stamp from/to.
+ *
+ * Every remove/release/lookup action that filters reservations by "today" MUST
+ * use this, not `dayjs().startOf('day')` (the server TZ). On a prod server (UTC)
+ * hosting a venue in another TZ, a hold/comp/walk-in stored for the venue's civil
+ * day has `from` = venue-midnight, which is the *previous* UTC day — so a
+ * server-TZ "today" window (or, worse, a containment filter) fails to match it
+ * and the bed becomes impossible to release/remove. Locally the bug hides because
+ * the dev server TZ ≈ the venue TZ. Returns { start, end } as UTC Date instants.
+ */
+async function siteTodayBounds(siteId: string): Promise<{ start: Date; end: Date }> {
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { timeZone: true, locationLat: true, locationLng: true },
+  })
+  return siteDayBounds(buildSiteTimezone(site ?? {}))
+}
+
+/**
  * Returns all other member IDs of the item's SunbedGroup.
  * Falls back to pairId/pairedBy for beds that pre-date SunbedGroup migration.
  * For a 2-member group this returns exactly one id — identical to the old
@@ -274,8 +294,7 @@ export async function unreserveItem(
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
-  const todayStart = dayjs().startOf('day').toDate()
-  const todayEnd = dayjs().endOf('day').toDate()
+  const { start: todayStart, end: todayEnd } = await siteTodayBounds(siteId)
 
   if (applyToPair) {
     // Pair mode: delete the whole walk-in reservation (frees both seats).
@@ -925,7 +944,7 @@ export async function blockBed(
     }
   }
 
-  const fromDate = dayjs().startOf('day').toDate()
+  const { start: fromDate } = await siteTodayBounds(siteId)
   // Sticky out-of-service: end the block far in the future so it persists across
   // days and stays out of online inventory until Unblock (see OUT_OF_SERVICE_TO).
   const toDate = OUT_OF_SERVICE_TO
@@ -965,8 +984,7 @@ export async function unblockBed(siteId: string, itemId: string, accessKey?: str
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
-  const todayStart = dayjs().startOf('day').toDate()
-  const todayEnd = dayjs().endOf('day').toDate()
+  const { start: todayStart, end: todayEnd } = await siteTodayBounds(siteId)
 
   if (applyToPair) {
     // Pair mode: delete the whole block reservation (frees both seats).
@@ -1086,8 +1104,7 @@ export async function uncompBed(siteId: string, itemId: string, accessKey?: stri
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
-  const todayStart = dayjs().startOf('day').toDate()
-  const todayEnd = dayjs().endOf('day').toDate()
+  const { start: todayStart, end: todayEnd } = await siteTodayBounds(siteId)
 
   if (applyToPair) {
     // Pair mode: delete the whole comp reservation (frees both seats).
@@ -1095,8 +1112,8 @@ export async function uncompBed(siteId: string, itemId: string, accessKey?: stri
       where: {
         siteId,
         operationalStatus: OP_COMP,
-        from: { gte: todayStart },
-        to: { lte: todayEnd },
+        from: { lte: todayEnd },
+        to: { gte: todayStart },
         items: { some: { id: itemId } },
       },
     })
@@ -1107,8 +1124,8 @@ export async function uncompBed(siteId: string, itemId: string, accessKey?: stri
       where: {
         siteId,
         operationalStatus: OP_COMP,
-        from: { gte: todayStart },
-        to: { lte: todayEnd },
+        from: { lte: todayEnd },
+        to: { gte: todayStart },
         items: { some: { id: itemId } },
       },
       include: { items: true },
@@ -1400,7 +1417,7 @@ export async function blockBeds(
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
-  const fromDate = dayjs().startOf('day').toDate()
+  const { start: fromDate } = await siteTodayBounds(siteId)
   const toDate = OUT_OF_SERVICE_TO
 
   const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
@@ -1801,8 +1818,7 @@ export async function refundReservation(
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
-  const todayStart = dayjs().startOf('day').toDate()
-  const todayEnd = dayjs().endOf('day').toDate()
+  const { start: todayStart, end: todayEnd } = await siteTodayBounds(siteId)
 
   const reservation = await prisma.reservation.findFirst({
     where: {
@@ -1866,8 +1882,7 @@ export async function cancelReservation(
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
-  const todayStart = dayjs().startOf('day').toDate()
-  const todayEnd = dayjs().endOf('day').toDate()
+  const { start: todayStart, end: todayEnd } = await siteTodayBounds(siteId)
 
   // Find the active paid reservation for this item (overlap-with-today semantics
   // so multi-day consumer bookings that started before today are matched correctly).
@@ -1922,17 +1937,21 @@ export async function releaseHold(siteId: string, itemId: string, accessKey?: st
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
-  const todayStart = dayjs().startOf('day').toDate()
-  const todayEnd = dayjs().endOf('day').toDate()
+  const { start: todayStart, end: todayEnd } = await siteTodayBounds(siteId)
 
   if (applyToPair) {
     // Pair mode: delete the whole hold reservation (frees both seats).
+    // Overlap-with-today (from<=todayEnd && to>=todayStart), not containment:
+    // a multi-day hold (to>todayEnd, from the "save hold period" picker) still
+    // covers today and must be releasable. Combined with the venue-local
+    // todayStart/todayEnd above, this is what makes releaseHold actually match
+    // in production (server UTC, venue in another TZ).
     await prisma.reservation.deleteMany({
       where: {
         siteId,
         status: RESERVATION_HELD,
-        from: { gte: todayStart },
-        to: { lte: todayEnd },
+        from: { lte: todayEnd },
+        to: { gte: todayStart },
         items: { some: { id: itemId } },
       },
     })
@@ -1943,8 +1962,8 @@ export async function releaseHold(siteId: string, itemId: string, accessKey?: st
       where: {
         siteId,
         status: RESERVATION_HELD,
-        from: { gte: todayStart },
-        to: { lte: todayEnd },
+        from: { lte: todayEnd },
+        to: { gte: todayStart },
         items: { some: { id: itemId } },
       },
       include: { items: true },
@@ -2717,8 +2736,7 @@ export async function findReservations(
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
-  const todayStart = dayjs().startOf('day').toDate()
-  const todayEnd = dayjs().endOf('day').toDate()
+  const { start: todayStart, end: todayEnd } = await siteTodayBounds(siteId)
   const q = query?.trim()
 
   const where: Prisma.ReservationWhereInput = q
@@ -3197,8 +3215,7 @@ export async function removeGroupSeat(siteId: string, itemId: string, accessKey?
   }
 
   // Reject if the seat has an active reservation today
-  const todayStart = dayjs().startOf('day').toDate()
-  const todayEnd = dayjs().endOf('day').toDate()
+  const { start: todayStart, end: todayEnd } = await siteTodayBounds(siteId)
   const activeReservation = await prisma.reservation.findFirst({
     where: {
       siteId,
@@ -3237,8 +3254,7 @@ export async function deletePoolSeat(siteId: string, itemId: string, accessKey?:
   }
 
   // Reject if the seat has an active reservation (not departed/no-show)
-  const todayStart = dayjs().startOf('day').toDate()
-  const todayEnd = dayjs().endOf('day').toDate()
+  const { start: todayStart, end: todayEnd } = await siteTodayBounds(siteId)
   const activeReservation = await prisma.reservation.findFirst({
     where: {
       siteId,

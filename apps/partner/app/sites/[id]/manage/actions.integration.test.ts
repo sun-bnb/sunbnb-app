@@ -2696,6 +2696,128 @@ describe('blockBeds — grouped block', () => {
   })
 })
 
+// ─── Venue-TZ / multiday release + uncomp (regression: server-TZ mismatch) ───
+//
+// Root cause: on-site create actions stamp from/to in the VENUE-local civil day
+// (siteDayBounds), but releaseHold/uncompBed used to compute "today" from the
+// SERVER TZ (dayjs().startOf('day')) AND filter with containment
+// (from>=todayStart && to<=todayEnd). In production (server UTC, venue in another
+// TZ) a hold's from = venue-midnight = the PREVIOUS UTC day, so it fell outside a
+// server-TZ window; and a MULTIDAY hold's to > todayEnd could never satisfy
+// containment — either way the bed was impossible to release/remove ("No walk-in
+// reservation found to release" for the sibling paid-in-cash path). The fix:
+// venue-local todayStart/todayEnd + overlap semantics. A multi-day span reveals
+// the containment half of the bug independent of the test runner's TZ.
+
+describe('releaseHold / uncompBed — multiday span (overlap, not containment)', () => {
+  it('releaseHold removes a hold whose stay extends past today', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    mockUserId = user.id
+
+    // Hold spanning [yesterday, +3 days] — covers today, but to > end-of-today,
+    // which the old containment filter (to <= todayEnd) could never match.
+    const from = new Date(); from.setDate(from.getDate() - 1)
+    const to = new Date(); to.setDate(to.getDate() + 3)
+    const hold = await createTestReservation(user.id, site.id, [item.id], {
+      status: 'held',
+      operationalStatus: 'expected',
+      from,
+      to,
+    })
+
+    const result = await releaseHold(site.id, item.id, undefined, true)
+    expect(result).toEqual({ status: 'ok' })
+
+    const after = await prisma.reservation.findUnique({ where: { id: hold.id } })
+    expect(after).toBeNull() // survived under the old containment code
+  })
+
+  it('uncompBed removes a comp whose stay extends past today', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    mockUserId = user.id
+
+    const from = new Date(); from.setDate(from.getDate() - 1)
+    const to = new Date(); to.setDate(to.getDate() + 3)
+    const comp = await createTestReservation(user.id, site.id, [item.id], {
+      status: 'complete',
+      operationalStatus: 'comp',
+      from,
+      to,
+    })
+
+    const result = await uncompBed(site.id, item.id, undefined, true)
+    expect(result).toEqual({ status: 'ok' })
+
+    const after = await prisma.reservation.findUnique({ where: { id: comp.id } })
+    expect(after).toBeNull()
+  })
+})
+
+// ─── Staff-created reservations are removable without errors (round-trip) ────
+//
+// End-to-end guard for the venue-vs-server TZ fix: create each on-site type with
+// the REAL create action, then remove it with the REAL remove action, and assert
+// the action returns { status: 'ok' } (no error) AND the row is gone. The site's
+// timeZone is pinned to a far offset (Pacific/Kiritimati, UTC+14) so the venue
+// civil day never coincides with the runner/server day — the exact production
+// condition (Vercel UTC + a Europe venue) that broke removal before the fix.
+
+describe('staff-created reservations are removable (venue TZ ≠ server TZ)', () => {
+  async function freshBed() {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { timeZone: 'Pacific/Kiritimati' })
+    const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    mockUserId = user.id
+    return { site, item }
+  }
+
+  async function rowsFor(siteId: string, itemId: string) {
+    return prisma.reservation.count({
+      where: { siteId, items: { some: { id: itemId } } },
+    })
+  }
+
+  it('walk-in (reserveItem → unreserveItem) removes cleanly', async () => {
+    const { site, item } = await freshBed()
+    expect(await reserveItem(site.id, item.id, 'Walk Guest')).toEqual({ status: 'ok' })
+    expect(await unreserveItem(site.id, item.id)).toEqual({ status: 'ok' })
+    expect(await rowsFor(site.id, item.id)).toBe(0)
+  })
+
+  it('multi-day walk-in (reserveItem +2d → unreserveItem) removes cleanly', async () => {
+    const { site, item } = await freshBed()
+    const until = dayjs().add(2, 'day').format('YYYY-MM-DD')
+    expect(await reserveItem(site.id, item.id, 'Multi Guest', undefined, undefined, until)).toEqual({ status: 'ok' })
+    expect(await unreserveItem(site.id, item.id)).toEqual({ status: 'ok' })
+    expect(await rowsFor(site.id, item.id)).toBe(0)
+  })
+
+  it('hold (holdBeds → releaseHold) removes cleanly', async () => {
+    const { site, item } = await freshBed()
+    expect(await holdBeds(site.id, [item.id], undefined, 'Hold Guest')).toEqual({ status: 'ok' })
+    expect(await releaseHold(site.id, item.id, undefined, true)).toEqual({ status: 'ok' })
+    expect(await rowsFor(site.id, item.id)).toBe(0)
+  })
+
+  it('comp (compBeds → uncompBed) removes cleanly', async () => {
+    const { site, item } = await freshBed()
+    expect(await compBeds(site.id, [item.id], undefined, 'Comp Guest')).toEqual({ status: 'ok' })
+    expect(await uncompBed(site.id, item.id, undefined, true)).toEqual({ status: 'ok' })
+    expect(await rowsFor(site.id, item.id)).toBe(0)
+  })
+
+  it('block (blockBed → unblockBed) removes cleanly', async () => {
+    const { site, item } = await freshBed()
+    expect(await blockBed(site.id, item.id, 'Broken slat')).toEqual({ status: 'ok' })
+    expect(await unblockBed(site.id, item.id)).toEqual({ status: 'ok' })
+    expect(await rowsFor(site.id, item.id)).toBe(0)
+  })
+})
+
 // ─── compBeds: grouped comp (track 011 Block/Comp parity) ────────────────────
 
 describe('compBeds — grouped comp', () => {
