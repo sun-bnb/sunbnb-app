@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest'
+import dayjs from 'dayjs'
 import { cleanDatabase, disconnectDatabase, prisma } from '@/app/test/setup'
 import {
   createTestUser,
@@ -206,28 +207,35 @@ describe('createPartnerReservation', () => {
     const item2 = await createTestInventoryItem(user.id, site.id, { number: 2 })
     mockUserId = user.id
 
+    // A stay whose last day is in the FUTURE so the departed/no-show beds are NOT
+    // yet released (the release only fires once `to <= endOfToday`). Dates are
+    // relative to today so the test can't age into "stay over" — a hardcoded
+    // 2026-07-05 `to` silently became today and freed the beds.
+    const resFrom = dayjs().subtract(1, 'day').startOf('day').toDate()
+    const resTo = dayjs().add(3, 'day').endOf('day').toDate()
+
     // no-show reservation
     await createTestReservation(user.id, site.id, [item1.id], {
-      from: new Date('2026-07-01'),
-      to: new Date('2026-07-05'),
+      from: resFrom,
+      to: resTo,
       status: 'complete',
       operationalStatus: 'no-show',
     })
 
     // departed reservation
     await createTestReservation(user.id, site.id, [item2.id], {
-      from: new Date('2026-07-01'),
-      to: new Date('2026-07-05'),
+      from: resFrom,
+      to: resTo,
       status: 'complete',
       operationalStatus: 'departed',
     })
 
-    // Book both items for the same dates — now rejected (both beds still held).
+    // Book both items for an overlapping range — rejected (both beds still held).
     const result = await createPartnerReservation({
       siteId: site.id,
       itemIds: [item1.id, item2.id],
-      from: '2026-07-01',
-      to: '2026-07-05',
+      from: dayjs().format('YYYY-MM-DD'),
+      to: dayjs().add(2, 'day').format('YYYY-MM-DD'),
       paymentType: 'cash',
     })
 
@@ -408,31 +416,42 @@ describe('getAvailableSunbeds', () => {
     const item3 = await createTestInventoryItem(user.id, site.id, { number: 3 })
     mockUserId = user.id
 
+    // A stay whose last day is in the FUTURE so the departed/no-show beds are NOT
+    // yet released (release only fires once `to <= endOfToday`). Relative to today
+    // so the test can't age into "stay over" — a hardcoded 2026-07-05 `to` silently
+    // became today and freed the beds.
+    const resFrom = dayjs().subtract(1, 'day').startOf('day').toDate()
+    const resTo = dayjs().add(3, 'day').endOf('day').toDate()
+
     // canceled reservation — frees item1 (canceled is non-blocking by status)
     await createTestReservation(user.id, site.id, [item1.id], {
-      from: new Date('2026-07-01'),
-      to: new Date('2026-07-05'),
+      from: resFrom,
+      to: resTo,
       status: 'canceled',
       operationalStatus: 'expected',
     })
 
     // no-show reservation — item2 STILL blocked (op-status never frees)
     await createTestReservation(user.id, site.id, [item2.id], {
-      from: new Date('2026-07-01'),
-      to: new Date('2026-07-05'),
+      from: resFrom,
+      to: resTo,
       status: 'complete',
       operationalStatus: 'no-show',
     })
 
     // departed reservation — item3 STILL blocked
     await createTestReservation(user.id, site.id, [item3.id], {
-      from: new Date('2026-07-01'),
-      to: new Date('2026-07-05'),
+      from: resFrom,
+      to: resTo,
       status: 'complete',
       operationalStatus: 'departed',
     })
 
-    const result = await getAvailableSunbeds(site.id, '2026-07-01', '2026-07-05')
+    const result = await getAvailableSunbeds(
+      site.id,
+      dayjs().format('YYYY-MM-DD'),
+      dayjs().add(2, 'day').format('YYYY-MM-DD'),
+    )
 
     expect(result.status).toBe('ok')
     // Only the canceled item is free; the no-show and departed beds stay held.

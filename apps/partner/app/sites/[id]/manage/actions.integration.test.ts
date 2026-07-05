@@ -258,9 +258,16 @@ describe('check-in / departure lifecycle', () => {
     const item = await createTestInventoryItem(user.id, site.id)
     mockUserId = user.id
 
+    // Single venue-local day so markDeparted sees no future days → 'departed'
+    // (not 'expected'). The default fixture `to` is now+4h, which straddles the
+    // venue's midnight when the runner is west of the site and the test runs late
+    // enough in the evening, faking a multiday stay.
+    const { start: today0, end: today23 } = fixtureDay(site)
     const reservation = await createTestReservation(user.id, site.id, [item.id], {
       status: 'complete',
       operationalStatus: 'expected',
+      from: today0,
+      to: today23,
     })
 
     // Check in
