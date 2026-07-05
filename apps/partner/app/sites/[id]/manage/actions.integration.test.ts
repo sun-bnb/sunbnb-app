@@ -59,6 +59,25 @@ import {
   settleReservation,
 } from './actions'
 import { resolveTodayRow } from './reservation-day'
+import { siteDayBounds } from '@repo/data/site-day'
+
+// ---------------------------------------------------------------------------
+// Fixture day-bounds helper
+// ---------------------------------------------------------------------------
+//
+// A "today-only" reservation fixture must anchor from/to to the SAME civil day
+// markDeparted resolves — the site's venue-local day — not the test runner's TZ.
+// Otherwise, when the runner sits west of the fixture site (e.g. a UTC or CEST
+// runner vs the Helsinki fixture), a runner-local endOf('day') lands past the
+// venue's end-of-day, and a genuine last-day depart is wrongly seen as multiday
+// (returns to 'expected' instead of 'departed'). Derive the bounds from the
+// site's own fields, exactly like buildSiteTimezone() in actions.ts.
+const fixtureDay = (site: { timeZone?: string | null; locationLat?: string | null; locationLng?: string | null }) =>
+  siteDayBounds({
+    timeZone: site.timeZone,
+    latitude: site.locationLat ? parseFloat(site.locationLat) : undefined,
+    longitude: site.locationLng ? parseFloat(site.locationLng) : undefined,
+  })
 
 // ---------------------------------------------------------------------------
 // Lifecycle
@@ -992,9 +1011,8 @@ describe('markDeparted — split-then-depart (cash walk-in)', () => {
     const itemB = await createTestInventoryItem(user.id, site.id, { number: 2 })
     mockUserId = user.id
 
-    // Today-only (last day)
-    const today0 = dayjs().startOf('day').toDate()
-    const today23 = dayjs().endOf('day').toDate()
+    // Today-only (last day) — venue-local so markDeparted sees no future days
+    const { start: today0, end: today23 } = fixtureDay(site)
     const reservation = await createTestReservation(user.id, site.id, [itemA.id, itemB.id], {
       from: today0,
       to: today23,
@@ -1760,11 +1778,13 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
     mockUserId = user.id
 
     // Build grouped walk-in with walked-in status (allows markDeparted).
+    // Venue-local day so a last-day depart isn't misread as multiday.
+    const { start: today0, end: today23 } = fixtureDay(site)
     const groupRes = await createTestReservation(user.id, site.id, [i1.id, i2.id, i3.id], {
       status: 'paid-in-cash',
       operationalStatus: 'walked-in',
-      from: new Date(new Date().setHours(0, 0, 0, 0)),
-      to: new Date(new Date().setHours(23, 59, 59, 999)),
+      from: today0,
+      to: today23,
     })
 
     const departResult = await markDeparted(site.id, groupRes.id)
@@ -2301,8 +2321,7 @@ describe('markDeparted — bulk multiselect 2-of-3 subset split', () => {
     mockUserId = user.id
 
     // Today-only 3-seat walk-in (last day → subset should be departed)
-    const today0 = dayjs().startOf('day').toDate()
-    const today23 = dayjs().endOf('day').toDate()
+    const { start: today0, end: today23 } = fixtureDay(site)
     const reservation = await createTestReservation(user.id, site.id, [itemA.id, itemB.id, itemC.id], {
       from: today0,
       to: today23,
