@@ -765,7 +765,8 @@
     "bulkNoAction": "Tälle valinnalle ei ole joukkotoimintoa",
     "bulkCancelPaidNote": "Peru maksetut varaukset yksitellen hyvityksen hoitamiseksi",
     "bulkSomeFailed": "{n} ei voitu päivittää",
-    "bulkGroupConflict": "Varaus epäonnistui — yksi tai useampi valituista aurinkovuoteista on jo varattu."
+    "bulkGroupConflict": "Varaus epäonnistui — yksi tai useampi valituista aurinkovuoteista on jo varattu.",
+    "bulkCardOneBooking": "Korttimaksu onnistuu yksi varaus kerrallaan — valitse paikat yhdestä varauksesta."
   },
   "BedDetail": {
     "collectPayment": "Peri maksu",
@@ -786,6 +787,9 @@
     "reserveDays": "Varaa · {n} päivää",
     "rent": "Vuokraa",
     "walkInAction": "Kävelee sisään",
+    "payHow": "Miten maksaa?",
+    "walkInCash": "Käteinen",
+    "walkInCard": "Kortti (QR)",
     "settle": "Maksu",
     "settleAmount": "Käteinen vastaanotettu",
     "settleConfirm": "Vahvista maksu",

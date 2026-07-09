@@ -765,7 +765,8 @@
     "bulkNoAction": "No bulk action for this selection",
     "bulkCancelPaidNote": "Cancel paid bookings one at a time to handle the refund",
     "bulkSomeFailed": "{n} couldn't be updated",
-    "bulkGroupConflict": "Couldn't book — one or more selected sunbeds are already taken."
+    "bulkGroupConflict": "Couldn't book — one or more selected sunbeds are already taken.",
+    "bulkCardOneBooking": "Card payment works one booking at a time — select seats from a single reservation."
   },
   "BedDetail": {
     "collectPayment": "Collect payment",
@@ -786,6 +787,9 @@
     "reserveDays": "Reserve · {n} days",
     "rent": "Rent",
     "walkInAction": "Walk-in",
+    "payHow": "Walk-in — how are they paying?",
+    "walkInCash": "Cash",
+    "walkInCard": "Card (QR)",
     "settle": "Settle",
     "settleAmount": "Cash received",
     "settleConfirm": "Settle",

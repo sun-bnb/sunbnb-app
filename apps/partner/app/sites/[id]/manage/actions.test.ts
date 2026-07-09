@@ -3408,6 +3408,224 @@ describe('convertHoldToWalkIn', () => {
   })
 })
 
+// ─── reserveItem: cash/card payment fork ────────────────────────────────────
+
+describe('reserveItem — cash/card till fork', () => {
+  /**
+   * Mock a paid-site owner for reserveItem. Call order for prisma.site.findUnique:
+   *   1. verifySiteOwnership (requireSiteOwner) → { userId: OWNER_ID }
+   *   2. Promise.all type/price fetch → { type: 'paid', price: 20, ... }
+   * inventoryItem.findUnique: null (no pair → getGroupMemberIds returns [])
+   * inventoryItem.findMany: price rows (one item, null price → falls back to site.price=20)
+   *
+   * NOTE: uses mockResolvedValue (persistent) NOT mockResolvedValueOnce so the Once queue
+   * is not polluted across tests (vi.clearAllMocks() clears call history but NOT the Once queue).
+   */
+  function setupPaidSiteForReserveItem() {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    // Two consecutive Once values for site.findUnique — needed because the action
+    // calls it twice (ownership then type/price). Once values drain in order, and
+    // vi.clearAllMocks() does NOT purge the queue, so this helper is designed to
+    // be called once per test with fresh beforeEach clearing only call history.
+    vi.mocked(prisma.site.findUnique)
+      .mockResolvedValueOnce({ userId: OWNER_ID } as any)
+      .mockResolvedValueOnce({
+        type: 'paid', price: 20, timeZone: null, locationLat: null, locationLng: null,
+      } as any)
+    // Use mockResolvedValue (not Once) for single-call mocks to avoid queue leakage.
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null) // no pair
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ price: null }] as any)
+    // Do NOT mock employee.findUnique — employeeId=undefined causes early return,
+    // so the mock would never be consumed and would pollute subsequent tests.
+  }
+
+  it('records a TillEntry when recordCashSettlement=true on a paid site', async () => {
+    setupPaidSiteForReserveItem()
+    mockGuard.mockResolvedValueOnce({ outcome: 'created', reservationId: 'r-cash-1' })
+
+    const res = await reserveItem(
+      SITE_ID, ITEM_ID, undefined, undefined, undefined, undefined, false, undefined, true,
+    )
+
+    expect(res.status).toBe('ok')
+    expect((res as any).reservationId).toBe('r-cash-1')
+    const mockRecord = vi.mocked(recordSettlement)
+    expect(mockRecord).toHaveBeenCalledOnce()
+    expect(mockRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        siteId: SITE_ID,
+        reservationId: 'r-cash-1',
+        amount: 20,
+      }),
+    )
+  })
+
+  it('does NOT record a TillEntry when recordCashSettlement=false (card/QR path)', async () => {
+    setupPaidSiteForReserveItem()
+    mockGuard.mockResolvedValueOnce({ outcome: 'created', reservationId: 'r-card-1' })
+
+    const res = await reserveItem(
+      SITE_ID, ITEM_ID, undefined, undefined, undefined, undefined, false, undefined, false,
+    )
+
+    expect(res.status).toBe('ok')
+    expect((res as any).reservationId).toBe('r-card-1')
+    expect(vi.mocked(recordSettlement)).not.toHaveBeenCalled()
+  })
+
+  it('does NOT record a TillEntry on a free site even when recordCashSettlement=true', async () => {
+    // Free site → paymentAmount=0 → settlement guard skips
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.site.findUnique)
+      .mockResolvedValueOnce({ userId: OWNER_ID } as any)
+      .mockResolvedValueOnce({ type: 'free', price: null, timeZone: null, locationLat: null, locationLng: null } as any)
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ price: null }] as any)
+    mockGuard.mockResolvedValueOnce({ outcome: 'created', reservationId: 'r-free-1' })
+
+    await reserveItem(
+      SITE_ID, ITEM_ID, undefined, undefined, undefined, undefined, false, undefined, true,
+    )
+
+    expect(vi.mocked(recordSettlement)).not.toHaveBeenCalled()
+  })
+
+  it('returns reservationId from the guard in the ok response', async () => {
+    // A basic (existing-behaviour) call now always returns reservationId
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([])
+    mockGuard.mockResolvedValueOnce({ outcome: 'created', reservationId: 'r-id-check' })
+
+    const res = await reserveItem(SITE_ID, ITEM_ID)
+
+    expect(res.status).toBe('ok')
+    expect((res as any).reservationId).toBe('r-id-check')
+  })
+})
+
+// ─── convertHoldToWalkIn: cash/card payment fork ─────────────────────────────
+
+describe('convertHoldToWalkIn — cash/card till fork', () => {
+  /**
+   * Mock a paid-site owner for convertHoldToWalkIn. Call order for prisma.site.findUnique:
+   *   1. verifySiteOwnership (requireSiteOwner) → { userId: OWNER_ID }
+   *   2. actions.ts fetches site type/price → { type: 'paid', price: 15, ... }
+   *
+   * Uses mockResolvedValue (persistent) for single-call mocks to avoid Once queue
+   * pollution across tests (vi.clearAllMocks() only clears call history, not the Once queue).
+   */
+  function setupPaidSiteForConvert() {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.site.findUnique)
+      .mockResolvedValueOnce({ userId: OWNER_ID } as any)
+      .mockResolvedValueOnce({
+        type: 'paid', price: 15, timeZone: null, locationLat: null, locationLng: null,
+      } as any)
+    // employee.findUnique IS called by resolveEmployeeId for convertHoldToWalkIn because
+    // the employeeId param is provided via currentWorkerId; here we pass undefined so
+    // resolveEmployeeId returns early without calling findUnique — don't mock it.
+    // Use mockResolvedValue (persistent) for safety.
+    vi.mocked(prisma.employee.findUnique).mockResolvedValue(null)
+  }
+
+  it('records TillEntry for today-only whole-hold with recordCashSettlement=true', async () => {
+    setupPaidSiteForConvert()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
+      id: RES_ID,
+      from: null,
+      items: [{ id: ITEM_ID, price: null }],
+    } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValueOnce({} as any)
+
+    const res = await convertHoldToWalkIn(
+      SITE_ID, ITEM_ID, undefined, undefined, undefined, undefined, true, undefined, true,
+    )
+
+    expect(res.status).toBe('ok')
+    expect((res as any).reservationId).toBe(RES_ID)
+    const mockRecord = vi.mocked(recordSettlement)
+    expect(mockRecord).toHaveBeenCalledOnce()
+    expect(mockRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        siteId: SITE_ID,
+        reservationId: RES_ID,
+        amount: 15,
+      }),
+    )
+  })
+
+  it('does NOT record TillEntry when recordCashSettlement=false (card path)', async () => {
+    setupPaidSiteForConvert()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
+      id: RES_ID,
+      from: null,
+      items: [{ id: ITEM_ID, price: null }],
+    } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValueOnce({} as any)
+
+    const res = await convertHoldToWalkIn(
+      SITE_ID, ITEM_ID, undefined, undefined, undefined, undefined, true, undefined, false,
+    )
+
+    expect(res.status).toBe('ok')
+    expect((res as any).reservationId).toBe(RES_ID)
+    expect(vi.mocked(recordSettlement)).not.toHaveBeenCalled()
+  })
+
+  it('today-only seat-split path: records TillEntry with the new subset reservation id', async () => {
+    setupPaidSiteForConvert()
+    // 3-seat hold; split off ITEM_ID only
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
+      id: RES_ID,
+      from: null,
+      items: [
+        { id: ITEM_ID, price: null },
+        { id: 'item-b', price: null },
+        { id: 'item-c', price: null },
+      ],
+    } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValueOnce({} as any)
+    vi.mocked(prisma.reservation.create).mockResolvedValueOnce({ id: 'split-res-1' } as any)
+
+    const res = await convertHoldToWalkIn(
+      SITE_ID, ITEM_ID, undefined, undefined, undefined, undefined, false, undefined, true,
+    )
+
+    expect(res.status).toBe('ok')
+    expect((res as any).reservationId).toBe('split-res-1')
+    const mockRecord = vi.mocked(recordSettlement)
+    expect(mockRecord).toHaveBeenCalledOnce()
+    expect(mockRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        siteId: SITE_ID,
+        reservationId: 'split-res-1',
+        amount: 15,
+      }),
+    )
+  })
+
+  it('does NOT record TillEntry on free site even when recordCashSettlement=true', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.site.findUnique)
+      .mockResolvedValueOnce({ userId: OWNER_ID } as any)
+      .mockResolvedValueOnce({ type: 'free', price: null, timeZone: null, locationLat: null, locationLng: null } as any)
+    vi.mocked(prisma.employee.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
+      id: RES_ID,
+      from: null,
+      items: [{ id: ITEM_ID, price: null }],
+    } as any)
+    vi.mocked(prisma.reservation.update).mockResolvedValueOnce({} as any)
+
+    await convertHoldToWalkIn(
+      SITE_ID, ITEM_ID, undefined, undefined, undefined, undefined, true, undefined, true,
+    )
+
+    expect(vi.mocked(recordSettlement)).not.toHaveBeenCalled()
+  })
+})
+
 // ─── Regression: group-attached pool seat cascades through reserveItem ────────
 
 describe('reserveItem cascade regression: pool seat with sunbedGroupId', () => {
@@ -4089,6 +4307,75 @@ describe('reserveItems', () => {
     const res = await reserveItems(SITE_ID, [ITEM_ID], undefined, undefined, undefined, far)
     expect(res.status).toBe('error')
     expect(mockGuard).not.toHaveBeenCalled()
+  })
+
+  it('records ONE TillEntry and returns reservationId when recordCashSettlement=true on a paid site', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      userId: OWNER_ID, type: 'paid', price: 10,
+      timeZone: null, locationLat: null, locationLng: null,
+    } as any)
+    // Two seats: item price 15, item price null → falls back to site price 10; sum = 25
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ price: 15 }, { price: null }] as any)
+    mockGuard.mockResolvedValueOnce({ outcome: 'created', reservationId: 'r-bulk-cash' })
+
+    const res = await reserveItems(SITE_ID, [ITEM_ID, 'item-2'], undefined, undefined, undefined, undefined, undefined, true)
+
+    expect(res.status).toBe('ok')
+    expect((res as any).reservationId).toBe('r-bulk-cash')
+
+    const mockRecord = vi.mocked(recordSettlement)
+    expect(mockRecord).toHaveBeenCalledOnce()
+    expect(mockRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        siteId: SITE_ID,
+        reservationId: 'r-bulk-cash',
+        amount: 25,
+      }),
+    )
+  })
+
+  it('does NOT record a TillEntry when recordCashSettlement=false (card/QR path)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      userId: OWNER_ID, type: 'paid', price: 20,
+      timeZone: null, locationLat: null, locationLng: null,
+    } as any)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ price: null }] as any)
+    mockGuard.mockResolvedValueOnce({ outcome: 'created', reservationId: 'r-bulk-card' })
+
+    const res = await reserveItems(SITE_ID, [ITEM_ID], undefined, undefined, undefined, undefined, undefined, false)
+
+    expect(res.status).toBe('ok')
+    expect((res as any).reservationId).toBe('r-bulk-card')
+    expect(vi.mocked(recordSettlement)).not.toHaveBeenCalled()
+  })
+
+  it('does NOT record a TillEntry on a free site even when recordCashSettlement=true', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      userId: OWNER_ID, type: 'free', price: null,
+      timeZone: null, locationLat: null, locationLng: null,
+    } as any)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ price: null }] as any)
+    mockGuard.mockResolvedValueOnce({ outcome: 'created', reservationId: 'r-free-bulk' })
+
+    const res = await reserveItems(SITE_ID, [ITEM_ID], undefined, undefined, undefined, undefined, undefined, true)
+
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(recordSettlement)).not.toHaveBeenCalled()
+  })
+
+  it('returns reservationId from the guard in the ok response (default no-cash path)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID, type: 'free', price: null } as any)
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ price: null }] as any)
+    mockGuard.mockResolvedValueOnce({ outcome: 'created', reservationId: 'r-bulk-id' })
+
+    const res = await reserveItems(SITE_ID, [ITEM_ID])
+
+    expect(res.status).toBe('ok')
+    expect((res as any).reservationId).toBe('r-bulk-id')
   })
 })
 

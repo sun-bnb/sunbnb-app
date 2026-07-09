@@ -765,7 +765,8 @@
     "bulkNoAction": "No hay acción en lote para esta selección",
     "bulkCancelPaidNote": "Cancela las reservas pagadas de una en una para gestionar el reembolso",
     "bulkSomeFailed": "{n} no se pudieron actualizar",
-    "bulkGroupConflict": "No se pudo reservar — una o más tumbonas seleccionadas ya están ocupadas."
+    "bulkGroupConflict": "No se pudo reservar — una o más tumbonas seleccionadas ya están ocupadas.",
+    "bulkCardOneBooking": "El pago con tarjeta se hace de una reserva a la vez — selecciona asientos de una sola reserva."
   },
   "BedDetail": {
     "collectPayment": "Cobrar",
@@ -786,6 +787,9 @@
     "reserveDays": "Reservar · {n} días",
     "rent": "Alquilar",
     "walkInAction": "Entrar",
+    "payHow": "¿Cómo paga?",
+    "walkInCash": "Efectivo",
+    "walkInCard": "Tarjeta (QR)",
     "settle": "Cobrar",
     "settleAmount": "Efectivo recibido",
     "settleConfirm": "Confirmar cobro",

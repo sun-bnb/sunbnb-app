@@ -20,9 +20,11 @@ import {
   holdBeds, reserveItems,
   unblockBed, uncompBed, releaseHold, unreserveItem, removeFailedReservation,
   checkInReservation, markNoShow, markDeparted, cancelReservation,
+  collectReservationPayment, getCollectStatus, cancelCollection,
   type ReservationMatch,
 } from './actions'
 import { RESERVATION_COMPLETE, RESERVATION_HELD } from '@repo/data/reservation-status'
+import CollectPaymentModal from './CollectPaymentModal'
 
 function parseSunbedNumber(num: number) {
   const str = String(num)
@@ -159,6 +161,10 @@ export default function ManageView({
   const [bulkUntil, setBulkUntil] = useState('')
   // Shared confirm step for the ⚠ bulk verbs (no-show / cancel / depart).
   const [bulkConfirm, setBulkConfirm] = useState<'no-show' | 'cancel' | 'depart' | null>(null)
+  // Bulk Card path — CollectPaymentModal targeting the single grouped reservation
+  // created by bulkRentCard (all-available only; held/mixed doesn't get Card).
+  const [bulkCollectTargetId, setBulkCollectTargetId] = useState<string | null>(null)
+  const [showBulkCollect, setShowBulkCollect] = useState(false)
   const tomorrow = dayjs().add(1, 'day').format('YYYY-MM-DD')
   const maxUntil = dayjs().add(90, 'day').format('YYYY-MM-DD')
   const bulkDays = bulkUntil ? dayjs(bulkUntil).startOf('day').diff(dayjs().startOf('day'), 'day') + 1 : 1
@@ -666,41 +672,40 @@ export default function ManageView({
     return groups
   }
 
-  const bulkRent = () => {
+  /**
+   * Bulk walk-in — CASH path.
+   * Free seats → reserveItems(..., recordCashSettlement=true)
+   * Held groups → convertHoldToWalkIn(..., recordCashSettlement=true) per group.
+   * Used for both the all-available and the held/mixed "Check-in" cases.
+   */
+  const bulkRentCash = () => {
     if (selectedIds.length === 0) return
     const name = bulkGuestName.trim() || undefined
     const until = bulkUntil || undefined
-    // Split selection: free seats → one grouped walk-in; held reservations → subset-aware convert.
     const selItems_ = inventoryItems.filter(i => selectedIds.includes(i.id))
     const freeIds = selItems_.filter(i => seatKind(i) === 'available').map(i => i.id)
-    // Group held seats by reservation with subset detection.
     const heldGroups = getSelectionGroups()
-    // Retain only held-reservation groups (free seats handled via reserveItems above).
     const heldEntries = [...heldGroups.entries()].filter(([, g]) => {
       const item = inventoryItems.find(i => i.id === g.anyItemId)
       return item && seatKind(item) === 'held'
     })
     setBulkError(null)
     startBulkTransition(async () => {
-      // 1. Attempt grouped free-seat create first (all-or-nothing). If it fails, abort entirely.
       if (freeIds.length > 0) {
-        const r = await reserveItems(site.id!, freeIds, name, undefined, accessKey, until, workerArg)
+        const r = await reserveItems(site.id!, freeIds, name, undefined, accessKey, until, workerArg, /*recordCashSettlement*/ true)
         if (r.status === 'error') {
           setBulkError(t('bulkGroupConflict'))
-          return // keep selection, do NOT convert any holds
+          return
         }
       }
-      // 2. Convert each distinct held reservation — subset if partial, whole if all selected.
       let failed = 0
       for (const [, g] of heldEntries) {
         try {
           let r: { status: string }
           if (g.isSubset) {
-            // Partial hold selection: peel off exactly the selected seats as ONE new walk-in.
-            r = await convertHoldToWalkIn(site.id!, g.anyItemId, accessKey, name, until, workerArg, false, g.selectedItemIds)
+            r = await convertHoldToWalkIn(site.id!, g.anyItemId, accessKey, name, until, workerArg, false, g.selectedItemIds, /*recordCashSettlement*/ true)
           } else {
-            // All seats in this hold selected: whole-hold convert in place.
-            r = await convertHoldToWalkIn(site.id!, g.anyItemId, accessKey, name, until, workerArg, true)
+            r = await convertHoldToWalkIn(site.id!, g.anyItemId, accessKey, name, until, workerArg, true, undefined, /*recordCashSettlement*/ true)
           }
           if (r.status === 'error') failed++
         } catch { failed++ }
@@ -708,6 +713,57 @@ export default function ManageView({
       router.refresh()
       if (failed > 0) setBulkError(t('bulkSomeFailed', { n: failed }))
       else setSelectedIds([])
+    })
+  }
+
+  /**
+   * Bulk walk-in — CARD (QR) path.
+   * Valid only when the whole selection collapses to exactly ONE reservation, so
+   * CollectPaymentModal can target a single reservation id:
+   *   - all-available → one grouped reservation via reserveItems, OR
+   *   - one held booking (whole or subset) → one reservation via convertHoldToWalkIn.
+   * A selection spanning multiple bookings (several holds, or free + held) can't be
+   * collected with one QR — guarded here and gated in the UI via bulkCardEligible.
+   * Creates the walk-in UNSETTLED (recordCashSettlement=false); the Mollie collect
+   * is the payment.
+   */
+  const bulkRentCard = () => {
+    if (selectedIds.length === 0) return
+    const name = bulkGuestName.trim() || undefined
+    const until = bulkUntil || undefined
+    const selItems_ = inventoryItems.filter(i => selectedIds.includes(i.id))
+    const freeIds = selItems_.filter(i => seatKind(i) === 'available').map(i => i.id)
+    const heldGroups = getSelectionGroups()
+    const heldEntries = [...heldGroups.entries()].filter(([, g]) => {
+      const item = inventoryItems.find(i => i.id === g.anyItemId)
+      return item && seatKind(item) === 'held'
+    })
+    // QR targets one reservation — refuse anything that would create more than one.
+    if ((freeIds.length > 0 ? 1 : 0) + heldEntries.length !== 1) {
+      setBulkError(t('bulkCardOneBooking'))
+      return
+    }
+    setBulkError(null)
+    startBulkTransition(async () => {
+      let reservationId: string | undefined
+      if (freeIds.length > 0) {
+        // All-available → one grouped reservation.
+        const r = await reserveItems(site.id!, freeIds, name, undefined, accessKey, until, workerArg, /*recordCashSettlement*/ false)
+        if (r.status === 'ok' && r.reservationId) reservationId = r.reservationId
+        else { setBulkError(t('bulkGroupConflict')); return }
+      } else {
+        // Exactly one held booking → convert (whole or subset), unsettled.
+        const [, g] = heldEntries[0]!
+        const r = g.isSubset
+          ? await convertHoldToWalkIn(site.id!, g.anyItemId, accessKey, name, until, workerArg, false, g.selectedItemIds, /*recordCashSettlement*/ false)
+          : await convertHoldToWalkIn(site.id!, g.anyItemId, accessKey, name, until, workerArg, true, undefined, /*recordCashSettlement*/ false)
+        if (r.status === 'ok' && r.reservationId) reservationId = r.reservationId
+        else { setBulkError(t('bulkSomeFailed', { n: 1 })); return }
+      }
+      if (reservationId) {
+        setBulkCollectTargetId(reservationId)
+        setShowBulkCollect(true)
+      }
     })
   }
   const bulkFree = () => {
@@ -811,6 +867,19 @@ export default function ManageView({
   const canRent = can(['available', 'held']) && sameStatus
   const selKinds = new Set(selItems.map(seatKind))
   const homogeneous = selKinds.size === 1 ? [...selKinds][0] : null
+
+  // Card (QR) is only possible when a bulk walk-in/check-in collapses to exactly
+  // ONE reservation — QR targets a single reservation id. True for all-available
+  // (one grouped booking) and for a single selected hold; false across multiple
+  // holds. Gates whether the Card button is offered next to Cash.
+  const bulkFreeCount = selItems.filter(i => seatKind(i) === 'available').length
+  const bulkHeldResIds = new Set(
+    selItems
+      .filter(i => seatKind(i) === 'held')
+      .map(i => getActiveReservation(i)?.id)
+      .filter((id): id is string => !!id)
+  )
+  const bulkCardEligible = (bulkFreeCount > 0 ? 1 : 0) + bulkHeldResIds.size === 1
 
   // Paid lane — reservation-level transitions (whole-reservation semantics).
   const canCheckIn = can(['reserved'])
@@ -1097,6 +1166,25 @@ export default function ManageView({
         />
       )}
 
+      {/* Bulk Card (QR) collect — targets the single grouped reservation from bulkRentCard.
+          Only reachable from the all-available path (one reservation, one QR). */}
+      {showBulkCollect && bulkCollectTargetId && (
+        <CollectPaymentModal
+          actions={{
+            create: () => collectReservationPayment(site.id!, bulkCollectTargetId, accessKey),
+            poll:   () => getCollectStatus(site.id!, bulkCollectTargetId, accessKey),
+            cancel: () => cancelCollection(site.id!, bulkCollectTargetId, accessKey),
+          }}
+          onClose={() => { setShowBulkCollect(false); setBulkCollectTargetId(null) }}
+          onSettled={() => {
+            setShowBulkCollect(false)
+            setBulkCollectTargetId(null)
+            setSelectedIds([])
+            router.refresh()
+          }}
+        />
+      )}
+
       {/* Walk-in rental modal */}
       {showRentalModal && site.rentalItems && (
         <CreateRentalModal
@@ -1217,24 +1305,70 @@ export default function ManageView({
 
               {/* Action buttons — mirror the tap dialog for the verbs common to the selection */}
               {allAvailable ? (
-                <div className="flex gap-3">
-                  <button disabled={isBulkPending} onClick={bulkBlock} aria-label={tb('block')} title={tb('block')} className="w-16 self-stretch flex flex-col items-center justify-center gap-0.5 border-2 border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 rounded-xl active:bg-gray-50 dark:active:bg-gray-800 disabled:opacity-50">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M5.6 5.6l12.8 12.8" /></svg>
-                    <span className="text-[10px] font-semibold leading-none">{tb('block')}</span>
-                  </button>
-                  <button disabled={isBulkPending} onClick={bulkComp} aria-label={tb('comp')} title={tb('comp')} className="w-16 self-stretch flex flex-col items-center justify-center gap-0.5 border-2 border-purple-300 text-purple-600 dark:text-purple-300 rounded-xl active:bg-purple-50 dark:active:bg-purple-950/30 disabled:opacity-50">
-                    <span className="text-base leading-none" aria-hidden="true">★</span>
-                    <span className="text-[10px] font-semibold leading-none">{tb('comp')}</span>
-                  </button>
-                  <button disabled={isBulkPending} onClick={bulkReserve} className="flex-1 bg-yellow-400 text-yellow-900 font-bold text-lg py-4 rounded-xl active:bg-yellow-500 disabled:opacity-50">{tb('reserve')}</button>
-                  <button disabled={isBulkPending} onClick={bulkRent} className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50">{tb('walkInAction')}</button>
+                <div className="space-y-2">
+                  {/* Row 1: Block / Comp / Reserve (square/full, always) */}
+                  <div className="flex gap-3">
+                    <button disabled={isBulkPending} onClick={bulkBlock} aria-label={tb('block')} title={tb('block')} className="w-16 self-stretch flex flex-col items-center justify-center gap-0.5 border-2 border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 rounded-xl active:bg-gray-50 dark:active:bg-gray-800 disabled:opacity-50">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M5.6 5.6l12.8 12.8" /></svg>
+                      <span className="text-[10px] font-semibold leading-none">{tb('block')}</span>
+                    </button>
+                    <button disabled={isBulkPending} onClick={bulkComp} aria-label={tb('comp')} title={tb('comp')} className="w-16 self-stretch flex flex-col items-center justify-center gap-0.5 border-2 border-purple-300 text-purple-600 dark:text-purple-300 rounded-xl active:bg-purple-50 dark:active:bg-purple-950/30 disabled:opacity-50">
+                      <span className="text-base leading-none" aria-hidden="true">★</span>
+                      <span className="text-[10px] font-semibold leading-none">{tb('comp')}</span>
+                    </button>
+                    <button disabled={isBulkPending} onClick={bulkReserve} className="flex-1 bg-yellow-400 text-yellow-900 font-bold text-lg py-4 rounded-xl active:bg-yellow-500 disabled:opacity-50">{tb('reserve')}</button>
+                    {/* Free site: single Walk-in button (no payment to collect) */}
+                    {site.type !== 'paid' && (
+                      <button disabled={isBulkPending} onClick={bulkRentCash} className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50">{tb('walkInAction')}</button>
+                    )}
+                  </div>
+                  {/* Row 2 (paid site only): Cash / Card fork — mirrors BedDetail layout */}
+                  {site.type === 'paid' && (
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 text-center">{tb('payHow')}</p>
+                      <div className="flex gap-2">
+                        <button
+                          disabled={isBulkPending}
+                          onClick={bulkRentCash}
+                          className="flex-1 bg-red-500 text-white font-bold text-lg py-4 rounded-xl active:bg-red-600 disabled:opacity-50"
+                        >
+                          {isBulkPending ? '...' : tb('walkInCash')}
+                        </button>
+                        <button
+                          disabled={isBulkPending}
+                          onClick={bulkRentCard}
+                          className="flex-1 bg-blue-500 text-white font-bold text-lg py-4 rounded-xl active:bg-blue-600 disabled:opacity-50"
+                        >
+                          {isBulkPending ? '...' : tb('walkInCard')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : canRent ? (
-                <div className="flex gap-3">
-                  {/* All held — the verb is Check-in (convert hold to walk-in) */}
-                  <button disabled={isBulkPending} onClick={bulkRent} className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50">{tb('checkIn')}</button>
-                  {canMove && bulkMoveSquare}
-                </div>
+                site.type === 'paid' ? (
+                  /* All held → convert to walk-in. Cash always records to the till;
+                     Card (QR) is offered only when the selection is a SINGLE booking
+                     (bulkCardEligible) — QR can't span multiple holds. */
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 text-center">{tb('payHow')}</p>
+                    <div className="flex gap-3">
+                      <div className="flex-1 flex gap-2">
+                        <button disabled={isBulkPending} onClick={bulkRentCash} className="flex-1 bg-red-500 text-white font-bold text-lg py-4 rounded-xl active:bg-red-600 disabled:opacity-50">{isBulkPending ? '...' : tb('walkInCash')}</button>
+                        {bulkCardEligible && (
+                          <button disabled={isBulkPending} onClick={bulkRentCard} className="flex-1 bg-blue-500 text-white font-bold text-lg py-4 rounded-xl active:bg-blue-600 disabled:opacity-50">{isBulkPending ? '...' : tb('walkInCard')}</button>
+                        )}
+                      </div>
+                      {canMove && bulkMoveSquare}
+                    </div>
+                  </div>
+                ) : (
+                  /* Free site — single Check-in (no payment to collect). */
+                  <div className="flex gap-3">
+                    <button disabled={isBulkPending} onClick={bulkRentCash} className="flex-1 bg-orange-500 text-white font-bold text-lg py-4 rounded-xl active:bg-orange-600 disabled:opacity-50">{tb('checkIn')}</button>
+                    {canMove && bulkMoveSquare}
+                  </div>
+                )
               ) : null}
 
               {/* Paid lane — Check-in (safe) · Depart (⚠) as the dominant button, with Move alongside */}

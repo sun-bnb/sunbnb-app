@@ -673,7 +673,9 @@ export default function BedDetail({
               </div>
             )}
 
-            {/* Block (square) + Comp (square, G/sky) + Reserve (hold, R/fuchsia) + Rent (paid walk-in, A/red primary) */}
+            {/* Block (square) + Comp (square, G/sky) + Reserve (hold, R/fuchsia).
+                On a FREE site the single Walk-in button rides on this row too;
+                on a PAID site the Cash/Card fork gets its own row below. */}
             <div className="flex gap-3">
               <button
                 disabled={isPending}
@@ -720,20 +722,79 @@ export default function BedDetail({
               >
                 {isPending ? '...' : t('reserve')}
               </button>
-              {/* Walk-in — paid walk-in (immediately checked in, cash payment) */}
-              <button
-                disabled={isPending}
-                onClick={() => runAction(() => reserveItem(
-                  siteId, item.id, guestName || undefined, undefined, accessKey,
-                  (isPool && !isGroupExtra) ? undefined : (until || undefined),
-                  groupItems.length > 0 ? applyToPair : false,
-                  currentWorkerId
-                ))}
-                className="flex-1 bg-red-500 text-white font-bold text-lg py-4 rounded-xl active:bg-red-600 disabled:opacity-50"
-              >
-                {isPending ? '...' : t('walkInAction')}
-              </button>
+              {/* Free site → single Walk-in button (no payment to collect). */}
+              {!siteIsPaid && (
+                <button
+                  disabled={isPending}
+                  onClick={() => runAction(() => reserveItem(
+                    siteId, item.id, guestName || undefined, undefined, accessKey,
+                    (isPool && !isGroupExtra) ? undefined : (until || undefined),
+                    groupItems.length > 0 ? applyToPair : false,
+                    currentWorkerId,
+                  ))}
+                  className="flex-1 bg-red-500 text-white font-bold text-lg py-4 rounded-xl active:bg-red-600 disabled:opacity-50"
+                >
+                  {isPending ? '...' : t('walkInAction')}
+                </button>
+              )}
             </div>
+
+            {/* Walk-in payment fork — its OWN row on paid sites.
+                Cash → book + record till in one tap.
+                Card → book unsettled, then open CollectPaymentModal (QR/Mollie). */}
+            {siteIsPaid && (
+              <div className="space-y-1.5">
+                <p className="text-xs text-gray-500 dark:text-gray-400 text-center">{t('payHow')}</p>
+                <div className="flex gap-2">
+                  {/* Cash: creates the walk-in AND writes a TillEntry in one tap */}
+                  <button
+                    disabled={isPending}
+                    onClick={() => {
+                      setError(null)
+                      startTransition(async () => {
+                        const result = await reserveItem(
+                          siteId, item.id, guestName || undefined, undefined, accessKey,
+                          (isPool && !isGroupExtra) ? undefined : (until || undefined),
+                          groupItems.length > 0 ? applyToPair : false,
+                          currentWorkerId,
+                          true,
+                        )
+                        if (result.status === 'ok') onClose()
+                        else setError(result.errors?.[0] || 'Something went wrong')
+                      })
+                    }}
+                    className="flex-1 bg-red-500 text-white font-bold text-lg py-4 rounded-xl active:bg-red-600 disabled:opacity-50"
+                  >
+                    {isPending ? '...' : t('walkInCash')}
+                  </button>
+                  {/* Card (QR): creates the walk-in unsettled, then opens Mollie collect */}
+                  <button
+                    disabled={isPending}
+                    onClick={() => {
+                      setError(null)
+                      startTransition(async () => {
+                        const result = await reserveItem(
+                          siteId, item.id, guestName || undefined, undefined, accessKey,
+                          (isPool && !isGroupExtra) ? undefined : (until || undefined),
+                          groupItems.length > 0 ? applyToPair : false,
+                          currentWorkerId,
+                          false,
+                        )
+                        if (result.status === 'ok' && result.reservationId) {
+                          setCollectTargetId(result.reservationId)
+                          setShowCollect(true)
+                        } else if (result.status !== 'ok') {
+                          setError(result.errors?.[0] || 'Something went wrong')
+                        }
+                      })
+                    }}
+                    className="flex-1 bg-blue-500 text-white font-bold text-lg py-4 rounded-xl active:bg-blue-600 disabled:opacity-50"
+                  >
+                    {isPending ? '...' : t('walkInCard')}
+                  </button>
+                </div>
+              </div>
+            )}
             {/* ── Seat management — compact link-style actions, divided off from the
                 larger reservation controls above. Add + Remove share the row at
                 equal width. ── */}
@@ -998,28 +1059,93 @@ export default function BedDetail({
               </div>
             )}
 
-            {/* Check-in — convert hold to paid walk-in, with the chosen period and scope.
-                Effective name: existing hold name if set, else the typed name.
-                applyToGroup controls whether the whole hold converts (Group mode)
-                or just this seat splits off into its own walk-in (Seat mode). */}
-            <div className="flex gap-3">
-              <button
-                disabled={isPending}
-                onClick={() => runAction(() => convertHoldToWalkIn(
-                  siteId, item.id, accessKey,
-                  reservation.guestName
-                    ? reservation.guestName
-                    : (guestName || undefined),
-                  until || undefined,
-                  currentWorkerId,
-                  applyToGroup,
-                ))}
-                className="flex-1 bg-red-500 text-white font-bold text-lg py-4 rounded-xl active:bg-red-600 disabled:opacity-50"
-              >
-                {isPending ? '...' : t('checkIn')}
-              </button>
-              {moveSquare}
-            </div>
+            {/* Check-in — convert hold to paid walk-in.
+                On a paid site: Cash (one-tap till) or Card (QR collect) fork.
+                Free site: single Check-in button.
+                applyToGroup controls Group (whole hold) vs Seat (split off) scope. */}
+            {siteIsPaid ? (
+              <>
+                <p className="text-xs text-gray-500 dark:text-gray-400 text-center">{t('payHow')}</p>
+                <div className="flex gap-3">
+                  <div className="flex-1 flex gap-2">
+                    {/* Cash: convert + write TillEntry in one tap */}
+                    <button
+                      disabled={isPending}
+                      onClick={() => {
+                        setError(null)
+                        startTransition(async () => {
+                          const result = await convertHoldToWalkIn(
+                            siteId, item.id, accessKey,
+                            reservation.guestName
+                              ? reservation.guestName
+                              : (guestName || undefined),
+                            until || undefined,
+                            currentWorkerId,
+                            applyToGroup,
+                            undefined,
+                            true,
+                          )
+                          if (result.status === 'ok') onClose()
+                          else setError(result.errors?.[0] || 'Something went wrong')
+                        })
+                      }}
+                      className="flex-1 bg-red-500 text-white font-bold text-lg py-4 rounded-xl active:bg-red-600 disabled:opacity-50"
+                    >
+                      {isPending ? '...' : t('walkInCash')}
+                    </button>
+                    {/* Card (QR): convert unsettled, then open CollectPaymentModal */}
+                    <button
+                      disabled={isPending}
+                      onClick={() => {
+                        setError(null)
+                        startTransition(async () => {
+                          const result = await convertHoldToWalkIn(
+                            siteId, item.id, accessKey,
+                            reservation.guestName
+                              ? reservation.guestName
+                              : (guestName || undefined),
+                            until || undefined,
+                            currentWorkerId,
+                            applyToGroup,
+                            undefined,
+                            false,
+                          )
+                          if (result.status === 'ok' && result.reservationId) {
+                            setCollectTargetId(result.reservationId)
+                            setShowCollect(true)
+                          } else if (result.status !== 'ok') {
+                            setError(result.errors?.[0] || 'Something went wrong')
+                          }
+                        })
+                      }}
+                      className="flex-1 bg-blue-500 text-white font-bold text-lg py-4 rounded-xl active:bg-blue-600 disabled:opacity-50"
+                    >
+                      {isPending ? '...' : t('walkInCard')}
+                    </button>
+                  </div>
+                  {moveSquare}
+                </div>
+              </>
+            ) : (
+              <div className="flex gap-3">
+                <button
+                  disabled={isPending}
+                  onClick={() => runAction(() => convertHoldToWalkIn(
+                    siteId, item.id, accessKey,
+                    reservation.guestName
+                      ? reservation.guestName
+                      : (guestName || undefined),
+                    until || undefined,
+                    currentWorkerId,
+                    applyToGroup,
+                  ))}
+                  className="flex-1 bg-red-500 text-white font-bold text-lg py-4 rounded-xl active:bg-red-600 disabled:opacity-50"
+                >
+                  {isPending ? '...' : t('checkIn')}
+                </button>
+                {moveSquare}
+              </div>
+            )}
 
             {/* Release — delete the hold with no confirmation (no money at stake) */}
             <button

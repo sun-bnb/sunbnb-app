@@ -198,7 +198,8 @@ export async function reserveItem(
   accessKey?: string,
   until?: string,
   applyToPair: boolean = true,
-  employeeId?: string
+  employeeId?: string,
+  recordCashSettlement: boolean = false,
 ) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
@@ -278,8 +279,21 @@ export async function reserveItem(
     return { status: 'error', errors: ['Sunbed is already reserved for part of this period'] }
   }
 
+  // Record a cash TillEntry immediately — ONLY for genuine cash walk-ins on paid
+  // sites. The Card(QR) path MUST NOT record here; it routes to collectReservationPayment
+  // (Mollie) which writes its own settled TillEntry on completion. Free sites always
+  // produce paymentAmount=0 so the guard below is purely defensive.
+  if (recordCashSettlement && site?.type === 'paid' && paymentAmount > 0) {
+    await recordSettlement({
+      siteId,
+      reservationId: result.reservationId,
+      employeeId: stampedEmployeeId,
+      amount: paymentAmount,
+    })
+  }
+
   revalidatePath(`/sites/${siteId}/manage`)
-  return { status: 'ok' }
+  return { status: 'ok', reservationId: result.reservationId }
 }
 
 // ─── Release bed: walk-in departs or no-show ────────────────────────────────
@@ -1261,6 +1275,7 @@ export async function reserveItems(
   accessKey?: string,
   until?: string,
   employeeId?: string,
+  recordCashSettlement: boolean = false,
 ) {
   if (!itemIds || itemIds.length === 0) {
     return { status: 'error', errors: ['No items selected'] }
@@ -1321,8 +1336,20 @@ export async function reserveItems(
     return { status: 'error', errors: ['One or more selected sunbeds are already reserved for this period'] }
   }
 
+  // Record ONE cash TillEntry for the whole grouped booking — same guard as
+  // single-seat reserveItem. Card/QR path MUST NOT record here; free sites
+  // always produce paymentAmount=0 so the guard is purely defensive.
+  if (recordCashSettlement && site?.type === 'paid' && paymentAmount > 0) {
+    await recordSettlement({
+      siteId,
+      reservationId: result.reservationId,
+      employeeId: stampedEmployeeId,
+      amount: paymentAmount,
+    })
+  }
+
   revalidatePath(`/sites/${siteId}/manage`)
-  return { status: 'ok' }
+  return { status: 'ok', reservationId: result.reservationId }
 }
 
 // ─── Grouped hold: pencil in an entire multiselect party as ONE hold ─────────
@@ -1534,6 +1561,7 @@ export async function convertHoldToWalkIn(
   employeeId?: string,
   applyToGroup: boolean = true,
   splitItemIds?: string[],
+  recordCashSettlement: boolean = false,
 ) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
@@ -1643,7 +1671,7 @@ export async function convertHoldToWalkIn(
           data: { items: { disconnect: splitSet.map((id) => ({ id })) } },
         })
         // Create ONE new walk-in for the whole subset.
-        await tx.reservation.create({
+        const newSplitRes = await tx.reservation.create({
           data: {
             siteId,
             userId: ownership.userId,
@@ -1659,7 +1687,7 @@ export async function convertHoldToWalkIn(
             items: { connect: splitSet.map((id) => ({ id })) },
           },
         })
-        return { outcome: 'split' as const }
+        return { outcome: 'split' as const, reservationId: newSplitRes.id, amount: perSubsetAmount }
       }
 
       const allItemIds = hold.items.map((i) => i.id)
@@ -1702,7 +1730,7 @@ export async function convertHoldToWalkIn(
         data: { ...updateData, paymentAmount },
       })
 
-      return { outcome: 'updated' as const }
+      return { outcome: 'updated' as const, reservationId: hold.id, amount: paymentAmount }
     })
 
     if (result.outcome === 'not_found') {
@@ -1711,6 +1739,25 @@ export async function convertHoldToWalkIn(
     if (result.outcome === 'conflict') {
       return { status: 'error', errors: ['Seat is already reserved for part of this period'] }
     }
+
+    // Record cash till entry for the extended paths (split or in-place update).
+    // result.reservationId and result.amount are present on both 'split' and 'updated'.
+    if (
+      recordCashSettlement &&
+      site?.type === 'paid' &&
+      'amount' in result &&
+      result.amount > 0
+    ) {
+      await recordSettlement({
+        siteId,
+        reservationId: result.reservationId,
+        employeeId: stampedEmployeeId,
+        amount: result.amount,
+      })
+    }
+
+    revalidatePath(`/sites/${siteId}/manage`)
+    return { status: 'ok', reservationId: result.reservationId }
   } else {
     // Today-only conversion: the hold already occupies the seat — no conflict
     // re-check needed. Simple find + update outside a transaction (or a split).
@@ -1744,7 +1791,7 @@ export async function convertHoldToWalkIn(
         ? computeWalkInAmount(splitSetItems, site.price, todayStart, toDate)
         : 0
 
-      await prisma.$transaction([
+      const [, newTodaySplitRes] = await prisma.$transaction([
         prisma.reservation.update({
           where: { id: reservation.id },
           data: { items: { disconnect: splitSet.map((id) => ({ id })) } },
@@ -1766,6 +1813,18 @@ export async function convertHoldToWalkIn(
           },
         }),
       ])
+
+      if (recordCashSettlement && site?.type === 'paid' && perSubsetAmount > 0) {
+        await recordSettlement({
+          siteId,
+          reservationId: newTodaySplitRes.id,
+          employeeId: stampedEmployeeId,
+          amount: perSubsetAmount,
+        })
+      }
+
+      revalidatePath(`/sites/${siteId}/manage`)
+      return { status: 'ok', reservationId: newTodaySplitRes.id }
     } else {
       // Whole-hold conversion (single-item hold OR Group scope): update in place.
       const paymentAmount = site?.type === 'paid'
@@ -1776,11 +1835,20 @@ export async function convertHoldToWalkIn(
         where: { id: reservation.id },
         data: { ...updateData, paymentAmount },
       })
+
+      if (recordCashSettlement && site?.type === 'paid' && paymentAmount > 0) {
+        await recordSettlement({
+          siteId,
+          reservationId: reservation.id,
+          employeeId: stampedEmployeeId,
+          amount: paymentAmount,
+        })
+      }
+
+      revalidatePath(`/sites/${siteId}/manage`)
+      return { status: 'ok', reservationId: reservation.id }
     }
   }
-
-  revalidatePath(`/sites/${siteId}/manage`)
-  return { status: 'ok' }
 }
 
 // ─── Refund reservation (manual, Mollie) ────────────────────────────────────
