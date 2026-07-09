@@ -110,7 +110,7 @@ function ReservationTimerangeSelector({ onDatePickerOpenChange, alwaysOpen, work
 
   let dateRange = sitesState.dateRange || [
     dayjs().startOf('day').toISOString(),
-    dayjs().add(1, 'day').endOf('day').toISOString()
+    dayjs().endOf('day').toISOString()
   ]
 
   return (

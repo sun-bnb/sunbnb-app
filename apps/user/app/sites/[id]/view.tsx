@@ -17,7 +17,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import EventNoteIcon from '@mui/icons-material/EventNote'
 import Image from 'next/image'
 import { useTranslations } from 'next-intl'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { setValue } from '@/store/features/sites/sitesSlice'
 import { RootState } from '@/store/store'
 import { useDispatch, useSelector } from 'react-redux'
@@ -86,6 +86,19 @@ export default function SiteView({ site, apiKey, brand }: { site: SiteProps, api
 
   const [ weekDaysOpen, setWeekDaysOpen ] = useState<boolean>(false)
 
+  // P0: on mount, open the drawer expanded and commit today as the default
+  // reservationDay so downstream components (SunbedSelection, ReservationView)
+  // see a real committed value rather than a render-time fallback.
+  // This runs once per mount — if the user collapses the drawer afterwards it
+  // stays collapsed (we never force focused:true again after mount).
+  useEffect(() => {
+    const updates: Record<string, unknown> = { focused: true }
+    if (!sitesState.reservationDay) {
+      updates.reservationDay = dayjs().toDate()
+    }
+    dispatch(setValue(updates))
+  }, [])
+
   const { data: fetchedSite, refetch: refetchSite } = useGetSiteByIdQuery({ id: site.id })
 
   logger.debug('Fetched site', fetchedSite)
@@ -135,6 +148,8 @@ export default function SiteView({ site, apiKey, brand }: { site: SiteProps, api
       style={brand ? { backgroundColor: brand.bgColor || '#faf9f6', color: brand.fgColor || '#111827' } : undefined}
     >
       {
+        // Scrim shows whenever the drawer is open, including the initial auto-open —
+        // it frames the reservation panel and lets a background tap dismiss it.
         focused &&
           <Backdrop onClick={() => {
             dispatch(setValue({ focused: false }))
@@ -320,7 +335,9 @@ export default function SiteView({ site, apiKey, brand }: { site: SiteProps, api
                   ? { backgroundColor: brand.bgColor || '#faf9f6', borderColor: `${brand.fgColor || '#111827'}15`, color: brand.fgColor || '#111827' }
                   : { backgroundColor: 'var(--color-cream, #faf9f6)', borderColor: 'var(--color-subtle, #e5e7eb)' }),
               }}
-              onClick={() => dispatch(setValue({ focused: !focused }))}
+              onClick={() => {
+                dispatch(setValue({ focused: !focused }))
+              }}
             >
               {focused ? <KeyboardDoubleArrowDownIcon /> : <KeyboardDoubleArrowUpIcon />}
             </div>

@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import Chip from '@mui/material/Chip'
 import { useEffect, useState } from 'react'
-import { InventoryItem, MapBounds, SiteProps, WorkingHours } from '@/app/sites/types'
+import { InventoryItem, SiteProps, WorkingHours } from '@/app/sites/types'
 import { useSelector, useDispatch } from 'react-redux'
 import { setValue } from '@/store/features/sites/sitesSlice'
 import { RootState } from '@/store/store'
@@ -18,6 +18,8 @@ import beachTowelIcon from './beach-towel-transparent.png'
 import React from 'react'
 import { useSession } from 'next-auth/react'
 import SchematicSelection from './SchematicSelection'
+import { pickFirstAvailablePair } from '@/app/sites/[id]/sunbed-preselection'
+export { resolveSelectionSet, pickFirstAvailablePair } from '@/app/sites/[id]/sunbed-preselection'
 
 /** Helper: Check if the site is open on a given day and time range */
 function isSiteOpen(
@@ -228,7 +230,7 @@ function SunbedSelectionGeo({
   ]
   const dateRange = sitesState.dateRange || [
     dayjs().startOf('day').toISOString(),
-    dayjs().add(1, 'day').endOf('day').toISOString(),
+    dayjs().endOf('day').toISOString(),
   ]
   let availabilityFrom = dateRange[0]
   let availabilityTo = dateRange[1]
@@ -277,6 +279,9 @@ function SunbedSelectionGeo({
   }
 
   // useEffect to update selected items based on availability.
+  // Deps: [availabilityResponse] only — selectedItems deliberately excluded to avoid a
+  // dispatch loop. Toggling a seat changes selectedItems but NOT availabilityResponse,
+  // so preselection runs only when fresh availability arrives (initial load / date change).
   useEffect(() => {
 
     if (!availabilityResponse) return
@@ -284,11 +289,21 @@ function SunbedSelectionGeo({
     const filteredSelection = (selectedItems ?? []).filter(
       (item: InventoryItem) => isAvailable(item)
     )
-    if (!filteredSelection.length) {
-      dispatch(setValue({ selectedItems: [] }))
-    } else {
+
+    if (filteredSelection.length) {
+      // Keep valid selections; drop items that are no longer available.
       dispatch(setValue({ selectedItems: filteredSelection }))
+    } else {
+      // Nothing selected (or current selection is entirely unavailable).
+      // Preselect the first available pair so "Reserve" is live on open.
+      // Zero availability → empty array, leave selectedItems: [].
+      const preselected = pickFirstAvailablePair(
+        availabilityResponse.availability,
+        inventoryItems || [],
+      )
+      dispatch(setValue({ selectedItems: preselected }))
     }
+
     if (!sitesState.dateRange) {
       dispatch(setValue({ dateRange: [availabilityFrom, availabilityTo] }))
     }
@@ -312,15 +327,18 @@ function SunbedSelectionGeo({
 
   }, [availabilityResponse])
 
-  // Calculate map bounds based on inventory item positions.
+  // Center the initial view on the inventory, so the default seat-level zoom (20)
+  // frames the sunbeds rather than the site's marketing pin. We deliberately do NOT
+  // fit-to-bounds here — fitting all seats zooms out to parcel level; opening at the
+  // farthest zoom where individual seats are still visible (zoom 20) is the goal.
   const itemLats = (inventoryItems || []).map(item => Number(item.locationLat))
   const itemLngs = (inventoryItems || []).map(item => Number(item.locationLng))
-  const defaultBounds: MapBounds = {
-    north: Math.max(...itemLats),
-    south: Math.min(...itemLats),
-    east: Math.max(...itemLngs),
-    west: Math.min(...itemLngs),
-  }
+  const inventoryCenter = itemLats.length > 0
+    ? {
+        lat: (Math.max(...itemLats) + Math.min(...itemLats)) / 2,
+        lng: (Math.max(...itemLngs) + Math.min(...itemLngs)) / 2,
+      }
+    : { lat: Number(site.locationLat), lng: Number(site.locationLng) }
 
   let notWorkingHours = false
   if (reservationMode === 'hours' && reservationDay && availabilityFrom && availabilityTo) {
@@ -435,12 +453,8 @@ function SunbedSelectionGeo({
       <SafeAPIProvider apiKey={apiKey}>
         <SafeMap
           mapId={'7a0196a7ba317ea5'}
-          defaultZoom={defaultBounds ? undefined : 20}
-          defaultCenter={{
-            lat: Number(site.locationLat),
-            lng: Number(site.locationLng),
-          }}
-          defaultBounds={defaultBounds}
+          defaultZoom={20}
+          defaultCenter={inventoryCenter}
           gestureHandling="greedy"
           disableDefaultUI={true}
           onZoomChanged={(mapInstance: any) => {

@@ -14,6 +14,7 @@ sections.
 - **Webhook & polling** — webhook failures, polling races, reconciliation — _none yet_
 - **Test failures & fixes** — mock/fixture gotchas — `rentalBooking.findUnique` missing from mock (2026-06-19)
 - **i18n & locale** — next-intl edge cases — _none yet_
+- **Sunbed preselection / reserve-first flow** — pair resolution, dispatch loop, single-day default — (2026-07-09)
 - **Rejected approaches** — dead-ends, so nobody re-tries them — _none yet_
 
 ---
@@ -99,6 +100,28 @@ sections.
 **Problem:** `getRequestIdentity` is an API-route helper that reads the session via `NextRequest`. Server actions can't call it. The pattern for server actions is explicit: `if (session?.user?.id) { check userId } else { check anonId }`.
 **Solution:** After fetching the booking, use `if (session?.user?.id) { if (booking.userId !== session.user.id) reject } else { if (!booking.anonId || booking.anonId !== anonId) reject }`. Validate anonId as UUID v4 before the DB fetch to fail fast.
 **Prevention:** Server actions own their identity check inline. API routes use `verifyOwnership`; server actions use the two-branch pattern above. Never write `if (identity.userId && ...)` — always use an else to cover the anon path.
+
+## Sunbed preselection / reserve-first flow (Track 014)
+
+### 2026-07-09: Pairing is one-directional — walk BOTH pair and pairedBy to resolve
+**Problem:** `InventoryItem.pair` only exists on the PRIMARY (the item that was paired TO another). The SECONDARY holds a back-pointer `pairedBy`. If you only walk `item.pair`, you miss half of all sunbeds in a pair (any secondary will look unpaired).
+**Solution:** In `resolveSelectionSet` (and `pickFirstAvailablePair`): check `item.pair?.id ?? item.pairedBy?.id` to get the partner id, then look up the partner by id from the full inventory list. SunbedGroup (if present) supersedes bare pair pointers.
+**Prevention:** Never write "resolve the partner" as just `item.pair`. Always check BOTH directions. See `apps/user/app/sites/[id]/sunbed-preselection.ts` for the canonical implementation.
+
+### 2026-07-09: Pure preselection helpers extracted to avoid Google Maps import in tests
+**Problem:** Preselection logic was initially written inline in `SunbedSelection.tsx`, which imports `@vis.gl/react-google-maps`, `next/image`, MUI, etc. Importing the component in vitest (no DOM) would crash the test.
+**Solution:** Extract the two pure functions (`resolveSelectionSet`, `pickFirstAvailablePair`) to `apps/user/app/sites/[id]/sunbed-preselection.ts`. `SunbedSelection.tsx` re-exports them via `export { ... } from ...` for backward-compatible imports. Tests import the pure module directly.
+**Prevention:** Any pure/testable logic that lives in a client component file with heavy browser deps should be extracted to a sibling `.ts` file. The test config (`vitest.config.ts`) only scans `app/**` and `store/**` — place tests in those directories.
+
+### 2026-07-09: preselection useEffect must NOT depend on selectedItems to avoid dispatch loop
+**Problem:** The `useEffect` that preselects items runs when `availabilityResponse` changes. If `selectedItems` were also in the dep array, every dispatch inside the effect (which changes `selectedItems`) would re-trigger the effect, causing an infinite loop.
+**Solution:** Keep deps as `[availabilityResponse]` only. Read `selectedItems` from the outer closure (snapshot); it's captured at the time the effect fires, which is correct. The user toggling a seat changes `selectedItems` but NOT `availabilityResponse`, so preselection does NOT re-run on toggle — desired behavior.
+**Prevention:** Effects that dispatch to Redux slices must not include the dispatched slice value in their dep array. The ESLint exhaustive-deps rule would flag this — but since we intentionally exclude `selectedItems`, document the reason in a comment (done in the code).
+
+### 2026-07-09: Single-day default for sunbed reservations
+**Problem:** The `dateRange` fallback in `SunbedSelection.tsx` and `Reservation.tsx` (the `ReservationTimerangeSelector`) used `dayjs().add(1,'day').endOf('day')` as the end — creating a 2-day default. A first-time visitor who didn't touch the picker would book 2 days instead of 1.
+**Solution:** Change to `dayjs().endOf('day')` in both files (days-mode only — hours-mode untouched). Files: `components/reservation/SunbedSelection.tsx` (dateRange fallback, ~line 289) and `app/sites/[id]/Reservation.tsx` (ReservationTimerangeSelector dateRange fallback, ~line 111).
+**Prevention:** Default date ranges must be single-day for a sunbed booking app. The committed `dateRange` in the availability useEffect derives from this fallback when `sitesState.dateRange` is null, so fixing the fallback fixes the committed value too.
 
 ## Rejected approaches
 
