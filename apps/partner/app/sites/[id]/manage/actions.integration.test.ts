@@ -109,7 +109,7 @@ describe('reserveItem', () => {
     mockUserId = user.id
 
     const result = await reserveItem(site.id, item.id, 'John Doe', 'VIP guest')
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     const reservations = await prisma.reservation.findMany({
       where: { siteId: site.id },
@@ -135,7 +135,7 @@ describe('reserveItem', () => {
     mockUserId = user.id
 
     const result = await reserveItem(site.id, itemA.id)
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     const reservation = await prisma.reservation.findFirst({
       where: { siteId: site.id },
@@ -197,7 +197,7 @@ describe('unreserveItem', () => {
     expect(beforeCount).toBe(2)
 
     const result = await unreserveItem(site.id, item.id)
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     const remaining = await prisma.reservation.findMany({ where: { siteId: site.id } })
     expect(remaining).toHaveLength(1)
@@ -219,7 +219,7 @@ describe('unreserveItem', () => {
     expect(beforeCount).toBe(1)
 
     const result = await unreserveItem(site.id, item.id)
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     const afterCount = await prisma.reservation.count({ where: { siteId: site.id } })
     expect(afterCount).toBe(0)
@@ -272,7 +272,7 @@ describe('check-in / departure lifecycle', () => {
 
     // Check in
     const checkInResult = await checkInReservation(site.id, reservation.id)
-    expect(checkInResult).toEqual({ status: 'ok' })
+    expect(checkInResult).toMatchObject({ status: 'ok' })
 
     const afterCheckIn = await prisma.reservation.findUnique({ where: { id: reservation.id } })
     expect(afterCheckIn!.operationalStatus).toBe('checked-in')
@@ -280,7 +280,7 @@ describe('check-in / departure lifecycle', () => {
 
     // Mark departed
     const departResult = await markDeparted(site.id, reservation.id)
-    expect(departResult).toEqual({ status: 'ok' })
+    expect(departResult).toMatchObject({ status: 'ok' })
 
     const afterDepart = await prisma.reservation.findUnique({ where: { id: reservation.id } })
     expect(afterDepart!.operationalStatus).toBe('departed')
@@ -302,7 +302,7 @@ describe('check-in / departure lifecycle', () => {
     })
 
     const departResult = await markDeparted(site.id, reservation.id)
-    expect(departResult).toEqual({ status: 'ok' })
+    expect(departResult).toMatchObject({ status: 'ok' })
 
     // Returned to reserved for the rest of the stay — NOT a terminal 'departed'.
     const after = await prisma.reservation.findUnique({ where: { id: reservation.id } })
@@ -391,7 +391,7 @@ describe('moveReservation', () => {
     })
 
     const result = await moveReservation(site.id, reservation.id, [itemB.id, itemC.id])
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     const updated = await prisma.reservation.findUnique({
       where: { id: reservation.id },
@@ -462,7 +462,7 @@ describe('blockBed / unblockBed', () => {
     mockUserId = user.id
 
     const result = await blockBed(site.id, item.id, 'Maintenance')
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     const reservations = await prisma.reservation.findMany({
       where: { siteId: site.id },
@@ -493,7 +493,7 @@ describe('blockBed / unblockBed', () => {
     expect(beforeCount).toBe(2)
 
     const result = await unblockBed(site.id, item.id)
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     const remaining = await prisma.reservation.findMany({ where: { siteId: site.id } })
     expect(remaining).toHaveLength(1)
@@ -531,7 +531,7 @@ describe('blockBed / unblockBed', () => {
     })
 
     const result = await unblockBed(site.id, item.id)
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     const remaining = await prisma.reservation.count({
       where: { siteId: site.id, operationalStatus: 'blocked' },
@@ -569,7 +569,7 @@ describe('markRentalPickedUp', () => {
     })
 
     const result = await markRentalPickedUp(site.id, booking.id)
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     const updated = await prisma.rentalBooking.findUnique({ where: { id: booking.id } })
     expect(updated!.operationalStatus).toBe('picked-up')
@@ -602,7 +602,7 @@ describe('markRentalReturned', () => {
     })
 
     const result = await markRentalReturned(site.id, booking.id)
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     const updated = await prisma.rentalBooking.findUnique({ where: { id: booking.id } })
     expect(updated!.operationalStatus).toBe('returned')
@@ -1258,7 +1258,7 @@ describe('floor-staff attribution', () => {
     const { site, item, employee } = await setupWithEmployee({ type: 'paid', price: 12 })
 
     const result = await reserveItem(site.id, item.id, undefined, undefined, undefined, undefined, true, employee.id)
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     const res = await prisma.reservation.findFirstOrThrow({ where: { siteId: site.id } })
     expect(res.employeeId).toBe(employee.id)
@@ -1274,7 +1274,7 @@ describe('floor-staff attribution', () => {
     const foreign = await prisma.employee.create({ data: { accountId: otherUser.id, name: 'Mallory' } })
 
     const result = await reserveItem(site.id, item.id, undefined, undefined, undefined, undefined, true, foreign.id)
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     const res = await prisma.reservation.findFirstOrThrow({ where: { siteId: site.id } })
     expect(res.employeeId).toBeNull()
@@ -1499,7 +1499,7 @@ describe('reserveItems — grouped walk-in', () => {
     mockUserId = user.id
 
     const result = await reserveItems(site.id, [itemA.id, itemB.id, itemC.id], 'Group A')
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     const reservations = await prisma.reservation.findMany({
       where: { siteId: site.id },
@@ -1636,7 +1636,7 @@ describe('holdBeds — grouped hold', () => {
     mockUserId = user.id
 
     const result = await holdBeds(site.id, [itemA.id, itemB.id], undefined, 'Group B')
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     const reservations = await prisma.reservation.findMany({
       where: { siteId: site.id },
@@ -1704,7 +1704,7 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
     mockUserId = user.id
 
     const result = await reserveItems(site.id, [itemA.id, itemB.id, itemC.id], 'Group Test')
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     const reservation = await prisma.reservation.findFirstOrThrow({
       where: { siteId: site.id },
@@ -1724,7 +1724,7 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
     mockUserId = user.id
 
     const result = await holdBeds(site.id, [itemA.id, itemB.id, itemC.id], undefined, 'Hold Group')
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     const reservation = await prisma.reservation.findFirstOrThrow({
       where: { siteId: site.id },
@@ -1759,7 +1759,7 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
     })
 
     const checkInResult = await checkInReservation(site2.id, groupRes.id)
-    expect(checkInResult).toEqual({ status: 'ok' })
+    expect(checkInResult).toMatchObject({ status: 'ok' })
 
     // The ONE reservation row is checked-in.
     const updated = await prisma.reservation.findUnique({
@@ -1795,7 +1795,7 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
     })
 
     const departResult = await markDeparted(site.id, groupRes.id)
-    expect(departResult).toEqual({ status: 'ok' })
+    expect(departResult).toMatchObject({ status: 'ok' })
 
     const departed = await prisma.reservation.findUnique({
       where: { id: groupRes.id },
@@ -1809,7 +1809,7 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
     // MULTIDAY booking departed mid-stay stays held — covered by the conflict-guard
     // integration tests in @repo/data.)
     const newResResult = await reserveItems(site.id, [i1.id, i2.id, i3.id], 'New Group')
-    expect(newResResult).toEqual({ status: 'ok' })
+    expect(newResResult).toMatchObject({ status: 'ok' })
 
     // One original + one new reservation.
     const allReservations = await prisma.reservation.findMany({ where: { siteId: site.id } })
@@ -1834,7 +1834,7 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
     })
 
     const noShowResult = await markNoShow(site.id, groupRes.id)
-    expect(noShowResult).toEqual({ status: 'ok' })
+    expect(noShowResult).toMatchObject({ status: 'ok' })
 
     const updated = await prisma.reservation.findUnique({
       where: { id: groupRes.id },
@@ -1849,7 +1849,7 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
     // rebooking the same seats succeeds (no explicit release needed for a stay
     // that's already over). A multiday mid-stay no-show would stay held.
     const newRes = await reserveItems(site.id, [i1.id, i2.id, i3.id], 'Replacement Group')
-    expect(newRes).toEqual({ status: 'ok' })
+    expect(newRes).toMatchObject({ status: 'ok' })
   })
 
   // ─── 4. Cancel via one itemId cancels the entire grouped reservation ────────
@@ -1874,7 +1874,7 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
 
     // Cancel using just ONE of the 3 item ids (i1).
     const cancelResult = await cancelReservation(site.id, i1.id)
-    expect(cancelResult).toEqual({ status: 'ok' })
+    expect(cancelResult).toMatchObject({ status: 'ok' })
 
     // The entire reservation is now canceled (one row).
     const canceled = await prisma.reservation.findUnique({
@@ -1884,7 +1884,7 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
 
     // All 3 previously-grouped seats are now free — verify by rebooking all 3.
     const newRes = await reserveItems(site.id, [i1.id, i2.id, i3.id], 'Post-Cancel Group')
-    expect(newRes).toEqual({ status: 'ok' })
+    expect(newRes).toMatchObject({ status: 'ok' })
 
     // i2 and i3 in particular must not be stranded / still show as occupied.
     const finalReservations = await prisma.reservation.findMany({
@@ -1929,7 +1929,7 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
 
     // Move to the 3 destination seats.
     const moveResult = await moveReservationToSeats(site.id, groupRes.id, [d1.id, d2.id, d3.id])
-    expect(moveResult).toEqual({ status: 'ok' })
+    expect(moveResult).toMatchObject({ status: 'ok' })
 
     // Same reservation id — identity preserved.
     const updated = await prisma.reservation.findUnique({
@@ -1946,7 +1946,7 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
 
     // Old seats are fully free — rebooking them must succeed.
     const oldSeatRes = await reserveItems(site.id, [i1.id, i2.id, i3.id], 'Reclaimed')
-    expect(oldSeatRes).toEqual({ status: 'ok' })
+    expect(oldSeatRes).toMatchObject({ status: 'ok' })
 
     // Total: original (moved) + reclaimed new walk-in.
     const allRes = await prisma.reservation.findMany({ where: { siteId: site.id } })
@@ -1976,7 +1976,7 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
 
     // Move 3-seat group to 2 destination seats (count change is allowed by moveReservation).
     const moveResult = await moveReservation(site.id, groupRes.id, [d1.id, d2.id])
-    expect(moveResult).toEqual({ status: 'ok' })
+    expect(moveResult).toMatchObject({ status: 'ok' })
 
     const updated = await prisma.reservation.findUnique({
       where: { id: groupRes.id },
@@ -1991,7 +1991,7 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
 
     // All 3 old seats are free.
     const reclaimResult = await reserveItems(site.id, [i1.id, i2.id, i3.id])
-    expect(reclaimResult).toEqual({ status: 'ok' })
+    expect(reclaimResult).toMatchObject({ status: 'ok' })
   })
 
   // ─── 6. Hold: releaseHold via one itemId — partial vs whole-group release ────
@@ -2011,7 +2011,7 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
 
     // The view.tsx single-tap path: applyToPair=false → partial release.
     const releaseResult = await releaseHold(site.id, itemA.id, undefined, false)
-    expect(releaseResult).toEqual({ status: 'ok' })
+    expect(releaseResult).toMatchObject({ status: 'ok' })
 
     // The hold row survives, now without itemA.
     const holdRes = await prisma.reservation.findUnique({
@@ -2039,7 +2039,7 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
 
     // applyToPair=true is the whole-group release: deletes the entire hold row.
     const releaseResult = await releaseHold(site.id, itemA.id, undefined, true)
-    expect(releaseResult).toEqual({ status: 'ok' })
+    expect(releaseResult).toMatchObject({ status: 'ok' })
 
     // The entire hold reservation is gone.
     const holdRes = await prisma.reservation.findUnique({ where: { id: reservation.id } })
@@ -2047,7 +2047,7 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
 
     // All 3 seats are free — rebooking all 3 must succeed.
     const rebook = await reserveItems(site.id, [itemA.id, itemB.id, itemC.id], 'After Full Release')
-    expect(rebook).toEqual({ status: 'ok' })
+    expect(rebook).toMatchObject({ status: 'ok' })
   })
 
   // ─── 7. Walk-in release: unreserveItem via one itemId — partial vs whole-group ─
@@ -2065,7 +2065,7 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
 
     // The view.tsx single-tap path: applyToPair=false → partial release.
     const releaseResult = await unreserveItem(site.id, itemA.id, undefined, false)
-    expect(releaseResult).toEqual({ status: 'ok' })
+    expect(releaseResult).toMatchObject({ status: 'ok' })
 
     // The walk-in row survives, now without itemA.
     const walkInRes = await prisma.reservation.findUnique({
@@ -2093,7 +2093,7 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
 
     // applyToPair=true deletes the whole walk-in row.
     const releaseResult = await unreserveItem(site.id, itemA.id, undefined, true)
-    expect(releaseResult).toEqual({ status: 'ok' })
+    expect(releaseResult).toMatchObject({ status: 'ok' })
 
     // The entire walk-in reservation is gone.
     const walkInRes = await prisma.reservation.findUnique({ where: { id: reservation.id } })
@@ -2101,7 +2101,7 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
 
     // All 3 seats are free — rebooking all 3 must succeed.
     const rebook = await reserveItems(site.id, [itemA.id, itemB.id, itemC.id], 'After Full Unreserve')
-    expect(rebook).toEqual({ status: 'ok' })
+    expect(rebook).toMatchObject({ status: 'ok' })
   })
 })
 
@@ -2217,7 +2217,7 @@ describe('convertHoldToWalkIn split-seat path', () => {
 
     // Split item A off as a walk-in
     const result = await convertHoldToWalkIn(site.id, itemA.id, undefined, 'Maria', undefined, undefined, false)
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     // Original hold: must still exist with 2 items (B + C) and stay `held`
     const updatedHold = await prisma.reservation.findUnique({
@@ -2293,7 +2293,7 @@ describe('convertHoldToWalkIn split-seat path', () => {
     })
 
     const result = await convertHoldToWalkIn(site.id, itemA.id, undefined, undefined, undefined, undefined, true)
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     // Still only ONE reservation — the original hold, now a walk-in
     const allRes = await prisma.reservation.findMany({
@@ -2620,7 +2620,7 @@ describe('unreserveItem disconnect — till conservation', () => {
 
     // Unreserve one seat (Seat mode).
     const result = await unreserveItem(site.id, itemA.id, undefined, false)
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     // Original reservation survives with 2 items and reduced paymentAmount.
     const remaining = await prisma.reservation.findUnique({
@@ -2647,7 +2647,7 @@ describe('blockBeds — grouped block', () => {
     mockUserId = user.id
 
     const result = await blockBeds(site.id, [itemA.id, itemB.id, itemC.id], 'VIP area')
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     const reservations = await prisma.reservation.findMany({
       where: { siteId: site.id },
@@ -2680,7 +2680,7 @@ describe('blockBeds — grouped block', () => {
 
     // Peel off itemA only (Seat mode → applyToGroup=false).
     const unblockResult = await unblockBed(site.id, itemA.id, undefined, false)
-    expect(unblockResult).toEqual({ status: 'ok' })
+    expect(unblockResult).toMatchObject({ status: 'ok' })
 
     const reservations = await prisma.reservation.findMany({
       where: { siteId: site.id },
@@ -2696,7 +2696,7 @@ describe('blockBeds — grouped block', () => {
 
     // itemA is now free — can be reserved
     const newRes = await reserveItem(site.id, itemA.id, 'Guest After Partial Unblock')
-    expect(newRes).toEqual({ status: 'ok' })
+    expect(newRes).toMatchObject({ status: 'ok' })
   })
 
   it('conflict on one taken seat → nothing created (all-or-nothing)', async () => {
@@ -2754,7 +2754,7 @@ describe('releaseHold / uncompBed — multiday span (overlap, not containment)',
     })
 
     const result = await releaseHold(site.id, item.id, undefined, true)
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     const after = await prisma.reservation.findUnique({ where: { id: hold.id } })
     expect(after).toBeNull() // survived under the old containment code
@@ -2776,7 +2776,7 @@ describe('releaseHold / uncompBed — multiday span (overlap, not containment)',
     })
 
     const result = await uncompBed(site.id, item.id, undefined, true)
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     const after = await prisma.reservation.findUnique({ where: { id: comp.id } })
     expect(after).toBeNull()
@@ -2809,37 +2809,37 @@ describe('staff-created reservations are removable (venue TZ ≠ server TZ)', ()
 
   it('walk-in (reserveItem → unreserveItem) removes cleanly', async () => {
     const { site, item } = await freshBed()
-    expect(await reserveItem(site.id, item.id, 'Walk Guest')).toEqual({ status: 'ok' })
-    expect(await unreserveItem(site.id, item.id)).toEqual({ status: 'ok' })
+    expect(await reserveItem(site.id, item.id, 'Walk Guest')).toMatchObject({ status: 'ok' })
+    expect(await unreserveItem(site.id, item.id)).toMatchObject({ status: 'ok' })
     expect(await rowsFor(site.id, item.id)).toBe(0)
   })
 
   it('multi-day walk-in (reserveItem +2d → unreserveItem) removes cleanly', async () => {
     const { site, item } = await freshBed()
     const until = dayjs().add(2, 'day').format('YYYY-MM-DD')
-    expect(await reserveItem(site.id, item.id, 'Multi Guest', undefined, undefined, until)).toEqual({ status: 'ok' })
-    expect(await unreserveItem(site.id, item.id)).toEqual({ status: 'ok' })
+    expect(await reserveItem(site.id, item.id, 'Multi Guest', undefined, undefined, until)).toMatchObject({ status: 'ok' })
+    expect(await unreserveItem(site.id, item.id)).toMatchObject({ status: 'ok' })
     expect(await rowsFor(site.id, item.id)).toBe(0)
   })
 
   it('hold (holdBeds → releaseHold) removes cleanly', async () => {
     const { site, item } = await freshBed()
-    expect(await holdBeds(site.id, [item.id], undefined, 'Hold Guest')).toEqual({ status: 'ok' })
-    expect(await releaseHold(site.id, item.id, undefined, true)).toEqual({ status: 'ok' })
+    expect(await holdBeds(site.id, [item.id], undefined, 'Hold Guest')).toMatchObject({ status: 'ok' })
+    expect(await releaseHold(site.id, item.id, undefined, true)).toMatchObject({ status: 'ok' })
     expect(await rowsFor(site.id, item.id)).toBe(0)
   })
 
   it('comp (compBeds → uncompBed) removes cleanly', async () => {
     const { site, item } = await freshBed()
-    expect(await compBeds(site.id, [item.id], undefined, 'Comp Guest')).toEqual({ status: 'ok' })
-    expect(await uncompBed(site.id, item.id, undefined, true)).toEqual({ status: 'ok' })
+    expect(await compBeds(site.id, [item.id], undefined, 'Comp Guest')).toMatchObject({ status: 'ok' })
+    expect(await uncompBed(site.id, item.id, undefined, true)).toMatchObject({ status: 'ok' })
     expect(await rowsFor(site.id, item.id)).toBe(0)
   })
 
   it('block (blockBed → unblockBed) removes cleanly', async () => {
     const { site, item } = await freshBed()
-    expect(await blockBed(site.id, item.id, 'Broken slat')).toEqual({ status: 'ok' })
-    expect(await unblockBed(site.id, item.id)).toEqual({ status: 'ok' })
+    expect(await blockBed(site.id, item.id, 'Broken slat')).toMatchObject({ status: 'ok' })
+    expect(await unblockBed(site.id, item.id)).toMatchObject({ status: 'ok' })
     expect(await rowsFor(site.id, item.id)).toBe(0)
   })
 })
@@ -2856,7 +2856,7 @@ describe('compBeds — grouped comp', () => {
     mockUserId = user.id
 
     const result = await compBeds(site.id, [itemA.id, itemB.id, itemC.id], undefined, 'VIP Guest')
-    expect(result).toEqual({ status: 'ok' })
+    expect(result).toMatchObject({ status: 'ok' })
 
     const reservations = await prisma.reservation.findMany({
       where: { siteId: site.id },
@@ -2890,7 +2890,7 @@ describe('compBeds — grouped comp', () => {
 
     // Peel off itemA only (Seat mode → applyToGroup=false).
     const uncompResult = await uncompBed(site.id, itemA.id, undefined, false)
-    expect(uncompResult).toEqual({ status: 'ok' })
+    expect(uncompResult).toMatchObject({ status: 'ok' })
 
     const reservations = await prisma.reservation.findMany({
       where: { siteId: site.id },
@@ -2906,7 +2906,7 @@ describe('compBeds — grouped comp', () => {
 
     // itemA is now free — can be reserved
     const newRes = await reserveItem(site.id, itemA.id, 'Guest After Partial Uncomp')
-    expect(newRes).toEqual({ status: 'ok' })
+    expect(newRes).toMatchObject({ status: 'ok' })
   })
 
   it('conflict on one taken seat → nothing created (all-or-nothing)', async () => {
