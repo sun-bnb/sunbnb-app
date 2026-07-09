@@ -28,6 +28,7 @@ import {
 
 import ReservationView from './Reservation'
 import { useRouter, usePathname } from 'next/navigation'
+import { CookieConsent } from '@repo/ui/cookie-consent'
 
 const serviceIcons: {
   [key: string]: React.ReactElement
@@ -147,6 +148,13 @@ export default function SiteView({ site, apiKey, brand }: { site: SiteProps, api
     <div className={`mx-auto max-w-6xl min-h-screen ${brand ? '' : 'bg-cream pt-[80px]'}`}
       style={brand ? { backgroundColor: brand.bgColor || '#faf9f6', color: brand.fgColor || '#111827' } : undefined}
     >
+      {/* Sticky cookie dialog pinned below the search bar (top of page when branded,
+          which has no header). Cookie-gated: shows only until consent is stored. */}
+      <CookieConsent
+        placement="top"
+        hasAnalytics
+        stickyOffsetClass={brand ? 'top-0' : 'top-[80px]'}
+      />
       {
         // Scrim shows whenever the drawer is open, including the initial auto-open —
         // it frames the reservation panel and lets a background tap dismiss it.

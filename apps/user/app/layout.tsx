@@ -7,7 +7,7 @@ import { getLocale, getMessages } from 'next-intl/server'
 import localFont from 'next/font/local'
 import App from './app'
 import NextAuthProvider from './nextauth'
-import { CookieConsent } from '@repo/ui/cookie-consent'
+import { GlobalCookieConsent } from '@/components/global-cookie-consent'
 import { FlagsProvider } from '@repo/ui/flags'
 import { getClientFlags } from './flags'
 import { auth } from './auth'
@@ -78,7 +78,7 @@ export default async function RootLayout({
                 <App>
                   {children}
                 </App>
-                <CookieConsent hasAnalytics />
+                <GlobalCookieConsent />
                 <ConsentAwareAnalytics />
               </NextIntlClientProvider>
             </NextAuthProvider>
