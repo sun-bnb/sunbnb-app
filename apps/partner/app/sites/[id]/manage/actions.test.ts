@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { siteDayBounds } from '@repo/data/site-day'
 
+vi.mock('@repo/data/payment', () => ({
+  processConfirmedReservation: vi.fn().mockResolvedValue(undefined),
+  processCashRentalBooking: vi.fn().mockResolvedValue(undefined),
+}))
+
 vi.mock('@/app/auth', () => ({
   auth: vi.fn().mockResolvedValue(null),
 }))
@@ -84,10 +89,13 @@ import {
   createRentalBookingsWithGuard,
 } from '@repo/data/reservations'
 import { recordSettlement, voidSettlementsForReservation } from '@repo/data/till'
+import { processConfirmedReservation, processCashRentalBooking } from '@repo/data/payment'
 import dayjs from 'dayjs'
 import { getActiveReservation } from './bed-state'
 
 const mockAuth = vi.mocked(auth)
+const mockProcessConfirmedReservation = vi.mocked(processConfirmedReservation)
+const mockProcessCashRentalBooking = vi.mocked(processCashRentalBooking)
 const mockGuard = vi.mocked(reserveWithConflictGuard)
 const mockMoveGuard = vi.mocked(moveReservationWithConflictGuard)
 const mockRentalGuard = vi.mocked(createRentalBookingsWithGuard)
@@ -1498,6 +1506,74 @@ describe('createWalkInRental', () => {
     })
 
     expect(vi.mocked(recordSettlement)).not.toHaveBeenCalled()
+  })
+
+  it('calls processCashRentalBooking for each booking when recordCashSettlement=true', async () => {
+    // Genuine cash rental: a PARTNER-only receipt must be issued per booking
+    // so the sale has an audit trail. processCashRentalBooking is idempotent.
+    authenticateAsOwner()
+    mockRentalGuard.mockResolvedValueOnce({ outcome: 'created', bookingIds: ['rb-x', 'rb-y'] })
+    vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
+      { id: 'ri-1', name: 'Surfboard', siteId: SITE_ID, active: true, totalQuantity: 10, pricePerDay: 30, pricePerHour: null },
+      { id: 'ri-2', name: 'Kayak', siteId: SITE_ID, active: true, totalQuantity: 5, pricePerDay: 25, pricePerHour: null },
+    ] as any)
+
+    const res = await createWalkInRental({
+      siteId: SITE_ID,
+      items: [
+        { rentalItemId: 'ri-1', quantity: 1 },
+        { rentalItemId: 'ri-2', quantity: 1 },
+      ],
+      durationType: 'days',
+      paymentType: 'cash',
+      recordCashSettlement: true,
+    })
+
+    expect(res.status).toBe('ok')
+    expect(mockProcessCashRentalBooking).toHaveBeenCalledTimes(2)
+    expect(mockProcessCashRentalBooking).toHaveBeenCalledWith('rb-x')
+    expect(mockProcessCashRentalBooking).toHaveBeenCalledWith('rb-y')
+  })
+
+  it('does NOT call processCashRentalBooking when recordCashSettlement is omitted (Card/QR path)', async () => {
+    // Card(QR) path: createWalkInRental is called with paymentType='cash' but
+    // recordCashSettlement=false; the booking is later collected via Mollie which
+    // creates a PARTNER+PLATFORM invoice. Issuing a cash receipt here would
+    // produce a duplicate invoice for the booking.
+    authenticateAsOwner()
+    vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
+      { id: 'ri-1', name: 'Paddleboard', siteId: SITE_ID, active: true, totalQuantity: 5, pricePerDay: 20, pricePerHour: null },
+    ] as any)
+
+    await createWalkInRental({
+      siteId: SITE_ID,
+      items: [{ rentalItemId: 'ri-1', quantity: 1 }],
+      durationType: 'days',
+      paymentType: 'cash',
+      // recordCashSettlement omitted — Card(QR) path
+    })
+
+    expect(mockProcessCashRentalBooking).not.toHaveBeenCalled()
+  })
+
+  it('does NOT fail if processCashRentalBooking throws (non-blocking receipt)', async () => {
+    // Receipt failure must not roll back or error the rental creation.
+    authenticateAsOwner()
+    mockRentalGuard.mockResolvedValueOnce({ outcome: 'created', bookingIds: ['rb-fail'] })
+    vi.mocked(prisma.rentalItem.findMany).mockResolvedValue([
+      { id: 'ri-1', name: 'Kayak', siteId: SITE_ID, active: true, totalQuantity: 10, pricePerDay: 15, pricePerHour: null },
+    ] as any)
+    mockProcessCashRentalBooking.mockRejectedValueOnce(new Error('invoice service down'))
+
+    const res = await createWalkInRental({
+      siteId: SITE_ID,
+      items: [{ rentalItemId: 'ri-1', quantity: 1 }],
+      durationType: 'days',
+      paymentType: 'cash',
+      recordCashSettlement: true,
+    })
+
+    expect(res.status).toBe('ok')
   })
 })
 
@@ -3502,6 +3578,46 @@ describe('reserveItem — cash/card till fork', () => {
     expect(res.status).toBe('ok')
     expect((res as any).reservationId).toBe('r-id-check')
   })
+
+  it('issues a PARTNER-only cash receipt when immediate cash is taken (recordCashSettlement=true)', async () => {
+    // At immediate-cash walk-in creation, a PARTNER receipt must be issued so the
+    // sale has an audit trail without waiting for a separate Settle action.
+    setupPaidSiteForReserveItem()
+    mockGuard.mockResolvedValueOnce({ outcome: 'created', reservationId: 'r-receipt-1' })
+
+    const res = await reserveItem(
+      SITE_ID, ITEM_ID, undefined, undefined, undefined, undefined, false, undefined, true,
+    )
+
+    expect(res.status).toBe('ok')
+    expect(mockProcessConfirmedReservation).toHaveBeenCalledOnce()
+    expect(mockProcessConfirmedReservation).toHaveBeenCalledWith('r-receipt-1', { skipCommission: true, skipEmail: true })
+  })
+
+  it('does NOT issue a receipt when recordCashSettlement=false (card/QR path)', async () => {
+    // Card/QR path gets its invoice via the normal online flow after Mollie settles.
+    setupPaidSiteForReserveItem()
+    mockGuard.mockResolvedValueOnce({ outcome: 'created', reservationId: 'r-card-no-receipt' })
+
+    await reserveItem(
+      SITE_ID, ITEM_ID, undefined, undefined, undefined, undefined, false, undefined, false,
+    )
+
+    expect(mockProcessConfirmedReservation).not.toHaveBeenCalled()
+  })
+
+  it('does NOT fail if receipt generation throws (non-blocking)', async () => {
+    // Receipt failure must not roll back or error the immediate cash walk-in.
+    setupPaidSiteForReserveItem()
+    mockGuard.mockResolvedValueOnce({ outcome: 'created', reservationId: 'r-error-1' })
+    mockProcessConfirmedReservation.mockRejectedValueOnce(new Error('DB timeout'))
+
+    const res = await reserveItem(
+      SITE_ID, ITEM_ID, undefined, undefined, undefined, undefined, false, undefined, true,
+    )
+
+    expect(res.status).toBe('ok')
+  })
 })
 
 // ─── convertHoldToWalkIn: cash/card payment fork ─────────────────────────────
@@ -5169,5 +5285,33 @@ describe('settleReservation', () => {
     expect(mockRecord).toHaveBeenCalledWith(
       expect.objectContaining({ employeeId: 'emp-1' })
     )
+  })
+
+  it('calls processConfirmedReservation with skipCommission=true after settlement', async () => {
+    // At the settle point (when cash is actually taken) a PARTNER-only receipt
+    // must be issued. skipCommission: true → no PLATFORM invoice; that is
+    // reserved for online (Mollie-collected) payments only.
+    authenticateAsOwner()
+    stubCashWalkIn('walked-in')
+    vi.mocked(prisma.employee.findUnique).mockResolvedValue(null)
+    vi.mocked(recordSettlement).mockResolvedValueOnce({ id: 'te-4', amount: 50, siteId: SITE_ID, reservationId: RES_ID, employeeId: null, settledAt: new Date(), voidedAt: null, createdAt: new Date() })
+
+    const res = await settleReservation(SITE_ID, RES_ID, 50)
+    expect(res.status).toBe('ok')
+    expect(mockProcessConfirmedReservation).toHaveBeenCalledOnce()
+    expect(mockProcessConfirmedReservation).toHaveBeenCalledWith(RES_ID, { skipCommission: true, skipEmail: true })
+  })
+
+  it('does NOT fail if processConfirmedReservation throws (non-blocking receipt)', async () => {
+    // The till entry + sale are the source of truth. A receipt failure must not
+    // roll back or error the cash settlement.
+    authenticateAsOwner()
+    stubCashWalkIn('walked-in')
+    vi.mocked(prisma.employee.findUnique).mockResolvedValue(null)
+    vi.mocked(recordSettlement).mockResolvedValueOnce({ id: 'te-5', amount: 40, siteId: SITE_ID, reservationId: RES_ID, employeeId: null, settledAt: new Date(), voidedAt: null, createdAt: new Date() })
+    mockProcessConfirmedReservation.mockRejectedValueOnce(new Error('invoice service down'))
+
+    const res = await settleReservation(SITE_ID, RES_ID, 40)
+    expect(res.status).toBe('ok')
   })
 })

@@ -19,6 +19,7 @@ import {
   reverifyAndFinalizeRentalBooking,
 } from '@repo/data/rental-payment'
 import { getOpenTill, recordSettlement, voidSettlementsForReservation, voidSettlementsForRentalBooking } from '@repo/data/till'
+import { processConfirmedReservation, processCashRentalBooking } from '@repo/data/payment'
 import { applyDayTransition } from './reservation-day'
 import { siteDayKey, siteDayBounds } from '@repo/data/site-day'
 import type { SiteTimezone } from '@repo/data/site-day'
@@ -82,6 +83,24 @@ async function resolveEmployeeId(
     select: { accountId: true },
   })
   return employee && employee.accountId === accountUserId ? employeeId : null
+}
+
+/**
+ * Issue a PARTNER-only cash receipt (no commission) for a cash reservation.
+ *
+ * Non-blocking: a failure here must not roll back or error the cash sale —
+ * the till entry is the source of truth; the receipt is audit trail only.
+ * Idempotent via processConfirmedReservation's own invoice-existence guard.
+ *
+ * Do NOT call this for the collectReservationPayment (QR/Mollie) path — that
+ * path creates PARTNER + PLATFORM invoices via the normal (non-skipped) flow.
+ */
+async function issueCashReservationReceipt(reservationId: string): Promise<void> {
+  try {
+    await processConfirmedReservation(reservationId, { skipCommission: true, skipEmail: true })
+  } catch (e) {
+    console.error('[cash-receipt] reservation', reservationId, e)
+  }
 }
 
 /**
@@ -290,6 +309,7 @@ export async function reserveItem(
       employeeId: stampedEmployeeId,
       amount: paymentAmount,
     })
+    await issueCashReservationReceipt(result.reservationId)
   }
 
   revalidatePath(`/sites/${siteId}/manage`)
@@ -1346,6 +1366,7 @@ export async function reserveItems(
       employeeId: stampedEmployeeId,
       amount: paymentAmount,
     })
+    await issueCashReservationReceipt(result.reservationId)
   }
 
   revalidatePath(`/sites/${siteId}/manage`)
@@ -1754,6 +1775,7 @@ export async function convertHoldToWalkIn(
         employeeId: stampedEmployeeId,
         amount: result.amount,
       })
+      await issueCashReservationReceipt(result.reservationId)
     }
 
     revalidatePath(`/sites/${siteId}/manage`)
@@ -1821,6 +1843,7 @@ export async function convertHoldToWalkIn(
           employeeId: stampedEmployeeId,
           amount: perSubsetAmount,
         })
+        await issueCashReservationReceipt(newTodaySplitRes.id)
       }
 
       revalidatePath(`/sites/${siteId}/manage`)
@@ -1843,6 +1866,7 @@ export async function convertHoldToWalkIn(
           employeeId: stampedEmployeeId,
           amount: paymentAmount,
         })
+        await issueCashReservationReceipt(reservation.id)
       }
 
       revalidatePath(`/sites/${siteId}/manage`)
@@ -2140,6 +2164,7 @@ export async function settleReservation(
     employeeId: stampedEmployeeId,
     amount,
   })
+  await issueCashReservationReceipt(reservationId)
 
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok' }
@@ -3083,6 +3108,19 @@ export async function createWalkInRental(input: {
           amount,
         }),
       ),
+    )
+    // Issue a PARTNER-only cash receipt for each genuine cash rental booking.
+    // Non-blocking — receipt failure must not roll back the sale.
+    // Only for genuine cash (recordCashSettlement=true); Card/QR path gets its
+    // invoice via processConfirmedRentalBooking after Mollie settles.
+    await Promise.all(
+      guardResult.bookingIds.map(async (bookingId) => {
+        try {
+          await processCashRentalBooking(bookingId)
+        } catch (e) {
+          console.error('[cash-receipt] rental booking', bookingId, e)
+        }
+      }),
     )
   }
 
