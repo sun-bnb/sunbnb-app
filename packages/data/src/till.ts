@@ -18,6 +18,41 @@
 
 import prisma from '../index'
 import { round } from './payment'
+import { RESERVATION_PAID_IN_CASH, RESERVATION_COMPLETE } from './reservation-status'
+
+// ─── Shift-items types (per-employee itemized audit) ────────────────────────
+
+/**
+ * A single reservation attributed to an employee during a shift window.
+ * `seats` uses `seatLabel` when set, otherwise falls back to `String(number)`.
+ * `channel` distinguishes cash walk-ins from card/online-collected reservations.
+ * `amount` = reservation.paymentAmount ?? 0, rounded.
+ */
+export interface EmployeeShiftItem {
+  reservationId: string
+  seats: string[]
+  amount: number
+  at: Date
+  channel: 'cash' | 'card'
+}
+
+/**
+ * One employee's full itemized shift for the window, including a total and count.
+ *
+ * Note: `total` spans BOTH cash and card (any employee-initiated payment — walk-in
+ * cash AND QR-collected card). It intentionally differs from `getTillByEmployee`,
+ * which is cash-only (ledger-sourced via TillEntry rows that only exist for cash
+ * payments). Use this helper for the "who rented which bed" audit across all channels;
+ * use `getTillByEmployee` for the cash-drawer reconciliation.
+ */
+export interface EmployeeShift {
+  employeeId: string
+  name: string
+  active: boolean
+  total: number
+  count: number
+  items: EmployeeShiftItem[]
+}
 
 export interface OpenTill {
   total: number
@@ -181,5 +216,86 @@ export async function getTillByEmployee(siteId: string, from: Date, to: Date): P
   return employees.map((e) => {
     const t = tally.get(e.id) ?? { total: 0, count: 0 }
     return { employeeId: e.id, name: e.name, active: e.active, total: round(t.total), count: t.count }
+  })
+}
+
+/**
+ * Per-employee **itemized** attribution for `[from, to]` — every sunbed an employee
+ * rang up, with seat identity, timestamp, amount, and channel.
+ *
+ * Scope = **employee-initiated payments only**: cash walk-ins AND QR-collected card
+ * (both carry `employeeId`). Guest self-bookings (`employeeId = null`) are excluded
+ * by construction. The window filter uses `createdAt gte/lte` (inclusive), mirroring
+ * `getTillByEmployee`'s window semantics.
+ *
+ * `total` spans BOTH cash and card — intentionally different from `getTillByEmployee`
+ * which is cash-only (ledger-sourced). Roster zero-fill follows the same pattern:
+ * all account employees appear; no dangling ids beyond the roster (SetNull on delete
+ * + inactive employees stay in the roster guarantees this).
+ *
+ * Auth/ownership is the caller's responsibility.
+ */
+export async function getEmployeeShiftItems(
+  siteId: string,
+  from: Date,
+  to: Date,
+): Promise<EmployeeShift[]> {
+  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
+  if (!site) return []
+
+  const [employees, reservations] = await Promise.all([
+    prisma.employee.findMany({
+      where: { accountId: site.userId },
+      select: { id: true, name: true, active: true },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.reservation.findMany({
+      where: {
+        siteId,
+        employeeId: { not: null },
+        status: { in: [RESERVATION_PAID_IN_CASH, RESERVATION_COMPLETE] },
+        refundedAt: null,
+        createdAt: { gte: from, lte: to },
+      },
+      select: {
+        id: true,
+        employeeId: true,
+        status: true,
+        paymentAmount: true,
+        createdAt: true,
+        items: { select: { number: true, seatLabel: true } },
+      },
+    }),
+  ])
+
+  // Group reservations by employeeId
+  const byEmployee = new Map<string, EmployeeShiftItem[]>()
+  for (const res of reservations) {
+    if (!res.employeeId) continue
+    const seats = res.items.map((it) => it.seatLabel ?? String(it.number))
+    const item: EmployeeShiftItem = {
+      reservationId: res.id,
+      seats,
+      amount: round(res.paymentAmount ?? 0),
+      at: res.createdAt,
+      channel: res.status === RESERVATION_PAID_IN_CASH ? 'cash' : 'card',
+    }
+    const list = byEmployee.get(res.employeeId) ?? []
+    list.push(item)
+    byEmployee.set(res.employeeId, list)
+  }
+
+  // Roster zero-fill: every account employee maps to a shift (empty items when none)
+  return employees.map((e) => {
+    const items = (byEmployee.get(e.id) ?? []).sort((a, b) => a.at.getTime() - b.at.getTime())
+    const total = round(items.reduce((sum, it) => sum + it.amount, 0))
+    return {
+      employeeId: e.id,
+      name: e.name,
+      active: e.active,
+      total,
+      count: items.length,
+      items,
+    }
   })
 }

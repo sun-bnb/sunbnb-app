@@ -13,6 +13,7 @@ import {
 import {
   getOpenTill,
   getTillByEmployee,
+  getEmployeeShiftItems,
   recordSettlement,
   voidSettlementsForReservation,
   voidSettlementsForRentalBooking,
@@ -614,5 +615,177 @@ describe('backfill — rental booking backfill reproduces the prior rental-till 
     expect(entries).toHaveLength(1)
     expect(entries[0].amount).toBe(42)
     expect(entries[0].rentalBookingId).toBeNull()
+  })
+})
+
+// ─── getEmployeeShiftItems ───────────────────────────────────────────────────
+
+describe('getEmployeeShiftItems', () => {
+  const dayRange = {
+    from: new Date('2026-07-01T00:00:00Z'),
+    to: new Date('2026-07-01T23:59:59Z'),
+  }
+
+  it('returns itemized rows per employee with correct seats, amount, channel, and sort order', async () => {
+    const { user, site, item, mkEmp } = await setup()
+    const alice = await mkEmp('Alice')
+    const bob = await mkEmp('Bob')
+
+    // Alice: cash walk-in (2-seat item1), then card QR-collect (1-seat item1)
+    const item2 = await createTestInventoryItem(user.id, site.id, { number: 2, seatLabel: 'B2' })
+
+    const res1 = await createTestReservation(user.id, site.id, [item.id], {
+      status: 'paid-in-cash',
+      paymentAmount: 25,
+      employeeId: alice.id,
+      createdAt: new Date('2026-07-01T09:00:00Z'),
+    })
+    const res2 = await createTestReservation(user.id, site.id, [item2.id], {
+      status: 'complete',
+      paymentAmount: 30,
+      employeeId: alice.id,
+      createdAt: new Date('2026-07-01T11:00:00Z'),
+    })
+
+    // Bob: one cash reservation
+    const res3 = await createTestReservation(user.id, site.id, [item.id], {
+      status: 'paid-in-cash',
+      paymentAmount: 15,
+      employeeId: bob.id,
+      createdAt: new Date('2026-07-01T10:00:00Z'),
+    })
+
+    const result = await getEmployeeShiftItems(site.id, dayRange.from, dayRange.to)
+
+    expect(result).toHaveLength(2)
+
+    const aliceShift = result.find((s) => s.employeeId === alice.id)!
+    expect(aliceShift.name).toBe('Alice')
+    expect(aliceShift.active).toBe(true)
+    expect(aliceShift.count).toBe(2)
+    expect(aliceShift.total).toBe(55)
+    expect(aliceShift.items[0]).toMatchObject({
+      reservationId: res1.id,
+      amount: 25,
+      channel: 'cash',
+      at: new Date('2026-07-01T09:00:00Z'),
+    })
+    expect(aliceShift.items[0].seats).toEqual([String(item.number)])
+    expect(aliceShift.items[1]).toMatchObject({
+      reservationId: res2.id,
+      amount: 30,
+      channel: 'card',
+      at: new Date('2026-07-01T11:00:00Z'),
+    })
+    expect(aliceShift.items[1].seats).toEqual(['B2'])
+
+    const bobShift = result.find((s) => s.employeeId === bob.id)!
+    expect(bobShift.count).toBe(1)
+    expect(bobShift.total).toBe(15)
+    expect(bobShift.items[0]).toMatchObject({
+      reservationId: res3.id,
+      amount: 15,
+      channel: 'cash',
+    })
+  })
+
+  it('excludes reservations with null employeeId (self-service guest bookings)', async () => {
+    const { user, site, item } = await setup()
+
+    // Self-service: no employeeId
+    await createTestReservation(user.id, site.id, [item.id], {
+      status: 'complete',
+      paymentAmount: 40,
+      employeeId: null,
+      createdAt: new Date('2026-07-01T09:00:00Z'),
+    })
+
+    const result = await getEmployeeShiftItems(site.id, dayRange.from, dayRange.to)
+    // No employees in roster → empty result; or if roster employees exist they have empty items
+    expect(result.every((s) => s.count === 0)).toBe(true)
+  })
+
+  it('excludes refunded reservations', async () => {
+    const { user, site, item, mkEmp } = await setup()
+    const alice = await mkEmp('Alice')
+
+    await createTestReservation(user.id, site.id, [item.id], {
+      status: 'complete',
+      paymentAmount: 50,
+      employeeId: alice.id,
+      refundedAt: new Date('2026-07-01T12:00:00Z'),
+      createdAt: new Date('2026-07-01T09:00:00Z'),
+    })
+
+    const result = await getEmployeeShiftItems(site.id, dayRange.from, dayRange.to)
+    const aliceShift = result.find((s) => s.employeeId === alice.id)!
+    expect(aliceShift.count).toBe(0)
+    expect(aliceShift.items).toHaveLength(0)
+  })
+
+  it('roster employee with no sales in-window returns empty items and zero total', async () => {
+    const { site, mkEmp } = await setup()
+    await mkEmp('Alice')
+
+    const result = await getEmployeeShiftItems(site.id, dayRange.from, dayRange.to)
+    expect(result).toHaveLength(1)
+    expect(result[0].name).toBe('Alice')
+    expect(result[0].count).toBe(0)
+    expect(result[0].total).toBe(0)
+    expect(result[0].items).toHaveLength(0)
+  })
+
+  it('total spans both cash and card channels (not cash-only like getTillByEmployee)', async () => {
+    const { user, site, item, mkEmp } = await setup()
+    const alice = await mkEmp('Alice')
+
+    // Cash walk-in: 20
+    await createTestReservation(user.id, site.id, [item.id], {
+      status: 'paid-in-cash',
+      paymentAmount: 20,
+      employeeId: alice.id,
+      createdAt: new Date('2026-07-01T08:00:00Z'),
+    })
+    // Card QR-collect: 30
+    await createTestReservation(user.id, site.id, [item.id], {
+      status: 'complete',
+      paymentAmount: 30,
+      employeeId: alice.id,
+      createdAt: new Date('2026-07-01T09:00:00Z'),
+    })
+
+    const result = await getEmployeeShiftItems(site.id, dayRange.from, dayRange.to)
+    const aliceShift = result.find((s) => s.employeeId === alice.id)!
+    expect(aliceShift.total).toBe(50) // cash 20 + card 30
+    expect(aliceShift.count).toBe(2)
+    expect(aliceShift.items.map((i) => i.channel)).toEqual(['cash', 'card'])
+  })
+
+  it('employees sorted by name asc, items sorted by at asc', async () => {
+    const { user, site, item, mkEmp } = await setup()
+    const zara = await mkEmp('Zara')
+    const anna = await mkEmp('Anna')
+
+    await createTestReservation(user.id, site.id, [item.id], {
+      status: 'paid-in-cash',
+      paymentAmount: 10,
+      employeeId: zara.id,
+      createdAt: new Date('2026-07-01T08:00:00Z'),
+    })
+    await createTestReservation(user.id, site.id, [item.id], {
+      status: 'paid-in-cash',
+      paymentAmount: 5,
+      employeeId: anna.id,
+      createdAt: new Date('2026-07-01T09:00:00Z'),
+    })
+
+    const result = await getEmployeeShiftItems(site.id, dayRange.from, dayRange.to)
+    expect(result[0].name).toBe('Anna')
+    expect(result[1].name).toBe('Zara')
+  })
+
+  it('returns empty array for unknown siteId', async () => {
+    const result = await getEmployeeShiftItems('nonexistent-site-id', dayRange.from, dayRange.to)
+    expect(result).toEqual([])
   })
 })
