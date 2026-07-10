@@ -462,6 +462,46 @@ const UNGATED_ALLOWLIST: AllowlistEntry[] = [
     file: 'app/sites/[id]/accounting/actions.ts',
     reason: 'Session-gated + site ownership: fetches site, checks site.userId !== session.user.id → throws; per-employee cash breakdown scoped to verified siteId via @repo/data/till getTillByEmployee',
   },
+  {
+    export: 'getOperationsTrend',
+    file: 'app/sites/[id]/accounting/actions.ts',
+    reason: 'Session-gated + site ownership: fetches site, checks site.userId !== session.user.id → throws; per-day reservation stats scoped to verified siteId via @repo/data/analytics getReservationDayStats',
+  },
+  {
+    export: 'getStaffShiftItems',
+    file: 'app/sites/[id]/accounting/actions.ts',
+    reason: 'Session-gated + site ownership: fetches site, checks site.userId !== session.user.id → throws; per-employee shift items scoped to verified siteId via @repo/data/till getEmployeeShiftItems',
+  },
+  {
+    export: 'getFloorSnapshot',
+    file: 'app/sites/[id]/accounting/actions.ts',
+    reason: 'Session-gated + site ownership: fetches site, checks site.userId !== session.user.id → throws; 5-way floor-state snapshot scoped to verified siteId via @repo/data/analytics getFloorStateSnapshot',
+  },
+  {
+    export: 'getStaffShiftItemsForDay',
+    file: 'app/sites/[id]/accounting/actions.ts',
+    reason: 'Session-gated + site ownership: fetches site, checks site.userId !== session.user.id → throws; per-employee shift items for a single civil UTC day via @repo/data/till getEmployeeShiftItems',
+  },
+  {
+    export: 'getMonthlyTakings',
+    file: 'app/sites/[id]/accounting/actions.ts',
+    reason: 'Session-gated + site ownership: fetches site, checks site.userId !== session.user.id → throws; calendar-month takings summary scoped to verified siteId via @repo/data/analytics getReservationDayStats',
+  },
+  {
+    export: 'getRevenueChannelTrend',
+    file: 'app/sites/[id]/accounting/actions.ts',
+    reason: 'Session-gated + site ownership: fetches site, checks site.userId !== session.user.id → throws; per-day channel revenue (cash/qr/online) scoped to verified siteId via @repo/data/analytics getRevenueByChannelByDay',
+  },
+  {
+    export: 'getMonthlySummary',
+    file: 'app/sites/[id]/accounting/actions.ts',
+    reason: 'Session-gated + site ownership: fetches site, checks site.userId !== session.user.id → throws; all-source monthly takings summary (sunbeds/rentals/orders/refunds + prev-month delta) scoped to verified siteId via @repo/data/analytics getMonthlySourceSummary',
+  },
+  {
+    export: 'getMonthlyFiscalReport',
+    file: 'app/sites/[id]/accounting/actions.ts',
+    reason: 'Session-gated + site ownership: fetches site, checks site.userId !== session.user.id → throws; invoice-based fiscal summary (gross/net/VAT/platform commission/fees/refunds) scoped to verified siteId via @repo/data/fiscal getMonthlyFiscalReport',
+  },
 
   // ── Server actions: reservations/[id] (session + reservation ownership) ────
   {
