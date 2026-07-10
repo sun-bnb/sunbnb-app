@@ -31,6 +31,7 @@ import {
   processConfirmedReservation,
   processConfirmedOrder,
   processConfirmedRentalBooking,
+  processCashRentalBooking,
   computeVatAndBaseAmounts,
 } from './payment'
 import { sendRentalConfirmationEmail } from './rental-emails'
@@ -327,6 +328,115 @@ describe('processConfirmedReservation', () => {
       where: { reservationId: reservation.id, issuerType: 'PARTNER' },
     })
     expect(partnerInvoice!.totalAmount).toBe(10.0)
+  })
+
+  // ── Cash / walk-in receipt path (skipCommission: true) ──────────────────
+
+  it('cash path: creates exactly ONE PARTNER invoice, no PLATFORM invoice', async () => {
+    // Multi-seat paid-in-cash reservation
+    const { reservation } = await setupReservation({
+      reservationOverrides: { status: 'paid-in-cash', paymentAmount: 20.0 },
+    })
+
+    await processConfirmedReservation(reservation.id, { skipCommission: true })
+
+    const invoices = await prisma.invoice.findMany({
+      where: { reservationId: reservation.id },
+      include: { invoiceLines: true },
+    })
+
+    // Exactly one invoice — PARTNER only
+    expect(invoices).toHaveLength(1)
+    const partnerInvoice = invoices[0]!
+    expect(partnerInvoice.issuerType).toBe('PARTNER')
+
+    // Per-item product lines (2 sunbeds × 10.0)
+    expect(partnerInvoice.invoiceLines).toHaveLength(2)
+    for (const line of partnerInvoice.invoiceLines) {
+      expect(line.productCode).toBe('sunbed-rental')
+      expect(line.amount).toBe(10.0) // full listed price per item
+      expect(line.vatRate).toBe(25.5)
+      const expected = computeVatAndBaseAmounts(10.0, 25.5)
+      expect(line.charge).toBe(expected.baseAmount)
+      expect(line.tax).toBe(expected.vatAmount)
+    }
+
+    // Invoice totals — gross consumer payment
+    expect(partnerInvoice.totalAmount).toBe(20.0)
+    const expectedTotals = computeVatAndBaseAmounts(20.0, 25.5)
+    expect(partnerInvoice.totalCharge).toBe(expectedTotals.baseAmount)
+    expect(partnerInvoice.totalTax).toBe(expectedTotals.vatAmount)
+
+    // Invoice has a number and hash
+    expect(partnerInvoice.invoiceNumber).toMatch(/^PARTNER-\d{4}-\d{5}$/)
+    expect(partnerInvoice.hash).toBeTruthy()
+  })
+
+  it('cash path: reservation status stays paid-in-cash (not mutated to complete)', async () => {
+    const { reservation } = await setupReservation({
+      reservationOverrides: { status: 'paid-in-cash', paymentAmount: 20.0 },
+    })
+
+    await processConfirmedReservation(reservation.id, { skipCommission: true })
+
+    const updated = await prisma.reservation.findUnique({ where: { id: reservation.id } })
+    expect(updated!.status).toBe('paid-in-cash')
+  })
+
+  it('cash path: idempotent — calling twice yields exactly one PARTNER invoice', async () => {
+    const { reservation } = await setupReservation({
+      reservationOverrides: { status: 'paid-in-cash', paymentAmount: 20.0 },
+    })
+
+    await processConfirmedReservation(reservation.id, { skipCommission: true })
+    await processConfirmedReservation(reservation.id, { skipCommission: true })
+
+    const invoices = await prisma.invoice.findMany({
+      where: { reservationId: reservation.id },
+    })
+    expect(invoices).toHaveLength(1)
+  })
+
+  it('cash path with invoicedAt: invoice date and number year match the override', async () => {
+    const { reservation } = await setupReservation({
+      reservationOverrides: { status: 'paid-in-cash', paymentAmount: 20.0 },
+    })
+
+    // Use a date whose year differs from the current year to prove the year is
+    // threaded through — pick the previous year so it's always in the past.
+    const pastYear = new Date().getFullYear() - 1
+    const pastDate = new Date(`${pastYear}-06-15T12:00:00.000Z`)
+
+    await processConfirmedReservation(reservation.id, {
+      skipCommission: true,
+      invoicedAt: pastDate,
+    })
+
+    const partnerInvoice = await prisma.invoice.findFirst({
+      where: { reservationId: reservation.id, issuerType: 'PARTNER' },
+    })
+
+    expect(partnerInvoice!.invoicedAt.toISOString()).toBe(pastDate.toISOString())
+    // Invoice number must carry the past year, not the current year
+    expect(partnerInvoice!.invoiceNumber).toMatch(
+      new RegExp(`^PARTNER-${pastYear}-\\d{5}$`)
+    )
+  })
+
+  it('cash path: default path still creates BOTH PARTNER and PLATFORM invoices (backward-compat)', async () => {
+    // A normal online reservation (status pending, no opts) must still produce 2 invoices.
+    const { reservation } = await setupReservation()
+
+    await processConfirmedReservation(reservation.id)
+
+    const invoices = await prisma.invoice.findMany({
+      where: { reservationId: reservation.id },
+    })
+    expect(invoices).toHaveLength(2)
+    expect(invoices.map((i) => i.issuerType).sort()).toEqual(['PARTNER', 'PLATFORM'])
+
+    const updated = await prisma.reservation.findUnique({ where: { id: reservation.id } })
+    expect(updated!.status).toBe(RESERVATION_COMPLETE)
   })
 })
 
@@ -661,5 +771,322 @@ describe('processConfirmedRentalBooking', () => {
     expect(line.charge).toBe(expected.baseAmount)
     expect(line.tax).toBe(expected.vatAmount)
     expect(line.vatRate).toBe(25.5)
+  })
+})
+
+// ─── processConfirmedOrder — cash path ──────────────────────────────────────
+
+describe('processConfirmedOrder — cash path (skipCommission: true)', () => {
+  async function setupCashOrder(overrides?: {
+    feeOverrides?: Record<string, any>
+    orderItemsConfig?: Array<{
+      name: string
+      price: number
+      tax: number
+      totalPrice: number
+      quantity: number
+    }>
+    orderOverrides?: Record<string, any>
+  }) {
+    const user = await createTestUser()
+    const partner = await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id)
+    const settings = await createTestSettings()
+    const fee = await createTestServiceFee(settings.id, {
+      serviceCode: 'food-and-beverage',
+      chargeType: 'fixed',
+      feeAmount: 1.0,
+      ...overrides?.feeOverrides,
+    })
+
+    const items = overrides?.orderItemsConfig ?? [
+      { name: 'Beer', price: 7.0, tax: 14, totalPrice: 7.0, quantity: 1 },
+      { name: 'Cocktail', price: 12.0, tax: 24, totalPrice: 12.0, quantity: 1 },
+    ]
+
+    const totalPrice = items.reduce((sum, i) => sum + i.totalPrice, 0)
+    const order = await createTestOrder(user.id, site.id, {
+      price: totalPrice,
+      tax: 0,
+      totalPrice,
+      paymentAmount: totalPrice,
+      // Cash orders are typically marked complete by staff before receipt is created
+      status: 'complete',
+      ...overrides?.orderOverrides,
+    })
+
+    const product = await createTestProduct(site.id)
+    const orderItems = []
+    for (const item of items) {
+      const oi = await createTestOrderItem(order.id, product.id, item)
+      orderItems.push(oi)
+    }
+
+    return { user, partner, site, settings, fee, order, orderItems }
+  }
+
+  it('cash path: creates exactly ONE PARTNER invoice, no PLATFORM invoice', async () => {
+    const { order } = await setupCashOrder()
+
+    await processConfirmedOrder(order.id, { skipCommission: true })
+
+    const invoices = await prisma.invoice.findMany({
+      where: { orderId: order.id },
+      include: { invoiceLines: true },
+    })
+
+    // Exactly one invoice — PARTNER only
+    expect(invoices).toHaveLength(1)
+    const partnerInvoice = invoices[0]!
+    expect(partnerInvoice.issuerType).toBe('PARTNER')
+
+    // Per-item product lines with per-item VAT (not site-wide)
+    expect(partnerInvoice.invoiceLines).toHaveLength(2)
+    const vatRates = partnerInvoice.invoiceLines
+      .map((l) => l.vatRate)
+      .sort((a, b) => (a ?? 0) - (b ?? 0))
+    expect(vatRates).toEqual([14, 24]) // per-item VAT preserved
+
+    // Check VAT math for Beer line (7.0 at 14%)
+    const beerLine = partnerInvoice.invoiceLines.find((l) => l.amount === 7.0)!
+    const expectedBeer = computeVatAndBaseAmounts(7.0, 14)
+    expect(beerLine.charge).toBe(expectedBeer.baseAmount)
+    expect(beerLine.tax).toBe(expectedBeer.vatAmount)
+
+    // Invoice totals — gross consumer payment (Beer 7.0 + Cocktail 12.0 = 19.0)
+    expect(partnerInvoice.totalAmount).toBe(19.0)
+
+    // Invoice has a number and hash
+    expect(partnerInvoice.invoiceNumber).toMatch(/^PARTNER-\d{4}-\d{5}$/)
+    expect(partnerInvoice.hash).toBeTruthy()
+  })
+
+  it('cash path: order status NOT mutated (stays at current status)', async () => {
+    const { order } = await setupCashOrder({ orderOverrides: { status: 'complete' } })
+
+    await processConfirmedOrder(order.id, { skipCommission: true })
+
+    const updated = await prisma.order.findUnique({ where: { id: order.id } })
+    // Status must stay as-is — NOT advanced to ORDER_COMPLETE by the cash path
+    expect(updated!.status).toBe('complete')
+  })
+
+  it('cash path: idempotent — calling twice yields exactly one PARTNER invoice', async () => {
+    const { order } = await setupCashOrder()
+
+    await processConfirmedOrder(order.id, { skipCommission: true })
+    await processConfirmedOrder(order.id, { skipCommission: true })
+
+    const invoices = await prisma.invoice.findMany({ where: { orderId: order.id } })
+    expect(invoices).toHaveLength(1)
+  })
+
+  it('cash path with invoicedAt: invoice date and number year match the override', async () => {
+    const { order } = await setupCashOrder()
+
+    const pastYear = new Date().getFullYear() - 1
+    const pastDate = new Date(`${pastYear}-06-15T12:00:00.000Z`)
+
+    await processConfirmedOrder(order.id, { skipCommission: true, invoicedAt: pastDate })
+
+    const partnerInvoice = await prisma.invoice.findFirst({
+      where: { orderId: order.id, issuerType: 'PARTNER' },
+    })
+
+    expect(partnerInvoice!.invoicedAt.toISOString()).toBe(pastDate.toISOString())
+    expect(partnerInvoice!.invoiceNumber).toMatch(
+      new RegExp(`^PARTNER-${pastYear}-\\d{5}$`)
+    )
+  })
+
+  it('cash path: default path still creates BOTH PARTNER and PLATFORM invoices (backward-compat)', async () => {
+    // A normal online order (no opts) must still produce 2 invoices and set status.
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id)
+    const settings = await createTestSettings()
+    await createTestServiceFee(settings.id, { serviceCode: 'food-and-beverage' })
+    const product = await createTestProduct(site.id)
+    const order = await createTestOrder(user.id, site.id, {
+      price: 10.0, tax: 0, totalPrice: 10.0, paymentAmount: 10.0,
+    })
+    await createTestOrderItem(order.id, product.id, {
+      name: 'Beer', price: 10.0, tax: 14, totalPrice: 10.0,
+    })
+
+    await processConfirmedOrder(order.id)
+
+    const invoices = await prisma.invoice.findMany({ where: { orderId: order.id } })
+    expect(invoices).toHaveLength(2)
+    expect(invoices.map((i) => i.issuerType).sort()).toEqual(['PARTNER', 'PLATFORM'])
+
+    const updated = await prisma.order.findUnique({ where: { id: order.id } })
+    expect(updated!.status).toBe(ORDER_COMPLETE)
+  })
+})
+
+// ─── processCashRentalBooking ────────────────────────────────────────────────
+
+describe('processCashRentalBooking', () => {
+  async function setupCashRental(overrides?: {
+    siteOverrides?: Record<string, any>
+    bookingOverrides?: Record<string, any>
+    rentalItemOverrides?: Record<string, any>
+  }) {
+    const user = await createTestUser()
+    const partner = await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id, {
+      rentalVat: 25.5,
+      ...overrides?.siteOverrides,
+    })
+    const settings = await createTestSettings()
+    // Fee is needed by loadFeeContext bootstrap, but not used by the cash path
+    await createTestServiceFee(settings.id, {
+      serviceCode: 'equipment-rental',
+      chargeType: 'fixed',
+      feeAmount: 1.0,
+    })
+    const rentalItem = await createTestRentalItem(site.id, {
+      name: 'Surfboard',
+      ...overrides?.rentalItemOverrides,
+    })
+    // Cash walk-in rental: paymentRef is null, status is paid-in-cash
+    const booking = await createTestRentalBooking(user.id, site.id, rentalItem.id, {
+      paymentRef: null,
+      status: 'paid-in-cash',
+      paymentAmount: 10.0,
+      totalPrice: 10.0,
+      ...overrides?.bookingOverrides,
+    })
+
+    return { user, partner, site, settings, rentalItem, booking }
+  }
+
+  it('receipt-only: creates exactly ONE PARTNER invoice, no PLATFORM invoice', async () => {
+    const { booking } = await setupCashRental()
+
+    await processCashRentalBooking(booking.id)
+
+    const invoices = await prisma.invoice.findMany({
+      where: { paymentRef: `cash-rental-${booking.id}` },
+      include: { invoiceLines: true },
+    })
+
+    expect(invoices).toHaveLength(1)
+    const partnerInvoice = invoices[0]!
+    expect(partnerInvoice.issuerType).toBe('PARTNER')
+
+    // Single equipment line at the full listed price (gross)
+    expect(partnerInvoice.invoiceLines).toHaveLength(1)
+    const line = partnerInvoice.invoiceLines[0]!
+    expect(line.productCode).toBe('equipment-rental')
+    expect(line.amount).toBe(10.0)
+    expect(line.vatRate).toBe(25.5)
+
+    // Correct reverse-VAT on the line
+    const expected = computeVatAndBaseAmounts(10.0, 25.5)
+    expect(line.charge).toBe(expected.baseAmount)
+    expect(line.tax).toBe(expected.vatAmount)
+
+    // Invoice totals
+    expect(partnerInvoice.totalAmount).toBe(10.0)
+    expect(partnerInvoice.totalCharge).toBe(expected.baseAmount)
+    expect(partnerInvoice.totalTax).toBe(expected.vatAmount)
+
+    // Invoice has a number and hash
+    expect(partnerInvoice.invoiceNumber).toMatch(/^PARTNER-\d{4}-\d{5}$/)
+    expect(partnerInvoice.hash).toBeTruthy()
+  })
+
+  it('source row status NOT mutated (booking stays at paid-in-cash)', async () => {
+    const { booking } = await setupCashRental()
+
+    await processCashRentalBooking(booking.id)
+
+    const updated = await prisma.rentalBooking.findUnique({ where: { id: booking.id } })
+    expect(updated!.status).toBe('paid-in-cash')
+  })
+
+  it('idempotent — calling twice yields exactly one PARTNER invoice', async () => {
+    const { booking } = await setupCashRental()
+
+    await processCashRentalBooking(booking.id)
+    await processCashRentalBooking(booking.id)
+
+    const invoices = await prisma.invoice.findMany({
+      where: { paymentRef: `cash-rental-${booking.id}` },
+    })
+    expect(invoices).toHaveLength(1)
+  })
+
+  it('invoicedAt override: invoice date and number year match the override', async () => {
+    const { booking } = await setupCashRental()
+
+    const pastYear = new Date().getFullYear() - 1
+    const pastDate = new Date(`${pastYear}-06-15T12:00:00.000Z`)
+
+    await processCashRentalBooking(booking.id, { invoicedAt: pastDate })
+
+    const partnerInvoice = await prisma.invoice.findFirst({
+      where: { paymentRef: `cash-rental-${booking.id}`, issuerType: 'PARTNER' },
+    })
+
+    expect(partnerInvoice!.invoicedAt.toISOString()).toBe(pastDate.toISOString())
+    expect(partnerInvoice!.invoiceNumber).toMatch(
+      new RegExp(`^PARTNER-${pastYear}-\\d{5}$`)
+    )
+  })
+
+  it('uses rentalVat for VAT calculation, falls back to site vat', async () => {
+    // Site with no rentalVat — should fall back to site.vat
+    const { booking } = await setupCashRental({
+      siteOverrides: { rentalVat: null, vat: 14 },
+    })
+
+    await processCashRentalBooking(booking.id)
+
+    const partnerInvoice = await prisma.invoice.findFirst({
+      where: { paymentRef: `cash-rental-${booking.id}`, issuerType: 'PARTNER' },
+      include: { invoiceLines: true },
+    })
+
+    const line = partnerInvoice!.invoiceLines[0]!
+    expect(line.vatRate).toBe(14)
+    const expected = computeVatAndBaseAmounts(10.0, 14)
+    expect(line.charge).toBe(expected.baseAmount)
+    expect(line.tax).toBe(expected.vatAmount)
+  })
+
+  it('throws for non-existent booking id', async () => {
+    await expect(
+      processCashRentalBooking('nonexistent-id')
+    ).rejects.toThrow('RentalBooking not found')
+  })
+
+  it('backward-compat: processConfirmedRentalBooking (online path) still creates PARTNER+PLATFORM invoices', async () => {
+    // Verify the paymentRef-keyed online function is unaffected by the new sibling.
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id, { rentalVat: 25.5 })
+    const settings = await createTestSettings()
+    await createTestServiceFee(settings.id, {
+      serviceCode: 'equipment-rental',
+      chargeType: 'fixed',
+      feeAmount: 1.0,
+    })
+    const rentalItem = await createTestRentalItem(site.id, { name: 'Kayak' })
+    const paymentRef = `pi_demo_${Date.now()}`
+    await createTestRentalBooking(user.id, site.id, rentalItem.id, {
+      paymentRef,
+      status: 'pending',
+      paymentAmount: 10.0,
+      totalPrice: 10.0,
+    })
+
+    await processConfirmedRentalBooking(paymentRef)
+
+    const invoices = await prisma.invoice.findMany({ where: { paymentRef } })
+    expect(invoices).toHaveLength(2)
+    expect(invoices.map((i) => i.issuerType).sort()).toEqual(['PARTNER', 'PLATFORM'])
   })
 })

@@ -31,7 +31,8 @@
     "./seat-label": "./src/seat-label.ts",
     "./seat-label-db": "./src/seat-label-db.ts",
     "./reservations": "./src/reservations.ts",
-    "./site-day": "./src/site-day.ts"
+    "./site-day": "./src/site-day.ts",
+    "./fiscal": "./src/fiscal.ts"
   },
   "typesVersions": {
     "*": {
@@ -109,6 +110,9 @@
       ],
       "site-day": [
         "./src/site-day.ts"
+      ],
+      "fiscal": [
+        "./src/fiscal.ts"
       ]
     }
   },
@@ -130,7 +134,13 @@
     "test:integration": "POSTGRES_URL=postgres://postgres:sunbnb@localhost:5432/sunbnb_test vitest run --config vitest.integration.config.ts",
     "test:integration:setup": "npm run migrate:integration",
     "prewarm:mollie:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx --yes tsx scripts/prewarm-mollie-tokens.ts",
-    "prewarm:mollie:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx --yes tsx scripts/prewarm-mollie-tokens.ts"
+    "prewarm:mollie:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx --yes tsx scripts/prewarm-mollie-tokens.ts",
+    "backfill:cash:local:dry": "npx --yes tsx scripts/backfill-cash-receipts.ts --dry-run",
+    "backfill:cash:local": "npx --yes tsx scripts/backfill-cash-receipts.ts",
+    "backfill:cash:test:dry": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx --yes tsx scripts/backfill-cash-receipts.ts --dry-run",
+    "backfill:cash:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx --yes tsx scripts/backfill-cash-receipts.ts",
+    "backfill:cash:production:dry": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx --yes tsx scripts/backfill-cash-receipts.ts --dry-run",
+    "backfill:cash:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx --yes tsx scripts/backfill-cash-receipts.ts"
   },
   "devDependencies": {
     "@repo/eslint-config": "*",

@@ -160,12 +160,16 @@ function computeCommissionVat(
  * Uses a raw query with FOR UPDATE to lock the row and prevent concurrent
  * transactions from generating duplicate numbers. The invoiceNumber column
  * also has a unique constraint as a safety net.
+ *
+ * @param year - The invoice year to use for numbering. Defaults to the
+ *   current year. Pass `invoicedAt.getFullYear()` when back-dating so that
+ *   a historical receipt is numbered in its sale year, not the current year.
  */
 async function nextInvoiceNumber(
   tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
-  issuerType: string
+  issuerType: string,
+  year: number = new Date().getFullYear()
 ): Promise<string> {
-  const year = new Date().getFullYear()
   const prefix = `${issuerType}-${year}-`
 
   // Lock the latest row for this issuer type to serialise number generation
@@ -439,22 +443,56 @@ export async function loadFeeContext(
 
 // ─── Idempotent Reservation Processing ──────────────────────────────────────
 
+export interface ProcessReservationOpts {
+  /**
+   * Skip the PLATFORM commission invoice. Use for cash/walk-in receipts where
+   * the partner is the sole merchant and no Mollie application fee was routed.
+   * When true: only a PARTNER invoice is created; reservation.status is NOT
+   * updated (it remains 'paid-in-cash').
+   */
+  skipCommission?: boolean
+  /**
+   * Override the invoice date. Defaults to `new Date()`. When set, the invoice
+   * number's year segment is derived from this date's year so that a back-dated
+   * receipt (e.g. a June sale) is numbered in its sale year, not the current year.
+   */
+  invoicedAt?: Date
+  /**
+   * Suppress the customer confirmation email. Use for cash receipts (an accounting
+   * artifact, not a customer notification) and ESPECIALLY when backfilling historical
+   * sales — otherwise customers get "reservation confirmed" emails for sales that
+   * happened weeks/months ago. Defaults to false (the online path emails as before).
+   */
+  skipEmail?: boolean
+}
+
 /**
- * Process a confirmed reservation payment: create two invoices atomically.
+ * Process a confirmed reservation payment: create invoices atomically.
  *
- * SPLIT MERCHANT model:
+ * Default (no opts) — SPLIT MERCHANT model, behaviour unchanged:
  *   1. PARTNER invoice — product lines (sunbed rental per item)
  *      Taxed at the partner site's VAT rate.
  *      Merchant of record: partner company.
  *   2. PLATFORM invoice — service fee line
  *      Taxed at the VAT rate from the fee's associated Settings entry.
  *      Merchant of record: Sunbnb business entity.
+ *   Status is set to RESERVATION_COMPLETE.
+ *
+ * With { skipCommission: true } — PARTNER-only receipt for cash/walk-in sales:
+ *   1. PARTNER invoice only — same product lines as above.
+ *   No PLATFORM invoice is created.
+ *   Status is NOT mutated (stays 'paid-in-cash').
  *
  * Safe to call multiple times — skips if already processed.
  */
 export async function processConfirmedReservation(
-  reservationId: string
+  reservationId: string,
+  opts?: ProcessReservationOpts
 ): Promise<void> {
+  const skipCommission = opts?.skipCommission ?? false
+  const skipEmail = opts?.skipEmail ?? false
+  const invoicedAtOverride = opts?.invoicedAt
+
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
     include: { items: true, invoices: true },
@@ -486,7 +524,8 @@ export async function processConfirmedReservation(
   const totalPayment = round(reservation.paymentAmount ?? 0)
   const siteVatRate = site.vat ?? 0
 
-  // Calculate total service fee across all items
+  // Calculate total service fee across all items (needed for PLATFORM invoice;
+  // computed regardless of skipCommission — harmless and keeps the path uniform).
   let totalServiceFee = 0
   for (const item of reservation.items) {
     const itemPrice = round(item.price ?? site.price ?? 0)
@@ -500,17 +539,20 @@ export async function processConfirmedReservation(
   // the consumer's payment).
   const partnerAmount = totalPayment
 
-  // Load platform business entity for the PLATFORM invoice
-  const businessEntity = await getBusinessEntity()
+  // Load platform business entity for the PLATFORM invoice (only needed when
+  // creating the commission invoice, but load outside the transaction to keep
+  // the transaction short and avoid blocking on an external read).
+  const businessEntity = skipCommission ? null : await getBusinessEntity()
 
   // Use the VAT rate & country from the fee's associated settings
-  const feeSettings = matchedFee
-    ? await prisma.settings.findUnique({
-        where: { id: matchedFee.settingsId },
-        select: { vat: true, country: true },
-      })
-    : null
-  const platformVatRate = feeSettings?.vat ?? businessEntity.vatRate
+  const feeSettings =
+    !skipCommission && matchedFee
+      ? await prisma.settings.findUnique({
+          where: { id: matchedFee.settingsId },
+          select: { vat: true, country: true },
+        })
+      : null
+  const platformVatRate = feeSettings?.vat ?? businessEntity?.vatRate ?? 0
   const feeCountry = feeSettings?.country ?? ''
 
   await prisma.$transaction(async (tx) => {
@@ -521,14 +563,17 @@ export async function processConfirmedReservation(
     })
     if (current?.status === RESERVATION_COMPLETE || (current?.invoices?.length ?? 0) > 0) return
 
-    const invoicedAt = new Date()
+    const invoicedAt = invoicedAtOverride ?? new Date()
+    // Invoice number year comes from invoicedAt so that backfilled receipts
+    // are numbered in their sale year, not the current calendar year.
+    const invoiceYear = invoicedAt.getFullYear()
 
     // ── 1. PARTNER Invoice (product lines) ──
 
     const { baseAmount: partnerBase, vatAmount: partnerVat } =
       computeVatAndBaseAmounts(partnerAmount, siteVatRate)
 
-    const partnerInvoiceNumber = await nextInvoiceNumber(tx, 'PARTNER')
+    const partnerInvoiceNumber = await nextInvoiceNumber(tx, 'PARTNER', invoiceYear)
     const partnerPrevHash = await getLastHash(tx, 'PARTNER')
 
     const partnerInvoice = await tx.invoice.create({
@@ -573,15 +618,15 @@ export async function processConfirmedReservation(
       await tx.invoiceLine.createMany({ data: partnerLines })
     }
 
-    // ── 2. PLATFORM Invoice (service fee) ──
+    // ── 2. PLATFORM Invoice (service fee) — skipped for cash/walk-in receipts ──
 
-    if (totalServiceFee > 0) {
+    if (!skipCommission && totalServiceFee > 0 && businessEntity) {
       const commission = computeCommissionVat(
         totalServiceFee, platformVatRate,
         partnerAccount?.country, partnerAccount?.businessId, feeCountry
       )
 
-      const platformInvoiceNumber = await nextInvoiceNumber(tx, 'PLATFORM')
+      const platformInvoiceNumber = await nextInvoiceNumber(tx, 'PLATFORM', invoiceYear)
       const platformPrevHash = await getLastHash(tx, 'PLATFORM')
 
       const platformInvoice = await tx.invoice.create({
@@ -620,18 +665,25 @@ export async function processConfirmedReservation(
       })
     }
 
-    await tx.reservation.update({
-      where: { id: reservationId },
-      data: { status: RESERVATION_COMPLETE },
-    })
+    // Only advance the payment status for online payments. Cash walk-ins stay
+    // at 'paid-in-cash' — the receipt is a separate accounting artifact.
+    if (!skipCommission) {
+      await tx.reservation.update({
+        where: { id: reservationId },
+        data: { status: RESERVATION_COMPLETE },
+      })
+    }
   })
 
-  // Send confirmation email (non-blocking, non-throwing)
-  try {
-    const { sendConfirmationEmail } = await import('./reservation-emails')
-    sendConfirmationEmail(reservationId).catch(() => {})
-  } catch {
-    // best-effort: a confirmation-email failure must not block invoice creation
+  // Send confirmation email (non-blocking, non-throwing). Suppressed for cash
+  // receipts / backfills via skipEmail — see ProcessReservationOpts.skipEmail.
+  if (!skipEmail) {
+    try {
+      const { sendConfirmationEmail } = await import('./reservation-emails')
+      sendConfirmationEmail(reservationId).catch(() => {})
+    } catch {
+      // best-effort: a confirmation-email failure must not block invoice creation
+    }
   }
 }
 
@@ -838,18 +890,162 @@ export async function processConfirmedRentalBooking(
   }
 }
 
-// ─── Idempotent Order Processing ────────────────────────────────────────────
+// ─── Cash Rental Booking Receipt ────────────────────────────────────────────
+
+export interface ProcessCashRentalOpts {
+  /**
+   * Override the invoice date. Defaults to `new Date()`. When set, the invoice
+   * number's year segment is derived from this date's year so that a back-dated
+   * receipt (e.g. a June sale) is numbered in its sale year, not the current year.
+   */
+  invoicedAt?: Date
+}
 
 /**
- * Process a confirmed order payment: create two invoices atomically.
+ * Create a PARTNER-only receipt for a single cash/walk-in rental booking.
  *
- * SPLIT MERCHANT model:
+ * Design rationale: `processConfirmedRentalBooking` is keyed on `paymentRef`
+ * (the Mollie shared payment reference for an online group of bookings). Cash
+ * walk-in rentals created via `createWalkInRental` have `paymentRef: null`, so
+ * the paymentRef-keyed function cannot serve them. This companion function
+ * accepts a single `rentalBookingId` and creates a PARTNER-only invoice for
+ * that one booking — no PLATFORM commission (no Mollie routing occurred), no
+ * status mutation (the booking stays in its current operational state).
+ *
+ * VAT: uses `site.rentalVat` with fallback to `site.vat`, matching the VAT
+ * rate used by `processConfirmedRentalBooking`.
+ *
+ * Idempotent: if the booking already has an invoice, returns immediately.
+ * Safe to call multiple times (webhook + polling convergence patterns).
+ */
+export async function processCashRentalBooking(
+  rentalBookingId: string,
+  opts?: ProcessCashRentalOpts
+): Promise<void> {
+  const invoicedAtOverride = opts?.invoicedAt
+
+  const booking = await prisma.rentalBooking.findUnique({
+    where: { id: rentalBookingId },
+    include: { rentalItem: true },
+  })
+
+  if (!booking) {
+    throw new Error(`RentalBooking not found: ${rentalBookingId}`)
+  }
+
+  // The Invoice model has NO rentalBookingId FK — rental invoices link via
+  // `paymentRef` (that's how the online grouped path works). Cash walk-in rentals
+  // have a null paymentRef, so we derive a deterministic per-booking ref for both
+  // linkage and idempotency. (If the booking already has a paymentRef, reuse it.)
+  const cashRef = booking.paymentRef ?? `cash-rental-${rentalBookingId}`
+
+  // Idempotency guard: a receipt for this booking already exists.
+  const existingInvoices = await prisma.invoice.count({
+    where: { paymentRef: cashRef },
+  })
+  if (existingInvoices > 0) {
+    return
+  }
+
+  const { site, partnerAccount } = await loadFeeContext(
+    booking.siteId,
+    'equipment-rental'
+  )
+
+  const bookingPrice = round(booking.paymentAmount ?? booking.totalPrice ?? 0)
+  const siteVatRate = site.rentalVat ?? site.vat ?? 0
+
+  await prisma.$transaction(async (tx) => {
+    // Double-check idempotency inside transaction (race-safe) — by paymentRef.
+    const invoiceCount = await tx.invoice.count({ where: { paymentRef: cashRef } })
+    if (invoiceCount > 0) return
+
+    const invoicedAt = invoicedAtOverride ?? new Date()
+    // Invoice number year comes from invoicedAt so that backfilled receipts
+    // are numbered in their sale year, not the current calendar year.
+    const invoiceYear = invoicedAt.getFullYear()
+
+    // ── PARTNER Invoice (single equipment line) ──
+
+    const { baseAmount: partnerBase, vatAmount: partnerVat } =
+      computeVatAndBaseAmounts(bookingPrice, siteVatRate)
+
+    const partnerInvoiceNumber = await nextInvoiceNumber(tx, 'PARTNER', invoiceYear)
+    const partnerPrevHash = await getLastHash(tx, 'PARTNER')
+
+    const partnerInvoice = await tx.invoice.create({
+      data: {
+        accountId: partnerAccount?.userId ?? '',
+        paymentRef: cashRef,
+        totalCharge: partnerBase,
+        totalTax: partnerVat,
+        totalAmount: bookingPrice,
+        invoicedAt,
+        issuerType: 'PARTNER',
+        issuerVatNumber: partnerAccount?.businessId ?? null,
+        issuerCompanyName: partnerAccount?.company ?? null,
+        issuerCompanyAddress: partnerAccount?.address ?? null,
+        invoiceNumber: partnerInvoiceNumber,
+        previousHash: partnerPrevHash,
+        hash: computeInvoiceHash(
+          partnerInvoiceNumber, invoicedAt, bookingPrice,
+          partnerAccount?.businessId ?? null, partnerPrevHash
+        ),
+      },
+    })
+
+    // Single line: one booking at the full listed price (gross)
+    await tx.invoiceLine.create({
+      data: {
+        charge: partnerBase,
+        tax: partnerVat,
+        amount: bookingPrice,
+        vatRate: siteVatRate,
+        invoiceId: partnerInvoice.id,
+        productCode: 'equipment-rental',
+        description: `${booking.rentalItem?.name ?? 'Equipment'} × ${booking.quantity}`,
+      },
+    })
+
+    // Status is NOT mutated — cash walk-in rental stays in its operational state.
+  })
+}
+
+// ─── Idempotent Order Processing ────────────────────────────────────────────
+
+export interface ProcessOrderOpts {
+  /**
+   * Skip the PLATFORM commission invoice. Use for cash/walk-in orders where
+   * the partner is the sole merchant and no Mollie application fee was routed.
+   * When true: only a PARTNER invoice is created; order.status is NOT updated
+   * (it remains in its current state, e.g. 'complete' after the counter staff
+   * marks it delivered).
+   */
+  skipCommission?: boolean
+  /**
+   * Override the invoice date. Defaults to `new Date()`. When set, the invoice
+   * number's year segment is derived from this date's year so that a back-dated
+   * receipt (e.g. a June sale) is numbered in its sale year, not the current year.
+   */
+  invoicedAt?: Date
+}
+
+/**
+ * Process a confirmed order payment: create invoices atomically.
+ *
+ * Default (no opts) — SPLIT MERCHANT model, behaviour unchanged:
  *   1. PARTNER invoice — product item lines (food & beverage)
  *      Taxed at the partner site's VAT rate.
  *      Merchant of record: partner company.
  *   2. PLATFORM invoice — service fee line
  *      Taxed at the VAT rate from the fee's associated Settings entry.
  *      Merchant of record: Sunbnb business entity.
+ *   Status is set to ORDER_COMPLETE.
+ *
+ * With { skipCommission: true } — PARTNER-only receipt for cash/walk-in sales:
+ *   1. PARTNER invoice only — same product lines with per-item VAT.
+ *   No PLATFORM invoice is created.
+ *   Status is NOT mutated (stays in its current state).
  *
  * Fee model: fees are INCLUDED in the product price.
  * Customer pays exactly order.paymentAmount (the product total).
@@ -858,8 +1054,12 @@ export async function processConfirmedRentalBooking(
  * Safe to call multiple times — skips if already processed.
  */
 export async function processConfirmedOrder(
-  orderId: string
+  orderId: string,
+  opts?: ProcessOrderOpts
 ): Promise<void> {
+  const skipCommission = opts?.skipCommission ?? false
+  const invoicedAtOverride = opts?.invoicedAt
+
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     include: { orderItems: true, invoices: true },
@@ -869,8 +1069,15 @@ export async function processConfirmedOrder(
     throw new Error(`Order not found: ${orderId}`)
   }
 
-  // Idempotency guard: already processed
-  if (order.status === ORDER_COMPLETE || order.invoices.length > 0) {
+  // Idempotency guard: already processed.
+  // The status check (ORDER_COMPLETE) is only meaningful for the online path —
+  // cash orders may already be at status 'complete' (operators mark them
+  // delivered before the receipt is generated), so for the cash path we rely
+  // solely on invoice existence.
+  if (order.invoices.length > 0) {
+    return
+  }
+  if (!skipCommission && order.status === ORDER_COMPLETE) {
     return
   }
 
@@ -911,32 +1118,40 @@ export async function processConfirmedOrder(
   totalPartnerVat = round(totalPartnerVat)
   totalPartnerAmount = round(totalPartnerAmount)
 
-  // Load platform business entity for the PLATFORM invoice
-  const businessEntity = await getBusinessEntity()
+  // Load platform business entity for the PLATFORM invoice (only needed when
+  // creating the commission invoice, but load outside the transaction to keep
+  // the transaction short and avoid blocking on an external read).
+  const businessEntity = skipCommission ? null : await getBusinessEntity()
 
   // Use the VAT rate & country from the fee's associated settings
-  const feeSettings = matchedFee
-    ? await prisma.settings.findUnique({
-        where: { id: matchedFee.settingsId },
-        select: { vat: true, country: true },
-      })
-    : null
-  const platformVatRate = feeSettings?.vat ?? businessEntity.vatRate
+  const feeSettings =
+    !skipCommission && matchedFee
+      ? await prisma.settings.findUnique({
+          where: { id: matchedFee.settingsId },
+          select: { vat: true, country: true },
+        })
+      : null
+  const platformVatRate = feeSettings?.vat ?? businessEntity?.vatRate ?? 0
   const feeCountry = feeSettings?.country ?? ''
 
   await prisma.$transaction(async (tx) => {
-    // Double-check idempotency inside transaction (race-safe)
+    // Double-check idempotency inside transaction (race-safe).
+    // Same logic as the outer guard: cash path checks invoice existence only.
     const current = await tx.order.findUnique({
       where: { id: orderId },
       include: { invoices: true },
     })
-    if (current?.status === ORDER_COMPLETE || (current?.invoices?.length ?? 0) > 0) return
+    if ((current?.invoices?.length ?? 0) > 0) return
+    if (!skipCommission && current?.status === ORDER_COMPLETE) return
 
-    const invoicedAt = new Date()
+    const invoicedAt = invoicedAtOverride ?? new Date()
+    // Invoice number year comes from invoicedAt so that backfilled receipts
+    // are numbered in their sale year, not the current calendar year.
+    const invoiceYear = invoicedAt.getFullYear()
 
     // ── 1. PARTNER Invoice (product lines) ──
 
-    const partnerInvoiceNumber = await nextInvoiceNumber(tx, 'PARTNER')
+    const partnerInvoiceNumber = await nextInvoiceNumber(tx, 'PARTNER', invoiceYear)
     const partnerPrevHash = await getLastHash(tx, 'PARTNER')
 
     const partnerInvoice = await tx.invoice.create({
@@ -976,15 +1191,15 @@ export async function processConfirmedOrder(
       await tx.invoiceLine.createMany({ data: itemLines })
     }
 
-    // ── 2. PLATFORM Invoice (service fee) ──
+    // ── 2. PLATFORM Invoice (service fee) — skipped for cash/walk-in receipts ──
 
-    if (serviceFeeAmount > 0) {
+    if (!skipCommission && serviceFeeAmount > 0 && businessEntity) {
       const commission = computeCommissionVat(
         serviceFeeAmount, platformVatRate,
         partnerAccount?.country, partnerAccount?.businessId, feeCountry
       )
 
-      const platformInvoiceNumber = await nextInvoiceNumber(tx, 'PLATFORM')
+      const platformInvoiceNumber = await nextInvoiceNumber(tx, 'PLATFORM', invoiceYear)
       const platformPrevHash = await getLastHash(tx, 'PLATFORM')
 
       const platformInvoice = await tx.invoice.create({
@@ -1023,10 +1238,14 @@ export async function processConfirmedOrder(
       })
     }
 
-    await tx.order.update({
-      where: { id: orderId },
-      data: { status: ORDER_COMPLETE },
-    })
+    // Only advance the payment status for online payments. Cash walk-in orders
+    // stay at their current state — the receipt is a separate accounting artifact.
+    if (!skipCommission) {
+      await tx.order.update({
+        where: { id: orderId },
+        data: { status: ORDER_COMPLETE },
+      })
+    }
   })
 }
 
