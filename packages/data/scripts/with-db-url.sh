@@ -33,4 +33,17 @@ if [ -z "$VALUE" ]; then
   exit 1
 fi
 
+# Force the DIRECT (non-pooled) Neon endpoint for every Prisma command run here.
+#
+# Prisma Migrate takes a SESSION-level advisory lock (SELECT pg_advisory_lock).
+# Neon's `-pooler` host is PgBouncer in transaction-pooling mode, which cannot
+# hold a session lock, and the compute auto-suspends — hence the intermittent
+# P1002 "Timed out trying to acquire a postgres advisory lock" on a cold start
+# (it only succeeds once the compute happens to be warm). Dropping the `-pooler`
+# label yields the direct endpoint, where the lock is taken on the real backend
+# session. No-op for the already-direct local URL, and it does NOT touch the
+# app's runtime connection (that reads POSTGRES_URL from Vercel env, never this
+# wrapper) — only CLI migrate/status/check/diff go through here.
+VALUE="${VALUE/-pooler./.}"
+
 POSTGRES_URL="$VALUE" "$@"
