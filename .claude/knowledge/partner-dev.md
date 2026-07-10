@@ -13,6 +13,7 @@ pointer here + the full entry in its section below.)*
 - **Auth & ownership** — `requireSiteOwner` / `verifySiteOwnership` / sudo edge cases — _none yet_
 - **State machines** — operational status extension pattern (7-file checklist), color palette — see "Adding a new manage-page operational status"
 - **Test failures & fixes** — mock/fixture gotchas — see "Mock-contract test", "saveInventoryItemProperties", "auth-matrix ok/reject predicate"
+- **Accounting analytics remodel** — coverage-contract allowlist + analytics mock + TREND_WINDOWS extension pattern — see "Adding analytics actions to accounting/actions.ts"
 - **Bug patterns & fixes** — recurring partner-app bugs — see "verifySiteOwnership vs verifySiteAccess scope divergence", "Prisma upsert is not atomic — RSC-prefetch concurrency crash on manage page"
 - **Component decomposition** — manage page decomposition, shared state boundary, pinch handler scroll-target — see "Decomposing view.tsx manage monolith"
 - **Manage page naming** — hold/reserve/rent action-row distinction — see "Reserve vs Rent vs Hold terminology"
@@ -52,6 +53,25 @@ pointer here + the full entry in its section below.)*
 purple=comp. Pick the next unused hue for P5+ states.
 **Revenue exclusion:** `paymentAmount: 0` + no `processConfirmedReservation` call = no Invoice →
 automatically excluded from invoice-driven accounting. No accounting changes needed.
+
+## Accounting analytics — extension patterns
+
+### 2026-07-10: Adding analytics actions to accounting/actions.ts
+**Pattern:** When adding new server actions to `accounting/actions.ts`:
+1. **TREND_WINDOWS const** — extend `[7,30,365]` to `[1,7,30,365]` to support single-day window. The `const` drives the type used in `getOperationsTrend`'s guard expression.
+2. **analytics mock** — add any new `export async function` from `packages/data/src/analytics.ts` to `apps/partner/__mocks__/@repo/data/analytics.ts` as `vi.fn().mockResolvedValue(...)`. The mock-contract test parses both files with regex and fails with a clear "missing exported functions" message if you forget.
+3. **coverage-contract allowlist** — every new `export async function` in `accounting/actions.ts` must be added to `UNGATED_ALLOWLIST` in `app/test/coverage-contract.test.ts` with the auth pattern documented. The coverage-contract test enumerates all `'use server'` exports via glob and fails if any are ungoverned.
+4. **No gated-actions entry needed** for read-only session+owner analytics actions — they're allowlisted (read-only, session-gated, ownership via `site.userId !== session.user.id`), not token-or-session.
+**Prevention:** Run `npm run test` and watch for `coverage-contract` and `mock-contract` failures immediately after adding any new action or analytics import. Both tests give pinpoint diagnostics.
+
+### 2026-07-10: Replacing the monthly summary cards — source-summary pattern
+**Pattern:** When redesigning the accounting summary cards to use `getMonthlySourceSummary`:
+- The action (`getMonthlySummary`) fetches current + prev month via `Promise.all` server-side and returns `{ current: MonthlySourceSummary, prevTotal: number }` — keeps the delta calculation off the client and avoids two separate effects.
+- Use a local interface in view.tsx mirroring `MonthlySourceSummary` rather than importing from `@repo/data/analytics` (client bundle isolation).
+- `salesCount` already exists in `Till` namespace; add it separately to `SiteAccounting` namespace for transaction counts — they're different plural formats and must remain independent.
+- Remove `grandTotal`/`totalTax`/`orderTotal`/`reservationTotal` useMemos when they're no longer rendered; keep `totalTransactions` (used by the fiscal-tables empty-state guard).
+- i18n: remove dead keys in one block replacement so en/es/fi stay in lock-step (73 keys each). Verify with `python3 -c "import json; [print(lang, len(json.load(open(f'messages/{lang}.json'))['SiteAccounting'])) for lang in ['en','es','fi']]"`.
+**Prevention:** Run `npx tsc --noEmit` after the card swap to catch any dangling refs to removed computed variables.
 
 ## Test failures & fixes
 

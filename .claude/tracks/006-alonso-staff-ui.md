@@ -3,7 +3,7 @@ id: 006-alonso-staff-ui
 title: Alonso → Staff UI Migration
 status: active
 created: 2026-06-17
-updated: 2026-06-18
+updated: 2026-07-09
 worktree: null
 ---
 
@@ -163,6 +163,41 @@ branching the expected lane by payment class.
 
 ## Resume here
 
+- **⚠ REOPENED 2026-07-09 — customer "literal parity" feedback.** The operator sent four Alonso
+  screenshots (WhatsApp, forwarded) and said parity was meant *literally*. Analysis (2026-07-09,
+  code-verified) found the **floor-state half is at parity**, but **three reporting/attribution
+  *presentation* gaps remain** — the underlying data/plumbing exists (attribution stamp, TillEntry
+  ledger, `@repo/data/analytics`), only the customer-facing views are missing or thin. These cut
+  across this track's manage surface **and** the two "done" sibling tracks
+  [[track:007-operator-analytics]] and [[track:008-employee-model]]. New phase **P9** below.
+  **Next action: get the user's build decision / prioritization (analysis delivered; not yet built).**
+  The three gaps:
+  1. **Floor daily-summary hero (manage page).** Alonso screenshot 1 shows a prominent *Ingresos
+     Totales* (today's revenue) + *Total hamacas hoy* (today's rented count) hero, above a 4-tile
+     state grid (Libres / Alquiladas / Reservadas / Gratis). We have the compact `O/R/C/free`
+     occupancy readout in `ManageToolbar.tsx:66-74` (comp/`gratis` included) but **no today-revenue
+     figure and no single "beds rented today" total** on the floor. *(Low–med effort; state counts
+     exist, need a today-revenue rollup on the manage surface.)*
+  2. **Per-employee itemized attribution list (till / shift).** Alonso screenshot 2 lists, per
+     employee, each individual sunbed rented **with its timestamp** ("Hamaca 115-2 … 14:13") under a
+     *Turno actual* running total + count + *Cierre de caja empleado*. Our `TillSheet.tsx` shows the
+     **aggregate only** (total € + count), single-current-worker, **no itemized per-seat+time list**,
+     and no manager "all workers' live shifts" view. The itemization data exists — `employeeId` +
+     `createdAt` + seat are stamped on every on-site reservation, and `TillEntry` rows carry
+     `reservationId`/`settledAt` — but is never fetched/rendered. **SCOPE LOCKED (user, 2026-07-09):**
+     the list shows sunbeds where **payment was initiated by an employee — cash *and* QR/collect** (the
+     two staff-handled channels); **online/consumer reservations are a separate stat, excluded** from
+     this list. So it is *not* today's cash-only `TillEntry` set (which excludes QR/collect) and *not*
+     all-rentals — it's the employee-initiated slice (cash walk-ins + QR-collected), keyed by
+     `employeeId` + seat + time. *(Med effort — new query spanning cash + QR-collect employee-attributed
+     reservations + list UI.)*
+  3. **Detailed per-day history table + per-day hamacas count (accounting "Avanzados").** Alonso
+     screenshots 3–4 show a *Historial detallado* **table** (row per day: date · sunbed count ·
+     revenue), a *Mejor día* card, and a *Tendencia de ingresos* chart. We have Mejor día + the
+     revenue trend chart (`accounting/view.tsx`), but **no per-day table**, and our per-day `count`
+     is **invoice count, not sunbeds rented** (`analytics.ts` `DailyRevenue.count`); `occupied` beds
+     live in `DailyOccupancy` but aren't shown per-day next to revenue. *(Low–med effort — add a
+     table + surface the hamacas-per-day count.)*
 - **Track is functionally COMPLETE and LIVE on test + production (promoted manually 2026-06-18).**
   Every roadmap item shipped: P1 shell/toolbar/kill-sectioned-view, P2–P4 bed-state model (hold /
   comp / walk-in / block), P6 walk-in/reserve relabel, P7 paid-booking guard + manage cancel, P7b
@@ -276,6 +311,156 @@ branching the expected lane by payment class.
   align with [[track:002-table-reservations]] — separate tracks when started.
 
 ## Log
+
+- **2026-07-10** — **Monthly summary cards redesigned — operator frames, all-source takings.** User:
+  the invoiced "Revenue" + "Tax collected" cards aren't meaningful here; Breakdown excluded rentals.
+  Replaced the four fiscal cards with takings-based operator frames: **Revenue** (all-source month total
+  + sales count + **▲/▼ MoM** vs previous month), **By source** (Sunbeds / Rentals / Orders €, icons),
+  **Refunds** (€ + count, red tint), **Avg per sunbed** (sunbed revenue ÷ seats sold). New additive
+  `@repo/data/analytics` `getMonthlySourceSummary` (no migration) — per-source takings (`paymentAmount`,
+  createdAt-attributed; rentals cash=`paid-in-cash`+online=`complete`, orders=post-payment states,
+  refunds across all three) → action `getMonthlySummary` (current+prev month for the MoM delta) + partner
+  analytics mock + coverage-contract. Removed dead invoice `grandTotal`/`totalTax`/`orderTotal`/
+  `reservationTotal` useMemos and 6 orphan i18n keys (`taxCollected`/`netAmount`/`invoicedHint`/
+  `monthlyTakings*`/`breakdown`, grep-verified). Kept the fiscal detail transaction tables (still
+  invoice-based, `getPaidItemsByMonth`). Extra-frame picks (Refunds + Avg-per-sunbed) chosen by user
+  over Comps/No-shows. data 247u+188i, partner 1716u green, tsc clean, en/es/fi 73-key parity (EN verified).
+  **Follow-up (same day):** user flagged "Avg per sunbed" was just avg bed price — replaced with
+  **Turnover per bed** (RevPAR-style yield): `(sunbeds.revenue + orders.bedLinkedRevenue) / capacity`.
+  Found orders ARE bed-linked (`Order.seatId`/`reservationId`; 24/30 local orders bed-tied). Enhanced
+  `getMonthlySourceSummary` (no migration) to also return `capacity` (active inventory count) +
+  `orders.bedLinkedRevenue` (F&B where seatId/reservationId set) — done INLINE (not delegated), +1 data
+  integration test (capacity excl. inactive; bed-linked = seat/reservation, counter orders excluded).
+  User chose "per available bed" (÷ capacity, captures price×occupancy×on-bed spend) over per-bed-sold;
+  rentals excluded. Partner mock + local type + frame + i18n (`turnoverPerBed*`) updated. data 189i,
+  partner 1716u green, 73-key parity.
+
+- **2026-07-10** — **Removed the *Reportes Avanzados* (Advanced report) section — redundant with the
+  chart.** User: per-day sunbeds + revenue are already visible in the trends chart, so the D card no
+  longer earns its place. Removed the whole card (period filter, Total Ingresos/Hamacas/Best-day tiles,
+  Historial Detallado table, Exportar TXT) + its dead state/helpers (`opsWindow`, `OPS_WINDOWS`,
+  `periodLabel`, `opsRowsDesc`, `exportTxt`/`exportingTxt`) + 14 D-only i18n keys (grep-verified
+  unused elsewhere; en/es/fi back to 70-key parity). **Kept the Daily summary (A) card**, which shared
+  `getOperationsTrend` — repointed that fetch to a fixed **1-day** window (it only needs today's row for
+  the Hoy figures). `getOperationsTrend` action left exported (still used by A). Partner 1716u green,
+  tsc clean. Net: accounting tab = Daily summary (today + parcela state) · recentTrend chart (Revenue
+  channel-stacked / Sunbeds / Occupancy, axis+tooltip) · Staff breakdown · fiscal invoice/VAT tables.
+
+- **2026-07-10** — **Trend Revenue metric → all-takings, stacked by payment channel.** The `recentTrend`
+  Revenue metric was still invoice-based (`getRevenueTrend`) → excluded cash walk-ins (the €90-vs-€788
+  gap). Repointed to **all takings** split by channel and rendered as **stacked bars**. New additive
+  `@repo/data/analytics` helpers (no migration): `getRevenueByChannelByDay` + `summarizeRevenueByChannel`
+  — per-day `{cash, qr, online, total}` where cash=`paid-in-cash`, qr=`complete`+`employeeId`, online=
+  `complete`+no `employeeId` (validated on local: June = cash €698 + online €90, qr €0). New action
+  `getRevenueChannelTrend` (mirrors `getOperationsTrend`). View: revenue renders three stacked
+  `<SafeBar stackId="rev">` (cash=green #16a34a / qr=blue #2563eb / online=dark #111827) + inline legend
+  + a stacked tooltip (per-channel breakdown + Total, hover/touch); tiles → Total takings + Best day
+  (dropped the invoice "Sales" count). Sunbeds/Occupancy metrics unchanged. Old invoice `getRevenueTrend`
+  removed from the view (still exported/dormant; `getRevenueCsv` untouched). i18n en/es/fi (`channelQr`/
+  `channelOnline`/`channelTotal`, `channelCash`→"Cash", 84-key parity, EN verified). data 247u+181i,
+  partner 1716u green, tsc clean, lint exit 0.
+
+- **2026-07-10** — **Trend chart → recharts (axis scale + hover/touch tooltip).** Replaced the hand-rolled
+  flex-`div` bars in the `recentTrend` card with a recharts `BarChart` (recharts@^2.15.3 already a partner
+  dep, already used in `dashboard/view.tsx` — mirrored its `Safe*`-cast pattern + `ChartTooltip` styling).
+  Adds YAxis **scale markings** (per-metric `tickFormatter` via `trendViewModel.fmt`: €/count/%), sparse
+  XAxis dates, faint `CartesianGrid`, and a `Tooltip` that fires on **hover AND mobile touch** showing each
+  column's date+value (metric-aware — `fmt` passed per-render so it reformats on metric switch). Bar auto-
+  sizes (no `barSize`) for 7/30/365-day windows. View-only, no data/action/mock/i18n changes. Partner 1716u
+  green, tsc clean, lint exit 0 (one benign no-unused-vars warning on a fn-type param name, matches existing
+  pattern). NOTE: recharts is visual — unit tests don't truly render it (jsdom); user is validating live on
+  local test.
+
+- **2026-07-10** — **Trend chart metric toggle (Revenue / Sunbeds / Occupancy).** Per user, the kept
+  `recentTrend` card now has a metric selector beside the 7/30/365 window. Revenue stays invoice-based
+  (`getRevenueTrend`); Sunbeds + Occupancy revive `getOccupancyTrend` (still exported from the remodel)
+  → per-day `occupied` count and `occupancyPct`. Chose a **metric toggle over a combined multi-axis
+  chart** (three units €/count/% don't share an axis cleanly, and sunbeds≈occupancy×capacity is
+  redundant); one clean single-axis chart per metric, tiles adapt (Total/Sales/BestDay for revenue;
+  Avg/Peak/BestDay for sunbeds+occupancy). View + i18n only — no new data/action/mock (occupancy mock
+  already present). i18n en/es/fi (`metricRevenue`/`metricSunbeds`/`metricOccupancy`/`avgSunbeds`/
+  `peakSunbeds`/`avgOccupancy`/`peakOccupancy`, 81-key parity, EN verified English). Partner 1716u
+  green, tsc+lint clean.
+
+- **2026-07-10** — **Monthly takings figure added (invoice-vs-takings reconciliation).** User (local test)
+  hit the confusing gap: the fiscal month summary showed €90 for June while June 21 alone had €501 of
+  cash. Root cause confirmed via local DB: June = 78 `paid-in-cash` walk-ins (€698) + 5 `complete`
+  online (€90); `getPaidItemsByMonth` (and the fiscal `grandTotal`) filter `status = complete`, so
+  cash walk-ins (never PARTNER-invoiced) are excluded — €90 = invoiced/online only. Per user choice
+  ("add a calendar-month takings total"), added `getMonthlyTakings(siteId,year,month)` action
+  (session+owner; reuses `summarizeReservationStats(getReservationDayStats(...))` over month bounds —
+  no new @repo/data helper) and a **Total takings** summary card (paymentAmount-based: cash+card+online,
+  ~€788 for June) beside the invoiced card, which is now sub-labelled "Invoiced (online) only". i18n
+  en/es/fi (`monthlyTakings`/`monthlyTakingsHint`/`invoicedHint`, 74 keys parity). coverage-contract
+  allowlist updated. Partner 1716u green, tsc+lint clean.
+
+- **2026-07-10** — **P9 RESET to a faithful Alonso baseline (accounting tab) — uncommitted, tests green.**
+  Per user ("keep recent trend, remodel everything else to have all and exactly what Alonso has — I'll
+  expand from that"), the accounting **stats overlay** was rebuilt to mirror Alonso's four surfaces,
+  read-only, takings-based. **Kept:** the invoice-based `recentTrend` chart + the fiscal invoice/VAT
+  paid-items tables (the tab's core accounting — NOT an "Alonso stat"). **Removed** (non-Alonso —
+  Alonso reports have no occupancy/comp reporting): the track-007 occupancy/comps viz + the interim
+  Hoy/Historial/monthly-staff-drilldown. **Built** (`accounting/view.tsx` full rewrite): **A** Resumen
+  diario — today's takings + hamacas + *Estado de la parcela* 5-way snapshot (Libres/Alquiladas/
+  Reservadas/Gratis/Desactivada) via new `@repo/data/analytics` `getFloorStateSnapshot` (additive, no
+  migration; classifies today's occupying reservations by op-status/`isComp`, `'blocked'`→desactivada);
+  **D** Reportes Avanzados — period filter Today/7/30/365 → Total Ingresos + Hamacas + Mejor Día +
+  Historial Detallado table (date·hamacas·ingresos, date-desc) + client-side Exportar TXT (visible
+  window, not Alonso's export-all bug); **B+C** Desglose por Empleado — a day-picker (default today) →
+  per-employee €/count sorted desc, each expandable to that day's itemized rentals (seat·time·channel·
+  amount), READ-ONLY (interactive close/reset = deferred mobile phase). New actions `getFloorSnapshot`,
+  `getStaffShiftItemsForDay`; `getOperationsTrend` window set now `[1,7,30,365]`. `getOccupancyTrend`/
+  `getStaffTill`/`getStaffShiftItems` left exported but unused. Verified: data 241u+175i; partner 1716u
+  incl. meta-guards; tsc+lint clean; locale parity 71 keys en/es/fi. **NOT browser-verified, NOT
+  committed.** This is the baseline the user will expand from.
+
+- **2026-07-10** — **P9 BUILT in the accounting tab (Operations lens) — superseded by the reset above.**
+  Per user, all three parity gaps landed on the **partner accounting tab** (session-gated, desktop —
+  the mobile/manage + `TillSheet` surfaces are explicitly deferred to a later staff-phone phase),
+  and on a **takings basis** (`Reservation.paymentAmount`, all channels incl. cash walk-ins) as a
+  lens distinct from the existing invoice/VAT figures. Data (`@repo/data`, additive, no migration):
+  `getReservationDayStats` + `summarizeReservationStats` (analytics.ts, per-day takings + rented
+  seats, createdAt-day attribution) and `getEmployeeShiftItems` (till.ts, `employeeId != null` paid
+  reservations → itemized seat/time/amount/channel; cash+QR, total intentionally ≠ cash-only
+  `getTillByEmployee`). Partner actions (mirror `getRevenueTrend`/`getStaffTill` auth): `getOperationsTrend`,
+  `getStaffShiftItems` (both `UNGATED_ALLOWLIST`, same class as existing accounting actions). UI in
+  `accounting/view.tsx`: **(gap 1)** "Hoy" card = today's takings + sunbeds (last trend row);
+  **(gap 3)** *Historial detallado* per-day table (date · sunbeds · revenue, reverse-chron, best-day
+  highlighted, respects 7/30/365 window); **(gap 2)** the staff-till card rows now expand to itemized
+  entries (seat · time · cash/card badge · amount). i18n en/es/fi (ES/FI machine, user reviews).
+  **Follow-up (same day):** per user, the staff-till itemization is now **grouped by day** (most-recent
+  first, per-day subtotal + count) inside the monthly card — Alonso's per-employee till is per-shift/day
+  (wiped at day-reset), so the monthly roll-up is a Sunbnb superset; the day grouping restores Alonso's
+  daily-reconciliation mental model on desktop. Client-side grouping only (reused `staffSales` key, no
+  new i18n, no new query). Partner 1716u still green, tsc+lint clean.
+  **Refined to a two-level drill-down (same day):** a month of raw entries per employee (~200–300 rows)
+  was too much, so expanding an employee now shows only compact **per-day subtotals**; each day is
+  itself clickable (`expandedDays` `${employeeId}:${dayKey}` set) to reveal that day's individual
+  transactions. Hierarchy = employee (month total) → days (subtotals) → one day's transactions — never a
+  raw month dump, and the "who rented what, when" audit stays reachable scoped to a day. Client-side
+  only, no new query/i18n. Partner 1716u green, tsc+lint clean.
+  Verified: data 241 unit + 172 integration; partner 1716 unit incl. mock/coverage/auth-matrix
+  meta-guards; tsc + lint clean; locale JSON valid + key parity. **NOT browser-verified, NOT
+  committed.** Deferred: mobile staff-phone surfacing of these stats; browser verification;
+  unifying/relabeling vs the existing invoice-based trend chart if the dual numbers confuse.
+
+- **2026-07-09** — **REOPENED on customer "literal parity" feedback.** Operator forwarded four Alonso
+  screenshots (daily floor summary; per-employee itemized shift with per-seat timestamps; *Avanzados*
+  detailed per-day history + Mejor día + revenue trend) and stated parity was meant literally.
+  Code-verified the current surfaces against each screenshot (three parallel Explore passes over
+  `manage/`, `TillSheet.tsx` + `@repo/data/till`, and `accounting/` + `@repo/data/analytics`).
+  Conclusion: **floor-state half is at parity; three reporting/attribution *presentation* gaps
+  remain** (plumbing exists, views missing) — captured as **P9** in Resume-here. Gaps: (1) no
+  today-revenue / total-rented-today hero on the manage floor (state counts do exist in
+  `ManageToolbar.tsx`); (2) till shows aggregate only — no per-seat+time itemized list, single-worker
+  only, and is cash-scoped where the operator wants full rental attribution; (3) accounting has Mejor
+  día + trend chart but no per-day *table* and surfaces invoice-count not sunbeds-rented per day.
+  Analysis delivered to the user; **no code written** — user chose "just the analysis for now" (build
+  deferred, track stays reopened/documented). **Gap-2 scope LOCKED (user):** the per-employee list =
+  sunbeds where **payment was employee-initiated (cash + QR/collect)**; **online reservations are a
+  separate stat, excluded** — so neither the cash-only `TillEntry` set nor all-rentals. Gaps cross
+  into "done" siblings [[track:007-operator-analytics]] (gap 3) and [[track:008-employee-model]]
+  (gap 2) — this track is the umbrella.
 
 - **2026-06-19** — **Paid-walk-in refund parity (P7b extended to QR-collect).** A walk-in paid online
   via QR collection reads `(complete, walked-in)` with a Mollie `paymentRef`; its removal previously
