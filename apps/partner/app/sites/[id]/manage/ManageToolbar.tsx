@@ -62,7 +62,9 @@ export default function ManageToolbar({
   return (
     <>
       {/* Header card — zoom control (sticky) */}
-      <div className="flex items-center justify-between gap-3 px-3 py-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm sticky top-0 z-10">
+      <div
+        className={`flex items-center justify-between gap-3 px-3 py-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm sticky top-0 z-10${showSwitcher ? '' : ' mb-5'}`}
+      >
         {/* Zoom control — always visible (scroll+zoom is the only mode) */}
         <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 font-semibold">
           <button

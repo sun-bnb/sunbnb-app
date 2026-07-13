@@ -38,6 +38,27 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
+// Time as HH:MM; when the timestamp is NOT today (viewer-local), prefix the date
+// as DD.MM. An open till can span days a worker never closed, so a bed rung up
+// yesterday reads e.g. "12.07 15:20" instead of a bare, ambiguous time.
+function formatWhen(at: Date | string): string {
+  const d = new Date(at)
+  const time = d.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+  const now = new Date()
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  if (sameDay) return time
+  const dd = String(d.getDate()).padStart(2, '0')
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  return `${dd}.${mm} ${time}`
+}
+
 export default function DailySummaryView({
   siteId,
   accessKey,
@@ -401,11 +422,7 @@ export default function DailySummaryView({
                       aria-label={`${till.name} till items`}
                     >
                       {till.items.map(item => {
-                        const timeStr = new Date(item.at).toLocaleTimeString(undefined, {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          hour12: false,
-                        })
+                        const timeStr = formatWhen(item.at)
                         const isRental = item.kind === 'rental'
 
                         return (
@@ -552,11 +569,7 @@ export default function DailySummaryView({
                       ) : (
                         <ul className="divide-y divide-gray-50 dark:divide-gray-700/50">
                           {shift.items.map(item => {
-                            const timeStr = new Date(item.at).toLocaleTimeString(undefined, {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              hour12: false,
-                            })
+                            const timeStr = formatWhen(item.at)
                             const seatLabel = item.seats.join(', ')
                             const isCash = item.channel === 'cash'
 
