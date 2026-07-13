@@ -229,6 +229,7 @@ beforeEach(() => {
   vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
   vi.mocked(prisma.reservation.create).mockResolvedValue({ id: 'new-res' } as any)
   vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
+  vi.mocked(prisma.reservation.updateMany).mockResolvedValue({ count: 0 } as any)
   vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
   vi.mocked(prisma.reservation.findMany).mockResolvedValue([])
 

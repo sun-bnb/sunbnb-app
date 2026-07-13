@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import dayjs from 'dayjs'
@@ -69,11 +70,14 @@ export default function ManageView({
   site,
   accessKey,
   employees = [],
+  backHref,
 }: {
   site: SiteProps
   accessKey: string
   /** Active roster for this site's account — empty hides the worker chip. */
   employees?: WorkerOption[]
+  /** Link back to the manage landing page (includes the ?key= param). */
+  backHref?: string
 }) {
   const router = useRouter()
   const t = useTranslations('SiteManage')
@@ -982,7 +986,38 @@ export default function ManageView({
     <div
       className={`flex flex-col h-[calc(100dvh-var(--impersonation-offset,0px))] overflow-hidden px-2 pt-2 mx-auto w-full max-w-screen-lg transition-colors dark:bg-gray-950 dark:text-gray-100 ${isDark ? 'dark' : ''}`}
     >
-      {/* Header — parcel toolbar (stats / zoom / parcel tabs) in a parcel view;
+      {/* Back link to manage landing — shown only when backHref is provided.
+          On the sunbed view, seat stats (O/R/Free/Comp) are right-aligned on
+          the same row so they stay visible without consuming toolbar space. */}
+      {backHref && (
+        <div className="flex items-center justify-between gap-2 mb-1">
+          {/* Borderless back button — a big 48px tap target for wet/sandy
+              "beach fingers" (no "Menu" word, no box), returns to the landing. */}
+          <Link
+            href={backHref}
+            className="inline-flex items-center justify-center h-9 w-12 -ml-1 rounded-xl text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 active:bg-gray-100 dark:active:bg-gray-800 transition-colors"
+            aria-label={t('backToMenu')}
+            title={t('backToMenu')}
+          >
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </Link>
+          {/* Seat stats — only in the sunbed/parcel view (not rentals) */}
+          {!showRentals && (
+            <span className="flex items-center gap-3 text-sm font-bold tabular-nums whitespace-nowrap leading-none pr-1">
+              <span className="text-red-600 dark:text-red-400" title={t('checkedIn')}>O{occupied}</span>
+              <span className="text-fuchsia-600 dark:text-fuchsia-400" title={t('expected')}>R{summary['expected'] ?? 0}</span>
+              {(summary['comp'] ?? 0) > 0 && (
+                <span className="text-sky-600 dark:text-sky-400" title={t('comp')}>C{summary['comp']}</span>
+              )}
+              <span className="text-green-600 dark:text-green-400" title={t('free')}>{summary['available'] ?? 0}</span>
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Header — parcel toolbar (zoom / parcel tabs) in a parcel view;
           a minimal placeholder title in the rentals view. */}
       {showRentals ? (
         <div className="flex items-center justify-between gap-2 mb-3 px-3 py-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm sticky top-0 z-10">
@@ -1003,8 +1038,6 @@ export default function ManageView({
         </div>
       ) : (
         <ManageToolbar
-          summary={summary}
-          occupied={occupied}
           parcelNums={parcelNums}
           selectedView={selectedView}
           onSelectView={selectView}

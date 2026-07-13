@@ -138,7 +138,7 @@ describe('createToken', () => {
     expect(callArgs.data.userId).toBe(OWNER_ID)
   })
 
-  it('assigns resources: ["all"] — not narrower scope and not empty', async () => {
+  it('assigns resources: ["all"] by default — not narrower scope and not empty', async () => {
     mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
     vi.mocked(prisma.securityToken.create).mockResolvedValue({
       id: TOKEN_ID,
@@ -151,6 +151,37 @@ describe('createToken', () => {
     const callArgs = vi.mocked(prisma.securityToken.create).mock.calls[0]![0] as any
     // The Security page creates tokens with the 'all' role (comment in source says so).
     // 'all' grants access to both manage and orders gates; assert this intent is preserved.
+    expect(callArgs.data.resources).toEqual(['all'])
+  })
+
+  it('assigns resources: ["all", "admin"] when admin=true', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.securityToken.create).mockResolvedValue({
+      id: TOKEN_ID,
+      userId: OWNER_ID,
+      resources: ['all', 'admin'],
+    } as any)
+
+    await createToken({ admin: true })
+
+    const callArgs = vi.mocked(prisma.securityToken.create).mock.calls[0]![0] as any
+    // Admin tokens include 'admin' so they satisfy verifySiteAdmin on the manage
+    // page. The 'all' resource is still present so the admin token also satisfies
+    // the standard manage-page gate.
+    expect(callArgs.data.resources).toEqual(['all', 'admin'])
+  })
+
+  it('assigns resources: ["all"] when admin=false explicitly', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.securityToken.create).mockResolvedValue({
+      id: TOKEN_ID,
+      userId: OWNER_ID,
+      resources: ['all'],
+    } as any)
+
+    await createToken({ admin: false })
+
+    const callArgs = vi.mocked(prisma.securityToken.create).mock.calls[0]![0] as any
     expect(callArgs.data.resources).toEqual(['all'])
   })
 

@@ -72,6 +72,51 @@ export async function verifySiteAccess(
 }
 
 /**
+ * Stricter admin gate for the manage page's till-summary actions.
+ *
+ * Access is granted when:
+ *   - An accessKey is supplied: the token must exist, be unexpired, have
+ *     `'admin'` in its resources (hasSome: ['admin']), AND its owner must
+ *     own the site. A plain `['all']` or `['manage_site']` token is NOT
+ *     sufficient — the caller must be an explicitly provisioned admin token.
+ *   - No accessKey: falls back to `requireSiteOwner(siteId)` so the site
+ *     owner and sudo users can always reach the till summary.
+ *
+ * Returns the same `{ userId, error }` shape as `verifySiteAccess`.
+ */
+export async function verifySiteAdmin(
+  siteId: string,
+  accessKey?: string,
+): Promise<{ userId: string | null; error: string | null }> {
+  if (accessKey) {
+    // The token must carry the 'admin' resource — a plain 'all'/'manage_site'
+    // token is deliberately rejected here. 'admin' implies 'all' so we only
+    // need to check for 'admin' in resources.
+    const token = await prisma.securityToken.findUnique({
+      where: {
+        id: accessKey,
+        expires: { gt: new Date() },
+        resources: { hasSome: ['admin'] },
+      },
+    })
+    if (!token) return { userId: null, error: 'Invalid or expired access key' }
+    const site = await prisma.site.findUnique({
+      where: { id: siteId },
+      select: { userId: true },
+    })
+    if (!site || site.userId !== token.userId) {
+      return { userId: null, error: 'Not authorized' }
+    }
+    return { userId: site.userId, error: null }
+  }
+
+  // Session path: owner or sudo passes.
+  const { session, error } = await requireSiteOwner(siteId)
+  if (error) return { userId: null, error }
+  return { userId: session.user.id, error: null }
+}
+
+/**
  * Verify the current user is authenticated and owns the given restaurant.
  * Ownership is checked via restaurant.partnerAccountId === session.user.id
  * (PartnerAccount is keyed by userId, so this is a direct userId comparison).

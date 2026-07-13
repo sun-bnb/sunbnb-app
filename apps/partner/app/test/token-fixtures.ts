@@ -103,6 +103,22 @@ export const TOKENS = {
       resources: ['all', 'manage_site'],
     },
   } satisfies TokenFixture,
+
+  /**
+   * Admin token: not expired, resources includes 'all' AND 'admin'.
+   * This satisfies the stricter verifySiteAdmin gate. It also satisfies the
+   * standard verifySiteAccess gate (hasSome ['all', 'manage_site']) because
+   * 'all' is present, so an admin token can still load the manage page normally.
+   */
+  admin: {
+    key: 'token-admin-1',
+    row: {
+      id: 'token-admin-1',
+      userId: OWNER_ID,
+      expires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      resources: ['all', 'admin'],
+    },
+  } satisfies TokenFixture,
 }
 
 // ─── Shared site stub ─────────────────────────────────────────────────────────
@@ -206,6 +222,31 @@ export function applyForeignSiteToken() {
   vi.mocked(auth).mockResolvedValue(null)
   stubOwnerSite()
   vi.mocked(prisma.securityToken.findUnique).mockResolvedValue(TOKENS.foreign.row as any)
+}
+
+/**
+ * Apply a valid admin token (resources: ['all', 'admin']).
+ * This satisfies verifySiteAdmin — the 'admin' resource is present.
+ * Auth is null (token path; no session).
+ */
+export function applyAdminToken() {
+  vi.mocked(auth).mockResolvedValue(null)
+  stubOwnerSite()
+  vi.mocked(prisma.securityToken.findUnique).mockResolvedValue(TOKENS.admin.row as any)
+}
+
+/**
+ * Apply a plain manage/all token (resources: ['all', 'manage_site']) against
+ * the admin gate. In unit mode, verifySiteAdmin queries with hasSome: ['admin'];
+ * since ['all', 'manage_site'] lacks 'admin', Prisma returns null. We model
+ * this by making findUnique return null (same unit-mode blind-spot convention as
+ * applyWrongScopeToken — the real Prisma where filter handles it in production).
+ */
+export function applyManageTokenForAdminGate() {
+  vi.mocked(auth).mockResolvedValue(null)
+  stubOwnerSite()
+  // findUnique returns null: the 'admin' resource filter eliminates this token.
+  vi.mocked(prisma.securityToken.findUnique).mockResolvedValue(null)
 }
 
 // ─── Restaurant-owner session helpers ────────────────────────────────────────

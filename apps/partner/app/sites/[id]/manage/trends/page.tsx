@@ -1,9 +1,8 @@
 import ErrorCard from '@/components/ErrorCard'
-import ManageLanding from './ManageLanding'
-import { validateManageToken } from './token'
+import TrendsView from './TrendsView'
+import { validateManageToken } from '../token'
 
-
-export default async function ManagePage({
+export default async function ManageTrendsPage({
   params,
   searchParams,
 }: {
@@ -23,12 +22,24 @@ export default async function ManagePage({
     )
   }
 
+  if (!result.isAdmin) {
+    return (
+      <ErrorCard
+        title="Admin access required"
+        message="This page is only accessible with an admin token."
+        showBackLink={false}
+      />
+    )
+  }
+
+  const backHref = `/sites/${params.id}/manage?key=${key}`
+
   return (
-    <ManageLanding
+    <TrendsView
       siteId={result.site.id}
-      siteName={result.site.name}
       accessKey={key!}
-      isAdmin={result.isAdmin}
+      siteName={result.site.name}
+      backHref={backHref}
     />
   )
 }

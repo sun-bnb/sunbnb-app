@@ -20,6 +20,7 @@ pointer here + the full entry in its section below.)*
 - **Till conservation** — unreserveItem disconnect + splitWalkInSeat reduce paymentAmount; depart-split pattern — see "Till conservation in per-seat walk-in operations"
 - **Cash rental settlement (track 013 P3b)** — `createWalkInRental` `recordCashSettlement` param; Card(QR) path must NOT pass it; free path auto-skips — see "Cash walk-in rental TillEntry (P3b)"
 - **BedDetail state-machine patterns** — convertHoldToWalkIn in-place update + multi-day $transaction extend, pendingConfirm per-branch guards, inSync-gated toggle, walk-in disconnect depart — see "BedDetail state-machine patterns"
+- **Manage surface routing** — token-gated sub-routes, admin-tier gating, `validateManageToken` convention, `closeDay` cash-up-only contract, `DayCloseView` frontend pattern — see "Token-gated sub-routes and admin-tier gating on the manage surface", "closeDay — cash-up only, does not touch the floor", "DayCloseView — todayIso derivation and dual-fetch pattern"
 - **Rejected approaches** — dead-ends, so nobody re-tries them — see "React onWheel prop"
 - **Mollie lib tests** — mocking strategy for app/api/_lib/mollie.ts — see "Testing mollie.ts: mocking boundary + scope separator"
 - **Restaurant query tests** — mocking @repo/table-reservations-core while keeping real auth-helpers — see "Mocking @repo/table-reservations-core for queries.ts tests"
@@ -351,6 +352,40 @@ auth-matrix invoke and test call sites can stay simple.
 **File:** `apps/partner/app/sites/[id]/manage/reservation-day.ts`
 **Test:** Added two bug-revealing integration tests in `actions.integration.test.ts` (describe `resolveTodayRow — concurrent upsert race safety`): `Promise.all` on the same reservation+date asserts both calls resolve to the same row id without throwing; a second test confirms different-reservation concurrent calls all succeed.
 **Prevention:** Any lazy get-or-create (`upsert` with `update: {}`) that runs under RSC-prefetch or other concurrent request patterns hits this race. Either (a) add a DB-level partial unique index + `INSERT ... ON CONFLICT DO NOTHING RETURNING *` via `$queryRaw`, or (b) use the try/catch P2002 + re-fetch pattern above. Option (b) keeps Prisma ergonomics and is the established repo pattern.
+
+## Manage surface routing
+
+### 2026-07-10: Token-gated sub-routes and admin-tier gating on the manage surface
+**Pattern:** The manage surface uses a shared `validateManageToken` (in `manage/token.ts`) that
+returns `{ ok, isAdmin, site: { id, name } }`. Sub-routes follow a uniform server-page convention:
+1. Call `validateManageToken(params.id, key)` — render `<ErrorCard showBackLink={false} />` on failure.
+2. For admin-only pages: additionally check `!result.isAdmin` — render another `ErrorCard` (defense-in-depth; the actions gate too).
+3. Pass `accessKey`, `siteId`, `siteName`, `backHref` down to the client view component.
+
+`DailySummaryView.tsx` is the admin-only full-page till view at `/manage/summary`. The action gate is
+`verifySiteAdmin` (requires `'admin'` in token resources) — stricter than the standard
+`verifySiteAccess` (`['all','manage_site']`) used by the floor-staff manage and orders surfaces.
+
+**Token scope tiers:**
+- `['all']` or `['manage_site']` → floor staff operations (sunbeds, orders)
+- `+ ['admin']` → admin summary operations (`getOpenTills`, `getTillDayReport`, `closeTill`, `closeDay`)
+
+**Prevention:** When adding future admin-only manage sub-routes, use the same two-check pattern
+(ok check + isAdmin check) in the server page, `DailySummaryView` as the reference client impl.
+
+### 2026-07-10: closeDay — cash-up only, does not touch the floor
+**Contract (pinned 2026-07-10):** `closeDay` is **cash-up only** — it calls `closeAllOpenTills(siteId)` and returns `{ status, closedCount, totalClosed }`. It does NOT mutate any `Reservation` row. A real calendar-day change in Sunbnb mutates no reservations automatically (occupants age out of the date window, stayovers carry over, blocks persist), so `closeDay` matching "same effect as a day change" means leaving the floor completely untouched.
+**Why the depart step was removed:** The original implementation bulk-updated `CHECKED_IN`/`WALKED_IN` reservations to `DEPARTED` via `prisma.reservation.updateMany`. This was wrong — it treated end-of-day as a hard checkout, conflicting with multiday stays and stayover semantics. The cleanup cron + per-day `ReservationDay` rows handle expiry automatically.
+**Return shape:** `{ status: 'ok', closedCount: number, totalClosed: number }`. No `departedCount` field — its absence is the contract. Unit test asserts `(result as any).departedCount` is `undefined`.
+**Regression test:** integration test seeds `CHECKED_IN` and `WALKED_IN` reservations, calls `closeDay`, and asserts they remain `CHECKED_IN` / `WALKED_IN` afterwards. This pins the cash-up-only contract against regressions.
+**Idempotency:** `closeAllOpenTills` re-runs safe (no-op when all tills at zero) — `closedCount: 0, totalClosed: 0` on re-run.
+**Employee fixture gotcha (integration tests):** `Employee.accountId` → FK to `PartnerAccount`, NOT `User`. Always call `createTestPartnerAccount(user.id)` before `prisma.employee.create({ data: { accountId: user.id } })`.
+
+### 2026-07-10: DayCloseView — todayIso derivation and dual-fetch pattern
+**Pattern:** The `close/page.tsx` server page must derive the venue-local `YYYY-MM-DD` string to pass to `DayCloseView`. Use `siteDayKey(buildSiteTimezone(siteMeta))` — exactly the same helper `sunbeds/page.tsx` uses with `siteDayBounds`. `validateManageToken` returns only `{id, name}`, so one extra `prisma.site.findFirst({ select: { timeZone, locationLat, locationLng } })` is needed.
+**Client fetch strategy:** `DayCloseView` fires both `getTillDayReport(siteId, todayIso, accessKey)` and `getOpenTills(siteId, accessKey)` in a single `Promise.all` on mount. The report shows today's per-employee totals; `getOpenTills` provides the open-till count for the pre-close note. After a successful `closeDay`, re-fetch only the day report (open tills become zero).
+**Two-step confirm state:** `ClosePhase = 'idle' | 'confirming' | 'closing' | 'done'` — mirrors `DailySummaryView`'s `ClosePhase` pattern. 'done' hides the confirm section and shows the success card with back-to-menu link.
+**Pre-close note copy:** Cash-up only — note says how many open tills will be closed. Only rendered when `openTillsCount > 0` (hide when all already closed; no "all tills already closed" variant needed). Success state shows tills closed + total; no guest/depart line.
 
 ## Rejected approaches
 

@@ -71,10 +71,22 @@ import {
   blockBeds,
   compBeds,
   settleReservation,
+  closeDay,
+  getDayShiftItems,
+  getOpenTillItems,
+  getManageTrends,
+  getManageTrendsCsv,
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { issueReservationRefund } from '@repo/data/refund'
+import {
+  getRevenueByChannelByDay,
+  getOccupancyByDay,
+  getReservationDayStats,
+  getRevenueByDay,
+  toFiguresCsv,
+} from '@repo/data/analytics'
 import {
   createReservationMolliePayment,
   reverifyAndFinalizeReservation,
@@ -88,7 +100,7 @@ import {
   moveReservationWithConflictGuard,
   createRentalBookingsWithGuard,
 } from '@repo/data/reservations'
-import { recordSettlement, voidSettlementsForReservation } from '@repo/data/till'
+import { recordSettlement, voidSettlementsForReservation, closeAllOpenTills, getEmployeeShiftItems, getOpenTillItemsByEmployee } from '@repo/data/till'
 import { processConfirmedReservation, processCashRentalBooking } from '@repo/data/payment'
 import dayjs from 'dayjs'
 import { getActiveReservation } from './bed-state'
@@ -5313,5 +5325,711 @@ describe('settleReservation', () => {
 
     const res = await settleReservation(SITE_ID, RES_ID, 40)
     expect(res.status).toBe('ok')
+  })
+})
+
+// ─── closeDay ────────────────────────────────────────────────────────────────
+
+describe('closeDay', () => {
+  // Auth-gate helpers (mirrors the admin-token gate used by getOpenTills / getTillDayReport).
+  // verifySiteAdmin: token path requires resources: ['admin']; session path requires ownership.
+
+  const OTHER_ID = 'other-user'
+
+  function authenticateAsAdminSession() {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(closeAllOpenTills).mockResolvedValue({ closedCount: 2, totalClosed: 150 })
+  }
+
+  function authenticateAsSudoSession() {
+    mockAuth.mockResolvedValue({ user: { id: 'sudo-user' } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: true } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(closeAllOpenTills).mockResolvedValue({ closedCount: 1, totalClosed: 75 })
+  }
+
+  function authenticateAsAdminToken() {
+    // Token path: securityToken with resources: ['admin'].
+    // verifySiteAdmin checks hasSome: ['admin'] — a plain 'all'/'manage_site' token is rejected.
+    mockAuth.mockResolvedValue(null)
+    vi.mocked(prisma.securityToken.findUnique).mockResolvedValue({
+      id: 'admin-token-key',
+      userId: OWNER_ID,
+      resources: ['admin'],
+      expires: new Date(Date.now() + 3_600_000),
+    } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(closeAllOpenTills).mockResolvedValue({ closedCount: 1, totalClosed: 80 })
+  }
+
+  // ── Auth gate: reject scenarios ───────────────────────────────────────────
+
+  it('no session and no token → error, no side effects', async () => {
+    // Gate must reject before touching tills.
+    mockAuth.mockResolvedValue(null)
+    vi.mocked(prisma.securityToken.findUnique).mockResolvedValue(null)
+
+    const res = await closeDay(SITE_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toBeDefined()
+    expect(closeAllOpenTills).not.toHaveBeenCalled()
+  })
+
+  it('wrong-owner session → error, no side effects', async () => {
+    // Different user who does not own the site.
+    mockAuth.mockResolvedValue({ user: { id: OTHER_ID } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+
+    const res = await closeDay(SITE_ID)
+    expect(res.status).toBe('error')
+    expect(closeAllOpenTills).not.toHaveBeenCalled()
+  })
+
+  it('plain manage token (no admin resource) → error, no side effects', async () => {
+    // verifySiteAdmin rejects resources: ['all'] — only ['admin'] passes the token path.
+    mockAuth.mockResolvedValue(null)
+    vi.mocked(prisma.securityToken.findUnique).mockResolvedValue(null) // hasSome:['admin'] returns null for an 'all' token
+
+    const res = await closeDay(SITE_ID, 'plain-manage-token')
+    expect(res.status).toBe('error')
+    expect(closeAllOpenTills).not.toHaveBeenCalled()
+  })
+
+  // ── Auth gate: allow scenarios ────────────────────────────────────────────
+
+  it('admin token → ok, calls closeAllOpenTills (cash-up only, no floor mutation)', async () => {
+    authenticateAsAdminToken()
+
+    const res = await closeDay(SITE_ID, 'admin-token-key')
+    expect(res.status).toBe('ok')
+    expect(closeAllOpenTills).toHaveBeenCalledWith(SITE_ID)
+    // closeDay is cash-up only — must never touch reservation rows
+    expect(prisma.reservation.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('owner session → ok (session path through verifySiteAdmin)', async () => {
+    authenticateAsAdminSession()
+
+    const res = await closeDay(SITE_ID)
+    expect(res.status).toBe('ok')
+    expect(closeAllOpenTills).toHaveBeenCalledWith(SITE_ID)
+    expect(prisma.reservation.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('sudo session → ok (bypasses ownership check)', async () => {
+    authenticateAsSudoSession()
+
+    const res = await closeDay(SITE_ID)
+    expect(res.status).toBe('ok')
+    expect(closeAllOpenTills).toHaveBeenCalledWith(SITE_ID)
+  })
+
+  // ── Happy-path: till summary only ─────────────────────────────────────────
+
+  it('returns closedCount + totalClosed from tills; no departedCount field', async () => {
+    authenticateAsAdminSession()
+    vi.mocked(closeAllOpenTills).mockResolvedValue({ closedCount: 3, totalClosed: 210 })
+
+    const res = await closeDay(SITE_ID)
+    expect(res).toMatchObject({
+      status: 'ok',
+      closedCount: 3,
+      totalClosed: 210,
+    })
+    // Must NOT carry a departedCount — that would imply floor mutation happened
+    expect((res as any).departedCount).toBeUndefined()
+  })
+
+  // ── Idempotency ───────────────────────────────────────────────────────────
+
+  it('idempotent re-run: zero counts when all tills already closed', async () => {
+    // After a successful closeDay all tills are at zero → re-running is a no-op.
+    authenticateAsAdminSession()
+    vi.mocked(closeAllOpenTills).mockResolvedValue({ closedCount: 0, totalClosed: 0 })
+
+    const res = await closeDay(SITE_ID)
+    expect(res).toMatchObject({
+      status: 'ok',
+      closedCount: 0,
+      totalClosed: 0,
+    })
+  })
+})
+
+// ─── getDayShiftItems ─────────────────────────────────────────────────────────
+
+describe('getDayShiftItems', () => {
+  // Gate: verifySiteAdmin — same as getOpenTills / getTillDayReport / closeDay.
+  // Requires 'admin' in token resources or an owner/sudo session.
+
+  const OTHER_ID = 'other-user'
+  const DATE_ISO = '2025-07-01'
+
+  function authenticateAsAdminSession() {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      userId: OWNER_ID,
+      timeZone: null,
+      locationLat: null,
+      locationLng: null,
+    } as any)
+  }
+
+  function authenticateAsAdminToken() {
+    mockAuth.mockResolvedValue(null)
+    vi.mocked(prisma.securityToken.findUnique).mockResolvedValue({
+      id: 'admin-token-key',
+      userId: OWNER_ID,
+      resources: ['admin'],
+      expires: new Date(Date.now() + 3_600_000),
+    } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      userId: OWNER_ID,
+      timeZone: null,
+      locationLat: null,
+      locationLng: null,
+    } as any)
+  }
+
+  // ── Auth gate: reject ─────────────────────────────────────────────────────
+
+  it('no session, no token → error; does not call getEmployeeShiftItems', async () => {
+    // Gate must fire before the DB shift query.
+    mockAuth.mockResolvedValue(null)
+    vi.mocked(prisma.securityToken.findUnique).mockResolvedValue(null)
+
+    const res = await getDayShiftItems(SITE_ID, DATE_ISO)
+    expect(res.status).toBe('error')
+    expect(res.errors).toBeDefined()
+    expect(getEmployeeShiftItems).not.toHaveBeenCalled()
+  })
+
+  it('wrong-owner session → error; does not call getEmployeeShiftItems', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OTHER_ID } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+
+    const res = await getDayShiftItems(SITE_ID, DATE_ISO)
+    expect(res.status).toBe('error')
+    expect(getEmployeeShiftItems).not.toHaveBeenCalled()
+  })
+
+  it('plain manage token (no admin resource) → error; does not call getEmployeeShiftItems', async () => {
+    // verifySiteAdmin checks hasSome: ['admin']; plain 'all' token is rejected.
+    mockAuth.mockResolvedValue(null)
+    vi.mocked(prisma.securityToken.findUnique).mockResolvedValue(null)
+
+    const res = await getDayShiftItems(SITE_ID, DATE_ISO, 'plain-manage-token')
+    expect(res.status).toBe('error')
+    expect(getEmployeeShiftItems).not.toHaveBeenCalled()
+  })
+
+  // ── Date validation ───────────────────────────────────────────────────────
+
+  it('bad dateIso (not YYYY-MM-DD) → error; does not call getEmployeeShiftItems', async () => {
+    // Auth passes, but invalid date string must be rejected before the DB query.
+    authenticateAsAdminSession()
+
+    const res = await getDayShiftItems(SITE_ID, 'not-a-date')
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/YYYY-MM-DD/)
+    expect(getEmployeeShiftItems).not.toHaveBeenCalled()
+  })
+
+  it('empty dateIso → error', async () => {
+    authenticateAsAdminSession()
+
+    const res = await getDayShiftItems(SITE_ID, '')
+    expect(res.status).toBe('error')
+    expect(getEmployeeShiftItems).not.toHaveBeenCalled()
+  })
+
+  // ── Happy path ────────────────────────────────────────────────────────────
+
+  it('admin token + valid date → ok, returns shifts from getEmployeeShiftItems', async () => {
+    authenticateAsAdminToken()
+    const mockShifts = [
+      {
+        employeeId: 'emp-1',
+        name: 'Alice',
+        active: true,
+        total: 75,
+        count: 3,
+        items: [
+          {
+            reservationId: 'res-1',
+            seats: ['A1'],
+            amount: 25,
+            at: new Date('2025-07-01T10:00:00Z'),
+            channel: 'cash' as const,
+          },
+        ],
+      },
+    ]
+    vi.mocked(getEmployeeShiftItems).mockResolvedValueOnce(mockShifts)
+
+    const res = await getDayShiftItems(SITE_ID, DATE_ISO, 'admin-token-key')
+    expect(res.status).toBe('ok')
+    expect(res.shifts).toEqual(mockShifts)
+    expect(getEmployeeShiftItems).toHaveBeenCalledWith(
+      SITE_ID,
+      expect.any(Date),
+      expect.any(Date),
+    )
+  })
+
+  it('owner session + valid date → ok, returns shifts', async () => {
+    authenticateAsAdminSession()
+    vi.mocked(getEmployeeShiftItems).mockResolvedValueOnce([])
+
+    const res = await getDayShiftItems(SITE_ID, DATE_ISO)
+    expect(res.status).toBe('ok')
+    expect(res.shifts).toEqual([])
+  })
+
+  it('day bounds passed to getEmployeeShiftItems span the requested civil day', async () => {
+    // Verify from < to and both are Date objects scoping roughly to the right day.
+    authenticateAsAdminSession()
+    vi.mocked(getEmployeeShiftItems).mockResolvedValueOnce([])
+
+    await getDayShiftItems(SITE_ID, '2025-07-15')
+
+    const [[, from, to]] = vi.mocked(getEmployeeShiftItems).mock.calls
+    expect(from).toBeInstanceOf(Date)
+    expect(to).toBeInstanceOf(Date)
+    expect((from as Date) < (to as Date)).toBe(true)
+    // The window must contain noon UTC on the requested day
+    const noon = new Date('2025-07-15T12:00:00.000Z')
+    expect((from as Date) <= noon && noon <= (to as Date)).toBe(true)
+  })
+})
+
+// ─── getOpenTillItems ─────────────────────────────────────────────────────────
+
+describe('getOpenTillItems', () => {
+  // Gate: verifySiteAdmin — requires 'admin' in token resources, or owner/sudo session.
+  // Mirrors getOpenTills gate; calls getOpenTillItemsByEmployee instead.
+
+  const OTHER_ID = 'other-user'
+
+  function authenticateAsAdminSession() {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+  }
+
+  function authenticateAsSudoSession() {
+    mockAuth.mockResolvedValue({ user: { id: 'sudo-user' } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: true } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+  }
+
+  function authenticateAsAdminToken() {
+    mockAuth.mockResolvedValue(null)
+    vi.mocked(prisma.securityToken.findUnique).mockResolvedValue({
+      id: 'admin-token-key',
+      userId: OWNER_ID,
+      resources: ['admin'],
+      expires: new Date(Date.now() + 3_600_000),
+    } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+  }
+
+  // ── Auth gate: reject scenarios ───────────────────────────────────────────
+
+  it('no session and no token → error, getOpenTillItemsByEmployee not called', async () => {
+    mockAuth.mockResolvedValue(null)
+    vi.mocked(prisma.securityToken.findUnique).mockResolvedValue(null)
+
+    const res = await getOpenTillItems(SITE_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toBeDefined()
+    expect(getOpenTillItemsByEmployee).not.toHaveBeenCalled()
+  })
+
+  it('wrong-owner session → error, getOpenTillItemsByEmployee not called', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OTHER_ID } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+
+    const res = await getOpenTillItems(SITE_ID)
+    expect(res.status).toBe('error')
+    expect(getOpenTillItemsByEmployee).not.toHaveBeenCalled()
+  })
+
+  it('plain manage token (no admin resource) → error, getOpenTillItemsByEmployee not called', async () => {
+    // verifySiteAdmin checks hasSome: ['admin'] — a plain 'all'/'manage_site' token is rejected.
+    mockAuth.mockResolvedValue(null)
+    vi.mocked(prisma.securityToken.findUnique).mockResolvedValue(null)
+
+    const res = await getOpenTillItems(SITE_ID, 'plain-manage-token')
+    expect(res.status).toBe('error')
+    expect(getOpenTillItemsByEmployee).not.toHaveBeenCalled()
+  })
+
+  // ── Auth gate: allow scenarios ────────────────────────────────────────────
+
+  it('admin token → ok, calls getOpenTillItemsByEmployee with siteId', async () => {
+    authenticateAsAdminToken()
+    const mockTills = [
+      {
+        employeeId: 'emp-1',
+        name: 'Ana',
+        active: true,
+        total: 45,
+        count: 2,
+        items: [
+          { id: 'te-1', kind: 'sunbed', label: 'Hamaca 5-1', amount: 25, at: new Date('2025-07-01T10:00:00Z') },
+          { id: 'te-2', kind: 'rental', label: 'Kayak', amount: 20, at: new Date('2025-07-01T11:00:00Z') },
+        ],
+      },
+    ]
+    vi.mocked(getOpenTillItemsByEmployee).mockResolvedValueOnce(mockTills as any)
+
+    const res = await getOpenTillItems(SITE_ID, 'admin-token-key')
+    expect(res.status).toBe('ok')
+    expect(getOpenTillItemsByEmployee).toHaveBeenCalledWith(SITE_ID)
+    expect(res.tills).toEqual(mockTills)
+  })
+
+  it('owner session → ok (session path through verifySiteAdmin)', async () => {
+    authenticateAsAdminSession()
+    vi.mocked(getOpenTillItemsByEmployee).mockResolvedValueOnce([])
+
+    const res = await getOpenTillItems(SITE_ID)
+    expect(res.status).toBe('ok')
+    expect(getOpenTillItemsByEmployee).toHaveBeenCalledWith(SITE_ID)
+    expect(res.tills).toEqual([])
+  })
+
+  it('sudo session → ok (bypasses ownership check)', async () => {
+    authenticateAsSudoSession()
+    vi.mocked(getOpenTillItemsByEmployee).mockResolvedValueOnce([])
+
+    const res = await getOpenTillItems(SITE_ID)
+    expect(res.status).toBe('ok')
+    expect(getOpenTillItemsByEmployee).toHaveBeenCalledWith(SITE_ID)
+  })
+
+  // ── Happy path: returns itemised tills ────────────────────────────────────
+
+  it('happy path → tills array propagated with items superset', async () => {
+    authenticateAsAdminSession()
+    const mockTills = [
+      {
+        employeeId: 'emp-2',
+        name: 'Bea',
+        active: true,
+        total: 75,
+        count: 3,
+        items: [
+          { id: 'te-3', kind: 'sunbed', label: 'Hamaca 12-2', amount: 25, at: new Date() },
+          { id: 'te-4', kind: 'sunbed', label: 'Hamaca 13-1', amount: 25, at: new Date() },
+          { id: 'te-5', kind: 'rental', label: 'Paddle board', amount: 25, at: new Date() },
+        ],
+      },
+    ]
+    vi.mocked(getOpenTillItemsByEmployee).mockResolvedValueOnce(mockTills as any)
+
+    const res = await getOpenTillItems(SITE_ID)
+    expect(res.status).toBe('ok')
+    expect(res.tills).toHaveLength(1)
+    expect(res.tills![0].items).toHaveLength(3)
+    expect(res.tills![0].total).toBe(75)
+    // items sum matches total
+    const itemSum = res.tills![0].items.reduce((s, i) => s + i.amount, 0)
+    expect(itemSum).toBe(75)
+  })
+
+  it('empty roster → ok with empty tills array', async () => {
+    authenticateAsAdminSession()
+    vi.mocked(getOpenTillItemsByEmployee).mockResolvedValueOnce([])
+
+    const res = await getOpenTillItems(SITE_ID)
+    expect(res.status).toBe('ok')
+    expect(res.tills).toEqual([])
+  })
+})
+
+// ─── getManageTrends ─────────────────────────────────────────────────────────
+
+describe('getManageTrends', () => {
+  // Gate: verifySiteAdmin — same as getTillDayReport / closeDay / getDayShiftItems.
+  // Requires 'admin' in token resources, or owner/sudo session.
+  // Window math must be IDENTICAL to the accounting trend actions (same
+  // TREND_WINDOWS, same last-N-days formula).
+
+  const OTHER_ID = 'other-user'
+
+  function authenticateAsAdminSession() {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+  }
+
+  function authenticateAsSudoSession() {
+    mockAuth.mockResolvedValue({ user: { id: 'sudo-user' } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: true } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+  }
+
+  function authenticateAsAdminToken() {
+    mockAuth.mockResolvedValue(null)
+    vi.mocked(prisma.securityToken.findUnique).mockResolvedValue({
+      id: 'admin-token-key',
+      userId: OWNER_ID,
+      resources: ['admin'],
+      expires: new Date(Date.now() + 3_600_000),
+    } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+  }
+
+  // ── Auth gate: reject scenarios ───────────────────────────────────────────
+
+  it('no session, no token → error; does not call analytics functions', async () => {
+    // Gate must fire before any analytics query.
+    mockAuth.mockResolvedValue(null)
+    vi.mocked(prisma.securityToken.findUnique).mockResolvedValue(null)
+
+    const res = await getManageTrends(SITE_ID, 30)
+    expect(res.status).toBe('error')
+    expect(res.errors).toBeDefined()
+    expect(getRevenueByChannelByDay).not.toHaveBeenCalled()
+    expect(getOccupancyByDay).not.toHaveBeenCalled()
+    expect(getReservationDayStats).not.toHaveBeenCalled()
+  })
+
+  it('wrong-owner session → error; does not call analytics functions', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OTHER_ID } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+
+    const res = await getManageTrends(SITE_ID, 30)
+    expect(res.status).toBe('error')
+    expect(getRevenueByChannelByDay).not.toHaveBeenCalled()
+  })
+
+  it('plain manage token (no admin resource) → error; does not call analytics functions', async () => {
+    // verifySiteAdmin checks hasSome: ['admin'] — a plain manage_site token is rejected.
+    mockAuth.mockResolvedValue(null)
+    vi.mocked(prisma.securityToken.findUnique).mockResolvedValue(null)
+
+    const res = await getManageTrends(SITE_ID, 30, 'plain-manage-token')
+    expect(res.status).toBe('error')
+    expect(getRevenueByChannelByDay).not.toHaveBeenCalled()
+  })
+
+  // ── Auth gate: allow scenarios ────────────────────────────────────────────
+
+  it('admin token → ok; calls all three analytics queries', async () => {
+    authenticateAsAdminToken()
+
+    const res = await getManageTrends(SITE_ID, 30, 'admin-token-key')
+    expect(res.status).toBe('ok')
+    expect(getRevenueByChannelByDay).toHaveBeenCalledWith(SITE_ID, expect.any(Date), expect.any(Date))
+    expect(getOccupancyByDay).toHaveBeenCalledWith(SITE_ID, expect.any(Date), expect.any(Date))
+    expect(getReservationDayStats).toHaveBeenCalledWith(SITE_ID, expect.any(Date), expect.any(Date))
+  })
+
+  it('owner session → ok (session path through verifySiteAdmin)', async () => {
+    authenticateAsAdminSession()
+
+    const res = await getManageTrends(SITE_ID, 7)
+    expect(res.status).toBe('ok')
+  })
+
+  it('sudo session → ok (bypasses ownership check)', async () => {
+    authenticateAsSudoSession()
+
+    const res = await getManageTrends(SITE_ID, 30)
+    expect(res.status).toBe('ok')
+  })
+
+  // ── Happy-path: return shape ──────────────────────────────────────────────
+
+  it('returns revenue, occupancy, operations with rows and summary', async () => {
+    authenticateAsAdminSession()
+
+    const mockRevenueRows = [{ date: '2025-07-01', cash: 50, qr: 20, online: 30, total: 100 }]
+    const mockOccupancyRows = [{ date: '2025-07-01', capacity: 10, occupied: 6, comps: 1, occupancyPct: 60 }]
+    const mockOperationsRows = [{ date: '2025-07-01', rentedSeats: 6, revenue: 150 }]
+    vi.mocked(getRevenueByChannelByDay).mockResolvedValueOnce(mockRevenueRows as any)
+    vi.mocked(getOccupancyByDay).mockResolvedValueOnce(mockOccupancyRows as any)
+    vi.mocked(getReservationDayStats).mockResolvedValueOnce(mockOperationsRows as any)
+
+    const res = await getManageTrends(SITE_ID, 7)
+    expect(res.status).toBe('ok')
+    expect(res.revenue).toMatchObject({ rows: mockRevenueRows, summary: expect.any(Object) })
+    expect(res.occupancy).toMatchObject({ rows: mockOccupancyRows, summary: expect.any(Object) })
+    expect(res.operations).toMatchObject({ rows: mockOperationsRows, summary: expect.any(Object) })
+  })
+
+  it('returns the clamped days value in the response', async () => {
+    authenticateAsAdminSession()
+
+    const res = await getManageTrends(SITE_ID, 30)
+    expect(res.days).toBe(30)
+  })
+
+  // ── days validation / clamp ───────────────────────────────────────────────
+
+  it('unknown days value (e.g. 14) → clamps to 30 and returns ok', async () => {
+    // Accounting actions clamp to 30 for unknown window values;
+    // getManageTrends must do the same (window-parity).
+    authenticateAsAdminSession()
+
+    const res = await getManageTrends(SITE_ID, 14)
+    expect(res.status).toBe('ok')
+    expect(res.days).toBe(30)
+  })
+
+  it('accepts all valid TREND_WINDOWS values: 1, 7, 30, 365', async () => {
+    // All four windows must be accepted without clamping.
+    for (const w of [1, 7, 30, 365]) {
+      authenticateAsAdminSession()
+      const res = await getManageTrends(SITE_ID, w)
+      expect(res.status).toBe('ok')
+      expect(res.days).toBe(w)
+    }
+  })
+
+  // ── Window-parity: same bounds as accounting actions ──────────────────────
+
+  it('window bounds match accounting trend formula: from = to - (window-1)*DAY_MS', async () => {
+    // The key invariant: getManageTrends must use exactly the same rolling-window
+    // math as getRevenueChannelTrend / getOccupancyTrend / getOperationsTrend in
+    // accounting/actions.ts. We verify this by inspecting the Date args passed to
+    // one of the analytics calls.
+    authenticateAsAdminSession()
+
+    const before = Date.now()
+    await getManageTrends(SITE_ID, 7)
+    const after = Date.now()
+
+    const [[, fromArg, toArg]] = vi.mocked(getRevenueByChannelByDay).mock.calls
+    // `to` is Date.now() at call time — must be between our before/after bookend.
+    expect(toArg.getTime()).toBeGreaterThanOrEqual(before)
+    expect(toArg.getTime()).toBeLessThanOrEqual(after)
+    // `from` is exactly (window-1) days before `to`.
+    const DAY_MS = 24 * 60 * 60 * 1000
+    expect(toArg.getTime() - fromArg.getTime()).toBe((7 - 1) * DAY_MS)
+  })
+})
+
+// ─── getManageTrendsCsv ───────────────────────────────────────────────────────
+
+describe('getManageTrendsCsv', () => {
+  // Gate: verifySiteAdmin — same as getManageTrends.
+  // Mirrors getRevenueCsv in accounting/actions.ts: same window, same
+  // getRevenueByDay + toFiguresCsv call chain.
+
+  const OTHER_ID = 'other-user'
+
+  function authenticateAsAdminSession() {
+    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+  }
+
+  function authenticateAsAdminToken() {
+    mockAuth.mockResolvedValue(null)
+    vi.mocked(prisma.securityToken.findUnique).mockResolvedValue({
+      id: 'admin-token-key',
+      userId: OWNER_ID,
+      resources: ['admin'],
+      expires: new Date(Date.now() + 3_600_000),
+    } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+  }
+
+  // ── Auth gate: reject scenarios ───────────────────────────────────────────
+
+  it('no session, no token → error; does not call getRevenueByDay', async () => {
+    mockAuth.mockResolvedValue(null)
+    vi.mocked(prisma.securityToken.findUnique).mockResolvedValue(null)
+
+    const res = await getManageTrendsCsv(SITE_ID, 30)
+    expect(res.status).toBe('error')
+    expect(res.errors).toBeDefined()
+    expect(getRevenueByDay).not.toHaveBeenCalled()
+  })
+
+  it('wrong-owner session → error; does not call getRevenueByDay', async () => {
+    mockAuth.mockResolvedValue({ user: { id: OTHER_ID } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+
+    const res = await getManageTrendsCsv(SITE_ID, 30)
+    expect(res.status).toBe('error')
+    expect(getRevenueByDay).not.toHaveBeenCalled()
+  })
+
+  it('plain manage token (no admin resource) → error; does not call getRevenueByDay', async () => {
+    mockAuth.mockResolvedValue(null)
+    vi.mocked(prisma.securityToken.findUnique).mockResolvedValue(null)
+
+    const res = await getManageTrendsCsv(SITE_ID, 30, 'plain-manage-token')
+    expect(res.status).toBe('error')
+    expect(getRevenueByDay).not.toHaveBeenCalled()
+  })
+
+  // ── Auth gate: allow scenarios ────────────────────────────────────────────
+
+  it('admin token → ok; calls getRevenueByDay and toFiguresCsv', async () => {
+    authenticateAsAdminToken()
+    vi.mocked(toFiguresCsv).mockReturnValueOnce('date,rentals,revenue\n2025-07-01,3,150.00\n')
+
+    const res = await getManageTrendsCsv(SITE_ID, 7, 'admin-token-key')
+    expect(res.status).toBe('ok')
+    expect(getRevenueByDay).toHaveBeenCalledWith(SITE_ID, expect.any(Date), expect.any(Date))
+    expect(toFiguresCsv).toHaveBeenCalled()
+  })
+
+  it('owner session → ok (session path through verifySiteAdmin)', async () => {
+    authenticateAsAdminSession()
+
+    const res = await getManageTrendsCsv(SITE_ID, 30)
+    expect(res.status).toBe('ok')
+    expect(res.csv).toBeDefined()
+  })
+
+  // ── Happy-path: return shape ──────────────────────────────────────────────
+
+  it('returns { status: ok, csv } where csv is a string', async () => {
+    authenticateAsAdminSession()
+    vi.mocked(toFiguresCsv).mockReturnValueOnce('date,rentals,revenue\n2025-07-01,5,200.00\n')
+
+    const res = await getManageTrendsCsv(SITE_ID, 30)
+    expect(res.status).toBe('ok')
+    expect(typeof res.csv).toBe('string')
+    expect(res.csv).toContain('date,rentals,revenue')
+  })
+
+  // ── days validation / clamp ───────────────────────────────────────────────
+
+  it('unknown days value (e.g. 10) → clamps to 30', async () => {
+    authenticateAsAdminSession()
+
+    // Verify the clamp by inspecting the time delta of the Date args.
+    await getManageTrendsCsv(SITE_ID, 10)
+
+    const [[, fromArg, toArg]] = vi.mocked(getRevenueByDay).mock.calls
+    const DAY_MS = 24 * 60 * 60 * 1000
+    // Should be a 30-day window: (30-1) * DAY_MS
+    expect(toArg.getTime() - fromArg.getTime()).toBe((30 - 1) * DAY_MS)
+  })
+
+  it('valid days value 7 → uses 7-day window', async () => {
+    authenticateAsAdminSession()
+
+    await getManageTrendsCsv(SITE_ID, 7)
+
+    const [[, fromArg, toArg]] = vi.mocked(getRevenueByDay).mock.calls
+    const DAY_MS = 24 * 60 * 60 * 1000
+    expect(toArg.getTime() - fromArg.getTime()).toBe((7 - 1) * DAY_MS)
   })
 })

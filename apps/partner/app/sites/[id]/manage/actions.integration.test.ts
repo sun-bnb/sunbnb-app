@@ -57,6 +57,7 @@ import {
   closeTill,
   findReservations,
   settleReservation,
+  closeDay,
 } from './actions'
 import { resolveTodayRow } from './reservation-day'
 import { siteDayBounds } from '@repo/data/site-day'
@@ -3088,5 +3089,147 @@ describe('unreserveItem void settlements (integration)', () => {
     const after = await getTillStatus(site.id, employee.id)
     expect(after.status).toBe('ok')
     if (after.status === 'ok') expect(after.total).toBe(30)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// closeDay — end-of-day cash-up (admin-gated, real DB)
+// ---------------------------------------------------------------------------
+
+describe('closeDay (integration)', () => {
+  /**
+   * Helper: seed a TillEntry (cash settlement) for an employee at a site.
+   * Mirrors what recordSettlement() does — used to put cash in an employee's open till.
+   */
+  async function seedTillEntry(siteId: string, employeeId: string, amount: number) {
+    return prisma.tillEntry.create({
+      data: { siteId, employeeId, amount, settledAt: new Date() },
+    })
+  }
+
+  it('closes every open till and returns closedCount + totalClosed', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id, { type: 'paid', price: 10 })
+    mockUserId = user.id
+
+    // Two employees with cash in their open tills.
+    const emp1 = await prisma.employee.create({ data: { accountId: user.id, name: 'Alice', active: true } })
+    const emp2 = await prisma.employee.create({ data: { accountId: user.id, name: 'Bob', active: true } })
+    await seedTillEntry(site.id, emp1.id, 50)
+    await seedTillEntry(site.id, emp2.id, 30)
+
+    // Act — call as site owner (session path through verifySiteAdmin).
+    const result = await closeDay(site.id)
+    expect(result.status).toBe('ok')
+
+    // Till: both employees should have TillClose rows now.
+    expect(result.closedCount).toBe(2)
+    expect(result.totalClosed).toBeCloseTo(80, 1) // 50 + 30
+
+    const tillCloses = await prisma.tillClose.findMany({ where: { siteId: site.id }, orderBy: { closedAt: 'asc' } })
+    expect(tillCloses).toHaveLength(2)
+    const closeAmounts = tillCloses.map((tc) => tc.totalAmount).sort((a, b) => a - b)
+    expect(closeAmounts).toEqual([30, 50])
+  })
+
+  it('cash-up only — reservation operational statuses are completely untouched', async () => {
+    // Regression contract: closeDay must never mutate the floor.
+    // A real calendar-day change ages reservations out of the date window automatically;
+    // closeDay matching "same effect" means leaving all reservation statuses unchanged.
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id, { type: 'paid', price: 10 })
+    const item1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const item2 = await createTestInventoryItem(user.id, site.id, { number: 2 })
+    const item3 = await createTestInventoryItem(user.id, site.id, { number: 3 })
+    mockUserId = user.id
+
+    const { start: todayStart, end: todayEnd } = fixtureDay(site)
+
+    // Seed reservations in every active operational state to prove none get mutated.
+    const resCheckedIn = await createTestReservation(user.id, site.id, [item1.id], {
+      status: 'complete',
+      operationalStatus: 'checked-in',
+      from: todayStart,
+      to: todayEnd,
+    })
+    const resWalkedIn = await createTestReservation(user.id, site.id, [item2.id], {
+      status: 'paid-in-cash',
+      operationalStatus: 'walked-in',
+      from: todayStart,
+      to: todayEnd,
+    })
+    const resExpected = await createTestReservation(user.id, site.id, [item3.id], {
+      status: 'complete',
+      operationalStatus: 'expected',
+      from: todayStart,
+      to: todayEnd,
+    })
+
+    const result = await closeDay(site.id)
+    expect(result.status).toBe('ok')
+
+    // All reservations must be exactly as seeded — closeDay touches nothing on the floor.
+    const afterCheckedIn = await prisma.reservation.findUnique({ where: { id: resCheckedIn.id } })
+    expect(afterCheckedIn!.operationalStatus).toBe('checked-in')
+    expect(afterCheckedIn!.departedAt).toBeNull()
+
+    const afterWalkedIn = await prisma.reservation.findUnique({ where: { id: resWalkedIn.id } })
+    expect(afterWalkedIn!.operationalStatus).toBe('walked-in')
+    expect(afterWalkedIn!.departedAt).toBeNull()
+
+    const afterExpected = await prisma.reservation.findUnique({ where: { id: resExpected.id } })
+    expect(afterExpected!.operationalStatus).toBe('expected')
+    expect(afterExpected!.departedAt).toBeNull()
+
+    // Return type must not carry a departedCount field.
+    expect((result as any).departedCount).toBeUndefined()
+  })
+
+  it('idempotent: re-running closeDay is a no-op — no new TillClose created', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id, { type: 'paid', price: 10 })
+    const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    mockUserId = user.id
+
+    const emp = await prisma.employee.create({ data: { accountId: user.id, name: 'Carlos', active: true } })
+    await seedTillEntry(site.id, emp.id, 60)
+
+    const { start: todayStart, end: todayEnd } = fixtureDay(site)
+    // Seed a walked-in reservation — must stay walked-in after both closeDays.
+    const res = await createTestReservation(user.id, site.id, [item.id], {
+      status: 'paid-in-cash',
+      operationalStatus: 'walked-in',
+      from: todayStart,
+      to: todayEnd,
+    })
+
+    // First close.
+    const first = await closeDay(site.id)
+    expect(first.status).toBe('ok')
+    expect(first.closedCount).toBe(1)
+
+    const closesAfterFirst = await prisma.tillClose.count({ where: { siteId: site.id } })
+    expect(closesAfterFirst).toBe(1)
+
+    // Reservation must still be walked-in (floor untouched).
+    const resAfterFirst = await prisma.reservation.findUnique({ where: { id: res.id } })
+    expect(resAfterFirst!.operationalStatus).toBe('walked-in')
+
+    // Second close — tills already at zero → no-op.
+    const second = await closeDay(site.id)
+    expect(second.status).toBe('ok')
+    expect(second.closedCount).toBe(0)
+    expect(second.totalClosed).toBe(0)
+
+    // No new TillClose created.
+    const closesAfterSecond = await prisma.tillClose.count({ where: { siteId: site.id } })
+    expect(closesAfterSecond).toBe(1) // unchanged
+
+    // Reservation still walked-in after second close too.
+    const resAfterSecond = await prisma.reservation.findUnique({ where: { id: res.id } })
+    expect(resAfterSecond!.operationalStatus).toBe('walked-in')
   })
 })

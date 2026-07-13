@@ -38,6 +38,8 @@ import {
   applyExpiredToken,
   applyWrongScopeToken,
   applyForeignSiteToken,
+  applyAdminToken,
+  applyManageTokenForAdminGate,
   applyRestaurantNonOwnerSession,
   applyRestaurantOwnerSession,
   TOKENS,
@@ -118,6 +120,58 @@ export const SCENARIOS: Record<GateType, Scenario[]> = {
       apply: applyWrongScopeToken,
       shouldReject: true,
       accessKey: TOKENS.wrongScope.key,
+    },
+    {
+      label: 'foreign-site token (wrong owner) → reject',
+      apply: applyForeignSiteToken,
+      shouldReject: true,
+      accessKey: TOKENS.foreign.key,
+    },
+  ],
+
+  /**
+   * admin-token: verifySiteAdmin in lib/auth-helpers.ts.
+   * Requires 'admin' in resources. A plain 'all'/'manage_site' token is REJECTED
+   * (this is the core security property this gate provides). Owner/sudo session passes.
+   */
+  'admin-token': [
+    // Session-path scenarios (no accessKey)
+    {
+      label: 'unauthenticated (no token, no session) → reject',
+      apply: applyUnauthenticated,
+      shouldReject: true,
+      accessKey: undefined,
+    },
+    {
+      label: 'non-owner session (no token) → reject',
+      apply: applyNonOwnerSession,
+      shouldReject: true,
+      accessKey: undefined,
+    },
+    {
+      label: 'owner session (no token) → ok',
+      apply: applyOwnerSession,
+      shouldReject: false,
+      accessKey: undefined,
+    },
+    // Token-path scenarios (accessKey supplied)
+    {
+      label: 'admin token (resources includes "admin") → ok',
+      apply: applyAdminToken,
+      shouldReject: false,
+      accessKey: TOKENS.admin.key,
+    },
+    {
+      label: 'plain manage/all token (resources lacks "admin") → reject',
+      apply: applyManageTokenForAdminGate,
+      shouldReject: true,
+      accessKey: TOKENS.valid.key,
+    },
+    {
+      label: 'expired token → reject',
+      apply: applyExpiredToken,
+      shouldReject: true,
+      accessKey: TOKENS.expired.key,
     },
     {
       label: 'foreign-site token (wrong owner) → reject',

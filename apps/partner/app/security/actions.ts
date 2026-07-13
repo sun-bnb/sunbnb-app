@@ -29,7 +29,7 @@ export async function getOwnedSites() {
   })
 }
 
-export async function createToken() {
+export async function createToken(opts?: { admin?: boolean }) {
 
   const session = await auth()
   if (!session?.user) throw new Error('Not authenticated')
@@ -37,13 +37,20 @@ export async function createToken() {
   // One-year validity from now. The Security page generates tokens with the
   // implicit `all` role and a fixed expiry — the multi-role data model is
   // preserved at the schema level for tokens issued by other means.
+  //
+  // Admin tokens include `'admin'` in resources, granting access to the
+  // admin-gated till summary actions (getOpenTills, getTillDayReport) on the
+  // manage page. The `'all'` resource is still present so the admin token also
+  // satisfies the standard manage-page gate (hasSome ['all', 'manage_site']).
+  const resources = opts?.admin ? ['all', 'admin'] : ['all']
+
   const expires = new Date()
   expires.setFullYear(expires.getFullYear() + 1)
 
   const token = await prisma.securityToken.create({
     data: {
       userId: session.user.id,
-      resources: ['all'],
+      resources,
       expires
     }
   })

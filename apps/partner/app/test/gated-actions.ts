@@ -61,6 +61,13 @@ import {
   closeTill,
   findReservations,
   settleReservation,
+  getOpenTills,
+  getOpenTillItems,
+  getTillDayReport,
+  closeDay,
+  getDayShiftItems,
+  getManageTrends,
+  getManageTrendsCsv,
 } from '@/app/sites/[id]/manage/actions'
 
 import {
@@ -222,6 +229,7 @@ export const ITEM_GROUP_ID = 'matrix-item-group-1'
 export type GateType =
   | 'session-owner'
   | 'token-or-session'
+  | 'admin-token'
   | 'restaurant-owner'
   | 'cron'
   | 'signature'
@@ -519,6 +527,55 @@ export const GATED_ACTIONS: GatedAction[] = [
     kind: 'action',
     gate: 'token-or-session',
     invoke: (accessKey?) => settleReservation(SITE_ID, RES_ID, 10, accessKey),
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // admin-token: manage/actions.ts — guarded by verifySiteAdmin (lib/auth-helpers.ts)
+  // Requires 'admin' in token resources. A plain 'all'/'manage_site' token is
+  // rejected. Owner/sudo session passes via the session fallback.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  {
+    name: 'manage.getOpenTills',
+    kind: 'action',
+    gate: 'admin-token',
+    invoke: (accessKey?) => getOpenTills(SITE_ID, accessKey),
+  },
+  {
+    name: 'manage.getOpenTillItems',
+    kind: 'action',
+    gate: 'admin-token',
+    invoke: (accessKey?) => getOpenTillItems(SITE_ID, accessKey),
+  },
+  {
+    name: 'manage.getTillDayReport',
+    kind: 'action',
+    gate: 'admin-token',
+    invoke: (accessKey?) => getTillDayReport(SITE_ID, '2025-07-01', accessKey),
+  },
+  {
+    name: 'manage.closeDay',
+    kind: 'action',
+    gate: 'admin-token',
+    invoke: (accessKey?) => closeDay(SITE_ID, accessKey),
+  },
+  {
+    name: 'manage.getDayShiftItems',
+    kind: 'action',
+    gate: 'admin-token',
+    invoke: (accessKey?) => getDayShiftItems(SITE_ID, '2025-07-01', accessKey),
+  },
+  {
+    name: 'manage.getManageTrends',
+    kind: 'action',
+    gate: 'admin-token',
+    invoke: (accessKey?) => getManageTrends(SITE_ID, 30, accessKey),
+  },
+  {
+    name: 'manage.getManageTrendsCsv',
+    kind: 'action',
+    gate: 'admin-token',
+    invoke: (accessKey?) => getManageTrendsCsv(SITE_ID, 30, accessKey),
   },
 
   // ══════════════════════════════════════════════════════════════════════════

@@ -2,7 +2,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
-import { verifySiteAccess } from '@/lib/auth-helpers'
+import { verifySiteAccess, verifySiteAdmin } from '@/lib/auth-helpers'
 import prisma from '@repo/data/PrismaCient'
 import {
   reserveWithConflictGuard,
@@ -18,7 +18,24 @@ import {
   createRentalBookingMolliePayment,
   reverifyAndFinalizeRentalBooking,
 } from '@repo/data/rental-payment'
-import { getOpenTill, recordSettlement, voidSettlementsForReservation, voidSettlementsForRentalBooking } from '@repo/data/till'
+import { getOpenTill, getOpenTillsByEmployee, getOpenTillItemsByEmployee, closeAllOpenTills, getTillByEmployee, getEmployeeShiftItems, recordSettlement, voidSettlementsForReservation, voidSettlementsForRentalBooking } from '@repo/data/till'
+import type { EmployeeTill, EmployeeShift, EmployeeOpenTill } from '@repo/data/till'
+import {
+  getRevenueByChannelByDay,
+  summarizeRevenueByChannel,
+  getOccupancyByDay,
+  summarizeOccupancy,
+  getReservationDayStats,
+  summarizeReservationStats,
+  getRevenueByDay,
+  toFiguresCsv,
+  type DailyRevenueByChannel,
+  type ChannelRevenueSummary,
+  type DailyOccupancy,
+  type OccupancySummary,
+  type DailyReservationStats,
+  type ReservationStatsSummary,
+} from '@repo/data/analytics'
 import { processConfirmedReservation, processCashRentalBooking } from '@repo/data/payment'
 import { applyDayTransition } from './reservation-day'
 import { siteDayKey, siteDayBounds } from '@repo/data/site-day'
@@ -3424,4 +3441,266 @@ export async function removeFailedReservation(
 
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok' }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ADMIN-GATED TILL SUMMARY ACTIONS
+// Gate: verifySiteAdmin — requires 'admin' in token resources (stricter than
+// the regular manage gate). Owner/sudo sessions pass via the session path.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Live (unclosed) till totals for every roster employee at this site.
+ *
+ * Each employee's balance is cash since their own last TillClose, so a worker
+ * who forgot to close on a prior day surfaces their full uncounted balance
+ * here. Designed for the admin till-summary panel on the manage page.
+ *
+ * Gate: verifySiteAdmin (requires 'admin' in token resources).
+ */
+export async function getOpenTills(
+  siteId: string,
+  accessKey?: string,
+): Promise<{ status: string; tills?: EmployeeTill[]; errors?: string[] }> {
+  const auth = await verifySiteAdmin(siteId, accessKey)
+  if (auth.error) return { status: 'error', errors: [auth.error] }
+
+  const tills = await getOpenTillsByEmployee(siteId)
+  return { status: 'ok', tills }
+}
+
+/** ISO 8601 date format YYYY-MM-DD */
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * Per-employee cash totals for a single civil day at this site.
+ *
+ * `dateIso` must be `'YYYY-MM-DD'`. Day bounds are computed in venue-local
+ * time using the same `siteDayBounds` approach the manage page uses, so the
+ * result is aligned with whatever shift day the operator sees on screen.
+ *
+ * Gate: verifySiteAdmin (requires 'admin' in token resources).
+ */
+export async function getTillDayReport(
+  siteId: string,
+  dateIso: string,
+  accessKey?: string,
+): Promise<{ status: string; tills?: EmployeeTill[]; errors?: string[] }> {
+  const auth = await verifySiteAdmin(siteId, accessKey)
+  if (auth.error) return { status: 'error', errors: [auth.error] }
+
+  if (!ISO_DATE_RE.test(dateIso)) {
+    return { status: 'error', errors: ['Invalid date format — expected YYYY-MM-DD'] }
+  }
+
+  // Fetch the site timezone to compute venue-local day bounds (the same
+  // approach manage/page.tsx uses via siteDayBounds).
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { timeZone: true, locationLat: true, locationLng: true },
+  })
+  if (!site) return { status: 'error', errors: ['Site not found'] }
+
+  // siteDayBounds accepts an optional `now` Date: pass noon UTC on the
+  // requested date so DST-edge days resolve unambiguously to the civil day
+  // the operator chose (same technique used by holdBed/compBed actions).
+  const nominalNoon = new Date(`${dateIso}T12:00:00.000Z`)
+  const { start: from, end: to } = siteDayBounds(buildSiteTimezone(site), nominalNoon)
+
+  const tills = await getTillByEmployee(siteId, from, to)
+  return { status: 'ok', tills }
+}
+
+/**
+ * End-of-day cash-up ("cierre de caja") — admin-gated.
+ *
+ * **Cash-up only** — does NOT touch the floor or any reservation status.
+ * A real calendar-day change mutates no reservations automatically (occupants
+ * age out of the date window, stayovers carry over, blocks persist), so
+ * closeDay matching "same effect as a day change" means leaving the floor
+ * completely untouched.
+ *
+ * Calls `closeAllOpenTills(siteId)` from `@repo/data/till`, which snapshots a
+ * TillClose row for every roster employee with a non-zero open balance.
+ * Idempotent: if all tills are already at zero the call is a no-op.
+ *
+ * Gate: verifySiteAdmin — requires 'admin' in token resources, or owner/sudo
+ * session. A plain manage_site token is deliberately rejected.
+ */
+export async function closeDay(
+  siteId: string,
+  accessKey?: string,
+): Promise<{
+  status: string
+  closedCount?: number
+  totalClosed?: number
+  errors?: string[]
+}> {
+  const auth = await verifySiteAdmin(siteId, accessKey)
+  if (auth.error) return { status: 'error', errors: [auth.error] }
+
+  // Close all open tills (idempotent; no-op when all zero).
+  const { closedCount, totalClosed } = await closeAllOpenTills(siteId)
+
+  revalidatePath(`/sites/${siteId}/manage`)
+  revalidatePath(`/sites/${siteId}/manage/sunbeds`)
+  revalidatePath(`/sites/${siteId}/manage/summary`)
+
+  return { status: 'ok', closedCount, totalClosed }
+}
+
+/**
+ * Itemised open-till breakdown per roster employee — same cash since last
+ * close, but with the individual TillEntry rows included so the UI can list
+ * each transaction (sunbed label, rental name, time, amount).
+ *
+ * Superset of getOpenTills: the `items` array sums to `total` and carries
+ * the same `kind`/`label`/`at`/`amount` shape as OpenTillItem in @repo/data/till.
+ * Used by the Open-tills tab in DailySummaryView to render per-bed inline rows.
+ *
+ * Gate: verifySiteAdmin (requires 'admin' in token resources).
+ */
+export async function getOpenTillItems(
+  siteId: string,
+  accessKey?: string,
+): Promise<{ status: string; tills?: EmployeeOpenTill[]; errors?: string[] }> {
+  const auth = await verifySiteAdmin(siteId, accessKey)
+  if (auth.error) return { status: 'error', errors: [auth.error] }
+
+  const tills = await getOpenTillItemsByEmployee(siteId)
+  return { status: 'ok', tills }
+}
+
+/**
+ * Per-employee itemised earnings breakup (cash + card) for a single civil day.
+ *
+ * Mirrors getTillDayReport's date validation and venue-local day-bounds approach
+ * but calls getEmployeeShiftItems (both channels, by-sunbed) instead of
+ * getTillByEmployee (cash-ledger only). Used by the Day report tab in
+ * DailySummaryView to render per-employee/per-sunbed earnings rows.
+ *
+ * Gate: verifySiteAdmin (requires 'admin' in token resources).
+ */
+export async function getDayShiftItems(
+  siteId: string,
+  dateIso: string,
+  accessKey?: string,
+): Promise<{ status: string; shifts?: EmployeeShift[]; errors?: string[] }> {
+  const auth = await verifySiteAdmin(siteId, accessKey)
+  if (auth.error) return { status: 'error', errors: [auth.error] }
+
+  if (!ISO_DATE_RE.test(dateIso)) {
+    return { status: 'error', errors: ['Invalid date format — expected YYYY-MM-DD'] }
+  }
+
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { timeZone: true, locationLat: true, locationLng: true },
+  })
+  if (!site) return { status: 'error', errors: ['Site not found'] }
+
+  // Use noon-UTC anchor to resolve DST-edge days unambiguously — same technique
+  // as getTillDayReport.
+  const nominalNoon = new Date(`${dateIso}T12:00:00.000Z`)
+  const { start: from, end: to } = siteDayBounds(buildSiteTimezone(site), nominalNoon)
+
+  const shifts = await getEmployeeShiftItems(siteId, from, to)
+  return { status: 'ok', shifts }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ADMIN-GATED TREND ANALYTICS ACTIONS
+// Gate: verifySiteAdmin — requires 'admin' in token resources (stricter than
+// the regular manage gate). Owner/sudo sessions pass via the session path.
+//
+// These expose the same data the accounting "Recent trend" card shows so
+// the on-site admin can read trends from the manage surface without a
+// separate session. Window math is identical to the accounting trend actions
+// (same TREND_WINDOWS constant, same last-N-days rolling formula) so the
+// numbers always agree for the same window.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Rolling-window days the manage trend lens accepts.
+ * Mirrors TREND_WINDOWS in accounting/actions.ts (1, 7, 30, 365) so the
+ * manage and accounting views always agree on what "30 days" means.
+ */
+const MANAGE_TREND_WINDOWS = [1, 7, 30, 365] as const
+const MANAGE_TREND_DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * All-channel revenue, occupancy, and operations trends for a rolling window
+ * ending today — the manage-surface counterpart to the accounting trend cards.
+ *
+ * Returns THREE metrics in one round-trip so the client can switch between
+ * them without extra fetches:
+ *   - `revenue`    — by-channel (cash/qr/online) + summary
+ *   - `occupancy`  — daily %, comps, + summary
+ *   - `operations` — seat count + takings + summary
+ *
+ * Window math is IDENTICAL to getRevenueChannelTrend / getOccupancyTrend /
+ * getOperationsTrend in accounting/actions.ts: `to = now`, `from = to -
+ * (window-1)*DAY_MS`. Unknown `days` values clamp to 30 (same as accounting).
+ *
+ * Gate: verifySiteAdmin (requires 'admin' in token resources).
+ */
+export async function getManageTrends(
+  siteId: string,
+  days: number,
+  accessKey?: string,
+): Promise<{
+  status: string
+  days?: number
+  revenue?: { rows: DailyRevenueByChannel[]; summary: ChannelRevenueSummary }
+  occupancy?: { rows: DailyOccupancy[]; summary: OccupancySummary }
+  operations?: { rows: DailyReservationStats[]; summary: ReservationStatsSummary }
+  errors?: string[]
+}> {
+  const auth = await verifySiteAdmin(siteId, accessKey)
+  if (auth.error) return { status: 'error', errors: [auth.error] }
+
+  // Clamp to the same window set accounting uses — unknown values → 30.
+  const window = (MANAGE_TREND_WINDOWS as readonly number[]).includes(days) ? days : 30
+  const to = new Date()
+  const from = new Date(to.getTime() - (window - 1) * MANAGE_TREND_DAY_MS)
+
+  // Fire all three queries in parallel — same functions accounting calls, same
+  // window bounds, so numbers always agree for the same `days` value.
+  const [revenueRows, occupancyRows, operationsRows] = await Promise.all([
+    getRevenueByChannelByDay(siteId, from, to),
+    getOccupancyByDay(siteId, from, to),
+    getReservationDayStats(siteId, from, to),
+  ])
+
+  return {
+    status: 'ok',
+    days: window,
+    revenue: { rows: revenueRows, summary: summarizeRevenueByChannel(revenueRows) },
+    occupancy: { rows: occupancyRows, summary: summarizeOccupancy(occupancyRows) },
+    operations: { rows: operationsRows, summary: summarizeReservationStats(operationsRows) },
+  }
+}
+
+/**
+ * Plain CSV revenue dump for a rolling window — the manage-surface counterpart
+ * to getRevenueCsv in accounting/actions.ts. Same window math, same
+ * `getRevenueByDay + toFiguresCsv` call chain. Useful for quick data exports
+ * from the on-site admin panel without navigating to the accounting page.
+ *
+ * Gate: verifySiteAdmin (requires 'admin' in token resources).
+ */
+export async function getManageTrendsCsv(
+  siteId: string,
+  days: number,
+  accessKey?: string,
+): Promise<{ status: string; csv?: string; errors?: string[] }> {
+  const auth = await verifySiteAdmin(siteId, accessKey)
+  if (auth.error) return { status: 'error', errors: [auth.error] }
+
+  const window = (MANAGE_TREND_WINDOWS as readonly number[]).includes(days) ? days : 30
+  const to = new Date()
+  const from = new Date(to.getTime() - (window - 1) * MANAGE_TREND_DAY_MS)
+
+  const csv = toFiguresCsv(await getRevenueByDay(siteId, from, to))
+  return { status: 'ok', csv }
 }

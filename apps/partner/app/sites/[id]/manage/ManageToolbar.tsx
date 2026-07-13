@@ -2,13 +2,9 @@
 
 import { useTranslations } from 'next-intl'
 
-type BedState = 'available' | 'expected' | 'checked-in' | 'walked-in' | 'blocked' | 'comp'
-
 export type ManageViewKey = number | 'rentals'
 
 interface ManageToolbarProps {
-  summary: Partial<Record<BedState, number>>
-  occupied: number
   // View switcher
   parcelNums: number[]
   selectedView: ManageViewKey
@@ -29,8 +25,6 @@ interface ManageToolbarProps {
 }
 
 export default function ManageToolbar({
-  summary,
-  occupied,
   parcelNums,
   selectedView,
   onSelectView,
@@ -47,36 +41,30 @@ export default function ManageToolbar({
 }: ManageToolbarProps) {
   const t = useTranslations('SiteManage')
 
-  const reserved = summary['expected'] ?? 0
-  const comp = summary['comp'] ?? 0
-  const free = summary['available'] ?? 0
   // The pill row only carries parcels now (rentals is a floating FAB) — show it
   // only when there's more than one parcel to switch between.
   const showSwitcher = parcelNums.length > 1
 
-  const tabClass = (active: boolean) =>
-    `flex-shrink-0 flex items-center justify-center gap-1 px-3 min-h-[44px] rounded-lg text-sm font-semibold whitespace-nowrap transition-colors select-none ${
+  // Parcel tabs form ONE continuous bar docked to the bottom of the header card,
+  // hanging out from beneath it. Adjoined (no gaps): every tab shares a right-edge
+  // divider (border-r), only the first/last carry the outer left/right ends and
+  // bottom rounding, and there's no top border (their tops tuck behind the card).
+  // The wrapper's negative margin + the card's z-index give the "from under" look.
+  const tabClass = (active: boolean, isFirst: boolean, isLast: boolean) =>
+    `flex-shrink-0 flex items-center justify-center gap-1 px-3 pt-5 pb-3 min-h-[52px] border-b border-r border-t-0 text-sm font-semibold whitespace-nowrap transition-colors select-none ${
+      isFirst ? 'border-l rounded-bl-lg ' : ''
+    }${isLast ? 'rounded-br-lg ' : ''}${
       active
-        ? 'bg-accent text-white dark:bg-gray-100 dark:text-gray-900'
-        : 'bg-white text-gray-500 border border-gray-200 hover:text-gray-900 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-400 dark:border-gray-700 dark:hover:text-gray-100 dark:hover:bg-gray-800'
+        ? 'bg-accent text-white border-accent dark:bg-gray-100 dark:text-gray-900 dark:border-gray-100'
+        : 'bg-white text-gray-500 border-gray-200 hover:text-gray-900 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-400 dark:border-gray-700 dark:hover:text-gray-100 dark:hover:bg-gray-800'
     }`
 
   return (
     <>
-      {/* Header card — compact occupancy readout + zoom control (sticky) */}
-      <div className="flex items-center justify-between gap-3 mb-2 px-3 py-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm sticky top-0 z-10">
-        {/* Occupied / Reserved / Comp / free — color-coded, no slashes, no word labels */}
-        <span className="flex items-center gap-2.5 text-base font-bold tabular-nums whitespace-nowrap leading-none">
-          <span className="text-blue-600 dark:text-blue-400" title={t('checkedIn')}>O{occupied}</span>
-          <span className="text-yellow-600 dark:text-yellow-400" title={t('expected')}>R{reserved}</span>
-          {comp > 0 && <span className="text-purple-600 dark:text-purple-400" title={t('comp')}>C{comp}</span>}
-          <span className="text-green-600 dark:text-green-400" title={t('free')}>{free}</span>
-        </span>
-
-        {/* Right controls — zoom + reverse seat order + dark mode toggle */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {/* Zoom control — always visible (scroll+zoom is the only mode) */}
-          <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 font-semibold">
+      {/* Header card — zoom control (sticky) */}
+      <div className="flex items-center justify-between gap-3 px-3 py-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm sticky top-0 z-10">
+        {/* Zoom control — always visible (scroll+zoom is the only mode) */}
+        <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 font-semibold">
           <button
             onClick={onZoomOut}
             disabled={zoom <= zoomMin}
@@ -103,8 +91,10 @@ export default function ManageToolbar({
           >
             +
           </button>
-          </div>
+        </div>
 
+        {/* View controls — reverse seat order + dark mode */}
+        <div className="flex items-center gap-2 flex-shrink-0">
           {/* Reverse seat order — applies to the active parcel */}
           <button
             onClick={onToggleReversed}
@@ -134,25 +124,33 @@ export default function ManageToolbar({
         </div>
       </div>
 
-      {/* View switcher — a bare pill row OUTSIDE the header card; always a single
-          row, scrolling horizontally if it outgrows the container. */}
+      {/* View switcher — parcel tabs DOCKED to the bottom of the header card,
+          hanging out from underneath it. The outer wrapper pulls the row up so the
+          tab tops tuck behind the card (which sits above via its sticky z-10); the
+          inner row scrolls horizontally when the tabs outgrow the container. */}
       {showSwitcher && (
-        <div
-          role="tablist"
-          aria-label={t('parcel', { n: '' }).trim()}
-          className="flex flex-nowrap items-center gap-1.5 mb-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        >
-          {parcelNums.map(n => (
-            <button
-              key={n}
-              role="tab"
-              aria-selected={selectedView === n}
-              onClick={() => onSelectView(n)}
-              className={tabClass(selectedView === n)}
-            >
-              {t('parcel', { n })}
-            </button>
-          ))}
+        <div className="relative z-0 -mt-2 mb-5">
+          <div
+            role="tablist"
+            aria-label={t('parcel', { n: '' }).trim()}
+            className="flex flex-nowrap items-stretch px-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            {parcelNums.map((n, i) => (
+              <button
+                key={n}
+                role="tab"
+                aria-selected={selectedView === n}
+                onClick={() => onSelectView(n)}
+                className={tabClass(
+                  selectedView === n,
+                  i === 0,
+                  i === parcelNums.length - 1,
+                )}
+              >
+                {t('parcel', { n })}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </>

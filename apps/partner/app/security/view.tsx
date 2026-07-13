@@ -160,6 +160,7 @@ export default function SecurityView() {
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [expandedTokenId, setExpandedTokenId] = useState<string | null>(null)
+  const [adminAccess, setAdminAccess] = useState(false)
 
   useEffect(() => {
     getTokens().then(setTokens)
@@ -171,7 +172,7 @@ export default function SecurityView() {
     setError(null)
     setCreatedToken(null)
     try {
-      const res = await createToken()
+      const res = await createToken(adminAccess ? { admin: true } : undefined)
       if (res.status !== 'ok' || !res.token) {
         setError(t('createError'))
         return
@@ -213,16 +214,27 @@ export default function SecurityView() {
             {t('headerSub', { count: tokens.length, active: activeTokens.length })}
           </p>
         </div>
-        <button
-          onClick={handleCreate}
-          disabled={creating}
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-40 transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          {creating ? t('creating') : t('newAccessKey')}
-        </button>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={adminAccess}
+              onChange={(e) => setAdminAccess(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-gray-900 accent-gray-900"
+            />
+            {t('adminAccess')}
+          </label>
+          <button
+            onClick={handleCreate}
+            disabled={creating}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-40 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            {creating ? t('creating') : t('newAccessKey')}
+          </button>
+        </div>
       </div>
 
       {/* Intro */}
