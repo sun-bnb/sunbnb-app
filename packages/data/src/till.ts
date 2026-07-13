@@ -135,21 +135,17 @@ export async function voidSettlementsForRentalBooking(rentalBookingId: string): 
   return result.count
 }
 
-// ─── Internal Helpers ────────────────────────────────────────────────────────
-
-function startOfToday(): Date {
-  const n = new Date()
-  return new Date(n.getFullYear(), n.getMonth(), n.getDate())
-}
-
 // ─── Till Read Queries ───────────────────────────────────────────────────────
 
 /**
- * The worker's open till at a site: cash taken since the later of their last
- * close and the start of today (a till is a daily drawer).
+ * The worker's open till at a site: cash taken **since their last close** — an
+ * uncounted running balance, not a daily reset. If a worker never closed on a
+ * prior day, that uncounted cash rolls forward and is swept in by the next
+ * close, so cash is never orphaned by a day boundary. If they have never closed
+ * at this site, the balance is all-time.
  *
  * Fully ledger-sourced (track 013 P3): sums all non-voided TillEntry rows
- * attributed to this employee in the window. Rental settlements are now
+ * attributed to this employee since the last TillClose. Rental settlements are
  * TillEntry rows (backfilled by migration 20260621162554_add_till_entry_rental_booking),
  * so no separate rentalBooking aggregate is needed.
  */
@@ -159,11 +155,14 @@ export async function getOpenTill(siteId: string, employeeId: string): Promise<O
     orderBy: { closedAt: 'desc' },
     select: { closedAt: true },
   })
-  const today = startOfToday()
-  const since = lastClose && lastClose.closedAt > today ? lastClose.closedAt : today
 
   const entries = await prisma.tillEntry.aggregate({
-    where: { siteId, employeeId, voidedAt: null, settledAt: { gt: since } },
+    where: {
+      siteId,
+      employeeId,
+      voidedAt: null,
+      ...(lastClose ? { settledAt: { gt: lastClose.closedAt } } : {}),
+    },
     _sum: { amount: true },
     _count: true,
   })
@@ -171,6 +170,184 @@ export async function getOpenTill(siteId: string, employeeId: string): Promise<O
   return {
     total: round(entries._sum.amount ?? 0),
     count: entries._count,
+  }
+}
+
+/**
+ * Every roster employee's **open** (unclosed) till at a site — the manager /
+ * admin overview behind the on-site "till summary". Each employee's balance is
+ * cash since *their own* last close (all-time if never closed), so a worker who
+ * forgot to close on a prior day still surfaces their full uncounted balance
+ * here (and closing it snapshots the whole amount). Mirrors getTillByEmployee's
+ * roster zero-fill; sorted by name.
+ *
+ * Read-only; the caller owns auth/ownership.
+ */
+export async function getOpenTillsByEmployee(siteId: string): Promise<EmployeeTill[]> {
+  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
+  if (!site) return []
+
+  const employees = await prisma.employee.findMany({
+    where: { accountId: site.userId },
+    select: { id: true, name: true, active: true },
+    orderBy: { name: 'asc' },
+  })
+
+  // Latest close per employee at this site → each employee's window floor.
+  const closes = await prisma.tillClose.groupBy({
+    by: ['employeeId'],
+    where: { siteId },
+    _max: { closedAt: true },
+  })
+  const lastCloseByEmp = new Map(closes.map((c) => [c.employeeId, c._max.closedAt]))
+
+  return Promise.all(
+    employees.map(async (e) => {
+      const since = lastCloseByEmp.get(e.id) ?? null
+      const agg = await prisma.tillEntry.aggregate({
+        where: {
+          siteId,
+          employeeId: e.id,
+          voidedAt: null,
+          ...(since ? { settledAt: { gt: since } } : {}),
+        },
+        _sum: { amount: true },
+        _count: true,
+      })
+      return {
+        employeeId: e.id,
+        name: e.name,
+        active: e.active,
+        total: round(agg._sum.amount ?? 0),
+        count: agg._count,
+      }
+    }),
+  )
+}
+
+export interface OpenTillItem {
+  id: string
+  kind: 'sunbed' | 'rental'
+  label: string
+  amount: number
+  at: Date
+}
+
+export interface EmployeeOpenTill {
+  employeeId: string
+  name: string
+  active: boolean
+  total: number
+  count: number
+  items: OpenTillItem[]
+}
+
+/**
+ * Every roster employee's open till at a site, ITEMIZED — the Alonso "cierre de
+ * caja empleado" per-worker view: each employee's unclosed cash broken down into
+ * the individual sunbeds (and cash rentals) that make it up, since their own last
+ * close. The `items` sum to `total` (cash-only, because TillEntry rows only exist
+ * for cash), so this is the drawer contents, not a broader earnings view. Mirrors
+ * getOpenTillsByEmployee's roster zero-fill + since-last-close window, and adds
+ * the line items. Sorted by name; items oldest-first.
+ *
+ * A sunbed line's `label` is the reserved seats joined (seatLabel, else number);
+ * a rental line's `label` is the rental item name. Read-only; caller owns auth.
+ */
+export async function getOpenTillItemsByEmployee(siteId: string): Promise<EmployeeOpenTill[]> {
+  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
+  if (!site) return []
+
+  const employees = await prisma.employee.findMany({
+    where: { accountId: site.userId },
+    select: { id: true, name: true, active: true },
+    orderBy: { name: 'asc' },
+  })
+
+  const closes = await prisma.tillClose.groupBy({
+    by: ['employeeId'],
+    where: { siteId },
+    _max: { closedAt: true },
+  })
+  const lastCloseByEmp = new Map(closes.map((c) => [c.employeeId, c._max.closedAt]))
+
+  return Promise.all(
+    employees.map(async (e) => {
+      const since = lastCloseByEmp.get(e.id) ?? null
+      const entries = await prisma.tillEntry.findMany({
+        where: {
+          siteId,
+          employeeId: e.id,
+          voidedAt: null,
+          ...(since ? { settledAt: { gt: since } } : {}),
+        },
+        select: {
+          id: true,
+          amount: true,
+          settledAt: true,
+          reservation: { select: { items: { select: { number: true, seatLabel: true } } } },
+          rentalBooking: { select: { rentalItem: { select: { name: true } } } },
+        },
+        orderBy: { settledAt: 'asc' },
+      })
+
+      const items: OpenTillItem[] = entries.map((en) => {
+        if (en.reservation) {
+          const seats = en.reservation.items.map((it) => it.seatLabel ?? String(it.number))
+          return { id: en.id, kind: 'sunbed', label: seats.join(', '), amount: round(en.amount), at: en.settledAt }
+        }
+        return {
+          id: en.id,
+          kind: 'rental',
+          label: en.rentalBooking?.rentalItem?.name ?? '',
+          amount: round(en.amount),
+          at: en.settledAt,
+        }
+      })
+
+      return {
+        employeeId: e.id,
+        name: e.name,
+        active: e.active,
+        total: round(entries.reduce((sum, en) => sum + en.amount, 0)),
+        count: items.length,
+        items,
+      }
+    }),
+  )
+}
+
+/**
+ * Close EVERY employee's open till at a site in one shot — the manager
+ * end-of-day "cierre de caja" cash-up. For each roster employee with a non-zero
+ * unclosed balance (from getOpenTillsByEmployee), snapshots a TillClose row.
+ * Employees with a zero open balance are skipped (no empty snapshot), exactly
+ * like the per-worker closeTill.
+ *
+ * Idempotent: re-running immediately after a close finds every open till at
+ * zero and is a no-op. Returns how many tills were closed and their combined
+ * total. Read/aggregation is caller-auth'd; this only writes TillClose rows —
+ * it does NOT touch reservations or floor state (that cleanup is the caller's).
+ */
+export async function closeAllOpenTills(
+  siteId: string,
+): Promise<{ closedCount: number; totalClosed: number }> {
+  const opens = await getOpenTillsByEmployee(siteId)
+  const toClose = opens.filter((o) => o.count > 0)
+  if (toClose.length === 0) return { closedCount: 0, totalClosed: 0 }
+
+  await prisma.tillClose.createMany({
+    data: toClose.map((o) => ({
+      siteId,
+      employeeId: o.employeeId,
+      totalAmount: o.total,
+      txnCount: o.count,
+    })),
+  })
+
+  return {
+    closedCount: toClose.length,
+    totalClosed: round(toClose.reduce((sum, o) => sum + o.total, 0)),
   }
 }
 

@@ -14,7 +14,7 @@ sections.
 - **Reservation conflict guard** — `reserveWithConflictGuard` (FOR UPDATE on InventoryItem, structured conflict return, race test) (2026-06-16)
 - **Cash receipt path** — `processConfirmedReservation(id, { skipCommission: true, invoicedAt? })` — status must NOT be updated to COMPLETE; year threading via `nextInvoiceNumber year param` (2026-07-10)
 - **Analytics — monthly source summary** — rental cash status shares `RESERVATION_PAID_IN_CASH`; Order.paymentAmount non-null for post-payment status rows (2026-07-10)
-- **Integration test failures & fixes** — _none yet_
+- **Integration test failures & fixes** — ESLint unused-var in destructuring + void binding (2026-07-11)
 - **PostGIS notes** — _none yet_
 - **Cross-app blast radius** — schema/export changes that rippled to app mocks — see SunbedGroup (2026-06-14)
 - **Rejected approaches** — dead-ends, so nobody re-tries them — _none yet_
@@ -47,6 +47,11 @@ sections.
 **Problem:** what went wrong / what was non-obvious
 **Solution:** what actually worked
 **Prevention:** how a future session avoids it (cite path/file.ts#symbol) -->
+
+### 2026-07-11: till integration test ESLint unused-var trap in destructuring + void binding
+**Problem:** `npm run lint` at `--max-warnings 0` catches two subtle unused-var patterns in integration tests: (1) destructuring `rentalItem` from `setup()` when the test doesn't use rentals; (2) binding the return of `await mkEmp('Zara')` to a `const zara` when the intent is only to create the roster row (zero-fill scenario).
+**Solution:** (1) Omit unused fields from destructuring (`const { user, site, mkEmp } = await setup()`). (2) Call without binding (`await mkEmp('Zara')`).
+**Prevention:** When a test's `setup()` call returns more fields than the test needs, destructure only what you use. For roster zero-fill employees, never bind the return value — just `await mkEmp(name)`.
 
 ## PostGIS notes
 
