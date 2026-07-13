@@ -13,6 +13,7 @@ import { issueReservationRefund } from '@repo/data/refund'
 import {
   createReservationMolliePayment,
   reverifyAndFinalizeReservation,
+  cancelReservationMolliePayment,
 } from '@repo/data/reservation-payment'
 import {
   createRentalBookingMolliePayment,
@@ -2382,7 +2383,37 @@ export async function cancelCollection(
     }
   }
 
-  // Not paid — revert to a plain cash walk-in (bed kept, re-collectable).
+  // Not paid — attempt to cancel the Mollie payment so it can't settle late.
+  const cancelResult = await cancelReservationMolliePayment(reservationId)
+
+  if (cancelResult.status === 'canceled') {
+    // Mollie confirmed cancellation — delete the reservation to free the seat.
+    // Void any settlements BEFORE delete (FK SetNull risk mirrors unreserveItem).
+    // In practice an unsettled card walk-in has no TillEntry, but mirror the
+    // safe pattern in case of a future path that records one.
+    await voidSettlementsForReservation(reservationId)
+    await prisma.reservation.deleteMany({
+      where: { id: reservationId, siteId },
+    })
+    revalidatePath(`/sites/${siteId}/manage`)
+    return { status: 'ok', paymentStatus: 'freed' as const }
+  }
+
+  if (cancelResult.status === 'paid') {
+    // The payment landed in the race between our abandon and the Mollie response.
+    // Treat it as a successful online collection.
+    const fin = await reverifyAndFinalizeReservation(reservationId)
+    if (fin.settled === 'complete') {
+      revalidatePath(`/sites/${siteId}/manage`)
+      return { status: 'ok', paymentStatus: 'complete' as const }
+    }
+    // Reverify returned something unexpected — fall through to the cash revert below.
+  }
+
+  // 'error' (or unexpected reverify result): we could NOT confirm the cancellation.
+  // Never delete when cancellation is uncertain — a late-arriving payment would
+  // create an orphaned charge with no reservation to attach to.
+  // Fall back to the previous behavior: revert to cash walk-in.
   await prisma.reservation.update({
     where: { id: reservationId },
     data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },

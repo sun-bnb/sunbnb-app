@@ -892,8 +892,8 @@
     "enableRefunds": "Ota hyvitykset käyttöön",
     "move": "Siirrä",
     "confirmDepart": "Merkitään lähteneeksi. Maksu pidätetään; paikka vapautuu.",
-    "confirmUnreserve": "Lopetetaan tämä walk-in. Hoida mahdollinen käteispalautus asiakkaan kanssa; paikka vapautuu.",
-    "moneyReturned": "Rahat palautettu",
+    "confirmUnreserve": "Lopetetaan tämä walk-in — paikka vapautuu.",
+    "confirmUnreserveRefund": "Hyvitetään {amount} — poistetaan kassasta; palauta käteinen asiakkaalle. Paikka vapautuu.",
     "paymentFailed": "Maksu epäonnistui",
     "remove": "Poista",
     "confirmRemove": "Poistetaan tämä varaus — maksua ei koskaan suoritettu. Paikka vapautuu heti."
@@ -909,6 +909,7 @@
     "failedBody": "Edelleen käteinen — voit yrittää uudelleen.",
     "done": "Valmis",
     "close": "Sulje",
+    "canceling": "Peruutetaan…",
     "demoNote": "Demotila — maksu suoritetaan automaattisesti.",
     "errorGeneric": "Maksua ei voitu aloittaa."
   },

@@ -90,6 +90,7 @@ import {
 import {
   createReservationMolliePayment,
   reverifyAndFinalizeReservation,
+  cancelReservationMolliePayment,
 } from '@repo/data/reservation-payment'
 import {
   createRentalBookingMolliePayment,
@@ -4039,26 +4040,77 @@ describe('getCollectStatus', () => {
   })
 })
 
+const mockCancelMollie = vi.mocked(cancelReservationMolliePayment)
+
 describe('cancelCollection', () => {
-  it('reverts an unpaid in-flight collection to cash', async () => {
+  it('deletes the reservation (frees the seat) when Mollie confirms cancellation', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID, status: 'processing', paymentRef: 'tr_x' } as any)
+    vi.mocked(voidSettlementsForReservation).mockResolvedValue(undefined)
+    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
+    mockReverify.mockResolvedValueOnce({ settled: 'pending' })
+    mockCancelMollie.mockResolvedValueOnce({ status: 'canceled' })
+
+    const res = await cancelCollection(SITE_ID, RES_ID)
+
+    expect((res as any).paymentStatus).toBe('freed')
+    // Void settlements before delete (FK-safety mirrors unreserveItem).
+    expect(vi.mocked(voidSettlementsForReservation)).toHaveBeenCalledWith(RES_ID)
+    // Reservation deleted to free the seat.
+    const del = vi.mocked(prisma.reservation.deleteMany).mock.calls.at(-1)![0]
+    expect(del.where).toEqual({ id: RES_ID, siteId: SITE_ID })
+    // Never left as cash.
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+  })
+
+  it('finalizes as complete when Mollie reports the payment already landed (race)', async () => {
+    // Flow: reverify-first returns pending → cancel returns paid → reverify again returns complete.
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID, status: 'processing', paymentRef: 'tr_x' } as any)
+    // First reverify (pre-cancel check) says pending; second (post-cancel-paid) says complete.
+    mockReverify
+      .mockResolvedValueOnce({ settled: 'pending' })
+      .mockResolvedValueOnce({ settled: 'complete', providerStatus: 'paid' })
+    mockCancelMollie.mockResolvedValueOnce({ status: 'paid' })
+
+    const res = await cancelCollection(SITE_ID, RES_ID)
+
+    expect((res as any).paymentStatus).toBe('complete')
+    // No delete, no cash revert.
+    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
+    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+  })
+
+  it('reverts to cash (does NOT delete) when Mollie cancellation errors — cannot confirm status', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID, status: 'processing', paymentRef: 'tr_x' } as any)
     vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
+    // Reverify shows still pending (payment not yet settled) — proceeds to cancel call.
     mockReverify.mockResolvedValueOnce({ settled: 'pending' })
+    mockCancelMollie.mockResolvedValueOnce({ status: 'error', error: 'network timeout' })
+
     const res = await cancelCollection(SITE_ID, RES_ID)
+
     expect((res as any).paymentStatus).toBe('cash')
+    // Safe fallback: revert to cash without deleting (late payment might still arrive).
     const u = vi.mocked(prisma.reservation.update).mock.calls.at(-1)![0]
     expect(u.data.status).toBe('paid-in-cash')
     expect(u.data.paymentRef).toBeNull()
+    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
   })
 
-  it('finalizes instead of reverting when the payment actually went through', async () => {
+  it('still reverify-first-before-delete path: if reverify shows complete before cancel call, returns complete', async () => {
+    // The reverify-first guard (when paymentRef exists) still runs first.
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID, status: 'processing', paymentRef: 'tr_x' } as any)
     mockReverify.mockResolvedValueOnce({ settled: 'complete', providerStatus: 'paid' })
+
     const res = await cancelCollection(SITE_ID, RES_ID)
+
     expect((res as any).paymentStatus).toBe('complete')
-    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+    // cancelReservationMolliePayment must NOT be called — the payment already landed.
+    expect(mockCancelMollie).not.toHaveBeenCalled()
+    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
   })
 
   it('is a no-op for a reservation that is not mid-collection', async () => {
@@ -4067,6 +4119,7 @@ describe('cancelCollection', () => {
     const res = await cancelCollection(SITE_ID, RES_ID)
     expect((res as any).paymentStatus).toBe('cash')
     expect(mockReverify).not.toHaveBeenCalled()
+    expect(mockCancelMollie).not.toHaveBeenCalled()
   })
 })
 

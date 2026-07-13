@@ -26,3 +26,7 @@ export const reverifyAndFinalizeReservation = vi.fn().mockResolvedValue({
   settled: 'complete' as const,
   providerStatus: 'paid',
 })
+
+export const cancelReservationMolliePayment = vi.fn().mockResolvedValue({
+  status: 'canceled' as const,
+})

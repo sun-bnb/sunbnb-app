@@ -892,8 +892,8 @@
     "enableRefunds": "Enable refunds",
     "move": "Move",
     "confirmDepart": "Marking as departed. The payment is kept; the seat frees up.",
-    "confirmUnreserve": "Ending this walk-in. Settle any cash refund with the customer directly; the seat frees up.",
-    "moneyReturned": "Money returned",
+    "confirmUnreserve": "Ending this walk-in — the seat frees up.",
+    "confirmUnreserveRefund": "Refunding {amount} — removed from the till; hand the cash back to the guest. The seat frees up.",
     "paymentFailed": "Payment failed",
     "remove": "Remove",
     "confirmRemove": "Removing this reservation — the payment was never taken. The seat frees up immediately."
@@ -909,6 +909,7 @@
     "failedBody": "Still cash — you can try again.",
     "done": "Done",
     "close": "Close",
+    "canceling": "Canceling…",
     "demoNote": "Demo mode — the payment completes automatically.",
     "errorGeneric": "Could not start the payment."
   },

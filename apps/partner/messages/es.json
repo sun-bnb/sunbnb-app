@@ -892,8 +892,8 @@
     "enableRefunds": "Activar reembolsos",
     "move": "Mover",
     "confirmDepart": "Marcando como salido. El pago se mantiene; la hamaca queda libre.",
-    "confirmUnreserve": "Finalizando este walk-in. Gestiona el reembolso en efectivo con el cliente; la hamaca queda libre.",
-    "moneyReturned": "Dinero devuelto",
+    "confirmUnreserve": "Finalizando este walk-in — la hamaca queda libre.",
+    "confirmUnreserveRefund": "Reembolsando {amount} — retirado de la caja; devuelve el efectivo al cliente. La hamaca queda libre.",
     "paymentFailed": "Pago fallido",
     "remove": "Eliminar",
     "confirmRemove": "Eliminando esta reserva — el pago nunca fue realizado. La hamaca queda libre inmediatamente."
@@ -909,6 +909,7 @@
     "failedBody": "Sigue en efectivo: puedes intentarlo de nuevo.",
     "done": "Hecho",
     "close": "Cerrar",
+    "canceling": "Cancelando…",
     "demoNote": "Modo demo: el pago se completa automáticamente.",
     "errorGeneric": "No se pudo iniciar el pago."
   },

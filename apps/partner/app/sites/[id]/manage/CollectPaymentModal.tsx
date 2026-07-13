@@ -30,7 +30,7 @@ export type CollectActions = {
   cancel: () => Promise<{ status: string; paymentStatus?: string }>
 }
 
-type Phase = 'creating' | 'awaiting' | 'complete' | 'failed' | 'error'
+type Phase = 'creating' | 'awaiting' | 'canceling' | 'complete' | 'failed' | 'error'
 
 const POLL_MS = 2500
 
@@ -111,8 +111,14 @@ export default function CollectPaymentModal({
   // ── Close: abandon an unpaid collection so the entity reverts to cash ─────
   const handleClose = useCallback(() => {
     if (!settledRef.current && (phase === 'awaiting' || phase === 'creating')) {
-      // Fire-and-forget; the parent refreshes on close regardless.
-      actions.cancel().finally(onSettled)
+      // The cancel now makes a Mollie network call (DELETE payment) — show a
+      // 'canceling' spinner so the operator sees progress, not a frozen modal.
+      setPhase('canceling')
+      actions.cancel().finally(() => {
+        onSettled()
+        onClose()
+      })
+      return
     }
     onClose()
   }, [phase, actions, onClose, onSettled])
@@ -123,13 +129,18 @@ export default function CollectPaymentModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 sm:p-4"
-      onClick={e => { if (e.target === e.currentTarget) handleClose() }}
+      onClick={e => { if (e.target === e.currentTarget && phase !== 'canceling') handleClose() }}
     >
       <div className="bg-white dark:bg-gray-900 dark:text-gray-100 w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl overflow-hidden max-h-[92vh] sm:max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b-2 border-gray-200 dark:border-gray-700">
           <h2 className="text-xl font-black text-gray-900 dark:text-gray-100">💳 {modalTitle}</h2>
-          <button onClick={handleClose} aria-label={t('close')} className="text-gray-400 dark:text-gray-500 text-4xl leading-none p-3 -mr-2">&times;</button>
+          <button
+            onClick={handleClose}
+            aria-label={t('close')}
+            disabled={phase === 'canceling'}
+            className="text-gray-400 dark:text-gray-500 text-4xl leading-none p-3 -mr-2 disabled:opacity-30"
+          >&times;</button>
         </div>
 
         {/* Body */}
@@ -166,6 +177,13 @@ export default function CollectPaymentModal({
             </>
           )}
 
+          {phase === 'canceling' && (
+            <div className="py-10 flex flex-col items-center gap-4">
+              <span className="w-8 h-8 border-4 border-gray-300 border-t-gray-600 dark:border-gray-600 dark:border-t-gray-200 rounded-full animate-spin" aria-hidden="true" />
+              <div className="text-gray-500 dark:text-gray-400 font-bold">{t('canceling')}</div>
+            </div>
+          )}
+
           {phase === 'complete' && (
             <div className="py-8 px-4 rounded-2xl border-2 border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-800/40">
               <div className="text-5xl">✅</div>
@@ -192,13 +210,14 @@ export default function CollectPaymentModal({
              style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))' }}>
           <button
             onClick={handleClose}
-            className={`w-full font-black py-4 rounded-2xl text-lg select-none transition-colors ${
+            disabled={phase === 'canceling'}
+            className={`w-full font-black py-4 rounded-2xl text-lg select-none transition-colors disabled:opacity-50 ${
               phase === 'complete'
                 ? 'bg-green-600 text-white active:bg-green-700'
                 : 'bg-gray-200 text-gray-700 active:bg-gray-300 dark:bg-gray-800 dark:text-gray-200'
             }`}
           >
-            {phase === 'complete' ? t('done') : t('close')}
+            {phase === 'complete' ? t('done') : phase === 'canceling' ? t('canceling') : t('close')}
           </button>
         </div>
       </div>

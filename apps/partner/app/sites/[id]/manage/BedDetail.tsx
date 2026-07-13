@@ -219,13 +219,6 @@ export default function BedDetail({
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null)
   const [until, setUntil] = useState('')
   const [error, setError] = useState<string | null>(null)
-  /**
-   * Whether the cash was returned when unreserving a settled walk-in.
-   * Default true (money returned = void the settlement). Shown in the unreserve
-   * confirm panel only when the reservation has been settled.
-   * Reset on item change so it doesn't carry over to a different seat.
-   */
-  const [moneyReturned, setMoneyReturned] = useState(true)
   /** Settle modal state — open when the staff taps the cash Settle button. */
   const [showSettle, setShowSettle] = useState(false)
   /** Editable amount in the settle modal, prefilled from reservation.paymentAmount. */
@@ -301,7 +294,6 @@ export default function BedDetail({
   useEffect(() => {
     setApplyToPair(inSync)
     setApplyToGroup(true)
-    setMoneyReturned(true)
     setRefunded(false)
     setNeedsReconnect(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -382,15 +374,15 @@ export default function BedDetail({
       // reservation-based toggle, not the physical-group applyToPair toggle).
       // Group → delete whole reservation; Seat → disconnect this item only.
       //
-      // voidSettlements: pass moneyReturned for the whole-delete paths (Group mode
-      // or single-seat reservation). The multi-seat disconnect path never voids —
-      // the settlement belongs to the remaining seats (unreserveItem ignores the
-      // flag there anyway, but we pass false for clarity).
+      // Unreserve ALWAYS refunds: a whole-delete voids the settlement so the cash
+      // leaves the drawer — keeping the money is what Depart is for, so a settled
+      // walk-in is never orphaned. The multi-seat disconnect path passes false
+      // because the settlement stays with the remaining seats (ignored there).
       if (state === 'walked-in') {
         const isWholeDelete = applyToGroup || !groupedReservation
-        runAction(() => unreserveItem(siteId, item.id, accessKey, applyToGroup, isWholeDelete ? moneyReturned : false))
+        runAction(() => unreserveItem(siteId, item.id, accessKey, applyToGroup, isWholeDelete))
       } else {
-        runAction(() => unreserveItem(siteId, item.id, accessKey, applyToPair, moneyReturned))
+        runAction(() => unreserveItem(siteId, item.id, accessKey, applyToPair, true))
       }
     } else if (pendingConfirm === 'remove') {
       if (!reservation) return
@@ -407,7 +399,9 @@ export default function BedDetail({
           : pendingConfirm === 'depart'
           ? t('confirmDepart')
           : pendingConfirm === 'unreserve'
-          ? t('confirmUnreserve')
+          ? (settled
+              ? t('confirmUnreserveRefund', { amount: '€' + (reservation?.paymentAmount ?? 0).toFixed(2) })
+              : t('confirmUnreserve'))
           : pendingConfirm === 'remove'
           ? t('confirmRemove')
           : t('confirmCancel')}
@@ -415,34 +409,10 @@ export default function BedDetail({
       {/* Refund control — only when canceling a real Mollie payment. Manual:
           tap to issue the refund, which flips to a static "Refunded" confirmation.
           Canceling afterwards terminates the booking as REFUNDED. */}
-      {/* Money-returned checkbox — shown when unreserving a settled walk-in
-          (at least one non-voided TillEntry) on a whole-delete path.
-          Checked (default) → void the settlement (cash left the drawer).
-          Unchecked → leave the entry (cash forfeited / retained by the venue). */}
-      {pendingConfirm === 'unreserve' && settled && (
-        (() => {
-          // Determine whether this unreserve will delete the whole reservation
-          // (vs. a partial seat-disconnect). Checkbox only makes sense for a
-          // whole delete — a disconnect leaves the settlement with the remaining seats.
-          const isWholeDeletePath =
-            state !== 'walked-in'
-              ? true  // expected (cash walk-in between days) — always whole delete
-              : applyToGroup || !groupedReservation  // walked-in: Group mode or single-seat
-          return isWholeDeletePath ? (
-            <label className="flex items-center gap-3 py-1 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={moneyReturned}
-                onChange={e => setMoneyReturned(e.target.checked)}
-                className="w-5 h-5 rounded border-gray-300 dark:border-gray-600 accent-gray-900 dark:accent-gray-100 cursor-pointer"
-              />
-              <span className="text-sm text-gray-700 dark:text-gray-200 font-medium">
-                {t('moneyReturned')}
-              </span>
-            </label>
-          ) : null
-        })()
-      )}
+      {/* Unreserve always refunds a settled walk-in — the cash leaves the drawer
+          automatically (the settlement is voided). Keeping the money is Depart's
+          job, not Unreserve's, so there's no opt-out; the confirmUnreserve copy
+          above already tells staff to settle the refund with the guest. */}
       {pendingConfirm === 'cancel' && isMolliePaid && (
         alreadyRefunded ? (
           <div
