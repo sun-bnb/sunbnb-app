@@ -10,6 +10,7 @@ What this playbook knows, by theme. Maintained by grooming; scan it before readi
 sections.
 
 - **Schema & migrations** — `prisma migrate dev` advisory-lock contention (never background it) (2026-05-20)
+- **Mollie payment cancel** — `cancelReservationMolliePayment`: 422→paid semantics, slim token lookup (no loadFeeContext), vi.hoisted() mock pattern for dual-findUnique test (2026-07-13)
 - **Payment / invoice / fee / subscription** — `resolveEffectiveSubscription` override convention (2026-05-20); feature-entitlement catalog/resolver + circular-import avoidance (2026-05-20); `rental-payment.ts` shared Mollie create/verify/finalize for RentalBooking (2026-06-20)
 - **Reservation conflict guard** — `reserveWithConflictGuard` (FOR UPDATE on InventoryItem, structured conflict return, race test) (2026-06-16)
 - **Cash receipt path** — `processConfirmedReservation(id, { skipCommission: true, invoicedAt? })` — status must NOT be updated to COMPLETE; year threading via `nextInvoiceNumber year param` (2026-07-10)
@@ -27,6 +28,15 @@ sections.
 **Problem:** Running `npm run migrate:local` in the background (via `run_in_background`) then attempting a second `prisma migrate dev` in the foreground fails immediately with `P1002: Timed out trying to acquire a postgres advisory lock`. The background process holds the lock even when stdin is waiting for input.
 **Solution:** Kill the background process with `pkill -f "prisma migrate dev"` before retrying. Then pipe the migration name via stdin: `echo "migration_name" | npx prisma migrate dev`.
 **Prevention:** Never run `prisma migrate dev` as a background task. Always run it in the foreground with stdin piped for the name prompt.
+
+## Mollie payment cancel (reservation-payment.ts)
+
+### 2026-07-13: cancelReservationMolliePayment — 422→paid semantics and slim token lookup
+**Pattern:** `cancelReservationMolliePayment(reservationId)` issues `DELETE /payments/{ref}` on the partner's Mollie account. The caller (partner `cancelCollection`) owns all local state changes based on the returned status; this function only talks to Mollie.
+**422 → `paid`:** Mollie returns 422 when a payment is no longer in `open` state (already `authorized` or `paid`). This means the consumer paid while the QR abandon was in flight. Return `{ status: 'paid' }` so the caller finalizes the reservation as complete rather than deleting it.
+**Token lookup:** Use `prisma.partnerAccount.findUnique({ where: { userId: site.userId } })` — NOT `loadFeeContext`. `loadFeeContext` loads fees + subscription + settings for fee calculation; none of that is needed for a cancel. Use the same two-field reservation select as `getReservationPaymentStatus`: `select: { paymentRef, site: { select: { userId } } }`, then look up `partnerAccount` by `userId`.
+**Short-circuit:** No `paymentRef` or `pi_demo_` prefix → `{ status: 'canceled' }` immediately with no fetch or token call.
+**Test mocking:** The function calls `prisma.reservation.findUnique` AND `prisma.partnerAccount.findUnique`. Mock both via `vi.hoisted()` so they're initialized before `vi.mock('../index', ...)` runs. Declare `const { mockReservationFindUnique, mockPartnerAccountFindUnique } = vi.hoisted(...)` then use them inside the `vi.mock('../index', () => ...)` factory. Without `vi.hoisted()`, the factory closes over uninitialized variables and throws "Cannot access before initialization".
 
 ## Payment / invoice / fee / subscription
 

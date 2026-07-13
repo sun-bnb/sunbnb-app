@@ -31,6 +31,11 @@ import {
   RESERVATION_PAYMENT_FAILED,
 } from './reservation-status'
 
+export type CancelPaymentResult =
+  | { status: 'canceled' }
+  | { status: 'paid' }
+  | { status: 'error'; error: string }
+
 const MOLLIE_API_BASE = 'https://api.mollie.com/v2'
 const SERVICE_CODE = 'sunbed-rental'
 
@@ -301,4 +306,98 @@ export async function reverifyAndFinalizeReservation(
   }
   if (verify.failed) return { settled: 'failed', providerStatus: verify.providerStatus }
   return { settled: 'pending', providerStatus: verify.providerStatus }
+}
+
+/**
+ * Cancel an in-flight Mollie payment for a reservation.
+ *
+ * Intended for the partner QR-collection abandon flow: when staff dismiss the
+ * QR screen before the consumer pays, this cancels the payment at the provider
+ * level so the consumer can't complete it out-of-band and create an untracked
+ * paid reservation.
+ *
+ * This function ONLY talks to Mollie. It does NOT delete the reservation, change
+ * its status, or touch the till — the caller (partner `cancelCollection`) owns
+ * all local state changes based on the returned status.
+ *
+ * Status semantics for the caller:
+ * - `canceled` → payment is gone; caller should delete/revert the reservation.
+ * - `paid`     → Mollie returned 422 (payment was already authorized/paid before
+ *               the DELETE landed); caller should finalize it as complete instead
+ *               of deleting. The QR consumer paid while the abandon was in flight.
+ * - `error`    → unexpected failure; keep the reservation safe (revert to cash
+ *               walk-in, don't delete — it may still be in flight).
+ *
+ * Demo refs and missing refs short-circuit without touching Mollie.
+ */
+export async function cancelReservationMolliePayment(
+  reservationId: string,
+): Promise<CancelPaymentResult> {
+  const reservation = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    select: { paymentRef: true, site: { select: { userId: true } } },
+  })
+
+  const paymentRef = reservation?.paymentRef ?? null
+
+  // No ref or demo ref — nothing to cancel with a provider.
+  if (!paymentRef || isDemoPaymentRef(paymentRef)) {
+    return { status: 'canceled' }
+  }
+
+  // Resolve the partner's Mollie token via the site owner (PartnerAccount.userId
+  // === Site.userId), exactly as createReservationMolliePayment does for the
+  // token acquisition step.
+  const partnerAccount = await prisma.partnerAccount.findUnique({
+    where: { userId: reservation!.site.userId },
+    select: { userId: true, mollieAccessToken: true },
+  })
+
+  if (!partnerAccount?.mollieAccessToken) {
+    return {
+      status: 'error',
+      error: 'Partner has not connected their Mollie account',
+    }
+  }
+
+  let token: string
+  try {
+    token = await getValidMollieToken(partnerAccount.userId)
+  } catch (err) {
+    console.error('[reservation-payment] cancel: token refresh failed:', err)
+    return {
+      status: 'error',
+      error:
+        'Partner Mollie session has expired. Please ask the merchant to reconnect their Mollie account.',
+    }
+  }
+
+  const testmode = isTestMode()
+  const qs = testmode ? '?testmode=true' : ''
+
+  const delRes = await fetch(
+    `${MOLLIE_API_BASE}/payments/${encodeURIComponent(paymentRef)}${qs}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  )
+
+  if (delRes.ok) {
+    return { status: 'canceled' }
+  }
+
+  if (delRes.status === 422) {
+    // Mollie returns 422 when the payment is no longer cancelable — it
+    // transitioned to `authorized` or `paid` while the DELETE was in flight.
+    // Signal the caller to finalize the reservation as complete.
+    return { status: 'paid' }
+  }
+
+  const detail = await delRes.text().catch(() => '')
+  console.error('[reservation-payment] cancel: Mollie DELETE failed', delRes.status, detail)
+  return {
+    status: 'error',
+    error: `Failed to cancel payment (${delRes.status})`,
+  }
 }
