@@ -10,10 +10,12 @@ export default function BrandedSiteView({
   site,
   brand,
   apiKey,
+  initialAvailableCount,
 }: {
   site: SiteProps
   brand: SiteViewBrand | null | undefined
   apiKey: string
+  initialAvailableCount?: number
 }) {
 
   const viewBrand: SiteViewBrand = {
@@ -39,7 +41,7 @@ export default function BrandedSiteView({
       <div className="absolute top-0 left-0 right-0 z-20">
         <BrandHeader brand={viewBrand} />
       </div>
-      <SiteView site={site} apiKey={apiKey} brand={viewBrand} />
+      <SiteView site={site} apiKey={apiKey} brand={viewBrand} initialAvailableCount={initialAvailableCount} />
     </div>
   )
 }

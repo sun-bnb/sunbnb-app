@@ -43,11 +43,16 @@ const serviceIcons: {
 }
 
 function Site({ site }: { site: SiteProps }) {
+  const t = useTranslations('SitesView')
+  // Treat missing features as the default (sunbeds enabled per schema default ["sunbeds"])
+  const siteFeatures = site.features ?? ['sunbeds']
+  const hasSunbeds = siteFeatures.includes('sunbeds')
+
   return (
     <div className="bg-white rounded-xl overflow-hidden shadow-soft md:hover:shadow-card md:transition-shadow" key={site.id}>
       <div className="w-full max-h-[260px] mr-2 overflow-hidden bg-gray-50 flex items-center relative">
-        { 
-          site.image && 
+        {
+          site.image &&
           <Link className="w-full" href={`/sites/${site.id}`} prefetch={true}>
             {
               (site.imageWidth && site.imageHeight) &&
@@ -62,12 +67,15 @@ function Site({ site }: { site: SiteProps }) {
       <div className="py-3 px-3">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3 text-sm">
+            {hasSunbeds && (
             <div>
               <span className="mr-1">&#x26F1;</span>
               <span className={(site.availableCount || 0) > 0 ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>{site.availableCount}</span>
               <span className="text-gray-300 mx-px">/</span>
               <span className="text-gray-400">{site.itemCount}</span>
+              <span className="text-gray-400 text-xs ml-1">{t('available today')}</span>
             </div>
+            )}
             {
               site.distance &&
                 <div className="text-gray-600">

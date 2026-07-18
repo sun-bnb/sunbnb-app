@@ -3,7 +3,7 @@ import path from 'path'
 
 export default defineConfig({
   test: {
-    include: ['app/**/*.integration.test.ts'],
+    include: ['app/**/*.integration.test.ts', 'service/**/*.integration.test.ts'],
     // Pins POSTGRES_URL to the throwaway sunbnb_test DB before @repo/data loads.
     setupFiles: ['./app/test/db-env.ts'],
     testTimeout: 15000,

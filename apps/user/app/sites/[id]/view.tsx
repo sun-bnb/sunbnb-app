@@ -22,8 +22,9 @@ import { setValue } from '@/store/features/sites/sitesSlice'
 import { RootState } from '@/store/store'
 import { useDispatch, useSelector } from 'react-redux'
 import dayjs from 'dayjs'
-import { 
-  useGetSiteByIdQuery
+import {
+  useGetSiteByIdQuery,
+  useGetAvailabilityBySiteAndTimeRangeQuery,
 } from '@/store/features/api/apiSlice'
 
 import ReservationView from './Reservation'
@@ -74,7 +75,7 @@ export interface SiteViewBrand {
   logoUrl?: string | null
 }
 
-export default function SiteView({ site, apiKey, brand }: { site: SiteProps, apiKey: string, brand?: SiteViewBrand }) {
+export default function SiteView({ site, apiKey, brand, initialAvailableCount }: { site: SiteProps, apiKey: string, brand?: SiteViewBrand, initialAvailableCount?: number }) {
 
   const router = useRouter()
   const pathname = usePathname()
@@ -105,9 +106,36 @@ export default function SiteView({ site, apiKey, brand }: { site: SiteProps, api
   logger.debug('Fetched site', fetchedSite)
 
   let inventoryItems = site.inventoryItems
-  
-  const itemCount = inventoryItems?.length
-  const availableCount = inventoryItems?.filter(item => item.status === 'active' && (item.reservations || []).length === 0).length
+
+  const activeSiteForFeatures = fetchedSite || site
+  const siteFeatureList = activeSiteForFeatures.features ?? ['sunbeds']
+  const hasSunbedsFeature = siteFeatureList.includes('sunbeds')
+
+  // Derive from/to for the availability query using the same logic as SunbedSelection
+  // (dateRange from Redux, defaulting to today). This ensures the header count,
+  // the sunbed grid, and bookings all reference the same availability response
+  // (RTK Query dedupes identical args — no extra request).
+  const dateRange = sitesState.dateRange || [
+    dayjs().startOf('day').toISOString(),
+    dayjs().endOf('day').toISOString(),
+  ]
+  const availabilityFrom = dateRange[0]
+  const availabilityTo = dateRange[1]
+
+  const { data: availabilityResponse } = useGetAvailabilityBySiteAndTimeRangeQuery(
+    { siteId: site.id, from: availabilityFrom, to: availabilityTo },
+    { skip: !hasSunbedsFeature }
+  )
+
+  // itemCount: number of active inventory items (length of page.tsx's active-filtered list)
+  const itemCount = hasSunbedsFeature ? inventoryItems?.length : undefined
+  // availableCount: from RTK Query (canonical rule), falling back to server-computed
+  // initialAvailableCount while the query is loading or no date range is committed yet.
+  const availableCount = hasSunbedsFeature
+    ? (availabilityResponse
+        ? availabilityResponse.availability.filter(a => a.available).length
+        : initialAvailableCount)
+    : undefined
 
   let allReservations: Reservation[] = []
   if (inventoryItems) {
@@ -126,9 +154,8 @@ export default function SiteView({ site, apiKey, brand }: { site: SiteProps, api
   // ── Mobile drawer: peek height = visible portion when minimized ──
   // Heights: date range ~56px, date+time row ~48px, hours/days toggle ~36px, view mode tabs ~44px, padding ~16px
   const activeSite = fetchedSite || site
-  const features = activeSite.features || ['sunbeds']
-  const hasSunbeds = features.includes('sunbeds')
-  const hasRentals = features.includes('rentals') && (activeSite.rentalItems?.length ?? 0) > 0
+  const hasSunbeds = hasSunbedsFeature
+  const hasRentals = siteFeatureList.includes('rentals') && (activeSite.rentalItems?.length ?? 0) > 0
   const hasViewModeTabs = hasSunbeds && hasRentals
   const hasHourlyEquipment = hasRentals && (activeSite.rentalItems || []).some((ri: any) => ri.pricePerHour != null && ri.pricePerHour > 0)
   const viewMode = sitesState.viewMode || (hasSunbeds ? 'sunbeds' : 'equipment')
@@ -212,12 +239,14 @@ export default function SiteView({ site, apiKey, brand }: { site: SiteProps, api
         <div className={brand ? 'px-3' : 'py-3 px-3'}>
           <div className={`flex justify-between items-center ${brand ? 'bg-black/30 -mx-3 px-3 py-2' : ''}`}>
             <div className="flex items-center gap-3 text-sm">
+              {hasSunbeds && (
               <div>
                 <span className="mr-1">&#x26F1;</span>
                 <span className={brand ? 'text-green-400 font-medium' : (availableCount || 0) > 0 ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>{availableCount}</span>
                 <span className={brand ? 'text-white/50 mx-px' : 'text-gray-300 mx-px'}>/</span>
                 <span className={brand ? 'text-white/60' : 'text-gray-400'}>{itemCount}</span>
               </div>
+              )}
               {
                 site.distance &&
                   <div className={brand ? 'text-white/90' : 'text-gray-600'}>

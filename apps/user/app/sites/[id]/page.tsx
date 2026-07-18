@@ -5,6 +5,7 @@ import { Metadata } from 'next'
 import { auth } from '@/app/auth'
 import SiteView from './view'
 import ErrorCard from '@/components/ErrorCard'
+import { countAvailableToday } from '@/service/availabilityService'
 
 async function getSite(idOrSlug: string, userId: string) {
 
@@ -84,9 +85,18 @@ export default async function Site({ params }: { params: { id: string }}) {
   const site = await getSite(params.id, session?.user?.id)
   if (!site) return <ErrorCard title="Beach not found" message={`We couldn't find the beach you're looking for.`} showHomeLink />
 
+  // Compute today's canonical availability count server-side so the header has
+  // a correct initial value before the client-side RTK Query resolves. Only
+  // computed when the site has the sunbeds feature (schema default: ["sunbeds"]).
+  const siteFeatures = site.features ?? ['sunbeds']
+  const hasSunbeds = siteFeatures.includes('sunbeds')
+  const initialAvailableCount = hasSunbeds
+    ? (await countAvailableToday(site.id)).availableCount
+    : undefined
+
   return (
     <div>
-      <SiteView site={site} apiKey={apiKey}/>
+      <SiteView site={site} apiKey={apiKey} initialAvailableCount={initialAvailableCount} />
     </div>
   )
 

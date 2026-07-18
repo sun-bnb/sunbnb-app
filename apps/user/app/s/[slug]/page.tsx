@@ -2,6 +2,7 @@ import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
 import { Metadata } from 'next'
 import BrandedSiteView from './view'
+import { countAvailableToday } from '@/service/availabilityService'
 
 async function getSiteBySlug(slug: string, userId?: string) {
 
@@ -75,11 +76,19 @@ export default async function BrandedSitePage({ params }: { params: { slug: stri
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY
     || process.env.GOOGLE_MAPS_API_KEY as string
 
+  // Same server-side initial count as /sites/[id] — the header falls back to
+  // this until the client-side availability query resolves.
+  const siteFeatures = site.features ?? ['sunbeds']
+  const initialAvailableCount = siteFeatures.includes('sunbeds')
+    ? (await countAvailableToday(site.id)).availableCount
+    : undefined
+
   return (
     <BrandedSiteView
       site={site}
       brand={site.brand}
       apiKey={apiKey}
+      initialAvailableCount={initialAvailableCount}
     />
   )
 }

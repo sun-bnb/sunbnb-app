@@ -86,3 +86,21 @@ export async function getAvailability(siteId: string, from: Date, to: Date) {
   const availabilityData = getAvailabilityData(reservations, itemIds, from, to)
   return availabilityData
 }
+
+/**
+ * Count available sunbeds for a site today using the canonical availability rule.
+ * Uses the same BLOCKING_STATUSES + no-show/departed release logic as getAvailability.
+ * Returns { availableCount, itemCount } where itemCount is active items only.
+ */
+export async function countAvailableToday(siteId: string): Promise<{ availableCount: number; itemCount: number }> {
+  const startOfToday = new Date()
+  startOfToday.setHours(0, 0, 0, 0)
+  const endOfToday = new Date()
+  endOfToday.setHours(23, 59, 59, 999)
+
+  const availabilityData = await getAvailability(siteId, startOfToday, endOfToday)
+  const itemCount = availabilityData.length
+  const availableCount = availabilityData.filter(a => a.available).length
+
+  return { availableCount, itemCount }
+}

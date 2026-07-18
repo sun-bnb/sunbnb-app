@@ -2,6 +2,7 @@
 import prisma from '@repo/data/PrismaCient'
 import { Prisma } from '@prisma/client'
 import { MapCenter, MapBounds, SiteGeography } from '@/app/sites/types'
+import { BLOCKING_STATUSES, OP_NO_SHOW, OP_DEPARTED } from '@repo/data/reservation-status'
 
 function parsePointWKT(wkt: string): [number, number] {
   // Matches something like "POINT(lat lng)"
@@ -139,6 +140,17 @@ export async function searchSites(lat?: string, lng?: string) {
   ? Prisma.sql`ORDER BY dist_km`
   : Prisma.sql``;
 
+  // Server-local today bounds — matches the convention used by availabilityService
+  // (endOfToday = new Date() with setHours(23,59,59,999)) so counts are consistent.
+  const startOfToday = new Date()
+  startOfToday.setHours(0, 0, 0, 0)
+  const endOfToday = new Date()
+  endOfToday.setHours(23, 59, 59, 999)
+
+  // Build the IN (...) list for BLOCKING_STATUSES using Prisma.join to avoid
+  // hardcoding status strings (single source of truth from @repo/data).
+  const blockingStatusList = Prisma.join(BLOCKING_STATUSES)
+
   // Query
   const results = await prisma.$queryRaw<any[]>(
     Prisma.sql`
@@ -151,21 +163,33 @@ export async function searchSites(lat?: string, lng?: string) {
         image_height,
         price,
         services,
+        features,
         location_lat,
         location_lng,
         ${distanceColumn}
-        (SELECT COUNT(*) FROM "InventoryItem" WHERE site_id = "Site".id)::int AS item_count,
+        (
+          SELECT COUNT(*)
+          FROM "InventoryItem"
+          WHERE site_id = "Site".id
+            AND status = 'active'
+        )::int AS item_count,
         (
           SELECT COUNT(*)
           FROM "InventoryItem" i
           WHERE i.site_id = "Site".id
+            AND i.status = 'active'
             AND NOT EXISTS (
               SELECT 1
               FROM "_InventoryItemToReservation" itor
               JOIN "Reservation" r ON r.id = itor."B"
               WHERE itor."A" = i.id
-                AND r.from <= CURRENT_DATE
-                AND r.to >= CURRENT_DATE
+                AND r.status IN (${blockingStatusList})
+                AND r.from <= ${endOfToday}
+                AND r.to >= ${startOfToday}
+                AND NOT (
+                  r.operational_status IN (${OP_NO_SHOW}, ${OP_DEPARTED})
+                  AND r.to <= ${endOfToday}
+                )
             )
         )::int AS available_count
       FROM "Site"
@@ -221,13 +245,14 @@ export async function searchSites(lat?: string, lng?: string) {
     distance: r.dist_km,
     price: r.price,
     services: r.services,
+    features: r.features,
     itemCount: r.item_count,
     availableCount: r.available_count
   }))
 
   return {
     sites,
-    geography: bounds ? parseMapData({
+    geography: (bounds && bounds[0]?.center && bounds[0]?.bounding_box) ? parseMapData({
       center: bounds[0].center,
       bounding_box: bounds[0].bounding_box
     }) : undefined

@@ -77,7 +77,7 @@ RTK Query: `reservationApi` (getReservation, getReservationByDate, etc.), `place
 ```bash
 npm run test              # unit + route + server action tests (326 tests, Prisma mocked)
 npm run test:watch        # vitest in watch mode
-npm run test:integration  # integration tests against local sunbnb_test DB (45 tests, real Prisma)
+npm run test:integration  # integration tests against local sunbnb_test DB (59 tests, real Prisma)
 ```
 
 ### Unit / route tests (`vitest.config.ts`)
@@ -114,6 +114,7 @@ npm run test:integration  # integration tests against local sunbnb_test DB (45 t
 ### Integration tests (`vitest.integration.config.ts`)
 
 Requires local Docker Postgres with `sunbnb_test` DB (same DB as `packages/data` integration tests — no extra setup needed). `POSTGRES_URL` set via CLI in the npm script. No mock for `@repo/data/PrismaCient` or `@repo/data/payment` — real DB writes verified.
+- `service/siteService.integration.test.ts` — searchSites item_count (active-only denominator), available_count (BLOCKING_STATUSES filter, date overlap, no-show/departed release rule, non-blocking statuses); countAvailableToday (wraps getAvailability for today's server-local window) (14 tests)
 - `app/sites/[id]/actions.integration.test.ts` — saveReservationForMultipleItems (DB writes, payment calc, unpaid, anonymous), saveRentalBooking (pricing, real aggregate availability check) (21 tests)
 - `app/reservations/[id]/actions.integration.test.ts` — createOrder (DB prices, soldOut, appSalesEnabled, anonymous), cancelReservation (status update, refund logic) (16 tests)
 - `app/reservations/rental/[id]/actions.integration.test.ts` — rental booking detail actions against real DB (8 tests)
