@@ -28,6 +28,12 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }))
 
+// Mock @repo/data/tab-payment for settleTabCash (processConfirmedTabPayment).
+vi.mock('@repo/data/tab-payment', () => ({
+  processConfirmedTabPayment: vi.fn().mockResolvedValue(undefined),
+  calculateTabTotal: vi.fn().mockResolvedValue({ ordersTotal: 0, serviceFee: 0, payableTotal: 0, orderIds: [] }),
+}))
+
 // Mock @repo/data/payment for getSite (resolveSiteFees) and restaurant deposit cascade
 // (processChargedTableDeposit called by chargeRestaurantReservationDeposit).
 vi.mock('@repo/data/payment', () => ({
@@ -180,6 +186,7 @@ import {
   WAITLIST_ENTRY_ID,
   COMBINATION_ID,
   RESTAURANT_ELEMENT_ID,
+  TAB_ID,
 } from './token-fixtures'
 import {
   WORKING_HOURS_ID,
@@ -317,6 +324,17 @@ beforeEach(() => {
   } as any)
   vi.mocked(prisma.order.findMany).mockResolvedValue([])
   vi.mocked(prisma.order.update).mockResolvedValue({} as any)
+  vi.mocked(prisma.order.updateMany).mockResolvedValue({ count: 0 } as any)
+
+  // TableTab stubs (for getOpenTabs, settleTabCash, discardTab)
+  vi.mocked(prisma.tableTab.findMany).mockResolvedValue([])
+  vi.mocked(prisma.tableTab.findUnique).mockResolvedValue({
+    id: TAB_ID,
+    siteId: SITE_ID,
+    status: 'open',
+    orders: [],
+  } as any)
+  vi.mocked(prisma.tableTab.update).mockResolvedValue({} as any)
 
   // Product stubs (for toggleProductSoldOut, updateProduct, deleteProduct, updateProductImage)
   // Must include site.userId for actions that do manual ownership check via product.site.userId

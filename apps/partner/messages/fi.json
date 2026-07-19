@@ -390,7 +390,8 @@
     "embedHeading": "Upota verkkosivuillesi",
     "embedHint": "Liitä tämä koodinpätkä sivustollesi ottaaksesi varauksia suoraan omalta sivultasi.",
     "embedCopy": "Kopioi koodi",
-    "embedCopied": "Kopioitu!"
+    "embedCopied": "Kopioitu!",
+    "printDineInQr": "Tulosta pöytä-QR-koodit"
   },
   "SiteSchematic": {
     "layoutWidth": "Leveys",
@@ -720,7 +721,13 @@
     "processingFeesLabel": "Maksunkäsittelykulut",
     "refundsNotCreditNotesHint": "Palautukset näytetään viitteenä — hyvityslaskuja ei ole vielä laadittu",
     "downloadCsvRegister": "Lataa CSV",
-    "accountingExportEmpty": "Ei laskuja tältä kuulta"
+    "accountingExportEmpty": "Ei laskuja tältä kuulta",
+    "tabsGroupTitle": "Pöytätilaukset",
+    "tabsEmpty": "Ei pöytätilauslaskuja tälle kuulle",
+    "tabTableLabel": "Pöytä",
+    "tabClosedAt": "Suljettu",
+    "tabStatusPaid": "Verkko",
+    "tabStatusCash": "Käteinen"
   },
   "SiteOrders": {
     "tabNew": "Uusi",
@@ -758,7 +765,24 @@
     "nothingPreparing": "Ei tilauksia valmistettavana",
     "noOrdersToDeliver": "Ei tilauksia toimitettavana",
     "noCompletedOrders": "Ei vielä suoritettuja tilauksia",
-    "reason": "Syy: {text}"
+    "reason": "Syy: {text}",
+    "tabsHeading": "Avoimet laskut",
+    "tabsEmpty": "Ei avoimia laskuja",
+    "tabStatusOpen": "Avoinna",
+    "tabStatusPendingPayment": "Maksu käynnissä",
+    "tabRounds": "{count, plural, one {# kierros} other {# kierrosta}}",
+    "tabAmountDue": "Maksettava summa",
+    "tabSettleCash": "Maksa käteisellä",
+    "tabDiscard": "Hylkää",
+    "tabSettleConfirmTitle": "Maksetaanko lasku käteisellä?",
+    "tabSettleConfirmBody": "Peri {amount} asiakkaalta. Luodaan kuitti ja suljetaan lasku.",
+    "tabSettleConfirm": "Peri {amount}",
+    "tabDiscardConfirmTitle": "Hylätäänkö lasku?",
+    "tabDiscardConfirmBody": "Kaikki tilaukset mitätöidään. Mitään maksua ei veloiteta. Tätä ei voi peruuttaa.",
+    "tabDiscardConfirm": "Hylkää lasku",
+    "tabPendingPaymentHint": "Verkkomaksu kesken — odota sen valmistumista",
+    "tabOpenedAt": "Avattu {time}",
+    "tabCancelAction": "Peruuta"
   },
   "SiteManage": {
     "summary": "Yhteenveto",

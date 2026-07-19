@@ -57,6 +57,12 @@ automatically excluded from invoice-driven accounting. No accounting changes nee
 
 ## Accounting analytics — extension patterns
 
+### 2026-07-19: Invoice header field semantics — totalCharge is NET, totalAmount is GROSS
+**Problem:** A phase-5F report claimed `Invoice.totalCharge` is the gross (VAT-inclusive) amount and derived net as `totalCharge - totalTax`. That is INVERTED. In every `processConfirmed*` creator (`packages/data/src/payment.ts`): `totalCharge` = summed line BASE amounts (net), `totalTax` = VAT, `totalAmount` = gross (VAT-inclusive, what the consumer paid). The dine-in tabs accounting card initially shipped with the inverted mapping and showed net-minus-VAT as "net".
+**Solution:** When rendering or aggregating invoice headers: net = `totalCharge`, VAT = `totalTax`, gross = `totalAmount`; sanity check `totalCharge + totalTax ≈ totalAmount`. Same convention at line level (`charge`/`tax`/`amount`).
+**Prevention:** Don't infer money-field semantics from names — read the creating function in `payment.ts` and check the arithmetic identity against a real row before wiring a display.
+
+
 ### 2026-07-10: Adding analytics actions to accounting/actions.ts
 **Pattern:** When adding new server actions to `accounting/actions.ts`:
 1. **TREND_WINDOWS const** — extend `[7,30,365]` to `[1,7,30,365]` to support single-day window. The `const` drives the type used in `getOperationsTrend`'s guard expression.

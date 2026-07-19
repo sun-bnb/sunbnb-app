@@ -249,17 +249,95 @@ describe('getPaidItemsByMonth', () => {
     )
   })
 
-  it('returns { orders, reservations } on happy path', async () => {
+  it('returns { orders, reservations, tabs } on happy path', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
     const fakeOrders = [{ id: 'order-1', status: ORDER_COMPLETE, invoices: [] }]
     const fakeReservations = [{ id: 'res-1', status: RESERVATION_COMPLETE, invoices: [] }]
+    const fakeTabs = [{ id: 'inv-tab-1', tableTabId: 'tab-1', issuerType: 'PARTNER', invoiceLines: [], tableTab: { id: 'tab-1', status: 'paid', closedAt: new Date(), table: { number: 3, label: 'Terrace' } } }]
     vi.mocked(prisma.order.findMany).mockResolvedValue(fakeOrders as any)
     vi.mocked(prisma.reservation.findMany).mockResolvedValue(fakeReservations as any)
+    vi.mocked(prisma.invoice.findMany).mockResolvedValue(fakeTabs as any)
 
     const result = await getPaidItemsByMonth(SITE_ID, 2024, 3)
 
-    expect(result).toEqual({ orders: fakeOrders, reservations: fakeReservations })
+    expect(result).toEqual({ orders: fakeOrders, reservations: fakeReservations, tabs: fakeTabs })
+  })
+
+  it('queries PARTNER tab invoices filtered by tableTabId not null and siteId via tableTab relation', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(prisma.order.findMany).mockResolvedValue([])
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([])
+    vi.mocked(prisma.invoice.findMany).mockResolvedValue([])
+
+    const expectedStart = new Date(Date.UTC(2024, 5, 1)) // 2024-06-01
+    const expectedEnd   = new Date(Date.UTC(2024, 6, 1)) // 2024-07-01
+
+    await getPaidItemsByMonth(SITE_ID, 2024, 6)
+
+    expect(vi.mocked(prisma.invoice.findMany)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          issuerType: 'PARTNER',
+          invoicedAt: { gte: expectedStart, lt: expectedEnd },
+          tableTabId: { not: null },
+          tableTab: { siteId: SITE_ID },
+        }),
+      })
+    )
+  })
+
+  it('includes invoiceLines and tableTab with table number/label in tab query', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(prisma.order.findMany).mockResolvedValue([])
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([])
+    vi.mocked(prisma.invoice.findMany).mockResolvedValue([])
+
+    await getPaidItemsByMonth(SITE_ID, 2024, 6)
+
+    expect(vi.mocked(prisma.invoice.findMany)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          invoiceLines: true,
+          tableTab: expect.objectContaining({
+            select: expect.objectContaining({
+              id: true,
+              status: true,
+              closedAt: true,
+              table: expect.objectContaining({
+                select: expect.objectContaining({ number: true, label: true }),
+              }),
+            }),
+          }),
+        }),
+      })
+    )
+  })
+
+  /**
+   * BUG-REVEALING: The tab query must NOT fire when the site does not belong to the
+   * session user — the ownership check must guard all three queries.
+   */
+  it('does not query tab invoices when the site belongs to a different user (IDOR guard)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OTHER_ID } as any)
+
+    await expect(getPaidItemsByMonth(SITE_ID, 2024, 3)).rejects.toThrow('Not authorized')
+    expect(vi.mocked(prisma.invoice.findMany)).not.toHaveBeenCalled()
+  })
+
+  it('returns empty tabs array when no tab invoices exist for the month', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(prisma.order.findMany).mockResolvedValue([])
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([])
+    vi.mocked(prisma.invoice.findMany).mockResolvedValue([])
+
+    const result = await getPaidItemsByMonth(SITE_ID, 2024, 3)
+
+    expect(result.tabs).toEqual([])
   })
 })
 

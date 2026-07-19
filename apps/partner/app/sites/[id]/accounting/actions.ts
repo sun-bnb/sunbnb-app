@@ -321,7 +321,7 @@ export async function getPaidItemsByMonth(siteId: string, year: number, month: n
   const start = new Date(Date.UTC(year, month - 1, 1))
   const end = new Date(Date.UTC(year, month, 1))
 
-  const [orders, reservations] = await Promise.all([
+  const [orders, reservations, tabs] = await Promise.all([
     prisma.order.findMany({
       where: {
         siteId,
@@ -365,7 +365,30 @@ export async function getPaidItemsByMonth(siteId: string, year: number, month: n
       },
       orderBy: { createdAt: 'desc' },
     }),
+    // Dine-in tab invoices: PARTNER invoices linked via tableTabId for this site.
+    // Tabs have status 'paid' (Mollie/online) or 'settled_cash' (staff cash close).
+    // The invoice is the fiscal record; the tab status distinguishes payment method.
+    prisma.invoice.findMany({
+      where: {
+        issuerType: 'PARTNER',
+        invoicedAt: { gte: start, lt: end },
+        tableTabId: { not: null },
+        tableTab: { siteId },
+      },
+      include: {
+        invoiceLines: true,
+        tableTab: {
+          select: {
+            id: true,
+            status: true,
+            closedAt: true,
+            table: { select: { number: true, label: true } },
+          },
+        },
+      },
+      orderBy: { invoicedAt: 'desc' },
+    }),
   ])
 
-  return { orders, reservations }
+  return { orders, reservations, tabs }
 }

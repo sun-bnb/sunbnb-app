@@ -172,8 +172,8 @@ export interface Order {
   userId?: string | null
   anonId?: string | null
   siteId: string
-  
-  status : string     
+
+  status : string
 
   price: number
   tax: number
@@ -191,6 +191,9 @@ export interface Order {
   orderItems: OrderItem[]
 
   createdAt: Date
+
+  /** Denormalized dine-in table reference (matches Table.id). No FK relation on Order. */
+  tableId?: string | null
 
 }
 

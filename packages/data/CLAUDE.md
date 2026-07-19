@@ -45,6 +45,11 @@ Key models: User, PartnerAccount, Site, InventoryItem, Reservation, Order, Order
 - `processConfirmedOrder(id)` — same pattern but per-item VAT (not site-wide)
 - `processConfirmedRentalBooking(paymentRef)` — groups bookings by paymentRef, creates invoices for the group
 - `calculateOrderServiceFee(orderId)` — read-only fee calculation for orders
+- `calculateTabTotal(tabId)` — dine-in tab payable amount: sum of non-voided rounds + service fee ADDED on top (orders add fee to customer total); single source for the Mollie/demo charge amount
+- `processConfirmedTabPayment(tabId, opts?)` — idempotent group invoicing for a dine-in tab across all rounds (per-item VAT). Default: PARTNER + PLATFORM invoices, tab → `paid`. `{ cash: true }` (staff settle-as-cash, track 015 precedent): PARTNER-only receipt, NO commission, no paymentRef, tab → `settled_cash`. Both paths null `openTableId` (mandatory — releases the one-open-tab-per-table guard); both terminal statuses block re-processing by the other path
+
+### Tab-order paid-ness rule (analytics)
+Tab orders enter kitchen states at PLACEMENT, before payment — `order.status` does not imply paid-ness when `Order.tabId` is set. Every Order-based revenue/refund aggregation in `analytics.ts` applies: an order with `tabId != null` counts only when its tab is `paid` or `settled_cash` (`TAB_PAID_FILTER`, module-local). Non-tab orders unaffected.
 
 ### Invoice Creation Rules
 - **Agent/marketplace model**: the PARTNER invoice is booked GROSS (the full price the consumer paid); the fee is never netted out of partner revenue or added to the consumer total
@@ -93,7 +98,7 @@ npm run test:integration:setup  # run prisma migrate deploy against sunbnb_test
 ```
 
 - **Unit tests** (`src/*.test.ts`): `payment.test.ts` (28 tests — round, VAT, fee cascade, fee calculation), `rate-limit.test.ts` (7 tests — sliding window, expiry, independent keys), `reservation-status.test.ts` (8 tests — status groupings, overlap checks)
-- **Integration tests** (`src/*.integration.test.ts`): `payment.integration.test.ts` (18 tests — processConfirmedReservation/Order, invoice creation, idempotency, hash chain, VAT, fees), `fee-context.integration.test.ts` (7 tests — loadFeeContext three-tier cascade), `password-reset.integration.test.ts` (15 tests — token lifecycle, rate limiting, expiry, password strength)
+- **Integration tests** (`src/*.integration.test.ts`): `payment.integration.test.ts` (18 tests — processConfirmedReservation/Order, invoice creation, idempotency, hash chain, VAT, fees), `tab-payment.integration.test.ts` (23 tests — openTableId guard, calculateTabTotal, group invoicing, idempotency both directions, cash settle PARTNER-only receipt, kitchen-state preservation, void exclusion), `analytics.integration.test.ts` (incl. 5 tab-order paid-ness tests), `fee-context.integration.test.ts` (7 tests — loadFeeContext three-tier cascade), `password-reset.integration.test.ts` (15 tests — token lifecycle, rate limiting, expiry, password strength)
 - **Config**: `vitest.config.ts` (unit, excludes `*.integration.test.ts`), `vitest.integration.config.ts` (integration, `fileParallelism: false` for shared DB)
 - **Test helpers**: `src/test/setup.ts` (DB connection, `cleanDatabase()` via TRUNCATE CASCADE), `src/test/fixtures.ts` (factory functions for all models)
 

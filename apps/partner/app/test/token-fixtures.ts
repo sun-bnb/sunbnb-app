@@ -39,6 +39,7 @@ export const TABLE_RES_ID = 'matrix-table-res-1'
 export const WAITLIST_ENTRY_ID = 'matrix-waitlist-1'
 export const COMBINATION_ID = 'matrix-combination-1'
 export const RESTAURANT_ELEMENT_ID = 'matrix-restaurant-element-1'
+export const TAB_ID = 'matrix-tab-1'
 
 // ─── Token definitions ────────────────────────────────────────────────────────
 

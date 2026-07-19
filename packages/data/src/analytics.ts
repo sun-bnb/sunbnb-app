@@ -34,7 +34,27 @@ import {
   ORDER_DELIVERED,
   ORDER_COMPLETED,
   ORDER_REFUNDED,
+  TAB_PAID,
+  TAB_SETTLED_CASH,
 } from './reservation-status'
+
+/**
+ * Tab-paid-ness filter for Order queries.
+ *
+ * Tab orders enter kitchen states (complete/accepted/…/delivered) at placement,
+ * BEFORE payment. An Order with `tabId != null` is only revenue once its
+ * owning tab has reached a terminal paid status (TAB_PAID for online, or
+ * TAB_SETTLED_CASH for cash settlement). Non-tab orders (tabId = null) are
+ * revenue as soon as their own status reaches a post-payment kitchen state.
+ *
+ * Usage: spread into a Prisma `where` clause alongside status filters.
+ */
+const TAB_PAID_FILTER = {
+  OR: [
+    { tabId: null },
+    { tab: { status: { in: [TAB_PAID, TAB_SETTLED_CASH] } } },
+  ],
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -608,7 +628,10 @@ export async function getMonthlySourceSummary(
         select: { paymentAmount: true },
       }),
 
-      // F&B orders — all post-payment fulfillment states
+      // F&B orders — all post-payment fulfillment states.
+      // Tab orders (tabId != null) enter kitchen states at PLACEMENT before any
+      // payment — apply TAB_PAID_FILTER so only orders whose tab has been paid
+      // (online or cash) count as revenue. Non-tab orders are unaffected.
       prisma.order.findMany({
         where: {
           siteId,
@@ -616,6 +639,7 @@ export async function getMonthlySourceSummary(
             in: [ORDER_COMPLETE, ORDER_ACCEPTED, ORDER_PREPARING, ORDER_READY, ORDER_DELIVERED, ORDER_COMPLETED],
           },
           createdAt: { gte: rangeStart, lt: rangeEndExcl },
+          ...TAB_PAID_FILTER,
         },
         select: { paymentAmount: true, seatId: true, reservationId: true },
       }),
@@ -640,12 +664,16 @@ export async function getMonthlySourceSummary(
         select: { paymentAmount: true },
       }),
 
-      // Refunded orders
+      // Refunded orders. Same tab-paid-ness rule as the revenue query: a
+      // refunded round on a never-paid tab was never revenue, so it must not
+      // count as a refund either — only refunds of paid/settled tabs (or
+      // non-tab orders) belong in the refunds bucket.
       prisma.order.findMany({
         where: {
           siteId,
           status: ORDER_REFUNDED,
           createdAt: { gte: rangeStart, lt: rangeEndExcl },
+          ...TAB_PAID_FILTER,
         },
         select: { paymentAmount: true },
       }),

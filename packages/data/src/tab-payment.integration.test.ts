@@ -16,7 +16,12 @@ import {
   resetCounter,
 } from './test/fixtures'
 import { calculateTabTotal, processConfirmedTabPayment } from './payment'
-import { TAB_PAID, ORDER_COMPLETE, ORDER_DELIVERED } from './reservation-status'
+import {
+  TAB_PAID,
+  TAB_SETTLED_CASH,
+  ORDER_COMPLETE,
+  ORDER_DELIVERED,
+} from './reservation-status'
 
 beforeEach(async () => {
   await cleanDatabase()
@@ -406,5 +411,183 @@ describe('processConfirmedTabPayment', () => {
     expect(updatedOrder2.status).toBe(ORDER_DELIVERED)
     expect(updatedOrder2.paymentRef).toBe(tab.paymentRef)
     expect(invoiceCount).toBe(2)
+  })
+
+  // ─── (f) cash settlement path ─────────────────────────────────────────────
+
+  describe('cash settlement — { cash: true }', () => {
+    it('creates exactly one PARTNER invoice and no PLATFORM invoice', async () => {
+      const { tab } = await setupTabWithOrders()
+
+      await processConfirmedTabPayment(tab.id, { cash: true })
+
+      const invoices = await prisma.invoice.findMany({
+        where: { tableTabId: tab.id },
+      })
+
+      expect(invoices).toHaveLength(1)
+      expect(invoices[0]?.issuerType).toBe('PARTNER')
+    })
+
+    it('PARTNER invoice has correct per-item VAT totals across both rounds', async () => {
+      const { tab } = await setupTabWithOrders()
+
+      await processConfirmedTabPayment(tab.id, { cash: true })
+
+      const partnerInvoice = await prisma.invoice.findFirstOrThrow({
+        where: { tableTabId: tab.id, issuerType: 'PARTNER' },
+        include: { invoiceLines: true },
+      })
+
+      // Round 1 (€16) + Round 2 (€8) = €24 gross
+      expect(partnerInvoice.totalAmount).toBe(24.0)
+      expect(partnerInvoice.invoiceLines).toHaveLength(2)
+      for (const line of partnerInvoice.invoiceLines) {
+        expect(line.vatRate).toBe(14)
+        // Base + vat should round to the gross amount
+        expect(line.charge + line.tax).toBeCloseTo(line.amount, 1)
+      }
+    })
+
+    it('tab status is TAB_SETTLED_CASH (not TAB_PAID) and openTableId is null', async () => {
+      const { tab } = await setupTabWithOrders()
+
+      await processConfirmedTabPayment(tab.id, { cash: true })
+
+      const updated = await prisma.tableTab.findUniqueOrThrow({ where: { id: tab.id } })
+
+      expect(updated.status).toBe(TAB_SETTLED_CASH)
+      expect(updated.closedAt).not.toBeNull()
+      expect(updated.openTableId).toBeNull()
+    })
+
+    it('paymentRef is NOT written to orders (cash has none)', async () => {
+      // Setup a cash tab — no paymentRef set on the tab itself
+      const { user, site, tab: rawTab, product } = await setupTab({
+        feeOverrides: { chargeType: 'fixed', feeAmount: 0.5 },
+      })
+      // Ensure tab has no paymentRef
+      expect(rawTab.paymentRef).toBeNull()
+
+      const order = await createTestOrder(user.id, site.id, {
+        tabId: rawTab.id,
+        status: 'delivered',
+        paymentAmount: 8.0,
+        totalPrice: 8.0,
+        paymentRef: null,
+      })
+      await createTestOrderItem(order.id, product.id, {
+        quantity: 1,
+        price: 8.0,
+        tax: 14,
+        totalPrice: 8.0,
+      })
+
+      await processConfirmedTabPayment(rawTab.id, { cash: true })
+
+      const updatedOrder = await prisma.order.findUniqueOrThrow({ where: { id: order.id } })
+      expect(updatedOrder.paymentRef).toBeNull()
+    })
+
+    it('PARTNER invoice paymentRef is undefined (not set) for cash', async () => {
+      const { tab: rawTab, user, site, product } = await setupTab({
+        feeOverrides: { chargeType: 'fixed', feeAmount: 0.5 },
+      })
+
+      const order = await createTestOrder(user.id, site.id, {
+        tabId: rawTab.id,
+        status: 'complete',
+        paymentAmount: 16.0,
+        totalPrice: 16.0,
+        paymentRef: null,
+      })
+      await createTestOrderItem(order.id, product.id, {
+        quantity: 2,
+        price: 8.0,
+        tax: 14,
+        totalPrice: 16.0,
+      })
+
+      await processConfirmedTabPayment(rawTab.id, { cash: true })
+
+      const partnerInvoice = await prisma.invoice.findFirstOrThrow({
+        where: { tableTabId: rawTab.id, issuerType: 'PARTNER' },
+      })
+      expect(partnerInvoice.paymentRef).toBeNull()
+    })
+
+    it('is idempotent — second call is a no-op (invoice count stays 1)', async () => {
+      const { tab } = await setupTabWithOrders()
+
+      await processConfirmedTabPayment(tab.id, { cash: true })
+      await processConfirmedTabPayment(tab.id, { cash: true })
+
+      const count = await prisma.invoice.count({ where: { tableTabId: tab.id } })
+      expect(count).toBe(1)
+    })
+
+    it('cash-settled tab is not re-processable by the online path', async () => {
+      const { tab } = await setupTabWithOrders()
+
+      // Cash settle first
+      await processConfirmedTabPayment(tab.id, { cash: true })
+      // Online path attempt — must be a no-op, not create new invoices
+      await processConfirmedTabPayment(tab.id)
+
+      const count = await prisma.invoice.count({ where: { tableTabId: tab.id } })
+      // Still exactly 1 PARTNER invoice from cash settle — no PLATFORM added
+      expect(count).toBe(1)
+
+      const updatedTab = await prisma.tableTab.findUniqueOrThrow({ where: { id: tab.id } })
+      // Status remains TAB_SETTLED_CASH — NOT overwritten to TAB_PAID
+      expect(updatedTab.status).toBe(TAB_SETTLED_CASH)
+    })
+
+    it('TAB_PAID tab is not re-processable by the cash path', async () => {
+      const { tab } = await setupTabWithOrders()
+
+      // Online payment first
+      await processConfirmedTabPayment(tab.id)
+      // Cash settle attempt — must be a no-op
+      await processConfirmedTabPayment(tab.id, { cash: true })
+
+      const count = await prisma.invoice.count({ where: { tableTabId: tab.id } })
+      // 2 invoices from the online path — no additional PARTNER-only invoice
+      expect(count).toBe(2)
+
+      const updatedTab = await prisma.tableTab.findUniqueOrThrow({ where: { id: tab.id } })
+      expect(updatedTab.status).toBe(TAB_PAID)
+    })
+
+    it('voided rounds are excluded from the cash receipt', async () => {
+      const { tab, user, site, product } = await setupTabWithOrders()
+
+      // Add a discarded (voided) round — must not appear on the receipt
+      const voided = await createTestOrder(user.id, site.id, {
+        tabId: tab.id,
+        status: 'discarded',
+        paymentAmount: 50.0,
+        totalPrice: 50.0,
+        paymentRef: null,
+      })
+      await createTestOrderItem(voided.id, product.id, {
+        quantity: 5,
+        price: 10.0,
+        tax: 14,
+        totalPrice: 50.0,
+      })
+
+      await processConfirmedTabPayment(tab.id, { cash: true })
+
+      const partnerInvoice = await prisma.invoice.findFirstOrThrow({
+        where: { tableTabId: tab.id, issuerType: 'PARTNER' },
+      })
+      // Only the 2 non-voided rounds (€16 + €8 = €24) are on the receipt
+      expect(partnerInvoice.totalAmount).toBe(24.0)
+
+      const voidedAfter = await prisma.order.findUniqueOrThrow({ where: { id: voided.id } })
+      expect(voidedAfter.status).toBe('discarded')
+      expect(voidedAfter.paymentRef).toBeNull()
+    })
   })
 })

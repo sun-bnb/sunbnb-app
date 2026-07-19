@@ -128,14 +128,42 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
   before promote**). Tests: view.test 10→29; **user 459u green (was 440); tsc + lint clean;
   orchestrator re-verified.** CLAUDE.md synced. **Phase 4 complete — dine-in tab pay works
   end-to-end (demo verifiable in browser; Mollie needs the test-env pay-through).**
-  **Next → (5) partner app** — per-table QR print (mirror
-  `qr-print-button.tsx`), table label on orders dashboard, open-tabs panel + settle/discard
-  (auth-matrix registry; settle-as-cash should reuse track 015's cash-receipt core); **(6) i18n +
-  wiki ingest + browser-verify.** Out of v1: standalone (no-Site) restaurants, MenuItem-rail
-  ordering, tips, split-the-bill, per-round pay mode, live-floor tab display (P2 renders tab state
-  later). **Deferred concern (surface at phase 5):** order-based accounting roll-ups
-  (`getPaidItemsByMonth`) may miss or double-count tab orders — their invoices link via
-  `Invoice.tableTabId` not `orderId`, and order.status no longer implies paid-ness for tab orders.
+  **✅ (5) partner app — DONE 2026-07-19 (four packets C–F, not yet committed).**
+  **(C) data core:** `processConfirmedTabPayment(tabId, { cash: true })` — staff settle-as-cash per
+  track 015 doctrine (PARTNER-only receipt, NO commission, terminal `settled_cash`, no paymentRef,
+  openTableId nulled; both terminal statuses mutually block re-processing). Thin re-export submodule
+  `@repo/data/tab-payment` added (package.json export) so partner unit tests can alias-mock it —
+  payment.ts keeps the exports, user app untouched. **Tab-order paid-ness rule** applied to BOTH
+  `prisma.order` aggregations in `analytics.ts` (revenue + refunds): an order with `tabId != null`
+  counts only when its tab is `paid`/`settled_cash` (unpaid open-tab rounds no longer inflate
+  takings; refunded rounds on never-paid tabs aren't "refunds"). Data 265u + 282i (+9 cash, +5
+  analytics). **(D) QR + labels:** `DineInQRButton` (jsPDF+qrcode, one card per active table →
+  `${CONSUMER_APP_URL}/sites/<siteId>/dine/<tableId>`) on the restaurant Tables tab, hidden for
+  standalone (siteId-null) restaurants — app-layer only, NOT in the shared UI packages
+  (extraction-clean); violet table chips on order cards via a page-level `tableMap` (orders
+  `actions.ts` polling untouched). **(E) open-tabs panel:** `getOpenTabs` / `settleTabCash` /
+  `discardTab` in orders `actions.ts` (verifySiteAccess token-or-session, registered in the
+  auth-matrix registry). Settle/discard **only from TAB_OPEN** — `pending_payment` is rejected
+  (online payment mid-flight = double-charge risk; staff wait for webhook/poll revert). Cash amount
+  due = `ordersTotal` (service fee is an online-checkout add-on — cash charges items only). Discard
+  voids rounds + closes tab in one txn. Panel on the orders dashboard with confirm steps.
+  **(F) accounting fiscal view:** third query in `getPaidItemsByMonth` (PARTNER invoices via
+  `tableTabId` + `tableTab.siteId`) + "Dine-in tabs" card (cash/online badge, net/VAT/gross —
+  orchestrator fixed an inverted field mapping: `totalCharge`=NET, `totalAmount`=GROSS, see
+  partner-dev playbook 2026-07-19); `getInvoicesByMonth` already included tab invoices (account-
+  scoped, no entity filter — verified, unchanged). **Green (orchestrator-verified): data 265u+282i,
+  user 459u + tsc, partner 1888u+178i + tsc; lint clean everywhere.** CLAUDE.md × 2 synced.
+  ~30 new partner i18n keys ×3 locales (**founder copy-review before promote**, with phases 3–4's).
+  **Deferred from 5 (flagged, not built):** employee/till attribution for cash-settled tabs (the
+  settle happens on the kitchen dashboard, not the manage grid — no TillEntry/employeeId recorded;
+  wire to track 008/013 when needed); tab refunds (webhook refunded = warn-only) + credit notes.
+  **Next → (6) wrap-up** — founder ES/FI copy review (43 user keys from ph.3–4 + ~30 partner keys);
+  browser-verify the full loop (print QR → scan → order rounds → kitchen sees table chip → demo
+  pay-through → paid card; staff settle-cash + discard; accounting tabs card) — demo mode works
+  locally, Mollie needs the founder's test-env pay-through; `/wiki ingest` for P1.5; `migrate:test`
+  for `20260718100617` before ANY main push (pre-push hook enforces). Out of v1: standalone
+  (no-Site) restaurants, MenuItem-rail ordering, tips, split-the-bill, per-round pay mode,
+  live-floor tab display (P2 renders tab state later).
 - **Status (2026-05-26): P1 booking core functionally complete and live on `main`** (the per-piece
   detail bullets below are now historical — all committed + pushed; the prior "LOCAL-only" 1f caveat is
   resolved — `1cb0e40`/`e4172a7`/`ac4a2b5` + the agent-model invoicing commit are all on `origin/main`).

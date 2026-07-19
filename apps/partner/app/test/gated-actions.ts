@@ -74,6 +74,9 @@ import {
   setOrderStatus,
   getOrders,
   toggleProductSoldOut as ordersToggleProductSoldOut,
+  getOpenTabs,
+  settleTabCash,
+  discardTab,
 } from '@/app/sites/[id]/orders/actions'
 
 import {
@@ -216,6 +219,7 @@ import {
   WAITLIST_ENTRY_ID,
   COMBINATION_ID,
   RESTAURANT_ELEMENT_ID,
+  TAB_ID,
 } from './token-fixtures'
 
 // ─── Stable stub IDs ─────────────────────────────────────────────────────────
@@ -600,6 +604,24 @@ export const GATED_ACTIONS: GatedAction[] = [
     kind: 'action',
     gate: 'token-or-session',
     invoke: (accessKey?) => ordersToggleProductSoldOut(SITE_ID, PRODUCT_ID, true, accessKey),
+  },
+  {
+    name: 'orders.getOpenTabs',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => getOpenTabs(SITE_ID, accessKey),
+  },
+  {
+    name: 'orders.settleTabCash',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => settleTabCash(SITE_ID, TAB_ID, accessKey),
+  },
+  {
+    name: 'orders.discardTab',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => discardTab(SITE_ID, TAB_ID, accessKey),
   },
 
   // ══════════════════════════════════════════════════════════════════════════

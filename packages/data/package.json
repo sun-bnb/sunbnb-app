@@ -32,7 +32,8 @@
     "./seat-label-db": "./src/seat-label-db.ts",
     "./reservations": "./src/reservations.ts",
     "./site-day": "./src/site-day.ts",
-    "./fiscal": "./src/fiscal.ts"
+    "./fiscal": "./src/fiscal.ts",
+    "./tab-payment": "./src/tab-payment.ts"
   },
   "typesVersions": {
     "*": {
@@ -113,6 +114,9 @@
       ],
       "fiscal": [
         "./src/fiscal.ts"
+      ],
+      "tab-payment": [
+        "./src/tab-payment.ts"
       ]
     }
   },

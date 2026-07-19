@@ -45,6 +45,7 @@ export default defineConfig({
       '@repo/data/analytics': path.resolve(__dirname, '__mocks__/@repo/data/analytics'),
       '@repo/data/till': path.resolve(__dirname, '__mocks__/@repo/data/till'),
       '@repo/data/fiscal': path.resolve(__dirname, '__mocks__/@repo/data/fiscal'),
+      '@repo/data/tab-payment': path.resolve(__dirname, '__mocks__/@repo/data/tab-payment'),
     },
   },
 })

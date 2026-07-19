@@ -71,9 +71,26 @@ export default async function OrdersPage(
     orderBy: { createdAt: 'asc' }
   })
 
+  // Build a table label map so the kitchen knows which dine-in table each round
+  // belongs to. Order.tableId is a denormalized string (no FK relation), so we
+  // collect unique ids and do a separate lookup to get number + label.
+  const tableIds = [...new Set(
+    orders.flatMap((o) => (o.tableId ? [o.tableId] : []))
+  )]
+  const tableRows = tableIds.length > 0
+    ? await prisma.table.findMany({
+        where: { id: { in: tableIds } },
+        select: { id: true, number: true, label: true },
+      })
+    : []
+  const tableMap: Record<string, { number: number; label: string | null }> = {}
+  for (const row of tableRows) {
+    tableMap[row.id] = { number: row.number, label: row.label }
+  }
+
   return (
     <div className="w-screen max-w-[768px]">
-      <OrdersView siteId={site.id} orders={orders} accessKey={accessKey} />
+      <OrdersView siteId={site.id} orders={orders} tableMap={tableMap} accessKey={accessKey} />
     </div>
   )
 

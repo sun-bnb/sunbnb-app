@@ -19,7 +19,8 @@ import {
   CanvasDimensionsHeader,
   type SaveStatus,
 } from '@repo/schematic-editor'
-import { getRestaurantLayout, getRestaurantCombinations, type RestaurantLayout } from '../queries'
+import { getRestaurantLayout, getRestaurantCombinations, type RestaurantLayout, type TableQRRecord } from '../queries'
+import DineInQRButton from './DineInQRButton'
 import {
   createTableForRestaurant,
   updateTableForRestaurant,
@@ -38,7 +39,22 @@ import {
 import { RestaurantSubNav } from '../RestaurantSubNav'
 import { RestaurantHeader } from '../RestaurantHeader'
 
-export default function TablesView({ restaurantId }: { restaurantId: string }) {
+interface TablesViewProps {
+  restaurantId: string
+  /** Site linked to this restaurant. Null for standalone restaurants. */
+  siteId?: string | null
+  /** Base URL of the consumer app for dine-in QR codes. */
+  consumerAppUrl?: string
+  /** Active tables for QR printing. Empty when siteId is null. */
+  activeTables?: TableQRRecord[]
+}
+
+export default function TablesView({
+  restaurantId,
+  siteId,
+  consumerAppUrl,
+  activeTables = [],
+}: TablesViewProps) {
   const t = useTranslations('Restaurant')
 
   const [layout, setLayout] = useState<RestaurantLayout | null>(null)
@@ -237,6 +253,16 @@ export default function TablesView({ restaurantId }: { restaurantId: string }) {
           saveStatus={saveStatus}
           saveError={saveErrors.length > 0 ? saveErrors.join(', ') : undefined}
         />
+        {siteId && consumerAppUrl && activeTables.length > 0 && (
+          <div className="flex justify-end">
+            <DineInQRButton
+              siteId={siteId}
+              consumerAppUrl={consumerAppUrl}
+              tables={activeTables}
+              label={t('printDineInQr')}
+            />
+          </div>
+        )}
         <TableLayoutEditor
           worldWidth={layout.layoutWidth}
           worldHeight={layout.layoutHeight}

@@ -9,6 +9,9 @@ import {
   createTestRentalItem,
   createTestRentalBooking,
   createTestOrder,
+  createTestRestaurant,
+  createTestTable,
+  createTestTableTab,
   resetCounter,
 } from './test/fixtures'
 import { getRevenueByDay, getOccupancyByDay, getReservationDayStats, summarizeRevenue, getFloorStateSnapshot, getRevenueByChannelByDay, getMonthlySourceSummary } from './analytics'
@@ -826,5 +829,164 @@ describe('getMonthlySourceSummary', () => {
     expect(summary.orders.bedLinkedRevenue).toBe(30) // 18 (seat) + 12 (reservation), NOT the 20 counter order
     // Turnover per available bed = (sunbeds 40 + bed-linked F&B 30) / capacity 2 = 35
     expect((summary.sunbeds.revenue + summary.orders.bedLinkedRevenue) / summary.capacity).toBe(35)
+  })
+})
+
+// ─── getMonthlySourceSummary — dine-in tab-order paid-ness (track 002 P1.5) ──
+//
+// Tab orders enter kitchen states (complete/accepted/…/delivered) at PLACEMENT,
+// before any payment — order.status does not imply paid-ness when tabId is set.
+// The canonical rule: an order with tabId != null is revenue only when its tab
+// is 'paid' (online) or 'settled_cash' (staff cash settle).
+
+describe('getMonthlySourceSummary — tab-order paid-ness', () => {
+  const MONTH_FROM = d('2026-07-01T00:00:00Z')
+  const MONTH_TO   = d('2026-07-31T23:59:59Z')
+
+  async function setupSiteWithTable() {
+    const user = await createTestUser()
+    const partner = await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id)
+    const restaurant = await createTestRestaurant(partner.userId, { siteId: site.id })
+    const table = await createTestTable(restaurant.id)
+    return { user, site, restaurant, table }
+  }
+
+  it('excludes unpaid open-tab orders from the orders bucket', async () => {
+    const { user, site, restaurant, table } = await setupSiteWithTable()
+    const tab = await createTestTableTab(table.id, site.id, {
+      restaurantId: restaurant.id,
+      status: 'open',
+    })
+
+    // Kitchen-state round on an OPEN (unpaid) tab — must NOT count as revenue
+    await createTestOrder(user.id, site.id, {
+      status: 'complete',
+      paymentAmount: 24,
+      tabId: tab.id,
+      createdAt: d('2026-07-10T12:00:00Z'),
+    })
+    // Non-tab order — unaffected by the rule
+    await createTestOrder(user.id, site.id, {
+      status: 'complete',
+      paymentAmount: 10,
+      createdAt: d('2026-07-10T13:00:00Z'),
+    })
+
+    const summary = await getMonthlySourceSummary(site.id, MONTH_FROM, MONTH_TO)
+
+    expect(summary.orders).toEqual({ revenue: 10, count: 1, bedLinkedRevenue: 0 })
+    expect(summary.total).toBe(10)
+  })
+
+  it('excludes pending_payment tab orders (claimed but not yet confirmed)', async () => {
+    const { user, site, restaurant, table } = await setupSiteWithTable()
+    const tab = await createTestTableTab(table.id, site.id, {
+      restaurantId: restaurant.id,
+      status: 'pending_payment',
+    })
+
+    await createTestOrder(user.id, site.id, {
+      status: 'delivered',
+      paymentAmount: 31,
+      tabId: tab.id,
+      createdAt: d('2026-07-11T12:00:00Z'),
+    })
+
+    const summary = await getMonthlySourceSummary(site.id, MONTH_FROM, MONTH_TO)
+
+    expect(summary.orders).toEqual({ revenue: 0, count: 0, bedLinkedRevenue: 0 })
+  })
+
+  it('includes orders on a paid tab and on a settled_cash tab', async () => {
+    const { user, site, restaurant, table } = await setupSiteWithTable()
+    // Closed tabs release openTableId (the one-open-tab-per-table guard)
+    const paidTab = await createTestTableTab(table.id, site.id, {
+      restaurantId: restaurant.id,
+      status: 'paid',
+      openTableId: null,
+      closedAt: d('2026-07-12T15:00:00Z'),
+    })
+    const cashTab = await createTestTableTab(table.id, site.id, {
+      restaurantId: restaurant.id,
+      status: 'settled_cash',
+      openTableId: null,
+      closedAt: d('2026-07-13T15:00:00Z'),
+    })
+
+    await createTestOrder(user.id, site.id, {
+      status: 'delivered',
+      paymentAmount: 40,
+      tabId: paidTab.id,
+      createdAt: d('2026-07-12T12:00:00Z'),
+    })
+    await createTestOrder(user.id, site.id, {
+      status: 'complete',
+      paymentAmount: 22,
+      tabId: cashTab.id,
+      createdAt: d('2026-07-13T12:00:00Z'),
+    })
+
+    const summary = await getMonthlySourceSummary(site.id, MONTH_FROM, MONTH_TO)
+
+    expect(summary.orders).toEqual({ revenue: 62, count: 2, bedLinkedRevenue: 0 })
+    expect(summary.total).toBe(62)
+  })
+
+  it('excludes discarded-tab orders from revenue', async () => {
+    const { user, site, restaurant, table } = await setupSiteWithTable()
+    const discardedTab = await createTestTableTab(table.id, site.id, {
+      restaurantId: restaurant.id,
+      status: 'discarded',
+      openTableId: null,
+      closedAt: d('2026-07-14T15:00:00Z'),
+    })
+
+    // Round left in a kitchen state on a discarded (walk-out) tab
+    await createTestOrder(user.id, site.id, {
+      status: 'complete',
+      paymentAmount: 17,
+      tabId: discardedTab.id,
+      createdAt: d('2026-07-14T12:00:00Z'),
+    })
+
+    const summary = await getMonthlySourceSummary(site.id, MONTH_FROM, MONTH_TO)
+
+    expect(summary.orders).toEqual({ revenue: 0, count: 0, bedLinkedRevenue: 0 })
+  })
+
+  it('refunds bucket applies the same rule: refunded round on an unpaid tab is not a refund', async () => {
+    const { user, site, restaurant, table } = await setupSiteWithTable()
+    const openTab = await createTestTableTab(table.id, site.id, {
+      restaurantId: restaurant.id,
+      status: 'open',
+    })
+    const paidTab = await createTestTableTab(table.id, site.id, {
+      restaurantId: restaurant.id,
+      status: 'paid',
+      openTableId: null,
+      closedAt: d('2026-07-16T15:00:00Z'),
+      // second tab on the same table needs a distinct row; openTableId null avoids the unique guard
+    })
+
+    // Voided (refunded-status) round on a never-paid tab — was never revenue,
+    // must not count as a refund
+    await createTestOrder(user.id, site.id, {
+      status: 'refunded',
+      paymentAmount: 9,
+      tabId: openTab.id,
+      createdAt: d('2026-07-15T12:00:00Z'),
+    })
+    // Refunded round on a PAID tab — a genuine refund
+    await createTestOrder(user.id, site.id, {
+      status: 'refunded',
+      paymentAmount: 14,
+      tabId: paidTab.id,
+      createdAt: d('2026-07-16T12:00:00Z'),
+    })
+
+    const summary = await getMonthlySourceSummary(site.id, MONTH_FROM, MONTH_TO)
+
+    expect(summary.refunds).toEqual({ revenue: 14, count: 1 })
   })
 })

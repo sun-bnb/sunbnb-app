@@ -141,6 +141,28 @@ export async function getRestaurantLayout(
   }
 }
 
+export interface TableQRRecord {
+  id: string
+  number: number
+  label: string | null
+}
+
+/**
+ * Fetch the active tables for a Restaurant — minimal shape for QR generation.
+ * Ownership-checked. Returns [] on auth failure (safe fallback for the QR button).
+ */
+export async function getTablesList(
+  restaurantId: string,
+): Promise<TableQRRecord[]> {
+  const { error } = await requireRestaurantOwner(restaurantId)
+  if (error) return []
+
+  const tables = await listTablesForRestaurant(restaurantId)
+  return tables
+    .filter((t) => t.status === 'active')
+    .map((t) => ({ id: t.id, number: t.number, label: t.label ?? null }))
+}
+
 /**
  * Fetch the menu for a Restaurant. Partner-side: includes inactive items by
  * default — set `activeOnly: true` for a customer-facing surface.

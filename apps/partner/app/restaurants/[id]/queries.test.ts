@@ -50,6 +50,7 @@ import {
   getRestaurantWaitlist,
   getRestaurantLayout,
   getRestaurantMenu,
+  getTablesList,
 } from './queries'
 
 const mockAuth = vi.mocked(auth)
@@ -457,5 +458,55 @@ describe('getRestaurantMenu', () => {
     expect(mockListMenuItems).toHaveBeenCalledWith(RESTAURANT_ID, { includeInactive: false })
     expect(result).toHaveLength(1)
     expect(result![0].name).toBe('Grilled Fish')
+  })
+})
+
+// ─────────────────────────────────────────────────────
+// getTablesList
+// ─────────────────────────────────────────────────────
+
+describe('getTablesList', () => {
+  const ALL_TABLES = [
+    { id: 't1', restaurantId: RESTAURANT_ID, number: 1, label: 'Window', status: 'active', capacity: 4 },
+    { id: 't2', restaurantId: RESTAURANT_ID, number: 2, label: null, status: 'active', capacity: 2 },
+    { id: 't3', restaurantId: RESTAURANT_ID, number: 3, label: 'Bar seat', status: 'inactive', capacity: 1 },
+  ]
+
+  it('returns [] without calling core when unauthenticated', async () => {
+    const result = await getTablesList(RESTAURANT_ID)
+    expect(result).toEqual([])
+    expect(mockListTables).not.toHaveBeenCalled()
+  })
+
+  it('returns [] without calling core when authenticated as non-owner', async () => {
+    authenticateNonOwner()
+    const result = await getTablesList(RESTAURANT_ID)
+    expect(result).toEqual([])
+    expect(mockListTables).not.toHaveBeenCalled()
+  })
+
+  it('returns only active tables mapped to { id, number, label } for an owner', async () => {
+    authorizeOwner()
+    mockListTables.mockResolvedValue(ALL_TABLES as any)
+
+    const result = await getTablesList(RESTAURANT_ID)
+
+    expect(mockListTables).toHaveBeenCalledOnce()
+    expect(mockListTables).toHaveBeenCalledWith(RESTAURANT_ID)
+    expect(result).toHaveLength(2)
+    expect(result[0]).toEqual({ id: 't1', number: 1, label: 'Window' })
+    expect(result[1]).toEqual({ id: 't2', number: 2, label: null })
+    // Inactive table must be excluded
+    expect(result.find((t) => t.id === 't3')).toBeUndefined()
+  })
+
+  it('returns [] when there are no active tables', async () => {
+    authorizeOwner()
+    mockListTables.mockResolvedValue(
+      ALL_TABLES.map((t) => ({ ...t, status: 'inactive' })) as any,
+    )
+
+    const result = await getTablesList(RESTAURANT_ID)
+    expect(result).toEqual([])
   })
 })

@@ -31,6 +31,7 @@ import {
   getMonthlySummary,
   getRevenueChannelTrend,
   getMonthlyFiscalReport,
+  getPaidItemsByMonth,
 } from './actions'
 
 const MONTH_KEYS = ['january','february','march','april','may','june','july','august','september','october','november','december'] as const
@@ -116,6 +117,37 @@ interface MonthlyFiscalReport {
   processingFees: number
   refunds: { count: number; amount: number }
   lines: FiscalInvoiceLine[]
+}
+
+// Dine-in tab invoice shape — returned by getPaidItemsByMonth tabs field
+interface TabInvoiceLine {
+  id: string
+  description: string | null
+  charge: number
+  tax: number
+  amount: number
+  vatRate: number | null
+  productCode: string | null
+}
+interface TabTableInfo {
+  number: number
+  label: string | null
+}
+interface TabInfo {
+  id: string
+  status: string
+  closedAt: Date | null
+  table: TabTableInfo
+}
+interface TabInvoiceEntry {
+  id: string
+  invoiceNumber: string | null
+  invoicedAt: Date
+  totalCharge: number
+  totalTax: number
+  totalAmount: number
+  invoiceLines: TabInvoiceLine[]
+  tableTab: TabInfo | null
 }
 
 // Format "YYYY-MM-DD" from a Date for a date input's default value
@@ -268,6 +300,10 @@ export default function AccountingView() {
   const [fiscalLoading, setFiscalLoading] = useState(true)
   const [fiscalDownloading, setFiscalDownloading] = useState(false)
 
+  // Dine-in tab invoices for the selected month
+  const [tabInvoices, setTabInvoices] = useState<TabInvoiceEntry[] | null>(null)
+  const [tabsLoading, setTabsLoading] = useState(true)
+
   // Load all-source monthly summary on month change
   useEffect(() => {
     if (!site?.id) return
@@ -287,6 +323,16 @@ export default function AccountingView() {
     getMonthlyFiscalReport(site.id, selectedYear, selectedMonth).then((data) => {
       setFiscalReport(data as MonthlyFiscalReport)
       setFiscalLoading(false)
+    })
+  }, [site?.id, selectedYear, selectedMonth])
+
+  // Load dine-in tab invoices for the selected month
+  useEffect(() => {
+    if (!site?.id) return
+    setTabsLoading(true)
+    getPaidItemsByMonth(site.id, selectedYear, selectedMonth).then((data) => {
+      setTabInvoices(data.tabs as TabInvoiceEntry[])
+      setTabsLoading(false)
     })
   }, [site?.id, selectedYear, selectedMonth])
 
@@ -918,6 +964,94 @@ export default function AccountingView() {
         </div>
 
       </div>
+
+      {/* ── Dine-in tabs breakdown — invoice-based, month-scoped ─────────────── */}
+      {(tabsLoading || (tabInvoices && tabInvoices.length > 0)) && (
+        <div className="mb-6 border border-gray-200 rounded-lg bg-white overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-4">
+            <h3 className="text-sm font-semibold text-gray-800">{t('tabsGroupTitle')}</h3>
+            {tabsLoading && <CircularProgress size={16} sx={{ color: '#9ca3af' }} />}
+          </div>
+
+          {tabsLoading ? (
+            <div className="flex justify-center py-6">
+              <CircularProgress size={18} sx={{ color: '#9ca3af' }} />
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    <th className="text-left px-4 py-2 text-gray-500 font-medium">{t('tabTableLabel')}</th>
+                    <th className="text-left px-4 py-2 text-gray-500 font-medium">{t('tabClosedAt')}</th>
+                    <th className="text-left px-4 py-2 text-gray-500 font-medium">{t('payments')}</th>
+                    <th className="text-right px-4 py-2 text-gray-500 font-medium">{t('net')}</th>
+                    <th className="text-right px-4 py-2 text-gray-500 font-medium">{t('vat')}</th>
+                    <th className="text-right px-4 py-2 text-gray-500 font-medium">{t('gross')}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {tabInvoices!.map((inv) => {
+                    const tab = inv.tableTab
+                    const isCash = tab?.status === 'settled_cash'
+                    const tableLabel = tab
+                      ? `${t('tabTableLabel')} ${tab.table.number}${tab.table.label ? ` · ${tab.table.label}` : ''}`
+                      : '—'
+                    const closedDate = tab?.closedAt
+                      ? new Date(tab.closedAt).toLocaleDateString('default', { day: 'numeric', month: 'short' })
+                      : inv.invoicedAt
+                      ? new Date(inv.invoicedAt).toLocaleDateString('default', { day: 'numeric', month: 'short' })
+                      : '—'
+                    // Tab invoice semantics (processConfirmedTabPayment):
+                    // totalCharge = NET base, totalTax = VAT, totalAmount = GROSS.
+                    const net = inv.totalCharge
+                    const tax = inv.totalTax
+                    const gross = inv.totalAmount
+                    return (
+                      <tr key={inv.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-2.5 text-gray-800 font-medium">{tableLabel}</td>
+                        <td className="px-4 py-2.5 text-gray-500">{closedDate}</td>
+                        <td className="px-4 py-2.5">
+                          <span
+                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                              isCash
+                                ? 'bg-green-50 text-green-700 border border-green-200'
+                                : 'bg-blue-50 text-blue-700 border border-blue-200'
+                            }`}
+                          >
+                            {isCash ? t('tabStatusCash') : t('tabStatusPaid')}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-gray-700 tabular-nums">€{net.toFixed(2)}</td>
+                        <td className="px-4 py-2.5 text-right text-gray-700 tabular-nums">€{tax.toFixed(2)}</td>
+                        <td className="px-4 py-2.5 text-right text-gray-900 font-semibold tabular-nums">€{gross.toFixed(2)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                {tabInvoices!.length > 1 && (
+                  <tfoot>
+                    <tr className="border-t border-gray-200 bg-gray-50">
+                      <td className="px-4 py-2 text-gray-500 font-medium text-xs" colSpan={3}>
+                        {t('salesCount', { count: tabInvoices!.length })}
+                      </td>
+                      <td className="px-4 py-2 text-right text-gray-700 font-semibold tabular-nums text-xs">
+                        €{tabInvoices!.reduce((s, inv) => s + inv.totalCharge, 0).toFixed(2)}
+                      </td>
+                      <td className="px-4 py-2 text-right text-gray-700 font-semibold tabular-nums text-xs">
+                        €{tabInvoices!.reduce((s, inv) => s + inv.totalTax, 0).toFixed(2)}
+                      </td>
+                      <td className="px-4 py-2 text-right text-gray-900 font-bold tabular-nums text-xs">
+                        €{tabInvoices!.reduce((s, inv) => s + inv.totalAmount, 0).toFixed(2)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Accounting export — for your accountant ──────────────────────────── */}
       <div className="mb-6 border border-gray-200 rounded-lg bg-white overflow-hidden">

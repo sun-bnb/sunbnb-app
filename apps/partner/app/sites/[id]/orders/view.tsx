@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { setOrderStatus, getOrders, type OrderTab } from './actions'
+import { setOrderStatus, getOrders, getOpenTabs, settleTabCash, discardTab, type OrderTab, type TabSummary } from './actions'
 import { Order } from '@/types/shared'
 import {
   ORDER_COMPLETE,
@@ -13,6 +13,8 @@ import {
   ORDER_COMPLETED,
   ORDER_REJECTED,
   ORDER_DISCARDED,
+  TAB_OPEN,
+  TAB_PENDING_PAYMENT,
 } from '@repo/data/reservation-status'
 
 // ─── Audio Alert ─────────────────────────────────────────────────────────────
@@ -84,11 +86,14 @@ function ElapsedTimer({ since }: { since: Date | string }) {
 
 // ─── Tab Bar ─────────────────────────────────────────────────────────────────
 
-const TABS: { key: OrderTab; labelKey: string }[] = [
+type DashboardTab = OrderTab | 'tabs'
+
+const TABS: { key: DashboardTab; labelKey: string }[] = [
   { key: 'incoming', labelKey: 'tabNew' },
   { key: 'active',   labelKey: 'tabKitchen' },
   { key: 'ready',    labelKey: 'tabDeliver' },
   { key: 'history',  labelKey: 'tabDone' },
+  { key: 'tabs',     labelKey: 'tabsHeading' },
 ]
 
 // ─── Status Colours & Labels ─────────────────────────────────────────────────
@@ -225,17 +230,206 @@ function OrderActions({
   return actions[status] ?? null
 }
 
+// ─── Table Chip ──────────────────────────────────────────────────────────────
+
+function TableChip({ number, label }: { number: number; label: string | null }) {
+  const text = label ? `Table ${number} — ${label}` : `Table ${number}`
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3" aria-hidden="true">
+        <path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v1A1.5 1.5 0 0112.5 6h-.75v5.5h.75a.75.75 0 010 1.5H3.5a.75.75 0 010-1.5h.75V6H3.5A1.5 1.5 0 012 4.5v-1zm4 2.5v5.5h4V6H6z" />
+      </svg>
+      {text}
+    </span>
+  )
+}
+
+// ─── Elapsed helper ──────────────────────────────────────────────────────────
+
+function formatElapsed(since: Date | string): string {
+  const ms = Date.now() - new Date(since).getTime()
+  const mins = Math.floor(ms / 60000)
+  const hours = Math.floor(mins / 60)
+  if (hours > 0) return `${hours}h ${mins % 60}m`
+  return `${mins}m`
+}
+
+// ─── Tab Card ────────────────────────────────────────────────────────────────
+
+function TabCard({
+  siteId,
+  tab,
+  onUpdated,
+  accessKey,
+}: {
+  siteId: string
+  tab: TabSummary
+  onUpdated: () => void
+  accessKey?: string
+}) {
+  const t = useTranslations('SiteOrders')
+  const [busy, setBusy] = useState(false)
+  const [confirm, setConfirm] = useState<'settle' | 'discard' | null>(null)
+
+  const isPending = tab.status === TAB_PENDING_PAYMENT
+
+  const handleSettle = async () => {
+    setBusy(true)
+    await settleTabCash(siteId, tab.id, accessKey)
+    setBusy(false)
+    setConfirm(null)
+    onUpdated()
+  }
+
+  const handleDiscard = async () => {
+    setBusy(true)
+    await discardTab(siteId, tab.id, accessKey)
+    setBusy(false)
+    setConfirm(null)
+    onUpdated()
+  }
+
+  const tableLabel = tab.tableLabel
+    ? `Table ${tab.tableNumber} — ${tab.tableLabel}`
+    : `Table ${tab.tableNumber}`
+
+  if (confirm === 'settle') {
+    return (
+      <div className="w-full rounded-xl border-2 border-green-200 bg-white shadow-sm p-4 space-y-3">
+        <div className="font-bold text-gray-900">{t('tabSettleConfirmTitle')}</div>
+        <div className="text-sm text-gray-600">
+          {t('tabSettleConfirmBody', { amount: `€${tab.amountDue.toFixed(2)}` })}
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setConfirm(null)}
+            disabled={busy}
+            className="flex-1 py-2.5 rounded-lg border border-gray-300 text-gray-600 font-semibold text-sm disabled:opacity-50"
+          >
+            {t('tabCancelAction').toUpperCase()}
+          </button>
+          <button
+            onClick={handleSettle}
+            disabled={busy}
+            className="flex-1 py-2.5 rounded-lg bg-green-600 text-white font-bold text-sm disabled:opacity-50 active:bg-green-700"
+          >
+            {t('tabSettleConfirm', { amount: `€${tab.amountDue.toFixed(2)}` }).toUpperCase()}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (confirm === 'discard') {
+    return (
+      <div className="w-full rounded-xl border-2 border-red-200 bg-white shadow-sm p-4 space-y-3">
+        <div className="font-bold text-gray-900">{t('tabDiscardConfirmTitle')}</div>
+        <div className="text-sm text-gray-600">{t('tabDiscardConfirmBody')}</div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setConfirm(null)}
+            disabled={busy}
+            className="flex-1 py-2.5 rounded-lg border border-gray-300 text-gray-600 font-semibold text-sm disabled:opacity-50"
+          >
+            {t('tabCancelAction').toUpperCase()}
+          </button>
+          <button
+            onClick={handleDiscard}
+            disabled={busy}
+            className="flex-1 py-2.5 rounded-lg bg-red-600 text-white font-bold text-sm disabled:opacity-50 active:bg-red-700"
+          >
+            {t('tabDiscardConfirm').toUpperCase()}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="w-full rounded-xl border-2 border-gray-200 bg-white shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-gray-900 text-white text-base font-black">
+            {tab.tableNumber}
+          </div>
+          <div>
+            <div className="text-base font-bold text-gray-900">{tableLabel}</div>
+            <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+              {isPending ? (
+                <span className="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
+                  {t('tabStatusPendingPayment')}
+                </span>
+              ) : (
+                <span className="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-700">
+                  {t('tabStatusOpen')}
+                </span>
+              )}
+              <span className="text-xs text-gray-500">
+                {t('tabOpenedAt', { time: formatElapsed(tab.openedAt) })}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-lg font-bold text-gray-900">€{tab.amountDue.toFixed(2)}</div>
+          <div className="text-xs text-gray-500">{t('tabRounds', { count: tab.roundsCount })}</div>
+        </div>
+      </div>
+
+      {/* Items summary */}
+      {tab.items.length > 0 && (
+        <div className="px-4 py-3 space-y-1">
+          {tab.items.map((item, i) => (
+            <div key={i} className="flex items-center justify-between text-sm">
+              <span className="text-gray-700">{item.quantity}× {item.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="px-4 pb-4">
+        {isPending ? (
+          <div className="mt-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+            {t('tabPendingPaymentHint')}
+          </div>
+        ) : (
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={() => setConfirm('settle')}
+              disabled={busy}
+              className="flex-1 py-3 rounded-lg bg-green-600 text-white font-bold text-sm disabled:opacity-50 active:bg-green-700"
+            >
+              {t('tabSettleCash').toUpperCase()}
+            </button>
+            <button
+              onClick={() => setConfirm('discard')}
+              disabled={busy}
+              className="flex-1 py-3 rounded-lg border-2 border-red-400 text-red-600 font-bold text-sm disabled:opacity-50 active:bg-red-50"
+            >
+              {t('tabDiscard').toUpperCase()}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Order Card ──────────────────────────────────────────────────────────────
 
 function OrderCard({
   siteId,
   order,
+  tableEntry,
   onUpdated,
   compact = false,
   accessKey,
 }: {
   siteId: string
   order: Order
+  tableEntry?: { number: number; label: string | null }
   onUpdated: () => void
   compact?: boolean
   accessKey?: string
@@ -268,8 +462,13 @@ function OrderCard({
             <div className="text-lg font-bold text-gray-900">
               <ElapsedTimer since={order.createdAt} />
             </div>
-            <div className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${style.bg} ${style.text}`}>
-              {t(style.labelKey as any)}
+            <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+              <div className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${style.bg} ${style.text}`}>
+                {t(style.labelKey as any)}
+              </div>
+              {tableEntry && (
+                <TableChip number={tableEntry.number} label={tableEntry.label} />
+              )}
             </div>
           </div>
         </div>
@@ -334,10 +533,22 @@ function OrderCard({
 
 // ─── Main View ───────────────────────────────────────────────────────────────
 
-export default function Orders({ siteId, orders: initialOrders, accessKey }: { siteId: string; orders: Order[]; accessKey?: string }) {
+export default function Orders({
+  siteId,
+  orders: initialOrders,
+  tableMap = {},
+  accessKey,
+}: {
+  siteId: string
+  orders: Order[]
+  /** Mapping of Table.id → { number, label } for dine-in tab orders. */
+  tableMap?: Record<string, { number: number; label: string | null }>
+  accessKey?: string
+}) {
   const t = useTranslations('SiteOrders')
-  const [activeTab, setActiveTab] = useState<OrderTab>('incoming')
+  const [activeTab, setActiveTab] = useState<DashboardTab>('incoming')
   const [allOrders, setAllOrders] = useState<Order[]>(initialOrders)
+  const [openTabs, setOpenTabs] = useState<TabSummary[]>([])
 
   // Filter current tab's orders from the full set
   const tabStatuses: Record<OrderTab, string[]> = {
@@ -348,20 +559,21 @@ export default function Orders({ siteId, orders: initialOrders, accessKey }: { s
   }
 
   const tabOrders = useMemo(
-    () => allOrders.filter(o => tabStatuses[activeTab]?.includes(o.status)),
+    () => activeTab === 'tabs' ? [] : allOrders.filter(o => tabStatuses[activeTab as OrderTab]?.includes(o.status)),
     [allOrders, activeTab],
   )
 
   // Count badges per tab
   const counts = useMemo(() => {
-    const c: Record<OrderTab, number> = { incoming: 0, active: 0, ready: 0, history: 0 }
+    const c: Record<DashboardTab, number> = { incoming: 0, active: 0, ready: 0, history: 0, tabs: 0 }
     for (const o of allOrders) {
       for (const [tab, statuses] of Object.entries(tabStatuses)) {
         if (statuses.includes(o.status)) c[tab as OrderTab]++
       }
     }
+    c.tabs = openTabs.length
     return c
-  }, [allOrders])
+  }, [allOrders, openTabs])
 
   // Audio alert for incoming tab
   const incomingOrders = useMemo(
@@ -370,21 +582,43 @@ export default function Orders({ siteId, orders: initialOrders, accessKey }: { s
   )
   useNewOrderAlert(incomingOrders)
 
-  // Polling — fetch all active orders every 5 seconds
+  // Fetch open tabs
+  const fetchOpenTabs = useCallback(async () => {
+    const result = await getOpenTabs(siteId, accessKey)
+    if (result.status === 'ok' && result.tabs) {
+      setOpenTabs(result.tabs)
+    }
+  }, [siteId, accessKey])
+
+  // Polling — fetch all active orders every 5 seconds; open tabs in parallel
   const fetchOrders = useCallback(async () => {
-    const tabs: OrderTab[] = activeTab === 'history' ? ['history'] : ['incoming', 'active', 'ready']
-    const results = await Promise.all(tabs.map(t => getOrders(siteId, t, accessKey)))
+    const orderTabs: OrderTab[] = activeTab === 'history' ? ['history'] : ['incoming', 'active', 'ready']
+    const results = await Promise.all(orderTabs.map(t => getOrders(siteId, t, accessKey)))
     const merged = results.flatMap(r => r.orders ?? [])
     setAllOrders(merged)
   }, [siteId, activeTab, accessKey])
 
   useEffect(() => {
-    const id = setInterval(fetchOrders, 5000)
+    const id = setInterval(() => {
+      fetchOrders()
+      fetchOpenTabs()
+    }, 5000)
     return () => clearInterval(id)
-  }, [fetchOrders])
+  }, [fetchOrders, fetchOpenTabs])
+
+  // Initial load of open tabs
+  useEffect(() => {
+    fetchOpenTabs()
+  }, [fetchOpenTabs])
 
   // Refresh after status change
-  const handleUpdated = () => fetchOrders()
+  const handleUpdated = () => {
+    fetchOrders()
+    fetchOpenTabs()
+  }
+  const handleTabUpdated = () => {
+    fetchOpenTabs()
+  }
 
   return (
     <div className="flex flex-col h-[100dvh]">
@@ -402,7 +636,7 @@ export default function Orders({ siteId, orders: initialOrders, accessKey }: { s
             {t(tab.labelKey as any)}
             {counts[tab.key] > 0 && tab.key !== 'history' && (
               <span className={`ml-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold text-white
-                ${tab.key === 'incoming' ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`}>
+                ${tab.key === 'incoming' ? 'bg-red-500 animate-pulse' : tab.key === 'tabs' ? 'bg-green-600' : 'bg-gray-500'}`}>
                 {counts[tab.key]}
               </span>
             )}
@@ -410,33 +644,58 @@ export default function Orders({ siteId, orders: initialOrders, accessKey }: { s
         ))}
       </div>
 
-      {/* Order list */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
-        {tabOrders.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-            <div className="text-5xl mb-3">
-              {activeTab === 'incoming' ? '🔔' : activeTab === 'active' ? '👨‍🍳' : activeTab === 'ready' ? '🏃' : '✅'}
+      {/* Open Tabs panel */}
+      {activeTab === 'tabs' && (
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
+          {openTabs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+              <div className="text-5xl mb-3">🧾</div>
+              <p className="text-sm font-medium">{t('tabsEmpty')}</p>
             </div>
-            <p className="text-sm font-medium">
-              {activeTab === 'incoming' ? t('noNewOrders') :
-               activeTab === 'active' ? t('nothingPreparing') :
-               activeTab === 'ready' ? t('noOrdersToDeliver') :
-               t('noCompletedOrders')}
-            </p>
-          </div>
-        ) : (
-          tabOrders.map(order => (
-            <OrderCard
-              key={order.id}
-              siteId={siteId}
-              order={order}
-              onUpdated={handleUpdated}
-              compact={activeTab === 'history'}
-              accessKey={accessKey}
-            />
-          ))
-        )}
-      </div>
+          ) : (
+            openTabs.map(tab => (
+              <TabCard
+                key={tab.id}
+                siteId={siteId}
+                tab={tab}
+                onUpdated={handleTabUpdated}
+                accessKey={accessKey}
+              />
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Order list */}
+      {activeTab !== 'tabs' && (
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
+          {tabOrders.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+              <div className="text-5xl mb-3">
+                {activeTab === 'incoming' ? '🔔' : activeTab === 'active' ? '👨‍🍳' : activeTab === 'ready' ? '🏃' : '✅'}
+              </div>
+              <p className="text-sm font-medium">
+                {activeTab === 'incoming' ? t('noNewOrders') :
+                 activeTab === 'active' ? t('nothingPreparing') :
+                 activeTab === 'ready' ? t('noOrdersToDeliver') :
+                 t('noCompletedOrders')}
+              </p>
+            </div>
+          ) : (
+            tabOrders.map(order => (
+              <OrderCard
+                key={order.id}
+                siteId={siteId}
+                order={order}
+                tableEntry={order.tableId ? tableMap[order.tableId] : undefined}
+                onUpdated={handleUpdated}
+                compact={activeTab === 'history'}
+                accessKey={accessKey}
+              />
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }

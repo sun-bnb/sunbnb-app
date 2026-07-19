@@ -22,7 +22,7 @@ Google OAuth only. `app.tsx` checks session; redirects unauthenticated to `/api/
 | `/sites/[id]/inventory` | Inventory editor — Google Maps with sunbed markers, parcels, bulk ops | Auth |
 | `/sites/[id]/products` | F&B product management — add/edit/delete with images | Auth |
 | `/sites/[id]/accounting` | Monthly accounting — revenue, tax, order/reservation breakdowns | Auth |
-| `/sites/[id]/orders` | Real-time order dashboard — live polling, complete/discard actions | Public |
+| `/sites/[id]/orders` | Real-time order dashboard — live polling, complete/discard actions; table chip shown for dine-in tab rounds (`Order.tableId`) | Public |
 | `/sites/[id]/manage` | On-site management — token-gated landing (links to sub-routes) | Public |
 | `/sites/[id]/manage/sunbeds` | Sunbed grid — token-gated, walk-ins, check-in/departure, rentals | Public |
 | `/sites/[id]/manage/summary` | Daily summary — admin-token-only, per-employee till totals + close | Public |
@@ -50,9 +50,10 @@ Google OAuth only. `app.tsx` checks session; redirects unauthenticated to `/api/
 - **`sites/[id]/inventory-actions.ts`**: `createInventoryItem`, `deleteInventoryItem`, `saveInventoryItemLocation`, `saveInventoryItemProperties`, `deleteItemsByGroup`
 - **`sites/[id]/working-hours-actions.ts`**: `addWorkingHours`, `deleteWorkingHours`
 - **`sites/[id]/queries.ts`**: `getSite` (exported), `resolveServiceFees` (private helper)
+- **`restaurants/[id]/queries.ts`**: `getRestaurant`, `getRestaurantLayout`, `getRestaurantMenu`, `getRestaurantShifts`, `getRestaurantCombinations`, `getRestaurantWaitlist`, `getTablesList` (active tables for dine-in QR printing)
 - **`sites/[id]/manage/actions.ts`**: `reserveItem`, `unreserveItem`, `checkInReservation`, `resumeWalkIn`, `markDeparted`, `markNoShow`, `updateReservationNotes`, `moveReservation`, `blockBed`, `unblockBed`, `holdBed`, `compBed`, `convertHoldToWalkIn`, `markRentalPickedUp`, `markRentalReturned`, `createWalkInRental`, `collectReservationPayment`/`getCollectStatus`/`cancelCollection` (QR collect), `getTillStatus`/`closeTill` (per-worker till) (all token-or-session). On-site create actions take an optional trailing `employeeId` (current-worker attribution), validated against the account via `resolveEmployeeId`; cash walk-ins record `paymentAmount` for the till.
 - **`sites/[id]/rentals/actions.ts`**: `getRentalItems`, `createRentalItem`, `updateRentalItem`, `deleteRentalItem`, `toggleSiteFeature`
-- **`sites/[id]/accounting/actions.ts`**: `getPaidItemsByMonth`, `getInvoicesByMonth`, `getRevenueTrend`/`getOccupancyTrend`/`getRevenueCsv` (track 007 analytics), `getStaffTill` (per-employee monthly cash breakdown) — session + site-owner
+- **`sites/[id]/accounting/actions.ts`**: `getPaidItemsByMonth` (returns `{ orders, reservations, tabs }` — dine-in tab PARTNER invoices via `tableTabId` now included in `tabs`), `getInvoicesByMonth`, `getRevenueTrend`/`getOccupancyTrend`/`getRevenueCsv` (track 007 analytics), `getStaffTill` (per-employee monthly cash breakdown) — session + site-owner
 - **`account/staff/actions.ts`**: `getEmployees`, `createEmployee`, `renameEmployee`, `setEmployeeActive`, `deleteEmployee` — per-account `Employee` roster (session-scoped, `accountId === session.user.id`)
 - **`security/actions.ts`**: `getTokens`, `getOwnedSites`, `createToken`, `deleteToken` — SecurityToken (access-key) management (session-scoped)
 
@@ -63,7 +64,7 @@ Redux slices: `reservationsSlice` (key-value store). RTK Query (`apiSlice`): `ge
 ## Testing
 
 ```bash
-npm run test              # unit tests (901 tests across 31 files, Prisma mocked)
+npm run test              # unit tests (1888 tests across 50 files, Prisma mocked)
 npm run test:watch        # vitest in watch mode
 npm run test:coverage     # unit tests with Istanbul coverage report
 npm run test:integration  # integration tests (89 tests across 7 files, real sunbnb_test DB)
@@ -98,6 +99,7 @@ Mock modules (`__mocks__/@repo/data/`): `PrismaCient.ts`, `password-reset.ts`, `
 | `app/sites/[id]/rentals/actions.test.ts` | getRentalItems, createRentalItem, updateRentalItem, deleteRentalItem, toggleSiteFeature | 46 |
 | `app/sites/[id]/working-hours-actions.test.ts` | addWorkingHours, deleteWorkingHours, overlap validation | 21 |
 | `app/sites/[id]/queries.test.ts` | getSite query | 3 |
+| `app/restaurants/[id]/queries.test.ts` | getRestaurant, getRestaurantLayout, getRestaurantMenu, getRestaurantShifts, getRestaurantCombinations, getRestaurantWaitlist, getTablesList | 28 |
 | `app/sites/create/actions.test.ts` | site creation wizard actions | 6 |
 | `app/calendar/actions.test.ts` | createPartnerReservation (auth, availability, double-booking, paired items), getAvailableSunbeds | 12 |
 | `app/restaurants/[id]/actions.test.ts` | restaurant CRUD, settings | 20 |
@@ -113,9 +115,9 @@ Mock modules (`__mocks__/@repo/data/`): `PrismaCient.ts`, `password-reset.ts`, `
 | `app/api/auth/end-impersonation/route.test.ts` | impersonation end | 4 |
 | `app/api/onboarding-status/route.test.ts` | Mollie onboarding status sync and caching | 7 |
 | `app/api/reservations/[siteId]/route.test.ts` | ownership, date/month queries, HTTP status codes | 7 |
-| `app/test/auth-matrix.test.ts` | auth gate matrix over all gated actions | 376 |
+| `app/test/auth-matrix.test.ts` | auth gate matrix over all gated actions | 603 |
 | `app/test/coverage-contract.test.ts` | gated-action registry completeness | 4 |
-| `app/test/mock-contract.test.ts` | mock module superset of real exports | 9 |
+| `app/test/mock-contract.test.ts` | mock module superset of real exports | 15 |
 | `app/test/no-inline-money.test.ts` | no hardcoded monetary literals in server actions | 2 |
 
 ### Integration tests (`vitest.integration.config.ts`)
@@ -146,5 +148,6 @@ Requires local Docker Postgres with `sunbnb_test` DB. No `@repo/data` mocks — 
 - Floor-staff attribution & till (track 008): a per-`PartnerAccount` `Employee` roster (`/account/staff`) feeds a current-worker chip in `ManageToolbar` (localStorage `sunbnb-manage-worker-${site.id}`, server-fetched roster passed from `manage/page.tsx`). On-site create actions auto-stamp the chosen `employeeId` (no per-transaction input; cross-account/stale ids drop to null via `resolveEmployeeId`); cash walk-ins record `paymentAmount`. The worker's open till (`getOpenTill`) + "Close my till" (`closeTill` → `TillClose` snapshot) live in `TillSheet`; the admin daily summary (`getOpenTills`/`getTillDayReport`/`closeTill`) lives at `/manage/summary` (`DailySummaryView.tsx`) — admin-token-gated, uses `verifySiteAdmin`; the manager's monthly per-worker cash roll-up (`getStaffTill` → `getTillByEmployee`) is a card on the accounting page. Till aggregation in `@repo/data/till` (unit tests alias it to `__mocks__/@repo/data/till.ts`). Attribution is orthogonal to the `accessKey` gate.
 - Inventory: items have `status` (new/active/inactive), coordinates for map placement, optional pairing (double sunbeds). Parcels (grouped items) support drag-and-drop repositioning on the map — dragging any item in a group moves the entire parcel via `moveParcel()` server action. Physical sunbed size: 2.1m (must match `getScaledSize()` in InventoryMap, InventoryField, and `generateChairs()` in chair-util)
 - Equipment rentals: `RentalItem` supports `pricePerHour` and `pricePerDay`. Walk-in rentals via `CreateRentalModal` with quick-pick duration (1h, 2h, 3h, all day). `RentalBookingCard` shows time range and overdue status for hourly bookings
+- Dine-in tab QR codes: `restaurants/[id]/tables/DineInQRButton.tsx` (client, jsPDF + qrcode) generates a PDF of per-table QR cards; lives in `apps/partner` ONLY (the URL encodes `CONSUMER_APP_URL` from the server — not `@repo/table-reservations-ui`). Gate: only rendered when `restaurant.siteId` is non-null. Orders dashboard shows a table chip (violet pill) when `Order.tableId` is set — `page.tsx` fetches the table map via `prisma.table.findMany` after orders are loaded.
 - Image upload: Vercel Blob `put()` in server actions; remote patterns whitelisted in `next.config.mjs`
 - UI / design system: see **`apps/partner/UI.md`** (partner design-system layer) + the general **`.claude/rules/ui.md`**; prime UI work with `/ui partner`.

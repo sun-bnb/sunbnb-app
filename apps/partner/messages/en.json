@@ -390,7 +390,8 @@
     "embedHeading": "Embed on your website",
     "embedHint": "Paste this snippet into your site to take reservations directly from your own page.",
     "embedCopy": "Copy code",
-    "embedCopied": "Copied!"
+    "embedCopied": "Copied!",
+    "printDineInQr": "Print table QR codes"
   },
   "SiteSchematic": {
     "layoutWidth": "Width",
@@ -720,7 +721,13 @@
     "processingFeesLabel": "Processing fees",
     "refundsNotCreditNotesHint": "Refunds shown for reference — not yet issued as credit notes",
     "downloadCsvRegister": "Download CSV",
-    "accountingExportEmpty": "No invoices for this month"
+    "accountingExportEmpty": "No invoices for this month",
+    "tabsGroupTitle": "Dine-in tabs",
+    "tabsEmpty": "No dine-in tab invoices for this month",
+    "tabTableLabel": "Table",
+    "tabClosedAt": "Closed",
+    "tabStatusPaid": "Online",
+    "tabStatusCash": "Cash"
   },
   "SiteOrders": {
     "tabNew": "New",
@@ -758,7 +765,24 @@
     "nothingPreparing": "Nothing being prepared",
     "noOrdersToDeliver": "No orders to deliver",
     "noCompletedOrders": "No completed orders yet",
-    "reason": "Reason: {text}"
+    "reason": "Reason: {text}",
+    "tabsHeading": "Open tabs",
+    "tabsEmpty": "No open tabs",
+    "tabStatusOpen": "Open",
+    "tabStatusPendingPayment": "Payment in progress",
+    "tabRounds": "{count, plural, one {# round} other {# rounds}}",
+    "tabAmountDue": "Amount due",
+    "tabSettleCash": "Settle cash",
+    "tabDiscard": "Discard",
+    "tabSettleConfirmTitle": "Settle tab as cash?",
+    "tabSettleConfirmBody": "Collect {amount} from the guest. This creates a receipt and closes the tab.",
+    "tabSettleConfirm": "Collect {amount}",
+    "tabDiscardConfirmTitle": "Discard tab?",
+    "tabDiscardConfirmBody": "All orders will be voided. No charge will be made. This cannot be undone.",
+    "tabDiscardConfirm": "Discard tab",
+    "tabPendingPaymentHint": "Online payment in progress — wait for it to complete",
+    "tabOpenedAt": "Opened {time}",
+    "tabCancelAction": "Cancel"
   },
   "SiteManage": {
     "summary": "Summary",

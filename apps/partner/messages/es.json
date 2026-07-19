@@ -390,7 +390,8 @@
     "embedHeading": "Incrustar en tu web",
     "embedHint": "Pega este fragmento en tu sitio para recibir reservas directamente desde tu propia página.",
     "embedCopy": "Copiar código",
-    "embedCopied": "¡Copiado!"
+    "embedCopied": "¡Copiado!",
+    "printDineInQr": "Imprimir códigos QR de mesa"
   },
   "SiteSchematic": {
     "layoutWidth": "Ancho",
@@ -720,7 +721,13 @@
     "processingFeesLabel": "Comisiones de pago",
     "refundsNotCreditNotesHint": "Reembolsos mostrados como referencia — aún no emitidos como facturas rectificativas",
     "downloadCsvRegister": "Descargar CSV",
-    "accountingExportEmpty": "Sin facturas para este mes"
+    "accountingExportEmpty": "Sin facturas para este mes",
+    "tabsGroupTitle": "Comandas de mesa",
+    "tabsEmpty": "Sin facturas de comandas de mesa para este mes",
+    "tabTableLabel": "Mesa",
+    "tabClosedAt": "Cerrado",
+    "tabStatusPaid": "Online",
+    "tabStatusCash": "Efectivo"
   },
   "SiteOrders": {
     "tabNew": "Nuevo",
@@ -758,7 +765,24 @@
     "nothingPreparing": "Nada en preparación",
     "noOrdersToDeliver": "No hay pedidos para entregar",
     "noCompletedOrders": "Aún no hay pedidos completados",
-    "reason": "Motivo: {text}"
+    "reason": "Motivo: {text}",
+    "tabsHeading": "Cuentas abiertas",
+    "tabsEmpty": "No hay cuentas abiertas",
+    "tabStatusOpen": "Abierta",
+    "tabStatusPendingPayment": "Pago en curso",
+    "tabRounds": "{count, plural, one {# ronda} other {# rondas}}",
+    "tabAmountDue": "Importe a cobrar",
+    "tabSettleCash": "Cobrar en efectivo",
+    "tabDiscard": "Descartar",
+    "tabSettleConfirmTitle": "¿Cobrar cuenta en efectivo?",
+    "tabSettleConfirmBody": "Cobra {amount} al cliente. Se crea un recibo y se cierra la cuenta.",
+    "tabSettleConfirm": "Cobrar {amount}",
+    "tabDiscardConfirmTitle": "¿Descartar cuenta?",
+    "tabDiscardConfirmBody": "Todos los pedidos serán anulados. No se realizará ningún cargo. Esta acción no se puede deshacer.",
+    "tabDiscardConfirm": "Descartar cuenta",
+    "tabPendingPaymentHint": "Pago en línea en curso — espera a que se complete",
+    "tabOpenedAt": "Abierta hace {time}",
+    "tabCancelAction": "Cancelar"
   },
   "SiteManage": {
     "summary": "Resumen",

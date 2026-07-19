@@ -39,6 +39,7 @@ import {
   ORDER_DISCARDED,
   ORDER_REFUNDED,
   TAB_PAID,
+  TAB_SETTLED_CASH,
 } from './reservation-status'
 
 // Tab orders live in KITCHEN states while unpaid (complete → accepted → … →
@@ -1560,37 +1561,63 @@ export async function calculateTabTotal(tabId: string): Promise<TabTotalResult> 
 
 // ─── Dine-In Tab: Idempotent Payment Processing ──────────────────────────────
 
+export interface ProcessTabPaymentOpts {
+  /**
+   * When true, this is a staff cash settlement (track 015 cash-receipt
+   * precedent): only a PARTNER invoice is created — no PLATFORM commission
+   * invoice. Terminal status becomes TAB_SETTLED_CASH (not TAB_PAID).
+   * `tab.paymentRef` may be null; it is NOT required or fabricated for cash.
+   *
+   * When false/absent (default): full online path — PARTNER + PLATFORM
+   * invoices, status = TAB_PAID.
+   */
+  cash?: boolean
+}
+
 /**
- * Process a confirmed tab payment: create two invoices (PARTNER + PLATFORM)
- * atomically across all order rounds of the tab, then mark every order paid
- * and close the tab.
+ * Process a confirmed tab payment: create invoices atomically across all
+ * order rounds of the tab, then mark every order paid and close the tab.
  *
- * SPLIT MERCHANT model (mirrors processConfirmedRentalBooking):
+ * Default (no opts / cash: false) — SPLIT MERCHANT model:
  *   1. PARTNER invoice — one InvoiceLine per OrderItem across all rounds,
  *      each line taxed at its own item.tax rate (per-item VAT, like
  *      processConfirmedOrder). Linked via tableTabId.
  *   2. PLATFORM invoice — single service-fee line, B2B commission billed to
  *      the partner. Linked via tableTabId.
+ *   Tab closed with status = TAB_PAID.
+ *
+ * With { cash: true } — PARTNER-only receipt (mirrors processConfirmedReservation
+ * skipCommission path, track 015):
+ *   1. PARTNER invoice only — same per-item lines as above. No PLATFORM invoice.
+ *   `tab.paymentRef` is null / may be absent; no paymentRef written to orders.
+ *   Tab closed with status = TAB_SETTLED_CASH.
  *
  * Fee model: `food-and-beverage`. Orders ADD the fee to the customer total
  * (payments.md) — the fee is NOT netted from the PARTNER invoice amount.
  *
- * Idempotency: existing-invoice check on tableTabId both before AND inside
- * the transaction (mirrors the existing pattern from processConfirmedOrder).
+ * Idempotency: existing-invoice check on tableTabId AND terminal-status check
+ * both before AND inside the transaction. Both TAB_PAID and TAB_SETTLED_CASH
+ * are treated as terminal — a cash-settled tab cannot be re-processed by a
+ * late webhook (online path), and vice versa.
  *
  * On completion (inside the transaction):
- *   - Each billed order: paymentRef = tab.paymentRef; kitchen lifecycle states
- *     are preserved (payment happens AFTER the kitchen for tab orders — only
- *     pending/processing stragglers are normalized to ORDER_COMPLETE). Voided
- *     orders (canceled/rejected/discarded/refunded) are neither charged nor
- *     invoiced.
- *   - Tab: status = TAB_PAID, closedAt = now(), openTableId = null
- *     (nulling openTableId is mandatory — it releases the concurrency guard
- *     so a new tab can be opened on the same table).
+ *   - Each billed order: paymentRef stamped only when present (null for cash).
+ *     Kitchen lifecycle states are preserved (payment happens AFTER the kitchen
+ *     for tab orders — only pending/processing stragglers are normalized to
+ *     ORDER_COMPLETE). Voided orders (canceled/rejected/discarded/refunded) are
+ *     neither charged nor invoiced.
+ *   - Tab: status = TAB_PAID or TAB_SETTLED_CASH, closedAt = now(),
+ *     openTableId = null (MANDATORY — releases the concurrency guard so a new
+ *     tab can be opened on the same table).
  *
  * Safe to call multiple times — skips if already processed (idempotent).
  */
-export async function processConfirmedTabPayment(tabId: string): Promise<void> {
+export async function processConfirmedTabPayment(
+  tabId: string,
+  opts?: ProcessTabPaymentOpts,
+): Promise<void> {
+  const skipCommission = opts?.cash ?? false
+
   const tab = await prisma.tableTab.findUnique({
     where: { id: tabId },
     include: {
@@ -1606,9 +1633,9 @@ export async function processConfirmedTabPayment(tabId: string): Promise<void> {
 
   if (!tab) throw new Error(`TableTab not found: ${tabId}`)
 
-  // Idempotency guard: already processed
+  // Idempotency guard: already processed (both terminal outcomes are final)
   if (tab.invoices.length > 0) return
-  if (tab.status === TAB_PAID) return
+  if (tab.status === TAB_PAID || tab.status === TAB_SETTLED_CASH) return
 
   const orders = tab.orders
 
@@ -1656,29 +1683,35 @@ export async function processConfirmedTabPayment(tabId: string): Promise<void> {
 
   // Fee is calculated on the gross orders total (payments.md: orders add to
   // customer total — fee on top, not netted from partner amount).
-  const serviceFeeAmount = calculateServiceFeeAmount(matchedFee, totalPartnerAmount)
+  // For cash settlements no commission invoice is created — skip fee/entity loads.
+  const serviceFeeAmount = skipCommission
+    ? 0
+    : calculateServiceFeeAmount(matchedFee, totalPartnerAmount)
 
-  const businessEntity = await getBusinessEntity()
+  const businessEntity = skipCommission ? null : await getBusinessEntity()
 
-  const feeSettings = matchedFee
-    ? await prisma.settings.findUnique({
-        where: { id: matchedFee.settingsId },
-        select: { vat: true, country: true },
-      })
-    : null
-  const platformVatRate = feeSettings?.vat ?? businessEntity.vatRate
+  const feeSettings =
+    !skipCommission && matchedFee
+      ? await prisma.settings.findUnique({
+          where: { id: matchedFee.settingsId },
+          select: { vat: true, country: true },
+        })
+      : null
+  const platformVatRate = feeSettings?.vat ?? businessEntity?.vatRate ?? 0
   const feeCountry = feeSettings?.country ?? ''
 
   const paymentRef = tab.paymentRef
 
   await prisma.$transaction(async (tx) => {
-    // Double-check idempotency inside transaction (race-safe)
+    // Double-check idempotency inside transaction (race-safe).
+    // Both TAB_PAID and TAB_SETTLED_CASH are terminal — a cash-settled tab
+    // must not be re-processable by a late online webhook, and vice versa.
     const current = await tx.tableTab.findUnique({
       where: { id: tabId },
       include: { invoices: true },
     })
     if ((current?.invoices?.length ?? 0) > 0) return
-    if (current?.status === TAB_PAID) return
+    if (current?.status === TAB_PAID || current?.status === TAB_SETTLED_CASH) return
 
     const invoicedAt = new Date()
 
@@ -1724,9 +1757,9 @@ export async function processConfirmedTabPayment(tabId: string): Promise<void> {
       await tx.invoiceLine.createMany({ data: itemLines })
     }
 
-    // ── 2. PLATFORM Invoice (service fee) ──
+    // ── 2. PLATFORM Invoice (service fee) — skipped for cash settlements ──
 
-    if (serviceFeeAmount > 0) {
+    if (!skipCommission && serviceFeeAmount > 0 && businessEntity) {
       const commission = computeCommissionVat(
         serviceFeeAmount, platformVatRate,
         partnerAccount?.country, partnerAccount?.businessId, feeCountry
@@ -1777,17 +1810,18 @@ export async function processConfirmedTabPayment(tabId: string): Promise<void> {
 
     const orderIds = orders.map((o) => o.id)
 
-    // Stamp the tab's paymentRef on every billed order. Do NOT touch kitchen
-    // lifecycle states (accepted/preparing/ready/delivered) — tab orders reach
-    // the kitchen BEFORE payment, so overwriting status here would regress a
+    // Stamp the tab's paymentRef on every billed order (only when present —
+    // cash settlements have no paymentRef). Do NOT touch kitchen lifecycle
+    // states (accepted/preparing/ready/delivered) — tab orders reach the
+    // kitchen BEFORE payment, so overwriting status here would regress a
     // delivered round back to 'complete'. Paid-ness is carried by the tab
-    // status + shared paymentRef, not by order.status.
-    await tx.order.updateMany({
-      where: { id: { in: orderIds } },
-      data: {
-        paymentRef: paymentRef ?? null,
-      },
-    })
+    // status (TAB_PAID or TAB_SETTLED_CASH), not by order.status.
+    if (paymentRef != null) {
+      await tx.order.updateMany({
+        where: { id: { in: orderIds } },
+        data: { paymentRef },
+      })
+    }
 
     // Only normalize stragglers that never entered the kitchen flow.
     await tx.order.updateMany({
@@ -1796,11 +1830,12 @@ export async function processConfirmedTabPayment(tabId: string): Promise<void> {
     })
 
     // Close the tab: set status, closedAt, and MUST null openTableId to release
-    // the one-open-tab-per-table concurrency guard.
+    // the one-open-tab-per-table concurrency guard. Status is TAB_PAID for
+    // online payments, TAB_SETTLED_CASH for staff cash settlements.
     await tx.tableTab.update({
       where: { id: tabId },
       data: {
-        status: TAB_PAID,
+        status: skipCommission ? TAB_SETTLED_CASH : TAB_PAID,
         closedAt: invoicedAt,
         openTableId: null,
       },
