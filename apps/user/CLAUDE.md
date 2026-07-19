@@ -17,7 +17,7 @@ Google, Facebook, Credentials (email/password with bcrypt). Anonymous support vi
 | `/sites/[id]` | Site detail — image, services, hours, reservation panel | Public |
 | `/sites/[id]/pos` | POS reservation (QR code entry) — anonymous support | Public |
 | `/sites/[id]/pos/[itemId]` | Direct item POS reservation | Public |
-| `/sites/[id]/dine/[tableId]` | Dine-in tab ordering — per-table QR landing, menu browse, place rounds, view running tab | Public |
+| `/sites/[id]/dine/[tableId]` | Dine-in tab ordering — per-table QR landing, menu browse, place rounds, view running tab, Close & pay (Mollie or demo), return-poll flow, paid state | Public |
 | `/reservations` | User's reservations — Active/History tabs | Auth |
 | `/reservations/[id]` | Reservation detail — swipeable confirmation + F&B menu | Mixed |
 | `/reservations/[id]/pass` | QR ticket pass — printable | Mixed |
@@ -45,6 +45,8 @@ Google, Facebook, Credentials (email/password with bcrypt). Anonymous support vi
 | `/api/orders/[id]/find` | GET | Find order by paymentRef |
 | `/api/payment/mollie/create-payment` | POST | Create Mollie payment for reservation (redirectUrl origin-validated) |
 | `/api/order-payment/mollie/create-payment` | POST | Create Mollie payment for order |
+| `/api/tab-payment/mollie/create-payment` | POST | Create Mollie payment for dine-in tab (QR-credential, no ownership check; atomic claim TAB_OPEN→TAB_PENDING_PAYMENT before total computed) |
+| `/api/tabs/[id]` | GET | Poll-fallback for tab payment status (QR-credential, no ownership check; minimal DTO `{ id, status, closedAt }`) |
 | `/api/webhooks/mollie` | POST | Mollie webhook (paymentId format-validated) |
 | `/api/reconcile` | POST | Reconcile stuck payments (RECONCILIATION_SECRET required) |
 | `/api/places/autocomplete` | GET | Google Places proxy (input length-limited) |
@@ -55,7 +57,7 @@ Google, Facebook, Credentials (email/password with bcrypt). Anonymous support vi
 
 - **`sites/[id]/actions.ts`**: `saveReservationForMultipleItems` (multi-item, auth/anonId required, price from DB), `saveRentalBooking` (availability-checked), `findAnonReservation`, `findUserReservation`
 - **`reservations/[id]/actions.ts`**: `cancelReservation` (+ provider refund via `issueRefund` if paid), `getProducts`, `createOrder` (DB prices enforced), `completeUnpaidOrder`, `getOrderByPaymentRef`, `getOrders`
-- **`payment/actions.ts`**: `initiateDemoReservationPayment`, `initiateDemoOrderPayment`, `initiateDemoRentalPayment`, `getReservationById`, `getReservationByPaymentRef`, `getOrderByPaymentRef`
+- **`payment/actions.ts`**: `initiateDemoReservationPayment`, `initiateDemoOrderPayment`, `initiateDemoRentalPayment`, `initiateDemoTabPayment` (QR-credential, no ownership check; atomic claim + calculateTabTotal guard; on processConfirmedTabPayment error does NOT revert — poll route retries), `getReservationById`, `getReservationByPaymentRef`, `getOrderByPaymentRef`
 - **`sites/[id]/dine/[tableId]/actions.ts`** (dine-in tabs, track 002 P1.5): `placeTabOrder` (find-or-create open tab in-txn on the `openTableId` unique guard, P2002 → join existing; orders enter kitchen state `complete`, DB prices), `getTabState` (open tab + rounds + `calculateTabTotal` totals; no ownership check — QR-URL-as-credential), `getDineContext` (site/restaurant/table + product menu; flag + `appSalesEnabled` + table↔site gates)
 
 ## API Auth Helpers (`app/api/_lib/`)
@@ -77,7 +79,7 @@ RTK Query: `reservationApi` (getReservation, getReservationByDate, etc.), `place
 ## Testing
 
 ```bash
-npm run test              # unit + route + server action tests (398 tests, Prisma mocked)
+npm run test              # unit + route + server action tests (459 tests, Prisma mocked)
 npm run test:watch        # vitest in watch mode
 npm run test:integration  # integration tests against local sunbnb_test DB (70 tests, real Prisma)
 ```
@@ -97,7 +99,9 @@ npm run test:integration  # integration tests against local sunbnb_test DB (70 t
 - `app/api/table-reservations/[id]/route.test.ts` — table reservation fetch + ownership (8 tests)
 - `app/api/table-reservations/[id]/deposit/mollie/route.test.ts` — table reservation deposit Mollie payment (23 tests)
 - `app/api/payment/mollie/create-rental-payment/route.test.ts` — create Mollie payment for rental booking (7 tests)
-- `app/api/webhooks/mollie/route.test.ts` — Mollie webhook handling (22 tests)
+- `app/api/tab-payment/mollie/create-payment/route.test.ts` — create Mollie payment for dine-in tab: validation, 404, 409 claim conflicts, zero-total revert, happy path, revert-on-error (15 tests)
+- `app/api/tabs/[id]/route.test.ts` — tab payment poll-fallback: 404, invalid id, open passthrough, paid passthrough, pending+succeeded, pending+failed revert, provider-error tolerance, minimal DTO, no-auth (9 tests)
+- `app/api/webhooks/mollie/route.test.ts` — Mollie webhook handling (28 tests — +6 for tab branch: paid/failed/canceled/expired/guard/refund-noop)
 - `app/api/reconcile/route.test.ts` — stuck payment reconciliation (9 tests)
 - `app/api/cron/send-reminders/route.test.ts` — daily reminder cron auth + email sending (10 tests)
 - `app/api/auth/forgot-password/route.test.ts` — rate limiting, email validation, enumeration protection (10 tests)
@@ -109,10 +113,10 @@ npm run test:integration  # integration tests against local sunbnb_test DB (70 t
 - `app/reservations/[id]/actions.test.ts` — cancel, createOrder, completeUnpaidOrder (40 tests)
 - `app/reservations/[id]/receipt/actions.test.ts` — receipt / invoice actions (6 tests)
 - `app/reservations/rental/[id]/actions.test.ts` — rental booking detail actions (17 tests)
-- `app/payment/actions.test.ts` — demo payments, query actions (34 tests)
+- `app/payment/actions.test.ts` — demo payments, query actions (45 tests — +11 for initiateDemoTabPayment)
 - `app/embed/[restaurantId]/page.test.ts` — embedded restaurant page (3 tests)
-- `app/sites/[id]/dine/[tableId]/page.test.ts` — dine-in page server component: getDineContext error paths → notFound, success → DineView (4 tests)
-- `app/sites/[id]/dine/[tableId]/view.test.ts` — DineView logic: product shape contract, placeTabOrder call contract, TabState shape, pending_payment gate (10 tests)
+- `app/sites/[id]/dine/[tableId]/page.test.ts` — dine-in page server component: getDineContext error paths → notFound, success → DineView with siteId/tableId props (4 tests)
+- `app/sites/[id]/dine/[tableId]/view.test.ts` — DineView logic: product shape contract, placeTabOrder call contract, TabState shape, pending_payment gate, pay button visibility, demo pay contract, Mollie pay contract, return-poll resolution mapping, paid-state guard vs tab:null poll (29 tests)
 - `store/features/api/apiSlice.test.ts` — anonGetQuery anonId forwarding for anon-owned lookups (3 tests)
 
 ### Integration tests (`vitest.integration.config.ts`)

@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { useTranslations } from 'next-intl'
 import { placeTabOrder, getTabState } from './actions'
+import { initiateDemoTabPayment } from '@/app/payment/actions'
 import type { DineContext, TabState, PlaceTabOrderItem } from './actions'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -11,6 +13,10 @@ import type { DineContext, TabState, PlaceTabOrderItem } from './actions'
 const MAX_ITEM_QTY = 99
 const ANON_ID_KEY = 'sunbnb-anonId'
 const TAB_POLL_INTERVAL_MS = 30_000
+const RETURN_POLL_INTERVAL_MS = 3_000
+const RETURN_POLL_MAX_ATTEMPTS = 40
+
+const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
 
 const CATEGORY_ORDER = ['food', 'drink', 'snack', 'accessory'] as const
 
@@ -21,6 +27,14 @@ type CartItem = {
   quantity: number
   notes?: string
 }
+
+type UiState =
+  | { phase: 'ordering' }
+  | { phase: 'confirm_pay' }
+  | { phase: 'paying' }
+  | { phase: 'verifying' } // tabReturn poll
+  | { phase: 'paid'; paidTotal?: number }
+  | { phase: 'closed' } // discarded / 404 after return
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -85,8 +99,18 @@ function SuccessBanner({ message }: { message: string }) {
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
-export default function DineView({ context }: { context: DineContext }) {
+export default function DineView({
+  context,
+  siteId,
+  tableId,
+}: {
+  context: DineContext
+  siteId: string
+  tableId: string
+}) {
   const t = useTranslations('Dine')
+  const router = useRouter()
+  const searchParams = useSearchParams()
 
   const CATEGORY_LABELS: Record<string, string> = {
     food: `${t('Food')}`,
@@ -146,10 +170,16 @@ export default function DineView({ context }: { context: DineContext }) {
   const [reviewOpen, setReviewOpen] = useState(false)
   const [placing, setPlacing] = useState(false)
 
+  // ── UI phase state ────────────────────────────────────────────────────────
+  const [uiState, setUiState] = useState<UiState>({ phase: 'ordering' })
+
   // ── Tab state (polling) ───────────────────────────────────────────────────
   const [tab, setTab] = useState<TabState | null>(null)
   const [tabLoading, setTabLoading] = useState(true)
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Capture the pre-payment totals so we can display them on the paid screen
+  const [prePaidTotal, setPrePaidTotal] = useState<number | undefined>(undefined)
 
   const fetchTab = useCallback(async () => {
     const res = await getTabState(context.site.id, context.table.id)
@@ -159,7 +189,7 @@ export default function DineView({ context }: { context: DineContext }) {
     setTabLoading(false)
   }, [context.site.id, context.table.id])
 
-  // Initial fetch + 30 s polling
+  // Initial fetch + 30 s polling (suspended during verifying/paid phases)
   useEffect(() => {
     void fetchTab()
     const schedule = () => {
@@ -174,11 +204,48 @@ export default function DineView({ context }: { context: DineContext }) {
     }
   }, [fetchTab])
 
+  // Guard: if the tab:null comes from the server poll after tab is closed (getTabState
+  // looks up by openTableId and returns null for closed tabs), do NOT clobber the paid state.
+  useEffect(() => {
+    if (tab === null && (uiState.phase === 'paid' || uiState.phase === 'closed')) {
+      // Tab was closed server-side — the local paid state is authoritative. Leave it.
+      return
+    }
+    if (tab !== null && tab.status === 'pending_payment' && uiState.phase === 'ordering') {
+      // A companion phone has already claimed the tab for payment — show the banner.
+      // (The local payer's own flow is handled via uiState transitions below.)
+    }
+  }, [tab, uiState.phase])
+
+  // When the 30s poll sees pending_payment on a companion phone and the tab later
+  // transitions to paid/closed (getTabState returns null), flip to paid state.
+  const prevTabStatusRef = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    const prevStatus = prevTabStatusRef.current
+    if (tab !== null) {
+      prevTabStatusRef.current = tab.status
+    }
+
+    // If we're currently watching pending_payment (companion phone) and tab
+    // disappears (closed by payer), move to paid state.
+    if (
+      prevStatus === 'pending_payment' &&
+      tab === null &&
+      uiState.phase === 'ordering'
+    ) {
+      setUiState({ phase: 'paid' })
+    }
+  }, [tab, uiState.phase])
+
   // ── Banner state ──────────────────────────────────────────────────────────
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successVisible, setSuccessVisible] = useState(false)
 
+  // Payment failed (returned from Mollie with failed status)
+  const [paymentFailedMsg, setPaymentFailedMsg] = useState<string | null>(null)
+
   const dismissError = useCallback(() => setErrorMsg(null), [])
+  const dismissPaymentFailed = useCallback(() => setPaymentFailedMsg(null), [])
 
   // Auto-dismiss success banner after 3 s
   useEffect(() => {
@@ -186,6 +253,75 @@ export default function DineView({ context }: { context: DineContext }) {
     const t = setTimeout(() => setSuccessVisible(false), 3000)
     return () => clearTimeout(t)
   }, [successVisible])
+
+  // ── tabReturn handling (on mount) ─────────────────────────────────────────
+  const returnPollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const returnPollAttemptsRef = useRef(0)
+
+  useEffect(() => {
+    const tabReturnId = searchParams.get('tabReturn')
+    if (!tabReturnId) return
+
+    // Strip the param immediately so a refresh doesn't re-enter verifying
+    const newUrl = new URL(window.location.href)
+    newUrl.searchParams.delete('tabReturn')
+    router.replace(newUrl.pathname + (newUrl.search === '?' ? '' : newUrl.search))
+
+    setUiState({ phase: 'verifying' })
+    returnPollAttemptsRef.current = 0
+
+    const pollReturn = async () => {
+      if (returnPollAttemptsRef.current >= RETURN_POLL_MAX_ATTEMPTS) {
+        // Timed out — treat as failed/unknown
+        setPaymentFailedMsg(t('paymentNotConfirmed'))
+        setUiState({ phase: 'ordering' })
+        return
+      }
+
+      returnPollAttemptsRef.current += 1
+
+      try {
+        const res = await fetch(`/api/tabs/${tabReturnId}`)
+        if (res.status === 404) {
+          setUiState({ phase: 'closed' })
+          return
+        }
+
+        const data: { id: string; status: string; closedAt: string | null } = await res.json()
+
+        if (data.status === 'paid' || data.status === 'settled_cash') {
+          setUiState({ phase: 'paid', paidTotal: prePaidTotal })
+          return
+        }
+
+        if (data.status === 'open') {
+          // Payment was canceled or failed — revert to ordering
+          setPaymentFailedMsg(t('paymentCanceled'))
+          setUiState({ phase: 'ordering' })
+          // Refresh tab state so banner clears
+          await fetchTab()
+          return
+        }
+
+        if (data.status === 'discarded') {
+          setUiState({ phase: 'closed' })
+          return
+        }
+
+        // pending_payment — keep polling
+        returnPollRef.current = setTimeout(pollReturn, RETURN_POLL_INTERVAL_MS)
+      } catch {
+        // Transient error — keep polling
+        returnPollRef.current = setTimeout(pollReturn, RETURN_POLL_INTERVAL_MS)
+      }
+    }
+
+    returnPollRef.current = setTimeout(pollReturn, RETURN_POLL_INTERVAL_MS)
+
+    return () => {
+      if (returnPollRef.current) clearTimeout(returnPollRef.current)
+    }
+  }, []) // intentionally run once on mount — tabReturn is read from searchParams at mount time only
 
   // ── Place order handler ───────────────────────────────────────────────────
   const handlePlaceOrder = async () => {
@@ -220,10 +356,150 @@ export default function DineView({ context }: { context: DineContext }) {
     setPlacing(false)
   }
 
+  // ── Close & pay handlers ──────────────────────────────────────────────────
+
+  const handlePayClick = () => {
+    // Capture totals before payment so paid state can display them
+    if (tab) {
+      setPrePaidTotal(tab.totals.payableTotal)
+    }
+    setUiState({ phase: 'confirm_pay' })
+  }
+
+  const handleCancelPay = () => {
+    setUiState({ phase: 'ordering' })
+  }
+
+  const handleConfirmPay = async () => {
+    if (!tab) return
+    setUiState({ phase: 'paying' })
+
+    if (DEMO_MODE) {
+      // Demo path: call server action, show paid state on ok
+      const result = await initiateDemoTabPayment(tab.id)
+      if (result.status === 'ok') {
+        setUiState({ phase: 'paid', paidTotal: prePaidTotal })
+        // Tab is now closed; the 30s getTabState poll will return null — that's expected.
+      } else {
+        const msg = result.errors?.[0] ?? t('paymentFailed')
+        setErrorMsg(msg)
+        // If the error was 409 "Payment already in progress", update local state accordingly
+        if (msg.toLowerCase().includes('progress') || msg.toLowerCase().includes('progress')) {
+          await fetchTab()
+        }
+        setUiState({ phase: 'ordering' })
+      }
+      return
+    }
+
+    // Mollie path
+    const redirectUrl = `${window.location.origin}/sites/${siteId}/dine/${tableId}?tabReturn=${tab.id}`
+
+    try {
+      const res = await fetch('/api/tab-payment/mollie/create-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tabId: tab.id, redirectUrl }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        const msg = data.error ?? t('paymentFailed')
+        // 409 "Payment already in progress" — flip to pending_payment and poll
+        if (res.status === 409 && (data.error ?? '').toLowerCase().includes('progress')) {
+          await fetchTab()
+          setUiState({ phase: 'ordering' })
+          // The pending_payment banner will appear via the tab state
+        } else {
+          setErrorMsg(msg)
+          setUiState({ phase: 'ordering' })
+        }
+        return
+      }
+
+      // Redirect to Mollie checkout
+      window.location.href = data.checkoutUrl
+    } catch {
+      setErrorMsg(t('paymentFailed'))
+      setUiState({ phase: 'ordering' })
+    }
+  }
+
   // ── Tab locked for payment ─────────────────────────────────────────────────
   const isPendingPayment = tab?.status === 'pending_payment'
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // Show pay button when tab is open and has a payable total
+  const canPay =
+    tab !== null &&
+    tab.status === 'open' &&
+    tab.totals.payableTotal > 0
+
+  // ── Verifying state ───────────────────────────────────────────────────────
+  if (uiState.phase === 'verifying') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-4 px-6 text-center">
+        <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-700 rounded-full animate-spin" />
+        <p className="text-sm font-medium text-gray-700">{t('confirmingPayment')}</p>
+      </div>
+    )
+  }
+
+  // ── Paid state ────────────────────────────────────────────────────────────
+  if (uiState.phase === 'paid') {
+    const total = uiState.paidTotal ?? prePaidTotal
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-6 text-center gap-6">
+        <div className="w-16 h-16 rounded-full bg-green-50 border border-green-200 flex items-center justify-center">
+          <svg className="w-8 h-8 text-green-600" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+          </svg>
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-xl font-bold text-gray-900">{t('paidTitle')}</h2>
+          <p className="text-sm text-gray-500">{t('paidSubtitle')}</p>
+          {total !== undefined && (
+            <p className="text-2xl font-bold text-gray-900 mt-2">{total.toFixed(2)}&nbsp;€</p>
+          )}
+        </div>
+        <button
+          onClick={() => {
+            // Navigate back to the dine page without ?tabReturn so a fresh tab
+            // can be opened lazily on the next order.
+            router.replace(`/sites/${siteId}/dine/${tableId}`)
+            // Reset local state so the user can start ordering again
+            setUiState({ phase: 'ordering' })
+            setTab(null)
+            setTabLoading(true)
+            void fetchTab()
+          }}
+          className="mt-2 px-6 py-3 rounded-xl bg-gray-900 text-white text-sm font-semibold
+                     active:bg-gray-800 transition-colors"
+        >
+          {t('startNewOrder')}
+        </button>
+      </div>
+    )
+  }
+
+  // ── Closed (discarded / 404) state ────────────────────────────────────────
+  if (uiState.phase === 'closed') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-6 text-center gap-4">
+        <div className="w-16 h-16 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center">
+          <svg className="w-8 h-8 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M18 10A8 8 0 11 2 10a8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zm-1 9a1 1 0 01-1-1V9a1 1 0 112 0v5a1 1 0 01-1 1z" clipRule="evenodd" />
+          </svg>
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-lg font-bold text-gray-900">{t('tabClosedTitle')}</h2>
+          <p className="text-sm text-gray-500">{t('tabClosedSubtitle')}</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Render (ordering / confirm_pay / paying phases) ───────────────────────
 
   const { site, restaurant, table, products } = context
 
@@ -235,6 +511,23 @@ export default function DineView({ context }: { context: DineContext }) {
     <>
       {/* Floating banners */}
       {errorMsg && <ErrorBanner message={errorMsg} onDismiss={dismissError} />}
+      {paymentFailedMsg && (
+        <div
+          role="status"
+          aria-live="assertive"
+          className="fixed top-4 inset-x-4 z-50 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 shadow-sm"
+        >
+          <svg className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M18 10A8 8 0 11 2 10a8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+          </svg>
+          <p className="flex-1 text-sm text-red-700">{paymentFailedMsg}</p>
+          <button onClick={dismissPaymentFailed} className="text-red-400 hover:text-red-600 ml-1">
+            <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+        </div>
+      )}
       {successVisible && <SuccessBanner message={t('orderReceived')} />}
 
       {/* ── Page ── */}
@@ -433,6 +726,19 @@ export default function DineView({ context }: { context: DineContext }) {
                       </span>
                     </div>
                   </div>
+
+                  {/* Close & pay button */}
+                  {canPay && uiState.phase === 'ordering' && (
+                    <div className="px-4 pb-4 pt-3 border-t border-gray-100">
+                      <button
+                        onClick={handlePayClick}
+                        className="w-full py-3 rounded-xl bg-gray-900 text-white text-sm font-semibold
+                                   active:bg-gray-800 transition-colors"
+                      >
+                        {t('closeAndPay')}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -441,7 +747,7 @@ export default function DineView({ context }: { context: DineContext }) {
       </div>
 
       {/* ── Fixed cart bar (only when cart has items and ordering is allowed) ── */}
-      {totalItems > 0 && !isPendingPayment && (
+      {totalItems > 0 && !isPendingPayment && uiState.phase === 'ordering' && (
         <div className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-sm border-t border-gray-100 px-4 py-3 z-20">
           <div className="max-w-xl mx-auto">
             <button
@@ -553,6 +859,77 @@ export default function DineView({ context }: { context: DineContext }) {
                 >
                   {placing ? t('placingOrder') : t('placeOrder')}
                 </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Confirm pay sheet ── */}
+      {(uiState.phase === 'confirm_pay' || uiState.phase === 'paying') && tab && (
+        <>
+          {/* Backdrop */}
+          <div className="fixed inset-0 bg-black/30 z-30" aria-hidden="true" />
+          <div
+            className="fixed bottom-0 inset-x-0 z-40 bg-white rounded-t-2xl shadow-xl"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('confirmPayTitle')}
+          >
+            {/* Drag handle */}
+            <div className="w-10 h-1 rounded-full bg-gray-300 mx-auto mt-3 mb-1" />
+
+            <div className="px-5 pt-4 pb-8 space-y-5">
+              <h3 className="text-lg font-semibold text-gray-900">{t('confirmPayTitle')}</h3>
+
+              {/* Summary breakdown */}
+              <div className="rounded-xl border border-gray-200 overflow-hidden">
+                <div className="divide-y divide-gray-100">
+                  <div className="px-4 py-3 flex items-center justify-between">
+                    <span className="text-sm text-gray-600">{t('ordersTotal')}</span>
+                    <span className="text-sm font-medium text-gray-900">
+                      {tab.totals.ordersTotal.toFixed(2)}&nbsp;€
+                    </span>
+                  </div>
+                  {tab.totals.serviceFee > 0 && (
+                    <div className="px-4 py-3 flex items-center justify-between">
+                      <span className="text-sm text-gray-600">{t('serviceFee')}</span>
+                      <span className="text-sm font-medium text-gray-900">
+                        {tab.totals.serviceFee.toFixed(2)}&nbsp;€
+                      </span>
+                    </div>
+                  )}
+                  <div className="px-4 py-3 flex items-center justify-between bg-gray-50">
+                    <span className="text-sm font-semibold text-gray-900">{t('payableTotal')}</span>
+                    <span className="text-base font-bold text-gray-900">
+                      {tab.totals.payableTotal.toFixed(2)}&nbsp;€
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div className="space-y-2">
+                <button
+                  onClick={handleConfirmPay}
+                  disabled={uiState.phase === 'paying'}
+                  className="w-full py-3 rounded-xl bg-gray-900 text-white text-sm font-semibold
+                             disabled:opacity-50 active:bg-gray-800 transition-colors flex items-center justify-center gap-2"
+                >
+                  {uiState.phase === 'paying' && (
+                    <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block" />
+                  )}
+                  {uiState.phase === 'paying' ? t('processingPayment') : t('confirmPay')}
+                </button>
+                {uiState.phase !== 'paying' && (
+                  <button
+                    onClick={handleCancelPay}
+                    className="w-full py-3 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium
+                               active:bg-gray-50 transition-colors"
+                  >
+                    {t('cancelPay')}
+                  </button>
+                )}
               </div>
             </div>
           </div>

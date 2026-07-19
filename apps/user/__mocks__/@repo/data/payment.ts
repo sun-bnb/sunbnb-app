@@ -10,3 +10,19 @@ export const calculateTabTotal = vi.fn().mockResolvedValue({
   payableTotal: 0,
   orderIds: [],
 })
+
+export const loadFeeContext = vi.fn().mockResolvedValue({
+  site: { id: 'site-1', serviceFees: [] },
+  partnerAccount: {
+    userId: 'partner-1',
+    mollieAccessToken: null,
+    mollieProfileId: null,
+    subscription: null,
+    serviceFees: [],
+  },
+  settings: { serviceFees: [] },
+})
+
+export const resolveServiceFee = vi.fn().mockReturnValue(null)
+export const calculateServiceFeeAmount = vi.fn().mockReturnValue(0)
+export const round = vi.fn((n: number) => Math.round(n * 100) / 100)

@@ -17,12 +17,18 @@ import {
   RESERVATION_PROCESSING,
   ORDER_PROCESSING,
   RENTAL_PROCESSING,
+  TAB_OPEN,
+  TAB_PENDING_PAYMENT,
+  TAB_TERMINAL_STATUSES,
 } from '@repo/data/reservation-status'
 import {
   processConfirmedReservation,
   processConfirmedOrder,
   processConfirmedRentalBooking,
+  processConfirmedTabPayment,
+  calculateTabTotal,
 } from '@repo/data/payment'
+import { isValidEntityId } from '@/app/api/_lib/payment-ids'
 
 const DEMO_MODE_ENABLED = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
 
@@ -200,6 +206,105 @@ export async function initiateDemoRentalPayment(rentalBookingIds: string[], anon
     await processConfirmedRentalBooking(paymentRef)
   } catch (error) {
     console.error('[Demo] Failed to process rental booking:', error)
+  }
+
+  return { status: 'ok', paymentRef }
+}
+
+/**
+ * Process a demo payment for a dine-in tab.
+ * Only available when NEXT_PUBLIC_DEMO_MODE is enabled.
+ *
+ * Security model: NO ownership check by design. This follows the
+ * QR-URL-as-credential model — possessing the open tab's CUID (from the QR
+ * URL) is the credential. Any holder of the QR-URL (i.e. anyone at the table)
+ * may initiate payment.
+ *
+ * Mirrors the Mollie route's claim logic exactly so demo and real flows are
+ * consistent: TAB_OPEN → TAB_PENDING_PAYMENT → paymentRef set → process.
+ */
+export async function initiateDemoTabPayment(tabId: string) {
+  if (!DEMO_MODE_ENABLED) {
+    return { status: 'error', errors: ['Demo mode is not enabled'] }
+  }
+
+  if (!isValidEntityId(tabId)) {
+    return { status: 'error', errors: ['Invalid tab ID'] }
+  }
+
+  // ── Load tab ─────────────────────────────────────────────────────────────
+
+  const tab = await prisma.tableTab.findUnique({
+    where: { id: tabId },
+    select: { id: true, status: true, paymentRef: true },
+  })
+
+  if (!tab) {
+    return { status: 'error', errors: ['Tab not found'] }
+  }
+
+  // Idempotent re-tap: if we already claimed + set a paymentRef, return it.
+  if (tab.paymentRef && (tab.status === TAB_PENDING_PAYMENT || (TAB_TERMINAL_STATUSES as readonly string[]).includes(tab.status))) {
+    return { status: 'ok', paymentRef: tab.paymentRef }
+  }
+
+  // ── Claim the tab atomically (TAB_OPEN → TAB_PENDING_PAYMENT) ───────────
+
+  const claimResult = await prisma.tableTab.updateMany({
+    where: { id: tabId, status: TAB_OPEN },
+    data: { status: TAB_PENDING_PAYMENT },
+  })
+
+  if (claimResult.count === 0) {
+    // Re-read to understand why
+    const current = await prisma.tableTab.findUnique({
+      where: { id: tabId },
+      select: { status: true },
+    })
+
+    if (!current) {
+      return { status: 'error', errors: ['Tab not found'] }
+    }
+
+    if (current.status === TAB_PENDING_PAYMENT) {
+      return { status: 'error', errors: ['Payment already in progress'] }
+    }
+
+    if ((TAB_TERMINAL_STATUSES as readonly string[]).includes(current.status)) {
+      return { status: 'error', errors: ['Tab is already closed'] }
+    }
+
+    return { status: 'error', errors: ['Tab cannot be paid in its current state'] }
+  }
+
+  // ── Verify the tab has something to pay (never trust client totals) ──────
+
+  const totals = await calculateTabTotal(tabId)
+
+  if (totals.payableTotal <= 0) {
+    // Revert the claim — nothing to pay
+    await prisma.tableTab.updateMany({
+      where: { id: tabId, status: TAB_PENDING_PAYMENT },
+      data: { status: TAB_OPEN, paymentRef: null },
+    })
+    return { status: 'error', errors: ['Tab has no payable amount'] }
+  }
+
+  // ── Set paymentRef and process ───────────────────────────────────────────
+
+  const paymentRef = `pi_demo_${Date.now()}`
+
+  await prisma.tableTab.update({
+    where: { id: tabId },
+    data: { paymentRef },
+  })
+
+  try {
+    await processConfirmedTabPayment(tabId)
+  } catch (error) {
+    // paymentRef is set — the poll route will retry processConfirmedTabPayment.
+    // Do NOT revert the claim here: the payment is considered made in demo mode.
+    console.error('[Demo] Failed to process tab payment:', error)
   }
 
   return { status: 'ok', paymentRef }

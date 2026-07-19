@@ -64,11 +64,13 @@ import {
   processConfirmedReservation,
   processConfirmedOrder,
   processConfirmedRentalBooking,
+  processConfirmedTabPayment,
 } from '@repo/data/payment'
 
 const mockProcessReservation = vi.mocked(processConfirmedReservation)
 const mockProcessOrder = vi.mocked(processConfirmedOrder)
 const mockProcessRentalBooking = vi.mocked(processConfirmedRentalBooking)
+const mockProcessTabPayment = vi.mocked(processConfirmedTabPayment)
 
 function makeWebhookRequest(paymentId?: string) {
   const formBody = paymentId ? `id=${paymentId}` : ''
@@ -569,5 +571,132 @@ describe('POST /api/webhooks/mollie — table-deposit branch', () => {
     const res = await POST(makeWebhookRequest(PAYMENT_ID))
     expect(res.status).toBe(200)
     expect(mockMarkDepositHeld).not.toHaveBeenCalled()
+  })
+})
+
+// ── tab webhook branch ────────────────────────────────────────────────────────
+
+describe('POST /api/webhooks/mollie — tab branch', () => {
+  const TAB_ID = 'clxtab0000000000000000000000'
+
+  it('calls processConfirmedTabPayment when tab payment is paid', async () => {
+    mockMollieGet.mockResolvedValue({
+      status: 'paid',
+      metadata: JSON.stringify({
+        type: 'tab',
+        entityId: TAB_ID,
+        siteId: 'site-1',
+      }),
+    })
+
+    const res = await POST(makeWebhookRequest('tr_tab123'))
+    expect(res.status).toBe(200)
+    expect(mockProcessTabPayment).toHaveBeenCalledWith(TAB_ID)
+    // Other processors must not be called
+    expect(mockProcessReservation).not.toHaveBeenCalled()
+    expect(mockProcessOrder).not.toHaveBeenCalled()
+  })
+
+  it('reverts tab to open when payment fails (so party can retry)', async () => {
+    mockMollieGet.mockResolvedValue({
+      status: 'failed',
+      metadata: JSON.stringify({
+        type: 'tab',
+        entityId: TAB_ID,
+        siteId: 'site-1',
+      }),
+    })
+    vi.mocked(prisma.tableTab.updateMany).mockResolvedValue({ count: 1 } as any)
+
+    const res = await POST(makeWebhookRequest('tr_tab123'))
+    expect(res.status).toBe(200)
+    expect(prisma.tableTab.updateMany).toHaveBeenCalledWith({
+      where: { id: TAB_ID, status: 'pending_payment' },
+      data: { status: 'open', paymentRef: null },
+    })
+    expect(mockProcessTabPayment).not.toHaveBeenCalled()
+  })
+
+  it('reverts tab to open when payment is canceled', async () => {
+    mockMollieGet.mockResolvedValue({
+      status: 'canceled',
+      metadata: JSON.stringify({
+        type: 'tab',
+        entityId: TAB_ID,
+        siteId: 'site-1',
+      }),
+    })
+    vi.mocked(prisma.tableTab.updateMany).mockResolvedValue({ count: 1 } as any)
+
+    const res = await POST(makeWebhookRequest('tr_tab123'))
+    expect(res.status).toBe(200)
+    expect(prisma.tableTab.updateMany).toHaveBeenCalledWith({
+      where: { id: TAB_ID, status: 'pending_payment' },
+      data: { status: 'open', paymentRef: null },
+    })
+  })
+
+  it('reverts tab to open when payment expires', async () => {
+    mockMollieGet.mockResolvedValue({
+      status: 'expired',
+      metadata: JSON.stringify({
+        type: 'tab',
+        entityId: TAB_ID,
+        siteId: 'site-1',
+      }),
+    })
+    vi.mocked(prisma.tableTab.updateMany).mockResolvedValue({ count: 1 } as any)
+
+    const res = await POST(makeWebhookRequest('tr_tab123'))
+    expect(res.status).toBe(200)
+    expect(prisma.tableTab.updateMany).toHaveBeenCalledWith({
+      where: { id: TAB_ID, status: 'pending_payment' },
+      data: { status: 'open', paymentRef: null },
+    })
+  })
+
+  it('guards failed revert with TAB_PENDING_PAYMENT — never reopens a paid tab', async () => {
+    // The where clause { status: TAB_PENDING_PAYMENT } is the guard.
+    // If the tab is already TAB_PAID, updateMany count is 0 — no state change.
+    mockMollieGet.mockResolvedValue({
+      status: 'failed',
+      metadata: JSON.stringify({
+        type: 'tab',
+        entityId: TAB_ID,
+        siteId: 'site-1',
+      }),
+    })
+    // Simulate the tab is already paid — updateMany returns count: 0 (guard kicks in)
+    vi.mocked(prisma.tableTab.updateMany).mockResolvedValue({ count: 0 } as any)
+
+    const res = await POST(makeWebhookRequest('tr_tab123'))
+    expect(res.status).toBe(200)
+    // The guard (where: { status: 'pending_payment' }) was applied correctly
+    expect(prisma.tableTab.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ status: 'pending_payment' }),
+      }),
+    )
+  })
+
+  it('logs a warning and does nothing on tab refund (v1 no-op)', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mockMollieGet.mockResolvedValue({
+      status: 'refunded',
+      metadata: JSON.stringify({
+        type: 'tab',
+        entityId: TAB_ID,
+        siteId: 'site-1',
+      }),
+    })
+
+    const res = await POST(makeWebhookRequest('tr_tab123'))
+    expect(res.status).toBe(200)
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Tab refund received'),
+      TAB_ID,
+    )
+    expect(prisma.tableTab.updateMany).not.toHaveBeenCalled()
+    warnSpy.mockRestore()
   })
 })

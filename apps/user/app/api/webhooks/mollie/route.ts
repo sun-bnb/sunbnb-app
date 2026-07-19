@@ -27,6 +27,7 @@ import {
   processConfirmedReservation,
   processConfirmedOrder,
   processConfirmedRentalBooking,
+  processConfirmedTabPayment,
 } from '@repo/data/payment'
 import { isTestMode } from '@repo/data/env'
 import { NextRequest } from 'next/server'
@@ -44,6 +45,7 @@ import {
   ORDER_REFUNDED,
   RENTAL_PAYMENT_FAILED,
   RENTAL_REFUNDED,
+  TAB_PENDING_PAYMENT,
 } from '@repo/data/reservation-status'
 import {
   markDepositHeld,
@@ -55,7 +57,7 @@ import { sendEmail } from '@repo/data/email'
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 interface MollieMetadata {
-  type: 'reservation' | 'order' | 'rental-booking' | 'table-deposit'
+  type: 'reservation' | 'order' | 'rental-booking' | 'table-deposit' | 'tab'
   entityId: string
   siteId?: string
   restaurantId?: string
@@ -129,6 +131,10 @@ async function handlePaymentPaid(meta: MollieMetadata, paymentId: string): Promi
         }
       }
     }
+  } else if (meta.type === 'tab') {
+    // processConfirmedTabPayment is idempotent: creates invoices, stamps paymentRef
+    // on orders, sets tab TAB_PAID + closedAt + nulls openTableId.
+    await processConfirmedTabPayment(meta.entityId)
   } else {
     console.warn('[Mollie Webhook] Unknown payment type in metadata:', meta.type)
   }
@@ -170,6 +176,13 @@ async function handlePaymentFailed(meta: MollieMetadata): Promise<void> {
         data: { status: RENTAL_PAYMENT_FAILED },
       })
     }
+  } else if (meta.type === 'tab') {
+    // Revert the tab so the party can retry payment. Guard on TAB_PENDING_PAYMENT
+    // so a late failure event never reopens a tab that was already TAB_PAID.
+    await prisma.tableTab.updateMany({
+      where: { id: meta.entityId, status: TAB_PENDING_PAYMENT },
+      data: { status: 'open', paymentRef: null },
+    })
   }
 }
 
@@ -190,6 +203,10 @@ async function handlePaymentRefunded(meta: MollieMetadata): Promise<void> {
       where: { id: { in: bookingIds } },
       data: { status: RENTAL_REFUNDED },
     })
+  } else if (meta.type === 'tab') {
+    // Tab refunds are out of v1 scope — handled by staff-side flows in phase 5.
+    // Log and no-op; do NOT attempt to mutate the tab status.
+    console.warn('[Mollie Webhook] Tab refund received — not handled in v1:', meta.entityId)
   }
 }
 

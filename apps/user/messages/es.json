@@ -280,7 +280,21 @@
     "orderReceived": "Pedido recibido — ¡la cocina está en ello!",
     "orderFailed": "No se pudo realizar el pedido — inténtalo de nuevo.",
     "paymentInProgress": "Pago en curso",
-    "paymentInProgressDesc": "Se está cerrando tu cuenta. Los pedidos están pausados mientras se procesa el pago."
+    "paymentInProgressDesc": "Se está cerrando tu cuenta. Los pedidos están pausados mientras se procesa el pago.",
+    "closeAndPay": "Cerrar y pagar",
+    "confirmPayTitle": "Confirmar pago",
+    "confirmPay": "Pagar ahora",
+    "cancelPay": "Cancelar",
+    "processingPayment": "Procesando…",
+    "paymentFailed": "No se pudo completar el pago. Por favor, inténtalo de nuevo.",
+    "paymentCanceled": "El pago no se completó — tu cuenta sigue abierta.",
+    "paymentNotConfirmed": "La confirmación del pago agotó el tiempo. Por favor, comprueba el estado de tu cuenta.",
+    "confirmingPayment": "Confirmando tu pago…",
+    "paidTitle": "Pago recibido — tu cuenta está cerrada",
+    "paidSubtitle": "¡Gracias! Disfruta el resto del día.",
+    "startNewOrder": "Hacer un nuevo pedido",
+    "tabClosedTitle": "Esta cuenta está cerrada",
+    "tabClosedSubtitle": "Esta cuenta ya ha sido liquidada o cancelada."
   },
   "TableBooking": {
     "pageTitle": "Reservar mesa en {name}",

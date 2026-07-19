@@ -3,7 +3,7 @@ id: 002-table-reservations
 title: Table Reservations
 status: active
 created: 2026-05-21
-updated: 2026-07-18
+updated: 2026-07-19
 worktree: null
 ---
 
@@ -105,9 +105,30 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
   `tableTab` + `$transaction`; fixtures gained restaurant/table/tab factories; setup.ts TRUNCATE
   extended. **Green: user 398u (was 344; +40 action +14 page/view) + 70i (was 59; +11); tsc + lint
   clean.** CLAUDE.md synced (route map, actions, test lists).
-  **Next → (4) user app payment** — "Close & pay" UI + Mollie tab route (amount from
-  `calculateTabTotal`, never client-summed) + webhook `tab`
-  branch + poll route + demo action; **(5) partner app** — per-table QR print (mirror
+  **✅ (4A) user app payment server — DONE 2026-07-19 (not yet committed).** Four new server
+  pieces: `POST /api/tab-payment/mollie/create-payment` (atomic claim TAB_OPEN→TAB_PENDING_PAYMENT
+  before `calculateTabTotal`, revert-on-any-failure, QR-credential model); webhook `tab` branch
+  (paid → `processConfirmedTabPayment`, failed/canceled/expired → guarded revert to TAB_OPEN,
+  refunded → warn-only no-op); `GET /api/tabs/[id]` (poll-fallback, minimal DTO, provider-error
+  tolerant); `initiateDemoTabPayment` (demo action, same claim logic, no revert on
+  processConfirmedTabPayment failure). Payment mock extended (loadFeeContext, resolveServiceFee,
+  calculateServiceFeeAmount, round). Tests: +42 unit tests (440 total, was 398); tsc + lint clean.
+  **✅ (4B) user app payment UI — DONE 2026-07-19 (not yet committed, same working set as 4A).**
+  DineView gained a `UiState` phase machine (`ordering|confirm_pay|paying|verifying|paid|closed`):
+  "Close & pay" button (tab open + payableTotal > 0) → confirm sheet (ordersTotal / serviceFee /
+  payableTotal) → demo (`initiateDemoTabPayment`) or Mollie (POST tab route, `redirectUrl =
+  /sites/[id]/dine/[tableId]?tabReturn=<tabId>`, redirect to checkout). On return, `tabReturn` →
+  verifying spinner polling `GET /api/tabs/[id]` every 3s (param stripped via router.replace
+  immediately so refresh doesn't re-enter): paid/settled_cash → paid card (green check +
+  prePaidTotal captured at tap time), open → dismissible "payment didn't complete" banner + resume
+  ordering, discarded/404 → closed state. Companion phones detect payment via the 30s `getTabState`
+  poll: `pending_payment` → `tab: null` transition ⇒ paid (`openTableId` nulls only at CLOSE — see
+  user-dev playbook 2026-07-19 note; a null poll result never clobbers a local paid/closed state).
+  page.tsx passes `siteId`/`tableId` props. +15 `Dine` i18n keys ×3 locales (**founder copy-review
+  before promote**). Tests: view.test 10→29; **user 459u green (was 440); tsc + lint clean;
+  orchestrator re-verified.** CLAUDE.md synced. **Phase 4 complete — dine-in tab pay works
+  end-to-end (demo verifiable in browser; Mollie needs the test-env pay-through).**
+  **Next → (5) partner app** — per-table QR print (mirror
   `qr-print-button.tsx`), table label on orders dashboard, open-tabs panel + settle/discard
   (auth-matrix registry; settle-as-cash should reuse track 015's cash-receipt core); **(6) i18n +
   wiki ingest + browser-verify.** Out of v1: standalone (no-Site) restaurants, MenuItem-rail

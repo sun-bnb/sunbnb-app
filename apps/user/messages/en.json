@@ -281,7 +281,21 @@
     "orderReceived": "Order received — the kitchen is on it!",
     "orderFailed": "Unable to place order — please try again.",
     "paymentInProgress": "Payment in progress",
-    "paymentInProgressDesc": "Your tab is being closed. Ordering is paused while payment is processing."
+    "paymentInProgressDesc": "Your tab is being closed. Ordering is paused while payment is processing.",
+    "closeAndPay": "Close & pay",
+    "confirmPayTitle": "Confirm payment",
+    "confirmPay": "Pay now",
+    "cancelPay": "Cancel",
+    "processingPayment": "Processing…",
+    "paymentFailed": "Payment could not be completed. Please try again.",
+    "paymentCanceled": "Payment was not completed — your tab is still open.",
+    "paymentNotConfirmed": "Payment confirmation timed out. Please check your tab status.",
+    "confirmingPayment": "Confirming your payment…",
+    "paidTitle": "Payment received — your tab is closed",
+    "paidSubtitle": "Thank you! Enjoy the rest of your day.",
+    "startNewOrder": "Start a new order",
+    "tabClosedTitle": "This tab is closed",
+    "tabClosedSubtitle": "This tab has already been settled or cancelled."
   },
   "TableBooking": {
     "pageTitle": "Book a table at {name}",

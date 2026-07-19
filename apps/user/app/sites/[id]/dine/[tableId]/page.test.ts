@@ -79,7 +79,7 @@ describe('DinePage', () => {
     expect(mockNotFound).toHaveBeenCalled()
   })
 
-  it('passes context to DineView when getDineContext succeeds', async () => {
+  it('passes context, siteId and tableId to DineView when getDineContext succeeds', async () => {
     const context = makeContext()
     mockGetDineContext.mockResolvedValue({ status: 'ok', context })
 
@@ -87,6 +87,8 @@ describe('DinePage', () => {
 
     expect(mockNotFound).not.toHaveBeenCalled()
     expect(el.props.context).toBe(context)
+    expect(el.props.siteId).toBe(SITE_ID)
+    expect(el.props.tableId).toBe(TABLE_ID)
   })
 
   it('invokes getDineContext with the correct siteId and tableId from params', async () => {

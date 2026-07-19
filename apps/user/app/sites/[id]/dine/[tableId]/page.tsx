@@ -18,5 +18,11 @@ export default async function DinePage({
     notFound()
   }
 
-  return <DineView context={result.context} />
+  return (
+    <DineView
+      context={result.context}
+      siteId={params.id}
+      tableId={params.tableId}
+    />
+  )
 }

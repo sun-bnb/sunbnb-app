@@ -280,7 +280,21 @@
     "orderReceived": "Tilaus vastaanotettu — keittiö hoitaa sen!",
     "orderFailed": "Tilauksen tekeminen epäonnistui — yritä uudelleen.",
     "paymentInProgress": "Maksu käynnissä",
-    "paymentInProgressDesc": "Laskuasi suljetaan. Tilaaminen on keskeytettynä maksun käsittelyn ajaksi."
+    "paymentInProgressDesc": "Laskuasi suljetaan. Tilaaminen on keskeytettynä maksun käsittelyn ajaksi.",
+    "closeAndPay": "Sulje ja maksa",
+    "confirmPayTitle": "Vahvista maksu",
+    "confirmPay": "Maksa nyt",
+    "cancelPay": "Peruuta",
+    "processingPayment": "Käsitellään…",
+    "paymentFailed": "Maksua ei voitu suorittaa. Yritä uudelleen.",
+    "paymentCanceled": "Maksu ei onnistunut — laskusi on edelleen auki.",
+    "paymentNotConfirmed": "Maksun vahvistus aikakatkaistiin. Tarkista laskusi tila.",
+    "confirmingPayment": "Vahvistetaan maksua…",
+    "paidTitle": "Maksu vastaanotettu — laskusi on suljettu",
+    "paidSubtitle": "Kiitos! Nauti lopusta päivästä.",
+    "startNewOrder": "Aloita uusi tilaus",
+    "tabClosedTitle": "Tämä lasku on suljettu",
+    "tabClosedSubtitle": "Tämä lasku on jo selvitetty tai peruttu."
   },
   "TableBooking": {
     "pageTitle": "Varaa pöytä: {name}",

@@ -11,7 +11,7 @@ sections.
 
 - **Payment flow** — Stripe / Mollie / demo issues — _none yet_
 - **Anonymous (anonId) flow** — POS/QR ownership, localStorage — `anonId` must be a valid UUID v4 in tests (2026-03-17)
-- **Webhook & polling** — webhook failures, polling races, reconciliation — _none yet_
+- **Webhook & polling** — webhook failures, polling races, reconciliation — tab payment revert asymmetry (2026-07-19)
 - **Test failures & fixes** — mock/fixture gotchas — `rentalBooking.findUnique` missing from mock (2026-06-19)
 - **i18n & locale** — next-intl edge cases — _none yet_
 - **Sunbed preselection / reserve-first flow** — pair resolution, dispatch loop, single-day default — (2026-07-09)
@@ -45,7 +45,20 @@ sections.
 
 ## Webhook & polling
 
-<!-- Stripe/Mollie webhook failures, polling race conditions, reconciliation -->
+### 2026-07-19: Tab payment claim — revert-on-failure asymmetry (demo vs Mollie)
+**Problem:** Two similar payment flows (Mollie route and demo action) have subtly different revert policies after setting `paymentRef`. In the Mollie route, if `getCheckoutUrl()` returns null after a successful Mollie API call, we do NOT revert (paymentRef is already on Mollie's side — poll route will recover). In the demo action, if `processConfirmedTabPayment` throws after setting paymentRef, we also do NOT revert — the payment is considered made and the poll route will retry.
+**Solution:** Only revert the `TAB_PENDING_PAYMENT → TAB_OPEN` claim (clearing `paymentRef: null`) when the failure happens BEFORE a real payment commitment: credential failures, zero-total, Mollie API errors. Once paymentRef is set (either on the tab row or confirmed by Mollie), never revert — return ok and let the poll route recover.
+**Prevention:** The rule: revert = before-commitment failures; no-revert = after-commitment failures. Apply to any new payment type that follows this claim-before-total pattern.
+
+### 2026-07-19: getTabState visibility — openTableId nulls at CLOSE, not at pending_payment
+**Problem:** Easy to misread the `TableTab.openTableId` guard as clearing when payment starts. It does NOT: the pay claim only flips `status` open→pending_payment; `openTableId` stays set (that is what lets `placeTabOrder` find the tab and reject with "payment in progress", and what keeps the dine view's pending_payment banner working). `openTableId` is nulled only by tab-CLOSING paths (paid / settled_cash / discarded), after which `getTabState` returns `tab: null`. A phase-4B report stated the opposite ("returns null the moment a tab transitions to pending_payment") — that claim is wrong; the shipped code is correct.
+**Solution:** Companion-phone paid detection in the dine view relies on exactly this: poll shows `pending_payment` (tab still visible) → later poll shows `null` (tab closed) ⇒ treat as paid. Note `settled_cash` also produces this transition (still "paid", by cash); `discarded` does too (rare walk-out path — accepted v1 imprecision).
+**Prevention:** When reasoning about tab lifecycle, check the closing paths in `processConfirmedTabPayment` (and future settle/discard actions): every one MUST null `openTableId` in the same update that sets the terminal status, and NONE of the non-terminal transitions may touch it.
+
+### 2026-07-19: TAB_OPEN constant used as revert target in guarded updateMany
+**Problem:** The webhook `handlePaymentFailed` for `tab` type uses `data: { status: 'open', paymentRef: null }` — not the `TAB_OPEN` constant — because the constant isn't imported in the test fixture but the string `'open'` IS what Prisma stores (it equals `TAB_OPEN`). Using the constant import is cleaner but the string literal is what test assertions compare against.
+**Solution:** In production code use `TAB_OPEN` constant (imported). In test assertions, compare against `'open'` string literal (or the constant if imported). The guarded `where: { status: TAB_PENDING_PAYMENT }` is the critical safety constraint preventing a late failure from reopening a paid tab.
+**Prevention:** When writing tests for revert logic, assert the EXACT where-clause guard: `{ id: tabId, status: 'pending_payment' }`. If the guard is missing, a paid tab could be reopened by a replayed webhook.
 
 ## Cron route patterns
 
