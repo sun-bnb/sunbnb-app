@@ -73,6 +73,7 @@ export async function cleanDatabase() {
       "menu_item",
       "restaurant_hours",
       "restaurant_shift",
+      "table_tab",
       "restaurant_table",
       "restaurant",
       "Site",

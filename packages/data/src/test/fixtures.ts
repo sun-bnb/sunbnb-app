@@ -315,6 +315,52 @@ export async function createTestRentalBooking(
   })
 }
 
+// ─── Table ───────────────────────────────────────────────────────────────────
+
+/**
+ * Create a test Table within a restaurant.
+ * `@@unique([restaurantId, number])` — number auto-increments via nextId() to
+ * prevent conflicts when multiple tables are created in the same test.
+ */
+export async function createTestTable(
+  restaurantId: string,
+  overrides: Record<string, any> = {}
+) {
+  return prisma.table.create({
+    data: {
+      restaurantId,
+      number: overrides.number ?? ++counter,
+      capacity: 4,
+      shape: 'square',
+      ...overrides,
+    },
+  })
+}
+
+// ─── TableTab ────────────────────────────────────────────────────────────────
+
+/**
+ * Create a test TableTab.
+ * Defaults: status = 'open', openTableId = tableId (concurrency guard set).
+ * Caller must supply restaurantId via overrides (it is a required column).
+ */
+export async function createTestTableTab(
+  tableId: string,
+  siteId: string,
+  overrides: Record<string, any> = {}
+) {
+  return prisma.tableTab.create({
+    data: {
+      tableId,
+      siteId,
+      status: 'open',
+      openTableId: tableId,
+      openedAt: new Date(),
+      ...overrides,
+    },
+  })
+}
+
 // ─── Subscription Plan + Subscription ───────────────────────────────────────
 
 export async function createTestSubscription(

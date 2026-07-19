@@ -32,7 +32,26 @@ import {
   RESERVATION_COMPLETE,
   RENTAL_COMPLETE,
   ORDER_COMPLETE,
+  ORDER_PENDING,
+  ORDER_PROCESSING,
+  ORDER_CANCELED,
+  ORDER_REJECTED,
+  ORDER_DISCARDED,
+  ORDER_REFUNDED,
+  TAB_PAID,
 } from './reservation-status'
+
+// Tab orders live in KITCHEN states while unpaid (complete → accepted → … →
+// delivered); paid-ness is tracked on the TAB, not the order status. An order
+// belongs to the tab bill unless it was voided. Shared by calculateTabTotal
+// and processConfirmedTabPayment so the charged amount always matches the
+// invoiced amount.
+const TAB_ORDER_VOID_STATUSES = [
+  ORDER_CANCELED,
+  ORDER_REJECTED,
+  ORDER_DISCARDED,
+  ORDER_REFUNDED,
+]
 import { resolveEffectiveFeatures, type SubscriptionFeatureKey } from './subscription'
 
 // ─── Financial Utilities ────────────────────────────────────────────────────
@@ -1471,4 +1490,320 @@ export async function calculateOrderServiceFee(
 
   const amount = order.paymentAmount ?? 0
   return calculateServiceFeeAmount(matchedFee, amount)
+}
+
+// ─── Dine-In Tab: Total Calculation ─────────────────────────────────────────
+
+export interface TabTotalResult {
+  /** Sum of paymentAmount across all not-yet-paid orders on the tab. */
+  ordersTotal: number
+  /** Platform service fee on the tab total (added to customer total per payments.md). */
+  serviceFee: number
+  /** What the customer pays: ordersTotal + serviceFee. */
+  payableTotal: number
+  /** IDs of the orders included in this calculation. */
+  orderIds: string[]
+}
+
+/**
+ * Read-only. Sum the tab's unpaid orders and add the platform service fee on
+ * top to derive the amount the customer must pay.
+ *
+ * Fee model: orders ADD the service fee to the customer total (payments.md).
+ * The fee is calculated via the three-tier cascade on `food-and-beverage`
+ * applied to the sum of all order paymentAmounts — single source of truth for
+ * the Mollie payment amount in the checkout phase.
+ *
+ * "Unpaid orders" = orders on the tab whose status is not yet ORDER_COMPLETE
+ * and which have a paymentAmount (i.e. the price has been confirmed by the
+ * kitchen flow). In practice for tab ordering, all orders on an open tab are
+ * candidates since the tab is paid once at the end.
+ */
+export async function calculateTabTotal(tabId: string): Promise<TabTotalResult> {
+  const tab = await prisma.tableTab.findUnique({
+    where: { id: tabId },
+    include: {
+      orders: {
+        where: { status: { notIn: TAB_ORDER_VOID_STATUSES } },
+        select: { id: true, paymentAmount: true, totalPrice: true },
+      },
+    },
+  })
+
+  if (!tab) throw new Error(`TableTab not found: ${tabId}`)
+
+  const orders = tab.orders
+  const ordersTotal = round(
+    orders.reduce((sum, o) => sum + (o.paymentAmount ?? o.totalPrice ?? 0), 0)
+  )
+  const orderIds = orders.map((o) => o.id)
+
+  const { site, partnerAccount, settings } = await loadFeeContext(
+    tab.siteId,
+    'food-and-beverage'
+  )
+
+  const tier = partnerAccount?.subscription?.plan?.tier ?? null
+  const matchedFee = resolveServiceFee(
+    site.serviceFees,
+    partnerAccount?.serviceFees ?? [],
+    settings?.serviceFees ?? [],
+    'food-and-beverage',
+    tier
+  )
+
+  const serviceFee = calculateServiceFeeAmount(matchedFee, ordersTotal)
+  const payableTotal = round(ordersTotal + serviceFee)
+
+  return { ordersTotal, serviceFee, payableTotal, orderIds }
+}
+
+// ─── Dine-In Tab: Idempotent Payment Processing ──────────────────────────────
+
+/**
+ * Process a confirmed tab payment: create two invoices (PARTNER + PLATFORM)
+ * atomically across all order rounds of the tab, then mark every order paid
+ * and close the tab.
+ *
+ * SPLIT MERCHANT model (mirrors processConfirmedRentalBooking):
+ *   1. PARTNER invoice — one InvoiceLine per OrderItem across all rounds,
+ *      each line taxed at its own item.tax rate (per-item VAT, like
+ *      processConfirmedOrder). Linked via tableTabId.
+ *   2. PLATFORM invoice — single service-fee line, B2B commission billed to
+ *      the partner. Linked via tableTabId.
+ *
+ * Fee model: `food-and-beverage`. Orders ADD the fee to the customer total
+ * (payments.md) — the fee is NOT netted from the PARTNER invoice amount.
+ *
+ * Idempotency: existing-invoice check on tableTabId both before AND inside
+ * the transaction (mirrors the existing pattern from processConfirmedOrder).
+ *
+ * On completion (inside the transaction):
+ *   - Each billed order: paymentRef = tab.paymentRef; kitchen lifecycle states
+ *     are preserved (payment happens AFTER the kitchen for tab orders — only
+ *     pending/processing stragglers are normalized to ORDER_COMPLETE). Voided
+ *     orders (canceled/rejected/discarded/refunded) are neither charged nor
+ *     invoiced.
+ *   - Tab: status = TAB_PAID, closedAt = now(), openTableId = null
+ *     (nulling openTableId is mandatory — it releases the concurrency guard
+ *     so a new tab can be opened on the same table).
+ *
+ * Safe to call multiple times — skips if already processed (idempotent).
+ */
+export async function processConfirmedTabPayment(tabId: string): Promise<void> {
+  const tab = await prisma.tableTab.findUnique({
+    where: { id: tabId },
+    include: {
+      orders: {
+        // Same void-exclusion as calculateTabTotal: a discarded/canceled
+        // round is neither charged nor invoiced.
+        where: { status: { notIn: TAB_ORDER_VOID_STATUSES } },
+        include: { orderItems: true },
+      },
+      invoices: true,
+    },
+  })
+
+  if (!tab) throw new Error(`TableTab not found: ${tabId}`)
+
+  // Idempotency guard: already processed
+  if (tab.invoices.length > 0) return
+  if (tab.status === TAB_PAID) return
+
+  const orders = tab.orders
+
+  const { site, partnerAccount, settings } = await loadFeeContext(
+    tab.siteId,
+    'food-and-beverage'
+  )
+
+  const tier = partnerAccount?.subscription?.plan?.tier ?? null
+  const matchedFee = resolveServiceFee(
+    site.serviceFees,
+    partnerAccount?.serviceFees ?? [],
+    settings?.serviceFees ?? [],
+    'food-and-beverage',
+    tier
+  )
+
+  // Accumulate per-item lines (per-item VAT like processConfirmedOrder).
+  let totalPartnerCharge = 0
+  let totalPartnerVat = 0
+  let totalPartnerAmount = 0
+
+  const allItemCalcs: Array<{
+    lineBase: number
+    lineVat: number
+    itemGross: number
+    item: { name: string; quantity: number; totalPrice: number; tax: number }
+  }> = []
+
+  for (const order of orders) {
+    for (const item of order.orderItems) {
+      const itemGross = round(item.totalPrice)
+      const { baseAmount: lineBase, vatAmount: lineVat } =
+        computeVatAndBaseAmounts(itemGross, item.tax)
+      totalPartnerCharge += lineBase
+      totalPartnerVat += lineVat
+      totalPartnerAmount += itemGross
+      allItemCalcs.push({ lineBase, lineVat, itemGross, item })
+    }
+  }
+
+  totalPartnerCharge = round(totalPartnerCharge)
+  totalPartnerVat = round(totalPartnerVat)
+  totalPartnerAmount = round(totalPartnerAmount)
+
+  // Fee is calculated on the gross orders total (payments.md: orders add to
+  // customer total — fee on top, not netted from partner amount).
+  const serviceFeeAmount = calculateServiceFeeAmount(matchedFee, totalPartnerAmount)
+
+  const businessEntity = await getBusinessEntity()
+
+  const feeSettings = matchedFee
+    ? await prisma.settings.findUnique({
+        where: { id: matchedFee.settingsId },
+        select: { vat: true, country: true },
+      })
+    : null
+  const platformVatRate = feeSettings?.vat ?? businessEntity.vatRate
+  const feeCountry = feeSettings?.country ?? ''
+
+  const paymentRef = tab.paymentRef
+
+  await prisma.$transaction(async (tx) => {
+    // Double-check idempotency inside transaction (race-safe)
+    const current = await tx.tableTab.findUnique({
+      where: { id: tabId },
+      include: { invoices: true },
+    })
+    if ((current?.invoices?.length ?? 0) > 0) return
+    if (current?.status === TAB_PAID) return
+
+    const invoicedAt = new Date()
+
+    // ── 1. PARTNER Invoice (all order item lines) ──
+
+    const partnerInvoiceNumber = await nextInvoiceNumber(tx, 'PARTNER')
+    const partnerPrevHash = await getLastHash(tx, 'PARTNER')
+
+    const partnerInvoice = await tx.invoice.create({
+      data: {
+        accountId: partnerAccount?.userId ?? '',
+        tableTabId: tabId,
+        paymentRef: paymentRef ?? undefined,
+        totalCharge: totalPartnerCharge,
+        totalTax: totalPartnerVat,
+        totalAmount: totalPartnerAmount,
+        invoicedAt,
+        issuerType: 'PARTNER',
+        issuerVatNumber: partnerAccount?.businessId ?? null,
+        issuerCompanyName: partnerAccount?.company ?? null,
+        issuerCompanyAddress: partnerAccount?.address ?? null,
+        invoiceNumber: partnerInvoiceNumber,
+        previousHash: partnerPrevHash,
+        hash: computeInvoiceHash(
+          partnerInvoiceNumber, invoicedAt, totalPartnerAmount,
+          partnerAccount?.businessId ?? null, partnerPrevHash
+        ),
+        product: 'restaurant',
+      },
+    })
+
+    const itemLines = allItemCalcs.map(({ lineBase, lineVat, itemGross, item }) => ({
+      charge: lineBase,
+      tax: lineVat,
+      amount: itemGross,
+      vatRate: item.tax,
+      invoiceId: partnerInvoice.id,
+      productCode: 'food-and-beverage',
+      description: `${item.name} x (${item.quantity})`,
+    }))
+
+    if (itemLines.length > 0) {
+      await tx.invoiceLine.createMany({ data: itemLines })
+    }
+
+    // ── 2. PLATFORM Invoice (service fee) ──
+
+    if (serviceFeeAmount > 0) {
+      const commission = computeCommissionVat(
+        serviceFeeAmount, platformVatRate,
+        partnerAccount?.country, partnerAccount?.businessId, feeCountry
+      )
+
+      const platformInvoiceNumber = await nextInvoiceNumber(tx, 'PLATFORM')
+      const platformPrevHash = await getLastHash(tx, 'PLATFORM')
+
+      const platformInvoice = await tx.invoice.create({
+        data: {
+          accountId: partnerAccount?.userId ?? '',
+          tableTabId: tabId,
+          paymentRef: paymentRef ?? undefined,
+          totalCharge: commission.base,
+          totalTax: commission.vat,
+          totalAmount: serviceFeeAmount,
+          invoicedAt,
+          issuerType: 'PLATFORM',
+          issuerVatNumber: businessEntity.vatId || null,
+          issuerCompanyName: businessEntity.companyName,
+          issuerCompanyAddress: businessEntity.companyAddress || null,
+          ...commissionRecipientFields(partnerAccount),
+          reverseCharge: commission.reverseCharge,
+          invoiceNumber: platformInvoiceNumber,
+          previousHash: platformPrevHash,
+          hash: computeInvoiceHash(
+            platformInvoiceNumber, invoicedAt, serviceFeeAmount,
+            businessEntity.vatId || null, platformPrevHash
+          ),
+          product: 'restaurant',
+        },
+      })
+
+      await tx.invoiceLine.create({
+        data: {
+          charge: commission.base,
+          tax: commission.vat,
+          amount: serviceFeeAmount,
+          vatRate: commission.vatRate,
+          invoiceId: platformInvoice.id,
+          productCode: 'sunbnb-service-fee',
+          description: `Dine-in tab service fee${feeCountry ? ` (${feeCountry})` : ''}`,
+        },
+      })
+    }
+
+    // ── 3. Mark all orders paid and close the tab ──
+
+    const orderIds = orders.map((o) => o.id)
+
+    // Stamp the tab's paymentRef on every billed order. Do NOT touch kitchen
+    // lifecycle states (accepted/preparing/ready/delivered) — tab orders reach
+    // the kitchen BEFORE payment, so overwriting status here would regress a
+    // delivered round back to 'complete'. Paid-ness is carried by the tab
+    // status + shared paymentRef, not by order.status.
+    await tx.order.updateMany({
+      where: { id: { in: orderIds } },
+      data: {
+        paymentRef: paymentRef ?? null,
+      },
+    })
+
+    // Only normalize stragglers that never entered the kitchen flow.
+    await tx.order.updateMany({
+      where: { id: { in: orderIds }, status: { in: [ORDER_PENDING, ORDER_PROCESSING] } },
+      data: { status: ORDER_COMPLETE },
+    })
+
+    // Close the tab: set status, closedAt, and MUST null openTableId to release
+    // the one-open-tab-per-table concurrency guard.
+    await tx.tableTab.update({
+      where: { id: tabId },
+      data: {
+        status: TAB_PAID,
+        closedAt: invoicedAt,
+        openTableId: null,
+      },
+    })
+  })
 }

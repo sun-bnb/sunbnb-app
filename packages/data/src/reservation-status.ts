@@ -149,3 +149,68 @@ export const OP_COMP = 'comp' as const
 export const OP_RESERVED = 'reserved' as const
 export const OP_PICKED_UP = 'picked-up' as const
 export const OP_RETURNED = 'returned' as const
+
+// ─── Dine-In Tab Statuses ────────────────────────────────────────────────────
+// These values live on the `TableTab.status` column (plain String, not enum).
+// TAB_OPEN is the schema default and MUST remain exactly `'open'` to match it.
+
+/**
+ * The tab is open — orders are accumulating, payment not yet initiated.
+ * MUST equal the schema default (`@default("open")`).
+ */
+export const TAB_OPEN = 'open' as const
+
+/**
+ * A Mollie (or demo) payment has been initiated for the tab total.
+ * The tab is waiting for payment confirmation.
+ */
+export const TAB_PENDING_PAYMENT = 'pending_payment' as const
+
+/**
+ * Payment confirmed and invoices created — the terminal success state for
+ * an online payment. Mirrors RESERVATION_COMPLETE semantics.
+ */
+export const TAB_PAID = 'paid' as const
+
+/**
+ * The tab was closed by staff via a cash settlement at the table.
+ * Partner-only receipt; no Mollie routing occurred.
+ */
+export const TAB_SETTLED_CASH = 'settled_cash' as const
+
+/**
+ * The tab was discarded by staff (walk-out / comp / error correction).
+ * No revenue recorded; orders remain for kitchen reporting.
+ */
+export const TAB_DISCARDED = 'discarded' as const
+
+/** All valid tab status values. */
+export const TAB_STATUSES = [
+  TAB_OPEN,
+  TAB_PENDING_PAYMENT,
+  TAB_PAID,
+  TAB_SETTLED_CASH,
+  TAB_DISCARDED,
+] as const
+
+export type TabStatus = (typeof TAB_STATUSES)[number]
+
+/**
+ * Terminal tab statuses — no further payment or status transitions expected.
+ * A tab in any of these states has a NULL `openTableId` (concurrency guard
+ * reset), allowing a new tab to be opened on the same table.
+ */
+export const TAB_TERMINAL_STATUSES: TabStatus[] = [
+  TAB_PAID,
+  TAB_SETTLED_CASH,
+  TAB_DISCARDED,
+]
+
+/**
+ * The single open state — a tab with this status has `openTableId` set to
+ * the tableId, preventing a second concurrent open tab on the same table.
+ */
+export const TAB_OPEN_STATUSES: TabStatus[] = [
+  TAB_OPEN,
+  TAB_PENDING_PAYMENT,
+]

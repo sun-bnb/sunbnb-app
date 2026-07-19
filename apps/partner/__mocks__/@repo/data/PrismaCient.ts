@@ -152,6 +152,15 @@ const prisma = {
     updateMany: vi.fn(),
     delete: vi.fn(),
   },
+  tableTab: {
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    count: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+  },
   restaurantShift: {
     findMany: vi.fn(),
     createMany: vi.fn(),

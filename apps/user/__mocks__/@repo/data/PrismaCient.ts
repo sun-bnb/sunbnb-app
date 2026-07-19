@@ -56,6 +56,22 @@ const prisma = {
     update: vi.fn(),
     updateMany: vi.fn(),
   },
+  table: {
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+  },
+  tableTab: {
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+  },
   featureFlag: {
     findMany: vi.fn(),
     upsert: vi.fn(),
@@ -68,6 +84,11 @@ const prisma = {
     findMany: vi.fn(),
     updateMany: vi.fn(),
   },
+  $transaction: vi.fn((arg: unknown) => {
+    if (Array.isArray(arg)) return Promise.all(arg)
+    if (typeof arg === 'function') return (arg as (tx: unknown) => unknown)(prisma)
+    return Promise.resolve(arg)
+  }),
 }
 
 export default prisma

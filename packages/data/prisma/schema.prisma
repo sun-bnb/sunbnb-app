@@ -264,6 +264,7 @@ model Site {
   brand           SiteBrand?
   tillCloses      TillClose[]
   tillEntries     TillEntry[]
+  tableTabs       TableTab[]
 
   @@index([coords], map: "site_coords_idx", type: Gist)
 }
@@ -481,6 +482,11 @@ model Order {
   userId        String         @map("user_id")
   reservationId String?        @map("reservation_id")
   seatId        String?        @map("seat_id")
+  // Dine-in tab link. tabId relates to the TableTab that groups this order
+  // with other rounds for a single payment. tableId is a denormalized label
+  // (no FK relation) for the kitchen/orders dashboard to display the table.
+  tabId         String?        @map("tab_id")
+  tableId       String?        @map("table_id")
   notes         String?
   rejectReason  String?        @map("reject_reason")
   acceptedAt    DateTime?      @map("accepted_at")
@@ -489,6 +495,7 @@ model Order {
   invoices      Invoice[]
   reservation   Reservation?   @relation(fields: [reservationId], references: [id])
   seat          InventoryItem? @relation(fields: [seatId], references: [id])
+  tab           TableTab?      @relation(fields: [tabId], references: [id])
   site          Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   orderItems    OrderItem[]
@@ -543,6 +550,9 @@ model Invoice {
   orderId          String?           @map("order_id")
   // Table-reservation deposit invoice link (no-show deposit cascade).
   tableReservationId String?         @map("table_reservation_id")
+  // Dine-in tab invoice link — idempotency anchor for processConfirmedTabPayment.
+  // Mirrors the tableReservationId precedent (chunk 1e).
+  tableTabId         String?         @map("table_tab_id")
   invoiceNumber    String?           @unique @map("invoice_number")
   previousHash     String?           @map("previous_hash")
   hash             String?
@@ -556,9 +566,11 @@ model Invoice {
   reservation      Reservation?      @relation(fields: [reservationId], references: [id])
   order            Order?            @relation(fields: [orderId], references: [id])
   tableReservation TableReservation? @relation(fields: [tableReservationId], references: [id])
+  tableTab         TableTab?         @relation(fields: [tableTabId], references: [id])
   invoiceLines     InvoiceLine[]
 
   @@index([tableReservationId])
+  @@index([tableTabId])
 }
 
 model Settlement {
@@ -871,6 +883,7 @@ model Table {
   updatedAt      DateTime            @updatedAt
   restaurant     Restaurant          @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   reservations   TableReservation[]
+  tableTabs      TableTab[]
 
   @@unique([restaurantId, number])
   @@index([restaurantId])
@@ -1062,6 +1075,52 @@ model ImpersonationLog {
 
 
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Dine-in tab — QR order & pay at the table (P1.5)
+//
+// A party scans a per-table QR → first order opens the tab (lazy create, no
+// DB write on scan) → order rounds accumulate as unpaid Order rows on the tab
+// → one pay-at-end Mollie/demo payment closes the tab. V1 rides the existing
+// site Order/Product rails (restaurant.siteId chiringuito link required).
+// ═══════════════════════════════════════════════════════════════════════════
+
+model TableTab {
+  id           String    @id @default(cuid())
+  tableId      String    @map("table_id")
+  restaurantId String    @map("restaurant_id")
+  siteId       String    @map("site_id")
+  status       String    @default("open") @map("status")
+  // Concurrency guard: exactly one OPEN tab per table. Set to `tableId` while
+  // the tab is open, NULLed when it closes (paid/settled/discarded) — NULLs
+  // never collide, so this plain unique index enforces "one open tab per
+  // table" without a partial index (which Prisma can't model and which would
+  // leave migrate:check permanently red). placeTabOrder's find-or-create
+  // relies on the unique violation: the loser of a concurrent create re-reads
+  // and joins the winner's tab. Every tab-closing path MUST null this column
+  // in the same update that sets the terminal status.
+  openTableId  String?   @unique @map("open_table_id")
+  // Opener attribution (mirrors Reservation.anonId / .userId conventions).
+  // Plain columns, no FK relations — attribution only, not authorization.
+  anonId       String?   @map("anon_id")
+  userId       String?   @map("user_id")
+  // Payment reference populated when the tab is submitted for payment.
+  // Shared across all orders in the tab (mirrors RentalBooking group pattern).
+  paymentRef   String?   @map("payment_ref")
+  openedAt     DateTime  @default(now()) @map("opened_at")
+  closedAt     DateTime? @map("closed_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  table        Table     @relation(fields: [tableId], references: [id])
+  site         Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  orders       Order[]
+  invoices     Invoice[]
+
+  @@index([tableId])
+  @@index([siteId])
+  @@index([paymentRef])
+  @@map("table_tab")
+}
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model spatial_ref_sys {
