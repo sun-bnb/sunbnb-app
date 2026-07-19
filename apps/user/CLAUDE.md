@@ -17,6 +17,7 @@ Google, Facebook, Credentials (email/password with bcrypt). Anonymous support vi
 | `/sites/[id]` | Site detail — image, services, hours, reservation panel | Public |
 | `/sites/[id]/pos` | POS reservation (QR code entry) — anonymous support | Public |
 | `/sites/[id]/pos/[itemId]` | Direct item POS reservation | Public |
+| `/sites/[id]/dine/[tableId]` | Dine-in tab ordering — per-table QR landing, menu browse, place rounds, view running tab | Public |
 | `/reservations` | User's reservations — Active/History tabs | Auth |
 | `/reservations/[id]` | Reservation detail — swipeable confirmation + F&B menu | Mixed |
 | `/reservations/[id]/pass` | QR ticket pass — printable | Mixed |
@@ -55,6 +56,7 @@ Google, Facebook, Credentials (email/password with bcrypt). Anonymous support vi
 - **`sites/[id]/actions.ts`**: `saveReservationForMultipleItems` (multi-item, auth/anonId required, price from DB), `saveRentalBooking` (availability-checked), `findAnonReservation`, `findUserReservation`
 - **`reservations/[id]/actions.ts`**: `cancelReservation` (+ provider refund via `issueRefund` if paid), `getProducts`, `createOrder` (DB prices enforced), `completeUnpaidOrder`, `getOrderByPaymentRef`, `getOrders`
 - **`payment/actions.ts`**: `initiateDemoReservationPayment`, `initiateDemoOrderPayment`, `initiateDemoRentalPayment`, `getReservationById`, `getReservationByPaymentRef`, `getOrderByPaymentRef`
+- **`sites/[id]/dine/[tableId]/actions.ts`** (dine-in tabs, track 002 P1.5): `placeTabOrder` (find-or-create open tab in-txn on the `openTableId` unique guard, P2002 → join existing; orders enter kitchen state `complete`, DB prices), `getTabState` (open tab + rounds + `calculateTabTotal` totals; no ownership check — QR-URL-as-credential), `getDineContext` (site/restaurant/table + product menu; flag + `appSalesEnabled` + table↔site gates)
 
 ## API Auth Helpers (`app/api/_lib/`)
 
@@ -75,9 +77,9 @@ RTK Query: `reservationApi` (getReservation, getReservationByDate, etc.), `place
 ## Testing
 
 ```bash
-npm run test              # unit + route + server action tests (326 tests, Prisma mocked)
+npm run test              # unit + route + server action tests (398 tests, Prisma mocked)
 npm run test:watch        # vitest in watch mode
-npm run test:integration  # integration tests against local sunbnb_test DB (59 tests, real Prisma)
+npm run test:integration  # integration tests against local sunbnb_test DB (70 tests, real Prisma)
 ```
 
 ### Unit / route tests (`vitest.config.ts`)
@@ -109,6 +111,8 @@ npm run test:integration  # integration tests against local sunbnb_test DB (59 t
 - `app/reservations/rental/[id]/actions.test.ts` — rental booking detail actions (17 tests)
 - `app/payment/actions.test.ts` — demo payments, query actions (34 tests)
 - `app/embed/[restaurantId]/page.test.ts` — embedded restaurant page (3 tests)
+- `app/sites/[id]/dine/[tableId]/page.test.ts` — dine-in page server component: getDineContext error paths → notFound, success → DineView (4 tests)
+- `app/sites/[id]/dine/[tableId]/view.test.ts` — DineView logic: product shape contract, placeTabOrder call contract, TabState shape, pending_payment gate (10 tests)
 - `store/features/api/apiSlice.test.ts` — anonGetQuery anonId forwarding for anon-owned lookups (3 tests)
 
 ### Integration tests (`vitest.integration.config.ts`)
@@ -118,6 +122,7 @@ Requires local Docker Postgres with `sunbnb_test` DB (same DB as `packages/data`
 - `app/sites/[id]/actions.integration.test.ts` — saveReservationForMultipleItems (DB writes, payment calc, unpaid, anonymous), saveRentalBooking (pricing, real aggregate availability check) (21 tests)
 - `app/reservations/[id]/actions.integration.test.ts` — createOrder (DB prices, soldOut, appSalesEnabled, anonymous), cancelReservation (status update, refund logic) (16 tests)
 - `app/reservations/rental/[id]/actions.integration.test.ts` — rental booking detail actions against real DB (8 tests)
+- `app/sites/[id]/dine/[tableId]/actions.integration.test.ts` — dine-in tab find-or-create (first order opens tab, second joins it, fresh tab after close), DB-priced rounds, getTabState totals, pending_payment rejection (11 tests)
 - **Test helpers**: `app/test/setup.ts` (cleanDatabase, prisma), `app/test/fixtures.ts` (factory functions for all needed models)
 
 ### Mocking patterns

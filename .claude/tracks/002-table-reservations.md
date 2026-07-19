@@ -3,7 +3,7 @@ id: 002-table-reservations
 title: Table Reservations
 status: active
 created: 2026-05-21
-updated: 2026-05-27
+updated: 2026-07-18
 worktree: null
 ---
 
@@ -62,6 +62,59 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
 
 ## Resume here
 
+- **▶ ACTIVE (2026-07-18): P1.5 — QR order & pay at the table ("dine-in tabs") — founder-prioritized,
+  jumps ahead of P2.** A party scans a per-table QR → browses the menu → first order **opens the tab**
+  (lazily, no DB write on scan) → order rounds accumulate unpaid on the tab (kitchen sees each round) →
+  "Close & pay" takes **one** Mollie/demo payment for the tab total, invoiced as a group. Three design
+  forks resolved with the founder (2026-07-18): **(1) tab opens on first order**, not on scan (no
+  garbage tabs / no duplicate-tab race; QR URL is the credential, real-tab trust model); **(2) v1 rides
+  the site Order/Product rails** (existing kitchen dashboard + Mollie routes + invoice cascade; requires
+  `Restaurant.siteId` — the chiringuito case; restaurant `MenuItem` stays display-only; NOT
+  extraction-clean — a tablefind extraction concern deferred); **(3) pay-at-end only** in v1 (no
+  per-round mode; staff settle-as-cash / discard for walk-outs; tabs with unpaid orders never
+  auto-expire). Build phases: **✅ (2) data layer — DONE 2026-07-18 (uncommitted).** Migration
+  `20260718100617_add_table_tab_dine_in` (additive; applied local + `sunbnb_test`; **NOT yet
+  `migrate:test`** — required before any `main` push, pre-push hook enforces): `TableTab` model,
+  `Order.tabId`/`tableId`, `Invoice.tableTabId` (idempotency anchor, 1e precedent). **Concurrency
+  guard = `TableTab.openTableId`** (unique-when-active column: holds `tableId` while open, NULLed
+  atomically on close — NOT a partial index; Prisma can't model those and `migrate:check` stayed
+  permanently red on the first attempt, so it was redesigned; every tab-closing path MUST null it).
+  `TAB_*` constants in reservation-status.ts (`open`/`pending_payment`/`paid`/`settled_cash`/
+  `discarded` + `TAB_STATUSES`/`TAB_OPEN_STATUSES`/`TAB_TERMINAL_STATUSES`). `payment.ts`:
+  `calculateTabTotal(tabId)` (single source for the payable amount; fee **added** to customer total
+  per payments.md) + `processConfirmedTabPayment(tabId)` (ONE gross PARTNER + ONE PLATFORM commission
+  invoice covering all rounds, per-item VAT, FOR-UPDATE numbering + hash chain, in-txn idempotency on
+  `tableTabId`). **Key semantics:** tab orders live in KITCHEN states while unpaid — paid-ness is
+  carried by the tab (+ shared `paymentRef`), so payment NEVER touches kitchen lifecycle (only
+  pending/processing stragglers normalize to `complete`); voided orders
+  (canceled/rejected/discarded/refunded = `TAB_ORDER_VOID_STATUSES`) are neither charged nor invoiced.
+  Fixtures `createTestTable`/`createTestTableTab`; `tab-payment.integration.test.ts` (14 tests: guard,
+  totals, group invoicing, idempotency, kitchen-state preservation, void exclusion). App mocks synced
+  (user payment mock + user/partner PrismaCient `tableTab`). **Green: data 265u + 268i, user 344u,
+  partner mock-contract 15; `migrate:check` + data lint clean.**
+  **✅ (3) user app ordering — DONE 2026-07-18 (uncommitted; two user-dev packets).**
+  `/sites/[id]/dine/[tableId]`: `actions.ts` (`placeTabOrder` — createOrder-mirrored validation/
+  pricing/anon, find-or-create tab + order in ONE txn, P2002 on `openTableId` → re-read + join the
+  winner's tab, orders enter kitchen state `complete` so the dashboard "incoming" tab sees each
+  round; `getTabState` — open tab + non-voided rounds + `calculateTabTotal`, no ownership check by
+  design (QR-URL-as-credential); `getDineContext` — flag + `appSalesEnabled` + table↔site gates,
+  getProducts-shaped menu) + `page.tsx`/`view.tsx` (Tailwind-only mobile-first: restaurant header +
+  table chip, category menu, fixed cart bar + review sheet, "Your tab" rounds + totals w/ 30s poll,
+  `pending_payment` banner disables ordering, NO pay button yet). 28 i18n keys (`Dine` namespace,
+  en/es/fi — **founder copy-review before promote**, per deploys.md). User mock gained `table` +
+  `tableTab` + `$transaction`; fixtures gained restaurant/table/tab factories; setup.ts TRUNCATE
+  extended. **Green: user 398u (was 344; +40 action +14 page/view) + 70i (was 59; +11); tsc + lint
+  clean.** CLAUDE.md synced (route map, actions, test lists).
+  **Next → (4) user app payment** — "Close & pay" UI + Mollie tab route (amount from
+  `calculateTabTotal`, never client-summed) + webhook `tab`
+  branch + poll route + demo action; **(5) partner app** — per-table QR print (mirror
+  `qr-print-button.tsx`), table label on orders dashboard, open-tabs panel + settle/discard
+  (auth-matrix registry; settle-as-cash should reuse track 015's cash-receipt core); **(6) i18n +
+  wiki ingest + browser-verify.** Out of v1: standalone (no-Site) restaurants, MenuItem-rail
+  ordering, tips, split-the-bill, per-round pay mode, live-floor tab display (P2 renders tab state
+  later). **Deferred concern (surface at phase 5):** order-based accounting roll-ups
+  (`getPaidItemsByMonth`) may miss or double-count tab orders — their invoices link via
+  `Invoice.tableTabId` not `orderId`, and order.status no longer implies paid-ness for tab orders.
 - **Status (2026-05-26): P1 booking core functionally complete and live on `main`** (the per-piece
   detail bullets below are now historical — all committed + pushed; the prior "LOCAL-only" 1f caveat is
   resolved — `1cb0e40`/`e4172a7`/`ac4a2b5` + the agent-model invoicing commit are all on `origin/main`).
@@ -117,10 +170,9 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
   map collapses). i18n en/es/fi; +5 layout-route tests. core 52 / user 251 / partner 294 / data-integ 74 green;
   `next build` passes. **Deferred:** optional upcharge for selectable spots (skipped). **Browser-verify pending
   (founder's):** master switch on + flag 2–3 tables → book a slot → tap a green table on the map.
-- **Next action — out of P1; pick a follow-on:**
-  - **`migrate:test` then push** is the only step left for this batch (1d/1h already pushed; pick-your-spot is
-    committed local only — additive migration `20260526145829` must reach the Neon TEST DB before `main` push;
-    pre-push hook enforces).
+- **Next action — superseded by P1.5 above (2026-07-18).** Standing items below remain valid:
+  - ~~**`migrate:test` then push**~~ **done** — verified 2026-07-18: `71c75e7` (pick-your-spot) is on
+    `main`, `test`, and `production`; the whole P1 batch fully shipped.
   - **Browser-verify** the 1d–1h + pick-your-spot consumer + partner UIs (founder's to run) — the standing debt.
   - Mollie token pillars **#3** (health-check + alert) / **#4** (fail-safe discovery).
   - **P2 live floor** — the next big pillar. See Roadmap.
@@ -481,6 +533,14 @@ monetization + no-show work is unblocked.
     inbound bookings via their partner APIs; large external integration depending on the finished engine
     (1a–1d) + a stable public booking API → sequenced **last** in P1, its own sub-project. **Ships when**
     a venue can take bookings from its own website (widget); Reserve integrations follow.
+- ◐ **P1.5 — QR order & pay at the table (dine-in tabs)** _(founder-prioritized 2026-07-18, sequenced
+  ahead of P2 — see the ▶ ACTIVE bullet in Resume here for the full design + phase breakdown)._ Per-table
+  QR → menu → first order opens the tab → rounds accumulate unpaid → one pay-at-end payment (Mollie/demo)
+  invoiced as a group. V1 rides the site Order/Product rails (requires `Restaurant.siteId`); new
+  `TableTab` entity + `Order.tabId`/`tableId`; partner gets QR print, dashboard table labels, and an
+  open-tabs settle/discard panel. This is the "order food to the sunbed" flow's dine-in twin — a wedge
+  feature no reservation incumbent bundles (it's the sunday/Mr-Yum category), and P2's live floor will
+  render its tab state.
 - ☐ **P2 — Live floor / operations** (category-defining daily driver). The schematic canvas
   *becomes* the live host view: color-coded statuses (available/booked/seated/eating/dessert/
   check/clearing/overdue), tap-a-table to seat a reservation or walk-in, drag to move/transfer,
@@ -831,6 +891,44 @@ monetization + no-show work is unblocked.
   core 52 / user 251 (+5 layout-route) / partner 294 / data-integ 74 green; tsc 0 new errors; `next build` passes.
   **Deferred:** optional upcharge for selectable spots. **Remaining for this batch:** `migrate:test` (Neon TEST DB)
   before the next `main` push — additive, pre-push-hook-enforced. Browser-verify is the founder's.
+- **2026-07-18** — **P1.5 "QR order & pay at the table" prioritized + designed** (founder directive after a
+  ~7-week track pause; jumps ahead of P2 live floor). Full design + phase breakdown in Resume here. Three
+  forks resolved with the founder via explicit options: tab opens on **first order** not scan (lazy create,
+  QR-URL-as-credential trust model, no duplicate-tab race — a DB partial unique index `one OPEN tab per
+  table` is the concurrency guard); v1 rides the **site Order/Product rails** (reuses kitchen dashboard,
+  Mollie/demo routes, `processConfirmedOrder`-style invoicing; requires `Restaurant.siteId`; restaurant
+  `MenuItem` stays display-only — extraction-cleanliness consciously traded for ~4x less scope, revisit at
+  tablefind extraction); **pay-at-end only** (rounds accumulate unpaid → one payment for the tab, grouped
+  by `paymentRef` like `processConfirmedRentalBooking`; staff settle-as-cash/discard for walk-outs). Also
+  verified + marked done the stale "migrate:test then push" next-action: `71c75e7` is on all three branches.
+  Kicked off phase 2 (data layer, data-dev).
+- **2026-07-18** — **P1.5 phase 2 (data layer) built & green** (uncommitted; details in Resume here).
+  Three build lessons worth keeping: **(1) partial indexes poison `migrate:check`** — the first design
+  (hand-added `CREATE UNIQUE INDEX … WHERE status='open'`) left the guard permanently red because
+  Prisma can't model partial indexes and `migrate diff` wants to drop them; redesigned to the
+  unique-when-active `openTableId` column (NULLs don't collide), fully Prisma-expressible. The flawed
+  migration was applied only to local DBs (never committed), so it was reverted + regenerated rather
+  than fix-forwarded. **(2) Local checksum drift** on `20260621162554_add_till_entry_rental_booking`
+  (edited between local apply and test deploy) blocked `migrate dev`; patched the recorded local
+  checksum to the committed file's hash per migrations.md — `sunbnb_test`/Neon already matched.
+  **(3) Tab orders invert the payment↔kitchen order** vs sunbed F&B (kitchen first, pay at end), which
+  surfaced two spec bugs in the first implementation: marking orders `ORDER_COMPLETE` at payment
+  regressed delivered rounds, and filtering the bill by `status != complete` dropped legitimately
+  billable rounds; both fixed by making paid-ness tab-carried (`TAB_ORDER_VOID_STATUSES` exclusion
+  + kitchen-state preservation), with tests encoding the corrected requirements. Process note: two
+  data-dev agents hit their turn cap mid-task (drift diagnosis ate the first's budget); orchestrator
+  finished migration + review + fixes inline. Also of note: a backgrounded `prisma migrate dev` hangs
+  forever on any interactive prompt (non-TTY stdin) while holding the advisory lock — kill it and use
+  `migrate deploy` for already-created migrations.
+- **2026-07-18** — **P1.5 phase 3 (user-app ordering) built & green** (uncommitted; details in Resume
+  here). Delegated as two seam-sized user-dev packets (A: actions+tests, B: UI+i18n) after the
+  phase-2 turn-cap lesson — both completed with full reports. Notables: the tab find-or-create and
+  the order create share one `$transaction` (no garbage tabs if the order write fails); the P2002
+  join-don't-fail retry is unit- AND integration-tested (two anonIds, same table → one tab); the
+  user PrismaCient mock was missing `table` and `$transaction` (function-form) — both added; the
+  dine view is the app's first fully MUI-free F&B order surface (the legacy `Menu.tsx` MUI drawer
+  was deliberately not mirrored). `pending_payment` gating is dual-layer: action rejects
+  (authoritative), UI disables (UX).
 
 ## Open decisions
 
