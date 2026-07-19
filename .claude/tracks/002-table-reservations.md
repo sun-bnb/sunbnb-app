@@ -72,7 +72,7 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
   `Restaurant.siteId` — the chiringuito case; restaurant `MenuItem` stays display-only; NOT
   extraction-clean — a tablefind extraction concern deferred); **(3) pay-at-end only** in v1 (no
   per-round mode; staff settle-as-cash / discard for walk-outs; tabs with unpaid orders never
-  auto-expire). Build phases: **✅ (2) data layer — DONE 2026-07-18 (uncommitted).** Migration
+  auto-expire). Build phases: **✅ (2) data layer — DONE 2026-07-18, committed `b55f0b8`.** Migration
   `20260718100617_add_table_tab_dine_in` (additive; applied local + `sunbnb_test`; **NOT yet
   `migrate:test`** — required before any `main` push, pre-push hook enforces): `TableTab` model,
   `Order.tabId`/`tableId`, `Invoice.tableTabId` (idempotency anchor, 1e precedent). **Concurrency
@@ -92,7 +92,7 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
   totals, group invoicing, idempotency, kitchen-state preservation, void exclusion). App mocks synced
   (user payment mock + user/partner PrismaCient `tableTab`). **Green: data 265u + 268i, user 344u,
   partner mock-contract 15; `migrate:check` + data lint clean.**
-  **✅ (3) user app ordering — DONE 2026-07-18 (uncommitted; two user-dev packets).**
+  **✅ (3) user app ordering — DONE 2026-07-18, committed `f628d7a` (two user-dev packets).**
   `/sites/[id]/dine/[tableId]`: `actions.ts` (`placeTabOrder` — createOrder-mirrored validation/
   pricing/anon, find-or-create tab + order in ONE txn, P2002 on `openTableId` → re-read + join the
   winner's tab, orders enter kitchen state `complete` so the dashboard "incoming" tab sees each
@@ -902,7 +902,7 @@ monetization + no-show work is unblocked.
   by `paymentRef` like `processConfirmedRentalBooking`; staff settle-as-cash/discard for walk-outs). Also
   verified + marked done the stale "migrate:test then push" next-action: `71c75e7` is on all three branches.
   Kicked off phase 2 (data layer, data-dev).
-- **2026-07-18** — **P1.5 phase 2 (data layer) built & green** (uncommitted; details in Resume here).
+- **2026-07-18** — **P1.5 phase 2 (data layer) built & green** (committed `b55f0b8` on `main`, 2026-07-19; details in Resume here).
   Three build lessons worth keeping: **(1) partial indexes poison `migrate:check`** — the first design
   (hand-added `CREATE UNIQUE INDEX … WHERE status='open'`) left the guard permanently red because
   Prisma can't model partial indexes and `migrate diff` wants to drop them; redesigned to the
@@ -920,7 +920,7 @@ monetization + no-show work is unblocked.
   finished migration + review + fixes inline. Also of note: a backgrounded `prisma migrate dev` hangs
   forever on any interactive prompt (non-TTY stdin) while holding the advisory lock — kill it and use
   `migrate deploy` for already-created migrations.
-- **2026-07-18** — **P1.5 phase 3 (user-app ordering) built & green** (uncommitted; details in Resume
+- **2026-07-18** — **P1.5 phase 3 (user-app ordering) built & green** (committed `f628d7a` on `main`, 2026-07-19; details in Resume
   here). Delegated as two seam-sized user-dev packets (A: actions+tests, B: UI+i18n) after the
   phase-2 turn-cap lesson — both completed with full reports. Notables: the tab find-or-create and
   the order create share one `$transaction` (no garbage tabs if the order write fails); the P2002
