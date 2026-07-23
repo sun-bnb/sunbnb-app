@@ -158,8 +158,9 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
   settle happens on the kitchen dashboard, not the manage grid — no TillEntry/employeeId recorded;
   wire to track 008/013 when needed); tab refunds (webhook refunded = warn-only) + credit notes.
   **Next → (6) wrap-up** — founder ES/FI copy review (43 user keys from ph.3–4 + ~30 partner keys);
-  browser-verify the full loop (print QR → scan → order rounds → kitchen sees table chip → demo
-  pay-through → paid card; staff settle-cash + discard; accounting tabs card) — demo mode works
+  browser-verify the full loop — **manual test plan: [[002-p15-manual-test-plan]]**
+  (`.claude/tracks/002-p15-manual-test-plan.md`, suites A–I: QR cards → scan → rounds/kitchen →
+  companion phone → demo pay → Mollie ⏳ → settle-cash → discard → accounting) — demo mode works
   locally, Mollie needs the founder's test-env pay-through; `/wiki ingest` for P1.5; `migrate:test`
   for `20260718100617` before ANY main push (pre-push hook enforces). Out of v1: standalone
   (no-Site) restaurants, MenuItem-rail ordering, tips, split-the-bill, per-round pay mode,
