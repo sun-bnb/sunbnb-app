@@ -157,7 +157,19 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
   **Deferred from 5 (flagged, not built):** employee/till attribution for cash-settled tabs (the
   settle happens on the kitchen dashboard, not the manage grid — no TillEntry/employeeId recorded;
   wire to track 008/013 when needed); tab refunds (webhook refunded = warn-only) + credit notes.
-  **Next → (6) wrap-up** — founder ES/FI copy review (43 user keys from ph.3–4 + ~30 partner keys);
+  **✅ (5b) adaptive tab polling — DONE 2026-07-23, committed `2938c47`** (founder-decided: polling,
+  not realtime — a realtime channel is a future platform track). `createTabPoller` in dine view.tsx:
+  5s cadence visible / paused hidden / immediate refetch on foreground; verifying-poll + paid guards
+  untouched; user 464u green.
+  **▶ Manual test run IN PROGRESS (2026-07-23, paused): [[002-p15-manual-test-plan]]** — A, B,
+  C.1–C.4 **PASS**; **resume at suite D** (companion phone; doubles as live check of the 5s poll),
+  then E/G/H/I local + F on test env. Findings so far incl. one **bug-level gap: `/api/reconcile`
+  has no tab coverage** (missed webhook + closed dine page = pending_payment tab stuck forever;
+  staff settle/discard correctly rejected while pending) — fix candidate below.
+  **Next → (6) wrap-up** — resume the manual run at suite D; **add tab coverage to
+  `/api/reconcile`** (re-verify pending tabs via getPaymentStatus: paid → processConfirmedTabPayment,
+  failed/expired → revert to open — mirrors the webhook tab branch); founder ES/FI copy review
+  (43 user keys from ph.3–4 + ~30 partner keys);
   browser-verify the full loop — **manual test plan: [[002-p15-manual-test-plan]]**
   (`.claude/tracks/002-p15-manual-test-plan.md`, suites A–I: QR cards → scan → rounds/kitchen →
   companion phone → demo pay → Mollie ⏳ → settle-cash → discard → accounting) — demo mode works
