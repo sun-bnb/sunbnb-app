@@ -2,10 +2,11 @@
 
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 import { getOpenTillItems, getTillDayReport, getDayShiftItems, closeTill } from './actions'
 import type { EmployeeOpenTill } from '@repo/data/till'
 import type { EmployeeShift } from '@repo/data/till'
+import type { EmployeeCashTotal } from '@repo/data/till'
 
 /**
  * Full-page daily summary view for the token-gated manage surface.
@@ -17,7 +18,10 @@ import type { EmployeeShift } from '@repo/data/till'
  *     earnings breakup (cash + card) via getDayShiftItems.
  *
  * State shapes differ by mode:
- *   - Open mode: EmployeeTill[] from getOpenTills / getTillDayReport (cash-ledger)
+ *   - Open mode: EmployeeOpenTill[] from getOpenTillItems (per-worker sweepable
+ *     balances, itemized) PLUS EmployeeCashTotal[] from getTillDayReport (the
+ *     close-independent civil-day accumulation the header leads with — track
+ *     016 P4.5; see the header comment below)
  *   - Day mode: EmployeeShift[] from getDayShiftItems (both channels, by-sunbed)
  *
  * No modal chrome (no backdrop, no role="dialog"/aria-modal, no escape-dismiss).
@@ -36,6 +40,18 @@ interface EmployeeCloseState {
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
+}
+
+// Short "DD Mon" date for the carry-over date label — locale-aware.
+function formatShortDate(at: Date | string, locale: string): string {
+  const d = new Date(at)
+  return d.toLocaleDateString(locale, { day: 'numeric', month: 'short' })
+}
+
+// Financial rounding to 2 decimals — mirrors @repo/data's `round()` without
+// pulling a DB-adjacent import into this client component.
+function round2(n: number): number {
+  return Math.round(n * 100) / 100
 }
 
 // Time as HH:MM; when the timestamp is NOT today (viewer-local), prefix the date
@@ -71,11 +87,16 @@ export default function DailySummaryView({
   backHref: string
 }) {
   const t = useTranslations('TillSummary')
+  const locale = useLocale()
   const [mode, setMode] = useState<Mode>('open')
   const [phase, setPhase] = useState<Phase>('loading')
 
   // Open-mode data: EmployeeOpenTill[] (superset of EmployeeTill; items[] holds per-transaction rows)
   const [tills, setTills] = useState<EmployeeOpenTill[]>([])
+  // Open-mode header source: today's close-independent civil-day accumulation
+  // (getTillDayReport) — track 016 P4.5. Kept separate from `tills` so the
+  // header total never moves when a per-worker close repartitions `tills`.
+  const [dayReport, setDayReport] = useState<EmployeeCashTotal[]>([])
   // Day-mode data: EmployeeShift[]
   const [shifts, setShifts] = useState<EmployeeShift[]>([])
 
@@ -96,13 +117,23 @@ export default function DailySummaryView({
     setErrorMsg(null)
     setCloseStates({})
     setTills([])
-    const res = await getOpenTillItems(siteId, accessKey)
+    setDayReport([])
+    // Fetch the sweepable per-worker tills AND today's close-independent
+    // civil-day accumulation in parallel — both are admin-gated the same way.
+    const [res, dayRes] = await Promise.all([
+      getOpenTillItems(siteId, accessKey),
+      getTillDayReport(siteId, todayIso(), accessKey),
+    ])
     if (res.status !== 'ok') {
       setErrorMsg(res.errors?.[0] ?? t('errorGeneric'))
       setPhase('error')
       return
     }
     setTills(res.tills ?? [])
+    // Non-fatal if the day report fails to load — the header just falls back
+    // to €0 rather than blocking the whole open-tills view (row list is the
+    // primary content and is still usable).
+    if (dayRes.status === 'ok') setDayReport(dayRes.tills ?? [])
     setPhase('ready')
   }
 
@@ -119,6 +150,7 @@ export default function DailySummaryView({
     setDayInput('')
     setErrorMsg(null)
     setTills([])
+    setDayReport([])
     setShifts([])
     setExpandedRows({})
     setCloseStates({})
@@ -130,6 +162,7 @@ export default function DailySummaryView({
   const switchToDay = () => {
     setMode('day')
     setTills([])
+    setDayReport([])
     setShifts([])
     setExpandedRows({})
     setErrorMsg(null)
@@ -181,9 +214,16 @@ export default function DailySummaryView({
         closedCount: res.count ?? 0,
       },
     }))
-    // Refresh the open-tills list after close (itemised source)
-    const refresh = await getOpenTillItems(siteId, accessKey)
+    // Refresh both sources after a close. The day-report total (header) is
+    // close-independent and must NOT move here — refreshing it alongside the
+    // sweepable list just keeps the two consistent as cash shifts from
+    // "still uncounted" into "handed in today" below the header.
+    const [refresh, dayRefresh] = await Promise.all([
+      getOpenTillItems(siteId, accessKey),
+      getTillDayReport(siteId, todayIso(), accessKey),
+    ])
     if (refresh.status === 'ok') setTills(refresh.tills ?? [])
+    if (dayRefresh.status === 'ok') setDayReport(dayRefresh.tills ?? [])
   }
 
   const setEmployeeConfirming = (employeeId: string, confirming: boolean) => {
@@ -202,13 +242,38 @@ export default function DailySummaryView({
   const nonZeroTills = tills.filter(t => t.total > 0 || t.count > 0)
   const allZero = mode === 'open' && phase === 'ready' && nonZeroTills.length === 0
 
-  // Day-totals: vary by mode
+  // Day-totals: vary by mode.
+  //
+  // Open mode (track 016 P4.5): the header leads with the DAY'S TRUE
+  // ACCUMULATION — getTillDayReport's close-independent civil-day total —
+  // not the sweepable per-worker `today` bucket. A midday close repartitions
+  // `tills` (today → handed-in) but must never move this number; that's the
+  // whole point (the pre-P4.5 bug was the header using `today.total`, which
+  // dropped to 0 for a worker the moment they closed).
   const grandTotal = mode === 'open'
-    ? tills.reduce((sum, t) => sum + t.total, 0)
+    ? dayReport.reduce((sum, d) => sum + d.total, 0)
     : shifts.reduce((sum, s) => sum + s.total, 0)
   const grandCount = mode === 'open'
-    ? tills.reduce((sum, t) => sum + t.count, 0)
+    ? dayReport.reduce((sum, d) => sum + d.count, 0)
     : shifts.reduce((sum, s) => sum + s.count, 0)
+  // Reconciliation breakdown under the header (open mode only):
+  //   - uncountedTotal: cash taken today still sitting on an open till
+  //     (not yet swept by a close) — sum of tills' `today.total`.
+  //   - handedInTotal: of today's accumulation, how much has already been
+  //     handed in via a close — grandTotal minus what's still uncounted.
+  // Together with grandTotal these three numbers stay consistent across a
+  // close: grandTotal is constant, uncounted shrinks, handed-in grows.
+  const uncountedTotal = mode === 'open'
+    ? round2(tills.reduce((sum, t) => sum + t.today.total, 0))
+    : 0
+  const handedInTotal = mode === 'open'
+    ? Math.max(0, round2(grandTotal - uncountedTotal))
+    : 0
+  // Carry-over across all workers — old (pre-today) cash, deliberately NOT
+  // part of today's accumulation; surfaced as its own amber header line.
+  const carryOverGrandTotal = mode === 'open'
+    ? tills.reduce((sum, t) => sum + t.carryOver.total, 0)
+    : 0
 
   const openDataLoaded = mode === 'open' && phase === 'ready' && tills.length > 0
   const dayDataLoaded = mode === 'day' && phase === 'ready' && shifts.length > 0
@@ -246,24 +311,45 @@ export default function DailySummaryView({
 
       {/* Day-totals summary header (visible when data is loaded) */}
       {showTotals && (
-        <div className="bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-4 py-3 flex items-center gap-6">
-          <div>
-            <div className="text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-              {mode === 'open' ? t('totalCash') : t('totalEarnings')}
+        <div className="bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-4 py-3">
+          <div className="flex items-center gap-6">
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                {mode === 'open' ? t('totalCashToday') : t('totalEarnings')}
+              </div>
+              <div className="text-2xl font-black tabular-nums text-gray-900 dark:text-gray-100">
+                {`€${grandTotal.toFixed(2)}`}
+              </div>
             </div>
-            <div className="text-2xl font-black tabular-nums text-gray-900 dark:text-gray-100">
-              {`€${grandTotal.toFixed(2)}`}
+            <div className="h-10 w-px bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                {mode === 'open' ? t('totalSales') : t('totalSunbeds')}
+              </div>
+              <div className="text-2xl font-black tabular-nums text-gray-900 dark:text-gray-100">
+                {grandCount}
+              </div>
             </div>
           </div>
-          <div className="h-10 w-px bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
-          <div>
-            <div className="text-xs font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-              {mode === 'open' ? t('totalSales') : t('totalSunbeds')}
+          {mode === 'open' && (uncountedTotal > 0 || handedInTotal > 0 || carryOverGrandTotal > 0) && (
+            <div className="mt-1.5 space-y-0.5">
+              {uncountedTotal > 0 && (
+                <div className="text-xs font-bold text-gray-500 dark:text-gray-400">
+                  {t('stillUncounted', { amount: `€${uncountedTotal.toFixed(2)}` })}
+                </div>
+              )}
+              {handedInTotal > 0 && (
+                <div className="text-xs font-bold text-gray-500 dark:text-gray-400">
+                  {t('handedInToday', { amount: `€${handedInTotal.toFixed(2)}` })}
+                </div>
+              )}
+              {carryOverGrandTotal > 0 && (
+                <div className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                  {t('carryOverGrandLine', { amount: `€${carryOverGrandTotal.toFixed(2)}` })}
+                </div>
+              )}
             </div>
-            <div className="text-2xl font-black tabular-nums text-gray-900 dark:text-gray-100">
-              {grandCount}
-            </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -367,8 +453,12 @@ export default function DailySummaryView({
           <div className="space-y-3">
             {tills.map(till => {
               const cs = closeStates[till.employeeId] ?? { phase: 'idle' }
+              // Sweepable (today + carryOver) — what the close action actually hands in.
               const totalLabel = `€${till.total.toFixed(2)}`
               const hasBalance = till.total > 0 || till.count > 0
+              // Today's figure leads the row; carryOver surfaces as its own chip.
+              const todayLabel = `€${till.today.total.toFixed(2)}`
+              const hasCarryOver = till.carryOver.count > 0
 
               return (
                 <div
@@ -395,9 +485,19 @@ export default function DailySummaryView({
                         )}
                       </div>
                       {cs.phase !== 'closed' ? (
-                        <div className="text-sm font-bold text-gray-500 dark:text-gray-400 mt-0.5">
-                          {t('employeeSalesCount', { count: till.count })}
-                        </div>
+                        <>
+                          <div className="text-sm font-bold text-gray-500 dark:text-gray-400 mt-0.5">
+                            {t('employeeSalesCount', { count: till.today.count })}
+                          </div>
+                          {hasCarryOver && (
+                            <span className="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold border bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/30 dark:border-amber-800/40 dark:text-amber-400">
+                              {t('carryOverChip', {
+                                amount: `€${till.carryOver.total.toFixed(2)}`,
+                                date: till.carryOver.oldestAt ? formatShortDate(till.carryOver.oldestAt, locale) : '',
+                              })}
+                            </span>
+                          )}
+                        </>
                       ) : (
                         <div className="text-sm font-bold text-green-700/80 dark:text-green-400/80 mt-0.5">
                           {t('closedBody', { total: `€${(cs.closedTotal ?? 0).toFixed(2)}`, count: cs.closedCount ?? 0 })}
@@ -411,7 +511,7 @@ export default function DailySummaryView({
                           ? 'text-gray-900 dark:text-gray-100'
                           : 'text-gray-300 dark:text-gray-600'
                     }`}>
-                      {cs.phase === 'closed' ? '✅' : totalLabel}
+                      {cs.phase === 'closed' ? '✅' : todayLabel}
                     </div>
                   </div>
 
@@ -431,8 +531,17 @@ export default function DailySummaryView({
                             className="flex items-center justify-between gap-2 px-3 py-2"
                           >
                             <div className="min-w-0 flex-1">
-                              <div className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate">
-                                {item.label}
+                              <div className="flex items-center gap-1.5">
+                                {item.carryOver && (
+                                  <span
+                                    className="w-1.5 h-1.5 rounded-full bg-amber-400 dark:bg-amber-500 flex-shrink-0"
+                                    aria-hidden="true"
+                                    title={t('carryOverTag')}
+                                  />
+                                )}
+                                <div className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate">
+                                  {item.label}
+                                </div>
                               </div>
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">
@@ -441,6 +550,11 @@ export default function DailySummaryView({
                                 {isRental && (
                                   <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold border bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/30 dark:border-amber-800/40 dark:text-amber-400">
                                     {t('rentalTag')}
+                                  </span>
+                                )}
+                                {item.carryOver && (
+                                  <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                                    {t('carryOverTag')}
                                   </span>
                                 )}
                               </div>

@@ -721,14 +721,20 @@ model Employee {
 // The "open till" is cash attributed to the worker at the site since their last
 // close; this row marks the boundary (persists — Sunbnb never day-resets).
 model TillClose {
-  id          String   @id @default(cuid())
-  siteId      String   @map("site_id")
-  employeeId  String   @map("employee_id")
-  closedAt    DateTime @default(now()) @map("closed_at")
-  totalAmount Float    @map("total_amount")
-  txnCount    Int      @map("txn_count")
-  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  id              String   @id @default(cuid())
+  siteId          String   @map("site_id")
+  employeeId      String   @map("employee_id")
+  closedAt        DateTime @default(now()) @map("closed_at")
+  totalAmount     Float    @map("total_amount")
+  txnCount        Int      @map("txn_count")
+  // Day-anchored till (track 016): the portion of totalAmount/txnCount that was
+  // carried over from before the venue-local day start (unclosed prior-day cash
+  // swept in by this close). Nullable — populated by new-model writers
+  // (closeEmployeeTill); historical rows predating the rework leave these null.
+  carryOverAmount Float?   @map("carry_over_amount")
+  carryOverCount  Int?     @map("carry_over_count")
+  site            Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([siteId, employeeId])
 }

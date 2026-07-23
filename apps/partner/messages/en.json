@@ -843,18 +843,22 @@
     "errorGeneric": "Something went wrong.",
     "totalCash": "Total cash",
     "totalSales": "sales",
+    "todayLine": "Today, {date}",
     "breakdownHeading": "Breakdown by employee",
     "employeeSalesCount": "{count} cash sales",
     "inactive": "(inactive)",
     "noData": "No cash recorded for today.",
     "whatCloseDoes": "Confirm will close {count, plural, one {# open till} other {# open tills}}.",
+    "carryOverPortion": "{amount} of that is carried over from previous days.",
     "confirmClose": "Confirm day close",
     "confirmQuestion": "Close all open tills?",
     "confirmButton": "Confirm",
     "cancel": "Cancel",
     "closing": "Closing…",
     "successTitle": "Day closed",
-    "successTills": "{count, plural, one {# till closed} other {# tills closed}} · {total}"
+    "successAmount": "{total} counted",
+    "successTills": "{count, plural, one {# till closed} other {# tills closed}}",
+    "successCarryOverNote": "({amount} from previous days)"
   },
   "BedDetail": {
     "collectPayment": "Collect payment",
@@ -940,6 +944,11 @@
   "Till": {
     "title": "{name}'s till",
     "openTill": "Open till",
+    "today": "Today",
+    "todaySalesCount": "{count} cash sales today",
+    "carryOverBanner": "Uncounted cash from {date}: {amount} ({count} sales) — included when you close",
+    "confirmBreakdown": "{today} today + {carryOver} carried over = {total}",
+    "closedCarryOverNote": "({amount} from previous days)",
     "salesCount": "{count} cash sales this shift",
     "closeTill": "Close till",
     "confirmBody": "Hand over {total} and start a fresh till?",
@@ -979,6 +988,7 @@
     "inactive": "(inactive)",
     "backToMenu": "Menu",
     "totalCash": "Total cash",
+    "totalCashToday": "Today's cash",
     "totalSales": "sales",
     "totalEarnings": "Total earnings",
     "totalSunbeds": "Sunbeds",
@@ -988,7 +998,12 @@
     "noShiftItems": "No sunbeds recorded",
     "adminRequired": "Admin access required",
     "adminRequiredMessage": "This page is only accessible with an admin token.",
-    "rentalTag": "Rental"
+    "rentalTag": "Rental",
+    "carryOverGrandLine": "+ {amount} carried over from previous days",
+    "carryOverChip": "+ {amount} from {date}",
+    "carryOverTag": "Carried over",
+    "stillUncounted": "Still uncounted: {amount}",
+    "handedInToday": "Handed in today: {amount}"
   },
   "Guests": {
     "title": "Guests",

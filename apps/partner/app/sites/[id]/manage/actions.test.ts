@@ -76,6 +76,8 @@ import {
   getOpenTillItems,
   getManageTrends,
   getManageTrendsCsv,
+  getTillStatus,
+  closeTill,
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
@@ -101,7 +103,7 @@ import {
   moveReservationWithConflictGuard,
   createRentalBookingsWithGuard,
 } from '@repo/data/reservations'
-import { recordSettlement, voidSettlementsForReservation, closeAllOpenTills, getEmployeeShiftItems, getOpenTillItemsByEmployee } from '@repo/data/till'
+import { recordSettlement, voidSettlementsForReservation, closeAllOpenTills, getEmployeeShiftItems, getOpenTillItemsByEmployee, getOpenTill, closeEmployeeTill } from '@repo/data/till'
 import { processConfirmedReservation, processCashRentalBooking } from '@repo/data/payment'
 import dayjs from 'dayjs'
 import { getActiveReservation } from './bed-state'
@@ -5381,6 +5383,114 @@ describe('settleReservation', () => {
   })
 })
 
+// ─── getTillStatus / closeTill (track 016 — day-anchored two-bucket till) ─────
+
+describe('getTillStatus', () => {
+  const EMPLOYEE_ID = 'emp-1'
+
+  it('rejects unauthenticated request', async () => {
+    const res = await getTillStatus(SITE_ID, EMPLOYEE_ID)
+    expect(res.status).toBe('error')
+  })
+
+  it('rejects an unknown worker', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.employee.findUnique).mockResolvedValue(null)
+    const res = await getTillStatus(SITE_ID, EMPLOYEE_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('Unknown worker')
+  })
+
+  it('forwards a site-derived dayStart to getOpenTill and returns the today/carryOver buckets', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.employee.findUnique).mockResolvedValue({ accountId: OWNER_ID } as any)
+    const today = { total: 25, count: 1 }
+    const carryOver = { total: 15, count: 1, oldestAt: new Date('2026-07-01T08:00:00.000Z') }
+    vi.mocked(getOpenTill).mockResolvedValueOnce({ total: 40, count: 2, today, carryOver })
+
+    const res: any = await getTillStatus(SITE_ID, EMPLOYEE_ID)
+
+    expect(res.status).toBe('ok')
+    expect(res.total).toBe(40)
+    expect(res.count).toBe(2)
+    expect(res.today).toEqual(today)
+    expect(res.carryOver).toEqual(carryOver)
+
+    expect(getOpenTill).toHaveBeenCalledTimes(1)
+    const [calledSiteId, calledEmployeeId, dayStart] = vi.mocked(getOpenTill).mock.calls[0]!
+    expect(calledSiteId).toBe(SITE_ID)
+    expect(calledEmployeeId).toBe(EMPLOYEE_ID)
+    expect(dayStart).toBeInstanceOf(Date)
+  })
+})
+
+describe('closeTill', () => {
+  const EMPLOYEE_ID = 'emp-1'
+
+  it('rejects unauthenticated request', async () => {
+    const res = await closeTill(SITE_ID, EMPLOYEE_ID)
+    expect(res.status).toBe('error')
+  })
+
+  it('delegates to closeEmployeeTill with a site-derived dayStart', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.employee.findUnique).mockResolvedValue({ accountId: OWNER_ID } as any)
+    vi.mocked(closeEmployeeTill).mockResolvedValueOnce({
+      closed: true,
+      totalAmount: 40,
+      txnCount: 2,
+      carryOverAmount: 15,
+      carryOverCount: 1,
+      till: {
+        total: 40,
+        count: 2,
+        today: { total: 25, count: 1 },
+        carryOver: { total: 15, count: 1, oldestAt: new Date() },
+      },
+    })
+
+    const res: any = await closeTill(SITE_ID, EMPLOYEE_ID)
+
+    expect(res).toMatchObject({
+      status: 'ok',
+      total: 40,
+      count: 2,
+      closed: true,
+      carryOverAmount: 15,
+      carryOverCount: 1,
+    })
+    expect(closeEmployeeTill).toHaveBeenCalledTimes(1)
+    const [calledSiteId, calledEmployeeId, dayStart] = vi.mocked(closeEmployeeTill).mock.calls[0]!
+    expect(calledSiteId).toBe(SITE_ID)
+    expect(calledEmployeeId).toBe(EMPLOYEE_ID)
+    expect(dayStart).toBeInstanceOf(Date)
+    expect(prisma.tillClose.create).not.toHaveBeenCalled()
+  })
+
+  it('preserves the zero-balance no-op contract: closed:false, no TillClose snapshot written', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.employee.findUnique).mockResolvedValue({ accountId: OWNER_ID } as any)
+    vi.mocked(closeEmployeeTill).mockResolvedValueOnce({
+      closed: false,
+      totalAmount: 0,
+      txnCount: 0,
+      carryOverAmount: 0,
+      carryOverCount: 0,
+      till: {
+        total: 0,
+        count: 0,
+        today: { total: 0, count: 0 },
+        carryOver: { total: 0, count: 0, oldestAt: null },
+      },
+    })
+
+    const res: any = await closeTill(SITE_ID, EMPLOYEE_ID)
+
+    expect(res).toMatchObject({ status: 'ok', total: 0, count: 0, closed: false })
+    expect(prisma.tillClose.create).not.toHaveBeenCalled()
+  })
+})
+
 // ─── closeDay ────────────────────────────────────────────────────────────────
 
 describe('closeDay', () => {
@@ -5458,7 +5568,7 @@ describe('closeDay', () => {
 
     const res = await closeDay(SITE_ID, 'admin-token-key')
     expect(res.status).toBe('ok')
-    expect(closeAllOpenTills).toHaveBeenCalledWith(SITE_ID)
+    expect(closeAllOpenTills).toHaveBeenCalledWith(SITE_ID, expect.any(Date))
     // closeDay is cash-up only — must never touch reservation rows
     expect(prisma.reservation.updateMany).not.toHaveBeenCalled()
   })
@@ -5468,7 +5578,7 @@ describe('closeDay', () => {
 
     const res = await closeDay(SITE_ID)
     expect(res.status).toBe('ok')
-    expect(closeAllOpenTills).toHaveBeenCalledWith(SITE_ID)
+    expect(closeAllOpenTills).toHaveBeenCalledWith(SITE_ID, expect.any(Date))
     expect(prisma.reservation.updateMany).not.toHaveBeenCalled()
   })
 
@@ -5477,7 +5587,7 @@ describe('closeDay', () => {
 
     const res = await closeDay(SITE_ID)
     expect(res.status).toBe('ok')
-    expect(closeAllOpenTills).toHaveBeenCalledWith(SITE_ID)
+    expect(closeAllOpenTills).toHaveBeenCalledWith(SITE_ID, expect.any(Date))
   })
 
   // ── Happy-path: till summary only ─────────────────────────────────────────
@@ -5494,6 +5604,30 @@ describe('closeDay', () => {
     })
     // Must NOT carry a departedCount — that would imply floor mutation happened
     expect((res as any).departedCount).toBeUndefined()
+  })
+
+  it('surfaces carryOverClosed from closeAllOpenTills (track 016 — day-anchored close)', async () => {
+    authenticateAsAdminSession()
+    vi.mocked(closeAllOpenTills).mockResolvedValue({ closedCount: 2, totalClosed: 130, carryOverClosed: 45 })
+
+    const res = await closeDay(SITE_ID)
+    expect(res).toMatchObject({
+      status: 'ok',
+      closedCount: 2,
+      totalClosed: 130,
+      carryOverClosed: 45,
+    })
+  })
+
+  it('passes a site-derived dayStart (venue-local start of today) to closeAllOpenTills', async () => {
+    authenticateAsAdminSession()
+
+    await closeDay(SITE_ID)
+
+    expect(closeAllOpenTills).toHaveBeenCalledTimes(1)
+    const [calledSiteId, dayStart] = vi.mocked(closeAllOpenTills).mock.calls[0]!
+    expect(calledSiteId).toBe(SITE_ID)
+    expect(dayStart).toBeInstanceOf(Date)
   })
 
   // ── Idempotency ───────────────────────────────────────────────────────────
@@ -5745,7 +5879,7 @@ describe('getOpenTillItems', () => {
 
     const res = await getOpenTillItems(SITE_ID, 'admin-token-key')
     expect(res.status).toBe('ok')
-    expect(getOpenTillItemsByEmployee).toHaveBeenCalledWith(SITE_ID)
+    expect(getOpenTillItemsByEmployee).toHaveBeenCalledWith(SITE_ID, expect.any(Date))
     expect(res.tills).toEqual(mockTills)
   })
 
@@ -5755,7 +5889,7 @@ describe('getOpenTillItems', () => {
 
     const res = await getOpenTillItems(SITE_ID)
     expect(res.status).toBe('ok')
-    expect(getOpenTillItemsByEmployee).toHaveBeenCalledWith(SITE_ID)
+    expect(getOpenTillItemsByEmployee).toHaveBeenCalledWith(SITE_ID, expect.any(Date))
     expect(res.tills).toEqual([])
   })
 
@@ -5765,7 +5899,7 @@ describe('getOpenTillItems', () => {
 
     const res = await getOpenTillItems(SITE_ID)
     expect(res.status).toBe('ok')
-    expect(getOpenTillItemsByEmployee).toHaveBeenCalledWith(SITE_ID)
+    expect(getOpenTillItemsByEmployee).toHaveBeenCalledWith(SITE_ID, expect.any(Date))
   })
 
   // ── Happy path: returns itemised tills ────────────────────────────────────

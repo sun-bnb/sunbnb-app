@@ -1330,12 +1330,27 @@ describe('per-worker till', () => {
     await reserveItem(site.id, item.id, undefined, undefined, undefined, undefined, true, employee.id)
 
     // track 013: a walk-in OCCUPIES but does not settle — the till is empty until Settle.
-    expect(await getTillStatus(site.id, employee.id)).toEqual({ status: 'ok', total: 0, count: 0 })
+    // track 016: total/count remain the sweepable (today + carryOver) balance; no
+    // backdated entries exist in this fixture, so carryOver stays empty and today
+    // mirrors total/count exactly.
+    expect(await getTillStatus(site.id, employee.id)).toMatchObject({
+      status: 'ok',
+      total: 0,
+      count: 0,
+      today: { total: 0, count: 0 },
+      carryOver: { total: 0, count: 0, oldestAt: null },
+    })
 
     const res = await prisma.reservation.findFirstOrThrow({ where: { siteId: site.id } })
     await settleReservation(site.id, res.id, 10, undefined, employee.id)
 
-    expect(await getTillStatus(site.id, employee.id)).toEqual({ status: 'ok', total: 10, count: 1 })
+    expect(await getTillStatus(site.id, employee.id)).toMatchObject({
+      status: 'ok',
+      total: 10,
+      count: 1,
+      today: { total: 10, count: 1 },
+      carryOver: { total: 0, count: 0, oldestAt: null },
+    })
   })
 
   it('closeTill snapshots the settled total and resets the open till to zero', async () => {
@@ -1345,22 +1360,33 @@ describe('per-worker till', () => {
     await settleReservation(site.id, res.id, 10, undefined, employee.id)
 
     const closed = await closeTill(site.id, employee.id)
-    expect(closed).toMatchObject({ status: 'ok', total: 10, count: 1, closed: true })
+    expect(closed).toMatchObject({
+      status: 'ok',
+      total: 10,
+      count: 1,
+      closed: true,
+      carryOverAmount: 0,
+      carryOverCount: 0,
+    })
 
     const snaps = await prisma.tillClose.findMany({ where: { siteId: site.id, employeeId: employee.id } })
     expect(snaps).toHaveLength(1)
     expect(snaps[0].totalAmount).toBe(10)
     expect(snaps[0].txnCount).toBe(1)
+    // Track 016: the snapshot records the carry-over portion of what was swept —
+    // nothing was carried over here (all settled today), so both are zero.
+    expect(snaps[0].carryOverAmount).toBe(0)
+    expect(snaps[0].carryOverCount).toBe(0)
 
     // Open till now reads zero — only cash AFTER the close counts.
-    expect(await getTillStatus(site.id, employee.id)).toEqual({ status: 'ok', total: 0, count: 0 })
+    expect(await getTillStatus(site.id, employee.id)).toMatchObject({ status: 'ok', total: 0, count: 0 })
   })
 
   it('closeTill on an empty till is a no-op (no snapshot written)', async () => {
     const { site, employee } = await setupWithEmployee()
 
     const res = await closeTill(site.id, employee.id)
-    expect(res).toEqual({ status: 'ok', total: 0, count: 0, closed: false })
+    expect(res).toMatchObject({ status: 'ok', total: 0, count: 0, closed: false })
     expect(await prisma.tillClose.count({ where: { siteId: site.id } })).toBe(0)
   })
 
@@ -3126,11 +3152,55 @@ describe('closeDay (integration)', () => {
     // Till: both employees should have TillClose rows now.
     expect(result.closedCount).toBe(2)
     expect(result.totalClosed).toBeCloseTo(80, 1) // 50 + 30
+    // Nothing was backdated — both entries settle "today", so nothing carries over.
+    expect(result.carryOverClosed).toBe(0)
 
     const tillCloses = await prisma.tillClose.findMany({ where: { siteId: site.id }, orderBy: { closedAt: 'asc' } })
     expect(tillCloses).toHaveLength(2)
     const closeAmounts = tillCloses.map((tc) => tc.totalAmount).sort((a, b) => a - b)
     expect(closeAmounts).toEqual([30, 50])
+  })
+
+  it('day-anchored (track 016): sweeps carry-over cash from a prior venue-local day and reports it', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id, { type: 'paid', price: 10 })
+    mockUserId = user.id
+
+    const emp = await prisma.employee.create({ data: { accountId: user.id, name: 'Dora', active: true } })
+
+    // Backdate to before the venue-local start of today — an uncounted balance
+    // from a prior day (e.g. a forgotten close) — plus a genuine today entry.
+    const { start: dayStart } = fixtureDay(site)
+    const yesterday = new Date(dayStart.getTime() - 60 * 60 * 1000)
+    await seedTillEntry(site.id, emp.id, 20)
+    await prisma.tillEntry.updateMany({
+      where: { siteId: site.id, employeeId: emp.id },
+      data: { settledAt: yesterday },
+    })
+    await seedTillEntry(site.id, emp.id, 12) // settles "now" (today)
+
+    const before = await getTillStatus(site.id, emp.id)
+    expect(before).toMatchObject({
+      status: 'ok',
+      total: 32,
+      today: { total: 12, count: 1 },
+      carryOver: { total: 20, count: 1 },
+    })
+
+    const result = await closeDay(site.id)
+    expect(result.status).toBe('ok')
+    expect(result.closedCount).toBe(1)
+    expect(result.totalClosed).toBeCloseTo(32, 1)
+    expect(result.carryOverClosed).toBeCloseTo(20, 1)
+
+    const snap = await prisma.tillClose.findFirstOrThrow({ where: { siteId: site.id, employeeId: emp.id } })
+    expect(snap.totalAmount).toBe(32)
+    expect(snap.carryOverAmount).toBe(20)
+    expect(snap.carryOverCount).toBe(1)
+
+    // Swept together — the open till reads zero afterwards, carry-over included.
+    expect(await getTillStatus(site.id, emp.id)).toMatchObject({ status: 'ok', total: 0, count: 0 })
   })
 
   it('cash-up only — reservation operational statuses are completely untouched', async () => {

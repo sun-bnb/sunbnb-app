@@ -1,10 +1,25 @@
 /**
  * Per-worker cash till — the operational cash-reconciliation layer (track 008,
- * Alonso "Group A"). A worker's "open till" is the cash they've physically taken
- * at a site this shift, recorded as explicit TillEntry ledger rows. The till is
+ * Alonso "Group A"; day-anchored rework track 016). A worker's till balance is
  * fully ledger-sourced (track 013 P3): reservation settlements and rental
  * settlements are both TillEntry rows. Closing snapshots the total into a
  * TillClose row; the open till then reads zero.
+ *
+ * Day-anchored, two-bucket model (track 016): every employee's open till is
+ * split into a **today** bucket and a **carryOver** bucket, anchored to the
+ * venue-local day. The caller computes `dayStart` (venue-local start of today,
+ * e.g. via `siteDayBounds(buildSiteTimezone(site), now)`) and passes it in —
+ * this module stays timezone-agnostic and does no site lookups for tz purposes.
+ *
+ *   lastClose = the employee's latest TillClose.closedAt at this site (or none)
+ *   floor     = max(lastClose, dayStart)
+ *   today     = non-voided TillEntry rows with settledAt > floor
+ *   carryOver = non-voided TillEntry rows with settledAt in (lastClose, dayStart]
+ *               — empty when the worker already closed today (lastClose >= dayStart);
+ *               everything at-or-before dayStart when never closed.
+ *   total/count (the sweepable balance a close snapshots) = today + carryOver,
+ *   which is identical to the old "since last close" total — close semantics
+ *   (and idempotency) are unchanged, only the balance is now surfaced split.
  *
  * Ledger helpers exported here:
  *   recordSettlement              — write a TillEntry for cash taken (reservation
@@ -54,12 +69,41 @@ export interface EmployeeShift {
   items: EmployeeShiftItem[]
 }
 
-export interface OpenTill {
+/** A same-shape money+count bucket used for both `today` and `carryOver`. */
+export interface TillBucket {
   total: number
   count: number
 }
 
+/** The carry-over bucket additionally surfaces the oldest unclosed entry's date. */
+export interface CarryOverBucket extends TillBucket {
+  oldestAt: Date | null
+}
+
+export interface OpenTill {
+  /** Sweepable balance — what a close snapshots. Always today.total + carryOver.total. */
+  total: number
+  count: number
+  today: TillBucket
+  carryOver: CarryOverBucket
+}
+
 export interface EmployeeTill {
+  employeeId: string
+  name: string
+  active: boolean
+  total: number
+  count: number
+  today: TillBucket
+  carryOver: CarryOverBucket
+}
+
+/**
+ * Plain (non-bucketed) per-employee cash total — the civil-day-window report
+ * shape returned by `getTillByEmployee`, unchanged by the track 016 rework
+ * (arbitrary `[from, to]` ranges don't have a "today vs carry-over" notion).
+ */
+export interface EmployeeCashTotal {
   employeeId: string
   name: string
   active: boolean
@@ -138,52 +182,89 @@ export async function voidSettlementsForRentalBooking(rentalBookingId: string): 
 // ─── Till Read Queries ───────────────────────────────────────────────────────
 
 /**
- * The worker's open till at a site: cash taken **since their last close** — an
- * uncounted running balance, not a daily reset. If a worker never closed on a
- * prior day, that uncounted cash rolls forward and is swept in by the next
- * close, so cash is never orphaned by a day boundary. If they have never closed
- * at this site, the balance is all-time.
+ * Shared two-bucket window computation. `lastClose` is the employee's own
+ * latest TillClose.closedAt at the site (or null if they've never closed).
+ * See the module doc comment for the window math.
+ */
+async function computeOpenTill(
+  siteId: string,
+  employeeId: string,
+  dayStart: Date,
+  lastClose: Date | null,
+): Promise<OpenTill> {
+  const floor = lastClose && lastClose > dayStart ? lastClose : dayStart
+
+  const [todayAgg, carryAgg] = await Promise.all([
+    prisma.tillEntry.aggregate({
+      where: { siteId, employeeId, voidedAt: null, settledAt: { gt: floor } },
+      _sum: { amount: true },
+      _count: true,
+    }),
+    prisma.tillEntry.aggregate({
+      where: {
+        siteId,
+        employeeId,
+        voidedAt: null,
+        settledAt: { lte: dayStart, ...(lastClose ? { gt: lastClose } : {}) },
+      },
+      _sum: { amount: true },
+      _count: true,
+      _min: { settledAt: true },
+    }),
+  ])
+
+  const today: TillBucket = { total: round(todayAgg._sum.amount ?? 0), count: todayAgg._count }
+  const carryOver: CarryOverBucket = {
+    total: round(carryAgg._sum.amount ?? 0),
+    count: carryAgg._count,
+    oldestAt: carryAgg._min.settledAt,
+  }
+
+  return {
+    total: round(today.total + carryOver.total),
+    count: today.count + carryOver.count,
+    today,
+    carryOver,
+  }
+}
+
+/**
+ * The worker's open till at a site, split into `today` (venue-local, since
+ * `dayStart` or since their last close today, whichever is later) and
+ * `carryOver` (unclosed cash from before `dayStart`). `total`/`count` are the
+ * sweepable balance (today + carryOver) — unchanged from the pre-track-016
+ * since-last-close total, so close semantics are unchanged.
+ *
+ * `dayStart` is REQUIRED and must be computed by the caller (venue-local start
+ * of today) — this module does not look up site timezone.
  *
  * Fully ledger-sourced (track 013 P3): sums all non-voided TillEntry rows
  * attributed to this employee since the last TillClose. Rental settlements are
  * TillEntry rows (backfilled by migration 20260621162554_add_till_entry_rental_booking),
  * so no separate rentalBooking aggregate is needed.
  */
-export async function getOpenTill(siteId: string, employeeId: string): Promise<OpenTill> {
+export async function getOpenTill(siteId: string, employeeId: string, dayStart: Date): Promise<OpenTill> {
   const lastClose = await prisma.tillClose.findFirst({
     where: { siteId, employeeId },
     orderBy: { closedAt: 'desc' },
     select: { closedAt: true },
   })
 
-  const entries = await prisma.tillEntry.aggregate({
-    where: {
-      siteId,
-      employeeId,
-      voidedAt: null,
-      ...(lastClose ? { settledAt: { gt: lastClose.closedAt } } : {}),
-    },
-    _sum: { amount: true },
-    _count: true,
-  })
-
-  return {
-    total: round(entries._sum.amount ?? 0),
-    count: entries._count,
-  }
+  return computeOpenTill(siteId, employeeId, dayStart, lastClose?.closedAt ?? null)
 }
 
 /**
  * Every roster employee's **open** (unclosed) till at a site — the manager /
- * admin overview behind the on-site "till summary". Each employee's balance is
- * cash since *their own* last close (all-time if never closed), so a worker who
- * forgot to close on a prior day still surfaces their full uncounted balance
- * here (and closing it snapshots the whole amount). Mirrors getTillByEmployee's
- * roster zero-fill; sorted by name.
+ * admin overview behind the on-site "till summary". Each employee's balance
+ * uses their OWN last close as the window floor (all-time carryOver if never
+ * closed), so a worker who forgot to close on a prior day still surfaces
+ * their full uncounted balance here, now explicitly split into `today` and
+ * `carryOver`. Mirrors getTillByEmployee's roster zero-fill; sorted by name.
  *
+ * `dayStart` is REQUIRED (venue-local start of today, caller-computed).
  * Read-only; the caller owns auth/ownership.
  */
-export async function getOpenTillsByEmployee(siteId: string): Promise<EmployeeTill[]> {
+export async function getOpenTillsByEmployee(siteId: string, dayStart: Date): Promise<EmployeeTill[]> {
   const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
   if (!site) return []
 
@@ -203,24 +284,9 @@ export async function getOpenTillsByEmployee(siteId: string): Promise<EmployeeTi
 
   return Promise.all(
     employees.map(async (e) => {
-      const since = lastCloseByEmp.get(e.id) ?? null
-      const agg = await prisma.tillEntry.aggregate({
-        where: {
-          siteId,
-          employeeId: e.id,
-          voidedAt: null,
-          ...(since ? { settledAt: { gt: since } } : {}),
-        },
-        _sum: { amount: true },
-        _count: true,
-      })
-      return {
-        employeeId: e.id,
-        name: e.name,
-        active: e.active,
-        total: round(agg._sum.amount ?? 0),
-        count: agg._count,
-      }
+      const lastClose = lastCloseByEmp.get(e.id) ?? null
+      const till = await computeOpenTill(siteId, e.id, dayStart, lastClose)
+      return { employeeId: e.id, name: e.name, active: e.active, ...till }
     }),
   )
 }
@@ -231,6 +297,8 @@ export interface OpenTillItem {
   label: string
   amount: number
   at: Date
+  /** True when this entry settled at-or-before dayStart (carried over from a prior day). */
+  carryOver: boolean
 }
 
 export interface EmployeeOpenTill {
@@ -239,6 +307,8 @@ export interface EmployeeOpenTill {
   active: boolean
   total: number
   count: number
+  today: TillBucket
+  carryOver: CarryOverBucket
   items: OpenTillItem[]
 }
 
@@ -246,15 +316,19 @@ export interface EmployeeOpenTill {
  * Every roster employee's open till at a site, ITEMIZED — the Alonso "cierre de
  * caja empleado" per-worker view: each employee's unclosed cash broken down into
  * the individual sunbeds (and cash rentals) that make it up, since their own last
- * close. The `items` sum to `total` (cash-only, because TillEntry rows only exist
+ * close, with each item tagged `carryOver` (settled at-or-before `dayStart`) vs
+ * today. The `items` sum to `total` (cash-only, because TillEntry rows only exist
  * for cash), so this is the drawer contents, not a broader earnings view. Mirrors
  * getOpenTillsByEmployee's roster zero-fill + since-last-close window, and adds
- * the line items. Sorted by name; items oldest-first.
+ * the line items plus the same `today`/`carryOver` bucket totals per employee.
+ * Sorted by name; items oldest-first.
+ *
+ * `dayStart` is REQUIRED (venue-local start of today, caller-computed).
  *
  * A sunbed line's `label` is the reserved seats joined (seatLabel, else number);
  * a rental line's `label` is the rental item name. Read-only; caller owns auth.
  */
-export async function getOpenTillItemsByEmployee(siteId: string): Promise<EmployeeOpenTill[]> {
+export async function getOpenTillItemsByEmployee(siteId: string, dayStart: Date): Promise<EmployeeOpenTill[]> {
   const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
   if (!site) return []
 
@@ -273,13 +347,13 @@ export async function getOpenTillItemsByEmployee(siteId: string): Promise<Employ
 
   return Promise.all(
     employees.map(async (e) => {
-      const since = lastCloseByEmp.get(e.id) ?? null
+      const lastClose = lastCloseByEmp.get(e.id) ?? null
       const entries = await prisma.tillEntry.findMany({
         where: {
           siteId,
           employeeId: e.id,
           voidedAt: null,
-          ...(since ? { settledAt: { gt: since } } : {}),
+          ...(lastClose ? { settledAt: { gt: lastClose } } : {}),
         },
         select: {
           id: true,
@@ -292,9 +366,17 @@ export async function getOpenTillItemsByEmployee(siteId: string): Promise<Employ
       })
 
       const items: OpenTillItem[] = entries.map((en) => {
+        const carryOver = en.settledAt <= dayStart
         if (en.reservation) {
           const seats = en.reservation.items.map((it) => it.seatLabel ?? String(it.number))
-          return { id: en.id, kind: 'sunbed', label: seats.join(', '), amount: round(en.amount), at: en.settledAt }
+          return {
+            id: en.id,
+            kind: 'sunbed',
+            label: seats.join(', '),
+            amount: round(en.amount),
+            at: en.settledAt,
+            carryOver,
+          }
         }
         return {
           id: en.id,
@@ -302,8 +384,14 @@ export async function getOpenTillItemsByEmployee(siteId: string): Promise<Employ
           label: en.rentalBooking?.rentalItem?.name ?? '',
           amount: round(en.amount),
           at: en.settledAt,
+          carryOver,
         }
       })
+
+      // items are settledAt-ascending, so filtering preserves order — the
+      // first carry-over item is the oldest.
+      const carryItems = items.filter((i) => i.carryOver)
+      const todayItems = items.filter((i) => !i.carryOver)
 
       return {
         employeeId: e.id,
@@ -311,43 +399,117 @@ export async function getOpenTillItemsByEmployee(siteId: string): Promise<Employ
         active: e.active,
         total: round(entries.reduce((sum, en) => sum + en.amount, 0)),
         count: items.length,
+        today: {
+          total: round(todayItems.reduce((sum, i) => sum + i.amount, 0)),
+          count: todayItems.length,
+        },
+        carryOver: {
+          total: round(carryItems.reduce((sum, i) => sum + i.amount, 0)),
+          count: carryItems.length,
+          oldestAt: carryItems[0]?.at ?? null,
+        },
         items,
       }
     }),
   )
 }
 
-/**
- * Close EVERY employee's open till at a site in one shot — the manager
- * end-of-day "cierre de caja" cash-up. For each roster employee with a non-zero
- * unclosed balance (from getOpenTillsByEmployee), snapshots a TillClose row.
- * Employees with a zero open balance are skipped (no empty snapshot), exactly
- * like the per-worker closeTill.
- *
- * Idempotent: re-running immediately after a close finds every open till at
- * zero and is a no-op. Returns how many tills were closed and their combined
- * total. Read/aggregation is caller-auth'd; this only writes TillClose rows —
- * it does NOT touch reservations or floor state (that cleanup is the caller's).
- */
-export async function closeAllOpenTills(
-  siteId: string,
-): Promise<{ closedCount: number; totalClosed: number }> {
-  const opens = await getOpenTillsByEmployee(siteId)
-  const toClose = opens.filter((o) => o.count > 0)
-  if (toClose.length === 0) return { closedCount: 0, totalClosed: 0 }
+export interface TillCloseBreakdown {
+  /** False when the sweepable balance was zero — no TillClose row was written. */
+  closed: boolean
+  totalAmount: number
+  txnCount: number
+  carryOverAmount: number
+  carryOverCount: number
+  /** The open till this breakdown was computed from (zeroed out once closed). */
+  till: OpenTill
+}
 
-  await prisma.tillClose.createMany({
-    data: toClose.map((o) => ({
+/**
+ * Close ONE employee's till at a site — the single TillClose snapshot writer
+ * both the per-worker close (`manage/actions.ts` closeTill, P3) and the
+ * manager end-of-day sweep (closeAllOpenTills, below) route through.
+ *
+ * Reads the open till (today + carryOver); no-ops when the sweepable total
+ * count is 0 (returns `{ closed: false, ... }` with the — zeroed — till so the
+ * caller can still render a breakdown). Otherwise creates a TillClose row with
+ * totalAmount/txnCount = the sweepable total/count and carryOverAmount/
+ * carryOverCount = the carry-over bucket, so the snapshot records how much of
+ * what was just swept came from before today.
+ *
+ * `dayStart` is REQUIRED (venue-local start of today, caller-computed).
+ */
+export async function closeEmployeeTill(
+  siteId: string,
+  employeeId: string,
+  dayStart: Date,
+): Promise<TillCloseBreakdown> {
+  const till = await getOpenTill(siteId, employeeId, dayStart)
+
+  if (till.count === 0) {
+    return {
+      closed: false,
+      totalAmount: 0,
+      txnCount: 0,
+      carryOverAmount: 0,
+      carryOverCount: 0,
+      till,
+    }
+  }
+
+  await prisma.tillClose.create({
+    data: {
       siteId,
-      employeeId: o.employeeId,
-      totalAmount: o.total,
-      txnCount: o.count,
-    })),
+      employeeId,
+      totalAmount: till.total,
+      txnCount: till.count,
+      carryOverAmount: till.carryOver.total,
+      carryOverCount: till.carryOver.count,
+    },
   })
 
   return {
-    closedCount: toClose.length,
-    totalClosed: round(toClose.reduce((sum, o) => sum + o.total, 0)),
+    closed: true,
+    totalAmount: till.total,
+    txnCount: till.count,
+    carryOverAmount: till.carryOver.total,
+    carryOverCount: till.carryOver.count,
+    till,
+  }
+}
+
+/**
+ * Close EVERY employee's open till at a site in one shot — the manager
+ * end-of-day "cierre de caja" cash-up. For each roster employee with a non-zero
+ * unclosed balance (from getOpenTillsByEmployee), snapshots a TillClose row via
+ * `closeEmployeeTill` (today + carryOver both swept together — no partial
+ * close). Employees with a zero open balance are skipped (no empty snapshot),
+ * exactly like the per-worker close.
+ *
+ * Idempotent: re-running immediately after a close finds every open till at
+ * zero and is a no-op. Returns how many tills were closed, their combined
+ * sweepable total, and the combined carry-over portion of that total (for the
+ * "€Y from previous days" summary line). Read/aggregation is caller-auth'd;
+ * this only writes TillClose rows — it does NOT touch reservations or floor
+ * state (that cleanup is the caller's).
+ *
+ * `dayStart` is REQUIRED (venue-local start of today, caller-computed).
+ */
+export async function closeAllOpenTills(
+  siteId: string,
+  dayStart: Date,
+): Promise<{ closedCount: number; totalClosed: number; carryOverClosed: number }> {
+  const opens = await getOpenTillsByEmployee(siteId, dayStart)
+  const toClose = opens.filter((o) => o.count > 0)
+  if (toClose.length === 0) return { closedCount: 0, totalClosed: 0, carryOverClosed: 0 }
+
+  const results = await Promise.all(toClose.map((o) => closeEmployeeTill(siteId, o.employeeId, dayStart)))
+  const closed = results.filter((r) => r.closed)
+
+  return {
+    closedCount: closed.length,
+    totalClosed: round(closed.reduce((sum, r) => sum + r.totalAmount, 0)),
+    carryOverClosed: round(closed.reduce((sum, r) => sum + r.carryOverAmount, 0)),
   }
 }
 
@@ -359,8 +521,10 @@ export async function closeAllOpenTills(
  * Fully ledger-sourced (track 013 P3): sums non-voided TillEntry rows with
  * settledAt in [from, to]. Both reservation and rental settlements are ledger
  * rows, so no separate rentalBooking groupBy is needed.
+ *
+ * Unchanged by track 016 — this is the civil-day report, not the open-till window.
  */
-export async function getTillByEmployee(siteId: string, from: Date, to: Date): Promise<EmployeeTill[]> {
+export async function getTillByEmployee(siteId: string, from: Date, to: Date): Promise<EmployeeCashTotal[]> {
   const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
   if (!site) return []
 
@@ -410,7 +574,8 @@ export async function getTillByEmployee(siteId: string, from: Date, to: Date): P
  * all account employees appear; no dangling ids beyond the roster (SetNull on delete
  * + inactive employees stay in the roster guarantees this).
  *
- * Auth/ownership is the caller's responsibility.
+ * Auth/ownership is the caller's responsibility. Unchanged by track 016 — this is
+ * the civil-day report, not the open-till window.
  */
 export async function getEmployeeShiftItems(
   siteId: string,

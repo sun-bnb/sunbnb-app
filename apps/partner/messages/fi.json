@@ -843,18 +843,22 @@
     "errorGeneric": "Jotain meni pieleen.",
     "totalCash": "Käteinen yhteensä",
     "totalSales": "myyntiä",
+    "todayLine": "Tänään, {date}",
     "breakdownHeading": "Erittely työntekijöittäin",
     "employeeSalesCount": "{count} käteismyyntiä",
     "inactive": "(ei aktiivinen)",
     "noData": "Tälle päivälle ei kirjattu käteistä.",
     "whatCloseDoes": "Vahvistaminen sulkee {count, plural, one {# avoimen kassan} other {# avointa kassaa}}.",
+    "carryOverPortion": "{amount} tästä on edellisiltä päiviltä.",
     "confirmClose": "Vahvista päivän sulkeminen",
     "confirmQuestion": "Suljetaanko kaikki avoimet kassat?",
     "confirmButton": "Vahvista",
     "cancel": "Peruuta",
     "closing": "Suljetaan…",
     "successTitle": "Päivä suljettu",
-    "successTills": "{count, plural, one {# kassa suljettu} other {# kassaa suljettu}} · {total}"
+    "successAmount": "{total} laskettu",
+    "successTills": "{count, plural, one {# kassa suljettu} other {# kassaa suljettu}}",
+    "successCarryOverNote": "({amount} edellisiltä päiviltä)"
   },
   "BedDetail": {
     "collectPayment": "Peri maksu",
@@ -940,6 +944,11 @@
   "Till": {
     "title": "{name} – kassa",
     "openTill": "Avoin kassa",
+    "today": "Tänään",
+    "todaySalesCount": "{count} käteismyyntiä tänään",
+    "carryOverBanner": "Laskematon käteinen {date} alkaen: {amount} ({count} myyntiä) — sisältyy sulkemiseen",
+    "confirmBreakdown": "{today} tänään + {carryOver} edelliseltä = {total}",
+    "closedCarryOverNote": "({amount} edellisiltä päiviltä)",
     "salesCount": "{count} käteismyyntiä tässä vuorossa",
     "closeTill": "Sulje kassa",
     "confirmBody": "Luovutetaanko {total} ja aloitetaan uusi kassa?",
@@ -979,6 +988,7 @@
     "inactive": "(ei aktiivinen)",
     "backToMenu": "Valikko",
     "totalCash": "Käteinen yhteensä",
+    "totalCashToday": "Tämän päivän käteinen",
     "totalSales": "myyntiä",
     "totalEarnings": "Tulot yhteensä",
     "totalSunbeds": "Aurinkotuolit",
@@ -988,7 +998,12 @@
     "noShiftItems": "Ei kirjattuja aurinkotuoleja",
     "adminRequired": "Järjestelmänvalvojan oikeudet vaaditaan",
     "adminRequiredMessage": "Tämä sivu on käytettävissä vain järjestelmänvalvojan tokenilla.",
-    "rentalTag": "Vuokraus"
+    "rentalTag": "Vuokraus",
+    "carryOverGrandLine": "+ {amount} edellisiltä päiviltä",
+    "carryOverChip": "+ {amount} {date} alkaen",
+    "carryOverTag": "Edelliseltä",
+    "stillUncounted": "Vielä laskematta: {amount}",
+    "handedInToday": "Luovutettu tänään: {amount}"
   },
   "Guests": {
     "title": "Asiakkaat",

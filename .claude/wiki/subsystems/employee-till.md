@@ -8,13 +8,16 @@ sources:
   - apps/partner/app/account/staff/actions.ts
   - apps/partner/app/sites/[id]/manage/actions.ts#resolveEmployeeId
   - apps/partner/app/sites/[id]/manage/TillSheet.tsx
+  - apps/partner/app/sites/[id]/manage/DailySummaryView.tsx
+  - apps/partner/app/sites/[id]/manage/DayCloseView.tsx
   - apps/partner/app/sites/[id]/accounting/actions.ts#getStaffTill
   - .claude/tracks/008-employee-model.md
+  - .claude/tracks/016-day-anchored-till.md
 related:
   - flow:walk-in
   - entity:reservation
   - entity:settlement
-last_verified: 2026-06-19
+last_verified: 2026-07-23
 ---
 
 # Floor-staff attribution & per-worker till
@@ -40,7 +43,10 @@ a real roster + persisted attribution → durable cross-day reporting.
   owner's `User.id`), `name`, `active`, `onDelete: Cascade`. Workers rotate across a partner's sites,
   so the roster is account-scoped, not site-scoped (most partners are single-site anyway).
 - **`TillClose`** — a shift-close reconciliation snapshot: `siteId`, `employeeId`, `closedAt` (default
-  now), `totalAmount`, `txnCount`. One row per "close my till".
+  now), `totalAmount`, `txnCount`, plus `carryOverAmount`/`carryOverCount` (nullable, migration
+  `20260723140622_add_till_close_carry_over`, track 016) — the portion of the snapshot that predated
+  the close's venue-local day. Closes are **irreversible partitions** (no reopen — same semantics as
+  Alonso's `shiftClosedAt`); the next cash entry starts a fresh window.
 - Nullable **`employeeId` FK** on `Reservation` and `RentalBooking` (`onDelete: SetNull` — deleting an
   employee nulls attribution but keeps the transactions). Threaded through the create helpers
   `reserveWithConflictGuard` / `createRentalBookingsWithGuard` (`packages/data/src/reservations.ts`)
@@ -71,20 +77,50 @@ else `null` — a stale or cross-account id is **silently dropped**, never block
 booking. Cash walk-ins additionally record `paymentAmount` (from DB prices via `computeWalkInAmount`,
 paid sites only) so the till has money — see [[flow:walk-in]].
 
-## Per-worker till — manage page
+## Per-worker till — day-anchored two-bucket model (track 016)
 
-Aggregation in `packages/data/src/till.ts`:
-- **`getOpenTill(siteId, employeeId)`** → `{ total, count }` — cash the worker has taken at this site
-  since the later of their last `TillClose.closedAt` and start-of-today (cash walk-ins
-  `paid-in-cash`/`walked-in` + cash rentals `paid-in-cash`; comps/blocks/holds excluded).
-- **`getTillByEmployee(siteId, from, to)`** → per-roster `{ employeeId, name, active, total, count }[]`,
-  zero-filled and name-sorted (for the manager breakdown).
+The till is **day-anchored** (track 016, driven by pilot-operator feedback: an Alonso-trained
+operator expects a strictly per-day till, and the old since-last-close window silently rolled
+cash across days). Aggregation in `packages/data/src/till.ts`; every open-till function takes a
+**required venue-local `dayStart`** (computed by the caller via `siteDayBounds` — the till module
+is timezone-agnostic). Per employee, with `floor = max(lastClose, dayStart)`:
+
+- **today** bucket — non-voided `TillEntry` rows with `settledAt > floor`.
+- **carryOver** bucket — unclosed rows in `(lastClose, dayStart]` (boundary entry at exactly
+  `dayStart` is carry-over), labeled with `oldestAt`. Empty once the worker has closed today.
+- **`total = today + carryOver`** — the *sweepable* balance. A close always sweeps both
+  ("sweep-together" decision: cash is never orphaned, no partial close); **no auto-close at
+  midnight** (a `TillClose` is a human attestation — forgotten cash surfaces as carry-over
+  instead).
+
+Key exports: **`getOpenTill(siteId, employeeId, dayStart)`** → `OpenTill { total, count, today,
+carryOver }`; **`closeEmployeeTill(siteId, employeeId, dayStart)`** — the *single* snapshot
+writer (records `carryOverAmount`/`carryOverCount`; zero-balance = no-op); **`closeAllOpenTills`**
+(built on it; returns `carryOverClosed`); `getOpenTillsByEmployee` / `getOpenTillItemsByEmployee`
+(bucketed rosters; items flagged `carryOver: boolean`). Civil-day reports —
+**`getTillByEmployee(siteId, from, to)`** → `EmployeeCashTotal[]` and `getEmployeeShiftItems` —
+sum by `settledAt` window and are **close-independent**: the day's accumulation never changes when
+tills close. This is the load-bearing split: *drawer questions* (what would this worker hand in?)
+read the buckets; *day questions* (what did we take today?) read the civil-day reports.
 
 UI: a `💶 Till` button beside the chip (shown once a worker is set) opens **`TillSheet.tsx`** —
-the open till € + sales count + a two-step **Close till**. Two token-or-session manage actions back it:
-**`getTillStatus`** (validates the worker, returns `getOpenTill`) and **`closeTill`** (snapshots the
-open total into a `TillClose` row; an empty till is a **no-op** — no row, harmless double-close). Both
-are in the `gated-actions.ts` registry.
+leads with **"Today €X"**, shows an amber carry-over banner ("Uncounted cash from {date} —
+included when you close") when applicable, and a two-step **Close till** over the sweepable total
+(close button gates on `total === 0`, so €0-today + carry-over is still closeable). Backed by
+**`getTillStatus`** / **`closeTill`** (routes through `closeEmployeeTill`); both in the
+`gated-actions.ts` registry.
+
+## Admin daily summary & day close — `/manage/summary`, `/manage/close`
+
+Both admin-token-gated (`verifySiteAdmin`). **`DailySummaryView.tsx`** (summary): the open-tills
+tab **leads with the daily accumulation** (`getTillDayReport` for today — provably constant
+across closes) and reconciles it with two secondary lines — "Still uncounted" (sum of `today`
+buckets) and "Handed in today" (day total − uncounted) — plus an amber carried-over line for
+pre-today cash; per-worker cards below are drawer views (today lead + carry-over chip + itemized
+rows with carry-over dots) with per-worker close. The day-report tab (`getDayShiftItems`,
+cash+card) is unchanged history. **`DayCloseView.tsx`** (`closeDay` → `closeAllOpenTills`):
+anchored to today's date, shows the day totals + "€Y of that is carried over from previous days",
+success copy "€X counted (€Y from previous days)". Cash-up only — never touches floor state.
 
 ## Manager breakdown — accounting page
 

@@ -82,6 +82,20 @@ Single source of truth. Status fields are plain String columns in Prisma (not en
 - `rateLimit(key, { maxAttempts, windowMs })` — in-memory sliding-window, cleanup every 5 min
 - Per-process only (resets on serverless cold start)
 
+## Till (`src/till.ts`)
+
+Day-anchored per-worker cash till (tracks 008/013/016). `TillEntry` is the cash ledger
+(`recordSettlement` / `voidSettlementsFor*`); `TillClose` rows are irreversible hand-in
+snapshots. The open till is **two-bucketed** against a caller-supplied venue-local
+`dayStart` (module is timezone-agnostic): **today** = non-voided entries since
+`max(lastClose, dayStart)`; **carryOver** = unclosed entries from before today
+(`(lastClose, dayStart]`, `oldestAt` labeled). `total` = today + carryOver = the sweepable
+balance — a close always sweeps both (cash never orphaned). `closeEmployeeTill` is the
+single snapshot writer (records `carryOverAmount`/`carryOverCount` on `TillClose`);
+`closeAllOpenTills` builds on it and returns `carryOverClosed`. Civil-day reports
+(`getTillByEmployee` → `EmployeeCashTotal[]`, `getEmployeeShiftItems`) sum by `settledAt`
+window and are **close-independent** — daily accumulation never changes when tills close.
+
 ## Other Exports
 - `src/reservation-emails.ts` — confirmation, reminder, cancellation emails via Resend
 - `src/settlement.ts` — monthly payout aggregation
@@ -98,7 +112,7 @@ npm run test:integration:setup  # run prisma migrate deploy against sunbnb_test
 ```
 
 - **Unit tests** (`src/*.test.ts`): `payment.test.ts` (28 tests — round, VAT, fee cascade, fee calculation), `rate-limit.test.ts` (7 tests — sliding window, expiry, independent keys), `reservation-status.test.ts` (8 tests — status groupings, overlap checks)
-- **Integration tests** (`src/*.integration.test.ts`): `payment.integration.test.ts` (18 tests — processConfirmedReservation/Order, invoice creation, idempotency, hash chain, VAT, fees), `tab-payment.integration.test.ts` (23 tests — openTableId guard, calculateTabTotal, group invoicing, idempotency both directions, cash settle PARTNER-only receipt, kitchen-state preservation, void exclusion), `analytics.integration.test.ts` (incl. 5 tab-order paid-ness tests), `fee-context.integration.test.ts` (7 tests — loadFeeContext three-tier cascade), `password-reset.integration.test.ts` (15 tests — token lifecycle, rate limiting, expiry, password strength)
+- **Integration tests** (`src/*.integration.test.ts`): `payment.integration.test.ts` (18 tests — processConfirmedReservation/Order, invoice creation, idempotency, hash chain, VAT, fees), `tab-payment.integration.test.ts` (23 tests — openTableId guard, calculateTabTotal, group invoicing, idempotency both directions, cash settle PARTNER-only receipt, kitchen-state preservation, void exclusion), `analytics.integration.test.ts` (incl. 5 tab-order paid-ness tests), `till.integration.test.ts` (79 tests — two-bucket window math, day-boundary inclusivity, closeEmployeeTill sweep + carry-over snapshot, void handling), `fee-context.integration.test.ts` (7 tests — loadFeeContext three-tier cascade), `password-reset.integration.test.ts` (15 tests — token lifecycle, rate limiting, expiry, password strength)
 - **Config**: `vitest.config.ts` (unit, excludes `*.integration.test.ts`), `vitest.integration.config.ts` (integration, `fileParallelism: false` for shared DB)
 - **Test helpers**: `src/test/setup.ts` (DB connection, `cleanDatabase()` via TRUNCATE CASCADE), `src/test/fixtures.ts` (factory functions for all models)
 

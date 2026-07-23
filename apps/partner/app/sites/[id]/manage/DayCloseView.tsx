@@ -2,22 +2,34 @@
 
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 import { getTillDayReport, getOpenTills, closeDay } from './actions'
-import type { EmployeeTill } from '@repo/data/till'
+import type { EmployeeCashTotal } from '@repo/data/till'
 
 /**
  * Full-page end-of-day close view for the token-gated manage surface.
  *
- * Admin-only. Provides:
+ * Admin-only. Anchored to `todayIso` (venue-local civil day) throughout:
  *   - Day totals: prominent cash + sales count from getTillDayReport for today.
  *   - Desglose por empleado: per-employee rows (name, total, sales count).
- *   - Pre-close note: shows how many open tills + active guests will be affected.
- *   - Two-step Confirm: "Confirmar cierre" → confirm → closeDay() → success state.
+ *   - Pre-close note: how many open tills will be swept, plus (day-anchored,
+ *     track 016) how much of that sweep is carry-over from before today —
+ *     the operator sees today vs. old cash before confirming.
+ *   - Two-step Confirm: "Confirmar cierre" → confirm → closeDay() → success
+ *     state, which surfaces the swept total and (if any) the carry-over
+ *     portion of it (`closeDay`'s `carryOverClosed`).
  *
  * No modal chrome (no backdrop, no role="dialog"/aria-modal, no escape-dismiss).
  * Page lives at /sites/[id]/manage/close?key=... — backHref returns to landing.
  */
+
+// Short, friendly rendering of the venue-local `todayIso` ('YYYY-MM-DD').
+// Noon-UTC anchor avoids DST-edge date-shifting (same technique as the
+// server-side `nominalNoon` used by getTillDayReport/getDayShiftItems).
+function formatTodayLabel(dateIso: string, locale: string): string {
+  const d = new Date(`${dateIso}T12:00:00.000Z`)
+  return d.toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' })
+}
 
 type Phase = 'loading' | 'ready' | 'error'
 type ClosePhase = 'idle' | 'confirming' | 'closing' | 'done'
@@ -38,15 +50,20 @@ export default function DayCloseView({
   backHref,
 }: DayCloseViewProps) {
   const t = useTranslations('DayClose')
+  const locale = useLocale()
 
   const [phase, setPhase] = useState<Phase>('loading')
-  const [tills, setTills] = useState<EmployeeTill[]>([])
+  const [tills, setTills] = useState<EmployeeCashTotal[]>([])
   const [openTillsCount, setOpenTillsCount] = useState(0)
+  // Sum of open tills' carryOver.total — the portion of the pending sweep
+  // that's uncounted cash from before today (day-anchored, track 016).
+  const [openTillsCarryOverTotal, setOpenTillsCarryOverTotal] = useState(0)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   const [closePhase, setClosePhase] = useState<ClosePhase>('idle')
   const [closedCount, setClosedCount] = useState(0)
   const [totalClosed, setTotalClosed] = useState(0)
+  const [carryOverClosed, setCarryOverClosed] = useState(0)
   const [closeError, setCloseError] = useState<string | null>(null)
 
   const startedRef = useRef(false)
@@ -72,11 +89,9 @@ export default function DayCloseView({
       }
 
       setTills(reportRes.tills ?? [])
-      setOpenTillsCount(
-        openRes.status === 'ok'
-          ? (openRes.tills ?? []).filter(t => t.total > 0 || t.count > 0).length
-          : 0
-      )
+      const openTills = openRes.status === 'ok' ? (openRes.tills ?? []) : []
+      setOpenTillsCount(openTills.filter(t => t.total > 0 || t.count > 0).length)
+      setOpenTillsCarryOverTotal(openTills.reduce((sum, t) => sum + t.carryOver.total, 0))
       setPhase('ready')
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -87,6 +102,7 @@ export default function DayCloseView({
     const res = await getTillDayReport(siteId, todayIso, accessKey)
     if (res.status === 'ok') setTills(res.tills ?? [])
     setOpenTillsCount(0)
+    setOpenTillsCarryOverTotal(0)
   }
 
   // ── Close-day handler ──────────────────────────────────────────────────────
@@ -101,6 +117,7 @@ export default function DayCloseView({
     }
     setClosedCount(res.closedCount ?? 0)
     setTotalClosed(res.totalClosed ?? 0)
+    setCarryOverClosed(res.carryOverClosed ?? 0)
     setClosePhase('done')
     // Refresh the day-totals rows (TillClose entries now exist; open balances = 0)
     await refreshAfterClose()
@@ -110,6 +127,7 @@ export default function DayCloseView({
   const grandTotal = tills.reduce((sum, t) => sum + t.total, 0)
   const grandCount = tills.reduce((sum, t) => sum + t.count, 0)
   const showTotals = phase === 'ready' && tills.length > 0
+  const todayLabel = formatTodayLabel(todayIso, locale)
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col">
@@ -138,7 +156,7 @@ export default function DayCloseView({
             {t('title')}
           </h1>
           <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 truncate">
-            {siteName} · {todayIso}
+            {siteName} · {t('todayLine', { date: todayLabel })}
           </p>
         </div>
       </div>
@@ -228,8 +246,11 @@ export default function DayCloseView({
 
             {/* What Confirm does — pre-close info note */}
             {closePhase !== 'done' && openTillsCount > 0 && (
-              <div className="px-3 py-2.5 rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-semibold">
-                {t('whatCloseDoes', { count: openTillsCount })}
+              <div className="px-3 py-2.5 rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-semibold space-y-1">
+                <div>{t('whatCloseDoes', { count: openTillsCount })}</div>
+                {openTillsCarryOverTotal > 0 && (
+                  <div>{t('carryOverPortion', { amount: `€${openTillsCarryOverTotal.toFixed(2)}` })}</div>
+                )}
               </div>
             )}
 
@@ -250,7 +271,13 @@ export default function DayCloseView({
                   </div>
                 </div>
                 <div className="text-sm font-bold text-green-700/80 dark:text-green-400/80">
-                  <div>{t('successTills', { count: closedCount, total: `€${totalClosed.toFixed(2)}` })}</div>
+                  <div>{t('successAmount', { total: `€${totalClosed.toFixed(2)}` })}</div>
+                  <div className="mt-0.5">{t('successTills', { count: closedCount })}</div>
+                  {carryOverClosed > 0 && (
+                    <div className="mt-0.5 text-green-700/70 dark:text-green-400/70">
+                      {t('successCarryOverNote', { amount: `€${carryOverClosed.toFixed(2)}` })}
+                    </div>
+                  )}
                 </div>
                 <Link
                   href={backHref}

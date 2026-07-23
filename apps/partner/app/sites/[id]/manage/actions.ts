@@ -19,8 +19,8 @@ import {
   createRentalBookingMolliePayment,
   reverifyAndFinalizeRentalBooking,
 } from '@repo/data/rental-payment'
-import { getOpenTill, getOpenTillsByEmployee, getOpenTillItemsByEmployee, closeAllOpenTills, getTillByEmployee, getEmployeeShiftItems, recordSettlement, voidSettlementsForReservation, voidSettlementsForRentalBooking } from '@repo/data/till'
-import type { EmployeeTill, EmployeeShift, EmployeeOpenTill } from '@repo/data/till'
+import { getOpenTill, getOpenTillsByEmployee, getOpenTillItemsByEmployee, closeAllOpenTills, closeEmployeeTill, getTillByEmployee, getEmployeeShiftItems, recordSettlement, voidSettlementsForReservation, voidSettlementsForRentalBooking } from '@repo/data/till'
+import type { EmployeeTill, EmployeeShift, EmployeeOpenTill, EmployeeCashTotal } from '@repo/data/till'
 import {
   getRevenueByChannelByDay,
   summarizeRevenueByChannel,
@@ -2776,6 +2776,10 @@ export async function cancelRentalCollection(
  * (the toolbar chip's localStorage), so this is a thin token-gated read of the
  * shared `getOpenTill` aggregation. Validates the worker belongs to the account
  * before reading so a stale/foreign id can't probe another account's till.
+ *
+ * Day-anchored (track 016): `total`/`count` remain the sweepable balance
+ * (today + carryOver — unchanged close semantics); `today`/`carryOver` split
+ * it out so the caller can surface "today's cash" vs. uncounted prior-day cash.
  */
 export async function getTillStatus(
   siteId: string,
@@ -2788,18 +2792,20 @@ export async function getTillStatus(
   const valid = await resolveEmployeeId(employeeId, ownership.userId)
   if (!valid) return { status: 'error', errors: ['Unknown worker'] }
 
-  const { total, count } = await getOpenTill(siteId, valid)
-  return { status: 'ok', total, count }
+  const { start: dayStart } = await siteTodayBounds(siteId)
+  const { total, count, today, carryOver } = await getOpenTill(siteId, valid, dayStart)
+  return { status: 'ok', total, count, today, carryOver }
 }
 
 /**
  * Close the current worker's till — the cash-handoff ritual at shift end.
  *
- * Snapshots the open total into a `TillClose` row (worker, site, total, count,
- * closedAt = now); `getOpenTill` then reads zero because it only counts cash
- * taken AFTER the latest close. Closing an already-empty till is a no-op (no
- * snapshot written) so the history isn't littered with empty rows. Idempotent
- * in effect: a second close right after the first sees count 0 → no-op.
+ * Day-anchored (track 016): routes through the shared `closeEmployeeTill`
+ * snapshot writer (sweeps today + carryOver together, records the carryOver
+ * portion on the TillClose row for audit). Closing an already-empty till is a
+ * no-op (no snapshot written) so the history isn't littered with empty rows.
+ * Idempotent in effect: a second close right after the first sees count 0 →
+ * no-op.
  */
 export async function closeTill(
   siteId: string,
@@ -2812,17 +2818,31 @@ export async function closeTill(
   const valid = await resolveEmployeeId(employeeId, ownership.userId)
   if (!valid) return { status: 'error', errors: ['Unknown worker'] }
 
-  const { total, count } = await getOpenTill(siteId, valid)
-  if (count === 0) {
-    return { status: 'ok', total, count, closed: false }
+  const { start: dayStart } = await siteTodayBounds(siteId)
+  const result = await closeEmployeeTill(siteId, valid, dayStart)
+
+  if (!result.closed) {
+    return {
+      status: 'ok',
+      total: result.till.total,
+      count: result.till.count,
+      today: result.till.today,
+      carryOver: result.till.carryOver,
+      closed: false,
+    }
   }
 
-  await prisma.tillClose.create({
-    data: { siteId, employeeId: valid, totalAmount: total, txnCount: count },
-  })
-
   revalidatePath(`/sites/${siteId}/manage`)
-  return { status: 'ok', total, count, closed: true }
+  return {
+    status: 'ok',
+    total: result.totalAmount,
+    count: result.txnCount,
+    today: result.till.today,
+    carryOver: result.till.carryOver,
+    closed: true,
+    carryOverAmount: result.carryOverAmount,
+    carryOverCount: result.carryOverCount,
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -3496,7 +3516,8 @@ export async function getOpenTills(
   const auth = await verifySiteAdmin(siteId, accessKey)
   if (auth.error) return { status: 'error', errors: [auth.error] }
 
-  const tills = await getOpenTillsByEmployee(siteId)
+  const { start: dayStart } = await siteTodayBounds(siteId)
+  const tills = await getOpenTillsByEmployee(siteId, dayStart)
   return { status: 'ok', tills }
 }
 
@@ -3516,7 +3537,7 @@ export async function getTillDayReport(
   siteId: string,
   dateIso: string,
   accessKey?: string,
-): Promise<{ status: string; tills?: EmployeeTill[]; errors?: string[] }> {
+): Promise<{ status: string; tills?: EmployeeCashTotal[]; errors?: string[] }> {
   const auth = await verifySiteAdmin(siteId, accessKey)
   if (auth.error) return { status: 'error', errors: [auth.error] }
 
@@ -3551,9 +3572,11 @@ export async function getTillDayReport(
  * closeDay matching "same effect as a day change" means leaving the floor
  * completely untouched.
  *
- * Calls `closeAllOpenTills(siteId)` from `@repo/data/till`, which snapshots a
- * TillClose row for every roster employee with a non-zero open balance.
- * Idempotent: if all tills are already at zero the call is a no-op.
+ * Calls `closeAllOpenTills(siteId, dayStart)` from `@repo/data/till`, which
+ * snapshots a TillClose row for every roster employee with a non-zero open
+ * balance (today + carryOver swept together). Idempotent: if all tills are
+ * already at zero the call is a no-op. `carryOverClosed` surfaces how much of
+ * the swept total came from before today (the "€Y from previous days" line).
  *
  * Gate: verifySiteAdmin — requires 'admin' in token resources, or owner/sudo
  * session. A plain manage_site token is deliberately rejected.
@@ -3565,19 +3588,21 @@ export async function closeDay(
   status: string
   closedCount?: number
   totalClosed?: number
+  carryOverClosed?: number
   errors?: string[]
 }> {
   const auth = await verifySiteAdmin(siteId, accessKey)
   if (auth.error) return { status: 'error', errors: [auth.error] }
 
   // Close all open tills (idempotent; no-op when all zero).
-  const { closedCount, totalClosed } = await closeAllOpenTills(siteId)
+  const { start: dayStart } = await siteTodayBounds(siteId)
+  const { closedCount, totalClosed, carryOverClosed } = await closeAllOpenTills(siteId, dayStart)
 
   revalidatePath(`/sites/${siteId}/manage`)
   revalidatePath(`/sites/${siteId}/manage/sunbeds`)
   revalidatePath(`/sites/${siteId}/manage/summary`)
 
-  return { status: 'ok', closedCount, totalClosed }
+  return { status: 'ok', closedCount, totalClosed, carryOverClosed }
 }
 
 /**
@@ -3598,7 +3623,8 @@ export async function getOpenTillItems(
   const auth = await verifySiteAdmin(siteId, accessKey)
   if (auth.error) return { status: 'error', errors: [auth.error] }
 
-  const tills = await getOpenTillItemsByEmployee(siteId)
+  const { start: dayStart } = await siteTodayBounds(siteId)
+  const tills = await getOpenTillItemsByEmployee(siteId, dayStart)
   return { status: 'ok', tills }
 }
 

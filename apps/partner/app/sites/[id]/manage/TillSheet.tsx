@@ -1,22 +1,41 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 import { getTillStatus, closeTill } from './actions'
 
 /**
  * Per-worker till sheet — the cash-handoff ritual at shift end.
  *
- * On open it reads the current worker's OPEN till (`getTillStatus`) — cash they
- * have taken at this site since their last close — and offers a two-step "Close
- * till" that snapshots the total into a `TillClose` row (`closeTill`). After a
- * close the open till reads zero (next shift counts fresh).
+ * Day-anchored (track 016): the lead number is TODAY's cash, not the raw
+ * since-last-close sweepable balance. Unclosed cash from before today (a
+ * forgotten close on a prior shift) surfaces separately as an explicit
+ * carry-over banner. A close always sweeps today + carry-over together —
+ * there is no partial close — `closeTill`'s response carries the full
+ * `today`/`carryOver` breakdown of what it just swept.
  *
  * Chrome mirrors CollectPaymentModal: bottom sheet on mobile, centered card on
  * desktop, with `dark:` variants (rendered inside the manage page's `.dark` root).
  */
 
 type Phase = 'loading' | 'ready' | 'confirming' | 'closing' | 'closed' | 'error'
+
+interface Bucket {
+  total: number
+  count: number
+}
+
+interface CarryOverBucket extends Bucket {
+  oldestAt: Date | string | null
+}
+
+const EMPTY_TODAY: Bucket = { total: 0, count: 0 }
+const EMPTY_CARRY_OVER: CarryOverBucket = { total: 0, count: 0, oldestAt: null }
+
+function formatShortDate(at: Date | string, locale: string): string {
+  const d = new Date(at)
+  return d.toLocaleDateString(locale, { day: 'numeric', month: 'short' })
+}
 
 export default function TillSheet({
   siteId,
@@ -33,9 +52,15 @@ export default function TillSheet({
   onClosed: () => void
 }) {
   const t = useTranslations('Till')
+  const locale = useLocale()
   const [phase, setPhase] = useState<Phase>('loading')
+  // Sweepable balance (today + carryOver) — what a close hands in.
   const [total, setTotal] = useState(0)
   const [count, setCount] = useState(0)
+  const [today, setToday] = useState<Bucket>(EMPTY_TODAY)
+  const [carryOver, setCarryOver] = useState<CarryOverBucket>(EMPTY_CARRY_OVER)
+  // Carry-over portion actually swept by the close (only meaningful once closed).
+  const [closedCarryOverAmount, setClosedCarryOverAmount] = useState<number | undefined>(undefined)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const startedRef = useRef(false)
 
@@ -52,6 +77,8 @@ export default function TillSheet({
       }
       setTotal(res.total ?? 0)
       setCount(res.count ?? 0)
+      setToday(res.today ?? EMPTY_TODAY)
+      setCarryOver(res.carryOver ?? EMPTY_CARRY_OVER)
       setPhase('ready')
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -67,12 +94,18 @@ export default function TillSheet({
     }
     setTotal(res.total ?? 0)
     setCount(res.count ?? 0)
+    setToday(res.today ?? EMPTY_TODAY)
+    setCarryOver(res.carryOver ?? EMPTY_CARRY_OVER)
+    setClosedCarryOverAmount(res.carryOverAmount)
     setPhase('closed')
     onClosed()
   }
 
   const totalLabel = `€${total.toFixed(2)}`
-  const isEmpty = count === 0
+  const todayLabel = `€${today.total.toFixed(2)}`
+  const carryOverLabel = `€${carryOver.total.toFixed(2)}`
+  const isEmpty = total === 0
+  const hasCarryOver = carryOver.count > 0
 
   return (
     <div
@@ -103,19 +136,45 @@ export default function TillSheet({
               <div className="mt-1 text-sm font-bold text-green-700/80 dark:text-green-400/80">
                 {t('closedBody', { total: totalLabel, count })}
               </div>
+              {!!closedCarryOverAmount && closedCarryOverAmount > 0 && (
+                <div className="mt-0.5 text-xs font-bold text-green-700/70 dark:text-green-400/70">
+                  {t('closedCarryOverNote', { amount: `€${closedCarryOverAmount.toFixed(2)}` })}
+                </div>
+              )}
             </div>
           ) : (
             <>
-              {/* Open till total */}
+              {/* Today lead */}
               <div>
-                <div className="text-sm font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">{t('openTill')}</div>
-                <div className="text-4xl font-black tabular-nums">{totalLabel}</div>
-                <div className="mt-1 text-sm font-bold text-gray-500 dark:text-gray-400">{t('salesCount', { count })}</div>
+                <div className="text-sm font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">{t('today')}</div>
+                <div className="text-4xl font-black tabular-nums">{todayLabel}</div>
+                <div className="mt-1 text-sm font-bold text-gray-500 dark:text-gray-400">
+                  {t('todaySalesCount', { count: today.count })}
+                </div>
               </div>
+
+              {/* Carry-over banner — uncounted cash from before today */}
+              {hasCarryOver && (
+                <div
+                  role="status"
+                  className="py-3 px-4 rounded-2xl border-2 border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800/40 text-amber-800 dark:text-amber-300 font-bold text-sm"
+                >
+                  {t('carryOverBanner', {
+                    date: carryOver.oldestAt ? formatShortDate(carryOver.oldestAt, locale) : '',
+                    amount: carryOverLabel,
+                    count: carryOver.count,
+                  })}
+                </div>
+              )}
 
               {phase === 'confirming' && !isEmpty && (
                 <div className="py-4 px-4 rounded-2xl border-2 border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800/40 text-amber-800 dark:text-amber-300 font-bold">
-                  {t('confirmBody', { total: totalLabel })}
+                  <div>{t('confirmBody', { total: totalLabel })}</div>
+                  {hasCarryOver && (
+                    <div className="mt-1.5 text-xs font-semibold text-amber-700/90 dark:text-amber-300/90">
+                      {t('confirmBreakdown', { today: todayLabel, carryOver: carryOverLabel, total: totalLabel })}
+                    </div>
+                  )}
                 </div>
               )}
 

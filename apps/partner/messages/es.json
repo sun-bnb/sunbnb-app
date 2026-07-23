@@ -843,18 +843,22 @@
     "errorGeneric": "Algo salió mal.",
     "totalCash": "Total efectivo",
     "totalSales": "ventas",
+    "todayLine": "Hoy, {date}",
     "breakdownHeading": "Desglose por empleado",
     "employeeSalesCount": "{count} ventas en efectivo",
     "inactive": "(inactivo)",
     "noData": "No se registró efectivo para hoy.",
     "whatCloseDoes": "Confirmar cerrará {count, plural, one {# caja abierta} other {# cajas abiertas}}.",
+    "carryOverPortion": "{amount} de eso viene arrastrado de días anteriores.",
     "confirmClose": "Confirmar cierre",
     "confirmQuestion": "¿Cerrar todas las cajas abiertas?",
     "confirmButton": "Confirmar",
     "cancel": "Cancelar",
     "closing": "Cerrando…",
     "successTitle": "Día cerrado",
-    "successTills": "{count, plural, one {# caja cerrada} other {# cajas cerradas}} · {total}"
+    "successAmount": "{total} contabilizados",
+    "successTills": "{count, plural, one {# caja cerrada} other {# cajas cerradas}}",
+    "successCarryOverNote": "({amount} de días anteriores)"
   },
   "BedDetail": {
     "collectPayment": "Cobrar",
@@ -940,6 +944,11 @@
   "Till": {
     "title": "Caja de {name}",
     "openTill": "Caja abierta",
+    "today": "Hoy",
+    "todaySalesCount": "{count} ventas en efectivo hoy",
+    "carryOverBanner": "Efectivo sin contar desde {date}: {amount} ({count} ventas) — se incluye al cerrar",
+    "confirmBreakdown": "{today} de hoy + {carryOver} arrastrado = {total}",
+    "closedCarryOverNote": "({amount} de días anteriores)",
     "salesCount": "{count} ventas en efectivo este turno",
     "closeTill": "Cerrar caja",
     "confirmBody": "¿Entregar {total} y empezar una caja nueva?",
@@ -979,6 +988,7 @@
     "inactive": "(inactivo)",
     "backToMenu": "Menú",
     "totalCash": "Total efectivo",
+    "totalCashToday": "Efectivo de hoy",
     "totalSales": "ventas",
     "totalEarnings": "Ingresos totales",
     "totalSunbeds": "Hamacas",
@@ -988,7 +998,12 @@
     "noShiftItems": "Sin hamacas registradas",
     "adminRequired": "Acceso de administrador requerido",
     "adminRequiredMessage": "Esta página solo es accesible con un token de administrador.",
-    "rentalTag": "Alquiler"
+    "rentalTag": "Alquiler",
+    "carryOverGrandLine": "+ {amount} arrastrados de días anteriores",
+    "carryOverChip": "+ {amount} desde {date}",
+    "carryOverTag": "Arrastrado",
+    "stillUncounted": "Aún sin contar: {amount}",
+    "handedInToday": "Entregado hoy: {amount}"
   },
   "Guests": {
     "title": "Clientes",

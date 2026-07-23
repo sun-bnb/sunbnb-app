@@ -150,7 +150,7 @@ describe('getOpenTills', () => {
 
     expect(res.status).toBe('ok')
     expect(res.tills).toEqual(tills)
-    expect(mockGetOpenTillsByEmployee).toHaveBeenCalledWith(SITE_ID)
+    expect(mockGetOpenTillsByEmployee).toHaveBeenCalledWith(SITE_ID, expect.any(Date))
   })
 
   it('returns empty array when no employees have open tills', async () => {
@@ -161,6 +161,21 @@ describe('getOpenTills', () => {
 
     expect(res.status).toBe('ok')
     expect(res.tills).toEqual([])
+  })
+
+  it('forwards a site-derived dayStart (venue-local start of today) — track 016', async () => {
+    authenticateAsOwner()
+    // Site is in Madrid (UTC+2 in summer) — dayStart must be a real Date, not
+    // the server's own local midnight, proving the action derives it from the
+    // site's timezone rather than skipping the day-anchoring entirely.
+    await getOpenTills(SITE_ID)
+
+    expect(mockGetOpenTillsByEmployee).toHaveBeenCalledTimes(1)
+    const [calledSiteId, dayStart] = mockGetOpenTillsByEmployee.mock.calls[0]!
+    expect(calledSiteId).toBe(SITE_ID)
+    expect(dayStart).toBeInstanceOf(Date)
+    // dayStart must be at-or-before "now" (it's the start of the current venue day).
+    expect((dayStart as Date).getTime()).toBeLessThanOrEqual(Date.now())
   })
 })
 
