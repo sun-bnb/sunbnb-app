@@ -12,13 +12,92 @@ import type { DineContext, TabState, PlaceTabOrderItem } from './actions'
 
 const MAX_ITEM_QTY = 99
 const ANON_ID_KEY = 'sunbnb-anonId'
-const TAB_POLL_INTERVAL_MS = 30_000
+const TAB_POLL_INTERVAL_MS = 5_000
 const RETURN_POLL_INTERVAL_MS = 3_000
 const RETURN_POLL_MAX_ATTEMPTS = 40
 
 const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
 
 const CATEGORY_ORDER = ['food', 'drink', 'snack', 'accessory'] as const
+
+// ── Adaptive tab-poll scheduler ─────────────────────────────────────────────
+// Extracted as a pure, injectable function (rather than inlined in the effect)
+// so it can be unit-tested without a DOM/render environment. Behavior:
+//  - polls fetchTab on a fixed cadence (intervalMs) while the page is visible
+//  - pauses entirely while hidden — no timers fire in the background
+//  - the instant visibility returns, refetches immediately, then resumes
+//    the cadence from zero
+// Uses the ambient DOM lib's own method signatures (via Pick) rather than a
+// hand-rolled interface, so a stub implementation only needs these three
+// members — no jsdom required.
+export type PollDocument = Pick<
+  Document,
+  'visibilityState' | 'addEventListener' | 'removeEventListener'
+>
+
+export function createTabPoller({
+  fetchTab,
+  intervalMs = TAB_POLL_INTERVAL_MS,
+  doc,
+}: {
+  fetchTab: () => Promise<void>
+  intervalMs?: number
+  doc?: PollDocument
+}) {
+  const resolvedDoc: PollDocument | undefined =
+    doc ?? (typeof document !== 'undefined' ? (document as unknown as PollDocument) : undefined)
+
+  let timer: ReturnType<typeof setTimeout> | null = null
+  let cancelled = false
+
+  const clearPoll = () => {
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
+  }
+
+  const isHidden = () => resolvedDoc !== undefined && resolvedDoc.visibilityState === 'hidden'
+
+  // Schedules the next poll intervalMs out, but only while visible — a
+  // hidden page schedules nothing.
+  const schedule = () => {
+    clearPoll()
+    if (isHidden()) return
+    timer = setTimeout(async () => {
+      if (cancelled) return
+      await fetchTab()
+      schedule()
+    }, intervalMs)
+  }
+
+  const handleVisibilityChange = () => {
+    if (isHidden()) {
+      // Backgrounded — pause. Nothing is scheduled until visibility returns.
+      clearPoll()
+      return
+    }
+    // Foregrounded — refetch immediately, then resume the cadence.
+    clearPoll()
+    void fetchTab().then(() => {
+      if (!cancelled) schedule()
+    })
+  }
+
+  const start = () => {
+    void fetchTab()
+    schedule()
+    resolvedDoc?.addEventListener('visibilitychange', handleVisibilityChange)
+  }
+
+  const stop = () => {
+    cancelled = true
+    clearPoll()
+    resolvedDoc?.removeEventListener('visibilitychange', handleVisibilityChange)
+  }
+
+  return { start, stop }
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -176,7 +255,6 @@ export default function DineView({
   // ── Tab state (polling) ───────────────────────────────────────────────────
   const [tab, setTab] = useState<TabState | null>(null)
   const [tabLoading, setTabLoading] = useState(true)
-  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Capture the pre-payment totals so we can display them on the paid screen
   const [prePaidTotal, setPrePaidTotal] = useState<number | undefined>(undefined)
@@ -189,19 +267,15 @@ export default function DineView({
     setTabLoading(false)
   }, [context.site.id, context.table.id])
 
-  // Initial fetch + 30 s polling (suspended during verifying/paid phases)
+  // Adaptive polling: 5 s cadence while the tab is visible, paused while
+  // backgrounded, and an immediate refetch the moment it becomes visible
+  // again (companion phones at a table background/foreground constantly —
+  // that immediate refetch is the biggest perceived-liveness win). See
+  // createTabPoller above for the (independently unit-tested) scheduler.
   useEffect(() => {
-    void fetchTab()
-    const schedule = () => {
-      pollTimerRef.current = setTimeout(async () => {
-        await fetchTab()
-        schedule()
-      }, TAB_POLL_INTERVAL_MS)
-    }
-    schedule()
-    return () => {
-      if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
-    }
+    const poller = createTabPoller({ fetchTab })
+    poller.start()
+    return () => poller.stop()
   }, [fetchTab])
 
   // Guard: if the tab:null comes from the server poll after tab is closed (getTabState
@@ -217,7 +291,7 @@ export default function DineView({
     }
   }, [tab, uiState.phase])
 
-  // When the 30s poll sees pending_payment on a companion phone and the tab later
+  // When the poll sees pending_payment on a companion phone and the tab later
   // transitions to paid/closed (getTabState returns null), flip to paid state.
   const prevTabStatusRef = useRef<string | undefined>(undefined)
   useEffect(() => {
@@ -379,7 +453,7 @@ export default function DineView({
       const result = await initiateDemoTabPayment(tab.id)
       if (result.status === 'ok') {
         setUiState({ phase: 'paid', paidTotal: prePaidTotal })
-        // Tab is now closed; the 30s getTabState poll will return null — that's expected.
+        // Tab is now closed; the getTabState poll will return null — that's expected.
       } else {
         const msg = result.errors?.[0] ?? t('paymentFailed')
         setErrorMsg(msg)

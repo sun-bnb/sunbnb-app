@@ -11,7 +11,7 @@ sections.
 
 - **Payment flow** — Stripe / Mollie / demo issues — _none yet_
 - **Anonymous (anonId) flow** — POS/QR ownership, localStorage — `anonId` must be a valid UUID v4 in tests (2026-03-17)
-- **Webhook & polling** — webhook failures, polling races, reconciliation — tab payment revert asymmetry (2026-07-19)
+- **Webhook & polling** — webhook failures, polling races, reconciliation — tab payment revert asymmetry (2026-07-19); adaptive dine-in tab polling, testing timers with no jsdom (2026-07-23)
 - **Test failures & fixes** — mock/fixture gotchas — `rentalBooking.findUnique` missing from mock (2026-06-19)
 - **i18n & locale** — next-intl edge cases — _none yet_
 - **Sunbed preselection / reserve-first flow** — pair resolution, dispatch loop, single-day default — (2026-07-09)
@@ -59,6 +59,16 @@ sections.
 **Problem:** The webhook `handlePaymentFailed` for `tab` type uses `data: { status: 'open', paymentRef: null }` — not the `TAB_OPEN` constant — because the constant isn't imported in the test fixture but the string `'open'` IS what Prisma stores (it equals `TAB_OPEN`). Using the constant import is cleaner but the string literal is what test assertions compare against.
 **Solution:** In production code use `TAB_OPEN` constant (imported). In test assertions, compare against `'open'` string literal (or the constant if imported). The guarded `where: { status: TAB_PENDING_PAYMENT }` is the critical safety constraint preventing a late failure from reopening a paid tab.
 **Prevention:** When writing tests for revert logic, assert the EXACT where-clause guard: `{ id: tabId, status: 'pending_payment' }`. If the guard is missing, a paid tab could be reopened by a replayed webhook.
+
+### 2026-07-23: Extract timer/scheduling logic to a pure exported function when there's no jsdom
+**Problem:** `apps/user` has NO jsdom/testing-library (confirmed via `package.json` devDependencies and `vitest.config.ts` — no `environment: 'jsdom'`, default is `node`). A client component's `useEffect` polling logic (e.g. `DineView`'s tab poll) can never be exercised by rendering — existing tests in this file only replicate logic inline (parallel copies), which is weak (doesn't catch drift between the copy and the real implementation).
+**Solution:** For `view.tsx`'s adaptive poll (5s cadence while visible, paused hidden, immediate refetch on visibility return), extracted the whole scheduler into a standalone exported pure function `createTabPoller({ fetchTab, intervalMs, doc })` returning `{ start, stop }` — no React, no refs, just closures + `setTimeout`/`visibilitychange`. The `useEffect` shrinks to `const poller = createTabPoller({ fetchTab }); poller.start(); return () => poller.stop()`. The test file imports `createTabPoller` directly from `./view` and drives it with `vi.useFakeTimers()` + a hand-rolled `EventTarget`-like stub object (a `Set` of listeners + a `setVisibility()` helper that invokes them synchronously) — no need for a real DOM `document`.
+**Prevention:** When a client-component effect has non-trivial scheduling/timer logic you need to unit-test bug-revealingly, extract it to a plain exported function taking its dependencies (including `document`) as injectable params, rather than writing a parallel "replica" test that only proves the test author's own understanding, not the shipped code. This works within a single-file scope boundary too — the extracted function doesn't need to move to a new file, just needs a named export.
+
+### 2026-07-23: TS interface method params trigger apps/user's no-unused-vars in TYPE position — Pick<> sidesteps it
+**Problem:** Declaring `interface Foo { addEventListener(type: 'x', listener: () => void): void }` in `apps/user` (which uses the plain `no-unused-vars` from `eslint:recommended` via `packages/eslint-config/next.js`, NOT `@typescript-eslint/no-unused-vars`) flags `type`/`listener` as unused — even prefixing with `_` (the usual escape hatch) does NOT suppress it, because the ignore pattern only applies inside function *implementations*, not type-only declarations. `packages/eslint-config/react-internal.js` documents this exact bug ("The base no-unused-vars misreports parameter names in TYPE positions") and disables the rule in favor of the TS-aware one — but `next.js` (what apps/user extends) does not.
+**Solution:** Don't hand-write the interface. Reference the ambient lib type instead: `export type PollDocument = Pick<Document, 'visibilityState' | 'addEventListener' | 'removeEventListener'>`. No new parameter names are declared in your source, so there's nothing for the misfiring rule to flag, and a plain stub object (contextually typed against the `Pick`) still satisfies it.
+**Prevention:** In apps/user (and any package still on the plain `next.js` eslint config, not `react-internal.js`), avoid hand-rolled interfaces for small subsets of a DOM/lib type — use `Pick<>`/`Omit<>` against the real lib type instead. Check `npm run lint` on the specific file before assuming underscore-prefixing param names fixes a type-position warning.
 
 ## Cron route patterns
 

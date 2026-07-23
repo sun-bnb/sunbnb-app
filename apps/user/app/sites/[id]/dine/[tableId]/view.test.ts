@@ -15,9 +15,11 @@
  *  6. Demo pay call contract (initiateDemoTabPayment called with tab id; ok → paid)
  *  7. Mollie pay call contract (correct POST body incl. redirectUrl shape)
  *  8. Return-poll resolution mapping (paid → paid, open → failed banner, pending → continue, 404/discarded → closed)
- *  9. Paid-state guard vs tab:null poll
+ *  9. Adaptive tab-poll scheduler (createTabPoller): 5s cadence while visible, paused while
+ *     hidden, immediate refetch + cadence resume on visibility return
+ * 10. Paid-state guard vs tab:null poll
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('./actions', () => ({
   getDineContext: vi.fn(),
@@ -37,6 +39,7 @@ vi.mock('@/app/payment/actions', () => ({
 
 import { placeTabOrder, getTabState } from './actions'
 import { initiateDemoTabPayment } from '@/app/payment/actions'
+import { createTabPoller, type PollDocument } from './view'
 import type { DineContext, TabState } from './actions'
 
 const mockPlaceTabOrder = vi.mocked(placeTabOrder)
@@ -485,7 +488,135 @@ describe('tabReturn poll resolution', () => {
   })
 })
 
-// ─── 9. Paid-state guard vs tab:null poll ─────────────────────────────────────
+// ─── 9. Adaptive tab-poll scheduler (createTabPoller) ─────────────────────────
+
+describe('createTabPoller — adaptive polling', () => {
+  // Minimal EventTarget-like stub so we control visibilitychange dispatch
+  // without needing a DOM/jsdom environment.
+  function makeStubDocument(initial: 'visible' | 'hidden'): PollDocument & {
+    setVisibility: (state: 'visible' | 'hidden') => void
+  } {
+    let visibilityState: string = initial
+    const listeners = new Set<() => void>()
+    return {
+      get visibilityState() {
+        return visibilityState
+      },
+      addEventListener(_type, listener) {
+        listeners.add(listener)
+      },
+      removeEventListener(_type, listener) {
+        listeners.delete(listener)
+      },
+      setVisibility(state) {
+        visibilityState = state
+        for (const l of listeners) l()
+      },
+    }
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('polls on a 5s cadence while visible', async () => {
+    const doc = makeStubDocument('visible')
+    const fetchTab = vi.fn().mockResolvedValue(undefined)
+    const poller = createTabPoller({ fetchTab, intervalMs: 5_000, doc })
+
+    poller.start()
+    expect(fetchTab).toHaveBeenCalledTimes(1) // immediate fetch on start
+
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(fetchTab).toHaveBeenCalledTimes(2)
+
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(fetchTab).toHaveBeenCalledTimes(3)
+
+    poller.stop()
+  })
+
+  it('does not fire any scheduled poll while hidden', async () => {
+    const doc = makeStubDocument('hidden')
+    const fetchTab = vi.fn().mockResolvedValue(undefined)
+    const poller = createTabPoller({ fetchTab, intervalMs: 5_000, doc })
+
+    poller.start()
+    expect(fetchTab).toHaveBeenCalledTimes(1) // start() always fetches once
+
+    await vi.advanceTimersByTimeAsync(60_000)
+    // No further calls — nothing was scheduled because the page was hidden.
+    expect(fetchTab).toHaveBeenCalledTimes(1)
+
+    poller.stop()
+  })
+
+  it('pauses an in-flight cadence the moment the page backgrounds', async () => {
+    const doc = makeStubDocument('visible')
+    const fetchTab = vi.fn().mockResolvedValue(undefined)
+    const poller = createTabPoller({ fetchTab, intervalMs: 5_000, doc })
+
+    poller.start()
+    expect(fetchTab).toHaveBeenCalledTimes(1)
+
+    doc.setVisibility('hidden')
+    await vi.advanceTimersByTimeAsync(60_000)
+    // Backgrounding must not itself trigger a fetch, and no timer fires hidden.
+    expect(fetchTab).toHaveBeenCalledTimes(1)
+
+    poller.stop()
+  })
+
+  it('refetches immediately on becoming visible again, then resumes the 5s cadence', async () => {
+    const doc = makeStubDocument('hidden')
+    const fetchTab = vi.fn().mockResolvedValue(undefined)
+    const poller = createTabPoller({ fetchTab, intervalMs: 5_000, doc })
+
+    poller.start()
+    expect(fetchTab).toHaveBeenCalledTimes(1) // start() fetch (independent of visibility)
+
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(fetchTab).toHaveBeenCalledTimes(1) // still just the initial — hidden the whole time
+
+    // Foreground the tab — should trigger an immediate refetch.
+    await doc.setVisibility('visible')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchTab).toHaveBeenCalledTimes(2)
+
+    // Cadence resumes from zero at 5s intervals after becoming visible.
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(fetchTab).toHaveBeenCalledTimes(3)
+
+    poller.stop()
+  })
+
+  it('stop() clears any pending timer and removes the visibilitychange listener', async () => {
+    const doc = makeStubDocument('visible')
+    const fetchTab = vi.fn().mockResolvedValue(undefined)
+    const poller = createTabPoller({ fetchTab, intervalMs: 5_000, doc })
+
+    poller.start()
+    expect(fetchTab).toHaveBeenCalledTimes(1)
+
+    poller.stop()
+
+    await vi.advanceTimersByTimeAsync(60_000)
+    // No further poll fires after stop.
+    expect(fetchTab).toHaveBeenCalledTimes(1)
+
+    // A subsequent visibility flip must not resurrect polling either.
+    doc.setVisibility('hidden')
+    doc.setVisibility('visible')
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(fetchTab).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ─── 10. Paid-state guard vs tab:null poll ────────────────────────────────────
 
 describe('paid state guard', () => {
   it('tab returning null after paid does NOT clobber paid state', () => {
