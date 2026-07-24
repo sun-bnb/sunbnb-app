@@ -833,7 +833,7 @@ export default function AccountingView() {
                             className="flex items-center justify-between px-3 py-2"
                           >
                             <div className="flex-1 min-w-0">
-                              <div className="text-xs text-gray-700 truncate">
+                              <div className="text-xs text-gray-700 break-words">
                                 {item.seats.length > 0 ? item.seats.join(', ') : '—'}
                               </div>
                               <div className="text-[11px] text-gray-400 mt-0.5">

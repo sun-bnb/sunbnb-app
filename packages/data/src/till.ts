@@ -295,6 +295,8 @@ export interface OpenTillItem {
   id: string
   kind: 'sunbed' | 'rental'
   label: string
+  /** Number of sunbeds on the settled reservation (0 for rental entries). */
+  seats: number
   amount: number
   at: Date
   /** True when this entry settled at-or-before dayStart (carried over from a prior day). */
@@ -373,6 +375,7 @@ export async function getOpenTillItemsByEmployee(siteId: string, dayStart: Date)
             id: en.id,
             kind: 'sunbed',
             label: seats.join(', '),
+            seats: seats.length,
             amount: round(en.amount),
             at: en.settledAt,
             carryOver,
@@ -382,6 +385,7 @@ export async function getOpenTillItemsByEmployee(siteId: string, dayStart: Date)
           id: en.id,
           kind: 'rental',
           label: en.rentalBooking?.rentalItem?.name ?? '',
+          seats: 0,
           amount: round(en.amount),
           at: en.settledAt,
           carryOver,

@@ -255,7 +255,8 @@ export default function DailySummaryView({
     : shifts.reduce((sum, s) => sum + s.total, 0)
   const grandCount = mode === 'open'
     ? dayReport.reduce((sum, d) => sum + d.count, 0)
-    : shifts.reduce((sum, s) => sum + s.count, 0)
+    // Day-mode header is labeled SUNBEDS — count actual seats, not sales rows.
+    : shifts.reduce((sum, s) => sum + s.items.reduce((n, i) => n + i.seats.length, 0), 0)
   // Reconciliation breakdown under the header (open mode only):
   //   - uncountedTotal: cash taken today still sitting on an open till
   //     (not yet swept by a close) — sum of tills' `today.total`.
@@ -459,6 +460,8 @@ export default function DailySummaryView({
               // Today's figure leads the row; carryOver surfaces as its own chip.
               const todayLabel = `€${till.today.total.toFixed(2)}`
               const hasCarryOver = till.carryOver.count > 0
+              // Sunbeds rung up today (rental entries carry seats: 0).
+              const todaySeats = till.items.reduce((s, i) => s + (i.carryOver ? 0 : i.seats), 0)
 
               return (
                 <div
@@ -487,7 +490,7 @@ export default function DailySummaryView({
                       {cs.phase !== 'closed' ? (
                         <>
                           <div className="text-sm font-bold text-gray-500 dark:text-gray-400 mt-0.5">
-                            {t('employeeSalesCount', { count: till.today.count })}
+                            {t('employeeSalesCount', { count: till.today.count, seats: todaySeats })}
                           </div>
                           {hasCarryOver && (
                             <span className="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold border bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/30 dark:border-amber-800/40 dark:text-amber-400">
@@ -531,15 +534,15 @@ export default function DailySummaryView({
                             className="flex items-center justify-between gap-2 px-3 py-2"
                           >
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-start gap-1.5">
                                 {item.carryOver && (
                                   <span
-                                    className="w-1.5 h-1.5 rounded-full bg-amber-400 dark:bg-amber-500 flex-shrink-0"
+                                    className="w-1.5 h-1.5 mt-1.5 rounded-full bg-amber-400 dark:bg-amber-500 flex-shrink-0"
                                     aria-hidden="true"
                                     title={t('carryOverTag')}
                                   />
                                 )}
-                                <div className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate">
+                                <div className="min-w-0 text-sm font-bold text-gray-800 dark:text-gray-200 break-words">
                                   {item.label}
                                 </div>
                               </div>
@@ -641,7 +644,10 @@ export default function DailySummaryView({
                         )}
                       </div>
                       <div className="text-sm font-bold text-gray-500 dark:text-gray-400 mt-0.5">
-                        {t('employeeSunbedCount', { count: shift.count })}
+                        {t('employeeSalesCount', {
+                          count: shift.count,
+                          seats: shift.items.reduce((s, i) => s + i.seats.length, 0),
+                        })}
                       </div>
                     </div>
                     <div className="flex items-center gap-3 flex-shrink-0">
@@ -693,7 +699,7 @@ export default function DailySummaryView({
                                 className="flex items-center justify-between gap-3 px-4 py-2.5"
                               >
                                 <div className="min-w-0 flex-1">
-                                  <div className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate">
+                                  <div className="text-sm font-bold text-gray-800 dark:text-gray-200 break-words">
                                     {seatLabel}
                                   </div>
                                   <div className="text-xs font-semibold text-gray-400 dark:text-gray-500 mt-0.5">
