@@ -88,6 +88,10 @@ import {
 } from '@/app/restaurants/[id]/orders/actions'
 
 import {
+  getRestaurantTabInvoicesByMonth,
+} from '@/app/restaurants/[id]/accounting/actions'
+
+import {
   deleteSite,
   setPaymentProvider,
   saveGeneral,
@@ -1446,5 +1450,19 @@ export const GATED_ACTIONS: GatedAction[] = [
     gate: 'restaurant-owner',
     invoke: (_accessKey?) =>
       saveRestaurantCanvasDimensions(RESTAURANT_ID, 20, 15),
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // restaurant-owner: restaurants/[id]/accounting/actions.ts (dine-in v2 Phase 6)
+  // Session-only (no token path) — requireRestaurantOwnerWithFlag, same gate
+  // class as every other restaurant-settings action above.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  {
+    name: 'restaurant-accounting.getRestaurantTabInvoicesByMonth',
+    kind: 'action',
+    gate: 'restaurant-owner',
+    invoke: (_accessKey?) =>
+      getRestaurantTabInvoicesByMonth(RESTAURANT_ID, 1, 2026),
   },
 ]

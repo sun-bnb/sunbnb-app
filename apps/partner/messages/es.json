@@ -210,6 +210,8 @@
     "fieldPublicOnStandaloneAppHint": "Muestra este restaurante en la búsqueda pública de tablefind.app. Siempre visible en Sunbnb.",
     "fieldGuestSelectionEnabled": "Permitir que los clientes elijan su mesa",
     "fieldGuestSelectionEnabledHint": "Muestra un plano para que los clientes elijan una mesa concreta. Solo las mesas marcadas como «seleccionables» serán elegibles — limítalo a sitios premium o con vistas.",
+    "fieldDineInEnabled": "Pedidos por QR en mesa",
+    "fieldDineInEnabledHint": "Permite a los clientes pedir y pagar desde el código QR de la mesa.",
     "daySun": "Domingo",
     "dayMon": "Lunes",
     "dayTue": "Martes",
@@ -221,6 +223,7 @@
     "subNavTables": "Mesas",
     "subNavMenu": "Carta",
     "subNavReservations": "Reservas",
+    "subNavAccounting": "Contabilidad",
     "reservationsRequireEnable": "Activa las reservas de mesa desde la pestaña General.",
     "resDateLabel": "Fecha",
     "resFilterAll": "Todas",
@@ -394,6 +397,11 @@
     "embedCopy": "Copiar código",
     "embedCopied": "¡Copiado!",
     "printDineInQr": "Imprimir códigos QR de mesa"
+  },
+  "RestaurantAccounting": {
+    "title": "Contabilidad",
+    "hint": "Facturas de cuentas de mesa del mes seleccionado.",
+    "empty": "No hay facturas de cuentas de mesa este mes."
   },
   "SiteSchematic": {
     "layoutWidth": "Ancho",

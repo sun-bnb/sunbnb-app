@@ -77,6 +77,7 @@ export default function RestaurantView({ restaurantId }: { restaurantId: string 
     cancellationDeadlineHours: restaurant.cancellationDeadlineHours,
     publicOnStandaloneApp: restaurant.publicOnStandaloneApp,
     guestSelectionEnabled: restaurant.guestSelectionEnabled,
+    dineInEnabled: restaurant.dineInEnabled,
   }
 
   const initialHours: RestaurantHoursInput[] = restaurant.workingHours.map((h) => ({
@@ -135,6 +136,8 @@ export default function RestaurantView({ restaurantId }: { restaurantId: string 
             publicOnStandaloneAppHint: t('fieldPublicOnStandaloneAppHint'),
             guestSelectionEnabled: t('fieldGuestSelectionEnabled'),
             guestSelectionEnabledHint: t('fieldGuestSelectionEnabledHint'),
+            dineInEnabled: t('fieldDineInEnabled'),
+            dineInEnabledHint: t('fieldDineInEnabledHint'),
           }}
           onSaveStatusChange={trackSave}
           onSave={async (patch) => {

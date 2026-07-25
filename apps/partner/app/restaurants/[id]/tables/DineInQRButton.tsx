@@ -11,8 +11,6 @@ export interface TableQREntry {
 }
 
 interface Props {
-  /** The Site.id that owns the restaurant — used to build /sites/<siteId>/dine/<tableId>. */
-  siteId: string
   /** Base URL of the consumer-facing app (e.g. https://sunbnb.app or CONSUMER_APP_URL). */
   consumerAppUrl: string
   /** Active tables to print. Caller is responsible for filtering by status. */
@@ -22,12 +20,14 @@ interface Props {
 
 /**
  * Generates a PDF of per-table QR codes for the dine-in tab flow.
- * Each card links to /sites/<siteId>/dine/<tableId> on the consumer app.
+ * Each card links to /tables/<tableId> on the consumer app — the canonical
+ * dine-in v2 route (table id is globally unique, no siteId needed; works for
+ * both standalone and site-linked restaurants).
  *
  * Lives in apps/partner ONLY — the URL is Sunbnb-specific wiring; do not
  * move to @repo/table-reservations-ui.
  */
-export default function DineInQRButton({ siteId, consumerAppUrl, tables, label }: Props) {
+export default function DineInQRButton({ consumerAppUrl, tables, label }: Props) {
   const [busy, setBusy] = useState(false)
 
   const handlePrint = async () => {
@@ -37,7 +37,7 @@ export default function DineInQRButton({ siteId, consumerAppUrl, tables, label }
       // Generate QR data-URLs for every table
       const qrDataUrls = await Promise.all(
         tables.map((table) => {
-          const url = `${consumerAppUrl}/sites/${siteId}/dine/${table.id}`
+          const url = `${consumerAppUrl}/tables/${table.id}`
           return QRCode.toDataURL(url, { margin: 1, width: 300 })
         }),
       )

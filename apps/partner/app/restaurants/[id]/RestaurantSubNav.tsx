@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 
-export type RestaurantSubTab = 'general' | 'tables' | 'menu' | 'reservations'
+export type RestaurantSubTab = 'general' | 'tables' | 'menu' | 'reservations' | 'accounting'
 
 export function RestaurantSubNav({
   restaurantId,
@@ -17,13 +17,15 @@ export function RestaurantSubNav({
 
   // Order mirrors the site-management tabs (General → Inventory → Products → …)
   // so the menu structure logic is consistent across corresponding sections:
-  // General ↔ site General, Tables ↔ Inventory, Menu ↔ Products. Reservations
-  // has no site-tab analog (site puts live ops in separate routes), so it trails.
+  // General ↔ site General, Tables ↔ Inventory, Menu ↔ Products, Accounting ↔
+  // site Accounting. Reservations has no site-tab analog (site puts live ops
+  // in separate routes), so it trails; Accounting comes last (mirrors site tab order).
   const tabs: Array<{ key: RestaurantSubTab; label: string; href: string }> = [
     { key: 'general', label: t('subNavGeneral'), href: `/restaurants/${restaurantId}` },
     { key: 'tables', label: t('subNavTables'), href: `/restaurants/${restaurantId}/tables` },
     { key: 'menu', label: t('subNavMenu'), href: `/restaurants/${restaurantId}/menu` },
     { key: 'reservations', label: t('subNavReservations'), href: `/restaurants/${restaurantId}/reservations` },
+    { key: 'accounting', label: t('subNavAccounting'), href: `/restaurants/${restaurantId}/accounting` },
   ]
 
   return (

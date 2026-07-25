@@ -1,4 +1,4 @@
-import { getRestaurant, getTablesList } from '../queries'
+import { getTablesList } from '../queries'
 import TablesView from './view'
 
 export default async function TablesPage({
@@ -6,14 +6,11 @@ export default async function TablesPage({
 }: {
   params: { id: string }
 }) {
-  // Load restaurant to get siteId (needed for dine-in QR URLs).
-  // getRestaurant is ownership-checked; returns null if unauth or wrong owner.
-  const restaurant = await getRestaurant(params.id)
-  const siteId = restaurant?.siteId ?? null
-
-  // Only fetch tables for QR if this restaurant has a linked site (dine-in tabs
-  // require the Site/Product rails; standalone restaurants can't use them).
-  const activeTables = siteId ? await getTablesList(params.id) : []
+  // Dine-in v2: /tables/<tableId> is table-id-keyed only (no siteId needed),
+  // so active tables are fetched unconditionally — standalone restaurants can
+  // print QR codes the same as site-linked ones. getTablesList is
+  // ownership-checked (returns [] on auth failure).
+  const activeTables = await getTablesList(params.id)
 
   // CONSUMER_APP_URL is server-side only (no NEXT_PUBLIC_ prefix). We resolve it
   // here on the server and pass it down as a plain string prop so the client QR
@@ -25,7 +22,6 @@ export default async function TablesPage({
     <div className="container mx-auto max-w-[768px]">
       <TablesView
         restaurantId={params.id}
-        siteId={siteId}
         consumerAppUrl={consumerAppUrl}
         activeTables={activeTables}
       />

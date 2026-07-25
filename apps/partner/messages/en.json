@@ -210,6 +210,8 @@
     "fieldPublicOnStandaloneAppHint": "Show this restaurant on tablefind.app's public search. Always visible on Sunbnb.",
     "fieldGuestSelectionEnabled": "Let guests pick their table",
     "fieldGuestSelectionEnabledHint": "Show a floor map so guests choose an exact table. Only tables you mark \"guest-selectable\" become pickable — keep it to premium/view spots.",
+    "fieldDineInEnabled": "QR dine-in ordering",
+    "fieldDineInEnabledHint": "Let guests order and pay from the table QR code.",
     "daySun": "Sunday",
     "dayMon": "Monday",
     "dayTue": "Tuesday",
@@ -221,6 +223,7 @@
     "subNavTables": "Tables",
     "subNavMenu": "Menu",
     "subNavReservations": "Reservations",
+    "subNavAccounting": "Accounting",
     "reservationsRequireEnable": "Enable table reservations from the General tab first.",
     "resDateLabel": "Date",
     "resFilterAll": "All",
@@ -394,6 +397,11 @@
     "embedCopy": "Copy code",
     "embedCopied": "Copied!",
     "printDineInQr": "Print table QR codes"
+  },
+  "RestaurantAccounting": {
+    "title": "Accounting",
+    "hint": "Dine-in tab invoices for the selected month.",
+    "empty": "No dine-in tab invoices for this month."
   },
   "SiteSchematic": {
     "layoutWidth": "Width",

@@ -131,6 +131,7 @@ export async function createRestaurant(
       layoutHeight: input.layoutHeight ?? null,
       publicOnStandaloneApp: input.publicOnStandaloneApp ?? true,
       guestSelectionEnabled: input.guestSelectionEnabled ?? false,
+      dineInEnabled: input.dineInEnabled ?? false,
     },
     select: { id: true },
   })
@@ -178,6 +179,7 @@ export async function updateRestaurant(
   if (input.layoutHeight !== undefined) data.layoutHeight = input.layoutHeight
   if (input.publicOnStandaloneApp !== undefined) data.publicOnStandaloneApp = input.publicOnStandaloneApp
   if (input.guestSelectionEnabled !== undefined) data.guestSelectionEnabled = input.guestSelectionEnabled
+  if (input.dineInEnabled !== undefined) data.dineInEnabled = input.dineInEnabled
 
   await prisma.restaurant.update({ where: { id: restaurantId }, data })
   const restaurant = await getRestaurantById(restaurantId)

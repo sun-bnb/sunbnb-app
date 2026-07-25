@@ -85,6 +85,7 @@ const RESTAURANT_RECORD = {
   layoutHeight: 15,
   publicOnStandaloneApp: true,
   guestSelectionEnabled: true,
+  dineInEnabled: true,
   partnerAccountId: OWNER_ID,
   siteId: 'site-1',
   workingHours: [
@@ -160,6 +161,8 @@ describe('getRestaurant', () => {
     expect(result!.cuisineType).toBe('seafood')
     expect(result!.timeZone).toBe('Europe/Madrid')
     expect(result!.siteId).toBe('site-1')
+    // dineInEnabled (dine-in v2 Phase 6) must pass through from the core record
+    expect(result!.dineInEnabled).toBe(true)
     // partnerAccountId must NOT be exposed in the RestaurantDetail
     expect(result).not.toHaveProperty('partnerAccountId')
     // workingHour 'id' field must be stripped from the mapped output

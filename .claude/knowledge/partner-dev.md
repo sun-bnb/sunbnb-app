@@ -27,6 +27,8 @@ pointer here + the full entry in its section below.)*
 - **Restaurant query tests** — mocking @repo/table-reservations-core while keeping real auth-helpers — see "Mocking @repo/table-reservations-core for queries.ts tests"
 - **Dual-scope dashboards (dine-in v2 Phase 5)** — sharing a client view across two owner types via a `scope` prop, extending the auth-matrix for a second token-or-session gate type — see "Restaurant-scoped orders dashboard: scope-prop view reuse + new gate type"
 - **Shared local dev environment** — sunbnb_test Postgres and the working tree can be concurrently used by a parallel agent session; diagnose before assuming a regression — see "Concurrent-session interference: git stash and shared local Postgres"
+- **Cross-package boolean-toggle plumbing (dine-in v2 Phase 6)** — a new `RestaurantInput` boolean needs FOUR touch points across two packages, not the two obvious ones — see "Adding a new Restaurant boolean toggle end-to-end"
+- **No React component tests in apps/partner** — vitest.config.ts only globs `*.test.ts`, no jsdom/testing-library — see "Adding a new Restaurant boolean toggle end-to-end" (component-test note)
 
 ---
 
@@ -484,6 +486,46 @@ across concurrent agent sessions — the same discipline the repo already applie
 shared test DB (`.claude/rules/migrations.md`) applies locally too when multiple sessions run in
 parallel. Diagnose (isolate the touched file, check `pg_stat_activity`/container logs) before
 reporting a failure as caused by your change.
+
+## Cross-package boolean-toggle plumbing (dine-in v2 Phase 6)
+
+### 2026-07-25: Adding a new Restaurant boolean toggle end-to-end — four touch points, not two
+**Problem:** A task packet named only two `packages/table-reservations-core` files to touch when adding
+`Restaurant.dineInEnabled` (an already-migrated schema column) as a settings-form toggle:
+`types.ts` (the `RestaurantInput` shape) and `restaurant/actions.ts` (`createRestaurant`'s persisted
+`data` + `updateRestaurant`'s patch whitelist). That covers the WRITE side only. The core package has a
+**separate** read-side file, `restaurant/queries.ts`, with its own `restaurantSelect` Prisma select object
+and `RestaurantRecord` return type — if the new field isn't added there too, the write silently succeeds
+but every subsequent read (including the very `getRestaurantById` call `updateRestaurant`/`createRestaurant`
+make to return the updated row) omits the field, so the UI never sees the toggle's persisted state after
+save/reload even though the DB column is correct.
+**Solution:** For any new `RestaurantInput` boolean, touch exactly these four places, in this order:
+(1) `types.ts` `RestaurantInput`, (2) `restaurant/actions.ts` create `data` + update patch whitelist
+(`if (input.x !== undefined) data.x = input.x`), (3) `restaurant/queries.ts` `restaurantSelect` +
+`RestaurantRecord` (the read side — easy to miss because it's a sibling file, not inside `actions.ts`),
+(4) the consuming app's own DTO mapping (`apps/partner/app/restaurants/[id]/queries.ts` `RestaurantDetail`
++ the `getRestaurant` mapper) and its General-tab `view.tsx` (`initialSettings` + the `RestaurantSettingsForm`
+`labels` prop). The shared UI toggle itself (`packages/table-reservations-ui/.../RestaurantSettingsForm.tsx`)
+needs the field added to `RestaurantSettingsLabels` + `RestaurantSettingsValues` + a new `<Toggle>` block
+mirroring the existing `guestSelectionEnabled` one (border-t divider, same `save()`/`scheduleSave()` wiring).
+**Regression guard:** a "pass-through" unit test asserting the new field survives `getRestaurant`'s mapping
+(mirrors the existing `guestSelectionEnabled`/`publicOnStandaloneApp` fixture fields in
+`app/restaurants/[id]/queries.test.ts`) is the cheapest way to catch step (3) being skipped — it fails
+immediately if `restaurantSelect`/`RestaurantRecord` don't carry the field, even though the write-side
+tests (`objectContaining` assertions in `actions.test.ts`) pass regardless.
+**No React component tests in apps/partner:** `vitest.config.ts`'s `include` is `['app/**/*.test.ts',
+'lib/**/*.test.ts']` only — no `.tsx` glob, no `environment: 'jsdom'`, no `@testing-library/react`
+dependency. Every existing test file in the app (50+ files) is server-action/route/query logic, never a
+rendered component. A task asking for "component test updates" on a client `.tsx` file (e.g.
+`DineInQRButton.tsx`, a jsPDF/qrcode-driven button with no separable pure-logic module) has no established
+pattern to extend — introducing jsdom + RTL for one component is a testing-infrastructure decision, not a
+one-file addition. Verify such changes via `tsc --noEmit` (catches prop-signature breakage) + manual source
+review instead of inventing a new test harness mid-task; flag the gap explicitly rather than silently
+skipping or silently expanding scope.
+**Prevention:** When a task names "the two files to touch" in a package for an input-shape change, grep the
+package for the OTHER file(s) selecting/returning that same record shape (`grep -rn "guestSelectionEnabled"
+packages/table-reservations-core/src` — every sibling boolean toggle shows exactly which files it already
+touches) before assuming the named list is complete.
 
 ## Rejected approaches
 

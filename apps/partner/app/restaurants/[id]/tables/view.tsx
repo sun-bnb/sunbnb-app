@@ -41,17 +41,14 @@ import { RestaurantHeader } from '../RestaurantHeader'
 
 interface TablesViewProps {
   restaurantId: string
-  /** Site linked to this restaurant. Null for standalone restaurants. */
-  siteId?: string | null
   /** Base URL of the consumer app for dine-in QR codes. */
   consumerAppUrl?: string
-  /** Active tables for QR printing. Empty when siteId is null. */
+  /** Active tables for QR printing (standalone and site-linked restaurants alike). */
   activeTables?: TableQRRecord[]
 }
 
 export default function TablesView({
   restaurantId,
-  siteId,
   consumerAppUrl,
   activeTables = [],
 }: TablesViewProps) {
@@ -253,10 +250,9 @@ export default function TablesView({
           saveStatus={saveStatus}
           saveError={saveErrors.length > 0 ? saveErrors.join(', ') : undefined}
         />
-        {siteId && consumerAppUrl && activeTables.length > 0 && (
+        {consumerAppUrl && activeTables.length > 0 && (
           <div className="flex justify-end">
             <DineInQRButton
-              siteId={siteId}
               consumerAppUrl={consumerAppUrl}
               tables={activeTables}
               label={t('printDineInQr')}

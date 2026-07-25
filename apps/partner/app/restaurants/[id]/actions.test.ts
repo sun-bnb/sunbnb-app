@@ -313,6 +313,42 @@ describe('updateRestaurantSettings', () => {
       data: expect.objectContaining({ name: 'Updated' }),
     })
   })
+
+  it('passes dineInEnabled through to the update patch (dine-in v2 Phase 6 toggle)', async () => {
+    authorizeRestaurantOwner()
+    vi.mocked(prisma.restaurant.findUnique)
+      .mockResolvedValueOnce({
+        id: RESTAURANT_ID,
+        partnerAccountId: OWNER_ID,
+        siteId: SITE_ID,
+      } as any)
+      .mockResolvedValueOnce({
+        id: RESTAURANT_ID,
+        slug: 'restaurant',
+        name: 'Restaurant',
+        tagline: null,
+        description: null,
+        partnerAccountId: OWNER_ID,
+        siteId: SITE_ID,
+        cuisineType: null,
+        priceRange: null,
+        averageMealDuration: 120,
+        reservationWindow: 60,
+        layoutWidth: null,
+        layoutHeight: null,
+        publicOnStandaloneApp: true,
+        dineInEnabled: true,
+        workingHours: [],
+      } as any)
+    vi.mocked(prisma.restaurant.update).mockResolvedValue({ id: RESTAURANT_ID } as any)
+
+    const res = await updateRestaurantSettings(RESTAURANT_ID, { dineInEnabled: true })
+    expect(res.status).toBe('ok')
+    expect(prisma.restaurant.update).toHaveBeenCalledWith({
+      where: { id: RESTAURANT_ID },
+      data: expect.objectContaining({ dineInEnabled: true }),
+    })
+  })
 })
 
 // ─────────────────────────────────────────────────────

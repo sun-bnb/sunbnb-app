@@ -210,6 +210,8 @@
     "fieldPublicOnStandaloneAppHint": "Näytä tämä ravintola tablefind.app-haun julkisessa listauksessa. Näkyy aina Sunbnb:ssa.",
     "fieldGuestSelectionEnabled": "Anna asiakkaiden valita pöytänsä",
     "fieldGuestSelectionEnabledHint": "Näytä pohjakartta, jotta asiakkaat valitsevat tietyn pöydän. Vain «valittaviksi» merkityt pöydät ovat valittavissa — rajaa premium- tai näköalapaikkoihin.",
+    "fieldDineInEnabled": "QR-pöytätilaukset",
+    "fieldDineInEnabledHint": "Anna asiakkaiden tilata ja maksaa pöydän QR-koodilla.",
     "daySun": "Sunnuntai",
     "dayMon": "Maanantai",
     "dayTue": "Tiistai",
@@ -221,6 +223,7 @@
     "subNavTables": "Pöydät",
     "subNavMenu": "Ruokalista",
     "subNavReservations": "Varaukset",
+    "subNavAccounting": "Kirjanpito",
     "reservationsRequireEnable": "Ota pöytävaraukset käyttöön Yleiset-välilehdeltä.",
     "resDateLabel": "Päivä",
     "resFilterAll": "Kaikki",
@@ -394,6 +397,11 @@
     "embedCopy": "Kopioi koodi",
     "embedCopied": "Kopioitu!",
     "printDineInQr": "Tulosta pöytä-QR-koodit"
+  },
+  "RestaurantAccounting": {
+    "title": "Kirjanpito",
+    "hint": "Valitun kuukauden pöytälaskut.",
+    "empty": "Ei pöytälaskuja tälle kuukaudelle."
   },
   "SiteSchematic": {
     "layoutWidth": "Leveys",

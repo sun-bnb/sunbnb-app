@@ -19,6 +19,10 @@ export interface RestaurantInput {
   layoutHeight?: number | null
   publicOnStandaloneApp?: boolean
   guestSelectionEnabled?: boolean
+  // Master switch for QR dine-in tab ordering (dine-in v2). Single gate for
+  // both standalone and site-linked restaurants — Site.appSalesEnabled stays
+  // sunbed room-service-only. See schema.prisma Restaurant.dineInEnabled.
+  dineInEnabled?: boolean
 }
 
 export interface TableInput {
