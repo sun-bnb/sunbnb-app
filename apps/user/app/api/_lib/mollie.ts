@@ -57,10 +57,24 @@ import { getValidMollieToken } from '@repo/data/mollie-tokens'
 
 /**
  * Find the partner account id that owns a given paymentRef. Checks reservations,
- * orders, rental bookings, and table-reservation deposits (the latter is owned
- * via restaurant → partnerAccount, not site → user).
+ * orders, rental bookings, dine-in tabs, and table-reservation deposits (the
+ * latter two are owned via restaurant → partnerAccount, not site → user).
+ *
+ * Dine-in tabs MUST be resolved here: the tab holds the paymentRef during
+ * pending_payment (orders are only stamped after processing), so without this
+ * branch the webhook and the /api/tabs poll can never verify a Mollie tab
+ * payment and the diner wedges on "Confirming your payment…".
  */
 export async function findPartnerAccountForPayment(paymentRef: string): Promise<string | null> {
+  // Dine-in tab payments — restaurant-anchored (works for standalone AND
+  // linked venues); checked first since tab refs are the common QR case.
+  const tab = await prisma.tableTab.findFirst({
+    where: { paymentRef },
+    select: { restaurant: { select: { partnerAccount: { select: { userId: true } } } } },
+  })
+  const tabId = tab?.restaurant?.partnerAccount?.userId
+  if (tabId) return tabId
+
   const reservation = await prisma.reservation.findFirst({
     where: { paymentRef },
     select: { site: { select: { user: { select: { partnerAccount: { select: { userId: true } } } } } } },
