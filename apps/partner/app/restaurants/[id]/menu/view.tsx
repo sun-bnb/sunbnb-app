@@ -54,6 +54,8 @@ export default function MenuView({ restaurantId }: { restaurantId: string }) {
       fieldName: t('menuFieldName'),
       fieldDescription: t('menuFieldDescription'),
       fieldPrice: t('menuFieldPrice'),
+      fieldVat: t('menuFieldVat'),
+      netPriceLabel: t('menuNetPrice'),
       fieldCategory: t('menuFieldCategory'),
       fieldCategoryHelper: t('menuFieldCategoryHelper'),
       imageCurrent: t('menuImageChange'),
@@ -87,7 +89,8 @@ export default function MenuView({ restaurantId }: { restaurantId: string }) {
             const fd = new FormData()
             fd.set('name', values.name)
             fd.set('description', values.description)
-            fd.set('price', String(values.price))
+            fd.set('totalPrice', String(values.totalPrice))
+            fd.set('tax', String(values.tax))
             fd.set('category', values.category)
             if (values.imageFile) fd.set('imageFile', values.imageFile)
             if (values.imageUrl) fd.set('imageUrl', values.imageUrl)
@@ -99,7 +102,8 @@ export default function MenuView({ restaurantId }: { restaurantId: string }) {
             const fd = new FormData()
             fd.set('name', values.name)
             fd.set('description', values.description)
-            fd.set('price', String(values.price))
+            fd.set('totalPrice', String(values.totalPrice))
+            fd.set('tax', String(values.tax))
             fd.set('category', values.category)
             if (values.imageFile) fd.set('imageFile', values.imageFile)
             else if (values.imageUrl === null) fd.set('removeImage', '1')

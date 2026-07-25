@@ -93,7 +93,8 @@ export function MenuItemRow({
 
       <div className="text-sm font-medium text-gray-900 tabular-nums w-20 text-right">
         {labels.currencyPrefix}
-        {item.price.toFixed(2)}
+        {/* Gross price; pre-v2 rows may have totalPrice 0 — fall back to the legacy price. */}
+        {(item.totalPrice > 0 ? item.totalPrice : item.price).toFixed(2)}
       </div>
 
       <Tooltip title={labels.soldOutTitle}>

@@ -53,7 +53,11 @@ export interface TableInput {
 export interface MenuItemInput {
   name: string
   description?: string | null
-  price: number
+  // VAT triple (dine-in v2): the partner enters the gross `totalPrice` +
+  // `tax` (VAT %, default 0); the net `price` is derived via reverse VAT
+  // inside the actions — never client-supplied.
+  totalPrice: number
+  tax?: number
   imageUrl?: string | null
   category?: string
   displayOrder?: number

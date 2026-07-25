@@ -51,13 +51,16 @@ export async function createMenuItemForRestaurant(restaurantId: string, formData
 
   const name = String(formData.get('name') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim()
-  const priceRaw = String(formData.get('price') ?? '0')
+  const totalPriceRaw = String(formData.get('totalPrice') ?? '0')
+  const taxRaw = String(formData.get('tax') ?? '0')
   const category = String(formData.get('category') ?? 'main').trim() || 'main'
   const imageUrlField = formData.get('imageUrl')
   const imageFile = formData.get('imageFile') as File | null
 
-  const price = Number(priceRaw)
-  if (!Number.isFinite(price)) return { status: 'error' as const, errors: ['Invalid price'] }
+  const totalPrice = Number(totalPriceRaw)
+  const tax = Number(taxRaw)
+  if (!Number.isFinite(totalPrice)) return { status: 'error' as const, errors: ['Invalid price'] }
+  if (!Number.isFinite(tax)) return { status: 'error' as const, errors: ['Invalid VAT'] }
 
   let imageUrl: string | null = null
   if (typeof imageUrlField === 'string' && imageUrlField.length > 0) {
@@ -71,7 +74,7 @@ export async function createMenuItemForRestaurant(restaurantId: string, formData
 
   const res = await createMenuItem(
     restaurantId,
-    { name, description: description || null, price, category, imageUrl } as MenuItemInput,
+    { name, description: description || null, totalPrice, tax, category, imageUrl } as MenuItemInput,
     r.userId,
   )
   if (res.status === 'ok') revalidatePath(`/restaurants/${restaurantId}/menu`)
@@ -88,7 +91,8 @@ export async function updateMenuItemForRestaurant(
 
   const name = formData.get('name')
   const description = formData.get('description')
-  const priceRaw = formData.get('price')
+  const totalPriceRaw = formData.get('totalPrice')
+  const taxRaw = formData.get('tax')
   const category = formData.get('category')
   const imageUrlField = formData.get('imageUrl')
   const removeImage = formData.get('removeImage') === '1'
@@ -97,10 +101,15 @@ export async function updateMenuItemForRestaurant(
   const patch: Partial<MenuItemInput> = {}
   if (typeof name === 'string') patch.name = name.trim()
   if (typeof description === 'string') patch.description = description.trim() || null
-  if (typeof priceRaw === 'string' && priceRaw.length > 0) {
-    const price = Number(priceRaw)
-    if (!Number.isFinite(price)) return { status: 'error' as const, errors: ['Invalid price'] }
-    patch.price = price
+  if (typeof totalPriceRaw === 'string' && totalPriceRaw.length > 0) {
+    const totalPrice = Number(totalPriceRaw)
+    if (!Number.isFinite(totalPrice)) return { status: 'error' as const, errors: ['Invalid price'] }
+    patch.totalPrice = totalPrice
+  }
+  if (typeof taxRaw === 'string' && taxRaw.length > 0) {
+    const tax = Number(taxRaw)
+    if (!Number.isFinite(tax)) return { status: 'error' as const, errors: ['Invalid VAT'] }
+    patch.tax = tax
   }
   if (typeof category === 'string') patch.category = category.trim() || 'main'
 

@@ -96,7 +96,8 @@ describe('createMenuItemForRestaurant', () => {
 
     const fd = new FormData()
     fd.set('name', 'Pizza')
-    fd.set('price', '10')
+    fd.set('totalPrice', '10')
+    fd.set('tax', '21')
     fd.set('category', 'mains')
     const res = await createMenuItemForRestaurant(RESTAURANT_ID, fd)
     expect(res.status).toBe('ok')
@@ -105,7 +106,10 @@ describe('createMenuItemForRestaurant', () => {
         data: expect.objectContaining({
           restaurantId: RESTAURANT_ID,
           name: 'Pizza',
-          price: 10,
+          // VAT triple: partner enters gross 10 @ 21% → net price derived
+          totalPrice: 10,
+          tax: 21,
+          price: 8.26,
           category: 'mains',
           displayOrder: 5,
         }),
@@ -124,6 +128,9 @@ describe('updateMenuItemForRestaurant', () => {
     vi.mocked(prisma.menuItem.findUnique).mockResolvedValueOnce({
       id: 'mi-1',
       restaurantId: RESTAURANT_ID,
+      tax: 21,
+      totalPrice: 10,
+      price: 8.26,
     } as any)
     coreOwnershipOk()
     vi.mocked(prisma.menuItem.update).mockResolvedValue({ id: 'mi-1' } as any)
@@ -142,14 +149,17 @@ describe('updateMenuItemForRestaurant', () => {
 
     const fd = new FormData()
     fd.set('description', 'With buffalo mozzarella')
-    fd.set('price', '12')
+    fd.set('totalPrice', '12')
     const res = await updateMenuItemForRestaurant(RESTAURANT_ID, 'mi-1', fd)
     expect(res.status).toBe('ok')
     expect(prisma.menuItem.update).toHaveBeenCalledWith({
       where: { id: 'mi-1' },
       data: {
         description: 'With buffalo mozzarella',
-        price: 12,
+        // gross patched without tax → existing tax (21) merged, net re-derived
+        totalPrice: 12,
+        tax: 21,
+        price: 9.92,
       },
     })
   })

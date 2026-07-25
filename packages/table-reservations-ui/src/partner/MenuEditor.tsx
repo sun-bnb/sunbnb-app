@@ -136,7 +136,8 @@ export function MenuEditor({
             ? {
                 name: editing.name,
                 description: editing.description ?? '',
-                price: editing.price,
+                totalPrice: editing.totalPrice > 0 ? editing.totalPrice : editing.price,
+                tax: editing.tax,
                 category: editing.category,
                 imageUrl: editing.imageUrl,
               }

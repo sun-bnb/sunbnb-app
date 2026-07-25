@@ -6,6 +6,8 @@ const menuItemSelect = {
   name: true,
   description: true,
   price: true,
+  tax: true,
+  totalPrice: true,
   imageUrl: true,
   category: true,
   soldOut: true,
@@ -19,6 +21,8 @@ export interface MenuItemRecord {
   name: string
   description: string | null
   price: number
+  tax: number
+  totalPrice: number
   imageUrl: string | null
   category: string
   soldOut: boolean

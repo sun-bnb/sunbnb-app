@@ -33,7 +33,8 @@
     "./reservations": "./src/reservations.ts",
     "./site-day": "./src/site-day.ts",
     "./fiscal": "./src/fiscal.ts",
-    "./tab-payment": "./src/tab-payment.ts"
+    "./tab-payment": "./src/tab-payment.ts",
+    "./payment-math": "./src/payment-math.ts"
   },
   "typesVersions": {
     "*": {
@@ -117,6 +118,9 @@
       ],
       "tab-payment": [
         "./src/tab-payment.ts"
+      ],
+      "payment-math": [
+        "./src/payment-math.ts"
       ]
     }
   },

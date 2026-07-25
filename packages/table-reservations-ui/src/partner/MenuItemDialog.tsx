@@ -15,6 +15,9 @@ export interface MenuItemDialogLabels {
   fieldName: string
   fieldDescription: string
   fieldPrice: string
+  fieldVat: string
+  /** Hint row under the price inputs, e.g. "Net price". */
+  netPriceLabel: string
   fieldCategory: string
   fieldCategoryHelper: string
   imageCurrent: string
@@ -33,7 +36,8 @@ export interface MenuItemDialogProps {
   initial: {
     name: string
     description: string
-    price: number
+    totalPrice: number
+    tax: number
     category: string
     imageUrl: string | null
   } | null
@@ -50,7 +54,8 @@ export function MenuItemDialog({
 }: MenuItemDialogProps) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [price, setPrice] = useState(0)
+  const [totalPrice, setTotalPrice] = useState(0)
+  const [tax, setTax] = useState(0)
   const [category, setCategory] = useState('main')
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -62,7 +67,8 @@ export function MenuItemDialog({
     if (!open) return
     setName(initial?.name ?? '')
     setDescription(initial?.description ?? '')
-    setPrice(initial?.price ?? 0)
+    setTotalPrice(initial?.totalPrice ?? 0)
+    setTax(initial?.tax ?? 0)
     setCategory(initial?.category ?? 'main')
     setImageUrl(initial?.imageUrl ?? null)
     setImageFile(null)
@@ -75,7 +81,8 @@ export function MenuItemDialog({
     const res = await onSubmit({
       name: name.trim(),
       description: description.trim(),
-      price,
+      totalPrice,
+      tax,
       category: category.trim() || 'main',
       imageUrl,
       imageFile,
@@ -113,14 +120,27 @@ export function MenuItemDialog({
               size="small"
               label={labels.fieldPrice}
               type="number"
-              value={price}
+              value={totalPrice}
               onChange={(e) => {
                 const n = Number(e.target.value)
                 if (!Number.isFinite(n)) return
-                setPrice(n)
+                setTotalPrice(n)
               }}
               inputProps={{ min: 0, step: 0.1 }}
               fullWidth
+            />
+            <TextField
+              size="small"
+              label={labels.fieldVat}
+              type="number"
+              value={tax}
+              onChange={(e) => {
+                const n = Number(e.target.value)
+                if (!Number.isFinite(n)) return
+                setTax(n)
+              }}
+              inputProps={{ min: 0, max: 100, step: 1 }}
+              className="max-w-[110px]"
             />
             <TextField
               size="small"
@@ -131,6 +151,11 @@ export function MenuItemDialog({
               fullWidth
             />
           </div>
+          {tax > 0 && totalPrice > 0 && (
+            <div className="text-xs text-gray-500 -mt-1">
+              {labels.netPriceLabel}: {(totalPrice / (1 + tax / 100)).toFixed(2)}
+            </div>
+          )}
 
           <div className="flex items-center gap-3">
             {imageUrl && !imageFile ? (

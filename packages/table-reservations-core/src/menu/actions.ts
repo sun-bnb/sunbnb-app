@@ -1,4 +1,5 @@
 import prisma from '@repo/data/PrismaCient'
+import { computeVatAndBaseAmounts } from '@repo/data/payment-math'
 import type { ActionResult, MenuItemInput } from '../types'
 import { requireRestaurantOwner } from '../ownership'
 import { getMenuItemById, type MenuItemRecord } from './queries'
@@ -15,9 +16,14 @@ function validateMenuItemInput(input: Partial<MenuItemInput>): string[] {
   if (input.description !== undefined && input.description !== null && input.description.length > 500) {
     errors.push('Description is too long (max 500)')
   }
-  if (input.price !== undefined) {
-    if (!Number.isFinite(input.price) || input.price < 0 || input.price > 100000) {
+  if (input.totalPrice !== undefined) {
+    if (!Number.isFinite(input.totalPrice) || input.totalPrice < 0 || input.totalPrice > 100000) {
       errors.push('Price must be 0–100,000')
+    }
+  }
+  if (input.tax !== undefined) {
+    if (!Number.isFinite(input.tax) || input.tax < 0 || input.tax > 100) {
+      errors.push('VAT must be 0–100')
     }
   }
   if (input.category !== undefined && input.category.length > 50) {
@@ -55,19 +61,22 @@ export async function createMenuItem(
   const { error } = await requireRestaurantOwner(restaurantId, userId)
   if (error) return { status: 'error', errors: [error] }
 
-  // `price` is required; others validated as given.
-  if (input.price === undefined) {
+  // `totalPrice` (gross) is required; others validated as given.
+  if (input.totalPrice === undefined) {
     return { status: 'error', errors: ['Price is required'] }
   }
   const errors = validateMenuItemInput(input)
   if (errors.length > 0) return { status: 'error', errors }
 
+  const tax = input.tax ?? 0
   const created = await prisma.menuItem.create({
     data: {
       restaurantId,
       name: input.name.trim(),
       description: input.description ?? null,
-      price: input.price,
+      price: computeVatAndBaseAmounts(input.totalPrice, tax).baseAmount,
+      tax,
+      totalPrice: input.totalPrice,
       imageUrl: input.imageUrl ?? null,
       category: input.category ?? 'main',
       displayOrder: input.displayOrder ?? (await nextDisplayOrder(restaurantId)),
@@ -85,7 +94,7 @@ export async function updateMenuItem(
 ): Promise<ActionResult & { item?: MenuItemRecord }> {
   const existing = await prisma.menuItem.findUnique({
     where: { id: menuItemId },
-    select: { id: true, restaurantId: true },
+    select: { id: true, restaurantId: true, tax: true, totalPrice: true, price: true },
   })
   if (!existing) return { status: 'error', errors: ['Not found'] }
 
@@ -98,7 +107,16 @@ export async function updateMenuItem(
   const data: Record<string, unknown> = {}
   if (patch.name !== undefined) data.name = patch.name.trim()
   if (patch.description !== undefined) data.description = patch.description
-  if (patch.price !== undefined) data.price = patch.price
+  if (patch.totalPrice !== undefined || patch.tax !== undefined) {
+    // Recompute the derived net price whenever either VAT input changes.
+    // Pre-v2 rows may have totalPrice 0 — fall back to the legacy gross price.
+    const totalPrice =
+      patch.totalPrice ?? (existing.totalPrice > 0 ? existing.totalPrice : existing.price)
+    const tax = patch.tax ?? existing.tax
+    data.totalPrice = totalPrice
+    data.tax = tax
+    data.price = computeVatAndBaseAmounts(totalPrice, tax).baseAmount
+  }
   if (patch.imageUrl !== undefined) data.imageUrl = patch.imageUrl
   if (patch.category !== undefined) data.category = patch.category
   if (patch.displayOrder !== undefined) data.displayOrder = patch.displayOrder
