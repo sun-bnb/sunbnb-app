@@ -115,6 +115,7 @@ export function MenuItemDialog({
             minRows={2}
             fullWidth
           />
+          {/* Price ¼ + VAT ¼ + category ½ */}
           <div className="flex gap-3">
             <TextField
               size="small"
@@ -127,7 +128,7 @@ export function MenuItemDialog({
                 setTotalPrice(n)
               }}
               inputProps={{ min: 0, step: 0.1 }}
-              fullWidth
+              className="basis-1/4 min-w-0"
             />
             <TextField
               size="small"
@@ -140,7 +141,7 @@ export function MenuItemDialog({
                 setTax(n)
               }}
               inputProps={{ min: 0, max: 100, step: 1 }}
-              className="max-w-[110px]"
+              className="basis-1/4 min-w-0"
             />
             <TextField
               size="small"
@@ -148,7 +149,7 @@ export function MenuItemDialog({
               value={category}
               onChange={(e) => setCategory(e.target.value)}
               helperText={labels.fieldCategoryHelper}
-              fullWidth
+              className="basis-1/2 min-w-0"
             />
           </div>
           {tax > 0 && totalPrice > 0 && (
