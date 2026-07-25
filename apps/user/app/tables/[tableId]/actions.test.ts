@@ -23,32 +23,31 @@ const mockCalculateTabTotal = vi.mocked(calculateTabTotal)
 const SITE_ID = 'site-1'
 const TABLE_ID = 'table-1'
 const RESTAURANT_ID = 'rest-1'
+const PARTNER_ACCOUNT_USER_ID = 'owner-1'
 const PRODUCT_ID = 'prod-1'
 const ANON_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
 const TAB_ID = 'tab-1'
 const ORDER_ID = 'order-1'
 
-function mockSite(overrides: Record<string, unknown> = {}) {
-  vi.mocked(prisma.site.findUnique).mockResolvedValueOnce({
-    id: SITE_ID,
-    userId: 'owner-1',
-    name: 'Test Beach',
-    appSalesEnabled: true,
-    ...overrides,
-  } as any)
-}
-
 function mockTable(overrides: Record<string, unknown> = {}) {
   vi.mocked(prisma.table.findUnique).mockResolvedValueOnce({
     id: TABLE_ID,
+    number: 5,
+    label: 'T5',
     status: 'active',
-    restaurant: { id: RESTAURANT_ID, siteId: SITE_ID },
+    restaurant: {
+      id: RESTAURANT_ID,
+      name: 'Chiringuito',
+      siteId: SITE_ID,
+      dineInEnabled: true,
+      partnerAccountId: PARTNER_ACCOUNT_USER_ID,
+    },
     ...overrides,
   } as any)
 }
 
-function mockProduct(overrides: Record<string, unknown> = {}) {
-  vi.mocked(prisma.product.findMany).mockResolvedValueOnce([
+function mockMenuItem(overrides: Record<string, unknown> = {}) {
+  vi.mocked(prisma.menuItem.findMany).mockResolvedValueOnce([
     {
       id: PRODUCT_ID,
       name: 'Water',
@@ -59,6 +58,7 @@ function mockProduct(overrides: Record<string, unknown> = {}) {
       soldOut: false,
       active: true,
       imageUrl: null,
+      displayOrder: 0,
       ...overrides,
     },
   ] as any)
@@ -88,7 +88,6 @@ function validItems() {
 
 function validInput(overrides: Record<string, unknown> = {}) {
   return {
-    siteId: SITE_ID,
     tableId: TABLE_ID,
     anonId: ANON_ID,
     items: validItems(),
@@ -119,17 +118,11 @@ describe('placeTabOrder — feature flag', () => {
 
     expect(res.status).toBe('error')
     expect((res as any).errors).toContain('feature_disabled')
-    expect(prisma.site.findUnique).not.toHaveBeenCalled()
+    expect(prisma.table.findUnique).not.toHaveBeenCalled()
   })
 })
 
 describe('placeTabOrder — validation', () => {
-  it('rejects missing siteId', async () => {
-    const res = await placeTabOrder(validInput({ siteId: '' }))
-    expect(res.status).toBe('error')
-    expect((res as any).errors).toContain('siteId is required')
-  })
-
   it('rejects missing tableId', async () => {
     const res = await placeTabOrder(validInput({ tableId: '' }))
     expect(res.status).toBe('error')
@@ -173,17 +166,8 @@ describe('placeTabOrder — validation', () => {
     expect((res as any).errors).toContain('Invalid item quantity')
   })
 
-  it('rejects invalid siteId via isValidEntityId', async () => {
-    mockIsValidEntityId.mockReturnValueOnce(false) // siteId check
-    const res = await placeTabOrder(validInput())
-    expect(res.status).toBe('error')
-    expect((res as any).errors).toContain('Invalid site ID')
-  })
-
   it('rejects invalid tableId via isValidEntityId', async () => {
-    mockIsValidEntityId
-      .mockReturnValueOnce(true) // siteId
-      .mockReturnValueOnce(false) // tableId
+    mockIsValidEntityId.mockReturnValueOnce(false) // tableId check
     const res = await placeTabOrder(validInput())
     expect(res.status).toBe('error')
     expect((res as any).errors).toContain('Invalid table ID')
@@ -191,7 +175,6 @@ describe('placeTabOrder — validation', () => {
 
   it('rejects invalid product id via isValidEntityId', async () => {
     mockIsValidEntityId
-      .mockReturnValueOnce(true) // siteId
       .mockReturnValueOnce(true) // tableId
       .mockReturnValueOnce(false) // product id
     const res = await placeTabOrder(validInput())
@@ -200,29 +183,9 @@ describe('placeTabOrder — validation', () => {
   })
 })
 
-describe('placeTabOrder — site gate', () => {
-  it('returns error when site is not found', async () => {
-    vi.mocked(prisma.site.findUnique).mockResolvedValueOnce(null)
-
-    const res = await placeTabOrder(validInput())
-
-    expect(res.status).toBe('error')
-    expect((res as any).errors).toContain('Site not found')
-  })
-
-  it('returns error when appSalesEnabled is false', async () => {
-    mockSite({ appSalesEnabled: false })
-
-    const res = await placeTabOrder(validInput())
-
-    expect(res.status).toBe('error')
-    expect((res as any).errors?.[0]).toContain('not available')
-  })
-})
-
 describe('placeTabOrder — identity', () => {
   it('returns auth error when no session and no anonId', async () => {
-    mockSite()
+    mockTable()
 
     const res = await placeTabOrder(validInput({ anonId: undefined }))
 
@@ -231,9 +194,8 @@ describe('placeTabOrder — identity', () => {
   })
 
   it('accepts anonId in place of session', async () => {
-    mockSite()
     mockTable()
-    mockProduct()
+    mockMenuItem()
     mockTabNotFound()
     mockTabCreate()
     mockOrderCreate()
@@ -245,9 +207,8 @@ describe('placeTabOrder — identity', () => {
 
   it('accepts session user when present', async () => {
     mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
-    mockSite()
     mockTable()
-    mockProduct()
+    mockMenuItem()
     mockTabNotFound()
     mockTabCreate()
     mockOrderCreate()
@@ -256,11 +217,28 @@ describe('placeTabOrder — identity', () => {
 
     expect(res.status).toBe('ok')
   })
+
+  it('anonymous order userId falls back to restaurant.partnerAccountId', async () => {
+    mockTable()
+    mockMenuItem()
+    mockTabNotFound()
+    mockTabCreate()
+    mockOrderCreate()
+
+    await placeTabOrder(validInput())
+
+    expect(prisma.order.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          user: { connect: { id: PARTNER_ACCOUNT_USER_ID } },
+        }),
+      }),
+    )
+  })
 })
 
 describe('placeTabOrder — table gate', () => {
   it('returns error when table is not found', async () => {
-    mockSite()
     vi.mocked(prisma.table.findUnique).mockResolvedValueOnce(null)
 
     const res = await placeTabOrder(validInput())
@@ -270,7 +248,6 @@ describe('placeTabOrder — table gate', () => {
   })
 
   it('returns error when table status is not active', async () => {
-    mockSite()
     mockTable({ status: 'inactive' })
 
     const res = await placeTabOrder(validInput())
@@ -279,24 +256,37 @@ describe('placeTabOrder — table gate', () => {
     expect((res as any).errors).toContain('Table not found or unavailable')
   })
 
-  it('returns generic error when restaurant siteId does not match', async () => {
-    mockSite()
-    mockTable({ restaurant: { id: RESTAURANT_ID, siteId: 'other-site' } })
+  it('returns error when table has no restaurant', async () => {
+    mockTable({ restaurant: null })
 
     const res = await placeTabOrder(validInput())
 
     expect(res.status).toBe('error')
-    // Generic error — does not reveal the mismatch detail
     expect((res as any).errors).toContain('Table not found or unavailable')
+  })
+
+  it('returns error when restaurant.dineInEnabled is false', async () => {
+    mockTable({
+      restaurant: {
+        id: RESTAURANT_ID,
+        siteId: SITE_ID,
+        dineInEnabled: false,
+        partnerAccountId: PARTNER_ACCOUNT_USER_ID,
+      },
+    })
+
+    const res = await placeTabOrder(validInput())
+
+    expect(res.status).toBe('error')
+    expect((res as any).errors[0]).toContain('not available')
   })
 })
 
 describe('placeTabOrder — products', () => {
-  it('rejects when product is not found (not in site / not active)', async () => {
-    mockSite()
+  it('rejects when menu item is not found (not in restaurant / not active)', async () => {
     mockTable()
-    // DB returns empty — product not active or wrong site
-    vi.mocked(prisma.product.findMany).mockResolvedValueOnce([])
+    // DB returns empty — menu item not active or wrong restaurant
+    vi.mocked(prisma.menuItem.findMany).mockResolvedValueOnce([])
 
     const res = await placeTabOrder(validInput())
 
@@ -305,10 +295,9 @@ describe('placeTabOrder — products', () => {
     expect(prisma.tableTab.findFirst).not.toHaveBeenCalled()
   })
 
-  it('rejects when product is sold out', async () => {
-    mockSite()
+  it('rejects when menu item is sold out', async () => {
     mockTable()
-    mockProduct({ soldOut: true })
+    mockMenuItem({ soldOut: true })
 
     const res = await placeTabOrder(validInput())
 
@@ -318,10 +307,9 @@ describe('placeTabOrder — products', () => {
   })
 
   it('uses DB prices, never client-supplied prices', async () => {
-    mockSite()
     mockTable()
     // DB price differs from any "client" price — only DB values should be used
-    vi.mocked(prisma.product.findMany).mockResolvedValueOnce([
+    vi.mocked(prisma.menuItem.findMany).mockResolvedValueOnce([
       {
         id: PRODUCT_ID,
         name: 'Water',
@@ -349,13 +337,28 @@ describe('placeTabOrder — products', () => {
     expect(createCall.data.totalPrice).toBeCloseTo(7.2, 5)
     expect(res.status).toBe('ok')
   })
+
+  it('pre-v2 menu item (totalPrice 0) falls back to price for the gross line', async () => {
+    mockTable()
+    mockMenuItem({ totalPrice: 0, price: 5.0, tax: 0 })
+    mockTabNotFound()
+    mockTabCreate()
+    mockOrderCreate()
+
+    const res = await placeTabOrder(validInput({ items: [{ product: { id: PRODUCT_ID }, quantity: 2 }] }))
+
+    expect(res.status).toBe('ok')
+    const createCall = vi.mocked(prisma.order.create).mock.calls[0][0] as any
+    // price 5.0 * 2 = 10; totalPrice falls back to price (gross = 10 as well)
+    expect(createCall.data.price).toBe(10)
+    expect(createCall.data.totalPrice).toBe(10)
+  })
 })
 
 describe('placeTabOrder — tab state machine', () => {
-  it('creates a new tab when no open tab exists', async () => {
-    mockSite()
+  it('creates a new tab when no open tab exists (dual-write siteId for linked restaurant)', async () => {
     mockTable()
-    mockProduct()
+    mockMenuItem()
     mockTabNotFound()
     mockTabCreate()
     mockOrderCreate()
@@ -378,10 +381,53 @@ describe('placeTabOrder — tab state machine', () => {
     )
   })
 
-  it('joins an existing open tab (second round)', async () => {
-    mockSite()
+  it('standalone restaurant (siteId null) creates a tab with siteId null and no site connect on the order', async () => {
+    mockTable({
+      restaurant: {
+        id: RESTAURANT_ID,
+        siteId: null,
+        dineInEnabled: true,
+        partnerAccountId: PARTNER_ACCOUNT_USER_ID,
+      },
+    })
+    mockMenuItem()
+    mockTabNotFound()
+    mockTabCreate()
+    mockOrderCreate()
+
+    const res = await placeTabOrder(validInput())
+
+    expect(res.status).toBe('ok')
+    expect(prisma.tableTab.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          restaurantId: RESTAURANT_ID,
+          siteId: null,
+        }),
+      }),
+    )
+    const createCall = vi.mocked(prisma.order.create).mock.calls[0][0] as any
+    expect(createCall.data.restaurant).toEqual({ connect: { id: RESTAURANT_ID } })
+    expect(createCall.data.site).toBeUndefined()
+  })
+
+  it('linked restaurant (siteId set) dual-writes site connect on the order', async () => {
     mockTable()
-    mockProduct()
+    mockMenuItem()
+    mockTabNotFound()
+    mockTabCreate()
+    mockOrderCreate()
+
+    await placeTabOrder(validInput())
+
+    const createCall = vi.mocked(prisma.order.create).mock.calls[0][0] as any
+    expect(createCall.data.restaurant).toEqual({ connect: { id: RESTAURANT_ID } })
+    expect(createCall.data.site).toEqual({ connect: { id: SITE_ID } })
+  })
+
+  it('joins an existing open tab (second round)', async () => {
+    mockTable()
+    mockMenuItem()
     // Existing open tab — no create needed
     vi.mocked(prisma.tableTab.findFirst).mockResolvedValueOnce({
       id: TAB_ID,
@@ -398,9 +444,8 @@ describe('placeTabOrder — tab state machine', () => {
   })
 
   it('rejects new orders when tab is pending_payment', async () => {
-    mockSite()
     mockTable()
-    mockProduct()
+    mockMenuItem()
     vi.mocked(prisma.tableTab.findFirst).mockResolvedValueOnce({
       id: TAB_ID,
       status: 'pending_payment',
@@ -414,9 +459,8 @@ describe('placeTabOrder — tab state machine', () => {
   })
 
   it('creates order with ORDER_COMPLETE status and denormalized tableId', async () => {
-    mockSite()
     mockTable()
-    mockProduct()
+    mockMenuItem()
     mockTabNotFound()
     mockTabCreate()
     mockOrderCreate()
@@ -434,9 +478,8 @@ describe('placeTabOrder — tab state machine', () => {
   })
 
   it('attaches anonId to the order for anonymous callers', async () => {
-    mockSite()
     mockTable()
-    mockProduct()
+    mockMenuItem()
     mockTabNotFound()
     mockTabCreate()
     mockOrderCreate()
@@ -451,9 +494,8 @@ describe('placeTabOrder — tab state machine', () => {
   })
 
   it('retries and joins winner tab on P2002 (concurrent first-order race)', async () => {
-    mockSite()
     mockTable()
-    mockProduct()
+    mockMenuItem()
 
     // First $transaction call: tab create throws P2002
     const p2002 = Object.assign(new Error('Unique constraint failed'), { code: 'P2002' })
@@ -482,10 +524,22 @@ describe('getTabState', () => {
   it('returns tab: null when no open tab exists', async () => {
     vi.mocked(prisma.tableTab.findFirst).mockResolvedValueOnce(null)
 
-    const res = await getTabState(SITE_ID, TABLE_ID)
+    const res = await getTabState(TABLE_ID)
 
     expect(res.status).toBe('ok')
     expect((res as any).tab).toBeNull()
+  })
+
+  it('queries by openTableId only (no siteId filter)', async () => {
+    vi.mocked(prisma.tableTab.findFirst).mockResolvedValueOnce(null)
+
+    await getTabState(TABLE_ID)
+
+    expect(prisma.tableTab.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { openTableId: TABLE_ID },
+      }),
+    )
   })
 
   it('returns tab with orders and calculateTabTotal totals', async () => {
@@ -520,7 +574,7 @@ describe('getTabState', () => {
       orderIds: [ORDER_ID],
     })
 
-    const res = await getTabState(SITE_ID, TABLE_ID)
+    const res = await getTabState(TABLE_ID)
 
     expect(res.status).toBe('ok')
     const tab = (res as any).tab
@@ -533,21 +587,10 @@ describe('getTabState', () => {
     expect(tab.totals.payableTotal).toBe(5.3)
   })
 
-  it('returns error on invalid siteId', async () => {
+  it('returns error on invalid tableId', async () => {
     mockIsValidEntityId.mockReturnValueOnce(false)
 
-    const res = await getTabState('bad', TABLE_ID)
-
-    expect(res.status).toBe('error')
-    expect((res as any).errors).toContain('Invalid site ID')
-  })
-
-  it('returns error on invalid tableId', async () => {
-    mockIsValidEntityId
-      .mockReturnValueOnce(true) // siteId
-      .mockReturnValueOnce(false) // tableId
-
-    const res = await getTabState(SITE_ID, 'bad')
+    const res = await getTabState('bad')
 
     expect(res.status).toBe('error')
     expect((res as any).errors).toContain('Invalid table ID')
@@ -560,66 +603,60 @@ describe('getDineContext', () => {
   it('returns feature_disabled when restaurants flag is off', async () => {
     mockIsFlagEnabled.mockResolvedValueOnce(false)
 
-    const res = await getDineContext(SITE_ID, TABLE_ID)
+    const res = await getDineContext(TABLE_ID)
 
     expect(res.status).toBe('error')
     expect((res as any).errors).toContain('feature_disabled')
   })
 
-  it('returns error when site is not found', async () => {
-    vi.mocked(prisma.site.findUnique).mockResolvedValueOnce(null)
-
-    const res = await getDineContext(SITE_ID, TABLE_ID)
-
-    expect(res.status).toBe('error')
-    expect((res as any).errors).toContain('Site not found')
-  })
-
-  it('returns error when appSalesEnabled is false', async () => {
-    mockSite({ appSalesEnabled: false })
-
-    const res = await getDineContext(SITE_ID, TABLE_ID)
-
-    expect(res.status).toBe('error')
-    expect((res as any).errors?.[0]).toContain('not available')
-  })
-
   it('returns error when table is not found or inactive', async () => {
-    mockSite()
     vi.mocked(prisma.table.findUnique).mockResolvedValueOnce(null)
 
-    const res = await getDineContext(SITE_ID, TABLE_ID)
+    const res = await getDineContext(TABLE_ID)
 
     expect(res.status).toBe('error')
     expect((res as any).errors).toContain('Table not found or unavailable')
   })
 
-  it('returns error when table restaurant siteId does not match', async () => {
-    mockSite()
+  it('returns error when table has no restaurant', async () => {
     vi.mocked(prisma.table.findUnique).mockResolvedValueOnce({
       id: TABLE_ID,
       number: 5,
       label: 'T5',
       status: 'active',
-      restaurant: { id: RESTAURANT_ID, name: 'Vento', siteId: 'wrong-site' },
+      restaurant: null,
     } as any)
 
-    const res = await getDineContext(SITE_ID, TABLE_ID)
+    const res = await getDineContext(TABLE_ID)
 
     expect(res.status).toBe('error')
     expect((res as any).errors).toContain('Table not found or unavailable')
   })
 
-  it('returns full context on success', async () => {
-    mockSite()
+  it('returns error when restaurant.dineInEnabled is false', async () => {
+    vi.mocked(prisma.table.findUnique).mockResolvedValueOnce({
+      id: TABLE_ID,
+      number: 5,
+      label: 'T5',
+      status: 'active',
+      restaurant: { id: RESTAURANT_ID, name: 'Vento', dineInEnabled: false },
+    } as any)
+
+    const res = await getDineContext(TABLE_ID)
+
+    expect(res.status).toBe('error')
+    expect((res as any).errors?.[0]).toContain('not available')
+  })
+
+  it('returns full context on success (menu sourced from MenuItem)', async () => {
     vi.mocked(prisma.table.findUnique).mockResolvedValueOnce({
       id: TABLE_ID,
       number: 3,
       label: 'T3',
       status: 'active',
-      restaurant: { id: RESTAURANT_ID, name: 'Chiringuito', siteId: SITE_ID },
+      restaurant: { id: RESTAURANT_ID, name: 'Chiringuito', dineInEnabled: true },
     } as any)
-    vi.mocked(prisma.product.findMany).mockResolvedValueOnce([
+    vi.mocked(prisma.menuItem.findMany).mockResolvedValueOnce([
       {
         id: PRODUCT_ID,
         name: 'Water',
@@ -633,34 +670,57 @@ describe('getDineContext', () => {
       },
     ] as any)
 
-    const res = await getDineContext(SITE_ID, TABLE_ID)
+    const res = await getDineContext(TABLE_ID)
 
     expect(res.status).toBe('ok')
     const ctx = (res as any).context
-    expect(ctx.site.name).toBe('Test Beach')
     expect(ctx.restaurant.name).toBe('Chiringuito')
     expect(ctx.table.number).toBe(3)
     expect(ctx.table.label).toBe('T3')
     expect(ctx.products).toHaveLength(1)
     expect(ctx.products[0].name).toBe('Water')
     expect(ctx.products[0].totalPrice).toBe(2.4)
+    expect(prisma.menuItem.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { restaurantId: RESTAURANT_ID, active: true },
+        orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
+      }),
+    )
   })
 
-  it('returns error on invalid siteId', async () => {
-    mockIsValidEntityId.mockReturnValueOnce(false)
+  it('pre-v2 menu item (totalPrice 0) falls back to price in the DTO', async () => {
+    vi.mocked(prisma.table.findUnique).mockResolvedValueOnce({
+      id: TABLE_ID,
+      number: 3,
+      label: 'T3',
+      status: 'active',
+      restaurant: { id: RESTAURANT_ID, name: 'Chiringuito', dineInEnabled: true },
+    } as any)
+    vi.mocked(prisma.menuItem.findMany).mockResolvedValueOnce([
+      {
+        id: PRODUCT_ID,
+        name: 'Legacy Dish',
+        price: 7.5,
+        totalPrice: 0,
+        tax: 0,
+        category: 'food',
+        soldOut: false,
+        active: true,
+        imageUrl: null,
+      },
+    ] as any)
 
-    const res = await getDineContext('bad', TABLE_ID)
+    const res = await getDineContext(TABLE_ID)
 
-    expect(res.status).toBe('error')
-    expect((res as any).errors).toContain('Invalid site ID')
+    expect(res.status).toBe('ok')
+    const ctx = (res as any).context
+    expect(ctx.products[0].totalPrice).toBe(7.5)
   })
 
   it('returns error on invalid tableId', async () => {
-    mockIsValidEntityId
-      .mockReturnValueOnce(true) // siteId
-      .mockReturnValueOnce(false) // tableId
+    mockIsValidEntityId.mockReturnValueOnce(false)
 
-    const res = await getDineContext(SITE_ID, 'bad')
+    const res = await getDineContext('bad')
 
     expect(res.status).toBe('error')
     expect((res as any).errors).toContain('Invalid table ID')

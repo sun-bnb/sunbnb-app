@@ -29,10 +29,10 @@ vi.mock('@/app/api/_lib/mollie', () => ({
 // ── Import after mocks ────────────────────────────────────────────────────────
 import { POST } from './route'
 import prisma from '@repo/data/PrismaCient'
-import { calculateTabTotal, loadFeeContext } from '@repo/data/payment'
+import { calculateTabTotal, loadTabFeeContext } from '@repo/data/payment'
 
 const mockCalculateTabTotal = vi.mocked(calculateTabTotal)
-const mockLoadFeeContext = vi.mocked(loadFeeContext)
+const mockLoadTabFeeContext = vi.mocked(loadTabFeeContext)
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const VALID_TAB_ID = 'clxk0000000000000000000000' // CUID-shaped
@@ -51,13 +51,10 @@ function makeRequest(body: Record<string, unknown>): NextRequest {
   })
 }
 
-/** A valid partner account with Mollie credentials */
+/** A valid partner account with Mollie credentials (linked-venue fee shape). */
 function mockValidPartnerContext() {
-  vi.mocked(mockLoadFeeContext).mockResolvedValue({
-    site: {
-      id: 'site-1',
-      serviceFees: [],
-    },
+  vi.mocked(mockLoadTabFeeContext).mockResolvedValue({
+    siteFees: [],
     partnerAccount: {
       userId: 'partner-1',
       mollieAccessToken: 'access_token_123',
@@ -66,6 +63,7 @@ function mockValidPartnerContext() {
       serviceFees: [],
     },
     settings: { serviceFees: [] },
+    tier: null,
   } as any)
   mockGetValidMollieToken.mockResolvedValue('valid_access_token')
 }
@@ -81,12 +79,13 @@ function mockMolliePayment(checkoutUrl = 'https://checkout.mollie.com/pay/abc') 
 beforeEach(() => {
   vi.clearAllMocks()
 
-  // Default tab: open, exists
+  // Default tab: open, exists, linked to a site (siteId set)
   vi.mocked(prisma.tableTab.updateMany).mockResolvedValue({ count: 1 } as any)
   vi.mocked(prisma.tableTab.findUnique).mockResolvedValue({
     id: VALID_TAB_ID,
     status: 'open',
     siteId: 'site-1',
+    restaurantId: 'rest-1',
     paymentRef: null,
   } as any)
   vi.mocked(prisma.tableTab.update).mockResolvedValue({} as any)
@@ -208,10 +207,11 @@ describe('POST /api/tab-payment/mollie/create-payment', () => {
   // ── Partner credential validation ────────────────────────────────────────────
 
   it('reverts claim and returns 400 when partner has no Mollie account', async () => {
-    vi.mocked(mockLoadFeeContext).mockResolvedValue({
-      site: { id: 'site-1', serviceFees: [] },
+    vi.mocked(mockLoadTabFeeContext).mockResolvedValue({
+      siteFees: [],
       partnerAccount: { userId: 'partner-1', mollieAccessToken: null, serviceFees: [] },
       settings: { serviceFees: [] },
+      tier: null,
     } as any)
 
     const res = await POST(makeRequest({ tabId: VALID_TAB_ID, redirectUrl: REDIRECT_URL }))
@@ -235,6 +235,24 @@ describe('POST /api/tab-payment/mollie/create-payment', () => {
     expect(res.status).toBe(401)
 
     // Claim must be reverted
+    expect(prisma.tableTab.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: VALID_TAB_ID, status: 'pending_payment' },
+        data: { status: 'open', paymentRef: null },
+      }),
+    )
+  })
+
+  // ── Fee-context failure revert ────────────────────────────────────────────────
+
+  it('reverts claim and returns 500 when loadTabFeeContext throws', async () => {
+    mockLoadTabFeeContext.mockRejectedValueOnce(new Error('Restaurant not found'))
+
+    const res = await POST(makeRequest({ tabId: VALID_TAB_ID, redirectUrl: REDIRECT_URL }))
+    expect(res.status).toBe(500)
+    const body = await res.json()
+    expect(body.error).toContain('payment configuration')
+
     expect(prisma.tableTab.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: VALID_TAB_ID, status: 'pending_payment' },
@@ -278,7 +296,7 @@ describe('POST /api/tab-payment/mollie/create-payment', () => {
     )
   })
 
-  // ── Happy path ───────────────────────────────────────────────────────────────
+  // ── Happy path (linked venue) ─────────────────────────────────────────────────
 
   it('claims the tab, creates a payment with the correct amount, stores paymentRef, returns checkoutUrl', async () => {
     const res = await POST(makeRequest({ tabId: VALID_TAB_ID, redirectUrl: REDIRECT_URL }))
@@ -295,12 +313,23 @@ describe('POST /api/tab-payment/mollie/create-payment', () => {
       }),
     )
 
+    // loadTabFeeContext called with { siteId, restaurantId } from the tab
+    expect(mockLoadTabFeeContext).toHaveBeenCalledWith(
+      { siteId: 'site-1', restaurantId: 'rest-1' },
+      'food-and-beverage',
+    )
+
     // Mollie was called with the correct amount from calculateTabTotal
     expect(mockPaymentsCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         amount: { value: '31.50', currency: 'EUR' },
         description: `Tab ${VALID_TAB_ID}`,
-        metadata: JSON.stringify({ type: 'tab', entityId: VALID_TAB_ID, siteId: 'site-1' }),
+        metadata: JSON.stringify({
+          type: 'tab',
+          entityId: VALID_TAB_ID,
+          restaurantId: 'rest-1',
+          siteId: 'site-1',
+        }),
       }),
     )
 
@@ -315,8 +344,8 @@ describe('POST /api/tab-payment/mollie/create-payment', () => {
 
   it('includes applicationFee when service fee is non-zero', async () => {
     // The default mock has ordersTotal=30, serviceFee=1.5, payableTotal=31.5
-    // loadFeeContext returns empty serviceFees → fee resolves to 0 by default.
-    // Patch loadFeeContext to return a non-zero fee by injecting via calculateTabTotal only
+    // loadTabFeeContext returns empty serviceFees → fee resolves to 0 by default.
+    // Patch loadTabFeeContext to return a non-zero fee by injecting via calculateTabTotal only
     // (the actual fee computation runs via resolveServiceFee → we test indirectly that
     // the route passes applicationFee when the computed amount > 0).
     // Since mocked resolveServiceFee returns null/0, applicationFee won't be sent in default mock.
@@ -332,5 +361,37 @@ describe('POST /api/tab-payment/mollie/create-payment', () => {
     const res = await POST(makeRequest({ tabId: VALID_TAB_ID, redirectUrl: REDIRECT_URL }))
     // Route succeeds without any auth header or session
     expect(res.status).toBe(200)
+  })
+
+  // ── Standalone restaurant (siteId null) happy path ────────────────────────────
+
+  it('standalone tab (siteId null): resolves via loadTabFeeContext, omits siteId from metadata', async () => {
+    vi.mocked(prisma.tableTab.findUnique).mockResolvedValue({
+      id: VALID_TAB_ID,
+      status: 'open',
+      siteId: null,
+      restaurantId: 'rest-2',
+      paymentRef: null,
+    } as any)
+
+    const res = await POST(makeRequest({ tabId: VALID_TAB_ID, redirectUrl: REDIRECT_URL }))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.checkoutUrl).toBe('https://checkout.mollie.com/pay/abc')
+
+    expect(mockLoadTabFeeContext).toHaveBeenCalledWith(
+      { siteId: null, restaurantId: 'rest-2' },
+      'food-and-beverage',
+    )
+
+    expect(mockPaymentsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: JSON.stringify({
+          type: 'tab',
+          entityId: VALID_TAB_ID,
+          restaurantId: 'rest-2',
+        }),
+      }),
+    )
   })
 })

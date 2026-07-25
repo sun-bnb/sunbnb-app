@@ -180,11 +180,9 @@ function SuccessBanner({ message }: { message: string }) {
 
 export default function DineView({
   context,
-  siteId,
   tableId,
 }: {
   context: DineContext
-  siteId: string
   tableId: string
 }) {
   const t = useTranslations('Dine')
@@ -260,12 +258,12 @@ export default function DineView({
   const [prePaidTotal, setPrePaidTotal] = useState<number | undefined>(undefined)
 
   const fetchTab = useCallback(async () => {
-    const res = await getTabState(context.site.id, context.table.id)
+    const res = await getTabState(context.table.id)
     if (res.status === 'ok') {
       setTab(res.tab)
     }
     setTabLoading(false)
-  }, [context.site.id, context.table.id])
+  }, [context.table.id])
 
   // Adaptive polling: 5 s cadence while the tab is visible, paused while
   // backgrounded, and an immediate refetch the moment it becomes visible
@@ -409,7 +407,6 @@ export default function DineView({
     }))
 
     const result = await placeTabOrder({
-      siteId: context.site.id,
       tableId: context.table.id,
       anonId: anonId ?? undefined,
       notes: orderNotes || undefined,
@@ -467,7 +464,7 @@ export default function DineView({
     }
 
     // Mollie path
-    const redirectUrl = `${window.location.origin}/sites/${siteId}/dine/${tableId}?tabReturn=${tab.id}`
+    const redirectUrl = `${window.location.origin}/tables/${tableId}?tabReturn=${tab.id}`
 
     try {
       const res = await fetch('/api/tab-payment/mollie/create-payment', {
@@ -540,7 +537,7 @@ export default function DineView({
           onClick={() => {
             // Navigate back to the dine page without ?tabReturn so a fresh tab
             // can be opened lazily on the next order.
-            router.replace(`/sites/${siteId}/dine/${tableId}`)
+            router.replace(`/tables/${tableId}`)
             // Reset local state so the user can start ordering again
             setUiState({ phase: 'ordering' })
             setTab(null)
@@ -575,9 +572,9 @@ export default function DineView({
 
   // ── Render (ordering / confirm_pay / paying phases) ───────────────────────
 
-  const { site, restaurant, table, products } = context
+  const { restaurant, table, products } = context
 
-  const displayName = restaurant.name || site.name
+  const displayName = restaurant.name
 
   const availableProducts = products.filter((p) => p.active && !p.soldOut)
 

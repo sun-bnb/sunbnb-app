@@ -29,11 +29,11 @@ import {
 import {
   createTestUser,
   createTestSite,
-  createTestProduct,
   createTestPartnerAccount,
   createTestRestaurant,
   createTestTable,
   createTestTableTab,
+  createTestMenuItem,
 } from '@/app/test/fixtures'
 import { ORDER_COMPLETE } from '@repo/data/reservation-status'
 
@@ -42,9 +42,10 @@ const mockCalculateTabTotal = vi.mocked(calculateTabTotal)
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Build a minimal site + restaurant + table wired together. */
-async function buildDineSetup(overrides: {
+/** Build a linked restaurant (site + restaurant, dual-write) + active table. */
+async function buildLinkedDineSetup(overrides: {
   siteOverrides?: Record<string, unknown>
+  restaurantOverrides?: Record<string, unknown>
   tableOverrides?: Record<string, unknown>
 } = {}) {
   const owner = await createTestUser()
@@ -55,6 +56,8 @@ async function buildDineSetup(overrides: {
   })
   const restaurant = await createTestRestaurant(partnerAccount.userId, {
     siteId: site.id,
+    dineInEnabled: true,
+    ...overrides.restaurantOverrides,
   })
   // Update the site to link the restaurant (Site.restaurantId soft FK)
   await prisma.site.update({
@@ -65,7 +68,26 @@ async function buildDineSetup(overrides: {
     status: 'active',
     ...overrides.tableOverrides,
   })
-  return { owner, site, restaurant, table }
+  return { owner, partnerAccount, site, restaurant, table }
+}
+
+/** Build a standalone restaurant (no Site) + active table. */
+async function buildStandaloneDineSetup(overrides: {
+  restaurantOverrides?: Record<string, unknown>
+  tableOverrides?: Record<string, unknown>
+} = {}) {
+  const owner = await createTestUser()
+  const partnerAccount = await createTestPartnerAccount(owner.id)
+  const restaurant = await createTestRestaurant(partnerAccount.userId, {
+    siteId: null,
+    dineInEnabled: true,
+    ...overrides.restaurantOverrides,
+  })
+  const table = await createTestTable(restaurant.id, {
+    status: 'active',
+    ...overrides.tableOverrides,
+  })
+  return { owner, partnerAccount, restaurant, table }
 }
 
 // ─── Setup / teardown ────────────────────────────────────────────────────────
@@ -86,33 +108,33 @@ afterAll(async () => {
   await disconnectDatabase()
 })
 
-// ─── placeTabOrder — first order creates the tab ─────────────────────────────
+// ─── placeTabOrder — first order creates the tab (linked venue) ─────────────
 
-describe('placeTabOrder — creates tab on first order', () => {
+describe('placeTabOrder — creates tab on first order (linked venue, dual-write)', () => {
   it('creates a TableTab and Order in the DB for an anonymous caller', async () => {
-    const { owner, site, table } = await buildDineSetup()
-    const product = await createTestProduct(site.id, {
+    const { partnerAccount, site, table, restaurant } = await buildLinkedDineSetup()
+    const menuItem = await createTestMenuItem(restaurant.id, {
       price: 5.0,
       totalPrice: 6.0,
       tax: 14,
     })
 
     const res = await placeTabOrder({
-      siteId: site.id,
       tableId: table.id,
       anonId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-      items: [{ product: { id: product.id }, quantity: 2 }],
+      items: [{ product: { id: menuItem.id }, quantity: 2 }],
     })
 
     expect(res.status).toBe('ok')
     const { tabId, orderId } = res as any
 
-    // Verify the tab was created with concurrency guard set
+    // Verify the tab was created with concurrency guard set + siteId dual-write
     const tab = await prisma.tableTab.findUnique({ where: { id: tabId } })
     expect(tab).not.toBeNull()
     expect(tab!.openTableId).toBe(table.id)
     expect(tab!.status).toBe('open')
     expect(tab!.siteId).toBe(site.id)
+    expect(tab!.restaurantId).toBe(restaurant.id)
 
     // Verify the order was created in ORDER_COMPLETE so kitchen sees it
     const order = await prisma.order.findUnique({
@@ -123,9 +145,11 @@ describe('placeTabOrder — creates tab on first order', () => {
     expect(order!.status).toBe(ORDER_COMPLETE)
     expect(order!.tabId).toBe(tabId)
     expect(order!.tableId).toBe(table.id)
+    expect(order!.siteId).toBe(site.id)
+    expect(order!.restaurantId).toBe(restaurant.id)
     expect(order!.anonId).toBe('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee')
-    // Anonymous orders: userId is the site owner (FK constraint), anonId is the customer
-    expect(order!.userId).toBe(owner.id)
+    // Anonymous orders: userId is the restaurant's partner account owner (FK constraint)
+    expect(order!.userId).toBe(partnerAccount.userId)
     expect(order!.orderItems).toHaveLength(1)
     expect(order!.orderItems[0].quantity).toBe(2)
     // Price must come from DB: 5.0 × 2
@@ -135,9 +159,9 @@ describe('placeTabOrder — creates tab on first order', () => {
   })
 
   it('creates order with session user userId (authenticated caller)', async () => {
-    const { site, table } = await buildDineSetup()
+    const { restaurant, table } = await buildLinkedDineSetup()
     const customer = await createTestUser()
-    const product = await createTestProduct(site.id, {
+    const menuItem = await createTestMenuItem(restaurant.id, {
       price: 3.0,
       totalPrice: 3.6,
       tax: 14,
@@ -146,9 +170,8 @@ describe('placeTabOrder — creates tab on first order', () => {
     mockAuth.mockResolvedValue({ user: { id: customer.id } } as any)
 
     const res = await placeTabOrder({
-      siteId: site.id,
       tableId: table.id,
-      items: [{ product: { id: product.id }, quantity: 1 }],
+      items: [{ product: { id: menuItem.id }, quantity: 1 }],
     })
 
     expect(res.status).toBe('ok')
@@ -159,22 +182,69 @@ describe('placeTabOrder — creates tab on first order', () => {
   })
 })
 
-// ─── placeTabOrder — second order joins the same tab ─────────────────────────
+// ─── placeTabOrder — standalone restaurant (no Site) ─────────────────────────
+
+describe('placeTabOrder — standalone restaurant (dine-in v2, no Site)', () => {
+  it('creates a TableTab with siteId null and an Order with no site connect', async () => {
+    const { partnerAccount, restaurant, table } = await buildStandaloneDineSetup()
+    const menuItem = await createTestMenuItem(restaurant.id, {
+      price: 4.0,
+      totalPrice: 5.0,
+      tax: 25,
+    })
+
+    const res = await placeTabOrder({
+      tableId: table.id,
+      anonId: 'aaaaaaaa-1111-0000-0000-000000000001',
+      items: [{ product: { id: menuItem.id }, quantity: 1 }],
+    })
+
+    expect(res.status).toBe('ok')
+    const { tabId, orderId } = res as any
+
+    const tab = await prisma.tableTab.findUnique({ where: { id: tabId } })
+    expect(tab!.siteId).toBeNull()
+    expect(tab!.restaurantId).toBe(restaurant.id)
+
+    const order = await prisma.order.findUnique({ where: { id: orderId } })
+    expect(order!.siteId).toBeNull()
+    expect(order!.restaurantId).toBe(restaurant.id)
+    expect(order!.userId).toBe(partnerAccount.userId)
+    expect(order!.totalPrice).toBe(5.0)
+  })
+
+  it('rejects when the restaurant has dineInEnabled false', async () => {
+    const { table } = await buildStandaloneDineSetup({
+      restaurantOverrides: { dineInEnabled: false },
+    })
+
+    const res = await placeTabOrder({
+      tableId: table.id,
+      anonId: 'aaaaaaaa-1111-0000-0000-000000000002',
+      // CUID-shaped so validation passes and the dineInEnabled gate is what fires.
+      items: [{ product: { id: 'cnonexistentproduct000000' }, quantity: 1 }],
+    })
+
+    expect(res.status).toBe('error')
+    expect((res as any).errors[0]).toContain('not available')
+  })
+})
+
+// ─── placeTabOrder — subsequent orders join the existing tab ─────────────────
 
 describe('placeTabOrder — subsequent orders join the existing tab', () => {
   it('two orders from different callers share the same tab', async () => {
-    const { site, table } = await buildDineSetup()
-    const product = await createTestProduct(site.id, {
+    const { restaurant, table } = await buildLinkedDineSetup()
+    const menuItem = await createTestMenuItem(restaurant.id, {
       price: 4.0,
       totalPrice: 4.8,
       tax: 14,
     })
 
     const res1 = await placeTabOrder({
-      siteId: site.id,
       tableId: table.id,
       anonId: 'aaaaaaaa-0000-0000-0000-000000000001',
-      items: [{ product: { id: product.id }, quantity: 1 }],
+      items: [{ product: { id: menuItem.id }, quantity: 1 }],
     })
 
     expect(res1.status).toBe('ok')
@@ -182,10 +252,9 @@ describe('placeTabOrder — subsequent orders join the existing tab', () => {
 
     // Second round — different anonId (another guest at the table)
     const res2 = await placeTabOrder({
-      siteId: site.id,
       tableId: table.id,
       anonId: 'aaaaaaaa-0000-0000-0000-000000000002',
-      items: [{ product: { id: product.id }, quantity: 2 }],
+      items: [{ product: { id: menuItem.id }, quantity: 2 }],
     })
 
     expect(res2.status).toBe('ok')
@@ -199,14 +268,14 @@ describe('placeTabOrder — subsequent orders join the existing tab', () => {
   })
 
   it('getTabState totals reflect both rounds accumulating on the tab', async () => {
-    const { site, table } = await buildDineSetup()
-    const beer = await createTestProduct(site.id, {
+    const { restaurant, table } = await buildLinkedDineSetup()
+    const beer = await createTestMenuItem(restaurant.id, {
       name: 'Beer',
       price: 4.0,
       totalPrice: 4.8,
       tax: 14,
     })
-    const water = await createTestProduct(site.id, {
+    const water = await createTestMenuItem(restaurant.id, {
       name: 'Water',
       price: 2.0,
       totalPrice: 2.4,
@@ -214,14 +283,12 @@ describe('placeTabOrder — subsequent orders join the existing tab', () => {
     })
 
     await placeTabOrder({
-      siteId: site.id,
       tableId: table.id,
       anonId: 'aaaaaaaa-0000-0000-0000-000000000001',
       items: [{ product: { id: beer.id }, quantity: 2 }],
     })
 
     await placeTabOrder({
-      siteId: site.id,
       tableId: table.id,
       anonId: 'aaaaaaaa-0000-0000-0000-000000000002',
       items: [{ product: { id: water.id }, quantity: 3 }],
@@ -245,8 +312,8 @@ describe('placeTabOrder — subsequent orders join the existing tab', () => {
 
 describe('placeTabOrder — pending_payment tab blocks new orders', () => {
   it('returns error when the tab is awaiting payment', async () => {
-    const { site, table } = await buildDineSetup()
-    const product = await createTestProduct(site.id, {
+    const { restaurant, site, table } = await buildLinkedDineSetup()
+    const menuItem = await createTestMenuItem(restaurant.id, {
       price: 5.0,
       totalPrice: 6.0,
       tax: 14,
@@ -254,23 +321,23 @@ describe('placeTabOrder — pending_payment tab blocks new orders', () => {
 
     // Manually create a tab in pending_payment state
     // openTableId is set (the tab is "logically open" for the concurrency guard)
-    await createTestTableTab(table.id, site.id, table.restaurantId ?? '', {
+    await createTestTableTab(table.id, site.id, {
+      restaurantId: restaurant.id,
       status: 'pending_payment',
       openTableId: table.id,
     })
 
     const res = await placeTabOrder({
-      siteId: site.id,
       tableId: table.id,
       anonId: 'aaaaaaaa-0000-0000-0000-000000000001',
-      items: [{ product: { id: product.id }, quantity: 1 }],
+      items: [{ product: { id: menuItem.id }, quantity: 1 }],
     })
 
     expect(res.status).toBe('error')
     expect((res as any).errors[0]).toContain('payment')
 
     // No order must have been created
-    const orderCount = await prisma.order.count({ where: { siteId: site.id } })
+    const orderCount = await prisma.order.count({ where: { restaurantId: restaurant.id } })
     expect(orderCount).toBe(0)
   })
 })
@@ -279,25 +346,25 @@ describe('placeTabOrder — pending_payment tab blocks new orders', () => {
 
 describe('placeTabOrder — new tab after previous tab is closed', () => {
   it('opens a new tab when the previous one is paid (openTableId nulled)', async () => {
-    const { site, table } = await buildDineSetup()
-    const product = await createTestProduct(site.id, {
+    const { restaurant, site, table } = await buildLinkedDineSetup()
+    const menuItem = await createTestMenuItem(restaurant.id, {
       price: 5.0,
       totalPrice: 6.0,
       tax: 14,
     })
 
     // Simulate a paid (closed) tab: status=paid, openTableId=null
-    await createTestTableTab(table.id, site.id, table.restaurantId ?? '', {
+    await createTestTableTab(table.id, site.id, {
+      restaurantId: restaurant.id,
       status: 'paid',
       openTableId: null,
     })
 
     // First order on the "fresh" session — should open a new tab
     const res = await placeTabOrder({
-      siteId: site.id,
       tableId: table.id,
       anonId: 'aaaaaaaa-0000-0000-0000-000000000001',
-      items: [{ product: { id: product.id }, quantity: 1 }],
+      items: [{ product: { id: menuItem.id }, quantity: 1 }],
     })
 
     expect(res.status).toBe('ok')
@@ -318,27 +385,26 @@ describe('placeTabOrder — new tab after previous tab is closed', () => {
 
 describe('getTabState', () => {
   it('returns null tab when no open tab exists', async () => {
-    const { site, table } = await buildDineSetup()
+    const { table } = await buildLinkedDineSetup()
 
-    const res = await getTabState(site.id, table.id)
+    const res = await getTabState(table.id)
 
     expect(res.status).toBe('ok')
     expect((res as any).tab).toBeNull()
   })
 
   it('returns tab with orders and calls calculateTabTotal', async () => {
-    const { site, table } = await buildDineSetup()
-    const product = await createTestProduct(site.id, {
+    const { restaurant, table } = await buildLinkedDineSetup()
+    const menuItem = await createTestMenuItem(restaurant.id, {
       price: 5.0,
       totalPrice: 6.0,
       tax: 14,
     })
 
     const placeRes = await placeTabOrder({
-      siteId: site.id,
       tableId: table.id,
       anonId: 'aaaaaaaa-0000-0000-0000-000000000001',
-      items: [{ product: { id: product.id }, quantity: 2 }],
+      items: [{ product: { id: menuItem.id }, quantity: 2 }],
     })
     expect(placeRes.status).toBe('ok')
     const { tabId } = placeRes as any
@@ -350,7 +416,7 @@ describe('getTabState', () => {
       orderIds: [(placeRes as any).orderId],
     })
 
-    const res = await getTabState(site.id, table.id)
+    const res = await getTabState(table.id)
 
     expect(res.status).toBe('ok')
     const tab = (res as any).tab
@@ -364,28 +430,47 @@ describe('getTabState', () => {
     expect(tab.totals.payableTotal).toBe(13.0)
     expect(mockCalculateTabTotal).toHaveBeenCalledWith(tabId)
   })
+
+  it('finds a standalone-restaurant tab (openTableId only, no siteId filter)', async () => {
+    const { restaurant, table } = await buildStandaloneDineSetup()
+    const menuItem = await createTestMenuItem(restaurant.id, {
+      price: 5.0,
+      totalPrice: 6.0,
+      tax: 14,
+    })
+
+    const placeRes = await placeTabOrder({
+      tableId: table.id,
+      anonId: 'aaaaaaaa-0000-0000-0000-000000000001',
+      items: [{ product: { id: menuItem.id }, quantity: 1 }],
+    })
+    expect(placeRes.status).toBe('ok')
+
+    const res = await getTabState(table.id)
+
+    expect(res.status).toBe('ok')
+    expect((res as any).tab?.id).toBe((placeRes as any).tabId)
+  })
 })
 
 // ─── getDineContext ───────────────────────────────────────────────────────────
 
 describe('getDineContext', () => {
-  it('returns site, restaurant, table, and active products', async () => {
-    const { site, restaurant, table } = await buildDineSetup()
-    const beer = await createTestProduct(site.id, {
+  it('returns restaurant, table, and active MenuItem products (linked venue)', async () => {
+    const { restaurant, table } = await buildLinkedDineSetup()
+    const beer = await createTestMenuItem(restaurant.id, {
       name: 'Beer',
       price: 4.0,
       totalPrice: 4.8,
       tax: 14,
       active: true,
     })
-    await createTestProduct(site.id, { name: 'Inactive', active: false })
+    await createTestMenuItem(restaurant.id, { name: 'Inactive', active: false })
 
-    const res = await getDineContext(site.id, table.id)
+    const res = await getDineContext(table.id)
 
     expect(res.status).toBe('ok')
     const ctx = (res as any).context
-    expect(ctx.site.id).toBe(site.id)
-    expect(ctx.site.name).toBe('Test Beach')
     expect(ctx.restaurant.id).toBe(restaurant.id)
     expect(ctx.table.id).toBe(table.id)
     // Only active products returned
@@ -393,28 +478,36 @@ describe('getDineContext', () => {
     expect(ctx.products[0].id).toBe(beer.id)
   })
 
-  it('returns error when table is from a different site', async () => {
-    const { site } = await buildDineSetup()
-    // Create a second site + restaurant + table, not linked to the first site
-    const owner2 = await createTestUser()
-    const partnerAccount2 = await createTestPartnerAccount(owner2.id)
-    const site2 = await createTestSite(owner2.id, { appSalesEnabled: true })
-    const restaurant2 = await createTestRestaurant(partnerAccount2.userId, {
-      siteId: site2.id,
+  it('returns restaurant, table, and menu for a standalone restaurant (no Site)', async () => {
+    const { restaurant, table } = await buildStandaloneDineSetup()
+    const dish = await createTestMenuItem(restaurant.id, {
+      name: 'Paella',
+      price: 12.0,
+      totalPrice: 15.0,
+      tax: 25,
     })
-    const table2 = await createTestTable(restaurant2.id)
 
-    // Request the table from site2 but pass site1's siteId
-    const res = await getDineContext(site.id, table2.id)
+    const res = await getDineContext(table.id)
+
+    expect(res.status).toBe('ok')
+    const ctx = (res as any).context
+    expect(ctx.restaurant.id).toBe(restaurant.id)
+    expect(ctx.products).toHaveLength(1)
+    expect(ctx.products[0].id).toBe(dish.id)
+    expect(ctx.products[0].totalPrice).toBe(15.0)
+  })
+
+  it('returns error when the table does not exist', async () => {
+    const res = await getDineContext('cnonexistenttable00000000')
 
     expect(res.status).toBe('error')
     expect((res as any).errors).toContain('Table not found or unavailable')
   })
 
-  it('returns error when appSalesEnabled is false', async () => {
-    const { site, table } = await buildDineSetup({ siteOverrides: { appSalesEnabled: false } })
+  it('returns error when restaurant.dineInEnabled is false', async () => {
+    const { table } = await buildLinkedDineSetup({ restaurantOverrides: { dineInEnabled: false } })
 
-    const res = await getDineContext(site.id, table.id)
+    const res = await getDineContext(table.id)
 
     expect(res.status).toBe('error')
     expect((res as any).errors[0]).toContain('not available')

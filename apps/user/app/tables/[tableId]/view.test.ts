@@ -48,14 +48,12 @@ const mockInitiateDemoTabPayment = vi.mocked(initiateDemoTabPayment)
 
 // ── Shared fixtures ───────────────────────────────────────────────────────────
 
-const SITE_ID = 'site-1'
 const TABLE_ID = 'table-1'
 const ANON_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
 const TAB_ID = 'tab-abc123'
 
 function makeContext(overrides: Partial<DineContext> = {}): DineContext {
   return {
-    site: { id: SITE_ID, name: 'Sunset Beach' },
     restaurant: { id: 'rest-1', name: 'Chiringuito Vento' },
     table: { id: TABLE_ID, number: 5, label: 'T5' },
     products: [
@@ -188,21 +186,19 @@ describe('DineContext product shape', () => {
 // ─── 2. Order flow calls placeTabOrder with anonId + cart items ───────────────
 
 describe('placeTabOrder call contract', () => {
-  it('is called with siteId, tableId, anonId, and item list', async () => {
+  it('is called with tableId, anonId, and item list (no siteId)', async () => {
     mockPlaceTabOrder.mockResolvedValue({ status: 'ok', orderId: 'ord-new', tabId: TAB_ID })
 
     const ctx = makeContext()
     const items = [{ product: { id: 'prod-1' }, quantity: 2, notes: 'no ice' }]
 
     await placeTabOrder({
-      siteId: ctx.site.id,
       tableId: ctx.table.id,
       anonId: ANON_ID,
       items,
     })
 
     expect(mockPlaceTabOrder).toHaveBeenCalledWith({
-      siteId: SITE_ID,
       tableId: TABLE_ID,
       anonId: ANON_ID,
       items,
@@ -213,7 +209,6 @@ describe('placeTabOrder call contract', () => {
     mockPlaceTabOrder.mockResolvedValue({ status: 'ok', orderId: 'ord-123', tabId: 'tab-abc' })
 
     const result = await placeTabOrder({
-      siteId: SITE_ID,
       tableId: TABLE_ID,
       anonId: ANON_ID,
       items: [{ product: { id: 'prod-1' }, quantity: 1 }],
@@ -233,7 +228,6 @@ describe('placeTabOrder call contract', () => {
     })
 
     const result = await placeTabOrder({
-      siteId: SITE_ID,
       tableId: TABLE_ID,
       anonId: ANON_ID,
       items: [{ product: { id: 'prod-1' }, quantity: 1 }],
@@ -252,7 +246,7 @@ describe('TabState shape', () => {
   it('getTabState returns null tab when no open tab exists', async () => {
     mockGetTabState.mockResolvedValue({ status: 'ok', tab: null })
 
-    const result = await getTabState(SITE_ID, TABLE_ID)
+    const result = await getTabState(TABLE_ID)
 
     expect(result.status).toBe('ok')
     if (result.status === 'ok') {
@@ -264,7 +258,7 @@ describe('TabState shape', () => {
     const tab = makeTab()
     mockGetTabState.mockResolvedValue({ status: 'ok', tab })
 
-    const result = await getTabState(SITE_ID, TABLE_ID)
+    const result = await getTabState(TABLE_ID)
 
     expect(result.status).toBe('ok')
     if (result.status === 'ok' && result.tab) {
@@ -284,7 +278,7 @@ describe('TabState shape', () => {
     })
     mockGetTabState.mockResolvedValue({ status: 'ok', tab })
 
-    const result = await getTabState(SITE_ID, TABLE_ID)
+    const result = await getTabState(TABLE_ID)
     if (result.status === 'ok' && result.tab) {
       expect(result.tab.totals.payableTotal).toBe(
         result.tab.totals.ordersTotal + result.tab.totals.serviceFee,
@@ -300,7 +294,7 @@ describe('pending_payment tab state', () => {
     const tab = makeTab({ status: 'pending_payment' })
     mockGetTabState.mockResolvedValue({ status: 'ok', tab })
 
-    const result = await getTabState(SITE_ID, TABLE_ID)
+    const result = await getTabState(TABLE_ID)
 
     expect(result.status).toBe('ok')
     if (result.status === 'ok' && result.tab) {
@@ -316,7 +310,6 @@ describe('pending_payment tab state', () => {
     })
 
     const result = await placeTabOrder({
-      siteId: SITE_ID,
       tableId: TABLE_ID,
       anonId: ANON_ID,
       items: [{ product: { id: 'prod-1' }, quantity: 1 }],
@@ -411,16 +404,15 @@ describe('Mollie create-payment call contract', () => {
   it('POST body contains tabId and a same-origin redirectUrl', () => {
     // Replicates how the view builds the POST body
     const origin = 'https://local.sunbnb.app:3002'
-    const siteId = SITE_ID
     const tableId = TABLE_ID
     const tabId = TAB_ID
 
-    const redirectUrl = `${origin}/sites/${siteId}/dine/${tableId}?tabReturn=${tabId}`
+    const redirectUrl = `${origin}/tables/${tableId}?tabReturn=${tabId}`
 
     const body = { tabId, redirectUrl }
 
     expect(body.tabId).toBe(TAB_ID)
-    expect(body.redirectUrl).toContain(`/sites/${SITE_ID}/dine/${TABLE_ID}`)
+    expect(body.redirectUrl).toContain(`/tables/${TABLE_ID}`)
     expect(body.redirectUrl).toContain(`tabReturn=${TAB_ID}`)
 
     // The origin must match the caller's origin (validated server-side)
@@ -430,7 +422,7 @@ describe('Mollie create-payment call contract', () => {
 
   it('redirectUrl contains tabReturn query param for return handling', () => {
     const origin = 'https://sunbnb.app'
-    const redirectUrl = `${origin}/sites/${SITE_ID}/dine/${TABLE_ID}?tabReturn=${TAB_ID}`
+    const redirectUrl = `${origin}/tables/${TABLE_ID}?tabReturn=${TAB_ID}`
 
     const parsed = new URL(redirectUrl)
     expect(parsed.searchParams.get('tabReturn')).toBe(TAB_ID)

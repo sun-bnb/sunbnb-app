@@ -20,7 +20,6 @@ export interface PlaceTabOrderItem {
 }
 
 export interface PlaceTabOrderInput {
-  siteId: string
   tableId: string
   anonId?: string
   notes?: string
@@ -40,6 +39,12 @@ type PlaceTabOrderResult =
  * QR-URL-as-credential model: any caller with the table CUID (from the QR)
  * may place orders. Authentication required only to distinguish anon vs
  * session identity for attribution.
+ *
+ * Restaurant-anchored (dine-in v2): the table id alone is the credential and
+ * routing key — no siteId is accepted or required. Linked venues (whose
+ * restaurant carries a siteId) dual-write siteId on the TableTab/Order so
+ * site dashboards/accounting keep working; standalone restaurants leave it
+ * null.
  */
 export async function placeTabOrder(
   input: PlaceTabOrderInput,
@@ -52,10 +57,6 @@ export async function placeTabOrder(
 
   // ── Validate required presence ───────────────────────────────────────────
 
-  if (!input.siteId) {
-    return { status: 'error', errors: ['siteId is required'] }
-  }
-
   if (!input.tableId) {
     return { status: 'error', errors: ['tableId is required'] }
   }
@@ -65,10 +66,6 @@ export async function placeTabOrder(
   }
 
   // ── Validate IDs ────────────────────────────────────────────────────────
-
-  if (!isValidEntityId(input.siteId)) {
-    return { status: 'error', errors: ['Invalid site ID'] }
-  }
 
   if (!isValidEntityId(input.tableId)) {
     return { status: 'error', errors: ['Invalid table ID'] }
@@ -97,39 +94,7 @@ export async function placeTabOrder(
     }
   }
 
-  // ── Site gate: exists + appSalesEnabled ─────────────────────────────────
-
-  const site = await prisma.site.findUnique({
-    where: { id: input.siteId },
-    select: { userId: true, appSalesEnabled: true },
-  })
-
-  if (!site) {
-    return { status: 'error', errors: ['Site not found'] }
-  }
-
-  if (!site.appSalesEnabled) {
-    return { status: 'error', errors: ['Product ordering is not available for this site'] }
-  }
-
-  // ── Identity ────────────────────────────────────────────────────────────
-  // Session user or anonId required. For anon callers we use the site
-  // owner's userId to satisfy the Order.userId FK, exactly as createOrder.
-
-  const session = await auth()
-  let orderUserId = session?.user?.id
-
-  if (!orderUserId) {
-    if (!input.anonId) {
-      return { status: 'error', errors: ['Authentication required'] }
-    }
-    orderUserId = site.userId
-  }
-
-  // ── Table gate: active + table↔site match ───────────────────────────────
-  // Load the table with its restaurant to verify:
-  //   (a) table.status === 'active'
-  //   (b) table.restaurant.siteId === input.siteId  (ownership check)
+  // ── Table gate: exists + active + restaurant + dineInEnabled ────────────
 
   const table = await prisma.table.findUnique({
     where: { id: input.tableId },
@@ -137,7 +102,7 @@ export async function placeTabOrder(
       id: true,
       status: true,
       restaurant: {
-        select: { id: true, siteId: true },
+        select: { id: true, siteId: true, dineInEnabled: true, partnerAccountId: true },
       },
     },
   })
@@ -146,28 +111,48 @@ export async function placeTabOrder(
     return { status: 'error', errors: ['Table not found or unavailable'] }
   }
 
-  if (!table.restaurant || table.restaurant.siteId !== input.siteId) {
+  if (!table.restaurant) {
     return { status: 'error', errors: ['Table not found or unavailable'] }
   }
 
-  const restaurantId = table.restaurant.id
+  if (!table.restaurant.dineInEnabled) {
+    return { status: 'error', errors: ['Ordering is not available for this table'] }
+  }
 
-  // ── Products: DB-priced, active, belong to site, not soldOut ────────────
+  const restaurant = table.restaurant
+  const restaurantId = restaurant.id
 
-  const productIds = input.items.map((i) => i.product.id)
-  const products = await prisma.product.findMany({
-    where: { id: { in: productIds }, siteId: input.siteId, active: true },
+  // ── Identity ────────────────────────────────────────────────────────────
+  // Session user or anonId required. For anon callers we use the restaurant
+  // owner's userId (Restaurant.partnerAccountId IS a User.id) to satisfy the
+  // Order.userId FK, exactly as createOrder used site.userId.
+
+  const session = await auth()
+  let orderUserId = session?.user?.id
+
+  if (!orderUserId) {
+    if (!input.anonId) {
+      return { status: 'error', errors: ['Authentication required'] }
+    }
+    orderUserId = restaurant.partnerAccountId
+  }
+
+  // ── Menu items: DB-priced, active, belong to restaurant, not soldOut ────
+
+  const menuItemIds = input.items.map((i) => i.product.id)
+  const menuItems = await prisma.menuItem.findMany({
+    where: { id: { in: menuItemIds }, restaurantId, active: true },
   })
 
-  const productMap = new Map(products.map((p) => [p.id, p]))
+  const menuItemMap = new Map(menuItems.map((m) => [m.id, m]))
 
   for (const item of input.items) {
-    const dbProduct = productMap.get(item.product.id)
-    if (!dbProduct) {
+    const dbMenuItem = menuItemMap.get(item.product.id)
+    if (!dbMenuItem) {
       return { status: 'error', errors: ['One or more products are unavailable'] }
     }
-    if (dbProduct.soldOut) {
-      return { status: 'error', errors: [`${dbProduct.name} is currently sold out`] }
+    if (dbMenuItem.soldOut) {
+      return { status: 'error', errors: [`${dbMenuItem.name} is currently sold out`] }
     }
   }
 
@@ -177,21 +162,23 @@ export async function placeTabOrder(
   let sumTotalPrice = 0
 
   const orderItemsData = input.items.map((item) => {
-    const product = productMap.get(item.product.id)!
-    const linePrice = product.price * item.quantity
-    const lineTotalPrice = product.totalPrice * item.quantity
+    const menuItem = menuItemMap.get(item.product.id)!
+    // Transitional guard for pre-v2 rows: totalPrice defaults to 0 until backfilled.
+    const grossUnit = menuItem.totalPrice > 0 ? menuItem.totalPrice : menuItem.price
+    const linePrice = menuItem.price * item.quantity
+    const lineTotalPrice = grossUnit * item.quantity
 
     sumPrice += linePrice
     sumTotalPrice += lineTotalPrice
 
     return {
-      productId: product.id,
+      productId: menuItem.id,
       quantity: item.quantity,
-      name: product.name,
+      name: menuItem.name,
       price: linePrice,
-      tax: product.tax,
+      tax: menuItem.tax,
       totalPrice: lineTotalPrice,
-      category: product.category ?? 'food',
+      category: menuItem.category ?? 'food',
       notes: item.notes?.slice(0, 200) || null,
     }
   })
@@ -227,11 +214,13 @@ export async function placeTabOrder(
         resolvedTabId = existingTab.id
       } else {
         // Create a new tab — this may throw P2002 if a concurrent first order wins.
+        // Dual-write: siteId is set for linked venues (restaurant.siteId non-null),
+        // null for standalone restaurants.
         const newTab = await tx.tableTab.create({
           data: {
             tableId: input.tableId,
             restaurantId,
-            siteId: input.siteId,
+            siteId: restaurant.siteId ?? null,
             openTableId: input.tableId,
             status: TAB_OPEN,
             anonId: input.anonId ?? null,
@@ -245,8 +234,10 @@ export async function placeTabOrder(
 
     // Create the order in the same transaction.
     // orderUserId is: session.user.id for authenticated callers,
-    // or site.userId for anonymous callers (satisfies FK constraint;
-    // real customer is identified by anonId — same pattern as createOrder).
+    // or restaurant.partnerAccountId for anonymous callers (satisfies FK
+    // constraint; real customer is identified by anonId — same pattern as
+    // createOrder). Dual-write: connect site only when the restaurant is
+    // linked to one; always connect restaurant.
     const orderData: Record<string, unknown> = {
       status: ORDER_COMPLETE,
       price: sumPrice,
@@ -257,7 +248,8 @@ export async function placeTabOrder(
       notes: input.notes?.slice(0, 500) || null,
       tableId: input.tableId,
       orderItems: { create: orderItemsData },
-      site: { connect: { id: input.siteId } },
+      restaurant: { connect: { id: restaurantId } },
+      ...(restaurant.siteId ? { site: { connect: { id: restaurant.siteId } } } : {}),
       user: { connect: { id: orderUserId } },
       tab: { connect: { id: resolvedTabId } },
     }
@@ -352,21 +344,17 @@ type GetTabStateResult =
 
 /**
  * Public read for the dine-in tab page. No ownership check by design —
- * the QR URL (containing the table CUID) is the credential.
+ * the QR URL (containing the table CUID) is the credential. openTableId is
+ * unique, so the table id alone identifies the open tab (no siteId filter
+ * needed).
  */
-export async function getTabState(
-  siteId: string,
-  tableId: string,
-): Promise<GetTabStateResult> {
-  if (!isValidEntityId(siteId)) {
-    return { status: 'error', errors: ['Invalid site ID'] }
-  }
+export async function getTabState(tableId: string): Promise<GetTabStateResult> {
   if (!isValidEntityId(tableId)) {
     return { status: 'error', errors: ['Invalid table ID'] }
   }
 
   const tab = await prisma.tableTab.findFirst({
-    where: { openTableId: tableId, siteId },
+    where: { openTableId: tableId },
     select: {
       id: true,
       status: true,
@@ -435,10 +423,6 @@ export async function getTabState(
 // ─── getDineContext ───────────────────────────────────────────────────────────
 
 export interface DineContext {
-  site: {
-    id: string
-    name: string
-  }
   restaurant: {
     id: string
     name: string
@@ -466,16 +450,15 @@ type GetDineContextResult =
   | { status: 'error'; errors: string[] }
 
 /**
- * Landing-page context for the dine-in tab page. Returns site display info,
- * restaurant + table metadata, and the site's active products (same contract
- * as getProducts in reservations/[id]/actions.ts so the UI can reuse Menu).
+ * Landing-page context for the dine-in tab page. Returns restaurant + table
+ * metadata and the restaurant's active MenuItem catalog, mapped to the same
+ * product-shaped DTO the DineView already consumes (dine-in v1 sourced this
+ * from site Product; v2 sources it from the restaurant's own MenuItem rail).
  *
- * Same gates as placeTabOrder: flag, appSalesEnabled, table↔site match.
+ * Same gates as placeTabOrder: flag, table active, restaurant.dineInEnabled.
+ * No site lookup at all — the table id is the sole credential/routing key.
  */
-export async function getDineContext(
-  siteId: string,
-  tableId: string,
-): Promise<GetDineContextResult> {
+export async function getDineContext(tableId: string): Promise<GetDineContextResult> {
   // ── Flag gate ────────────────────────────────────────────────────────────
 
   if (!(await isFlagEnabled('restaurants'))) {
@@ -484,30 +467,11 @@ export async function getDineContext(
 
   // ── Validate IDs ────────────────────────────────────────────────────────
 
-  if (!isValidEntityId(siteId)) {
-    return { status: 'error', errors: ['Invalid site ID'] }
-  }
-
   if (!isValidEntityId(tableId)) {
     return { status: 'error', errors: ['Invalid table ID'] }
   }
 
-  // ── Site gate ────────────────────────────────────────────────────────────
-
-  const site = await prisma.site.findUnique({
-    where: { id: siteId },
-    select: { id: true, name: true, appSalesEnabled: true },
-  })
-
-  if (!site) {
-    return { status: 'error', errors: ['Site not found'] }
-  }
-
-  if (!site.appSalesEnabled) {
-    return { status: 'error', errors: ['Product ordering is not available for this site'] }
-  }
-
-  // ── Table gate: active + table↔site ownership ────────────────────────────
+  // ── Table gate: active + restaurant + dineInEnabled ──────────────────────
 
   const table = await prisma.table.findUnique({
     where: { id: tableId },
@@ -517,7 +481,7 @@ export async function getDineContext(
       label: true,
       status: true,
       restaurant: {
-        select: { id: true, name: true, siteId: true },
+        select: { id: true, name: true, dineInEnabled: true },
       },
     },
   })
@@ -526,35 +490,37 @@ export async function getDineContext(
     return { status: 'error', errors: ['Table not found or unavailable'] }
   }
 
-  if (!table.restaurant || table.restaurant.siteId !== siteId) {
+  if (!table.restaurant) {
     return { status: 'error', errors: ['Table not found or unavailable'] }
   }
 
-  // ── Products ─────────────────────────────────────────────────────────────
+  if (!table.restaurant.dineInEnabled) {
+    return { status: 'error', errors: ['Ordering is not available for this table'] }
+  }
 
-  const products = await prisma.product.findMany({
-    where: { siteId, active: true },
-    select: {
-      id: true,
-      name: true,
-      price: true,
-      totalPrice: true,
-      tax: true,
-      category: true,
-      soldOut: true,
-      active: true,
-      imageUrl: true,
-    },
-    orderBy: { name: 'asc' },
+  // ── Menu ─────────────────────────────────────────────────────────────────
+
+  const menuItems = await prisma.menuItem.findMany({
+    where: { restaurantId: table.restaurant.id, active: true },
+    orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
   })
+
+  const products = menuItems.map((m) => ({
+    id: m.id,
+    name: m.name,
+    price: m.price,
+    // Transitional guard for pre-v2 rows: totalPrice defaults to 0 until backfilled.
+    totalPrice: m.totalPrice > 0 ? m.totalPrice : m.price,
+    tax: m.tax,
+    category: m.category,
+    soldOut: m.soldOut,
+    active: m.active,
+    imageUrl: m.imageUrl,
+  }))
 
   return {
     status: 'ok',
     context: {
-      site: {
-        id: site.id,
-        name: site.name,
-      },
       restaurant: {
         id: table.restaurant.id,
         name: table.restaurant.name,

@@ -1,101 +1,76 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// next/navigation.notFound must throw to simulate the 404 response
+// next/navigation.redirect throws (Next's control-flow signal) — capture the target.
+const { mockRedirect } = vi.hoisted(() => ({ mockRedirect: vi.fn() }))
+
 vi.mock('next/navigation', () => ({
-  notFound: vi.fn(() => {
-    throw new Error('NEXT_NOT_FOUND')
-  }),
+  redirect: mockRedirect,
 }))
 
-// Mock the actions so the page test doesn't hit the DB
-vi.mock('./actions', () => ({
-  getDineContext: vi.fn(),
-  placeTabOrder: vi.fn(),
-  getTabState: vi.fn(),
-}))
-
-// Mock the client view — it pulls in Image, next-intl, etc.
-vi.mock('./view', () => ({ default: () => null }))
-
-import { notFound } from 'next/navigation'
-import { getDineContext } from './actions'
-import DinePage from './page'
-
-const mockGetDineContext = vi.mocked(getDineContext)
-const mockNotFound = vi.mocked(notFound)
-
-const SITE_ID = 'site-cuid-1'
-const TABLE_ID = 'table-cuid-1'
-
-function makeContext() {
-  return {
-    site: { id: SITE_ID, name: 'Sunset Beach' },
-    restaurant: { id: 'rest-1', name: 'Chiringuito Vento' },
-    table: { id: TABLE_ID, number: 5, label: 'T5' },
-    products: [
-      {
-        id: 'prod-1',
-        name: 'Agua',
-        price: 2.0,
-        totalPrice: 2.4,
-        tax: 14,
-        category: 'drink',
-        soldOut: false,
-        active: true,
-        imageUrl: null,
-      },
-    ],
-  }
-}
+import LegacyDinePage from './page'
 
 beforeEach(() => {
   vi.clearAllMocks()
 })
 
-describe('DinePage', () => {
-  it('calls notFound when getDineContext returns an error', async () => {
-    mockGetDineContext.mockResolvedValue({
-      status: 'error',
-      errors: ['Table not found or unavailable'],
+describe('legacy /sites/[id]/dine/[tableId] alias', () => {
+  it('redirects to /tables/[tableId] with no query params', () => {
+    LegacyDinePage({
+      params: { id: 'site-1', tableId: 'table-1' },
+      searchParams: {},
     })
 
-    await expect(
-      DinePage({ params: { id: SITE_ID, tableId: TABLE_ID } }),
-    ).rejects.toThrow('NEXT_NOT_FOUND')
-
-    expect(mockNotFound).toHaveBeenCalled()
+    expect(mockRedirect).toHaveBeenCalledWith('/tables/table-1')
   })
 
-  it('calls notFound when getDineContext returns feature_disabled', async () => {
-    mockGetDineContext.mockResolvedValue({
-      status: 'error',
-      errors: ['feature_disabled'],
+  it('preserves query params (e.g. mid-flight Mollie return ?tabReturn=)', () => {
+    LegacyDinePage({
+      params: { id: 'site-1', tableId: 'table-1' },
+      searchParams: { tabReturn: 'tab-abc123' },
     })
 
-    await expect(
-      DinePage({ params: { id: SITE_ID, tableId: TABLE_ID } }),
-    ).rejects.toThrow('NEXT_NOT_FOUND')
-
-    expect(mockNotFound).toHaveBeenCalled()
+    expect(mockRedirect).toHaveBeenCalledWith('/tables/table-1?tabReturn=tab-abc123')
   })
 
-  it('passes context, siteId and tableId to DineView when getDineContext succeeds', async () => {
-    const context = makeContext()
-    mockGetDineContext.mockResolvedValue({ status: 'ok', context })
+  it('preserves multiple query params', () => {
+    LegacyDinePage({
+      params: { id: 'site-1', tableId: 'table-1' },
+      searchParams: { tabReturn: 'tab-abc123', foo: 'bar' },
+    })
 
-    const el: any = await DinePage({ params: { id: SITE_ID, tableId: TABLE_ID } })
-
-    expect(mockNotFound).not.toHaveBeenCalled()
-    expect(el.props.context).toBe(context)
-    expect(el.props.siteId).toBe(SITE_ID)
-    expect(el.props.tableId).toBe(TABLE_ID)
+    const calledWith = mockRedirect.mock.calls[0][0] as string
+    const url = new URL(calledWith, 'http://localhost')
+    expect(url.pathname).toBe('/tables/table-1')
+    expect(url.searchParams.get('tabReturn')).toBe('tab-abc123')
+    expect(url.searchParams.get('foo')).toBe('bar')
   })
 
-  it('invokes getDineContext with the correct siteId and tableId from params', async () => {
-    mockGetDineContext.mockResolvedValue({ status: 'ok', context: makeContext() })
+  it('ignores undefined searchParams values', () => {
+    LegacyDinePage({
+      params: { id: 'site-1', tableId: 'table-1' },
+      searchParams: { tabReturn: undefined },
+    })
 
-    await DinePage({ params: { id: SITE_ID, tableId: TABLE_ID } })
+    expect(mockRedirect).toHaveBeenCalledWith('/tables/table-1')
+  })
 
-    expect(mockGetDineContext).toHaveBeenCalledWith(SITE_ID, TABLE_ID)
+  it('supports array-valued query params (repeated keys)', () => {
+    LegacyDinePage({
+      params: { id: 'site-1', tableId: 'table-1' },
+      searchParams: { tag: ['a', 'b'] },
+    })
+
+    const calledWith = mockRedirect.mock.calls[0][0] as string
+    const url = new URL(calledWith, 'http://localhost')
+    expect(url.searchParams.getAll('tag')).toEqual(['a', 'b'])
+  })
+
+  it('routes on the tableId param, independent of the legacy siteId', () => {
+    LegacyDinePage({
+      params: { id: 'some-other-site', tableId: 'table-9' },
+      searchParams: {},
+    })
+
+    expect(mockRedirect).toHaveBeenCalledWith('/tables/table-9')
   })
 })

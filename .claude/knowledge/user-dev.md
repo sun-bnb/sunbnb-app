@@ -15,6 +15,7 @@ sections.
 - **Test failures & fixes** — mock/fixture gotchas — `rentalBooking.findUnique` missing from mock (2026-06-19)
 - **i18n & locale** — next-intl edge cases — _none yet_
 - **Sunbed preselection / reserve-first flow** — pair resolution, dispatch loop, single-day default — (2026-07-09)
+- **Integration test infra** — `sunbnb_test` deadlocks were cross-session contention, not container/infra rot — never run two integration suites concurrently (2026-07-25)
 - **Rejected approaches** — dead-ends, so nobody re-tries them — _none yet_
 
 ---
@@ -145,6 +146,13 @@ sections.
 **Problem:** The `dateRange` fallback in `SunbedSelection.tsx` and `Reservation.tsx` (the `ReservationTimerangeSelector`) used `dayjs().add(1,'day').endOf('day')` as the end — creating a 2-day default. A first-time visitor who didn't touch the picker would book 2 days instead of 1.
 **Solution:** Change to `dayjs().endOf('day')` in both files (days-mode only — hours-mode untouched). Files: `components/reservation/SunbedSelection.tsx` (dateRange fallback, ~line 289) and `app/sites/[id]/Reservation.tsx` (ReservationTimerangeSelector dateRange fallback, ~line 111).
 **Prevention:** Default date ranges must be single-day for a sunbed booking app. The committed `dateRange` in the availability useEffect derives from this fallback when `sitesState.dateRange` is null, so fixing the fallback fixes the committed value too.
+
+## Integration test infra
+
+### 2026-07-25: `sunbnb_test` deadlocks (`40P01`) / phantom FK failures = another session's integration run on the same DB — check pg_stat_activity before blaming infra or your diff
+**Problem:** `npm run test:integration` in `apps/user` produced non-deterministic failures — `FK constraint violated` immediately after a fixture's `createTestUser()`, and `deadlock detected` (Postgres `40P01`) from plain sequential `create()` calls and from `cleanDatabase()`'s `TRUNCATE ... CASCADE` — differing on every rerun, and reproducing on completely untouched files. Root cause (established after the session): a **parallel agent session was running its own integration suite against the same `sunbnb_test` DB at the same time**. Every suite's `cleanDatabase()` TRUNCATE CASCADE tramples the other suite's fixtures — mutual deadlocks and mid-test row deletion are the guaranteed outcome, not flakiness. The same orchestration re-ran both suites serially immediately afterwards: 74/74 (apps/user) and 299/299 (packages/data) green, twice.
+**Solution:** `docker exec sunbnb-postgres psql -U postgres -d sunbnb_test -c "SELECT pid, state, query FROM pg_stat_activity;"` — if connections you didn't open are active on `sunbnb_test`, another session is running tests. Wait for it (or coordinate via the orchestrator) and re-run serially; do NOT restart the container, chase Prisma pool tuning, or report the code broken.
+**Prevention:** Integration suites against the shared local `sunbnb_test` must be serialized across sessions/agents — an orchestrator dispatching parallel agents must either tell exactly one of them to run integration tests or run them itself after the agents finish. If you see `40P01`/phantom-FK signatures, assume cross-session contention first; only suspect real infra after `pg_stat_activity` shows you are alone.
 
 ## Rejected approaches
 

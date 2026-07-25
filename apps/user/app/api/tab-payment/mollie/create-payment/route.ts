@@ -29,7 +29,7 @@
 
 import prisma from '@repo/data/PrismaCient'
 import {
-  loadFeeContext,
+  loadTabFeeContext,
   resolveServiceFee,
   calculateServiceFeeAmount,
   calculateTabTotal,
@@ -118,10 +118,10 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Invalid payment amount' }, { status: 400 })
   }
 
-  // Load the tab to get siteId for fee context
+  // Load the tab to get siteId/restaurantId for fee context
   const tab = await prisma.tableTab.findUnique({
     where: { id: tabId },
-    select: { id: true, siteId: true },
+    select: { id: true, siteId: true, restaurantId: true },
   })
 
   if (!tab) {
@@ -130,19 +130,23 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Load partner's Mollie credentials ────────────────────────────────────
-  let site: Awaited<ReturnType<typeof loadFeeContext>>['site']
-  let partnerAccount: Awaited<ReturnType<typeof loadFeeContext>>['partnerAccount']
-  let settings: Awaited<ReturnType<typeof loadFeeContext>>['settings']
+  // Restaurant-anchored (dine-in v2): linked venues (siteId set) resolve fees
+  // through the site rail; standalone restaurants resolve through the
+  // account tier directly. loadTabFeeContext branches on tab.siteId.
+  let siteFees: Awaited<ReturnType<typeof loadTabFeeContext>>['siteFees']
+  let partnerAccount: Awaited<ReturnType<typeof loadTabFeeContext>>['partnerAccount']
+  let settings: Awaited<ReturnType<typeof loadTabFeeContext>>['settings']
+  let tier: Awaited<ReturnType<typeof loadTabFeeContext>>['tier']
 
   try {
-    // Transitional (dine-in v2 phase 3 replaces this with loadTabFeeContext).
-    if (!tab.siteId) {
-      throw new Error(`Tab ${tab.id} has no siteId — standalone fee context not yet wired`)
-    }
-    const ctx = await loadFeeContext(tab.siteId, 'food-and-beverage')
-    site = ctx.site
+    const ctx = await loadTabFeeContext(
+      { siteId: tab.siteId, restaurantId: tab.restaurantId },
+      'food-and-beverage',
+    )
+    siteFees = ctx.siteFees
     partnerAccount = ctx.partnerAccount
     settings = ctx.settings
+    tier = ctx.tier
   } catch (err) {
     await revertClaim()
     console.error('[TabPayment] Failed to load fee context:', err)
@@ -174,9 +178,8 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Compute application fee (our platform commission) ────────────────────
-  const tier = partnerAccount.subscription?.plan?.tier ?? null
   const matchedFee = resolveServiceFee(
-    site.serviceFees,
+    siteFees,
     partnerAccount.serviceFees,
     settings?.serviceFees ?? [],
     'food-and-beverage',
@@ -236,7 +239,8 @@ export async function POST(request: NextRequest) {
       metadata: JSON.stringify({
         type: 'tab',
         entityId: tabId,
-        siteId: tab.siteId,
+        restaurantId: tab.restaurantId,
+        ...(tab.siteId ? { siteId: tab.siteId } : {}),
       }),
       ...(applicationFeeAmount > 0 && {
         applicationFee: {

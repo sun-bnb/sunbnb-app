@@ -1,28 +1,28 @@
-import { notFound } from 'next/navigation'
-import { getDineContext } from './actions'
-import DineView from './view'
+import { redirect } from 'next/navigation'
 
 /**
- * Per-table dine-in QR landing page.
- * A guest scans the table QR → lands here → browses the menu → places tab orders.
- * No auth required; the table CUID in the URL is the credential.
+ * Legacy alias for the pre-dine-in-v2 site-anchored QR URL. Old printed QR
+ * codes (and mid-flight Mollie returns already carrying `?tabReturn=`) still
+ * point here — redirect to the canonical restaurant-anchored
+ * `/tables/[tableId]` route, preserving every query param.
  */
-export default async function DinePage({
+export default function LegacyDinePage({
   params,
+  searchParams,
 }: {
   params: { id: string; tableId: string }
+  searchParams: Record<string, string | string[] | undefined>
 }) {
-  const result = await getDineContext(params.id, params.tableId)
-
-  if (result.status === 'error') {
-    notFound()
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(searchParams)) {
+    if (value === undefined) continue
+    if (Array.isArray(value)) {
+      for (const v of value) qs.append(key, v)
+    } else {
+      qs.append(key, value)
+    }
   }
+  const query = qs.toString()
 
-  return (
-    <DineView
-      context={result.context}
-      siteId={params.id}
-      tableId={params.tableId}
-    />
-  )
+  redirect(`/tables/${params.tableId}${query ? `?${query}` : ''}`)
 }
