@@ -781,6 +781,7 @@
     "tabStatusOpen": "Abierta",
     "tabStatusPendingPayment": "Pago en curso",
     "tabRounds": "{count, plural, one {# ronda} other {# rondas}}",
+    "tableN": "Mesa {number}",
     "tabAmountDue": "Importe a cobrar",
     "tabSettleCash": "Cobrar en efectivo",
     "tabDiscard": "Descartar",

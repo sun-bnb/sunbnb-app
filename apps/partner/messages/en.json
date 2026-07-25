@@ -781,6 +781,7 @@
     "tabStatusOpen": "Open",
     "tabStatusPendingPayment": "Payment in progress",
     "tabRounds": "{count, plural, one {# round} other {# rounds}}",
+    "tableN": "Table {number}",
     "tabAmountDue": "Amount due",
     "tabSettleCash": "Settle cash",
     "tabDiscard": "Discard",

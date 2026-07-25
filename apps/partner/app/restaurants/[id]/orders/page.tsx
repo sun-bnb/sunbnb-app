@@ -94,7 +94,7 @@ export default async function RestaurantOrdersPage(
   }
 
   return (
-    <div className="w-screen max-w-[768px]">
+    <div className="w-screen max-w-6xl">
       <OrdersView scope={{ kind: 'restaurant', id: restaurant.id }} orders={orders} tableMap={tableMap} accessKey={accessKey} />
     </div>
   )

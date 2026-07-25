@@ -282,7 +282,10 @@ function OrderActions({
 // ─── Table Chip ──────────────────────────────────────────────────────────────
 
 function TableChip({ number, label }: { number: number; label: string | null }) {
-  const text = label ? `Table ${number} — ${label}` : `Table ${number}`
+  const t = useTranslations('SiteOrders')
+  // The big identity box already shows the table number — the chip marks the
+  // order as dine-in and carries the human label when one exists.
+  const text = label ?? t('tableN', { number })
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3" aria-hidden="true">
@@ -339,8 +342,8 @@ function TabCard({
   }
 
   const tableLabel = tab.tableLabel
-    ? `Table ${tab.tableNumber} — ${tab.tableLabel}`
-    : `Table ${tab.tableNumber}`
+    ? `${t('tableN', { number: tab.tableNumber })} — ${tab.tableLabel}`
+    : t('tableN', { number: tab.tableNumber })
 
   if (confirm === 'settle') {
     return (
@@ -398,12 +401,12 @@ function TabCard({
     <div className="w-full rounded-xl border-2 border-gray-200 bg-white shadow-sm overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-gray-900 text-white text-base font-black">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-gray-900 text-white text-base font-black shrink-0">
             {tab.tableNumber}
           </div>
-          <div>
-            <div className="text-base font-bold text-gray-900">{tableLabel}</div>
+          <div className="min-w-0">
+            <div className="text-base font-bold text-gray-900 truncate">{tableLabel}</div>
             <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
               {isPending ? (
                 <span className="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
@@ -420,7 +423,7 @@ function TabCard({
             </div>
           </div>
         </div>
-        <div className="text-right">
+        <div className="text-right shrink-0 pl-2">
           <div className="text-lg font-bold text-gray-900">€{tab.amountDue.toFixed(2)}</div>
           <div className="text-xs text-gray-500">{t('tabRounds', { count: tab.roundsCount })}</div>
         </div>
@@ -502,10 +505,11 @@ function OrderCard({
     <div className="w-full rounded-xl border-2 border-gray-200 bg-white shadow-sm overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
-        <div className="flex items-center gap-3">
-          {/* Seat number — large for runner visibility */}
-          <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-gray-900 text-white text-xl font-black">
-            {order.seat?.number ?? '–'}
+        <div className="flex items-center gap-3 min-w-0">
+          {/* Big identity box — the runner's king identifier: table number for
+              dine-in rounds, seat number for sunbed orders. */}
+          <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-gray-900 text-white text-xl font-black shrink-0">
+            {tableEntry?.number ?? order.seat?.number ?? '–'}
           </div>
           <div>
             <div className="text-lg font-bold text-gray-900">
@@ -672,20 +676,24 @@ export default function Orders({
 
   return (
     <div className="flex flex-col h-[100dvh]">
-      {/* Tab bar — sticky top */}
-      <div className="flex border-b border-gray-200 bg-white sticky top-0 z-10">
+      {/* Tab bar — sticky top. Language-proof: the count badge is absolutely
+          positioned in the tab's corner so it can never disturb label layout;
+          labels center, shrink to text-xs on phones, and may wrap to at most
+          two lines inside a fixed-height bar (no per-locale height jumps). */}
+      <div className="flex border-b border-gray-200 bg-white sticky top-0 z-10 pt-[env(safe-area-inset-top)]">
         {TABS.map(tab => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex-1 py-3 text-center text-sm font-semibold relative transition-colors
+            className={`relative flex-1 min-w-0 min-h-[52px] px-1 py-2 flex items-center justify-center
+              text-center text-xs sm:text-sm font-semibold leading-tight transition-colors
               ${activeTab === tab.key
                 ? 'text-gray-900 border-b-2 border-gray-900'
                 : 'text-gray-400 hover:text-gray-600'}`}
           >
-            {t(tab.labelKey as any)}
+            <span className="line-clamp-2 break-words">{t(tab.labelKey as any)}</span>
             {counts[tab.key] > 0 && tab.key !== 'history' && (
-              <span className={`ml-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold text-white
+              <span className={`absolute top-1 right-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold text-white
                 ${tab.key === 'incoming' ? 'bg-red-500 animate-pulse' : tab.key === 'tabs' ? 'bg-green-600' : 'bg-gray-500'}`}>
                 {counts[tab.key]}
               </span>
@@ -694,31 +702,33 @@ export default function Orders({
         ))}
       </div>
 
-      {/* Open Tabs panel */}
+      {/* Open Tabs panel — 1 col on phones, 2 on tablets, 3 on wide screens */}
       {activeTab === 'tabs' && (
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
+        <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
           {openTabs.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-gray-400">
               <div className="text-5xl mb-3">🧾</div>
               <p className="text-sm font-medium">{t('tabsEmpty')}</p>
             </div>
           ) : (
-            openTabs.map(tab => (
-              <TabCard
-                key={tab.id}
-                scope={scope}
-                tab={tab}
-                onUpdated={handleTabUpdated}
-                accessKey={accessKey}
-              />
-            ))
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 items-start">
+              {openTabs.map(tab => (
+                <TabCard
+                  key={tab.id}
+                  scope={scope}
+                  tab={tab}
+                  onUpdated={handleTabUpdated}
+                  accessKey={accessKey}
+                />
+              ))}
+            </div>
           )}
         </div>
       )}
 
-      {/* Order list */}
+      {/* Order list — same responsive grid */}
       {activeTab !== 'tabs' && (
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
+        <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
           {tabOrders.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-gray-400">
               <div className="text-5xl mb-3">
@@ -732,17 +742,19 @@ export default function Orders({
               </p>
             </div>
           ) : (
-            tabOrders.map(order => (
-              <OrderCard
-                key={order.id}
-                scope={scope}
-                order={order}
-                tableEntry={order.tableId ? tableMap[order.tableId] : undefined}
-                onUpdated={handleUpdated}
-                compact={activeTab === 'history'}
-                accessKey={accessKey}
-              />
-            ))
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 items-start">
+              {tabOrders.map(order => (
+                <OrderCard
+                  key={order.id}
+                  scope={scope}
+                  order={order}
+                  tableEntry={order.tableId ? tableMap[order.tableId] : undefined}
+                  onUpdated={handleUpdated}
+                  compact={activeTab === 'history'}
+                  accessKey={accessKey}
+                />
+              ))}
+            </div>
           )}
         </div>
       )}

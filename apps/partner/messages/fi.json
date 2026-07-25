@@ -781,6 +781,7 @@
     "tabStatusOpen": "Avoinna",
     "tabStatusPendingPayment": "Maksu käynnissä",
     "tabRounds": "{count, plural, one {# kierros} other {# kierrosta}}",
+    "tableN": "Pöytä {number}",
     "tabAmountDue": "Maksettava summa",
     "tabSettleCash": "Maksa käteisellä",
     "tabDiscard": "Hylkää",
