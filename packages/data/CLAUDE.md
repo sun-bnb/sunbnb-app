@@ -40,12 +40,14 @@ Key models: User, PartnerAccount, Site, InventoryItem, Reservation, Order, Order
 - `computeInvoiceHash(number, date, amount, vatNumber, previousHash)` — SHA-256 chain for invoice integrity
 
 ### DB-Dependent Functions
-- `loadFeeContext(siteId, serviceCode)` — loads site + partnerAccount + settings fees; bootstraps default Settings if missing
+- `loadFeeContext(siteId, serviceCode)` — loads site + partnerAccount + settings fees; bootstraps default Settings if missing (bootstrap shared with the restaurant loader via a private `ensureSettingsAndFee`)
+- `loadRestaurantFeeContext(restaurantId, serviceCode)` — dine-in v2: partner resolved directly via `Restaurant.partnerAccountId` (a User.id), EMPTY site tier — cascade is partnerAccount → settings. For standalone (no-Site) restaurants
+- `loadTabFeeContext(tab: { siteId, restaurantId }, serviceCode)` — branches: linked tab (siteId set) → `loadFeeContext` (site rail, byte-identical); standalone → `loadRestaurantFeeContext`. Returns `TabFeeContext { siteFees, partnerAccount, settings, tier }`
 - `processConfirmedReservation(id)` — idempotent invoice creation: 2 invoices (partner + platform), per-sunbed lines + fee lines, sequential numbering with FOR UPDATE lock, hash chain, sends confirmation email
 - `processConfirmedOrder(id)` — same pattern but per-item VAT (not site-wide)
 - `processConfirmedRentalBooking(paymentRef)` — groups bookings by paymentRef, creates invoices for the group
 - `calculateOrderServiceFee(orderId)` — read-only fee calculation for orders
-- `calculateTabTotal(tabId)` — dine-in tab payable amount: sum of non-voided rounds + service fee ADDED on top (orders add fee to customer total); single source for the Mollie/demo charge amount
+- `calculateTabTotal(tabId)` — dine-in tab payable amount: sum of non-voided rounds + service fee ADDED on top (orders add fee to customer total); single source for the Mollie/demo charge amount. Site-agnostic since dine-in v2 (fee context via `loadTabFeeContext`)
 - `processConfirmedTabPayment(tabId, opts?)` — idempotent group invoicing for a dine-in tab across all rounds (per-item VAT). Default: PARTNER + PLATFORM invoices, tab → `paid`. `{ cash: true }` (staff settle-as-cash, track 015 precedent): PARTNER-only receipt, NO commission, no paymentRef, tab → `settled_cash`. Both paths null `openTableId` (mandatory — releases the one-open-tab-per-table guard); both terminal statuses block re-processing by the other path
 
 ### Tab-order paid-ness rule (analytics)
@@ -112,7 +114,7 @@ npm run test:integration:setup  # run prisma migrate deploy against sunbnb_test
 ```
 
 - **Unit tests** (`src/*.test.ts`): `payment.test.ts` (28 tests — round, VAT, fee cascade, fee calculation), `rate-limit.test.ts` (7 tests — sliding window, expiry, independent keys), `reservation-status.test.ts` (8 tests — status groupings, overlap checks)
-- **Integration tests** (`src/*.integration.test.ts`): `payment.integration.test.ts` (18 tests — processConfirmedReservation/Order, invoice creation, idempotency, hash chain, VAT, fees), `tab-payment.integration.test.ts` (23 tests — openTableId guard, calculateTabTotal, group invoicing, idempotency both directions, cash settle PARTNER-only receipt, kitchen-state preservation, void exclusion), `analytics.integration.test.ts` (incl. 5 tab-order paid-ness tests), `till.integration.test.ts` (79 tests — two-bucket window math, day-boundary inclusivity, closeEmployeeTill sweep + carry-over snapshot, void handling), `fee-context.integration.test.ts` (7 tests — loadFeeContext three-tier cascade), `password-reset.integration.test.ts` (15 tests — token lifecycle, rate limiting, expiry, password strength)
+- **Integration tests** (`src/*.integration.test.ts`): `payment.integration.test.ts` (18 tests — processConfirmedReservation/Order, invoice creation, idempotency, hash chain, VAT, fees), `tab-payment.integration.test.ts` (29 tests — openTableId guard, calculateTabTotal, group invoicing, idempotency both directions, cash settle PARTNER-only receipt, kitchen-state preservation, void exclusion, standalone-restaurant block: null-siteId tabs, account/settings-tier fees, partner-anchored invoicing), `analytics.integration.test.ts` (incl. 5 tab-order paid-ness tests), `till.integration.test.ts` (79 tests — two-bucket window math, day-boundary inclusivity, closeEmployeeTill sweep + carry-over snapshot, void handling), `fee-context.integration.test.ts` (19 tests — loadFeeContext three-tier cascade + loadRestaurantFeeContext: empty site tier, account-tier override, bootstrap), `password-reset.integration.test.ts` (15 tests — token lifecycle, rate limiting, expiry, password strength)
 - **Config**: `vitest.config.ts` (unit, excludes `*.integration.test.ts`), `vitest.integration.config.ts` (integration, `fileParallelism: false` for shared DB)
 - **Test helpers**: `src/test/setup.ts` (DB connection, `cleanDatabase()` via TRUNCATE CASCADE), `src/test/fixtures.ts` (factory functions for all models)
 

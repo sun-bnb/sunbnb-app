@@ -62,7 +62,29 @@ then spin up the standalone tablefind.app once the competitive core (P1–P3) is
 
 ## Resume here
 
-- **▶ ACTIVE (2026-07-18): P1.5 — QR order & pay at the table ("dine-in tabs") — founder-prioritized,
+- **✅ SHIPPED (2026-07-25): Dine-in tabs v2 — the standalone-restaurant rail (decoupling
+  from Site).** Founder-decided reversal of v1's fork (2): dine-in no longer rides the site
+  Order/Product rails. Six commits on `main` (`e528758` → `bee7e45`): expand migration
+  `20260725111509_dine_in_v2_expand` (Order/TableTab gain restaurant anchors, `siteId`
+  nullable + `order_owner_chk` at-least-one CHECK, `Restaurant.dineInEnabled`, MenuItem VAT
+  triple) + idempotent `menu_item_copy_from_products`; **MenuItem is THE dine-in catalog for
+  both linked and standalone venues** (Product = sunbed/POS F&B only); money path via
+  `loadTabFeeContext` (site rail when linked — byte-identical; account→settings cascade when
+  standalone); canonical consumer route **`/tables/[tableId]`** (old `/sites/[id]/dine/...`
+  = query-preserving redirect; QR prints the new URL, ungated for standalone);
+  restaurant-scoped kitchen dashboard `/restaurants/[id]/orders`
+  (`verifyRestaurantAccess`, reuses staff tokens + the site Orders view via a `scope` prop)
+  + minimal `/restaurants/[id]/accounting`; `dineInEnabled` toggle on the General tab is the
+  single ordering gate (backfilled from `appSalesEnabled` for linked venues). Dual-write:
+  linked tabs/orders still carry `siteId` so site dashboards/accounting/analytics are
+  unchanged. Browser-verified end-to-end standalone (order → demo pay → PARTNER 29.00 +
+  PLATFORM 1.45 invoices on the partner account → kitchen dashboard; recipe added to
+  `verifier-sunbnb`). **NOT yet `migrate:test`** — both new migrations must reach the test
+  DB before ANY `main` push (pre-push hook enforces). Still open (deferred): analytics/till
+  for standalone orders, settlement/fiscal tab-invoice gap (pre-existing), site-Product↔
+  MenuItem duplication UX for linked venues, `processChargedTableDeposit` still site-bound,
+  component-test infra for partner client components (none exists).
+- **▶ prior context (2026-07-18): P1.5 — QR order & pay at the table ("dine-in tabs") — founder-prioritized,
   jumps ahead of P2.** A party scans a per-table QR → browses the menu → first order **opens the tab**
   (lazily, no DB write on scan) → order rounds accumulate unpaid on the tab (kitchen sees each round) →
   "Close & pay" takes **one** Mollie/demo payment for the tab total, invoiced as a group. Three design
@@ -991,6 +1013,31 @@ monetization + no-show work is unblocked.
   dine view is the app's first fully MUI-free F&B order surface (the legacy `Menu.tsx` MUI drawer
   was deliberately not mirrored). `pending_payment` gating is dual-layer: action rejects
   (authoritative), UI disables (UX).
+
+- **2026-07-25** — **Dine-in tabs v2 shipped: decoupled from Site (standalone-restaurant rail).**
+  Trigger: founder created "Gusto Bravo" standalone and hit the QR-printing gate; decided to do
+  the deferred decoupling now. Three design forks resolved with the founder up front:
+  (1) **MenuItem everywhere** — MenuItem gained the VAT triple (`tax`/`totalPrice`, net `price`
+  derived via the new pure `@repo/data/payment-math`) and is the single dine-in catalog for
+  linked AND standalone venues; linked menus auto-populated by the idempotent
+  `menu_item_copy_from_products` migration (dedup per item name). (2) **Ops scope** = kitchen
+  dashboard + tab settle/discard + minimal monthly accounting; analytics/till deferred.
+  (3) **Canonical URL `/tables/[tableId]`** (founder-picked over `/dine/`); legacy dine URL is a
+  query-preserving redirect. Architecture: exploration showed only FOUR structural blockers
+  (Order.siteId, TableTab.siteId, Product-owned catalog, `getSiteFeeContext`) — everything else
+  (Mollie tokens, invoices, per-item VAT, numbering, openTableId guard, SecurityToken) was
+  already account-anchored. `loadTabFeeContext` branches the fee context; linked resolution is
+  byte-identical (site tier included), standalone runs account→settings with an empty site tier.
+  Dual-write keeps `siteId` on linked tabs/orders so every site surface is unchanged; the
+  `order_owner_chk` CHECK is at-least-one, NOT XOR, for that reason. Six commits `e528758`,
+  `43d0c88`, `cec5ee9`, `464fcdb`, `20fbe60`, `bee7e45`; suites: data 265u/299i, user 472u/74i,
+  partner 1962u/179i, full turbo build green; standalone loop browser-verified with DB proof
+  (PARTNER gross + PLATFORM fee invoices on the partner account). Notables: the two dev agents'
+  concurrent integration runs against the shared `sunbnb_test` produced phantom 40P01 deadlocks
+  — serialized re-runs were green (playbooks updated: never run two integration suites
+  concurrently); partner-dev caught the read-side `restaurantSelect` omission that would have
+  made the `dineInEnabled` toggle write-only. Migrations NOT yet on the test DB
+  (`migrate:test` required before any main push).
 
 ## Open decisions
 

@@ -14,7 +14,7 @@ related:
   - subsystem:table-reservations
   - flow:table-booking
   - subsystem:auth
-last_verified: 2026-05-22
+last_verified: 2026-07-25
 ---
 
 # Restaurant
@@ -44,11 +44,23 @@ Sunbnb `Site` (the chiringuito case) — but a Restaurant can also stand alone (
 - Standalone visibility: `publicOnStandaloneApp` (default `true`) — when false, a
   chiringuito-linked restaurant stays hidden from the standalone app's public listing but is
   always discoverable on Sunbnb. Brand-neutral column name on purpose.
+- Dine-in ordering: `dineInEnabled` (default `false`) — **the single gate** for QR dine-in tab
+  ordering (dine-in v2, 2026-07-25), for standalone AND site-linked restaurants alike
+  (`Site.appSalesEnabled` now governs sunbed room-service only). Toggle on the partner General
+  tab; consumer `/tables/[tableId]` route enforces it. Backfilled from the linked site's
+  `appSalesEnabled` at migration time.
 - Relations: `tables` (`[[entity:table-reservation]]` covers `Table`), `reservations`
   (`TableReservation`), `menuItems`, `workingHours` (`RestaurantHours`, 0–14 rows: per-day
   `openTime`/`closeTime` `"HH:mm"`), `shifts` (`RestaurantShift` — named service windows with
   pacing; **override** `workingHours` for availability when present), `combinations`
-  (`TableCombination`), `waitlistEntries` (`TableWaitlistEntry`), `layoutElements`.
+  (`TableCombination`), `waitlistEntries` (`TableWaitlistEntry`), `layoutElements`, and since
+  dine-in v2 `tabs` (`TableTab`) + `orders` (`Order.restaurantId`) — dine-in commerce is
+  restaurant-anchored; linked venues dual-write `siteId` alongside.
+- `MenuItem` is **orderable** since dine-in v2: carries the VAT triple (`price` net derived,
+  `tax` %, `totalPrice` gross — mirrors `Product`) and is THE dine-in catalog for all
+  restaurants. Site `Product` remains for sunbed/POS F&B only. Fee context for standalone
+  restaurants resolves via `loadRestaurantFeeContext` (partnerAccount → settings; empty site
+  tier) in `packages/data/src/payment.ts`.
 
 ## Ownership
 

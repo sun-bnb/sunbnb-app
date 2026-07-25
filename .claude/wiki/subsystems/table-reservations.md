@@ -69,6 +69,17 @@ the Site cross-link. Reservations tab → `markSeated/Departed/NoShow`, staff ca
 pacing + per-shift deposit gate), and partner action wrappers for shifts, combinations, modify, and
 `chargeNoShowDeposit`.
 
+**Dine-in tabs (v2, 2026-07-25 — decoupled from Site):** QR order & pay at the table is
+**restaurant-anchored**. Consumer route `/tables/[tableId]` (public, QR-as-credential; the old
+`/sites/[id]/dine/[tableId]` is a query-preserving redirect). Menu = restaurant `MenuItem`
+(VAT triple; Product = sunbed/POS F&B only); gate = `Restaurant.dineInEnabled`; money path =
+`loadTabFeeContext` (`@repo/data` — site fee tier when linked, account→settings when
+standalone); kitchen = `/restaurants/[id]/orders` (token-or-session `verifyRestaurantAccess`,
+shares the site Orders view via a `scope` prop) + minimal `/restaurants/[id]/accounting`.
+Linked venues dual-write `siteId` on `TableTab`/`Order` so site surfaces are unchanged.
+Standalone gaps (deferred): analytics/till invisibility, settlement/fiscal tab-invoice gap
+(pre-existing), table-deposit collection still site-bound.
+
 **User** (`apps/user`): the consumer surface lives under a Sunbnb site — `/sites/[id]/table`.
 `bookTableForSite` / `bookCombinationForSite` / `modifyTableBooking` / `cancelTableBooking` /
 `joinWaitlistForSite` resolve `Site.restaurantId` → restaurant → the matching core action, then

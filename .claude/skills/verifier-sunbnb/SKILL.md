@@ -124,7 +124,39 @@ the page polls, no realtime — but the server guard still rejects.)
 **Manage-specific pitfalls:** parcel tab `getByRole('button',…)` times out (use `getByText`); a
 parcel with <3 seats (switch parcel / bigger site).
 
-## User app — `apps/user` (:3002)
+## User app — dine-in tabs — `/tables/[tableId]` (:3002)
+
+**Public, QR-as-credential** (dine-in v2, restaurant-anchored — works for standalone
+`Restaurant.siteId = null`). Verified end-to-end 2026-07-25.
+
+**Data setup** (local dev DB, `postgres` database): need a restaurant with
+`dine_in_enabled = true`, an `active` row in `restaurant_table`, and `menu_item` rows.
+Seed venue `cseed0dinerest00000000002` (Standalone Bistro, table
+`cseed0dinetable0000000005`) works — flip its `dine_in_enabled` and seed menu items,
+restore after. **Menu-item ids must pass `isValidEntityId`** — CUID shape
+`^c[a-z0-9]{24,}$` (≥25 chars, `c` prefix); a hand-rolled `e2e...` id fails placement
+with a flash "Invalid product ID" banner that auto-dismisses (screenshot ≤2.5s after
+the action or you'll miss it).
+
+**Drive it** (labels from the `Dine` i18n namespace):
+- A bottom-fixed consent/toast overlay (`div.fixed.bottom-0.z-[9999]`) intercepts
+  clicks in headless runs — `page.evaluate` remove it first.
+- Add to cart: `getByLabel('Add <item name>')` → cart bar `button /review order/i` →
+  sheet `button /^place order$/i` → success banner "Order received".
+- Pay: `button /close & pay/i` → "Confirm payment" sheet → `button /^pay now$/i`
+  (demo mode) → wait ~6s → paid state.
+- Legacy alias: `/sites/<anything>/dine/<tableId>?x=y` redirects to
+  `/tables/<tableId>?x=y`. **`?tabReturn=` specifically is consumed + stripped by the
+  view on mount (by design)** — assert query preservation with a neutral param.
+- Kitchen side: `/restaurants/<restaurantId>/orders?key=<SecurityToken.id>`
+  (token-gated, session-less) shows the rounds.
+
+**DB proof**: `table_tab` (`site_id` NULL for standalone, `open_table_id` nulled on
+close), `"Order".restaurant_id`, `"Invoice"` PARTNER (gross) + PLATFORM (fee) rows via
+`table_tab_id`, `"InvoiceLine".vat_rate` per item. Clean up: InvoiceLine → Invoice →
+OrderItem → Order → table_tab → menu_item, then restore `dine_in_enabled`.
+
+## User app — other surfaces (:3002)
 
 _Not yet filled in._ Use `openApp('user', '<path>')` for the handle; add the booking/POS driving
 mechanics here the first time you browser-verify a user-app change.

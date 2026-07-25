@@ -134,3 +134,9 @@ Operations:
 - changed: `.claude/wiki/subsystems/employee-till.md` (Per-worker till section rewritten to the day-anchored two-bucket model; new Admin daily summary & day close section; TillClose carry-over columns in data model; sources + last_verified updated).
 - reason: track 016 changed both the contract and the invariants the page documented — `getOpenTill` et al. now take a required venue-local `dayStart` and return `today`/`carryOver` buckets; `closeEmployeeTill` is the single TillClose snapshot writer (records `carryOverAmount`/`carryOverCount`, migration `20260723140622_add_till_close_carry_over`); the daily summary leads with close-independent daily accumulation (`getTillDayReport`) reconciled via "still uncounted / handed in today". Driven by pilot-operator confusion (Alonso-trained, expects strictly per-day tills). Browser-verified end-to-end (midday close leaves the day total constant; carry-over surfaces amber and sweeps with the next close).
 - by: claude (fable-5)
+
+## [2026-07-25] ingest | Dine-in tabs v2 (Site decoupling) folded into restaurant + table-reservations
+- mode: revise
+- changed: `.claude/wiki/entities/restaurant.md` (dineInEnabled gate, tabs/orders relations, MenuItem-now-orderable + VAT triple, standalone fee context; last_verified bumped), `.claude/wiki/subsystems/table-reservations.md` (new dine-in v2 paragraph in app-layer wiring: /tables/[tableId] canonical route + legacy redirect, MenuItem rail, loadTabFeeContext, restaurant kitchen dashboard + accounting, dual-write, deferred standalone gaps).
+- reason: dine-in tabs v2 shipped (track 002, commits e528758..bee7e45) — v1's "rides the site Order/Product rails" fork is superseded; standalone (siteId-null) restaurants now order end-to-end. Both pages documented the v1 coupling as current. Browser-verified standalone loop with DB invoice proof before ingesting.
+- by: claude (fable-5)
