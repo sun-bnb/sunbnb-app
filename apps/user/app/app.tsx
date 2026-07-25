@@ -31,6 +31,7 @@ const App = ({ children }: {
       pathname.startsWith('/reset-password') ||
       pathname.startsWith('/s/') ||
       pathname.startsWith('/embed') ||
+      pathname.startsWith('/tables/') ||
       (pathname.includes('/complete') && status !== 'authenticated')) {
       setContent(
         <div>
