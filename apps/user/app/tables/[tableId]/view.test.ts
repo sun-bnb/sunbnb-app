@@ -272,17 +272,17 @@ describe('TabState shape', () => {
     }
   })
 
-  it('tab totals: payableTotal includes serviceFee when present', async () => {
+  it('tab totals: payableTotal equals ordersTotal — the commission is parallel, never added', async () => {
     const tab = makeTab({
-      totals: { ordersTotal: 10.0, serviceFee: 1.5, payableTotal: 11.5 },
+      totals: { ordersTotal: 10.0, serviceFee: 1.5, payableTotal: 10.0 },
     })
     mockGetTabState.mockResolvedValue({ status: 'ok', tab })
 
     const result = await getTabState(TABLE_ID)
     if (result.status === 'ok' && result.tab) {
-      expect(result.tab.totals.payableTotal).toBe(
-        result.tab.totals.ordersTotal + result.tab.totals.serviceFee,
-      )
+      // One price, one VAT: the diner pays menu prices only; serviceFee is
+      // informational (applicationFee + PLATFORM invoice), not part of the total.
+      expect(result.tab.totals.payableTotal).toBe(result.tab.totals.ordersTotal)
     }
   })
 })

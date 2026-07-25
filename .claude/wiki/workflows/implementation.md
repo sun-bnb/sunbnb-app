@@ -65,7 +65,7 @@ Non-negotiables (these are in `.claude/rules/` and `CLAUDE.md` — always check 
 - Never trust client-submitted prices. Fetch from DB.
 - Invoice creation is idempotent — check before creating, double-check in the transaction.
 - Service fees use the three-tier cascade (`[[entity:service-fee]]`). No hardcoded amounts.
-- Reservations: fee **deducted from partner revenue**. Orders: fee **added to customer total**. Do not mix.
+- Fee model is **uniform** (since 2026-07-25, all F&B included): the consumer pays the listed price only; the commission is **deducted from partner revenue** (applicationFee + PLATFORM invoice). Never add a fee to a consumer total.
 - All prices VAT-inclusive. Use `round()` from `@repo/data` for all money math.
 - Demo payments: `pi_demo_{timestamp}` prefix. Check `isDemoPayment()` before any provider call.
 - Mollie webhook: validate the payment-id regex + re-fetch state. (Subscription Stripe webhook: verify the HMAC signature.)

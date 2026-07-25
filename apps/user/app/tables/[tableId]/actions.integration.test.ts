@@ -412,7 +412,8 @@ describe('getTabState', () => {
     mockCalculateTabTotal.mockResolvedValueOnce({
       ordersTotal: 12.0,
       serviceFee: 1.0,
-      payableTotal: 13.0,
+      // Fee model: payableTotal = ordersTotal (commission parallel, never added)
+      payableTotal: 12.0,
       orderIds: [(placeRes as any).orderId],
     })
 
@@ -427,7 +428,7 @@ describe('getTabState', () => {
     expect(tab.orders[0].items[0].quantity).toBe(2)
     expect(tab.totals.ordersTotal).toBe(12.0)
     expect(tab.totals.serviceFee).toBe(1.0)
-    expect(tab.totals.payableTotal).toBe(13.0)
+    expect(tab.totals.payableTotal).toBe(12.0)
     expect(mockCalculateTabTotal).toHaveBeenCalledWith(tabId)
   })
 

@@ -157,8 +157,8 @@ describe('calculateTabTotal', () => {
     const result = await calculateTabTotal(tab.id)
 
     expect(result.ordersTotal).toBe(24.0)
-    expect(result.serviceFee).toBe(1.0)     // fixed fee
-    expect(result.payableTotal).toBe(25.0)  // ordersTotal + fee
+    expect(result.serviceFee).toBe(1.0)     // fixed fee — computed in parallel
+    expect(result.payableTotal).toBe(24.0)  // menu prices only; fee never added
     expect(result.orderIds).toHaveLength(2)
     expect(result.orderIds).toContain(order1.id)
     expect(result.orderIds).toContain(order2.id)
@@ -658,7 +658,7 @@ describe('standalone restaurant tabs (siteId null)', () => {
 
     expect(result.ordersTotal).toBe(24.0)
     expect(result.serviceFee).toBe(0.5)
-    expect(result.payableTotal).toBe(24.5)
+    expect(result.payableTotal).toBe(24.0)  // fee parallel, never added
   })
 
   it('account-tier fee beats the settings tier for standalone tabs', async () => {
@@ -669,7 +669,7 @@ describe('standalone restaurant tabs (siteId null)', () => {
     const result = await calculateTabTotal(tab.id)
 
     expect(result.serviceFee).toBe(2.0)
-    expect(result.payableTotal).toBe(26.0)
+    expect(result.payableTotal).toBe(24.0)  // fee parallel, never added
   })
 
   it('processConfirmedTabPayment creates PARTNER + PLATFORM invoices anchored on the partner account', async () => {

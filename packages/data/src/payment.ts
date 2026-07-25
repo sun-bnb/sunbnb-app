@@ -1581,22 +1581,28 @@ export async function calculateOrderServiceFee(
 export interface TabTotalResult {
   /** Sum of paymentAmount across all not-yet-paid orders on the tab. */
   ordersTotal: number
-  /** Platform service fee on the tab total (added to customer total per payments.md). */
+  /**
+   * Platform commission on the tab total — NOT added to the customer total.
+   * Computed in parallel for the Mollie applicationFee and the PLATFORM
+   * commission invoice; comes out of partner revenue (payments.md).
+   */
   serviceFee: number
-  /** What the customer pays: ordersTotal + serviceFee. */
+  /** What the customer pays: exactly the sum of menu prices (= ordersTotal). */
   payableTotal: number
   /** IDs of the orders included in this calculation. */
   orderIds: string[]
 }
 
 /**
- * Read-only. Sum the tab's unpaid orders and add the platform service fee on
- * top to derive the amount the customer must pay.
+ * Read-only. Sum the tab's unpaid orders to derive the amount the customer
+ * must pay, and compute the platform commission in parallel.
  *
- * Fee model: orders ADD the service fee to the customer total (payments.md).
- * The fee is calculated via the three-tier cascade on `food-and-beverage`
- * applied to the sum of all order paymentAmounts — single source of truth for
- * the Mollie payment amount in the checkout phase.
+ * Fee model (founder-decided 2026-07-25, all F&B): the consumer sees and pays
+ * MENU PRICES ONLY — one price, one VAT. The service fee is never added to
+ * the customer total; it is deducted from partner revenue via the Mollie
+ * applicationFee and billed as the PLATFORM commission invoice, exactly like
+ * sunbed reservations and sunbed F&B orders. (v1 dine-in tabs added the fee
+ * on top — that model is retired.)
  *
  * "Unpaid orders" = orders on the tab whose status is not yet ORDER_COMPLETE
  * and which have a paymentAmount (i.e. the price has been confirmed by the
@@ -1636,7 +1642,9 @@ export async function calculateTabTotal(tabId: string): Promise<TabTotalResult> 
   )
 
   const serviceFee = calculateServiceFeeAmount(matchedFee, ordersTotal)
-  const payableTotal = round(ordersTotal + serviceFee)
+  // Customer pays menu prices only; the fee rides in parallel (applicationFee
+  // + PLATFORM invoice), never on top.
+  const payableTotal = ordersTotal
 
   return { ordersTotal, serviceFee, payableTotal, orderIds }
 }

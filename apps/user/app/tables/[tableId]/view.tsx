@@ -780,24 +780,12 @@ export default function DineView({
                 </div>
               ))}
 
-              {/* Totals block */}
+              {/* Totals block — one price, one VAT: the platform commission
+                  is never shown to (or paid by) the diner; it settles in
+                  parallel via applicationFee + the PLATFORM invoice. */}
               {tab.orders.length > 0 && (
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mt-2">
                   <div className="divide-y divide-gray-100">
-                    <div className="px-4 py-3 flex items-center justify-between">
-                      <span className="text-sm text-gray-600">{t('ordersTotal')}</span>
-                      <span className="text-sm font-medium text-gray-900">
-                        {tab.totals.ordersTotal.toFixed(2)}&nbsp;€
-                      </span>
-                    </div>
-                    {tab.totals.serviceFee > 0 && (
-                      <div className="px-4 py-3 flex items-center justify-between">
-                        <span className="text-sm text-gray-600">{t('serviceFee')}</span>
-                        <span className="text-sm font-medium text-gray-900">
-                          {tab.totals.serviceFee.toFixed(2)}&nbsp;€
-                        </span>
-                      </div>
-                    )}
                     <div className="px-4 py-3 flex items-center justify-between bg-gray-50">
                       <span className="text-sm font-semibold text-gray-900">{t('payableTotal')}</span>
                       <span className="text-base font-bold text-gray-900">
@@ -961,23 +949,9 @@ export default function DineView({
             <div className="px-5 pt-4 pb-8 space-y-5">
               <h3 className="text-lg font-semibold text-gray-900">{t('confirmPayTitle')}</h3>
 
-              {/* Summary breakdown */}
+              {/* Summary — menu prices only; no fee line by design. */}
               <div className="rounded-xl border border-gray-200 overflow-hidden">
                 <div className="divide-y divide-gray-100">
-                  <div className="px-4 py-3 flex items-center justify-between">
-                    <span className="text-sm text-gray-600">{t('ordersTotal')}</span>
-                    <span className="text-sm font-medium text-gray-900">
-                      {tab.totals.ordersTotal.toFixed(2)}&nbsp;€
-                    </span>
-                  </div>
-                  {tab.totals.serviceFee > 0 && (
-                    <div className="px-4 py-3 flex items-center justify-between">
-                      <span className="text-sm text-gray-600">{t('serviceFee')}</span>
-                      <span className="text-sm font-medium text-gray-900">
-                        {tab.totals.serviceFee.toFixed(2)}&nbsp;€
-                      </span>
-                    </div>
-                  )}
                   <div className="px-4 py-3 flex items-center justify-between bg-gray-50">
                     <span className="text-sm font-semibold text-gray-900">{t('payableTotal')}</span>
                     <span className="text-base font-bold text-gray-900">

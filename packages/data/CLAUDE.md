@@ -47,7 +47,7 @@ Key models: User, PartnerAccount, Site, InventoryItem, Reservation, Order, Order
 - `processConfirmedOrder(id)` — same pattern but per-item VAT (not site-wide)
 - `processConfirmedRentalBooking(paymentRef)` — groups bookings by paymentRef, creates invoices for the group
 - `calculateOrderServiceFee(orderId)` — read-only fee calculation for orders
-- `calculateTabTotal(tabId)` — dine-in tab payable amount: sum of non-voided rounds + service fee ADDED on top (orders add fee to customer total); single source for the Mollie/demo charge amount. Site-agnostic since dine-in v2 (fee context via `loadTabFeeContext`)
+- `calculateTabTotal(tabId)` — dine-in tab payable amount: sum of non-voided rounds — **menu prices only** (the commission is computed in parallel in the result's `serviceFee` for the Mollie applicationFee/PLATFORM invoice, never added to the customer total — uniform with reservations since 2026-07-25); single source for the Mollie/demo charge amount. Site-agnostic since dine-in v2 (fee context via `loadTabFeeContext`)
 - `processConfirmedTabPayment(tabId, opts?)` — idempotent group invoicing for a dine-in tab across all rounds (per-item VAT). Default: PARTNER + PLATFORM invoices, tab → `paid`. `{ cash: true }` (staff settle-as-cash, track 015 precedent): PARTNER-only receipt, NO commission, no paymentRef, tab → `settled_cash`. Both paths null `openTableId` (mandatory — releases the one-open-tab-per-table guard); both terminal statuses block re-processing by the other path
 
 ### Tab-order paid-ness rule (analytics)

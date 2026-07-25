@@ -43,7 +43,7 @@ Invokable via `/wiki <op>` (see `.claude/commands/wiki.md`).
 ## Flows — end-to-end journeys
 
 - [`flow:reservation-payment`](flows/reservation-payment.md) — **stable** — booking → Mollie/Demo → invoice → confirmation email
-- [`flow:order-payment`](flows/order-payment.md) — **stable** — F&B order placement → payment → invoice (fee added to total)
+- [`flow:order-payment`](flows/order-payment.md) — **stable** — F&B order placement → payment → invoice (consumer pays listed price; commission parallel)
 - [`flow:rental-booking`](flows/rental-booking.md) — **stable** — equipment rental: availability check → booking → payment → pickup/return
 - [`flow:walk-in`](flows/walk-in.md) — **stable** — partner manage page: occupancy lifecycle (walk-in/hold/comp/block creators vs transitions), `[from,to]` + `until`, two-clock GC, pool seats, QR walk-in payment collection (Mollie + anonId capability + receipt)
 - [`flow:settlement-cycle`](flows/settlement-cycle.md) — **stable** — admin app: generate → close → approve → mark paid
