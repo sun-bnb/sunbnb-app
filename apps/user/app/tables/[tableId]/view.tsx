@@ -635,7 +635,15 @@ export default function DineView({
             </div>
           ) : (
             <div className="space-y-6">
-              {CATEGORY_ORDER.map((cat) => {
+              {[
+                ...CATEGORY_ORDER,
+                // MenuItem categories are free-form ("main", "starters", …) —
+                // append any not in the known set, in first-appearance order,
+                // so no active item is ever silently dropped from the menu.
+                ...Array.from(
+                  new Set(availableProducts.map((p) => p.category ?? 'food')),
+                ).filter((c) => !(CATEGORY_ORDER as readonly string[]).includes(c)),
+              ].map((cat) => {
                 const catProducts = availableProducts.filter(
                   (p) => (p.category ?? 'food') === cat,
                 )
@@ -643,7 +651,7 @@ export default function DineView({
                 return (
                   <div key={cat}>
                     <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                      {CATEGORY_LABELS[cat]}
+                      {CATEGORY_LABELS[cat] ?? cat}
                     </h3>
                     <div className="space-y-2">
                       {catProducts.map((product) => {
