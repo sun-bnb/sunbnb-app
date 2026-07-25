@@ -25,6 +25,8 @@ pointer here + the full entry in its section below.)*
 - **Rejected approaches** — dead-ends, so nobody re-tries them — see "React onWheel prop"
 - **Mollie lib tests** — mocking strategy for app/api/_lib/mollie.ts — see "Testing mollie.ts: mocking boundary + scope separator"
 - **Restaurant query tests** — mocking @repo/table-reservations-core while keeping real auth-helpers — see "Mocking @repo/table-reservations-core for queries.ts tests"
+- **Dual-scope dashboards (dine-in v2 Phase 5)** — sharing a client view across two owner types via a `scope` prop, extending the auth-matrix for a second token-or-session gate type — see "Restaurant-scoped orders dashboard: scope-prop view reuse + new gate type"
+- **Shared local dev environment** — sunbnb_test Postgres and the working tree can be concurrently used by a parallel agent session; diagnose before assuming a regression — see "Concurrent-session interference: git stash and shared local Postgres"
 
 ---
 
@@ -406,6 +408,82 @@ returns `{ ok, isAdmin, site: { id, name } }`. Sub-routes follow a uniform serve
 **Client fetch strategy:** `DayCloseView` fires both `getTillDayReport(siteId, todayIso, accessKey)` and `getOpenTills(siteId, accessKey)` in a single `Promise.all` on mount. The report shows today's per-employee totals; `getOpenTills` provides the open-till count for the pre-close note. After a successful `closeDay`, re-fetch only the day report (open tills become zero).
 **Two-step confirm state:** `ClosePhase = 'idle' | 'confirming' | 'closing' | 'done'` — mirrors `DailySummaryView`'s `ClosePhase` pattern. 'done' hides the confirm section and shows the success card with back-to-menu link.
 **Pre-close note copy:** Cash-up only — note says how many open tills will be closed. Only rendered when `openTillsCount > 0` (hide when all already closed; no "all tills already closed" variant needed). Success state shows tills closed + total; no guest/depart line.
+
+## Dual-scope dashboards (dine-in v2 Phase 5)
+
+### 2026-07-25: Restaurant-scoped orders dashboard — scope-prop view reuse + new gate type
+**Pattern:** Reusing a single client component across two differently-owned resources (site vs
+restaurant) without duplicating it: give it a `scope: { kind: 'site' | 'restaurant'; id: string }`
+prop instead of a bare `siteId`, and write small `scopedX(scope, ...)` dispatcher functions at the
+top of the view file that call `siteActions.x(scope.id, ...)` or `restaurantActions.x(scope.id, ...)`
+based on `scope.kind`. Every internal subcomponent takes `scope` instead of `siteId` and passes it
+straight through. The two server-action modules (`sites/[id]/orders/actions.ts`,
+`restaurants/[id]/orders/actions.ts`) stay separate 'use server' files (different auth gate, different
+`where` clause) but share their status-machine + tab-summary logic via a third **non-'use server'**
+`shared.ts` module (`VALID_TRANSITIONS`, `isValidTransition`, `TAB_STATUSES`, `TabSummary` + its mapper,
+`computeTabAmountDue`) — `shared.ts` doesn't match the coverage-contract's `*actions*.ts` glob, so it
+needs no allowlist entry despite living in the same directory as a gated actions file.
+
+**Auth-matrix gotcha — existing token-fixtures appliers are resource-specific, not generic:** The
+existing `'token-or-session'` gate's scenario appliers (`applyValidToken`, `applyForeignSiteToken`, etc.
+in `token-fixtures.ts`) stub `prisma.site.findUnique` — they do NOT also stub `prisma.restaurant.findUnique`.
+A new `verifyRestaurantAccess` helper (near-copy of `verifySiteAccess`, comparing
+`restaurant.partnerAccountId` instead of `site.userId`) needs its OWN gate type
+(`'restaurant-token-or-session'`) with its own scenario appliers (`applyRestaurantValidToken`,
+`applyRestaurantExpiredToken`, `applyRestaurantWrongScopeToken`, `applyRestaurantForeignToken`) that
+call `stubOwnerRestaurant()` instead of `stubOwnerSite()`. Reused the existing
+`applyRestaurantNonOwnerSession`/`applyRestaurantOwnerSession` (already built for the separate
+`'restaurant-owner'` gate) for the session-path scenarios — they were already restaurant-shaped.
+**Prevention:** When gating a new restaurant-scoped action with a token-or-session pattern, don't
+assume the site-flavored gate type covers it — check what `prisma.*.findUnique` the fixture appliers
+stub, and add a parallel gate type + appliers if the owning entity differs.
+
+**Deliberate resource-vocabulary reuse:** `verifyRestaurantAccess` intentionally checks the SAME
+`resources: { hasSome: ['all', 'manage_site'] }` as `verifySiteAccess` rather than introducing a new
+`manage_restaurant` scope — existing staff `SecurityToken`s (provisioned for the site manage/orders
+surfaces) work against the new restaurant dashboard with zero re-provisioning. Flagged as an open
+item in the plan, not a design flaw to fix opportunistically.
+
+**Layout gate check before assuming a route needs a layout change:** `app/restaurants/layout.tsx` only
+calls `isFlagEnabled('restaurants')` — a **global feature flag** check, no session/auth. `isFlagEnabled`
+→ `getFlags()` → `isSudoUser()` calls `auth()` but only to decide whether to also enable sudo-only flag
+states; an unauthenticated (token-only) request resolves `auth()` to `null` and falls through fine. So
+a token-gated public page nested under `/restaurants/[id]/*` (mirroring the already-public
+`/sites/[id]/orders`) needs **no layout change** — verify this by reading `flags.ts`, not by assuming a
+route-group layout implies a session boundary.
+
+## Shared local dev environment
+
+### 2026-07-25: Concurrent-session interference — git stash and shared local Postgres
+**Problem:** Used `git stash -u` mid-task to snapshot a "before" auth-matrix test count for reporting
+purposes, then `git stash pop`. The pop reported `"already exists, no checkout"` for several
+`apps/user/app/tables/[tableId]/*` files and left a stale stash entry — because a **different agent
+session was concurrently editing `apps/user`** (a parallel Phase 4 dispatch) in the very same working
+tree. `git diff stash@{0}` afterward showed one real content divergence (a route file where the
+concurrent session had made further edits between the stash and the pop). Separately, `npm run
+test:integration` in `apps/partner` started throwing non-deterministic FK-constraint-violated /
+`deadlock detected` errors across files unrelated to the current change (calendar, manage, rentals) —
+traced via `docker exec sunbnb-postgres psql ... pg_stat_activity` to live concurrent connections to
+`sunbnb_test`, and once to the Postgres container physically restarting mid-run (`docker logs` showed
+`FATAL: the database system is starting up` for ~20s) — almost certainly the same concurrent session
+running its own `migrate:local`/`test:integration` against the shared local DB.
+**Solution:** (1) Never `git stash` in this repo to get a "before" baseline when other agents may be
+active in the same working tree — use `git show HEAD:path/to/file.ts` or a targeted `git diff
+HEAD -- path` to inspect a single file's committed state instead; if a stash is unavoidable, `git
+stash show -p` and diff carefully before dropping. (2) When `test:integration` fails with FK
+violations/deadlocks in files you didn't touch, don't assume a regression — check
+`docker exec sunbnb-postgres psql -U postgres -c "SELECT datname, count(*) FROM pg_stat_activity GROUP
+BY datname;"` for live concurrent connections to `sunbnb_test` (or `docker logs sunbnb-postgres --tail
+30` for a restart), and re-run once activity clears. Isolate first: run just the integration test
+file(s) you actually touched (`npx vitest run path/to/your.integration.test.ts --config
+vitest.integration.config.ts`) — if that's consistently green across repeated runs while the full
+suite flakes non-deterministically on unrelated files, that's the signature of external contention,
+not your change.
+**Prevention:** Treat the local Docker Postgres and the working tree itself as shared, mutable state
+across concurrent agent sessions — the same discipline the repo already applies to the *deployed*
+shared test DB (`.claude/rules/migrations.md`) applies locally too when multiple sessions run in
+parallel. Diagnose (isolate the touched file, check `pg_stat_activity`/container logs) before
+reporting a failure as caused by your change.
 
 ## Rejected approaches
 

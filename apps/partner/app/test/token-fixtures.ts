@@ -281,3 +281,54 @@ export function applyRestaurantOwnerSession() {
   vi.mocked(prisma.securityToken.findUnique).mockResolvedValue(null)
   stubOwnerRestaurant()
 }
+
+// ─── Restaurant token-or-session helpers (verifyRestaurantAccess) ───────────
+//
+// `verifyRestaurantAccess` (lib/auth-helpers.ts) is a near-copy of
+// `verifySiteAccess` but checks `restaurant.partnerAccountId` instead of
+// `site.userId`. Its token-path scenarios need `prisma.restaurant.findUnique`
+// stubbed (via `stubOwnerRestaurant`) instead of `prisma.site.findUnique`.
+
+/**
+ * Apply a valid, correctly-scoped, same-owner token against a restaurant
+ * action. Auth is null (token path; no session involved).
+ */
+export function applyRestaurantValidToken() {
+  vi.mocked(auth).mockResolvedValue(null)
+  stubOwnerRestaurant()
+  vi.mocked(prisma.securityToken.findUnique).mockResolvedValue(TOKENS.valid.row as any)
+}
+
+/**
+ * Apply an expired token against a restaurant action. In practice the Prisma
+ * where clause filters it out (expires: { gt: new Date() }), so the mock
+ * returns null.
+ */
+export function applyRestaurantExpiredToken() {
+  vi.mocked(auth).mockResolvedValue(null)
+  stubOwnerRestaurant()
+  vi.mocked(prisma.securityToken.findUnique).mockResolvedValue(null)
+}
+
+/**
+ * Apply a wrong-scope token against a restaurant action. Resources don't
+ * include 'all' or 'manage_site', so the Prisma query (hasSome filter)
+ * returns null in reality.
+ */
+export function applyRestaurantWrongScopeToken() {
+  vi.mocked(auth).mockResolvedValue(null)
+  stubOwnerRestaurant()
+  vi.mocked(prisma.securityToken.findUnique).mockResolvedValue(null)
+}
+
+/**
+ * Apply a token whose userId does not match the restaurant's
+ * partnerAccountId. The token is found (valid scope + not expired) but the
+ * ownership linkage check (restaurant.partnerAccountId !== token.userId)
+ * should reject it.
+ */
+export function applyRestaurantForeignToken() {
+  vi.mocked(auth).mockResolvedValue(null)
+  stubOwnerRestaurant()
+  vi.mocked(prisma.securityToken.findUnique).mockResolvedValue(TOKENS.foreign.row as any)
+}

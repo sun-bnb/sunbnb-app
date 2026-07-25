@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { setOrderStatus, getOrders, getOpenTabs, settleTabCash, discardTab, type OrderTab, type TabSummary } from './actions'
+import * as siteOrderActions from './actions'
+import * as restaurantOrderActions from '@/app/restaurants/[id]/orders/actions'
+import type { OrderTab, TabSummary } from './actions'
 import { Order } from '@/types/shared'
 import {
   ORDER_COMPLETE,
@@ -16,6 +18,53 @@ import {
   TAB_OPEN,
   TAB_PENDING_PAYMENT,
 } from '@repo/data/reservation-status'
+
+// ─── Scope dispatch ──────────────────────────────────────────────────────────
+//
+// `Orders` backs both the site-scoped (`/sites/[id]/orders`) and
+// restaurant-scoped (`/restaurants/[id]/orders`) kitchen dashboards. `scope`
+// picks which action module (and therefore which `where` clause / auth gate)
+// each call goes through; the id inside `scope` is the siteId or
+// restaurantId respectively. Site behavior is unchanged — `scope.kind ===
+// 'site'` dispatches to the exact same `./actions` functions as before.
+
+export type OrdersScope = { kind: 'site' | 'restaurant'; id: string }
+
+function scopedSetOrderStatus(
+  scope: OrdersScope,
+  orderId: string,
+  status: string,
+  reason: string | undefined,
+  accessKey?: string,
+) {
+  return scope.kind === 'site'
+    ? siteOrderActions.setOrderStatus(scope.id, orderId, status, reason, accessKey)
+    : restaurantOrderActions.setRestaurantOrderStatus(scope.id, orderId, status, reason, accessKey)
+}
+
+function scopedGetOrders(scope: OrdersScope, tab: OrderTab, accessKey?: string) {
+  return scope.kind === 'site'
+    ? siteOrderActions.getOrders(scope.id, tab, accessKey)
+    : restaurantOrderActions.getRestaurantOrders(scope.id, tab, accessKey)
+}
+
+function scopedGetOpenTabs(scope: OrdersScope, accessKey?: string) {
+  return scope.kind === 'site'
+    ? siteOrderActions.getOpenTabs(scope.id, accessKey)
+    : restaurantOrderActions.getRestaurantOpenTabs(scope.id, accessKey)
+}
+
+function scopedSettleTabCash(scope: OrdersScope, tabId: string, accessKey?: string) {
+  return scope.kind === 'site'
+    ? siteOrderActions.settleTabCash(scope.id, tabId, accessKey)
+    : restaurantOrderActions.settleRestaurantTabCash(scope.id, tabId, accessKey)
+}
+
+function scopedDiscardTab(scope: OrdersScope, tabId: string, accessKey?: string) {
+  return scope.kind === 'site'
+    ? siteOrderActions.discardTab(scope.id, tabId, accessKey)
+    : restaurantOrderActions.discardRestaurantTab(scope.id, tabId, accessKey)
+}
 
 // ─── Audio Alert ─────────────────────────────────────────────────────────────
 
@@ -113,12 +162,12 @@ const STATUS_STYLE: Record<string, { bg: string; text: string; labelKey: string 
 // ─── Action Buttons Per Status ───────────────────────────────────────────────
 
 function OrderActions({
-  siteId,
+  scope,
   order,
   onUpdated,
   accessKey,
 }: {
-  siteId: string
+  scope: OrdersScope
   order: Order
   onUpdated: () => void
   accessKey?: string
@@ -130,7 +179,7 @@ function OrderActions({
 
   const act = async (status: string, reason?: string) => {
     setBusy(true)
-    await setOrderStatus(siteId, order.id, status, reason, accessKey)
+    await scopedSetOrderStatus(scope, order.id, status, reason, accessKey)
     setBusy(false)
     onUpdated()
   }
@@ -257,12 +306,12 @@ function formatElapsed(since: Date | string): string {
 // ─── Tab Card ────────────────────────────────────────────────────────────────
 
 function TabCard({
-  siteId,
+  scope,
   tab,
   onUpdated,
   accessKey,
 }: {
-  siteId: string
+  scope: OrdersScope
   tab: TabSummary
   onUpdated: () => void
   accessKey?: string
@@ -275,7 +324,7 @@ function TabCard({
 
   const handleSettle = async () => {
     setBusy(true)
-    await settleTabCash(siteId, tab.id, accessKey)
+    await scopedSettleTabCash(scope, tab.id, accessKey)
     setBusy(false)
     setConfirm(null)
     onUpdated()
@@ -283,7 +332,7 @@ function TabCard({
 
   const handleDiscard = async () => {
     setBusy(true)
-    await discardTab(siteId, tab.id, accessKey)
+    await scopedDiscardTab(scope, tab.id, accessKey)
     setBusy(false)
     setConfirm(null)
     onUpdated()
@@ -420,14 +469,14 @@ function TabCard({
 // ─── Order Card ──────────────────────────────────────────────────────────────
 
 function OrderCard({
-  siteId,
+  scope,
   order,
   tableEntry,
   onUpdated,
   compact = false,
   accessKey,
 }: {
-  siteId: string
+  scope: OrdersScope
   order: Order
   tableEntry?: { number: number; label: string | null }
   onUpdated: () => void
@@ -524,7 +573,7 @@ function OrderCard({
       {/* Actions */}
       {!compact && (
         <div className="px-4 pb-4">
-          <OrderActions siteId={siteId} order={order} onUpdated={onUpdated} accessKey={accessKey} />
+          <OrderActions scope={scope} order={order} onUpdated={onUpdated} accessKey={accessKey} />
         </div>
       )}
     </div>
@@ -534,12 +583,13 @@ function OrderCard({
 // ─── Main View ───────────────────────────────────────────────────────────────
 
 export default function Orders({
-  siteId,
+  scope,
   orders: initialOrders,
   tableMap = {},
   accessKey,
 }: {
-  siteId: string
+  /** Which action module (site- or restaurant-scoped) drives this dashboard. */
+  scope: OrdersScope
   orders: Order[]
   /** Mapping of Table.id → { number, label } for dine-in tab orders. */
   tableMap?: Record<string, { number: number; label: string | null }>
@@ -584,19 +634,19 @@ export default function Orders({
 
   // Fetch open tabs
   const fetchOpenTabs = useCallback(async () => {
-    const result = await getOpenTabs(siteId, accessKey)
+    const result = await scopedGetOpenTabs(scope, accessKey)
     if (result.status === 'ok' && result.tabs) {
       setOpenTabs(result.tabs)
     }
-  }, [siteId, accessKey])
+  }, [scope, accessKey])
 
   // Polling — fetch all active orders every 5 seconds; open tabs in parallel
   const fetchOrders = useCallback(async () => {
     const orderTabs: OrderTab[] = activeTab === 'history' ? ['history'] : ['incoming', 'active', 'ready']
-    const results = await Promise.all(orderTabs.map(t => getOrders(siteId, t, accessKey)))
+    const results = await Promise.all(orderTabs.map(t => scopedGetOrders(scope, t, accessKey)))
     const merged = results.flatMap(r => r.orders ?? [])
     setAllOrders(merged)
-  }, [siteId, activeTab, accessKey])
+  }, [scope, activeTab, accessKey])
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -656,7 +706,7 @@ export default function Orders({
             openTabs.map(tab => (
               <TabCard
                 key={tab.id}
-                siteId={siteId}
+                scope={scope}
                 tab={tab}
                 onUpdated={handleTabUpdated}
                 accessKey={accessKey}
@@ -685,7 +735,7 @@ export default function Orders({
             tabOrders.map(order => (
               <OrderCard
                 key={order.id}
-                siteId={siteId}
+                scope={scope}
                 order={order}
                 tableEntry={order.tableId ? tableMap[order.tableId] : undefined}
                 onUpdated={handleUpdated}

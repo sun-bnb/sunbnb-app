@@ -147,6 +147,49 @@ export async function requireRestaurantOwner(
 }
 
 /**
+ * Verify the caller may act on the given restaurant, accepting either a
+ * SecurityToken access key (for staff/integration use without login) or a
+ * signed-in session that owns the restaurant. When an access key is
+ * supplied, the token must include `all` OR `manage_site` in its `resources`
+ * and its owner must own the restaurant (`restaurant.partnerAccountId ===
+ * token.userId`).
+ *
+ * Near-copy of `verifySiteAccess` — deliberately reuses the same `'all'` /
+ * `'manage_site'` resource vocabulary so existing staff tokens (provisioned
+ * for the site manage/orders surfaces) work against the restaurant-scoped
+ * kitchen dashboard with zero re-provisioning. This is the canonical
+ * token-gate for the restaurant orders dashboard (mirrors verifySiteAccess
+ * for the site orders dashboard).
+ */
+export async function verifyRestaurantAccess(
+  restaurantId: string,
+  accessKey?: string
+): Promise<{ userId: string | null; error: string | null }> {
+  if (accessKey) {
+    const token = await prisma.securityToken.findUnique({
+      where: {
+        id: accessKey,
+        expires: { gt: new Date() },
+        resources: { hasSome: ['all', 'manage_site'] },
+      },
+    })
+    if (!token) return { userId: null, error: 'Invalid or expired access key' }
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { partnerAccountId: true },
+    })
+    if (!restaurant || restaurant.partnerAccountId !== token.userId) {
+      return { userId: null, error: 'Not authorized' }
+    }
+    return { userId: restaurant.partnerAccountId, error: null }
+  }
+
+  const { session, error } = await requireRestaurantOwner(restaurantId)
+  if (error) return { userId: null, error }
+  return { userId: session.user.id, error: null }
+}
+
+/**
  * Require both site ownership AND that the named feature flag is enabled.
  * Sudo bypass is built into `isFlagEnabled`, so sudo users always pass.
  * Use this in server actions for features that are runtime-gated.

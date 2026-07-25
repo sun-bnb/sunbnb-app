@@ -42,6 +42,10 @@ import {
   applyManageTokenForAdminGate,
   applyRestaurantNonOwnerSession,
   applyRestaurantOwnerSession,
+  applyRestaurantValidToken,
+  applyRestaurantExpiredToken,
+  applyRestaurantWrongScopeToken,
+  applyRestaurantForeignToken,
   TOKENS,
 } from './token-fixtures'
 
@@ -176,6 +180,60 @@ export const SCENARIOS: Record<GateType, Scenario[]> = {
     {
       label: 'foreign-site token (wrong owner) → reject',
       apply: applyForeignSiteToken,
+      shouldReject: true,
+      accessKey: TOKENS.foreign.key,
+    },
+  ],
+
+  /**
+   * restaurant-token-or-session: verifyRestaurantAccess in lib/auth-helpers.ts.
+   * Near-copy of 'token-or-session' (same 'all'/'manage_site' resource
+   * vocabulary) but the ownership linkage + session-fallback checks compare
+   * against restaurant.partnerAccountId instead of site.userId. Backs the
+   * restaurant-scoped orders/tabs actions (restaurants/[id]/orders/actions.ts).
+   */
+  'restaurant-token-or-session': [
+    // Session-path scenarios (no accessKey)
+    {
+      label: 'unauthenticated (no token, no session) → reject',
+      apply: applyUnauthenticated,
+      shouldReject: true,
+      accessKey: undefined,
+    },
+    {
+      label: 'non-owner session (no token) → reject',
+      apply: applyRestaurantNonOwnerSession,
+      shouldReject: true,
+      accessKey: undefined,
+    },
+    {
+      label: 'owner session (no token) → ok',
+      apply: applyRestaurantOwnerSession,
+      shouldReject: false,
+      accessKey: undefined,
+    },
+    // Token-path scenarios (accessKey supplied)
+    {
+      label: 'valid token → ok',
+      apply: applyRestaurantValidToken,
+      shouldReject: false,
+      accessKey: TOKENS.valid.key,
+    },
+    {
+      label: 'expired token → reject',
+      apply: applyRestaurantExpiredToken,
+      shouldReject: true,
+      accessKey: TOKENS.expired.key,
+    },
+    {
+      label: 'wrong-scope token → reject',
+      apply: applyRestaurantWrongScopeToken,
+      shouldReject: true,
+      accessKey: TOKENS.wrongScope.key,
+    },
+    {
+      label: 'foreign-restaurant token (wrong owner) → reject',
+      apply: applyRestaurantForeignToken,
       shouldReject: true,
       accessKey: TOKENS.foreign.key,
     },

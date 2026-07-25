@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { verifySiteAccess } from '@/lib/auth-helpers'
+import { verifyRestaurantAccess } from '@/lib/auth-helpers'
 import { isValidOrderStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 import {
@@ -11,7 +11,7 @@ import {
   TAB_OPEN,
   TAB_PENDING_PAYMENT,
 } from '@repo/data/reservation-status'
-import { processConfirmedTabPayment, calculateTabTotal } from '@repo/data/tab-payment'
+import { processConfirmedTabPayment } from '@repo/data/tab-payment'
 import {
   isValidTransition,
   TAB_STATUSES,
@@ -21,16 +21,24 @@ import {
   mapTabToSummary,
   type OrderTab,
   type TabSummary,
-} from './shared'
+} from '@/app/sites/[id]/orders/shared'
 
-// Re-exported so existing consumers (view.tsx, gated-actions.ts) keep
-// importing these types/values from './actions' without changes.
-export type { OrderTab, TabSummary }
+/**
+ * Restaurant-scoped siblings of `sites/[id]/orders/actions.ts`, sharing the
+ * status-machine + tab-summary logic via `shared.ts`. Every action here is
+ * gated by `verifyRestaurantAccess` (restaurant-keyed token-or-session gate,
+ * mirrors `verifySiteAccess`) and every ownership check compares against
+ * `restaurantId` (`order.restaurantId` / `tab.restaurantId`) instead of
+ * `siteId`. Powers the restaurant-scoped kitchen/orders dashboard at
+ * `/restaurants/[id]/orders` — used by both standalone restaurants and
+ * linked venues (which also keep the site-scoped dashboard for room-service
+ * orders + the dual-written dine tabs).
+ */
 
 // ─── Set Order Status ────────────────────────────────────────────────────────
 
-export async function setOrderStatus(
-  siteId: string,
+export async function setRestaurantOrderStatus(
+  restaurantId: string,
   orderId: string,
   status: string,
   reason?: string,
@@ -40,7 +48,7 @@ export async function setOrderStatus(
     return { status: 'error', errors: ['Reason is too long (max 500 characters)'] }
   }
 
-  const { error } = await verifySiteAccess(siteId, accessKey)
+  const { error } = await verifyRestaurantAccess(restaurantId, accessKey)
   if (error) return { status: 'error', errors: [error] }
 
   if (!isValidOrderStatus(status)) {
@@ -49,10 +57,10 @@ export async function setOrderStatus(
 
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    select: { status: true, siteId: true },
+    select: { status: true, restaurantId: true },
   })
 
-  if (!order || order.siteId !== siteId) {
+  if (!order || order.restaurantId !== restaurantId) {
     return { status: 'error', errors: ['Order not found'] }
   }
 
@@ -68,15 +76,15 @@ export async function setOrderStatus(
   if (status === 'rejected' && reason) data.rejectReason = reason
 
   await prisma.order.update({ where: { id: orderId }, data })
-  revalidatePath(`/sites/${siteId}/orders`)
+  revalidatePath(`/restaurants/${restaurantId}/orders`)
 
   return { status: 'ok' }
 }
 
 // ─── Get Orders ──────────────────────────────────────────────────────────────
 
-export async function getOrders(
-  siteId: string,
+export async function getRestaurantOrders(
+  restaurantId: string,
   tab: OrderTab = 'incoming',
   accessKey?: string,
 ): Promise<{ status: string; errors?: string[]; orders?: any[] }> {
@@ -85,14 +93,14 @@ export async function getOrders(
     return { status: 'error', errors: ['Invalid tab'] }
   }
 
-  const { error } = await verifySiteAccess(siteId, accessKey)
+  const { error } = await verifyRestaurantAccess(restaurantId, accessKey)
   if (error) return { status: 'error', errors: [error] }
 
   const statuses = TAB_STATUSES[tab]
 
   const orders = await prisma.order.findMany({
     where: {
-      siteId,
+      restaurantId,
       status: { in: statuses },
     },
     include: {
@@ -105,47 +113,26 @@ export async function getOrders(
   return { status: 'ok', orders }
 }
 
-// ─── Toggle Product Sold Out ─────────────────────────────────────────────────
-
-export async function toggleProductSoldOut(siteId: string, productId: string, soldOut: boolean, accessKey?: string) {
-  const { error } = await verifySiteAccess(siteId, accessKey)
-  if (error) return { status: 'error', errors: [error] }
-
-  const product = await prisma.product.findUnique({
-    where: { id: productId },
-    select: { siteId: true },
-  })
-
-  if (!product || product.siteId !== siteId) {
-    return { status: 'error', errors: ['Product not found'] }
-  }
-
-  await prisma.product.update({
-    where: { id: productId },
-    data: { soldOut },
-  })
-
-  return { status: 'ok' }
-}
-
 // ─── Open Tabs ───────────────────────────────────────────────────────────────
 
 /**
- * Return all open tabs (TAB_OPEN or TAB_PENDING_PAYMENT) for the given site.
- * For each tab, compute the cash amount due as the sum of non-voided orders'
- * totalPrice (DB values — never client-side). This is `ordersTotal` from
- * calculateTabTotal (without the service fee, which is an online-only add-on).
+ * Return all open tabs (TAB_OPEN or TAB_PENDING_PAYMENT) for the given
+ * restaurant. Mirrors `sites/[id]/orders/actions.ts` `getOpenTabs` — same
+ * cash-amount-due computation, filtered by `restaurantId` instead of
+ * `siteId`. Linked-venue dine tabs are dual-written (`siteId` set too) but
+ * this dashboard is restaurant-only, so it surfaces every dine tab for the
+ * restaurant regardless of whether it's also linked to a site.
  */
-export async function getOpenTabs(
-  siteId: string,
+export async function getRestaurantOpenTabs(
+  restaurantId: string,
   accessKey?: string,
 ): Promise<{ status: string; errors?: string[]; tabs?: TabSummary[] }> {
-  const { error } = await verifySiteAccess(siteId, accessKey)
+  const { error } = await verifyRestaurantAccess(restaurantId, accessKey)
   if (error) return { status: 'error', errors: [error] }
 
   const tabs = await prisma.tableTab.findMany({
     where: {
-      siteId,
+      restaurantId,
       status: { in: [TAB_OPEN, TAB_PENDING_PAYMENT] },
     },
     include: {
@@ -166,18 +153,15 @@ export async function getOpenTabs(
 // ─── Settle Tab (Cash) ────────────────────────────────────────────────────────
 
 /**
- * Settle an open tab as cash (staff collects from guest, no online payment).
- * Only TAB_OPEN tabs can be settled — if status is TAB_PENDING_PAYMENT an
- * online payment is mid-flight; attempting cash settle could double-charge.
- * Calls processConfirmedTabPayment with { cash: true } which creates a
- * PARTNER-only invoice (no platform commission) and sets status = settled_cash.
+ * Settle an open tab as cash. Mirrors `settleTabCash` — ownership check is
+ * `tab.restaurantId === restaurantId` instead of `tab.siteId === siteId`.
  */
-export async function settleTabCash(
-  siteId: string,
+export async function settleRestaurantTabCash(
+  restaurantId: string,
   tabId: string,
   accessKey?: string,
 ): Promise<{ status: string; errors?: string[]; amountDue?: number }> {
-  const { error } = await verifySiteAccess(siteId, accessKey)
+  const { error } = await verifyRestaurantAccess(restaurantId, accessKey)
   if (error) return { status: 'error', errors: [error] }
 
   const tab = await prisma.tableTab.findUnique({
@@ -190,7 +174,7 @@ export async function settleTabCash(
     },
   })
 
-  if (!tab || tab.siteId !== siteId) {
+  if (!tab || tab.restaurantId !== restaurantId) {
     return { status: 'error', errors: ['Tab not found'] }
   }
 
@@ -205,32 +189,28 @@ export async function settleTabCash(
     return { status: 'error', errors: ['Tab is already closed'] }
   }
 
-  // Amount due for display/receipt (ordersTotal — no service fee for cash).
   const amountDue = computeTabAmountDue(tab.orders)
 
   await processConfirmedTabPayment(tabId, { cash: true })
 
-  revalidatePath(`/sites/${siteId}/orders`)
+  revalidatePath(`/restaurants/${restaurantId}/orders`)
   return { status: 'ok', amountDue }
 }
 
 // ─── Discard Tab ─────────────────────────────────────────────────────────────
 
 /**
- * Discard an open tab (walk-out / no charge).
- * Only TAB_OPEN tabs can be discarded — same guard as settleTabCash.
- * All non-voided orders are set to 'discarded'.
- * The tab is set to TAB_DISCARDED with closedAt = now() and openTableId = null.
- * openTableId MUST be nulled — it releases the one-open-tab-per-table guard
- * so a new tab can be opened on the same table immediately.
- * No invoice is created; no refund is issued.
+ * Discard an open tab (walk-out / no charge). Mirrors `discardTab` —
+ * ownership check is `tab.restaurantId === restaurantId`. `openTableId` is
+ * still nulled unconditionally — it releases the one-open-tab-per-table
+ * guard regardless of which dashboard (site or restaurant) closed the tab.
  */
-export async function discardTab(
-  siteId: string,
+export async function discardRestaurantTab(
+  restaurantId: string,
   tabId: string,
   accessKey?: string,
 ): Promise<{ status: string; errors?: string[] }> {
-  const { error } = await verifySiteAccess(siteId, accessKey)
+  const { error } = await verifyRestaurantAccess(restaurantId, accessKey)
   if (error) return { status: 'error', errors: [error] }
 
   const tab = await prisma.tableTab.findUnique({
@@ -243,7 +223,7 @@ export async function discardTab(
     },
   })
 
-  if (!tab || tab.siteId !== siteId) {
+  if (!tab || tab.restaurantId !== restaurantId) {
     return { status: 'error', errors: ['Tab not found'] }
   }
 
@@ -278,6 +258,6 @@ export async function discardTab(
     }),
   ])
 
-  revalidatePath(`/sites/${siteId}/orders`)
+  revalidatePath(`/restaurants/${restaurantId}/orders`)
   return { status: 'ok' }
 }

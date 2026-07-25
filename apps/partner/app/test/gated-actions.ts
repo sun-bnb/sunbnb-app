@@ -80,6 +80,14 @@ import {
 } from '@/app/sites/[id]/orders/actions'
 
 import {
+  setRestaurantOrderStatus,
+  getRestaurantOrders,
+  getRestaurantOpenTabs,
+  settleRestaurantTabCash,
+  discardRestaurantTab,
+} from '@/app/restaurants/[id]/orders/actions'
+
+import {
   deleteSite,
   setPaymentProvider,
   saveGeneral,
@@ -235,6 +243,7 @@ export type GateType =
   | 'token-or-session'
   | 'admin-token'
   | 'restaurant-owner'
+  | 'restaurant-token-or-session'
   | 'cron'
   | 'signature'
 
@@ -622,6 +631,44 @@ export const GATED_ACTIONS: GatedAction[] = [
     kind: 'action',
     gate: 'token-or-session',
     invoke: (accessKey?) => discardTab(SITE_ID, TAB_ID, accessKey),
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // restaurant-token-or-session: restaurants/[id]/orders/actions.ts —
+  // guarded by verifyRestaurantAccess (same 'all'/'manage_site' resource
+  // vocabulary as verifySiteAccess, but ownership linkage is
+  // restaurant.partnerAccountId, not site.userId)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  {
+    name: 'restaurant-orders.setRestaurantOrderStatus',
+    kind: 'action',
+    gate: 'restaurant-token-or-session',
+    invoke: (accessKey?) => setRestaurantOrderStatus(RESTAURANT_ID, ORDER_ID, 'accepted', undefined, accessKey),
+  },
+  {
+    name: 'restaurant-orders.getRestaurantOrders',
+    kind: 'action',
+    gate: 'restaurant-token-or-session',
+    invoke: (accessKey?) => getRestaurantOrders(RESTAURANT_ID, 'incoming', accessKey),
+  },
+  {
+    name: 'restaurant-orders.getRestaurantOpenTabs',
+    kind: 'action',
+    gate: 'restaurant-token-or-session',
+    invoke: (accessKey?) => getRestaurantOpenTabs(RESTAURANT_ID, accessKey),
+  },
+  {
+    name: 'restaurant-orders.settleRestaurantTabCash',
+    kind: 'action',
+    gate: 'restaurant-token-or-session',
+    invoke: (accessKey?) => settleRestaurantTabCash(RESTAURANT_ID, TAB_ID, accessKey),
+  },
+  {
+    name: 'restaurant-orders.discardRestaurantTab',
+    kind: 'action',
+    gate: 'restaurant-token-or-session',
+    invoke: (accessKey?) => discardRestaurantTab(RESTAURANT_ID, TAB_ID, accessKey),
   },
 
   // ══════════════════════════════════════════════════════════════════════════
