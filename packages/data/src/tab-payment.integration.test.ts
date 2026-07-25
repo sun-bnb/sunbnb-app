@@ -591,3 +591,143 @@ describe('processConfirmedTabPayment', () => {
     })
   })
 })
+
+// ─── (e) Standalone restaurant (dine-in v2 — no site) ────────────────────────
+
+describe('standalone restaurant tabs (siteId null)', () => {
+  async function setupStandaloneTab(opts?: { accountFee?: Record<string, any> }) {
+    const user = await createTestUser()
+    const partner = await createTestPartnerAccount(user.id)
+    const settings = await createTestSettings()
+    await createTestServiceFee(settings.id, {
+      serviceCode: 'food-and-beverage',
+      chargeType: 'fixed',
+      feeAmount: 0.5,
+    })
+    if (opts?.accountFee) {
+      await createTestServiceFee(settings.id, {
+        serviceCode: 'food-and-beverage',
+        accountId: partner.userId,
+        ...opts.accountFee,
+      })
+    }
+
+    // No site anywhere: restaurant, tab, and orders are restaurant-anchored.
+    const restaurant = await createTestRestaurant(partner.userId, { dineInEnabled: true })
+    const table = await createTestTable(restaurant.id)
+    const tab = await createTestTableTab(table.id, null, {
+      restaurantId: restaurant.id,
+      paymentRef: `pi_demo_tab_standalone`,
+    })
+
+    // Anon dine flow satisfies Order.userId with restaurant.partnerAccountId.
+    const order1 = await createTestOrder(partner.userId, null, {
+      tabId: tab.id,
+      restaurantId: restaurant.id,
+      status: 'delivered',
+      paymentAmount: 16.0,
+      totalPrice: 16.0,
+    })
+    await createTestOrderItem(order1.id, 'menu-item-ref-1', {
+      quantity: 2,
+      price: 8.0,
+      tax: 14,
+      totalPrice: 16.0,
+    })
+    const order2 = await createTestOrder(partner.userId, null, {
+      tabId: tab.id,
+      restaurantId: restaurant.id,
+      status: 'delivered',
+      paymentAmount: 8.0,
+      totalPrice: 8.0,
+    })
+    await createTestOrderItem(order2.id, 'menu-item-ref-1', {
+      quantity: 1,
+      price: 8.0,
+      tax: 14,
+      totalPrice: 8.0,
+    })
+
+    return { user, partner, settings, restaurant, table, tab, order1, order2 }
+  }
+
+  it('calculateTabTotal resolves the fee from the settings tier without a site', async () => {
+    const { tab } = await setupStandaloneTab()
+
+    const result = await calculateTabTotal(tab.id)
+
+    expect(result.ordersTotal).toBe(24.0)
+    expect(result.serviceFee).toBe(0.5)
+    expect(result.payableTotal).toBe(24.5)
+  })
+
+  it('account-tier fee beats the settings tier for standalone tabs', async () => {
+    const { tab } = await setupStandaloneTab({
+      accountFee: { chargeType: 'fixed', feeAmount: 2.0 },
+    })
+
+    const result = await calculateTabTotal(tab.id)
+
+    expect(result.serviceFee).toBe(2.0)
+    expect(result.payableTotal).toBe(26.0)
+  })
+
+  it('processConfirmedTabPayment creates PARTNER + PLATFORM invoices anchored on the partner account', async () => {
+    const { tab, partner } = await setupStandaloneTab()
+
+    await processConfirmedTabPayment(tab.id)
+
+    const invoices = await prisma.invoice.findMany({ where: { tableTabId: tab.id } })
+    expect(invoices).toHaveLength(2)
+    for (const invoice of invoices) {
+      expect(invoice.accountId).toBe(partner.userId)
+    }
+
+    const partnerInvoice = invoices.find((i) => i.issuerType === 'PARTNER')!
+    expect(partnerInvoice.totalAmount).toBe(24.0)
+
+    const lines = await prisma.invoiceLine.findMany({
+      where: { invoiceId: partnerInvoice.id },
+    })
+    // Per-item VAT (14%) on every product line
+    for (const line of lines) {
+      expect(line.vatRate).toBe(14)
+    }
+  })
+
+  it('closes the tab: TAB_PAID, closedAt set, openTableId nulled', async () => {
+    const { tab } = await setupStandaloneTab()
+
+    await processConfirmedTabPayment(tab.id)
+
+    const after = await prisma.tableTab.findUniqueOrThrow({ where: { id: tab.id } })
+    expect(after.status).toBe(TAB_PAID)
+    expect(after.closedAt).not.toBeNull()
+    expect(after.openTableId).toBeNull()
+    expect(after.siteId).toBeNull()
+  })
+
+  it('is idempotent — re-run leaves invoice count unchanged', async () => {
+    const { tab } = await setupStandaloneTab()
+
+    await processConfirmedTabPayment(tab.id)
+    await processConfirmedTabPayment(tab.id)
+
+    const count = await prisma.invoice.count({ where: { tableTabId: tab.id } })
+    expect(count).toBe(2)
+  })
+
+  it('cash settle: PARTNER-only receipt, TAB_SETTLED_CASH, no commission', async () => {
+    const { tab } = await setupStandaloneTab()
+
+    await processConfirmedTabPayment(tab.id, { cash: true })
+
+    const invoices = await prisma.invoice.findMany({ where: { tableTabId: tab.id } })
+    expect(invoices).toHaveLength(1)
+    expect(invoices[0]!.issuerType).toBe('PARTNER')
+
+    const after = await prisma.tableTab.findUniqueOrThrow({ where: { id: tab.id } })
+    expect(after.status).toBe(TAB_SETTLED_CASH)
+    expect(after.openTableId).toBeNull()
+  })
+})

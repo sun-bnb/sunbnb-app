@@ -264,6 +264,19 @@ export interface PartnerFeeContext {
   features: Record<SubscriptionFeatureKey, boolean>
 }
 
+/**
+ * Fee context for a dine-in tab (dine-in v2). Site-agnostic: for a linked
+ * venue `siteFees` carries the site's fee tier (resolution byte-identical to
+ * the site rail); for a standalone restaurant it is empty and the cascade
+ * starts at the partner-account tier.
+ */
+export interface TabFeeContext {
+  siteFees: ServiceFee[]
+  partnerAccount: FeeContext['partnerAccount']
+  settings: FeeContext['settings']
+  tier: SubscriptionTier | null
+}
+
 const SETTINGS_INCLUDE = {
   serviceFees: {
     where: { siteId: null, accountId: null },
@@ -384,7 +397,32 @@ export async function loadFeeContext(
 ): Promise<FeeContext> {
   const baseCtx = await getSiteFeeContext(siteId)
   const { site, partnerAccount, tier } = baseCtx
-  let settings = baseCtx.settings
+
+  const settings = await ensureSettingsAndFee(
+    serviceCode,
+    site.serviceFees,
+    partnerAccount?.serviceFees ?? [],
+    baseCtx.settings,
+    tier
+  )
+
+  return { site, partnerAccount, settings }
+}
+
+/**
+ * Shared bootstrap for the fee-context loaders: guarantee that Settings exist
+ * and that the requested service code resolves at some cascade level, creating
+ * defaults transactionally when missing. Single-sourced so the site and
+ * restaurant loaders can never drift.
+ */
+async function ensureSettingsAndFee(
+  serviceCode: string,
+  siteFees: ServiceFee[],
+  partnerFees: ServiceFee[],
+  initialSettings: FeeContext['settings'],
+  tier: SubscriptionTier | null
+): Promise<FeeContext['settings']> {
+  let settings = initialSettings
 
   // Bootstrap: create default settings + fee in a transaction to prevent duplicates
   if (!settings) {
@@ -410,8 +448,8 @@ export async function loadFeeContext(
   // Bootstrap: create default service fee if not found at any level
   if (settings) {
     const existingFee = resolveServiceFee(
-      site.serviceFees,
-      partnerAccount?.serviceFees ?? [],
+      siteFees,
+      partnerFees,
       settings.serviceFees,
       serviceCode,
       tier
@@ -445,7 +483,56 @@ export async function loadFeeContext(
     }
   }
 
-  return { site, partnerAccount, settings }
+  return settings
+}
+
+/**
+ * Fee resolution context for a standalone restaurant (dine-in v2). Resolves
+ * the partner directly via `Restaurant.partnerAccountId` (a User.id — the
+ * PartnerAccount key), with an EMPTY site tier: the cascade is
+ * partnerAccount → settings. Same bootstrap guarantees as `loadFeeContext`.
+ */
+export async function loadRestaurantFeeContext(
+  restaurantId: string,
+  serviceCode: string
+): Promise<TabFeeContext> {
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: restaurantId },
+    select: { id: true, partnerAccountId: true },
+  })
+  if (!restaurant) throw new Error(`Restaurant not found: ${restaurantId}`)
+
+  const base = await getPartnerFeeContext(restaurant.partnerAccountId)
+  const settings = await ensureSettingsAndFee(
+    serviceCode,
+    [],
+    base.partnerAccount?.serviceFees ?? [],
+    base.settings,
+    base.tier
+  )
+
+  return { siteFees: [], partnerAccount: base.partnerAccount, settings, tier: base.tier }
+}
+
+/**
+ * Fee context for a dine-in tab: linked venues (siteId set) resolve through
+ * the site rail (`loadFeeContext` — byte-identical fee resolution, site fee
+ * tier included); standalone tabs resolve through the restaurant.
+ */
+export async function loadTabFeeContext(
+  tab: { siteId: string | null; restaurantId: string },
+  serviceCode: string
+): Promise<TabFeeContext> {
+  if (tab.siteId) {
+    const { site, partnerAccount, settings } = await loadFeeContext(tab.siteId, serviceCode)
+    return {
+      siteFees: site.serviceFees,
+      partnerAccount,
+      settings,
+      tier: partnerAccount?.subscription?.plan?.tier ?? null,
+    }
+  }
+  return loadRestaurantFeeContext(tab.restaurantId, serviceCode)
 }
 
 // ─── Idempotent Reservation Processing ──────────────────────────────────────
@@ -1535,20 +1622,13 @@ export async function calculateTabTotal(tabId: string): Promise<TabTotalResult> 
   )
   const orderIds = orders.map((o) => o.id)
 
-  // Transitional (dine-in v2 phase 3 replaces this with loadTabFeeContext):
-  // v1 tabs always carry a siteId; standalone tabs don't exist yet.
-  if (!tab.siteId) {
-    throw new Error(`Tab ${tab.id} has no siteId — standalone fee context not yet wired`)
-  }
-
-  const { site, partnerAccount, settings } = await loadFeeContext(
-    tab.siteId,
+  const { siteFees, partnerAccount, settings, tier } = await loadTabFeeContext(
+    tab,
     'food-and-beverage'
   )
 
-  const tier = partnerAccount?.subscription?.plan?.tier ?? null
   const matchedFee = resolveServiceFee(
-    site.serviceFees,
+    siteFees,
     partnerAccount?.serviceFees ?? [],
     settings?.serviceFees ?? [],
     'food-and-beverage',
@@ -1641,19 +1721,13 @@ export async function processConfirmedTabPayment(
 
   const orders = tab.orders
 
-  // Transitional (dine-in v2 phase 3 replaces this with loadTabFeeContext).
-  if (!tab.siteId) {
-    throw new Error(`Tab ${tab.id} has no siteId — standalone fee context not yet wired`)
-  }
-
-  const { site, partnerAccount, settings } = await loadFeeContext(
-    tab.siteId,
+  const { siteFees, partnerAccount, settings, tier } = await loadTabFeeContext(
+    tab,
     'food-and-beverage'
   )
 
-  const tier = partnerAccount?.subscription?.plan?.tier ?? null
   const matchedFee = resolveServiceFee(
-    site.serviceFees,
+    siteFees,
     partnerAccount?.serviceFees ?? [],
     settings?.serviceFees ?? [],
     'food-and-beverage',

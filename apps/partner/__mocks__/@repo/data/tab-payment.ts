@@ -16,3 +16,17 @@ export const calculateTabTotal = vi.fn().mockResolvedValue({
   payableTotal: 0,
   orderIds: [],
 })
+
+// Dine-in v2: fee-context loaders (site-agnostic tab shape)
+export const loadTabFeeContext = vi.fn().mockResolvedValue({
+  siteFees: [],
+  partnerAccount: null,
+  settings: { serviceFees: [] },
+  tier: null,
+})
+export const loadRestaurantFeeContext = vi.fn().mockResolvedValue({
+  siteFees: [],
+  partnerAccount: null,
+  settings: { serviceFees: [] },
+  tier: null,
+})

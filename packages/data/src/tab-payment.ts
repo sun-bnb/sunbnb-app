@@ -11,6 +11,9 @@
 export {
   calculateTabTotal,
   processConfirmedTabPayment,
+  loadTabFeeContext,
+  loadRestaurantFeeContext,
   type ProcessTabPaymentOpts,
   type TabTotalResult,
+  type TabFeeContext,
 } from './payment'

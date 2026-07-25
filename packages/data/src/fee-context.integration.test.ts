@@ -12,10 +12,12 @@ import {
   createTestSettings,
   createTestServiceFee,
   createTestSubscription,
+  createTestRestaurant,
   resetCounter,
 } from './test/fixtures'
 import {
   loadFeeContext,
+  loadRestaurantFeeContext,
   resolveServiceFee,
   getSiteFeeContext,
   getPartnerFeeContext,
@@ -346,5 +348,68 @@ describe('loadFeeContext', () => {
     // FI was not touched
     const fiFees = await prisma.serviceFee.findMany({ where: { settingsId: fiSettings.id } })
     expect(fiFees.some((f) => f.serviceCode === 'food-and-beverage')).toBe(false)
+  })
+})
+
+describe('loadRestaurantFeeContext (dine-in v2 — standalone restaurants)', () => {
+  it('resolves partner + settings without any site and returns an empty site tier', async () => {
+    const user = await createTestUser()
+    const partner = await createTestPartnerAccount(user.id)
+    const settings = await createTestSettings()
+    await createTestServiceFee(settings.id, { serviceCode: 'food-and-beverage' })
+    const restaurant = await createTestRestaurant(partner.userId)
+
+    const ctx = await loadRestaurantFeeContext(restaurant.id, 'food-and-beverage')
+
+    expect(ctx.siteFees).toEqual([])
+    expect(ctx.partnerAccount?.userId).toBe(partner.userId)
+    expect(ctx.settings?.serviceFees.some((f) => f.serviceCode === 'food-and-beverage')).toBe(true)
+  })
+
+  it('account-tier fee wins the cascade when present', async () => {
+    const user = await createTestUser()
+    const partner = await createTestPartnerAccount(user.id)
+    const settings = await createTestSettings()
+    await createTestServiceFee(settings.id, {
+      serviceCode: 'food-and-beverage',
+      chargeType: 'fixed',
+      feeAmount: 0.5,
+    })
+    await createTestServiceFee(settings.id, {
+      serviceCode: 'food-and-beverage',
+      accountId: partner.userId,
+      chargeType: 'fixed',
+      feeAmount: 3.0,
+    })
+    const restaurant = await createTestRestaurant(partner.userId)
+
+    const ctx = await loadRestaurantFeeContext(restaurant.id, 'food-and-beverage')
+    const resolved = resolveServiceFee(
+      ctx.siteFees,
+      ctx.partnerAccount?.serviceFees ?? [],
+      ctx.settings?.serviceFees ?? [],
+      'food-and-beverage',
+      ctx.tier,
+    )
+
+    expect(resolved?.feeAmount).toBe(3.0)
+    expect(resolved?.accountId).toBe(partner.userId)
+  })
+
+  it('bootstraps default Settings + fee when none exist', async () => {
+    const user = await createTestUser()
+    const partner = await createTestPartnerAccount(user.id)
+    const restaurant = await createTestRestaurant(partner.userId)
+
+    const ctx = await loadRestaurantFeeContext(restaurant.id, 'food-and-beverage')
+
+    expect(ctx.settings).not.toBeNull()
+    expect(ctx.settings?.serviceFees.some((f) => f.serviceCode === 'food-and-beverage')).toBe(true)
+  })
+
+  it('throws for an unknown restaurant', async () => {
+    await expect(
+      loadRestaurantFeeContext('clzzzzzzzzzzzzzzzzzzzzzzz', 'food-and-beverage'),
+    ).rejects.toThrow('Restaurant not found')
   })
 })
