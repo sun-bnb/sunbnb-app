@@ -29,10 +29,15 @@ vi.mock('@/app/api/_lib/mollie', () => ({
 // ── Import after mocks ────────────────────────────────────────────────────────
 import { POST } from './route'
 import prisma from '@repo/data/PrismaCient'
-import { calculateTabTotal, loadTabFeeContext } from '@repo/data/payment'
+import {
+  calculateTabTotal,
+  loadTabFeeContext,
+  calculateServiceFeeAmount,
+} from '@repo/data/payment'
 
 const mockCalculateTabTotal = vi.mocked(calculateTabTotal)
 const mockLoadTabFeeContext = vi.mocked(loadTabFeeContext)
+const mockCalculateServiceFeeAmount = vi.mocked(calculateServiceFeeAmount)
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const VALID_TAB_ID = 'clxk0000000000000000000000' // CUID-shaped
@@ -391,6 +396,56 @@ describe('POST /api/tab-payment/mollie/create-payment', () => {
           entityId: VALID_TAB_ID,
           restaurantId: 'rest-2',
         }),
+      }),
+    )
+  })
+
+  // ── Own-account applicationFee fallback (platform-operated venues) ──────────
+
+  it('retries once WITHOUT the applicationFee when Mollie rejects it for our own account', async () => {
+    mockCalculateServiceFeeAmount.mockReturnValue(0.5)
+    mockPaymentsCreate
+      .mockRejectedValueOnce(
+        Object.assign(new Error('Application fees can not be created for your own account'), {
+          statusCode: 422,
+        }),
+      )
+      .mockResolvedValueOnce({
+        id: 'tr_retry',
+        getCheckoutUrl: () => 'https://checkout.mollie.com/pay/retry',
+      })
+
+    const res = await POST(makeRequest({ tabId: VALID_TAB_ID, redirectUrl: REDIRECT_URL }))
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.checkoutUrl).toBe('https://checkout.mollie.com/pay/retry')
+
+    expect(mockPaymentsCreate).toHaveBeenCalledTimes(2)
+    expect(mockPaymentsCreate.mock.calls[0]![0]).toHaveProperty('applicationFee')
+    expect(mockPaymentsCreate.mock.calls[1]![0]).not.toHaveProperty('applicationFee')
+
+    // The claim survives and the paymentRef is stored — payment proceeded.
+    expect(vi.mocked(prisma.tableTab.update)).toHaveBeenCalledWith({
+      where: { id: VALID_TAB_ID },
+      data: { paymentRef: 'tr_retry' },
+    })
+  })
+
+  it('does NOT retry on other 422s — claim reverted, 422 returned', async () => {
+    mockCalculateServiceFeeAmount.mockReturnValue(0.5)
+    mockPaymentsCreate.mockRejectedValue(
+      Object.assign(new Error('The amount is lower than the minimum'), { statusCode: 422 }),
+    )
+
+    const res = await POST(makeRequest({ tabId: VALID_TAB_ID, redirectUrl: REDIRECT_URL }))
+
+    expect(res.status).toBe(422)
+    expect(mockPaymentsCreate).toHaveBeenCalledTimes(1)
+    // revertClaim ran: TAB_PENDING_PAYMENT → open
+    expect(vi.mocked(prisma.tableTab.updateMany)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'open' }),
       }),
     )
   })

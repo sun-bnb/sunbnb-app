@@ -19,6 +19,7 @@ import {
   round,
 } from '@repo/data/payment'
 import { isTestMode } from '@repo/data/env'
+import { createMolliePaymentWithFeeFallback } from '@repo/data/mollie-app-fee'
 import { RENTAL_PENDING, RENTAL_PROCESSING, RENTAL_PAYMENT_FAILED } from '@repo/data/reservation-status'
 import { NextRequest } from 'next/server'
 import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
@@ -177,32 +178,37 @@ export async function POST(request: NextRequest) {
 
   let payment
   try {
-    payment = await mollie.payments.create({
-      profileId: profileId!,
-      amount: {
-        value: amountValue,
-        currency: 'EUR',
-      },
-      description: `Equipment rental (${bookings.length} item${bookings.length !== 1 ? 's' : ''})`,
-      redirectUrl,
-      webhookUrl,
-      metadata: JSON.stringify({
-        type: 'rental-booking',
-        entityId: rentalBookingIds[0],   // primary booking for lookup
-        bookingIds: rentalBookingIds,     // all booking IDs
-        siteId,
-      }),
-      ...(applicationFeeAmount > 0 && {
-        applicationFee: {
-          amount: {
-            value: feeValue,
-            currency: 'EUR',
-          },
-          description: 'Platform fee',
+    const result = await createMolliePaymentWithFeeFallback(
+      (p) => mollie.payments.create(p),
+      {
+        profileId: profileId!,
+        amount: {
+          value: amountValue,
+          currency: 'EUR',
         },
-      }),
-      ...(isTestMode() && { testmode: true }),
-    })
+        description: `Equipment rental (${bookings.length} item${bookings.length !== 1 ? 's' : ''})`,
+        redirectUrl,
+        webhookUrl,
+        metadata: JSON.stringify({
+          type: 'rental-booking',
+          entityId: rentalBookingIds[0],   // primary booking for lookup
+          bookingIds: rentalBookingIds,     // all booking IDs
+          siteId,
+        }),
+        ...(applicationFeeAmount > 0 && {
+          applicationFee: {
+            amount: {
+              value: feeValue,
+              currency: 'EUR',
+            },
+            description: 'Platform fee',
+          },
+        }),
+        ...(isTestMode() && { testmode: true }),
+      },
+      '[MollieRentalPayment]',
+    )
+    payment = result.payment
   } catch (error: any) {
     console.error('[MollieRentalPayment] Mollie error:', {
       title: error?.title,

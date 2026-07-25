@@ -25,6 +25,7 @@ import {
   processConfirmedReservation,
 } from './payment'
 import { getValidMollieToken } from './mollie-tokens'
+import { isOwnAccountApplicationFeeError } from './mollie-app-fee'
 import { isTestMode } from './env'
 import {
   RESERVATION_PROCESSING,
@@ -167,30 +168,48 @@ export async function createReservationMolliePayment(
   }
 
   // Create the payment on the partner's account.
-  const payRes = await fetch(`${MOLLIE_API_BASE}/payments`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      profileId,
-      amount: { value: paymentAmount.toFixed(2), currency: 'EUR' },
-      description: `Reservation ${reservationId}`,
-      redirectUrl: opts.redirectUrl,
-      webhookUrl: opts.webhookUrl,
-      metadata: JSON.stringify({
-        type: 'reservation',
-        entityId: reservationId,
-        siteId: reservation.siteId,
-        ...opts.metadataExtra,
-      }),
-      ...(applicationFeeAmount > 0 && {
-        applicationFee: {
-          amount: { value: applicationFeeAmount.toFixed(2), currency: 'EUR' },
-          description: 'Platform fee',
-        },
-      }),
-      ...(testmode ? { testmode: true } : {}),
+  const paymentBody = {
+    profileId,
+    amount: { value: paymentAmount.toFixed(2), currency: 'EUR' },
+    description: `Reservation ${reservationId}`,
+    redirectUrl: opts.redirectUrl,
+    webhookUrl: opts.webhookUrl,
+    metadata: JSON.stringify({
+      type: 'reservation',
+      entityId: reservationId,
+      siteId: reservation.siteId,
+      ...opts.metadataExtra,
     }),
-  })
+    ...(applicationFeeAmount > 0 && {
+      applicationFee: {
+        amount: { value: applicationFeeAmount.toFixed(2), currency: 'EUR' },
+        description: 'Platform fee',
+      },
+    }),
+    ...(testmode ? { testmode: true } : {}),
+  }
+
+  const attemptCreate = (body: object) =>
+    fetch(`${MOLLIE_API_BASE}/payments`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+  let payRes = await attemptCreate(paymentBody)
+
+  // Own-account fallback: platform-operated venues (partner OAuth = our own
+  // Mollie org) cannot carry an applicationFee — retry once without it.
+  if (!payRes.ok && payRes.status === 422 && 'applicationFee' in paymentBody) {
+    const detail = await payRes.clone().text().catch(() => '')
+    if (isOwnAccountApplicationFeeError(detail)) {
+      console.warn(
+        '[reservation-payment] Own-account applicationFee rejected by Mollie — retrying without fee (platform-operated venue; commission not routed)',
+      )
+      const { applicationFee: _dropped, ...withoutFee } = paymentBody as Record<string, unknown>
+      payRes = await attemptCreate(withoutFee)
+    }
+  }
 
   if (!payRes.ok) {
     const detail = await payRes.text().catch(() => '')

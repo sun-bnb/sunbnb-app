@@ -36,6 +36,7 @@ import {
   round,
 } from '@repo/data/payment'
 import { isTestMode } from '@repo/data/env'
+import { createMolliePaymentWithFeeFallback } from '@repo/data/mollie-app-fee'
 import { TAB_OPEN, TAB_PENDING_PAYMENT, TAB_TERMINAL_STATUSES } from '@repo/data/reservation-status'
 import { NextRequest } from 'next/server'
 import { getMollieClientForPartner, getValidMollieToken } from '@/app/api/_lib/mollie'
@@ -225,34 +226,41 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Create payment on the partner's Mollie account ───────────────────────
+  // Own-account fallback: platform-operated venues (partner OAuth = our own
+  // Mollie org) get a one-shot retry without the applicationFee.
   let payment
   try {
-    payment = await mollie.payments.create({
-      profileId: profileId!,
-      amount: {
-        value: amountValue,
-        currency: 'EUR',
-      },
-      description: `Tab ${tabId}`,
-      redirectUrl,
-      webhookUrl,
-      metadata: JSON.stringify({
-        type: 'tab',
-        entityId: tabId,
-        restaurantId: tab.restaurantId,
-        ...(tab.siteId ? { siteId: tab.siteId } : {}),
-      }),
-      ...(applicationFeeAmount > 0 && {
-        applicationFee: {
-          amount: {
-            value: feeValue,
-            currency: 'EUR',
-          },
-          description: 'Platform fee',
+    const result = await createMolliePaymentWithFeeFallback(
+      (p) => mollie.payments.create(p),
+      {
+        profileId: profileId!,
+        amount: {
+          value: amountValue,
+          currency: 'EUR',
         },
-      }),
-      ...(isTestMode() && { testmode: true }),
-    })
+        description: `Tab ${tabId}`,
+        redirectUrl,
+        webhookUrl,
+        metadata: JSON.stringify({
+          type: 'tab',
+          entityId: tabId,
+          restaurantId: tab.restaurantId,
+          ...(tab.siteId ? { siteId: tab.siteId } : {}),
+        }),
+        ...(applicationFeeAmount > 0 && {
+          applicationFee: {
+            amount: {
+              value: feeValue,
+              currency: 'EUR',
+            },
+            description: 'Platform fee',
+          },
+        }),
+        ...(isTestMode() && { testmode: true }),
+      },
+      '[TabPayment]',
+    )
+    payment = result.payment
   } catch (error: any) {
     await revertClaim()
     console.error('[TabPayment] Mollie error:', {

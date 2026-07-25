@@ -23,6 +23,7 @@ import {
   round,
 } from '@repo/data/payment'
 import { isTestMode } from '@repo/data/env'
+import { createMolliePaymentWithFeeFallback } from '@repo/data/mollie-app-fee'
 import { ORDER_PROCESSING, ORDER_PAYMENT_FAILED } from '@repo/data/reservation-status'
 import { NextRequest } from 'next/server'
 import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
@@ -168,32 +169,37 @@ export async function POST(request: NextRequest) {
 
   let payment
   try {
-    payment = await mollie.payments.create({
-      profileId: profileId!,
-      amount: {
-        value: amountValue,
-        currency: 'EUR',
-      },
-      description: `Order ${orderId}`,
-      redirectUrl,
-      webhookUrl,
-      metadata: JSON.stringify({
-        type: 'order',
-        entityId: orderId,
-        siteId: order.siteId,
-      }),
-      // Platform commission — routed to our organization automatically by Mollie
-      ...(applicationFeeAmount > 0 && {
-        applicationFee: {
-          amount: {
-            value: feeValue,
-            currency: 'EUR',
-          },
-          description: 'Platform fee',
+    const result = await createMolliePaymentWithFeeFallback(
+      (p) => mollie.payments.create(p),
+      {
+        profileId: profileId!,
+        amount: {
+          value: amountValue,
+          currency: 'EUR',
         },
-      }),
-      ...(isTestMode() && { testmode: true }),
-    })
+        description: `Order ${orderId}`,
+        redirectUrl,
+        webhookUrl,
+        metadata: JSON.stringify({
+          type: 'order',
+          entityId: orderId,
+          siteId: order.siteId,
+        }),
+        // Platform commission — routed to our organization automatically by Mollie
+        ...(applicationFeeAmount > 0 && {
+          applicationFee: {
+            amount: {
+              value: feeValue,
+              currency: 'EUR',
+            },
+            description: 'Platform fee',
+          },
+        }),
+        ...(isTestMode() && { testmode: true }),
+      },
+      '[MolliePayment]',
+    )
+    payment = result.payment
   } catch (error: any) {
     console.error('[MolliePayment] Mollie error:', {
       title: error?.title,
