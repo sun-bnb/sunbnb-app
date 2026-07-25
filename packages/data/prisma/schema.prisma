@@ -474,7 +474,11 @@ model Order {
   totalPrice    Float
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
-  siteId        String         @map("site_id")
+  // Nullable since dine-in v2 (owner CHECK order_owner_chk enforces at least
+  // one of siteId/restaurantId). Linked-venue dine orders dual-write both;
+  // standalone-restaurant orders carry restaurantId only.
+  siteId        String?        @map("site_id")
+  restaurantId  String?        @map("restaurant_id")
   status        String         @default("created")
   anonId        String?        @map("anon_id")
   paymentAmount Float?         @map("payment_amount")
@@ -496,9 +500,12 @@ model Order {
   reservation   Reservation?   @relation(fields: [reservationId], references: [id])
   seat          InventoryItem? @relation(fields: [seatId], references: [id])
   tab           TableTab?      @relation(fields: [tabId], references: [id])
-  site          Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  site          Site?          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  restaurant    Restaurant?    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   orderItems    OrderItem[]
+
+  @@index([restaurantId])
 }
 
 model OrderItem {
@@ -814,6 +821,11 @@ model Restaurant {
   // When true, tables individually flagged `Table.guestSelectable` become
   // guest-pickable from the read-only floor map. Opt-in, never the default.
   guestSelectionEnabled Boolean             @default(false) @map("guest_selection_enabled")
+  // Master switch for QR dine-in tab ordering (v2: the single gate for both
+  // standalone and site-linked restaurants; Site.appSalesEnabled now governs
+  // sunbed room-service only). Backfilled true for linked venues whose site
+  // had appSalesEnabled at migration time.
+  dineInEnabled         Boolean             @default(false) @map("dine_in_enabled")
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
   partnerAccount        PartnerAccount      @relation(fields: [partnerAccountId], references: [userId], onDelete: Cascade)
@@ -825,6 +837,8 @@ model Restaurant {
   combinations          TableCombination[]
   waitlistEntries       TableWaitlistEntry[]
   layoutElements        LayoutElement[]
+  tabs                  TableTab[]
+  orders                Order[]
 
   @@index([partnerAccountId])
   @@map("restaurant")
@@ -984,7 +998,12 @@ model MenuItem {
   restaurantId String      @map("restaurant_id")
   name         String
   description  String?
+  // VAT triple (mirrors Product): partner enters the gross `totalPrice` +
+  // `tax` (VAT %); `price` is the derived net base via reverse VAT. Rows
+  // created before dine-in v2 have tax=0 and total_price backfilled = price.
   price        Float
+  tax          Float       @default(0)
+  totalPrice   Float       @default(0) @map("total_price")
   imageUrl     String?     @map("image_url")
   category     String      @default("main")
   soldOut      Boolean     @default(false) @map("sold_out")
@@ -1095,7 +1114,9 @@ model TableTab {
   id           String    @id @default(cuid())
   tableId      String    @map("table_id")
   restaurantId String    @map("restaurant_id")
-  siteId       String    @map("site_id")
+  // Nullable since dine-in v2: linked venues dual-write their siteId so site
+  // dashboards/accounting keep working; standalone restaurants leave it NULL.
+  siteId       String?   @map("site_id")
   status       String    @default("open") @map("status")
   // Concurrency guard: exactly one OPEN tab per table. Set to `tableId` while
   // the tab is open, NULLed when it closes (paid/settled/discarded) — NULLs
@@ -1117,13 +1138,15 @@ model TableTab {
   closedAt     DateTime? @map("closed_at")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
-  table        Table     @relation(fields: [tableId], references: [id])
-  site         Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  table        Table      @relation(fields: [tableId], references: [id])
+  site         Site?      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   orders       Order[]
   invoices     Invoice[]
 
   @@index([tableId])
   @@index([siteId])
+  @@index([restaurantId])
   @@index([paymentRef])
   @@map("table_tab")
 }

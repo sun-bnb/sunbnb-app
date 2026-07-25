@@ -34,6 +34,10 @@ const prisma = {
   product: {
     findMany: vi.fn(),
   },
+  menuItem: {
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+  },
   rentalItem: {
     findMany: vi.fn(),
   },

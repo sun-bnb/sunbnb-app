@@ -127,6 +127,9 @@ export default async function Receipt({ params, searchParams }: { params: { id: 
       return <div>Invoice not found</div>
     }
 
+    if (!order.site) {
+      return <div>Order not found</div>
+    }
     const { partnerAccount } = order.site.user
 
     const date =

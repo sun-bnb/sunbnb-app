@@ -328,6 +328,9 @@ export async function completeUnpaidOrder(orderId: string, anonId?: string) {
   }
 
   // Only allow for off-platform billing sites (check orderPaymentType first, fall back to type)
+  if (!order.site) {
+    return { status: 'error', errors: ['Order not found'] }
+  }
   const effectiveOrderPaymentType = order.site.orderPaymentType ?? order.site.type
   if (effectiveOrderPaymentType === 'paid') {
     return { status: 'error', errors: ['Payment is required for this site'] }

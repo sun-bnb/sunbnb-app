@@ -1101,6 +1101,12 @@ export async function processConfirmedOrder(
     return
   }
 
+  // Dine-tab orders (restaurant-anchored, siteId possibly null) are invoiced
+  // as a group via processConfirmedTabPayment, never individually here.
+  if (!order.siteId) {
+    throw new Error(`Order ${order.id} has no siteId — not processable on the site order rail`)
+  }
+
   const { site, partnerAccount, settings } = await loadFeeContext(
     order.siteId,
     'food-and-beverage'
@@ -1474,6 +1480,9 @@ export async function calculateOrderServiceFee(
     where: { id: orderId },
   })
   if (!order) throw new Error(`Order not found: ${orderId}`)
+  if (!order.siteId) {
+    throw new Error(`Order ${order.id} has no siteId — tab orders use calculateTabTotal`)
+  }
 
   const { site, partnerAccount, settings } = await loadFeeContext(
     order.siteId,
@@ -1538,6 +1547,12 @@ export async function calculateTabTotal(tabId: string): Promise<TabTotalResult> 
     orders.reduce((sum, o) => sum + (o.paymentAmount ?? o.totalPrice ?? 0), 0)
   )
   const orderIds = orders.map((o) => o.id)
+
+  // Transitional (dine-in v2 phase 3 replaces this with loadTabFeeContext):
+  // v1 tabs always carry a siteId; standalone tabs don't exist yet.
+  if (!tab.siteId) {
+    throw new Error(`Tab ${tab.id} has no siteId — standalone fee context not yet wired`)
+  }
 
   const { site, partnerAccount, settings } = await loadFeeContext(
     tab.siteId,
@@ -1638,6 +1653,11 @@ export async function processConfirmedTabPayment(
   if (tab.status === TAB_PAID || tab.status === TAB_SETTLED_CASH) return
 
   const orders = tab.orders
+
+  // Transitional (dine-in v2 phase 3 replaces this with loadTabFeeContext).
+  if (!tab.siteId) {
+    throw new Error(`Tab ${tab.id} has no siteId — standalone fee context not yet wired`)
+  }
 
   const { site, partnerAccount, settings } = await loadFeeContext(
     tab.siteId,

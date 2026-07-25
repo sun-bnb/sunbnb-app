@@ -171,7 +171,7 @@ export async function createTestProduct(
 
 export async function createTestOrder(
   userId: string,
-  siteId: string,
+  siteId: string | null,
   overrides: Record<string, any> = {}
 ) {
   return prisma.order.create({
@@ -221,6 +221,29 @@ export async function createTestRestaurant(
       partnerAccountId,
       name: 'Test Restaurant',
       slug: `test-restaurant-${nextId()}`,
+      ...overrides,
+    },
+  })
+}
+
+// ─── MenuItem ────────────────────────────────────────────────────────────────
+
+/**
+ * Create a test MenuItem (dine-in v2 orderable catalog). VAT triple mirrors
+ * Product: totalPrice is gross, price is the derived net base.
+ */
+export async function createTestMenuItem(
+  restaurantId: string,
+  overrides: Record<string, any> = {}
+) {
+  return prisma.menuItem.create({
+    data: {
+      restaurantId,
+      name: 'Test Dish',
+      price: 8.0,
+      tax: 14,
+      totalPrice: 8.0,
+      category: 'food',
       ...overrides,
     },
   })
@@ -343,10 +366,11 @@ export async function createTestTable(
  * Create a test TableTab.
  * Defaults: status = 'open', openTableId = tableId (concurrency guard set).
  * Caller must supply restaurantId via overrides (it is a required column).
+ * Pass siteId = null for a standalone-restaurant tab (dine-in v2).
  */
 export async function createTestTableTab(
   tableId: string,
-  siteId: string,
+  siteId: string | null,
   overrides: Record<string, any> = {}
 ) {
   return prisma.tableTab.create({

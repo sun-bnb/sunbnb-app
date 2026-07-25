@@ -89,6 +89,11 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Load partner's Mollie credentials ────────────────────────────────────
+  // Sunbed F&B orders are always site-anchored; restaurant tab orders pay via
+  // the tab-payment route, never here.
+  if (!order.siteId) {
+    return Response.json({ error: 'Order not found' }, { status: 404 })
+  }
   const { site, partnerAccount, settings } = await loadFeeContext(
     order.siteId,
     'food-and-beverage'

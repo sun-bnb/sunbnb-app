@@ -20,7 +20,8 @@ export interface Order {
 
   userId?: string | null
   anonId?: string | null
-  siteId: string
+  // Nullable since dine-in v2: standalone-restaurant tab orders have no site.
+  siteId: string | null
   
   status : string     
 

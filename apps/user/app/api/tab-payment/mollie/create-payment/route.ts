@@ -135,6 +135,10 @@ export async function POST(request: NextRequest) {
   let settings: Awaited<ReturnType<typeof loadFeeContext>>['settings']
 
   try {
+    // Transitional (dine-in v2 phase 3 replaces this with loadTabFeeContext).
+    if (!tab.siteId) {
+      throw new Error(`Tab ${tab.id} has no siteId — standalone fee context not yet wired`)
+    }
     const ctx = await loadFeeContext(tab.siteId, 'food-and-beverage')
     site = ctx.site
     partnerAccount = ctx.partnerAccount
