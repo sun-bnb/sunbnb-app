@@ -7,6 +7,7 @@ import { headers } from 'next/headers'
 import prisma from '@repo/data/PrismaCient'
 import { validateOrCreateUser } from '@repo/data/auth'
 import { consumeImpersonationToken } from '@repo/data/impersonation'
+import { resolveMissingMollieScopes } from '@/app/api/_lib/mollie-permissions'
 import { SiteProps } from '@/types/shared'
 
 const nextAuthResult: NextAuthResult = NextAuth({
@@ -14,6 +15,14 @@ const nextAuthResult: NextAuthResult = NextAuth({
   secret: process.env.AUTH_SECRET,
   session: {
     strategy: 'jwt',
+    // 8-hour IDLE timeout, not an absolute one: @auth/core re-signs the JWT with
+    // a fresh expiry on every session read under the `jwt` strategy (`updateAge`
+    // applies only to the database strategy). So an operator is never logged out
+    // mid-shift, but an overnight close-to-open gap always exceeds 8h — which
+    // means partners sign in roughly daily. The Mollie permission check in the
+    // `jwt` callback below rides on that: it only runs at sign-in, so session
+    // length is what determines how promptly a missing scope is noticed.
+    maxAge: 8 * 60 * 60,
   },
   providers: [
     GoogleProvider({
@@ -86,6 +95,9 @@ const nextAuthResult: NextAuthResult = NextAuth({
   callbacks: {
     async session({ session, token }) {
       session.user.id = token.id as string
+      // Computed once at sign-in; the app shell reads it to decide whether to
+      // show the "reconnect Mollie" notification.
+      ;(session.user as any).missingMollieScopes = token.missingMollieScopes ?? []
       if (token.impersonating) {
         (session.user as any).impersonating = true
         ;(session.user as any).impersonatorId = token.impersonatorId
@@ -103,7 +115,7 @@ const nextAuthResult: NextAuthResult = NextAuth({
       }
       return true
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         const u = user as any
         if (u.impersonating) {
@@ -124,6 +136,17 @@ const nextAuthResult: NextAuthResult = NextAuth({
           token.name = user.name
           token.email = user.email
         }
+
+        // Sign-in only (`user` is undefined on subsequent session reads), so
+        // this costs one Mollie call per login rather than one per request.
+        // `resolveMissingMollieScopes` fails open and is time-bounded — a Mollie
+        // outage must never block a partner from signing in.
+        token.missingMollieScopes = await resolveMissingMollieScopes(token.id as string)
+      } else if (trigger === 'update' && token.id) {
+        // Explicit client-side session refresh — the one path that re-checks
+        // without a new login. Used after a Mollie (re)connect so the banner
+        // clears immediately instead of lingering until the next sign-in.
+        token.missingMollieScopes = await resolveMissingMollieScopes(token.id as string)
       }
       return token
     },

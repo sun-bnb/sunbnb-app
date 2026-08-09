@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useSession } from 'next-auth/react'
 import { disconnectMollie, refreshMollieTokens } from './actions'
 
 interface PartnerData {
@@ -221,6 +222,17 @@ export default function MollieView({ isConnected, profileId, onboardingStatus, s
   const [refreshing, setRefreshing] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [tab, setTab] = useState<'existing' | 'new'>('existing')
+  const { update: updateSession } = useSession()
+
+  // The granted Mollie scopes are stamped onto the session at sign-in, so a
+  // partner who has just (re)connected would keep seeing the "missing
+  // permissions" banner until their next login. A connect always lands here,
+  // so refresh the session once to re-read the now-widened grant.
+  // Deliberately keyed on `success` only: `updateSession` has no stable
+  // identity, and including it would re-fire the refresh on every render.
+  useEffect(() => {
+    if (success) updateSession()
+  }, [success])
 
   const handleDisconnect = async () => {
     if (!confirm('Are you sure you want to disconnect your Mollie account? Customers will not be able to pay via Mollie until you reconnect.')) return

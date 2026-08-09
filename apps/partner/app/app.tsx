@@ -21,22 +21,48 @@ interface BusinessEntity {
 
 type MollieOnboardingStatus = 'completed' | 'in-review' | 'needs-data' | null
 
+/**
+ * Collapse missing OAuth scopes into the capabilities a partner would recognise
+ * — nobody should be shown "refunds.write". Read/write pairs fold into one
+ * entry, and order follows the scope list so the copy is deterministic.
+ */
+const SCOPE_CAPABILITY: Record<string, string> = {
+  'payments.read': 'payments',
+  'payments.write': 'payments',
+  'refunds.read': 'refunds',
+  'refunds.write': 'refunds',
+  'profiles.read': 'profile',
+  'profiles.write': 'profile',
+  'onboarding.read': 'onboarding',
+  'onboarding.write': 'onboarding',
+}
+
+function missingCapabilities(missingScopes: string[]): string[] {
+  const capabilities: string[] = []
+  for (const scope of missingScopes) {
+    // Fall back to the raw scope id for a scope added without a label — better
+    // a developer-ish word than a crash or a silently empty list.
+    const capability = SCOPE_CAPABILITY[scope] ?? scope
+    if (!capabilities.includes(capability)) capabilities.push(capability)
+  }
+  return capabilities
+}
+
 function MollieBanner({
   hasMollie,
   mollieOnboardingStatus,
   hasIntegratedPayments,
+  missingScopes,
 }: {
   hasMollie: boolean
   mollieOnboardingStatus: MollieOnboardingStatus
   hasIntegratedPayments: boolean
+  missingScopes: string[]
 }) {
   const t = useTranslations('App')
 
   // Only show when at least one site uses integrated payments
   if (!hasIntegratedPayments) return null
-
-  // No banner needed when Mollie is fully set up
-  if (hasMollie && mollieOnboardingStatus === 'completed') return null
 
   const reason = t('mollieIntegratedReason')
 
@@ -104,6 +130,55 @@ function MollieBanner({
     )
   }
 
+  // Connected and onboarded, but the OAuth grant is missing scopes we need.
+  // Ranked below needs-data (which blocks payments outright) and above
+  // in-review, since payments still work — it is the extras that fail, and they
+  // fail as a 403 in front of whoever tries first, usually floor staff.
+  // Re-consent is the only fix: /api/mollie/authorize re-prompts with the
+  // current scope set (approval_prompt=force), because a token refresh never
+  // widens an existing grant.
+  if (missingScopes.length > 0) {
+    const capabilities = missingCapabilities(missingScopes)
+      .map((capability) => {
+        switch (capability) {
+          case 'payments': return t('molliePermissionPayments')
+          case 'refunds': return t('molliePermissionRefunds')
+          case 'profile': return t('molliePermissionProfile')
+          case 'onboarding': return t('molliePermissionOnboarding')
+          default: return capability
+        }
+      })
+      .join(', ')
+
+    return (
+      <div className="bg-amber-50 border-b border-amber-200">
+        <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center gap-4">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-400/20 flex items-center justify-center">
+              <svg className="w-3 h-3 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1.001.43-1.563A6 6 0 1121.75 8.25z" />
+              </svg>
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm text-amber-800">{t('mollieMissingPermissions')}</p>
+              <p className="text-xs text-amber-600 mt-0.5">
+                {t('mollieMissingPermissionsDetail', { capabilities })}
+              </p>
+            </div>
+          </div>
+          {/* No returnTo: the default landing is /account/mollie?success=true,
+              which refreshes the session so this banner clears right away. */}
+          <a
+            href="/api/mollie/authorize"
+            className="flex-shrink-0 text-xs font-semibold text-white bg-amber-500 hover:bg-amber-600 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            {t('updateMolliePermissions')}
+          </a>
+        </div>
+      </div>
+    )
+  }
+
   // in-review — informational, lower urgency, but link partners to details
   if (mollieOnboardingStatus === 'in-review') {
     return (
@@ -138,7 +213,7 @@ function MollieBanner({
 
 export default function App({ children, businessEntity }: { children: React.ReactNode; businessEntity: BusinessEntity }) {
 
-  const { status } = useSession()
+  const { data: session, status } = useSession()
   const pathname = usePathname()
   const router = useRouter()
   const [onboardingChecked, setOnboardingChecked] = useState(false)
@@ -164,6 +239,11 @@ export default function App({ children, businessEntity }: { children: React.Reac
 
   // Don't show the banner when the user is already on the Mollie setup page
   const isMolliePage = pathname.startsWith('/account/mollie')
+
+  // Stamped onto the token at sign-in (see the `jwt` callback in app/auth.ts),
+  // so this needs no fetch of its own and stays fixed for the session.
+  const missingScopes: string[] =
+    (session?.user as { missingMollieScopes?: string[] } | undefined)?.missingMollieScopes ?? []
 
   useEffect(() => {
     if (status !== 'authenticated' || isPublicRoute || isOnboardingRoute) {
@@ -224,7 +304,12 @@ export default function App({ children, businessEntity }: { children: React.Reac
     <div className="min-h-screen bg-gray-50/50">
       <Header />
       {!isMolliePage && (
-        <MollieBanner hasMollie={hasMollie} mollieOnboardingStatus={mollieOnboardingStatus} hasIntegratedPayments={hasIntegratedPayments} />
+        <MollieBanner
+          hasMollie={hasMollie}
+          mollieOnboardingStatus={mollieOnboardingStatus}
+          hasIntegratedPayments={hasIntegratedPayments}
+          missingScopes={missingScopes}
+        />
       )}
       <main>
         {children}

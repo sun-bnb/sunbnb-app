@@ -19,7 +19,11 @@
  * partners keep their old (narrower) grant — a refresh-token exchange never
  * widens scope — so they must RECONNECT Mollie before a refund will succeed.
  * Until then `refunds.write` calls return 403 (Forbidden, missing permission).
+ * That gap is surfaced proactively at sign-in — see `./mollie-permissions`,
+ * which owns the scope list and the granted-scope lookup.
  */
+
+import { OAUTH_SCOPE_LIST } from './mollie-permissions'
 
 // ── Environment ─────────────────────────────────────────────────────────────
 
@@ -42,16 +46,12 @@ export function getMollieClientSecret() {
 const MOLLIE_AUTH_URL = 'https://my.mollie.com/oauth2/authorize'
 const MOLLIE_TOKEN_URL = 'https://api.mollie.com/oauth2/tokens'
 
-export const OAUTH_SCOPES = [
-  'payments.read',
-  'payments.write',
-  'refunds.read',
-  'refunds.write',
-  'profiles.read',
-  'profiles.write',
-  'onboarding.read',
-  'onboarding.write',
-].join('+')
+/**
+ * The required scopes in the `+`-separated form Mollie's authorize endpoint
+ * expects. The list itself lives in `./mollie-permissions` so the URL we send
+ * partners to and the "is anything missing?" check can never drift apart.
+ */
+export const OAUTH_SCOPES = OAUTH_SCOPE_LIST.join('+')
 
 // ── Authorization URL ───────────────────────────────────────────────────────
 
