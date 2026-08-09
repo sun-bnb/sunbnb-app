@@ -12,6 +12,8 @@ sources:
   - apps/user/app/payment/actions.ts
   - packages/data/src/payment.ts
   - apps/user/service/siteService.ts#searchSites
+  - apps/partner/app/api/_lib/mollie-permissions.ts
+  - apps/partner/app/api/_lib/mollie.ts
   - .claude/rules/payments.md
 related:
   - entity:invoice
@@ -19,7 +21,8 @@ related:
   - flow:reservation-payment
   - flow:order-payment
   - flow:rental-booking
-last_verified: 2026-05-23
+  - subsystem:auth
+last_verified: 2026-08-09
 ---
 
 # Subsystem: Payments
@@ -82,11 +85,20 @@ Consumer Stripe was **removed** (2026-05-23). Stripe survives **only** for partn
 ## Mollie specifics
 
 - Client: `getMollieClientForPartner(accessToken)` — partner-scoped, never global
-- Token freshness: `getValidMollieToken(partnerAccount)` — refreshes via OAuth if expired
-- Payment lookup on webhook: `findPartnerTokenForPayment(paymentId)` walks `PartnerAccount` rows to find the owning partner (the webhook gives only a payment id, not which account it belongs to)
+- Token freshness: `getValidMollieToken(partnerAccountId)` — refreshes via OAuth if expired
+- Payment lookup on webhook: `findPartnerAccountForPayment(paymentRef)` → `partnerAccountId | null`, resolving which partner owns a payment (the webhook gives only a payment id, not the account); it also resolves dine-in tab `paymentRef`s
 - Payment id format: `/^tr_[A-Za-z0-9]{1,50}$/` — webhook validates before fetch
 - Redirect URL: origin validated against `APP_URL` / `NEXT_PUBLIC_APP_URL` to prevent open redirect
 - `applicationFee`: platform commission, routed to platform account
+
+### Granted scopes can be narrower than requested
+
+A partner's OAuth grant is frozen at the scope set in force when they authorized. Adding a scope to `OAUTH_SCOPE_LIST` affects **new authorizations only** — a refresh-token exchange never widens an existing grant — so a partner who connected earlier keeps the narrower one and the new capability fails with a 403 for them alone. Only re-consent fixes it: `/api/mollie/authorize` sends `approval_prompt=force`, which re-prompts an already-connected partner so the grant is re-issued.
+
+- `OAUTH_SCOPE_LIST` (`apps/partner/app/api/_lib/mollie-permissions.ts`) is the single source of truth for both the authorize URL and the missing-scope check — `OAUTH_SCOPES` in `_lib/mollie.ts` is just its `+`-joined form. A second copy would let the two drift.
+- Mollie has **no token-introspection endpoint**, but `GET /v2/permissions` reports every permission with a `granted` boolean for the calling token and requires no scope of its own — so even a minimal legacy grant can answer the question.
+- `resolveMissingMollieScopes(userId)` runs in the partner `jwt` callback at sign-in only (one call per login, not per request) and stamps `missingMollieScopes` on the session; the shell renders a reconnect banner from it. It **fails open** — a 401, timeout, malformed body or DB error yields `[]`, never "missing everything", since the output drives a banner telling partners to reconnect their payment provider.
+- Detection cadence is therefore tied to session length — see `[[subsystem:auth]]`.
 
 ## Demo specifics
 
@@ -161,3 +173,4 @@ Env vars (all required for the providers you use):
 - **Trusting return-URL query params** (`reservationId` / `payment_intent`). Always re-verify status with the provider before treating a payment as paid.
 - **Logging full webhook payloads.** Contains PII / partial card data.
 - **Re-issuing refunds because the first one's response was lost.** Provider also has idempotency keys — use them where available.
+- **Assuming a connected partner holds every scope we request.** Grants are frozen at authorization time; check `missingMollieScopes` (or expect a 403) rather than treating "connected" as "fully permissioned".

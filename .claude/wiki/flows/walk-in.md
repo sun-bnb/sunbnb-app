@@ -136,7 +136,7 @@ The only period control in `/manage` (the calendar toggle in `BedDetail.tsx`), f
 | Invalid / expired `accessKey` | Action returns auth error | Fresh token from `/security` |
 | Token scope mismatch | Auth error | Token needs `'all'` or `'manage_site'` |
 | Conflicting create (item or sibling already booked in range) | `reserveWithConflictGuard` `outcome:'conflict'` | `{ status:'error', errors:[…] }` |
-| Refund fails (Mollie permission/403) | `refundReservation` returns `needsReconnect:true` | UI offers Mollie re-consent; cancel can still proceed |
+| Refund fails (Mollie permission/403) | `refundReservation` returns `needsReconnect:true` | UI offers Mollie re-consent; cancel can still proceed. Staff usually **cannot** complete it: the "Enable refunds" link targets `/api/mollie/authorize`, which needs an owner session and 401s on a token-gated `?key=` manage session. The owner is warned separately at partner-app sign-in (`[[subsystem:payments]]` § granted scopes), so the fix normally comes from them, not from whoever hit the failure |
 | Extend-via-`until` races a concurrent booking | `convertHoldToWalkIn` re-checks in a `FOR UPDATE` tx | `outcome:'conflict'` |
 
 ## Related

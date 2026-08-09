@@ -9,12 +9,14 @@ sources:
   - apps/user/app/api/_lib/auth.ts
   - .claude/rules/auth.md
   - packages/data/src/password-reset.ts
+  - apps/partner/app/api/_lib/mollie-permissions.ts
 related:
   - entity:reservation
   - entity:settlement
   - flow:walk-in
   - flow:reservation-payment
-last_verified: 2026-05-20
+  - subsystem:payments
+last_verified: 2026-08-09
 ---
 
 # Subsystem: Auth
@@ -50,14 +52,16 @@ verifyOwnership(identity, entity)
 
 ### `apps/partner` — Venue operator
 
-- Provider: Google OAuth only
-- Strategy: JWT
+- Providers: Google, Facebook, Credentials (email/password), plus an `impersonation` Credentials provider consuming a single-use signed token from the admin app
+- Strategy: JWT, `maxAge` **8 hours**
 - Guard: `app.tsx` redirects unauthenticated visitors to `/api/auth/signin` (except public routes: `/info`, `/manage`, site-slug pages)
 - Authorization helpers:
   - `requireSiteOwner(siteId)` / `authorizeSite(siteId)` / `verifySiteOwnership(siteId)` — checks `session.user.id === site.userId`
   - Sudo users (`User.sudo: true`) bypass ownership checks in admin app only — **not** the partner app
 
 **Every mutation** in the partner app goes through one of these helpers.
+
+**`maxAge` is an idle timeout, not an absolute one.** Under the `jwt` strategy `@auth/core` re-signs the token with a fresh expiry on *every* session read (`src/lib/actions/session.ts` — `updateAge` is consulted only in the database-session branch), so an operator is never logged out mid-shift. An overnight close-to-open gap does exceed 8h, so partners sign in roughly daily. That cadence is load-bearing, not incidental: the Mollie granted-scope check runs in the `jwt` callback at sign-in only, so session length is what paces how promptly a partner learns their OAuth grant is missing a scope — see `[[subsystem:payments]]`.
 
 ### `apps/admin` — Platform admin
 
@@ -135,3 +139,4 @@ Env vars:
 - **Storing the plaintext reset token in the DB.** Always hash with `hashToken()` first.
 - **Trusting `anonId` for anything beyond ownership of self-owned records.** It is not authentication.
 - **Forgetting `ALLOWED_ORIGINS` in a new env** — password reset will fail-closed.
+- **Reading `maxAge` as an absolute session lifetime, or expecting `updateAge` to throttle the refresh.** Under the JWT strategy it is a pure idle timeout; anything needing a guaranteed periodic re-login must stamp its own absolute-expiry claim in the `jwt` callback.

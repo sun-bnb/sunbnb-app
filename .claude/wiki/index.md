@@ -51,7 +51,7 @@ Invokable via `/wiki <op>` (see `.claude/commands/wiki.md`).
 
 ## Subsystems — cross-cutting modules
 
-- [`subsystem:auth`](subsystems/auth.md) — **stable** — NextAuth setup per app, anonId, ownership checks, sudo
+- [`subsystem:auth`](subsystems/auth.md) — **stable** — NextAuth setup per app, session lifetime, anonId, ownership checks, sudo
 - [`subsystem:payments`](subsystems/payments.md) — **stable** — consumer Mollie + Demo (Stripe = subscriptions only), webhooks, reconciliation, refunds
 - [`subsystem:table-reservations`](subsystems/table-reservations.md) — **stable** — restaurant product: core/ui packages, availability engine, app wiring, extraction posture
 - [`subsystem:schematic-editor`](subsystems/schematic-editor.md) — **draft** — shared grid geometry + editor chrome behind sunbed inventory & restaurant tables
