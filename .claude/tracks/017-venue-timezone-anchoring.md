@@ -33,11 +33,14 @@ in any query window, write path, or money boundary.
 
 ## Resume here
 
-- **Next action:** Resolve **Q1 and Q2 in Open decisions** (the anchoring contract for
-  consumer-written bookings, and whether existing rows get backfilled). Everything in P3+
-  depends on Q1; P1 and P2 do **not** and can ship first without it.
-- **If you want to ship value before that decision lands:** do **P1** (settlement final-day
-  bug). It is isolated, money-affecting, verified, and touches two files.
+- **P1 is DONE** (2026-08-11, uncommitted on local `main`) — see Log. Venue-anchored the
+  settlement window; added the `siteDateBounds` civil-date primitive; 4 regression tests.
+- **Next action:** either (a) resolve **Q1 and Q2 in Open decisions** (the anchoring contract
+  for consumer-written bookings, and whether existing rows get backfilled) to unblock P3+; or
+  (b) ship **P2** (reminder-email + consumer-availability windows) — like P1 it needs neither
+  Q1 nor Q2. P3+ depends on Q1.
+- **Uncommitted P1 work awaits a commit + the `migrate:test`/deploy call (user ops).** No
+  schema change, so no migration — just push/promote when the founder chooses.
 - **Context needed:**
   - This file.
   - `packages/data/src/site-day.ts` — the canonical primitive (read it first; it is correct,
@@ -51,7 +54,7 @@ in any query window, write path, or money boundary.
 
 ## Roadmap
 
-- ☐ **P1 — Settlement period drops its final day** *(money; isolated; verified)*
+- ☑ **P1 — Settlement period drops its final day** *(DONE 2026-08-11 — money; isolated)*
   `apps/admin/app/settlements/actions.ts:62-63` builds `periodEnd = new Date("2025-08-31")` →
   `2025-08-31T00:00:00Z`, and `packages/data/src/settlement.ts:99-101` (`previewSettlement`) +
   `:188-190` (`generateSettlement`) filter `invoicedAt: { gte: periodStart, lt: periodEnd }`.
@@ -193,6 +196,31 @@ in any query window, write path, or money boundary.
   was wired into `holdBeds`, `compBed` and `compBeds`, and the duplicated validation was
   extracted into `resolveStayBounds` (`manage/actions.ts:166`). That consolidation means the
   server-TZ validation bound now lives in exactly one place — see the Backlog item.
+
+- **2026-08-11 — P1 shipped (uncommitted, local `main`).** Venue-anchored the settlement
+  period window so the final civil day is no longer dropped.
+  - `packages/data/src/site-day.ts` — added `siteDateBounds(site, 'YYYY-MM-DD')`, the
+    civil-date-keyed sibling of the instant-keyed `siteDayBounds` (both now share a private
+    `boundsForCivilDate`). DST-safe; throws on a malformed key. +6 unit tests.
+  - `packages/data/src/settlement.ts` — `previewSettlement` + `generateSettlement` now derive
+    the `invoicedAt` window from the site's timezone via a shared private
+    `resolveSettlementWindow` (loads `Site.timeZone`/coords, keys off the incoming civil dates,
+    exclusive `lt` = start of the day after the end date). The **stored label is left as the
+    admin-selected civil dates** — decision below.
+  - New `packages/data/src/settlement.integration.test.ts` (4 tests): a Madrid invoice at
+    `Aug 31 20:00Z` (late on the venue's final day) is now included; front-edge inclusion
+    (`Jul 31 22:30Z`); genuine out-of-period exclusion; label preserved.
+  - **Decision (supersedes "correct the stored label" in P1's roadmap note):** the fix
+    decouples the *query window* from the *stored label*. Only the query was buggy — the label
+    text ("01 Aug – 31 Aug") was already right, it just didn't match what the query covered.
+    Storing venue-anchored *instants* as the label was rejected because the admin view's
+    `fmtDate` renders in the **browser** tz (`toLocaleDateString`), so `periodStart = Jul 31
+    22:00Z` would show "31 Jul" in a UTC browser — a display regression. Keeping the
+    admin-selected civil dates renders correctly in every browser tz and is consistent in
+    venue terms. Cross-tz display of period boundaries stays a P4/backlog concern.
+  - Green: data 281 unit + 303 integration, lint clean, admin settlement 19 unit. No schema
+    change → no migration. **Interacts with Q3** (whether past short-by-a-day settlements get
+    restated — still open).
 
 ## Open decisions
 

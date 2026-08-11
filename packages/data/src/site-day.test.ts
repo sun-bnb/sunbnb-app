@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { resolveSiteTimeZone, siteDayKey, siteDayBounds } from './site-day'
+import { resolveSiteTimeZone, siteDayKey, siteDayBounds, siteDateBounds } from './site-day'
 
 // ─── resolveSiteTimeZone ─────────────────────────────────────────────────────
 
@@ -178,5 +178,48 @@ describe('siteDayBounds', () => {
     const { start } = siteDayBounds(site, d)
     // Same as Europe/Madrid summer: start = 2024-07-13T22:00:00Z
     expect(start.toISOString()).toBe('2024-07-13T22:00:00.000Z')
+  })
+})
+
+// ─── siteDateBounds ──────────────────────────────────────────────────────────
+
+describe('siteDateBounds', () => {
+  it('returns UTC midnight..23:59:59.999 for a UTC site', () => {
+    const { start, end } = siteDateBounds({ timeZone: 'UTC' }, '2025-08-31')
+    expect(start.toISOString()).toBe('2025-08-31T00:00:00.000Z')
+    expect(end.toISOString()).toBe('2025-08-31T23:59:59.999Z')
+  })
+
+  it('anchors the civil date to the venue day for Europe/Madrid in summer (UTC+2)', () => {
+    // Aug 31 (local) = [Aug 30 22:00Z, Aug 31 21:59:59.999Z]
+    const { start, end } = siteDateBounds({ timeZone: 'Europe/Madrid' }, '2025-08-31')
+    expect(start.toISOString()).toBe('2025-08-30T22:00:00.000Z')
+    expect(end.toISOString()).toBe('2025-08-31T21:59:59.999Z')
+  })
+
+  it('produces the same bounds as siteDayBounds for an instant within that day', () => {
+    const site = { timeZone: 'Europe/Madrid' }
+    const byKey = siteDateBounds(site, '2024-07-14')
+    const byInstant = siteDayBounds(site, new Date('2024-07-14T10:00:00Z'))
+    expect(byKey.start.toISOString()).toBe(byInstant.start.toISOString())
+    expect(byKey.end.toISOString()).toBe(byInstant.end.toISOString())
+  })
+
+  it('handles the DST spring-forward day (Madrid, 2024-03-31 is 23h)', () => {
+    const { start, end } = siteDateBounds({ timeZone: 'Europe/Madrid' }, '2024-03-31')
+    expect(start.toISOString()).toBe('2024-03-30T23:00:00.000Z')
+    expect(end.toISOString()).toBe('2024-03-31T21:59:59.999Z')
+  })
+
+  it('the next civil day starts exactly 1ms after this day ends (exclusive-bound contract)', () => {
+    const site = { timeZone: 'Europe/Madrid' }
+    const aug31 = siteDateBounds(site, '2025-08-31')
+    const sep01 = siteDateBounds(site, '2025-09-01')
+    expect(sep01.start.getTime()).toBe(aug31.end.getTime() + 1)
+  })
+
+  it('throws on a malformed date key', () => {
+    expect(() => siteDateBounds({ timeZone: 'UTC' }, '2025-8-1')).toThrow(/YYYY-MM-DD/)
+    expect(() => siteDateBounds({ timeZone: 'UTC' }, 'garbage')).toThrow()
   })
 })

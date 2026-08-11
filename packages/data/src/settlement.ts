@@ -29,6 +29,48 @@
 
 import prisma from '../index'
 import { SettlementStatus } from '@prisma/client'
+import { siteDateBounds } from './site-day'
+
+/**
+ * Resolve the venue-anchored `invoicedAt` query window for a settlement period.
+ *
+ * The admin picks civil dates (a `<input type="date">` → a UTC-midnight `Date`).
+ * A settlement over "1–31 Aug" must include every invoice stamped anywhere
+ * within the *venue's* Aug 1 → Aug 31 civil days — not the server's (UTC on
+ * Vercel). Anchoring in UTC dropped the venue's final civil day: for a Madrid
+ * site (UTC+2), `lt: Aug 31 00:00Z` excluded everything rung up after ~02:00
+ * local on Aug 31. This resolves the site's timezone and returns an inclusive
+ * `gte` start and an *exclusive* `lt` upper bound (start of the day after the
+ * end date), so the entire final civil day is included.
+ *
+ * The civil-date key is read from the incoming `Date` in UTC (`toISOString`),
+ * matching the admin contract that the boundary is a date-only value. The
+ * stored `Settlement.periodStart`/`periodEnd` label is left untouched (the
+ * admin-selected civil dates) — once the window includes the final day, that
+ * label accurately describes the settled range in venue terms.
+ */
+async function resolveSettlementWindow(
+  siteId: string,
+  periodStart: Date,
+  periodEnd: Date,
+): Promise<{ gte: Date; lt: Date }> {
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { timeZone: true, locationLat: true, locationLng: true },
+  })
+  const tz = {
+    timeZone: site?.timeZone ?? null,
+    latitude: site?.locationLat ? parseFloat(site.locationLat) : undefined,
+    longitude: site?.locationLng ? parseFloat(site.locationLng) : undefined,
+  }
+  const startKey = periodStart.toISOString().slice(0, 10)
+  const endKey = periodEnd.toISOString().slice(0, 10)
+
+  const { start } = siteDateBounds(tz, startKey)
+  const { end } = siteDateBounds(tz, endKey)
+  // Exclusive upper bound = 1ms past the final civil day's end = next day's midnight.
+  return { gte: start, lt: new Date(end.getTime() + 1) }
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -91,15 +133,13 @@ export async function previewSettlement(input: {
   periodEnd: Date
 }): Promise<SettlementPreview | null> {
   const { accountId, siteId, periodStart, periodEnd } = input
+  const invoicedAt = await resolveSettlementWindow(siteId, periodStart, periodEnd)
 
   const invoices = await prisma.invoice.findMany({
     where: {
       accountId,
       settlementBatchId: null,
-      invoicedAt: {
-        gte: periodStart,
-        lt: periodEnd,
-      },
+      invoicedAt,
       OR: [
         { reservation: { siteId } },
         { order: { siteId } },
@@ -179,16 +219,14 @@ export async function generateSettlement(input: {
   periodEnd: Date
 }): Promise<{ id: string; invoiceCount: number } | null> {
   const { accountId, siteId, periodStart, periodEnd } = input
+  const invoicedAt = await resolveSettlementWindow(siteId, periodStart, periodEnd)
 
-  // Find unsettled invoices in the period
+  // Find unsettled invoices in the period (window anchored to the venue's civil days)
   const invoices = await prisma.invoice.findMany({
     where: {
       accountId,
       settlementBatchId: null,
-      invoicedAt: {
-        gte: periodStart,
-        lt: periodEnd,
-      },
+      invoicedAt,
       OR: [
         { reservation: { siteId } },
         { order: { siteId } },
