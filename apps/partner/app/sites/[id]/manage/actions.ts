@@ -11,9 +11,7 @@ import {
 } from '@repo/data/reservations'
 import { issueReservationRefund } from '@repo/data/refund'
 import {
-  createReservationMolliePayment,
   reverifyAndFinalizeReservation,
-  cancelReservationMolliePayment,
 } from '@repo/data/reservation-payment'
 import {
   createRentalBookingMolliePayment,
@@ -1972,15 +1970,12 @@ export async function settleReservation(
 /**
  * Begin collecting an online (Mollie) payment for an existing cash walk-in.
  *
- * Computes the amount from DB chair prices, persists it, then creates a Mollie
- * payment on the partner's account (platform fee included) via the shared
- * `@repo/data` helper. The QR shown to the beachgoer encodes the returned
- * `checkoutUrl`. On success the walk-in is left `processing`; the webhook (or the
- * `getCollectStatus` poll) flips it to `complete` + invoices once paid. A failed
- * creation reverts to `paid-in-cash` so the bed is never lost.
- *
- * Demo mode short-circuits to a `pi_demo_` ref that `getCollectStatus` settles
- * as paid on the next poll (no real checkout).
+ * MIGRATED onto the state machine (track 018 P4 slice e): the action verifies
+ * ownership + builds the app-level URLs; `collect.start` executes the contract
+ * — amount from DB prices, anonId minted by the MACHINE (the redirect URL
+ * embeds it, so the action passes a builder), demo ref or Mollie create, and a
+ * provider failure reverts to the unsettled cash walk-in. A SETTLED walk-in is
+ * a machine reject cell (D6 closed at the action level — no UI-only gate).
  */
 export async function collectReservationPayment(
   siteId: string,
@@ -1992,99 +1987,50 @@ export async function collectReservationPayment(
 
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
-    select: {
-      siteId: true,
-      status: true,
-      operationalStatus: true,
-      anonId: true,
-      from: true,
-      to: true,
-      items: { select: { price: true } },
-      site: { select: { type: true, price: true } },
-    },
+    select: { siteId: true },
   })
   if (!reservation || reservation.siteId !== siteId) {
     return { status: 'error', errors: ['Reservation not found'] }
   }
-  // Walk-in only: a cash walk-in that hasn't started a collection yet.
-  if (reservation.operationalStatus !== OP_WALKED_IN || reservation.status !== RESERVATION_PAID_IN_CASH) {
-    return { status: 'error', errors: ['Payment can only be collected for a walk-in'] }
-  }
-  if (reservation.site.type !== 'paid') {
-    return { status: 'error', errors: ['This site does not charge for sunbeds'] }
-  }
-
-  const amount = computeWalkInAmount(
-    reservation.items,
-    reservation.site.price,
-    reservation.from,
-    reservation.to,
-  )
-  if (amount <= 0) {
-    return { status: 'error', errors: ['Nothing to charge for this sunbed'] }
-  }
-
-  // Mint an anonId capability so the beachgoer's browser can claim THIS one
-  // reservation after paying (the walk-in was partner-created, so it has none) —
-  // it then flows through /payment/complete → /reservations/[id] → receipt exactly
-  // like an anonymous POS booking. Reuse an existing anonId if one is already set.
-  const anonId = reservation.anonId ?? randomUUID()
-
-  // Persist the DB-computed amount (and the new anonId) before creating the
-  // payment — the shared helper reads paymentAmount off the reservation row.
-  await prisma.reservation.update({
-    where: { id: reservationId },
-    data: { paymentAmount: amount, ...(reservation.anonId ? {} : { anonId }) },
-  })
-
-  // Demo: skip the real provider — assign a demo ref and move to processing.
-  if (DEMO_MODE) {
-    await prisma.reservation.update({
-      where: { id: reservationId },
-      data: { paymentRef: `pi_demo_${Date.now()}`, status: RESERVATION_PROCESSING },
-    })
-    revalidatePath(`/sites/${siteId}/manage`)
-    return { status: 'ok', amount, demo: true }
-  }
 
   const consumerAppUrl = process.env.CONSUMER_APP_URL
-  if (!consumerAppUrl) {
+  if (!DEMO_MODE && !consumerAppUrl) {
     return { status: 'error', errors: ['Online payments are not configured (CONSUMER_APP_URL)'] }
   }
-  // Standard post-payment redirect (same as every other payment): the beachgoer
-  // lands on /payment/complete, which polls then forwards to /reservations/[id].
-  const redirectUrl = new URL(
-    `/payment/complete?reservationId=${reservationId}&anonId=${anonId}`,
-    consumerAppUrl,
-  ).toString()
-  const webhookUrl = new URL('/api/webhooks/mollie', consumerAppUrl).toString()
 
-  const result = await createReservationMolliePayment(reservationId, {
-    redirectUrl,
-    webhookUrl,
-    metadataExtra: { collect: true },
+  const result = await applyTransition(reservationId, 'collect.start', {
+    collect: {
+      demo: DEMO_MODE,
+      buildRedirectUrl: (anonId) =>
+        new URL(
+          `/payment/complete?reservationId=${reservationId}&anonId=${anonId}`,
+          consumerAppUrl!,
+        ).toString(),
+      webhookUrl: consumerAppUrl
+        ? new URL('/api/webhooks/mollie', consumerAppUrl).toString()
+        : undefined,
+    },
   })
 
-  if (result.status === 'error') {
-    // The shared helper marks payment_failed only on a provider error; for a
-    // walk-in we must keep the bed as cash, never strand it as a failed seat.
-    await prisma.reservation.update({
-      where: { id: reservationId },
-      data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
-    })
-    return { status: 'error', errors: [result.error ?? 'Payment could not be created'] }
+  if (result.outcome === 'effect-failed') {
+    return { status: 'error', errors: [result.error] }
+  }
+  if (result.outcome !== 'applied') {
+    return { status: 'error', errors: ['Payment can only be collected for an unsettled walk-in'] }
   }
 
   revalidatePath(`/sites/${siteId}/manage`)
-  return { status: 'ok', amount, checkoutUrl: result.checkoutUrl }
+  const data = result.data ?? {}
+  return { status: 'ok', amount: data.amount as number, ...(data.demo ? { demo: true } : { checkoutUrl: data.checkoutUrl as string }) }
 }
 
 /**
  * Poll the live payment status of a walk-in collection (the manage screen calls
  * this on an interval while the QR is shown). Reads the webhook-updated status
- * and, as a fallback, re-verifies with Mollie: a confirmed payment is finalized
- * (idempotent invoices, status → complete); a failed/expired one reverts to
- * `paid-in-cash` so the walk-in (and the bed) survive.
+ * and, as a fallback, re-verifies with Mollie via the shared payment core: a
+ * confirmed payment is finalized (idempotent invoices, status → complete); a
+ * failed/expired one reverts via the machine's `pay.fail` row — the walk-in
+ * (and the bed) survive as unsettled cash.
  */
 export async function getCollectStatus(
   siteId: string,
@@ -2113,11 +2059,8 @@ export async function getCollectStatus(
       return { status: 'ok', paymentStatus: 'complete' as const }
     }
     if (fin.settled === 'failed') {
-      // Failed collection → keep the walk-in as cash, free nothing.
-      await prisma.reservation.update({
-        where: { id: reservationId },
-        data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
-      })
+      // Machine pay.fail: collecting → unsettled cash, paymentRef cleared.
+      await applyTransition(reservationId, 'pay.fail')
       revalidatePath(`/sites/${siteId}/manage`)
       return { status: 'ok', paymentStatus: 'failed' as const }
     }
@@ -2129,11 +2072,12 @@ export async function getCollectStatus(
 
 /**
  * Abandon an in-flight collection (operator closed the QR before the beachgoer
- * paid). Re-verifies once: a payment that actually went through is finalized
- * (complete + invoices); otherwise the walk-in reverts to `paid-in-cash` and the
- * paymentRef is cleared, so the occupied bed is safe from the PENDING/PROCESSING
- * cleanup cron (which keys on the walk-in's old `createdAt`) and can be
- * re-collected. Idempotent / no-op for a reservation that isn't mid-collection.
+ * paid). MIGRATED onto the machine's `collect.abandon` (track 018 D5 fix):
+ * reverify once (a paid race resolves as pay.confirm → 'complete'), cancel at
+ * the provider, and REVERT to the unsettled cash walk-in. The bed is NEVER
+ * deleted or freed by an abandon — a payment event only touches the payment
+ * axis; freeing is an explicit staff Unreserve. Idempotent / no-op for a
+ * reservation that isn't mid-collection.
  */
 export async function cancelCollection(
   siteId: string,
@@ -2145,62 +2089,27 @@ export async function cancelCollection(
 
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
-    select: { siteId: true, status: true, paymentRef: true },
+    select: { siteId: true, status: true },
   })
   if (!reservation || reservation.siteId !== siteId) {
     return { status: 'error', errors: ['Reservation not found'] }
   }
-  // Only a processing collection is abandonable. Anything else (already complete,
-  // already cash) is a no-op success.
+  // Only a processing collection is abandonable. Anything else (already
+  // complete, already cash) is a no-op success.
   if (reservation.status !== RESERVATION_PROCESSING) {
-    return { status: 'ok', paymentStatus: reservation.status === RESERVATION_COMPLETE ? 'complete' as const : 'cash' as const }
-  }
-
-  if (reservation.paymentRef) {
-    const fin = await reverifyAndFinalizeReservation(reservationId)
-    if (fin.settled === 'complete') {
-      revalidatePath(`/sites/${siteId}/manage`)
-      return { status: 'ok', paymentStatus: 'complete' as const }
+    return {
+      status: 'ok',
+      paymentStatus: reservation.status === RESERVATION_COMPLETE ? 'complete' as const : 'cash' as const,
     }
   }
 
-  // Not paid — attempt to cancel the Mollie payment so it can't settle late.
-  const cancelResult = await cancelReservationMolliePayment(reservationId)
-
-  if (cancelResult.status === 'canceled') {
-    // Mollie confirmed cancellation — delete the reservation to free the seat.
-    // Void any settlements BEFORE delete (FK SetNull risk mirrors unreserveItem).
-    // In practice an unsettled card walk-in has no TillEntry, but mirror the
-    // safe pattern in case of a future path that records one.
-    await voidSettlementsForReservation(reservationId)
-    await prisma.reservation.deleteMany({
-      where: { id: reservationId, siteId },
-    })
-    revalidatePath(`/sites/${siteId}/manage`)
-    return { status: 'ok', paymentStatus: 'freed' as const }
+  const result = await applyTransition(reservationId, 'collect.abandon')
+  if (result.outcome !== 'applied') {
+    return { status: 'error', errors: ['Could not abandon the collection'] }
   }
 
-  if (cancelResult.status === 'paid') {
-    // The payment landed in the race between our abandon and the Mollie response.
-    // Treat it as a successful online collection.
-    const fin = await reverifyAndFinalizeReservation(reservationId)
-    if (fin.settled === 'complete') {
-      revalidatePath(`/sites/${siteId}/manage`)
-      return { status: 'ok', paymentStatus: 'complete' as const }
-    }
-    // Reverify returned something unexpected — fall through to the cash revert below.
-  }
-
-  // 'error' (or unexpected reverify result): we could NOT confirm the cancellation.
-  // Never delete when cancellation is uncertain — a late-arriving payment would
-  // create an orphaned charge with no reservation to attach to.
-  // Fall back to the previous behavior: revert to cash walk-in.
-  await prisma.reservation.update({
-    where: { id: reservationId },
-    data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
-  })
   revalidatePath(`/sites/${siteId}/manage`)
-  return { status: 'ok', paymentStatus: 'cash' as const }
+  return { status: 'ok', paymentStatus: (result.data?.paymentStatus ?? 'cash') as 'complete' | 'cash' }
 }
 
 // ─── Split one seat off a multi-seat walk-in (Seat-collect primitive) ────────

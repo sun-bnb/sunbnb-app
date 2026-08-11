@@ -217,9 +217,28 @@ must-reject cells). Known logical errors become red cells first, then fixes.
   Verify018" → click re-seated (red, € intact, till untouched). Test rows cleaned;
   verifier skill recipe updated (grid route /manage/sunbeds; paid bulk sheet forks
   Cash/Card directly).
-  **Remaining P4:** (e) collect flow (D5/D6 mollie executors); (f) user-app
-  writers (webhook/reconcile/cancel); (g) docs/wiki sync (packages/data/CLAUDE.md,
-  partner CLAUDE.md, /wiki ingest).
+  Slice (e) SHIPPED 2026-08-11 (uncommitted): **collect flow migrated — D5 and D6 both
+  closed at the ACTION level.** Interpreter gained the payment-rail executors:
+  `runCollectStart` (amountFromDb walk-in pricing → mintAnonId → demo ref | Mollie
+  create via reservation-payment helper; provider failure reverts to unsettled cash —
+  never stranded; the redirect URL embeds the MACHINE-minted anonId so the action
+  passes a `buildRedirectUrl` builder in `opts.collect`), `runCollectAbandon`
+  (reverifyOnce → paid race honestly reported as the pay.confirm ROW; else provider
+  cancel + revert-to-cash — NEVER deletes/frees, D5), plus generic `invoiceOnline`
+  (processConfirmedReservation) and the pay.fail revert via the standard tail.
+  ApplyResult gained `data` payload + `effect-failed` variant (guards passed,
+  provider failed, local state kept safe). Actions (`collectReservationPayment`,
+  `getCollectStatus`, `cancelCollection`) are thin delegators; settled walk-ins now
+  rejected by the MACHINE, not a hidden button (D6). Ratchet: manage/actions.ts
+  13 → 8. 4 new machine integration tests (demo collect, config-failure revert,
+  paid-race abandon → collected + invoices + seat never freed, pay.fail revert);
+  collect unit suites rewritten to delegation contracts; matrix DEFERRED reasons
+  updated (collect events machine-covered). Partner 1968u+198i, data 320u+331i, tsc
+  clean.
+  **Remaining P4:** (f) user-app writers (webhook/reconcile/user-cancel via machine
+  events); (g) docs/wiki sync (packages/data/CLAUDE.md, partner CLAUDE.md,
+  /wiki ingest). Later batches: convertHoldToWalkIn, block/comp/hold deletes,
+  refund/cancel delegation (allowlist 8 → 0).
 - 💤 **P5 — Wiki page** (`subsystems/reservation-state-machine.md`) + fold into
   `bed-state.ts` docs; groom CLAUDE.md pointers.
 
@@ -233,6 +252,14 @@ deletable rule; D13 grouping kept; kind derived not persisted; no new status str
 
 ## Log
 
+- **2026-08-11 (P4 slice e — collect flow; D5+D6 dead)** — Slice-3 verification
+  committed (`0d3548b`). The collect flow runs on the machine: settled walk-ins are
+  machine-rejected (D6 was UI-only), abandon can never free an occupied bed (D5 —
+  "one gesture, one state change" now enforced by the executor), a paid race is
+  honestly reported as the pay.confirm row, provider failures revert to unsettled
+  cash. Design note: the redirect URL embeds the machine-minted anonId, so the
+  action passes a URL BUILDER through opts.collect — callers supply intent and
+  context, never state. Ratchet 13→8. Fable 5.
 - **2026-08-11 (P4 slice 3 — the UI slice)** — Slice 2 committed (`9072900`). Primed
   /ui partner. bed-state internals swapped for deriveState (grid and guards now share
   ONE derivation — the D8-class grid/guard divergence is structurally closed on the

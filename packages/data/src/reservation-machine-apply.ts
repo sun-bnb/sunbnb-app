@@ -43,9 +43,18 @@ import {
   type EffectKey,
   type TransitionSpec,
 } from './reservation-machine'
+import { randomUUID } from 'node:crypto'
 import { recordSettlement, voidSettlementsForReservation } from './till'
 import { processConfirmedReservation, issueCashCreditNote } from './payment'
-import { BLOCKING_STATUSES, OP_DEPARTED, OP_NO_SHOW } from './reservation-status'
+import {
+  createReservationMolliePayment,
+  reverifyAndFinalizeReservation,
+  cancelReservationMolliePayment,
+} from './reservation-payment'
+import {
+  BLOCKING_STATUSES, OP_DEPARTED, OP_NO_SHOW,
+  RESERVATION_PAID_IN_CASH, RESERVATION_PROCESSING,
+} from './reservation-status'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -60,20 +69,36 @@ export interface ApplyOpts {
   employeeId?: string | null
   /** Injectable clock for tests. */
   now?: Date
+  /**
+   * Collect-flow context (collect.start / collect.abandon). The redirect URL
+   * embeds the anonId the MACHINE mints, so the caller passes a builder, not a
+   * string. `demo` short-circuits the provider with a pi_demo ref.
+   */
+  collect?: {
+    demo?: boolean
+    buildRedirectUrl?: (anonId: string) => string
+    webhookUrl?: string
+  }
 }
 
 export type ApplyResult =
-  | { outcome: 'applied'; transition: TransitionSpec; state: CompoundState; newReservationId?: string }
+  | { outcome: 'applied'; transition: TransitionSpec; state: CompoundState; newReservationId?: string; data?: Record<string, unknown> }
   | { outcome: 'rejected'; state: CompoundState; event: EventName; reason: string }
   | { outcome: 'conflict' }
   | { outcome: 'not_found' }
   | { outcome: 'unsupported'; effect: EffectKey; event: EventName }
+  /** A provider-side effect failed AFTER guards passed; local state was reverted/kept safe. */
+  | { outcome: 'effect-failed'; effect: EffectKey; event: EventName; error: string }
 
 /** Effects this slice can execute. Everything else ⇒ outcome 'unsupported'. */
 const IMPLEMENTED: ReadonlySet<EffectKey> = new Set<EffectKey>([
   'dayRow', 'deleteRow', 'tillRecord', 'tillVoid', 'tillPartition', 'receiptIssue',
   'creditNoteIssue', 'clearPaymentRef', 'conflictRecheck',
   'seatDisconnect', 'seatPartition', 'amountRepartition', 'lineageLink', 'dayRowClone',
+  // Collect flow (P4 slice e). setPaymentRef/email are satisfied INSIDE their
+  // composite executors (mollieCreate/demo write the ref; invoiceOnline emails).
+  'amountFromDb', 'mintAnonId', 'mollieCreate', 'setPaymentRef',
+  'reverifyOnce', 'mollieCancel', 'invoiceOnline', 'email',
 ])
 
 // ─── Loading ─────────────────────────────────────────────────────────────────
@@ -93,6 +118,7 @@ interface Loaded {
   refundedAt: Date | null
   paymentAmount: number | null
   paymentRef: string | null
+  anonId: string | null
   guestName: string | null
   employeeId: string | null
   items: { id: string; price: number | null }[]
@@ -110,7 +136,7 @@ async function load(reservationId: string): Promise<Loaded | null> {
       id: true, siteId: true, userId: true, status: true, operationalStatus: true,
       isComp: true, from: true, to: true, createdAt: true, checkedInAt: true,
       departedAt: true, refundedAt: true, paymentAmount: true, paymentRef: true,
-      guestName: true, employeeId: true,
+      anonId: true, guestName: true, employeeId: true,
       items: { select: { id: true, price: true } },
       tillEntries: { select: { id: true, amount: true, settledAt: true, employeeId: true, voidedAt: true } },
       site: { select: { type: true, price: true, timeZone: true, locationLat: true, locationLng: true } },
@@ -412,6 +438,110 @@ async function runSeatDisconnect(r: Loaded, row: TransitionSpec, opts: ApplyOpts
   if (row.effects.includes('creditNoteIssue')) await issueCreditNote(r.id, freedAmount)
 }
 
+
+// ─── Composite executor: collect.start (QR payment for a cash walk-in) ───────
+
+/**
+ * Begin collecting an online payment for an UNSETTLED cash walk-in (the table
+ * guarantees the pre-state — a settled walk-in is a reject cell, D6).
+ * amountFromDb (never a client value, I7) → mintAnonId (the payer's browser
+ * capability) → demo ref OR Mollie create (the reservation-payment helper
+ * writes paymentRef + processing itself). A provider failure REVERTS to the
+ * unsettled cash walk-in — the seat is never stranded.
+ */
+async function runCollectStart(
+  r: Loaded,
+  state: CompoundState,
+  row: TransitionSpec,
+  opts: ApplyOpts,
+): Promise<ApplyResult> {
+  const collect = opts.collect ?? {}
+
+  // amountFromDb — the walk-in pricing rule (per-seat price ?? site price × civil days)
+  const days = Math.max(1, Math.round((r.to.getTime() - r.from.getTime()) / 86_400_000))
+  const perDay = r.items.reduce((s, it) => s + ((it.price ?? null) || r.site.price || 0), 0)
+  const amount = perDay * days
+  if (r.site.type !== 'paid' || amount <= 0) {
+    return { outcome: 'rejected', state, event: row.event, reason: 'nothing to charge for this reservation' }
+  }
+
+  // mintAnonId + persist the DB-computed amount (non-state columns — direct write).
+  const anonId = r.anonId ?? randomUUID()
+  await prisma.reservation.update({
+    where: { id: r.id },
+    data: { paymentAmount: amount, ...(r.anonId ? {} : { anonId }) },
+  })
+
+  if (collect.demo) {
+    await prisma.reservation.update({
+      where: { id: r.id },
+      data: { paymentRef: `pi_demo_${(opts.now ?? new Date()).getTime()}`, status: RESERVATION_PROCESSING },
+    })
+    return { outcome: 'applied', transition: row, state, data: { amount, demo: true } }
+  }
+
+  if (!collect.buildRedirectUrl || !collect.webhookUrl) {
+    return { outcome: 'effect-failed', effect: 'mollieCreate', event: row.event, error: 'redirect/webhook URL not configured' }
+  }
+
+  const created = await createReservationMolliePayment(r.id, {
+    redirectUrl: collect.buildRedirectUrl(anonId),
+    webhookUrl: collect.webhookUrl,
+    metadataExtra: { collect: true },
+  })
+  if (created.status === 'error') {
+    // The helper marks payment_failed on provider errors; a walk-in must stay a
+    // CASH walk-in (the guest is on the bed) — revert, never strand.
+    await prisma.reservation.update({
+      where: { id: r.id },
+      data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
+    })
+    return { outcome: 'effect-failed', effect: 'mollieCreate', event: row.event, error: created.error ?? 'payment creation failed' }
+  }
+
+  return { outcome: 'applied', transition: row, state, data: { amount, checkoutUrl: created.checkoutUrl } }
+}
+
+// ─── Composite executor: collect.abandon (operator closed the QR) ────────────
+
+/**
+ * Abandon an in-flight collection. reverifyOnce first — the payment may have
+ * landed while the QR was closing; a paid race resolves as `pay.confirm` (the
+ * returned transition is the CONFIRM row, honestly). Otherwise cancel at the
+ * provider and REVERT to the unsettled cash walk-in.
+ *
+ * NEVER deletes, NEVER frees the seat (D5): abandon is a payment event and may
+ * only touch the payment axis — freeing a bed is an explicit staff Unreserve.
+ */
+async function runCollectAbandon(
+  r: Loaded,
+  state: CompoundState,
+  row: TransitionSpec,
+): Promise<ApplyResult> {
+  const asConfirm = (): ApplyResult => ({
+    outcome: 'applied',
+    transition: resolveTransition(state, 'pay.confirm') ?? row,
+    state,
+    data: { paymentStatus: 'complete' },
+  })
+
+  const fin = await reverifyAndFinalizeReservation(r.id)
+  if (fin.settled === 'complete') return asConfirm()
+
+  const cancel = await cancelReservationMolliePayment(r.id)
+  if (cancel.status === 'paid') {
+    const fin2 = await reverifyAndFinalizeReservation(r.id)
+    if (fin2.settled === 'complete') return asConfirm()
+  }
+
+  // canceled, error, or uncertain → the guest keeps the bed as unsettled cash.
+  await prisma.reservation.update({
+    where: { id: r.id },
+    data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
+  })
+  return { outcome: 'applied', transition: row, state, data: { paymentStatus: 'cash' } }
+}
+
 // ─── applyTransition ─────────────────────────────────────────────────────────
 
 export async function applyTransition(
@@ -441,6 +571,12 @@ export async function applyTransition(
   if (unimplemented) return { outcome: 'unsupported', effect: unimplemented, event }
 
   // ── Composite flows ──
+  if (event === 'collect.start') {
+    return runCollectStart(r, state, row, { ...opts, now })
+  }
+  if (event === 'collect.abandon') {
+    return runCollectAbandon(r, state, row)
+  }
   if (row.effects.includes('seatPartition')) {
     const { newReservationId } = await runSplit(r, row, { ...opts, now })
     return { outcome: 'applied', transition: row, state, newReservationId }
@@ -461,6 +597,12 @@ export async function applyTransition(
     }
     await prisma.reservation.delete({ where: { id: r.id } })
     return { outcome: 'applied', transition: row, state }
+  }
+
+  // invoiceOnline (+ its confirmation email) — the idempotent invoice core owns
+  // the status advance to complete; the generic post-write below is a no-op twin.
+  if (row.effects.includes('invoiceOnline')) {
+    await processConfirmedReservation(r.id)
   }
 
   if (row.effects.includes('tillVoid')) {

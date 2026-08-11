@@ -60,8 +60,11 @@ const ALLOWLIST: Record<string, number> = {
   // reservations/[id]/actions.ts 4 → 0 — the D14/D15 fossils migrated onto
   // applyTransition (their parent-only writes and terminal-only depart deleted).
   // P4 slice 1 (2026-08-11): unreserveItem, markDeparted (whole+split),
-  // splitWalkInSeat, checkInReservation migrated onto applyTransition → 19 → 13.
-  'apps/partner/app/sites/[id]/manage/actions.ts': 13, // remaining P4 targets
+  // splitWalkInSeat, checkInReservation migrated → 19 → 13. Slice e: the
+  // collect flow (start/poll-revert/abandon) migrated → 13 → 8. Remaining:
+  // convertHoldToWalkIn paths, blockBed/unblock/uncomp/releaseHold deletes,
+  // refund/cancel — future P4 batches.
+  'apps/partner/app/sites/[id]/manage/actions.ts': 8,
   'apps/user/app/api/reconcile/route.ts': 1, // payment_failed writer
   'apps/user/app/api/reservations/[id]/route.ts': 1, // payment_failed writer (poll)
   'apps/user/app/api/webhooks/mollie/route.ts': 3, // paid/failed/refund webhook writers

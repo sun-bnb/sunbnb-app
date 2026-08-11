@@ -308,3 +308,61 @@ describe('kind guards', () => {
     expect(after!.operationalStatus).toBe('checked-in')
   })
 })
+
+// ─── Collect flow (P4 slice e executors) ─────────────────────────────────────
+
+describe('collect.start / collect.abandon / pay.fail', () => {
+  it('collect.start (demo): unsettled walkin → collecting with demo ref, DB amount, minted anonId', async () => {
+    const { reservation } = await walkIn(2) // unsettled, €10/seat, today-only
+    const result = await applyTransition(reservation.id, 'collect.start', { collect: { demo: true } })
+    expect(result.outcome).toBe('applied')
+    if (result.outcome === 'applied') expect(result.data?.amount).toBe(20)
+
+    const after = await prisma.reservation.findUniqueOrThrow({ where: { id: reservation.id } })
+    expect(after.status).toBe('processing')
+    expect(after.paymentRef).toMatch(/^pi_demo_/)
+    expect(after.paymentAmount).toBe(20) // amountFromDb persisted (I7)
+    expect(after.anonId).toBeTruthy() // mintAnonId
+  })
+
+  it('collect.start without provider config: effect-failed, walk-in stays unsettled cash (never stranded)', async () => {
+    const { reservation } = await walkIn(1)
+    const result = await applyTransition(reservation.id, 'collect.start', { collect: { demo: false } })
+    expect(result.outcome).toBe('effect-failed')
+
+    const after = await prisma.reservation.findUniqueOrThrow({ where: { id: reservation.id } })
+    expect(after.status).toBe('paid-in-cash')
+    expect(after.paymentRef).toBeNull()
+  })
+
+  it('collect.abandon on a demo collection: the paid race resolves as pay.confirm → collected + invoices', async () => {
+    const { reservation } = await walkIn(1)
+    await applyTransition(reservation.id, 'collect.start', { collect: { demo: true } })
+
+    const result = await applyTransition(reservation.id, 'collect.abandon')
+    expect(result.outcome).toBe('applied')
+    if (result.outcome === 'applied') {
+      expect(result.data?.paymentStatus).toBe('complete')
+      expect(result.transition.event).toBe('pay.confirm') // the HONEST transition
+    }
+
+    const after = await prisma.reservation.findUniqueOrThrow({ where: { id: reservation.id } })
+    expect(after.status).toBe('complete') // derive: walkin·collected
+    expect(await prisma.invoice.count({ where: { reservationId: reservation.id } })).toBeGreaterThanOrEqual(1)
+    // D5: the seat was NEVER freed — the row exists and stays walked-in
+    expect(after.operationalStatus).toBe('walked-in')
+  })
+
+  it('pay.fail: collecting → unsettled cash with the ref cleared (bed survives)', async () => {
+    const { reservation } = await walkIn(1)
+    await applyTransition(reservation.id, 'collect.start', { collect: { demo: true } })
+
+    const result = await applyTransition(reservation.id, 'pay.fail')
+    expect(result.outcome).toBe('applied')
+
+    const after = await prisma.reservation.findUniqueOrThrow({ where: { id: reservation.id } })
+    expect(after.status).toBe('paid-in-cash')
+    expect(after.paymentRef).toBeNull()
+    expect(after.operationalStatus).toBe('walked-in')
+  })
+})
