@@ -414,6 +414,14 @@ model Reservation {
   internalNotes     String?         @map("internal_notes")
   reminderSentAt    DateTime?       @map("reminder_sent_at")
   employeeId        String?         @map("employee_id")
+  // Split lineage (track 018): when a subset of seats is peeled into a new
+  // reservation (depart-split / seat-collect / hold-convert), the new row points
+  // at its origin. Conservation invariants (I1 till, I2 receipts) are checked
+  // across a lineage, and audit can walk a party's full history. SetNull: a
+  // deleted origin (only ever a zero-money row, I4) must not orphan-cascade.
+  splitFromId       String?         @map("split_from_id")
+  splitFrom         Reservation?    @relation("ReservationSplitLineage", fields: [splitFromId], references: [id], onDelete: SetNull)
+  splitInto         Reservation[]   @relation("ReservationSplitLineage")
   orders            Order[]
   invoices          Invoice[]
   days              ReservationDay[]

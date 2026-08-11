@@ -159,6 +159,9 @@ describe('split.subset (B1: money follows the seats)', () => {
     expect(orig!.paymentAmount! + peeled!.paymentAmount!).toBe(40)
     expect(peeled!.paymentAmount).toBe(20)
 
+    // Lineage stamped (splitFromId) — invariants are checkable lineage-wide
+    expect(peeled!.splitFromId).toBe(reservation.id)
+
     // Till partitioned: original entry voided, per-part entries sum to €40 (I1)
     const active = await activeTill()
     expect(active).toHaveLength(2)

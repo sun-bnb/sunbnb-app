@@ -312,7 +312,8 @@ async function runSplit(r: Loaded, row: TransitionSpec, opts: ApplyOpts): Promis
         paymentAmount: subsetAmount,
         ...(r.employeeId ? { employeeId: r.employeeId } : {}),
         ...(r.guestName ? { guestName: r.guestName } : {}),
-        // lineageLink: TODO stamp splitFromId once the additive migration lands (P2c).
+        // lineageLink: conservation invariants (I1/I2) are checked across a lineage.
+        splitFromId: r.id,
         items: { connect: subsetIds.map((id) => ({ id })) },
       },
       select: { id: true },

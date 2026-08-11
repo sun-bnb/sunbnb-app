@@ -32,16 +32,19 @@ must-reject cells). Known logical errors become red cells first, then fixes.
 
 ## Resume here
 
-- **Next action:** commit slice (b) — the meta-guard (awaiting founder's word) — then P2
-  slice (c): additive `splitFromId` migration (nullable self-ref on Reservation) +
-  lineageLink executor in `runSplit` (follow migrations.md: migrate:local → integration →
-  migrate:test before main push; update each app's `__mocks__/@repo/data/PrismaCient.ts`
-  if the mock models reservations' fields).
-- **Then:** slice (d) credit-note invoice (design against payment.ts invoice core,
-  track 015); then P3 — generate the matrix driving partner actions through table
-  expectations (red cells for un-migrated actions) and start P4 migration (first targets:
-  markDeparted split path + unreserveItem — the B1/B2 cells — then the newly-found
-  frontdesk/actions.ts + partner reservations/[id]/actions.ts fossils, D14/D15).
+- **Next action:** commit slice (c) — `splitFromId` migration + lineageLink (awaiting
+  founder's word). **Before the next `main` push: `npm run migrate:test`** (additive
+  migration `20260811164614_add_reservation_split_lineage` must reach the shared test DB
+  first — the pre-push hook enforces).
+- **Then:** P2 slice (d) credit-note invoice (design against payment.ts invoice core,
+  track 015 deferred item; replaces the `issueCreditNoteStub` in
+  reservation-machine-apply.ts); then P3 — generate the matrix driving partner actions
+  through table expectations (red cells for un-migrated actions) and start P4 migration
+  (first targets: markDeparted split path + unreserveItem — the B1/B2 cells — then the
+  frontdesk/actions.ts + partner reservations/[id]/actions.ts fossils, D14/D15; each
+  migration lowers the meta-guard ALLOWLIST).
+- **Deferred nit:** no index on `split_from_id` (lineage lookups are rare/small); add
+  forward if lineage queries become hot.
 - **Context needed:** `018-state-machine-intended.md` (contract);
   `packages/data/src/reservation-machine.ts` (pure model) +
   `reservation-machine-apply.ts` (interpreter); `018-state-machine-defacto.md` for
@@ -152,6 +155,13 @@ deletable rule; D13 grouping kept; kind derived not persisted; no new status str
 
 ## Log
 
+- **2026-08-11 (P2 slice c — split lineage)** — Slice (b) committed (`7a54f75`). Additive
+  migration `20260811164614_add_reservation_split_lineage`: nullable `split_from_id`
+  self-ref on Reservation (SetNull — a deleted origin is only ever a zero-money row per
+  I4). Applied local + sunbnb_test lockstep; `migrate:check` clean; **migrate:test still
+  pending before next main push**. `runSplit` now stamps `splitFromId` (lineageLink
+  executor real); integration test asserts lineage. Data 320u+320i green. No index on
+  split_from_id (deferred — rare lookups). Uncommitted. Fable 5.
 - **2026-08-11 (P2 slice b — meta-guard)** — Slice 2 committed (`28a4cb4`). Single-writer
   ratchet shipped: `packages/data/src/reservation-machine-guard.test.ts` scans all apps +
   data src for reservation state writes (update touching state fields; any delete; any
