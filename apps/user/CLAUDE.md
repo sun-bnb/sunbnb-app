@@ -80,16 +80,16 @@ RTK Query: `reservationApi` (getReservation, getReservationByDate, etc.), `place
 ## Testing
 
 ```bash
-npm run test              # unit + route + server action tests (472 tests, Prisma mocked)
+npm run test              # unit + route + server action tests (478 tests, Prisma mocked)
 npm run test:watch        # vitest in watch mode
-npm run test:integration  # integration tests against local sunbnb_test DB (74 tests, real Prisma)
+npm run test:integration  # integration tests against local sunbnb_test DB (77 tests, real Prisma)
 ```
 
 ### Unit / route tests (`vitest.config.ts`)
 
 - Excludes `*.integration.test.ts`; scans `app/**` and `store/**`
 - Path aliases redirect `@repo/data/PrismaCient` → mock, `@repo/data/payment` → mock
-- **Mock modules** (`__mocks__/@repo/data/`): `PrismaCient.ts`, `payment.ts`, `reservation-emails.ts`, `env.ts`
+- **Mock modules** (`__mocks__/@repo/data/`): `PrismaCient.ts`, `payment.ts`, `reservation-emails.ts`, `env.ts`, `reservation-machine-apply.ts` (the state-machine interpreter, track 018 — the pure model `@repo/data/reservation-machine` is aliased to REAL source)
 - `app/api/_lib/payment-ids.test.ts` — isDemoPayment, isValidEntityId (6 tests)
 - `app/api/_lib/payment-provider.test.ts` — detectProvider (Mollie/demo), isPaymentSucceeded/Failed (16 tests)
 - `app/api/reservations/[id]/route.test.ts` — reservation fetch, payment verification (9 tests)
@@ -102,7 +102,7 @@ npm run test:integration  # integration tests against local sunbnb_test DB (74 t
 - `app/api/payment/mollie/create-rental-payment/route.test.ts` — create Mollie payment for rental booking (7 tests)
 - `app/api/tab-payment/mollie/create-payment/route.test.ts` — create Mollie payment for dine-in tab: validation, 404, 409 claim conflicts, zero-total revert, `loadTabFeeContext` fee-context-failure revert, happy path (linked venue, metadata incl. `restaurantId`), standalone (`siteId: null`) happy path (18 tests)
 - `app/api/tabs/[id]/route.test.ts` — tab payment poll-fallback: 404, invalid id, open passthrough, paid passthrough, pending+succeeded, pending+failed revert, provider-error tolerance, minimal DTO, no-auth (9 tests)
-- `app/api/webhooks/mollie/route.test.ts` — Mollie webhook handling (28 tests — +6 for tab branch: paid/failed/canceled/expired/guard/refund-noop)
+- `app/api/webhooks/mollie/route.test.ts` — Mollie webhook handling (34 tests — tab branch + reservation fail/refund asserted as machine events: ONE state-resolved `pay.fail` covers both online payment_failed and QR-collect revert-to-cash; `pay.refund.webhook` for refunds)
 - `app/api/reconcile/route.test.ts` — stuck payment reconciliation (9 tests)
 - `app/api/cron/send-reminders/route.test.ts` — daily reminder cron auth + email sending (10 tests)
 - `app/api/auth/forgot-password/route.test.ts` — rate limiting, email validation, enumeration protection (10 tests)
@@ -144,6 +144,7 @@ Requires local Docker Postgres with `sunbnb_test` DB (same DB as `packages/data`
 - Anonymous flow: POS/QR users get `anonId` in localStorage, passed to server actions and API routes for ownership without requiring login
 - Reservation creation: server-side availability check → create with DB prices (never trust client prices)
 - Default-deny payment logic: use `=== 'paid'` (not `!== 'unpaid'`) to prevent unknown payment types from bypassing payment
+- **Reservation state transitions (track 018)**: webhook/poll/reconcile failure reverts, demo initiation, and user cancel/delete delegate to `applyTransition` (`@repo/data/reservation-machine-apply`). `pay.fail` resolves collect-vs-online reverts BY STATE (metadata.collect not load-bearing); `user.delete` rejects PROCESSING bookings (in-flight payment could orphan); `user.cancel` runs the provider refund via a caller-supplied handler BEFORE the status write. Single-writer ratchet in `packages/data/src/reservation-machine-guard.test.ts`
 - Equipment rentals: supports hourly and daily bookings. `viewMode` (sunbeds/equipment) stored in Redux so the mobile drawer can adapt its peek height to content. Tab switching opens the drawer automatically
 - Mobile reservation drawer: fixed bottom panel with peek (minimized) and expanded states. Peek height varies by tab — sunbeds shows date range only, equipment shows hours/days toggle + time picker. Drawer opens on tab switch
 - Error handling: server actions return `{ status: 'ok' | 'error', errors?: string[] }`. API error responses use generic messages (no internal details leaked)

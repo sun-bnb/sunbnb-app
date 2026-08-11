@@ -32,22 +32,18 @@ must-reject cells). Known logical errors become red cells first, then fixes.
 
 ## Resume here
 
-- **Next action:** commit P4 slice 2 (awaiting founder's word): fossil migrations +
-  undoDepartWalkIn + cron I4 filter + rewritten fossil suites + allowlist 9→7 files +
-  matrix 19 cells. **Before the next `main` push: `npm run migrate:test`** — TWO
-  additive migrations pending on the shared test DB
-  (`20260811164614_add_reservation_split_lineage`,
+- **Next action:** commit P4 slice (g) — docs/wiki sync (awaiting founder's word).
+  That closes the track's built scope: P0–P3 done, P4 slices 1/2/3/e/f/g done,
+  browser-verified.
+- **Founder ops before promote:** ES/FI copy review (`undoDeparture`,
+  `confirmUnreserveSeatRefund` + earlier session keys); **`npm run migrate:test`
+  before the next `main` push** — TWO additive migrations pending on the shared test
+  DB (`20260811164614_add_reservation_split_lineage`,
   `20260811165223_add_invoice_credit_note_link`); the pre-push hook enforces.
-- **Then P4 slice 3 — (d) the UI slice** (prime with `/ui partner` — it's real UI
-  work): undo-depart button in BedDetail's departed/expected panels; dialog copy from
-  effect cells (B2's UI half: seat-mode unreserve must show the PARTITIONED share —
-  the action now actually moves it; `confirmUnreserveRefund` currently shows the whole
-  paymentAmount); deriveState behind bed-state.ts (presentation-only shell). Founder
-  copy-review gate applies to new i18n keys (en/es/fi) before promote.
-- **Then:** (e) collect flow (mollie effect executors — D5/D6 cells DEFERRED→COVERED);
-  (f) user-app writers (webhook/reconcile/user-cancel via machine events); (g) docs/
-  wiki sync (packages/data/CLAUDE.md machine section, partner CLAUDE.md test tables +
-  migrated-actions notes, `/wiki ingest` for the state-machine subsystem page).
+- **Queued follow-up batches (backlog, not started):** manage create-verbs +
+  move/cancel/refund onto machine events (allowlist 8 → 0); rental-booking and
+  table-reservation machines on the same rails (Q5); partner reservation-day.ts
+  delegates to the interpreter's day-row writer (removes the deliberate duplication).
 - **Deferred nits:** no index on `split_from_id` (rare lookups; add forward if hot);
   accounting/fiscal surfaces should eventually RENDER credit notes distinctly (they
   already net correctly in sums).
@@ -249,11 +245,19 @@ must-reject cells). Known logical errors become red cells first, then fixes.
   aliases; 9 stale write-assertions rewritten to delegation contracts. Allowlist
   now TWO entries total: cron (1, I4-filtered by design) + manage/actions.ts (8).
   User 478u+77i, partner 1968u+198i, data 320u+331i, tsc clean everywhere.
-  **Remaining P4:** (g) docs/wiki sync (packages/data/CLAUDE.md, apps CLAUDE.mds,
-  /wiki ingest) — then P4 pauses; final batch (manage creates/holds/blocks/convert,
-  8 → 0) queued as follow-up work.
-- 💤 **P5 — Wiki page** (`subsystems/reservation-state-machine.md`) + fold into
-  `bed-state.ts` docs; groom CLAUDE.md pointers.
+  Slice (g) SHIPPED 2026-08-11 (uncommitted): docs/wiki sync. packages/data/CLAUDE.md
+  gained the Reservation State Machine section (+ issueCashCreditNote + test lists);
+  partner CLAUDE.md (delegation notes, undoDepartWalkIn, matrix/bed-state/frontdesk
+  test rows, corrected counts 1968u/198i, auth-matrix 669, mock-contract 17); user
+  CLAUDE.md (machine notes, webhook 34, 478u/77i, machine mock). Wiki: NEW
+  `subsystems/reservation-state-machine.md` (stable — model, four pillars, invariants,
+  founder decisions, extension rule "edit the TABLE"), index line, log ingest record.
+  **P4 = functionally complete.** Queued follow-up (not started): the final manage
+  batch — creates/holds/blocks/comps/convert + move + partner cancel/refund onto
+  machine events (allowlist 8 → 0), rentals + table-reservations machines on the same
+  rails (Q5), unify partner reservation-day.ts onto the interpreter's day-row writer.
+- ✅ **P5 — Wiki page + canonical docs** (2026-08-11, with P4 slice g):
+  `subsystems/reservation-state-machine.md` (stable) + CLAUDE.md tree synced.
 
 ## Open decisions
 

@@ -51,7 +51,7 @@ Google OAuth only. `app.tsx` checks session; redirects unauthenticated to `/api/
 - **`sites/[id]/working-hours-actions.ts`**: `addWorkingHours`, `deleteWorkingHours`
 - **`sites/[id]/queries.ts`**: `getSite` (exported), `resolveServiceFees` (private helper)
 - **`restaurants/[id]/queries.ts`**: `getRestaurant`, `getRestaurantLayout`, `getRestaurantMenu`, `getRestaurantShifts`, `getRestaurantCombinations`, `getRestaurantWaitlist`, `getTablesList` (active tables for dine-in QR printing)
-- **`sites/[id]/manage/actions.ts`**: `reserveItem`, `unreserveItem`, `checkInReservation`, `resumeWalkIn`, `markDeparted`, `markNoShow`, `updateReservationNotes`, `moveReservation`, `blockBed`, `unblockBed`, `holdBed`, `compBed`, `convertHoldToWalkIn`, `markRentalPickedUp`, `markRentalReturned`, `createWalkInRental`, `collectReservationPayment`/`getCollectStatus`/`cancelCollection` (QR collect), `getTillStatus`/`closeTill` (per-worker till) (all token-or-session). On-site create actions take an optional trailing `employeeId` (current-worker attribution), validated against the account via `resolveEmployeeId`; cash walk-ins record `paymentAmount` for the till.
+- **`sites/[id]/manage/actions.ts`**: `reserveItem`, `unreserveItem`, `checkInReservation`, `resumeWalkIn`, `undoDepartWalkIn` (same-day depart undo, track 018), `markDeparted`, `markNoShow`, `updateReservationNotes`, `moveReservation`, `blockBed`, `unblockBed`, `holdBed`, `compBed`, `convertHoldToWalkIn`, `markRentalPickedUp`, `markRentalReturned`, `createWalkInRental`, `collectReservationPayment`/`getCollectStatus`/`cancelCollection` (QR collect), `getTillStatus`/`closeTill` (per-worker till) (all token-or-session). On-site create actions take an optional trailing `employeeId` (current-worker attribution), validated against the account via `resolveEmployeeId`; cash walk-ins record `paymentAmount` for the till. **Reservation state transitions delegate to the state machine** (`@repo/data/reservation-machine-apply` — track 018): guards, day-row atomicity, till partitioning, credit notes, and refund-vs-delete are table-driven; actions name events and map outcomes (same for `frontdesk/actions.ts` and `reservations/[id]/actions.ts`).
 - **`sites/[id]/rentals/actions.ts`**: `getRentalItems`, `createRentalItem`, `updateRentalItem`, `deleteRentalItem`, `toggleSiteFeature`
 - **`sites/[id]/accounting/actions.ts`**: `getPaidItemsByMonth` (returns `{ orders, reservations, tabs }` — dine-in tab PARTNER invoices via `tableTabId` now included in `tabs`), `getInvoicesByMonth`, `getRevenueTrend`/`getOccupancyTrend`/`getRevenueCsv` (track 007 analytics), `getStaffTill` (per-employee monthly cash breakdown) — session + site-owner
 - **`account/staff/actions.ts`**: `getEmployees`, `createEmployee`, `renameEmployee`, `setEmployeeActive`, `deleteEmployee` — per-account `Employee` roster (session-scoped, `accountId === session.user.id`)
@@ -64,19 +64,19 @@ Redux slices: `reservationsSlice` (key-value store). RTK Query (`apiSlice`): `ge
 ## Testing
 
 ```bash
-npm run test              # unit tests (1962 tests across 52 files, Prisma mocked)
+npm run test              # unit tests (1968 tests across 53 files, Prisma mocked)
 npm run test:watch        # vitest in watch mode
 npm run test:coverage     # unit tests with Istanbul coverage report
-npm run test:integration  # integration tests (89 tests across 7 files, real sunbnb_test DB)
+npm run test:integration  # integration tests (198 tests across 9 files, real sunbnb_test DB)
 ```
 
 ### Test architecture spine
 
 The test suite includes four meta-guards that enforce architecture invariants:
 
-- **`app/test/auth-matrix.test.ts`** (376 tests) — Drives every action in the gated-action registry (`app/test/gated-actions.ts`) through all auth scenarios (no session, wrong owner, token-only, sudo). The single source of truth for "which actions exist and which gates they must respect."
+- **`app/test/auth-matrix.test.ts`** (669 tests) — Drives every action in the gated-action registry (`app/test/gated-actions.ts`) through all auth scenarios (no session, wrong owner, token-only, sudo). The single source of truth for "which actions exist and which gates they must respect."
 - **`app/test/coverage-contract.test.ts`** (4 tests) — Fails if the gated-action registry omits an exported server action that has an auth gate in its source. Prevents new actions from silently skipping the matrix.
-- **`app/test/mock-contract.test.ts`** (9 tests) — Verifies that the `@repo/data` mock modules expose every export from the real source packages. Prevents silent mock drift (new real export never added to mock → tests silently skip code paths).
+- **`app/test/mock-contract.test.ts`** (17 tests) — Verifies that the `@repo/data` mock modules expose every export from the real source packages. Prevents silent mock drift (new real export never added to mock → tests silently skip code paths).
 - **`app/test/no-inline-money.test.ts`** (2 tests) — Rejects hardcoded monetary literals (`0.XX`, `XX.00`) in server-action source files; enforces use of DB-fetched prices.
 
 ### Unit tests (`vitest.config.ts`)
@@ -94,8 +94,11 @@ Mock modules (`__mocks__/@repo/data/`): `PrismaCient.ts`, `password-reset.ts`, `
 | `app/sites/[id]/schematic/actions.test.ts` | schematic layout actions | 16 |
 | `app/sites/[id]/products/actions.test.ts` | toggleAppSales, setOrderPaymentType, updateProduct VAT recalc, soft-delete, soldOut | 30 |
 | `app/sites/[id]/orders/actions.test.ts` | order status transitions (complete→accepted→preparing→ready→delivered), rejection, discard | 19 |
-| `app/sites/[id]/manage/actions.test.ts` | walk-in reserveItem, checkIn/departure/noShow state machine, moveReservation, blockBed, rental pickup/return, createWalkInRental | 84 |
+| `app/sites/[id]/manage/actions.test.ts` | manage actions — creates (walk-in/hold/comp/block), machine-DELEGATION contracts for migrated transitions (which event, which subset, outcome mapping; behavior lives in @repo/data machine tests + the matrix), collect delegation, rental ops, till | 362 |
 | `app/sites/[id]/manage/grid-helpers.test.ts` | manage grid layout and seat ordering helpers | 28 |
+| `app/sites/[id]/manage/bed-state.test.ts` | grid presentation over the machine's deriveState (BedState mapping, release rule, payment glyph, undo-depart candidate, freed-seat share partition) | 41 |
+| `app/frontdesk/actions.test.ts` | frontdesk search + machine-delegation contracts (checkIn/depart/noShow/cancel) + rental ops | 47 |
+| `app/reservations/[id]/actions.test.ts` | reservation-detail machine-delegation contracts + notes | 22 |
 | `app/sites/[id]/rentals/actions.test.ts` | getRentalItems, createRentalItem, updateRentalItem, deleteRentalItem, toggleSiteFeature | 46 |
 | `app/sites/[id]/working-hours-actions.test.ts` | addWorkingHours, deleteWorkingHours, overlap validation | 21 |
 | `app/sites/[id]/queries.test.ts` | getSite query | 3 |
@@ -117,9 +120,9 @@ Mock modules (`__mocks__/@repo/data/`): `PrismaCient.ts`, `password-reset.ts`, `
 | `app/api/auth/end-impersonation/route.test.ts` | impersonation end | 4 |
 | `app/api/onboarding-status/route.test.ts` | Mollie onboarding status sync and caching | 7 |
 | `app/api/reservations/[siteId]/route.test.ts` | ownership, date/month queries, HTTP status codes | 7 |
-| `app/test/auth-matrix.test.ts` | auth gate matrix over all gated actions | 603 |
+| `app/test/auth-matrix.test.ts` | auth gate matrix over all gated actions | 669 |
 | `app/test/coverage-contract.test.ts` | gated-action registry completeness | 4 |
-| `app/test/mock-contract.test.ts` | mock module superset of real exports | 15 |
+| `app/test/mock-contract.test.ts` | mock module superset of real exports | 17 |
 | `app/test/no-inline-money.test.ts` | no hardcoded monetary literals in server actions | 2 |
 
 ### Integration tests (`vitest.integration.config.ts`)
@@ -128,7 +131,9 @@ Requires local Docker Postgres with `sunbnb_test` DB. No `@repo/data` mocks — 
 
 | File | What it tests | Tests |
 |---|---|---|
-| `app/sites/[id]/manage/actions.integration.test.ts` | reserveItem, checkIn, blockBed, rental pickup/return, walk-in rental (real conflict guard) | 27 |
+| `app/sites/[id]/manage/actions.integration.test.ts` | reserveItem, checkIn, blockBed, splits (machine partition semantics), settled-unreserve row-kept, rental pickup/return, walk-in rental, till (real conflict guard) | 106 |
+| `app/sites/[id]/manage/state-machine-matrix.integration.test.ts` | REAL actions driven through the machine's transition table (post-states from resolveTransition; formerly-RED bug-ledger cells B1a/b/c, D2, D10, D12 now green; COVERED/DEFERRED event manifest, shrink-only) | 19 |
+| `app/frontdesk/actions.integration.test.ts` | frontdesk transitions against real DB | 5 |
 | `app/calendar/actions.integration.test.ts` | createPartnerReservation (real DB writes, availability, cash payment) | 19 |
 | `app/sites/[id]/orders/actions.integration.test.ts` | order status transitions and invoice creation against real DB | 13 |
 | `app/sites/[id]/site-actions.integration.test.ts` | saveGeneral persists to DB, PostGIS coords, entitlement gate | 12 |
@@ -144,6 +149,7 @@ Requires local Docker Postgres with `sunbnb_test` DB. No `@repo/data` mocks — 
 
 ## Key Patterns
 
+- **Reservation state machine (track 018)**: transitions run through `applyTransition` (`@repo/data/reservation-machine-apply`); the grid derives state via the same `deriveState` (`bed-state.ts` is a presentation shell). A single-writer ratchet in `packages/data/src/reservation-machine-guard.test.ts` fails the build on any new direct reservation state write. Add transitions by editing the TABLE, not by writing guards in actions.
 - Site ownership: all mutations go through `requireSiteOwner()` or `verifySiteOwnership()` which check `session.user.id === site.userId` (sudo users bypass)
 - Auto-save: debounced (1.5–2s) field changes trigger server actions → `revalidatePath` refreshes site context
 - Manage page: token-gated (no auth, uses site-specific `accessKey` from SecurityToken table). All manage server actions accept optional `accessKey` parameter — validates token expiry and resource permissions (`'all'` or `'manage_site'`). Supports walk-in reservations, check-in/departure, bed blocking, hourly/daily rental operations

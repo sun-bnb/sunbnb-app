@@ -54,6 +54,7 @@ Invokable via `/wiki <op>` (see `.claude/commands/wiki.md`).
 - [`subsystem:auth`](subsystems/auth.md) — **stable** — NextAuth setup per app, session lifetime, anonId, ownership checks, sudo
 - [`subsystem:payments`](subsystems/payments.md) — **stable** — consumer Mollie + Demo (Stripe = subscriptions only), webhooks, reconciliation, refunds
 - [`subsystem:table-reservations`](subsystems/table-reservations.md) — **stable** — restaurant product: core/ui packages, availability engine, app wiring, extraction posture
+- [`subsystem:reservation-state-machine`](subsystems/reservation-state-machine.md) — **stable** — table-driven reservation transitions (track 018): `deriveState` compound state, `applyTransition` interpreter, conservation invariants I1–I7, single-writer ratchet, red-cell matrix. Edit the TABLE, never add action-level guards
 - [`subsystem:schematic-editor`](subsystems/schematic-editor.md) — **draft** — shared grid geometry + editor chrome behind sunbed inventory & restaurant tables
 - [`subsystem:design-system`](subsystems/design-system.md) — **draft** — UI design language: `accent` token, component classes, identity header, `Toggle`; canonical conventions in `.claude/rules/ui.md`. Prime with `/ui`
 - [`subsystem:employee-till`](subsystems/employee-till.md) — **draft** — floor-staff roster (`/account/staff`) + automatic per-worker attribution + per-worker cash till/close (`TillSheet`) + manager monthly breakdown (accounting); `@repo/data/till`. Track 008

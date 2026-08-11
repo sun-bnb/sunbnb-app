@@ -47,6 +47,11 @@ Key models: User, PartnerAccount, Site, InventoryItem, Reservation, Order, Order
 - `processConfirmedOrder(id)` — same pattern but per-item VAT (not site-wide)
 - `processConfirmedRentalBooking(paymentRef)` — groups bookings by paymentRef, creates invoices for the group
 - `calculateOrderServiceFee(orderId)` — read-only fee calculation for orders
+- `issueCashCreditNote(reservationId, {amount?, invoicedAt?})` — credit note against a
+  reservation's PARTNER cash receipt (track 018/015): NEGATIVE-total PARTNER invoice in
+  its own `PARTNER-CN-YYYY-NNNNN` series, same hash chain, `creditsInvoiceId` link, VAT
+  at the receipt's effective rate, partial credits capped at the receipt total.
+  Existing PARTNER revenue aggregations net refunds automatically
 - `calculateTabTotal(tabId)` — dine-in tab payable amount: sum of non-voided rounds — **menu prices only** (the commission is computed in parallel in the result's `serviceFee` for the Mollie applicationFee/PLATFORM invoice, never added to the customer total — uniform with reservations since 2026-07-25); single source for the Mollie/demo charge amount. Site-agnostic since dine-in v2 (fee context via `loadTabFeeContext`)
 - `processConfirmedTabPayment(tabId, opts?)` — idempotent group invoicing for a dine-in tab across all rounds (per-item VAT). Default: PARTNER + PLATFORM invoices, tab → `paid`. `{ cash: true }` (staff settle-as-cash, track 015 precedent): PARTNER-only receipt, NO commission, no paymentRef, tab → `settled_cash`. Both paths null `openTableId` (mandatory — releases the one-open-tab-per-table guard); both terminal statuses block re-processing by the other path
 
@@ -71,6 +76,36 @@ Single source of truth. Status fields are plain String columns in Prisma (not en
 - **Rental payment**: PENDING → PROCESSING → COMPLETE (or PAYMENT_FAILED / CANCELED / REFUNDED)
 - **Rental operational**: RESERVED → PICKED_UP → RETURNED
 - Semantic groupings: `BLOCKING_STATUSES`, `PAID_STATUSES`, `TERMINAL_STATUSES`, `RESERVATION_STATUSES`
+
+## Reservation State Machine (`src/reservation-machine.ts` + `-apply.ts`) — track 018
+
+Reservation state is a COMPOUND (kind × pay-phase × occupancy) derived from storage; the
+machine makes it explicit and is the ONLY sanctioned writer of reservation state fields.
+
+- **`reservation-machine.ts`** (pure, CLIENT-SAFE — no prisma; also backs the partner
+  grid's `bed-state.ts`): `deriveState(input) → { kind, pay, occ, released }` (kinds:
+  online · walkin · hold · comp · block — disambiguates the overloaded `paid-in-cash`);
+  `TRANSITIONS` — the founder-signed transition table as data (events × pre-state →
+  post + named effect keys; anything unmatched is a MUST-REJECT cell);
+  `resolveTransition`, `storageForState`/`opForOcc` (writer = reader's inverse),
+  `partitionAmount` (largest-remainder cents — splits can never create/destroy money).
+- **`reservation-machine-apply.ts`** (server-only interpreter):
+  `applyTransition(reservationId, event, opts)` — load → deriveState → resolveTransition
+  (typed rejection) → effect executors. Conditions (hasFutureDays/sameCivilDay/expired/
+  subset…) are interpreter-computed FACTS; callers pass only intent (`itemIds`, `cash`,
+  `amount`, a `buildRedirectUrl` builder, a `refund` handler). Executors: day-row +
+  parent mirror (atomic), till record/void/PARTITION (splits carry the money with the
+  seats), receipts + credit notes, split lineage (`splitFromId`), collect flow
+  (demo/Mollie, abandon NEVER frees a bed), providerRefund, I4 delete defense (any
+  till/invoice history — voided included — blocks hard delete).
+- **`reservation-machine-guard.test.ts`** — single-writer ratchet: scans all apps for
+  reservation state writes outside the sanctioned modules; exact-equality shrink-only
+  allowlist (currently: cron sweep 1 — I4-filtered by design — + manage/actions.ts 8).
+- Contract + design record: `.claude/tracks/018-state-machine-intended.md` (invariants
+  I1–I7, decision record); de facto history: `018-state-machine-defacto.md`.
+- Consumers: partner manage/frontdesk/reservation-detail actions, user-app webhook/
+  poll/reconcile/cancel/delete/demo-initiate, partner matrix
+  (`state-machine-matrix.integration.test.ts`) drives real actions against the table.
 
 ## Password Reset (`src/password-reset.ts`)
 
@@ -113,8 +148,12 @@ npm run test:integration      # integration tests — requires local sunbnb_test
 npm run test:integration:setup  # run prisma migrate deploy against sunbnb_test
 ```
 
-- **Unit tests** (`src/*.test.ts`): `payment.test.ts` (28 tests — round, VAT, fee cascade, fee calculation), `rate-limit.test.ts` (7 tests — sliding window, expiry, independent keys), `reservation-status.test.ts` (8 tests — status groupings, overlap checks)
-- **Integration tests** (`src/*.integration.test.ts`): `payment.integration.test.ts` (18 tests — processConfirmedReservation/Order, invoice creation, idempotency, hash chain, VAT, fees), `tab-payment.integration.test.ts` (29 tests — openTableId guard, calculateTabTotal, group invoicing, idempotency both directions, cash settle PARTNER-only receipt, kitchen-state preservation, void exclusion, standalone-restaurant block: null-siteId tabs, account/settings-tier fees, partner-anchored invoicing), `analytics.integration.test.ts` (incl. 5 tab-order paid-ness tests), `till.integration.test.ts` (79 tests — two-bucket window math, day-boundary inclusivity, closeEmployeeTill sweep + carry-over snapshot, void handling), `fee-context.integration.test.ts` (19 tests — loadFeeContext three-tier cascade + loadRestaurantFeeContext: empty site tier, account-tier override, bootstrap), `password-reset.integration.test.ts` (15 tests — token lifecycle, rate limiting, expiry, password strength)
+- **Unit tests** (`src/*.test.ts`): `payment.test.ts` (round, VAT, fee cascade, fee
+  calculation), `rate-limit.test.ts`, `reservation-status.test.ts`,
+  `reservation-machine.test.ts` (37 — deriveState kind/pay/occ mapping, allowed +
+  must-reject cells, table properties incl. deletes-confined-to-zero-money, partition
+  math), `reservation-machine-guard.test.ts` (single-writer ratchet)
+- **Integration tests** (`src/*.integration.test.ts`): `payment.integration.test.ts` (18 tests — processConfirmedReservation/Order, invoice creation, idempotency, hash chain, VAT, fees), `tab-payment.integration.test.ts` (29 tests — openTableId guard, calculateTabTotal, group invoicing, idempotency both directions, cash settle PARTNER-only receipt, kitchen-state preservation, void exclusion, standalone-restaurant block: null-siteId tabs, account/settings-tier fees, partner-anchored invoicing), `analytics.integration.test.ts` (incl. 5 tab-order paid-ness tests), `till.integration.test.ts` (79 tests — two-bucket window math, day-boundary inclusivity, closeEmployeeTill sweep + carry-over snapshot, void handling), `fee-context.integration.test.ts` (19 tests — loadFeeContext three-tier cascade + loadRestaurantFeeContext: empty site tier, account-tier override, bootstrap), `password-reset.integration.test.ts` (15 tests — token lifecycle, rate limiting, expiry, password strength), `reservation-machine-apply.integration.test.ts` (20 — settle/unreserve/split/undo-depart/GC/collect executors: till partition, money-rows-kept, I2 end-to-end, I4 defense, paid-race abandon), `credit-note.integration.test.ts` (6 — negative twin, chain link, capped partials, series independence)
 - **Config**: `vitest.config.ts` (unit, excludes `*.integration.test.ts`), `vitest.integration.config.ts` (integration, `fileParallelism: false` for shared DB)
 - **Test helpers**: `src/test/setup.ts` (DB connection, `cleanDatabase()` via TRUNCATE CASCADE), `src/test/fixtures.ts` (factory functions for all models)
 
