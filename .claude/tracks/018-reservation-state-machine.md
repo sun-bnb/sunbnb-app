@@ -209,8 +209,14 @@ must-reject cells). Known logical errors become red cells first, then fixes.
   type narrowed to the minimal shape). New pure helpers unit-tested (8 tests).
   **i18n: 2 new keys × 3 locales** (`undoDeparture`, `confirmUnreserveSeatRefund`) —
   ES/FI machine-drafted, FOUNDER COPY REVIEW before promote. Partner 1974u+198i, tsc
-  clean. **Browser verification pending** (design-system pitfall: don't declare UI
-  done blind — run verifier-sunbnb over the manage grid).
+  clean. **BROWSER-VERIFIED 2026-08-11** (verifier-sunbnb, real dev DB, screenshots
+  /tmp/v018-*.png): cash party → red seats with € glyph (deriveState grid); Seat-mode
+  Unreserve dialog showed the PARTITIONED €8.50 (party till €17) — confirmed → till
+  void+recreate trail + `PARTNER-CN-2026-00001` credit note (first CN in the wild) +
+  paymentAmount 17→8.5; depart → green; FREE panel showed "↩ Undo departure —
+  Verify018" → click re-seated (red, € intact, till untouched). Test rows cleaned;
+  verifier skill recipe updated (grid route /manage/sunbeds; paid bulk sheet forks
+  Cash/Card directly).
   **Remaining P4:** (e) collect flow (D5/D6 mollie executors); (f) user-app
   writers (webhook/reconcile/cancel); (g) docs/wiki sync (packages/data/CLAUDE.md,
   partner CLAUDE.md, /wiki ingest).

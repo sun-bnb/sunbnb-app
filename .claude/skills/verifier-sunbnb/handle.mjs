@@ -53,9 +53,13 @@ export async function openApp(app, path, { width = 1100, height = 900, dismissCo
 
 // ── Partner manage page (token-gated, session-less; ?key=<SecurityToken.id>) ────────────
 
-/** Open the partner manage page for a site with its access token. */
+/**
+ * Open the partner manage SUNBED GRID for a site with its access token.
+ * The bare /manage route is a token-gated LANDING (links to sub-routes) since
+ * the manage split — the drivable seat grid lives at /manage/sunbeds.
+ */
 export function openManage(siteId, token, opts) {
-  return openApp('partner', `/sites/${siteId}/manage?key=${token}`, opts)
+  return openApp('partner', `/sites/${siteId}/manage/sunbeds?key=${token}`, opts)
 }
 
 /**

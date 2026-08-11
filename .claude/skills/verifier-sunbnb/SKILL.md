@@ -122,7 +122,15 @@ submit; B grabs one (long-press 1 + Reserve); A submits → expect the red banne
 the page polls, no realtime — but the server guard still rejects.)
 
 **Manage-specific pitfalls:** parcel tab `getByRole('button',…)` times out (use `getByText`); a
-parcel with <3 seats (switch parcel / bigger site).
+parcel with <3 seats (switch parcel / bigger site); the GRID lives at **`/manage/sunbeds`** —
+bare `/manage` is a landing page (openManage handles this since 2026-08-11); on a **paid** site
+the bulk sheet forks **Cash / Card (QR)** directly (there is no intermediate "Rent" button —
+`getByRole('button',{name:/^cash$/i})`); seat-tap dialogs confirm via **Confirm** / **Back**.
+
+**Verified 2026-08-11 (track 018 slice 3):** cash party via bulk Cash → both seats red with €
+glyph; Seat-mode Unreserve dialog shows the PARTITIONED share; Mark departed → green; FREE
+panel shows "↩ Undo departure — <guest>" → click re-seats (red, € intact). DB trail:
+till_entry void+recreate partition, Invoice PARTNER receipt + PARTNER-CN credit note.
 
 ## User app — dine-in tabs — `/tables/[tableId]` (:3002)
 
