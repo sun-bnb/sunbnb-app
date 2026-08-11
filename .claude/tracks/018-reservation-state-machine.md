@@ -32,20 +32,16 @@ must-reject cells). Known logical errors become red cells first, then fixes.
 
 ## Resume here
 
-- **Next action:** commit slice 2 (interpreter — awaiting founder's word), then P2
-  slice (b): the meta-guard source-scan test. Pattern: partner
-  `app/test/no-inline-money.test.ts` / `coverage-contract.test.ts` — scan
-  `apps/partner/app/sites/[id]/manage/actions.ts` (later all action sources) for
-  `reservation.update/updateMany/delete/deleteMany` touching state fields
-  (`status`/`operationalStatus`/`checkedInAt`/`departedAt`) outside the machine modules;
-  fails on new bypasses. Grandfather existing call sites via an explicit allowlist that
-  SHRINKS as P4 migrates each action (ratchet, never grows).
-- **Then:** slice (c) additive `splitFromId` migration + lineageLink executor (follow
-  migrations.md: migrate:local → integration → migrate:test before main push); slice (d)
-  credit-note invoice (design against payment.ts invoice core, track 015); then P3 —
-  generate the matrix driving partner actions through table expectations (red cells for
-  un-migrated actions) and start P4 migration (first target: markDeparted split path +
-  unreserveItem — the B1/B2 cells).
+- **Next action:** commit slice (b) — the meta-guard (awaiting founder's word) — then P2
+  slice (c): additive `splitFromId` migration (nullable self-ref on Reservation) +
+  lineageLink executor in `runSplit` (follow migrations.md: migrate:local → integration →
+  migrate:test before main push; update each app's `__mocks__/@repo/data/PrismaCient.ts`
+  if the mock models reservations' fields).
+- **Then:** slice (d) credit-note invoice (design against payment.ts invoice core,
+  track 015); then P3 — generate the matrix driving partner actions through table
+  expectations (red cells for un-migrated actions) and start P4 migration (first targets:
+  markDeparted split path + unreserveItem — the B1/B2 cells — then the newly-found
+  frontdesk/actions.ts + partner reservations/[id]/actions.ts fossils, D14/D15).
 - **Context needed:** `018-state-machine-intended.md` (contract);
   `packages/data/src/reservation-machine.ts` (pure model) +
   `reservation-machine-apply.ts` (interpreter); `018-state-machine-defacto.md` for
@@ -156,6 +152,15 @@ deletable rule; D13 grouping kept; kind derived not persisted; no new status str
 
 ## Log
 
+- **2026-08-11 (P2 slice b — meta-guard)** — Slice 2 committed (`28a4cb4`). Single-writer
+  ratchet shipped: `packages/data/src/reservation-machine-guard.test.ts` scans all apps +
+  data src for reservation state writes (update touching state fields; any delete; any
+  ReservationDay write) outside 5 sanctioned machine/executor modules; exact-equality
+  allowlist, shrink-only. Snapshot: 36 legacy sites across 9 files. **The scan found two
+  writer files P0 missed** — `frontdesk/actions.ts` (pre-track-012 fossil: parent-only
+  writes, no day-rows, terminal-only depart — D14) and partner
+  `reservations/[id]/actions.ts` (D15) — recorded in the defacto doc §4b; both P4 targets.
+  Validates determinism contract #2: bypasses are now build failures. Uncommitted. Fable 5.
 - **2026-08-11 (P2 slice 2 — interpreter)** — Slice 1 committed (`608bc55`). Interpreter
   shipped: `@repo/data/reservation-machine-apply` executes the table against the DB.
   Design choices worth remembering: conditions are interpreter-computed FACTS (callers

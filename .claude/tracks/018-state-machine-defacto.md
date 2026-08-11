@@ -208,6 +208,25 @@ Format: **event** (actor) — guard → writes ⟶ side effects. All partner act
   TillEntry for card collects (till is cash-only per track 013). Glyph comes from
   status=complete, not a till row.
 
+## 4b. Addendum (2026-08-11, found by the P2b single-writer scan)
+
+The meta-guard scan (`packages/data/src/reservation-machine-guard.test.ts`) found two
+writer files the P0 sweep missed:
+
+- **D14 — `apps/partner/app/frontdesk/actions.ts`** (4 state writes): checkInReservation /
+  markDeparted / markNoShow / cancelReservation duplicated at **pre-track-012 semantics** —
+  parent-column writes only (NO ReservationDay row, no `applyDayTransition`), parent-only
+  guards, no venue TZ, and depart is **unconditionally terminal** (no hasFutureDays branch —
+  a multiday guest departed from the frontdesk loses the daily cycle). Cancel sets
+  CANCELED with no refund coupling. This is the duplicate track 012 P3 predicted.
+- **D15 — `apps/partner/app/reservations/[id]/actions.ts`** (4 state writes): the partner
+  reservation-detail page carries its own transition set of the same shape (audit precisely
+  at P4 migration).
+
+Both are now ratcheted in the meta-guard ALLOWLIST and are P4 migration targets alongside
+manage/actions.ts (19 sites), the user-app payment writers (8 across 5 files), and the
+cleanup cron (1).
+
 ## 5. Raw material for P1 (intended-model design)
 
 - The **kind** (K1–K7) is the real top-level state variable; C1 overloading (paid-in-cash
