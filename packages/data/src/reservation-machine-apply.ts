@@ -44,7 +44,7 @@ import {
   type TransitionSpec,
 } from './reservation-machine'
 import { recordSettlement, voidSettlementsForReservation } from './till'
-import { processConfirmedReservation } from './payment'
+import { processConfirmedReservation, issueCashCreditNote } from './payment'
 import { BLOCKING_STATUSES, OP_DEPARTED, OP_NO_SHOW } from './reservation-status'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -225,11 +225,22 @@ async function issueReceipt(reservationId: string): Promise<void> {
   }
 }
 
-/** Credit-note stub — P2 slice (d) builds the invoice type; until then, loudly logged. */
-async function issueCreditNoteStub(reservationId: string, amount: number): Promise<void> {
-  console.warn(
-    `[reservation-machine] TODO creditNoteIssue: reservation ${reservationId} refunded €${amount.toFixed(2)} — credit-note invoice not yet implemented (track 018 P2d / track 015 deferred)`,
-  )
+/**
+ * Credit note against the reservation's cash receipt — non-blocking, same
+ * precedent as the receipt itself: the till void is the source of truth for
+ * the refund; the credit note is the fiscal audit trail (I2). 'no-receipt' is
+ * a normal skip (money was settled but the receipt issue had failed / predates
+ * track 015) — logged for reconciliation, never an error.
+ */
+async function issueCreditNote(reservationId: string, amount: number): Promise<void> {
+  try {
+    const result = await issueCashCreditNote(reservationId, { amount })
+    if (result.status === 'skipped') {
+      console.warn(`[reservation-machine] creditNoteIssue skipped (${result.reason})`, reservationId)
+    }
+  } catch (e) {
+    console.error('[reservation-machine] creditNoteIssue', reservationId, e)
+  }
 }
 
 /**
@@ -398,7 +409,7 @@ async function runSeatDisconnect(r: Loaded, row: TransitionSpec, opts: ApplyOpts
     }
   })
 
-  if (row.effects.includes('creditNoteIssue')) await issueCreditNoteStub(r.id, freedAmount)
+  if (row.effects.includes('creditNoteIssue')) await issueCreditNote(r.id, freedAmount)
 }
 
 // ─── applyTransition ─────────────────────────────────────────────────────────
@@ -490,7 +501,7 @@ export async function applyTransition(
 
   if (row.effects.includes('creditNoteIssue')) {
     const refunded = r.tillEntries.filter((e) => e.voidedAt === null).reduce((s, e) => s + e.amount, 0)
-    await issueCreditNoteStub(r.id, refunded)
+    await issueCreditNote(r.id, refunded)
   }
   if (row.effects.includes('receiptIssue')) {
     await issueReceipt(r.id)

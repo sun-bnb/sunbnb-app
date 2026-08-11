@@ -571,6 +571,14 @@ model Invoice {
   invoiceNumber    String?           @unique @map("invoice_number")
   previousHash     String?           @map("previous_hash")
   hash             String?
+  // Credit-note link (track 018 P2d / track 015 deferred): a credit note is an
+  // Invoice with negative totals whose creditsInvoiceId points at the original
+  // receipt it rectifies. Own number series (PARTNER-CN-YYYY-NNNNN), same
+  // issuer hash chain. Invoices are never deleted (hash chain), so SetNull is
+  // a formality.
+  creditsInvoiceId String?           @map("credits_invoice_id")
+  creditsInvoice   Invoice?          @relation("InvoiceCreditNote", fields: [creditsInvoiceId], references: [id], onDelete: SetNull)
+  creditNotes      Invoice[]         @relation("InvoiceCreditNote")
   // Product discriminator. Brand-neutral values: "beachclub" for sunbed / F&B
   // order / rental invoices, "restaurant" for (future) table-reservation
   // invoices. Default preserves existing behaviour for code that doesn't set
@@ -586,6 +594,7 @@ model Invoice {
 
   @@index([tableReservationId])
   @@index([tableTabId])
+  @@index([creditsInvoiceId])
 }
 
 model Settlement {

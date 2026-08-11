@@ -10,6 +10,7 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest'
 import { cleanDatabase, disconnectDatabase, prisma } from './test/setup'
 import {
   createTestUser,
+  createTestPartnerAccount,
   createTestSite,
   createTestInventoryItem,
   createTestReservation,
@@ -29,6 +30,7 @@ beforeEach(async () => {
   await cleanDatabase()
   resetCounter()
   user = await createTestUser()
+  await createTestPartnerAccount(user.id) // receipts/credit-notes need an issuer
   site = await createTestSite(user.id, { type: 'paid', price: 10 })
 })
 
@@ -99,6 +101,29 @@ describe('staff.unreserve.whole', () => {
     expect(await activeTill(reservation.id)).toHaveLength(0) // cash left the drawer
     // voided history preserved (refund audit)
     expect(await prisma.tillEntry.count({ where: { reservationId: reservation.id } })).toBe(1)
+  })
+
+  it('I2 end-to-end: settle issues the receipt, unreserve nets it with a credit note', async () => {
+    const { reservation } = await walkIn(2) // unsettled
+    expect((await applyTransition(reservation.id, 'staff.settle', { amount: 20 })).outcome).toBe('applied')
+
+    const receipt = await prisma.invoice.findFirstOrThrow({
+      where: { reservationId: reservation.id, creditsInvoiceId: null },
+    })
+    expect(receipt.totalAmount).toBe(20)
+
+    expect((await applyTransition(reservation.id, 'staff.unreserve.whole')).outcome).toBe('applied')
+
+    const cn = await prisma.invoice.findFirstOrThrow({
+      where: { reservationId: reservation.id, creditsInvoiceId: receipt.id },
+    })
+    expect(cn.totalAmount).toBe(-20)
+    // I2 over the lineage: Σ receipts − Σ credit notes == Σ non-voided till == 0
+    const invoiceSum = await prisma.invoice.aggregate({
+      where: { reservationId: reservation.id }, _sum: { totalAmount: true },
+    })
+    expect(invoiceSum._sum.totalAmount).toBeCloseTo(0, 2)
+    expect(await activeTill(reservation.id)).toHaveLength(0)
   })
 
   it('unsettled: plain delete (zero-money row)', async () => {

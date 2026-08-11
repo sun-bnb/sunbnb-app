@@ -175,9 +175,16 @@ function computeCommissionVat(
 async function nextInvoiceNumber(
   tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
   issuerType: string,
-  year: number = new Date().getFullYear()
+  year: number = new Date().getFullYear(),
+  /**
+   * Optional sub-series discriminator. Credit notes number in their own series
+   * (`PARTNER-CN-YYYY-NNNNN`) — the CN prefix keeps them out of the plain
+   * `PARTNER-YYYY-%` LIKE window, so both sequences stay dense and independent
+   * while sharing the issuer's hash chain.
+   */
+  series?: string
 ): Promise<string> {
-  const prefix = `${issuerType}-${year}-`
+  const prefix = `${issuerType}-${series ? `${series}-` : ''}${year}-`
 
   // Lock the latest row for this issuer type to serialise number generation
   const rows = await tx.$queryRawUnsafe<{ invoice_number: string | null }[]>(
@@ -779,6 +786,130 @@ export async function processConfirmedReservation(
       // best-effort: a confirmation-email failure must not block invoice creation
     }
   }
+}
+
+// ─── Cash Credit Note (rectificative receipt) ───────────────────────────────
+
+export interface CashCreditNoteOpts {
+  /**
+   * Cash amount returned to the guest (positive euros). Defaults to the full
+   * remaining creditable amount of the receipt. Always capped at
+   * (receipt total − already-credited sum) so a lineage of partial refunds can
+   * never over-credit the original document.
+   */
+  amount?: number
+  /** Back-date the credit note (mirrors ProcessReservationOpts.invoicedAt). */
+  invoicedAt?: Date
+}
+
+export type CashCreditNoteResult =
+  | { status: 'created'; invoiceId: string; invoiceNumber: string; amount: number }
+  | { status: 'skipped'; reason: 'no-receipt' | 'fully-credited' | 'zero-amount' }
+
+/**
+ * Issue a credit note against a reservation's PARTNER cash receipt (track 018
+ * P2d — the machine's `creditNoteIssue` effect; closes track 015's deferred
+ * "cash refund → credit-note").
+ *
+ * Model: a credit note is an Invoice with NEGATIVE totals/lines, issuerType
+ * 'PARTNER' (it participates in the partner's Veri*factu hash chain), its own
+ * number series `PARTNER-CN-YYYY-NNNNN`, and `creditsInvoiceId` pointing at the
+ * receipt it rectifies. Invoices are immutable (hash chain) — money returned is
+ * recorded forward, never by editing or deleting the receipt (I2: over a
+ * lineage, Σ receipts − Σ credit notes ≡ Σ non-voided till entries).
+ *
+ * Negative amounts mean existing PARTNER revenue aggregations net refunds out
+ * automatically. VAT is reverse-computed at the receipt's own effective rate
+ * (totalTax/totalCharge), so partial credits stay proportional even if the
+ * site's configured VAT has changed since the sale.
+ *
+ * Idempotent per remaining balance: re-running with the same amount after a
+ * full credit is a no-op ('fully-credited'). Race-safe: the FOR UPDATE
+ * invoice-number lock serialises concurrent issuers, and the balance re-check
+ * runs inside the transaction.
+ */
+export async function issueCashCreditNote(
+  reservationId: string,
+  opts?: CashCreditNoteOpts,
+): Promise<CashCreditNoteResult> {
+  // The receipt: the reservation's positive PARTNER invoice (cash receipts and
+  // online PARTNER invoices share the shape; credit notes exclude themselves).
+  const receipt = await prisma.invoice.findFirst({
+    where: {
+      reservationId,
+      issuerType: 'PARTNER',
+      creditsInvoiceId: null,
+      totalAmount: { gt: 0 },
+    },
+    orderBy: { invoicedAt: 'asc' },
+  })
+  if (!receipt) return { status: 'skipped', reason: 'no-receipt' }
+
+  const invoicedAt = opts?.invoicedAt ?? new Date()
+  const invoiceYear = invoicedAt.getFullYear()
+
+  const result = await prisma.$transaction(async (tx) => {
+    // Balance check INSIDE the tx (serialised by the number lock below for
+    // concurrent credit issuers on the same issuer series).
+    const credited = await tx.invoice.aggregate({
+      where: { creditsInvoiceId: receipt.id },
+      _sum: { totalAmount: true },
+    })
+    const alreadyCredited = round(Math.abs(credited._sum.totalAmount ?? 0))
+    const creditable = round(receipt.totalAmount - alreadyCredited)
+    if (creditable <= 0) return { status: 'skipped' as const, reason: 'fully-credited' as const }
+
+    const requested = opts?.amount !== undefined ? round(opts.amount) : creditable
+    if (requested <= 0) return { status: 'skipped' as const, reason: 'zero-amount' as const }
+    const amount = Math.min(requested, creditable)
+
+    // VAT at the receipt's own effective rate — proportional to the original.
+    const effectiveVatRate =
+      receipt.totalCharge > 0 ? (receipt.totalTax / receipt.totalCharge) * 100 : 0
+    const { baseAmount, vatAmount } = computeVatAndBaseAmounts(amount, effectiveVatRate)
+
+    const invoiceNumber = await nextInvoiceNumber(tx, 'PARTNER', invoiceYear, 'CN')
+    const previousHash = await getLastHash(tx, 'PARTNER')
+
+    const creditNote = await tx.invoice.create({
+      data: {
+        accountId: receipt.accountId,
+        reservationId,
+        creditsInvoiceId: receipt.id,
+        totalCharge: -baseAmount,
+        totalTax: -vatAmount,
+        totalAmount: -amount,
+        invoicedAt,
+        issuerType: 'PARTNER',
+        issuerVatNumber: receipt.issuerVatNumber,
+        issuerCompanyName: receipt.issuerCompanyName,
+        issuerCompanyAddress: receipt.issuerCompanyAddress,
+        product: receipt.product,
+        invoiceNumber,
+        previousHash,
+        hash: computeInvoiceHash(
+          invoiceNumber, invoicedAt, -amount,
+          receipt.issuerVatNumber, previousHash,
+        ),
+      },
+    })
+
+    await tx.invoiceLine.create({
+      data: {
+        invoiceId: creditNote.id,
+        charge: -baseAmount,
+        tax: -vatAmount,
+        amount: -amount,
+        vatRate: round(effectiveVatRate),
+        productCode: 'cash-refund-credit',
+        description: `Credit note for ${receipt.invoiceNumber ?? receipt.id} — cash refund`,
+      },
+    })
+
+    return { status: 'created' as const, invoiceId: creditNote.id, invoiceNumber, amount }
+  })
+
+  return result
 }
 
 // ─── Idempotent Rental Booking Processing ───────────────────────────────────

@@ -32,19 +32,19 @@ must-reject cells). Known logical errors become red cells first, then fixes.
 
 ## Resume here
 
-- **Next action:** commit slice (c) — `splitFromId` migration + lineageLink (awaiting
-  founder's word). **Before the next `main` push: `npm run migrate:test`** (additive
-  migration `20260811164614_add_reservation_split_lineage` must reach the shared test DB
-  first — the pre-push hook enforces).
-- **Then:** P2 slice (d) credit-note invoice (design against payment.ts invoice core,
-  track 015 deferred item; replaces the `issueCreditNoteStub` in
-  reservation-machine-apply.ts); then P3 — generate the matrix driving partner actions
-  through table expectations (red cells for un-migrated actions) and start P4 migration
-  (first targets: markDeparted split path + unreserveItem — the B1/B2 cells — then the
-  frontdesk/actions.ts + partner reservations/[id]/actions.ts fossils, D14/D15; each
-  migration lowers the meta-guard ALLOWLIST).
-- **Deferred nit:** no index on `split_from_id` (lineage lookups are rare/small); add
-  forward if lineage queries become hot.
+- **Next action:** commit slice (d) — credit notes (awaiting founder's word). That closes
+  P2. **Before the next `main` push: `npm run migrate:test`** — TWO additive migrations
+  pending on the shared test DB (`20260811164614_add_reservation_split_lineage`,
+  `20260811165223_add_invoice_credit_note_link`); the pre-push hook enforces.
+- **Then P3:** generate the matrix driving partner actions through table expectations
+  (red cells for un-migrated actions), then P4 migration (first targets: markDeparted
+  split path + unreserveItem — the B1/B2 cells — then the frontdesk/actions.ts + partner
+  reservations/[id]/actions.ts fossils, D14/D15; each migration lowers the meta-guard
+  ALLOWLIST). Also due with P4: sync canonical docs (packages/data/CLAUDE.md — machine
+  modules + new tests; partner CLAUDE.md when actions migrate) and /wiki ingest.
+- **Deferred nits:** no index on `split_from_id` (rare lookups; add forward if hot);
+  accounting/fiscal surfaces should eventually RENDER credit notes distinctly (they
+  already net correctly in sums).
 - **Context needed:** `018-state-machine-intended.md` (contract);
   `packages/data/src/reservation-machine.ts` (pure model) +
   `reservation-machine-apply.ts` (interpreter); `018-state-machine-defacto.md` for
@@ -121,9 +121,21 @@ must-reject cells). Known logical errors become red cells first, then fixes.
   end-to-end regression (split settled party → peeled reservation derives settled →
   collect.start AND re-settle both rejected) + I4 (voided-history row survives cron.gc).
   Data 318u + 320i green, lint clean.
-  **Remaining P2 slices:** (b) meta-guard source-scan test (no state writes outside the
-  machine); (c) additive `splitFromId` migration + lineageLink executor; (d) credit-note
-  invoice support (Q4, extends track 015).
+  Slice (b) meta-guard committed `7a54f75`; slice (c) split lineage committed `f391988`.
+  Slice (d) SHIPPED 2026-08-11 (uncommitted): credit notes. Additive migration
+  `20260811165223_add_invoice_credit_note_link` (`credits_invoice_id` self-ref + index on
+  Invoice). `issueCashCreditNote(reservationId, {amount?, invoicedAt?})` in payment.ts —
+  a credit note is a NEGATIVE-total PARTNER invoice in its own number series
+  (`PARTNER-CN-YYYY-NNNNN`, via a `series` param on nextInvoiceNumber) sharing the
+  issuer's Veri*factu hash chain, linked via creditsInvoiceId; VAT reverse-computed at
+  the RECEIPT's effective rate (survives site-VAT changes); partial credits accumulate
+  and cap at the receipt total (balance re-checked inside the numbering-locked tx).
+  Negative totals mean existing PARTNER revenue aggregations net refunds automatically.
+  Interpreter's creditNoteIssue executor is real (non-blocking, 'no-receipt' is a normal
+  logged skip). User-app payment mock updated (mock-superset). 6 new credit-note
+  integration tests + machine-level I2 end-to-end (settle→receipt, unreserve→CN,
+  lineage invoice sum 0 ≡ empty till). Data 320u+327i, user 478u green; migrate:check
+  clean. **P2 COMPLETE once (d) is committed.**
   **Determinism contract (LLM-analyzability — the design goal; non-negotiable):**
   1. *Reified state:* one exported `deriveState(reservation) → CompoundState`; grid
      (`bed-state.ts`), guards, and tests all call it — no per-consumer re-derivation
@@ -155,6 +167,14 @@ deletable rule; D13 grouping kept; kind derived not persisted; no new status str
 
 ## Log
 
+- **2026-08-11 (P2 slice d — credit notes; P2 functionally complete)** — Slice (c)
+  committed (`f391988`). Credit notes live: additive `credits_invoice_id` migration,
+  `issueCashCreditNote` in payment.ts (negative PARTNER invoice, own `PARTNER-CN-` series
+  via nextInvoiceNumber `series` param, shared hash chain, receipt-effective VAT, capped
+  cumulative partials inside the numbering-locked tx), interpreter executor real. Q4 and
+  the track-015 deferred item are both closed. I2 provable end-to-end: settle→receipt,
+  refund-unreserve→CN, lineage invoice sum ≡ till ≡ 0. Data 320u+327i, user 478u green.
+  All four P2 slices done — table, interpreter, ratchet, money-correction rail. Fable 5.
 - **2026-08-11 (P2 slice c — split lineage)** — Slice (b) committed (`7a54f75`). Additive
   migration `20260811164614_add_reservation_split_lineage`: nullable `split_from_id`
   self-ref on Reservation (SetNull — a deleted origin is only ever a zero-money row per
