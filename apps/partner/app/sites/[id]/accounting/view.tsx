@@ -408,6 +408,15 @@ export default function AccountingView() {
   const formatDay = (iso: string) =>
     new Date(`${iso}T00:00:00Z`).toLocaleDateString('default', { day: 'numeric', month: 'short' })
 
+  // Richer than formatDay (adds weekday) — used standalone in the daily breakdown list,
+  // where there's no surrounding chart axis to supply the "which day" context.
+  const formatDayLong = (iso: string) =>
+    new Date(`${iso}T00:00:00Z`).toLocaleDateString('default', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    })
+
   const formatTime = (d: Date | string) => {
     const date = new Date(d)
     return date.toLocaleTimeString('default', { hour: '2-digit', minute: '2-digit' })
@@ -749,6 +758,24 @@ export default function AccountingView() {
                 </SafeBarChart>
               </SafeResponsiveContainer>
             </div>
+
+            {/* Daily breakdown — plain scannable day-by-day list, newest first */}
+            {trendMetric === 'revenue' && channelTrend && channelTrend.rows.length > 0 && (
+              <div className="mt-4 pt-3 border-t border-gray-100">
+                <div className="text-xs font-semibold text-gray-500 mb-2">{t('dailyBreakdown')}</div>
+                <div className="max-h-64 overflow-y-auto">
+                  {[...channelTrend.rows].reverse().map((row) => (
+                    <div
+                      key={row.date}
+                      className="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-b-0 text-sm"
+                    >
+                      <span className="text-gray-600">{formatDayLong(row.date)}</span>
+                      <span className="font-semibold text-gray-900 tabular-nums">€{row.total.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
 
