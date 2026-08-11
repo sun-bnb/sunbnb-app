@@ -32,16 +32,20 @@ must-reject cells). Known logical errors become red cells first, then fixes.
 
 ## Resume here
 
-- **Next action:** commit slice (d) — credit notes (awaiting founder's word). That closes
-  P2. **Before the next `main` push: `npm run migrate:test`** — TWO additive migrations
-  pending on the shared test DB (`20260811164614_add_reservation_split_lineage`,
+- **Next action:** commit P3 initial matrix (awaiting founder's word). **Before the next
+  `main` push: `npm run migrate:test`** — TWO additive migrations pending on the shared
+  test DB (`20260811164614_add_reservation_split_lineage`,
   `20260811165223_add_invoice_credit_note_link`); the pre-push hook enforces.
-- **Then P3:** generate the matrix driving partner actions through table expectations
-  (red cells for un-migrated actions), then P4 migration (first targets: markDeparted
-  split path + unreserveItem — the B1/B2 cells — then the frontdesk/actions.ts + partner
-  reservations/[id]/actions.ts fossils, D14/D15; each migration lowers the meta-guard
-  ALLOWLIST). Also due with P4: sync canonical docs (packages/data/CLAUDE.md — machine
-  modules + new tests; partner CLAUDE.md when actions migrate) and /wiki ingest.
+- **Then P4 — migrate actions onto applyTransition, flipping red cells green.** First
+  target: `unreserveItem` + `markDeparted` split path (flips B1a/B1b/B1c, D12, D2) —
+  swap guard+writes for `applyTransition` calls, lower the meta-guard ALLOWLIST count
+  for manage/actions.ts, flip the matrix cells from `it.fails` to `it`. Then the D14/D15
+  fossils (frontdesk + partner reservation-detail), collect flow (D5/D6 cells +
+  DEFERRED→COVERED), undo-depart UI (new capability), cron I4 sweep. Each migration:
+  action swap → allowlist down → cells green → matrix DEFERRED shrinks. Also due with
+  P4: sync canonical docs (packages/data/CLAUDE.md — machine modules + tests; partner
+  CLAUDE.md — matrix file + migrated actions) and /wiki ingest; BedDetail/view UI
+  reads move onto deriveState (bed-state.ts becomes presentation-only).
 - **Deferred nits:** no index on `split_from_id` (rare lookups; add forward if hot);
   accounting/fiscal surfaces should eventually RENDER credit notes distinctly (they
   already net correctly in sums).
@@ -150,8 +154,19 @@ must-reject cells). Known logical errors become red cells first, then fixes.
      (undefined cells, unreachable states, conservation sums) — analysis is lookup +
      proof, never code-path simulation. (Plain typed table over XState/TLA+ — no library
      semantics for future sessions to learn; auth-matrix is the in-repo precedent.)
-- ☐ **P3 — Matrix tests generated from the table** (auth-matrix pattern). Bug ledger
-  entries land as failing cells first.
+- ▶ **P3 — Matrix tests generated from the table.** Initial matrix SHIPPED 2026-08-11
+  (uncommitted): partner integration test
+  `app/sites/[id]/manage/state-machine-matrix.integration.test.ts` (17 tests) drives the
+  REAL manage actions through table expectations — post-states come from
+  `resolveTransition`, never hand-written. **10 GREEN cells** (walkIn cash/card, settle,
+  depart lastDay/multiday, resume, checkIn, noShow, hold+release, convert-cash) lock
+  current-correct behavior; **6 RED cells** as `it.fails` (B1a/B1b peeled-party settled +
+  till partition, B1c splitWalkInSeat, D12/I4 refund-unreserve row-kept+credit-note, D2
+  seat-unreserve till partition, D10 check-in-on-hold) — they PASS while the bugs exist
+  and flip the build when P4 fixes each action, forcing the cell to green. Coverage
+  manifest: every table event classified COVERED (13) or DEFERRED-with-reason (21,
+  shrink-only) — a new table event fails the manifest until classified. Partner 1996u +
+  196i green (17 new), tsc + lint clean.
 - ☐ **P4 — Migrate actions onto the machine + fix red cells** (B1 till/receipt
   conservation on split, B2 copy/void mismatch, B3 credit-note or delete-blocks-receipt).
 - 💤 **P5 — Wiki page** (`subsystems/reservation-state-machine.md`) + fold into
@@ -167,6 +182,14 @@ deletable rule; D13 grouping kept; kind derived not persisted; no new status str
 
 ## Log
 
+- **2026-08-11 (P3 — initial matrix)** — P2 committed complete (`29c5a68`). The matrix
+  is live: real manage actions driven through table-derived expectations (tablePost via
+  resolveTransition — the table IS the oracle). 10 green cells lock correct behavior;
+  6 `it.fails` red cells encode B1a/B1b/B1c/D12/D2/D10 — each will break the build when
+  its P4 fix lands, forcing the flip to green (bugs die visibly, never silently).
+  Coverage manifest partitions all 34 events into COVERED/DEFERRED (exhaustive,
+  disjoint, shrink-only). Founder's original repro is now a permanent CI artifact.
+  Partner 1996u+196i, tsc+lint clean. Uncommitted. Fable 5.
 - **2026-08-11 (P2 slice d — credit notes; P2 functionally complete)** — Slice (c)
   committed (`f391988`). Credit notes live: additive `credits_invoice_id` migration,
   `issueCashCreditNote` in payment.ts (negative PARTNER invoice, own `PARTNER-CN-` series
