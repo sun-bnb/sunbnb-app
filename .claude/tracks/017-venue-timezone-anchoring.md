@@ -33,14 +33,17 @@ in any query window, write path, or money boundary.
 
 ## Resume here
 
-- **P1 is DONE** (2026-08-11, uncommitted on local `main`) — see Log. Venue-anchored the
-  settlement window; added the `siteDateBounds` civil-date primitive; 4 regression tests.
-- **Next action:** either (a) resolve **Q1 and Q2 in Open decisions** (the anchoring contract
-  for consumer-written bookings, and whether existing rows get backfilled) to unblock P3+; or
-  (b) ship **P2** (reminder-email + consumer-availability windows) — like P1 it needs neither
-  Q1 nor Q2. P3+ depends on Q1.
-- **Uncommitted P1 work awaits a commit + the `migrate:test`/deploy call (user ops).** No
-  schema change, so no migration — just push/promote when the founder chooses.
+- **P1 + P2 are DONE** (2026-08-11) — see Log. P1 committed (`f0b51ba`). P2 committed as two
+  commits (packages/data reminders + apps/user availability). Both are on local `main`,
+  **unpushed**. No schema change in either → no migration; push/promote is user ops.
+- **Next action:** resolve **Q1 and Q2 in Open decisions** — the anchoring contract for
+  consumer-written bookings (Q1) gates **P3** (the write-path root cause), and everything after.
+  **Recommend (a) for Q1** (server re-anchors `from`/`to` from client civil dates). Until Q1
+  lands, remaining shippable-without-it work is thin: **P7** (populate `Site.timeZone` +
+  restaurant tz inheritance) is independent and would also close the P2-availability Canary
+  residual (multi-site search SQL falls back to Madrid for sites with no stored `time_zone`).
+- **P4/P5/P6** (money/reporting windows, analytics bucketing, module merge) are largely
+  independent of Q1 too, but each is its own phase — pick per priority.
 - **Context needed:**
   - This file.
   - `packages/data/src/site-day.ts` — the canonical primitive (read it first; it is correct,
@@ -66,7 +69,7 @@ in any query window, write path, or money boundary.
   timezone**, and correct the stored label. Add a regression test asserting an invoice stamped
   on the final day of the period is included.
 
-- ☐ **P2 — Reminder emails + consumer availability counts** *(consumer-visible; silent loss)*
+- ☑ **P2 — Reminder emails + consumer availability counts** *(DONE 2026-08-11 — consumer-visible)*
   - `packages/data/src/reservation-emails.ts:390-393` and `packages/data/src/rental-emails.ts:326-328`
     window on server-local `setHours(0,0,0,0)`. Consumer bookings are written from the
     **browser's** start-of-day, so a Spanish guest's Aug 11 booking stores `from = Aug 10 22:00Z`
@@ -221,6 +224,32 @@ in any query window, write path, or money boundary.
   - Green: data 281 unit + 303 integration, lint clean, admin settlement 19 unit. No schema
     change → no migration. **Interacts with Q3** (whether past short-by-a-day settlements get
     restated — still open).
+
+- **2026-08-11 — P2 shipped (two commits, local `main`, unpushed).** Venue-anchored the
+  reminder-email and consumer-availability day windows.
+  - **Reminders (`packages/data`):** `sendDueReminders` (`reservation-emails.ts`) and
+    `sendRentalDueReminders` (`rental-emails.ts`) previously windowed on server-local
+    `setHours(0,0,0,0)` and stamped `reminderSentAt` regardless → an unrecoverable miss for any
+    booking whose venue-anchored `from` fell outside the UTC day. Now both fetch a **±36h
+    candidate pool** (covers every IANA offset) and keep only rows where
+    `siteDayKey(site, from) === siteDayKey(site, now)` — full coord-tier tz resolution, so a
+    cross-site cron is correct per venue. `rental-emails.test.ts` fixture `from` made
+    relative-to-today. New `reminders.integration.test.ts` pins a site to `Asia/Tokyo` (UTC+9)
+    and proves only the venue-today booking is reminded (venue-yesterday/tomorrow, both inside
+    the fetch window, are filtered out).
+  - **Availability (`apps/user`):** single-site `availabilityService.ts`
+    (`getAvailability` release predicate + `countAvailableToday` window) now uses
+    `siteDayBounds(site)` (full coord tier — correct everywhere). Multi-site search
+    `siteService.ts` computes the today window **per row in SQL** via
+    `date_trunc('day', now() AT TIME ZONE COALESCE("Site".time_zone,'Europe/Madrid'))`
+    (DST-safe next-midnight−1ms form). tz-lookup is JS-only, so the SQL path can only resolve
+    the stored `time_zone` column, falling back to Madrid — **fully fixes mainland-ES now**;
+    a coord-derived non-Madrid site with no stored tz (Canary) stays offset until **P7**
+    populates `Site.timeZone` (chosen scope: "Full P2 both paths" — founder call 2026-08-11).
+    Existing `siteService.integration.test.ts` sites pinned to `timeZone:'UTC'` with
+    UTC-anchored windows (was server-local → env-fragile); +3 regression tests (Madrid
+    venue-tomorrow booking does NOT occupy today, both SQL and JS paths; venue-today does).
+  - Green: data 281u + 305i, user 478u + 77i, both typecheck/lint clean, user cron 10u.
 
 ## Open decisions
 

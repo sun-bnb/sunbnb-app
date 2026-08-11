@@ -20,9 +20,16 @@ import {
   createTestReservation,
 } from '@/app/test/fixtures'
 import { BLOCKING_STATUSES, OP_NO_SHOW, OP_DEPARTED } from '@repo/data/reservation-status'
+import { siteDayBounds } from '@repo/data/site-day'
 
 // A non-blocking status (canceled) for contrast
 const CANCELED = 'canceled'
+
+// Venue civil-day bounds for a given tz, N days from today.
+function venueDay(timeZone: string, offsetDays: number) {
+  const anchor = new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000)
+  return siteDayBounds({ timeZone }, anchor)
+}
 
 beforeEach(async () => {
   await cleanDatabase()
@@ -34,7 +41,10 @@ afterAll(async () => {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-async function createReadySite(user: Awaited<ReturnType<typeof createTestUser>>) {
+async function createReadySite(
+  user: Awaited<ReturnType<typeof createTestUser>>,
+  timeZone: string = 'UTC',
+) {
   // searchSites requires: active status, name, location not 0, at least one active item,
   // at least one working hours entry, an image, and either non-paid type or price+vat set.
   const site = await createTestSite(user.id, {
@@ -45,6 +55,9 @@ async function createReadySite(user: Awaited<ReturnType<typeof createTestUser>>)
     locationLat: '36.7',
     locationLng: '3.0',
     features: ['sunbeds'],
+    // Pin the venue timezone so availability windows are deterministic across
+    // machines (track 017 P2 anchors "today" to the site's civil day).
+    timeZone,
   })
   // Add a working hours entry so the site passes the WHERE filter
   await prisma.siteWorkingHours.create({
@@ -58,12 +71,12 @@ async function createReadySite(user: Awaited<ReturnType<typeof createTestUser>>)
   return site
 }
 
-// today's bounds (server-local)
+// today's bounds, UTC-anchored to match the pinned `timeZone: 'UTC'` test sites
+// (production anchors to each site's civil day — track 017 P2).
 function todayBounds() {
-  const startOfToday = new Date()
-  startOfToday.setHours(0, 0, 0, 0)
-  const endOfToday = new Date()
-  endOfToday.setHours(23, 59, 59, 999)
+  const now = new Date()
+  const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0))
+  const endOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999))
   return { startOfToday, endOfToday }
 }
 
@@ -172,12 +185,9 @@ describe('searchSites available_count — canonical blocking rule', () => {
     const item = await createTestInventoryItem(user.id, site.id, { number: 1, status: 'active' })
 
     // A past reservation (ended yesterday) — blocking status but not overlapping today
-    const yesterday = new Date()
-    yesterday.setDate(yesterday.getDate() - 1)
-    yesterday.setHours(0, 0, 0, 0)
-    const yesterdayEnd = new Date()
-    yesterdayEnd.setDate(yesterdayEnd.getDate() - 1)
-    yesterdayEnd.setHours(23, 59, 59, 999)
+    const { startOfToday: todayStart } = todayBounds()
+    const yesterday = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000)
+    const yesterdayEnd = new Date(todayStart.getTime() - 1)
 
     await createTestReservation(user.id, site.id, [item.id], {
       status: 'complete',
@@ -240,9 +250,7 @@ describe('searchSites available_count — canonical blocking rule', () => {
     const item = await createTestInventoryItem(user.id, site.id, { number: 1, status: 'active' })
 
     const { startOfToday } = todayBounds()
-    const future = new Date()
-    future.setDate(future.getDate() + 2)
-    future.setHours(23, 59, 59, 999)
+    const future = new Date(startOfToday.getTime() + 3 * 24 * 60 * 60 * 1000 - 1)
 
     // No-show but multi-day stay ends in the future — bed stays blocked
     await createTestReservation(user.id, site.id, [item.id], {
@@ -281,6 +289,47 @@ describe('searchSites available_count — canonical blocking rule', () => {
     expect(result!.availableCount).toBe(1)
   })
 
+  it('does NOT count a venue-tomorrow booking as occupying today (track 017 P2)', async () => {
+    // Madrid venue (UTC+2 summer): its "tomorrow" starts at ~22:00Z today, which
+    // falls inside the SERVER's UTC today — the old server-anchored window counted
+    // it as occupying today and under-advertised the free bed. The per-site SQL
+    // window (COALESCE time_zone) must exclude it.
+    const user = await createTestUser()
+    const site = await createReadySite(user, 'Europe/Madrid')
+    const item = await createTestInventoryItem(user.id, site.id, { number: 1, status: 'active' })
+
+    const tomorrow = venueDay('Europe/Madrid', 1)
+    await createTestReservation(user.id, site.id, [item.id], {
+      status: 'complete',
+      from: tomorrow.start,
+      to: tomorrow.end,
+    })
+
+    const { sites } = await searchSites()
+    const result = sites.find(s => s.id === site.id)
+    // Booking is for the venue's tomorrow — today's bed is free.
+    expect(result!.availableCount).toBe(1)
+    expect(result!.itemCount).toBe(1)
+  })
+
+  it('DOES count a venue-today booking as occupying today (Madrid tz)', async () => {
+    const user = await createTestUser()
+    const site = await createReadySite(user, 'Europe/Madrid')
+    const item = await createTestInventoryItem(user.id, site.id, { number: 1, status: 'active' })
+
+    const today = venueDay('Europe/Madrid', 0)
+    await createTestReservation(user.id, site.id, [item.id], {
+      status: 'complete',
+      from: today.start,
+      to: today.end,
+    })
+
+    const { sites } = await searchSites()
+    const result = sites.find(s => s.id === site.id)
+    expect(result!.availableCount).toBe(0)
+    expect(result!.itemCount).toBe(1)
+  })
+
   it('includes features in the search result', async () => {
     const user = await createTestUser()
     const site = await createReadySite(user)
@@ -297,7 +346,7 @@ describe('searchSites available_count — canonical blocking rule', () => {
 describe('countAvailableToday', () => {
   it('returns itemCount = active items and availableCount = unblocked items', async () => {
     const user = await createTestUser()
-    const site = await createTestSite(user.id)
+    const site = await createTestSite(user.id, { timeZone: 'UTC' })
 
     const item1 = await createTestInventoryItem(user.id, site.id, { number: 1, status: 'active' })
     const item2 = await createTestInventoryItem(user.id, site.id, { number: 2, status: 'active' })
@@ -320,7 +369,7 @@ describe('countAvailableToday', () => {
 
   it('returns itemCount = 0 and availableCount = 0 for a site with no active items', async () => {
     const user = await createTestUser()
-    const site = await createTestSite(user.id)
+    const site = await createTestSite(user.id, { timeZone: 'UTC' })
 
     const result = await countAvailableToday(site.id)
     expect(result.itemCount).toBe(0)
@@ -329,7 +378,7 @@ describe('countAvailableToday', () => {
 
   it('respects the no-show/departed release rule', async () => {
     const user = await createTestUser()
-    const site = await createTestSite(user.id)
+    const site = await createTestSite(user.id, { timeZone: 'UTC' })
 
     const item = await createTestInventoryItem(user.id, site.id, { number: 1, status: 'active' })
 
@@ -345,5 +394,23 @@ describe('countAvailableToday', () => {
 
     const result = await countAvailableToday(site.id)
     expect(result.availableCount).toBe(1)
+  })
+
+  it('does NOT count a venue-tomorrow booking as occupying today (Madrid tz — track 017 P2)', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { timeZone: 'Europe/Madrid' })
+    const item = await createTestInventoryItem(user.id, site.id, { number: 1, status: 'active' })
+
+    const tomorrow = venueDay('Europe/Madrid', 1)
+    await createTestReservation(user.id, site.id, [item.id], {
+      status: 'complete',
+      from: tomorrow.start,
+      to: tomorrow.end,
+    })
+
+    const result = await countAvailableToday(site.id)
+    // The stay is the venue's tomorrow — today's bed is free.
+    expect(result.availableCount).toBe(1)
+    expect(result.itemCount).toBe(1)
   })
 })

@@ -3,8 +3,18 @@ import dayjs from 'dayjs'
 import isBetween from 'dayjs/plugin/isBetween'
 import { Reservation } from '@/app/sites/types'
 import { BLOCKING_STATUSES, OP_NO_SHOW, OP_DEPARTED } from '@repo/data/reservation-status'
+import { siteDayBounds } from '@repo/data/site-day'
 
 dayjs.extend(isBetween)
+
+/** Build the `SiteTimezone` shape `siteDayBounds` expects from a site row. */
+function siteTz(site: { timeZone?: string | null; locationLat?: string | null; locationLng?: string | null } | null) {
+  return {
+    timeZone: site?.timeZone ?? null,
+    latitude: site?.locationLat ? parseFloat(site.locationLat) : undefined,
+    longitude: site?.locationLng ? parseFloat(site.locationLng) : undefined,
+  }
+}
 
 function checkAvailability(
   reservations: Reservation[], 
@@ -50,6 +60,13 @@ function getAvailabilityData(
 }
 
 export async function getAvailability(siteId: string, from: Date, to: Date) {
+  // Resolve the venue timezone so "end of today" anchors to the site's civil day,
+  // not the server's (UTC on Vercel). (track 017 P2)
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { timeZone: true, locationLat: true, locationLng: true },
+  })
+
   // Find all items for this site
   const items = await prisma.inventoryItem.findMany({
     where: { siteId, status: 'active' },
@@ -63,8 +80,7 @@ export async function getAvailability(siteId: string, from: Date, to: Date) {
   // its bed ONLY once its stay is over (no remaining reserved days, `to` <= end of
   // today); a multiday booking departed mid-stay keeps blocking its future days. A
   // booking with future days is reused via an explicit release. (track 012)
-  const endOfToday = new Date()
-  endOfToday.setHours(23, 59, 59, 999)
+  const endOfToday = siteDayBounds(siteTz(site)).end
   const reservations = await prisma.reservation.findMany({
     where: {
       siteId,
@@ -93,10 +109,12 @@ export async function getAvailability(siteId: string, from: Date, to: Date) {
  * Returns { availableCount, itemCount } where itemCount is active items only.
  */
 export async function countAvailableToday(siteId: string): Promise<{ availableCount: number; itemCount: number }> {
-  const startOfToday = new Date()
-  startOfToday.setHours(0, 0, 0, 0)
-  const endOfToday = new Date()
-  endOfToday.setHours(23, 59, 59, 999)
+  // Venue-anchored "today" window (not the server's UTC day). (track 017 P2)
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { timeZone: true, locationLat: true, locationLng: true },
+  })
+  const { start: startOfToday, end: endOfToday } = siteDayBounds(siteTz(site))
 
   const availabilityData = await getAvailability(siteId, startOfToday, endOfToday)
   const itemCount = availabilityData.length

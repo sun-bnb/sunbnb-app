@@ -140,12 +140,19 @@ export async function searchSites(lat?: string, lng?: string) {
   ? Prisma.sql`ORDER BY dist_km`
   : Prisma.sql``;
 
-  // Server-local today bounds — matches the convention used by availabilityService
-  // (endOfToday = new Date() with setHours(23,59,59,999)) so counts are consistent.
-  const startOfToday = new Date()
-  startOfToday.setHours(0, 0, 0, 0)
-  const endOfToday = new Date()
-  endOfToday.setHours(23, 59, 59, 999)
+  // Venue-anchored "today" bounds, computed PER SITE in SQL so each row's count
+  // uses its own civil day, not the server's UTC day (track 017 P2). tz-lookup is
+  // JS-only, so SQL can only resolve via the stored `time_zone` column, falling
+  // back to Europe/Madrid — this fully fixes mainland-ES sites now; sites with a
+  // coord-derived non-Madrid tz and no stored `time_zone` (e.g. Atlantic/Canary)
+  // stay offset until Site.timeZone is populated (track 017 P7). availabilityService
+  // (single-site, JS) resolves the full coord tier, so the two agree once time_zone
+  // is set — see the consistency note there.
+  const tzExpr = Prisma.sql`COALESCE("Site".time_zone, 'Europe/Madrid')`
+  // Local midnight today and tomorrow, trunc'd on the local wall clock then
+  // converted back — DST-safe (mirrors siteDayBounds' "next midnight − 1ms").
+  const startOfToday = Prisma.sql`(date_trunc('day', now() AT TIME ZONE ${tzExpr}) AT TIME ZONE ${tzExpr})`
+  const endOfToday = Prisma.sql`((date_trunc('day', (now() AT TIME ZONE ${tzExpr}) + interval '1 day') AT TIME ZONE ${tzExpr}) - interval '1 millisecond')`
 
   // Build the IN (...) list for BLOCKING_STATUSES using Prisma.join to avoid
   // hardcoding status strings (single source of truth from @repo/data).
