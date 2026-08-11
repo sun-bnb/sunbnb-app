@@ -33,7 +33,6 @@ import {
   cancelCollection,
   splitWalkInSeat,
   settleReservation,
-  undoDepartWalkIn,
 } from './actions'
 import {
   RESERVATION_COMPLETE, RESERVATION_HELD, RESERVATION_PAID_IN_CASH,
@@ -44,7 +43,6 @@ import {
   getActiveReservation,
   getBedState,
   isFailedReservationStatus,
-  findUndoDepartCandidate,
   freedSeatShare,
   settledTotal,
   type BedState,
@@ -265,10 +263,6 @@ export default function BedDetail({
   // A walk-in is "settled" when at least one non-voided TillEntry exists for it
   // (the Settle action has been used). Both settled and collected show as paid.
   const settled = (reservation?.tillEntries?.length ?? 0) > 0
-  // A same-day-departed cash walk-in on a FREE seat → offer "Undo departure"
-  // (guest came back / mistaken tap; track 018). Server enforces same-civil-day
-  // + re-checks the seat for conflicts; no new money moves.
-  const undoDepartCandidate = state === 'available' ? findUndoDepartCandidate(item) : null
 
   // Sync: all group members share the same reservation (or all are free).
   // Must be computed BEFORE pairNumber — pairNumber is only shown when inSync
@@ -777,19 +771,6 @@ export default function BedDetail({
                   </button>
                 </div>
               </div>
-            )}
-            {/* Undo departure — a same-day-departed cash walk-in can be re-seated
-                (guest returned / mistaken Depart tap). Restorative, so no confirm
-                step; the server conflict-rechecks the seat and enforces same-day.
-                (track 018 undo-depart capability) */}
-            {undoDepartCandidate && (
-              <button
-                disabled={isPending}
-                onClick={() => runAction(() => undoDepartWalkIn(siteId, undoDepartCandidate.id, accessKey))}
-                className="w-full text-gray-500 dark:text-gray-400 text-sm py-2 active:text-gray-700 dark:active:text-gray-200"
-              >
-                {isPending ? '...' : `↩ ${t('undoDeparture')}${undoDepartCandidate.guestName ? ` — ${undoDepartCandidate.guestName}` : ''}`}
-              </button>
             )}
             {/* ── Seat management — compact link-style actions, divided off from the
                 larger reservation controls above. Add + Remove share the row at

@@ -107,26 +107,6 @@ function paymentGlyph(res: Reservation | null): string {
 
 // ─── Track 018 slice-3 helpers (pure, unit-tested in bed-state.test.ts) ──────
 
-/**
- * A same-day-departed cash walk-in on this seat that `undoDepartWalkIn` could
- * re-seat (guest came back / mistaken tap). Released rows are exactly the ones
- * getActiveReservation drops, so the FREE panel needs this separate lookup.
- * Same-civil-day is ENFORCED server-side (interpreter fact); the client check
- * (departedAt present) is only a visibility heuristic.
- */
-export function findUndoDepartCandidate(item: InventoryItem): Reservation | null {
-  if (!item.reservations?.length) return null
-  return (
-    item.reservations.find((r) => {
-      const s = derive(r)
-      return (
-        s.kind === 'walkin' &&
-        s.occ === 'departed' &&
-        Boolean(r.today?.departedAt ?? r.departedAt)
-      )
-    }) ?? null
-  )
-}
 
 /**
  * The freed seat's share of a settled party's cash — what a Seat-mode

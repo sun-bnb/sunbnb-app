@@ -4,7 +4,6 @@ import {
   getActiveReservation,
   getBedState,
   getCellAppearance,
-  findUndoDepartCandidate,
   freedSeatShare,
   settledTotal,
   selectionRefundTotal,
@@ -231,36 +230,6 @@ describe('getCellAppearance', () => {
 })
 
 // ─── Track 018 slice-3 helpers ────────────────────────────────────────────────
-
-describe('findUndoDepartCandidate', () => {
-  const departedCash = (over: Record<string, unknown> = {}) => ({
-    id: 'r-dep', status: 'paid-in-cash', operationalStatus: 'departed',
-    departedAt: new Date(), stayOver: true, tillEntries: [{ id: 't1', amount: 10 }],
-    ...over,
-  })
-
-  it('finds a released same-day-departed cash walk-in on a free seat', () => {
-    const found = findUndoDepartCandidate(item([departedCash()] as any))
-    expect(found?.id).toBe('r-dep')
-  })
-
-  it('ignores online departures and rows without a departedAt stamp', () => {
-    expect(findUndoDepartCandidate(item([departedCash({ status: 'complete' })] as any))).toBeNull()
-    expect(findUndoDepartCandidate(item([departedCash({ departedAt: null })] as any))).toBeNull()
-  })
-
-  it('reads the today-row departure (multiday between-days shape)', () => {
-    const r = departedCash({
-      departedAt: null,
-      today: { id: 'rd', reservationId: 'r-dep', date: new Date(), operationalStatus: 'departed', checkedInAt: null, departedAt: new Date() },
-    })
-    expect(findUndoDepartCandidate(item([r] as any))?.id).toBe('r-dep')
-  })
-
-  it('returns null for an empty seat', () => {
-    expect(findUndoDepartCandidate(item([]))).toBeNull()
-  })
-})
 
 describe('freedSeatShare / settledTotal (B2: the dialog shows the partitioned truth)', () => {
   const party = (tillEntries: { id: string; amount: number }[], items: { id: string; price: number | null }[]) =>

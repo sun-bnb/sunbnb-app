@@ -40,13 +40,22 @@ must-reject cells). Known logical errors become red cells first, then fixes.
   (`e53d3ce..be954d4` — Vercel preview rebuilding; 15 track-018 commits).
 - **Founder ops before promote:** ES/FI copy review — `undoDeparture`,
   `confirmUnreserveSeatRefund`, `refund` (Devolver/Hyvitä), `confirmBulkRefund`.
-- **Queued follow-up batches (backlog, not started):** manage create-verbs +
-  move/cancel/refund onto machine events (allowlist 8 → 0); rental-booking and
-  table-reservation machines on the same rails (Q5); partner reservation-day.ts
-  delegates to the interpreter's day-row writer (removes the deliberate duplication).
+- **Queued follow-up batches (backlog, not started):** undo-departure surface in the
+  GUESTS SHEET (explicit party selection — the FREE-panel button was pulled 2026-08-11,
+  per-seat candidate heuristic ambiguous; server event + action remain live); manage
+  create-verbs + move/cancel/refund onto machine events (allowlist 8 → 0);
+  rental-booking and table-reservation machines on the same rails (Q5); partner
+  reservation-day.ts delegates to the interpreter's day-row writer.
 - **Deferred nits:** no index on `split_from_id` (rare lookups; add forward if hot);
   accounting/fiscal surfaces should eventually RENDER credit notes distinctly (they
   already net correctly in sums).
+- **Known bounded pre-fix gap (prod-verified 2026-08-11, post-deploy — NO backfill):**
+  7 voided till entries (€176, all `reservation_id NULL`) from pre-machine
+  refund-unreserves in the receipts era (since 2026-07-10) have receipts but no credit
+  notes — invoiced revenue overstates the till by ≤ €176 for that window. Both sides
+  SetNull'd, so no integrity-safe automated backfill exists; accepted as documented.
+  Live unsettled cash walk-ins at deploy: 0 (no B1 residue on the floor). The class
+  cannot recur (rows kept + CNs automatic).
 - **Context needed:** `018-state-machine-intended.md` (contract);
   `packages/data/src/reservation-machine.ts` (pure model) +
   `reservation-machine-apply.ts` (interpreter); `018-state-machine-defacto.md` for
@@ -269,6 +278,15 @@ deletable rule; D13 grouping kept; kind derived not persisted; no new status str
 
 ## Log
 
+- **2026-08-11 (undo-depart button PULLED — founder test feedback)** — The FREE-panel
+  "Undo departure" button chose its candidate per-seat via `.find()` over from-asc-ordered
+  rows: ambiguous once multiple same-day departures accumulate (departed rows persist all
+  day) and asymmetric across a party's seats — founder observed the inconsistency on the
+  floor. Button, `findUndoDepartCandidate` heuristic, its tests, and the `undoDeparture`
+  i18n keys removed. KEPT: the `staff.resume.undoDepart` event, `undoDepartWalkIn` action,
+  matrix cells, gated-actions entry — the capability is sound; only the surface was wrong.
+  **Backlog: undo via the Guests sheet** — staff explicitly finds the departed party
+  (name/time), so the wrong-candidate class is unrepresentable. Partner 1968u green. Fable 5.
 - **2026-08-11 (follow-up: honest Unreserve labels + bulk refund confirm)** — Founder
   call: the button says what the transition does. All four Unreserve entry points now
   label `settled ? "Refund" : "Unreserve"` (EN Refund / ES Devolver / FI Hyvitä — all

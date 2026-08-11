@@ -76,7 +76,11 @@ LLM-analyzability**: state questions are table lookups, never code-path simulati
 - Settled unreserve ALWAYS refunds (keeping money is Depart's job) — row kept as
   `refunded` + till void + credit note.
 - Same-day departed cash walk-ins are re-seatable (`staff.resume.undoDepart`, conflict
-  re-checked; `undoDepartWalkIn` + BedDetail's FREE-panel button).
+  re-checked; `undoDepartWalkIn` server action). The FREE-panel button was PULLED
+  2026-08-11 — a per-seat candidate heuristic is ambiguous once multiple same-day
+  departures accumulate (departed rows persist all day) and disagrees across a party's
+  seats. Undo resurfaces via the Guests sheet (explicit party selection — can't pick
+  the wrong candidate by construction).
 - "One gesture, one state change": payment events (e.g. `collect.abandon`) may only
   touch the payment axis — abandoning a QR can never free a bed.
 - `pay.fail` resolves collect-vs-online reverts BY STATE (webhook `metadata.collect` is

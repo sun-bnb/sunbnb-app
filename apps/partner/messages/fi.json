@@ -942,7 +942,6 @@
     "confirmUnreserve": "Lopetetaan tämä walk-in — paikka vapautuu.",
     "confirmUnreserveRefund": "Hyvitetään {amount} — poistetaan kassasta; palauta käteinen asiakkaalle. Paikka vapautuu.",
     "confirmUnreserveSeatRefund": "Hyvitetään {amount} tästä paikasta — poistetaan kassasta; palauta käteinen. Paikka vapautuu.",
-    "undoDeparture": "Kumoa lähtö",
     "refund": "Hyvitä",
     "confirmBulkRefund": "Hyvitetään {amount} valinnasta — poistetaan kassasta; palauta käteinen. Paikat vapautuvat.",
     "paymentFailed": "Maksu epäonnistui",
