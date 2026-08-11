@@ -943,6 +943,8 @@
     "confirmUnreserveRefund": "Hyvitetään {amount} — poistetaan kassasta; palauta käteinen asiakkaalle. Paikka vapautuu.",
     "confirmUnreserveSeatRefund": "Hyvitetään {amount} tästä paikasta — poistetaan kassasta; palauta käteinen. Paikka vapautuu.",
     "undoDeparture": "Kumoa lähtö",
+    "refund": "Hyvitä",
+    "confirmBulkRefund": "Hyvitetään {amount} valinnasta — poistetaan kassasta; palauta käteinen. Paikat vapautuvat.",
     "paymentFailed": "Maksu epäonnistui",
     "remove": "Poista",
     "confirmRemove": "Poistetaan tämä varaus — maksua ei koskaan suoritettu. Paikka vapautuu heti."

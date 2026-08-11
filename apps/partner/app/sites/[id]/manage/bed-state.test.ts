@@ -7,6 +7,7 @@ import {
   findUndoDepartCandidate,
   freedSeatShare,
   settledTotal,
+  selectionRefundTotal,
 } from './bed-state'
 import {
   OP_EXPECTED, OP_CHECKED_IN, OP_WALKED_IN, OP_DEPARTED, OP_NO_SHOW, OP_COMP,
@@ -288,5 +289,37 @@ describe('freedSeatShare / settledTotal (B2: the dialog shows the partitioned tr
   it('settledTotal sums the non-voided entries (what a whole Unreserve refunds)', () => {
     expect(settledTotal(party([{ id: 't1', amount: 12.5 }, { id: 't2', amount: 7.5 }], []))).toBe(20)
     expect(settledTotal(null)).toBe(0)
+  })
+})
+
+describe('selectionRefundTotal (bulk Refund label + confirm amount)', () => {
+  const seat = (id: string, r: any) => ({ id, reservations: [r] }) as any
+  const party = (id: string, seats: { id: string; price: number | null }[], till: number) => ({
+    id, status: 'paid-in-cash', operationalStatus: 'walked-in',
+    tillEntries: till > 0 ? [{ id: 't-' + id, amount: till }] : [],
+    items: seats,
+  })
+
+  it('full party selected → the whole settled total', () => {
+    const r = party('r1', [{ id: 'a', price: 10 }, { id: 'b', price: 10 }], 20)
+    expect(selectionRefundTotal([seat('a', r), seat('b', r)], ['a', 'b'])).toBe(20)
+  })
+
+  it('subset selected → the partitioned share only', () => {
+    const r = party('r1', [{ id: 'a', price: 10 }, { id: 'b', price: 20 }], 30)
+    expect(selectionRefundTotal([seat('a', r), seat('b', r)], ['b'])).toBe(20)
+  })
+
+  it('sums across distinct parties; unsettled parties contribute zero', () => {
+    const r1 = party('r1', [{ id: 'a', price: 10 }], 10)      // settled single
+    const r2 = party('r2', [{ id: 'b', price: 10 }], 0)       // unsettled
+    const r3 = party('r3', [{ id: 'c', price: 10 }, { id: 'd', price: 10 }], 20)
+    const items = [seat('a', r1), seat('b', r2), seat('c', r3), seat('d', r3)]
+    expect(selectionRefundTotal(items, ['a', 'b', 'c'])).toBe(20) // 10 + 0 + 10
+  })
+
+  it('zero for an all-unsettled selection (label stays "Unreserve")', () => {
+    const r = party('r1', [{ id: 'a', price: 10 }], 0)
+    expect(selectionRefundTotal([seat('a', r)], ['a'])).toBe(0)
   })
 })

@@ -380,17 +380,14 @@ export default function BedDetail({
     } else if (pendingConfirm === 'unreserve') {
       // In the walked-in branch, unreserve scope is driven by applyToGroup (the
       // reservation-based toggle, not the physical-group applyToPair toggle).
-      // Group → delete whole reservation; Seat → disconnect this item only.
-      //
-      // Unreserve ALWAYS refunds: a whole-delete voids the settlement so the cash
-      // leaves the drawer — keeping the money is what Depart is for, so a settled
-      // walk-in is never orphaned. The multi-seat disconnect path passes false
-      // because the settlement stays with the remaining seats (ignored there).
+      // Group → whole-release; Seat → free this seat only. Refund-vs-keep is
+      // STATE-DERIVED in the machine (track 018): a settled release ALWAYS
+      // refunds (till void/partition + credit note — the button says "Refund");
+      // the legacy 5th arg is ignored by the action.
       if (state === 'walked-in') {
-        const isWholeDelete = applyToGroup || !groupedReservation
-        runAction(() => unreserveItem(siteId, item.id, accessKey, applyToGroup, isWholeDelete))
+        runAction(() => unreserveItem(siteId, item.id, accessKey, applyToGroup))
       } else {
-        runAction(() => unreserveItem(siteId, item.id, accessKey, applyToPair, true))
+        runAction(() => unreserveItem(siteId, item.id, accessKey, applyToPair))
       }
     } else if (pendingConfirm === 'remove') {
       if (!reservation) return
@@ -943,7 +940,7 @@ export default function BedDetail({
                   onClick={() => setPendingConfirm('unreserve')}
                   className="w-full text-red-500 text-sm py-2 active:text-red-700"
                 >
-                  {t('unreserve')}
+                  {t(settled ? 'refund' : 'unreserve')}
                 </button>
               </>
             )}
@@ -1416,7 +1413,7 @@ export default function BedDetail({
                   onClick={() => setPendingConfirm(collected ? 'cancel' : 'unreserve')}
                   className="w-full text-red-500 text-sm py-2 active:text-red-700"
                 >
-                  {collected ? t('cancelReservation') : t('unreserve')}
+                  {collected ? t('cancelReservation') : t(settled ? 'refund' : 'unreserve')}
                 </button>
               </>
             )}

@@ -14,7 +14,7 @@ import TillSheet from './TillSheet'
 import GuestSearchSheet from './GuestSearchSheet'
 import ParcelView from './ParcelView'
 import RentalsSection from './RentalsSection'
-import { getActiveReservation, getBedState, isFailedReservationStatus, type BedState } from './bed-state'
+import { getActiveReservation, getBedState, isFailedReservationStatus, type BedState , selectionRefundTotal } from './bed-state'
 import {
   moveReservationToSeats,
   blockBed, compBed, blockBeds, compBeds, convertHoldToWalkIn,
@@ -164,7 +164,7 @@ export default function ManageView({
   const [bulkGuestName, setBulkGuestName] = useState('')
   const [bulkUntil, setBulkUntil] = useState('')
   // Shared confirm step for the ⚠ bulk verbs (no-show / cancel / depart).
-  const [bulkConfirm, setBulkConfirm] = useState<'no-show' | 'cancel' | 'depart' | null>(null)
+  const [bulkConfirm, setBulkConfirm] = useState<'no-show' | 'cancel' | 'depart' | 'unreserve' | null>(null)
   // Bulk Card path — CollectPaymentModal targeting the single grouped reservation
   // created by bulkRentCard (all-available only; held/mixed doesn't get Card).
   const [bulkCollectTargetId, setBulkCollectTargetId] = useState<string | null>(null)
@@ -855,6 +855,7 @@ export default function ManageView({
     if (v === 'no-show') bulkNoShow()
     else if (v === 'cancel') bulkCancel()
     else if (v === 'depart') bulkDepart()
+    else if (v === 'unreserve') bulkFree()
   }
 
   // The panel offers the INTERSECTION of each selected seat's valid actions — a
@@ -926,12 +927,21 @@ export default function ManageView({
   // The vacate button mirrors the tap dialog, shown only for a single-status
   // selection (Release / Unblock / End comp / Unreserve / Remove). A mixed
   // selection offers no vacate — same-status-only, for clarity. Always runs
+  // Summed unconditional refund a bulk Unreserve of this selection would trigger
+  // (settled parties only) — drives the Refund-vs-Unreserve label + confirm amount.
+  const bulkRefundTotal = homogeneous === 'walked-in' ? selectionRefundTotal(inventoryItems, selectedIds) : 0
+
   // bulkFree (which dispatches the right per-seat vacate). Null when not freeable.
   const freeButton = (() => {
     if (homogeneous === 'held') return <button disabled={isBulkPending} onClick={bulkFree} className="w-full text-gray-400 dark:text-gray-500 text-sm py-2 active:text-gray-600 dark:active:text-gray-200 disabled:opacity-50">{tb('release')}</button>
     if (homogeneous === 'blocked') return <button disabled={isBulkPending} onClick={bulkFree} className="w-full bg-green-500 text-white font-bold text-lg py-4 rounded-xl active:bg-green-600 disabled:opacity-50">{tb('unblock')}</button>
     if (homogeneous === 'comp') return <button disabled={isBulkPending} onClick={bulkFree} className="w-full bg-green-500 text-white font-bold text-lg py-4 rounded-xl active:bg-green-600 disabled:opacity-50">{tb('endComp')}</button>
-    if (homogeneous === 'walked-in') return <button disabled={isBulkPending} onClick={bulkFree} className="w-full text-red-500 text-sm py-2 active:text-red-700 disabled:opacity-50">{tb('unreserve')}</button>
+    if (homogeneous === 'walked-in') {
+      // Track 018: unreserving SETTLED seats refunds unconditionally (till void /
+      // partition + credit notes) — the label says so, and the ⚠ confirm shows
+      // the summed amount before anything fires (parity with the tap dialog).
+      return <button disabled={isBulkPending} onClick={() => setBulkConfirm('unreserve')} className="w-full text-red-500 text-sm py-2 active:text-red-700 disabled:opacity-50">{bulkRefundTotal > 0 ? tb('refund') : tb('unreserve')}</button>
+    }
     if (homogeneous === 'failed') return <button disabled={isBulkPending} onClick={bulkFree} className="w-full bg-red-500 text-white font-bold text-lg py-4 rounded-xl active:bg-red-600 disabled:opacity-50">{tb('remove')}</button>
     return null
   })()
@@ -1294,7 +1304,13 @@ export default function ManageView({
                 /* ⚠ confirm step — mirrors the BedDetail confirm panel */
                 <div className="space-y-3">
                   <p className="text-sm text-gray-600 dark:text-gray-300">
-                    {bulkConfirm === 'no-show' ? tb('confirmNoShow') : bulkConfirm === 'depart' ? tb('confirmDepart') : tb('confirmCancel')}
+                    {bulkConfirm === 'no-show' ? tb('confirmNoShow')
+                      : bulkConfirm === 'depart' ? tb('confirmDepart')
+                      : bulkConfirm === 'unreserve'
+                        ? (bulkRefundTotal > 0
+                            ? tb('confirmBulkRefund', { amount: '\u20ac' + bulkRefundTotal.toFixed(2) })
+                            : tb('confirmUnreserve'))
+                      : tb('confirmCancel')}
                   </p>
                   <div className="flex gap-3">
                     <button disabled={isBulkPending} onClick={runBulkConfirm} className="flex-1 bg-red-500 text-white font-bold text-lg py-4 rounded-xl active:bg-red-600 disabled:opacity-50">{isBulkPending ? '...' : tb('confirm')}</button>

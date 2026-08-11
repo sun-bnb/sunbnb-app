@@ -269,6 +269,15 @@ deletable rule; D13 grouping kept; kind derived not persisted; no new status str
 
 ## Log
 
+- **2026-08-11 (follow-up: honest Unreserve labels + bulk refund confirm)** — Founder
+  call: the button says what the transition does. All four Unreserve entry points now
+  label `settled ? "Refund" : "Unreserve"` (EN Refund / ES Devolver / FI Hyvitä — all
+  strictly shorter than the existing Unreserve strings, no wrap risk); the bulk
+  multiselect Unreserve — previously fire-on-tap — now routes through the ⚠ bulkConfirm
+  showing the SUMMED refund (`selectionRefundTotal` in bed-state: per-party grouped
+  partition, full total when a whole party is selected; 4 unit tests). Stale
+  pre-migration comment in BedDetail fixed; legacy 5th arg dropped from callers.
+  Partner 1972u+198i green. ES/FI drafts await founder review. Uncommitted. Fable 5.
 - **2026-08-11 (P4 slice f — user-app writers at zero)** — Slice (e) committed
   (`64d039a`). Consumer surfaces on the machine: webhook/poll/reconcile reverts are
   one state-resolved `pay.fail` (the metadata.collect branch is DELETED — kind

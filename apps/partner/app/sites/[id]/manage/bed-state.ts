@@ -152,6 +152,42 @@ export function settledTotal(reservation: Reservation | null): number {
   return (reservation?.tillEntries ?? []).reduce((s, e) => s + e.amount, 0)
 }
 
+
+/**
+ * Summed refund a bulk Unreserve of `selectedIds` would trigger — the label/
+ * confirm source for the multiselect sheet ("Refund" vs "Unreserve", track 018).
+ * Per distinct settled reservation in the selection: full `settledTotal` when
+ * ALL its seats are selected, else the selected seats' partitioned share (one
+ * grouped partition per reservation — matches the machine's per-seat partition
+ * sum to the cent). Unsettled parties contribute 0.
+ */
+export function selectionRefundTotal(items: InventoryItem[], selectedIds: string[]): number {
+  const selected = new Set(selectedIds)
+  const byRes = new Map<string, { r: Reservation; ids: string[] }>()
+  for (const item of items) {
+    if (!selected.has(item.id)) continue
+    const r = getActiveReservation(item)
+    if (!r) continue
+    const e = byRes.get(r.id) ?? { r, ids: [] }
+    e.ids.push(item.id)
+    byRes.set(r.id, e)
+  }
+  let total = 0
+  for (const { r, ids } of byRes.values()) {
+    const st = settledTotal(r)
+    if (st <= 0) continue
+    const seats = r.items ?? []
+    if (seats.length === 0 || ids.length >= seats.length) { total += st; continue }
+    const weight = (arr: { price?: number | null }[]) =>
+      arr.reduce((s, i) => s + ((i.price ?? null) || 0), 0)
+    const sel = seats.filter((s) => ids.includes(s.id))
+    const rest = seats.filter((s) => !ids.includes(s.id))
+    const [, share] = partitionAmount(st, [weight(rest), weight(sel)]) as [number, number]
+    total += share
+  }
+  return Math.round(total * 100) / 100
+}
+
 /**
  * Returns the Tailwind CSS classes and icon string for a seat grid cell.
  *

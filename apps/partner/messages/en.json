@@ -943,6 +943,8 @@
     "confirmUnreserveRefund": "Refunding {amount} — removed from the till; hand the cash back to the guest. The seat frees up.",
     "confirmUnreserveSeatRefund": "Refunding {amount} for this seat — removed from the till; hand the cash back. The seat frees up.",
     "undoDeparture": "Undo departure",
+    "refund": "Refund",
+    "confirmBulkRefund": "Refunding {amount} across the selection — removed from the till; hand the cash back. The seats free up.",
     "paymentFailed": "Payment failed",
     "remove": "Remove",
     "confirmRemove": "Removing this reservation — the payment was never taken. The seat frees up immediately."
