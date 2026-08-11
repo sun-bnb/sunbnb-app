@@ -618,8 +618,9 @@ export default function ManageView({
   const bulkComp = () => {
     if (selectedIds.length === 0) return
     setBulkError(null)
+    const until = bulkUntil || undefined
     startBulkTransition(async () => {
-      const res = await compBeds(site.id!, selectedIds, accessKey, bulkGuestName.trim() || undefined, undefined, workerArg)
+      const res = await compBeds(site.id!, selectedIds, accessKey, bulkGuestName.trim() || undefined, undefined, workerArg, until)
       if (res.status === 'error') {
         setBulkError(t('bulkGroupConflict'))
       } else {
@@ -631,8 +632,9 @@ export default function ManageView({
   const bulkReserve = () => {
     if (selectedIds.length === 0) return
     setBulkError(null)
+    const until = bulkUntil || undefined
     startBulkTransition(async () => {
-      const res = await holdBeds(site.id!, selectedIds, accessKey, bulkGuestName.trim() || undefined, undefined, workerArg)
+      const res = await holdBeds(site.id!, selectedIds, accessKey, bulkGuestName.trim() || undefined, undefined, workerArg, until)
       if (res.status === 'error') {
         setBulkError(t('bulkGroupConflict'))
       } else {

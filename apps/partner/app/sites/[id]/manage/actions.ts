@@ -151,6 +151,40 @@ function buildSiteTimezone(site: {
 }
 
 /**
+ * Resolve the multi-day `to` bound (and, for convenience, `from`) for an
+ * on-site create action from an optional `until` (YYYY-MM-DD) string. A stay
+ * always starts today (`from` = start of the venue-local civil day); `until`
+ * optionally widens `to` past end-of-today. Shared validation rules (parseable
+ * date, not in the past, max 90 days out) — SAME error strings on every call
+ * site, asserted by existing unit tests. Returns `{ error }` on a validation
+ * failure; callers must short-circuit with `{ status: 'error', errors: [error] }`.
+ *
+ * Not exported (this file is `'use server'`, so all exports must be async
+ * server actions) — a plain sync local helper avoids that constraint entirely.
+ */
+function resolveStayBounds(
+  siteTz: SiteTimezone,
+  until?: string,
+): { from: Date; to: Date } | { error: string } {
+  const { start: fromDate, end: todayEnd } = siteDayBounds(siteTz)
+  if (!until) return { from: fromDate, to: todayEnd }
+  if (isNaN(Date.parse(until))) {
+    return { error: 'Invalid date format' }
+  }
+  const days = dayjs(until).startOf('day').diff(dayjs().startOf('day'), 'day')
+  if (days < 0) {
+    return { error: 'End date cannot be in the past' }
+  }
+  if (days > 90) {
+    return { error: 'Date range cannot exceed 90 days' }
+  }
+  // Noon UTC (12:00:00Z) is safely within the civil day for all real venue
+  // offsets (UTC-12 to UTC+14), so passing it as `now` to siteDayBounds gives
+  // the correct day's end regardless of server timezone.
+  return { from: fromDate, to: siteDayBounds(siteTz, new Date(until + 'T12:00:00.000Z')).end }
+}
+
+/**
  * Venue-local "today" civil-day bounds for a site — the SAME window the on-site
  * create actions (reserveItem/holdBed/compBed…) use to stamp from/to.
  *
@@ -268,25 +302,9 @@ export async function reserveItem(
   // optionally extends it across multiple days; omitted means today only.
   // Dates are anchored to the venue-local civil day (not the server TZ).
   const siteTz = buildSiteTimezone(site ?? {})
-  const { start: fromDate, end: todayEnd } = siteDayBounds(siteTz)
-  let toDate = todayEnd
-  if (until) {
-    if (isNaN(Date.parse(until))) {
-      return { status: 'error', errors: ['Invalid date format'] }
-    }
-    const days = dayjs(until).startOf('day').diff(dayjs().startOf('day'), 'day')
-    if (days < 0) {
-      return { status: 'error', errors: ['End date cannot be in the past'] }
-    }
-    if (days > 90) {
-      return { status: 'error', errors: ['Date range cannot exceed 90 days'] }
-    }
-    // Compute the venue-local end of the picked day.
-    // Noon UTC (12:00:00Z) is safely within the civil day for all real venue
-    // offsets (UTC-12 to UTC+14), so passing it as `now` to siteDayBounds gives
-    // the correct day's end regardless of server timezone.
-    toDate = siteDayBounds(siteTz, new Date(until + 'T12:00:00.000Z')).end
-  }
+  const stayBounds = resolveStayBounds(siteTz, until)
+  if ('error' in stayBounds) return { status: 'error', errors: [stayBounds.error] }
+  const { from: fromDate, to: toDate } = stayBounds
   const paymentAmount = site?.type === 'paid'
     ? computeWalkInAmount(priceRows, site.price, fromDate, toDate)
     : 0
@@ -1104,7 +1122,8 @@ export async function compBed(
   applyToPair: boolean = true,
   guestName?: string,
   notes?: string,
-  employeeId?: string
+  employeeId?: string,
+  until?: string
 ) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
@@ -1122,7 +1141,10 @@ export async function compBed(
     where: { id: siteId },
     select: { timeZone: true, locationLat: true, locationLng: true },
   })
-  const { start: fromDate, end: toDate } = siteDayBounds(buildSiteTimezone(compSite ?? {}))
+  const compSiteTz = buildSiteTimezone(compSite ?? {})
+  const stayBounds = resolveStayBounds(compSiteTz, until)
+  if ('error' in stayBounds) return { status: 'error', errors: [stayBounds.error] }
+  const { from: fromDate, to: toDate } = stayBounds
 
   const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
 
@@ -1245,21 +1267,9 @@ export async function holdBed(
     select: { timeZone: true, locationLat: true, locationLng: true },
   })
   const holdSiteTz = buildSiteTimezone(holdSite ?? {})
-  const { start: fromDate, end: todayEnd } = siteDayBounds(holdSiteTz)
-  let toDate = todayEnd
-  if (until) {
-    if (isNaN(Date.parse(until))) {
-      return { status: 'error', errors: ['Invalid date format'] }
-    }
-    const days = dayjs(until).startOf('day').diff(dayjs().startOf('day'), 'day')
-    if (days < 0) {
-      return { status: 'error', errors: ['End date cannot be in the past'] }
-    }
-    if (days > 90) {
-      return { status: 'error', errors: ['Date range cannot exceed 90 days'] }
-    }
-    toDate = siteDayBounds(holdSiteTz, new Date(until + 'T12:00:00.000Z')).end
-  }
+  const stayBounds = resolveStayBounds(holdSiteTz, until)
+  if ('error' in stayBounds) return { status: 'error', errors: [stayBounds.error] }
+  const { from: fromDate, to: toDate } = stayBounds
 
   const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
 
@@ -1333,21 +1343,9 @@ export async function reserveItems(
 
   // Dates anchored to the venue-local civil day (not the server TZ).
   const siteTz = buildSiteTimezone(site ?? {})
-  const { start: fromDate, end: todayEnd } = siteDayBounds(siteTz)
-  let toDate = todayEnd
-  if (until) {
-    if (isNaN(Date.parse(until))) {
-      return { status: 'error', errors: ['Invalid date format'] }
-    }
-    const days = dayjs(until).startOf('day').diff(dayjs().startOf('day'), 'day')
-    if (days < 0) {
-      return { status: 'error', errors: ['End date cannot be in the past'] }
-    }
-    if (days > 90) {
-      return { status: 'error', errors: ['Date range cannot exceed 90 days'] }
-    }
-    toDate = siteDayBounds(siteTz, new Date(until + 'T12:00:00.000Z')).end
-  }
+  const stayBounds = resolveStayBounds(siteTz, until)
+  if ('error' in stayBounds) return { status: 'error', errors: [stayBounds.error] }
+  const { from: fromDate, to: toDate } = stayBounds
   const paymentAmount = site?.type === 'paid'
     ? computeWalkInAmount(priceRows, site.price, fromDate, toDate)
     : 0
@@ -1414,6 +1412,7 @@ export async function holdBeds(
   guestName?: string,
   notes?: string,
   employeeId?: string,
+  until?: string,
 ) {
   if (!itemIds || itemIds.length === 0) {
     return { status: 'error', errors: ['No items selected'] }
@@ -1427,7 +1426,10 @@ export async function holdBeds(
     where: { id: siteId },
     select: { timeZone: true, locationLat: true, locationLng: true },
   })
-  const { start: fromDate, end: toDate } = siteDayBounds(buildSiteTimezone(holdBedsSite ?? {}))
+  const holdBedsSiteTz = buildSiteTimezone(holdBedsSite ?? {})
+  const stayBounds = resolveStayBounds(holdBedsSiteTz, until)
+  if ('error' in stayBounds) return { status: 'error', errors: [stayBounds.error] }
+  const { from: fromDate, to: toDate } = stayBounds
 
   const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
 
@@ -1532,6 +1534,7 @@ export async function compBeds(
   guestName?: string,
   notes?: string,
   employeeId?: string,
+  until?: string,
 ) {
   if (!itemIds || itemIds.length === 0) {
     return { status: 'error', errors: ['No items selected'] }
@@ -1545,7 +1548,10 @@ export async function compBeds(
     where: { id: siteId },
     select: { timeZone: true, locationLat: true, locationLng: true },
   })
-  const { start: fromDate, end: toDate } = siteDayBounds(buildSiteTimezone(compBedsSite ?? {}))
+  const compBedsSiteTz = buildSiteTimezone(compBedsSite ?? {})
+  const stayBounds = resolveStayBounds(compBedsSiteTz, until)
+  if ('error' in stayBounds) return { status: 'error', errors: [stayBounds.error] }
+  const { from: fromDate, to: toDate } = stayBounds
 
   const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
 
@@ -1616,21 +1622,12 @@ export async function convertHoldToWalkIn(
   const convertSiteTz = buildSiteTimezone(site ?? {})
   const { start: todayStart, end: todayEnd } = siteDayBounds(convertSiteTz)
 
-  // Validate and compute the end date (same rules as reserveItem).
-  let toDate = todayEnd
-  if (until) {
-    if (isNaN(Date.parse(until))) {
-      return { status: 'error', errors: ['Invalid date format'] }
-    }
-    const days = dayjs(until).startOf('day').diff(dayjs().startOf('day'), 'day')
-    if (days < 0) {
-      return { status: 'error', errors: ['End date cannot be in the past'] }
-    }
-    if (days > 90) {
-      return { status: 'error', errors: ['Date range cannot exceed 90 days'] }
-    }
-    toDate = siteDayBounds(convertSiteTz, new Date(until + 'T12:00:00.000Z')).end
-  }
+  // Validate and compute the end date (same rules as reserveItem). The hold's
+  // original `from` is preserved (the reservation lookups above already have
+  // it) — only `to` comes from the shared resolver.
+  const stayBounds = resolveStayBounds(convertSiteTz, until)
+  if ('error' in stayBounds) return { status: 'error', errors: [stayBounds.error] }
+  let toDate = stayBounds.to
   const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
 
   const updateData = {

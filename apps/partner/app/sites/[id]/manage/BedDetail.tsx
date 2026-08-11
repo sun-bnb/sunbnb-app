@@ -667,7 +667,8 @@ export default function BedDetail({
                   groupItems.length > 0 ? applyToPair : false,
                   guestName || undefined,
                   undefined,
-                  currentWorkerId
+                  currentWorkerId,
+                  (isPool && !isGroupExtra) ? undefined : (until || undefined)
                 ))}
                 aria-label={t('comp')}
                 title={t('comp')}

@@ -2477,6 +2477,60 @@ describe('compBed', () => {
   })
 })
 
+// ─── compBed — multi-day until param ────────────────────────────────────────
+
+describe('compBed — multi-day until param', () => {
+  it('falls back to today-only when until is not provided', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+
+    await compBed(SITE_ID, ITEM_ID)
+
+    const { end: expectedTo } = siteDayBounds({}) // Madrid fallback
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect((guardCall.to as Date).getTime()).toBe(expectedTo.getTime())
+  })
+
+  it('extends `to` to the end of the given until date', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue(null)
+    const until = dayjs().add(3, 'day').format('YYYY-MM-DD')
+
+    const res = await compBed(SITE_ID, ITEM_ID, undefined, false, undefined, undefined, undefined, until)
+    expect(res.status).toBe('ok')
+
+    const expectedTo = siteDayBounds({}, new Date(until + 'T12:00:00.000Z')).end
+    const guardCall = mockGuard.mock.calls[0][0]
+    expect((guardCall.to as Date).getTime()).toBe(expectedTo.getTime())
+  })
+
+  it('rejects an invalid until date', async () => {
+    authenticateAsOwner()
+    const res = await compBed(SITE_ID, ITEM_ID, undefined, false, undefined, undefined, undefined, 'not-a-date')
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/invalid date/i)
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+
+  it('rejects until in the past', async () => {
+    authenticateAsOwner()
+    const past = dayjs().subtract(1, 'day').format('YYYY-MM-DD')
+    const res = await compBed(SITE_ID, ITEM_ID, undefined, false, undefined, undefined, undefined, past)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/past/i)
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+
+  it('rejects until more than 90 days out', async () => {
+    authenticateAsOwner()
+    const far = dayjs().add(91, 'day').format('YYYY-MM-DD')
+    const res = await compBed(SITE_ID, ITEM_ID, undefined, false, undefined, undefined, undefined, far)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/90 days/i)
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+})
+
 // ─── uncompBed ───────────────────────────────────────────────────────────────
 
 describe('uncompBed', () => {
@@ -4634,6 +4688,58 @@ describe('holdBeds', () => {
   })
 })
 
+// ─── holdBeds — multi-day until param ───────────────────────────────────────
+
+describe('holdBeds — multi-day until param', () => {
+  it('falls back to today-only when until is not provided', async () => {
+    authenticateAsOwner()
+
+    await holdBeds(SITE_ID, [ITEM_ID])
+
+    const { end: expectedTo } = siteDayBounds({}) // Madrid fallback
+    const call = mockGuard.mock.calls[0][0]
+    expect((call.to as Date).getTime()).toBe(expectedTo.getTime())
+  })
+
+  it('extends `to` to the end of the given until date', async () => {
+    authenticateAsOwner()
+    const until = dayjs().add(3, 'day').format('YYYY-MM-DD')
+
+    const res = await holdBeds(SITE_ID, [ITEM_ID, 'item-2'], undefined, undefined, undefined, undefined, until)
+    expect(res.status).toBe('ok')
+
+    const expectedTo = siteDayBounds({}, new Date(until + 'T12:00:00.000Z')).end
+    const call = mockGuard.mock.calls[0][0]
+    expect((call.to as Date).getTime()).toBe(expectedTo.getTime())
+  })
+
+  it('rejects an invalid until date', async () => {
+    authenticateAsOwner()
+    const res = await holdBeds(SITE_ID, [ITEM_ID], undefined, undefined, undefined, undefined, 'not-a-date')
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/invalid date/i)
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+
+  it('rejects until in the past', async () => {
+    authenticateAsOwner()
+    const past = dayjs().subtract(1, 'day').format('YYYY-MM-DD')
+    const res = await holdBeds(SITE_ID, [ITEM_ID], undefined, undefined, undefined, undefined, past)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/past/i)
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+
+  it('rejects until more than 90 days out', async () => {
+    authenticateAsOwner()
+    const far = dayjs().add(91, 'day').format('YYYY-MM-DD')
+    const res = await holdBeds(SITE_ID, [ITEM_ID], undefined, undefined, undefined, undefined, far)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/90 days/i)
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+})
+
 // ─── collectRentalPayment / getRentalCollectStatus / cancelRentalCollection ──
 
 const BOOKING_ID = 'rb-1'
@@ -5238,6 +5344,58 @@ describe('compBeds', () => {
     expect(res.status).toBe('error')
     expect(res.errors?.[0]).toMatch(/already occupied or blocked/i)
     expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
+  })
+})
+
+// ─── compBeds — multi-day until param ───────────────────────────────────────
+
+describe('compBeds — multi-day until param', () => {
+  it('falls back to today-only when until is not provided', async () => {
+    authenticateAsOwner()
+
+    await compBeds(SITE_ID, [ITEM_ID])
+
+    const { end: expectedTo } = siteDayBounds({}) // Madrid fallback
+    const call = mockGuard.mock.calls[0][0]
+    expect((call.to as Date).getTime()).toBe(expectedTo.getTime())
+  })
+
+  it('extends `to` to the end of the given until date', async () => {
+    authenticateAsOwner()
+    const until = dayjs().add(3, 'day').format('YYYY-MM-DD')
+
+    const res = await compBeds(SITE_ID, [ITEM_ID, 'item-2'], undefined, undefined, undefined, undefined, until)
+    expect(res.status).toBe('ok')
+
+    const expectedTo = siteDayBounds({}, new Date(until + 'T12:00:00.000Z')).end
+    const call = mockGuard.mock.calls[0][0]
+    expect((call.to as Date).getTime()).toBe(expectedTo.getTime())
+  })
+
+  it('rejects an invalid until date', async () => {
+    authenticateAsOwner()
+    const res = await compBeds(SITE_ID, [ITEM_ID], undefined, undefined, undefined, undefined, 'not-a-date')
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/invalid date/i)
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+
+  it('rejects until in the past', async () => {
+    authenticateAsOwner()
+    const past = dayjs().subtract(1, 'day').format('YYYY-MM-DD')
+    const res = await compBeds(SITE_ID, [ITEM_ID], undefined, undefined, undefined, undefined, past)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/past/i)
+    expect(mockGuard).not.toHaveBeenCalled()
+  })
+
+  it('rejects until more than 90 days out', async () => {
+    authenticateAsOwner()
+    const far = dayjs().add(91, 'day').format('YYYY-MM-DD')
+    const res = await compBeds(SITE_ID, [ITEM_ID], undefined, undefined, undefined, undefined, far)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/90 days/i)
+    expect(mockGuard).not.toHaveBeenCalled()
   })
 })
 
