@@ -265,16 +265,28 @@ describe('reserveWithConflictGuard — non-blocking statuses', () => {
 
   // track 012 stay-over rule: a no-show/departed booking frees its bed only once
   // its stay is OVER (no remaining reserved days, to <= end of today). These two
-  // use a FUTURE range (08-01..08-07), so the booking still has days left → it
-  // stays blocking (a departed day-1 of a multiday stay must not free days 2–3).
+  // need a range whose `to` is still AHEAD of now, so the booking has days left →
+  // it stays blocking (a departed day-1 of a multiday stay must not free days 2–3).
   // The released (stay-over) case is the test below them.
+  //
+  // Dates MUST be relative to today, never hardcoded. An absolute "future" range
+  // silently inverts these assertions the day it passes: `to <= endOfToday` starts
+  // matching, the stay-over exception fires, and the test fails claiming the guard
+  // is broken when it is behaving correctly. (Was '2026-08-01'..'2026-08-07'; began
+  // failing 2026-08-08.)
+  const futureStay = () => {
+    const from = new Date(new Date().setHours(0, 0, 0, 0))
+    const to = new Date(new Date().setHours(23, 59, 59, 999))
+    to.setDate(to.getDate() + 6)
+    return { from, to }
+  }
+
   it('NO_SHOW with remaining days STILL blocks (stay not over)', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id)
     const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
 
-    const from = new Date('2026-08-01T00:00:00Z')
-    const to = new Date('2026-08-07T23:59:59Z')
+    const { from, to } = futureStay()
 
     await createTestReservation(user.id, site.id, [item.id], {
       from,
@@ -302,8 +314,7 @@ describe('reserveWithConflictGuard — non-blocking statuses', () => {
     const site = await createTestSite(user.id)
     const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
 
-    const from = new Date('2026-08-01T00:00:00Z')
-    const to = new Date('2026-08-07T23:59:59Z')
+    const { from, to } = futureStay()
 
     await createTestReservation(user.id, site.id, [item.id], {
       from,
