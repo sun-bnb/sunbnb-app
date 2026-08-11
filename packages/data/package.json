@@ -21,6 +21,7 @@
     "./rate-limit": "./src/rate-limit.ts",
     "./reservation-status": "./src/reservation-status.ts",
     "./reservation-machine": "./src/reservation-machine.ts",
+    "./reservation-machine-apply": "./src/reservation-machine-apply.ts",
     "./flags": "./src/flags.ts",
     "./impersonation": "./src/impersonation.ts",
     "./mollie-tokens": "./src/mollie-tokens.ts",
@@ -81,6 +82,9 @@
       ],
       "reservation-machine": [
         "./src/reservation-machine.ts"
+      ],
+      "reservation-machine-apply": [
+        "./src/reservation-machine-apply.ts"
       ],
       "flags": [
         "./src/flags.ts"

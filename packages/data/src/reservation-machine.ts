@@ -362,6 +362,47 @@ export function resolveTransition(
   return null
 }
 
+// ─── State → storage mapping (deriveState's inverse, used by the interpreter) ─
+
+/**
+ * The Reservation.status string that stores a given (kind, pay). Inverse of
+ * deriveState's pay derivation — keeping both here means the mapping can never
+ * fork between reader and writer.
+ */
+export function storageForState(kind: Kind, pay: Pay): string {
+  if (kind === 'hold') return RESERVATION_HELD
+  if (kind === 'comp' || kind === 'block') return RESERVATION_PAID_IN_CASH
+  if (kind === 'walkin') {
+    switch (pay) {
+      case 'unsettled': case 'settled': return RESERVATION_PAID_IN_CASH
+      case 'collecting': return RESERVATION_PROCESSING
+      case 'collected': return RESERVATION_COMPLETE
+      case 'refunded': return RESERVATION_REFUNDED
+      default: return RESERVATION_PAID_IN_CASH
+    }
+  }
+  // online: pay values ARE the status strings
+  return pay === 'none' ? RESERVATION_PENDING : pay
+}
+
+/**
+ * The operationalStatus string that stores a given occupancy for a kind.
+ * 'present' is the kind-dependent one: walk-ins stay walked-in (red), online
+ * bookings are checked-in (blue), comps stay comp (sky).
+ */
+export function opForOcc(kind: Kind, occ: Occ): string {
+  switch (occ) {
+    case 'expected': return OP_EXPECTED
+    case 'present':
+      if (kind === 'walkin') return OP_WALKED_IN
+      if (kind === 'comp') return OP_COMP
+      return OP_CHECKED_IN
+    case 'departed': return OP_DEPARTED
+    case 'no-show': return OP_NO_SHOW
+    case 'none': return kind === 'block' ? OP_BLOCKED : OP_EXPECTED
+  }
+}
+
 // ─── Money partition (I1 helper) ─────────────────────────────────────────────
 
 /**

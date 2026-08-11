@@ -32,22 +32,24 @@ must-reject cells). Known logical errors become red cells first, then fixes.
 
 ## Resume here
 
-- **Next action:** P2 slice (a) — the server interpreter. New server-only module (e.g.
-  `packages/data/src/reservation-machine-apply.ts`, NOT exported to clients):
-  `applyTransition(reservationId, event, conditions)` that (1) loads the row + today-row +
-  till evidence, (2) calls `deriveState`, (3) `resolveTransition` — null ⇒ typed rejection,
-  (4) executes the row's effect keys via named executors reusing existing primitives
-  (`applyDayTransition`, `recordSettlement`/`voidSettlementsForReservation`,
-  `reserveWithConflictGuard`, `issueCashReservationReceipt` logic, `partitionAmount` for
-  tillPartition). Start with the effects the bug-ledger cells need (tillPartition,
-  creditNoteIssue stub, dayRow, deleteRow guard by I4).
-- **Then:** slice (b) meta-guard scan test; slice (c) additive `splitFromId` migration
-  (follow migrations.md: migrate:local → integration → migrate:test before main push);
-  slice (d) credit-note invoice (design against payment.ts invoice core, track 015).
-  P3 matrix generation targets the partner actions once (a) exists.
-- **Context needed:** `018-state-machine-intended.md` (contract) + the shipped pure module
-  `packages/data/src/reservation-machine.ts`; `018-state-machine-defacto.md` for current
-  action behavior (file:line anchors).
+- **Next action:** commit slice 2 (interpreter — awaiting founder's word), then P2
+  slice (b): the meta-guard source-scan test. Pattern: partner
+  `app/test/no-inline-money.test.ts` / `coverage-contract.test.ts` — scan
+  `apps/partner/app/sites/[id]/manage/actions.ts` (later all action sources) for
+  `reservation.update/updateMany/delete/deleteMany` touching state fields
+  (`status`/`operationalStatus`/`checkedInAt`/`departedAt`) outside the machine modules;
+  fails on new bypasses. Grandfather existing call sites via an explicit allowlist that
+  SHRINKS as P4 migrates each action (ratchet, never grows).
+- **Then:** slice (c) additive `splitFromId` migration + lineageLink executor (follow
+  migrations.md: migrate:local → integration → migrate:test before main push); slice (d)
+  credit-note invoice (design against payment.ts invoice core, track 015); then P3 —
+  generate the matrix driving partner actions through table expectations (red cells for
+  un-migrated actions) and start P4 migration (first target: markDeparted split path +
+  unreserveItem — the B1/B2 cells).
+- **Context needed:** `018-state-machine-intended.md` (contract);
+  `packages/data/src/reservation-machine.ts` (pure model) +
+  `reservation-machine-apply.ts` (interpreter); `018-state-machine-defacto.md` for
+  current action behavior (file:line anchors).
 - **Still pending (empirical, non-blocking):** (a) B1's "all 4 beds offered Collect" —
   whole-depart via tap-dialog Group mode vs a second derivation bug; (b) D5
   delete-on-abandon behavior for a demo paymentRef.
@@ -101,10 +103,28 @@ must-reject cells). Known logical errors become red cells first, then fixes.
   (46 rows, reject-by-omission), `resolveTransition`, `partitionAmount` (largest-remainder,
   sum-preserving). 37 tests green (`reservation-machine.test.ts` — derive mappings, allowed
   cells, D5/D6/D10/I4 reject cells, table properties, partition math); data suite 318 green,
-  lint clean. **Remaining P2 slices:** (a) server interpreter `applyTransition` + effect
-  executors (wraps applyDayTransition, till, receipts/credit-notes, conflict guards);
-  (b) meta-guard source-scan test (no state writes outside the machine); (c) additive
-  `splitFromId` migration; (d) credit-note invoice support (Q4, extends track 015).
+  lint clean. Slice 1 committed `608bc55`.
+  Slice 2 (a) SHIPPED 2026-08-11 (uncommitted): server interpreter
+  `packages/data/src/reservation-machine-apply.ts` (`@repo/data/reservation-machine-apply`,
+  server-only) — `applyTransition(reservationId, event, opts)`: load → deriveState →
+  resolveTransition (typed rejection) → effect executors. Implements dayRow (day-row +
+  parent mirror + status, atomic, P2002-retried — duplicates partner reservation-day.ts
+  semantics until P4 unifies), deleteRow (I4 defense: ANY till/invoice history incl.
+  voided blocks delete), tillRecord/tillVoid/tillPartition (void+recreate preserving
+  settledAt/employee), receiptIssue (non-blocking), creditNoteIssue STUB (logs until
+  slice d), conflictRecheck (venue-local, self-excluding), and the composite split
+  (seatPartition+amountRepartition+tillPartition+dayRowClone in one tx; lineageLink TODO
+  until slice c). Conditions are FACTS computed by the interpreter (hasFutureDays,
+  sameCivilDay, expired, stale*, subset) — callers supply only intent (itemIds, cash,
+  amount, employeeId). Rows needing unbuilt executors (mollie*, creates) return
+  `unsupported`, never half-run. Pure module gained `storageForState`/`opForOcc`
+  (writer = reader's inverse, same file). 15 integration tests green incl. the B1
+  end-to-end regression (split settled party → peeled reservation derives settled →
+  collect.start AND re-settle both rejected) + I4 (voided-history row survives cron.gc).
+  Data 318u + 320i green, lint clean.
+  **Remaining P2 slices:** (b) meta-guard source-scan test (no state writes outside the
+  machine); (c) additive `splitFromId` migration + lineageLink executor; (d) credit-note
+  invoice support (Q4, extends track 015).
   **Determinism contract (LLM-analyzability — the design goal; non-negotiable):**
   1. *Reified state:* one exported `deriveState(reservation) → CompoundState`; grid
      (`bed-state.ts`), guards, and tests all call it — no per-consumer re-derivation
@@ -136,6 +156,16 @@ deletable rule; D13 grouping kept; kind derived not persisted; no new status str
 
 ## Log
 
+- **2026-08-11 (P2 slice 2 — interpreter)** — Slice 1 committed (`608bc55`). Interpreter
+  shipped: `@repo/data/reservation-machine-apply` executes the table against the DB.
+  Design choices worth remembering: conditions are interpreter-computed FACTS (callers
+  can't lie about hasFutureDays/sameCivilDay/subset); unimplemented effects (mollie*,
+  creates) return `unsupported` — a row never half-runs; I4 defense counts VOIDED till
+  entries as history (refund audit) so refunded rows survive GC; day-row writer is a
+  deliberate duplicate of partner reservation-day.ts until P4 unifies (data can't import
+  apps/*). B1 now has an end-to-end DB regression test: split a settled 4-seat party →
+  peeled reservation still settled → collect + re-settle both rejected. 15 integration
+  tests; data 318u+320i green. Uncommitted. Fable 5.
 - **2026-08-11 (P1 sign-off + P2 slice 1)** — Founder clarified collect-abandon (payment
   events touch only the payment axis; occupancy changes need an occupancy gesture — "one
   gesture, one state change"), then signed off the table. P2 begun: pure model shipped as
