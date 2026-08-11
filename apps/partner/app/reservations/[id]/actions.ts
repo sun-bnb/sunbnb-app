@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { applyTransition } from '@repo/data/reservation-machine-apply'
 import {
   OP_EXPECTED,
   OP_CHECKED_IN,
@@ -34,20 +35,23 @@ function revalidate(reservationId: string) {
 
 // ─── Actions ────────────────────────────────────────────────
 
+// MIGRATED onto the state machine (track 018 P4 slice 2 — the D14/D15 fossil
+// fix): these formerly wrote parent columns only (no ReservationDay row, no
+// venue TZ, terminal-only depart). They now name table events; guards, day-row
+// atomicity, and the multiday daily cycle execute from the machine.
+
+function stateLabel(r: Awaited<ReturnType<typeof applyTransition>>): string {
+  return r.outcome === 'rejected' ? `${r.state.kind}\u00b7${r.state.pay}\u00b7${r.state.occ}` : r.outcome
+}
+
 export async function checkInReservation(reservationId: string) {
   const result = await verifyOwnership(reservationId)
   if ('error' in result) return { status: 'error', errors: [result.error] }
-  const { reservation } = result
 
-  if (reservation.operationalStatus !== OP_EXPECTED) {
-    return { status: 'error', errors: [`Cannot check in from status: ${reservation.operationalStatus}`] }
+  const r = await applyTransition(reservationId, 'staff.checkIn')
+  if (r.outcome !== 'applied') {
+    return { status: 'error', errors: [`Cannot check in from status: ${stateLabel(r)}`] }
   }
-
-  await prisma.reservation.update({
-    where: { id: reservationId },
-    data: { operationalStatus: OP_CHECKED_IN, checkedInAt: new Date() },
-  })
-
   revalidate(reservationId)
   return { status: 'ok' }
 }
@@ -55,17 +59,13 @@ export async function checkInReservation(reservationId: string) {
 export async function markDeparted(reservationId: string) {
   const result = await verifyOwnership(reservationId)
   if ('error' in result) return { status: 'error', errors: [result.error] }
-  const { reservation } = result
 
-  if (!([OP_CHECKED_IN, OP_WALKED_IN] as string[]).includes(reservation.operationalStatus)) {
-    return { status: 'error', errors: [`Cannot mark departed from status: ${reservation.operationalStatus}`] }
+  // The machine branches multiday (cycle to expected) vs last-day (departed) —
+  // the fossil's unconditionally-terminal depart is gone.
+  const r = await applyTransition(reservationId, 'staff.depart')
+  if (r.outcome !== 'applied') {
+    return { status: 'error', errors: [`Cannot mark departed from status: ${stateLabel(r)}`] }
   }
-
-  await prisma.reservation.update({
-    where: { id: reservationId },
-    data: { operationalStatus: OP_DEPARTED, departedAt: new Date() },
-  })
-
   revalidate(reservationId)
   return { status: 'ok' }
 }
@@ -73,17 +73,11 @@ export async function markDeparted(reservationId: string) {
 export async function markNoShow(reservationId: string) {
   const result = await verifyOwnership(reservationId)
   if ('error' in result) return { status: 'error', errors: [result.error] }
-  const { reservation } = result
 
-  if (reservation.operationalStatus !== OP_EXPECTED) {
-    return { status: 'error', errors: [`Cannot mark no-show from status: ${reservation.operationalStatus}`] }
+  const r = await applyTransition(reservationId, 'staff.noShow')
+  if (r.outcome !== 'applied') {
+    return { status: 'error', errors: [`Cannot mark no-show from status: ${stateLabel(r)}`] }
   }
-
-  await prisma.reservation.update({
-    where: { id: reservationId },
-    data: { operationalStatus: OP_NO_SHOW },
-  })
-
   revalidate(reservationId)
   return { status: 'ok' }
 }
@@ -91,19 +85,13 @@ export async function markNoShow(reservationId: string) {
 export async function cancelReservation(reservationId: string) {
   const result = await verifyOwnership(reservationId)
   if ('error' in result) return { status: 'error', errors: [result.error] }
-  const { reservation } = result
 
-  if (reservation.status === RESERVATION_CANCELED) {
-    return { status: 'error', errors: ['Already canceled'] }
+  // partner.cancel: online-complete only (terminal reads refundedAt); cash
+  // walk-ins are released via manage Unreserve — the machine rejects them here.
+  const r = await applyTransition(reservationId, 'partner.cancel')
+  if (r.outcome !== 'applied') {
+    return { status: 'error', errors: [`Cannot cancel from status: ${stateLabel(r)}`] }
   }
-  if (([OP_DEPARTED, OP_NO_SHOW] as string[]).includes(reservation.operationalStatus)) {
-    return { status: 'error', errors: ['Cannot cancel a completed reservation'] }
-  }
-
-  await prisma.reservation.update({
-    where: { id: reservationId },
-    data: { status: RESERVATION_CANCELED },
-  })
 
   try {
     const { sendCancellationEmail } = await import('@repo/data/reservation-emails')

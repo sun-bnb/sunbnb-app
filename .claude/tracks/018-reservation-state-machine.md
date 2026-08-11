@@ -32,25 +32,22 @@ must-reject cells). Known logical errors become red cells first, then fixes.
 
 ## Resume here
 
-- **Next action:** commit P4 slice 1 (awaiting founder's word): migrated actions +
-  rewritten unit suites + updated integration expectations + allowlist 19→13 + the six
-  flipped matrix cells. **Before the next `main` push: `npm run migrate:test`** — TWO
+- **Next action:** commit P4 slice 2 (awaiting founder's word): fossil migrations +
+  undoDepartWalkIn + cron I4 filter + rewritten fossil suites + allowlist 9→7 files +
+  matrix 19 cells. **Before the next `main` push: `npm run migrate:test`** — TWO
   additive migrations pending on the shared test DB
   (`20260811164614_add_reservation_split_lineage`,
   `20260811165223_add_invoice_credit_note_link`); the pre-push hook enforces.
-- **Then P4 slice 2 (suggested order):** (a) D14/D15 fossils — frontdesk/actions.ts +
-  partner reservations/[id]/actions.ts route through applyTransition (kills parent-only
-  writes + terminal-only depart; allowlist 4+4 → 0); (b) markNoShow/resumeWalkIn +
-  undo-depart action (new `staff.resume.undoDepart` capability + BedDetail button);
-  (c) cron I4 sweep (stop deleting settled walk-ins); (d) BedDetail/view.tsx UI
-  alignment — dialog copy derived from effect cells (B2's UI half: seat-mode unreserve
-  shows the PARTITIONED share now that the action actually moves it), deriveState
-  behind bed-state; (e) collect flow (mollie effect executors, D5/D6 DEFERRED→COVERED);
-  (f) user-app writers; (g) docs/wiki sync at the end of P4.
-- **UI note for (d):** BedDetail's `confirmUnreserveRefund` copy still shows the WHOLE
-  paymentAmount in seat mode; the migrated action now partitions — copy must show the
-  freed seat's share. The legacy `voidSettlements` arg is ignored by the action (docs
-  in the action header).
+- **Then P4 slice 3 — (d) the UI slice** (prime with `/ui partner` — it's real UI
+  work): undo-depart button in BedDetail's departed/expected panels; dialog copy from
+  effect cells (B2's UI half: seat-mode unreserve must show the PARTITIONED share —
+  the action now actually moves it; `confirmUnreserveRefund` currently shows the whole
+  paymentAmount); deriveState behind bed-state.ts (presentation-only shell). Founder
+  copy-review gate applies to new i18n keys (en/es/fi) before promote.
+- **Then:** (e) collect flow (mollie effect executors — D5/D6 cells DEFERRED→COVERED);
+  (f) user-app writers (webhook/reconcile/user-cancel via machine events); (g) docs/
+  wiki sync (packages/data/CLAUDE.md machine section, partner CLAUDE.md test tables +
+  migrated-actions notes, `/wiki ingest` for the state-machine subsystem page).
 - **Deferred nits:** no index on `split_from_id` (rare lookups; add forward if hot);
   accounting/fiscal surfaces should eventually RENDER credit notes distinctly (they
   already net correctly in sums).
@@ -184,13 +181,25 @@ must-reject cells). Known logical errors become red cells first, then fixes.
   updated to the decided semantics — one had enshrined the old split recompute that
   INVENTED money (guest paid €30, books said €60; now partitions the actual €30).
   Partner 1978u+196i, data 320u+327i, tsc clean.
-  **Remaining P4:** D14/D15 fossils (frontdesk + partner reservation-detail — route
-  through applyTransition, kill the parent-only writes), collect flow (D5/D6 executors:
-  mollie effects), undo-depart UI (new resume capability), cron I4 sweep (stop deleting
-  settled walk-ins), markNoShow/resumeWalkIn/holds/comps/blocks delegation, user-app
-  writers (webhook/reconcile/cancel), BedDetail/view.tsx UI alignment (dialog copy from
-  effect cells — B2's UI half; deriveState replaces bed-state internals), then docs/wiki
-  sync (packages/data/CLAUDE.md, partner CLAUDE.md).
+  Slice 2 SHIPPED 2026-08-11 (uncommitted): **D14/D15 fossils migrated** — frontdesk +
+  partner reservation-detail check-in/depart/no-show/cancel now delegate (parent-only
+  writes and terminal-only depart deleted; frontdesk gains the multiday daily cycle;
+  cancel is machine-guarded to online·complete — cash walk-ins rejected with pointer to
+  Unreserve; cancellation email stays action-owned, fired only on applied).
+  **markNoShow/resumeWalkIn delegated; NEW `undoDepartWalkIn` action** (staff.resume.
+  undoDepart — same-civil-day undo with conflict recheck; registered in gated-actions,
+  auth-matrix picks it up; UI button still pending → slice d). **Cron I4 sweep**: the
+  cleanup deleteMany now carries `tillEntries: {none:{}} + invoices: {none:{}}` — money
+  rows structurally survive GC. Vestigial dayRow effect removed from partner.cancel
+  table rows. Ratchet: frontdesk 4→0, reservation-detail 4→0 (allowlist entries
+  deleted). Fossil test files rewritten to delegation contracts (69 green); matrix
+  +2 undo-depart cells (19 total), staff.resume.undoDepart DEFERRED→COVERED.
+  Partner 1966u+198i, data 320u+327i green, tsc clean.
+  **Remaining P4:** (d) BedDetail/view.tsx UI alignment — undo-depart button, dialog
+  copy from effect cells (B2's UI half: seat-unreserve shows partitioned share),
+  deriveState behind bed-state; (e) collect flow (D5/D6 mollie executors); (f) user-app
+  writers (webhook/reconcile/cancel); (g) docs/wiki sync (packages/data/CLAUDE.md,
+  partner CLAUDE.md).
 - 💤 **P5 — Wiki page** (`subsystems/reservation-state-machine.md`) + fold into
   `bed-state.ts` docs; groom CLAUDE.md pointers.
 
@@ -204,6 +213,15 @@ deletable rule; D13 grouping kept; kind derived not persisted; no new status str
 
 ## Log
 
+- **2026-08-11 (P4 slice 2 — fossils dead, undo-depart live, cron I4-safe)** — Slice 1
+  committed (`4c386e4`, net −846 lines). The D14/D15 fossils are gone: frontdesk and
+  reservation-detail transitions delegate to the machine (the frontdesk's terminal-only
+  depart — which silently broke multiday stays — now cycles correctly). New capability
+  from the P1 decision: `undoDepartWalkIn` (same-day undo, conflict-rechecked, till
+  untouched) — action + matrix cells shipped; BedDetail button pending (slice d).
+  Cron GC structurally cannot delete money rows anymore (I4 filter in the where).
+  Allowlist: 9 files → 7 (both fossil entries deleted). Fossil unit suites rewritten to
+  delegation contracts. Partner 1966u+198i, data 320u+327i. Uncommitted. Fable 5.
 - **2026-08-11 (P4 slice 1 — first actions migrated, all red cells flipped)** — P3
   committed (`5de085b`). unreserveItem / markDeparted / splitWalkInSeat /
   checkInReservation now delegate to applyTransition; every one of the six matrix red

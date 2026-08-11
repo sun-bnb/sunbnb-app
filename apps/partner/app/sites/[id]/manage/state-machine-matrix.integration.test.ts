@@ -40,6 +40,7 @@ import {
   settleReservation,
   checkInReservation,
   resumeWalkIn,
+  undoDepartWalkIn,
   markDeparted,
   markNoShow,
   holdBeds,
@@ -202,6 +203,29 @@ describe('GREEN cells (table ⇔ action agree)', () => {
     expect(await activeTillSum(reservationId)).toBe(20) // 2 civil days × €10 — unchanged by resume
   })
 
+  it('staff.resume.undoDepart: same-day departed walk-in re-seats, till untouched (P4 slice 2 capability)', async () => {
+    const { reservationId } = await cashWalkIn(1)
+    await markDeparted(site.id, reservationId) // lastDay → departed
+    const pre = (await stateOf(reservationId))!
+    expect(pre.occ).toBe('departed')
+
+    expect((await undoDepartWalkIn(site.id, reservationId)).status).toBe('ok')
+    expectState(await stateOf(reservationId), tablePost(pre, 'staff.resume.undoDepart', ['sameCivilDay']))
+    expect(await activeTillSum(reservationId)).toBe(10)
+  })
+
+  it('staff.resume.undoDepart: conflicts when the freed bed was re-let in between', async () => {
+    const { reservationId, items } = await cashWalkIn(1)
+    await markDeparted(site.id, reservationId)
+    // Re-let the same seat to a new party
+    const relet = await reserveItems(site.id, [items[0]!.id], 'NewGuest', undefined, undefined, undefined, undefined, true)
+    expect(relet.status).toBe('ok')
+
+    const res = await undoDepartWalkIn(site.id, reservationId)
+    expect(res.status).toBe('error')
+    expect((await stateOf(reservationId))!.occ).toBe('departed') // unchanged
+  })
+
   it('staff.checkIn: online·complete·expected → present', async () => {
     const [item] = await nSeats(1)
     const { start, end } = siteDayBounds(siteTz())
@@ -319,6 +343,7 @@ const COVERED: EventName[] = [
   'staff.walkIn.cash', 'staff.walkIn.card', 'staff.settle', 'staff.depart',
   'staff.resume', 'staff.checkIn', 'staff.noShow', 'staff.hold',
   'staff.releaseHold', 'convert.holdToWalkIn.whole', 'staff.unreserve.whole',
+  'staff.resume.undoDepart',
   'staff.unreserve.seat', 'split.subset',
 ]
 
@@ -335,7 +360,6 @@ const DEFERRED: Record<string, string> = {
   'pay.fail': 'payment rail — webhook/poll drivers live in user app',
   'collect.abandon': 'D5 cell needs Mollie cancel stub — with collect migration (P4)',
   'pay.refund.webhook': 'user-app webhook driver',
-  'staff.resume.undoDepart': 'NO partner action yet — new capability lands in P4',
   'staff.move': 'covered by existing moveReservation action tests; matrix cells with P4',
   'convert.holdToWalkIn.subset': 'subset-convert cells with P4 convert migration',
   'staff.uncomp': 'with staff.comp cells',

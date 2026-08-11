@@ -39,6 +39,14 @@ export async function GET(request: Request) {
 
   const result = await prisma.reservation.deleteMany({
     where: {
+      // I4 deletable rule (track 018): a row that ever produced money evidence
+      // — ANY TillEntry (voided included: refund audit) or invoice — is NEVER
+      // hard-deleted. Settled walk-ins and receipted rows survive the sweep as
+      // queryable history (they already read as released via the stay-over
+      // rule); only zero-money rows (holds, comps, unsettled walk-ins,
+      // abandoned checkouts, failed payments) are GC'd.
+      tillEntries: { none: {} },
+      invoices: { none: {} },
       OR: [
         {
           status: { in: [ RESERVATION_PENDING, RESERVATION_PROCESSING ] },

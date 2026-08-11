@@ -42,6 +42,8 @@ import {
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { applyTransition } from '@repo/data/reservation-machine-apply'
+import { sendCancellationEmail } from '@repo/data/reservation-emails'
 import {
   OP_EXPECTED,
   OP_CHECKED_IN,
@@ -56,6 +58,7 @@ import {
 } from '@repo/data/reservation-status'
 
 const mockAuth = vi.mocked(auth)
+const mockApply = vi.mocked(applyTransition)
 
 const OWNER_ID = 'owner-1'
 const OTHER_ID = 'other-1'
@@ -66,7 +69,18 @@ const BOOKING_ID = 'booking-1'
 beforeEach(() => {
   vi.clearAllMocks()
   mockAuth.mockResolvedValue(null)
+  mockApply.mockResolvedValue({
+    outcome: 'applied',
+    transition: {} as any,
+    state: { kind: 'online', pay: 'complete', occ: 'present', released: false },
+  } as any)
 })
+
+
+// ─── State-machine mock helpers (track 018 P4 slice 2) ──────────────────────
+
+const rejected = (event: string, state: Record<string, unknown> = { kind: 'online', pay: 'complete', occ: 'present' }) =>
+  ({ outcome: 'rejected', state: { released: false, ...state }, event, reason: 'no matching transition (must-reject cell)' }) as any
 
 // ─── Setup helpers ──────────────────────────────────────────────────────────
 
@@ -350,170 +364,88 @@ describe('frontdesk reservation actions — ownership guard', () => {
 
 // ─── checkInReservation (frontdesk) ────────────────────────────────────────
 
-describe('frontdesk checkInReservation', () => {
-  it('transitions expected → checked-in and sets checkedInAt', async () => {
-    authenticateAsReservationOwner(OP_EXPECTED)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
+describe('frontdesk checkInReservation (machine-delegating)', () => {
+  it('delegates to staff.checkIn on an owned reservation', async () => {
+    authenticateAsReservationOwner()
     const res = await checkInReservation(RES_ID)
     expect(res.status).toBe('ok')
-
-    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
-    expect(updateCall.where.id).toBe(RES_ID)
-    expect(updateCall.data.operationalStatus).toBe(OP_CHECKED_IN)
-    expect(updateCall.data.checkedInAt).toBeInstanceOf(Date)
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.checkIn')
   })
 
-  it('rejects check-in from checked-in', async () => {
-    authenticateAsReservationOwner(OP_CHECKED_IN)
-    const res = await checkInReservation(RES_ID)
-    expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Cannot check in')
-    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
-  })
-
-  it('rejects check-in from walked-in', async () => {
-    authenticateAsReservationOwner(OP_WALKED_IN)
+  it('maps a machine rejection to a Cannot-check-in error', async () => {
+    authenticateAsReservationOwner()
+    mockApply.mockResolvedValueOnce(rejected('staff.checkIn'))
     const res = await checkInReservation(RES_ID)
     expect(res.status).toBe('error')
     expect(res.errors?.[0]).toContain('Cannot check in')
   })
 
-  it('rejects check-in from departed', async () => {
-    authenticateAsReservationOwner(OP_DEPARTED)
+  it('rejects non-owner without invoking the machine', async () => {
+    authenticateAsReservationNonOwner()
     const res = await checkInReservation(RES_ID)
     expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Cannot check in')
-  })
-
-  it('rejects check-in from no-show', async () => {
-    authenticateAsReservationOwner(OP_NO_SHOW)
-    const res = await checkInReservation(RES_ID)
-    expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Cannot check in')
+    expect(mockApply).not.toHaveBeenCalled()
   })
 })
 
-// ─── markDeparted (frontdesk) ───────────────────────────────────────────────
-
-describe('frontdesk markDeparted', () => {
-  it('transitions checked-in → departed and sets departedAt', async () => {
+describe('frontdesk markDeparted (machine-delegating)', () => {
+  it('delegates to staff.depart — the D14 fossil (terminal-only depart) is gone: multiday branching is machine-owned', async () => {
     authenticateAsReservationOwner(OP_CHECKED_IN)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
     const res = await markDeparted(RES_ID)
     expect(res.status).toBe('ok')
-
-    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
-    expect(updateCall.data.operationalStatus).toBe(OP_DEPARTED)
-    expect(updateCall.data.departedAt).toBeInstanceOf(Date)
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.depart')
   })
 
-  it('transitions walked-in → departed', async () => {
-    authenticateAsReservationOwner(OP_WALKED_IN)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
-    const res = await markDeparted(RES_ID)
-    expect(res.status).toBe('ok')
-    expect(vi.mocked(prisma.reservation.update).mock.calls[0][0].data.operationalStatus).toBe(OP_DEPARTED)
-  })
-
-  it('rejects departure from expected', async () => {
-    authenticateAsReservationOwner(OP_EXPECTED)
-    const res = await markDeparted(RES_ID)
-    expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Cannot mark departed')
-    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
-  })
-
-  it('rejects departure from already-departed', async () => {
-    authenticateAsReservationOwner(OP_DEPARTED)
-    const res = await markDeparted(RES_ID)
-    expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Cannot mark departed')
-  })
-
-  it('rejects departure from no-show', async () => {
-    authenticateAsReservationOwner(OP_NO_SHOW)
+  it('maps a machine rejection to a Cannot-mark-departed error', async () => {
+    authenticateAsReservationOwner()
+    mockApply.mockResolvedValueOnce(rejected('staff.depart'))
     const res = await markDeparted(RES_ID)
     expect(res.status).toBe('error')
     expect(res.errors?.[0]).toContain('Cannot mark departed')
   })
 })
 
-// ─── markNoShow (frontdesk) ─────────────────────────────────────────────────
-
-describe('frontdesk markNoShow', () => {
-  it('transitions expected → no-show', async () => {
-    authenticateAsReservationOwner(OP_EXPECTED)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
+describe('frontdesk markNoShow (machine-delegating)', () => {
+  it('delegates to staff.noShow', async () => {
+    authenticateAsReservationOwner()
     const res = await markNoShow(RES_ID)
     expect(res.status).toBe('ok')
-
-    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
-    expect(updateCall.data.operationalStatus).toBe(OP_NO_SHOW)
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.noShow')
   })
 
-  it('rejects no-show from checked-in', async () => {
-    authenticateAsReservationOwner(OP_CHECKED_IN)
-    const res = await markNoShow(RES_ID)
-    expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Cannot mark no-show')
-    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
-  })
-
-  it('rejects no-show from walked-in', async () => {
-    authenticateAsReservationOwner(OP_WALKED_IN)
+  it('maps a machine rejection to a Cannot-mark-no-show error', async () => {
+    authenticateAsReservationOwner()
+    mockApply.mockResolvedValueOnce(rejected('staff.noShow'))
     const res = await markNoShow(RES_ID)
     expect(res.status).toBe('error')
     expect(res.errors?.[0]).toContain('Cannot mark no-show')
   })
-
-  it('rejects no-show from departed', async () => {
-    authenticateAsReservationOwner(OP_DEPARTED)
-    const res = await markNoShow(RES_ID)
-    expect(res.status).toBe('error')
-  })
 })
 
-// ─── cancelReservation (frontdesk) ─────────────────────────────────────────
-
-describe('frontdesk cancelReservation', () => {
-  it('cancels an expected reservation', async () => {
-    authenticateAsReservationOwner(OP_EXPECTED)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
+describe('frontdesk cancelReservation (machine-delegating)', () => {
+  it('delegates to partner.cancel and sends the cancellation email on success', async () => {
+    authenticateAsReservationOwner()
     const res = await cancelReservation(RES_ID)
     expect(res.status).toBe('ok')
-
-    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
-    expect(updateCall.where.id).toBe(RES_ID)
-    expect(updateCall.data.status).toBe(RESERVATION_CANCELED)
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'partner.cancel')
+    // Email is action-owned (non-blocking) — fired only after the machine applied.
+    await vi.waitFor(() => expect(vi.mocked(sendCancellationEmail)).toHaveBeenCalledWith(RES_ID))
   })
 
-  it('cancels a checked-in reservation', async () => {
-    authenticateAsReservationOwner(OP_CHECKED_IN)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
-    const res = await cancelReservation(RES_ID)
-    expect(res.status).toBe('ok')
-  })
-
-  it('rejects cancellation from departed', async () => {
-    authenticateAsReservationOwner(OP_DEPARTED)
+  it('machine rejection (e.g. a cash walk-in — released via Unreserve, not cancel) sends NO email', async () => {
+    authenticateAsReservationOwner()
+    mockApply.mockResolvedValueOnce(rejected('partner.cancel', { kind: 'walkin', pay: 'settled', occ: 'present' }))
     const res = await cancelReservation(RES_ID)
     expect(res.status).toBe('error')
-    expect(res.errors).toContain('Cannot cancel a completed reservation')
-    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+    expect(res.errors?.[0]).toContain('Cannot cancel')
+    expect(vi.mocked(sendCancellationEmail)).not.toHaveBeenCalled()
   })
 
-  it('rejects cancellation from no-show', async () => {
-    authenticateAsReservationOwner(OP_NO_SHOW)
+  it('rejects non-owner without invoking the machine', async () => {
+    authenticateAsReservationNonOwner()
     const res = await cancelReservation(RES_ID)
     expect(res.status).toBe('error')
-    expect(res.errors).toContain('Cannot cancel a completed reservation')
-    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+    expect(mockApply).not.toHaveBeenCalled()
   })
 })
 

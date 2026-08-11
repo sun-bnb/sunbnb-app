@@ -25,6 +25,7 @@ import {
   unreserveItem,
   checkInReservation,
   resumeWalkIn,
+  undoDepartWalkIn,
   markDeparted,
   markNoShow,
   updateReservationNotes,
@@ -538,6 +539,12 @@ export const GATED_ACTIONS: GatedAction[] = [
     kind: 'action',
     gate: 'token-or-session',
     invoke: (accessKey?) => resumeWalkIn(SITE_ID, RES_ID, accessKey),
+  },
+  {
+    name: 'manage.undoDepartWalkIn',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => undoDepartWalkIn(SITE_ID, RES_ID, accessKey),
   },
   {
     name: 'manage.settleReservation',

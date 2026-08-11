@@ -52,9 +52,13 @@ const SANCTIONED = [
  * from the P0 de facto extraction (018-state-machine-defacto.md addendum).
  */
 const ALLOWLIST: Record<string, number> = {
-  'apps/partner/app/api/reservations-cleanup/route.ts': 1, // cron GC deleteMany
-  'apps/partner/app/frontdesk/actions.ts': 4, // track-012-flagged duplicate of manage transitions
-  'apps/partner/app/reservations/[id]/actions.ts': 4, // partner reservation-detail transitions
+  // Cron GC keeps ONE bulk deleteMany — now I4-filtered (tillEntries none +
+  // invoices none), so it can only ever touch zero-money rows. A per-row
+  // applyTransition sweep would be correct but wasteful; the filter IS the rule.
+  'apps/partner/app/api/reservations-cleanup/route.ts': 1,
+  // P4 slice 2 (2026-08-11): frontdesk/actions.ts 4 → 0 and partner
+  // reservations/[id]/actions.ts 4 → 0 — the D14/D15 fossils migrated onto
+  // applyTransition (their parent-only writes and terminal-only depart deleted).
   // P4 slice 1 (2026-08-11): unreserveItem, markDeparted (whole+split),
   // splitWalkInSeat, checkInReservation migrated onto applyTransition → 19 → 13.
   'apps/partner/app/sites/[id]/manage/actions.ts': 13, // remaining P4 targets

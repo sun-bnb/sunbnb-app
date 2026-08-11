@@ -29,6 +29,8 @@ import {
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { applyTransition } from '@repo/data/reservation-machine-apply'
+import { sendCancellationEmail } from '@repo/data/reservation-emails'
 import {
   OP_EXPECTED,
   OP_CHECKED_IN,
@@ -39,6 +41,7 @@ import {
 } from '@repo/data/reservation-status'
 
 const mockAuth = vi.mocked(auth)
+const mockApply = vi.mocked(applyTransition)
 
 const OWNER_ID = 'owner-1'
 const OTHER_ID = 'other-1'
@@ -47,7 +50,18 @@ const RES_ID = 'res-1'
 beforeEach(() => {
   vi.clearAllMocks()
   mockAuth.mockResolvedValue(null)
+  mockApply.mockResolvedValue({
+    outcome: 'applied',
+    transition: {} as any,
+    state: { kind: 'online', pay: 'complete', occ: 'present', released: false },
+  } as any)
 })
+
+
+// ─── State-machine mock helpers (track 018 P4 slice 2) ──────────────────────
+
+const rejected = (event: string, state: Record<string, unknown> = { kind: 'online', pay: 'complete', occ: 'present' }) =>
+  ({ outcome: 'rejected', state: { released: false, ...state }, event, reason: 'no matching transition (must-reject cell)' }) as any
 
 // ─── Setup helpers ──────────────────────────────────────────────────────────
 
@@ -167,192 +181,74 @@ describe('reservations/[id]/actions — ownership guard', () => {
 
 // ─── checkInReservation ─────────────────────────────────────────────────────
 
-describe('checkInReservation', () => {
-  it('transitions expected → checked-in and sets checkedInAt', async () => {
-    authenticateAsOwner({ operationalStatus: OP_EXPECTED })
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
+describe('checkInReservation (machine-delegating)', () => {
+  it('delegates to staff.checkIn', async () => {
+    authenticateAsOwner()
     const res = await checkInReservation(RES_ID)
     expect(res.status).toBe('ok')
-
-    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
-    expect(updateCall.where.id).toBe(RES_ID)
-    expect(updateCall.data.operationalStatus).toBe(OP_CHECKED_IN)
-    expect(updateCall.data.checkedInAt).toBeInstanceOf(Date)
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.checkIn')
   })
 
-  it('rejects check-in from checked-in (already in)', async () => {
-    authenticateAsOwner({ operationalStatus: OP_CHECKED_IN })
-    const res = await checkInReservation(RES_ID)
-    expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Cannot check in')
-    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
-  })
-
-  it('rejects check-in from walked-in (walk-in is not the check-in flow)', async () => {
-    authenticateAsOwner({ operationalStatus: OP_WALKED_IN })
-    const res = await checkInReservation(RES_ID)
-    expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Cannot check in')
-    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
-  })
-
-  it('rejects check-in from departed', async () => {
-    authenticateAsOwner({ operationalStatus: OP_DEPARTED })
-    const res = await checkInReservation(RES_ID)
-    expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Cannot check in')
-  })
-
-  it('rejects check-in from no-show', async () => {
-    authenticateAsOwner({ operationalStatus: OP_NO_SHOW })
+  it('maps a machine rejection to a Cannot-check-in error', async () => {
+    authenticateAsOwner()
+    mockApply.mockResolvedValueOnce(rejected('staff.checkIn'))
     const res = await checkInReservation(RES_ID)
     expect(res.status).toBe('error')
     expect(res.errors?.[0]).toContain('Cannot check in')
   })
 })
 
-// ─── markDeparted ───────────────────────────────────────────────────────────
-
-describe('markDeparted', () => {
-  it('transitions checked-in → departed and sets departedAt', async () => {
-    authenticateAsOwner({ operationalStatus: OP_CHECKED_IN })
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
+describe('markDeparted (machine-delegating)', () => {
+  it('delegates to staff.depart — multiday branching is machine-owned (D15 fossil fix)', async () => {
+    authenticateAsOwner({ operationalStatus: 'checked-in' })
     const res = await markDeparted(RES_ID)
     expect(res.status).toBe('ok')
-
-    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
-    expect(updateCall.where.id).toBe(RES_ID)
-    expect(updateCall.data.operationalStatus).toBe(OP_DEPARTED)
-    expect(updateCall.data.departedAt).toBeInstanceOf(Date)
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.depart')
   })
 
-  it('transitions walked-in → departed (walk-in guests can also depart)', async () => {
-    authenticateAsOwner({ operationalStatus: OP_WALKED_IN })
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
-    const res = await markDeparted(RES_ID)
-    expect(res.status).toBe('ok')
-    expect(vi.mocked(prisma.reservation.update).mock.calls[0][0].data.operationalStatus).toBe(OP_DEPARTED)
-  })
-
-  it('rejects departure from expected (must check in first)', async () => {
-    authenticateAsOwner({ operationalStatus: OP_EXPECTED })
+  it('maps a machine rejection to a Cannot-mark-departed error', async () => {
+    authenticateAsOwner()
+    mockApply.mockResolvedValueOnce(rejected('staff.depart'))
     const res = await markDeparted(RES_ID)
     expect(res.status).toBe('error')
     expect(res.errors?.[0]).toContain('Cannot mark departed')
-    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
-  })
-
-  it('rejects departure from already-departed', async () => {
-    authenticateAsOwner({ operationalStatus: OP_DEPARTED })
-    const res = await markDeparted(RES_ID)
-    expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Cannot mark departed')
-    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
-  })
-
-  it('rejects departure from no-show', async () => {
-    authenticateAsOwner({ operationalStatus: OP_NO_SHOW })
-    const res = await markDeparted(RES_ID)
-    expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Cannot mark departed')
-    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
   })
 })
 
-// ─── markNoShow ─────────────────────────────────────────────────────────────
-
-describe('markNoShow', () => {
-  it('transitions expected → no-show', async () => {
-    authenticateAsOwner({ operationalStatus: OP_EXPECTED })
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
+describe('markNoShow (machine-delegating)', () => {
+  it('delegates to staff.noShow', async () => {
+    authenticateAsOwner()
     const res = await markNoShow(RES_ID)
     expect(res.status).toBe('ok')
-
-    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
-    expect(updateCall.where.id).toBe(RES_ID)
-    expect(updateCall.data.operationalStatus).toBe(OP_NO_SHOW)
-    // markNoShow must NOT set a timestamp (only checkedIn/departed have timestamps)
-    expect(updateCall.data.checkedInAt).toBeUndefined()
-    expect(updateCall.data.departedAt).toBeUndefined()
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.noShow')
   })
 
-  it('rejects no-show from checked-in', async () => {
-    authenticateAsOwner({ operationalStatus: OP_CHECKED_IN })
+  it('maps a machine rejection to a Cannot-mark-no-show error', async () => {
+    authenticateAsOwner()
+    mockApply.mockResolvedValueOnce(rejected('staff.noShow'))
     const res = await markNoShow(RES_ID)
     expect(res.status).toBe('error')
     expect(res.errors?.[0]).toContain('Cannot mark no-show')
-    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
-  })
-
-  it('rejects no-show from walked-in', async () => {
-    authenticateAsOwner({ operationalStatus: OP_WALKED_IN })
-    const res = await markNoShow(RES_ID)
-    expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Cannot mark no-show')
-    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
-  })
-
-  it('rejects no-show from departed', async () => {
-    authenticateAsOwner({ operationalStatus: OP_DEPARTED })
-    const res = await markNoShow(RES_ID)
-    expect(res.status).toBe('error')
-    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
   })
 })
 
-// ─── cancelReservation ──────────────────────────────────────────────────────
-
-describe('cancelReservation', () => {
-  it('cancels an expected reservation', async () => {
-    authenticateAsOwner({ status: 'complete', operationalStatus: OP_EXPECTED })
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
+describe('cancelReservation (machine-delegating)', () => {
+  it('delegates to partner.cancel and sends the cancellation email on success', async () => {
+    authenticateAsOwner()
     const res = await cancelReservation(RES_ID)
     expect(res.status).toBe('ok')
-
-    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
-    expect(updateCall.where.id).toBe(RES_ID)
-    expect(updateCall.data.status).toBe(RESERVATION_CANCELED)
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'partner.cancel')
+    await vi.waitFor(() => expect(vi.mocked(sendCancellationEmail)).toHaveBeenCalledWith(RES_ID))
   })
 
-  it('cancels a checked-in reservation (partner may need to refund)', async () => {
-    authenticateAsOwner({ status: 'complete', operationalStatus: OP_CHECKED_IN })
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
-    const res = await cancelReservation(RES_ID)
-    expect(res.status).toBe('ok')
-  })
-
-  it('rejects cancellation of already-canceled reservation', async () => {
-    authenticateAsOwner({ status: RESERVATION_CANCELED, operationalStatus: OP_EXPECTED })
+  it('machine rejection sends NO email', async () => {
+    authenticateAsOwner()
+    mockApply.mockResolvedValueOnce(rejected('partner.cancel'))
     const res = await cancelReservation(RES_ID)
     expect(res.status).toBe('error')
-    expect(res.errors).toContain('Already canceled')
-    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
-  })
-
-  it('rejects cancellation from departed (reservation already completed)', async () => {
-    authenticateAsOwner({ status: 'complete', operationalStatus: OP_DEPARTED })
-    const res = await cancelReservation(RES_ID)
-    expect(res.status).toBe('error')
-    expect(res.errors).toContain('Cannot cancel a completed reservation')
-    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
-  })
-
-  it('rejects cancellation from no-show (reservation already completed)', async () => {
-    authenticateAsOwner({ status: 'complete', operationalStatus: OP_NO_SHOW })
-    const res = await cancelReservation(RES_ID)
-    expect(res.status).toBe('error')
-    expect(res.errors).toContain('Cannot cancel a completed reservation')
-    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
+    expect(vi.mocked(sendCancellationEmail)).not.toHaveBeenCalled()
   })
 })
-
-// ─── updateNotes ────────────────────────────────────────────────────────────
 
 describe('updateNotes', () => {
   it('persists notes for the reservation owner', async () => {

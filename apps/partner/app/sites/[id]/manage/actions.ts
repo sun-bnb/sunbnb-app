@@ -456,33 +456,57 @@ export async function checkInReservation(siteId: string, reservationId: string, 
  * Precondition: effectiveStatus must be OP_EXPECTED (walked-in → departed →
  * expected is the multiday daily cycle). Any other status is rejected.
  */
+/** MIGRATED (track 018 P4): the machine's `staff.resume` — walkin·expected → present. */
 export async function resumeWalkIn(siteId: string, reservationId: string, accessKey?: string) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
-    select: {
-      siteId: true,
-      operationalStatus: true,
-      site: { select: { timeZone: true, locationLat: true, locationLng: true } },
-    },
+    select: { siteId: true },
   })
   if (!reservation || reservation.siteId !== siteId) {
     return { status: 'error', errors: ['Reservation not found'] }
   }
 
-  const todayStatus = await getTodayStatus(reservationId, reservation.site)
-  const effectiveStatus = todayStatus ?? reservation.operationalStatus
-  if (effectiveStatus !== OP_EXPECTED) {
-    return { status: 'error', errors: [`Cannot resume walk-in from status: ${effectiveStatus}`] }
+  const result = await applyTransition(reservationId, 'staff.resume')
+  if (result.outcome !== 'applied') {
+    const from = result.outcome === 'rejected'
+      ? `${result.state.kind}·${result.state.pay}·${result.state.occ}`
+      : result.outcome
+    return { status: 'error', errors: [`Cannot resume walk-in from status: ${from}`] }
   }
 
-  await applyDayTransition(
-    { id: reservationId },
-    reservation.site,
-    { operationalStatus: OP_WALKED_IN, checkedInAt: new Date() },
-  )
+  revalidatePath(`/sites/${siteId}/manage`)
+  return { status: 'ok' }
+}
+
+/**
+ * Undo a same-day depart on a cash walk-in — the guest came back (or the tap
+ * was a mistake). NEW capability from the P1 review (departed re-seatable same
+ * civil day): the machine's `staff.resume.undoDepart`, which conflict-rechecks
+ * the seats (the bed may have been re-let in between) before re-seating.
+ * No new money; the till is untouched.
+ */
+export async function undoDepartWalkIn(siteId: string, reservationId: string, accessKey?: string) {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const reservation = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    select: { siteId: true },
+  })
+  if (!reservation || reservation.siteId !== siteId) {
+    return { status: 'error', errors: ['Reservation not found'] }
+  }
+
+  const result = await applyTransition(reservationId, 'staff.resume.undoDepart')
+  if (result.outcome === 'conflict') {
+    return { status: 'error', errors: ['Seat was already re-let — cannot undo the departure'] }
+  }
+  if (result.outcome !== 'applied') {
+    return { status: 'error', errors: ['Departure can only be undone on the same day'] }
+  }
 
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok' }
@@ -560,34 +584,26 @@ export async function markDeparted(
 }
 // ─── Mark no-show: customer didn't arrive ───────────────────────────────────
 
+/** MIGRATED (track 018 P4): the machine's `staff.noShow` — kind-guarded (online·complete or walkin; holds via releaseHold). */
 export async function markNoShow(siteId: string, reservationId: string, accessKey?: string) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
-    select: {
-      siteId: true,
-      operationalStatus: true,
-      site: { select: { timeZone: true, locationLat: true, locationLng: true } },
-    },
+    select: { siteId: true },
   })
   if (!reservation || reservation.siteId !== siteId) {
     return { status: 'error', errors: ['Reservation not found'] }
   }
 
-  // Precondition: derive from today's row (may not exist yet → fall back to parent).
-  const todayStatus = await getTodayStatus(reservationId, reservation.site)
-  const effectiveStatus = todayStatus ?? reservation.operationalStatus
-  if (effectiveStatus !== OP_EXPECTED) {
-    return { status: 'error', errors: [`Cannot mark no-show from: ${effectiveStatus}`] }
+  const result = await applyTransition(reservationId, 'staff.noShow')
+  if (result.outcome !== 'applied') {
+    const from = result.outcome === 'rejected'
+      ? `${result.state.kind}·${result.state.pay}·${result.state.occ}`
+      : result.outcome
+    return { status: 'error', errors: [`Cannot mark no-show from: ${from}`] }
   }
-
-  await applyDayTransition(
-    { id: reservationId },
-    reservation.site,
-    { operationalStatus: OP_NO_SHOW },
-  )
 
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok' }

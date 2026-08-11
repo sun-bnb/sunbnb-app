@@ -36,6 +36,7 @@ import {
   unreserveItem,
   checkInReservation,
   resumeWalkIn,
+  undoDepartWalkIn,
   markDeparted,
   markNoShow,
   updateReservationNotes,
@@ -723,41 +724,27 @@ describe('markDeparted split-then-depart (machine split.subset)', () => {
 })
 // ─── markNoShow ─────────────────────────────────────────────────────────────
 
-describe('markNoShow', () => {
-  it('transitions expected -> no-show (writes today row + mirrors legacy field)', async () => {
+describe('markNoShow (machine-delegating)', () => {
+  it('delegates to staff.noShow — kind guard (holds rejected) is machine-owned', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
-      siteId: SITE_ID,
-      operationalStatus: 'expected',
-      site: SITE_TZ_STUB,
-    } as any)
-    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue(null)
-    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({
-      id: 'rd-1', reservationId: RES_ID, date: new Date(), operationalStatus: 'no-show',
-      checkedInAt: null, departedAt: null,
-    } as any)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID } as any)
     const res = await markNoShow(SITE_ID, RES_ID)
     expect(res.status).toBe('ok')
-    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
-    expect(updateCall.data.operationalStatus).toBe('no-show')
-    expect(vi.mocked(prisma.reservationDay.upsert)).toHaveBeenCalledOnce()
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.noShow')
   })
 
-  it('rejects no-show from checked-in (reads today row)', async () => {
+  it('maps a machine rejection to a Cannot-mark-no-show error', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
-      siteId: SITE_ID,
-      operationalStatus: 'checked-in',
-      site: SITE_TZ_STUB,
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID } as any)
+    mockApply.mockResolvedValueOnce({
+      outcome: 'rejected',
+      state: { kind: 'online', pay: 'complete', occ: 'present', released: false },
+      event: 'staff.noShow',
+      reason: 'no matching transition (must-reject cell)',
     } as any)
-    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({
-      operationalStatus: 'checked-in',
-    } as any)
-
     const res = await markNoShow(SITE_ID, RES_ID)
     expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('Cannot mark no-show')
   })
 })
 
@@ -4508,88 +4495,70 @@ describe('holdBed — multi-day until param', () => {
 
 // ─── resumeWalkIn ────────────────────────────────────────────────────────────
 
-describe('resumeWalkIn', () => {
-  it('transitions expected -> walked-in with checkedInAt stamped', async () => {
+describe('resumeWalkIn (machine-delegating)', () => {
+  it('delegates to staff.resume', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
-      siteId: SITE_ID,
-      operationalStatus: 'expected',
-      site: SITE_TZ_STUB,
-    } as any)
-    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue(null)
-    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({
-      id: 'rd-1', reservationId: RES_ID, date: new Date(), operationalStatus: 'walked-in',
-      checkedInAt: new Date(), departedAt: null,
-    } as any)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID } as any)
     const res = await resumeWalkIn(SITE_ID, RES_ID)
     expect(res.status).toBe('ok')
-
-    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
-    expect(updateCall.data.operationalStatus).toBe('walked-in')
-    expect(updateCall.data.checkedInAt).toBeInstanceOf(Date)
-    expect(vi.mocked(prisma.reservationDay.upsert)).toHaveBeenCalledOnce()
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.resume')
   })
 
-  it('rejects when effective status is already walked-in (not expected)', async () => {
+  it('maps a machine rejection to a Cannot-resume error', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
-      siteId: SITE_ID,
-      operationalStatus: 'walked-in',
-      site: SITE_TZ_STUB,
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID } as any)
+    mockApply.mockResolvedValueOnce({
+      outcome: 'rejected',
+      state: { kind: 'walkin', pay: 'settled', occ: 'present', released: false },
+      event: 'staff.resume',
+      reason: 'no matching transition (must-reject cell)',
     } as any)
-    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({
-      operationalStatus: 'walked-in',
-    } as any)
-
     const res = await resumeWalkIn(SITE_ID, RES_ID)
     expect(res.status).toBe('error')
     expect(res.errors?.[0]).toContain('Cannot resume walk-in')
   })
+})
 
-  it('rejects when effective status is checked-in', async () => {
+// ─── undoDepartWalkIn (track 018 P4 slice 2 — new capability) ────────────────
+
+describe('undoDepartWalkIn (machine-delegating)', () => {
+  it('delegates to staff.resume.undoDepart', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
-      siteId: SITE_ID,
-      operationalStatus: 'checked-in',
-      site: SITE_TZ_STUB,
-    } as any)
-    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({
-      operationalStatus: 'checked-in',
-    } as any)
-
-    const res = await resumeWalkIn(SITE_ID, RES_ID)
-    expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Cannot resume walk-in')
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID } as any)
+    const res = await undoDepartWalkIn(SITE_ID, RES_ID)
+    expect(res.status).toBe('ok')
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.resume.undoDepart')
   })
 
-  it('rejects when reservation belongs to a different site', async () => {
+  it('surfaces a conflict as seat-already-re-let', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
-      siteId: 'other-site',
-      operationalStatus: 'expected',
-      site: SITE_TZ_STUB,
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID } as any)
+    mockApply.mockResolvedValueOnce({ outcome: 'conflict' } as any)
+    const res = await undoDepartWalkIn(SITE_ID, RES_ID)
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/already re-let/i)
+  })
+
+  it('maps a machine rejection (not same civil day) to a same-day-only error', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID } as any)
+    mockApply.mockResolvedValueOnce({
+      outcome: 'rejected',
+      state: { kind: 'walkin', pay: 'settled', occ: 'departed', released: false },
+      event: 'staff.resume.undoDepart',
+      reason: 'no matching transition (must-reject cell)',
     } as any)
-
-    const res = await resumeWalkIn(SITE_ID, RES_ID)
+    const res = await undoDepartWalkIn(SITE_ID, RES_ID)
     expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Reservation not found')
+    expect(res.errors?.[0]).toMatch(/same day/i)
   })
 
-  it('rejects unauthenticated caller', async () => {
-    const res = await resumeWalkIn(SITE_ID, RES_ID)
+  it('rejects a reservation from another site without invoking the machine', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: 'other-site' } as any)
+    const res = await undoDepartWalkIn(SITE_ID, RES_ID)
     expect(res.status).toBe('error')
-    expect(res.errors).toContain('Not authenticated')
-    expect(vi.mocked(prisma.reservation.findUnique)).not.toHaveBeenCalled()
-  })
-
-  it('rejects non-owner', async () => {
-    authenticateAsNonOwner()
-    const res = await resumeWalkIn(SITE_ID, RES_ID)
-    expect(res.status).toBe('error')
-    expect(res.errors).toContain('Not authorized')
-    expect(vi.mocked(prisma.reservation.findUnique)).not.toHaveBeenCalled()
+    expect(mockApply).not.toHaveBeenCalled()
   })
 })
 
