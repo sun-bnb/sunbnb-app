@@ -195,11 +195,25 @@ must-reject cells). Known logical errors become red cells first, then fixes.
   deleted). Fossil test files rewritten to delegation contracts (69 green); matrix
   +2 undo-depart cells (19 total), staff.resume.undoDepart DEFERRED→COVERED.
   Partner 1966u+198i, data 320u+327i green, tsc clean.
-  **Remaining P4:** (d) BedDetail/view.tsx UI alignment — undo-depart button, dialog
-  copy from effect cells (B2's UI half: seat-unreserve shows partitioned share),
-  deriveState behind bed-state; (e) collect flow (D5/D6 mollie executors); (f) user-app
+  Slice 3 (UI) SHIPPED 2026-08-11 (uncommitted, primed via /ui partner):
+  **bed-state.ts is now a presentation shell over deriveState** (determinism contract
+  #1 closed for the grid — same derivation as the interpreter's guards; one deliberate
+  presentation change: impossible tuple paid-in-cash+checked-in now renders walked-in,
+  kind-authoritative). **Undo-departure button** in BedDetail's FREE panel (↩ +guest
+  name, restorative so no confirm; visible when `findUndoDepartCandidate` finds a
+  released same-day-departed cash walk-in; server enforces same-day + conflict).
+  **B2's UI half fixed:** Seat-mode unreserve dialog shows the freed seat's PARTITIONED
+  share (`freedSeatShare` — same partitionAmount as the interpreter, seat-price
+  weights); Group mode shows the actual non-voided till total (`settledTotal`), not
+  paymentAmount. Grid query now selects party `items {id, price}` (Reservation.items
+  type narrowed to the minimal shape). New pure helpers unit-tested (8 tests).
+  **i18n: 2 new keys × 3 locales** (`undoDeparture`, `confirmUnreserveSeatRefund`) —
+  ES/FI machine-drafted, FOUNDER COPY REVIEW before promote. Partner 1974u+198i, tsc
+  clean. **Browser verification pending** (design-system pitfall: don't declare UI
+  done blind — run verifier-sunbnb over the manage grid).
+  **Remaining P4:** (e) collect flow (D5/D6 mollie executors); (f) user-app
   writers (webhook/reconcile/cancel); (g) docs/wiki sync (packages/data/CLAUDE.md,
-  partner CLAUDE.md).
+  partner CLAUDE.md, /wiki ingest).
 - 💤 **P5 — Wiki page** (`subsystems/reservation-state-machine.md`) + fold into
   `bed-state.ts` docs; groom CLAUDE.md pointers.
 
@@ -213,6 +227,15 @@ deletable rule; D13 grouping kept; kind derived not persisted; no new status str
 
 ## Log
 
+- **2026-08-11 (P4 slice 3 — the UI slice)** — Slice 2 committed (`9072900`). Primed
+  /ui partner. bed-state internals swapped for deriveState (grid and guards now share
+  ONE derivation — the D8-class grid/guard divergence is structurally closed on the
+  grid side); undo-departure button live in the FREE panel; unreserve dialog tells the
+  truth (Seat → partitioned share via the same partitionAmount as the machine; Group →
+  actual till total). One fixture correction in bed-state.test.ts: paid-in-cash+
+  checked-in (impossible tuple) now renders walked-in — kind wins. 2 i18n keys × 3
+  locales added (ES/FI await founder review). Browser verify pending. Partner
+  1974u+198i, tsc clean. Uncommitted. Fable 5.
 - **2026-08-11 (P4 slice 2 — fossils dead, undo-depart live, cron I4-safe)** — Slice 1
   committed (`4c386e4`, net −846 lines). The D14/D15 fossils are gone: frontdesk and
   reservation-detail transitions delegate to the machine (the frontdesk's terminal-only

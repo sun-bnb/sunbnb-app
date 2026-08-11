@@ -78,6 +78,10 @@ export default async function ManageSunbedsPage({
                 where: { voidedAt: null },
                 select: { id: true, amount: true },
               },
+              // Party seats with prices — lets BedDetail show the PARTITIONED
+              // seat share in the Seat-mode unreserve dialog (track 018 B2:
+              // the machine's tillPartition moves exactly that share).
+              items: { select: { id: true, price: true } },
             },
             orderBy: { from: 'asc' },
           },

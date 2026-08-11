@@ -1,15 +1,25 @@
 /**
  * Shared bed-state helpers for the manage page.
  *
- * Single source of truth — previously copy-pasted in Item.tsx, ParcelView.tsx,
- * view.tsx, and BedDetail.tsx. Import from here, never re-define locally.
+ * Single source of truth for GRID PRESENTATION — previously copy-pasted in
+ * Item.tsx, ParcelView.tsx, view.tsx, and BedDetail.tsx. Import from here,
+ * never re-define locally.
+ *
+ * Since track 018 P4 this module is a PRESENTATION SHELL over the machine's
+ * `deriveState` (@repo/data/reservation-machine — client-safe, no prisma):
+ * the compound state (kind × pay × occ × released) is derived exactly the way
+ * the interpreter's guards derive it, then mapped to grid vocabulary
+ * (BedState + payment glyph). No state logic lives here — determinism
+ * contract #1: one derivation, every consumer.
  */
 
 import { InventoryItem, Reservation } from '@/types/shared'
 import {
-  OP_EXPECTED, OP_CHECKED_IN, OP_WALKED_IN, OP_DEPARTED, OP_NO_SHOW, OP_COMP,
-  RESERVATION_COMPLETE, RESERVATION_PAYMENT_FAILED, RESERVATION_PROCESSING,
-} from '@repo/data/reservation-status'
+  deriveState,
+  partitionAmount,
+  type CompoundState,
+} from '@repo/data/reservation-machine'
+import { RESERVATION_PROCESSING } from '@repo/data/reservation-status'
 
 export type BedState = 'available' | 'expected' | 'checked-in' | 'walked-in' | 'blocked' | 'comp'
 
@@ -19,37 +29,28 @@ export type BedState = 'available' | 'expected' | 'checked-in' | 'walked-in' | '
  * and the legacy literal 'error' that older rows may carry in the database.
  */
 export function isFailedReservationStatus(status: string): boolean {
-  return status === RESERVATION_PAYMENT_FAILED || status === 'error'
+  return status === 'payment_failed' || status === 'error'
+}
+
+/** THE derivation, from the grid's loaded shape (today-row + non-voided tillEntries). */
+function derive(r: Reservation): CompoundState {
+  return deriveState({
+    status: r.status,
+    operationalStatus: r.operationalStatus,
+    todayOperationalStatus: r.today?.operationalStatus ?? null,
+    isComp: r.isComp,
+    settled: (r.tillEntries?.length ?? 0) > 0,
+    stayOver: r.stayOver,
+  })
 }
 
 /**
- * Resolve the effective operational status for a reservation.
- *
- * For blocked reservations the parent's operationalStatus is always used
- * (blocked is sticky; no per-day row exists for it — D5).
- *
- * For all other reservations: if a today-row is attached (`r.today`), that
- * row's operationalStatus is the source of truth. This is the core of the
- * double-sell fix: a parent `departed` on day-1 no longer hides a still-reserved
- * future day — day-2's row starts `expected` so the bed shows as reserved.
- */
-function effectiveOpStatus(r: Reservation): string {
-  if (r.operationalStatus === 'blocked') return 'blocked'
-  return r.today?.operationalStatus ?? r.operationalStatus
-}
-
-/**
- * A departed/no-show booking only RELEASES the bed once its stay is over — i.e.
- * it has no remaining reserved days (`r.stayOver`, computed server-side). A
- * single-day or last-day departure is released (bed free); a multiday booking
- * departed mid-stay keeps holding the bed for its future days. (track 012)
- *
- * Keeps availability and the grid in lockstep: this is the same condition the
- * conflict guard / availability queries use, so "green" always means "bookable".
+ * A departed/no-show booking only RELEASES the bed once its stay is over —
+ * machine release rule (I6): released ⇔ (departed | no-show) ∧ stayOver.
+ * Keeps availability and the grid in lockstep. (track 012 / track 018)
  */
 function isReleased(r: Reservation): boolean {
-  const eff = effectiveOpStatus(r)
-  return (eff === OP_DEPARTED || eff === OP_NO_SHOW) && r.stayOver === true
+  return derive(r).released
 }
 
 /**
@@ -70,43 +71,85 @@ export function getActiveReservation(item: InventoryItem): Reservation | null {
 }
 
 /**
- * Maps a seat's active reservation state to a BedState identifier.
- * Uses today's per-day operational status (via effectiveOpStatus) so multiday
- * bookings re-cycle daily rather than carrying stale day-1 state.
+ * Maps a seat's active reservation to a BedState identifier — the machine's
+ * (kind, occ) projected onto the grid vocabulary. Multiday bookings re-cycle
+ * daily via the today-row (inside deriveState).
  */
 export function getBedState(item: InventoryItem): BedState {
   const res = getActiveReservation(item)
   if (!res) return 'available'
-  const opStatus = effectiveOpStatus(res)
+  const s = derive(res)
+  if (s.kind === 'block') return 'blocked'
+  if (s.kind === 'comp') return 'comp'
   // A departed/no-show booking that survived getActiveReservation is NOT yet
   // released (multiday, future days remain) — it still holds the bed. Render it
   // as reserved ("expected"), never green: not bookable ⇒ not green. (track 012)
-  if (opStatus === OP_DEPARTED || opStatus === OP_NO_SHOW) return 'expected'
-  switch (opStatus) {
-    case OP_EXPECTED: return 'expected'
-    case OP_CHECKED_IN: return 'checked-in'
-    case OP_WALKED_IN: return 'walked-in'
-    case 'blocked': return 'blocked'
-    case OP_COMP: return 'comp'
+  switch (s.occ) {
+    case 'present': return s.kind === 'walkin' ? 'walked-in' : 'checked-in'
+    case 'expected': case 'departed': case 'no-show': return 'expected'
     default: return 'available'
   }
 }
 
 /**
- * Returns the payment-collection glyph for a reservation based on how money was collected.
- *
- * Precedence:
- *   1. Online / QR collected (status === RESERVATION_COMPLETE) → 'card' sentinel
- *      (consumers render this as a MUI CreditCardIcon; the string 'card' is never
- *      displayed as text)
- *   2. Cash settled (at least one non-voided TillEntry) → '€'
- *   3. Not yet collected (held / pending / unsettled cash walk-in) → '' (no glyph)
+ * Payment-collection glyph — the machine's pay-phase projected to the grid:
+ *   collected / complete (online or QR) → 'card' sentinel (CreditCardIcon)
+ *   settled (≥1 non-voided TillEntry)  → '€'
+ *   anything else                       → '' (no glyph)
  */
 function paymentGlyph(res: Reservation | null): string {
   if (!res) return ''
-  if (res.status === RESERVATION_COMPLETE) return 'card'
-  if ((res.tillEntries?.length ?? 0) > 0) return '€'
+  const pay = derive(res).pay
+  if (pay === 'complete' || pay === 'collected') return 'card'
+  if (pay === 'settled') return '€'
   return ''
+}
+
+// ─── Track 018 slice-3 helpers (pure, unit-tested in bed-state.test.ts) ──────
+
+/**
+ * A same-day-departed cash walk-in on this seat that `undoDepartWalkIn` could
+ * re-seat (guest came back / mistaken tap). Released rows are exactly the ones
+ * getActiveReservation drops, so the FREE panel needs this separate lookup.
+ * Same-civil-day is ENFORCED server-side (interpreter fact); the client check
+ * (departedAt present) is only a visibility heuristic.
+ */
+export function findUndoDepartCandidate(item: InventoryItem): Reservation | null {
+  if (!item.reservations?.length) return null
+  return (
+    item.reservations.find((r) => {
+      const s = derive(r)
+      return (
+        s.kind === 'walkin' &&
+        s.occ === 'departed' &&
+        Boolean(r.today?.departedAt ?? r.departedAt)
+      )
+    }) ?? null
+  )
+}
+
+/**
+ * The freed seat's share of a settled party's cash — what a Seat-mode
+ * Unreserve will actually void + credit-note (machine tillPartition, I1).
+ * Partitioned from the NON-VOIDED till total by seat-price weights (equal
+ * split when prices are unknown), mirroring the interpreter's partition —
+ * so the confirm dialog shows the truth, not the whole paymentAmount (B2).
+ */
+export function freedSeatShare(reservation: Reservation, freedItemId: string): number {
+  const total = (reservation.tillEntries ?? []).reduce((s, e) => s + e.amount, 0)
+  const items = reservation.items ?? []
+  if (total <= 0 || items.length < 2) return total
+  const weight = (arr: { price?: number | null }[]) =>
+    arr.reduce((s, i) => s + ((i.price ?? null) || 0), 0)
+  const rest = items.filter((i) => i.id !== freedItemId)
+  const freed = items.filter((i) => i.id === freedItemId)
+  const [, share] = partitionAmount(total, [weight(rest), weight(freed)]) as [number, number]
+  return share
+}
+
+/** Sum of the party's non-voided till entries — what a whole Unreserve refunds. */
+export function settledTotal(reservation: Reservation | null): number {
+  return (reservation?.tillEntries ?? []).reduce((s, e) => s + e.amount, 0)
 }
 
 /**
@@ -119,7 +162,6 @@ function paymentGlyph(res: Reservation | null): string {
  * - Cash settled (non-voided TillEntry): R or A colour € (currency)
  * - Not yet collected (held / pending / unsettled walk-in): R or A colour, no glyph
  *
- * The '●' dot is removed entirely — it conveyed nothing actionable.
  * The ⏳ pulse is kept: it correctly signals a genuinely in-flight state.
  *
  * State colours mirror the staff grid legend — R reserved (fuchsia), A alquilada/
@@ -139,12 +181,12 @@ export function getCellAppearance(item: InventoryItem): { bg: string; icon: stri
         return { bg: 'bg-fuchsia-400 border-fuchsia-600 animate-pulse-slow', icon: '⏳' }
       }
     }
-    // All other reserved states: use payment glyph (✓ / € / no glyph), no pulse.
+    // All other reserved states: use payment glyph (card / € / no glyph), no pulse.
     return { bg: 'bg-fuchsia-400 border-fuchsia-600', icon: paymentGlyph(res) }
   }
 
   // OCCUPIED (A — alquilada) — a present guest, online or offline. One colour
-  // (red); collection method is shown by the payment glyph (✓ online, € cash, none unpaid).
+  // (red); collection method is shown by the payment glyph (card online, € cash, none unpaid).
   // Unifies the old checked-in and walked-in into one state.
   if (state === 'checked-in' || state === 'walked-in') {
     const res = getActiveReservation(item)

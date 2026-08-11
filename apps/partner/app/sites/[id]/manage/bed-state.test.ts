@@ -4,6 +4,9 @@ import {
   getActiveReservation,
   getBedState,
   getCellAppearance,
+  findUndoDepartCandidate,
+  freedSeatShare,
+  settledTotal,
 } from './bed-state'
 import {
   OP_EXPECTED, OP_CHECKED_IN, OP_WALKED_IN, OP_DEPARTED, OP_NO_SHOW, OP_COMP,
@@ -108,7 +111,11 @@ describe('getBedState', () => {
   })
   it('maps each operational status to its BedState', () => {
     expect(getBedState(item([res(OP_EXPECTED)]))).toBe('expected')
-    expect(getBedState(item([res(OP_CHECKED_IN)]))).toBe('checked-in')
+    // checked-in belongs to ONLINE bookings (status complete); a paid-in-cash +
+    // checked-in tuple is impossible in practice and the machine derivation
+    // makes KIND authoritative — walkin·present renders walked-in (track 018).
+    expect(getBedState(item([res(OP_CHECKED_IN, RESERVATION_COMPLETE)]))).toBe('checked-in')
+    expect(getBedState(item([res(OP_CHECKED_IN)]))).toBe('walked-in') // cash kind wins
     expect(getBedState(item([res(OP_WALKED_IN)]))).toBe('walked-in')
     expect(getBedState(item([res('blocked')]))).toBe('blocked')
   })
@@ -219,5 +226,67 @@ describe('getCellAppearance', () => {
       const a = getCellAppearance(item([res(OP_WALKED_IN, RESERVATION_COMPLETE, undefined, undefined, [{ id: 'te1', amount: 20 }])]))
       expect(a.icon).toBe('card')
     })
+  })
+})
+
+// ─── Track 018 slice-3 helpers ────────────────────────────────────────────────
+
+describe('findUndoDepartCandidate', () => {
+  const departedCash = (over: Record<string, unknown> = {}) => ({
+    id: 'r-dep', status: 'paid-in-cash', operationalStatus: 'departed',
+    departedAt: new Date(), stayOver: true, tillEntries: [{ id: 't1', amount: 10 }],
+    ...over,
+  })
+
+  it('finds a released same-day-departed cash walk-in on a free seat', () => {
+    const found = findUndoDepartCandidate(item([departedCash()] as any))
+    expect(found?.id).toBe('r-dep')
+  })
+
+  it('ignores online departures and rows without a departedAt stamp', () => {
+    expect(findUndoDepartCandidate(item([departedCash({ status: 'complete' })] as any))).toBeNull()
+    expect(findUndoDepartCandidate(item([departedCash({ departedAt: null })] as any))).toBeNull()
+  })
+
+  it('reads the today-row departure (multiday between-days shape)', () => {
+    const r = departedCash({
+      departedAt: null,
+      today: { id: 'rd', reservationId: 'r-dep', date: new Date(), operationalStatus: 'departed', checkedInAt: null, departedAt: new Date() },
+    })
+    expect(findUndoDepartCandidate(item([r] as any))?.id).toBe('r-dep')
+  })
+
+  it('returns null for an empty seat', () => {
+    expect(findUndoDepartCandidate(item([]))).toBeNull()
+  })
+})
+
+describe('freedSeatShare / settledTotal (B2: the dialog shows the partitioned truth)', () => {
+  const party = (tillEntries: { id: string; amount: number }[], items: { id: string; price: number | null }[]) =>
+    ({ id: 'r1', status: 'paid-in-cash', operationalStatus: 'walked-in', tillEntries, items }) as any
+
+  it('partitions the settled total by seat-price weights', () => {
+    const r = party([{ id: 't1', amount: 30 }], [
+      { id: 'a', price: 10 }, { id: 'b', price: 20 },
+    ])
+    expect(freedSeatShare(r, 'b')).toBe(20)
+    expect(freedSeatShare(r, 'a')).toBe(10)
+  })
+
+  it('splits equally when prices are unknown, preserving the sum', () => {
+    const r = party([{ id: 't1', amount: 25 }], [
+      { id: 'a', price: null }, { id: 'b', price: null },
+    ])
+    expect(freedSeatShare(r, 'a') + freedSeatShare(r, 'b')).toBe(25)
+  })
+
+  it('single-seat or unsettled parties return the whole (possibly zero) total', () => {
+    expect(freedSeatShare(party([{ id: 't1', amount: 10 }], [{ id: 'a', price: 10 }]), 'a')).toBe(10)
+    expect(freedSeatShare(party([], [{ id: 'a', price: 10 }, { id: 'b', price: 10 }]), 'a')).toBe(0)
+  })
+
+  it('settledTotal sums the non-voided entries (what a whole Unreserve refunds)', () => {
+    expect(settledTotal(party([{ id: 't1', amount: 12.5 }, { id: 't2', amount: 7.5 }], []))).toBe(20)
+    expect(settledTotal(null)).toBe(0)
   })
 })

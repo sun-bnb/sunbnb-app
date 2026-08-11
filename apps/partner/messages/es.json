@@ -941,6 +941,8 @@
     "confirmDepart": "Marcando como salido. El pago se mantiene; la hamaca queda libre.",
     "confirmUnreserve": "Finalizando este walk-in — la hamaca queda libre.",
     "confirmUnreserveRefund": "Reembolsando {amount} — retirado de la caja; devuelve el efectivo al cliente. La hamaca queda libre.",
+    "confirmUnreserveSeatRefund": "Reembolsando {amount} por esta hamaca — retirado de la caja; devuelve el efectivo. La hamaca queda libre.",
+    "undoDeparture": "Deshacer salida",
     "paymentFailed": "Pago fallido",
     "remove": "Eliminar",
     "confirmRemove": "Eliminando esta reserva — el pago nunca fue realizado. La hamaca queda libre inmediatamente."

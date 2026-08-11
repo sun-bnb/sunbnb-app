@@ -115,7 +115,12 @@ export interface Reservation {
     id: string
     email: string
   }
-  items?: InventoryItem[] | null
+  /**
+   * The party's seats — a MINIMAL shape (id + price), matching what the manage
+   * grid query selects. Prices feed the Seat-mode unreserve dialog's
+   * partitioned-share display (track 018 B2). Not full InventoryItem rows.
+   */
+  items?: { id: string; price?: number | null }[] | null
   /** Today's per-day operational state row. Absent for blocked reservations. */
   today?: ReservationDayRow | null
   /**
