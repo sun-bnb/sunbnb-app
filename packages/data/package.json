@@ -20,6 +20,7 @@
     "./password-reset": "./src/password-reset.ts",
     "./rate-limit": "./src/rate-limit.ts",
     "./reservation-status": "./src/reservation-status.ts",
+    "./reservation-machine": "./src/reservation-machine.ts",
     "./flags": "./src/flags.ts",
     "./impersonation": "./src/impersonation.ts",
     "./mollie-tokens": "./src/mollie-tokens.ts",
@@ -77,6 +78,9 @@
       ],
       "reservation-status": [
         "./src/reservation-status.ts"
+      ],
+      "reservation-machine": [
+        "./src/reservation-machine.ts"
       ],
       "flags": [
         "./src/flags.ts"
