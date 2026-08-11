@@ -50,7 +50,7 @@ markers in `.claude/agent-protocol.md`: self-contained, why-first, entity vocabu
 
 ### Trailers (machine-parseable `Key: value`, in a final paragraph)
 
-- **Always:** `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`
+- **Always:** `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`
 - **When it links something real:** `Refs:` an issue/PR, a track, or a wiki page — e.g.
   `Refs: .claude/tracks/001-knowledge-store.md`. Trailers are for genuine, greppable links;
   don't manufacture ceremony.

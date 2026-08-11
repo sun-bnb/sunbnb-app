@@ -29,6 +29,6 @@ Now, working through the rules:
    self-describing imperative subject ≤72 chars (no period, no `type(scope):` prefix) leading
    with the affected surface; a body carrying the *why / trigger / rejected alternatives* —
    not a restatement of the diff — in greppable file/symbol/subsystem vocabulary so `--grep`,
-   pickaxe, and `blame`→`show` land here; then trailers: `Co-Authored-By: Claude Opus 4.7
-   (1M context) <noreply@anthropic.com>` (plus `Refs:` when it links a real issue/track/wiki page).
+   pickaxe, and `blame`→`show` land here; then trailers: `Co-Authored-By: Claude Opus 5
+   <noreply@anthropic.com>` (plus `Refs:` when it links a real issue/track/wiki page).
 6. **Commit**, then show `git --no-pager show --stat --oneline HEAD`. Do **not** push.
