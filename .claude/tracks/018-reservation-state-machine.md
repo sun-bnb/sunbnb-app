@@ -35,11 +35,11 @@ must-reject cells). Known logical errors become red cells first, then fixes.
 - **Next action:** commit P4 slice (g) — docs/wiki sync (awaiting founder's word).
   That closes the track's built scope: P0–P3 done, P4 slices 1/2/3/e/f/g done,
   browser-verified.
-- **Founder ops before promote:** ES/FI copy review (`undoDeparture`,
-  `confirmUnreserveSeatRefund` + earlier session keys); **`npm run migrate:test`
-  before the next `main` push** — TWO additive migrations pending on the shared test
-  DB (`20260811164614_add_reservation_split_lineage`,
-  `20260811165223_add_invoice_credit_note_link`); the pre-push hook enforces.
+- **DONE 2026-08-11:** `migrate:test` applied (both additive migrations live on the
+  shared test DB, 119 total, status clean) and `main` pushed
+  (`e53d3ce..be954d4` — Vercel preview rebuilding; 15 track-018 commits).
+- **Founder ops before promote:** ES/FI copy review — `undoDeparture`,
+  `confirmUnreserveSeatRefund`, `refund` (Devolver/Hyvitä), `confirmBulkRefund`.
 - **Queued follow-up batches (backlog, not started):** manage create-verbs +
   move/cancel/refund onto machine events (allowlist 8 → 0); rental-booking and
   table-reservation machines on the same rails (Q5); partner reservation-day.ts
