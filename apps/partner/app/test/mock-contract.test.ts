@@ -146,6 +146,11 @@ interface SubmoduleSpec {
 
 const SUBMODULE_SPECS: SubmoduleSpec[] = [
   {
+    name: 'reservation-machine-apply',
+    realFile: 'reservation-machine-apply.ts',
+    mockFile: 'reservation-machine-apply.ts',
+  },
+  {
     name: 'subscription',
     realFile: 'subscription.ts',
     mockFile: 'subscription.ts',

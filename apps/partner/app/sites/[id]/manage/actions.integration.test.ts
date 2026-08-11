@@ -961,9 +961,10 @@ describe('markDeparted — split-then-depart (cash walk-in)', () => {
     expect(originalItemIds).toEqual([itemB.id, itemC.id].sort())
     // Original stays walked-in
     expect(original!.operationalStatus).toBe('walked-in')
-    // Original's amount = 2 remaining seats × 10€ × 2 days = 40
-    // (computeWalkInAmount: days = Math.max(1, Math.round((tomorrow23 - today0) / 86400000)) = 2)
-    expect(original!.paymentAmount).toBe(40) // 2 seats × 10€ × 2 days
+    // Machine conservation (track 018 I1): the ACTUAL charged amount (30) is
+    // PARTITIONED by seat weights — never recomputed from prices×days (the old
+    // recompute inflated 30 charged into 40+20=60 booked, inventing money).
+    expect(original!.paymentAmount).toBe(20) // 2/3 of the 30 actually charged
 
     // A new reservation must exist for itemA
     const newRes = await prisma.reservation.findFirst({
@@ -979,7 +980,9 @@ describe('markDeparted — split-then-depart (cash walk-in)', () => {
     expect(newRes!.status).toBe('paid-in-cash')
     // Multi-day → new reservation should be expected (departed today, re-rentable tomorrow)
     expect(newRes!.operationalStatus).toBe('expected')
-    expect(newRes!.paymentAmount).toBe(20) // 1 seat × 10€ × 2 days
+    expect(newRes!.paymentAmount).toBe(10) // 1/3 of the 30 actually charged (I1)
+    // Lineage stamped by the machine split
+    expect(newRes!.splitFromId).toBe(reservation.id)
   })
 
   it('till is conserved: split amounts sum to original total', async () => {
@@ -3083,7 +3086,7 @@ describe('unreserveItem void settlements (integration)', () => {
     if (after.status === 'ok') expect(after.total).toBe(0)
   })
 
-  it('voidSettlements=false: TillEntry survives unreserve and till keeps the amount', async () => {
+  it('legacy voidSettlements=false is ignored: settled unreserve always refunds (row kept, till voided)', async () => {
     const user = await createTestUser()
     // Employee.accountId references PartnerAccount.userId — must exist first.
     await createTestPartnerAccount(user.id)
@@ -3101,20 +3104,25 @@ describe('unreserveItem void settlements (integration)', () => {
 
     await settleReservation(site.id, reservation!.id, 30, undefined, employee.id)
 
-    // Unreserve with moneyReturned=false (cash retained) — settlement survives
+    // Track 018 decision (D2/table): unreserving a settled walk-in ALWAYS
+    // refunds — the legacy voidSettlements=false opt-out is IGNORED (keeping
+    // the money is Depart's job, not Unreserve's). The machine voids the till
+    // and KEEPS the row as refunded (money-rows-kept, I4).
     const result = await unreserveItem(site.id, item.id, undefined, true, false)
     expect(result.status).toBe('ok')
 
-    // TillEntry survives (voidedAt remains null); reservation row is gone
-    // (reservationId SetNull'd by the cascade) — query by site instead
     const entries = await prisma.tillEntry.findMany({ where: { siteId: site.id } })
     expect(entries).toHaveLength(1)
-    expect(entries[0]!.voidedAt).toBeNull()
+    expect(entries[0]!.voidedAt).not.toBeNull() // cash left the drawer
+    expect(entries[0]!.reservationId).toBe(reservation!.id) // row KEPT — no SetNull
 
-    // Open till still has the 30 (entry persists, attributable to the employee)
+    const kept = await prisma.reservation.findUnique({ where: { id: reservation!.id } })
+    expect(kept!.status).toBe('refunded')
+
+    // Open till no longer counts the refunded 30
     const after = await getTillStatus(site.id, employee.id)
     expect(after.status).toBe('ok')
-    if (after.status === 'ok') expect(after.total).toBe(30)
+    if (after.status === 'ok') expect(after.total).toBe(0)
   })
 })
 

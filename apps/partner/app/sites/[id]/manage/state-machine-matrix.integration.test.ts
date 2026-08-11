@@ -250,11 +250,13 @@ describe('GREEN cells (table ⇔ action agree)', () => {
   })
 })
 
-// ─── RED cells — known divergences (bug ledger). `it.fails` passes while the
-//     bug exists and flips the build the moment a P4 migration fixes it. ──────
+// ─── Formerly-RED cells — the bug ledger, flipped GREEN by P4 slice 1 ────────
+//     (unreserveItem / markDeparted split / splitWalkInSeat / checkInReservation
+//     migrated onto applyTransition on 2026-08-11). Kept in their own block as
+//     the permanent regression record of B1a/B1b/B1c, D12, D2, D10.
 
-describe('RED cells (flip to GREEN when the action migrates in P4)', () => {
-  it.fails('B1a: depart-split — the peeled party must keep its settled pay-phase', async () => {
+describe('Formerly-RED cells (bug ledger — fixed by the P4 slice-1 migration)', () => {
+  it('B1a: depart-split — the peeled party must keep its settled pay-phase', async () => {
     const { reservationId, items } = await cashWalkIn(4) // €40 settled
     const subset = items.slice(0, 2).map((i) => i.id)
     expect((await markDeparted(site.id, reservationId, undefined, subset)).status).toBe('ok')
@@ -266,14 +268,14 @@ describe('RED cells (flip to GREEN when the action migrates in P4)', () => {
     expect((await stateOf(peeled.id))!.pay).toBe('settled')
   })
 
-  it.fails('B1b: depart-split — till evidence must partition with the seats (I1)', async () => {
+  it('B1b: depart-split — till evidence must partition with the seats (I1)', async () => {
     const { reservationId, items } = await cashWalkIn(4) // €40, one entry on the original
     await markDeparted(site.id, reservationId, undefined, items.slice(0, 2).map((i) => i.id))
     // Table: original keeps exactly its remaining share (€20), not the full €40.
     expect(await activeTillSum(reservationId)).toBe(20)
   })
 
-  it.fails('B1c: splitWalkInSeat — the peeled seat must carry its till share', async () => {
+  it('B1c: splitWalkInSeat — the peeled seat must carry its till share', async () => {
     const { reservationId, items } = await cashWalkIn(2) // €20 settled
     const res = await splitWalkInSeat(site.id, reservationId, items[0]!.id)
     expect(res.status).toBe('ok')
@@ -282,7 +284,7 @@ describe('RED cells (flip to GREEN when the action migrates in P4)', () => {
     expect(await activeTillSum(newId)).toBe(10)
   })
 
-  it.fails('D12/I4: refund-unreserve must KEEP the money row as refunded + credit note', async () => {
+  it('D12/I4: refund-unreserve must KEEP the money row as refunded + credit note', async () => {
     const { reservationId, items } = await cashWalkIn(1) // settled, receipted
     expect((await unreserveItem(site.id, items[0]!.id)).status).toBe('ok')
     // Table: walkin·settled --unreserve.whole--> refunded, kept:true, creditNoteIssue.
@@ -294,14 +296,14 @@ describe('RED cells (flip to GREEN when the action migrates in P4)', () => {
     ).toBe(1)
   })
 
-  it.fails('D2: seat-mode unreserve must move the freed seat’s cash out of the till (partition)', async () => {
+  it('D2: seat-mode unreserve must move the freed seat’s cash out of the till (partition)', async () => {
     const { reservationId, items } = await cashWalkIn(2) // €20 settled
     expect((await unreserveItem(site.id, items[0]!.id, undefined, false)).status).toBe('ok')
     // Table: seatDisconnect + tillPartition — original keeps €10; today the full €20 stays.
     expect(await activeTillSum(reservationId)).toBe(10)
   })
 
-  it.fails('D10: check-in must reject a hold (kind guard)', async () => {
+  it('D10: check-in must reject a hold (kind guard)', async () => {
     const items = await nSeats(1)
     await holdBeds(site.id, [items[0]!.id])
     const hold = await prisma.reservation.findFirstOrThrow({ where: { status: 'held' } })

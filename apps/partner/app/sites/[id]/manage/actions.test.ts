@@ -105,10 +105,13 @@ import {
 } from '@repo/data/reservations'
 import { recordSettlement, voidSettlementsForReservation, closeAllOpenTills, getEmployeeShiftItems, getOpenTillItemsByEmployee, getOpenTill, closeEmployeeTill } from '@repo/data/till'
 import { processConfirmedReservation, processCashRentalBooking } from '@repo/data/payment'
+// Aliased to __mocks__ — the DB interpreter of the state machine (track 018 P4).
+import { applyTransition } from '@repo/data/reservation-machine-apply'
 import dayjs from 'dayjs'
 import { getActiveReservation } from './bed-state'
 
 const mockAuth = vi.mocked(auth)
+const mockApply = vi.mocked(applyTransition)
 const mockProcessConfirmedReservation = vi.mocked(processConfirmedReservation)
 const mockProcessCashRentalBooking = vi.mocked(processCashRentalBooking)
 const mockGuard = vi.mocked(reserveWithConflictGuard)
@@ -128,6 +131,13 @@ beforeEach(() => {
   mockGuard.mockResolvedValue({ outcome: 'created', reservationId: 'r1' })
   mockMoveGuard.mockResolvedValue({ outcome: 'moved' })
   mockRentalGuard.mockResolvedValue({ outcome: 'created', bookingIds: ['rb1'] })
+  // Machine default: every transition applies. Reject-path tests override per-call.
+  mockApply.mockResolvedValue({
+    outcome: 'applied',
+    transition: {} as any,
+    state: { kind: 'walkin', pay: 'settled', occ: 'present', released: false },
+    newReservationId: 'new-res-id',
+  } as any)
 })
 
 function authenticateAsOwner() {
@@ -463,217 +473,155 @@ describe('venue-local timezone anchoring for create actions', () => {
     expect(storedTo.getTime()).not.toBe(serverTzEnd.getTime())
   })
 
-  it('markDeparted hasFutureDays: uses venue-local end-of-today, not server-tz setHours', async () => {
-    authenticateAsOwner()
-    // A reservation whose `to` is beyond the venue's end-of-today (has future days)
-    // but is before the server-tz midnight. This would have been wrongly treated as
-    // "last day" (hasFutureDays=false) by the old server-tz setHours(23,59,59,999).
-    // Hawaii (UTC-10): venue end-of-today = 09:59:59 UTC next calendar day at UTC.
-    // Set `to` = 10:30 UTC, which is still in Hawaii's today (10:30 < 09:59+24h,
-    // simplified: use siteDayBounds to get the future end directly).
-    const tomorrowNoon = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
-    const futureEnd = siteDayBounds({ timeZone: HAWAII_TZ }, tomorrowNoon).end
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
-      siteId: SITE_ID,
-      status: 'paid-in-cash',
-      operationalStatus: 'walked-in',
-      to: futureEnd,
-      from: siteDayBounds({ timeZone: HAWAII_TZ }).start,
-      checkedInAt: new Date(),
-      guestName: null,
-      userId: OWNER_ID,
-      employeeId: null,
-      items: [{ id: ITEM_ID, price: null }],
-      site: { type: 'free', price: null, timeZone: HAWAII_TZ, locationLat: null, locationLng: null },
-    } as any)
-    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({ operationalStatus: 'walked-in' } as any)
-    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({} as any)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
-    const res = await markDeparted(SITE_ID, RES_ID)
-    expect(res.status).toBe('ok')
-
-    // hasFutureDays=true → transition to OP_EXPECTED (not departed)
-    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
-    expect(updateCall.data.operationalStatus).toBe('expected')
-    // departedAt is explicitly cleared to null when transitioning to expected
-    expect((updateCall.data as any).departedAt).toBeNull()
-  })
 })
 
 // ─── unreserveItem ─────────────────────────────────────────────────────────
 
-describe('unreserveItem', () => {
-  it('deletes walk-in with overlap-with-today filter and returns ok when count > 0', async () => {
+describe('unreserveItem (machine-delegating)', () => {
+  const lookupWalkIn = (items: { id: string }[] = [{ id: ITEM_ID }]) =>
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({ id: RES_ID, items } as any)
+
+  it('whole mode: locates the cash walk-in (overlap-today, ANY op status) and applies staff.unreserve.whole', async () => {
     authenticateAsOwner()
-    // Pair mode pre-fetches the reservation ids for voiding before deleteMany
-    vi.mocked(prisma.reservation.findMany).mockResolvedValue([{ id: RES_ID } as any])
-    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
+    lookupWalkIn()
 
     const res = await unreserveItem(SITE_ID, ITEM_ID)
     expect(res.status).toBe('ok')
 
-    const deleteCall = vi.mocked(prisma.reservation.deleteMany).mock.calls[0][0]
-    const where = deleteCall?.where as any
-    // Overlap semantics: from <= todayEnd AND to >= todayStart
+    // Lookup filter is still action-owned: overlap semantics + kind filter.
+    const where = vi.mocked(prisma.reservation.findFirst).mock.calls[0][0]?.where as any
     expect(where.from).toHaveProperty('lte')
     expect(where.to).toHaveProperty('gte')
-    // Must NOT use the old fully-contained filter shapes
-    expect(where.from).not.toHaveProperty('gte')
-    expect(where.to).not.toHaveProperty('lte')
-    // Core ownership + status filters must remain
-    expect(where.siteId).toBe(SITE_ID)
     expect(where.status).toBe('paid-in-cash')
-    // A cash walk-in can be unreserved in ANY operational state (incl. departed /
-    // no-show) — no operationalStatus constraint. (track 012)
+    // Unreservable in ANY operational state (incl. departed / no-show — track 012).
     expect(where.operationalStatus).toBeUndefined()
     expect(where.items.some.id).toBe(ITEM_ID)
+
+    // Refund-vs-delete is STATE-DERIVED inside the machine (settled ⇒ kept as
+    // refunded + till void + credit note; unsettled ⇒ delete) — the action only
+    // names the event. See @repo/data reservation-machine(-apply) tests + matrix.
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.unreserve.whole')
   })
 
-  it('returns error when deleteMany finds nothing (count === 0)', async () => {
+  it('seat mode on a multi-seat party applies staff.unreserve.seat for the tapped seat', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.reservation.findMany).mockResolvedValue([{ id: RES_ID } as any])
-    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 0 } as any)
+    lookupWalkIn([{ id: ITEM_ID }, { id: 'item-b' }])
+
+    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, false)
+    expect(res.status).toBe('ok')
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.unreserve.seat', { itemIds: [ITEM_ID] })
+  })
+
+  it('seat mode on a single-seat reservation falls back to whole release', async () => {
+    authenticateAsOwner()
+    lookupWalkIn([{ id: ITEM_ID }])
+
+    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, false)
+    expect(res.status).toBe('ok')
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.unreserve.whole')
+  })
+
+  it('returns error (and no revalidate, no machine call) when no walk-in matches', async () => {
+    const { revalidatePath } = await import('next/cache')
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
 
     const res = await unreserveItem(SITE_ID, ITEM_ID)
     expect(res.status).toBe('error')
     expect(res.errors?.[0]).toMatch(/no walk-in reservation found/i)
-  })
-
-  it('does not call revalidatePath when nothing was deleted', async () => {
-    const { revalidatePath } = await import('next/cache')
-    authenticateAsOwner()
-    vi.mocked(prisma.reservation.findMany).mockResolvedValue([{ id: RES_ID } as any])
-    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 0 } as any)
-
-    await unreserveItem(SITE_ID, ITEM_ID)
+    expect(mockApply).not.toHaveBeenCalled()
     expect(vi.mocked(revalidatePath)).not.toHaveBeenCalled()
   })
 
-  it('rejects unauthenticated caller without touching the DB', async () => {
+  it('maps a machine rejection to the standard error shape', async () => {
+    authenticateAsOwner()
+    lookupWalkIn()
+    mockApply.mockResolvedValueOnce({
+      outcome: 'rejected',
+      state: { kind: 'walkin', pay: 'collecting', occ: 'present', released: false },
+      event: 'staff.unreserve.whole',
+      reason: 'no matching transition (must-reject cell)',
+    } as any)
+
     const res = await unreserveItem(SITE_ID, ITEM_ID)
     expect(res.status).toBe('error')
-    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
+  })
+
+  it('rejects unauthenticated caller without touching the machine', async () => {
+    const res = await unreserveItem(SITE_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(mockApply).not.toHaveBeenCalled()
   })
 })
-
 // ─── checkInReservation ─────────────────────────────────────────────────────
 
 // Shared site stub with tz/coord fields for the three lifecycle actions.
 const SITE_TZ_STUB = { timeZone: 'Europe/Madrid', locationLat: '40.416', locationLng: '-3.703' }
 
-describe('checkInReservation', () => {
-  it('transitions expected -> checked-in (writes today row + mirrors legacy field)', async () => {
+describe('checkInReservation (machine-delegating)', () => {
+  it('delegates to staff.checkIn — guards + day-row semantics live in the machine', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
-      siteId: SITE_ID,
-      operationalStatus: 'expected',
-      site: SITE_TZ_STUB,
-    } as any)
-    // No today-row yet → getTodayStatus returns null → falls back to parent status
-    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue(null)
-    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({
-      id: 'rd-1', reservationId: RES_ID, date: new Date(), operationalStatus: 'checked-in',
-      checkedInAt: new Date(), departedAt: null,
-    } as any)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID } as any)
 
     const res = await checkInReservation(SITE_ID, RES_ID)
     expect(res.status).toBe('ok')
-
-    // The legacy Reservation update must still happen (parallel-write / expand).
-    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
-    expect(updateCall.data.operationalStatus).toBe('checked-in')
-    expect(updateCall.data.checkedInAt).toBeInstanceOf(Date)
-    // Today's row must have been upserted too.
-    expect(vi.mocked(prisma.reservationDay.upsert)).toHaveBeenCalledOnce()
-    const upsertCall = vi.mocked(prisma.reservationDay.upsert).mock.calls[0][0]
-    expect(upsertCall.update.operationalStatus).toBe('checked-in')
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.checkIn')
   })
 
-  it('rejects check-in from non-expected status (reads today row if present)', async () => {
+  it('maps a machine rejection to "Cannot check in from status: kind·pay·occ"', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
-      siteId: SITE_ID,
-      operationalStatus: 'checked-in',
-      site: SITE_TZ_STUB,
-    } as any)
-    // Today row also says checked-in
-    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({
-      operationalStatus: 'checked-in',
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID } as any)
+    // D10 example: a hold has no staff.checkIn row in the table.
+    mockApply.mockResolvedValueOnce({
+      outcome: 'rejected',
+      state: { kind: 'hold', pay: 'none', occ: 'expected', released: false },
+      event: 'staff.checkIn',
+      reason: 'no matching transition (must-reject cell)',
     } as any)
 
     const res = await checkInReservation(SITE_ID, RES_ID)
     expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toContain('Cannot check in')
+    expect(res.errors?.[0]).toContain('Cannot check in from status')
+    expect(res.errors?.[0]).toContain('hold·none·expected')
   })
 
-  it('rejects reservation belonging to different site', async () => {
+  it('rejects reservation belonging to different site without invoking the machine', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
-      siteId: 'other-site',
-      operationalStatus: 'expected',
-      site: SITE_TZ_STUB,
-    } as any)
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: 'other-site' } as any)
 
     const res = await checkInReservation(SITE_ID, RES_ID)
     expect(res.status).toBe('error')
     expect(res.errors).toContain('Reservation not found')
+    expect(mockApply).not.toHaveBeenCalled()
   })
 })
 
 // ─── markDeparted ───────────────────────────────────────────────────────────
 
-describe('markDeparted', () => {
-  it('transitions checked-in -> departed (writes today row + mirrors legacy field)', async () => {
+describe('markDeparted (whole, machine-delegating)', () => {
+  it('delegates to staff.depart — multiday-vs-lastday branching is a machine fact', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
-      operationalStatus: 'checked-in',
-      site: SITE_TZ_STUB,
+      items: [{ id: ITEM_ID }],
     } as any)
-    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({
-      operationalStatus: 'checked-in',
-    } as any)
-    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({
-      id: 'rd-1', reservationId: RES_ID, date: new Date(), operationalStatus: 'departed',
-      checkedInAt: null, departedAt: new Date(),
-    } as any)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
 
     const res = await markDeparted(SITE_ID, RES_ID)
     expect(res.status).toBe('ok')
-    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
-    expect(updateCall.data.operationalStatus).toBe('departed')
-    expect(vi.mocked(prisma.reservationDay.upsert)).toHaveBeenCalledOnce()
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.depart')
   })
 
-  it('transitions walked-in -> departed', async () => {
+  it('maps a machine rejection to a Cannot-mark-departed error', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       siteId: SITE_ID,
-      operationalStatus: 'walked-in',
-      site: SITE_TZ_STUB,
+      items: [{ id: ITEM_ID }],
     } as any)
-    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({
-      operationalStatus: 'walked-in',
-    } as any)
-    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({} as any)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
-    const res = await markDeparted(SITE_ID, RES_ID)
-    expect(res.status).toBe('ok')
-  })
-
-  it('rejects departure from expected status', async () => {
-    authenticateAsOwner()
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
-      siteId: SITE_ID,
-      operationalStatus: 'expected',
-      site: SITE_TZ_STUB,
-    } as any)
-    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({
-      operationalStatus: 'expected',
+    mockApply.mockResolvedValueOnce({
+      outcome: 'rejected',
+      state: { kind: 'online', pay: 'complete', occ: 'expected', released: false },
+      event: 'staff.depart',
+      reason: 'no matching transition (must-reject cell)',
     } as any)
 
     const res = await markDeparted(SITE_ID, RES_ID)
@@ -681,319 +629,98 @@ describe('markDeparted', () => {
     expect(res.errors?.[0]).toContain('Cannot mark departed')
   })
 })
-
 // ─── markDeparted — split-then-depart (cash walk-in per-seat) ───────────────
 
-describe('markDeparted split-then-depart', () => {
-  // Helper: set up the mocks needed for the split path.
-  // `splitItem` is the item being departed; `otherItems` stay on the original.
-  function setupSplitMocks({
-    items,
-    splitItemId,
-    status = 'paid-in-cash',
-    operationalStatus = 'walked-in',
-    hasFutureDays = false,
-    siteType = 'paid',
-    sitePrice = 10,
-  }: {
-    items: { id: string; price: number | null }[]
-    splitItemId: string
-    status?: string
-    operationalStatus?: string
-    hasFutureDays?: boolean
-    siteType?: string
-    sitePrice?: number
-  }) {
+describe('markDeparted split-then-depart (machine split.subset)', () => {
+  // Seat/amount/till partitioning, lineage stamping, and depart branching are
+  // machine effects — tested in @repo/data (interpreter) and the matrix. Here we
+  // pin the ACTION contract: which events it names, with which subsets, in
+  // which order, and the fall-through rules.
+  const THREE = [{ id: ITEM_ID }, { id: 'item-b' }, { id: 'item-c' }]
+  const lookup = (items: { id: string }[]) => {
     authenticateAsOwner()
-    // Use venue-local bounds (Madrid tz from SITE_TZ_STUB) so `hasFutureDays` in the
-    // action (which now uses siteDayBounds) is computed against the same base.
-    const madridTz = { timeZone: 'Europe/Madrid' }
-    const { start: fromDate, end: todayVenueEnd } = siteDayBounds(madridTz)
-    const tomorrowNoon = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
-    const toDate = hasFutureDays
-      ? siteDayBounds(madridTz, tomorrowNoon).end
-      : todayVenueEnd
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
-      siteId: SITE_ID,
-      status,
-      operationalStatus,
-      to: toDate,
-      from: fromDate,
-      checkedInAt: new Date(),
-      guestName: 'Alice',
-      userId: OWNER_ID,
-      employeeId: 'emp-1',
-      items,
-      site: {
-        type: siteType,
-        price: sitePrice,
-        ...SITE_TZ_STUB,
-      },
-    } as any)
-    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({
-      operationalStatus,
-    } as any)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-    vi.mocked(prisma.reservation.create).mockResolvedValue({ id: 'new-res-split' } as any)
-    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({} as any)
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID, items } as any)
   }
+  const applied = (extra: Record<string, unknown> = {}) =>
+    ({ outcome: 'applied', transition: {} as any, state: {} as any, ...extra }) as any
 
-  it('3-seat cash walk-in: splits off one seat (array form), original keeps 2 items + walked-in', async () => {
-    const ITEM_B = 'item-b'
-    const ITEM_C = 'item-c'
-    setupSplitMocks({
-      items: [{ id: ITEM_ID, price: null }, { id: ITEM_B, price: null }, { id: ITEM_C, price: null }],
-      splitItemId: ITEM_ID,
-    })
-
-    const res = await markDeparted(SITE_ID, RES_ID, undefined, [ITEM_ID])
-    expect(res.status).toBe('ok')
-
-    // Original reservation: disconnect the split seat, reduce paymentAmount.
-    const updateCalls = vi.mocked(prisma.reservation.update).mock.calls
-    const origUpdate = updateCalls.find(
-      (c) => c[0].where.id === RES_ID
-    )
-    expect(origUpdate).toBeDefined()
-    expect((origUpdate![0].data as any).items?.disconnect).toEqual([{ id: ITEM_ID }])
-    // Remaining 2 items × 10€ × 1 day = 20€
-    expect((origUpdate![0].data as any).paymentAmount).toBe(20)
-
-    // New reservation created for the split seat.
-    const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
-    expect((createCall.data as any).status).toBe('paid-in-cash')
-    expect((createCall.data as any).operationalStatus).toBe('walked-in')
-    expect((createCall.data as any).items?.connect).toEqual([{ id: ITEM_ID }])
-    // Per-seat amount: 1 item × 10€ × 1 day = 10€
-    expect((createCall.data as any).paymentAmount).toBe(10)
-    // Attribution preserved from original
-    expect((createCall.data as any).employeeId).toBe('emp-1')
-    expect((createCall.data as any).guestName).toBe('Alice')
-  })
-
-  it('till is conserved: split seat + remaining amounts sum to original total', async () => {
-    const ITEM_B = 'item-b'
-    const ITEM_C = 'item-c'
-    setupSplitMocks({
-      items: [{ id: ITEM_ID, price: null }, { id: ITEM_B, price: null }, { id: ITEM_C, price: null }],
-      splitItemId: ITEM_ID,
-      sitePrice: 15,
-    })
-
-    await markDeparted(SITE_ID, RES_ID, undefined, [ITEM_ID])
-
-    const updateCalls = vi.mocked(prisma.reservation.update).mock.calls
-    const origUpdate = updateCalls.find((c) => c[0].where.id === RES_ID)
-    const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
-
-    const splitAmount = (createCall.data as any).paymentAmount as number
-    const remainingAmount = (origUpdate![0].data as any).paymentAmount as number
-    // Original 3 seats × 15€ × 1 day = 45€
-    expect(splitAmount + remainingAmount).toBe(45)
-  })
-
-  it('split last-day → new reservation departed (bed freed)', async () => {
-    const ITEM_B = 'item-b'
-    setupSplitMocks({
-      items: [{ id: ITEM_ID, price: null }, { id: ITEM_B, price: null }],
-      splitItemId: ITEM_ID,
-      hasFutureDays: false,
-    })
+  it('strict subset → split.subset with the subset ids, then staff.depart on the NEW reservation', async () => {
+    lookup(THREE)
+    mockApply
+      .mockResolvedValueOnce(applied({ newReservationId: 'new-res-split' }))
+      .mockResolvedValueOnce(applied())
 
     const res = await markDeparted(SITE_ID, RES_ID, undefined, [ITEM_ID])
     expect(res.status).toBe('ok')
-
-    // The new reservation must be departed
-    const updateCalls = vi.mocked(prisma.reservation.update).mock.calls
-    const newResUpdate = updateCalls.find((c) => c[0].where.id === 'new-res-split')
-    expect(newResUpdate).toBeDefined()
-    expect((newResUpdate![0].data as any).operationalStatus).toBe('departed')
-    expect((newResUpdate![0].data as any).departedAt).toBeInstanceOf(Date)
-
-    // Today's ReservationDay for the new reservation must also be departed
-    const upsertCall = vi.mocked(prisma.reservationDay.upsert).mock.calls[0][0]
-    expect(upsertCall.create.operationalStatus).toBe('departed')
-    expect(upsertCall.update.operationalStatus).toBe('departed')
+    expect(mockApply).toHaveBeenNthCalledWith(1, RES_ID, 'split.subset', { itemIds: [ITEM_ID] })
+    expect(mockApply).toHaveBeenNthCalledWith(2, 'new-res-split', 'staff.depart')
   })
 
-  it('split future-days → new reservation expected (re-rentable tomorrow)', async () => {
-    const ITEM_B = 'item-b'
-    setupSplitMocks({
-      items: [{ id: ITEM_ID, price: null }, { id: ITEM_B, price: null }],
-      splitItemId: ITEM_ID,
-      hasFutureDays: true,
-    })
+  it('2-of-3 subset departs together: both ids in ONE split.subset call', async () => {
+    lookup(THREE)
+    mockApply
+      .mockResolvedValueOnce(applied({ newReservationId: 'new-res-split' }))
+      .mockResolvedValueOnce(applied())
 
-    const res = await markDeparted(SITE_ID, RES_ID, undefined, [ITEM_ID])
+    const res = await markDeparted(SITE_ID, RES_ID, undefined, [ITEM_ID, 'item-b'])
     expect(res.status).toBe('ok')
-
-    const updateCalls = vi.mocked(prisma.reservation.update).mock.calls
-    const newResUpdate = updateCalls.find((c) => c[0].where.id === 'new-res-split')
-    expect(newResUpdate).toBeDefined()
-    expect((newResUpdate![0].data as any).operationalStatus).toBe('expected')
-    expect((newResUpdate![0].data as any).checkedInAt).toBeNull()
-
-    const upsertCall = vi.mocked(prisma.reservationDay.upsert).mock.calls[0][0]
-    expect(upsertCall.create.operationalStatus).toBe('expected')
-    expect(upsertCall.update.operationalStatus).toBe('expected')
+    expect(mockApply).toHaveBeenNthCalledWith(1, RES_ID, 'split.subset', {
+      itemIds: [ITEM_ID, 'item-b'],
+    })
   })
 
-  it('2-of-3 subset split: 2 seats split off together as ONE new reservation, original keeps 1', async () => {
-    const ITEM_B = 'item-b'
-    const ITEM_C = 'item-c'
-    setupSplitMocks({
-      items: [{ id: ITEM_ID, price: null }, { id: ITEM_B, price: null }, { id: ITEM_C, price: null }],
-      splitItemId: ITEM_ID, // not used by the split logic now, just for helper compat
-    })
-
-    // Split ITEM_ID + ITEM_B together (2 of 3 seats)
-    const res = await markDeparted(SITE_ID, RES_ID, undefined, [ITEM_ID, ITEM_B])
+  it('ids not on the reservation are filtered — unknown-only selection is a whole depart', async () => {
+    lookup(THREE)
+    const res = await markDeparted(SITE_ID, RES_ID, undefined, ['not-a-member'])
     expect(res.status).toBe('ok')
-
-    const updateCalls = vi.mocked(prisma.reservation.update).mock.calls
-    const origUpdate = updateCalls.find((c) => c[0].where.id === RES_ID)
-    expect(origUpdate).toBeDefined()
-    // Disconnect both selected seats
-    expect((origUpdate![0].data as any).items?.disconnect).toEqual(
-      expect.arrayContaining([{ id: ITEM_ID }, { id: ITEM_B }]),
-    )
-    // Original keeps 1 seat: 1 item × 10€ × 1 day = 10€
-    expect((origUpdate![0].data as any).paymentAmount).toBe(10)
-
-    // ONE new reservation for the 2-seat subset
-    const createCall = vi.mocked(prisma.reservation.create).mock.calls[0][0]
-    expect((createCall.data as any).status).toBe('paid-in-cash')
-    expect((createCall.data as any).items?.connect).toEqual(
-      expect.arrayContaining([{ id: ITEM_ID }, { id: ITEM_B }]),
-    )
-    // Subset amount: 2 items × 10€ × 1 day = 20€
-    expect((createCall.data as any).paymentAmount).toBe(20)
-    // Amounts conserve: 20 + 10 = 30 (3 seats × 10€ × 1 day)
-    expect((createCall.data as any).paymentAmount + (origUpdate![0].data as any).paymentAmount).toBe(30)
+    expect(mockApply).toHaveBeenCalledExactlyOnceWith(RES_ID, 'staff.depart')
   })
 
   it('splitItemIds covering ALL items → whole depart (no pointless split)', async () => {
-    const ITEM_B = 'item-b'
-    setupSplitMocks({
-      items: [{ id: ITEM_ID, price: null }, { id: ITEM_B, price: null }],
-      splitItemId: ITEM_ID,
-    })
-
-    // Passing all items as splitItemIds must fall through to whole depart
-    const res = await markDeparted(SITE_ID, RES_ID, undefined, [ITEM_ID, ITEM_B])
+    lookup(THREE)
+    const res = await markDeparted(SITE_ID, RES_ID, undefined, [ITEM_ID, 'item-b', 'item-c'])
     expect(res.status).toBe('ok')
-    // canSplit is false (validSplitIds.length === reservation.items.length) → no create
-    expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
+    expect(mockApply).toHaveBeenCalledExactlyOnceWith(RES_ID, 'staff.depart')
   })
 
-  it('whole depart (no splitItemIds) is unchanged', async () => {
-    authenticateAsOwner()
-    // Use venue-local end-of-today (Madrid tz) so hasFutureDays=false in the action.
-    const { start: fromDate, end: toDate } = siteDayBounds({ timeZone: 'Europe/Madrid' })
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
-      siteId: SITE_ID,
-      status: 'paid-in-cash',
-      operationalStatus: 'walked-in',
-      to: toDate,
-      from: fromDate,
-      checkedInAt: new Date(),
-      guestName: null,
-      userId: OWNER_ID,
-      employeeId: null,
-      items: [{ id: ITEM_ID, price: null }, { id: 'item-b', price: null }],
-      site: { type: 'paid', price: 10, ...SITE_TZ_STUB },
-    } as any)
-    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({ operationalStatus: 'walked-in' } as any)
-    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({} as any)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
-    const res = await markDeparted(SITE_ID, RES_ID)
+  it('single-item reservation with splitItemIds → whole depart', async () => {
+    lookup([{ id: ITEM_ID }])
+    const res = await markDeparted(SITE_ID, RES_ID, undefined, [ITEM_ID])
     expect(res.status).toBe('ok')
-    // No split: create must NOT have been called
-    expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
-    // Whole-row depart via applyDayTransition
-    expect(vi.mocked(prisma.reservationDay.upsert)).toHaveBeenCalledOnce()
+    expect(mockApply).toHaveBeenCalledExactlyOnceWith(RES_ID, 'staff.depart')
   })
 
-  it('single-item reservation with splitItemIds: falls through to whole depart', async () => {
-    authenticateAsOwner()
-    const { start: fromDate, end: toDate } = siteDayBounds({ timeZone: 'Europe/Madrid' })
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
-      siteId: SITE_ID,
-      status: 'paid-in-cash',
-      operationalStatus: 'walked-in',
-      to: toDate,
-      from: fromDate,
-      checkedInAt: new Date(),
-      guestName: null,
-      userId: OWNER_ID,
-      employeeId: null,
-      items: [{ id: ITEM_ID, price: null }],
-      site: { type: 'paid', price: 10, ...SITE_TZ_STUB },
-    } as any)
-    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({ operationalStatus: 'walked-in' } as any)
-    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({} as any)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
+  it('machine split REJECTION (online complete / QR-collected kinds) falls through to whole depart', async () => {
+    lookup(THREE)
+    mockApply
+      .mockResolvedValueOnce({
+        outcome: 'rejected',
+        state: { kind: 'online', pay: 'complete', occ: 'present', released: false },
+        event: 'split.subset',
+        reason: 'no matching transition (must-reject cell)',
+      } as any)
+      .mockResolvedValueOnce(applied())
 
     const res = await markDeparted(SITE_ID, RES_ID, undefined, [ITEM_ID])
     expect(res.status).toBe('ok')
-    // Single item → canSplit is false → no split, no create
-    expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
+    expect(mockApply).toHaveBeenNthCalledWith(2, RES_ID, 'staff.depart')
   })
 
-  it('online checked-in (complete status) with splitItemIds: whole depart only', async () => {
-    authenticateAsOwner()
-    const { start: fromDate, end: toDate } = siteDayBounds({ timeZone: 'Europe/Madrid' })
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
-      siteId: SITE_ID,
-      status: 'complete',           // NOT paid-in-cash
-      operationalStatus: 'checked-in',
-      to: toDate,
-      from: fromDate,
-      checkedInAt: new Date(),
-      guestName: null,
-      userId: OWNER_ID,
-      employeeId: null,
-      items: [{ id: ITEM_ID, price: null }, { id: 'item-b', price: null }],
-      site: { type: 'paid', price: 10, ...SITE_TZ_STUB },
-    } as any)
-    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({ operationalStatus: 'checked-in' } as any)
-    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({} as any)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
+  it('split applied but depart of the peeled reservation fails → error surfaced', async () => {
+    lookup(THREE)
+    mockApply
+      .mockResolvedValueOnce(applied({ newReservationId: 'new-res-split' }))
+      .mockResolvedValueOnce({
+        outcome: 'rejected',
+        state: { kind: 'walkin', pay: 'settled', occ: 'expected', released: false },
+        event: 'staff.depart',
+        reason: 'no matching transition (must-reject cell)',
+      } as any)
 
     const res = await markDeparted(SITE_ID, RES_ID, undefined, [ITEM_ID])
-    expect(res.status).toBe('ok')
-    // complete status → not a cash walk-in → whole-reservation depart, no split
-    expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
-  })
-
-  it('QR-collected walk-in (complete + walked-in) with splitItemIds: whole depart only', async () => {
-    authenticateAsOwner()
-    const { start: fromDate, end: toDate } = siteDayBounds({ timeZone: 'Europe/Madrid' })
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
-      siteId: SITE_ID,
-      status: 'complete',           // paid online via QR collect
-      operationalStatus: 'walked-in',
-      to: toDate,
-      from: fromDate,
-      checkedInAt: new Date(),
-      guestName: null,
-      userId: OWNER_ID,
-      employeeId: null,
-      items: [{ id: ITEM_ID, price: null }, { id: 'item-b', price: null }],
-      site: { type: 'paid', price: 10, ...SITE_TZ_STUB },
-    } as any)
-    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({ operationalStatus: 'walked-in' } as any)
-    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({} as any)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
-    const res = await markDeparted(SITE_ID, RES_ID, undefined, [ITEM_ID])
-    expect(res.status).toBe('ok')
-    // QR-collected (complete) → not cash walk-in → whole depart
-    expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
+    expect(res.status).toBe('error')
   })
 })
-
 // ─── markNoShow ─────────────────────────────────────────────────────────────
 
 describe('markNoShow', () => {
@@ -1042,31 +769,19 @@ describe('markNoShow', () => {
 //   (c) Per-day checkedInAt is today's, not the stale day-1 value.
 
 describe('multiday per-day lifecycle', () => {
-  it('(a) day-2: today row expected → bed reads as expected (not checked-in from day-1)', async () => {
-    // Day-2 scenario: parent says checked-in (day-1 state), but today's row is expected.
-    // getTodayStatus returns 'expected' → precondition for checkIn passes.
+  it('(a+c) day-2 semantics live in the machine: check-in only names staff.checkIn', async () => {
+    // The day-2 rules formerly asserted here — "today-row wins over the stale
+    // day-1 parent" and "checkedInAt is stamped with TODAY's time, mirrored to
+    // the legacy field" — are machine facts now: deriveState today-row
+    // precedence (reservation-machine.test.ts) and the atomic dayRow executor
+    // (reservation-machine-apply.integration.test.ts + the matrix checkIn
+    // cell). The action's whole remaining contract is delegation.
     authenticateAsOwner()
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
-      siteId: SITE_ID,
-      operationalStatus: 'checked-in', // parent is stale day-1
-      site: SITE_TZ_STUB,
-    } as any)
-    // Today row says expected (it was lazy-created at day-2 rollover)
-    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({
-      operationalStatus: 'expected',
-    } as any)
-    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({
-      id: 'rd-2', reservationId: RES_ID, date: new Date(), operationalStatus: 'checked-in',
-      checkedInAt: new Date(), departedAt: null,
-    } as any)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID } as any)
 
-    // checkIn should SUCCEED because today's row is 'expected' (not stale 'checked-in')
     const res = await checkInReservation(SITE_ID, RES_ID)
     expect(res.status).toBe('ok')
-    // The today row should have been transitioned to checked-in
-    const upsertCall = vi.mocked(prisma.reservationDay.upsert).mock.calls[0][0]
-    expect(upsertCall.update.operationalStatus).toBe('checked-in')
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.checkIn')
   })
 
   it('(b) day-1 departure leaves bed reserved for day-2 (getActiveReservation still returns it)', () => {
@@ -1104,44 +819,7 @@ describe('multiday per-day lifecycle', () => {
     expect(activeRes).not.toBeNull()
     expect(activeRes?.today?.operationalStatus).toBe('expected')
   })
-
-  it('(c) OccupantInfo uses today checkedInAt, not day-1 stale value', async () => {
-    // Per-day checkedInAt: checkIn on day-2 writes today's row with today's time,
-    // NOT the day-1 legacy field. The legacy field mirrors day-2 checkedInAt too.
-    authenticateAsOwner()
-    const day1CheckedInAt = new Date(Date.now() - 86_400_000) // 24h ago
-    const day2Now = new Date()
-
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
-      siteId: SITE_ID,
-      operationalStatus: 'expected', // today row says expected (day-2 fresh)
-      site: SITE_TZ_STUB,
-      checkedInAt: day1CheckedInAt, // legacy field still has day-1 time
-    } as any)
-    vi.mocked(prisma.reservationDay.findUnique).mockResolvedValue({
-      operationalStatus: 'expected',
-    } as any)
-    vi.mocked(prisma.reservationDay.upsert).mockResolvedValue({
-      id: 'rd-2', reservationId: RES_ID, date: new Date(),
-      operationalStatus: 'checked-in',
-      checkedInAt: day2Now, // today's check-in time
-      departedAt: null,
-    } as any)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
-    const res = await checkInReservation(SITE_ID, RES_ID)
-    expect(res.status).toBe('ok')
-
-    // The reservation.update (legacy mirror) must set checkedInAt to NOW (day-2),
-    // not preserve day-1's value. This is verified by the upsert + update data.
-    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
-    expect(updateCall.data.checkedInAt).toBeInstanceOf(Date)
-    // The new timestamp must be after day-1 (within a 1-minute window of "now")
-    const delta = Math.abs(updateCall.data.checkedInAt.getTime() - day2Now.getTime())
-    expect(delta).toBeLessThan(5_000) // within 5s of test execution
-  })
 })
-
 // ─── updateReservationNotes ─────────────────────────────────────────────────
 
 describe('updateReservationNotes', () => {
@@ -1682,210 +1360,12 @@ describe('blockBed with applyToPair = false', () => {
   })
 })
 
-describe('unreserveItem with applyToPair = false', () => {
-  // Regression (track 012): a multiday cash walk-in reads 'expected' on its
-  // between-days legs. The single-seat lookup must match a cash walk-in in ANY
-  // operational state — constraining to walked-in made unreserve fail with
-  // "No walk-in reservation found to release" for the expected leg.
-  it('matches a cash walk-in in any operational state — no operationalStatus filter', async () => {
-    authenticateAsOwner()
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
-      id: RES_ID,
-      items: [{ id: ITEM_ID }],
-    } as any)
-    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
-
-    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, false)
-    expect(res.status).toBe('ok')
-
-    const where = vi.mocked(prisma.reservation.findFirst).mock.calls[0][0]?.where as any
-    expect(where.status).toBe('paid-in-cash')
-    expect(where.operationalStatus).toBeUndefined()
-    expect(where.from).toHaveProperty('lte')
-    expect(where.to).toHaveProperty('gte')
-    expect(where.items.some.id).toBe(ITEM_ID)
-  })
-
-  it('disconnects this item from a 2-item reservation and reduces paymentAmount (till conservation)', async () => {
-    authenticateAsOwner()
-    // Paid site: item being freed has price 10, partner's item has price 15.
-    // Original total would be 25/day; freeing the 10€ seat → remaining 15€ on the reservation.
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
-      id: RES_ID,
-      from: new Date('2026-06-21T00:00:00.000Z'),
-      to: new Date('2026-06-21T23:59:59.999Z'),
-      items: [{ id: ITEM_ID, price: 10 }, { id: 'pair-1', price: 15 }],
-      site: { type: 'paid', price: 20 },
-    } as any)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
-    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, false)
-    expect(res.status).toBe('ok')
-
-    // Update called to disconnect AND reduce paymentAmount — not deleteMany.
-    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
-    expect(updateCall).toMatchObject({
-      where: { id: RES_ID },
-      data: {
-        paymentAmount: 15, // remaining 1 seat × 15€ × 1 day
-        items: { disconnect: [{ id: ITEM_ID }] },
-      },
-    })
-    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
-  })
-
-  it('disconnect on a free-site walk-in sets paymentAmount to 0 (not computed)', async () => {
-    authenticateAsOwner()
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
-      id: RES_ID,
-      from: new Date('2026-06-21T00:00:00.000Z'),
-      to: new Date('2026-06-21T23:59:59.999Z'),
-      items: [{ id: ITEM_ID, price: null }, { id: 'pair-1', price: null }],
-      site: { type: 'free', price: null },
-    } as any)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
-    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, false)
-    expect(res.status).toBe('ok')
-
-    const updateCall = vi.mocked(prisma.reservation.update).mock.calls[0][0]
-    expect((updateCall.data as any).paymentAmount).toBe(0)
-  })
-
-  it('deletes the whole reservation when it has only 1 item', async () => {
-    authenticateAsOwner()
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
-      id: RES_ID,
-      items: [{ id: ITEM_ID }],
-    } as any)
-    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
-
-    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, false)
-    expect(res.status).toBe('ok')
-
-    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
-    expect(vi.mocked(prisma.reservation.deleteMany)).toHaveBeenCalledWith({
-      where: { id: RES_ID, siteId: SITE_ID },
-    })
-  })
-
-  it('returns error when no walk-in reservation found (single mode)', async () => {
-    authenticateAsOwner()
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null)
-
-    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, false)
-    expect(res.status).toBe('error')
-    expect(res.errors?.[0]).toMatch(/no walk-in reservation found/i)
-  })
-
-  it('pair mode (true) still uses deleteMany to free both seats', async () => {
-    authenticateAsOwner()
-    vi.mocked(prisma.reservation.findMany).mockResolvedValue([{ id: RES_ID } as any])
-    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
-
-    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, true)
-    expect(res.status).toBe('ok')
-
-    expect(vi.mocked(prisma.reservation.deleteMany)).toHaveBeenCalled()
-    expect(vi.mocked(prisma.reservation.update)).not.toHaveBeenCalled()
-  })
-})
-
-// ─── unreserveItem — void settlements ─────────────────────────────────────
-
-describe('unreserveItem void settlements', () => {
-  // applyToPair=true (Group/pair mode) — whole reservation delete
-
-  it('pair mode: voids settlements for each matched reservation before deleteMany when voidSettlements=true', async () => {
-    authenticateAsOwner()
-    // findMany returns the reservation ids that will be deleted
-    vi.mocked(prisma.reservation.findMany).mockResolvedValue([{ id: RES_ID } as any])
-    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
-
-    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, true, true)
-    expect(res.status).toBe('ok')
-
-    // voidSettlementsForReservation called with the matched reservation id
-    expect(vi.mocked(voidSettlementsForReservation)).toHaveBeenCalledWith(RES_ID)
-    // delete still happens after voiding
-    expect(vi.mocked(prisma.reservation.deleteMany)).toHaveBeenCalled()
-  })
-
-  it('pair mode: does NOT void settlements when voidSettlements=false (cash retained)', async () => {
-    authenticateAsOwner()
-    vi.mocked(prisma.reservation.findMany).mockResolvedValue([{ id: RES_ID } as any])
-    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
-
-    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, true, false)
-    expect(res.status).toBe('ok')
-
-    expect(vi.mocked(voidSettlementsForReservation)).not.toHaveBeenCalled()
-    expect(vi.mocked(prisma.reservation.deleteMany)).toHaveBeenCalled()
-  })
-
-  // applyToPair=false, single-item reservation — whole delete path
-
-  it('single mode, 1-item reservation: voids settlements before deleteMany when voidSettlements=true', async () => {
-    authenticateAsOwner()
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
-      id: RES_ID,
-      from: new Date('2026-06-21T00:00:00.000Z'),
-      to: new Date('2026-06-21T23:59:59.999Z'),
-      items: [{ id: ITEM_ID, price: 10 }],
-      site: { type: 'paid', price: 10 },
-    } as any)
-    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
-
-    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, false, true)
-    expect(res.status).toBe('ok')
-
-    // void called before delete (order: void → deleteMany)
-    const voidCall = vi.mocked(voidSettlementsForReservation).mock.invocationCallOrder[0]
-    const deleteCall = vi.mocked(prisma.reservation.deleteMany).mock.invocationCallOrder[0]
-    expect(voidCall).toBeLessThan(deleteCall!)
-    expect(vi.mocked(voidSettlementsForReservation)).toHaveBeenCalledWith(RES_ID)
-  })
-
-  it('single mode, 1-item reservation: does NOT void when voidSettlements=false', async () => {
-    authenticateAsOwner()
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
-      id: RES_ID,
-      from: new Date('2026-06-21T00:00:00.000Z'),
-      to: new Date('2026-06-21T23:59:59.999Z'),
-      items: [{ id: ITEM_ID, price: 10 }],
-      site: { type: 'paid', price: 10 },
-    } as any)
-    vi.mocked(prisma.reservation.deleteMany).mockResolvedValue({ count: 1 } as any)
-
-    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, false, false)
-    expect(res.status).toBe('ok')
-
-    expect(vi.mocked(voidSettlementsForReservation)).not.toHaveBeenCalled()
-  })
-
-  // applyToPair=false, multi-item reservation — disconnect path, never voids
-
-  it('single mode, 2-item reservation: NEVER voids even when voidSettlements=true (disconnect path)', async () => {
-    authenticateAsOwner()
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
-      id: RES_ID,
-      from: new Date('2026-06-21T00:00:00.000Z'),
-      to: new Date('2026-06-21T23:59:59.999Z'),
-      items: [{ id: ITEM_ID, price: 10 }, { id: 'pair-1', price: 15 }],
-      site: { type: 'paid', price: 20 },
-    } as any)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
-    const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, false, true)
-    expect(res.status).toBe('ok')
-
-    // Disconnect happened, NOT delete
-    expect(vi.mocked(prisma.reservation.update)).toHaveBeenCalled()
-    expect(vi.mocked(prisma.reservation.deleteMany)).not.toHaveBeenCalled()
-    // Settlement must NOT be voided — it belongs to the remaining seats
-    expect(vi.mocked(voidSettlementsForReservation)).not.toHaveBeenCalled()
-  })
-})
+// NOTE (track 018 P4): the former "unreserveItem with applyToPair = false" and
+// "unreserveItem void settlements" suites asserted the pre-machine delete/void
+// internals. Refund-vs-delete and till partitioning are now state-derived
+// machine effects — covered by @repo/data reservation-machine(-apply) tests and
+// the state-machine matrix; the action contract lives in
+// "unreserveItem (machine-delegating)" above.
 
 // ─── Pool Seat Actions ──────────────────────────────────────────────────────
 
@@ -4208,120 +3688,41 @@ function walkInResStub(overrides: Partial<{
   }
 }
 
-describe('splitWalkInSeat', () => {
-  it('splits one seat off a 3-seat cash walk-in: original keeps 2 items + reduced amount, new reservation is 1-item walked-in', async () => {
+describe('splitWalkInSeat (machine-delegating)', () => {
+  // Seat/amount/till partitioning + lineage are machine effects (split.subset)
+  // — tested in @repo/data and the matrix. The action contract: delegate for
+  // the tapped seat, surface the new reservation id, map rejections.
+  it('delegates to split.subset for the tapped seat and returns the new reservation id', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(walkInResStub() as any)
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID } as any)
 
-    let createdResId = 'new-res-1'
-    vi.mocked(prisma.$transaction).mockImplementationOnce(async (fn: any) => {
-      return fn({
-        reservation: {
-          update: vi.fn().mockResolvedValue({}),
-          create: vi.fn().mockResolvedValue({ id: createdResId }),
-        },
-      })
-    })
-
-    const result = await splitWalkInSeat(SITE_ID, RES_ID, ITEM_ID)
-    expect(result.status).toBe('ok')
-    if (result.status === 'ok') {
-      expect(result.reservationId).toBe(createdResId)
-    }
+    const res = await splitWalkInSeat(SITE_ID, RES_ID, ITEM_ID)
+    expect(res.status).toBe('ok')
+    expect((res as any).reservationId).toBe('new-res-id')
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'split.subset', { itemIds: [ITEM_ID] })
   })
 
-  it('disconnect update carries paymentAmount for remaining 2 seats (till conservation)', async () => {
+  it('maps a machine rejection (single-seat, online kinds, foreign item) to an error', async () => {
     authenticateAsOwner()
-    // 3-seat walk-in, each seat 10€, 1 day → total 30€.
-    // Split off ITEM_ID (10€) → remaining 2 seats = 20€.
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(walkInResStub() as any)
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID } as any)
+    mockApply.mockResolvedValueOnce({
+      outcome: 'rejected',
+      state: { kind: 'online', pay: 'complete', occ: 'present', released: false },
+      event: 'split.subset',
+      reason: 'no matching transition (must-reject cell)',
+    } as any)
 
-    let capturedUpdateArgs: any = null
-    let capturedCreateArgs: any = null
-
-    vi.mocked(prisma.$transaction).mockImplementationOnce(async (fn: any) => {
-      const tx = {
-        reservation: {
-          update: vi.fn().mockImplementation((args) => { capturedUpdateArgs = args; return Promise.resolve({}) }),
-          create: vi.fn().mockImplementation((args) => { capturedCreateArgs = args; return Promise.resolve({ id: 'new-res-2' }) }),
-        },
-      }
-      return fn(tx)
-    })
-
-    await splitWalkInSeat(SITE_ID, RES_ID, ITEM_ID)
-
-    // Original reservation: disconnect + reduced amount (30 - 10 = 20 for 2 remaining seats).
-    expect(capturedUpdateArgs.where).toEqual({ id: RES_ID })
-    expect(capturedUpdateArgs.data.paymentAmount).toBe(20)
-    expect(capturedUpdateArgs.data.items.disconnect).toEqual([{ id: ITEM_ID }])
-
-    // New reservation: per-seat amount (10€) + attribution copied.
-    expect(capturedCreateArgs.data.paymentAmount).toBe(10)
-    expect(capturedCreateArgs.data.status).toBe('paid-in-cash')
-    expect(capturedCreateArgs.data.operationalStatus).toBe('walked-in')
-    expect(capturedCreateArgs.data.employeeId).toBe('emp-1')
-    expect(capturedCreateArgs.data.guestName).toBe('Test Party')
-    expect(capturedCreateArgs.data.items.connect).toEqual([{ id: ITEM_ID }])
+    const res = await splitWalkInSeat(SITE_ID, RES_ID, ITEM_ID)
+    expect(res.status).toBe('error')
   })
 
-  it('rejects online checked-in (complete) reservation', async () => {
+  it('rejects a reservation from another site without invoking the machine', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(
-      walkInResStub({ status: 'complete', operationalStatus: 'walked-in' }) as any
-    )
-    const result = await splitWalkInSeat(SITE_ID, RES_ID, ITEM_ID)
-    expect(result.status).toBe('error')
-    expect(result.errors?.[0]).toMatch(/cash walk-in/i)
-  })
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: 'other-site' } as any)
 
-  it('rejects a single-seat walk-in (nothing to split)', async () => {
-    authenticateAsOwner()
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(
-      walkInResStub({ itemCount: 1 }) as any
-    )
-    const result = await splitWalkInSeat(SITE_ID, RES_ID, ITEM_ID)
-    expect(result.status).toBe('error')
-    expect(result.errors?.[0]).toMatch(/only one seat/i)
-  })
-
-  it('rejects when the tapped item is not on the reservation', async () => {
-    authenticateAsOwner()
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(
-      walkInResStub() as any
-    )
-    const result = await splitWalkInSeat(SITE_ID, RES_ID, 'no-such-item')
-    expect(result.status).toBe('error')
-    expect(result.errors?.[0]).toMatch(/item not found/i)
-  })
-
-  it('sets paymentAmount to 0 for a free site regardless of item prices', async () => {
-    authenticateAsOwner()
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(
-      walkInResStub({ siteType: 'free' }) as any
-    )
-
-    let capturedUpdateArgs: any = null
-    let capturedCreateArgs: any = null
-    vi.mocked(prisma.$transaction).mockImplementationOnce(async (fn: any) => {
-      const tx = {
-        reservation: {
-          update: vi.fn().mockImplementation((args) => { capturedUpdateArgs = args; return Promise.resolve({}) }),
-          create: vi.fn().mockImplementation((args) => { capturedCreateArgs = args; return Promise.resolve({ id: 'new-res-3' }) }),
-        },
-      }
-      return fn(tx)
-    })
-
-    await splitWalkInSeat(SITE_ID, RES_ID, ITEM_ID)
-
-    expect(capturedUpdateArgs.data.paymentAmount).toBe(0)
-    expect(capturedCreateArgs.data.paymentAmount).toBe(0)
-  })
-
-  it('rejects unauthenticated caller', async () => {
-    const result = await splitWalkInSeat(SITE_ID, RES_ID, ITEM_ID)
-    expect(result.status).toBe('error')
+    const res = await splitWalkInSeat(SITE_ID, RES_ID, ITEM_ID)
+    expect(res.status).toBe('error')
+    expect(mockApply).not.toHaveBeenCalled()
   })
 })
 

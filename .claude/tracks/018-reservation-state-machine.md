@@ -32,20 +32,25 @@ must-reject cells). Known logical errors become red cells first, then fixes.
 
 ## Resume here
 
-- **Next action:** commit P3 initial matrix (awaiting founder's word). **Before the next
-  `main` push: `npm run migrate:test`** — TWO additive migrations pending on the shared
-  test DB (`20260811164614_add_reservation_split_lineage`,
+- **Next action:** commit P4 slice 1 (awaiting founder's word): migrated actions +
+  rewritten unit suites + updated integration expectations + allowlist 19→13 + the six
+  flipped matrix cells. **Before the next `main` push: `npm run migrate:test`** — TWO
+  additive migrations pending on the shared test DB
+  (`20260811164614_add_reservation_split_lineage`,
   `20260811165223_add_invoice_credit_note_link`); the pre-push hook enforces.
-- **Then P4 — migrate actions onto applyTransition, flipping red cells green.** First
-  target: `unreserveItem` + `markDeparted` split path (flips B1a/B1b/B1c, D12, D2) —
-  swap guard+writes for `applyTransition` calls, lower the meta-guard ALLOWLIST count
-  for manage/actions.ts, flip the matrix cells from `it.fails` to `it`. Then the D14/D15
-  fossils (frontdesk + partner reservation-detail), collect flow (D5/D6 cells +
-  DEFERRED→COVERED), undo-depart UI (new capability), cron I4 sweep. Each migration:
-  action swap → allowlist down → cells green → matrix DEFERRED shrinks. Also due with
-  P4: sync canonical docs (packages/data/CLAUDE.md — machine modules + tests; partner
-  CLAUDE.md — matrix file + migrated actions) and /wiki ingest; BedDetail/view UI
-  reads move onto deriveState (bed-state.ts becomes presentation-only).
+- **Then P4 slice 2 (suggested order):** (a) D14/D15 fossils — frontdesk/actions.ts +
+  partner reservations/[id]/actions.ts route through applyTransition (kills parent-only
+  writes + terminal-only depart; allowlist 4+4 → 0); (b) markNoShow/resumeWalkIn +
+  undo-depart action (new `staff.resume.undoDepart` capability + BedDetail button);
+  (c) cron I4 sweep (stop deleting settled walk-ins); (d) BedDetail/view.tsx UI
+  alignment — dialog copy derived from effect cells (B2's UI half: seat-mode unreserve
+  shows the PARTITIONED share now that the action actually moves it), deriveState
+  behind bed-state; (e) collect flow (mollie effect executors, D5/D6 DEFERRED→COVERED);
+  (f) user-app writers; (g) docs/wiki sync at the end of P4.
+- **UI note for (d):** BedDetail's `confirmUnreserveRefund` copy still shows the WHOLE
+  paymentAmount in seat mode; the migrated action now partitions — copy must show the
+  freed seat's share. The legacy `voidSettlements` arg is ignored by the action (docs
+  in the action header).
 - **Deferred nits:** no index on `split_from_id` (rare lookups; add forward if hot);
   accounting/fiscal surfaces should eventually RENDER credit notes distinctly (they
   already net correctly in sums).
@@ -167,8 +172,25 @@ must-reject cells). Known logical errors become red cells first, then fixes.
   manifest: every table event classified COVERED (13) or DEFERRED-with-reason (21,
   shrink-only) — a new table event fails the manifest until classified. Partner 1996u +
   196i green (17 new), tsc + lint clean.
-- ☐ **P4 — Migrate actions onto the machine + fix red cells** (B1 till/receipt
-  conservation on split, B2 copy/void mismatch, B3 credit-note or delete-blocks-receipt).
+- ▶ **P4 — Migrate actions onto the machine + fix red cells.** Slice 1 SHIPPED
+  2026-08-11 (uncommitted): `unreserveItem`, `markDeparted` (whole + split),
+  `splitWalkInSeat`, `checkInReservation` swapped onto `applyTransition` — **all six
+  matrix red cells flipped GREEN on first run** (B1a/B1b/B1c till-follows-seats, D12
+  refund-unreserve row-kept+credit-note, D2 seat-partition, D10 kind-guarded check-in).
+  Meta-guard ALLOWLIST manage/actions.ts 19 → 13 (first ratchet shrink). Legacy
+  `voidSettlements` param retained-but-ignored (refund is state-derived; documented).
+  actions.test.ts stale internals suites rewritten to the machine-delegation contract
+  (368 green; two obsolete suites replaced with a pointer note); two integration tests
+  updated to the decided semantics — one had enshrined the old split recompute that
+  INVENTED money (guest paid €30, books said €60; now partitions the actual €30).
+  Partner 1978u+196i, data 320u+327i, tsc clean.
+  **Remaining P4:** D14/D15 fossils (frontdesk + partner reservation-detail — route
+  through applyTransition, kill the parent-only writes), collect flow (D5/D6 executors:
+  mollie effects), undo-depart UI (new resume capability), cron I4 sweep (stop deleting
+  settled walk-ins), markNoShow/resumeWalkIn/holds/comps/blocks delegation, user-app
+  writers (webhook/reconcile/cancel), BedDetail/view.tsx UI alignment (dialog copy from
+  effect cells — B2's UI half; deriveState replaces bed-state internals), then docs/wiki
+  sync (packages/data/CLAUDE.md, partner CLAUDE.md).
 - 💤 **P5 — Wiki page** (`subsystems/reservation-state-machine.md`) + fold into
   `bed-state.ts` docs; groom CLAUDE.md pointers.
 
@@ -182,6 +204,17 @@ deletable rule; D13 grouping kept; kind derived not persisted; no new status str
 
 ## Log
 
+- **2026-08-11 (P4 slice 1 — first actions migrated, all red cells flipped)** — P3
+  committed (`5de085b`). unreserveItem / markDeparted / splitWalkInSeat /
+  checkInReservation now delegate to applyTransition; every one of the six matrix red
+  cells went green ON FIRST RUN — the founder's B1 repro is fixed by construction (till
+  partitions with seats; peeled parties stay settled; Collect/re-settle rejected).
+  Ratchet shrank 19→13. Notable: the old split recompute INVENTED money (charged €30 →
+  booked €60) — an old integration test had enshrined it; now asserts I1 partition.
+  Legacy voidSettlements opt-out ignored per D2 decision. Unit suites rewritten from
+  implementation-internals to machine-delegation contracts (this is the maintenance
+  model now: actions assert WHICH event they name; behavior lives in table+interpreter
+  tests). Partner 1978u+196i, data 320u+327i green. Uncommitted. Fable 5.
 - **2026-08-11 (P3 — initial matrix)** — P2 committed complete (`29c5a68`). The matrix
   is live: real manage actions driven through table-derived expectations (tablePost via
   resolveTransition — the table IS the oracle). 10 green cells lock correct behavior;

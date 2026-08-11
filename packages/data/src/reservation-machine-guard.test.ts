@@ -55,7 +55,9 @@ const ALLOWLIST: Record<string, number> = {
   'apps/partner/app/api/reservations-cleanup/route.ts': 1, // cron GC deleteMany
   'apps/partner/app/frontdesk/actions.ts': 4, // track-012-flagged duplicate of manage transitions
   'apps/partner/app/reservations/[id]/actions.ts': 4, // partner reservation-detail transitions
-  'apps/partner/app/sites/[id]/manage/actions.ts': 19, // the P4 migration target
+  // P4 slice 1 (2026-08-11): unreserveItem, markDeparted (whole+split),
+  // splitWalkInSeat, checkInReservation migrated onto applyTransition → 19 → 13.
+  'apps/partner/app/sites/[id]/manage/actions.ts': 13, // remaining P4 targets
   'apps/user/app/api/reconcile/route.ts': 1, // payment_failed writer
   'apps/user/app/api/reservations/[id]/route.ts': 1, // payment_failed writer (poll)
   'apps/user/app/api/webhooks/mollie/route.ts': 3, // paid/failed/refund webhook writers

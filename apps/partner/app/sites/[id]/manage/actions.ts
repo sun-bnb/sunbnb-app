@@ -39,6 +39,7 @@ import {
 } from '@repo/data/analytics'
 import { processConfirmedReservation, processCashRentalBooking } from '@repo/data/payment'
 import { applyDayTransition } from './reservation-day'
+import { applyTransition } from '@repo/data/reservation-machine-apply'
 import { siteDayKey, siteDayBounds } from '@repo/data/site-day'
 import type { SiteTimezone } from '@repo/data/site-day'
 import type { Prisma } from '@prisma/client'
@@ -354,121 +355,54 @@ export async function reserveItem(
 
 // ─── Release bed: walk-in departs or no-show ────────────────────────────────
 
+/**
+ * MIGRATED onto the state machine (track 018 P4): the guard + writes live in
+ * the transition table (`@repo/data/reservation-machine`), executed by
+ * `applyTransition`. Whole mode → `staff.unreserve.whole` (settled ⇒ row KEPT
+ * as refunded + till voided + credit note — money-rows-kept; unsettled ⇒
+ * delete). Seat mode on a multi-seat party → `staff.unreserve.seat`
+ * (disconnect + till/amount partition + credit note for the freed share).
+ *
+ * `_voidSettlements` is retained for caller compatibility but IGNORED: per the
+ * table, unreserving a settled walk-in ALWAYS refunds (keeping the money is
+ * Depart's job) — refund behavior is state-derived, not caller-chosen.
+ */
 export async function unreserveItem(
   siteId: string,
   itemId: string,
   accessKey?: string,
   applyToPair: boolean = true,
-  voidSettlements: boolean = true,
+  _voidSettlements: boolean = true,
 ) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
   const { start: todayStart, end: todayEnd } = await siteTodayBounds(siteId)
 
-  if (applyToPair) {
-    // Pair mode: delete the whole walk-in reservation (frees both seats).
-    // For walk-ins (paid-in-cash), delete them entirely (no invoice trail).
-    // Use overlap-with-today semantics so multi-day walk-ins (to > todayEnd)
-    // and in-progress stays (from < todayStart) are matched correctly.
-    //
-    // Void settlements BEFORE delete: after deleteMany the reservationId FKs are
-    // SetNull'd and voidSettlementsForReservation can no longer find the rows.
-    const matchWhere = {
+  // Locate the cash walk-in this seat belongs to. Overlap-with-today + ANY
+  // operational state (track 012: multiday between-days legs, departed rows).
+  const reservation = await prisma.reservation.findFirst({
+    where: {
       siteId,
       status: RESERVATION_PAID_IN_CASH,
-      // Any operational state — a cash walk-in can be unreserved at any time,
-      // including after it's been departed or marked no-show (track 012).
       from: { lte: todayEnd },
       to: { gte: todayStart },
       items: { some: { id: itemId } },
-    }
+    },
+    select: { id: true, items: { select: { id: true } } },
+  })
+  if (!reservation) {
+    return { status: 'error', errors: ['No walk-in reservation found to release'] }
+  }
 
-    if (voidSettlements) {
-      // Fetch the reservation ids that will be deleted so we can void their
-      // settlements before the delete clears the FK. (Shouldn't be more than
-      // one, but safe to handle any count.)
-      const toDelete = await prisma.reservation.findMany({
-        where: matchWhere,
-        select: { id: true },
-      })
-      for (const r of toDelete) {
-        await voidSettlementsForReservation(r.id)
-      }
-    }
+  // Seat scope only makes sense on a multi-seat party; otherwise whole-release.
+  const seatMode = !applyToPair && reservation.items.length > 1
+  const result = seatMode
+    ? await applyTransition(reservation.id, 'staff.unreserve.seat', { itemIds: [itemId] })
+    : await applyTransition(reservation.id, 'staff.unreserve.whole')
 
-    const result = await prisma.reservation.deleteMany({ where: matchWhere })
-
-    if (result.count === 0) {
-      return { status: 'error', errors: ['No walk-in reservation found to release'] }
-    }
-  } else {
-    // Single-seat mode: if the reservation has >1 item, disconnect just this
-    // seat (the partner stays); otherwise delete the whole reservation.
-    // Match a cash walk-in in ANY operational state — including the between-days
-    // 'expected' leg of a multiday walk-in (track 012). The pair branch above
-    // already dropped this constraint; the single branch must mirror it, or
-    // unreserving a multiday cash booking that reads 'expected' today fails with
-    // "No walk-in reservation found to release".
-    const reservation = await prisma.reservation.findFirst({
-      where: {
-        siteId,
-        status: RESERVATION_PAID_IN_CASH,
-        from: { lte: todayEnd },
-        to: { gte: todayStart },
-        items: { some: { id: itemId } },
-      },
-      select: {
-        id: true,
-        from: true,
-        to: true,
-        items: { select: { id: true, price: true } },
-        site: { select: { type: true, price: true } },
-      },
-    })
-
-    if (!reservation) {
-      return { status: 'error', errors: ['No walk-in reservation found to release'] }
-    }
-
-    if (reservation.items.length > 1) {
-      // Multi-seat disconnect: freeing one seat from a group reservation.
-      // Never void settlements here — the settlement belongs to the whole
-      // reservation (the remaining seats still occupy the drawer). The
-      // paymentAmount reduction below maintains the "expected price" prefill
-      // for a later Settle; the till itself reads from TillEntry (unaffected).
-      const remainingItems = reservation.items.filter((i) => i.id !== itemId)
-      // Till conservation: reduce paymentAmount to the remaining seats' share so
-      // the refunded seat's cash leaves the till (mirrors the depart-split logic).
-      // Free sites always record 0; paid sites compute from DB prices only (payments.md).
-      const remainingAmount =
-        reservation.site.type === 'paid'
-          ? computeWalkInAmount(
-              remainingItems,
-              reservation.site.price,
-              reservation.from ?? dayjs().startOf('day').toDate(),
-              reservation.to,
-            )
-          : 0
-      await prisma.reservation.update({
-        where: { id: reservation.id },
-        data: {
-          paymentAmount: remainingAmount,
-          items: { disconnect: [{ id: itemId }] },
-        },
-      })
-    } else {
-      // Single-seat delete path: void settlements before delete (same FK-SetNull risk).
-      if (voidSettlements) {
-        await voidSettlementsForReservation(reservation.id)
-      }
-      await prisma.reservation.deleteMany({
-        where: {
-          id: reservation.id,
-          siteId,
-        },
-      })
-    }
+  if (result.outcome !== 'applied') {
+    return { status: 'error', errors: ['No walk-in reservation found to release'] }
   }
 
   revalidatePath(`/sites/${siteId}/manage`)
@@ -477,36 +411,31 @@ export async function unreserveItem(
 
 // ─── Check-in: customer arrived for their booking ───────────────────────────
 
+/**
+ * MIGRATED onto the state machine (track 018 P4). The table's `staff.checkIn`
+ * row requires online·complete·expected — so holds and mid-payment rows are
+ * now rejected (defacto D10): a held guest arrives via Rent/convert, a
+ * mid-payment guest resolves via the payment rail first.
+ */
 export async function checkInReservation(siteId: string, reservationId: string, accessKey?: string) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
 
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
-    select: {
-      siteId: true,
-      operationalStatus: true,
-      site: { select: { timeZone: true, locationLat: true, locationLng: true } },
-    },
+    select: { siteId: true },
   })
   if (!reservation || reservation.siteId !== siteId) {
     return { status: 'error', errors: ['Reservation not found'] }
   }
 
-  // Precondition: read from today's row if it exists, else fall back to parent.
-  // We load the today-row to get the real current-day operational status.
-  const todayStatus = await getTodayStatus(reservationId, reservation.site)
-  const effectiveStatus = todayStatus ?? reservation.operationalStatus
-  if (effectiveStatus !== OP_EXPECTED) {
-    return { status: 'error', errors: [`Cannot check in from status: ${effectiveStatus}`] }
+  const result = await applyTransition(reservationId, 'staff.checkIn')
+  if (result.outcome !== 'applied') {
+    const from = result.outcome === 'rejected'
+      ? `${result.state.kind}·${result.state.pay}·${result.state.occ}`
+      : result.outcome
+    return { status: 'error', errors: [`Cannot check in from status: ${from}`] }
   }
-
-  const now = new Date()
-  await applyDayTransition(
-    { id: reservationId },
-    reservation.site,
-    { operationalStatus: OP_CHECKED_IN, checkedInAt: now },
-  )
 
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok' }
@@ -562,26 +491,17 @@ export async function resumeWalkIn(siteId: string, reservationId: string, access
 // ─── Mark departed: customer left ───────────────────────────────────────────
 
 /**
- * Mark a reservation (or a subset of seats of a multi-seat cash walk-in) as departed.
+ * Mark a reservation (or a subset of seats of a cash walk-in party) as departed.
  *
- * `splitItemIds` — optional array; only honoured for `paid-in-cash` + walked-in
- * reservations. When set AND the subset is smaller than the reservation's full item
- * count, the selected seats are peeled into ONE new reservation:
- *   1. In a $transaction: disconnect the subset from the original reservation
- *      (remaining seats stay walked-in with the reduced paymentAmount), create a
- *      new reservation for the subset copying the original's attribution
- *      (employeeId, guestName, userId, from/to, status, checkedInAt), then apply
- *      the depart transition to the NEW reservation only.
- *   2. The original reservation is NOT transitioned — its remaining seats stay
- *      walked-in and the bed remains occupied.
- *   3. Till conservation: paymentAmount on both the original (reduced) and the new
- *      (per-subset) sum to the original total when prices are unchanged.
- * When `splitItemIds` covers ALL the reservation's items (or is empty), the
- * whole-reservation depart runs in place (no pointless split).
- *
- * Online checked-in (RESERVATION_COMPLETE) and QR-collected (complete + walked-in)
- * reservations are NOT splittable — `splitItemIds` is silently ignored for them and
- * the whole-reservation depart runs instead (invoice / refund complexity).
+ * MIGRATED onto the state machine (track 018 P4):
+ * - Subset depart = `split.subset` (seats + paymentAmount + TILL EVIDENCE
+ *   partition into a lineage row — B1 fix) followed by `staff.depart` on the
+ *   peeled reservation. The original keeps its remaining seats untouched.
+ * - Whole depart = `staff.depart`; the table branches on the interpreter-computed
+ *   hasFutureDays/lastDay facts (multiday daily cycle vs terminal departed).
+ * - Online complete / QR-collected reservations are not splittable — the table
+ *   has no split row for them, so `splitItemIds` falls through to whole-depart
+ *   (previous behavior preserved). Money is never touched by depart.
  */
 export async function markDeparted(
   siteId: string,
@@ -594,202 +514,50 @@ export async function markDeparted(
 
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
-    select: {
-      siteId: true,
-      status: true,
-      operationalStatus: true,
-      to: true,
-      from: true,
-      checkedInAt: true,
-      guestName: true,
-      userId: true,
-      employeeId: true,
-      items: { select: { id: true, price: true } },
-      site: {
-        select: {
-          type: true,
-          price: true,
-          timeZone: true,
-          locationLat: true,
-          locationLng: true,
-        },
-      },
-    },
+    select: { siteId: true, items: { select: { id: true } } },
   })
   if (!reservation || reservation.siteId !== siteId) {
     return { status: 'error', errors: ['Reservation not found'] }
   }
 
-  // Precondition: derive from today's row (may not exist yet → fall back to parent).
-  const todayStatus = await getTodayStatus(reservationId, reservation.site)
-  const effectiveStatus = todayStatus ?? reservation.operationalStatus
-  if (!([OP_CHECKED_IN, OP_WALKED_IN] as string[]).includes(effectiveStatus)) {
-    return { status: 'error', errors: [`Cannot mark departed from: ${effectiveStatus}`] }
-  }
-
-  // Split-then-depart path: only for paid-in-cash + walked-in multi-seat walk-ins.
-  // Online (complete) and QR-collected (complete + walked-in) are excluded: their
-  // invoice complexity makes per-seat partial operations unsafe here.
-  const isCashWalkIn =
-    reservation.status === RESERVATION_PAID_IN_CASH &&
-    effectiveStatus === OP_WALKED_IN
-
-  // Normalise the split set: filter to item ids that actually belong to this reservation.
+  // Normalise the split set: only item ids that actually belong to this
+  // reservation, and only a STRICT subset is a split (whole selection = plain depart).
   const validSplitIds = (splitItemIds ?? []).filter((id) =>
     reservation.items.some((i) => i.id === id),
   )
+  const wantsSplit =
+    validSplitIds.length > 0 && validSplitIds.length < reservation.items.length
 
-  // A split is only meaningful when:
-  //   - this is a cash walk-in
-  //   - the caller specified a non-empty subset
-  //   - the subset is SMALLER than the full item count (otherwise it's just a whole depart)
-  const canSplit =
-    isCashWalkIn &&
-    validSplitIds.length > 0 &&
-    reservation.items.length > 1 &&
-    validSplitIds.length < reservation.items.length
-
-  if (canSplit) {
-    const splitItems = reservation.items.filter((i) => validSplitIds.includes(i.id))
-    const remainingItems = reservation.items.filter((i) => !validSplitIds.includes(i.id))
-
-    // Conserve the till: subset + remaining amounts sum to the original total
-    // when prices are unchanged. Both computed from DB prices only (payments.md).
-    const fromDate = reservation.from ?? dayjs().startOf('day').toDate()
-    const toDate = reservation.to
-    const newSubsetAmount =
-      reservation.site.type === 'paid'
-        ? computeWalkInAmount(splitItems, reservation.site.price, fromDate, toDate)
-        : 0
-    const remainingAmount =
-      reservation.site.type === 'paid'
-        ? computeWalkInAmount(remainingItems, reservation.site.price, fromDate, toDate)
-        : 0
-
-    // Determine departure transition BEFORE entering the transaction (uses site tz).
-    const endOfToday = siteDayBounds(buildSiteTimezone(reservation.site)).end
-    const hasFutureDays = toDate > endOfToday
-
-    // Compute todayKey BEFORE the transaction — it's a pure timezone calculation.
-    const todayKey = siteDayKey({
-      timeZone: reservation.site.timeZone,
-      latitude: reservation.site.locationLat
-        ? parseFloat(reservation.site.locationLat)
-        : undefined,
-      longitude: reservation.site.locationLng
-        ? parseFloat(reservation.site.locationLng)
-        : undefined,
+  if (wantsSplit) {
+    const split = await applyTransition(reservationId, 'split.subset', {
+      itemIds: validSplitIds,
     })
-    const todayDate = new Date(todayKey)
-    const departNow = new Date()
-
-    // All DB mutations in one atomic transaction: disconnect → create → depart.
-    await prisma.$transaction(async (tx) => {
-      // 1. Disconnect the splitting subset from the original; reduce the original's amount.
-      await tx.reservation.update({
-        where: { id: reservationId },
-        data: {
-          paymentAmount: remainingAmount,
-          items: { disconnect: validSplitIds.map((id) => ({ id })) },
-        },
-      })
-
-      // 2. Create ONE new reservation for the entire subset, copying original attribution.
-      //    Preserve: employeeId (who collected the cash), guestName, userId, from, to,
-      //    status (paid-in-cash), operationalStatus (walked-in), checkedInAt.
-      const newRes = await tx.reservation.create({
-        data: {
-          siteId,
-          userId: reservation.userId,
-          type: 'days',
-          status: RESERVATION_PAID_IN_CASH,
-          operationalStatus: OP_WALKED_IN,
-          checkedInAt: reservation.checkedInAt,
-          from: fromDate,
-          to: toDate,
-          paymentAmount: newSubsetAmount,
-          ...(reservation.employeeId ? { employeeId: reservation.employeeId } : {}),
-          ...(reservation.guestName ? { guestName: reservation.guestName } : {}),
-          items: { connect: validSplitIds.map((id) => ({ id })) },
-        },
-        select: { id: true },
-      })
-
-      // 3. Apply the depart transition to the NEW single-seat reservation.
-      //    future-days → expected (re-rentable tomorrow); last-day → departed (bed freed).
-      if (hasFutureDays) {
-        await tx.reservationDay.upsert({
-          where: { reservationId_date: { reservationId: newRes.id, date: todayDate } },
-          create: {
-            reservationId: newRes.id,
-            date: todayDate,
-            operationalStatus: OP_EXPECTED,
-            checkedInAt: null,
-            departedAt: null,
-          },
-          update: {
-            operationalStatus: OP_EXPECTED,
-            checkedInAt: null,
-            departedAt: null,
-          },
-        })
-        await tx.reservation.update({
-          where: { id: newRes.id },
-          data: { operationalStatus: OP_EXPECTED, checkedInAt: null, departedAt: null },
-        })
-      } else {
-        await tx.reservationDay.upsert({
-          where: { reservationId_date: { reservationId: newRes.id, date: todayDate } },
-          create: {
-            reservationId: newRes.id,
-            date: todayDate,
-            operationalStatus: OP_DEPARTED,
-            checkedInAt: null,
-            departedAt: departNow,
-          },
-          update: {
-            operationalStatus: OP_DEPARTED,
-            departedAt: departNow,
-          },
-        })
-        await tx.reservation.update({
-          where: { id: newRes.id },
-          data: { operationalStatus: OP_DEPARTED, departedAt: departNow },
-        })
+    if (split.outcome === 'applied' && split.newReservationId) {
+      const depart = await applyTransition(split.newReservationId, 'staff.depart')
+      if (depart.outcome !== 'applied') {
+        return { status: 'error', errors: ['Could not depart the split seats'] }
       }
-    })
-
-    revalidatePath(`/sites/${siteId}/manage`)
-    return { status: 'ok' }
+      revalidatePath(`/sites/${siteId}/manage`)
+      return { status: 'ok' }
+    }
+    // rejected ⇒ this kind isn't splittable (online complete / QR-collected /
+    // mid-collect) — fall through to whole-reservation depart, as before.
+    if (split.outcome !== 'rejected') {
+      return { status: 'error', errors: ['Could not split the selected seats'] }
+    }
   }
 
-  // Whole-reservation depart path (unchanged).
-  // Depart returns the bed to RESERVED for the rest of the stay, not a terminal
-  // "departed" — that's the daily cycle (state machine): a guest who leaves but is
-  // booked again tomorrow goes back to reserved (re-rentable tomorrow). Only on the
-  // LAST day (no remaining reserved days) does departing end the stay → `departed`,
-  // which frees the bed via the stay-over rule. (track 012)
-  const endOfToday = siteDayBounds(buildSiteTimezone(reservation.site)).end
-  const hasFutureDays = reservation.to > endOfToday
-
-  if (hasFutureDays) {
-    await applyDayTransition(
-      { id: reservationId },
-      reservation.site,
-      { operationalStatus: OP_EXPECTED, checkedInAt: null, departedAt: null },
-    )
-  } else {
-    await applyDayTransition(
-      { id: reservationId },
-      reservation.site,
-      { operationalStatus: OP_DEPARTED, departedAt: new Date() },
-    )
+  const result = await applyTransition(reservationId, 'staff.depart')
+  if (result.outcome !== 'applied') {
+    const from = result.outcome === 'rejected'
+      ? `${result.state.kind}·${result.state.pay}·${result.state.occ}`
+      : result.outcome
+    return { status: 'error', errors: [`Cannot mark departed from: ${from}`] }
   }
 
   revalidatePath(`/sites/${siteId}/manage`)
   return { status: 'ok' }
 }
-
 // ─── Mark no-show: customer didn't arrive ───────────────────────────────────
 
 export async function markNoShow(siteId: string, reservationId: string, accessKey?: string) {
@@ -2422,22 +2190,15 @@ export async function cancelCollection(
 // ─── Split one seat off a multi-seat walk-in (Seat-collect primitive) ────────
 
 /**
- * Peel a single seat from a multi-seat cash walk-in into its own walk-in
- * reservation, so the Collect Payment QR can target that one seat independently.
+ * Peel a single seat from a multi-seat cash walk-in into its own reservation,
+ * so the Collect Payment QR can target that one seat independently.
  *
- * This is the split-without-depart analogue of the depart-split in markDeparted:
- * the new reservation stays `walked-in` (not departed) and carries the per-seat
- * paymentAmount. The original keeps its remaining seats with a reduced amount.
- *
- * Only valid for `paid-in-cash` + `walked-in` multi-seat reservations. Online
- * checked-in (complete) and QR-collected (complete + walked-in) are excluded —
- * their invoice complexity makes per-seat partial operations unsafe.
- *
- * Side effect (intentional): if the operator opens the QR modal and then abandons
- * it, `cancelCollection` reverts the new single-seat reservation to `paid-in-cash`
- * — the seat remains its own cash walk-in (revertible to cash, never stranded).
- *
- * Returns `{ status: 'ok', reservationId: <new id> }` on success.
+ * MIGRATED onto the state machine (track 018 P4): this is the table's
+ * `split.subset` — seats, paymentAmount, AND till evidence partition together
+ * into a lineage row (splitFromId), so a settled seat stays settled after the
+ * split (B1c fix) and the collect guard sees the truth. Only cash walk-ins in
+ * walked-in state with >1 seats are splittable (table pre-state); online
+ * complete / QR-collected are reject cells.
  */
 export async function splitWalkInSeat(
   siteId: string,
@@ -2450,97 +2211,19 @@ export async function splitWalkInSeat(
 
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
-    select: {
-      siteId: true,
-      status: true,
-      operationalStatus: true,
-      from: true,
-      to: true,
-      checkedInAt: true,
-      guestName: true,
-      userId: true,
-      employeeId: true,
-      items: { select: { id: true, price: true } },
-      site: { select: { type: true, price: true } },
-    },
+    select: { siteId: true },
   })
-
   if (!reservation || reservation.siteId !== siteId) {
     return { status: 'error', errors: ['Reservation not found'] }
   }
 
-  // Only cash walk-ins that are currently walked-in are splittable. Online
-  // collected (complete) and any single-item reservation are rejected.
-  if (
-    reservation.status !== RESERVATION_PAID_IN_CASH ||
-    reservation.operationalStatus !== OP_WALKED_IN
-  ) {
-    return { status: 'error', errors: ['Can only split a cash walk-in in walked-in state'] }
+  const result = await applyTransition(reservationId, 'split.subset', { itemIds: [itemId] })
+  if (result.outcome !== 'applied' || !result.newReservationId) {
+    return { status: 'error', errors: ['Can only split a seat off a multi-seat cash walk-in'] }
   }
-
-  if (reservation.items.length <= 1) {
-    return { status: 'error', errors: ['Reservation has only one seat — nothing to split'] }
-  }
-
-  const splitItem = reservation.items.find((i) => i.id === itemId)
-  if (!splitItem) {
-    return { status: 'error', errors: ['Item not found on this reservation'] }
-  }
-
-  const remainingItems = reservation.items.filter((i) => i.id !== itemId)
-  const fromDate = reservation.from
-  const toDate = reservation.to
-
-  // Till conservation: per-seat and remaining amounts sum to the original total
-  // when prices are unchanged. Both computed from DB prices only (payments.md).
-  const newSeatAmount =
-    reservation.site.type === 'paid'
-      ? computeWalkInAmount([splitItem], reservation.site.price, fromDate, toDate)
-      : 0
-  const remainingAmount =
-    reservation.site.type === 'paid'
-      ? computeWalkInAmount(remainingItems, reservation.site.price, fromDate, toDate)
-      : 0
-
-  // All mutations in one atomic transaction: disconnect → create new walk-in.
-  // Attribution (employeeId, guestName, userId, from/to, checkedInAt) is copied
-  // to the new reservation so till/accounting traces back to the original worker.
-  const newRes = await prisma.$transaction(async (tx) => {
-    // 1. Disconnect the splitting seat from the original; reduce the original's amount.
-    await tx.reservation.update({
-      where: { id: reservationId },
-      data: {
-        paymentAmount: remainingAmount,
-        items: { disconnect: [{ id: itemId }] },
-      },
-    })
-
-    // 2. Create the new single-seat cash walk-in, copying original attribution.
-    //    Preserve: employeeId (who collected the cash), guestName, userId,
-    //    from, to, checkedInAt, status (paid-in-cash), operationalStatus (walked-in).
-    const created = await tx.reservation.create({
-      data: {
-        siteId,
-        userId: reservation.userId,
-        type: 'days',
-        status: RESERVATION_PAID_IN_CASH,
-        operationalStatus: OP_WALKED_IN,
-        checkedInAt: reservation.checkedInAt,
-        from: fromDate,
-        to: toDate,
-        paymentAmount: newSeatAmount,
-        ...(reservation.employeeId ? { employeeId: reservation.employeeId } : {}),
-        ...(reservation.guestName ? { guestName: reservation.guestName } : {}),
-        items: { connect: [{ id: itemId }] },
-      },
-      select: { id: true },
-    })
-
-    return created
-  })
 
   revalidatePath(`/sites/${siteId}/manage`)
-  return { status: 'ok', reservationId: newRes.id }
+  return { status: 'ok', reservationId: result.newReservationId }
 }
 
 // ─── Collect payment (QR → Mollie) for a cash walk-in rental ────────────────
