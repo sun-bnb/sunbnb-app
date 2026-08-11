@@ -13,6 +13,7 @@ vi.mock('@/app/api/_lib/payment-provider', () => ({
 
 import { POST } from './route'
 import prisma from '@repo/data/PrismaCient'
+import { applyTransition } from '@repo/data/reservation-machine-apply'
 import { processConfirmedReservation, processConfirmedOrder } from '@repo/data/payment'
 import { getPaymentStatus } from '@/app/api/_lib/payment-provider'
 
@@ -83,14 +84,12 @@ describe('POST /api/reconcile', () => {
       { id: 'res-1', paymentRef: 'tr_abc', status: 'processing' } as any,
     ])
     mockGetPaymentStatus.mockResolvedValue('canceled')
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
 
     const res = await POST(makeRequest('test-secret'))
     expect(res.status).toBe(200)
-    expect(prisma.reservation.update).toHaveBeenCalledWith({
-      where: { id: 'res-1' },
-      data: { status: 'payment_failed' },
-    })
+    // Machine pay.fail (track 018): the revert (online → payment_failed,
+    // collect → unsettled cash) is state-derived inside the interpreter.
+    expect(vi.mocked(applyTransition)).toHaveBeenCalledWith('res-1', 'pay.fail')
   })
 
   it('leaves a still-pending reservation untouched', async () => {

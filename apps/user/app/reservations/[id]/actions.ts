@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { applyTransition } from '@repo/data/reservation-machine-apply'
 import { processConfirmedOrder } from '@repo/data/payment'
 import { isDemoPayment, isValidEntityId } from '@/app/api/_lib/payment-ids'
 import { issueRefund } from '@/app/api/_lib/payment-provider'
@@ -43,23 +44,21 @@ export async function cancelReservation(reservationId: string) {
     return { status: 'ok' }
   }
 
-  // Issue a refund via the payment provider if this reservation was paid with a real payment
-  const isPaid = reservation.status === RESERVATION_COMPLETE
-  const hasRealPayment = reservation.paymentRef && !isDemoPayment(reservation.paymentRef)
-
-  if (isPaid && hasRealPayment) {
-    try {
-      await issueRefund(reservation.paymentRef!)
-    } catch (error) {
-      console.error(`[cancelReservation] Refund failed for ${reservationId}:`, error)
-      return { status: 'error', errors: ['Refund failed — please contact support'] }
-    }
-  }
-
-  await prisma.reservation.update({
-    data: { status: RESERVATION_CANCELED },
-    where: { id: reservationId },
+  // Machine user.cancel (track 018): the providerRefund effect runs BEFORE the
+  // status write — the interpreter decides whether a refund is needed (paid
+  // state + real ref; demo refs skip) and calls the app-side handler. A refund
+  // failure aborts the cancel; mid-payment (processing) cancels are reject
+  // cells — the payment outcome must resolve first.
+  const result = await applyTransition(reservationId, 'user.cancel', {
+    refund: () => issueRefund(reservation.paymentRef!),
   })
+  if (result.outcome === 'effect-failed') {
+    console.error(`[cancelReservation] Refund failed for ${reservationId}:`, result.error)
+    return { status: 'error', errors: ['Refund failed — please contact support'] }
+  }
+  if (result.outcome !== 'applied') {
+    return { status: 'error', errors: ['Reservation cannot be canceled in its current state'] }
+  }
 
   // Send cancellation email (non-blocking)
   try {
@@ -98,12 +97,19 @@ export async function deleteReservation(reservationId: string) {
     return { status: 'error', errors: ['Not authorized'] }
   }
 
-  // Only delete unpaid reservations — paid ones must go through cancelReservation for refunds
-  if (reservation.status === RESERVATION_COMPLETE) {
-    return { status: 'error', errors: ['Cannot delete a paid reservation'] }
+  // Machine user.delete (track 018): only unpaid/abandoned online bookings are
+  // deletable (pending / payment_failed / canceled). A paid booking must go
+  // through cancelReservation (refund path); a PROCESSING one is a reject cell
+  // — the in-flight payment may still land. Money history (I4) blocks deletes
+  // of anything that ever produced till/invoice rows.
+  const result = await applyTransition(reservationId, 'user.delete')
+  if (result.outcome !== 'applied') {
+    const reason =
+      result.outcome === 'rejected' && result.state.pay === 'processing'
+        ? 'Payment is still processing — try again shortly'
+        : 'Cannot delete a paid reservation'
+    return { status: 'error', errors: [reason] }
   }
-
-  await prisma.reservation.delete({ where: { id: reservationId } })
 
   revalidatePath('/reservations')
 

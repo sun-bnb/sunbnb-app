@@ -27,6 +27,7 @@ import {
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { applyTransition } from '@repo/data/reservation-machine-apply'
 import { processConfirmedOrder } from '@repo/data/payment'
 import { issueRefund } from '@/app/api/_lib/payment-provider'
 
@@ -90,15 +91,17 @@ describe('cancelReservation', () => {
       status: 'complete',
       paymentRef: 'pi_real_123',
     } as any)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
     const res = await cancelReservation('res-1')
     expect(res.status).toBe('ok')
+    // Machine user.cancel (track 018): the action supplies the app-side refund
+    // handler; the INTERPRETER decides refund necessity (paid + real ref) and
+    // runs it before the status write. The delegation is the action contract.
+    const [id, event, opts] = vi.mocked(applyTransition).mock.calls[0]!
+    expect(id).toBe('res-1')
+    expect(event).toBe('user.cancel')
+    expect(typeof (opts as any).refund).toBe('function')
+    await (opts as any).refund()
     expect(mockIssueRefund).toHaveBeenCalledWith('pi_real_123')
-    expect(prisma.reservation.update).toHaveBeenCalledWith({
-      data: { status: 'canceled' },
-      where: { id: 'res-1' },
-    })
   })
 
   it('does not refund demo payments', async () => {
@@ -136,12 +139,15 @@ describe('cancelReservation', () => {
       status: 'complete',
       paymentRef: 'pi_real_123',
     } as any)
-    mockIssueRefund.mockRejectedValue(new Error('Stripe error'))
+    // The interpreter surfaces a refund-handler failure as effect-failed and
+    // never writes the status — the cancel aborts.
+    vi.mocked(applyTransition).mockResolvedValueOnce({
+      outcome: 'effect-failed', effect: 'providerRefund', event: 'user.cancel', error: 'Stripe error',
+    } as any)
 
     const res = await cancelReservation('res-1')
     expect(res.status).toBe('error')
     expect(res.errors?.[0]).toContain('Refund failed')
-    expect(prisma.reservation.update).not.toHaveBeenCalled()
   })
 })
 

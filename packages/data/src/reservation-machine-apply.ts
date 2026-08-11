@@ -79,6 +79,13 @@ export interface ApplyOpts {
     buildRedirectUrl?: (anonId: string) => string
     webhookUrl?: string
   }
+  /**
+   * Provider-refund handler for user.cancel (the providerRefund effect). The
+   * provider abstraction lives app-side; the MACHINE decides whether a refund
+   * is required (paid state + real paymentRef) and orchestrates order: refund
+   * BEFORE the status write — a refund failure aborts the cancel.
+   */
+  refund?: () => Promise<void>
 }
 
 export type ApplyResult =
@@ -98,7 +105,7 @@ const IMPLEMENTED: ReadonlySet<EffectKey> = new Set<EffectKey>([
   // Collect flow (P4 slice e). setPaymentRef/email are satisfied INSIDE their
   // composite executors (mollieCreate/demo write the ref; invoiceOnline emails).
   'amountFromDb', 'mintAnonId', 'mollieCreate', 'setPaymentRef',
-  'reverifyOnce', 'mollieCancel', 'invoiceOnline', 'email',
+  'reverifyOnce', 'mollieCancel', 'invoiceOnline', 'email', 'providerRefund',
 ])
 
 // ─── Loading ─────────────────────────────────────────────────────────────────
@@ -571,6 +578,19 @@ export async function applyTransition(
   if (unimplemented) return { outcome: 'unsupported', effect: unimplemented, event }
 
   // ── Composite flows ──
+  if (event === 'pay.initiate') {
+    // Demo variant only: stamp a pi_demo ref and advance to processing. The
+    // REAL initiation is createReservationMolliePayment (a sanctioned writer)
+    // — routing it through this event is the consumer create-payment route's
+    // future migration, not silently skipping the provider call.
+    if (!opts.collect?.demo) return { outcome: 'unsupported', effect: 'mollieCreate', event }
+    const ref = `pi_demo_${now.getTime()}`
+    await prisma.reservation.update({
+      where: { id: r.id },
+      data: { paymentRef: ref, status: RESERVATION_PROCESSING },
+    })
+    return { outcome: 'applied', transition: row, state, data: { paymentRef: ref } }
+  }
   if (event === 'collect.start') {
     return runCollectStart(r, state, row, { ...opts, now })
   }
@@ -597,6 +617,23 @@ export async function applyTransition(
     }
     await prisma.reservation.delete({ where: { id: r.id } })
     return { outcome: 'applied', transition: row, state }
+  }
+
+  // providerRefund (user.cancel): required only for a PAID state with a REAL
+  // provider ref (demo refs have nothing to refund). Runs BEFORE the status
+  // write; a throw here propagates and the cancel never happens.
+  if (row.effects.includes('providerRefund')) {
+    const needsRefund = state.pay === 'complete' && r.paymentRef && !r.paymentRef.startsWith('pi_demo_')
+    if (needsRefund) {
+      if (!opts.refund) {
+        return { outcome: 'effect-failed', effect: 'providerRefund', event, error: 'refund handler not supplied' }
+      }
+      try {
+        await opts.refund()
+      } catch (e) {
+        return { outcome: 'effect-failed', effect: 'providerRefund', event, error: e instanceof Error ? e.message : 'refund failed' }
+      }
+    }
   }
 
   // invoiceOnline (+ its confirmation email) — the idempotent invoice core owns

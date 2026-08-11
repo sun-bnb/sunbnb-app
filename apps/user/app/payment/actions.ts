@@ -13,6 +13,7 @@
 
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { applyTransition } from '@repo/data/reservation-machine-apply'
 import {
   RESERVATION_PROCESSING,
   ORDER_PROCESSING,
@@ -71,12 +72,14 @@ export async function initiateDemoReservationPayment(reservationId: string, anon
     return { status: 'ok', paymentRef: reservation.paymentRef }
   }
 
-  const paymentRef = `pi_demo_${Date.now()}`
-
-  await prisma.reservation.update({
-    where: { id: reservationId },
-    data: { paymentRef, status: RESERVATION_PROCESSING },
-  })
+  // Machine pay.initiate (demo variant): pending → processing with a pi_demo
+  // ref stamped by the interpreter (track 018). Non-pending states are reject
+  // cells — a payment can only be initiated once.
+  const init = await applyTransition(reservationId, 'pay.initiate', { collect: { demo: true } })
+  if (init.outcome !== 'applied') {
+    return { status: 'error', errors: ['Payment cannot be initiated for this reservation'] }
+  }
+  const paymentRef = init.data?.paymentRef as string
 
   try {
     await processConfirmedReservation(reservationId)

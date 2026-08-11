@@ -27,6 +27,9 @@ export default defineConfig({
       '@repo/data/PrismaCient': path.resolve(__dirname, '__mocks__/@repo/data/PrismaCient'),
       '@repo/data/payment': path.resolve(__dirname, '__mocks__/@repo/data/payment'),
       '@repo/data/reservation-status': path.resolve(__dirname, '../../packages/data/src/reservation-status'),
+      // Pure model — real source (no prisma); DB interpreter — mocked (track 018).
+      '@repo/data/reservation-machine': path.resolve(__dirname, '../../packages/data/src/reservation-machine'),
+      '@repo/data/reservation-machine-apply': path.resolve(__dirname, '__mocks__/@repo/data/reservation-machine-apply'),
       '@repo/data/reservation-emails': path.resolve(__dirname, '__mocks__/@repo/data/reservation-emails'),
       '@repo/data/rental-emails': path.resolve(__dirname, '__mocks__/@repo/data/rental-emails'),
       '@repo/data/env': path.resolve(__dirname, '__mocks__/@repo/data/env'),

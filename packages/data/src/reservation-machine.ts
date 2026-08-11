@@ -177,7 +177,7 @@ export const EVENTS = [
   'split.subset', 'convert.holdToWalkIn.whole', 'convert.holdToWalkIn.subset',
   // release / end
   'staff.releaseHold', 'staff.uncomp', 'staff.unblock',
-  'partner.cancel', 'partner.refund', 'user.cancel',
+  'partner.cancel', 'partner.refund', 'user.cancel', 'user.delete',
   'staff.removeFailed', 'cron.gc',
 ] as const
 export type EventName = (typeof EVENTS)[number]
@@ -281,6 +281,7 @@ export const TRANSITIONS: TransitionSpec[] = [
   { event: 'pay.fail', pre: { kind: ['walkin'], pay: ['collecting'] }, post: { pay: 'unsettled' }, effects: ['clearPaymentRef'] },
   { event: 'collect.abandon', pre: { kind: ['walkin'], pay: ['collecting'], occ: ['present'] }, post: { pay: 'unsettled' }, effects: ['reverifyOnce', 'mollieCancel', 'clearPaymentRef'], note: 'NEVER deletes/frees — D5' },
   { event: 'pay.refund.webhook', pre: { kind: ['online'], pay: ['complete'] }, post: { pay: 'refunded' }, effects: [] },
+  { event: 'pay.refund.webhook', pre: { kind: ['walkin'], pay: ['collected'] }, post: { pay: 'refunded' }, effects: [], note: 'a QR-collected walk-in refunded by the partner' },
 
   // ── Cash ──
   { event: 'staff.settle', pre: { kind: ['walkin'], pay: ['unsettled'], occ: ['present', 'expected'] }, post: { pay: 'settled' }, effects: ['tillRecord', 'receiptIssue'], note: 'settled pre absent ⇒ double-settle rejected' },
@@ -319,8 +320,9 @@ export const TRANSITIONS: TransitionSpec[] = [
   { event: 'partner.cancel', pre: { kind: ['online'], pay: ['complete'] }, when: ['refundedAt'], post: { pay: 'refunded', kept: true }, effects: [], note: 'terminal status alone frees the bed (grid + guard exclude it); day-row untouched' },
   { event: 'partner.cancel', pre: { kind: ['online'], pay: ['complete'] }, post: { pay: 'canceled', kept: true }, effects: [] },
   { event: 'partner.refund', pre: { kind: ['online'], pay: ['complete'] }, post: {}, effects: ['mollieRefund'], note: 'stamps refundedAt only; bed stays occupied' },
-  { event: 'user.cancel', pre: { kind: ['online'], pay: ['complete'] }, post: { pay: 'canceled', kept: true }, effects: ['providerRefund'] },
+  { event: 'user.cancel', pre: { kind: ['online'], pay: ['complete'] }, post: { pay: 'canceled', kept: true }, effects: ['providerRefund'], note: 'refund executes BEFORE the status write via the caller-supplied handler (provider abstraction is app-side); refund failure aborts the cancel' },
   { event: 'user.cancel', pre: { kind: ['online'], pay: ['pending'] }, post: { pay: 'canceled', kept: true }, effects: [] },
+  { event: 'user.delete', pre: { kind: ['online'], pay: ['pending', 'payment_failed', 'canceled'] }, post: { deleted: true }, effects: ['deleteRow'], note: 'consumer removes an unpaid/abandoned booking. processing is REJECTED (the payment may still land); a paid-then-canceled row is blocked by the I4 defense (it has invoices)' },
   { event: 'staff.removeFailed', pre: { kind: ['online'], pay: ['payment_failed'] }, post: { deleted: true }, effects: ['deleteRow'] },
 
   // ── Cron GC (I4: only zero-money rows are deletable; settled walkins have NO row here — reject ⇒ sweep must exclude them) ──

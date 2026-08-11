@@ -20,6 +20,7 @@ import {
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { applyTransition } from '@repo/data/reservation-machine-apply'
 import {
   processConfirmedReservation,
   processConfirmedOrder,
@@ -102,18 +103,12 @@ describe('initiateDemoReservationPayment', () => {
       anonId: null,
       paymentRef: null,
     } as any)
-    vi.mocked(prisma.reservation.update).mockResolvedValue({} as any)
-
     const res = await initiateDemoReservationPayment('res-1')
     expect(res.status).toBe('ok')
     expect(res.paymentRef).toMatch(/^pi_demo_/)
-    expect(prisma.reservation.update).toHaveBeenCalledWith({
-      where: { id: 'res-1' },
-      data: expect.objectContaining({
-        status: 'processing',
-        paymentRef: expect.stringMatching(/^pi_demo_/),
-      }),
-    })
+    // Machine pay.initiate demo variant (track 018): the interpreter stamps the
+    // pi_demo ref and advances pending → processing; non-pending is a reject cell.
+    expect(vi.mocked(applyTransition)).toHaveBeenCalledWith('res-1', 'pay.initiate', { collect: { demo: true } })
     expect(mockProcessReservation).toHaveBeenCalledWith('res-1')
   })
 

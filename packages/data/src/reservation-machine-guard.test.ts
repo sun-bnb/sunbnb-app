@@ -65,11 +65,10 @@ const ALLOWLIST: Record<string, number> = {
   // convertHoldToWalkIn paths, blockBed/unblock/uncomp/releaseHold deletes,
   // refund/cancel — future P4 batches.
   'apps/partner/app/sites/[id]/manage/actions.ts': 8,
-  'apps/user/app/api/reconcile/route.ts': 1, // payment_failed writer
-  'apps/user/app/api/reservations/[id]/route.ts': 1, // payment_failed writer (poll)
-  'apps/user/app/api/webhooks/mollie/route.ts': 3, // paid/failed/refund webhook writers
-  'apps/user/app/payment/actions.ts': 1, // demo payment status writer
-  'apps/user/app/reservations/[id]/actions.ts': 2, // user cancel + delete
+  // P4 slice (f) 2026-08-11: ALL apps/user entries → 0 — webhook fail/refund,
+  // poll + reconcile reverts, demo pay.initiate, user cancel/delete all
+  // delegate to applyTransition (pay.fail resolves the collect-vs-online
+  // revert by STATE; metadata.collect is no longer load-bearing).
 }
 
 // ─── Scanner ─────────────────────────────────────────────────────────────────

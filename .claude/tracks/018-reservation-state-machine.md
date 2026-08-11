@@ -235,10 +235,23 @@ must-reject cells). Known logical errors become red cells first, then fixes.
   collect unit suites rewritten to delegation contracts; matrix DEFERRED reasons
   updated (collect events machine-covered). Partner 1968u+198i, data 320u+331i, tsc
   clean.
-  **Remaining P4:** (f) user-app writers (webhook/reconcile/user-cancel via machine
-  events); (g) docs/wiki sync (packages/data/CLAUDE.md, partner CLAUDE.md,
-  /wiki ingest). Later batches: convertHoldToWalkIn, block/comp/hold deletes,
-  refund/cancel delegation (allowlist 8 → 0).
+  Slice (f) SHIPPED 2026-08-11 (uncommitted): **ALL user-app writer entries → 0.**
+  Webhook fail/refund, poll + reconcile reverts, demo `pay.initiate`, and user
+  cancel/delete delegate to applyTransition. Highlights: `pay.fail` resolves the
+  collect-vs-online revert BY STATE (metadata.collect no longer load-bearing —
+  webhook branch deleted); new table rows: `user.delete` (pending/failed/canceled
+  only — PROCESSING is a reject cell, in-flight payments can no longer be deleted
+  out from under; paid-then-canceled blocked by the I4 invoice defense) and
+  `pay.refund.webhook` for QR-collected walk-ins (was silently unhandled);
+  `user.cancel`'s providerRefund executes via a caller-supplied handler (provider
+  abstraction stays app-side) BEFORE the status write — refund failure aborts the
+  cancel; mid-payment cancels rejected. User test infra gained the machine mock +
+  aliases; 9 stale write-assertions rewritten to delegation contracts. Allowlist
+  now TWO entries total: cron (1, I4-filtered by design) + manage/actions.ts (8).
+  User 478u+77i, partner 1968u+198i, data 320u+331i, tsc clean everywhere.
+  **Remaining P4:** (g) docs/wiki sync (packages/data/CLAUDE.md, apps CLAUDE.mds,
+  /wiki ingest) — then P4 pauses; final batch (manage creates/holds/blocks/convert,
+  8 → 0) queued as follow-up work.
 - 💤 **P5 — Wiki page** (`subsystems/reservation-state-machine.md`) + fold into
   `bed-state.ts` docs; groom CLAUDE.md pointers.
 
@@ -252,6 +265,15 @@ deletable rule; D13 grouping kept; kind derived not persisted; no new status str
 
 ## Log
 
+- **2026-08-11 (P4 slice f — user-app writers at zero)** — Slice (e) committed
+  (`64d039a`). Consumer surfaces on the machine: webhook/poll/reconcile reverts are
+  one state-resolved `pay.fail` (the metadata.collect branch is DELETED — kind
+  derivation replaced a wire-protocol flag); user.delete is a new table event with a
+  real safety win (deleting a PROCESSING booking — whose payment could still land as
+  an orphaned charge — is now a reject cell); QR-collected walk-in refunds get their
+  webhook row (previously fell through silently). providerRefund pattern: caller
+  supplies the handler, interpreter decides necessity + ordering. Allowlist: 7 files
+  → 2. Fable 5.
 - **2026-08-11 (P4 slice e — collect flow; D5+D6 dead)** — Slice-3 verification
   committed (`0d3548b`). The collect flow runs on the machine: settled walk-ins are
   machine-rejected (D6 was UI-only), abandon can never free an occupied bed (D5 —

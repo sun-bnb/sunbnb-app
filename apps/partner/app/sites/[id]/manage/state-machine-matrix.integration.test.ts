@@ -366,7 +366,8 @@ const DEFERRED: Record<string, string> = {
   'staff.unblock': 'with staff.block cells',
   'partner.cancel': 'refund/cancel decoupling cells with P4 cancel migration',
   'partner.refund': 'needs Mollie refund stub',
-  'user.cancel': 'consumer app action — user-app matrix',
+  'user.cancel': 'consumer app action, machine-delegating since slice (f) — user-app matrix later',
+  'user.delete': 'consumer app action, machine-delegating since slice (f) — user-app matrix later',
   'staff.removeFailed': 'trivial delete; cells with P4',
   'cron.gc': 'cron route driver — cells with P4 cron migration (I4 sweep change)',
 }

@@ -23,6 +23,7 @@
  */
 
 import prisma from '@repo/data/PrismaCient'
+import { applyTransition } from '@repo/data/reservation-machine-apply'
 import {
   processConfirmedReservation,
   processConfirmedOrder,
@@ -142,19 +143,11 @@ async function handlePaymentPaid(meta: MollieMetadata, paymentId: string): Promi
 
 async function handlePaymentFailed(meta: MollieMetadata): Promise<void> {
   if (meta.type === 'reservation') {
-    // A QR walk-in collection that fails reverts to paid-in-cash (keep the
-    // occupied bed); only a genuine online reservation goes payment_failed.
-    if (meta.collect) {
-      await prisma.reservation.updateMany({
-        where: { id: meta.entityId },
-        data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
-      })
-    } else {
-      await prisma.reservation.updateMany({
-        where: { id: meta.entityId },
-        data: { status: RESERVATION_PAYMENT_FAILED },
-      })
-    }
+    // Machine pay.fail — STATE decides the revert (track 018): a QR collection
+    // (walkin·collecting) reverts to unsettled cash with the ref cleared (the
+    // occupied bed survives); a genuine online reservation (online·processing)
+    // goes payment_failed. The metadata.collect flag is no longer load-bearing.
+    await applyTransition(meta.entityId, 'pay.fail')
   } else if (meta.type === 'order') {
     await prisma.order.updateMany({
       where: { id: meta.entityId },
@@ -188,10 +181,8 @@ async function handlePaymentFailed(meta: MollieMetadata): Promise<void> {
 
 async function handlePaymentRefunded(meta: MollieMetadata): Promise<void> {
   if (meta.type === 'reservation') {
-    await prisma.reservation.updateMany({
-      where: { id: meta.entityId },
-      data: { status: RESERVATION_REFUNDED },
-    })
+    // Machine pay.refund.webhook (online·complete OR QR-collected walkin → refunded).
+    await applyTransition(meta.entityId, 'pay.refund.webhook')
   } else if (meta.type === 'order') {
     await prisma.order.updateMany({
       where: { id: meta.entityId },

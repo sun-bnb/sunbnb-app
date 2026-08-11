@@ -19,6 +19,7 @@ vi.mock('@/app/api/_lib/payment-provider', () => ({
 import { GET } from './route'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { applyTransition } from '@repo/data/reservation-machine-apply'
 import { processConfirmedReservation } from '@repo/data/payment'
 import { getPaymentStatus, isPaymentSucceeded, isPaymentFailed } from '@/app/api/_lib/payment-provider'
 
@@ -158,14 +159,10 @@ describe('GET /api/reservations/[id]', () => {
     mockGetPaymentStatus.mockResolvedValue('canceled')
     mockIsPaymentSucceeded.mockReturnValue(false)
     mockIsPaymentFailed.mockReturnValue(true)
-    mockUpdate.mockResolvedValue({} as any)
-
     const res = await GET(makeRequest('res-1'), { params: { id: 'res-1' } })
     expect(res.status).toBe(200)
-    expect(mockUpdate).toHaveBeenCalledWith({
-      where: { id: 'res-1' },
-      data: { status: 'payment_failed' },
-    })
+    // Machine pay.fail (track 018) — revert is state-derived in the interpreter.
+    expect(vi.mocked(applyTransition)).toHaveBeenCalledWith('res-1', 'pay.fail')
   })
 
   it('returns current state when payment is still processing', async () => {

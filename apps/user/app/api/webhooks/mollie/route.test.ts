@@ -60,6 +60,7 @@ vi.mock('@repo/table-reservations-core', () => ({
 
 import { POST } from './route'
 import prisma from '@repo/data/PrismaCient'
+import { applyTransition } from '@repo/data/reservation-machine-apply'
 import {
   processConfirmedReservation,
   processConfirmedOrder,
@@ -197,14 +198,10 @@ describe('POST /api/webhooks/mollie', () => {
         siteId: 'site-1',
       }),
     })
-    vi.mocked(prisma.reservation.updateMany).mockResolvedValue({ count: 1 } as any)
-
     const res = await POST(makeWebhookRequest('tr_abc123'))
     expect(res.status).toBe(200)
-    expect(prisma.reservation.updateMany).toHaveBeenCalledWith({
-      where: { id: 'res-1' },
-      data: { status: 'payment_failed' },
-    })
+    // Machine pay.fail (track 018): online·processing → payment_failed.
+    expect(vi.mocked(applyTransition)).toHaveBeenCalledWith('res-1', 'pay.fail')
   })
 
   it('marks reservation as payment_failed on expired status', async () => {
@@ -216,14 +213,10 @@ describe('POST /api/webhooks/mollie', () => {
         siteId: 'site-1',
       }),
     })
-    vi.mocked(prisma.reservation.updateMany).mockResolvedValue({ count: 1 } as any)
-
     const res = await POST(makeWebhookRequest('tr_abc123'))
     expect(res.status).toBe(200)
-    expect(prisma.reservation.updateMany).toHaveBeenCalledWith({
-      where: { id: 'res-1' },
-      data: { status: 'payment_failed' },
-    })
+    // Machine pay.fail (track 018): online·processing → payment_failed.
+    expect(vi.mocked(applyTransition)).toHaveBeenCalledWith('res-1', 'pay.fail')
   })
 
   it('reverts a failed QR walk-in collection to paid-in-cash (not payment_failed)', async () => {
@@ -236,14 +229,12 @@ describe('POST /api/webhooks/mollie', () => {
         collect: true,
       }),
     })
-    vi.mocked(prisma.reservation.updateMany).mockResolvedValue({ count: 1 } as any)
-
     const res = await POST(makeWebhookRequest('tr_abc123'))
     expect(res.status).toBe(200)
-    expect(prisma.reservation.updateMany).toHaveBeenCalledWith({
-      where: { id: 'res-1' },
-      data: { status: 'paid-in-cash', paymentRef: null },
-    })
+    // SAME machine event — the STATE decides the revert (walkin·collecting →
+    // unsettled cash with the ref cleared). metadata.collect is no longer
+    // load-bearing; the interpreter derives the kind. (track 018)
+    expect(vi.mocked(applyTransition)).toHaveBeenCalledWith('res-1', 'pay.fail')
   })
 
   it('marks reservation as refunded', async () => {
@@ -255,14 +246,10 @@ describe('POST /api/webhooks/mollie', () => {
         siteId: 'site-1',
       }),
     })
-    vi.mocked(prisma.reservation.updateMany).mockResolvedValue({ count: 1 } as any)
-
     const res = await POST(makeWebhookRequest('tr_abc123'))
     expect(res.status).toBe(200)
-    expect(prisma.reservation.updateMany).toHaveBeenCalledWith({
-      where: { id: 'res-1' },
-      data: { status: 'refunded' },
-    })
+    // Machine pay.refund.webhook (online·complete OR collected walk-in → refunded).
+    expect(vi.mocked(applyTransition)).toHaveBeenCalledWith('res-1', 'pay.refund.webhook')
   })
 
   it('ignores non-terminal statuses (open, pending)', async () => {

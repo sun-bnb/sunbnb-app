@@ -15,6 +15,7 @@
  */
 
 import prisma from '@repo/data/PrismaCient'
+import { applyTransition } from '@repo/data/reservation-machine-apply'
 import { processConfirmedReservation } from '@repo/data/payment'
 import { NextRequest } from 'next/server'
 import { getRequestIdentity, verifyOwnership } from '@/app/api/_lib/auth'
@@ -76,11 +77,8 @@ export async function GET(
         if (isPaymentSucceeded(paymentStatus)) {
           await processConfirmedReservation(reservation.id)
         } else if (isPaymentFailed(paymentStatus)) {
-          // Payment failed, canceled, or expired
-          await prisma.reservation.update({
-            where: { id: reservation.id },
-            data: { status: RESERVATION_PAYMENT_FAILED },
-          })
+          // Payment failed, canceled, or expired — machine pay.fail (track 018).
+          await applyTransition(reservation.id, 'pay.fail')
         }
         // else: still processing (Mollie 'open'/'pending') — wait
       }

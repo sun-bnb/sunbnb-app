@@ -16,6 +16,7 @@
  */
 
 import prisma from '@repo/data/PrismaCient'
+import { applyTransition } from '@repo/data/reservation-machine-apply'
 import {
   processConfirmedReservation,
   processConfirmedOrder,
@@ -77,10 +78,7 @@ export async function POST(request: NextRequest) {
         await processConfirmedReservation(reservation.id)
         results.reservations.processed++
       } else if (isPaymentFailed(status)) {
-        await prisma.reservation.update({
-          where: { id: reservation.id },
-          data: { status: RESERVATION_PAYMENT_FAILED },
-        })
+        await applyTransition(reservation.id, 'pay.fail') // machine revert (track 018)
         results.reservations.failed++
       }
       // else: still pending — leave it for the next sweep
