@@ -22,6 +22,7 @@
 
 import prisma from '../index'
 import { sendEmail } from './email'
+import { siteDayKey } from './site-day'
 import { RENTAL_COMPLETE, RENTAL_PROCESSING } from './reservation-status'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -321,26 +322,44 @@ export async function sendRentalCancellationEmail(bookingId: string): Promise<vo
  *
  * Returns the count of reminders sent.
  */
-export async function sendRentalDueReminders(): Promise<number> {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
+/** Build the `SiteTimezone` shape `siteDayKey` expects from a site row. */
+function rentalSiteTz(site: { timeZone?: string | null; locationLat?: string | null; locationLng?: string | null } | null) {
+  return {
+    timeZone: site?.timeZone ?? null,
+    latitude: site?.locationLat ? parseFloat(site.locationLat) : undefined,
+    longitude: site?.locationLng ? parseFloat(site.locationLng) : undefined,
+  }
+}
 
-  const dueBookings = await prisma.rentalBooking.findMany({
+export async function sendRentalDueReminders(): Promise<number> {
+  const now = new Date()
+
+  // "from is today" = today in the VENUE's civil day, not the server's UTC day.
+  // Cross-site query → fetch a ±36h candidate pool (covers every IANA offset)
+  // and filter each row against its own site's timezone. See sendDueReminders.
+  const windowStart = new Date(now.getTime() - 36 * 60 * 60 * 1000)
+  const windowEnd = new Date(now.getTime() + 36 * 60 * 60 * 1000)
+
+  const candidates = await prisma.rentalBooking.findMany({
     where: {
       operationalStatus: 'reserved',
       status: { in: [RENTAL_COMPLETE, RENTAL_PROCESSING] },
-      from: { gte: today, lt: tomorrow },
+      from: { gte: windowStart, lt: windowEnd },
       reminderSentAt: null,
     },
     include: {
       user: { select: { email: true, name: true } },
-      site: { select: { name: true, id: true } },
+      site: { select: { name: true, id: true, timeZone: true, locationLat: true, locationLng: true } },
       rentalItem: { select: { name: true } },
     },
-    take: 200, // safety limit per cron run
+    take: 500, // candidate pool (filtered to today-in-venue-tz below)
   })
+
+  // Keep only bookings that START on the venue's civil today. For hours-mode
+  // rentals `from` is the exact pickup instant, still on the venue day it lands.
+  const dueBookings = candidates.filter((b) =>
+    siteDayKey(rentalSiteTz(b.site), b.from) === siteDayKey(rentalSiteTz(b.site), now),
+  )
 
   let sent = 0
 

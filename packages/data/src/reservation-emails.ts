@@ -12,6 +12,7 @@
 
 import prisma from '../index'
 import { sendEmail } from './email'
+import { siteDayKey } from './site-day'
 import {
   RESERVATION_COMPLETE,
   RESERVATION_PROCESSING,
@@ -374,6 +375,15 @@ export async function sendReceiptEmail(
   }
 }
 
+/** Build the `SiteTimezone` shape `siteDayKey` expects from a site row. */
+function siteTz(site: { timeZone?: string | null; locationLat?: string | null; locationLng?: string | null } | null) {
+  return {
+    timeZone: site?.timeZone ?? null,
+    latitude: site?.locationLat ? parseFloat(site.locationLat) : undefined,
+    longitude: site?.locationLng ? parseFloat(site.locationLng) : undefined,
+  }
+}
+
 /**
  * Send reminder emails for today's reservations that haven't been reminded yet.
  * Designed to be called from a cron job (e.g., every morning at 7 AM).
@@ -381,31 +391,41 @@ export async function sendReceiptEmail(
  * Targets reservations where:
  *   - operationalStatus = 'expected' (not yet checked in)
  *   - status is an active booking (not cancelled)
- *   - from date is today
+ *   - from date is today IN THE VENUE'S CIVIL DAY (not the server's UTC day)
  *   - reminderSentAt is null
  *
  * Returns the count of reminders sent.
  */
 export async function sendDueReminders(): Promise<number> {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
+  const now = new Date()
 
-  const dueReservations = await prisma.reservation.findMany({
+  // "from is today" must mean today in the VENUE's civil day, not the server's
+  // (UTC on Vercel). This is a cross-site query, so we can't anchor a single
+  // window: fetch a generous ±36h candidate pool (covers every IANA offset,
+  // −12h..+14h) then filter each row against its own site's timezone. A miss
+  // here is unrecoverable — reminderSentAt is stamped regardless (see below).
+  const windowStart = new Date(now.getTime() - 36 * 60 * 60 * 1000)
+  const windowEnd = new Date(now.getTime() + 36 * 60 * 60 * 1000)
+
+  const candidates = await prisma.reservation.findMany({
     where: {
       operationalStatus: OP_EXPECTED,
       status: { in: [RESERVATION_COMPLETE, RESERVATION_PROCESSING] },
-      from: { gte: today, lt: tomorrow },
+      from: { gte: windowStart, lt: windowEnd },
       reminderSentAt: null,
     },
     include: {
       user: { select: { email: true, name: true } },
-      site: { select: { name: true, id: true } },
+      site: { select: { name: true, id: true, timeZone: true, locationLat: true, locationLng: true } },
       items: { select: { number: true }, orderBy: { number: 'asc' } },
     },
-    take: 200, // safety limit per cron run
+    take: 500, // candidate pool (filtered to today-in-venue-tz below)
   })
+
+  // Keep only bookings whose stay STARTS on the venue's civil today.
+  const dueReservations = candidates.filter((r) =>
+    siteDayKey(siteTz(r.site), r.from) === siteDayKey(siteTz(r.site), now),
+  )
 
   let sent = 0
 

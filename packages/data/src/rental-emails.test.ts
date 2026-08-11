@@ -53,8 +53,10 @@ function makeBooking(overrides: Record<string, any> = {}) {
     siteId: 'site-1',
     rentalItemId: 'item-1',
     userId: 'user-1',
-    from: new Date('2026-07-01T10:00:00Z'),
-    to: new Date('2026-07-01T12:00:00Z'),
+    // Relative to now: sendRentalDueReminders filters to bookings whose `from`
+    // is today in the venue's civil day, so a fixed past date would be dropped.
+    from: new Date(),
+    to: new Date(Date.now() + 2 * 60 * 60 * 1000),
     quantity: 1,
     durationType: 'hours',
     totalPrice: 20.0,
