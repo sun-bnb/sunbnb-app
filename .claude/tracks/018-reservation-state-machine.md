@@ -278,6 +278,29 @@ deletable rule; D13 grouping kept; kind derived not persisted; no new status str
 
 ## Log
 
+- **2026-08-12 (bulk refund for the full cash family — founder request)** — Bulk
+  Refund/Unreserve now covers red walked-in AND fuchsia cash-reserved parties
+  (between-days legs, mid-stay departed, cash advance bookings), mixed selections
+  included. Table: `staff.unreserve.seat` occ widened present → +expected/departed
+  (disconnect/partition never touches occupancy; pure + integration cells added).
+  View: `canCashRelease` eligibility; bulkFree dispatches GROUPED BY RESERVATION
+  (mirrors bulkDepart) — whole party → ONE unreserve.whole (one CN, one kept refunded
+  row), subset → per-seat unreserve.seat partitions. Browser-verified mixed red+fuchsia:
+  Refund label, "Refunding €34.00 across the selection" confirm, both parties kept as
+  refunded·departed with till entries voided. Data 321u+332i(+cells), partner
+  1968u+198i green. Fable 5.
+- **2026-08-12 (bulk check-in for cash-reserved seats — founder finding)** — Bulk
+  Check-in was gated to seatKind 'reserved' (online complete) only; cash advance
+  bookings (calendar paid-in-cash + expected) and between-days walk-in legs were lumped
+  into 'inflight' with mid-payment rows → NO bulk verb, and one of them in a mixed
+  selection killed the button. Fix: new seatKind 'cash-reserved' (paid-in-cash +
+  expected — awaiting the GUEST, not the provider); canCheckIn/canMove cover it
+  (statusGroup lanes reserved+cash-reserved as 'booked'); bulkCheckIn dispatches the
+  arrival verb per reservation kind — complete → checkInReservation (staff.checkIn),
+  paid-in-cash → resumeWalkIn (staff.resume) — a wrong dispatch is a clean machine
+  rejection. Browser-verified: 2 seeded cash-reserved seats → "Check in" offered →
+  both walked-in with checkedInAt (red A, correct cash arrival). Partner 1968u+198i
+  green. Fable 5.
 - **2026-08-11 (undo-depart button PULLED — founder test feedback)** — The FREE-panel
   "Undo departure" button chose its candidate per-seat via `.find()` over from-asc-ordered
   rows: ambiguous once multiple same-day departures accumulate (departed rows persist all

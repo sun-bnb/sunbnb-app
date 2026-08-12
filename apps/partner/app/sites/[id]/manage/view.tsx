@@ -20,11 +20,11 @@ import {
   blockBed, compBed, blockBeds, compBeds, convertHoldToWalkIn,
   holdBeds, reserveItems,
   unblockBed, uncompBed, releaseHold, unreserveItem, removeFailedReservation,
-  checkInReservation, markNoShow, markDeparted, cancelReservation,
+  checkInReservation, resumeWalkIn, markNoShow, markDeparted, cancelReservation,
   collectReservationPayment, getCollectStatus, cancelCollection,
   type ReservationMatch,
 } from './actions'
-import { RESERVATION_COMPLETE, RESERVATION_HELD } from '@repo/data/reservation-status'
+import { RESERVATION_COMPLETE, RESERVATION_HELD, RESERVATION_PAID_IN_CASH } from '@repo/data/reservation-status'
 import CollectPaymentModal from './CollectPaymentModal'
 
 function parseSunbedNumber(num: number) {
@@ -569,7 +569,7 @@ export default function ManageView({
   // the safe ones: bulk Create on an all-free selection, and Free/clear on a
   // selection of no-money / cash-offline states. Paid bookings (reserved /
   // checked-in) are deliberately excluded — their bulk cancel+refund is slice 4.
-  type SeatKind = 'available' | 'reserved' | 'held' | 'failed' | 'inflight' | 'checked-in' | 'walked-in' | 'comp' | 'blocked'
+  type SeatKind = 'available' | 'reserved' | 'cash-reserved' | 'held' | 'failed' | 'inflight' | 'checked-in' | 'walked-in' | 'comp' | 'blocked'
   const seatKind = (item: InventoryItem): SeatKind => {
     const st = getBedState(item)
     if (st !== 'expected') return st as SeatKind // available / checked-in / walked-in / blocked / comp
@@ -578,6 +578,11 @@ export default function ManageView({
     if (isFailedReservationStatus(res.status)) return 'failed'
     if (res.status === RESERVATION_HELD) return 'held'
     if (res.status === RESERVATION_COMPLETE) return 'reserved'
+    // Cash-reserved: a calendar advance booking paid in cash, or a multiday
+    // walk-in's between-days leg — AWAITING THE GUEST, not the payment provider.
+    // Its arrival verb is resumeWalkIn (machine staff.resume); do not lump it
+    // with genuinely mid-payment rows. (track 018 follow-up)
+    if (res.status === RESERVATION_PAID_IN_CASH) return 'cash-reserved'
     return 'inflight'
   }
 
@@ -773,15 +778,42 @@ export default function ManageView({
     })
   }
   const bulkFree = () => {
+    // Cash family (walked-in / cash-reserved): group by RESERVATION, subset-aware
+    // (mirrors bulkDepart). Whole party selected → ONE unreserve.whole (one credit
+    // note, one kept refunded row); strict subset → per-seat unreserve.seat
+    // (partitioned shares). Money/occupancy semantics are machine-owned.
+    if (canCashRelease) {
+      const groups = getSelectionGroups()
+      if (groups.size === 0) return
+      setBulkError(null)
+      startBulkTransition(async () => {
+        let failed = 0
+        for (const [, g] of groups) {
+          try {
+            if (g.isSubset) {
+              for (const seatId of g.selectedItemIds) {
+                const r = await unreserveItem(site.id!, seatId, accessKey, false)
+                if (r?.status === 'error') failed++
+              }
+            } else {
+              const r = await unreserveItem(site.id!, g.anyItemId, accessKey, true)
+              if (r?.status === 'error') failed++
+            }
+          } catch { failed++ }
+        }
+        router.refresh()
+        if (failed > 0) setBulkError(t('bulkSomeFailed', { n: failed }))
+        else setSelectedIds([])
+      })
+      return
+    }
+
     const seen = new Set<string>() // dedupe a failed reservation shared by >1 selected seat
     runBulkSeq((i) => {
       const kind = seatKind(i)
       if (kind === 'blocked') return unblockBed(site.id!, i.id, accessKey, false)
       if (kind === 'comp') return uncompBed(site.id!, i.id, accessKey, false)
       if (kind === 'held') return releaseHold(site.id!, i.id, accessKey, false)
-      // Bulk unreserve: applyToPair=false (Seat/disconnect), voidSettlements defaults
-      // to true (money-returned). The per-seat tap dialog is the only place staff
-      // can mark cash retained (unchecked) before confirming.
       if (kind === 'walked-in') return unreserveItem(site.id!, i.id, accessKey, false)
       if (kind === 'failed') {
         const res = getActiveReservation(i)
@@ -816,7 +848,16 @@ export default function ManageView({
       else setSelectedIds([])
     })
   }
-  const bulkCheckIn = () => bulkByReservation((resId) => checkInReservation(site.id!, resId, accessKey))
+  // Both online (staff.checkIn) and cash-reserved (staff.resume) are the same
+  // floor gesture — "the guest arrived" — on two machine kinds; dispatch per
+  // reservation. A wrong dispatch is a clean machine rejection, never a wrong write.
+  const bulkCheckIn = () => bulkByReservation((resId, itemId) => {
+    const item = inventoryItems.find(i => i.id === itemId)
+    const res = item ? getActiveReservation(item) : null
+    return res?.status === RESERVATION_PAID_IN_CASH
+      ? resumeWalkIn(site.id!, resId, accessKey)
+      : checkInReservation(site.id!, resId, accessKey)
+  })
   const bulkDepart = () => {
     // Subset-aware depart: cash walk-ins with a partial selection split off the
     // selected seats as ONE new reservation (which is then departed); online
@@ -868,7 +909,7 @@ export default function ManageView({
   // Bulk actions are offered only for a SINGLE status — a mixed selection (e.g.
   // blocked + occupied) gets no action, for clarity. checked-in and walked-in
   // count as one "occupied" status (same colour, same depart / move / vacate verbs).
-  const statusGroup = (k: SeatKind) => (k === 'checked-in' || k === 'walked-in') ? 'occupied' : k
+  const statusGroup = (k: SeatKind) => (k === 'checked-in' || k === 'walked-in') ? 'occupied' : (k === 'reserved' || k === 'cash-reserved') ? 'booked' : k
   const sameStatus = selItems.length > 0 && new Set(selItems.map(i => statusGroup(seatKind(i)))).size === 1
   const allAvailable = can(['available'])                         // → the full create row
   const canRent = can(['available', 'held']) && sameStatus
@@ -889,7 +930,7 @@ export default function ManageView({
   const bulkCardEligible = (bulkFreeCount > 0 ? 1 : 0) + bulkHeldResIds.size === 1
 
   // Paid lane — reservation-level transitions (whole-reservation semantics).
-  const canCheckIn = can(['reserved'])
+  const canCheckIn = can(['reserved', 'cash-reserved'])
   const canDepart = can(['checked-in', 'walked-in']) && sameStatus
   const canNoShow = can(['reserved'])
   // Real Mollie-paid bookings must NEVER be canceled silently (no refund). Cancel
@@ -905,7 +946,7 @@ export default function ManageView({
 
   // Move applies to any selection of relocatable bookings (same states the tap
   // dialog shows Move on). Each booking is relocated in turn via the move queue.
-  const canMove = can(['reserved', 'held', 'checked-in', 'walked-in']) && sameStatus
+  const canMove = can(['reserved', 'cash-reserved', 'held', 'checked-in', 'walked-in']) && sameStatus
   // Square Move button — sits on the dominant action's row (like the tap dialog);
   // rendered standalone when Move is the only applicable verb.
   const bulkMoveSquare = (
@@ -929,17 +970,22 @@ export default function ManageView({
   // selection offers no vacate — same-status-only, for clarity. Always runs
   // Summed unconditional refund a bulk Unreserve of this selection would trigger
   // (settled parties only) — drives the Refund-vs-Unreserve label + confirm amount.
-  const bulkRefundTotal = homogeneous === 'walked-in' ? selectionRefundTotal(inventoryItems, selectedIds) : 0
+  // Cash-family release/refund eligibility: red walked-in AND fuchsia cash-reserved
+  // (between-days legs, mid-stay departed, cash advance bookings) — mixed across
+  // parties allowed, it's all the same cash rails. (track 018 bulk refund)
+  const canCashRelease = can(['walked-in', 'cash-reserved'])
+  const bulkRefundTotal = canCashRelease ? selectionRefundTotal(inventoryItems, selectedIds) : 0
 
   // bulkFree (which dispatches the right per-seat vacate). Null when not freeable.
   const freeButton = (() => {
     if (homogeneous === 'held') return <button disabled={isBulkPending} onClick={bulkFree} className="w-full text-gray-400 dark:text-gray-500 text-sm py-2 active:text-gray-600 dark:active:text-gray-200 disabled:opacity-50">{tb('release')}</button>
     if (homogeneous === 'blocked') return <button disabled={isBulkPending} onClick={bulkFree} className="w-full bg-green-500 text-white font-bold text-lg py-4 rounded-xl active:bg-green-600 disabled:opacity-50">{tb('unblock')}</button>
     if (homogeneous === 'comp') return <button disabled={isBulkPending} onClick={bulkFree} className="w-full bg-green-500 text-white font-bold text-lg py-4 rounded-xl active:bg-green-600 disabled:opacity-50">{tb('endComp')}</button>
-    if (homogeneous === 'walked-in') {
+    if (canCashRelease) {
       // Track 018: unreserving SETTLED seats refunds unconditionally (till void /
       // partition + credit notes) — the label says so, and the ⚠ confirm shows
       // the summed amount before anything fires (parity with the tap dialog).
+      // Covers red walked-in AND fuchsia cash-reserved parties, mixed included.
       return <button disabled={isBulkPending} onClick={() => setBulkConfirm('unreserve')} className="w-full text-red-500 text-sm py-2 active:text-red-700 disabled:opacity-50">{bulkRefundTotal > 0 ? tb('refund') : tb('unreserve')}</button>
     }
     if (homogeneous === 'failed') return <button disabled={isBulkPending} onClick={bulkFree} className="w-full bg-red-500 text-white font-bold text-lg py-4 rounded-xl active:bg-red-600 disabled:opacity-50">{tb('remove')}</button>

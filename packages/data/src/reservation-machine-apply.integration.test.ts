@@ -366,3 +366,28 @@ describe('collect.start / collect.abandon / pay.fail', () => {
     expect(after.operationalStatus).toBe('walked-in')
   })
 })
+
+// ─── Bulk-refund cells: seat-unreserve on non-present cash parties ───────────
+
+describe('staff.unreserve.seat on between-days / departed parties (bulk refund, 2026-08-12)', () => {
+  it('between-days settled party: seat share partitions out, occupancy untouched', async () => {
+    const { end } = dayBounds()
+    const { reservation, items } = await walkIn(2, { settled: true, to: new Date(end.getTime() + 24 * 3600_000) })
+    // Cycle to the between-days leg (multiday depart → expected)
+    expect((await applyTransition(reservation.id, 'staff.depart')).outcome).toBe('applied')
+    const before = await prisma.reservation.findUniqueOrThrow({ where: { id: reservation.id } })
+    expect(before.operationalStatus).toBe('expected')
+
+    const result = await applyTransition(reservation.id, 'staff.unreserve.seat', { itemIds: [items[0]!.id] })
+    expect(result.outcome).toBe('applied')
+
+    const after = await prisma.reservation.findUniqueOrThrow({
+      where: { id: reservation.id }, include: { items: true },
+    })
+    expect(after.operationalStatus).toBe('expected') // occupancy untouched
+    expect(after.items).toHaveLength(1)
+    // 2-seat party settled €20 (fixture: n×10 flat) → freeing one seat moves €10 out
+    expect((await activeTill(reservation.id)).reduce((s, e) => s + e.amount, 0)).toBe(10)
+    expect(after.paymentAmount).toBe(10)
+  })
+})

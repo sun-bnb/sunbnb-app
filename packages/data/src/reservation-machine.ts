@@ -287,8 +287,8 @@ export const TRANSITIONS: TransitionSpec[] = [
   { event: 'staff.settle', pre: { kind: ['walkin'], pay: ['unsettled'], occ: ['present', 'expected'] }, post: { pay: 'settled' }, effects: ['tillRecord', 'receiptIssue'], note: 'settled pre absent ⇒ double-settle rejected' },
   { event: 'staff.unreserve.whole', pre: { kind: ['walkin'], pay: ['settled'] }, post: { pay: 'refunded', occ: 'departed', kept: true }, effects: ['tillVoid', 'creditNoteIssue', 'dayRow'], note: 'money row KEPT (I4); cash handed back' },
   { event: 'staff.unreserve.whole', pre: { kind: ['walkin'], pay: ['unsettled'] }, post: { deleted: true }, effects: ['deleteRow'] },
-  { event: 'staff.unreserve.seat', pre: { kind: ['walkin'], pay: ['settled'], occ: ['present'] }, when: ['subset'], post: {}, effects: ['seatDisconnect', 'amountRepartition', 'tillPartition', 'creditNoteIssue'], note: 'freed seat’s share voided + credit-noted; dialog shows exactly that share (D2)' },
-  { event: 'staff.unreserve.seat', pre: { kind: ['walkin'], pay: ['unsettled'], occ: ['present'] }, when: ['subset'], post: {}, effects: ['seatDisconnect', 'amountRepartition'] },
+  { event: 'staff.unreserve.seat', pre: { kind: ['walkin'], pay: ['settled'], occ: ['present', 'expected', 'departed'] }, when: ['subset'], post: {}, effects: ['seatDisconnect', 'amountRepartition', 'tillPartition', 'creditNoteIssue'], note: 'freed seat’s share voided + credit-noted; dialog shows exactly that share (D2). occ widened 2026-08-12 for bulk refunds on between-days / mid-stay-departed cash parties — the disconnect/partition never touches occupancy' },
+  { event: 'staff.unreserve.seat', pre: { kind: ['walkin'], pay: ['unsettled'], occ: ['present', 'expected', 'departed'] }, when: ['subset'], post: {}, effects: ['seatDisconnect', 'amountRepartition'] },
 
   // ── Occupancy ──
   { event: 'staff.checkIn', pre: { kind: ['online'], pay: ['complete'], occ: ['expected'] }, post: { occ: 'present' }, effects: ['dayRow'], note: 'complete only (D10)' },

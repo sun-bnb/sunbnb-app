@@ -143,6 +143,17 @@ describe('resolveTransition — allowed cells', () => {
     expect(unsettled?.effects).not.toContain('tillPartition')
   })
 
+  it('seat-unreserve works on non-present cash parties (between-days / mid-stay-departed) — bulk refund cells', () => {
+    // Widened 2026-08-12: the disconnect/partition never touches occupancy.
+    const expectedLeg = resolveTransition(S('walkin', 'settled', 'expected'), 'staff.unreserve.seat', ['subset'])
+    expect(expectedLeg?.effects).toEqual(expect.arrayContaining(['tillPartition', 'creditNoteIssue']))
+    const departedLeg = resolveTransition(S('walkin', 'unsettled', 'departed'), 'staff.unreserve.seat', ['subset'])
+    expect(departedLeg?.effects).toContain('seatDisconnect')
+    // Still subset-gated, still walkin-only
+    expect(resolveTransition(S('walkin', 'settled', 'expected'), 'staff.unreserve.seat')).toBeNull()
+    expect(resolveTransition(S('online', 'complete', 'expected'), 'staff.unreserve.seat', ['subset'])).toBeNull()
+  })
+
   it('refund-unreserve keeps the row, voids the till, and issues a credit note (I2/I4)', () => {
     const t = resolveTransition(S('walkin', 'settled', 'present'), 'staff.unreserve.whole')
     expect(t?.post).toMatchObject({ pay: 'refunded', kept: true })
