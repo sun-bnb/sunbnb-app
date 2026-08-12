@@ -47,7 +47,10 @@ interface ChannelTrend {
   summary: ChannelRevenueSummary
 }
 
-interface DailyOccupancy { date: string; capacity: number; occupied: number; comps: number; occupancyPct: number }
+/** Mirrors `DailyOccupancy` in @repo/data/analytics. `occupied` = rented + comps
+ *  (guests on beds); out-of-service `blocked` seats are excluded from both it and
+ *  the `occupancyPct` denominator (`sellable` = capacity − blocked). */
+interface DailyOccupancy { date: string; capacity: number; blocked: number; sellable: number; occupied: number; comps: number; held: number; unconfirmed: number; occupancyPct: number }
 interface OccupancySummary { avgOccupancyPct: number; peakOccupancyPct: number; totalComps: number }
 interface OccupancyTrend {
   rows: DailyOccupancy[]
@@ -469,9 +472,11 @@ export default function AccountingView() {
       return {
         bars: rows.map((r) => ({ date: r.date, value: r.occupied, max })),
         fmt: (v: number) => String(v),
+        // No separate "peak" tile: the peak IS the best day, so a peak tile
+        // renders the identical number with less information than `bestDay`,
+        // which carries the date too. Two tiles, same shape as `revenue`.
         tiles: [
           { label: t('avgSunbeds'), value: String(avg) },
-          { label: t('peakSunbeds'), value: String(peak) },
           { label: t('bestDay'), value: peakRow ? String(peakRow.occupied) : '—', date: peakRow?.date },
         ],
         loading: occupancyLoading,
@@ -487,9 +492,9 @@ export default function AccountingView() {
       return {
         bars: rows.map((r) => ({ date: r.date, value: r.occupancyPct, max })),
         fmt: (v: number) => `${Math.round(v)}%`,
+        // Same reasoning as `sunbeds`: peak == best day, so drop the peak tile.
         tiles: [
           { label: t('avgOccupancy'), value: summary ? `${summary.avgOccupancyPct}%` : '—' },
-          { label: t('peakOccupancy'), value: summary ? `${summary.peakOccupancyPct}%` : '—' },
           { label: t('bestDay'), value: peakRow ? `${Math.round(peakRow.occupancyPct)}%` : '—', date: peakRow?.date },
         ],
         loading: occupancyLoading,

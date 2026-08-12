@@ -14,6 +14,7 @@ import {
   ORDER_PREPARING,
   ORDER_READY,
 } from '@repo/data/reservation-status'
+import { getOccupancySnapshotForSites } from '@repo/data/analytics'
 
 
 // Local to this module — Next.js page modules may only export `default`,
@@ -111,8 +112,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
   // ── Run all independent queries in parallel ───────────────────────────
 
   const [
-    totalInventory,
-    todaysReservations,
+    occupancy,
     checkedInCount,
     revenueToday,
     monthAgg,
@@ -126,20 +126,12 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
     totalReservationsThisMonth,
   ] = await Promise.all([
 
-    // Total inventory (exclude pool seats — ad-hoc overflow, counted separately)
-    prisma.inventoryItem.count({
-      where: { siteId: { in: siteIds }, status: { not: 'pool' } },
-    }),
-
-    // Today's reservations (blocking statuses = actually happening)
-    prisma.reservation.count({
-      where: {
-        siteId: { in: siteIds },
-        from: { lte: endOfToday },
-        to: { gte: startOfToday },
-        status: { in: [...BLOCKING_STATUSES] },
-      },
-    }),
+    // Today's occupancy — SEATS occupied over SEATS sellable, classified by the
+    // same machine-kind partition the trend surfaces use, so the dashboard can't
+    // disagree with /manage/trends. Replaces a reservation-ROW count divided by
+    // an inventory-SEAT count that also let out-of-service blocks, no-shows, and
+    // departures inflate the percentage.
+    getOccupancySnapshotForSites(siteIds, startOfToday, endOfToday),
 
     // Checked in today
     prisma.reservation.count({
@@ -266,9 +258,9 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
 
   // ── Derived metrics ───────────────────────────────────────────────────
 
-  const occupancyPct = totalInventory > 0
-    ? Math.round((todaysReservations / totalInventory) * 100)
-    : 0
+  // Occupancy is computed in @repo/data (seats over sellable seats) — rounded
+  // here only for display.
+  const occupancyPct = Math.round(occupancy.occupancyPct)
 
   const cancellationPct = totalReservationsThisMonth > 0
     ? Math.round((canceledThisMonth / totalReservationsThisMonth) * 100)
@@ -297,10 +289,12 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
   }))
 
   return {
-    // Today snapshot
-    totalInventory,
+    // Today snapshot — seats for the occupancy card, parties for the check-in ratio
+    sellableInventory: occupancy.sellable,
+    blockedInventory: occupancy.blocked,
+    occupiedSeats: occupancy.occupied,
     occupancyPct,
-    todaysReservations,
+    partiesToday: occupancy.parties,
     checkedInCount,
     pendingOrders,
     hasFnb,

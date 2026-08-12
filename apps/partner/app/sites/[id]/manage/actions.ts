@@ -26,7 +26,6 @@ import {
   summarizeOccupancy,
   getReservationDayStats,
   summarizeReservationStats,
-  getRevenueByDay,
   toFiguresCsv,
   type DailyRevenueByChannel,
   type ChannelRevenueSummary,
@@ -3351,8 +3350,10 @@ export async function getManageTrends(
 /**
  * Plain CSV revenue dump for a rolling window — the manage-surface counterpart
  * to getRevenueCsv in accounting/actions.ts. Same window math, same
- * `getRevenueByDay + toFiguresCsv` call chain. Useful for quick data exports
- * from the on-site admin panel without navigating to the accounting page.
+ * `getReservationDayStats + toFiguresCsv` call chain — the SAME source that
+ * feeds the Daily breakdown's seat counts, so the file and the screen always
+ * agree. Useful for quick data exports from the on-site admin panel without
+ * navigating to the accounting page.
  *
  * Gate: verifySiteAdmin (requires 'admin' in token resources).
  */
@@ -3368,6 +3369,6 @@ export async function getManageTrendsCsv(
   const to = new Date()
   const from = new Date(to.getTime() - (window - 1) * MANAGE_TREND_DAY_MS)
 
-  const csv = toFiguresCsv(await getRevenueByDay(siteId, from, to))
+  const csv = toFiguresCsv(await getReservationDayStats(siteId, from, to))
   return { status: 'ok', csv }
 }

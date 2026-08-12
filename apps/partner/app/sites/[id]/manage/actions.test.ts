@@ -87,7 +87,6 @@ import {
   getRevenueByChannelByDay,
   getOccupancyByDay,
   getReservationDayStats,
-  getRevenueByDay,
   toFiguresCsv,
 } from '@repo/data/analytics'
 import {
@@ -5499,7 +5498,10 @@ describe('getManageTrends', () => {
     authenticateAsAdminSession()
 
     const mockRevenueRows = [{ date: '2025-07-01', cash: 50, qr: 20, online: 30, total: 100 }]
-    const mockOccupancyRows = [{ date: '2025-07-01', capacity: 10, occupied: 6, comps: 1, occupancyPct: 60 }]
+    const mockOccupancyRows = [{
+      date: '2025-07-01', capacity: 10, blocked: 2, sellable: 8,
+      occupied: 6, comps: 1, held: 0, unconfirmed: 0, occupancyPct: 75,
+    }]
     const mockOperationsRows = [{ date: '2025-07-01', rentedSeats: 6, revenue: 150 }]
     vi.mocked(getRevenueByChannelByDay).mockResolvedValueOnce(mockRevenueRows as any)
     vi.mocked(getOccupancyByDay).mockResolvedValueOnce(mockOccupancyRows as any)
@@ -5569,7 +5571,7 @@ describe('getManageTrends', () => {
 describe('getManageTrendsCsv', () => {
   // Gate: verifySiteAdmin — same as getManageTrends.
   // Mirrors getRevenueCsv in accounting/actions.ts: same window, same
-  // getRevenueByDay + toFiguresCsv call chain.
+  // getReservationDayStats + toFiguresCsv call chain.
 
   const OTHER_ID = 'other-user'
 
@@ -5592,44 +5594,44 @@ describe('getManageTrendsCsv', () => {
 
   // ── Auth gate: reject scenarios ───────────────────────────────────────────
 
-  it('no session, no token → error; does not call getRevenueByDay', async () => {
+  it('no session, no token → error; does not call getReservationDayStats', async () => {
     mockAuth.mockResolvedValue(null)
     vi.mocked(prisma.securityToken.findUnique).mockResolvedValue(null)
 
     const res = await getManageTrendsCsv(SITE_ID, 30)
     expect(res.status).toBe('error')
     expect(res.errors).toBeDefined()
-    expect(getRevenueByDay).not.toHaveBeenCalled()
+    expect(getReservationDayStats).not.toHaveBeenCalled()
   })
 
-  it('wrong-owner session → error; does not call getRevenueByDay', async () => {
+  it('wrong-owner session → error; does not call getReservationDayStats', async () => {
     mockAuth.mockResolvedValue({ user: { id: OTHER_ID } } as any)
     vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as any)
     vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
 
     const res = await getManageTrendsCsv(SITE_ID, 30)
     expect(res.status).toBe('error')
-    expect(getRevenueByDay).not.toHaveBeenCalled()
+    expect(getReservationDayStats).not.toHaveBeenCalled()
   })
 
-  it('plain manage token (no admin resource) → error; does not call getRevenueByDay', async () => {
+  it('plain manage token (no admin resource) → error; does not call getReservationDayStats', async () => {
     mockAuth.mockResolvedValue(null)
     vi.mocked(prisma.securityToken.findUnique).mockResolvedValue(null)
 
     const res = await getManageTrendsCsv(SITE_ID, 30, 'plain-manage-token')
     expect(res.status).toBe('error')
-    expect(getRevenueByDay).not.toHaveBeenCalled()
+    expect(getReservationDayStats).not.toHaveBeenCalled()
   })
 
   // ── Auth gate: allow scenarios ────────────────────────────────────────────
 
-  it('admin token → ok; calls getRevenueByDay and toFiguresCsv', async () => {
+  it('admin token → ok; calls getReservationDayStats and toFiguresCsv', async () => {
     authenticateAsAdminToken()
-    vi.mocked(toFiguresCsv).mockReturnValueOnce('date,rentals,revenue\n2025-07-01,3,150.00\n')
+    vi.mocked(toFiguresCsv).mockReturnValueOnce('date,sunbeds,revenue\n2025-07-01,3,150.00\n')
 
     const res = await getManageTrendsCsv(SITE_ID, 7, 'admin-token-key')
     expect(res.status).toBe('ok')
-    expect(getRevenueByDay).toHaveBeenCalledWith(SITE_ID, expect.any(Date), expect.any(Date))
+    expect(getReservationDayStats).toHaveBeenCalledWith(SITE_ID, expect.any(Date), expect.any(Date))
     expect(toFiguresCsv).toHaveBeenCalled()
   })
 
@@ -5645,12 +5647,12 @@ describe('getManageTrendsCsv', () => {
 
   it('returns { status: ok, csv } where csv is a string', async () => {
     authenticateAsAdminSession()
-    vi.mocked(toFiguresCsv).mockReturnValueOnce('date,rentals,revenue\n2025-07-01,5,200.00\n')
+    vi.mocked(toFiguresCsv).mockReturnValueOnce('date,sunbeds,revenue\n2025-07-01,5,200.00\n')
 
     const res = await getManageTrendsCsv(SITE_ID, 30)
     expect(res.status).toBe('ok')
     expect(typeof res.csv).toBe('string')
-    expect(res.csv).toContain('date,rentals,revenue')
+    expect(res.csv).toContain('date,sunbeds,revenue')
   })
 
   // ── days validation / clamp ───────────────────────────────────────────────
@@ -5661,7 +5663,7 @@ describe('getManageTrendsCsv', () => {
     // Verify the clamp by inspecting the time delta of the Date args.
     await getManageTrendsCsv(SITE_ID, 10)
 
-    const [[, fromArg, toArg]] = vi.mocked(getRevenueByDay).mock.calls
+    const [[, fromArg, toArg]] = vi.mocked(getReservationDayStats).mock.calls
     const DAY_MS = 24 * 60 * 60 * 1000
     // Should be a 30-day window: (30-1) * DAY_MS
     expect(toArg.getTime() - fromArg.getTime()).toBe((30 - 1) * DAY_MS)
@@ -5672,7 +5674,7 @@ describe('getManageTrendsCsv', () => {
 
     await getManageTrendsCsv(SITE_ID, 7)
 
-    const [[, fromArg, toArg]] = vi.mocked(getRevenueByDay).mock.calls
+    const [[, fromArg, toArg]] = vi.mocked(getReservationDayStats).mock.calls
     const DAY_MS = 24 * 60 * 60 * 1000
     expect(toArg.getTime() - fromArg.getTime()).toBe((7 - 1) * DAY_MS)
   })

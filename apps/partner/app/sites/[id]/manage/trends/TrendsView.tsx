@@ -26,7 +26,10 @@ const SafeBar = Bar as unknown as React.ComponentType<any>
 /* ── Types — mirrors accounting/view.tsx local interfaces ── */
 interface DailyRevenueByChannel { date: string; cash: number; qr: number; online: number; total: number }
 interface ChannelRevenueSummary { total: number; cash: number; qr: number; online: number; bestDay: DailyRevenueByChannel | null }
-interface DailyOccupancy { date: string; capacity: number; occupied: number; comps: number; occupancyPct: number }
+/** Mirrors `DailyOccupancy` in @repo/data/analytics. `occupied` = rented + comps
+ *  (guests on beds); out-of-service `blocked` seats are excluded from both it and
+ *  the `occupancyPct` denominator (`sellable` = capacity − blocked). */
+interface DailyOccupancy { date: string; capacity: number; blocked: number; sellable: number; occupied: number; comps: number; held: number; unconfirmed: number; occupancyPct: number }
 interface OccupancySummary { avgOccupancyPct: number; peakOccupancyPct: number; totalComps: number }
 interface DailyReservationStats { date: string; rentedSeats: number; revenue: number }
 interface ReservationStatsSummary { totalRevenue: number; totalSeats: number; bestDay: DailyReservationStats | null }
@@ -241,9 +244,11 @@ export default function TrendsView({
       return {
         bars: rows.map((r) => ({ date: r.date, value: r.occupied })),
         fmt: (v: number) => String(v),
+        // No separate "peak" tile: the peak IS the best day, so a peak tile
+        // renders the identical number with less information than `bestDay`,
+        // which carries the date too. Two tiles, same shape as `revenue`.
         tiles: [
           { label: t('avgSunbeds'), value: String(avg) },
-          { label: t('peakSunbeds'), value: String(peak) },
           { label: t('bestDay'), value: peakRow ? String(peakRow.occupied) : '—', date: peakRow?.date },
         ],
         empty: rows.every((r) => r.occupied === 0),
@@ -258,9 +263,9 @@ export default function TrendsView({
       return {
         bars: rows.map((r) => ({ date: r.date, value: r.occupancyPct })),
         fmt: (v: number) => `${Math.round(v)}%`,
+        // Same reasoning as `sunbeds`: peak == best day, so drop the peak tile.
         tiles: [
           { label: t('avgOccupancy'), value: `${summary.avgOccupancyPct}%` },
-          { label: t('peakOccupancy'), value: `${summary.peakOccupancyPct}%` },
           { label: t('bestDay'), value: peakRow ? `${Math.round(peakRow.occupancyPct)}%` : '—', date: peakRow?.date },
         ],
         empty: rows.every((r) => r.occupancyPct === 0),
@@ -283,6 +288,15 @@ export default function TrendsView({
       isStacked: true,
     }
   }, [data, trendMetric, t])
+
+  /* Seats rented per day, for the revenue breakdown rows. `operations` comes from
+   * getReservationDayStats, whose WHERE clause and `createdAt` day-bucketing are
+   * identical to getRevenueByChannelByDay's — so `rentedSeats` is the seat count
+   * of the very reservations that produced each row's money, not an estimate. */
+  const seatsByDate = useMemo(
+    () => new Map((data?.operations.rows ?? []).map((r) => [r.date, r.rentedSeats])),
+    [data],
+  )
 
   const hasData = phase === 'ready' && data !== null
 
@@ -476,17 +490,27 @@ export default function TrendsView({
                       {t('dailyBreakdown')}
                     </div>
                     <div className="max-h-64 overflow-y-auto">
-                      {[...data.revenue.rows].reverse().map((row) => (
-                        <div
-                          key={row.date}
-                          className="flex items-center justify-between py-1.5 border-b border-gray-100 dark:border-gray-700 last:border-b-0 text-sm"
-                        >
-                          <span className="text-gray-600 dark:text-gray-400">{formatDayLong(row.date)}</span>
-                          <span className="font-semibold text-gray-900 dark:text-gray-100 tabular-nums">
-                            €{row.total.toFixed(2)}
-                          </span>
-                        </div>
-                      ))}
+                      {[...data.revenue.rows].reverse().map((row) => {
+                        const seats = seatsByDate.get(row.date) ?? 0
+                        return (
+                          <div
+                            key={row.date}
+                            className="flex items-center justify-between py-1.5 border-b border-gray-100 dark:border-gray-700 last:border-b-0 text-sm"
+                          >
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-gray-600 dark:text-gray-400">{formatDayLong(row.date)}</span>
+                              {seats > 0 && (
+                                <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 tabular-nums">
+                                  {t('breakdownSeats', { count: seats })}
+                                </span>
+                              )}
+                            </div>
+                            <span className="font-semibold text-gray-900 dark:text-gray-100 tabular-nums">
+                              €{row.total.toFixed(2)}
+                            </span>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )}

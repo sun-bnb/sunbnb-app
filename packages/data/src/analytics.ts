@@ -16,6 +16,7 @@
 
 import prisma from '../index'
 import { round } from './payment'
+import { deriveState } from './reservation-machine'
 import {
   BLOCKING_STATUSES,
   OP_NO_SHOW,
@@ -116,11 +117,33 @@ export interface DailyOccupancy {
   date: string
   /** Active inventory count for the site (current). */
   capacity: number
-  /** Distinct beds occupied by a blocking reservation overlapping the day. */
+  /**
+   * Seats OUT OF SERVICE that day — machine kind `block` (`blockBed`, which
+   * stores a sticky `to` = 2999-12-31 so the block survives day rollover).
+   * Excluded from `occupied` *and* from the `occupancyPct` denominator: a bed
+   * the venue deliberately took off the floor is neither rented nor sellable.
+   */
+  blocked: number
+  /** `capacity − blocked`, floored at 0 — the floor the venue could actually sell. */
+  sellable: number
+  /**
+   * Distinct seats with a GUEST ON THEM: revenue-bearing kinds (`walkin`, and
+   * `online` once `complete`) plus comps. Excludes out-of-service blocks,
+   * unpaid holds, and unconfirmed/abandoned online checkouts — none of which
+   * are a rented sunbed.
+   */
   occupied: number
-  /** Of those, how many were comp (zero-revenue) occupancy. */
+  /** Of `occupied`, how many were comp (zero-revenue) occupancy. */
   comps: number
-  /** `occupied / capacity * 100`, 0 when capacity is 0. */
+  /** Seats reserved but not paid for — machine kind `hold`. Excluded from `occupied`. */
+  held: number
+  /**
+   * Seats on an online checkout that never confirmed (`pending`/`processing`).
+   * These block inventory until the cleanup cron sweeps them, but they are not
+   * a rental. Excluded from `occupied`.
+   */
+  unconfirmed: number
+  /** `occupied / sellable * 100`, 0 when sellable is 0. */
   occupancyPct: number
 }
 
@@ -221,13 +244,26 @@ export function summarizeRevenueByChannel(rows: DailyRevenueByChannel[]): Channe
 }
 
 /**
- * Fixed-column figures dump (date, rentals, revenue) → CSV string (one row per
- * supplied day). Serializes EXACTLY the rows it's given — the caller passes the
- * same windowed rows shown on screen, so there's no screen-vs-file mismatch.
+ * Fixed-column figures dump (date, sunbeds, revenue) → CSV string, one row per
+ * supplied day. Serializes EXACTLY the rows it's given.
+ *
+ * Takes `DailyReservationStats` — reservation-driven, bucketed by `createdAt` —
+ * deliberately, because that is what the trend screens show. Two earlier
+ * mismatches this closes:
+ *
+ *  - the column was labelled `rentals` but carried `DailyRevenue.count`, the
+ *    number of PARTNER INVOICES that day. A 10-seat €80 day exported as `1`
+ *    while the screen said "10 sunbeds";
+ *  - `DailyRevenue` is bucketed by `invoicedAt`, so a sale could even land on a
+ *    different DAY in the file than on the screen.
+ *
+ * `rentedSeats` and `revenue` come from ONE row here, so the seat count and the
+ * money can never describe different reservations. For invoice-driven fiscal
+ * truth use the accounting page's separate invoice-register export, not this.
  */
-export function toFiguresCsv(rows: DailyRevenue[]): string {
-  const header = 'date,rentals,revenue'
-  const body = rows.map((r) => `${r.date},${r.count},${r.revenue.toFixed(2)}`)
+export function toFiguresCsv(rows: DailyReservationStats[]): string {
+  const header = 'date,sunbeds,revenue'
+  const body = rows.map((r) => `${r.date},${r.rentedSeats},${r.revenue.toFixed(2)}`)
   return [header, ...body].join('\n') + '\n'
 }
 
@@ -327,11 +363,62 @@ export async function getReservationDayStats(
 }
 
 /**
+ * Seat buckets in CLASSIFICATION PRECEDENCE order — a seat is counted exactly
+ * once, in the first bucket that claims it. Precedence only bites when one seat
+ * sits on two reservations overlapping the same day (e.g. a sticky block laid
+ * over a booking made earlier); the conflict guard prevents it otherwise.
+ */
+const OCCUPANCY_BUCKETS = ['blocked', 'comps', 'rented', 'held', 'unconfirmed'] as const
+type OccupancyBucket = (typeof OCCUPANCY_BUCKETS)[number]
+
+/**
+ * Which bucket a reservation's seats fall into, decided by the state machine's
+ * own `kind` (`reservation-machine.ts`) rather than a hand-rolled status ladder.
+ * `kind` is already the vocabulary that separates revenue-bearing reservations
+ * (`walkin`, `online`) from the `pay: 'none'` ones (`hold`, `comp`, `block`), so
+ * "is this seat rented?" has exactly one definition repo-wide.
+ *
+ * `walkin` counts as rented whether or not the cash is settled yet — the bed IS
+ * rented; the till just hasn't caught up. `online` only counts once `complete`:
+ * `pending`/`processing` is an in-flight or abandoned checkout.
+ *
+ * Note: derived from the PARENT row's op-status — a range query loads no
+ * `ReservationDay` rows, same as `getFloorStateSnapshot`.
+ */
+function occupancyBucket(res: {
+  status: string
+  operationalStatus: string
+  isComp: boolean
+}): OccupancyBucket {
+  const { kind } = deriveState(res)
+  switch (kind) {
+    case 'block':
+      return 'blocked'
+    case 'comp':
+      return 'comps'
+    case 'hold':
+      return 'held'
+    case 'walkin':
+      return 'rented'
+    case 'online':
+      return res.status === RESERVATION_COMPLETE ? 'rented' : 'unconfirmed'
+  }
+}
+
+/**
  * Per-day occupancy for a site over `[from, to]` (dense). Not invoice-driven:
- * capacity = active inventory; occupied = distinct beds with a blocking
- * reservation overlapping the day (mirrors `availabilityService` /
- * `reserveWithConflictGuard`: `BLOCKING_STATUSES`, op-status ∉ [no-show,
- * departed]); comps = those whose reservation `isComp`.
+ * capacity = active inventory; every seat held by a blocking reservation
+ * overlapping the day is classified into ONE mutually-exclusive bucket by
+ * machine kind (see `occupancyBucket`), and `occupied` counts only the buckets
+ * that mean "a guest is on this bed" — rented + comps.
+ *
+ * The reservation filter still mirrors `availabilityService` /
+ * `reserveWithConflictGuard` (`BLOCKING_STATUSES`, op-status ∉ [no-show,
+ * departed]) — that is the right set for "what is holding inventory". The
+ * partition is what separates *holding inventory* from *rented*: previously
+ * everything blocking counted as occupied, so out-of-service beds (kind
+ * `block`, sticky `to` = 2999-12-31) inflated the series by a flat baseline on
+ * every single day, forever, and dragged `occupancyPct` down with them.
  */
 export async function getOccupancyByDay(
   siteId: string,
@@ -354,34 +441,160 @@ export async function getOccupancyByDay(
       select: {
         from: true,
         to: true,
+        status: true,
+        operationalStatus: true,
         isComp: true,
         items: { select: { id: true } },
       },
     }),
   ])
 
+  // Bucket each reservation once up front — `deriveState` is per-row, not per-day.
+  const bucketed = reservations.map((res) => ({ res, bucket: occupancyBucket(res) }))
+
   return eachDay(from, to).map((d) => {
     const dayStart = d
     const dayEnd = addDays(d, 1)
-    const occupiedItems = new Set<string>()
-    const compItems = new Set<string>()
-    for (const res of reservations) {
-      if (res.from < dayEnd && res.to >= dayStart) {
-        for (const it of res.items) {
-          occupiedItems.add(it.id)
-          if (res.isComp) compItems.add(it.id)
+    const overlapping = bucketed.filter(
+      ({ res }) => res.from < dayEnd && res.to >= dayStart,
+    )
+
+    const seats: Record<OccupancyBucket, Set<string>> = {
+      blocked: new Set(),
+      comps: new Set(),
+      rented: new Set(),
+      held: new Set(),
+      unconfirmed: new Set(),
+    }
+    // Global "already classified" set — a seat lands in one bucket only.
+    const classified = new Set<string>()
+    for (const bucket of OCCUPANCY_BUCKETS) {
+      for (const entry of overlapping) {
+        if (entry.bucket !== bucket) continue
+        for (const it of entry.res.items) {
+          if (classified.has(it.id)) continue
+          classified.add(it.id)
+          seats[bucket].add(it.id)
         }
       }
     }
-    const occupied = occupiedItems.size
+
+    const blocked = seats.blocked.size
+    const comps = seats.comps.size
+    const occupied = seats.rented.size + comps
+    const sellable = Math.max(capacity - blocked, 0)
     return {
       date: dayKey(d),
       capacity,
+      blocked,
+      sellable,
       occupied,
-      comps: compItems.size,
-      occupancyPct: capacity > 0 ? round((occupied / capacity) * 100) : 0,
+      comps,
+      held: seats.held.size,
+      unconfirmed: seats.unconfirmed.size,
+      occupancyPct: sellable > 0 ? round((occupied / sellable) * 100) : 0,
     }
   })
+}
+
+export interface OccupancySnapshot {
+  /** Active inventory across the sites. */
+  capacity: number
+  /** Seats out of service (kind `block`). */
+  blocked: number
+  /** `capacity − blocked` — the floor that could actually be sold. */
+  sellable: number
+  /** Seats with a guest on them: rented + comps. */
+  occupied: number
+  comps: number
+  held: number
+  unconfirmed: number
+  /**
+   * Guest PARTIES (reservation rows) holding a seat — out-of-service blocks
+   * excluded. Rows, NOT seats: the correct denominator for a party-level ratio
+   * such as check-ins, which counts rows on both sides.
+   */
+  parties: number
+  /** `occupied / sellable * 100`, 0 when sellable is 0. */
+  occupancyPct: number
+}
+
+/**
+ * Single-day, MULTI-SITE occupancy snapshot — for the partner dashboard's
+ * "today" KPI, which spans every site the operator owns.
+ *
+ * Shares `occupancyBucket` with `getOccupancyByDay`, so the dashboard and the
+ * trend surfaces can never drift apart on what "occupied" means. Critically it
+ * counts distinct SEATS (via the item join) against sellable seats — a
+ * reservation-row count over an inventory-seat count is a unit mismatch, and a
+ * 24-seat out-of-service block spread over 6 rows reads as "6 occupied" one way
+ * and "24 unsellable" the other.
+ *
+ * `dayStart`/`dayEnd` are caller-supplied so this module stays
+ * timezone-agnostic (same discipline as `till.ts`) — pass the bounds of the
+ * civil day you mean.
+ */
+export async function getOccupancySnapshotForSites(
+  siteIds: string[],
+  dayStart: Date,
+  dayEnd: Date,
+): Promise<OccupancySnapshot> {
+  const empty: OccupancySnapshot = {
+    capacity: 0, blocked: 0, sellable: 0, occupied: 0,
+    comps: 0, held: 0, unconfirmed: 0, parties: 0, occupancyPct: 0,
+  }
+  if (siteIds.length === 0) return empty
+
+  const [capacity, reservations] = await Promise.all([
+    prisma.inventoryItem.count({ where: { siteId: { in: siteIds }, status: 'active' } }),
+    prisma.reservation.findMany({
+      where: {
+        siteId: { in: siteIds },
+        status: { in: BLOCKING_STATUSES },
+        operationalStatus: { notIn: [OP_NO_SHOW, OP_DEPARTED] },
+        from: { lte: dayEnd },
+        to: { gte: dayStart },
+      },
+      select: {
+        status: true,
+        operationalStatus: true,
+        isComp: true,
+        items: { select: { id: true } },
+      },
+    }),
+  ])
+
+  const seats: Record<OccupancyBucket, Set<string>> = {
+    blocked: new Set(), comps: new Set(), rented: new Set(), held: new Set(), unconfirmed: new Set(),
+  }
+  const classified = new Set<string>()
+  const bucketed = reservations.map((res) => ({ res, bucket: occupancyBucket(res) }))
+  for (const bucket of OCCUPANCY_BUCKETS) {
+    for (const entry of bucketed) {
+      if (entry.bucket !== bucket) continue
+      for (const it of entry.res.items) {
+        if (classified.has(it.id)) continue
+        classified.add(it.id)
+        seats[bucket].add(it.id)
+      }
+    }
+  }
+
+  const blocked = seats.blocked.size
+  const comps = seats.comps.size
+  const occupied = seats.rented.size + comps
+  const sellable = Math.max(capacity - blocked, 0)
+  return {
+    capacity,
+    blocked,
+    sellable,
+    occupied,
+    comps,
+    held: seats.held.size,
+    unconfirmed: seats.unconfirmed.size,
+    parties: bucketed.filter((e) => e.bucket !== 'blocked').length,
+    occupancyPct: sellable > 0 ? round((occupied / sellable) * 100) : 0,
+  }
 }
 
 // ─── Floor State Snapshot ─────────────────────────────────────────────────────

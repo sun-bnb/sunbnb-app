@@ -14,7 +14,7 @@ import {
   createTestTableTab,
   resetCounter,
 } from './test/fixtures'
-import { getRevenueByDay, getOccupancyByDay, getReservationDayStats, summarizeRevenue, getFloorStateSnapshot, getRevenueByChannelByDay, getMonthlySourceSummary } from './analytics'
+import { getRevenueByDay, getOccupancyByDay, getOccupancySnapshotForSites, getReservationDayStats, summarizeRevenue, toFiguresCsv, getFloorStateSnapshot, getRevenueByChannelByDay, getMonthlySourceSummary } from './analytics'
 
 beforeEach(async () => {
   await cleanDatabase()
@@ -110,8 +110,339 @@ describe('getOccupancyByDay', () => {
     const rows = await getOccupancyByDay(site.id, d('2026-06-01T00:00:00Z'), d('2026-06-01T00:00:00Z'))
 
     expect(rows).toEqual([
-      { date: '2026-06-01', capacity: 4, occupied: 2, comps: 1, occupancyPct: 50 },
+      {
+        date: '2026-06-01',
+        capacity: 4,
+        blocked: 0,
+        sellable: 4,
+        occupied: 2,
+        comps: 1,
+        held: 0,
+        unconfirmed: 0,
+        occupancyPct: 50,
+      },
     ])
+  })
+
+  /**
+   * The Alonso Beach production bug: `blockBed` writes `status: 'paid-in-cash'`
+   * + `operationalStatus: 'blocked'` with a sticky `to` = 2999-12-31, which IS a
+   * BLOCKING_STATUS with an op-status outside [no-show, departed]. Every
+   * out-of-service bed therefore used to count as "occupied" on every day of
+   * every window, forever — a flat baseline the operator read as rentals.
+   */
+  it('does NOT count out-of-service (blocked) beds as occupied, and drops them from the denominator', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id)
+    const items = await Promise.all(
+      [1, 2, 3, 4].map((n) => createTestInventoryItem(user.id, site.id, { number: n })),
+    )
+    const day = { from: d('2026-06-01T00:00:00Z'), to: d('2026-06-01T23:59:59Z') }
+
+    // items 1-2: taken out of service exactly the way blockBed does it.
+    await createTestReservation(user.id, site.id, [items[0]!.id, items[1]!.id], {
+      status: 'paid-in-cash',
+      operationalStatus: 'blocked',
+      from: d('2026-06-01T00:00:00Z'),
+      to: d('2999-12-31T23:59:59.999Z'),
+    })
+    // item3: a real cash walk-in.
+    await createTestReservation(user.id, site.id, [items[2]!.id], {
+      status: 'paid-in-cash', operationalStatus: 'walked-in', ...day,
+    })
+
+    const [row] = await getOccupancyByDay(site.id, d('2026-06-01T00:00:00Z'), d('2026-06-01T00:00:00Z'))
+
+    expect(row!.blocked).toBe(2)
+    expect(row!.occupied).toBe(1)            // the walk-in only — was 3 before the fix
+    expect(row!.sellable).toBe(2)            // 4 active − 2 out of service
+    expect(row!.occupancyPct).toBe(50)       // 1/2, not 1/4 — blocking a bed can't dilute the rate
+  })
+
+  it('does not smear a sticky out-of-service block across the whole window as occupancy', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id)
+    const items = await Promise.all(
+      [1, 2].map((n) => createTestInventoryItem(user.id, site.id, { number: n })),
+    )
+
+    // Blocked once, on the first day, with blockBed's far-future sentinel `to`.
+    await createTestReservation(user.id, site.id, [items[0]!.id], {
+      status: 'paid-in-cash',
+      operationalStatus: 'blocked',
+      from: d('2026-06-01T00:00:00Z'),
+      to: d('2999-12-31T23:59:59.999Z'),
+    })
+
+    const rows = await getOccupancyByDay(site.id, d('2026-06-01T00:00:00Z'), d('2026-06-05T00:00:00Z'))
+
+    expect(rows).toHaveLength(5)
+    // Every day sees the block, and no day reports it as a rented sunbed.
+    expect(rows.map((r) => r.blocked)).toEqual([1, 1, 1, 1, 1])
+    expect(rows.map((r) => r.occupied)).toEqual([0, 0, 0, 0, 0])
+    expect(rows.map((r) => r.occupancyPct)).toEqual([0, 0, 0, 0, 0])
+  })
+
+  it('excludes unpaid holds and unconfirmed online checkouts from occupied, reporting them separately', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id)
+    const items = await Promise.all(
+      [1, 2, 3, 4].map((n) => createTestInventoryItem(user.id, site.id, { number: n })),
+    )
+    const day = { from: d('2026-06-01T00:00:00Z'), to: d('2026-06-01T23:59:59Z') }
+
+    // item1: held (reserved, no money) — blocks inventory but is not a rental.
+    await createTestReservation(user.id, site.id, [items[0]!.id], {
+      status: 'held', operationalStatus: 'expected', ...day,
+    })
+    // item2: online checkout that never confirmed.
+    await createTestReservation(user.id, site.id, [items[1]!.id], {
+      status: 'pending', operationalStatus: 'expected', ...day,
+    })
+    // item3: online booking that DID confirm — a real rental, even though the
+    // guest has not been checked in on the floor yet.
+    await createTestReservation(user.id, site.id, [items[2]!.id], {
+      status: 'complete', operationalStatus: 'expected', ...day,
+    })
+
+    const [row] = await getOccupancyByDay(site.id, d('2026-06-01T00:00:00Z'), d('2026-06-01T00:00:00Z'))
+
+    expect(row!.held).toBe(1)
+    expect(row!.unconfirmed).toBe(1)
+    expect(row!.occupied).toBe(1)            // the confirmed online booking only — was 3
+    expect(row!.occupancyPct).toBe(25)       // 1/4 sellable
+  })
+
+  it('keeps the buckets mutually exclusive — one seat is never counted twice', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const day = { from: d('2026-06-01T00:00:00Z'), to: d('2026-06-01T23:59:59Z') }
+
+    // A sticky block laid over the same seat that already had a walk-in: the
+    // conflict guard normally prevents this, but a block created after an
+    // existing booking can overlap it. Precedence must pick exactly one.
+    await createTestReservation(user.id, site.id, [item.id], {
+      status: 'paid-in-cash', operationalStatus: 'walked-in', ...day,
+    })
+    await createTestReservation(user.id, site.id, [item.id], {
+      status: 'paid-in-cash',
+      operationalStatus: 'blocked',
+      from: d('2026-06-01T00:00:00Z'),
+      to: d('2999-12-31T23:59:59.999Z'),
+    })
+
+    const [row] = await getOccupancyByDay(site.id, d('2026-06-01T00:00:00Z'), d('2026-06-01T00:00:00Z'))
+
+    expect(row!.blocked + row!.occupied + row!.held + row!.unconfirmed).toBe(1)
+    expect(row!.blocked).toBe(1)             // blocked wins precedence
+    expect(row!.occupied).toBe(0)
+    // The partition can never exceed the floor.
+    expect(row!.blocked + row!.occupied + row!.held + row!.unconfirmed).toBeLessThanOrEqual(row!.capacity)
+  })
+})
+
+/**
+ * The partner dashboard's "today" occupancy KPI. Its previous implementation
+ * divided a reservation-ROW count by an inventory-SEAT count with no op-status
+ * filter at all — so 6 block rows covering 24 seats read as "6 occupied of 150",
+ * and no-shows/departures counted as occupancy too. These assert the unit is
+ * seats and the filters hold.
+ */
+describe('getOccupancySnapshotForSites (dashboard today KPI)', () => {
+  const DAY_START = d('2026-06-01T00:00:00Z')
+  const DAY_END = d('2026-06-01T23:59:59.999Z')
+
+  it('counts SEATS, not reservation rows, across every site the operator owns', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const siteA = await createTestSite(user.id)
+    const siteB = await createTestSite(user.id)
+    const a = await Promise.all(
+      [1, 2, 3].map((n) => createTestInventoryItem(user.id, siteA.id, { number: n })),
+    )
+    const b = await Promise.all(
+      [1, 2].map((n) => createTestInventoryItem(user.id, siteB.id, { number: n })),
+    )
+    const day = { from: DAY_START, to: DAY_END }
+
+    // ONE row holding THREE seats — a row count would report 1, seats report 3.
+    await createTestReservation(user.id, siteA.id, [a[0]!.id, a[1]!.id, a[2]!.id], {
+      status: 'paid-in-cash', operationalStatus: 'walked-in', ...day,
+    })
+    // Second site contributes too — the dashboard spans all owned sites.
+    await createTestReservation(user.id, siteB.id, [b[0]!.id], {
+      status: 'complete', operationalStatus: 'expected', ...day,
+    })
+
+    const snap = await getOccupancySnapshotForSites([siteA.id, siteB.id], DAY_START, DAY_END)
+
+    expect(snap.capacity).toBe(5)
+    expect(snap.occupied).toBe(4)      // 3 seats + 1 seat, NOT 2 rows
+    expect(snap.parties).toBe(2)       // rows, for the check-in ratio
+    expect(snap.occupancyPct).toBe(80)
+  })
+
+  it('keeps out-of-service blocks out of both the numerator and the denominator', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id)
+    const items = await Promise.all(
+      [1, 2, 3, 4].map((n) => createTestInventoryItem(user.id, site.id, { number: n })),
+    )
+
+    // Two separate block ROWS covering three seats — the old code read this as
+    // "2 occupied of 4" (50%); it is really "0 occupied of 1 sellable".
+    await createTestReservation(user.id, site.id, [items[0]!.id, items[1]!.id], {
+      status: 'paid-in-cash', operationalStatus: 'blocked',
+      from: DAY_START, to: d('2999-12-31T23:59:59.999Z'),
+    })
+    await createTestReservation(user.id, site.id, [items[2]!.id], {
+      status: 'paid-in-cash', operationalStatus: 'blocked',
+      from: DAY_START, to: d('2999-12-31T23:59:59.999Z'),
+    })
+
+    const snap = await getOccupancySnapshotForSites([site.id], DAY_START, DAY_END)
+
+    expect(snap.blocked).toBe(3)
+    expect(snap.occupied).toBe(0)
+    expect(snap.sellable).toBe(1)
+    expect(snap.occupancyPct).toBe(0)
+    expect(snap.parties).toBe(0)       // a block is not a guest party awaiting check-in
+  })
+
+  it('excludes no-shows and departures from today occupancy', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id)
+    const items = await Promise.all(
+      [1, 2, 3].map((n) => createTestInventoryItem(user.id, site.id, { number: n })),
+    )
+    const day = { from: DAY_START, to: DAY_END }
+
+    await createTestReservation(user.id, site.id, [items[0]!.id], {
+      status: 'paid-in-cash', operationalStatus: 'no-show', ...day,
+    })
+    await createTestReservation(user.id, site.id, [items[1]!.id], {
+      status: 'paid-in-cash', operationalStatus: 'departed', ...day,
+    })
+    await createTestReservation(user.id, site.id, [items[2]!.id], {
+      status: 'paid-in-cash', operationalStatus: 'walked-in', ...day,
+    })
+
+    const snap = await getOccupancySnapshotForSites([site.id], DAY_START, DAY_END)
+
+    expect(snap.occupied).toBe(1)      // only the live walk-in — was 3
+    expect(snap.parties).toBe(1)
+  })
+
+  it('agrees with getOccupancyByDay for a single site on the same day', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id)
+    const items = await Promise.all(
+      [1, 2, 3, 4].map((n) => createTestInventoryItem(user.id, site.id, { number: n })),
+    )
+    const day = { from: DAY_START, to: DAY_END }
+
+    await createTestReservation(user.id, site.id, [items[0]!.id], {
+      status: 'paid-in-cash', operationalStatus: 'walked-in', ...day,
+    })
+    await createTestReservation(user.id, site.id, [items[1]!.id], {
+      status: 'paid-in-cash', operationalStatus: 'blocked',
+      from: DAY_START, to: d('2999-12-31T23:59:59.999Z'),
+    })
+    await createTestReservation(user.id, site.id, [items[2]!.id], {
+      status: 'held', operationalStatus: 'expected', ...day,
+    })
+
+    const [snap, [row]] = await Promise.all([
+      getOccupancySnapshotForSites([site.id], DAY_START, DAY_END),
+      getOccupancyByDay(site.id, DAY_START, DAY_START),
+    ])
+
+    // The dashboard and the trend surfaces must never disagree about today.
+    expect(snap.occupied).toBe(row!.occupied)
+    expect(snap.blocked).toBe(row!.blocked)
+    expect(snap.sellable).toBe(row!.sellable)
+    expect(snap.held).toBe(row!.held)
+    expect(snap.occupancyPct).toBe(row!.occupancyPct)
+  })
+
+  it('returns a zeroed snapshot for an operator with no sites', async () => {
+    expect(await getOccupancySnapshotForSites([], DAY_START, DAY_END)).toEqual({
+      capacity: 0, blocked: 0, sellable: 0, occupied: 0,
+      comps: 0, held: 0, unconfirmed: 0, parties: 0, occupancyPct: 0,
+    })
+  })
+})
+
+/**
+ * The manage-trends "Daily breakdown" prints each day's takings from
+ * getRevenueByChannelByDay and its seat count from getReservationDayStats. That
+ * pairing is only honest because the two share an identical WHERE clause and
+ * `createdAt` day-bucketing. Ratchet it: if either filter drifts, the money and
+ * the seat count on the same row start describing different reservation sets,
+ * and nothing else in the suite would notice.
+ */
+describe('revenue ↔ rentedSeats pairing (daily-breakdown invariant)', () => {
+  it('agrees on per-day revenue, and counts seats for exactly those reservations', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id)
+    const items = await Promise.all(
+      [1, 2, 3, 4, 5].map((n) => createTestInventoryItem(user.id, site.id, { number: n })),
+    )
+
+    // Two cash walk-ins on day 1 — 3 seats, €24 total (flat €8/seat).
+    await createTestReservation(user.id, site.id, [items[0]!.id, items[1]!.id], {
+      status: 'paid-in-cash', paymentAmount: 16, createdAt: d('2026-07-01T09:00:00Z'),
+    })
+    await createTestReservation(user.id, site.id, [items[2]!.id], {
+      status: 'paid-in-cash', paymentAmount: 8, createdAt: d('2026-07-01T15:00:00Z'),
+    })
+    // One online booking on day 2 — 1 seat, €8.
+    await createTestReservation(user.id, site.id, [items[3]!.id], {
+      status: 'complete', paymentAmount: 8, createdAt: d('2026-07-02T11:00:00Z'),
+    })
+    // Excluded from BOTH series — a comp and a refunded booking must not add
+    // money on one side or seats on the other.
+    await createTestReservation(user.id, site.id, [items[4]!.id], {
+      status: 'paid-in-cash', isComp: true, paymentAmount: 0, createdAt: d('2026-07-02T12:00:00Z'),
+    })
+    await createTestReservation(user.id, site.id, [items[4]!.id], {
+      status: 'complete', paymentAmount: 99, refundedAt: d('2026-07-02T18:00:00Z'),
+      createdAt: d('2026-07-02T13:00:00Z'),
+    })
+
+    const from = d('2026-07-01T00:00:00Z')
+    const to = d('2026-07-03T00:00:00Z')
+    const [revenue, ops] = await Promise.all([
+      getRevenueByChannelByDay(site.id, from, to),
+      getReservationDayStats(site.id, from, to),
+    ])
+
+    // Same dense day set, and the money agrees day for day.
+    expect(ops.map((r) => r.date)).toEqual(revenue.map((r) => r.date))
+    expect(ops.map((r) => r.revenue)).toEqual(revenue.map((r) => r.total))
+
+    // And the seat counts belong to those same reservations.
+    expect(revenue.map((r) => r.total)).toEqual([24, 8, 0])
+    expect(ops.map((r) => r.rentedSeats)).toEqual([3, 1, 0])
+
+    // The CSV export is built from the same rows, so the file cannot disagree
+    // with the screen — it previously exported an INVOICE COUNT under a
+    // `rentals` header, bucketed by `invoicedAt` rather than `createdAt`.
+    expect(toFiguresCsv(ops)).toBe(
+      'date,sunbeds,revenue\n' +
+      '2026-07-01,3,24.00\n' +
+      '2026-07-02,1,8.00\n' +
+      '2026-07-03,0,0.00\n',
+    )
   })
 })
 

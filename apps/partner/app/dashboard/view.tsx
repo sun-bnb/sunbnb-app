@@ -47,9 +47,15 @@ export interface ArrivingSoon {
 
 export interface DashboardData {
   // Today
-  totalInventory: number
+  /** Active seats the operator could sell today (`capacity − blocked`). */
+  sellableInventory: number
+  /** Seats out of service today — shown as context for why sellable < capacity. */
+  blockedInventory: number
+  /** Seats with a guest on them today (rented + comps). */
+  occupiedSeats: number
   occupancyPct: number
-  todaysReservations: number
+  /** Guest parties (reservation ROWS) holding a seat today — the check-in denominator. */
+  partiesToday: number
   checkedInCount: number
   pendingOrders: number
   hasFnb: boolean
@@ -242,7 +248,7 @@ export default function DashboardView({ data }: { data: DashboardData }) {
     net: d.revenue - d.fees,
   }))
 
-  const availableSpots = data.totalInventory - data.todaysReservations
+  const availableSpots = data.sellableInventory - data.occupiedSeats
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-5xl">
@@ -270,7 +276,7 @@ export default function DashboardView({ data }: { data: DashboardData }) {
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-semibold text-gray-900">{data.occupancyPct}%</span>
             <span className="text-sm text-gray-400">
-              {data.todaysReservations}/{data.totalInventory}
+              {data.occupiedSeats}/{data.sellableInventory}
             </span>
           </div>
           <OccupancyBar pct={data.occupancyPct} />
@@ -278,15 +284,18 @@ export default function DashboardView({ data }: { data: DashboardData }) {
             {availableSpots > 0
               ? t('spotsAvailable', { count: availableSpots })
               : t('fullyBooked')}
+            {data.blockedInventory > 0 && (
+              <> &middot; {t('outOfService', { count: data.blockedInventory })}</>
+            )}
           </span>
         </div>
 
         {/* Check-ins */}
         <StatCard
           label={t('checkIns')}
-          value={`${data.checkedInCount}/${data.todaysReservations}`}
-          subtitle={data.todaysReservations > 0
-            ? t('arrivedPct', { pct: Math.round((data.checkedInCount / data.todaysReservations) * 100) })
+          value={`${data.checkedInCount}/${data.partiesToday}`}
+          subtitle={data.partiesToday > 0
+            ? t('arrivedPct', { pct: Math.round((data.checkedInCount / data.partiesToday) * 100) })
             : t('noReservationsToday')}
           icon={icons.checkIn}
           accent="bg-amber-50 text-amber-600"

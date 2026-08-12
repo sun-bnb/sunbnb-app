@@ -12,8 +12,25 @@ import {
 } from './analytics'
 
 const row = (date: string, revenue: number, count: number): DailyRevenue => ({ date, revenue, count })
-const occ = (date: string, capacity: number, occupied: number, comps: number, occupancyPct: number): DailyOccupancy =>
-  ({ date, capacity, occupied, comps, occupancyPct })
+const occ = (
+  date: string,
+  capacity: number,
+  occupied: number,
+  comps: number,
+  occupancyPct: number,
+  extra: Partial<DailyOccupancy> = {},
+): DailyOccupancy => ({
+  date,
+  capacity,
+  blocked: 0,
+  sellable: capacity,
+  occupied,
+  comps,
+  held: 0,
+  unconfirmed: 0,
+  occupancyPct,
+  ...extra,
+})
 
 describe('summarizeRevenue', () => {
   it('returns zeros and no best day for an empty set', () => {
@@ -157,11 +174,20 @@ describe('summarizeRevenueByChannel', () => {
 
 describe('toFiguresCsv', () => {
   it('emits a header plus one row per day, revenue at 2dp', () => {
-    const csv = toFiguresCsv([row('2026-06-01', 16, 2), row('2026-06-02', 0, 0)])
-    expect(csv).toBe('date,rentals,revenue\n2026-06-01,2,16.00\n2026-06-02,0,0.00\n')
+    const csv = toFiguresCsv([stat('2026-06-01', 2, 16), stat('2026-06-02', 0, 0)])
+    expect(csv).toBe('date,sunbeds,revenue\n2026-06-01,2,16.00\n2026-06-02,0,0.00\n')
   })
 
   it('emits just the header for no rows', () => {
-    expect(toFiguresCsv([])).toBe('date,rentals,revenue\n')
+    expect(toFiguresCsv([])).toBe('date,sunbeds,revenue\n')
+  })
+
+  /**
+   * The column carries SEATS, not the invoice count it used to carry — a
+   * 10-seat €80 day exported as `1` while the screen said "10 sunbeds".
+   */
+  it('exports the seat count, so a multi-seat day does not collapse to one', () => {
+    const csv = toFiguresCsv([stat('2026-08-11', 10, 80)])
+    expect(csv).toBe('date,sunbeds,revenue\n2026-08-11,10,80.00\n')
   })
 })

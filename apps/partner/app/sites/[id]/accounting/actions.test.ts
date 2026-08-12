@@ -7,7 +7,7 @@ vi.mock('@/app/auth', () => ({
 import { getInvoicesByMonth, getPaidItemsByMonth, getRevenueTrend, getOccupancyTrend, getRevenueCsv, getStaffTill } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
-import { getRevenueByDay, summarizeRevenue, getOccupancyByDay, summarizeOccupancy, toFiguresCsv } from '@repo/data/analytics'
+import { getRevenueByDay, summarizeRevenue, getOccupancyByDay, summarizeOccupancy, getReservationDayStats, toFiguresCsv } from '@repo/data/analytics'
 import { getTillByEmployee } from '@repo/data/till'
 import { RESERVATION_COMPLETE, ORDER_COMPLETE } from '@repo/data/reservation-status'
 
@@ -410,7 +410,10 @@ describe('getOccupancyTrend', () => {
   it('aggregates the window and returns rows + summary', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
-    const rows = [{ date: '2026-06-18', capacity: 4, occupied: 2, comps: 1, occupancyPct: 50 }]
+    const rows = [{
+      date: '2026-06-18', capacity: 4, blocked: 0, sellable: 4,
+      occupied: 2, comps: 1, held: 0, unconfirmed: 0, occupancyPct: 50,
+    }]
     mockOccByDay.mockResolvedValue(rows)
     mockSummarizeOcc.mockReturnValue({ avgOccupancyPct: 50, peakOccupancyPct: 50, totalComps: 1 })
 
@@ -437,32 +440,34 @@ describe('getOccupancyTrend', () => {
 // ─── getRevenueCsv ────────────────────────────────────────────────────────────
 
 describe('getRevenueCsv', () => {
-  const mockRevenueByDay = vi.mocked(getRevenueByDay)
+  // Reservation-driven (getReservationDayStats), NOT invoice-driven — the file
+  // must match the on-screen trend. The invoice register is a separate export.
+  const mockDayStats = vi.mocked(getReservationDayStats)
   const mockCsv = vi.mocked(toFiguresCsv)
 
   it('throws when not authenticated', async () => {
     await expect(getRevenueCsv(SITE_ID, 30)).rejects.toThrow('Not authenticated')
-    expect(mockRevenueByDay).not.toHaveBeenCalled()
+    expect(mockDayStats).not.toHaveBeenCalled()
   })
 
   it('throws when the site belongs to another partner', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OTHER_ID } as any)
     await expect(getRevenueCsv(SITE_ID, 30)).rejects.toThrow('Not authorized')
-    expect(mockRevenueByDay).not.toHaveBeenCalled()
+    expect(mockDayStats).not.toHaveBeenCalled()
   })
 
-  it('serializes the window rows to CSV', async () => {
+  it('serializes the window rows to CSV from the reservation-driven seat/revenue source', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
-    const rows = [{ date: '2026-06-18', revenue: 16, count: 2 }]
-    mockRevenueByDay.mockResolvedValue(rows)
-    mockCsv.mockReturnValue('date,rentals,revenue\n2026-06-18,2,16.00\n')
+    const rows = [{ date: '2026-06-18', rentedSeats: 2, revenue: 16 }]
+    mockDayStats.mockResolvedValue(rows)
+    mockCsv.mockReturnValue('date,sunbeds,revenue\n2026-06-18,2,16.00\n')
 
     const csv = await getRevenueCsv(SITE_ID, 7)
 
     expect(mockCsv).toHaveBeenCalledWith(rows)
-    expect(csv).toBe('date,rentals,revenue\n2026-06-18,2,16.00\n')
+    expect(csv).toBe('date,sunbeds,revenue\n2026-06-18,2,16.00\n')
   })
 })
 
