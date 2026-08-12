@@ -792,11 +792,11 @@ export default function ManageView({
           try {
             if (g.isSubset) {
               for (const seatId of g.selectedItemIds) {
-                const r = await unreserveItem(site.id!, seatId, accessKey, false)
+                const r = await unreserveItem(site.id!, seatId, accessKey, false, true, workerArg)
                 if (r?.status === 'error') failed++
               }
             } else {
-              const r = await unreserveItem(site.id!, g.anyItemId, accessKey, true)
+              const r = await unreserveItem(site.id!, g.anyItemId, accessKey, true, true, workerArg)
               if (r?.status === 'error') failed++
             }
           } catch { failed++ }
@@ -814,7 +814,7 @@ export default function ManageView({
       if (kind === 'blocked') return unblockBed(site.id!, i.id, accessKey, false)
       if (kind === 'comp') return uncompBed(site.id!, i.id, accessKey, false)
       if (kind === 'held') return releaseHold(site.id!, i.id, accessKey, false)
-      if (kind === 'walked-in') return unreserveItem(site.id!, i.id, accessKey, false)
+      if (kind === 'walked-in') return unreserveItem(site.id!, i.id, accessKey, false, true, workerArg)
       if (kind === 'failed') {
         const res = getActiveReservation(i)
         if (!res || seen.has(res.id)) return Promise.resolve({ status: 'ok' as const })

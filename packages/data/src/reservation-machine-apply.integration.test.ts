@@ -391,3 +391,81 @@ describe('staff.unreserve.seat on between-days / departed parties (bulk refund, 
     expect(after.paymentAmount).toBe(10)
   })
 })
+
+// ─── Option B (2026-08-12): refunds of already-CLOSED cash ───────────────────
+
+describe('closed-cash refunds append counter-entries (Option B) — history frozen, drawer truthful', () => {
+  async function closedParty(seats = 2) {
+    const miguel = await prisma.employee.create({ data: { accountId: user.id, name: 'Miguel', active: true } })
+    const ana = await prisma.employee.create({ data: { accountId: user.id, name: 'Ana', active: true } })
+    const { reservation, items } = await walkIn(seats) // unsettled fixture
+    const amount = seats * 10
+    // Miguel collected YESTERDAY...
+    const yesterday = new Date(Date.now() - 24 * 3600_000)
+    await recordSettlement({ siteId: site.id, reservationId: reservation.id, employeeId: miguel.id, amount, settledAt: yesterday })
+    // ...and CLOSED his till (handed the cash in) before the refund.
+    await prisma.tillClose.create({
+      data: { siteId: site.id, employeeId: miguel.id, closedAt: new Date(Date.now() - 12 * 3600_000), totalAmount: amount, txnCount: 1 },
+    })
+    return { reservation, items, miguel, ana, amount, yesterday }
+  }
+
+  it('whole refund: original entry untouched (Miguel/yesterday frozen); counter-entry today debits Ana', async () => {
+    const { reservation, miguel, ana, yesterday } = await closedParty(2)
+
+    const result = await applyTransition(reservation.id, 'staff.unreserve.whole', { employeeId: ana.id })
+    expect(result.outcome).toBe('applied')
+
+    const entries = await prisma.tillEntry.findMany({
+      where: { reservationId: reservation.id }, orderBy: { createdAt: 'asc' },
+    })
+    expect(entries).toHaveLength(2)
+    // Miguel's collection: NOT voided, amount/attribution/date frozen
+    expect(entries[0]!.voidedAt).toBeNull()
+    expect(entries[0]!.amount).toBe(20)
+    expect(entries[0]!.employeeId).toBe(miguel.id)
+    expect(entries[0]!.settledAt.getTime()).toBe(yesterday.getTime())
+    // Ana's counter-entry: −20, TODAY, her drawer
+    expect(entries[1]!.amount).toBe(-20)
+    expect(entries[1]!.employeeId).toBe(ana.id)
+    expect(entries[1]!.settledAt.getTime()).toBeGreaterThan(Date.now() - 60_000)
+    // Net active cash for the party: zero — books closed
+    const net = entries.filter((e) => !e.voidedAt).reduce((s, e) => s + e.amount, 0)
+    expect(net).toBe(0)
+    // Row kept as refunded (money-rows-kept unchanged)
+    const after = await prisma.reservation.findUniqueOrThrow({ where: { id: reservation.id } })
+    expect(after.status).toBe('refunded')
+  })
+
+  it('seat refund on a closed party: counter-entry for the freed share only; original intact (I1 as net)', async () => {
+    const { reservation, items, miguel, ana } = await closedParty(2)
+
+    const result = await applyTransition(reservation.id, 'staff.unreserve.seat', {
+      itemIds: [items[0]!.id], employeeId: ana.id,
+    })
+    expect(result.outcome).toBe('applied')
+
+    const entries = await prisma.tillEntry.findMany({
+      where: { reservationId: reservation.id }, orderBy: { createdAt: 'asc' },
+    })
+    expect(entries).toHaveLength(2)
+    expect(entries[0]!.voidedAt).toBeNull() // Miguel's +20 frozen
+    expect(entries[0]!.employeeId).toBe(miguel.id)
+    expect(entries[1]!.amount).toBe(-10) // Ana pays out the freed seat's share
+    expect(entries[1]!.employeeId).toBe(ana.id)
+
+    const after = await prisma.reservation.findUniqueOrThrow({ where: { id: reservation.id } })
+    expect(after.paymentAmount).toBe(10)
+    const net = entries.filter((e) => !e.voidedAt).reduce((s, e) => s + e.amount, 0)
+    expect(net).toBe(10) // I1 (net form): active till ≡ remaining paymentAmount
+  })
+
+  it('OPEN entries keep void semantics (cash still in the drawer — no close in between)', async () => {
+    const { reservation } = await walkIn(1, { settled: true }) // settled now, never closed
+    const result = await applyTransition(reservation.id, 'staff.unreserve.whole')
+    expect(result.outcome).toBe('applied')
+    const entries = await prisma.tillEntry.findMany({ where: { reservationId: reservation.id } })
+    expect(entries).toHaveLength(1)
+    expect(entries[0]!.voidedAt).not.toBeNull() // voided, no counter-entry
+  })
+})

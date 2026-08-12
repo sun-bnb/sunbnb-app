@@ -379,9 +379,9 @@ export default function BedDetail({
       // refunds (till void/partition + credit note — the button says "Refund");
       // the legacy 5th arg is ignored by the action.
       if (state === 'walked-in') {
-        runAction(() => unreserveItem(siteId, item.id, accessKey, applyToGroup))
+        runAction(() => unreserveItem(siteId, item.id, accessKey, applyToGroup, true, currentWorkerId))
       } else {
-        runAction(() => unreserveItem(siteId, item.id, accessKey, applyToPair))
+        runAction(() => unreserveItem(siteId, item.id, accessKey, applyToPair, true, currentWorkerId))
       }
     } else if (pendingConfirm === 'remove') {
       if (!reservation) return

@@ -44,7 +44,7 @@ import {
   type TransitionSpec,
 } from './reservation-machine'
 import { randomUUID } from 'node:crypto'
-import { recordSettlement, voidSettlementsForReservation } from './till'
+import { recordSettlement } from './till'
 import { processConfirmedReservation, issueCashCreditNote } from './payment'
 import {
   createReservationMolliePayment,
@@ -65,7 +65,11 @@ export interface ApplyOpts {
   cash?: boolean
   /** Staff-entered amount for staff.settle (falls back to paymentAmount). */
   amount?: number
-  /** Worker attribution for till writes (already resolved by the caller). */
+  /**
+   * Worker attribution for till writes (already resolved by the caller):
+   * settle entries AND refund counter-entries (Option B — the refunder's
+   * drawer pays out, not the original collector's).
+   */
   employeeId?: string | null
   /** Injectable clock for tests. */
   now?: Date
@@ -313,6 +317,40 @@ function seatWeights(items: { price: number | null }[], sitePrice: number | null
   return items.map((i) => (i.price ?? null) || sitePrice || 0)
 }
 
+/**
+ * Which of the reservation's ACTIVE till entries are already CLOSED — swept
+ * into a TillClose hand-in by their worker. Option B (2026-08-12): a closed
+ * entry is immutable history; refunding it appends a NEGATIVE counter-entry
+ * (settledAt = now, attributed to the REFUNDER) instead of voiding — so
+ * yesterday's day reports and close snapshots stay frozen, and today's drawer
+ * shows the cash going out. Open entries (incl. unclosed carry-over — the cash
+ * is still in the drawer) keep void semantics. Entries with no employee are
+ * never swept by a close (TillClose is per-employee) ⇒ always open.
+ */
+async function closedEntryIds(
+  r: Loaded,
+): Promise<Set<string>> {
+  const active = r.tillEntries.filter((e) => e.voidedAt === null && e.employeeId)
+  const employeeIds = [...new Set(active.map((e) => e.employeeId!))]
+  if (employeeIds.length === 0) return new Set()
+  const closes = await prisma.tillClose.groupBy({
+    by: ['employeeId'],
+    where: { siteId: r.siteId, employeeId: { in: employeeIds } },
+    _max: { closedAt: true },
+  })
+  const lastClose = new Map(closes.map((c) => [c.employeeId, c._max.closedAt!]))
+  return new Set(
+    active
+      .filter((e) => {
+        const lc = lastClose.get(e.employeeId!)
+        return lc !== undefined && e.settledAt <= lc
+      })
+      .map((e) => e.id),
+  )
+}
+
+// ─── Composite executor: seat split (seatPartition / lineage) ────────────────
+
 // ─── Composite executor: seat split (seatPartition / lineage) ────────────────
 
 /**
@@ -365,6 +403,9 @@ async function runSplit(r: Loaded, row: TransitionSpec, opts: ApplyOpts): Promis
 
     // 3. tillPartition (I1): void each active entry, recreate per-part entries
     //    preserving settledAt + employee. Sum is preserved exactly per entry.
+    //    NOTE: the Option-B closed-entry hybrid deliberately does NOT apply to
+    //    splits — no cash moves here; the re-attribution preserves value per
+    //    (worker, settledAt), so day reports and close snapshots are unchanged.
     if (withTill && activeEntries.length > 0) {
       const now = opts.now ?? new Date()
       for (const entry of activeEntries) {
@@ -422,21 +463,37 @@ async function runSeatDisconnect(r: Loaded, row: TransitionSpec, opts: ApplyOpts
   const withTill = row.effects.includes('tillPartition')
   const activeEntries = r.tillEntries.filter((e) => e.voidedAt === null)
   const now = opts.now ?? new Date()
+  const closed = withTill ? await closedEntryIds(r) : new Set<string>()
 
   await prisma.$transaction(async (tx) => {
     await tx.reservation.update({
       where: { id: r.id },
       data: { paymentAmount: remainingAmount, items: { disconnect: freedIds.map((id) => ({ id })) } },
     })
-    // The freed seats' cash leaves the drawer: void + recreate only the kept share.
+    // The freed seats' cash leaves the drawer. Option B hybrid (2026-08-12):
+    // OPEN entry → void + recreate only the kept share (original semantics);
+    // CLOSED entry → immutable — append a negative counter-entry for the freed
+    // share today, attributed to the refunder.
     if (withTill && activeEntries.length > 0) {
       for (const entry of activeEntries) {
-        const [keepAmt] = partitionAmount(entry.amount, weights) as [number, number]
-        await tx.tillEntry.update({ where: { id: entry.id }, data: { voidedAt: now } })
-        if (keepAmt > 0) {
-          await tx.tillEntry.create({
-            data: { siteId: r.siteId, reservationId: r.id, employeeId: entry.employeeId, amount: keepAmt, settledAt: entry.settledAt },
-          })
+        const [keepAmt, freedAmt] = partitionAmount(entry.amount, weights) as [number, number]
+        if (closed.has(entry.id)) {
+          if (freedAmt > 0) {
+            await tx.tillEntry.create({
+              data: {
+                siteId: r.siteId, reservationId: r.id,
+                employeeId: opts.employeeId ?? null,
+                amount: -freedAmt, settledAt: now,
+              },
+            })
+          }
+        } else {
+          await tx.tillEntry.update({ where: { id: entry.id }, data: { voidedAt: now } })
+          if (keepAmt > 0) {
+            await tx.tillEntry.create({
+              data: { siteId: r.siteId, reservationId: r.id, employeeId: entry.employeeId, amount: keepAmt, settledAt: entry.settledAt },
+            })
+          }
         }
       }
     }
@@ -643,7 +700,26 @@ export async function applyTransition(
   }
 
   if (row.effects.includes('tillVoid')) {
-    await voidSettlementsForReservation(r.id)
+    // Option B hybrid (2026-08-12): void OPEN entries (cash still in the drawer);
+    // CLOSED (handed-in) entries get a negative counter-entry today, attributed
+    // to the refunder — posted periods stay immutable, today's drawer reconciles.
+    const closed = await closedEntryIds(r)
+    const active = r.tillEntries.filter((e) => e.voidedAt === null)
+    const ops = []
+    for (const entry of active) {
+      if (closed.has(entry.id)) {
+        ops.push(prisma.tillEntry.create({
+          data: {
+            siteId: r.siteId, reservationId: r.id,
+            employeeId: opts.employeeId ?? null,
+            amount: -entry.amount, settledAt: now,
+          },
+        }))
+      } else {
+        ops.push(prisma.tillEntry.update({ where: { id: entry.id }, data: { voidedAt: now } }))
+      }
+    }
+    if (ops.length > 0) await prisma.$transaction(ops)
   }
   if (row.effects.includes('tillRecord')) {
     const amount = opts.amount ?? r.paymentAmount ?? 0

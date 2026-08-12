@@ -371,9 +371,14 @@ export async function unreserveItem(
   accessKey?: string,
   applyToPair: boolean = true,
   _voidSettlements: boolean = true,
+  employeeId?: string,
 ) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  // Refund attribution (Option B): counter-entries for already-closed cash are
+  // debited to the CURRENT worker's drawer — the one physically paying out.
+  const stampedEmployeeId = await resolveEmployeeId(employeeId, ownership.userId)
 
   const { start: todayStart, end: todayEnd } = await siteTodayBounds(siteId)
 
@@ -396,8 +401,8 @@ export async function unreserveItem(
   // Seat scope only makes sense on a multi-seat party; otherwise whole-release.
   const seatMode = !applyToPair && reservation.items.length > 1
   const result = seatMode
-    ? await applyTransition(reservation.id, 'staff.unreserve.seat', { itemIds: [itemId] })
-    : await applyTransition(reservation.id, 'staff.unreserve.whole')
+    ? await applyTransition(reservation.id, 'staff.unreserve.seat', { itemIds: [itemId], employeeId: stampedEmployeeId })
+    : await applyTransition(reservation.id, 'staff.unreserve.whole', { employeeId: stampedEmployeeId })
 
   if (result.outcome !== 'applied') {
     return { status: 'error', errors: ['No walk-in reservation found to release'] }

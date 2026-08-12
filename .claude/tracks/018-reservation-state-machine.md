@@ -278,6 +278,21 @@ deletable rule; D13 grouping kept; kind derived not persisted; no new status str
 
 ## Log
 
+- **2026-08-12 (Option B: closed-cash refunds post counter-entries — founder decision)** —
+  Founder probed the cross-day refund seam (Miguel collects €32 yesterday + closes; party
+  refunded today): void semantics retroactively mutated yesterday's day report against
+  its immutable TillClose snapshot, left today's drawer short with no ledger line, and
+  attributed nothing to the refunder. Evaluated A(status quo)/B(hybrid)/C(always-counter)/
+  D(report band-aid)/E(block) → founder picked B. Implemented: `closedEntryIds` fact in
+  the interpreter (entry closed ⇔ swept by its worker's TillClose; null-employee never
+  swept ⇒ voidable); `tillVoid` + `runSeatDisconnect` go per-entry hybrid — open → void
+  (unchanged), closed → NEGATIVE counter-entry (settledAt=now, employeeId=REFUNDER via
+  the current worker chip threaded through `unreserveItem(..., employeeId)` from
+  BedDetail + bulk). Pure splits stay value-preserving void+recreate (no cash moves —
+  documented). Attribution decision: refunder's drawer pays out, collector's history
+  frozen. 3 new integration tests (Miguel/Ana whole + seat + open-unchanged); effect
+  docs + both wiki pages updated. Data 321u+335i, partner 1968u+198i green. C (always
+  counter-entry, settled ⇒ Σ>0) noted as possible future purist end-state. Fable 5.
 - **2026-08-12 (bulk refund for the full cash family — founder request)** — Bulk
   Refund/Unreserve now covers red walked-in AND fuchsia cash-reserved parties
   (between-days legs, mid-stay departed, cash advance bookings), mixed selections

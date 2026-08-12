@@ -74,7 +74,11 @@ LLM-analyzability**: state questions are table lookups, never code-path simulati
 ## Decisions that shape behavior (founder, P1 review 2026-08-11)
 
 - Settled unreserve ALWAYS refunds (keeping money is Depart's job) — row kept as
-  `refunded` + till void + credit note.
+  `refunded` + credit note. Till mechanics are Option-B hybrid (2026-08-12): OPEN
+  entries (cash still in the drawer, incl. unclosed carry-over) are VOIDED; CLOSED
+  entries (already swept by a TillClose hand-in) are immutable — a NEGATIVE
+  counter-entry posts today, attributed to the REFUNDER's worker chip. Posted periods
+  never mutate; today's drawer reconciles; till and credit-note land in the same period.
 - Same-day departed cash walk-ins are re-seatable (`staff.resume.undoDepart`, conflict
   re-checked; `undoDepartWalkIn` server action). The FREE-panel button was PULLED
   2026-08-11 — a per-seat candidate heuristic is ambiguous once multiple same-day

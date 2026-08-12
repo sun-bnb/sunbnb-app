@@ -212,8 +212,8 @@ export const EFFECTS = [
   'amountFromDb',        // recompute amount from DB prices at event time (I7)
   'amountRepartition',   // repartition paymentAmount across a seat partition (I7)
   'tillRecord',          // create a TillEntry (cash in drawer)
-  'tillVoid',            // void all entries (cash returned)
-  'tillPartition',       // void + recreate entries per partition, settledAt/employee preserved (I1)
+  'tillVoid',            // cash returned: void OPEN entries; CLOSED (handed-in) entries get a negative counter-entry today, attributed to the refunder (Option B, 2026-08-12)
+  'tillPartition',       // partition entries with the seats (I1): open → void+recreate kept share; closed → negative counter-entry for the freed share (refunds only — pure splits stay value-preserving void+recreate)
   'receiptIssue',        // PARTNER-only cash receipt invoice (idempotent)
   'creditNoteIssue',     // credit note referencing the receipt (I2)
   'invoiceOnline',       // PARTNER+PLATFORM invoices (idempotent) + status advance

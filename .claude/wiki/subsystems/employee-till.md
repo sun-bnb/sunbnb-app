@@ -147,3 +147,17 @@ CRUD are coverage-contract allowlisted. Real aggregation is integration-tested i
 - Partner surface map: `apps/partner/CLAUDE.md` (route `/account/staff`; manage/accounting actions).
 - Sibling tracks: 006 (floor states) and 007 (analytics — the `@repo/data/analytics` pattern `till.ts`
   mirrors).
+
+## Refunds vs closed hand-ins (Option B, 2026-08-12 — track 018)
+
+`voidedAt` means "this settlement never counted" and is only valid while the cash is
+still in the drawer (open window or unclosed carry-over). Once an entry was swept by a
+`TillClose`, a refund posts a **negative counter-entry** instead (settledAt = now,
+employeeId = the refunder's chip, linked to the same reservation): yesterday's civil-day
+reports and close snapshots stay frozen, today's drawer shows the payout, and the
+counter-entry renders as a negative line in shift itemizations. Consequences: entry
+amounts can be NEGATIVE (sums flow through all till math); a worker whose only event
+today is a refund closes at a negative hand-in. Null-employee entries are never swept
+by a close (TillClose is per-employee) ⇒ always voidable. Writer: the reservation
+machine's `tillVoid`/`tillPartition` executors (`reservation-machine-apply.ts`).
+

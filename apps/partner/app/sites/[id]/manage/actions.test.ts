@@ -501,7 +501,9 @@ describe('unreserveItem (machine-delegating)', () => {
     // Refund-vs-delete is STATE-DERIVED inside the machine (settled ⇒ kept as
     // refunded + till void + credit note; unsettled ⇒ delete) — the action only
     // names the event. See @repo/data reservation-machine(-apply) tests + matrix.
-    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.unreserve.whole')
+    // Refund attribution (Option B): the current worker chip rides along —
+    // counter-entries for already-closed cash debit the REFUNDER's drawer.
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.unreserve.whole', { employeeId: null })
   })
 
   it('seat mode on a multi-seat party applies staff.unreserve.seat for the tapped seat', async () => {
@@ -510,7 +512,7 @@ describe('unreserveItem (machine-delegating)', () => {
 
     const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, false)
     expect(res.status).toBe('ok')
-    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.unreserve.seat', { itemIds: [ITEM_ID] })
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.unreserve.seat', { itemIds: [ITEM_ID], employeeId: null })
   })
 
   it('seat mode on a single-seat reservation falls back to whole release', async () => {
@@ -519,7 +521,7 @@ describe('unreserveItem (machine-delegating)', () => {
 
     const res = await unreserveItem(SITE_ID, ITEM_ID, undefined, false)
     expect(res.status).toBe('ok')
-    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.unreserve.whole')
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'staff.unreserve.whole', { employeeId: null })
   })
 
   it('returns error (and no revalidate, no machine call) when no walk-in matches', async () => {
