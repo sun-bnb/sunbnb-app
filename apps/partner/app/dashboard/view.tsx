@@ -54,9 +54,11 @@ export interface DashboardData {
   /** Seats with a guest on them today (rented + comps). */
   occupiedSeats: number
   occupancyPct: number
-  /** Guest parties (reservation ROWS) holding a seat today — the check-in denominator. */
-  partiesToday: number
-  checkedInCount: number
+  /** Bookings due today (ROWS) — includes departed and no-show; excludes blocks/comps. */
+  bookingsDueToday: number
+  /** Of those, how many arrived at some point today. Never falls as guests leave. */
+  arrivedCount: number
+  arrivedPct: number
   pendingOrders: number
   hasFnb: boolean
 
@@ -293,9 +295,9 @@ export default function DashboardView({ data }: { data: DashboardData }) {
         {/* Check-ins */}
         <StatCard
           label={t('checkIns')}
-          value={`${data.checkedInCount}/${data.partiesToday}`}
-          subtitle={data.partiesToday > 0
-            ? t('arrivedPct', { pct: Math.round((data.checkedInCount / data.partiesToday) * 100) })
+          value={`${data.arrivedCount}/${data.bookingsDueToday}`}
+          subtitle={data.bookingsDueToday > 0
+            ? t('arrivedPct', { pct: data.arrivedPct })
             : t('noReservationsToday')}
           icon={icons.checkIn}
           accent="bg-amber-50 text-amber-600"

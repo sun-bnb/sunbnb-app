@@ -16,7 +16,7 @@
 
 import prisma from '../index'
 import { round } from './payment'
-import { deriveState } from './reservation-machine'
+import { deriveState, OP_BLOCKED } from './reservation-machine'
 import {
   BLOCKING_STATUSES,
   OP_NO_SHOW,
@@ -24,6 +24,7 @@ import {
   OP_CHECKED_IN,
   OP_WALKED_IN,
   OP_EXPECTED,
+  OP_COMP,
   RESERVATION_PAID_IN_CASH,
   RESERVATION_COMPLETE,
   RENTAL_COMPLETE,
@@ -509,12 +510,6 @@ export interface OccupancySnapshot {
   comps: number
   held: number
   unconfirmed: number
-  /**
-   * Guest PARTIES (reservation rows) holding a seat — out-of-service blocks
-   * excluded. Rows, NOT seats: the correct denominator for a party-level ratio
-   * such as check-ins, which counts rows on both sides.
-   */
-  parties: number
   /** `occupied / sellable * 100`, 0 when sellable is 0. */
   occupancyPct: number
 }
@@ -541,7 +536,7 @@ export async function getOccupancySnapshotForSites(
 ): Promise<OccupancySnapshot> {
   const empty: OccupancySnapshot = {
     capacity: 0, blocked: 0, sellable: 0, occupied: 0,
-    comps: 0, held: 0, unconfirmed: 0, parties: 0, occupancyPct: 0,
+    comps: 0, held: 0, unconfirmed: 0, occupancyPct: 0,
   }
   if (siteIds.length === 0) return empty
 
@@ -592,8 +587,76 @@ export async function getOccupancySnapshotForSites(
     comps,
     held: seats.held.size,
     unconfirmed: seats.unconfirmed.size,
-    parties: bucketed.filter((e) => e.bucket !== 'blocked').length,
     occupancyPct: sellable > 0 ? round((occupied / sellable) * 100) : 0,
+  }
+}
+
+/** Op-statuses that prove a booking turned up today. `departed` counts: a guest
+ *  who arrived and left still arrived — treating departure as "not arrived" is
+ *  what made the dashboard's check-in rate sag through the afternoon. */
+const ARRIVED_OPS: string[] = [OP_CHECKED_IN, OP_WALKED_IN, OP_DEPARTED]
+
+export interface ArrivalsToday {
+  /**
+   * Guest BOOKINGS due today — expected + arrived + departed + no-show.
+   * ROWS (parties), not seats.
+   */
+  expected: number
+  /** Of those, the ones that arrived at some point today. Never decreases as guests leave. */
+  arrived: number
+  /** `arrived / expected * 100`, 0 when nothing was due. */
+  arrivedPct: number
+}
+
+/**
+ * Today's arrival rate for the partner dashboard's check-ins card: of the
+ * bookings due today, how many turned up.
+ *
+ * This is a CUMULATIVE DAY fact, deliberately unlike `getOccupancySnapshotForSites`
+ * (a point-in-time seat count) — which is why it is a separate query with a
+ * different filter rather than another field on the snapshot:
+ *
+ *  - `departed` rows are INCLUDED on both sides. Occupancy must drop when a guest
+ *    leaves; an arrival must not un-happen. Excluding them from both sides made
+ *    the ratio fall as the day wore on (10 due, 8 arrived = 80%; after 5 left,
+ *    3/5 = 60%).
+ *  - `no-show` rows are INCLUDED in `expected` only — a booking that never
+ *    turned up is exactly what this rate is meant to expose.
+ *  - Blocks and comps are EXCLUDED entirely: out-of-service beds and staff
+ *    giveaways are floor actions, not bookings awaiting arrival, and counting
+ *    them in the denominator would drag the rate down permanently.
+ *
+ * Arrival is read from `operationalStatus`, not `checkedInAt`: a multi-day stay
+ * cycles back to `expected` overnight while keeping yesterday's `checkedInAt`,
+ * so the timestamp would report a stay-over as having arrived today.
+ *
+ * `dayStart`/`dayEnd` are caller-supplied (timezone-agnostic module).
+ */
+export async function getArrivalsToday(
+  siteIds: string[],
+  dayStart: Date,
+  dayEnd: Date,
+): Promise<ArrivalsToday> {
+  if (siteIds.length === 0) return { expected: 0, arrived: 0, arrivedPct: 0 }
+
+  const rows = await prisma.reservation.findMany({
+    where: {
+      siteId: { in: siteIds },
+      status: { in: BLOCKING_STATUSES },
+      isComp: false,
+      operationalStatus: { notIn: [OP_BLOCKED, OP_COMP] },
+      from: { lte: dayEnd },
+      to: { gte: dayStart },
+    },
+    select: { operationalStatus: true },
+  })
+
+  const expected = rows.length
+  const arrived = rows.filter((r) => ARRIVED_OPS.includes(r.operationalStatus)).length
+  return {
+    expected,
+    arrived,
+    arrivedPct: expected > 0 ? round((arrived / expected) * 100) : 0,
   }
 }
 

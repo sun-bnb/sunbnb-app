@@ -14,7 +14,7 @@ import {
   createTestTableTab,
   resetCounter,
 } from './test/fixtures'
-import { getRevenueByDay, getOccupancyByDay, getOccupancySnapshotForSites, getReservationDayStats, summarizeRevenue, toFiguresCsv, getFloorStateSnapshot, getRevenueByChannelByDay, getMonthlySourceSummary } from './analytics'
+import { getRevenueByDay, getOccupancyByDay, getOccupancySnapshotForSites, getArrivalsToday, getReservationDayStats, summarizeRevenue, toFiguresCsv, getFloorStateSnapshot, getRevenueByChannelByDay, getMonthlySourceSummary } from './analytics'
 
 beforeEach(async () => {
   await cleanDatabase()
@@ -283,7 +283,6 @@ describe('getOccupancySnapshotForSites (dashboard today KPI)', () => {
 
     expect(snap.capacity).toBe(5)
     expect(snap.occupied).toBe(4)      // 3 seats + 1 seat, NOT 2 rows
-    expect(snap.parties).toBe(2)       // rows, for the check-in ratio
     expect(snap.occupancyPct).toBe(80)
   })
 
@@ -312,7 +311,6 @@ describe('getOccupancySnapshotForSites (dashboard today KPI)', () => {
     expect(snap.occupied).toBe(0)
     expect(snap.sellable).toBe(1)
     expect(snap.occupancyPct).toBe(0)
-    expect(snap.parties).toBe(0)       // a block is not a guest party awaiting check-in
   })
 
   it('excludes no-shows and departures from today occupancy', async () => {
@@ -337,7 +335,6 @@ describe('getOccupancySnapshotForSites (dashboard today KPI)', () => {
     const snap = await getOccupancySnapshotForSites([site.id], DAY_START, DAY_END)
 
     expect(snap.occupied).toBe(1)      // only the live walk-in — was 3
-    expect(snap.parties).toBe(1)
   })
 
   it('agrees with getOccupancyByDay for a single site on the same day', async () => {
@@ -376,8 +373,124 @@ describe('getOccupancySnapshotForSites (dashboard today KPI)', () => {
   it('returns a zeroed snapshot for an operator with no sites', async () => {
     expect(await getOccupancySnapshotForSites([], DAY_START, DAY_END)).toEqual({
       capacity: 0, blocked: 0, sellable: 0, occupied: 0,
-      comps: 0, held: 0, unconfirmed: 0, parties: 0, occupancyPct: 0,
+      comps: 0, held: 0, unconfirmed: 0, occupancyPct: 0,
     })
+  })
+})
+
+/**
+ * The dashboard check-ins card. Its inline predecessor counted op-status in
+ * [checked-in, walked-in] only, so a guest who arrived and then left dropped out
+ * of the numerator — the arrival rate sagged through the afternoon even though
+ * nothing about the day's arrivals had changed.
+ */
+describe('getArrivalsToday (dashboard check-ins card)', () => {
+  const DAY_START = d('2026-06-01T00:00:00Z')
+  const DAY_END = d('2026-06-01T23:59:59.999Z')
+  const day = { from: d('2026-06-01T00:00:00Z'), to: d('2026-06-01T23:59:59Z') }
+
+  it('does not un-count an arrival when the guest departs', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id)
+    const items = await Promise.all(
+      [1, 2, 3, 4].map((n) => createTestInventoryItem(user.id, site.id, { number: n })),
+    )
+
+    // Two arrived and are still here, two arrived and left.
+    await createTestReservation(user.id, site.id, [items[0]!.id], {
+      status: 'paid-in-cash', operationalStatus: 'walked-in', ...day,
+    })
+    await createTestReservation(user.id, site.id, [items[1]!.id], {
+      status: 'complete', operationalStatus: 'checked-in', ...day,
+    })
+    await createTestReservation(user.id, site.id, [items[2]!.id], {
+      status: 'complete', operationalStatus: 'departed', ...day,
+    })
+    await createTestReservation(user.id, site.id, [items[3]!.id], {
+      status: 'paid-in-cash', operationalStatus: 'departed', ...day,
+    })
+
+    const res = await getArrivalsToday([site.id], DAY_START, DAY_END)
+
+    // All four turned up. The old logic reported 2/2 — the departures vanished
+    // from BOTH sides, hiding half the day's arrivals.
+    expect(res).toEqual({ expected: 4, arrived: 4, arrivedPct: 100 })
+  })
+
+  it('counts a no-show as due but not arrived — that is the point of the rate', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id)
+    const items = await Promise.all(
+      [1, 2, 3, 4].map((n) => createTestInventoryItem(user.id, site.id, { number: n })),
+    )
+
+    await createTestReservation(user.id, site.id, [items[0]!.id], {
+      status: 'complete', operationalStatus: 'checked-in', ...day,
+    })
+    await createTestReservation(user.id, site.id, [items[1]!.id], {
+      status: 'complete', operationalStatus: 'no-show', ...day,
+    })
+    await createTestReservation(user.id, site.id, [items[2]!.id], {
+      status: 'complete', operationalStatus: 'expected', ...day,
+    })
+    await createTestReservation(user.id, site.id, [items[3]!.id], {
+      status: 'complete', operationalStatus: 'departed', ...day,
+    })
+
+    const res = await getArrivalsToday([site.id], DAY_START, DAY_END)
+
+    expect(res).toEqual({ expected: 4, arrived: 2, arrivedPct: 50 })
+  })
+
+  it('excludes out-of-service blocks and comps — neither is a booking awaiting arrival', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const site = await createTestSite(user.id)
+    const items = await Promise.all(
+      [1, 2, 3, 4].map((n) => createTestInventoryItem(user.id, site.id, { number: n })),
+    )
+
+    // A real booking that arrived.
+    await createTestReservation(user.id, site.id, [items[0]!.id], {
+      status: 'paid-in-cash', operationalStatus: 'walked-in', ...day,
+    })
+    // Out of service, with blockBed's sticky sentinel `to` — overlaps every day.
+    await createTestReservation(user.id, site.id, [items[1]!.id, items[2]!.id], {
+      status: 'paid-in-cash', operationalStatus: 'blocked',
+      from: DAY_START, to: d('2999-12-31T23:59:59.999Z'),
+    })
+    // A comp.
+    await createTestReservation(user.id, site.id, [items[3]!.id], {
+      status: 'paid-in-cash', operationalStatus: 'comp', isComp: true, ...day,
+    })
+
+    const res = await getArrivalsToday([site.id], DAY_START, DAY_END)
+
+    // 1/1, not 1/3 — a permanent block must not sit in the denominator forever.
+    expect(res).toEqual({ expected: 1, arrived: 1, arrivedPct: 100 })
+  })
+
+  it('spans every site the operator owns, and zeroes cleanly with no bookings', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    const siteA = await createTestSite(user.id)
+    const siteB = await createTestSite(user.id)
+    const a = await createTestInventoryItem(user.id, siteA.id, { number: 1 })
+    const b = await createTestInventoryItem(user.id, siteB.id, { number: 1 })
+
+    await createTestReservation(user.id, siteA.id, [a.id], {
+      status: 'complete', operationalStatus: 'checked-in', ...day,
+    })
+    await createTestReservation(user.id, siteB.id, [b.id], {
+      status: 'complete', operationalStatus: 'expected', ...day,
+    })
+
+    expect(await getArrivalsToday([siteA.id, siteB.id], DAY_START, DAY_END))
+      .toEqual({ expected: 2, arrived: 1, arrivedPct: 50 })
+    expect(await getArrivalsToday([], DAY_START, DAY_END))
+      .toEqual({ expected: 0, arrived: 0, arrivedPct: 0 })
   })
 })
 

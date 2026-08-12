@@ -7,14 +7,12 @@ import {
   RESERVATION_COMPLETE,
   RESERVATION_PAID_IN_CASH,
   BLOCKING_STATUSES,
-  OP_CHECKED_IN,
-  OP_WALKED_IN,
   ORDER_COMPLETE,
   ORDER_ACCEPTED,
   ORDER_PREPARING,
   ORDER_READY,
 } from '@repo/data/reservation-status'
-import { getOccupancySnapshotForSites } from '@repo/data/analytics'
+import { getOccupancySnapshotForSites, getArrivalsToday } from '@repo/data/analytics'
 
 
 // Local to this module — Next.js page modules may only export `default`,
@@ -113,7 +111,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
 
   const [
     occupancy,
-    checkedInCount,
+    arrivals,
     revenueToday,
     monthAgg,
     yearAgg,
@@ -133,16 +131,11 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
     // departures inflate the percentage.
     getOccupancySnapshotForSites(siteIds, startOfToday, endOfToday),
 
-    // Checked in today
-    prisma.reservation.count({
-      where: {
-        siteId: { in: siteIds },
-        from: { lte: endOfToday },
-        to: { gte: startOfToday },
-        status: { in: [...BLOCKING_STATUSES] },
-        operationalStatus: { in: [OP_CHECKED_IN, OP_WALKED_IN] },
-      },
-    }),
+    // Today's arrival rate — a CUMULATIVE day fact, so a departure never
+    // un-counts an arrival. The old inline count took op-status in
+    // [checked-in, walked-in] only, so every guest who left dropped out of the
+    // numerator and the rate sagged through the afternoon.
+    getArrivalsToday(siteIds, startOfToday, endOfToday),
 
     // Revenue today
     prisma.invoice.aggregate({
@@ -294,8 +287,9 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
     blockedInventory: occupancy.blocked,
     occupiedSeats: occupancy.occupied,
     occupancyPct,
-    partiesToday: occupancy.parties,
-    checkedInCount,
+    bookingsDueToday: arrivals.expected,
+    arrivedCount: arrivals.arrived,
+    arrivedPct: Math.round(arrivals.arrivedPct),
     pendingOrders,
     hasFnb,
 

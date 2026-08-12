@@ -17,8 +17,9 @@ export const toFiguresCsv = vi.fn().mockReturnValue('date,sunbeds,revenue\n')
 export const getFloorStateSnapshot = vi.fn().mockResolvedValue({ capacity: 0, libres: 0, alquiladas: 0, reservadas: 0, gratis: 0, desactivada: 0 })
 export const getOccupancySnapshotForSites = vi.fn().mockResolvedValue({
   capacity: 0, blocked: 0, sellable: 0, occupied: 0,
-  comps: 0, held: 0, unconfirmed: 0, parties: 0, occupancyPct: 0,
+  comps: 0, held: 0, unconfirmed: 0, occupancyPct: 0,
 })
+export const getArrivalsToday = vi.fn().mockResolvedValue({ expected: 0, arrived: 0, arrivedPct: 0 })
 export const getRevenueByChannelByDay = vi.fn().mockResolvedValue([])
 export const summarizeRevenueByChannel = vi.fn().mockReturnValue({ total: 0, cash: 0, qr: 0, online: 0, bestDay: null })
 export const getMonthlySourceSummary = vi.fn().mockResolvedValue({
