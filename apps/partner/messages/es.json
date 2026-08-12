@@ -1657,6 +1657,7 @@
     "channelQr": "QR",
     "channelOnline": "Online",
     "channelTotal": "Total",
+    "dailyBreakdown": "Historial diario",
     "downloadCsv": "Descargar CSV",
     "noDataYet": "Sin datos en este período",
     "errorGeneric": "Error al cargar los reportes"

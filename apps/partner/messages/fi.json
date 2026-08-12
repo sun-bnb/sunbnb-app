@@ -1657,6 +1657,7 @@
     "channelQr": "QR",
     "channelOnline": "Verkko",
     "channelTotal": "Yhteensä",
+    "dailyBreakdown": "Päivittäinen erittely",
     "downloadCsv": "Lataa CSV",
     "noDataYet": "Ei tietoja tässä ajanjaksossa",
     "errorGeneric": "Trendien lataaminen epäonnistui"

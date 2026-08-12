@@ -1657,6 +1657,7 @@
     "channelQr": "QR",
     "channelOnline": "Online",
     "channelTotal": "Total",
+    "dailyBreakdown": "Daily breakdown",
     "downloadCsv": "Download CSV",
     "noDataYet": "No data in this window yet",
     "errorGeneric": "Failed to load trends"
