@@ -53,6 +53,7 @@ Google, Facebook, Credentials (email/password with bcrypt). Anonymous support vi
 | `/api/places/autocomplete` | GET | Google Places proxy (input length-limited) |
 | `/api/places/details` | GET | Google Places proxy (placeId regex-validated) |
 | `/api/cron/send-reminders` | GET | Daily 07:00 UTC — sends reminder emails (CRON_SECRET) |
+| `/api/hw/[code]/state` | GET | **HW API** (track 019 P1) — seat state for a mounted hardware device. Bearer `HW_TOKEN`, seat binding from `HW_DEVICE_MAP` (array order = LED mount order), venue-local day, projection over `deriveState`, `ETag`/`304`. **Uniform 401** for bad token *and* unknown code (the code is printed on a public sticker — a 404 would be an enumeration oracle); every other failure is non-200 so the device shows amber, never a false FREE |
 
 ## Server Actions
 
@@ -80,7 +81,7 @@ RTK Query: `reservationApi` (getReservation, getReservationByDate, etc.), `place
 ## Testing
 
 ```bash
-npm run test              # unit + route + server action tests (478 tests, Prisma mocked)
+npm run test              # unit + route + server action tests (521 tests, Prisma mocked)
 npm run test:watch        # vitest in watch mode
 npm run test:integration  # integration tests against local sunbnb_test DB (77 tests, real Prisma)
 ```
@@ -107,6 +108,7 @@ npm run test:integration  # integration tests against local sunbnb_test DB (77 t
 - `app/api/cron/send-reminders/route.test.ts` — daily reminder cron auth + email sending (10 tests)
 - `app/api/auth/forgot-password/route.test.ts` — rate limiting, email validation, enumeration protection (10 tests)
 - `app/api/auth/reset-password/route.test.ts` — rate limiting, token/password validation (12 tests)
+- `app/api/hw/[code]/state/route.test.ts` — HW device state route: uniform 401 (unknown code asserted **byte-identical** to bad token), binding resolution + mount-order emission, one case per compound state → wire state, the read-only today-row rule (a multiday guest checked in yesterday reads RESERVED, not OCCUPIED), aggregate rule, fail-safe (unrecognised state ⇒ OCCUPIED; DB throw ⇒ 503), ETag/304 (43 tests)
 - `app/api/auth/impersonate/route.test.ts` — sudo impersonation start (4 tests)
 - `app/api/auth/end-impersonation/route.test.ts` — impersonation end (4 tests)
 - `app/sites/[id]/actions.test.ts` — reservation/rental creation, availability, pricing (51 tests)
