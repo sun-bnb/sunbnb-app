@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { reserveWithConflictGuard } from '@repo/data/reservations'
+import { siteAnchoredDay, siteDayBounds } from '@repo/data/site-day'
+import type { SiteTimezone } from '@repo/data/site-day'
 import dayjs from 'dayjs'
 import {
   RESERVATION_COMPLETE,
@@ -13,6 +15,25 @@ import {
   OP_NO_SHOW,
   OP_DEPARTED,
 } from '@repo/data/reservation-status'
+
+/**
+ * Build the SiteTimezone input for siteAnchoredDay / siteDayBounds from raw
+ * Prisma site fields (String lat/lng columns) — same pattern as
+ * `sites/[id]/manage/actions.ts`'s `buildSiteTimezone`. Ensures calendar
+ * reservation writes/reads are anchored to the venue's civil day, not the
+ * server's TZ (track 017 P3).
+ */
+function buildSiteTimezone(site: {
+  timeZone?: string | null
+  locationLat?: string | null
+  locationLng?: string | null
+}): SiteTimezone {
+  return {
+    timeZone: site.timeZone,
+    latitude: site.locationLat ? parseFloat(site.locationLat) : undefined,
+    longitude: site.locationLng ? parseFloat(site.locationLng) : undefined,
+  }
+}
 
 /**
  * Create a partner-initiated reservation (phone booking, walk-in pre-reserve, VIP hold).
@@ -58,26 +79,29 @@ export async function createPartnerReservation(data: {
     return { status: 'error', errors: ['Invalid date format'] }
   }
 
-  const fromDate = dayjs(data.from).startOf('day').toDate()
-  const toDate = dayjs(data.to).endOf('day').toDate()
+  // Verify the partner owns this site — loaded FIRST (before computing
+  // fromDate/toDate) so its timezone can venue-anchor the civil-day bounds
+  // below, instead of anchoring to the server's TZ (track 017 P3).
+  const site = await prisma.site.findUnique({
+    where: { id: data.siteId },
+    select: { userId: true, timeZone: true, locationLat: true, locationLng: true },
+  })
+  if (!site || site.userId !== session.user.id) {
+    return { status: 'error', errors: ['Not authorized'] }
+  }
+
+  const siteTz = buildSiteTimezone(site)
+  const fromDate = siteAnchoredDay(siteTz, data.from).start
+  const toDate = siteAnchoredDay(siteTz, data.to).end
 
   if (fromDate > toDate) {
     return { status: 'error', errors: ['From date must be before to date'] }
   }
 
-  // Max 365-day range
+  // Max 365-day range (civil-date diff — timezone-independent)
   const diffDays = dayjs(data.to).diff(dayjs(data.from), 'day')
   if (diffDays > 365) {
     return { status: 'error', errors: ['Date range cannot exceed 365 days'] }
-  }
-
-  // Verify the partner owns this site
-  const site = await prisma.site.findUnique({
-    where: { id: data.siteId },
-    select: { userId: true },
-  })
-  if (!site || site.userId !== session.user.id) {
-    return { status: 'error', errors: ['Not authorized'] }
   }
 
   // Verify items belong to this site and are active
@@ -169,14 +193,15 @@ export async function getAvailableSunbeds(
   // Verify the partner owns this site
   const site = await prisma.site.findUnique({
     where: { id: siteId },
-    select: { userId: true },
+    select: { userId: true, timeZone: true, locationLat: true, locationLng: true },
   })
   if (!site || site.userId !== session.user.id) {
     return { status: 'error', errors: ['Not authorized'], items: [] }
   }
 
-  const fromDate = dayjs(from).startOf('day').toDate()
-  const toDate = dayjs(to).endOf('day').toDate()
+  const siteTz = buildSiteTimezone(site)
+  const fromDate = siteAnchoredDay(siteTz, from).start
+  const toDate = siteAnchoredDay(siteTz, to).end
 
   // Get all active inventory items
   const allItems = await prisma.inventoryItem.findMany({
@@ -186,10 +211,12 @@ export async function getAvailableSunbeds(
   })
 
   // A no-show/departed booking frees its bed ONLY once its stay is over (no
-  // remaining reserved days, `to` <= end of today); a multiday booking departed
-  // mid-stay keeps blocking its future days. (track 012)
-  const endOfToday = new Date()
-  endOfToday.setHours(23, 59, 59, 999)
+  // remaining reserved days, `to` <= end of the VENUE's today); a multiday
+  // booking departed mid-stay keeps blocking its future days. (track 012,
+  // venue-anchored per track 017 P3 — using the server's "today" here would
+  // free or hold a bed up to ~2h too early/late relative to the venue's
+  // civil day whenever the venue's TZ differs from the server's.)
+  const endOfToday = siteDayBounds(siteTz).end
 
   // Get item IDs that have overlapping reservations
   const reservedItems = await prisma.reservation.findMany({

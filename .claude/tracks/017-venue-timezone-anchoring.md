@@ -33,17 +33,22 @@ in any query window, write path, or money boundary.
 
 ## Resume here
 
-- **P1 + P2 are DONE** (2026-08-11) — see Log. P1 committed (`f0b51ba`). P2 committed as two
-  commits (packages/data reminders + apps/user availability). Both are on local `main`,
-  **unpushed**. No schema change in either → no migration; push/promote is user ops.
-- **Next action:** resolve **Q1 and Q2 in Open decisions** — the anchoring contract for
-  consumer-written bookings (Q1) gates **P3** (the write-path root cause), and everything after.
-  **Recommend (a) for Q1** (server re-anchors `from`/`to` from client civil dates). Until Q1
-  lands, remaining shippable-without-it work is thin: **P7** (populate `Site.timeZone` +
-  restaurant tz inheritance) is independent and would also close the P2-availability Canary
-  residual (multi-site search SQL falls back to Madrid for sites with no stored `time_zone`).
-- **P4/P5/P6** (money/reporting windows, analytics bucketing, module merge) are largely
-  independent of Q1 too, but each is its own phase — pick per priority.
+- **P1 + P2 + P3 are DONE.** P1 (`f0b51ba`), P2 (2 commits) — all pushed to `main` 2026-08-11.
+  **P3 done 2026-08-13, UNCOMMITTED on local `main`** (Q1=(a), Q2=fix-forward — founder calls).
+  See Log. No schema change anywhere → no migration.
+- **Next action:** pick from the remaining independent phases — none is blocked now:
+  - **P7** (populate `Site.timeZone` + restaurant tz inheritance) — closes the P2-availability
+    Canary residual (multi-site search SQL falls back to Madrid without a stored `time_zone`).
+  - **P4** (money/reporting windows: accounting/VAT month boundaries, `siteMonthBounds`) —
+    money/compliance; line numbers were flagged second-hand, re-verify first.
+  - **P5** (analytics UTC bucketing → venue day; occupancy double-count) · **P6** (collapse the
+    two tz modules — needs Q4).
+- **Still open:** **Q3** (whether past short-by-a-day settlements from P1 get restated) — unrelated
+  to P3, decide when settling accounts. **Q5** (surface a "tz was guessed" signal) — cheap, tie to P7.
+- **Deferred functional fix (documented, not lost):** the conflict-guard release predicate
+  `findConflictingReservation` in `packages/data/src/reservations.ts` still uses a SERVER-tz
+  `endOfToday` — benign east of UTC, inverted west of UTC. Venue-anchor it (thread site tz →
+  `siteDayBounds(siteTz).end`) before any non-EU launch. Comment corrected in place.
 - **Context needed:**
   - This file.
   - `packages/data/src/site-day.ts` — the canonical primitive (read it first; it is correct,
@@ -82,7 +87,7 @@ in any query window, write path, or money boundary.
     occupying today → the marketplace advertises fewer free sunbeds than exist. The comment at
     `siteService.ts:144` asserts a storage convention manage no longer follows — correct it.
 
-- ☐ **P3 — Venue-anchor the write paths** *(the root cause; blocked on Q1)*
+- ☑ **P3 — Venue-anchor the write paths** *(DONE 2026-08-13 — Q1=(a), Q2=fix-forward; the root cause)*
   - `apps/user/app/sites/[id]/Reservation.tsx:470-471` — `dateRange[0].toDate()` /
     `.endOf('day')` are **browser**-anchored and are the persisted `from`/`to` of every consumer
     booking. Related client windows: `apps/user/app/sites/[id]/view.tsx:119-120`,
@@ -250,6 +255,39 @@ in any query window, write path, or money boundary.
     UTC-anchored windows (was server-local → env-fragile); +3 regression tests (Madrid
     venue-tomorrow booking does NOT occupy today, both SQL and JS paths; venue-today does).
   - Green: data 281u + 305i, user 478u + 77i, both typecheck/lint clean, user cron 10u.
+
+- **2026-08-13 — P3 shipped (uncommitted, local `main`).** Venue-anchored both reservation
+  WRITE paths so `Reservation.from`/`to` stops carrying two conventions. Q1=(a) (client sends
+  civil dates, server re-anchors), Q2=fix-forward (no backfill).
+  - **New primitive** `siteAnchoredDay(site, input)` in `packages/data/src/site-day.ts` — accepts
+    a bare `YYYY-MM-DD` (anchors directly) or an ISO instant (recovers the venue day via
+    `siteDayKey`). Single entry point for write-path anchoring, client-safe/pure. +tests.
+  - **Latent bug fixed in `localMidnight`** (the 012 P0 primitive): it corrected only by the
+    naive instant's *time-of-day*, so for timezones WEST of UTC it landed on the previous day's
+    midnight (the naive-UTC instant reads as the previous local day). Rewritten to measure the
+    full-wall-clock offset; **byte-identical for east-of-UTC** (Madrid/spring-forward unchanged),
+    now correct for LA/NY. +regression tests. This means `siteDateBounds`/`siteDayBounds` are now
+    correct worldwide, not just for the EU fleet.
+  - **Consumer (`apps/user`):** `Reservation.tsx` days-branch sends civil dates (not browser
+    instants); `saveReservationForMultipleItems` re-anchors `type:'days'` `from`/`to` via
+    `siteAnchoredDay` (`.start` for BOTH — the consumer `to` is the EXCLUSIVE checkout day, so
+    anchoring to its venue-midnight preserves `daysBetween`/billing exactly; only browser→venue
+    shifts). `type:'hours'` instants pass through. POS callers unchanged (on-site → server
+    recovery is correct). +regression test (Madrid: civil `2025-08-13`→`2025-08-15` stores
+    `from=Aug 12 22:00Z`, `to=Aug 14 22:00Z`).
+  - **Partner calendar (`apps/partner`, via partner-dev):** `createPartnerReservation` +
+    `getAvailableSunbeds` re-anchor via `siteAnchoredDay` (`.end` for `to` — calendar/manage `to`
+    is the INCLUSIVE last-day, matching `resolveStayBounds`); `getAvailableSunbeds`' release
+    `endOfToday` now `siteDayBounds(siteTz).end`. Tests pinned to `timeZone:'UTC'`; +regression
+    (Madrid write stored venue-anchored). 12 calendar unit + 20 integration green.
+  - **Comment cleanup:** the stale "`to` is server-tz end-of-day" invariant comments corrected in
+    `reservations.ts` (+ the deferred-west-of-UTC note) and `calendar/actions.ts`;
+    `availabilityService.ts` was already venue-anchored by P2.
+  - **Observation (out of P3 scope):** consumer `to` is exclusive-checkout while manage/calendar
+    `to` is inclusive-last-day — a pre-existing `to`-*semantics* divergence orthogonal to tz.
+    P3 preserved each path's billing; unifying that convention is a separate concern.
+  - Green: data 329u + 349i, user 521u + 78i (typecheck clean), partner 1968u + 199i (partner-dev),
+    full `turbo build` 4/4. No schema change → no migration.
 
 ## Open decisions
 

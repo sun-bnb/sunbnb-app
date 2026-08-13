@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest'
-import dayjs from 'dayjs'
 import { cleanDatabase, disconnectDatabase, prisma } from '@/app/test/setup'
 import {
   createTestUser,
@@ -31,6 +30,26 @@ vi.mock('next/cache', () => ({
 import { createPartnerReservation, getAvailableSunbeds } from './actions'
 
 // ---------------------------------------------------------------------------
+// UTC-anchored "today" helpers — the pinned test sites below use
+// `timeZone: 'UTC'`, so hand-built "today" windows must be computed in UTC
+// (not the test-runner machine's local TZ) to stay deterministic and aligned
+// with the venue-anchored bounds the actions now compute (track 017 P3).
+// Mirrors apps/user/service/siteService.integration.test.ts's `todayBounds`.
+// ---------------------------------------------------------------------------
+
+function utcDayKey(offsetDays: number = 0): string {
+  const d = new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000)
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+}
+
+function utcDayBounds(offsetDays: number): { start: Date; end: Date } {
+  const d = new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000)
+  const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0))
+  const end = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999))
+  return { start, end }
+}
+
+// ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
 
@@ -55,7 +74,7 @@ afterAll(async () => {
 describe('createPartnerReservation', () => {
   it('creates reservation with paid-in-cash status for cash payment, persists guest info', async () => {
     const user = await createTestUser()
-    const site = await createTestSite(user.id)
+    const site = await createTestSite(user.id, { timeZone: 'UTC' })
     const item = await createTestInventoryItem(user.id, site.id)
     mockUserId = user.id
 
@@ -88,7 +107,7 @@ describe('createPartnerReservation', () => {
 
   it('creates reservation with complete status for free payment', async () => {
     const user = await createTestUser()
-    const site = await createTestSite(user.id)
+    const site = await createTestSite(user.id, { timeZone: 'UTC' })
     const item = await createTestInventoryItem(user.id, site.id)
     mockUserId = user.id
 
@@ -111,7 +130,7 @@ describe('createPartnerReservation', () => {
 
   it('rejects double-booking for same item and overlapping dates', async () => {
     const user = await createTestUser()
-    const site = await createTestSite(user.id)
+    const site = await createTestSite(user.id, { timeZone: 'UTC' })
     const item = await createTestInventoryItem(user.id, site.id)
     mockUserId = user.id
 
@@ -143,7 +162,7 @@ describe('createPartnerReservation', () => {
 
   it('allows booking same item on non-overlapping dates', async () => {
     const user = await createTestUser()
-    const site = await createTestSite(user.id)
+    const site = await createTestSite(user.id, { timeZone: 'UTC' })
     const item = await createTestInventoryItem(user.id, site.id)
     mockUserId = user.id
 
@@ -171,7 +190,7 @@ describe('createPartnerReservation', () => {
 
   it('allows booking on dates where existing reservation is canceled', async () => {
     const user = await createTestUser()
-    const site = await createTestSite(user.id)
+    const site = await createTestSite(user.id, { timeZone: 'UTC' })
     const item = await createTestInventoryItem(user.id, site.id)
     mockUserId = user.id
 
@@ -202,7 +221,7 @@ describe('createPartnerReservation', () => {
   // must not free days 2–3); reuse is an explicit release, not an op-status effect.
   it('rejects booking over a no-show/departed reservation (op-status never frees a bed)', async () => {
     const user = await createTestUser()
-    const site = await createTestSite(user.id)
+    const site = await createTestSite(user.id, { timeZone: 'UTC' })
     const item1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
     const item2 = await createTestInventoryItem(user.id, site.id, { number: 2 })
     mockUserId = user.id
@@ -211,8 +230,8 @@ describe('createPartnerReservation', () => {
     // yet released (the release only fires once `to <= endOfToday`). Dates are
     // relative to today so the test can't age into "stay over" — a hardcoded
     // 2026-07-05 `to` silently became today and freed the beds.
-    const resFrom = dayjs().subtract(1, 'day').startOf('day').toDate()
-    const resTo = dayjs().add(3, 'day').endOf('day').toDate()
+    const resFrom = utcDayBounds(-1).start
+    const resTo = utcDayBounds(3).end
 
     // no-show reservation
     await createTestReservation(user.id, site.id, [item1.id], {
@@ -234,8 +253,8 @@ describe('createPartnerReservation', () => {
     const result = await createPartnerReservation({
       siteId: site.id,
       itemIds: [item1.id, item2.id],
-      from: dayjs().format('YYYY-MM-DD'),
-      to: dayjs().add(2, 'day').format('YYYY-MM-DD'),
+      from: utcDayKey(0),
+      to: utcDayKey(2),
       paymentType: 'cash',
     })
 
@@ -244,7 +263,7 @@ describe('createPartnerReservation', () => {
 
   it('rejects booking inactive items and creates nothing in DB', async () => {
     const user = await createTestUser()
-    const site = await createTestSite(user.id)
+    const site = await createTestSite(user.id, { timeZone: 'UTC' })
     const activeItem = await createTestInventoryItem(user.id, site.id, { number: 1, status: 'active' })
     const inactiveItem = await createTestInventoryItem(user.id, site.id, { number: 2, status: 'inactive' })
     mockUserId = user.id
@@ -266,7 +285,7 @@ describe('createPartnerReservation', () => {
 
   it('rejects empty itemIds', async () => {
     const user = await createTestUser()
-    const site = await createTestSite(user.id)
+    const site = await createTestSite(user.id, { timeZone: 'UTC' })
     mockUserId = user.id
 
     const result = await createPartnerReservation({
@@ -284,7 +303,7 @@ describe('createPartnerReservation', () => {
   it('rejects non-owner and creates nothing in DB', async () => {
     const owner = await createTestUser()
     const stranger = await createTestUser()
-    const site = await createTestSite(owner.id)
+    const site = await createTestSite(owner.id, { timeZone: 'UTC' })
     const item = await createTestInventoryItem(owner.id, site.id)
     mockUserId = stranger.id
 
@@ -305,7 +324,7 @@ describe('createPartnerReservation', () => {
 
   it('auto-includes paired item in the reservation', async () => {
     const user = await createTestUser()
-    const site = await createTestSite(user.id)
+    const site = await createTestSite(user.id, { timeZone: 'UTC' })
     // Create item A, then item B paired to A
     const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
     const itemB = await createTestInventoryItem(user.id, site.id, { number: 2, pairId: itemA.id })
@@ -333,7 +352,7 @@ describe('createPartnerReservation', () => {
 
   it('truncates guest fields to their limits in the DB', async () => {
     const user = await createTestUser()
-    const site = await createTestSite(user.id)
+    const site = await createTestSite(user.id, { timeZone: 'UTC' })
     const item = await createTestInventoryItem(user.id, site.id)
     mockUserId = user.id
 
@@ -361,6 +380,36 @@ describe('createPartnerReservation', () => {
     expect(reservation!.guestContact).toHaveLength(200)
     expect(reservation!.internalNotes).toHaveLength(500)
   })
+
+  // Regression (track 017 P3): the write must anchor from/to to the VENUE's
+  // civil day, not the server's (UTC on Vercel). Pins a non-UTC venue tz
+  // (Europe/Madrid, CEST = UTC+2 in August) and asserts the stored instants
+  // land on venue-midnight, not server/UTC-midnight.
+  it('venue-anchors from/to to the site timezone, not the server TZ', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { timeZone: 'Europe/Madrid' })
+    const item = await createTestInventoryItem(user.id, site.id)
+    mockUserId = user.id
+
+    const result = await createPartnerReservation({
+      siteId: site.id,
+      itemIds: [item.id],
+      from: '2025-08-15',
+      to: '2025-08-15',
+      paymentType: 'cash',
+    })
+
+    expect(result).toEqual({ status: 'ok' })
+
+    const reservation = await prisma.reservation.findFirst({
+      where: { siteId: site.id },
+    })
+    expect(reservation).not.toBeNull()
+    // Venue midnight (Madrid, UTC+2 in August) — NOT server/UTC midnight
+    // (which would be 2025-08-15T00:00:00.000Z / T23:59:59.999Z).
+    expect(reservation!.from.toISOString()).toBe('2025-08-14T22:00:00.000Z')
+    expect(reservation!.to.toISOString()).toBe('2025-08-15T21:59:59.999Z')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -370,7 +419,7 @@ describe('createPartnerReservation', () => {
 describe('getAvailableSunbeds', () => {
   it('returns all active items when no reservations exist', async () => {
     const user = await createTestUser()
-    const site = await createTestSite(user.id)
+    const site = await createTestSite(user.id, { timeZone: 'UTC' })
     const item1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
     const item2 = await createTestInventoryItem(user.id, site.id, { number: 2 })
     mockUserId = user.id
@@ -385,7 +434,7 @@ describe('getAvailableSunbeds', () => {
 
   it('excludes items with active reservations for the date range', async () => {
     const user = await createTestUser()
-    const site = await createTestSite(user.id)
+    const site = await createTestSite(user.id, { timeZone: 'UTC' })
     const item1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
     const item2 = await createTestInventoryItem(user.id, site.id, { number: 2 })
     mockUserId = user.id
@@ -410,7 +459,7 @@ describe('getAvailableSunbeds', () => {
   // beds stay held until an explicit release.
   it('frees only the canceled item; no-show/departed still block (op-status never frees)', async () => {
     const user = await createTestUser()
-    const site = await createTestSite(user.id)
+    const site = await createTestSite(user.id, { timeZone: 'UTC' })
     const item1 = await createTestInventoryItem(user.id, site.id, { number: 1 })
     const item2 = await createTestInventoryItem(user.id, site.id, { number: 2 })
     const item3 = await createTestInventoryItem(user.id, site.id, { number: 3 })
@@ -420,8 +469,8 @@ describe('getAvailableSunbeds', () => {
     // yet released (release only fires once `to <= endOfToday`). Relative to today
     // so the test can't age into "stay over" — a hardcoded 2026-07-05 `to` silently
     // became today and freed the beds.
-    const resFrom = dayjs().subtract(1, 'day').startOf('day').toDate()
-    const resTo = dayjs().add(3, 'day').endOf('day').toDate()
+    const resFrom = utcDayBounds(-1).start
+    const resTo = utcDayBounds(3).end
 
     // canceled reservation — frees item1 (canceled is non-blocking by status)
     await createTestReservation(user.id, site.id, [item1.id], {
@@ -449,8 +498,8 @@ describe('getAvailableSunbeds', () => {
 
     const result = await getAvailableSunbeds(
       site.id,
-      dayjs().format('YYYY-MM-DD'),
-      dayjs().add(2, 'day').format('YYYY-MM-DD'),
+      utcDayKey(0),
+      utcDayKey(2),
     )
 
     expect(result.status).toBe('ok')
@@ -461,7 +510,7 @@ describe('getAvailableSunbeds', () => {
 
   it('does not return inactive items', async () => {
     const user = await createTestUser()
-    const site = await createTestSite(user.id)
+    const site = await createTestSite(user.id, { timeZone: 'UTC' })
     await createTestInventoryItem(user.id, site.id, { number: 1, status: 'active' })
     await createTestInventoryItem(user.id, site.id, { number: 2, status: 'inactive' })
     mockUserId = user.id
@@ -475,7 +524,7 @@ describe('getAvailableSunbeds', () => {
   it('rejects non-owner', async () => {
     const owner = await createTestUser()
     const stranger = await createTestUser()
-    const site = await createTestSite(owner.id)
+    const site = await createTestSite(owner.id, { timeZone: 'UTC' })
     await createTestInventoryItem(owner.id, site.id)
     mockUserId = stranger.id
 
@@ -503,7 +552,7 @@ describe('createPartnerReservation — pair-expansion conflict detection (bug #2
     // itemA and itemB even though itemB was already taken.
     // Fixed: siblings are expanded first, guard sees both in the conflict check.
     const user = await createTestUser()
-    const site = await createTestSite(user.id)
+    const site = await createTestSite(user.id, { timeZone: 'UTC' })
 
     const group = await prisma.sunbedGroup.create({ data: { siteId: site.id } })
     const itemA = await createTestInventoryItem(user.id, site.id, {
@@ -543,7 +592,7 @@ describe('createPartnerReservation — pair-expansion conflict detection (bug #2
 
   it('rejects booking a primary item when its legacy pairId sibling is already booked for the same period', async () => {
     const user = await createTestUser()
-    const site = await createTestSite(user.id)
+    const site = await createTestSite(user.id, { timeZone: 'UTC' })
 
     const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
     const itemB = await createTestInventoryItem(user.id, site.id, {
@@ -578,7 +627,7 @@ describe('createPartnerReservation — pair-expansion conflict detection (bug #2
   it('allows booking when sibling reservation does not overlap the requested period', async () => {
     // Control test: same structure, but the sibling reservation is on non-overlapping dates.
     const user = await createTestUser()
-    const site = await createTestSite(user.id)
+    const site = await createTestSite(user.id, { timeZone: 'UTC' })
 
     const group = await prisma.sunbedGroup.create({ data: { siteId: site.id } })
     const itemA = await createTestInventoryItem(user.id, site.id, {
