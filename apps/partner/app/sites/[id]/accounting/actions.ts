@@ -23,7 +23,7 @@ import {
   type MonthlySourceSummary,
 } from '@repo/data/analytics'
 import { getTillByEmployee, getEmployeeShiftItems } from '@repo/data/till'
-import { siteMonthBounds, siteDateBounds, type SiteTimezone } from '@repo/data/site-day'
+import { siteMonthBounds, siteDateBounds, siteDayBounds, type SiteTimezone } from '@repo/data/site-day'
 
 /**
  * Builds the `SiteTimezone` shape `@repo/data/site-day` expects from a Site
@@ -135,6 +135,28 @@ const TREND_WINDOWS = [1, 7, 30, 365] as const
 const DAY_MS = 24 * 60 * 60 * 1000
 
 /**
+ * Venue-anchored "last `window` civil days ending today" bounds (track 017 P5).
+ * The day-bucketed series functions in `@repo/data/analytics` bucket by the
+ * site's civil day, so the window edges must be anchored the same way — a
+ * server-clock `new Date()` window is off by the venue↔server offset right
+ * after venue midnight, and skews the window=1 ("Hoy") case entirely.
+ * `to` = end of the venue's today; `from` = start of the venue day
+ * `window - 1` civil days before today. The `+12h` before re-anchoring lands
+ * on noon of the target civil day (DST-safe — never crosses a day boundary
+ * from the fixed-ms offset alone) before `siteDayBounds` reconstructs that
+ * day's true venue-local midnight.
+ */
+function venueTrendWindow(site: SiteTimezone, days: number): { from: Date; to: Date } {
+  const window = (TREND_WINDOWS as readonly number[]).includes(days) ? days : 30
+  const { start: todayStart, end: to } = siteDayBounds(site)
+  const from = siteDayBounds(
+    site,
+    new Date(todayStart.getTime() - (window - 1) * DAY_MS + 12 * 60 * 60 * 1000),
+  ).start
+  return { from, to }
+}
+
+/**
  * Per-day revenue + a summary (total, count, best day) for a rolling window
  * ending today — the dashboard-style "how am I doing lately" lens on the
  * accounting page. Session-gated + site-ownership (mirrors getPaidItemsByMonth);
@@ -144,12 +166,13 @@ export async function getRevenueTrend(siteId: string, days: number) {
   const session = await auth()
   if (!session?.user) throw new Error('Not authenticated')
 
-  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { userId: true, timeZone: true, locationLat: true, locationLng: true },
+  })
   if (!site || site.userId !== session.user.id) throw new Error('Not authorized')
 
-  const window = (TREND_WINDOWS as readonly number[]).includes(days) ? days : 30
-  const to = new Date()
-  const from = new Date(to.getTime() - (window - 1) * DAY_MS)
+  const { from, to } = venueTrendWindow(buildSiteTimezone(site), days)
 
   const rows = await getRevenueByDay(siteId, from, to)
   return { rows, summary: summarizeRevenue(rows) }
@@ -167,12 +190,13 @@ export async function getRevenueChannelTrend(siteId: string, days: number) {
   const session = await auth()
   if (!session?.user) throw new Error('Not authenticated')
 
-  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { userId: true, timeZone: true, locationLat: true, locationLng: true },
+  })
   if (!site || site.userId !== session.user.id) throw new Error('Not authorized')
 
-  const window = (TREND_WINDOWS as readonly number[]).includes(days) ? days : 30
-  const to = new Date()
-  const from = new Date(to.getTime() - (window - 1) * DAY_MS)
+  const { from, to } = venueTrendWindow(buildSiteTimezone(site), days)
 
   const rows = await getRevenueByChannelByDay(siteId, from, to)
   return { rows, summary: summarizeRevenueByChannel(rows) }
@@ -187,12 +211,13 @@ export async function getOccupancyTrend(siteId: string, days: number) {
   const session = await auth()
   if (!session?.user) throw new Error('Not authenticated')
 
-  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { userId: true, timeZone: true, locationLat: true, locationLng: true },
+  })
   if (!site || site.userId !== session.user.id) throw new Error('Not authorized')
 
-  const window = (TREND_WINDOWS as readonly number[]).includes(days) ? days : 30
-  const to = new Date()
-  const from = new Date(to.getTime() - (window - 1) * DAY_MS)
+  const { from, to } = venueTrendWindow(buildSiteTimezone(site), days)
 
   const rows = await getOccupancyByDay(siteId, from, to)
   return { rows, summary: summarizeOccupancy(rows) }
@@ -210,12 +235,13 @@ export async function getRevenueCsv(siteId: string, days: number): Promise<strin
   const session = await auth()
   if (!session?.user) throw new Error('Not authenticated')
 
-  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { userId: true, timeZone: true, locationLat: true, locationLng: true },
+  })
   if (!site || site.userId !== session.user.id) throw new Error('Not authorized')
 
-  const window = (TREND_WINDOWS as readonly number[]).includes(days) ? days : 30
-  const to = new Date()
-  const from = new Date(to.getTime() - (window - 1) * DAY_MS)
+  const { from, to } = venueTrendWindow(buildSiteTimezone(site), days)
 
   return toFiguresCsv(await getReservationDayStats(siteId, from, to))
 }
@@ -230,12 +256,13 @@ export async function getOperationsTrend(siteId: string, days: number) {
   const session = await auth()
   if (!session?.user) throw new Error('Not authenticated')
 
-  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { userId: true, timeZone: true, locationLat: true, locationLng: true },
+  })
   if (!site || site.userId !== session.user.id) throw new Error('Not authorized')
 
-  const window = (TREND_WINDOWS as readonly number[]).includes(days) ? days : 30
-  const to = new Date()
-  const from = new Date(to.getTime() - (window - 1) * DAY_MS)
+  const { from, to } = venueTrendWindow(buildSiteTimezone(site), days)
 
   const rows = await getReservationDayStats(siteId, from, to)
   return { rows, summary: summarizeReservationStats(rows) }

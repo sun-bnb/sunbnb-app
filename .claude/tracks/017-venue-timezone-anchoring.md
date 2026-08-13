@@ -33,16 +33,17 @@ in any query window, write path, or money boundary.
 
 ## Resume here
 
-- **P1, P2, P3, P4 are DONE.** P1 (`f0b51ba`) + P2 (2 commits) pushed to `main` 2026-08-11.
-  **P3 committed** on local `main` (3 commits `a8fbc07`/`889d33e`/`3850fc6`), **UNPUSHED**.
-  **P4 done 2026-08-13, UNCOMMITTED** on local `main` (site-level scope). No schema change → no migration.
-- **Next action:** pick from the remaining phases:
-  - **P5** (analytics UTC day bucketing → venue day; occupancy double-count >100%) — now ALSO
-    carries the deferred P4 rolling-trend windows (`getRevenueTrend` etc.), since they're the same
-    day-bucket concern. Do them together.
+- **P1, P2, P3, P4, P5 are DONE.** P1 (`f0b51ba`) + P2 (2 commits) pushed to `main` 2026-08-11.
+  **P3 committed** on local `main` (`a8fbc07`/`889d33e`/`3850fc6`) + **P4 committed** (`c8ba8a5`/
+  `592490f`), all **UNPUSHED**. **P5 done 2026-08-13, UNCOMMITTED** (analytics + rolling trends).
+  No schema change anywhere → no migration.
+- **Only structural/robustness phases remain — the correctness bugs are all fixed:**
   - **P7** (populate `Site.timeZone` + restaurant tz inheritance) — closes the P2-availability
     Canary residual; would also let `getInvoicesByMonth` and the SQL search anchor per stored tz.
   - **P6** (collapse the two tz modules — needs Q4).
+- **Open decisions still parked:** Q3 (restate P1's past short-by-a-day settlements?), Q4 (P6
+  scope), Q5 (surface a "tz guessed" signal — pairs with P7). The deferred conflict-guard
+  release-predicate west-of-UTC fix (P3 log) remains before any non-EU launch.
 - **Still open:** **Q3** (whether past short-by-a-day settlements from P1 get restated) — unrelated
   to P3, decide when settling accounts. **Q5** (surface a "tz was guessed" signal) — cheap, tie to P7.
 - **Deferred functional fix (documented, not lost):** the conflict-guard release predicate
@@ -124,7 +125,7 @@ in any query window, write path, or money boundary.
     `:208-209` inherit the same skew; the "last row is always today" contract at `:194-197`
     breaks for the `window = 1` ("Hoy") case.
 
-- ☐ **P5 — Analytics day bucketing**
+- ☑ **P5 — Analytics day bucketing** *(DONE 2026-08-13 — incl. the deferred P4 rolling trends; see Log)*
   `packages/data/src/analytics.ts:140-142` (`utcDayStart`) + `dayKey` bucket every series in UTC
   (`getRevenueByDay`, `getReservationDayStats`, `getOccupancyByDay`, `getRevenueByChannelByDay`,
   `getMonthlySourceSummary`). Two distinct effects: revenue rung up 00:00–02:00 local lands on
@@ -315,6 +316,35 @@ in any query window, write path, or money boundary.
     half a fix. (2) `getInvoicesByMonth` is keyed by `accountId` (not `siteId`) — an account can
     span timezones, so it needs a **per-account tz** decision; left UTC with a comment. No schema
     change → no migration.
+
+- **2026-08-13 — P5 shipped (uncommitted, local `main`).** Venue-anchored the analytics day
+  bucketing + the rolling-trend windows that were deferred out of P4.
+  - **`packages/data/src/analytics.ts` (me):** the UTC day helpers (`utcDayStart`/`dayKey`/
+    `eachDay`) are replaced by venue-day helpers — `loadSiteTz` (per-function site tz load),
+    `eachSiteDayKey` (civil-day-key iteration via pure `nextDayKey` calendar arithmetic), and
+    `siteRange` (venue-anchored `[start, endExcl)` fetch window). All six day-scoped functions
+    now key on the site's civil day: `getRevenueByDay`, `getReservationDayStats`,
+    `getOccupancyByDay`, `getRevenueByChannelByDay`, `getMonthlySourceSummary`,
+    `getFloorStateSnapshot`. The tab-paid `TAB_PAID_FILTER` and occupancy-bucket precedence are
+    untouched — only the day keying/window changed.
+  - **Headline fix — occupancy double-count:** `getOccupancyByDay`'s overlap now uses venue
+    civil-day bounds (`res.from < nextVenueMidnight && res.to >= venueMidnight`), so a booking
+    that spans exactly one venue day lands in ONE bucket instead of overlapping two adjacent UTC
+    days. New integration regression: a Madrid venue-day booking (`Jul 14 22:00Z → Jul 15
+    21:59:59.999Z`) occupies venue Jul 15 (100%) and NOT Jul 14 (0%) — previously it counted on
+    both. Fixed a tz-fragile fixture (`MONTH_TO` was a `23:59:59Z` end-of-day that reads as the
+    next month for a UTC+ venue → noon).
+  - **`apps/partner/app/sites/[id]/accounting/actions.ts` rolling trends (via partner-dev):**
+    `getRevenueTrend`/`getRevenueChannelTrend`/`getOccupancyTrend`/`getRevenueCsv`/
+    `getOperationsTrend` now build their "last N days" window via a `venueTrendWindow(site, days)`
+    helper (`to` = venue end-of-today via `siteDayBounds`; `from` = venue midnight of
+    today−(N−1) days). Because the series now bucket by venue day, the window returns exactly
+    `window` civil days ending on venue today, and the "last row is today" / `window=1` ("Hoy")
+    case is correct. Trend tests updated: the window spans exactly `window` inclusive civil days
+    (`dayCount === 7/30`), replacing the old elapsed-span assertion (`spanDays === 6/29`); sites
+    pinned to `timeZone:'UTC'`.
+  - Green: data 335u + 350i (+1 occupancy regression), partner 1970u, `turbo build` 4/4, lint
+    clean. No schema change → no migration.
 
 ## Open decisions
 

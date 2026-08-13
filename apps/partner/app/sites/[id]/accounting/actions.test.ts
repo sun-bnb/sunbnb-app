@@ -394,7 +394,7 @@ describe('getRevenueTrend', () => {
 
   it('aggregates a 7-day window and returns rows + summary', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID, timeZone: 'UTC' } as any)
     const rows = [{ date: '2026-06-18', revenue: 16, count: 2 }]
     mockRevenueByDay.mockResolvedValue(rows)
     mockSummarize.mockReturnValue({ totalRevenue: 16, totalCount: 2, bestDay: rows[0]! })
@@ -404,21 +404,24 @@ describe('getRevenueTrend', () => {
     expect(res).toEqual({ rows, summary: { totalRevenue: 16, totalCount: 2, bestDay: rows[0] } })
     const [siteId, from, to] = mockRevenueByDay.mock.calls[0]!
     expect(siteId).toBe(SITE_ID)
-    const spanDays = Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000))
-    expect(spanDays).toBe(6) // 7-day inclusive window → 6 day span
+    // Venue-anchored (track 017 P5): `to` = end of today (23:59:59.999), `from`
+    // = start of the venue day (window-1) days before. UTC-pinned site → the
+    // venue day equals the server UTC day, so the day count is deterministic.
+    const dayCount = Math.round((to.getTime() - from.getTime() + 1) / (24 * 60 * 60 * 1000))
+    expect(dayCount).toBe(7) // 7-day window → exactly 7 civil days, inclusive of today
     expect(mockSummarize).toHaveBeenCalledWith(rows)
   })
 
   it('clamps an invalid window to 30 days', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID, timeZone: 'UTC' } as any)
     mockRevenueByDay.mockResolvedValue([])
 
     await getRevenueTrend(SITE_ID, 999)
 
     const [, from, to] = mockRevenueByDay.mock.calls[0]!
-    const spanDays = Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000))
-    expect(spanDays).toBe(29) // clamped 30-day window
+    const dayCount = Math.round((to.getTime() - from.getTime() + 1) / (24 * 60 * 60 * 1000))
+    expect(dayCount).toBe(30) // clamped 30-day window
   })
 })
 
@@ -442,7 +445,7 @@ describe('getOccupancyTrend', () => {
 
   it('aggregates the window and returns rows + summary', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID, timeZone: 'UTC' } as any)
     const rows = [{
       date: '2026-06-18', capacity: 4, blocked: 0, sellable: 4,
       occupied: 2, comps: 1, held: 0, unconfirmed: 0, occupancyPct: 50,
@@ -459,14 +462,15 @@ describe('getOccupancyTrend', () => {
 
   it('clamps an invalid window to 30 days', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID, timeZone: 'UTC' } as any)
     mockOccByDay.mockResolvedValue([])
 
     await getOccupancyTrend(SITE_ID, -1)
 
     const [, from, to] = mockOccByDay.mock.calls[0]!
-    const spanDays = Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000))
-    expect(spanDays).toBe(29)
+    // Venue-anchored (track 017 P5): dayCount = 30 civil days ending today (UTC-pinned).
+    const dayCount = Math.round((to.getTime() - from.getTime() + 1) / (24 * 60 * 60 * 1000))
+    expect(dayCount).toBe(30)
   })
 })
 
@@ -492,7 +496,7 @@ describe('getRevenueCsv', () => {
 
   it('serializes the window rows to CSV from the reservation-driven seat/revenue source', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID, timeZone: 'UTC' } as any)
     const rows = [{ date: '2026-06-18', rentedSeats: 2, revenue: 16 }]
     mockDayStats.mockResolvedValue(rows)
     mockCsv.mockReturnValue('date,sunbeds,revenue\n2026-06-18,2,16.00\n')
