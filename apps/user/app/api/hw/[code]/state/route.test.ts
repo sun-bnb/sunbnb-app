@@ -14,7 +14,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
-import { GET, normalizeCode, wireStateFor, aggregateState } from './route'
+import { GET } from './route'
+// Pure helpers live in ./projection — a Next route file may export only the
+// handlers and config fields, which `next build` enforces and tsc/lint do not.
+import { normalizeCode, wireStateFor, aggregateState } from './projection'
 import prisma from '@repo/data/PrismaCient'
 
 const mockItems = vi.mocked(prisma.inventoryItem.findMany)

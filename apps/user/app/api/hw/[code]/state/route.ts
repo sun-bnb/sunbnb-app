@@ -16,9 +16,11 @@
  *      caller. The code is printed on a sticker on a public beach, so a
  *      distinguishable 404 would turn the code space into a free oracle.
  *
- * This route is a SECOND SHELL over `deriveState` (@repo/data/reservation-machine),
- * exactly as the partner grid's `bed-state.ts` is — never a second opinion about
- * what a seat's state is (track 018, determinism contract #1).
+ * The projection itself lives in `./projection.ts` — a Next.js route file may
+ * export only the handlers and a fixed set of config fields, and it is the SECOND
+ * SHELL over `deriveState` (@repo/data/reservation-machine), exactly as the partner
+ * grid's `bed-state.ts` is: never a second opinion about what a seat's state is
+ * (track 018, determinism contract #1). This file is I/O only.
  *
  * P1 binds devices through `HW_DEVICE_MAP` env config and authenticates with a
  * single shared `HW_TOKEN`; P2 replaces both with the `Device` table and per-device
@@ -28,35 +30,21 @@
 import { NextRequest } from 'next/server'
 import { createHash, timingSafeEqual } from 'crypto'
 import prisma from '@repo/data/PrismaCient'
-import { deriveState, type CompoundState } from '@repo/data/reservation-machine'
 import { siteDayBounds, siteDayKey } from '@repo/data/site-day'
+import { RESERVATION_CANCELED, RESERVATION_REFUNDED } from '@repo/data/reservation-status'
 import {
-  RESERVATION_CANCELED,
-  RESERVATION_REFUNDED,
-  RESERVATION_PAYMENT_FAILED,
-  OP_WALKED_IN,
-  OP_COMP,
-  OP_EXPECTED,
-} from '@repo/data/reservation-status'
+  activeStateForSeat,
+  aggregateState,
+  normalizeCode,
+  wireStateFor,
+  type ReservationRow,
+  type WireState,
+} from './projection'
 
 export const dynamic = 'force-dynamic'
 
-/** The closed wire vocabulary. Adding a member breaks fielded devices. */
-export type WireState = 'FREE' | 'RESERVED' | 'OCCUPIED' | 'UNAVAILABLE'
-
 /** Server-driven poll cadence. Firmware obeys this and never hardcodes an interval. */
 const POLL_AFTER_SEC = 60
-
-/** Blocking rank for the aggregate rule: UNAVAILABLE > OCCUPIED > RESERVED > FREE. */
-const BLOCKING_RANK: Record<WireState, number> = {
-  FREE: 0,
-  RESERVED: 1,
-  OCCUPIED: 2,
-  UNAVAILABLE: 3,
-}
-
-/** Legacy literal some old rows carry instead of payment_failed. */
-const LEGACY_ERROR = 'error'
 
 // ─── auth ────────────────────────────────────────────────────────────────────
 
@@ -86,15 +74,6 @@ function bearerMatches(header: string | null, expected: string): boolean {
 }
 
 /**
- * Crockford base32 normalisation (contract §Identity & credentials): uppercase,
- * `I`/`L` → `1`, `O` → `0`. A human reading a code aloud from a windy beach is the
- * reason the alphabet was chosen; this is the decode half of that promise.
- */
-export function normalizeCode(raw: string): string {
-  return raw.trim().toUpperCase().replace(/[IL]/g, '1').replace(/O/g, '0')
-}
-
-/**
  * P1 binding: `HW_DEVICE_MAP` is JSON `{"<code>": ["<itemId>", …]}`, and **array
  * order is mount order** — index 0 is the leftmost LED segment. That is the same
  * physical fact `DeviceSeat.position` carries in P2 (Q1, decided): the binding is
@@ -117,108 +96,6 @@ function seatIdsForCode(code: string): string[] | null {
 
   const ids = entry.filter((id): id is string => typeof id === 'string' && id.length > 0)
   return ids.length > 0 ? ids : null
-}
-
-// ─── derivation ──────────────────────────────────────────────────────────────
-
-type ReservationRow = {
-  status: string
-  operationalStatus: string
-  isComp: boolean
-  to: Date
-  items: { id: string }[]
-  tillEntries: { id: string }[]
-  days: { operationalStatus: string }[]
-}
-
-function isFailedStatus(status: string): boolean {
-  return status === RESERVATION_PAYMENT_FAILED || status === LEGACY_ERROR
-}
-
-/**
- * Today's operational status WITHOUT writing a row.
- *
- * The manage page lazy-upserts today's `ReservationDay` (`resolveTodayRow`) and so
- * never meets the gap this closes: a device polls long before any staff member
- * opens the grid, and at 1 500 devices × 60 s an upsert-on-read would be 1.3 M
- * writes/day. So we mirror what `resolveTodayRow` *would* create, read-only:
- * walk-ins and comps are present-now kinds that track the parent directly; every
- * per-day-cycling kind starts a fresh civil day as `expected`.
- *
- * Falling back to the parent column instead (deriveState's default for a null
- * today-row) would be wrong here: a multiday guest who checked in yesterday and
- * has not arrived today would read `checked-in` → OCCUPIED (dark) when the truth
- * is `expected` → RESERVED (red). Blocked rows are unaffected — deriveState treats
- * the parent as authoritative for them regardless of what we pass. (track 012/018)
- */
-function todayOperationalStatus(res: ReservationRow): string {
-  const row = res.days[0]
-  if (row) return row.operationalStatus
-  return res.operationalStatus === OP_WALKED_IN || res.operationalStatus === OP_COMP
-    ? res.operationalStatus
-    : OP_EXPECTED
-}
-
-function derive(res: ReservationRow, endOfToday: Date): CompoundState {
-  return deriveState({
-    status: res.status,
-    operationalStatus: res.operationalStatus,
-    todayOperationalStatus: todayOperationalStatus(res),
-    isComp: res.isComp,
-    settled: res.tillEntries.length > 0,
-    // No reserved days remain after today. Venue-local, never the server's UTC day.
-    stayOver: res.to <= endOfToday,
-  })
-}
-
-/**
- * Projects the machine's compound state onto the wire vocabulary
- * (contract §Wire contract, the derivation table).
- *
- * The `default` arm is the fail-safe and is deliberately unreachable-by-design: an
- * unrecognised compound state must read OCCUPIED, never FREE. If a future `Occ`
- * member lands here, the device dims rather than double-selling the bed.
- */
-export function wireStateFor(state: CompoundState): WireState {
-  if (state.kind === 'block') return 'UNAVAILABLE'
-  switch (state.occ) {
-    case 'present':
-      return 'OCCUPIED'
-    case 'expected':
-      return 'RESERVED'
-    // Survived the released filter ⇒ multiday mid-stay: still holds the bed. (track 012)
-    case 'departed':
-    case 'no-show':
-      return 'RESERVED'
-    // hold, and pending/processing payment — money not settled, bed not free.
-    case 'none':
-      return 'RESERVED'
-    default:
-      return 'OCCUPIED'
-  }
-}
-
-/**
- * The seat's active reservation, mirroring the grid's `getActiveReservation`:
- * released bookings drop out, and a failed one is only chosen when it is the sole
- * candidate — so a red ✕ can never mask a real paid booking on the same seat.
- */
-function activeStateForSeat(rows: ReservationRow[], endOfToday: Date): CompoundState | null {
-  const candidates = rows
-    .map((res) => ({ res, state: derive(res, endOfToday) }))
-    .filter((c) => !c.state.released)
-
-  if (candidates.length === 0) return null
-  const nonFailed = candidates.find((c) => !isFailedStatus(c.res.status))
-  return (nonFailed ?? candidates[0]!).state
-}
-
-/** Aggregate: FREE only if every seat is FREE; otherwise the most blocking member. */
-export function aggregateState(states: WireState[]): WireState {
-  return states.reduce<WireState>(
-    (worst, s) => (BLOCKING_RANK[s] > BLOCKING_RANK[worst] ? s : worst),
-    'FREE',
-  )
 }
 
 // ─── route ───────────────────────────────────────────────────────────────────
