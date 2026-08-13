@@ -155,6 +155,35 @@ export function siteDateBounds(
 }
 
 /**
+ * Returns the UTC instants for a whole calendar month in the site's venue-local
+ * timezone: `start` = 00:00:00.000 on the 1st, `end` = 23:59:59.999 on the last
+ * day (inclusive — same convention as `siteDayBounds`). `month` is 1-based.
+ *
+ * This is the month-scale sibling of `siteDayBounds`/`siteDateBounds`, added so
+ * accounting/VAT/reporting windows stop hand-rolling `Date.UTC(year, month-1, 1)`
+ * (which anchors the month to UTC, booking a Madrid venue's first ~2 local hours
+ * into the previous month's fiscal period). DST-safe via `siteDateBounds`.
+ *
+ * Query with `{ gte: start, lte: end }` (or `lt` the next month's `start`).
+ */
+export function siteMonthBounds(
+  site: SiteTimezone,
+  year: number,
+  month: number,
+): { start: Date; end: Date } {
+  if (!Number.isInteger(month) || month < 1 || month > 12) {
+    throw new Error(`siteMonthBounds: month must be 1-12, got ${month}`)
+  }
+  const pad = (n: number, len = 2) => String(n).padStart(len, '0')
+  const nextYear = month === 12 ? year + 1 : year
+  const nextMonth = month === 12 ? 1 : month + 1
+
+  const start = siteDateBounds(site, `${pad(year, 4)}-${pad(month)}-01`).start
+  const nextStart = siteDateBounds(site, `${pad(nextYear, 4)}-${pad(nextMonth)}-01`).start
+  return { start, end: new Date(nextStart.getTime() - 1) }
+}
+
+/**
  * Re-anchor a client-supplied day boundary to the site's civil-day bounds — the
  * single entry point for venue-anchoring reservation WRITE paths (track 017 P3).
  *

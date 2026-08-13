@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { resolveSiteTimeZone, siteDayKey, siteDayBounds, siteDateBounds, siteAnchoredDay } from './site-day'
+import { resolveSiteTimeZone, siteDayKey, siteDayBounds, siteDateBounds, siteAnchoredDay, siteMonthBounds } from './site-day'
 
 // ─── resolveSiteTimeZone ─────────────────────────────────────────────────────
 
@@ -277,5 +277,47 @@ describe('siteAnchoredDay', () => {
   it('accepts a Date instance', () => {
     const { start } = siteAnchoredDay(madrid, new Date('2025-08-13T10:00:00.000Z'))
     expect(start.toISOString()).toBe('2025-08-12T22:00:00.000Z')
+  })
+})
+
+// ─── siteMonthBounds ─────────────────────────────────────────────────────────
+
+describe('siteMonthBounds', () => {
+  it('spans a full UTC month for a UTC site', () => {
+    const { start, end } = siteMonthBounds({ timeZone: 'UTC' }, 2025, 8)
+    expect(start.toISOString()).toBe('2025-08-01T00:00:00.000Z')
+    expect(end.toISOString()).toBe('2025-08-31T23:59:59.999Z')
+  })
+
+  it('anchors the month to the venue day for Europe/Madrid (Aug, UTC+2)', () => {
+    // Venue August = [Jul 31 22:00Z, Aug 31 21:59:59.999Z]. The first two UTC
+    // hours of Aug 1 belong to the venue's July, not August.
+    const { start, end } = siteMonthBounds({ timeZone: 'Europe/Madrid' }, 2025, 8)
+    expect(start.toISOString()).toBe('2025-07-31T22:00:00.000Z')
+    expect(end.toISOString()).toBe('2025-08-31T21:59:59.999Z')
+  })
+
+  it('handles the December → next-year rollover', () => {
+    const { start, end } = siteMonthBounds({ timeZone: 'Europe/Madrid' }, 2025, 12)
+    expect(start.toISOString()).toBe('2025-11-30T23:00:00.000Z') // Dec 1 00:00 CET (UTC+1)
+    expect(end.toISOString()).toBe('2025-12-31T22:59:59.999Z')   // Dec 31 23:59:59.999 CET
+  })
+
+  it('handles February (28 days) correctly', () => {
+    const { start, end } = siteMonthBounds({ timeZone: 'UTC' }, 2025, 2)
+    expect(start.toISOString()).toBe('2025-02-01T00:00:00.000Z')
+    expect(end.toISOString()).toBe('2025-02-28T23:59:59.999Z')
+  })
+
+  it("the next month's start is exactly 1ms after this month's end", () => {
+    const site = { timeZone: 'Europe/Madrid' }
+    const aug = siteMonthBounds(site, 2025, 8)
+    const sep = siteMonthBounds(site, 2025, 9)
+    expect(sep.start.getTime()).toBe(aug.end.getTime() + 1)
+  })
+
+  it('throws on an out-of-range month', () => {
+    expect(() => siteMonthBounds({ timeZone: 'UTC' }, 2025, 0)).toThrow(/1-12/)
+    expect(() => siteMonthBounds({ timeZone: 'UTC' }, 2025, 13)).toThrow(/1-12/)
   })
 })
