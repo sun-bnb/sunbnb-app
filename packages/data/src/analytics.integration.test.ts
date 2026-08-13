@@ -124,6 +124,31 @@ describe('getOccupancyByDay', () => {
     ])
   })
 
+  it('buckets a venue-day booking into ONE venue day, not two adjacent UTC days (track 017 P5)', async () => {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id)
+    // Europe/Madrid (UTC+2 summer): venue day 2026-07-15 = [Jul 14 22:00Z, Jul 15 21:59:59.999Z].
+    // Under UTC bucketing this booking overlapped BOTH UTC Jul 14 (its last 2h) and
+    // UTC Jul 15 — counting one booking as occupancy on two days.
+    const site = await createTestSite(user.id, { timeZone: 'Europe/Madrid' })
+    const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
+
+    await createTestReservation(user.id, site.id, [item.id], {
+      status: 'paid-in-cash',
+      operationalStatus: 'walked-in',
+      from: d('2026-07-14T22:00:00Z'),
+      to: d('2026-07-15T21:59:59.999Z'),
+    })
+
+    // Query venue days Jul 14 and Jul 15 (noon instants — unambiguously each day).
+    const rows = await getOccupancyByDay(site.id, d('2026-07-14T12:00:00Z'), d('2026-07-15T12:00:00Z'))
+
+    expect(rows.map((r) => ({ date: r.date, occupied: r.occupied, occupancyPct: r.occupancyPct }))).toEqual([
+      { date: '2026-07-14', occupied: 0, occupancyPct: 0 },   // NOT occupied — the stay is Jul 15
+      { date: '2026-07-15', occupied: 1, occupancyPct: 100 }, // occupied exactly once
+    ])
+  })
+
   /**
    * The Alonso Beach production bug: `blockBed` writes `status: 'paid-in-cash'`
    * + `operationalStatus: 'blocked'` with a sticky `to` = 2999-12-31, which IS a
@@ -964,7 +989,10 @@ describe('getRevenueByChannelByDay', () => {
 describe('getMonthlySourceSummary', () => {
   // Shared window: all test data falls within July 2026
   const MONTH_FROM = d('2026-07-01T00:00:00Z')
-  const MONTH_TO   = d('2026-07-31T23:59:59Z')
+  // Noon on the last day — a tz-robust "any timestamp within July's last day"
+  // (the function anchors the window to the site's civil day; track 017 P5).
+  // A UTC end-of-day instant (23:59:59Z) is already Aug 1 for a UTC+ venue.
+  const MONTH_TO   = d('2026-07-31T12:00:00Z')
 
   it('sunbeds bucket: sums paymentAmount + seat count for cash and online reservations', async () => {
     const user = await createTestUser()
@@ -1285,7 +1313,10 @@ describe('getMonthlySourceSummary', () => {
 
 describe('getMonthlySourceSummary — tab-order paid-ness', () => {
   const MONTH_FROM = d('2026-07-01T00:00:00Z')
-  const MONTH_TO   = d('2026-07-31T23:59:59Z')
+  // Noon on the last day — a tz-robust "any timestamp within July's last day"
+  // (the function anchors the window to the site's civil day; track 017 P5).
+  // A UTC end-of-day instant (23:59:59Z) is already Aug 1 for a UTC+ venue.
+  const MONTH_TO   = d('2026-07-31T12:00:00Z')
 
   async function setupSiteWithTable() {
     const user = await createTestUser()

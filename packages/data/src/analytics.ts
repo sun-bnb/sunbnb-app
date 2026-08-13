@@ -11,12 +11,14 @@
  * integration-tested against sunbnb_test.
  *
  * `from`/`to` are inclusive day bounds — any timestamp within the first and last
- * day you want. All day bucketing is UTC (`YYYY-MM-DD`).
+ * day you want. All day bucketing is anchored to the SITE's civil day (its
+ * timezone), not UTC (`YYYY-MM-DD` keys; track 017 P5).
  */
 
 import prisma from '../index'
 import { round } from './payment'
 import { deriveState, OP_BLOCKED } from './reservation-machine'
+import { siteDayKey, siteDateBounds, type SiteTimezone } from './site-day'
 import {
   BLOCKING_STATUSES,
   OP_NO_SHOW,
@@ -61,7 +63,7 @@ const TAB_PAID_FILTER = {
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface DailyRevenueByChannel {
-  /** UTC day, `YYYY-MM-DD`. */
+  /** Venue civil day, `YYYY-MM-DD`. */
   date: string
   /** Cash walk-in takings (status === RESERVATION_PAID_IN_CASH), rounded. */
   cash: number
@@ -83,7 +85,7 @@ export interface ChannelRevenueSummary {
 }
 
 export interface DailyReservationStats {
-  /** UTC day, `YYYY-MM-DD`. */
+  /** Venue civil day, `YYYY-MM-DD`. */
   date: string
   /** Sum of seat counts (items.length) across that day's paid reservations. */
   rentedSeats: number
@@ -99,7 +101,7 @@ export interface ReservationStatsSummary {
 }
 
 export interface DailyRevenue {
-  /** UTC day, `YYYY-MM-DD`. */
+  /** Venue civil day, `YYYY-MM-DD`. */
   date: string
   /** Sum of PARTNER-invoice gross totals that day. */
   revenue: number
@@ -157,25 +159,49 @@ export interface OccupancySummary {
   totalComps: number
 }
 
-// ─── Date helpers (UTC) ───────────────────────────────────────────────────────
+// ─── Date helpers (VENUE civil day) ───────────────────────────────────────────
+//
+// Every day-bucketed series here keys on the SITE's civil day, not UTC (track
+// 017 P5). UTC bucketing put revenue rung up 00:00–02:00 local on the previous
+// day's bar and, worse, double-counted a venue-day booking across two UTC day
+// buckets — inflating occupancy toward 2× and allowing >100% of capacity.
 
-const DAY_MS = 24 * 60 * 60 * 1000
+/** Load the site's timezone descriptor for civil-day math. */
+async function loadSiteTz(siteId: string): Promise<SiteTimezone> {
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { timeZone: true, locationLat: true, locationLng: true },
+  })
+  return {
+    timeZone: site?.timeZone ?? null,
+    latitude: site?.locationLat ? parseFloat(site.locationLat) : undefined,
+    longitude: site?.locationLng ? parseFloat(site.locationLng) : undefined,
+  }
+}
 
-function utcDayStart(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
+/** Next civil-day key — pure calendar arithmetic on `YYYY-MM-DD`, tz-independent. */
+function nextDayKey(key: string): string {
+  const [y, m, d] = key.split('-').map(Number)
+  return new Date(Date.UTC(y!, m! - 1, d! + 1)).toISOString().slice(0, 10)
 }
-function addDays(d: Date, n: number): Date {
-  return new Date(d.getTime() + n * DAY_MS)
+
+/** Every venue civil-day key from `from`'s venue day through `to`'s, inclusive. */
+function eachSiteDayKey(tz: SiteTimezone, from: Date, to: Date): string[] {
+  const endKey = siteDayKey(tz, to)
+  const keys: string[] = []
+  for (let k = siteDayKey(tz, from); k <= endKey; k = nextDayKey(k)) keys.push(k)
+  return keys
 }
-function dayKey(d: Date): string {
-  return d.toISOString().slice(0, 10)
-}
-/** Every UTC day from `from`'s day through `to`'s day, inclusive. */
-function eachDay(from: Date, to: Date): Date[] {
-  const end = utcDayStart(to).getTime()
-  const days: Date[] = []
-  for (let d = utcDayStart(from); d.getTime() <= end; d = addDays(d, 1)) days.push(d)
-  return days
+
+/**
+ * Venue-anchored `[start, endExcl)` instant window covering every row whose
+ * VENUE civil day falls in `[from's day .. to's day]` — the DB fetch bound for
+ * a day-bucketed series.
+ */
+function siteRange(tz: SiteTimezone, from: Date, to: Date): { start: Date; endExcl: Date } {
+  const start = siteDateBounds(tz, siteDayKey(tz, from)).start
+  const endIncl = siteDateBounds(tz, siteDayKey(tz, to)).end
+  return { start, endExcl: new Date(endIncl.getTime() + 1) }
 }
 
 // ─── Pure helpers (no DB) ─────────────────────────────────────────────────────
@@ -281,8 +307,8 @@ export async function getRevenueByDay(
   from: Date,
   to: Date,
 ): Promise<DailyRevenue[]> {
-  const rangeStart = utcDayStart(from)
-  const rangeEndExcl = addDays(utcDayStart(to), 1)
+  const tz = await loadSiteTz(siteId)
+  const { start: rangeStart, endExcl: rangeEndExcl } = siteRange(tz, from, to)
 
   const invoices = await prisma.invoice.findMany({
     where: {
@@ -295,26 +321,26 @@ export async function getRevenueByDay(
 
   const byDay = new Map<string, { revenue: number; count: number }>()
   for (const inv of invoices) {
-    const key = dayKey(inv.invoicedAt)
+    const key = siteDayKey(tz, inv.invoicedAt)
     const cur = byDay.get(key) ?? { revenue: 0, count: 0 }
     cur.revenue += inv.totalAmount
     cur.count += 1
     byDay.set(key, cur)
   }
 
-  return eachDay(from, to).map((d) => {
-    const e = byDay.get(dayKey(d))
-    return { date: dayKey(d), revenue: round(e?.revenue ?? 0), count: e?.count ?? 0 }
+  return eachSiteDayKey(tz, from, to).map((key) => {
+    const e = byDay.get(key)
+    return { date: key, revenue: round(e?.revenue ?? 0), count: e?.count ?? 0 }
   })
 }
 
 /**
  * Per-day takings + rented-seat count for a site over `[from, to]` (dense — every
- * UTC day in range, zero-filled). This is the **takings lens** (paymentAmount-based,
+ * venue civil day in range, zero-filled). This is the **takings lens** (paymentAmount-based,
  * all channels including cash walk-ins and online payments) — deliberately distinct
  * from the invoice-based `getRevenueByDay`.
  *
- * Each reservation is attributed to its `createdAt` UTC day (the business day it was
+ * Each reservation is attributed to its `createdAt` venue civil day (the business day it was
  * rung up — matches how the operator reads a daily report; multiday bookings are NOT
  * split). Revenue = paymentAmount (null → 0). Seats = items.length.
  *
@@ -326,8 +352,8 @@ export async function getReservationDayStats(
   from: Date,
   to: Date,
 ): Promise<DailyReservationStats[]> {
-  const rangeStart = utcDayStart(from)
-  const rangeEndExcl = addDays(utcDayStart(to), 1)
+  const tz = await loadSiteTz(siteId)
+  const { start: rangeStart, endExcl: rangeEndExcl } = siteRange(tz, from, to)
 
   const reservations = await prisma.reservation.findMany({
     where: {
@@ -346,17 +372,17 @@ export async function getReservationDayStats(
 
   const byDay = new Map<string, { revenue: number; rentedSeats: number }>()
   for (const res of reservations) {
-    const key = dayKey(res.createdAt)
+    const key = siteDayKey(tz, res.createdAt)
     const cur = byDay.get(key) ?? { revenue: 0, rentedSeats: 0 }
     cur.revenue += res.paymentAmount ?? 0
     cur.rentedSeats += res.items.length
     byDay.set(key, cur)
   }
 
-  return eachDay(from, to).map((d) => {
-    const e = byDay.get(dayKey(d))
+  return eachSiteDayKey(tz, from, to).map((key) => {
+    const e = byDay.get(key)
     return {
-      date: dayKey(d),
+      date: key,
       rentedSeats: e?.rentedSeats ?? 0,
       revenue: round(e?.revenue ?? 0),
     }
@@ -426,8 +452,8 @@ export async function getOccupancyByDay(
   from: Date,
   to: Date,
 ): Promise<DailyOccupancy[]> {
-  const rangeStart = utcDayStart(from)
-  const rangeEndExcl = addDays(utcDayStart(to), 1)
+  const tz = await loadSiteTz(siteId)
+  const { start: rangeStart, endExcl: rangeEndExcl } = siteRange(tz, from, to)
 
   const [capacity, reservations] = await Promise.all([
     prisma.inventoryItem.count({ where: { siteId, status: 'active' } }),
@@ -453,11 +479,13 @@ export async function getOccupancyByDay(
   // Bucket each reservation once up front — `deriveState` is per-row, not per-day.
   const bucketed = reservations.map((res) => ({ res, bucket: occupancyBucket(res) }))
 
-  return eachDay(from, to).map((d) => {
-    const dayStart = d
-    const dayEnd = addDays(d, 1)
+  return eachSiteDayKey(tz, from, to).map((key) => {
+    // Venue civil-day bounds: a booking that spans exactly one venue day now
+    // lands in exactly ONE bucket, instead of overlapping two adjacent UTC days.
+    const dayStart = siteDateBounds(tz, key).start
+    const nextStart = new Date(siteDateBounds(tz, key).end.getTime() + 1)
     const overlapping = bucketed.filter(
-      ({ res }) => res.from < dayEnd && res.to >= dayStart,
+      ({ res }) => res.from < nextStart && res.to >= dayStart,
     )
 
     const seats: Record<OccupancyBucket, Set<string>> = {
@@ -485,7 +513,7 @@ export async function getOccupancyByDay(
     const occupied = seats.rented.size + comps
     const sellable = Math.max(capacity - blocked, 0)
     return {
-      date: dayKey(d),
+      date: key,
       capacity,
       blocked,
       sellable,
@@ -687,7 +715,7 @@ export interface FloorStateSnapshot {
 }
 
 /**
- * Returns the 5-way floor-state snapshot for `siteId` on the civil UTC day
+ * Returns the 5-way floor-state snapshot for `siteId` on the venue civil day
  * containing `day`. Uses the same BLOCKING_STATUSES / no-show / departed
  * filter as `getOccupancyByDay` — seats on excluded reservations fall into
  * `libres`.
@@ -702,8 +730,9 @@ export async function getFloorStateSnapshot(
   siteId: string,
   day: Date,
 ): Promise<FloorStateSnapshot> {
-  const dayStart = utcDayStart(day)
-  const dayEnd = addDays(dayStart, 1)
+  const tz = await loadSiteTz(siteId)
+  const { start: dayStart, end: dayEndIncl } = siteDateBounds(tz, siteDayKey(tz, day))
+  const dayEnd = new Date(dayEndIncl.getTime() + 1)
 
   const [capacity, reservations] = await Promise.all([
     prisma.inventoryItem.count({ where: { siteId, status: 'active' } }),
@@ -762,7 +791,7 @@ export async function getFloorStateSnapshot(
 
 /**
  * Per-day revenue broken down by payment channel for a site over `[from, to]`
- * (dense — every UTC day in range, zero-filled). This is a takings-lens view
+ * (dense — every venue civil day in range, zero-filled). This is a takings-lens view
  * (paymentAmount-based, same population as `getReservationDayStats`) with the
  * addition of a channel split:
  *
@@ -773,7 +802,7 @@ export async function getFloorStateSnapshot(
  *              (guest self-booked and paid online)
  *
  * Included: status ∈ [paid-in-cash, complete], refundedAt = null, isComp = false.
- * Each reservation is attributed to its `createdAt` UTC day. Auth/ownership is
+ * Each reservation is attributed to its `createdAt` venue civil day. Auth/ownership is
  * the caller's responsibility.
  */
 export async function getRevenueByChannelByDay(
@@ -781,8 +810,8 @@ export async function getRevenueByChannelByDay(
   from: Date,
   to: Date,
 ): Promise<DailyRevenueByChannel[]> {
-  const rangeStart = utcDayStart(from)
-  const rangeEndExcl = addDays(utcDayStart(to), 1)
+  const tz = await loadSiteTz(siteId)
+  const { start: rangeStart, endExcl: rangeEndExcl } = siteRange(tz, from, to)
 
   const reservations = await prisma.reservation.findMany({
     where: {
@@ -802,7 +831,7 @@ export async function getRevenueByChannelByDay(
 
   const byDay = new Map<string, { cash: number; qr: number; online: number }>()
   for (const res of reservations) {
-    const key = dayKey(res.createdAt)
+    const key = siteDayKey(tz, res.createdAt)
     const cur = byDay.get(key) ?? { cash: 0, qr: 0, online: 0 }
     const amount = res.paymentAmount ?? 0
     if (res.status === RESERVATION_PAID_IN_CASH) {
@@ -815,12 +844,12 @@ export async function getRevenueByChannelByDay(
     byDay.set(key, cur)
   }
 
-  return eachDay(from, to).map((d) => {
-    const e = byDay.get(dayKey(d))
+  return eachSiteDayKey(tz, from, to).map((key) => {
+    const e = byDay.get(key)
     const cash = round(e?.cash ?? 0)
     const qr = round(e?.qr ?? 0)
     const online = round(e?.online ?? 0)
-    return { date: dayKey(d), cash, qr, online, total: round(cash + qr + online) }
+    return { date: key, cash, qr, online, total: round(cash + qr + online) }
   })
 }
 
@@ -857,8 +886,9 @@ export interface MonthlySourceSummary {
  * plus a combined refunds bucket.
  *
  * All buckets are **takings** (`paymentAmount`-based) and **createdAt-attributed**
- * to the `[utcDayStart(from), addDays(utcDayStart(to), 1))` window — the same
- * convention as `getReservationDayStats`. Auth/ownership is the caller's responsibility.
+ * to the venue civil-day window covering `[from's day .. to's day]` (via
+ * `siteRange`) — the same convention as `getReservationDayStats`. Auth/ownership
+ * is the caller's responsibility.
  *
  * Included:
  *   sunbeds  — Reservation: status ∈ [paid-in-cash, complete], isComp=false, refundedAt=null
@@ -872,8 +902,8 @@ export async function getMonthlySourceSummary(
   from: Date,
   to: Date,
 ): Promise<MonthlySourceSummary> {
-  const rangeStart = utcDayStart(from)
-  const rangeEndExcl = addDays(utcDayStart(to), 1)
+  const tz = await loadSiteTz(siteId)
+  const { start: rangeStart, endExcl: rangeEndExcl } = siteRange(tz, from, to)
 
   const [rawReservations, rawRentals, rawOrders, refundedReservations, refundedRentals, refundedOrders, capacity] =
     await Promise.all([
