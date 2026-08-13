@@ -150,7 +150,7 @@ high-entropy random secret has no dictionary to attack, and this comparison runs
 (Q3's ~1.3 M/day) where a slow KDF is a self-inflicted cost problem. Revocation = `status` flip;
 rotation is near-moot on a device potted for its service life.
 
-**Provisioning (P4) — at the bench, not in the field.** Hardware half is decided in
+**Minting (P3) — at the bench, not in the field.** Hardware half is decided in
 `../sunbnb-hw` ADR 0010; the app-side obligations it creates:
 
 - **Order is mint → flash → print, in one script run**, so the database row, the NVS contents
@@ -232,18 +232,44 @@ free, but:
   and lint clean). Env-config binding, real `deriveState` projection, no migration. **Definition
   of done is unchanged and NOT met: a device on the test env lighting red from a real
   reservation** — that needs the kit, which is in transit.
-- **☐ P2 — `Device` model + binding.** Additive migration per **Binding** above. Token stored
-  hashed (sha256), issued once at provisioning, never readable back. Route switches from env map
-  to table lookup; env path deleted. **Freeze the wire contract here** (states, seat order, check
-  character, status codes).
-- **☐ P3 — telemetry + partner device health.** POST route writes last-values; a partner-side
-  list (site → devices: last seen, battery, RSSI, fw) so an operator can see a dead device before
-  a guest does. Cell voltage is the one number that predicts a field failure.
-- **☐ P4 — provisioning.** Admin-app (or script) mint-device returning `{code, token}` once, in
-  the mint → flash → print order; `status` lifecycle for unclaimed rows; bind to an anchor seat;
-  re-provision (same code) on board replacement. Binding is server-side by design so a device
-  swap is a rebind, not a reprint (`../sunbnb-hw` ADR 0003 + ADR 0010).
-- **💤 P5 — fleet scale.** Only when a real fleet exists: edge runtime, short-TTL per-site cache,
+- **☐ P1.5 — telemetry stub** *(optional, ~20 lines, no schema).* `POST /api/hw/{code}/telemetry`
+  authenticates like the state route and returns `204` without persisting. The firmware loop does
+  **both** calls; the contract says telemetry must never fail the poll loop, so a well-behaved
+  device tolerates a 404 — but a stub lets firmware exercise the real shape from day one instead
+  of discovering the endpoint at P5. Skip if bring-up goes smoothly without it.
+- **☐ P2 — `Device` + `DeviceSeat` schema.** Additive migration per **Binding** above; `status`
+  lifecycle (`minted → provisioned → active → retired`); token stored sha256-hashed, never
+  readable back. Route switches from the env map to table lookup; `HW_DEVICE_MAP`/`HW_TOKEN`
+  deleted. **Freeze the wire contract here** — states, seat order, status codes, and Q6's check
+  character. Q6 and Q7 must be answered *before* this phase, not during it.
+
+**Phases 3–5 are the device-management surfaces. They are three different jobs with three
+different owners, and conflating them is what the earlier roadmap got wrong.** None is needed for
+the demo — one device, one env var, no UI. They become real at the *second and third unit*, the
+same threshold `../sunbnb-hw` ADR 0010 sets for the provisioning script.
+
+- **☐ P3 — minting (platform-side, a script, not a UI).** We assemble the devices, so this is
+  ours, not the operator's. A CLI that mints the `Device` row, receives `{code, token}` once,
+  writes NVS over USB and prints the label — in that order, so the DB row, the NVS contents and
+  the sticker match *by construction* (ADR 0010). Keep it a script well past the demo: under
+  ~100 units a UI buys nothing and makes the one-shot token harder to handle honestly. Also
+  needs the local mint record (code, token, MAC, date) ADR 0010 requires, and the unclaimed-row
+  path for a failed flash.
+- **☐ P4 — binding (operator-side, a FIELD flow on a phone).** The surface Q1's explicit seat
+  list makes necessary. **Not the desktop inventory editor** — binding happens standing at a
+  parasol with a device in hand, so it belongs on `/sites/[id]/manage`, which is already
+  token-gated, mobile-first and login-free: scan the device's QR → tap the seat(s) on the grid →
+  confirm. `position` is captured as mount order, left segment first. **Depends on `cmd:
+  "identify"`** to be self-verifying: bind, the bar flashes, staff confirm they tagged the right
+  parasol before walking away. At ~750 parasols this loop being fast and one-handed decides
+  whether a deployment takes a morning or a week. Rebinding uses the same flow (seat replaced,
+  parasol moved); a board swap does **not** — that is a re-provision at the bench (P3), same
+  code, sticker and binding untouched (ADR 0003 + 0010).
+- **☐ P5 — telemetry persistence + operator health view.** Promote the P1.5 stub to last-values
+  writes, then a partner-side list (site → devices: last seen, battery, RSSI, fw) so an operator
+  sees a dead device before a guest does. Cell voltage is the one number that predicts a field
+  failure.
+- **💤 P6 — fleet scale.** Only when a real fleet exists: edge runtime, short-TTL per-site cache,
   `304` discipline, cadence throttling via `pollAfterSec`, `cmd: "stow"` for off-season. See Q3
   for the invocation arithmetic.
 
@@ -312,6 +338,20 @@ backend, and both drag in consumer-surface design that shouldn't gate the hardwa
   `checked-in` → `OCCUPIED` (dark) when the truth is `expected` → `RESERVED` (red). Both are
   non-FREE, so the fail-safe held either way — but the light would have been wrong.
 
+- **2026-08-13** — **Roadmap restructured around device management.** The old P2 ended at "route
+  switches to table lookup", which quietly assumed binding rows appear by magic, and the old P4
+  conflated *minting* with *binding* — two jobs with different owners, different homes and
+  different timing. Now split: **P3 minting** (platform-side, a bench *script*, not a UI — we
+  assemble the devices, and under ~100 units a UI buys nothing while making the one-shot token
+  harder to handle honestly), **P4 binding** (operator-side, a *field* flow on
+  `/sites/[id]/manage` — already token-gated, mobile-first, login-free — because binding happens
+  standing at a parasol with a device in hand, not at a desk in the inventory editor; depends on
+  `cmd: "identify"` to be self-verifying), **P5 telemetry + health**. Added optional **P1.5
+  telemetry stub** so firmware can exercise both endpoints during bring-up. Noting the honest
+  cost of Q1: the explicit seat list is what makes a binding *surface* necessary at all — the
+  rejected anchor-seat variant would have been one field on a form. None of P3–P5 is needed for
+  the demo; they become real at the second and third unit.
+
 ## Open decisions
 
 - **~~Q1 — Binding shape.~~ DECIDED 2026-08-13: explicit seat list** (`DeviceSeat` join table,
@@ -321,7 +361,7 @@ backend, and both drag in consumer-surface design that shouldn't gate the hardwa
 - **~~Q2 — Token per device or per site?~~ DECIDED 2026-08-13: per device, sha256-hashed.**
   Per-site is one env var and no provisioning, but a single recovered device would compromise a
   whole beach — and per-device tokens are what keep a stolen device's blast radius at one seat,
-  which is also why plain-NVS storage is tolerable for now. Costs P4 provisioning.
+  which is also why plain-NVS storage is tolerable for now. Costs P3 minting.
 - **Q3 — Fleet invocation cost.** 1 500 devices × 60 s over a 14 h day ≈ **1.3 M invocations/day**
   against a Vercel function that queries Postgres. Irrelevant at demo scale (1 device), decisive
   at fleet scale. Options: edge + short-TTL site cache · `304` (device already sends
