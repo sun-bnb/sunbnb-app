@@ -239,13 +239,17 @@ function ReservationButton({
         type: 'hours',
       })
     } else if (reservationMode === 'days' && dateRange[0] && dateRange[1]) {
-      const from = dateRange[0].toDate()
-      const to = dateRange[1].toDate()
+      // Send civil dates (YYYY-MM-DD), not browser instants: the server anchors
+      // them to the venue's civil day (track 017 P3). A bare civil date is
+      // unambiguous for guests booking from any timezone, unlike a browser
+      // midnight which can land in the venue's previous/next day.
+      const from = dateRange[0].format('YYYY-MM-DD')
+      const to = dateRange[1].format('YYYY-MM-DD')
       logger.debug('Save reservation', from, to)
       saveResult = await saveReservationForMultipleItems({
         ...common,
-        from: from.toISOString(),
-        to: to.toISOString(),
+        from,
+        to,
         type: 'days',
       })
     }

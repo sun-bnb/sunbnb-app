@@ -5,6 +5,7 @@ import dayjs from 'dayjs'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { reserveWithConflictGuard, createRentalBookingsWithGuard } from '@repo/data/reservations'
+import { siteAnchoredDay } from '@repo/data/site-day'
 import { getAvailability } from '@/service/availabilityService'
 import { isValidEntityId } from '@/app/api/_lib/payment-ids'
 import { InventoryItem } from '../types'
@@ -99,15 +100,33 @@ export async function saveReservationForMultipleItems(
     reservationUserId = site.userId
   }
 
-  const from = new Date(reservation.from)
-  const to = new Date(reservation.to)
+  const site = await prisma.site.findUnique({ where: { id: reservation.siteId } })
+  if (!site) return { status: 'error', errors: ['Site not found'] }
+
+  // Venue-anchor the day boundaries to the site's civil day, not the browser's
+  // (track 017 P3). For a 'days' reservation `from`/`to` are calendar days: the
+  // client sends civil dates and the server re-anchors them here — for 'hours'
+  // reservations from/to are precise instants and pass through untouched. `to` is
+  // the EXCLUSIVE checkout day, so it anchors to that day's venue-midnight (.start,
+  // not .end): this shifts only browser→venue and preserves the day-count/billing
+  // (`daysBetween`) exactly. siteAnchoredDay also accepts a browser instant (POS /
+  // legacy clients) and recovers the venue day from it.
+  const siteTz = {
+    timeZone: site.timeZone ?? null,
+    latitude: site.locationLat ? parseFloat(site.locationLat) : undefined,
+    longitude: site.locationLng ? parseFloat(site.locationLng) : undefined,
+  }
+  const from = reservation.type === 'days'
+    ? siteAnchoredDay(siteTz, reservation.from).start
+    : new Date(reservation.from)
+  const to = reservation.type === 'days'
+    ? siteAnchoredDay(siteTz, reservation.to).start
+    : new Date(reservation.to)
 
   if (from >= to) {
     return { status: 'error', errors: ['End date must be after start date'] }
   }
 
-  const site = await prisma.site.findUnique({ where: { id: reservation.siteId } })
-  if (!site) return { status: 'error', errors: ['Site not found'] }
   if (site.type === 'paid' && !site.price) return { status: 'error', errors: ['Site price not set'] }
 
   if (site.type === 'paid' && (!reservation.items || reservation.items.length === 0)) {

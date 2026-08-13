@@ -68,6 +68,31 @@ describe('saveReservationForMultipleItems', () => {
     expect(created!.status).toBe('pending')
   })
 
+  it('venue-anchors from/to to the site timezone, not the browser/server TZ (track 017 P3)', async () => {
+    const user = await createTestUser()
+    // Europe/Madrid = UTC+2 in August. Civil day N = [N-1 22:00Z, N 21:59:59.999Z].
+    const site = await createTestSite(user.id, { timeZone: 'Europe/Madrid' })
+    const item = await createTestInventoryItem(user.id, site.id)
+
+    mockAuth.mockResolvedValue({ user: { id: user.id } } as any)
+    mockGetAvailability.mockResolvedValue([{ itemId: item.id, available: true }] as any)
+
+    const res = await saveReservationForMultipleItems({
+      siteId: site.id,
+      items: [{ id: item.id } as any],
+      type: 'days',
+      from: '2025-08-13',
+      to: '2025-08-15', // exclusive checkout → 2 occupied days (Aug 13, 14)
+    })
+
+    expect(res.status).toBe('ok')
+    const created = await prisma.reservation.findUnique({ where: { id: res.id! } })
+    // from = venue-midnight of Aug 13; to = venue-midnight of the Aug 15 checkout
+    // day (exclusive) — both anchored to Madrid, not the server's UTC day.
+    expect(created!.from.toISOString()).toBe('2025-08-12T22:00:00.000Z')
+    expect(created!.to.toISOString()).toBe('2025-08-14T22:00:00.000Z')
+  })
+
   it('calculates payment amount from site price × items × days', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id, { price: 20.0 })
