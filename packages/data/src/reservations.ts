@@ -116,8 +116,17 @@ async function findConflictingReservation(
   // until it has no remaining reserved days (`to` is on/before the end of today).
   // Once over it frees the bed: single-day and last-day departures become
   // rebookable; a multiday booking departed mid-stay keeps its future days (no
-  // double-sell). `to` is stored as server-tz end-of-day (dayjs().endOf('day')),
-  // so the boundary is server-tz end of today — matched by construction. (track 012)
+  // double-sell).
+  //
+  // `to` is now VENUE-anchored across all write paths (track 017 P3): manage /
+  // calendar store the venue end-of-last-day; the consumer stores the venue
+  // midnight of the exclusive checkout day. This `endOfToday` is still the
+  // SERVER's end-of-today — a deliberate, EU-benign approximation: for a venue
+  // east of UTC the server boundary is LATER than the venue's, so a departed
+  // bed still releases correctly. It is INVERTED west of UTC (server end-of-today
+  // is earlier → a departed bed would not release until the next server day).
+  // Venue-anchor this (thread the site tz through `params` and use
+  // `siteDayBounds(siteTz).end`) before any non-EU launch. See track 017.
   const endOfToday = new Date()
   endOfToday.setHours(23, 59, 59, 999)
   return tx.reservation.findFirst({

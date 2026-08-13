@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { resolveSiteTimeZone, siteDayKey, siteDayBounds, siteDateBounds } from './site-day'
+import { resolveSiteTimeZone, siteDayKey, siteDayBounds, siteDateBounds, siteAnchoredDay } from './site-day'
 
 // ─── resolveSiteTimeZone ─────────────────────────────────────────────────────
 
@@ -221,5 +221,61 @@ describe('siteDateBounds', () => {
   it('throws on a malformed date key', () => {
     expect(() => siteDateBounds({ timeZone: 'UTC' }, '2025-8-1')).toThrow(/YYYY-MM-DD/)
     expect(() => siteDateBounds({ timeZone: 'UTC' }, 'garbage')).toThrow()
+  })
+
+  it('anchors correctly for a timezone WEST of UTC (America/Los_Angeles, UTC-7 summer)', () => {
+    // Regression guard for the localMidnight west-of-UTC bug: the naive-UTC
+    // instant reads as the previous local day, so a time-of-day-only offset
+    // correction produced the wrong day's midnight.
+    const { start, end } = siteDateBounds({ timeZone: 'America/Los_Angeles' }, '2025-08-13')
+    expect(start.toISOString()).toBe('2025-08-13T07:00:00.000Z') // Aug 13 00:00 PDT
+    expect(end.toISOString()).toBe('2025-08-14T06:59:59.999Z')   // Aug 13 23:59:59.999 PDT
+  })
+
+  it('anchors correctly for New York in winter (UTC-5)', () => {
+    const { start } = siteDateBounds({ timeZone: 'America/New_York' }, '2025-01-15')
+    expect(start.toISOString()).toBe('2025-01-15T05:00:00.000Z') // Jan 15 00:00 EST
+  })
+})
+
+// ─── siteAnchoredDay ─────────────────────────────────────────────────────────
+
+describe('siteAnchoredDay', () => {
+  const madrid = { timeZone: 'Europe/Madrid' }
+
+  it('anchors a bare YYYY-MM-DD civil date to the venue day', () => {
+    const { start, end } = siteAnchoredDay(madrid, '2025-08-13')
+    // Same as siteDateBounds — Madrid summer UTC+2
+    expect(start.toISOString()).toBe('2025-08-12T22:00:00.000Z')
+    expect(end.toISOString()).toBe('2025-08-13T21:59:59.999Z')
+  })
+
+  it('anchors a bare civil date west of UTC without the off-by-one a UTC parse would cause', () => {
+    // new Date("2025-08-13") is midnight UTC = still Aug 12 in Los Angeles; the
+    // bare-date branch must NOT read it as an instant.
+    const { start } = siteAnchoredDay({ timeZone: 'America/Los_Angeles' }, '2025-08-13')
+    // Aug 13 00:00 PDT (UTC-7) = Aug 13 07:00Z
+    expect(start.toISOString()).toBe('2025-08-13T07:00:00.000Z')
+  })
+
+  it('recovers the venue day from a browser-midnight instant (same tz as venue)', () => {
+    // A Madrid browser sends midnight of Aug 13 = Aug 12 22:00Z
+    const browserMidnight = '2025-08-12T22:00:00.000Z'
+    const { start, end } = siteAnchoredDay(madrid, browserMidnight)
+    expect(start.toISOString()).toBe('2025-08-12T22:00:00.000Z')
+    expect(end.toISOString()).toBe('2025-08-13T21:59:59.999Z')
+  })
+
+  it('recovers the venue day from a browser-midnight instant (browser west of venue)', () => {
+    // A UK browser (UTC+1 summer) sends midnight of Aug 13 = Aug 12 23:00Z;
+    // the Madrid venue day it falls in is still Aug 13.
+    const ukMidnight = '2025-08-12T23:00:00.000Z'
+    const { start } = siteAnchoredDay(madrid, ukMidnight)
+    expect(start.toISOString()).toBe('2025-08-12T22:00:00.000Z') // venue Aug 13 start
+  })
+
+  it('accepts a Date instance', () => {
+    const { start } = siteAnchoredDay(madrid, new Date('2025-08-13T10:00:00.000Z'))
+    expect(start.toISOString()).toBe('2025-08-12T22:00:00.000Z')
   })
 })

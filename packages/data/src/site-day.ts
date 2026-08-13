@@ -155,6 +155,33 @@ export function siteDateBounds(
 }
 
 /**
+ * Re-anchor a client-supplied day boundary to the site's civil-day bounds — the
+ * single entry point for venue-anchoring reservation WRITE paths (track 017 P3).
+ *
+ * Accepts either form a caller might send:
+ *  - a bare `YYYY-MM-DD` civil date (the calendar/partner path, and the intended
+ *    consumer contract) → anchored directly via `siteDateBounds`, correct for any
+ *    venue east or west of UTC.
+ *  - a full ISO instant (a browser-anchored `toISOString()` — browser-midnight of
+ *    the picked day) → the venue civil day it falls in is recovered with
+ *    `siteDayKey`, then anchored. Because the guest's browser is at or near the
+ *    venue, browser-midnight maps back to the correct venue day for every
+ *    realistic offset; a bare civil date is the unambiguous form and is preferred.
+ *
+ * Returns the venue-local `{ start, end }` instants of that civil day. Callers
+ * take `.start` for `from` and `.end` for `to`.
+ */
+export function siteAnchoredDay(
+  site: SiteTimezone,
+  input: string | Date,
+): { start: Date; end: Date } {
+  if (typeof input === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(input.trim())) {
+    return siteDateBounds(site, input.trim())
+  }
+  return siteDateBounds(site, siteDayKey(site, new Date(input)))
+}
+
+/**
  * Shared reconstruction for the day-bounds helpers: given a 1-based civil date
  * and an IANA tz, return the UTC start/end instants of that civil day.
  *
@@ -191,19 +218,22 @@ function boundsForCivilDate(
  * Compute the UTC Date corresponding to 00:00:00.000 local time for a given
  * civil date (year, 1-based month, day) in `tz`.
  *
- * Strategy: construct a "naive" ISO string for midnight, then use
- * `Intl.DateTimeFormat` to measure the actual UTC offset at that moment and
- * correct for it. One iteration is enough because DST offsets change at the
- * hour boundary, not at midnight (in all IANA zones in use).
+ * Strategy: take the civil date as if it were a UTC wall clock (`guess`), measure
+ * the tz's UTC offset at that instant by re-reading the wall clock Intl reports,
+ * and shift by it. Measuring the offset from the FULL local wall clock (date +
+ * time), not just the time-of-day, is what makes this correct for timezones WEST
+ * of UTC — there the naive-UTC instant reads as the *previous* local day, and a
+ * time-of-day-only correction would land on the wrong day's midnight.
+ *
+ * One iteration suffices: DST offsets change at the hour boundary (02:00/03:00),
+ * not at midnight, so the offset measured at the guess equals the offset at true
+ * local midnight for every IANA zone. `Date.UTC` normalises the "24:00" wall-clock
+ * quirk some runtimes emit, so no special-casing is needed.
  */
 function localMidnight(year: number, month: number, day: number, tz: string): Date {
-  // Pad to ISO format
-  const pad = (n: number, len = 2) => String(n).padStart(len, '0')
-  const naiveIso = `${pad(year, 4)}-${pad(month)}-${pad(day)}T00:00:00.000Z`
-  const naiveUtc = new Date(naiveIso)
+  const asUtcMs = Date.UTC(year, month - 1, day, 0, 0, 0, 0)
 
-  // Ask Intl what local time that UTC instant maps to in the target tz
-  const localParts = new Intl.DateTimeFormat('en-US', {
+  const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: tz,
     year: 'numeric',
     month: '2-digit',
@@ -212,18 +242,21 @@ function localMidnight(year: number, month: number, day: number, tz: string): Da
     minute: '2-digit',
     second: '2-digit',
     hour12: false,
-  }).formatToParts(naiveUtc)
+  }).formatToParts(new Date(asUtcMs))
 
   const getP = (type: string) =>
-    parseInt(localParts.find((p) => p.type === type)?.value ?? '0', 10)
+    parseInt(parts.find((p) => p.type === type)?.value ?? '0', 10)
 
-  const localHour = getP('hour')   // 0–23 (hour12: false)
-  const localMin = getP('minute')
-  const localSec = getP('second')
+  // The wall clock `guess` shows in tz, re-read as if it were UTC.
+  const localAsUtcMs = Date.UTC(
+    getP('year'),
+    getP('month') - 1,
+    getP('day'),
+    getP('hour'),
+    getP('minute'),
+    getP('second'),
+  )
 
-  // Offset = how far naiveUtc is from midnight local: subtract to align
-  const offsetMs =
-    localHour * 3_600_000 + localMin * 60_000 + localSec * 1_000
-
-  return new Date(naiveUtc.getTime() - offsetMs)
+  const offsetMs = localAsUtcMs - asUtcMs   // tz offset from UTC at the guess
+  return new Date(asUtcMs - offsetMs)
 }
