@@ -160,7 +160,13 @@
     "backfill:cash:test:dry": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx --yes tsx scripts/backfill-cash-receipts.ts --dry-run",
     "backfill:cash:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx --yes tsx scripts/backfill-cash-receipts.ts",
     "backfill:cash:production:dry": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx --yes tsx scripts/backfill-cash-receipts.ts --dry-run",
-    "backfill:cash:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx --yes tsx scripts/backfill-cash-receipts.ts"
+    "backfill:cash:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx --yes tsx scripts/backfill-cash-receipts.ts",
+    "backfill:tz:local:dry": "npx --yes tsx scripts/backfill-site-timezones.ts --dry-run",
+    "backfill:tz:local": "npx --yes tsx scripts/backfill-site-timezones.ts",
+    "backfill:tz:test:dry": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx --yes tsx scripts/backfill-site-timezones.ts --dry-run",
+    "backfill:tz:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx --yes tsx scripts/backfill-site-timezones.ts",
+    "backfill:tz:production:dry": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx --yes tsx scripts/backfill-site-timezones.ts --dry-run",
+    "backfill:tz:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx --yes tsx scripts/backfill-site-timezones.ts"
   },
   "devDependencies": {
     "@repo/eslint-config": "*",

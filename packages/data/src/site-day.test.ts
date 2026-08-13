@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { resolveSiteTimeZone, siteDayKey, siteDayBounds, siteDateBounds, siteAnchoredDay, siteMonthBounds } from './site-day'
+import { resolveSiteTimeZone, siteDayKey, siteDayBounds, siteDateBounds, siteAnchoredDay, siteMonthBounds, deriveTimeZoneFromCoords } from './site-day'
 
 // ─── resolveSiteTimeZone ─────────────────────────────────────────────────────
 
@@ -59,6 +59,33 @@ describe('resolveSiteTimeZone', () => {
       longitude: -16.25,
     })
     expect(tz).toBe('Europe/Helsinki')
+  })
+})
+
+// ─── deriveTimeZoneFromCoords ────────────────────────────────────────────────
+
+describe('deriveTimeZoneFromCoords', () => {
+  it('derives Europe/Madrid for Marbella coords', () => {
+    expect(deriveTimeZoneFromCoords(36.51, -4.88)).toBe('Europe/Madrid')
+  })
+
+  it('derives Atlantic/Canary for Tenerife coords (the Canary residual case)', () => {
+    expect(deriveTimeZoneFromCoords(28.47, -16.25)).toBe('Atlantic/Canary')
+  })
+
+  it('derives Europe/Helsinki for Helsinki coords', () => {
+    expect(deriveTimeZoneFromCoords(60.17, 24.94)).toBe('Europe/Helsinki')
+  })
+
+  it('returns null when coordinates are missing', () => {
+    expect(deriveTimeZoneFromCoords(null, null)).toBeNull()
+    expect(deriveTimeZoneFromCoords(undefined, undefined)).toBeNull()
+    expect(deriveTimeZoneFromCoords(36.51, null)).toBeNull()
+  })
+
+  it('returns null for non-finite coordinates', () => {
+    expect(deriveTimeZoneFromCoords(NaN, 0)).toBeNull()
+    expect(deriveTimeZoneFromCoords(Infinity, 0)).toBeNull()
   })
 })
 

@@ -48,31 +48,42 @@ export interface SiteTimezone {
 }
 
 /**
+ * Derive the IANA timezone from lat/lng via the offline `tz-lookup` library.
+ * Returns `null` when the coordinates are missing/non-finite or `tz-lookup`
+ * can't place them (it throws for open-ocean coordinates).
+ *
+ * This is the WRITE-time helper (track 017 P7): the partner site + restaurant
+ * create/save paths call it to populate `Site.timeZone` / `Restaurant.timeZone`
+ * from coordinates, so the stored column is authoritative and readers (incl. the
+ * SQL search that can't run `tz-lookup`) resolve tier-1 instead of falling back
+ * to Madrid.
+ */
+export function deriveTimeZoneFromCoords(
+  latitude?: number | null,
+  longitude?: number | null,
+): string | null {
+  if (latitude == null || longitude == null || !isFinite(latitude) || !isFinite(longitude)) {
+    return null
+  }
+  try {
+    return tzlookup(latitude, longitude) || null
+  } catch {
+    return null // tz-lookup throws for coords in the open ocean
+  }
+}
+
+/**
  * Resolve the IANA timezone for a site.
  *
  * 1. Returns `site.timeZone` if it is a non-empty string.
- * 2. If `latitude` and `longitude` are finite numbers, derives the timezone
- *    via the offline `tz-lookup` library.
+ * 2. Else derives from `latitude`/`longitude` via `tz-lookup`.
  * 3. Falls back to `'Europe/Madrid'` if neither is available.
  */
 export function resolveSiteTimeZone(site: SiteTimezone): string {
   if (site.timeZone && site.timeZone.trim().length > 0) {
     return site.timeZone.trim()
   }
-  if (
-    site.latitude != null &&
-    site.longitude != null &&
-    isFinite(site.latitude) &&
-    isFinite(site.longitude)
-  ) {
-    try {
-      const derived = tzlookup(site.latitude, site.longitude)
-      if (derived) return derived
-    } catch {
-      // tz-lookup returns null for coords in the ocean; fall through to default
-    }
-  }
-  return DEFAULT_TZ
+  return deriveTimeZoneFromCoords(site.latitude, site.longitude) ?? DEFAULT_TZ
 }
 
 /**
