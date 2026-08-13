@@ -33,17 +33,19 @@ in any query window, write path, or money boundary.
 
 ## Resume here
 
-- **P1, P2, P3, P4, P5 are DONE.** P1 (`f0b51ba`) + P2 (2 commits) pushed to `main` 2026-08-11.
-  **P3 committed** on local `main` (`a8fbc07`/`889d33e`/`3850fc6`) + **P4 committed** (`c8ba8a5`/
-  `592490f`), all **UNPUSHED**. **P5 done 2026-08-13, UNCOMMITTED** (analytics + rolling trends).
-  No schema change anywhere → no migration.
-- **Only structural/robustness phases remain — the correctness bugs are all fixed:**
-  - **P7** (populate `Site.timeZone` + restaurant tz inheritance) — closes the P2-availability
-    Canary residual; would also let `getInvoicesByMonth` and the SQL search anchor per stored tz.
-  - **P6** (collapse the two tz modules — needs Q4).
+- **P1–P5 + P7 are DONE.** P1 (`f0b51ba`) + P2 (2 commits) pushed to `main` 2026-08-11. **P3–P5
+  committed** on local `main` (`a8fbc07`…`a86aebe`, 7 commits) **UNPUSHED**. **P7 done 2026-08-13,
+  UNCOMMITTED** (auto-derive writer + backfill + restaurant inheritance). No schema change → no migration.
+- **Only P6 remains — every correctness bug + the availability residual are fixed.**
+  - **P6** (collapse the two tz modules: `@repo/data/site-day` + `table-reservations-core/tz.ts`)
+    — needs the **Q4** decision (full merge vs. `table-reservations-core` imports `site-day` for
+    day/month bounds while keeping its wall-clock converters). Structural cleanup, not a bug.
+- **User ops outstanding:** (1) push P3–P5+P7 → promote → deploy when ready; (2) run the
+  `backfill:tz:*` scripts (dry then live) per environment to populate existing `Site.timeZone`
+  (closes the availability residual for the live fleet immediately).
 - **Open decisions still parked:** Q3 (restate P1's past short-by-a-day settlements?), Q4 (P6
-  scope), Q5 (surface a "tz guessed" signal — pairs with P7). The deferred conflict-guard
-  release-predicate west-of-UTC fix (P3 log) remains before any non-EU launch.
+  scope). Q5 is resolved by P7's auto-derive. The deferred conflict-guard release-predicate
+  west-of-UTC fix (P3 log) remains before any non-EU launch.
 - **Still open:** **Q3** (whether past short-by-a-day settlements from P1 get restated) — unrelated
   to P3, decide when settling accounts. **Q5** (surface a "tz was guessed" signal) — cheap, tie to P7.
 - **Deferred functional fix (documented, not lost):** the conflict-guard release predicate
@@ -155,7 +157,7 @@ in any query window, write path, or money boundary.
   Target: one module, exporting both `isValidTimeZone` and the day/month bounds, consumed by both
   domains.
 
-- ☐ **P7 — `Site.timeZone` writer + restaurant inheritance** *(robustness; low urgency)*
+- ☑ **P7 — `Site.timeZone` writer + restaurant inheritance** *(DONE 2026-08-13 — auto-derive + backfill; see Log)*
   - `Site.timeZone` (`schema.prisma:249`) was added by 012 P0 but is **never written** — no UI
     field, absent from `site-actions.ts` entirely. Tier 1 of `resolveSiteTimeZone` never fires
     for a Site; every site resolves via `tz-lookup(lat, lng)` or falls to Madrid. Mostly benign
@@ -345,6 +347,37 @@ in any query window, write path, or money boundary.
     pinned to `timeZone:'UTC'`.
   - Green: data 335u + 350i (+1 occupancy regression), partner 1970u, `turbo build` 4/4, lint
     clean. No schema change → no migration.
+
+- **2026-08-13 — P7 shipped (uncommitted, local `main`).** `Site.timeZone` is now WRITTEN
+  (auto-derived from coords), so readers resolve tier-1 instead of the coord/Madrid fallback —
+  which closes the P2 multi-site-search Canary residual. Decisions: auto-derive on save (no
+  manual dropdown) + backfill existing sites from coords (founder calls).
+  - **`packages/data/src/site-day.ts` (me):** new `deriveTimeZoneFromCoords(lat, lng): string |
+    null` (the write-time helper); `resolveSiteTimeZone` refactored to use it. +5 tests (incl. the
+    Canary case). No `isValidTimeZone`/manual-input path added — kept out of scope (that's P6).
+  - **Backfill (me):** `packages/data/scripts/backfill-site-timezones.ts` + `backfill:tz:{local,
+    test,production}[:dry]` npm scripts (env-tiered, dry-run, idempotent — only `time_zone IS
+    NULL` sites, derived from coords, unresolvable coords left NULL). Sites only; existing linked
+    restaurants stay fix-forward (a Restaurant has no geo columns; a follow-up could derive from
+    the linked Site's coords). **Local dry-run confirmed the residual is real in live data:** 6
+    null-tz sites, 3 of them `Europe/Athens` (UTC+3) that the SQL search was mis-anchoring to
+    Madrid; all 6 derivable.
+  - **`apps/partner` writer + inheritance (via partner-dev):** `saveGeneral` derives + stores
+    `timeZone` on every save (`...(derivedTz ? { timeZone } : {})` — never nulls a good value);
+    `createRestaurant` extends the site select to coords and passes the inherited `timeZone` to
+    `coreCreateRestaurant` (closes the "linked restaurant permanently disagrees with its site"
+    gap for NEW restaurants). Tests: site-actions 39u + 13i, restaurant create 22u (Athens-coord
+    assertions). No signature/gate change → meta-guards untouched.
+  - **`tz-lookup@6.1.25` finding:** it does NOT throw for open-ocean coords (returns `Etc/GMT±N`);
+    it only throws for out-of-range lat/lng, which `saveGeneral` validation already rejects. So
+    `deriveTimeZoneFromCoords`'s null branch is effectively unreachable via real site input —
+    kept as future-proof defensive code. Beach venues are on land, so this is benign.
+  - Green: data 340u, partner 1973u + 200i, `turbo build` 4/4, lint clean. No schema change → no
+    migration. **User op: run `backfill:tz:*` (dry then live) per environment to populate existing
+    sites** (closes the residual for the live fleet immediately; without it, sites self-populate
+    on their next General-tab save).
+  - **Q5 is effectively resolved** by auto-derive: the stored value IS the coord derivation, so
+    there is no silent Madrid "guess" to surface (the fallback only fires for unparseable coords).
 
 ## Open decisions
 

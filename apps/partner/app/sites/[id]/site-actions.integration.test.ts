@@ -90,6 +90,29 @@ describe('saveGeneral', () => {
     expect(updated!.locationLng).toBe('-3.7038')
   })
 
+  it('derives and persists Site.timeZone from coords (track 017 P7)', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    mockUserId = user.id
+
+    // Athens coords — clearly distinct from the Europe/Madrid fallback, so the
+    // assertion proves derivation actually ran rather than a stale default.
+    const result = await saveGeneral({
+      id: site.id,
+      name: 'Athens Beach',
+      type: 'paid',
+      price: '25',
+      vat: '21',
+      locationLat: '37.98',
+      locationLng: '23.73',
+    })
+
+    expect(result).toEqual({ status: 'ok' })
+
+    const updated = await prisma.site.findUnique({ where: { id: site.id } })
+    expect(updated!.timeZone).toBe('Europe/Athens')
+  })
+
   it('rejects an invalid site type and leaves the DB unchanged', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id, { name: 'Original' })

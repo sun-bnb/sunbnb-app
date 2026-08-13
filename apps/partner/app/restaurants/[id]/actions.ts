@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { requireRestaurantOwnerWithFlag, requireSiteOwnerWithFlag } from '@/lib/auth-helpers'
 import prisma from '@repo/data/PrismaCient'
+import { deriveTimeZoneFromCoords } from '@repo/data/site-day'
 import {
   createRestaurant as coreCreateRestaurant,
   updateRestaurant,
@@ -49,7 +50,14 @@ export async function createRestaurant({
 
     const site = await prisma.site.findUnique({
       where: { id: siteId },
-      select: { name: true, restaurantId: true, layoutWidth: true, layoutHeight: true },
+      select: {
+        name: true,
+        restaurantId: true,
+        layoutWidth: true,
+        layoutHeight: true,
+        locationLat: true,
+        locationLng: true,
+      },
     })
     if (!site) return { status: 'error' as const, errors: ['Site not found'] }
     if (site.restaurantId) {
@@ -59,6 +67,14 @@ export async function createRestaurant({
     sessionUserId = session!.user.id as string
     if (!resolvedName) resolvedName = site.name
 
+    // Inherit the site's timezone (derived from coords, track 017 P7) so a
+    // newly linked restaurant doesn't silently default to Madrid when the
+    // site is somewhere else.
+    const inheritedTz = deriveTimeZoneFromCoords(
+      site.locationLat ? parseFloat(site.locationLat) : null,
+      site.locationLng ? parseFloat(site.locationLng) : null,
+    )
+
     const slug = await uniqueRestaurantSlug(resolvedName)
     const created = await coreCreateRestaurant({
       partnerAccountId: sessionUserId,
@@ -67,6 +83,7 @@ export async function createRestaurant({
       slug,
       layoutWidth: site.layoutWidth,
       layoutHeight: site.layoutHeight,
+      timeZone: inheritedTz ?? undefined,
     })
     if (created.status === 'error' || !created.restaurant) {
       return { status: 'error' as const, errors: created.errors ?? ['Could not create restaurant'] }

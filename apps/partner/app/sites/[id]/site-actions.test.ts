@@ -12,6 +12,15 @@ vi.mock('@/lib/auth-helpers', () => ({
   requireSiteOwner: vi.fn().mockResolvedValue({ session: null, error: 'Not authenticated' }),
 }))
 
+// Real (pure) module by default — spied so one test can force the "coords
+// don't resolve" branch, which real-world valid lat/lng never hits with the
+// current tz-lookup version (it only throws for out-of-range coords, which
+// saveGeneral's own validation already rejects before reaching this call).
+vi.mock('@repo/data/site-day', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@repo/data/site-day')>()
+  return { ...actual, deriveTimeZoneFromCoords: vi.fn(actual.deriveTimeZoneFromCoords) }
+})
+
 import {
   saveGeneral,
   submitForm,
@@ -26,6 +35,7 @@ import { auth } from '@/app/auth'
 import { requireSiteOwner } from '@/lib/auth-helpers'
 import prisma from '@repo/data/PrismaCient'
 import { getEffectiveSubscriptionForUser } from '@repo/data/subscription'
+import { deriveTimeZoneFromCoords } from '@repo/data/site-day'
 
 const mockAuth = vi.mocked(auth)
 const mockRequireSiteOwner = vi.mocked(requireSiteOwner)
@@ -102,6 +112,57 @@ describe('saveGeneral', () => {
       }),
     })
     expect(vi.mocked(prisma.$executeRaw)).toHaveBeenCalled()
+  })
+
+  it('derives and persists Site.timeZone from non-Madrid coords', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.$executeRaw).mockResolvedValue(1 as any)
+
+    // Athens coords — clearly distinct from the Europe/Madrid fallback, so the
+    // assertion actually proves derivation ran (not just "some string").
+    const res = await saveGeneral({
+      id: SITE_ID,
+      name: 'Athens Beach Club',
+      type: 'paid',
+      price: '25',
+      vat: '21',
+      locationLat: '37.98',
+      locationLng: '23.73',
+    })
+
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(prisma.site.update)).toHaveBeenCalledWith({
+      where: { id: SITE_ID },
+      data: expect.objectContaining({
+        timeZone: 'Europe/Athens',
+      }),
+    })
+  })
+
+  it('does not null out timeZone when coords fail to resolve', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.$executeRaw).mockResolvedValue(1 as any)
+    // Force the "can't derive" branch (real-world valid lat/lng always resolves
+    // with the current tz-lookup version — see comment at the top of this file).
+    vi.mocked(deriveTimeZoneFromCoords).mockReturnValueOnce(null)
+
+    const res = await saveGeneral({
+      id: SITE_ID,
+      name: 'Undetermined Zone Club',
+      type: 'paid',
+      price: '25',
+      vat: '21',
+      locationLat: '40.0',
+      locationLng: '3.0',
+    })
+
+    expect(res.status).toBe('ok')
+    // Must omit `timeZone` entirely — never write null over a previously-good
+    // stored value just because this save's derivation didn't resolve.
+    const updateCall = vi.mocked(prisma.site.update).mock.calls[0][0]
+    expect(updateCall.data).not.toHaveProperty('timeZone')
   })
 
   it('sets price to null when zero or negative', async () => {

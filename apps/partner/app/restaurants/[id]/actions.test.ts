@@ -190,6 +190,59 @@ describe('createRestaurant — site-linked branch', () => {
       data: { restaurantId: RESTAURANT_ID },
     })
   })
+
+  it('inherits the site timezone derived from coords (track 017 P7)', async () => {
+    authorizeSiteOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValueOnce({
+      name: 'Athens Beach Club',
+      restaurantId: null,
+      userId: OWNER_ID,
+      layoutWidth: 50,
+      layoutHeight: 35,
+      // Athens coords — clearly distinct from the Europe/Madrid default, so
+      // the assertion proves inheritance actually ran.
+      locationLat: '37.98',
+      locationLng: '23.73',
+    } as any)
+
+    vi.mocked(prisma.restaurant.findUnique)
+      .mockResolvedValueOnce(null as any) // slug uniqueness check
+      .mockResolvedValueOnce(null as any) // createRestaurant slug double-check
+      .mockResolvedValueOnce(null as any) // createRestaurant siteId link check
+      .mockResolvedValueOnce({
+        id: RESTAURANT_ID,
+        slug: 'athens-beach-club',
+        name: 'Athens Beach Club',
+        tagline: null,
+        description: null,
+        partnerAccountId: OWNER_ID,
+        siteId: SITE_ID,
+        cuisineType: null,
+        priceRange: null,
+        averageMealDuration: 120,
+        reservationWindow: 60,
+        layoutWidth: 50,
+        layoutHeight: 35,
+        publicOnStandaloneApp: true,
+        workingHours: [],
+      } as any)
+    vi.mocked(prisma.restaurant.create).mockResolvedValue({ id: RESTAURANT_ID } as any)
+    vi.mocked(prisma.siteWorkingHours.findMany).mockResolvedValue([])
+    vi.mocked(prisma.restaurant.findUnique).mockResolvedValue({
+      id: RESTAURANT_ID,
+      partnerAccountId: OWNER_ID,
+      siteId: SITE_ID,
+    } as any)
+
+    const res = await createRestaurant({ siteId: SITE_ID })
+
+    expect(res.status).toBe('ok')
+    expect(prisma.restaurant.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ timeZone: 'Europe/Athens' }),
+      }),
+    )
+  })
 })
 
 // ─────────────────────────────────────────────────────

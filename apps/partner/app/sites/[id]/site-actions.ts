@@ -6,6 +6,7 @@ import { requireSiteOwner } from '@/lib/auth-helpers'
 import { isValidSiteStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 import { getEffectiveSubscriptionForUser } from '@repo/data/subscription'
+import { deriveTimeZoneFromCoords } from '@repo/data/site-day'
 
 // ─── Save Schematic Canvas Dimensions ───────────────────────────────────────
 
@@ -149,6 +150,12 @@ export async function saveGeneral(input: {
   if (layoutWidth !== undefined) layoutData.layoutWidth = layoutWidth
   if (layoutHeight !== undefined) layoutData.layoutHeight = layoutHeight
 
+  // Auto-derive Site.timeZone from coords (track 017 P7) so the stored column
+  // is authoritative for readers that can't run tz-lookup (e.g. the consumer
+  // search SQL). Only set when derivation succeeds — never null-out an
+  // existing good value if coords momentarily don't resolve (open ocean etc).
+  const derivedTz = deriveTimeZoneFromCoords(lat, lng)
+
   await prisma.site.update({
     where: { id: input.id },
     data: {
@@ -158,6 +165,7 @@ export async function saveGeneral(input: {
       vat: vat > 0 ? vat : null,
       locationLat: input.locationLat,
       locationLng: input.locationLng,
+      ...(derivedTz ? { timeZone: derivedTz } : {}),
       ...(wantsLayoutChange ? layoutData : {}),
     },
   })
