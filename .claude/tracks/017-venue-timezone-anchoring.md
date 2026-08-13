@@ -33,16 +33,16 @@ in any query window, write path, or money boundary.
 
 ## Resume here
 
-- **P1 + P2 + P3 are DONE.** P1 (`f0b51ba`), P2 (2 commits) — all pushed to `main` 2026-08-11.
-  **P3 done 2026-08-13, UNCOMMITTED on local `main`** (Q1=(a), Q2=fix-forward — founder calls).
-  See Log. No schema change anywhere → no migration.
-- **Next action:** pick from the remaining independent phases — none is blocked now:
+- **P1, P2, P3, P4 are DONE.** P1 (`f0b51ba`) + P2 (2 commits) pushed to `main` 2026-08-11.
+  **P3 committed** on local `main` (3 commits `a8fbc07`/`889d33e`/`3850fc6`), **UNPUSHED**.
+  **P4 done 2026-08-13, UNCOMMITTED** on local `main` (site-level scope). No schema change → no migration.
+- **Next action:** pick from the remaining phases:
+  - **P5** (analytics UTC day bucketing → venue day; occupancy double-count >100%) — now ALSO
+    carries the deferred P4 rolling-trend windows (`getRevenueTrend` etc.), since they're the same
+    day-bucket concern. Do them together.
   - **P7** (populate `Site.timeZone` + restaurant tz inheritance) — closes the P2-availability
-    Canary residual (multi-site search SQL falls back to Madrid without a stored `time_zone`).
-  - **P4** (money/reporting windows: accounting/VAT month boundaries, `siteMonthBounds`) —
-    money/compliance; line numbers were flagged second-hand, re-verify first.
-  - **P5** (analytics UTC bucketing → venue day; occupancy double-count) · **P6** (collapse the
-    two tz modules — needs Q4).
+    Canary residual; would also let `getInvoicesByMonth` and the SQL search anchor per stored tz.
+  - **P6** (collapse the two tz modules — needs Q4).
 - **Still open:** **Q3** (whether past short-by-a-day settlements from P1 get restated) — unrelated
   to P3, decide when settling accounts. **Q5** (surface a "tz was guessed" signal) — cheap, tie to P7.
 - **Deferred functional fix (documented, not lost):** the conflict-guard release predicate
@@ -105,7 +105,8 @@ in any query window, write path, or money boundary.
     of UTC**, where a departed bed would not release until the next server day. Fix before any
     non-EU launch; correct the comments regardless.
 
-- ☐ **P4 — `siteMonthBounds` + the money/reporting windows**
+- ◧ **P4 — `siteMonthBounds` + the money/reporting windows** *(DONE 2026-08-13 for site-level
+  month/day windows; rolling trends deferred into P5, `getInvoicesByMonth` deferred — see Log)*
   `site-day.ts` has day helpers only, which is *why* every monthly window hand-rolls
   `Date.UTC(...)`. Add `siteMonthBounds(site, year, month)` to the same module, then migrate:
   - `apps/partner/app/sites/[id]/accounting/actions.ts` — `:43-44`, `:62-63`, `:87-94`,
@@ -288,6 +289,32 @@ in any query window, write path, or money boundary.
     P3 preserved each path's billing; unifying that convention is a separate concern.
   - Green: data 329u + 349i, user 521u + 78i (typecheck clean), partner 1968u + 199i (partner-dev),
     full `turbo build` 4/4. No schema change → no migration.
+
+- **2026-08-13 — P4 shipped (uncommitted, local `main`), site-level scope.** Venue-anchored the
+  accounting month + day reporting windows so fiscal/VAT periods align to the venue's civil month.
+  - **New primitive** `siteMonthBounds(site, year, month)` in `packages/data/src/site-day.ts` —
+    inclusive-end `{ start, end }` (sibling of `siteDayBounds`), DST-safe via `siteDateBounds`.
+    +6 tests (Madrid month boundary, Dec→next-year rollover, 28-day Feb, adjacency).
+  - **`apps/partner/app/sites/[id]/accounting/actions.ts` (via partner-dev):** `getStaffTill`,
+    `getMonthlyTakings`, `getMonthlySummary` (incl. previous month), `getStaffShiftItems`,
+    `getMonthlyFiscalReport`, `getPaidItemsByMonth` → `siteMonthBounds`; `getStaffShiftItemsForDay`
+    → `siteDateBounds`. Each call site's inclusive vs exclusive END convention was preserved
+    exactly (inclusive → `.end`; exclusive `lt:` sites → `.end + 1ms` = venue next-month start),
+    so no downstream query predicate changed — only the anchor moved UTC→venue. Site selects
+    extended with tz/coords; local `buildSiteTimezone` helper. +2 Madrid regression tests;
+    accounting 35u, full partner 1970u green.
+  - **`DailySummaryView.tsx` + `summary/page.tsx` (me):** the daily summary computed "today" from
+    the browser clock (`toISOString().slice(0,10)`) → showed **yesterday** between venue midnight
+    and ~02:00. Now `summary/page.tsx` resolves venue-local today server-side via `siteDayKey`
+    (mirroring `close/page.tsx`) and passes it as a `todayIso` prop. Partner 1970u + `turbo build`
+    4/4 green.
+  - **Deferred (documented):** (1) the **rolling-trend** windows (`getRevenueTrend`/
+    `getRevenueChannelTrend`/`getOccupancyTrend`/`getRevenueCsv`/`getOperationsTrend`) fold into
+    **P5** — their `new Date()`+`DAY_MS` day boundaries are the same "day bucket" concern as the
+    `analytics.ts` UTC bucketing P5 fixes; anchoring the window without fixing the bucket is
+    half a fix. (2) `getInvoicesByMonth` is keyed by `accountId` (not `siteId`) — an account can
+    span timezones, so it needs a **per-account tz** decision; left UTC with a comment. No schema
+    change → no migration.
 
 ## Open decisions
 

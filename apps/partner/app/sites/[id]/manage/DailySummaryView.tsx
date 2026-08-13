@@ -38,10 +38,8 @@ interface EmployeeCloseState {
   closedCount?: number
 }
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
+// TODO(track 017 P4): this is the server's UTC day, not the venue-local civil
+// day — between 00:00 and (up to) 02:00 venue-local (e.g. a Europe/Madrid
 // Short "DD Mon" date for the carry-over date label — locale-aware.
 function formatShortDate(at: Date | string, locale: string): string {
   const d = new Date(at)
@@ -80,11 +78,17 @@ export default function DailySummaryView({
   accessKey,
   siteName,
   backHref,
+  todayIso,
 }: {
   siteId: string
   accessKey: string
   siteName: string
   backHref: string
+  // Venue-local today (YYYY-MM-DD), resolved server-side via siteDayKey in
+  // summary/page.tsx (track 017 P4). Computing it client-side off the browser
+  // clock made the day-report window slip to yesterday between venue midnight
+  // and ~02:00 for a venue ahead of the browser/server tz.
+  todayIso: string
 }) {
   const t = useTranslations('TillSummary')
   const locale = useLocale()
@@ -109,7 +113,7 @@ export default function DailySummaryView({
   const startedRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
 
-  const today = todayIso()
+  const today = todayIso
 
   // ── Load open tills on mount ───────────────────────────────────────────────
   const loadOpenTills = async () => {
@@ -122,7 +126,7 @@ export default function DailySummaryView({
     // civil-day accumulation in parallel — both are admin-gated the same way.
     const [res, dayRes] = await Promise.all([
       getOpenTillItems(siteId, accessKey),
-      getTillDayReport(siteId, todayIso(), accessKey),
+      getTillDayReport(siteId, todayIso, accessKey),
     ])
     if (res.status !== 'ok') {
       setErrorMsg(res.errors?.[0] ?? t('errorGeneric'))
@@ -220,7 +224,7 @@ export default function DailySummaryView({
     // "still uncounted" into "handed in today" below the header.
     const [refresh, dayRefresh] = await Promise.all([
       getOpenTillItems(siteId, accessKey),
-      getTillDayReport(siteId, todayIso(), accessKey),
+      getTillDayReport(siteId, todayIso, accessKey),
     ])
     if (refresh.status === 'ok') setTills(refresh.tills ?? [])
     if (dayRefresh.status === 'ok') setDayReport(dayRefresh.tills ?? [])

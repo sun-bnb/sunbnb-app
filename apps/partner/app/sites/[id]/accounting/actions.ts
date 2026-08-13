@@ -23,6 +23,26 @@ import {
   type MonthlySourceSummary,
 } from '@repo/data/analytics'
 import { getTillByEmployee, getEmployeeShiftItems } from '@repo/data/till'
+import { siteMonthBounds, siteDateBounds, type SiteTimezone } from '@repo/data/site-day'
+
+/**
+ * Builds the `SiteTimezone` shape `@repo/data/site-day` expects from a Site
+ * row's stored String coordinate columns. Copied from the identical helper
+ * in `calendar/actions.ts` / `manage/actions.ts` (track 017 P4) — anchors
+ * accounting/VAT month + day reporting windows to the venue's civil calendar
+ * instead of the server's UTC month.
+ */
+function buildSiteTimezone(site: {
+  timeZone?: string | null
+  locationLat?: string | null
+  locationLng?: string | null
+}): SiteTimezone {
+  return {
+    timeZone: site.timeZone,
+    latitude: site.locationLat ? parseFloat(site.locationLat) : undefined,
+    longitude: site.locationLng ? parseFloat(site.locationLng) : undefined,
+  }
+}
 
 /**
  * Per-employee cash breakdown for the selected accounting month — the manager
@@ -36,12 +56,14 @@ export async function getStaffTill(siteId: string, year: number, month: number) 
   const session = await auth()
   if (!session?.user) throw new Error('Not authenticated')
 
-  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { userId: true, timeZone: true, locationLat: true, locationLng: true },
+  })
   if (!site || site.userId !== session.user.id) throw new Error('Not authorized')
 
-  // Whole-month bounds (getTillByEmployee uses createdAt gte..lte, inclusive).
-  const from = new Date(Date.UTC(year, month - 1, 1))
-  const to = new Date(Date.UTC(year, month, 1) - 1)
+  // Whole-month bounds, venue-anchored (getTillByEmployee uses createdAt gte..lte, inclusive).
+  const { start: from, end: to } = siteMonthBounds(buildSiteTimezone(site), year, month)
   return getTillByEmployee(siteId, from, to)
 }
 
@@ -56,11 +78,13 @@ export async function getMonthlyTakings(siteId: string, year: number, month: num
   const session = await auth()
   if (!session?.user) throw new Error('Not authenticated')
 
-  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { userId: true, timeZone: true, locationLat: true, locationLng: true },
+  })
   if (!site || site.userId !== session.user.id) throw new Error('Not authorized')
 
-  const from = new Date(Date.UTC(year, month - 1, 1))
-  const to = new Date(Date.UTC(year, month, 1) - 1)
+  const { start: from, end: to } = siteMonthBounds(buildSiteTimezone(site), year, month)
   return summarizeReservationStats(await getReservationDayStats(siteId, from, to))
 }
 
@@ -80,18 +104,21 @@ export async function getMonthlySummary(
   const session = await auth()
   if (!session?.user) throw new Error('Not authenticated')
 
-  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { userId: true, timeZone: true, locationLat: true, locationLng: true },
+  })
   if (!site || site.userId !== session.user.id) throw new Error('Not authorized')
 
-  // Current-month whole-month UTC bounds
-  const from = new Date(Date.UTC(year, month - 1, 1))
-  const to = new Date(Date.UTC(year, month, 1) - 1)
+  const siteTz = buildSiteTimezone(site)
+
+  // Current-month whole-month bounds, venue-anchored
+  const { start: from, end: to } = siteMonthBounds(siteTz, year, month)
 
   // Previous-month bounds
   const prevYear = month === 1 ? year - 1 : year
   const prevMonth = month === 1 ? 12 : month - 1
-  const prevFrom = new Date(Date.UTC(prevYear, prevMonth - 1, 1))
-  const prevTo = new Date(Date.UTC(prevYear, prevMonth, 1) - 1)
+  const { start: prevFrom, end: prevTo } = siteMonthBounds(siteTz, prevYear, prevMonth)
 
   const [current, prev] = await Promise.all([
     getMonthlySourceSummary(siteId, from, to),
@@ -218,18 +245,20 @@ export async function getOperationsTrend(siteId: string, days: number) {
  * Per-employee shift items for the selected accounting month — granular
  * transaction-level view of floor staff activity (walk-ins + cash rentals).
  * Complements getStaffTill (which gives the monthly cash total per employee);
- * this returns the individual line items. Same whole-month UTC bounds and
- * session + site-ownership gate as getStaffTill.
+ * this returns the individual line items. Same whole-month venue-anchored
+ * bounds and session + site-ownership gate as getStaffTill.
  */
 export async function getStaffShiftItems(siteId: string, year: number, month: number) {
   const session = await auth()
   if (!session?.user) throw new Error('Not authenticated')
 
-  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { userId: true, timeZone: true, locationLat: true, locationLng: true },
+  })
   if (!site || site.userId !== session.user.id) throw new Error('Not authorized')
 
-  const from = new Date(Date.UTC(year, month - 1, 1))
-  const to = new Date(Date.UTC(year, month, 1) - 1)
+  const { start: from, end: to } = siteMonthBounds(buildSiteTimezone(site), year, month)
   return getEmployeeShiftItems(siteId, from, to)
 }
 
@@ -250,20 +279,23 @@ export async function getFloorSnapshot(siteId: string): Promise<FloorStateSnapsh
 }
 
 /**
- * Per-employee shift items for a single civil UTC day — the Alonso per-employee
- * day-scoped view (*Desglose por empleado* + *Cierre de caja empleado*).
- * Computes UTC day bounds from `dateIso` ('YYYY-MM-DD') and delegates to
- * `getEmployeeShiftItems`. Session-gated + site-ownership (mirrors getStaffTill).
+ * Per-employee shift items for a single venue-local civil day — the Alonso
+ * per-employee day-scoped view (*Desglose por empleado* + *Cierre de caja
+ * empleado*). Computes venue-anchored day bounds from `dateIso` ('YYYY-MM-DD')
+ * and delegates to `getEmployeeShiftItems`. Session-gated + site-ownership
+ * (mirrors getStaffTill).
  */
 export async function getStaffShiftItemsForDay(siteId: string, dateIso: string) {
   const session = await auth()
   if (!session?.user) throw new Error('Not authenticated')
 
-  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { userId: true, timeZone: true, locationLat: true, locationLng: true },
+  })
   if (!site || site.userId !== session.user.id) throw new Error('Not authorized')
 
-  const from = new Date(`${dateIso}T00:00:00.000Z`)
-  const to = new Date(`${dateIso}T23:59:59.999Z`)
+  const { start: from, end: to } = siteDateBounds(buildSiteTimezone(site), dateIso)
   return getEmployeeShiftItems(siteId, from, to)
 }
 
@@ -277,14 +309,23 @@ export async function getMonthlyFiscalReport(siteId: string, year: number, month
   const session = await auth()
   if (!session?.user) throw new Error('Not authenticated')
 
-  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { userId: true, timeZone: true, locationLat: true, locationLng: true },
+  })
   if (!site || site.userId !== session.user.id) throw new Error('Not authorized')
 
-  const from = new Date(Date.UTC(year, month - 1, 1))
-  const to = new Date(Date.UTC(year, month, 1))
+  const { start: from, end: inclusiveEnd } = siteMonthBounds(buildSiteTimezone(site), year, month)
+  // _getMonthlyFiscalReport windows exclusively (`< to`) — shift the inclusive
+  // venue month-end by 1ms to the venue start-of-next-month.
+  const to = new Date(inclusiveEnd.getTime() + 1)
   return _getMonthlyFiscalReport(siteId, from, to)
 }
 
+// NOT venue-anchored (track 017 P4 scope excludes this function): scoped by
+// `accountId`/`session.user.id`, not `siteId` — a single PartnerAccount can
+// own sites in different timezones, so there is no single site tz to anchor
+// to. Left on UTC month bounds pending a per-account timezone decision.
 export async function getInvoicesByMonth(
   accountId: string,
   year: number,
@@ -317,11 +358,16 @@ export async function getPaidItemsByMonth(siteId: string, year: number, month: n
   if (!session?.user) throw new Error('Not authenticated')
 
   // Verify the site belongs to this user
-  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { userId: true } })
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { userId: true, timeZone: true, locationLat: true, locationLng: true },
+  })
   if (!site || site.userId !== session.user.id) throw new Error('Not authorized')
 
-  const start = new Date(Date.UTC(year, month - 1, 1))
-  const end = new Date(Date.UTC(year, month, 1))
+  const { start, end: inclusiveEnd } = siteMonthBounds(buildSiteTimezone(site), year, month)
+  // Downstream queries window exclusively (`lt: end`) — shift the inclusive
+  // venue month-end by 1ms to the venue start-of-next-month.
+  const end = new Date(inclusiveEnd.getTime() + 1)
 
   const [orders, reservations, tabs] = await Promise.all([
     prisma.order.findMany({

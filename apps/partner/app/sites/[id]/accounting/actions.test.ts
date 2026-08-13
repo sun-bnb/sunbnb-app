@@ -164,7 +164,7 @@ describe('getPaidItemsByMonth', () => {
 
   it('verifies site ownership before issuing financial queries', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID, timeZone: 'UTC' } as any)
     vi.mocked(prisma.order.findMany).mockResolvedValue([])
     vi.mocked(prisma.reservation.findMany).mockResolvedValue([])
 
@@ -172,13 +172,13 @@ describe('getPaidItemsByMonth', () => {
 
     expect(vi.mocked(prisma.site.findUnique)).toHaveBeenCalledWith({
       where: { id: SITE_ID },
-      select: { userId: true },
+      select: { userId: true, timeZone: true, locationLat: true, locationLng: true },
     })
   })
 
   it('filters orders by ORDER_COMPLETE status', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID, timeZone: 'UTC' } as any)
     vi.mocked(prisma.order.findMany).mockResolvedValue([])
     vi.mocked(prisma.reservation.findMany).mockResolvedValue([])
 
@@ -196,7 +196,7 @@ describe('getPaidItemsByMonth', () => {
 
   it('filters reservations by RESERVATION_COMPLETE status', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID, timeZone: 'UTC' } as any)
     vi.mocked(prisma.order.findMany).mockResolvedValue([])
     vi.mocked(prisma.reservation.findMany).mockResolvedValue([])
 
@@ -214,7 +214,7 @@ describe('getPaidItemsByMonth', () => {
 
   it('filters by PARTNER invoices within the correct UTC month window', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID, timeZone: 'UTC' } as any)
     vi.mocked(prisma.order.findMany).mockResolvedValue([])
     vi.mocked(prisma.reservation.findMany).mockResolvedValue([])
 
@@ -249,9 +249,42 @@ describe('getPaidItemsByMonth', () => {
     )
   })
 
+  /**
+   * BUG-REVEALING (track 017 P4): a Europe/Madrid venue's civil month starts
+   * at 22:00 UTC the day before (CEST, UTC+2) — a UTC-anchored window would
+   * book the first ~2 local hours of August into July's fiscal/VAT period.
+   */
+  it('anchors the month window to the venue timezone, not UTC', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      userId: OWNER_ID,
+      timeZone: 'Europe/Madrid',
+    } as any)
+    vi.mocked(prisma.order.findMany).mockResolvedValue([])
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([])
+
+    await getPaidItemsByMonth(SITE_ID, 2025, 8)
+
+    const expectedStart = new Date('2025-07-31T22:00:00.000Z')
+    const expectedEnd = new Date('2025-08-31T22:00:00.000Z')
+
+    expect(vi.mocked(prisma.order.findMany)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          invoices: {
+            some: {
+              issuerType: 'PARTNER',
+              invoicedAt: { gte: expectedStart, lt: expectedEnd },
+            },
+          },
+        }),
+      })
+    )
+  })
+
   it('returns { orders, reservations, tabs } on happy path', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID, timeZone: 'UTC' } as any)
     const fakeOrders = [{ id: 'order-1', status: ORDER_COMPLETE, invoices: [] }]
     const fakeReservations = [{ id: 'res-1', status: RESERVATION_COMPLETE, invoices: [] }]
     const fakeTabs = [{ id: 'inv-tab-1', tableTabId: 'tab-1', issuerType: 'PARTNER', invoiceLines: [], tableTab: { id: 'tab-1', status: 'paid', closedAt: new Date(), table: { number: 3, label: 'Terrace' } } }]
@@ -266,7 +299,7 @@ describe('getPaidItemsByMonth', () => {
 
   it('queries PARTNER tab invoices filtered by tableTabId not null and siteId via tableTab relation', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID, timeZone: 'UTC' } as any)
     vi.mocked(prisma.order.findMany).mockResolvedValue([])
     vi.mocked(prisma.reservation.findMany).mockResolvedValue([])
     vi.mocked(prisma.invoice.findMany).mockResolvedValue([])
@@ -290,7 +323,7 @@ describe('getPaidItemsByMonth', () => {
 
   it('includes invoiceLines and tableTab with table number/label in tab query', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID, timeZone: 'UTC' } as any)
     vi.mocked(prisma.order.findMany).mockResolvedValue([])
     vi.mocked(prisma.reservation.findMany).mockResolvedValue([])
     vi.mocked(prisma.invoice.findMany).mockResolvedValue([])
@@ -330,7 +363,7 @@ describe('getPaidItemsByMonth', () => {
 
   it('returns empty tabs array when no tab invoices exist for the month', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID, timeZone: 'UTC' } as any)
     vi.mocked(prisma.order.findMany).mockResolvedValue([])
     vi.mocked(prisma.reservation.findMany).mockResolvedValue([])
     vi.mocked(prisma.invoice.findMany).mockResolvedValue([])
@@ -488,7 +521,7 @@ describe('getStaffTill', () => {
 
   it('delegates to getTillByEmployee with whole-month bounds', async () => {
     authenticateAsOwner()
-    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({ userId: OWNER_ID, timeZone: 'UTC' } as any)
     const rows = [{ employeeId: 'e1', name: 'Alice', active: true, total: 30, count: 3 }]
     mockTillByEmployee.mockResolvedValue(rows)
 
@@ -500,5 +533,25 @@ describe('getStaffTill', () => {
     // June 2026: from = 1 Jun 00:00 UTC, to = last ms of 30 Jun.
     expect(from.toISOString()).toBe('2026-06-01T00:00:00.000Z')
     expect(to.toISOString()).toBe('2026-06-30T23:59:59.999Z')
+  })
+
+  /**
+   * BUG-REVEALING (track 017 P4): a Europe/Madrid venue's civil month starts
+   * at 22:00 UTC the day before (CEST, UTC+2) — a UTC-anchored window would
+   * book the first ~2 local hours of August into July's fiscal period.
+   */
+  it('anchors the month window to the venue timezone, not UTC', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      userId: OWNER_ID,
+      timeZone: 'Europe/Madrid',
+    } as any)
+    mockTillByEmployee.mockResolvedValue([])
+
+    await getStaffTill(SITE_ID, 2026, 8)
+
+    const [, from, to] = mockTillByEmployee.mock.calls[0]!
+    expect(from.toISOString()).toBe('2026-07-31T22:00:00.000Z')
+    expect(to.toISOString()).toBe('2026-08-31T21:59:59.999Z')
   })
 })
