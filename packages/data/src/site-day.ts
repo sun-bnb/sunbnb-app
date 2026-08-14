@@ -27,8 +27,28 @@
 
 import tzlookup from 'tz-lookup'
 
-/** The IANA fallback for sites with no stored timezone and no parseable coords. */
-const DEFAULT_TZ = 'Europe/Madrid'
+/**
+ * The IANA fallback for venues with no stored timezone and no parseable coords.
+ * Exported as the single source of the platform's default zone — the restaurant
+ * timezone module (`@repo/table-reservations-core/tz`) re-exports it as
+ * `DEFAULT_TIME_ZONE` instead of declaring its own literal (track 017 P6).
+ */
+export const DEFAULT_TZ = 'Europe/Madrid'
+
+/**
+ * True if the runtime's `Intl` database accepts the IANA zone id. The single
+ * validator for both the Site and Restaurant domains (track 017 P6) — the
+ * restaurant module re-exports this as `isValidTimeZone`.
+ */
+export function isValidTimeZone(timeZone: string): boolean {
+  if (!timeZone || typeof timeZone !== 'string') return false
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone })
+    return true
+  } catch {
+    return false
+  }
+}
 
 /**
  * Input shape accepted by all helpers in this module.

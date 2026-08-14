@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { resolveSiteTimeZone, siteDayKey, siteDayBounds, siteDateBounds, siteAnchoredDay, siteMonthBounds, deriveTimeZoneFromCoords } from './site-day'
+import { resolveSiteTimeZone, siteDayKey, siteDayBounds, siteDateBounds, siteAnchoredDay, siteMonthBounds, deriveTimeZoneFromCoords, isValidTimeZone, DEFAULT_TZ } from './site-day'
 
 // ─── resolveSiteTimeZone ─────────────────────────────────────────────────────
 
@@ -59,6 +59,31 @@ describe('resolveSiteTimeZone', () => {
       longitude: -16.25,
     })
     expect(tz).toBe('Europe/Helsinki')
+  })
+})
+
+// ─── isValidTimeZone / DEFAULT_TZ ────────────────────────────────────────────
+
+describe('isValidTimeZone', () => {
+  it('accepts real IANA zones', () => {
+    expect(isValidTimeZone('Europe/Madrid')).toBe(true)
+    expect(isValidTimeZone('Atlantic/Canary')).toBe(true)
+    expect(isValidTimeZone('America/New_York')).toBe(true)
+    expect(isValidTimeZone('UTC')).toBe(true)
+  })
+
+  it('rejects junk / empty / non-strings', () => {
+    expect(isValidTimeZone('Not/AZone')).toBe(false)
+    expect(isValidTimeZone('')).toBe(false)
+    expect(isValidTimeZone(undefined as unknown as string)).toBe(false)
+    expect(isValidTimeZone(null as unknown as string)).toBe(false)
+  })
+})
+
+describe('DEFAULT_TZ', () => {
+  it('is Europe/Madrid and a valid zone', () => {
+    expect(DEFAULT_TZ).toBe('Europe/Madrid')
+    expect(isValidTimeZone(DEFAULT_TZ)).toBe(true)
   })
 })
 
