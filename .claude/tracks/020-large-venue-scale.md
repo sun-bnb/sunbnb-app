@@ -1,9 +1,9 @@
 ---
 id: 020-large-venue-scale
 title: Large-venue scale — dozens of parcels, thousands of sunbeds
-status: proposed
+status: active
 created: 2026-08-13
-updated: 2026-08-13
+updated: 2026-08-14
 worktree: null
 ---
 
@@ -42,24 +42,40 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
 
 ## Resume here
 
-- **Next action:** answer **Open decisions Q1–Q3** (target scale · driver · stopgap cap)
-  — Q1 in particular decides whether P6 exists at all — then start **P0** (baseline harness):
-  a seeded synthetic site at the Q1 target in `sunbnb_test`, plus captured before-numbers for
-  the six hot paths listed in P0. Everything after P0 is verified against that fixture.
-- **P1 (indexes) is independently shippable and does not depend on P0.** If the founder wants
-  the cheap win first, do P1 standalone: it is a purely additive expand migration, no code
-  change, and it is the only phase that helps **every** tenant rather than the big one.
-- **Context needed:** this file; `.claude/rules/migrations.md` (expand/contract — P1 is a
-  migration); `.claude/rules/architecture.md` (this track crosses `packages/data`, both apps,
-  and `@repo/schematic` → architecture pass per phase, orchestrator-owned).
-- **Blocked by:** Q1 (target scale) for P6 sizing only. P0–P5 are unblocked.
-- **Measurement caveat:** every number in this track is derived from **reading the code**, not
-  from profiling. The Postgres MCP servers were not connected in the scoping session, so real
-  production row counts are unknown. P0 exists to replace judgment with measurement.
+- **P0 + P1 are DONE and green** (2026-08-14, uncommitted on local `main`). Measured results
+  live in **[`020-scale-baseline.md`](020-scale-baseline.md)** — read that before touching any
+  later phase; it also records two index candidates measured and **rejected**, so they are not
+  re-proposed.
+- **Next action — USER OPS FIRST, then P3.**
+  1. **`npm run migrate:test`** before any `main` push. Migration
+     `20260814065600_add_site_scoped_indexes` is applied to local + `sunbnb_test` only. The
+     shared test DB must satisfy main's preview the moment the code lands; the `.githooks/
+     pre-push` hook blocks the push otherwise. Additive → expand phase → goes ahead of `main`.
+  2. Then **P3** (render quadratics) is the highest value-per-risk remaining: pure client-side,
+     no schema, no contract change. P2 (set-based availability) is higher value but rewrites a
+     money-adjacent correctness path, so it wants its own careful slice.
+- **Do NOT re-run the P0 seeder against anything but `sunbnb_scale`** — it TRUNCATEs. The guard
+  refuses `sunbnb_test` and every remote host even with `--force`; leave that guard alone.
+- **Context needed:** this file; `020-scale-baseline.md`; `.claude/rules/migrations.md`
+  (P1 is an expand migration — user ops above); `.claude/rules/architecture.md`.
+- **Blocked by:** nothing for P2–P5. Q1 still gates P6 sizing only.
+- **Measurement status:** DB-level numbers are now **measured**, not estimated (P0). The
+  app-level baselines (TTFB, payload bytes, frame time, query counts) are still unmeasured —
+  they need a running app + browser, and are the gate for judging P3/P4/P5.
 
 ## Roadmap
 
-- ☐ **P0 — Baseline harness (measure before optimizing).** Seed a synthetic site at the Q1
+- ✅ **P0 — Baseline harness.** DONE 2026-08-14. `packages/data/scripts/`:
+  `seed-scale-fixture.ts` (deterministic, PRNG seed 20260814), `bench-scale.ts` (EXPLAIN
+  ANALYZE over the shapes the apps actually issue, each annotated with its call site), and
+  `scale-fixture-guard.ts` — the destructive-write target guard, extracted pure and
+  **unit-tested (17 tests)** because its failure mode is silent data loss, not a red test.
+  Fixture lives in its own `sunbnb_scale` DB, never `sunbnb_test` (the integration suites
+  TRUNCATE that between files). Baselines recorded in `020-scale-baseline.md`.
+  Deferred (needs a running app + browser, not SQL): partner inventory TTFB/payload, user
+  site-detail TTFB/payload, schematic pan frame time, manage render+query count, `moveParcel`
+  wall time. Those are the gate for P3/P4/P5.
+- ░ **P0 (original spec, for reference).** Seed a synthetic site at the Q1
   target size into `sunbnb_test` (N parcels × M seats, a realistic reservation load incl. at
   least one sticky `to = 2999-12-31` block — see the P5 note). Capture baselines for:
   (a) partner inventory tab TTFB + payload bytes, (b) `getAvailability` wall time,
@@ -68,7 +84,20 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
   Deliverable: a repeatable script + a committed baseline table this track's phases are
   measured against. **Without this, no later phase can be shown to have worked.**
 
-- ☐ **P1 — Indexes (additive migration, no code change).** `packages/data` → `data-dev`.
+- ✅ **P1 — Indexes.** DONE 2026-08-14, migration `20260814065600_add_site_scoped_indexes`
+  (three `CREATE INDEX`, no alteration, no drop). Shipped set — **`Reservation(site_id, from,
+  to)`**, **`InventoryItem(site_id, group)`**, **`InventoryItem(site_id, number)`**. Headline:
+  the conflict guard, which runs inside the booking `FOR UPDATE`, went **256ms → 0.98ms
+  (261×)**; month revenue 87×; overlap window 84×; a *small* venue's item load 24× (the
+  cross-tenant cost). Two candidates measured and **rejected** — plain `(site_id)` (redundant
+  behind the composites) and `(site_id, status)` (`active` matches ~99% of a site's seats).
+  **One behaviour risk found and fixed:** an index can reorder a `findMany` with no `orderBy`;
+  audited all 50 call sites on the two tables, and `getAvailability` → `pickFirstAvailablePair`
+  was genuinely order-dependent (it drives consumer preselection). Fixed + locked by 4
+  integration tests, verified to fail 3/4 without the fix. Full gate green: data 360u+350i,
+  user 521u+82i, partner 1973u+198i. **The premise changed** — see the Log entry; P1 turned out
+  to be ordinary growth work, not large-venue work.
+- ░ **P1 (original spec, for reference).** `packages/data` → `data-dev`.
   `InventoryItem` today carries **only** `id` PK + `pair_id` unique; `Reservation` **only**
   `id` PK + `invoice_id` unique (verified against every migration). Postgres does **not**
   auto-index FK columns, so `where: { siteId }` is a **sequential scan of the whole table
@@ -207,6 +236,37 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
 
 ## Log
 
+- **2026-08-14 — P0 + P1 built and green (uncommitted, local `main`). The track's central
+  premise was measured and partly FALSIFIED.** Built the harness first, deliberately, because
+  without a volume fixture an index change is unobservable — Postgres picks a sequential scan
+  on a small table no matter what indexes exist, so you cannot distinguish a working index
+  from a broken one. That caution paid immediately: at the first fixture size (5 000 items /
+  36 400 reservations) the candidate indexes changed **nothing** — every shape stayed a seq
+  scan, correctly, since 5 000 rows is ~125 pages and the big venue was 60% of the table.
+  **Correction to the scoping claim "one big venue degrades every other partner":** index
+  benefit scales with TOTAL table size, not with the big venue's seat count. `InventoryItem`
+  may never get large enough to matter much (100 venues × 200 beds is 20 000 rows).
+  `Reservation` is the table that accumulates forever, and at 441k rows it was spending
+  180–256ms per query on seq scans. **So P1 is not large-venue work at all — it is ordinary
+  growth work that the large-venue question happened to surface, and it is worth shipping
+  whether or not a 3 000-seat venue ever exists.** Re-sized the fixture to 61 sites / 9 000
+  items / 441 222 reservations / 1.1M seat-links and measured properly (all numbers in
+  `020-scale-baseline.md`). Index set chosen by measurement, adding candidates one at a time
+  to attribute each: `(site_id)` and `(site_id, status)` were **dropped** after measuring as
+  redundant/non-selective — an unused index is pure write amplification on exactly the bulk
+  parcel operations P4 exists to speed up. **Risk work, since the ask was "don't break the
+  app":** the non-obvious hazard in an index-only migration is that it can change the physical
+  row order of any query without `ORDER BY`; audited all 50 `findMany` call sites on the two
+  tables (39 had none), and found exactly one order-dependent path —
+  `getAvailability` → `pickFirstAvailablePair`, whose docstring claimed an "ordered array"
+  that was in fact planner order, and which chooses the seat preselected for the guest
+  (track 014). Fixed by ordering on seat number (also makes the choice *meaningful*: lowest
+  number = the operator's own first seat), locked by a new integration test file whose value
+  was verified by removing the fix and confirming 3 of 4 fail. Everything else is safe by
+  construction — `computeSeatLabels` and `reverseParcelNumbering` sort explicitly, the HW
+  route emits in binding order via a `byId` map, the rest use sets/maps/`.length`.
+  **User ops before any `main` push: `npm run migrate:test`** (additive → expand phase → the
+  test DB must lead `main`; the pre-push hook enforces it).
 - **2026-08-13 — Created.** Scoped from the founder question "how would our system handle a
   single beach with dozens of parcels and thousands of sunbeds?" Two read-only code sweeps
   (inventory/manage/user-availability/reservation-create; schematic/polling/analytics/HW)

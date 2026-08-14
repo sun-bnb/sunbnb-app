@@ -329,6 +329,19 @@ model InventoryItem {
   user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   orders         Order[]
   reservations   Reservation[]  @relation("InventoryItemToReservation")
+
+  // Track 020 P1. Postgres does NOT auto-index foreign keys, so before these
+  // every `where: { siteId }` was a sequential scan of the whole table across
+  // ALL tenants — a small venue paid for a large one's rows.
+  //
+  // Both are composites with `site_id` leading, so they also serve plain
+  // site-scoped lookups; a separate `@@index([siteId])` measured as redundant
+  // and was left out rather than carried as write amplification. `(siteId,
+  // status)` was also measured and REJECTED — `status = 'active'` matches ~99%
+  // of a site's seats, so it is not selective enough to earn its cost.
+  // Benchmarked via `npm run scale:bench` (packages/data/scripts).
+  @@index([siteId, group])  // parcel ops: moveParcel, deleteItemsByGroup (39x)
+  @@index([siteId, number]) // next-seat-number lookup + ordered site load (79x)
 }
 
 model SunbedGroup {
@@ -430,6 +443,21 @@ model Reservation {
   user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   employee          Employee?       @relation(fields: [employeeId], references: [id], onDelete: SetNull)
   items             InventoryItem[] @relation("InventoryItemToReservation")
+
+  // Track 020 P1 — the single highest-value index in the schema.
+  //
+  // `Reservation` is the table that accumulates forever: every booking at every
+  // venue. Every hot read is "this site, overlapping this window" — consumer
+  // availability, the manage grid, accounting, analytics — and each was a full
+  // sequential scan. Measured at 441k rows: overlap window 180ms → 2.1ms (84x),
+  // month revenue 234ms → 2.7ms (87x).
+  //
+  // The sharpest one is `findConflictingReservation` (src/reservations.ts),
+  // which runs this shape INSIDE the booking transaction's `SELECT … FOR
+  // UPDATE`: 256ms → 1.0ms (261x). That is 256ms of lock hold per booking
+  // removed, on the path that serialises concurrent bookings for the same
+  // seats — i.e. it mattered most exactly when the venue was busiest.
+  @@index([siteId, from, to])
 }
 
 model ReservationDay {
