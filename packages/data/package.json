@@ -166,7 +166,11 @@
     "backfill:tz:test:dry": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx --yes tsx scripts/backfill-site-timezones.ts --dry-run",
     "backfill:tz:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx --yes tsx scripts/backfill-site-timezones.ts",
     "backfill:tz:production:dry": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx --yes tsx scripts/backfill-site-timezones.ts --dry-run",
-    "backfill:tz:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx --yes tsx scripts/backfill-site-timezones.ts"
+    "backfill:tz:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx --yes tsx scripts/backfill-site-timezones.ts",
+    "scale:setup": "POSTGRES_URL=postgres://postgres:sunbnb@localhost:5432/sunbnb_scale npx prisma migrate deploy",
+    "scale:seed": "POSTGRES_URL=postgres://postgres:sunbnb@localhost:5432/sunbnb_scale npx --yes tsx scripts/seed-scale-fixture.ts",
+    "scale:reset": "POSTGRES_URL=postgres://postgres:sunbnb@localhost:5432/sunbnb_scale npx --yes tsx scripts/seed-scale-fixture.ts --reset",
+    "scale:bench": "POSTGRES_URL=postgres://postgres:sunbnb@localhost:5432/sunbnb_scale npx --yes tsx scripts/bench-scale.ts"
   },
   "devDependencies": {
     "@repo/eslint-config": "*",
