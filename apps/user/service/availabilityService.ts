@@ -67,9 +67,19 @@ export async function getAvailability(siteId: string, from: Date, to: Date) {
     select: { timeZone: true, locationLat: true, locationLng: true },
   })
 
-  // Find all items for this site
+  // Find all items for this site.
+  //
+  // `orderBy` is load-bearing, not cosmetic: this array's order becomes the
+  // order of the returned availability list, and `pickFirstAvailablePair`
+  // (app/sites/[id]/sunbed-preselection.ts) preselects the FIRST available
+  // entry for the consumer. Without an explicit sort that is whatever order
+  // Postgres happened to return, which changes the moment the planner switches
+  // from a sequential scan to an index scan (track 020 P1). Ordering by seat
+  // number also makes the choice meaningful rather than arbitrary — the lowest
+  // number is the operator's own first seat.
   const items = await prisma.inventoryItem.findMany({
     where: { siteId, status: 'active' },
+    orderBy: { number: 'asc' },
     select: { id: true },
   })
 

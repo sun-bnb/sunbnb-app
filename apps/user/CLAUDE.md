@@ -83,7 +83,7 @@ RTK Query: `reservationApi` (getReservation, getReservationByDate, etc.), `place
 ```bash
 npm run test              # unit + route + server action tests (521 tests, Prisma mocked)
 npm run test:watch        # vitest in watch mode
-npm run test:integration  # integration tests against local sunbnb_test DB (77 tests, real Prisma)
+npm run test:integration  # integration tests against local sunbnb_test DB (82 tests, real Prisma)
 ```
 
 ### Unit / route tests (`vitest.config.ts`)
@@ -127,6 +127,7 @@ npm run test:integration  # integration tests against local sunbnb_test DB (77 t
 ### Integration tests (`vitest.integration.config.ts`)
 
 Requires local Docker Postgres with `sunbnb_test` DB (same DB as `packages/data` integration tests — no extra setup needed). `POSTGRES_URL` set via CLI in the npm script. No mock for `@repo/data/PrismaCient` or `@repo/data/payment` — real DB writes verified.
+- `service/availabilityService.integration.test.ts` — `getAvailability` ORDERING contract (track 020 P1): seats returned in ascending seat-number order regardless of insertion order, `pickFirstAvailablePair` preselects the lowest-numbered available seat (and the next-lowest when it is booked), stability across calls. Guards the one order-dependent read path an index can silently change — fixture seats are inserted deliberately scrambled (4 tests)
 - `service/siteService.integration.test.ts` — searchSites item_count (active-only denominator), available_count (BLOCKING_STATUSES filter, date overlap, no-show/departed release rule, non-blocking statuses); countAvailableToday (wraps getAvailability for today's server-local window) (14 tests)
 - `app/sites/[id]/actions.integration.test.ts` — saveReservationForMultipleItems (DB writes, payment calc, unpaid, anonymous), saveRentalBooking (pricing, real aggregate availability check) (21 tests)
 - `app/reservations/[id]/actions.integration.test.ts` — createOrder (DB prices, soldOut, appSalesEnabled, anonymous), cancelReservation (status update, refund logic) (16 tests)
