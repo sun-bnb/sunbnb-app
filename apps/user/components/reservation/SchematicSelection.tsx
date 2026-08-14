@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import dayjs from 'dayjs'
 import { SchematicRenderer } from '@repo/schematic'
@@ -60,12 +60,29 @@ export default function SchematicSelection({ site }: { site: SiteProps }) {
     to: availabilityTo,
   })
 
-  const isAvailable = (item: InventoryItem): boolean => {
-    if (!availabilityResponse) return false
-    return !!availabilityResponse.availability.find((a: any) => a.itemId === item.id && a.available)
-  }
+  // Track 020 P3: O(1) lookups instead of linear `.find`s — `itemVisual` below
+  // is invoked per item by the renderer on every paint, and each call did both
+  // an inventory find AND an availability find (O(n·(n+m)) stacked on the
+  // renderer's own per-item pass).
+  const availableIds = useMemo(
+    () =>
+      new Set(
+        (availabilityResponse?.availability ?? [])
+          .filter((a: any) => a.available)
+          .map((a: any) => a.itemId)
+      ),
+    [availabilityResponse]
+  )
 
-  const inventoryItems = site.inventoryItems ?? []
+  const isAvailable = (item: InventoryItem): boolean =>
+    !!availabilityResponse && availableIds.has(item.id)
+
+  const inventoryItems = useMemo(() => site.inventoryItems ?? [], [site.inventoryItems])
+
+  const itemById = useMemo(
+    () => new Map(inventoryItems.map((i) => [i.id, i])),
+    [inventoryItems]
+  )
 
   useEffect(() => {
     if (!availabilityResponse) return
@@ -77,7 +94,7 @@ export default function SchematicSelection({ site }: { site: SiteProps }) {
   }, [availabilityResponse])
 
   const toggleSelection = (itemId: string): void => {
-    const item = inventoryItems.find((i) => i.id === itemId)
+    const item = itemById.get(itemId)
     if (!item || !isAvailable(item)) return
     const alreadySelected = selectedItems?.some((sel: { id: string }) => sel.id === item.id)
     const groupMembers = getGroupMembers(item)
@@ -90,35 +107,48 @@ export default function SchematicSelection({ site }: { site: SiteProps }) {
       for (const member of groupMembers) {
         if (!updated.some((sel: { id: string }) => sel.id === member.id)) {
           // Push the full InventoryItem if found, otherwise the stub (id-only) from the group
-          const fullItem = inventoryItems.find((i) => i.id === member.id)
-          updated.push(fullItem ?? member)
+          updated.push(itemById.get(member.id) ?? member)
         }
       }
     }
     dispatch(setValue({ selectedItems: updated }))
   }
 
-  const elements: LayoutElementDTO[] = (site.layoutElements ?? []).map((el) => ({
-    id: el.id,
-    type: el.type,
-    shape: (el.shape as 'rect' | 'ellipse' | 'icon') ?? 'rect',
-    x: el.x, y: el.y, width: el.width, height: el.height,
-    rotation: el.rotation ?? 0,
-    z: el.z ?? 0,
-    label: el.label ?? null,
-    color: el.color ?? null,
-  }))
+  // Stable identities matter downstream: SchematicRenderer memoizes its
+  // derived structures on `elements`/`items` — rebuilding these arrays every
+  // render would defeat that (track 020 P3).
+  const elements: LayoutElementDTO[] = useMemo(
+    () =>
+      (site.layoutElements ?? []).map((el) => ({
+        id: el.id,
+        type: el.type,
+        shape: (el.shape as 'rect' | 'ellipse' | 'icon') ?? 'rect',
+        x: el.x, y: el.y, width: el.width, height: el.height,
+        rotation: el.rotation ?? 0,
+        z: el.z ?? 0,
+        label: el.label ?? null,
+        color: el.color ?? null,
+      })),
+    [site.layoutElements]
+  )
 
-  const items: SchematicItem[] = inventoryItems.map((it) => ({
-    id: it.id,
-    x: it.schematicX ?? 0,
-    y: it.schematicY ?? 0,
-    rotation: it.rotation ?? 0,
-    status: it.status,
-    label: undefined,
-  }))
+  const items: SchematicItem[] = useMemo(
+    () =>
+      inventoryItems.map((it) => ({
+        id: it.id,
+        x: it.schematicX ?? 0,
+        y: it.schematicY ?? 0,
+        rotation: it.rotation ?? 0,
+        status: it.status,
+        label: undefined,
+      })),
+    [inventoryItems]
+  )
 
-  const selectedIds = new Set<string>((selectedItems ?? []).map((s: { id: string }) => s.id))
+  const selectedIds = useMemo(
+    () => new Set<string>((selectedItems ?? []).map((s: { id: string }) => s.id)),
+    [selectedItems]
+  )
 
   return (
     <SchematicRenderer
@@ -127,7 +157,7 @@ export default function SchematicSelection({ site }: { site: SiteProps }) {
       elements={elements}
       items={items}
       itemVisual={(it) => {
-        const inv = inventoryItems.find((x) => x.id === it.id)
+        const inv = itemById.get(it.id)
         const available = inv ? isAvailable(inv) : false
         const isSelected = selectedIds.has(it.id)
         return {

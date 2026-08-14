@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Chip from '@mui/material/Chip'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { InventoryItem, SiteProps, WorkingHours } from '@/app/sites/types'
 import { useSelector, useDispatch } from 'react-redux'
 import { setValue } from '@/store/features/sites/sitesSlice'
@@ -256,13 +256,24 @@ function SunbedSelectionGeo({
       to: availabilityTo,
     })
 
+  // Track 020 P3: availability lookups were a linear `.find` over the whole
+  // availability array, called once per item in the marker map — O(N²) per
+  // render (~9M comparisons at 3 000 seats). One Set, O(1) per lookup, rebuilt
+  // only when a fresh availability response arrives.
+  const availableIds = useMemo(
+    () =>
+      new Set(
+        (availabilityResponse?.availability ?? [])
+          .filter(a => a.available)
+          .map(a => a.itemId)
+      ),
+    [availabilityResponse]
+  )
+
   // isAvailable: returns true if the given item is available per the API response.
-  const isAvailable = (item: InventoryItem): boolean => {
-    if (!availabilityResponse) return false
-    return !!availabilityResponse.availability.find(
-      a => a.itemId === item.id && a.available
-    )
-  }
+  // (No response yet → nothing is available — same as the old `.find` on undefined.)
+  const isAvailable = (item: InventoryItem): boolean =>
+    !!availabilityResponse && availableIds.has(item.id)
 
   const inventoryItems = site.inventoryItems
 
@@ -331,14 +342,16 @@ function SunbedSelectionGeo({
   // frames the sunbeds rather than the site's marketing pin. We deliberately do NOT
   // fit-to-bounds here — fitting all seats zooms out to parcel level; opening at the
   // farthest zoom where individual seats are still visible (zoom 20) is the goal.
-  const itemLats = (inventoryItems || []).map(item => Number(item.locationLat))
-  const itemLngs = (inventoryItems || []).map(item => Number(item.locationLng))
-  const inventoryCenter = itemLats.length > 0
-    ? {
-        lat: (Math.max(...itemLats) + Math.min(...itemLats)) / 2,
-        lng: (Math.max(...itemLngs) + Math.min(...itemLngs)) / 2,
-      }
-    : { lat: Number(site.locationLat), lng: Number(site.locationLng) }
+  const inventoryCenter = useMemo(() => {
+    const itemLats = (inventoryItems || []).map(item => Number(item.locationLat))
+    const itemLngs = (inventoryItems || []).map(item => Number(item.locationLng))
+    return itemLats.length > 0
+      ? {
+          lat: (Math.max(...itemLats) + Math.min(...itemLats)) / 2,
+          lng: (Math.max(...itemLngs) + Math.min(...itemLngs)) / 2,
+        }
+      : { lat: Number(site.locationLat), lng: Number(site.locationLng) }
+  }, [inventoryItems, site.locationLat, site.locationLng])
 
   let notWorkingHours = false
   if (reservationMode === 'hours' && reservationDay && availabilityFrom && availabilityTo) {
@@ -382,7 +395,9 @@ function SunbedSelectionGeo({
   // look) — but the primary is derived from group GEOMETRY, not pairId: it's the
   // member whose partner lies to its LOCAL-left, so the offset lands the umbrella
   // between the beds rather than outside the pair.
-  const groupPrimaryIds = (() => {
+  // Memoized (track 020 P3): geometry only depends on the inventory, but this
+  // rebuilt the whole group map on every render (pan/zoom/selection).
+  const groupPrimaryIds = useMemo(() => {
     const groups: Record<string, InventoryItem[]> = {}
     for (const it of inventoryItems || []) {
       const gid = it.sunbedGroupId
@@ -406,7 +421,7 @@ function SunbedSelectionGeo({
       ids.add(leftX * vx + leftY * vy > 0 ? a.id : b.id)
     }
     return ids
-  })()
+  }, [inventoryItems])
 
   const sunbedMarkers = (inventoryItems || []).map(item => {
     const available = isAvailable(item)

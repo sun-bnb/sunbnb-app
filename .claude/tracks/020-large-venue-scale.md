@@ -42,26 +42,32 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
 
 ## Resume here
 
-- **P0 + P1 are DONE and green** (2026-08-14, uncommitted on local `main`). Measured results
-  live in **[`020-scale-baseline.md`](020-scale-baseline.md)** — read that before touching any
-  later phase; it also records two index candidates measured and **rejected**, so they are not
-  re-proposed.
-- **Next action — USER OPS FIRST, then P3.**
-  1. **`npm run migrate:test`** before any `main` push. Migration
-     `20260814065600_add_site_scoped_indexes` is applied to local + `sunbnb_test` only. The
-     shared test DB must satisfy main's preview the moment the code lands; the `.githooks/
-     pre-push` hook blocks the push otherwise. Additive → expand phase → goes ahead of `main`.
-  2. Then **P3** (render quadratics) is the highest value-per-risk remaining: pure client-side,
-     no schema, no contract change. P2 (set-based availability) is higher value but rewrites a
-     money-adjacent correctness path, so it wants its own careful slice.
+- **P0 + P1 committed** (`6cb50bf` ordering fix · `4ad3234` harness · `194cdbb` indexes, local
+  `main`, unpushed). **P3 slice 1 built & green 2026-08-14** (all four render quadratics dead;
+  see roadmap). Measured results live in **[`020-scale-baseline.md`](020-scale-baseline.md)** —
+  read that before touching any later phase; it also records two index candidates measured and
+  **rejected**, so they are not re-proposed.
+- **Next action:**
+  1. **USER OPS: `npm run migrate:test`** before any `main` push (migration
+     `20260814065600_add_site_scoped_indexes` pending on the shared test DB; pre-push hook
+     enforces).
+  2. **Browser-verify the inventory-map pointer paths** (drag a seat, drag a parcel, marquee
+     select, click vs drag discrimination) — the SunbedMarker listener rewrite is the one P3
+     change unit tests cannot cover; use `/verifier-sunbnb` on partner `/sites/[id]/inventory`.
+  3. Then **P4** (batch writes + the moveParcel-transaction correctness fix) or **P2**
+     (set-based availability — money-adjacent, wants its own careful slice).
+  4. P3 follow-up slice (deferred, second-order): `manage/view.tsx` per-render site-wide
+     filters + `bed-state.ts` derive-call memoization (memoize CALLS, never fork the
+     derivation — track 018 constraint).
 - **Do NOT re-run the P0 seeder against anything but `sunbnb_scale`** — it TRUNCATEs. The guard
   refuses `sunbnb_test` and every remote host even with `--force`; leave that guard alone.
 - **Context needed:** this file; `020-scale-baseline.md`; `.claude/rules/migrations.md`
   (P1 is an expand migration — user ops above); `.claude/rules/architecture.md`.
 - **Blocked by:** nothing for P2–P5. Q1 still gates P6 sizing only.
-- **Measurement status:** DB-level numbers are now **measured**, not estimated (P0). The
-  app-level baselines (TTFB, payload bytes, frame time, query counts) are still unmeasured —
-  they need a running app + browser, and are the gate for judging P3/P4/P5.
+- **Measurement status:** DB-level numbers are **measured** (P0). App-level baselines (TTFB,
+  payload bytes, frame time, query counts) still unmeasured — they need a running app +
+  browser; P3's improvement is therefore *proven by construction* (complexity class), not yet
+  by measurement.
 
 ## Roadmap
 
@@ -131,7 +137,38 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
   (comment at `actions.ts:136-140`), so a narrowed per-booking variant must preserve that
   semantic, not just the availability answer.
 
-- ☐ **P3 — Kill the three render quadratics + memoize.** `apps/partner` + `apps/user` +
+- ✅ **P3 (slice 1) — the render quadratics are dead.** DONE 2026-08-14 (uncommitted).
+  All four O(N²)-class passes converted to O(1) lookups behind O(n) builds:
+  (1) `InventoryMap.tsx` — `selectedInvItem` find hoisted out of the marker map; `SunbedMarker`
+  is now `React.memo` with SCALAR position props + item-carrying callbacks, and its
+  pointer-listener effect subscribes once per map via the latest-ref pattern (deps were
+  `[map, position, zoom, onClick, onDragEnd, onDragMove]` → now `[map]`) — so a parent
+  render no longer re-attaches 4 DOM listeners × N markers, and during a parcel drag only
+  the dragged group re-renders. Bonus correctness: pointerup now reports the exact drop
+  point from a synchronously-written ref instead of the last RENDERED position (which could
+  trail the pointer by one move).
+  (2) `SchematicRenderer.tsx` — `pairedSelected` `items.some` inside `items.map` replaced by
+  `buildPairedSelectedIds` (new pure module `@repo/schematic/pair-selection`, **8 unit tests
+  incl. an oracle property-check against the verbatim original expression** — the
+  self-exclusion subtlety is exactly what a naive precompute gets wrong); `sortedElements` +
+  selection Set + the new build all `useMemo`d, so pan/pinch/drag paints skip them.
+  (3) `SunbedSelection.tsx` — availability `.find`-per-item → memoized `Set`;
+  `groupPrimaryIds` + `inventoryCenter` memoized.
+  (4) `SchematicSelection.tsx` — same Set treatment + `itemById` Map (its `itemVisual` ran
+  TWO linear finds per item per paint); `elements`/`items`/`selectedIds` memoized so the
+  renderer's new memos actually hold (identity matters downstream).
+  (5) `ParcelView.tsx` — `resolveColumn`'s `allRegularItems.filter` per CELL (O(rows×cols×N))
+  → per-group index maps built once per render; trailing-position also precomputed;
+  `otherGroupMembers` reads the map. Semantics preserved exactly (incl. the cross-parcel
+  group quirk).
+  Green: schematic 34 (26+8), partner 1973u, user 521u, both apps tsc + lint clean.
+  **Deferred to a follow-up slice** (second-order: linear factors, thousands not millions of
+  ops, on the live floor-ops surface): `manage/view.tsx:423-433` per-render site-wide
+  filters + summary `getBedState` over all items; `bed-state.ts` 4-6 `deriveState` calls per
+  seat per render (memoize the CALLS — never fork the derivation, track 018 constraint).
+  Browser verification of drag/marquee/selection on the inventory map still owed (P0's
+  app-level baselines) — the pointer-path rewrite is the one part tests don't cover.
+- ░ **P3 (original spec, for reference).** `apps/partner` + `apps/user` +
   `@repo/schematic` → `sunbed-inventory`/`user-dev`, `/ui` + `/schematic` primed.
   | Location | Pattern |
   |---|---|
@@ -236,6 +273,23 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
 
 ## Log
 
+- **2026-08-14 (later) — P3 slice 1: render quadratics killed; P0+P1 committed.** P0+P1 went
+  in as three commits (`6cb50bf` availability ordering fix — deliberately FIRST, it protects
+  against index-induced reorder; `4ad3234` harness; `194cdbb` indexes). P3 then converted all
+  four quadratic render passes to indexed lookups (details in the roadmap entry). The only
+  logic extracted rather than transformed in place is `buildPairedSelectedIds`
+  (`@repo/schematic/pair-selection`) — extracted BECAUSE it has a subtle self-exclusion
+  semantic worth locking: its test file includes an oracle property-check that runs the
+  verbatim original O(n²) expression against the O(n) replacement over a 200-item generated
+  fixture. The `SunbedMarker` rewrite (scalar props + latest-ref + `React.memo`, pointer
+  effect deps `[map]`) is the one change with real behavioral surface — pointer handlers are
+  untestable without a browser, so it carries an explicit browser-verification debt (Resume
+  here #2); it also FIXES a latent bug (drop position could trail the pointer by one move,
+  since pointerup read the last rendered position). Deferred as a follow-up slice:
+  `manage/view.tsx` linear-factor scans + `bed-state` derive-call memoization — second-order
+  cost on the operationally hottest surface; not worth bundling into this diff. Gate:
+  schematic 34 (26+8 new), partner 1973u, user 521u, tsc+lint clean both apps, `turbo build`
+  4/4 green (the only gate that catches client/server import violations).
 - **2026-08-14 — P0 + P1 built and green (uncommitted, local `main`). The track's central
   premise was measured and partly FALSIFIED.** Built the harness first, deliberately, because
   without a volume fixture an index change is unobservable — Postgres picks a sequential scan

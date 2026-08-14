@@ -211,14 +211,39 @@ export default function ParcelView({
     }, new Set())
   )
 
+  // Track 020 P3: group-membership lookups were `allRegularItems.filter(...)`
+  // calls — one per group-extra AND one per grid CELL via resolveColumn below,
+  // i.e. O(rows × cols × N) per render, re-run on every 30s refresh and every
+  // seat tap. Build the per-group index once per render; cells do O(1) reads.
+  const regularMembersByGroupId = new Map<string, InventoryItem[]>()
+  for (const r of allRegularItems) {
+    if (!r.sunbedGroupId) continue
+    const list = regularMembersByGroupId.get(r.sunbedGroupId)
+    if (list) list.push(r)
+    else regularMembersByGroupId.set(r.sunbedGroupId, [r])
+  }
+
+  // Trailing (max) position per group — resolveColumn re-derived this per cell.
+  const trailingPosByGroupId = new Map<string, number>()
+  for (const [gid, members] of regularMembersByGroupId) {
+    trailingPosByGroupId.set(gid, Math.max(...members.map(m => parseSunbedNumber(m.number).position)))
+  }
+
+  const allMembersByGroupId = new Map<string, InventoryItem[]>()
+  for (const i of allInventoryItems) {
+    if (!i.sunbedGroupId) continue
+    const list = allMembersByGroupId.get(i.sunbedGroupId)
+    if (list) list.push(i)
+    else allMembersByGroupId.set(i.sunbedGroupId, [i])
+  }
+
   // position → max extra count among groups whose trailing position is that position
   const extraSlotsAfter = new Map<number, number>()
   for (const [gid, extras] of groupExtrasByGroupId) {
-    const members = allRegularItems.filter(r => r.sunbedGroupId === gid)
+    const members = regularMembersByGroupId.get(gid) ?? []
     if (members.length === 0) continue
-    const parsed = members.map(m => parseSunbedNumber(m.number))
-    if (parsed[0]!.parcel !== parcelNum) continue
-    const trailingPos = Math.max(...parsed.map(p => p.position))
+    if (parseSunbedNumber(members[0]!.number).parcel !== parcelNum) continue
+    const trailingPos = trailingPosByGroupId.get(gid)!
     extraSlotsAfter.set(trailingPos, Math.max(extraSlotsAfter.get(trailingPos) ?? 0, extras.length))
   }
 
@@ -227,7 +252,7 @@ export default function ParcelView({
   // All OTHER members of an item's group — for label derivation
   const otherGroupMembers = (it: InventoryItem): InventoryItem[] =>
     it.sunbedGroupId
-      ? allInventoryItems.filter(i => i.id !== it.id && i.sunbedGroupId === it.sunbedGroupId)
+      ? (allMembersByGroupId.get(it.sunbedGroupId) ?? []).filter(i => i.id !== it.id)
       : []
 
   type ResolvedCell =
@@ -245,8 +270,7 @@ export default function ParcelView({
     const trailing = positions[col.afterPos]
     const gid = trailing?.sunbedGroupId
     if (!trailing || !gid) return { kind: 'empty' }
-    const members = allRegularItems.filter(r => r.sunbedGroupId === gid)
-    const trailingPos = Math.max(...members.map(m => parseSunbedNumber(m.number).position))
+    const trailingPos = trailingPosByGroupId.get(gid)
     if (trailingPos !== col.afterPos) return { kind: 'empty' }
     const groupExtras = groupExtrasByGroupId.get(gid) ?? []
     const extra = groupExtras[col.slot]

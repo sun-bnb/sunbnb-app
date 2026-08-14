@@ -1,7 +1,7 @@
 // components/InventoryMap.tsx
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { APIProvider, Map, ControlPosition, MapMouseEvent, useMap } from '@vis.gl/react-google-maps'
 import SunbedMarker from './SunbedMarker'
 import { InventoryItem } from '@/types/shared'
@@ -195,28 +195,61 @@ function MapContent({
   }, [map, site.inventoryItems, selectedItemIds, onSelectionChange])
 
   // Build the set of all highlighted item IDs for quick lookup
-  const selectedSet = new Set(selectedItemIds)
+  const selectedSet = useMemo(() => new Set(selectedItemIds), [selectedItemIds])
+
+  // Exclude pool seats (status:'pool') — they have sentinel coords (0,0)
+  // and must not appear as stray markers on the inventory map.
+  const visibleItems = useMemo(
+    () => (site.inventoryItems || []).filter(i => i.status !== 'pool'),
+    [site.inventoryItems],
+  )
+
+  // Track 020 P3: this lookup used to run INSIDE the per-item map below —
+  // a full-array find per marker, O(N²) per render (~9M comparisons at 3 000
+  // seats). It does not depend on the loop variable; hoisted.
+  const selectedInvItem = useMemo(
+    () => (site.inventoryItems || []).find((i) => i.id === selectedItemId),
+    [site.inventoryItems, selectedItemId],
+  )
+
+  // Stable callbacks via the latest-ref pattern: SunbedMarker is React.memo'd,
+  // so its handler props must not change identity per render — but the parent
+  // props (onMarkerClick etc.) usually do. The ref decouples the two.
+  const parentHandlersRef = useRef({ onMarkerClick, onMarkerDragEnd })
+  parentHandlersRef.current = { onMarkerClick, onMarkerDragEnd }
+
+  const handleItemClick = useCallback(
+    (item: InventoryItem, mods: { metaKey: boolean; ctrlKey: boolean }) =>
+      parentHandlersRef.current.onMarkerClick(item, mods),
+    [],
+  )
+  const handleItemDragEnd = useCallback(
+    (item: InventoryItem, e: any) => parentHandlersRef.current.onMarkerDragEnd(item, e),
+    [],
+  )
+  // Formation drag: previously an inline arrow passed only for grouped items;
+  // now one stable handler that no-ops for ungrouped items (same behavior).
+  const handleItemDragMove = useCallback((item: InventoryItem, deltaLat: number, deltaLng: number) => {
+    if (item.group > 0) {
+      setGroupDrag({ draggedItemId: item.id, group: item.group, deltaLat, deltaLng })
+    }
+  }, [])
 
   return (
     <>
-      {/* Exclude pool seats (status:'pool') — they have sentinel coords (0,0)
-          and must not appear as stray markers on the inventory map. */}
-      {(site.inventoryItems || []).filter(i => i.status !== 'pool').map((item) => {
+      {visibleItems.map((item) => {
         const isEditing = selectedItemId === item.id
         const isMultiSelected =
           selectedSet.has(item.id) ||
           (selectedGroupNumber != null && item.group === selectedGroupNumber)
         const itemParcelColor = getParcelColor(item.group)
-        const selectedInvItem = (site.inventoryItems || []).find((i) => i.id === selectedItemId)
         const pairedSelected =
           pairingMode && selectedInvItem?.sunbedGroupId
             ? item.id !== selectedInvItem.id && item.sunbedGroupId === selectedInvItem.sunbedGroupId
             : false
 
-        const position = {
-          lat: Number(item.locationLat),
-          lng: Number(item.locationLng),
-        }
+        const lat = Number(item.locationLat)
+        const lng = Number(item.locationLng)
 
         // Group drag: sibling markers get a position override to move in formation
         const isGroupDragSibling =
@@ -225,31 +258,28 @@ function MapContent({
           item.group === groupDrag.group &&
           item.id !== groupDrag.draggedItemId
 
-        const positionOverride = isGroupDragSibling
-          ? { lat: position.lat + groupDrag.deltaLat, lng: position.lng + groupDrag.deltaLng }
-          : null
-
         return (
           <SunbedMarker
             key={item.id}
+            item={item}
             isGroupMember={Boolean(item.sunbedGroupId)}
             number={item.number}
             seatLabel={item.seatLabel}
             rotation={item.rotation || 0}
             status={item.status}
-            initialPosition={position}
+            lat={lat}
+            lng={lng}
             zoom={zoom}
             dynamicSize={dynamicSize}
             isEditing={isEditing}
             isMultiSelected={isMultiSelected}
             parcelColor={itemParcelColor}
             pairedSelected={pairedSelected}
-            positionOverride={positionOverride}
-            onClick={(mods) => onMarkerClick(item, mods)}
-            onDragEnd={(e) => onMarkerDragEnd(item, e)}
-            onDragMove={item.group > 0 ? (deltaLat, deltaLng) => {
-              setGroupDrag({ draggedItemId: item.id, group: item.group, deltaLat, deltaLng })
-            } : undefined}
+            overrideLat={isGroupDragSibling ? lat + groupDrag.deltaLat : null}
+            overrideLng={isGroupDragSibling ? lng + groupDrag.deltaLng : null}
+            onItemClick={handleItemClick}
+            onItemDragEnd={handleItemDragEnd}
+            onItemDragMove={handleItemDragMove}
           />
         )
       })}

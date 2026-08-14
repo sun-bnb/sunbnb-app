@@ -3,47 +3,58 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { AdvancedMarker, useMap } from '@vis.gl/react-google-maps'
 import { formatSeat } from '@repo/data/seat-label'
+import { InventoryItem } from '@/types/shared'
 
+// Track 020 P3: props are scalars (lat/lng, overrideLat/overrideLng) rather
+// than {lat,lng} objects, and the callbacks carry the item, so the parent can
+// pass REFERENTIALLY STABLE handlers. Both are what make the React.memo export
+// actually effective — with per-render object/closure props every parent
+// render re-rendered all N markers and re-attached 4 DOM listeners each.
 interface SunbedMarkerProps {
+  /** The inventory item this marker renders — handed back in every callback. */
+  item: InventoryItem
   /** True when this item belongs to a SunbedGroup (i.e. is part of a double/couple). */
   isGroupMember?: boolean
   number: number
   seatLabel?: string | null
   rotation: number
   status: string
-  initialPosition: {
-    lat: number
-    lng: number
-  }
+  lat: number
+  lng: number
   zoom: number
   dynamicSize: number
   isEditing?: boolean
   isMultiSelected?: boolean
   parcelColor?: string
   pairedSelected?: boolean
-  positionOverride?: { lat: number; lng: number } | null
-  onClick: (modifiers: { metaKey: boolean; ctrlKey: boolean }) => void
-  onDragEnd: (e: google.maps.MapMouseEvent) => void
-  onDragMove?: (deltaLat: number, deltaLng: number) => void
+  /** Group-drag formation override — null/undefined when not overridden. */
+  overrideLat?: number | null
+  overrideLng?: number | null
+  onItemClick: (item: InventoryItem, modifiers: { metaKey: boolean; ctrlKey: boolean }) => void
+  onItemDragEnd: (item: InventoryItem, e: google.maps.MapMouseEvent) => void
+  onItemDragMove?: (item: InventoryItem, deltaLat: number, deltaLng: number) => void
 }
 
-export default function SunbedMarker({
+function SunbedMarker({
+  item,
   isGroupMember = false,
   number,
   seatLabel,
   rotation,
   status,
-  initialPosition,
+  lat,
+  lng,
   zoom,
   dynamicSize,
   isEditing = false,
   isMultiSelected = false,
   parcelColor,
   pairedSelected = false,
-  positionOverride,
-  onClick,
-  onDragEnd,
-  onDragMove,
+  overrideLat,
+  overrideLng,
+  onItemClick,
+  onItemDragEnd,
+  onItemDragMove,
 }: SunbedMarkerProps) {
 
   const map = useMap()
@@ -54,12 +65,25 @@ export default function SunbedMarker({
   // Reset local drag position when the authoritative position changes (e.g. reorder/move)
   useEffect(() => {
     setPosition(null)
-  }, [initialPosition.lat, initialPosition.lng])
+  }, [lat, lng])
+
+  // Latest-ref: the pointer-listener effect below subscribes ONCE per map and
+  // reads everything mutable through this ref, so a parent re-render (new
+  // handler identities, moved position) no longer tears down and re-attaches
+  // 4 DOM listeners on every marker. Assigned during render — the standard
+  // latest-ref pattern; the values are only read inside DOM event handlers.
+  const liveRef = useRef({ item, lat, lng, position, onItemClick, onItemDragEnd, onItemDragMove })
+  liveRef.current = { item, lat, lng, position, onItemClick, onItemDragEnd, onItemDragMove }
 
   const isDraggingRef = useRef(false)
   const wasDraggedRef = useRef(false)
   const startClientRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const startWorldRef = useRef<google.maps.Point | null>(null)
+  // The in-flight drag position, written synchronously in pointermove so that
+  // pointerup reports the exact drop point even if React has not yet committed
+  // the corresponding setPosition render (the old code read the last RENDERED
+  // position, which could trail the pointer by one move).
+  const dragPosRef = useRef<google.maps.LatLngLiteral | null>(null)
 
   const isPaired = isGroupMember
   const isHighlighted = isEditing || isMultiSelected
@@ -86,6 +110,16 @@ export default function SunbedMarker({
     const el = svgRef.current
     if (!el || !map) return
 
+    // Everything mutable is read through liveRef at event time — the effect
+    // subscribes once per map instance instead of once per parent render
+    // (deps were [map, position, zoom, onClick, onDragEnd, onDragMove], i.e.
+    // 4 listeners × N markers re-attached on every render, at pointer-event
+    // rate during a parcel drag). zoom is read live off the map.
+    const current = () => {
+      const { position: pos, lat: l, lng: g } = liveRef.current
+      return pos ?? { lat: l, lng: g }
+    }
+
     const handlePointerDown = (e: PointerEvent) => {
       e.preventDefault()
       e.stopPropagation()
@@ -95,10 +129,11 @@ export default function SunbedMarker({
 
       isDraggingRef.current = true
       wasDraggedRef.current = false
+      dragPosRef.current = null
       startClientRef.current = { x: e.clientX, y: e.clientY }
 
-      const latLng = new google.maps.LatLng((position || initialPosition).lat, (position || initialPosition).lng)
-      startWorldRef.current = projection.fromLatLngToPoint(latLng)
+      const { lat: cLat, lng: cLng } = current()
+      startWorldRef.current = projection.fromLatLngToPoint(new google.maps.LatLng(cLat, cLng))
 
       el.setPointerCapture(e.pointerId)
       map.setOptions({ draggable: false })
@@ -125,30 +160,34 @@ export default function SunbedMarker({
       const newLatLng = projection!.fromPointToLatLng(newWorldPoint)
       if (newLatLng) {
         const newPos = { lat: newLatLng.lat(), lng: newLatLng.lng() }
+        dragPosRef.current = newPos
         setPosition(newPos)
-        if (onDragMove) {
-          onDragMove(newPos.lat - initialPosition.lat, newPos.lng - initialPosition.lng)
+        const { item: it, lat: baseLat, lng: baseLng, onItemDragMove: dragMove } = liveRef.current
+        if (dragMove) {
+          dragMove(it, newPos.lat - baseLat, newPos.lng - baseLng)
         }
       }
     }
 
     const handlePointerUp = (e: PointerEvent) => {
       if (!isDraggingRef.current) return
-    
+
       isDraggingRef.current = false
       el.releasePointerCapture(e.pointerId)
       map.setOptions({ draggable: true })
-    
+
       if (wasDraggedRef.current) {
-        onDragEnd({
-          latLng: new google.maps.LatLng((position || initialPosition).lat, (position || initialPosition).lng),
+        const { lat: cLat, lng: cLng } = dragPosRef.current ?? current()
+        liveRef.current.onItemDragEnd(liveRef.current.item, {
+          latLng: new google.maps.LatLng(cLat, cLng),
         } as google.maps.MapMouseEvent)
       }
     }
-    
 
     const handleClick = (e: MouseEvent) => {
-      if (!wasDraggedRef.current) onClick({ metaKey: e.metaKey, ctrlKey: e.ctrlKey })
+      if (!wasDraggedRef.current) {
+        liveRef.current.onItemClick(liveRef.current.item, { metaKey: e.metaKey, ctrlKey: e.ctrlKey })
+      }
     }
 
     el.addEventListener('pointerdown', handlePointerDown)
@@ -162,10 +201,13 @@ export default function SunbedMarker({
       el.removeEventListener('pointerup', handlePointerUp)
       el.removeEventListener('click', handleClick)
     }
-  }, [map, position, zoom, onClick, onDragEnd, onDragMove])
+  }, [map])
+
+  const overridePosition =
+    overrideLat != null && overrideLng != null ? { lat: overrideLat, lng: overrideLng } : null
 
   return (
-    <SafeAdvancedMarker position={(positionOverride ?? position ?? initialPosition)} style={{ pointerEvents: 'none' }}>
+    <SafeAdvancedMarker position={overridePosition ?? position ?? { lat, lng }} style={{ pointerEvents: 'none' }}>
       <svg
         ref={svgRef}
         data-sunbed-marker
@@ -260,3 +302,9 @@ export default function SunbedMarker({
     </SafeAdvancedMarker>
   )
 }
+
+// Memoized: with scalar props and parent-stable callbacks, a parent re-render
+// (selection change, marquee move, another parcel's drag) skips the ~N markers
+// whose props didn't change. During a group drag only the dragged parcel's
+// siblings get new override coords — exactly those re-render.
+export default React.memo(SunbedMarker)

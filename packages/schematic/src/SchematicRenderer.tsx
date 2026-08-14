@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type {
   ElementPaletteConfig,
@@ -10,6 +10,7 @@ import type {
   WorldDims,
 } from './types'
 import { computeChairPositions, type ChairShape } from './chair-glyphs'
+import { buildPairedSelectedIds } from './pair-selection'
 
 export interface SchematicRendererProps {
   world: WorldDims
@@ -183,16 +184,33 @@ export function SchematicRenderer(props: SchematicRendererProps) {
     : 1
   const worldPerPx = pxScale > 0 ? 1 / pxScale : 1
 
-  const sortedElements = [...elements].sort((a, b) => {
-    const za = paletteConfig[a.type]?.zBand ?? 0
-    const zb = paletteConfig[b.type]?.zBand ?? 0
-    if (za !== zb) return za - zb
-    return a.z - b.z
-  })
+  // Memoized: this component re-renders at pointer-event rate (pan/pinch/drag
+  // all setState), so anything derivable from stable props must not be rebuilt
+  // per paint (track 020 P3).
+  const sortedElements = useMemo(
+    () =>
+      [...elements].sort((a, b) => {
+        const za = paletteConfig[a.type]?.zBand ?? 0
+        const zb = paletteConfig[b.type]?.zBand ?? 0
+        if (za !== zb) return za - zb
+        return a.z - b.z
+      }),
+    [elements, paletteConfig],
+  )
 
-  const selectedItemIds = new Set(selection?.itemIds ?? [])
+  const selectionItemIds = selection?.itemIds
+  const selectedItemIds = useMemo(() => new Set(selectionItemIds ?? []), [selectionItemIds])
   const editingItemId = selection?.editingItemId ?? null
   const selectedElementId = selection?.elementId ?? null
+
+  // Was an O(n²) `items.some(...)` inside `items.map(...)` — ~9M comparisons
+  // per paint at 3 000 seats, on every pan event. Same semantics, O(n), locked
+  // by pair-selection.test.ts (incl. an oracle check against the original
+  // expression).
+  const pairedSelectedIds = useMemo(
+    () => buildPairedSelectedIds(items, selectedItemIds, editingItemId),
+    [items, selectedItemIds, editingItemId],
+  )
 
   function screenToWorld(clientX: number, clientY: number): { x: number; y: number } | null {
     const svg = svgRef.current
@@ -836,15 +854,7 @@ export function SchematicRenderer(props: SchematicRendererProps) {
         const isMultiSelected = selectedItemIds.has(item.id)
         const isHighlighted = isEditing || isMultiSelected
         const isPaired = !!item.groupId
-        const pairedSelected = !!(
-          item.groupId &&
-          items.some(
-            (o) =>
-              o.id !== item.id &&
-              o.groupId === item.groupId &&
-              (editingItemId === o.id || selectedItemIds.has(o.id)),
-          )
-        )
+        const pairedSelected = pairedSelectedIds.has(item.id)
         const isDragging = mode === 'edit' && drag?.kind === 'item' && drag.id === item.id
         const isDragSelectionSibling =
           mode === 'edit' &&
