@@ -1,9 +1,9 @@
 ---
 id: 017-venue-timezone-anchoring
 title: Venue timezone anchoring — one civil-day convention across the platform
-status: proposed
+status: done
 created: 2026-08-11
-updated: 2026-08-11
+updated: 2026-08-13
 worktree: null
 ---
 
@@ -33,19 +33,23 @@ in any query window, write path, or money boundary.
 
 ## Resume here
 
-- **P1–P5 + P7 are DONE.** P1 (`f0b51ba`) + P2 (2 commits) pushed to `main` 2026-08-11. **P3–P5
-  committed** on local `main` (`a8fbc07`…`a86aebe`, 7 commits) **UNPUSHED**. **P7 done 2026-08-13,
-  UNCOMMITTED** (auto-derive writer + backfill + restaurant inheritance). No schema change → no migration.
-- **Only P6 remains — every correctness bug + the availability residual are fixed.**
-  - **P6** (collapse the two tz modules: `@repo/data/site-day` + `table-reservations-core/tz.ts`)
-    — needs the **Q4** decision (full merge vs. `table-reservations-core` imports `site-day` for
-    day/month bounds while keeping its wall-clock converters). Structural cleanup, not a bug.
-- **User ops outstanding:** (1) push P3–P5+P7 → promote → deploy when ready; (2) run the
-  `backfill:tz:*` scripts (dry then live) per environment to populate existing `Site.timeZone`
-  (closes the availability residual for the live fleet immediately).
-- **Open decisions still parked:** Q3 (restate P1's past short-by-a-day settlements?), Q4 (P6
-  scope). Q5 is resolved by P7's auto-derive. The deferred conflict-guard release-predicate
-  west-of-UTC fix (P3 log) remains before any non-EU launch.
+- **✅ ALL PHASES DONE (P1–P7). Track complete 2026-08-13.** P1 (`f0b51ba`) + P2 (2 commits)
+  pushed to `main` 2026-08-11. **P3–P7 committed on local `main` (`a8fbc07`…HEAD, 11 commits),
+  UNPUSHED.** No schema change in any phase → **no migration**.
+- **What's left is entirely USER OPS + optional follow-ups — no more build work on this track:**
+  1. **Deploy:** push P3–P7 → promote → deploy when ready (pure code deploy, migrate step is a no-op).
+  2. **Backfill:** run `backfill:tz:*` (dry then live) per environment to populate existing
+     `Site.timeZone` — closes the availability residual for the live fleet immediately (3 live
+     Europe/Athens sites are mis-anchored today; else they self-populate on their next save).
+- **Parked decisions / deferred follow-ups (none block the shipped work):**
+  - **Q3** — whether to restate P1's past short-by-a-day settlements (fix-forward is fine; decide
+    at accounting time).
+  - **Q5** — resolved by P7's auto-derive (the stored value IS the derivation; no silent guess).
+  - **Deferred: conflict-guard release predicate** (`packages/data/reservations.ts`
+    `findConflictingReservation`) still uses a SERVER-tz `endOfToday` — benign east of UTC,
+    inverted west of UTC. Venue-anchor before any non-EU launch (comment in place).
+  - **Deferred: existing linked restaurants** — P7's inheritance is create-time only; a backfill
+    could derive their tz from the linked site's coords (Restaurant has no geo columns).
 - **Still open:** **Q3** (whether past short-by-a-day settlements from P1 get restated) — unrelated
   to P3, decide when settling accounts. **Q5** (surface a "tz was guessed" signal) — cheap, tie to P7.
 - **Deferred functional fix (documented, not lost):** the conflict-guard release predicate
@@ -135,7 +139,7 @@ in any query window, write path, or money boundary.
   double-counts a venue-day booking across two UTC buckets, inflating occupancy toward 2× and
   allowing >100% of capacity. Note the interaction with 012's per-day occupancy work.
 
-- ☐ **P6 — Collapse the two timezone modules**
+- ☑ **P6 — Collapse the two timezone modules** *(DONE 2026-08-13 — Q4=light convergence; see Log)*
   Two independent implementations declare the **same** fallback literal with no shared import:
   `packages/data/src/site-day.ts:31` and `packages/table-reservations-core/src/tz.ts:11`
   (both `'Europe/Madrid'`).
@@ -378,6 +382,29 @@ in any query window, write path, or money boundary.
     on their next General-tab save).
   - **Q5 is effectively resolved** by auto-derive: the stored value IS the coord derivation, so
     there is no silent Madrid "guess" to surface (the fallback only fires for unparseable coords).
+
+- **2026-08-13 — P6 shipped (uncommitted, local `main`). Track 017 is now fully built.**
+  Q4 = light convergence (recon showed the two modules serve genuinely different domains — Site
+  coord-derived day bounds vs Restaurant wall-clock slot conversion — so a full merge would only
+  co-locate unrelated logic). Fixed the real latent DST bug + deduped the shared symbols.
+  - **DST fix (`table-reservations-core`):** `queries.ts:122` and `availability.ts:133` computed
+    the venue day END as `dayStart + 24h`/`+ msPerDay` — wrong on transition days (a Madrid
+    spring-forward day is 23h → overruns into the next day; a fall-back day is 25h → drops the
+    last local hour's reservations/slots, a double-book risk). New `zonedDayBounds(y,m,d,tz)` in
+    `tz.ts` returns a DST-safe half-open `[start, end)` via `zonedWallClockToUtc` (start = local
+    midnight, end = NEXT civil day's local midnight); both callers use it. `availability.ts:92`'s
+    `msPerDay` is untouched — that's `Date.UTC`-based civil-date arithmetic (`daysAhead`), correct.
+    +4 `tz.test` cases (24h normal / 23h spring-forward / 25h fall-back / year rollover) — the
+    file previously only tested a normal afternoon on a transition day.
+  - **Dedup (`@repo/data/site-day` as the single home):** exported `DEFAULT_TZ` and added
+    `isValidTimeZone` to `site-day.ts` (+3 tests). `tz.ts` now imports both from
+    `@repo/data/site-day` and re-exports them as `DEFAULT_TIME_ZONE` / `isValidTimeZone`, deleting
+    its own copies — the duplicated `'Europe/Madrid'` literal and validator are gone, and every
+    existing importer (5 files, via `../tz` + the package's `export * from './tz'`) is unchanged.
+    `table-reservations-core` already depends on `@repo/data`, and `@repo/data/site-day` is a pure
+    subpath (no prisma) — so `tz.ts` stays client-safe and no circular dep is introduced.
+  - Green: data 343u, table-reservations-core 56u, user 521u, partner 1973u, `turbo build` 4/4,
+    all lint clean. No schema change → no migration.
 
 ## Open decisions
 

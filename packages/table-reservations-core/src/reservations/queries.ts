@@ -1,5 +1,5 @@
 import prisma from '@repo/data/PrismaCient'
-import { DEFAULT_TIME_ZONE, parseCivilDate, zonedWallClockToUtc } from '../tz'
+import { DEFAULT_TIME_ZONE, parseCivilDate, zonedDayBounds } from '../tz'
 
 const reservationSelect = {
   id: true,
@@ -118,8 +118,8 @@ export async function listReservationsForDay(
     select: { timeZone: true },
   })
   const timeZone = restaurant?.timeZone ?? DEFAULT_TIME_ZONE
-  const start = zonedWallClockToUtc(civil.year, civil.month, civil.day, 0, 0, timeZone)
-  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000)
+  // DST-safe venue day window (not `start + 24h`, which is wrong on transition days).
+  const { start, end } = zonedDayBounds(civil.year, civil.month, civil.day, timeZone)
   return listReservationsForRestaurant(restaurantId, { from: start, to: end })
 }
 

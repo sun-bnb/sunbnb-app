@@ -7,6 +7,7 @@ import {
 import {
   DEFAULT_TIME_ZONE,
   zonedWallClockToUtc,
+  zonedDayBounds,
   getZonedParts,
   civilDayOfWeek,
   parseCivilDate,
@@ -129,8 +130,8 @@ export async function getRestaurantAvailability(
 
   // The venue-local day window converted to UTC instants, for prefetching
   // reservations that overlap the day; intersect with each slot in-memory below.
-  const dayStart = zonedWallClockToUtc(civil.year, civil.month, civil.day, 0, 0, timeZone)
-  const dayEnd = new Date(dayStart.getTime() + msPerDay)
+  // DST-safe [start, end) (not `dayStart + msPerDay`, wrong on transition days).
+  const { start: dayStart, end: dayEnd } = zonedDayBounds(civil.year, civil.month, civil.day, timeZone)
 
   // Restaurant-wide blocking reservations: per-table overlap is filtered by
   // tableId below; pacing sums party sizes across *all* tables.

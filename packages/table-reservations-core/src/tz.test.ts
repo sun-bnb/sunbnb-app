@@ -3,10 +3,13 @@ import {
   DEFAULT_TIME_ZONE,
   isValidTimeZone,
   zonedWallClockToUtc,
+  zonedDayBounds,
   getZonedParts,
   civilDayOfWeek,
   parseCivilDate,
 } from './tz'
+
+const HOUR = 60 * 60 * 1000
 
 describe('DEFAULT_TIME_ZONE', () => {
   it('is a valid IANA zone', () => {
@@ -54,6 +57,38 @@ describe('zonedWallClockToUtc — venue wall-clock → UTC instant', () => {
     expect(zonedWallClockToUtc(2026, 3, 29, 12, 0, 'Europe/Madrid').toISOString()).toBe(
       '2026-03-29T10:00:00.000Z',
     )
+  })
+})
+
+describe('zonedDayBounds — DST-safe venue civil-day window', () => {
+  it('is exactly 24h on a normal Madrid summer day', () => {
+    const { start, end } = zonedDayBounds(2026, 7, 1, 'Europe/Madrid')
+    expect(start.toISOString()).toBe('2026-06-30T22:00:00.000Z') // Jul 1 00:00 CEST (UTC+2)
+    expect(end.toISOString()).toBe('2026-07-01T22:00:00.000Z')   // Jul 2 00:00 CEST
+    expect(end.getTime() - start.getTime()).toBe(24 * HOUR)
+  })
+
+  it('is 23h on the Madrid spring-forward day (clocks skip 02:00→03:00)', () => {
+    // 2026-03-29: the naive `start + 24h` would overrun into Mar 30.
+    const { start, end } = zonedDayBounds(2026, 3, 29, 'Europe/Madrid')
+    expect(start.toISOString()).toBe('2026-03-28T23:00:00.000Z') // Mar 29 00:00 CET (UTC+1)
+    expect(end.toISOString()).toBe('2026-03-29T22:00:00.000Z')   // Mar 30 00:00 CEST (UTC+2)
+    expect(end.getTime() - start.getTime()).toBe(23 * HOUR)
+  })
+
+  it('is 25h on the Madrid fall-back day (clocks repeat 02:00→03:00)', () => {
+    // 2026-10-25: the naive `start + 24h` would fall an hour short, dropping the
+    // last local hour's reservations/slots from the day window.
+    const { start, end } = zonedDayBounds(2026, 10, 25, 'Europe/Madrid')
+    expect(start.toISOString()).toBe('2026-10-24T22:00:00.000Z') // Oct 25 00:00 CEST (UTC+2)
+    expect(end.toISOString()).toBe('2026-10-25T23:00:00.000Z')   // Oct 26 00:00 CET (UTC+1)
+    expect(end.getTime() - start.getTime()).toBe(25 * HOUR)
+  })
+
+  it('rolls over month/year boundaries (Dec 31 → Jan 1)', () => {
+    const { start, end } = zonedDayBounds(2026, 12, 31, 'Europe/Madrid')
+    expect(start.toISOString()).toBe('2026-12-30T23:00:00.000Z') // Dec 31 00:00 CET
+    expect(end.toISOString()).toBe('2026-12-31T23:00:00.000Z')   // Jan 1 00:00 CET
   })
 })
 
