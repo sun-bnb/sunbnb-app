@@ -3,7 +3,7 @@ id: 020-large-venue-scale
 title: Large-venue scale — dozens of parcels, thousands of sunbeds
 status: active
 created: 2026-08-13
-updated: 2026-08-14
+updated: 2026-08-15
 worktree: null
 ---
 
@@ -42,23 +42,28 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
 
 ## Resume here
 
-- **P0 + P1 committed** (`6cb50bf` ordering fix · `4ad3234` harness · `194cdbb` indexes, local
-  `main`, unpushed). **P3 slice 1 built & green 2026-08-14** (all four render quadratics dead;
-  see roadmap). Measured results live in **[`020-scale-baseline.md`](020-scale-baseline.md)** —
-  read that before touching any later phase; it also records two index candidates measured and
-  **rejected**, so they are not re-proposed.
-- **Next action:**
-  1. **USER OPS: `npm run migrate:test`** before any `main` push (migration
-     `20260814065600_add_site_scoped_indexes` pending on the shared test DB; pre-push hook
-     enforces).
-  2. ✅ ~~Browser-verify the inventory-map pointer paths~~ — DONE 2026-08-15 after the
-     founder-reported pan regression; fixed (callback-ref) + verified end-to-end (see Log).
-     Marquee select still unexercised in-browser (listener path untouched by the regression).
-  3. Then **P4** (batch writes + the moveParcel-transaction correctness fix) or **P2**
-     (set-based availability — money-adjacent, wants its own careful slice).
-  4. P3 follow-up slice (deferred, second-order): `manage/view.tsx` per-render site-wide
-     filters + `bed-state.ts` derive-call memoization (memoize CALLS, never fork the
-     derivation — track 018 constraint).
+- **PAUSED 2026-08-15 at a clean seam** (founder's call, after confirming "drag and rotate
+  work now" on the live editor). Everything built so far is committed on local `main`,
+  unpushed: P0 harness (`4ad3234`) · P1 indexes (`194cdbb`, plus the `6cb50bf` ordering fix
+  that must precede them) · P3 slice 1 render quadratics (`c86b9ad`) · pan-regression fix
+  (`32f3c53`) · rotation-teleport fix + data repair (`15734fc`). Measured results + REJECTED
+  index candidates: **[`020-scale-baseline.md`](020-scale-baseline.md)** — read before
+  touching any later phase.
+- **Next action (in order):**
+  1. **USER OPS before any `main` push: `npm run migrate:test`** — migration
+     `20260814065600_add_site_scoped_indexes` is applied to local + `sunbnb_test` only; the
+     shared test DB must lead `main` (pre-push hook enforces).
+  2. **Founder's pick of P4 vs P2**: P4 = batch writes + moveParcel transaction + the
+     createInventoryItem read-then-write race (contained, partner+data). P2 = set-based
+     availability (bigger win — public unauthenticated endpoint + booking hot path — but
+     money-adjacent; own careful slice, converge on `searchSites`' NOT EXISTS shape and mind
+     the existence-check double duty at `sites/[id]/actions.ts:136-140`).
+  3. P3 follow-up slice (second-order): `manage/view.tsx` per-render site-wide filters +
+     `bed-state.ts` derive-call memoization (memoize CALLS, never fork the derivation —
+     track 018 constraint). Marquee select also still unexercised in-browser.
+  4. Open decisions Q1 (target scale — gates P6 only) and Q4 (rate-limit the public
+     availability endpoint — may deserve to jump the queue as a security fix) remain
+     unanswered.
 - **Do NOT re-run the P0 seeder against anything but `sunbnb_scale`** — it TRUNCATEs. The guard
   refuses `sunbnb_test` and every remote host even with `--force`; leave that guard alone.
 - **Context needed:** this file; `020-scale-baseline.md`; `.claude/rules/migrations.md`
