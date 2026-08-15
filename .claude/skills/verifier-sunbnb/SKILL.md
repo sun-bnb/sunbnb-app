@@ -164,6 +164,38 @@ close), `"Order".restaurant_id`, `"Invoice"` PARTNER (gross) + PLATFORM (fee) ro
 `table_tab_id`, `"InvoiceLine".vat_rate` per item. Clean up: InvoiceLine → Invoice →
 OrderItem → Order → table_tab → menu_item, then restore `dine_in_enabled`.
 
+## Partner inventory map — `sites/[id]/inventory` (:3001)
+
+**Session-gated (Google OAuth)** — no token param. Get a session headlessly via the
+**impersonation rail**: mint a 5-min single-use token with
+`createImpersonationToken({ adminId: <sudo User.id>, targetUserId: <site owner>, app: 'partner' })`
+(`@repo/data` `src/impersonation`; needs `AUTH_SECRET` — `source apps/partner/.env.local`),
+then `openApp('partner', '/api/auth/impersonate?token=…')` → 302 chain sets the NextAuth
+cookie on the context; navigate anywhere session-gated after that. **Tokens are single-use**
+(replay-protected) — mint a fresh one per run, keep them out of chat logs.
+
+**Data setup:** seed a THROWAWAY site owned by the impersonation target (never drag a real
+site's seats — drag-end writes coordinates). Minimal drag fixture: 4 seats sharing
+`"group" = 1` (numbers `10101…10104`, ~10m lng apart) + 1 solo `"group" = 0` seat ~50m north
+as the **stationary pan reference**. Delete the Site afterwards (items cascade).
+
+**Drive it:** markers are `svg[data-sunbed-marker]`; identify by geometry (the solo seat is
+the northernmost → smallest bounding-box y). Drag = `mouse.move(cx,cy)` → `mouse.down()` →
+`mouse.move(cx+dx, cy+dy, {steps:12})` → `mouse.up()` (Playwright's mouse emits pointer
+events; `setPointerCapture` works headless). Assertions that matter:
+- **No pan:** the solo reference marker's bbox must not move during a drag (drift <4px).
+- **Formation:** all grouped seats shift together mid-drag.
+- **Click:** clicking a seat turns its rect stroke amber (`rect[stroke="#f59e0b"]`).
+- **DB proof:** after drop, the parcel rows' `location_lat/lng` all changed by the SAME
+  delta (moveParcel), and the solo seat's coords are byte-identical to seeded.
+
+**Pitfalls:** `AdvancedMarker` portals its children in asynchronously — markers appear
+seconds after `networkidle`; wait for the selector, then settle ~3s. This mount timing is
+also a real bug class: DOM listeners attached from a `[map]`-dep effect never bind (the
+2026-08-15 pan regression) — listeners on marker SVGs must key on the ELEMENT (callback
+ref), not just the map. A dead 3001 listener (`lsof` shows the PID but `curl` gets
+`ERR_CONNECTION_REFUSED` on both stacks) means a zombie server — kill and restart.
+
 ## User app — other surfaces (:3002)
 
 _Not yet filled in._ Use `openApp('user', '<path>')` for the handle; add the booking/POS driving

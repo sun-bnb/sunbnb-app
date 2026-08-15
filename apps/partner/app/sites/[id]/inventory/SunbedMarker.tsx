@@ -58,7 +58,15 @@ function SunbedMarker({
 }: SunbedMarkerProps) {
 
   const map = useMap()
-  const svgRef = useRef<SVGSVGElement>(null)
+  // The SVG is held in STATE via a callback ref, not a plain useRef: the
+  // parent AdvancedMarker renders `null` until Google Maps provides its
+  // content container (async after mount), so the SVG does not exist when
+  // mount-time effects run. A [map]-only effect reading a plain ref therefore
+  // attaches listeners to nothing and never re-runs — no pointerdown, no
+  // preventDefault, and the map PANS instead of dragging the seat (the
+  // regression this replaced code shipped). A callback ref fires exactly when
+  // the portal-rendered node mounts, re-running the listener effect below.
+  const [svgEl, setSvgEl] = useState<SVGSVGElement | null>(null)
 
   const [position, setPosition] = useState<google.maps.LatLngLiteral | null>(null)
 
@@ -107,11 +115,11 @@ function SunbedMarker({
   const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
 
   useEffect(() => {
-    const el = svgRef.current
+    const el = svgEl
     if (!el || !map) return
 
     // Everything mutable is read through liveRef at event time — the effect
-    // subscribes once per map instance instead of once per parent render
+    // subscribes once per (element, map) instead of once per parent render
     // (deps were [map, position, zoom, onClick, onDragEnd, onDragMove], i.e.
     // 4 listeners × N markers re-attached on every render, at pointer-event
     // rate during a parcel drag). zoom is read live off the map.
@@ -201,7 +209,7 @@ function SunbedMarker({
       el.removeEventListener('pointerup', handlePointerUp)
       el.removeEventListener('click', handleClick)
     }
-  }, [map])
+  }, [svgEl, map])
 
   const overridePosition =
     overrideLat != null && overrideLng != null ? { lat: overrideLat, lng: overrideLng } : null
@@ -209,7 +217,7 @@ function SunbedMarker({
   return (
     <SafeAdvancedMarker position={overridePosition ?? position ?? { lat, lng }} style={{ pointerEvents: 'none' }}>
       <svg
-        ref={svgRef}
+        ref={setSvgEl}
         data-sunbed-marker
         width={width}
         height={height}

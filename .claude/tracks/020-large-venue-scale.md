@@ -51,9 +51,9 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
   1. **USER OPS: `npm run migrate:test`** before any `main` push (migration
      `20260814065600_add_site_scoped_indexes` pending on the shared test DB; pre-push hook
      enforces).
-  2. **Browser-verify the inventory-map pointer paths** (drag a seat, drag a parcel, marquee
-     select, click vs drag discrimination) — the SunbedMarker listener rewrite is the one P3
-     change unit tests cannot cover; use `/verifier-sunbnb` on partner `/sites/[id]/inventory`.
+  2. ✅ ~~Browser-verify the inventory-map pointer paths~~ — DONE 2026-08-15 after the
+     founder-reported pan regression; fixed (callback-ref) + verified end-to-end (see Log).
+     Marquee select still unexercised in-browser (listener path untouched by the regression).
   3. Then **P4** (batch writes + the moveParcel-transaction correctness fix) or **P2**
      (set-based availability — money-adjacent, wants its own careful slice).
   4. P3 follow-up slice (deferred, second-order): `manage/view.tsx` per-render site-wide
@@ -273,6 +273,24 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
 
 ## Log
 
+- **2026-08-15 — P3 regression (founder-reported) found, fixed, BROWSER-VERIFIED.** The
+  flagged risk materialized: dragging a seat panned the map. Root cause confirmed in library
+  source: `AdvancedMarker` renders `null` until Google Maps supplies its content container
+  (`if (!contentContainer) return null`), so the marker SVG mounts ASYNC after the component
+  — the P3 `[map]`-dep listener effect ran while `svgRef.current` was null, attached nothing,
+  and never re-ran. No pointerdown → no `preventDefault`/`draggable:false` → greedy map pan.
+  The old code was only accidentally immune (its per-render-fresh callback deps re-attached
+  constantly — the very churn P3 removed). Fix: the SVG element is now **state via a callback
+  ref** (`[svgEl, setSvgEl]`), listener effect keyed `[svgEl, map]` — fires exactly when the
+  portal-rendered node mounts, keeps the attach-once perf win. **Verified in a real browser**
+  (Playwright headless against the dev app, impersonation rail for the session-gated page,
+  throwaway seeded site, deleted after): click selects (amber stroke), reference seat drifted
+  0.0px during drag (no pan), 4 grouped seats moved in formation, and the DB shows all four
+  parcel rows moved by the IDENTICAL delta with spacing preserved while the solo seat's
+  coords stayed byte-identical. New verifier-skill recipe: "Partner inventory map" (the
+  impersonation handle + the no-pan/formation/DB assertions), so the next session doesn't
+  re-derive it. Lesson recorded there too: listeners on portal-rendered marker DOM must key
+  on the ELEMENT, never just `[map]`.
 - **2026-08-14 (later) — P3 slice 1: render quadratics killed; P0+P1 committed.** P0+P1 went
   in as three commits (`6cb50bf` availability ordering fix — deliberately FIRST, it protects
   against index-induced reorder; `4ad3234` harness; `194cdbb` indexes). P3 then converted all
