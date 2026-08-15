@@ -315,7 +315,20 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
     payload (`sites/[id]/page.tsx:99`), once again over `/api/sites/[id]` (`view.tsx:104`).
     Add reservation date windows + `select` narrowing; kill the double-ship.
 
-- 💤 **P6 — Structural: stop shipping the whole site.** Gated on Q1. Viewport culling /
+- ☐ **P6 — LOD + viewport culling (founder-directed, 2026-08-15).** Q1/Q6 effectively
+  answered: the founder wants massive seat counts supported and named viewport culling as
+  the mechanism. Design sharpened during that exchange: **culling alone only helps zoomed
+  IN** (zoomed out, all 3 000 seats are inside the viewport) — the full answer is two-tier:
+  (a) **LOD**: below a zoom threshold render PARCELS (hull + available count — the user map
+  already draws both; they become the only render at low zoom), seats only above it;
+  (b) **bounds culling** at seat-level zoom (bounds + pan margin, re-filter on map idle).
+  Applies to the partner inventory map, the user selection map, and the schematic canvas
+  (viewBox intersection there). The manage grid needs nothing (already parcel-scoped).
+  **Sequence: measure FIRST** — the deferred P0 app-level baseline (seed the 3 000-seat
+  fixture venue into the dev DB, load the editor + user site page, measure load/pan) sets
+  the before-numbers P6 is judged against; this track has twice shown "obviously faster"
+  shapes measuring slower.
+- 💤 **P6 (original spec, superseded).** Gated on Q1. Viewport culling /
   clustering on the map, virtualization or parcel-scoped loading for the schematic canvas,
   and parcel-scoped queries instead of site-scoped. Only needed if Q1's target is genuinely
   in the thousands; P0–P5 may well carry us to ~1 000. **Do not start this before P0 proves
@@ -323,7 +336,10 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
 
 ## Open decisions
 
-1. ❓ **Q1 — What size must we actually support?** ~500 · ~1 500 · ~3 000+ seats. This is the
+1. ✅ **Q1 — answered by direction (2026-08-15):** the founder wants "massive amounts of
+   seats" supported; P6 (LOD + culling) is unpaused. No numeric ceiling named — treat the
+   3 000-seat fixture as the working target. Original question for reference:
+   ~~What size must we actually support?~~ ~500 · ~1 500 · ~3 000+ seats. This is the
    single load-bearing question: it decides whether P6 exists, and it sizes the P0 fixture.
    Everything else in this track is worth doing at *any* target.
 2. ❓ **Q2 — Is there a real prospect driving this, or is it pre-emptive hardening?** A signed
