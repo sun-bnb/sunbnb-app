@@ -10,6 +10,12 @@ import { InventoryItem } from '@/types/shared'
 interface ParcelListProps {
   inventory: InventoryItem[]
   allParcelNumbers: number[]
+  /**
+   * Seats per parcel (track 020 C2 slice 2). The chip count must come from
+   * the ParcelSummary rows, not from `inventory` — on the parcel tier a
+   * parcel's seats are absent until it is opened, which rendered "(0)".
+   */
+  seatCountFor: (group: number) => number
   selectedItemIds: string[]
   onSelectParcel: (group: number) => void
   onRestoreOrder: (group: number) => void
@@ -18,6 +24,7 @@ interface ParcelListProps {
 export default function ParcelList({
   inventory,
   allParcelNumbers,
+  seatCountFor,
   selectedItemIds,
   onSelectParcel,
   onRestoreOrder,
@@ -29,7 +36,7 @@ export default function ParcelList({
       <span className="text-xs text-gray-400 mr-1 shrink-0">Parcels</span>
       {allParcelNumbers.map(group => {
         const parcelItems = inventory.filter(i => i.group === group)
-        const count = parcelItems.length
+        const count = seatCountFor(group)
         const color = getParcelColor(group) || '#6b7280'
         const parcelItemIds = parcelItems.map(i => i.id)
         const allSelected = parcelItemIds.length > 0 && parcelItemIds.every(id => selectedItemIds.includes(id))

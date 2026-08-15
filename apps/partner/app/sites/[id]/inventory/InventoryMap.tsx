@@ -3,7 +3,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { APIProvider, Map, ControlPosition, MapMouseEvent, useMap, AdvancedMarker } from '@vis.gl/react-google-maps'
-import { cullToBounds, expandBounds, lodTier, orientedBoundingBox, LOD_SEAT_ZOOM, type ViewportBounds } from '@repo/schematic'
+import { cullToBounds, expandBounds, lodTier, orientedBoundingBox, parcelFootprint, LOD_SEAT_ZOOM, type ViewportBounds } from '@repo/schematic'
 import { Polygon } from '@/components/maps/polygon'
 import SunbedMarker from './SunbedMarker'
 import { InventoryItem } from '@/types/shared'
@@ -28,6 +28,12 @@ interface InventoryMapProps {
   onPlaceSelect: (place: google.maps.places.PlaceResult | null) => void
   onMapClick: (event: MapMouseEvent) => void
   onSelectionChange: (ids: string[]) => void
+  /** Parcel tier (track 020 C2): open a parcel whose seats are not loaded. */
+  onOpenGroup: (group: number) => void
+  /** Parcel tier: ensure these parcels' seats are loaded. */
+  onEnsureGroups: (groups: number[]) => void
+  /** Parcel tier: a summary-derived box was dragged (no seats loaded). */
+  onMovedGroup: (group: number, targetLat: number, targetLng: number) => void
   selectedPlace: google.maps.places.PlaceResult | null
 }
 
@@ -45,7 +51,14 @@ interface ParcelBox {
   color: string
   corners: Array<{ lat: number; lng: number }>
   center: { lat: number; lng: number }
-  firstItem: InventoryItem
+  /**
+   * Present only once the parcel's seats are loaded (track 020 C2 slice 2).
+   * A summary-tier box has no seats yet and drags via `anchor` instead — the
+   * ItemGroup origin, which is exactly what `moveParcel` targets when no
+   * anchor ITEM is supplied.
+   */
+  firstItem: InventoryItem | null
+  anchor: { lat: number; lng: number } | null
 }
 
 /**
@@ -57,11 +70,14 @@ interface ParcelBox {
 function DraggableParcelBox({
   box,
   onMoved,
+  onMovedGroup,
   onOpen,
 }: {
   box: ParcelBox
   /** Same contract as a marker drag end: (anchor item, drop event). */
   onMoved: (item: InventoryItem, e: { latLng: { lat: () => number; lng: () => number } }) => void
+  /** Summary-tier drag: no seat loaded, so move the parcel by its anchor. */
+  onMovedGroup: (group: number, targetLat: number, targetLng: number) => void
   onOpen: (box: ParcelBox) => void
 }) {
   const polyRef = useRef<google.maps.Polygon | null>(null)
@@ -114,12 +130,17 @@ function DraggableParcelBox({
           const dLat = end.lat - start.lat
           const dLng = end.lng - start.lng
           if (Math.abs(dLat) < 1e-9 && Math.abs(dLng) < 1e-9) return
-          // The whole parcel moves by the box's drag delta: send the parcel's
-          // first seat to its new ABSOLUTE position (the server derives the
-          // delta from that seat's DB row — same rail as a seat drag).
-          const targetLat = Number(box.firstItem.locationLat) + dLat
-          const targetLng = Number(box.firstItem.locationLng) + dLng
-          onMoved(box.firstItem, { latLng: { lat: () => targetLat, lng: () => targetLng } })
+          // The whole parcel moves by the box's drag delta, sent as an
+          // ABSOLUTE target (the server derives the delta from the DB row —
+          // stale client coords can never compound; see the drag-jump fix).
+          if (box.firstItem) {
+            const targetLat = Number(box.firstItem.locationLat) + dLat
+            const targetLng = Number(box.firstItem.locationLng) + dLng
+            onMoved(box.firstItem, { latLng: { lat: () => targetLat, lng: () => targetLng } })
+          } else if (box.anchor) {
+            // Summary tier: no seat is loaded, so target the ItemGroup anchor.
+            onMovedGroup(box.group, box.anchor.lat + dLat, box.anchor.lng + dLng)
+          }
         }}
         onClick={() => onOpen(box)}
       />
@@ -153,6 +174,9 @@ function MapContent({
   onMarkerClick,
   onMarkerDragEnd,
   onSelectionChange,
+  onOpenGroup,
+  onEnsureGroups,
+  onMovedGroup,
   zoom,
   viewBounds,
 }: {
@@ -163,6 +187,12 @@ function MapContent({
   onMarkerClick: (item: InventoryItem, modifiers: { metaKey: boolean; ctrlKey: boolean }) => void
   onMarkerDragEnd: (item: InventoryItem, e: any) => void
   onSelectionChange: (ids: string[]) => void
+  /** Parcel tier: open a parcel whose seats are not loaded yet. */
+  onOpenGroup: (group: number) => void
+  /** Parcel tier: make sure these parcels' seats are loaded. */
+  onEnsureGroups: (groups: number[]) => void
+  /** Parcel tier: a summary box was dragged (no seats loaded). */
+  onMovedGroup: (group: number, targetLat: number, targetLng: number) => void
   zoom: number
   viewBounds: ViewportBounds | null
 }) {
@@ -367,13 +397,50 @@ function MapContent({
 
   const parcelBoxes = useMemo(() => {
     if (tier !== 'parcels') return []
+    // Parcel tier (track 020 C2 slice 2): with summaries present, a parcel
+    // whose seats have NOT been loaded is drawn from its ItemGroup geometry
+    // via the shared parcelFootprint — the whole point is never fetching its
+    // seats to draw it. Parcels already loaded (and legacy ones with no
+    // ItemGroup row) still derive their box from the seats themselves.
+    const summaries = site.parcels
     // (record, not a Map — `Map` here is the @vis.gl map component)
     const byGroup: Record<number, InventoryItem[]> = {}
     for (const i of visibleItems) {
       if (!(i.group > 0)) continue
       ;(byGroup[i.group] ??= []).push(i)
     }
-    return Object.entries(byGroup).map(([groupStr, items]) => {
+    const boxes: ParcelBox[] = []
+    for (const summary of summaries ?? []) {
+      if (byGroup[summary.group]) continue // seats loaded — exact box below
+      if (summary.locationLat == null || summary.locationLng == null) continue
+      const anchor = { lat: Number(summary.locationLat), lng: Number(summary.locationLng) }
+      if (!Number.isFinite(anchor.lat) || !Number.isFinite(anchor.lng)) continue
+      const corners = parcelFootprint(anchor, {
+        rows: summary.rows ?? 1,
+        seatsPerRow: summary.seatsPerRow ?? 1,
+        horizontalGap: summary.horizontalGap ?? 0,
+        verticalGap: summary.verticalGap ?? 0,
+        intraPairGap: summary.pairGap ?? 0,
+        pairSeats: (summary.pairGap ?? 0) > 0,
+        rotation: summary.rotation ?? 0,
+      })
+      const center = {
+        lat: corners.reduce((sum, c) => sum + c.lat, 0) / corners.length,
+        lng: corners.reduce((sum, c) => sum + c.lng, 0) / corners.length,
+      }
+      boxes.push({
+        group: summary.group,
+        count: summary.count,
+        ids: [],
+        color: getParcelColor(summary.group) || '#6b7280',
+        corners,
+        center,
+        firstItem: null,
+        anchor,
+      })
+    }
+
+    boxes.push(...Object.entries(byGroup).map(([groupStr, items]) => {
       const group = Number(groupStr)
       const points = items.map((i) => ({ lat: Number(i.locationLat), lng: Number(i.locationLng) }))
       // Oriented to the parcel's actual rotation so the box hugs its real
@@ -391,14 +458,19 @@ function MapContent({
         corners,
         center,
         firstItem: items[0]!,
+        anchor: null,
       } satisfies ParcelBox
-    })
-  }, [tier, visibleItems])
+    }))
+    return boxes.sort((a, b) => a.group - b.group)
+  }, [tier, visibleItems, site.parcels])
 
   // Click on a box/chip: select the parcel and zoom onto it (into the seats
   // tier — fitBounds, then nudge past LOD_SEAT_ZOOM for very large parcels).
   const openParcel = useCallback((box: ParcelBox) => {
-    onSelectionChange(box.ids)
+    // With no seats loaded there are no ids to select yet — the view loads the
+    // parcel and selects it once its rows arrive.
+    if (box.ids.length > 0) onSelectionChange(box.ids)
+    else onOpenGroup(box.group)
     if (!map) return
     const b = new google.maps.LatLngBounds()
     for (const c of box.corners) b.extend(c)
@@ -408,7 +480,28 @@ function MapContent({
       if (z <= LOD_SEAT_ZOOM) map.setZoom(LOD_SEAT_ZOOM + 1)
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, onSelectionChange])
+  }, [map, onSelectionChange, onOpenGroup])
+
+  // At seat zoom the user is looking at actual seats, so make sure the parcels
+  // overlapping the viewport are loaded. Boxes come from summaries, so this
+  // decides what to fetch WITHOUT already having the seats (track 020 C2).
+  useEffect(() => {
+    if (tier !== 'seats' || !site.parcels || !viewBounds) return
+    const b = expandBounds(viewBounds)
+    const needed = site.parcels
+      .filter((p) => {
+        if (p.locationLat == null || p.locationLng == null) return false
+        const lat = Number(p.locationLat)
+        const lng = Number(p.locationLng)
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false
+        // Anchor-in-bounds is a deliberate approximation: parcels are small
+        // relative to a seat-zoom viewport, and a miss self-corrects on the
+        // next pan (idle re-runs this).
+        return lat <= b.north && lat >= b.south && lng <= b.east && lng >= b.west
+      })
+      .map((p) => p.group)
+    if (needed.length > 0) onEnsureGroups(needed)
+  }, [tier, viewBounds, site.parcels, onEnsureGroups])
 
   // Ungrouped seats have no box to live in — keep them as markers at both tiers.
   const ungroupedSeats = useMemo(
@@ -424,6 +517,7 @@ function MapContent({
             key={`parcel-${box.group}`}
             box={box}
             onMoved={onMarkerDragEnd}
+            onMovedGroup={onMovedGroup}
             onOpen={openParcel}
           />
         ))}
@@ -551,6 +645,9 @@ export default function InventoryMap({
   onMarkerDragEnd,
   onPlaceSelect,
   onSelectionChange,
+  onOpenGroup,
+  onEnsureGroups,
+  onMovedGroup,
   selectedPlace,
 }: InventoryMapProps) {
 
@@ -627,6 +724,9 @@ export default function InventoryMap({
             onMarkerClick={onMarkerClick}
             onMarkerDragEnd={onMarkerDragEnd}
             onSelectionChange={onSelectionChange}
+            onOpenGroup={onOpenGroup}
+            onEnsureGroups={onEnsureGroups}
+            onMovedGroup={onMovedGroup}
             zoom={zoom}
             viewBounds={viewBounds}
           />

@@ -5,7 +5,12 @@ import { SiteProps } from '@/types/shared'
 
 interface SiteContextValue {
   site: SiteProps
-  setSite: (site: SiteProps) => void
+  /**
+   * Accepts an updater as well as a value (track 020 C2): parcel seat loads
+   * can overlap (a map-idle trigger and a click), and a value-form update
+   * built from a stale closure would drop the other's rows.
+   */
+  setSite: (site: SiteProps | ((prev: SiteProps) => SiteProps)) => void
   apiKey: string,
   nonce: number
 }
@@ -22,7 +27,7 @@ export function SiteProvider(props: SiteContextProps & { children: React.ReactNo
   const [site, setSite] = useState<SiteProps>(props.site)
   const [nonce, setNonce] = useState<number>(Math.random())
 
-  const updateSite = (newSite: SiteProps) => {
+  const updateSite = (newSite: SiteProps | ((prev: SiteProps) => SiteProps)) => {
     setNonce(Math.random())
     setSite(newSite)
   }

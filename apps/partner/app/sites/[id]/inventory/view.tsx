@@ -1,16 +1,17 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
-import { InventoryItem } from '@/types/shared'
+import { InventoryItem, SiteProps } from '@/types/shared'
 import {
   createInventoryItem,
   saveInventoryItemLocation,
   deleteInventoryItem,
+  deleteInventoryItems,
   pairInventoryItems,
 } from '../inventory-actions'
-import { getSite } from '../queries'
+import { getSite, getInventoryItems, getItemsByGroups } from '../queries'
 import { useSite } from '@/app/sites/site-context'
 import ReadinessChecklist from '@/app/sites/readiness-checklist'
 import InventoryForm from './InventoryForm'
@@ -68,15 +69,80 @@ export default function InventoryView() {
     if (updatedSite) setSite(updatedSite)
   }
 
+  // Scoped refresh (track 020): after a mutation that only touches known
+  // items, re-fetch just those rows (same include shape as getSite) and merge
+  // them into the context — the full-site refresh was 5.8MB/~1.6s per rotate
+  // click on the 4,436-item site, independent of parcel size.
+  const refreshItems = async (itemIds: string[]) => {
+    const fresh = await getInventoryItems(siteId, itemIds)
+    if (!fresh) return refresh()
+    const byId = new Map(fresh.map((i) => [i.id, i]))
+    setSite({
+      ...site,
+      inventoryItems: (site.inventoryItems || []).map((i) => byId.get(i.id) ?? i),
+    })
+  }
+
+  // ── Parcel tier (track 020 C2 slice 2) ────────────────────────────────
+  // The payload carries ~12 ParcelSummary rows instead of thousands of seats.
+  // Seats stream in per parcel and are merged into the SAME site context, so
+  // every existing consumer below keeps reading `inventory` unchanged — a
+  // parcel is simply absent from it until it has been opened.
+  const parcels = site.parcels
+  const loadedGroupsRef = useRef<Set<number>>(new Set())
+  const [loadingGroups, setLoadingGroups] = useState(false)
+
+  const ensureGroups = useCallback(async (groups: number[]) => {
+    if (!parcels) return // no summaries → the full array is already present
+    const missing = [...new Set(groups)].filter(
+      (g) => g > 0 && !loadedGroupsRef.current.has(g),
+    )
+    if (missing.length === 0) return
+    // Mark BEFORE awaiting so overlapping triggers (map idle + a click) cannot
+    // issue the same fetch twice.
+    for (const g of missing) loadedGroupsRef.current.add(g)
+    setLoadingGroups(true)
+    try {
+      const rows = await getItemsByGroups(siteId, missing)
+      if (!rows) {
+        for (const g of missing) loadedGroupsRef.current.delete(g)
+        return
+      }
+      setSite((prev: SiteProps) => {
+        const existing = prev.inventoryItems || []
+        const known = new Set(existing.map((i) => i.id))
+        return { ...prev, inventoryItems: [...existing, ...rows.filter((r) => !known.has(r.id))] }
+      })
+    } catch {
+      for (const g of missing) loadedGroupsRef.current.delete(g)
+    } finally {
+      setLoadingGroups(false)
+    }
+  }, [parcels, siteId, setSite])
+
   const sunbedEditing = useSunbedEditing(siteId, refresh)
 
   const isParcelEditorActive = editorMode === 'create-parcel' || editorMode === 'edit-parcel'
 
   // --- Summary stats ---
-  const totalSunbeds = inventory.length
-  const parcelGroups = new Set(inventory.filter(i => i.group && i.group > 0).map(i => i.group))
-  const totalParcels = parcelGroups.size
+  const totalSunbeds = parcels
+    ? parcels.reduce((sum, p) => sum + p.count, 0) + (site.ungroupedCount ?? 0)
+    : inventory.length
+  const totalParcels = parcels
+    ? parcels.length
+    : new Set(inventory.filter(i => i.group && i.group > 0).map(i => i.group)).size
+  // Only ever computed over LOADED seats — a status roll-up over the whole
+  // site would need its own aggregate, and this counter is advisory.
   const disabledCount = inventory.filter(i => i.status === 'disabled').length
+
+  /** Seats in a parcel per the summary, falling back to the loaded array. */
+  const parcelSeatCount = useCallback((group: number | null) => {
+    if (!group) return 0
+    const summary = parcels?.find((p) => p.group === group)
+    if (summary) return summary.count
+    return inventory.filter(i => i.group === group).length
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parcels, site.inventoryItems])
 
   // --- Detect if all selected items belong to the same parcel group ---
   const selectedParcelGroupNumber = useMemo(() => {
@@ -89,26 +155,27 @@ export default function InventoryView() {
   }, [selectedItemIds, inventory])
 
   // Total items in the selected parcel group
-  const selectedParcelTotal = useMemo(() => {
-    if (!selectedParcelGroupNumber) return 0
-    return inventory.filter(i => i.group === selectedParcelGroupNumber).length
-  }, [selectedParcelGroupNumber, inventory])
+  const selectedParcelTotal = useMemo(
+    () => parcelSeatCount(selectedParcelGroupNumber),
+    [selectedParcelGroupNumber, parcelSeatCount],
+  )
 
   // Whether ALL members of the parcel are in the selection
   const isCompleteParcelSelected = useMemo(() => {
     if (!selectedParcelGroupNumber) return false
-    const totalInGroup = inventory.filter(i => i.group === selectedParcelGroupNumber).length
+    const totalInGroup = parcelSeatCount(selectedParcelGroupNumber)
     const selectedInGroup = inventory.filter(i =>
       i.group === selectedParcelGroupNumber && selectedItemIds.includes(i.id)
     ).length
-    return selectedInGroup === totalInGroup
-  }, [selectedParcelGroupNumber, selectedItemIds, inventory])
+    return totalInGroup > 0 && selectedInGroup === totalInGroup
+  }, [selectedParcelGroupNumber, selectedItemIds, inventory, parcelSeatCount])
 
   // All existing parcel numbers for the assign dropdown
   const allParcelNumbers = useMemo(() => {
+    if (parcels) return parcels.map((p) => p.group).sort((a, b) => a - b)
     const groups = new Set(inventory.filter(i => i.group && i.group > 0).map(i => i.group))
     return Array.from(groups).sort((a, b) => a - b)
-  }, [inventory])
+  }, [inventory, parcels])
 
   const [selectedParcelConfig, setSelectedParcelConfig] = useState<ChairConfig | null>(null)
 
@@ -219,23 +286,20 @@ export default function InventoryView() {
             baseLng: parseFloat(ig.locationLng),
           }
           await syncChairsWithLayout(siteId, newConfig, 'rearrange')
-          const updatedSite = await getSite(siteId)
-          if (updatedSite) setSite(updatedSite)
+          await refreshItems(groupItems.map((i) => i.id))
           return
         }
       }
     }
 
     await rotateSelection(siteId, selectedItemIds, delta)
-    const updatedSite = await getSite(siteId)
-    if (updatedSite) setSite(updatedSite)
+    await refreshItems(selectedItemIds)
   }
 
   const handleAdjustSpacing = async (axis: 'horizontal' | 'vertical', factor: number) => {
     if (selectedItemIds.length < 2) return
     await adjustItemSpacing(siteId, selectedItemIds, axis, factor)
-    const updatedSite = await getSite(siteId)
-    if (updatedSite) setSite(updatedSite)
+    await refreshItems(selectedItemIds)
   }
 
   const handleAssignToParcel = async (group: number) => {
@@ -252,8 +316,33 @@ export default function InventoryView() {
     if (updatedSite) setSite(updatedSite)
   }
 
+  // Parcel tier (track 020 C2 slice 2): the map can only hand us a GROUP when
+  // that parcel's seats have not been fetched yet — load, then select.
+  const handleOpenGroup = useCallback(async (group: number) => {
+    await ensureGroups([group])
+    const rows = await getItemsByGroups(siteId, [group])
+    if (!rows) return
+    setSelectedItemIds(rows.filter((i) => i.status !== 'pool').map((i) => i.id))
+  }, [ensureGroups, siteId])
+
+  const handleEnsureGroups = useCallback((groups: number[]) => {
+    void ensureGroups(groups)
+  }, [ensureGroups])
+
+  // Summary-box drag: no seat is loaded, so the parcel moves by its ItemGroup
+  // anchor — the same absolute-target rail, minus the anchor item.
+  const handleMovedGroup = useCallback(async (group: number, targetLat: number, targetLng: number) => {
+    await moveParcel(siteId, group, targetLat, targetLng)
+    await refresh()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteId])
+
   const handleSelectEntireParcel = (group: number) => {
     const parcelItems = inventory.filter(i => i.group === group)
+    if (parcelItems.length === 0 && parcels) {
+      void handleOpenGroup(group)
+      return
+    }
     setSelectedItemIds(parcelItems.map(i => i.id))
   }
 
@@ -353,7 +442,7 @@ export default function InventoryView() {
     }
 
     if (editorMode === 'create-parcel') {
-      const newGroup = Math.max(0, ...inventory.map(i => i.group || 0)) + 1
+      const newGroup = Math.max(0, ...allParcelNumbers, ...inventory.map(i => i.group || 0)) + 1
       const newConfig: ChairConfig = {
         ...parcelConfig,
         group: newGroup,
@@ -437,7 +526,9 @@ export default function InventoryView() {
 
   const handleDeleteSelected = async () => {
     if (selectedItemIds.length === 0) return
-    await Promise.all(selectedItemIds.map(id => deleteInventoryItem(id)))
+    // One set-based action — this was one server action PER SEAT, each with
+    // its own site-wide label recompute (track 020).
+    await deleteInventoryItems(siteId, selectedItemIds)
     setSelectedItemIds([])
     await refresh()
   }
@@ -600,6 +691,7 @@ export default function InventoryView() {
       <ParcelList
         inventory={inventory}
         allParcelNumbers={allParcelNumbers}
+        seatCountFor={parcelSeatCount}
         selectedItemIds={selectedItemIds}
         onSelectParcel={handleSelectEntireParcel}
         onRestoreOrder={handleRestoreParcelOrder}
@@ -684,6 +776,9 @@ export default function InventoryView() {
             onMarkerDragEnd={handleMarkerDragEnd}
             onPlaceSelect={setSelectedPlace}
             onSelectionChange={setSelectedItemIds}
+          onOpenGroup={handleOpenGroup}
+          onEnsureGroups={handleEnsureGroups}
+          onMovedGroup={handleMovedGroup}
             selectedPlace={selectedPlace}
           />
         </div>

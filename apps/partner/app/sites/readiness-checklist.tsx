@@ -14,7 +14,10 @@ interface ReadinessItem {
 
 function computeMissing(site: SiteProps): ReadinessItem[] {
   const isPaid = site.type === 'paid'
-  const activeItems = site.inventoryItems?.filter(i => i.status === 'active') ?? []
+  // Count only (track 020 C2): scalar when the loader provides it, array
+  // fallback otherwise.
+  const activeItemCount =
+    site.activeItemCount ?? (site.inventoryItems?.filter(i => i.status === 'active') ?? []).length
 
   const all: ReadinessItem[] = [
     {
@@ -41,7 +44,7 @@ function computeMissing(site: SiteProps): ReadinessItem[] {
     {
       key: 'inventory',
       labelKey: 'addInventory',
-      met: activeItems.length > 0,
+      met: activeItemCount > 0,
       tab: 'inventory',
       hintKey: 'addInventoryHint',
     },

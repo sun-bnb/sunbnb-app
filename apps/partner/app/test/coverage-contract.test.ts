@@ -628,6 +628,16 @@ const UNGATED_ALLOWLIST: AllowlistEntry[] = [
     reason: 'SAFE — ownership enforced via query filter: site.findFirst where { id: siteId, userId: session.user.id } (queries.ts:12-13); returns null for unauthenticated or non-owners. Bug #1 fixed. Auth-only (non-standard return: returns full site|null not { status }). Regression guard: queries.test.ts (3 tests).',
   },
   {
+    export: 'getInventoryItems',
+    file: 'app/sites/[id]/queries.ts',
+    reason: 'SAFE — same gate as getSite: auth() then site.findFirst where { id: siteId, userId: session.user.id }; returns null for unauthenticated or non-owners (callers fall back to full refresh). Scoped read of items already visible via getSite. Regression guard: queries.test.ts.',
+  },
+  {
+    export: 'getItemsByGroups',
+    file: 'app/sites/[id]/queries.ts',
+    reason: 'SAFE — same gate as getSite/getInventoryItems: auth() then site.findFirst where { id: siteId, userId: session.user.id }; returns null for unauthenticated or non-owners. Streams a parcel\'s seats for the track-020 C2 parcel tier (data already visible to the owner via getSite). Regression guard: queries.test.ts.',
+  },
+  {
     export: 'checkSlug',
     file: 'app/sites/[id]/site-actions.ts',
     reason: 'Auth-only (non-standard return: { available: boolean }); reads only existence of slug string, not any site data; returns false for unauthenticated',

@@ -178,8 +178,15 @@ export default function BrandView() {
     }
   }, [brandName, slug, tagline, bgColor, fgColor, slugStatus, site.id])
 
-  const itemCount = (site.inventoryItems || []).length
-  const availableCount = (site.inventoryItems || []).filter(item => item.status === 'active' && (item.reservations || []).length === 0).length
+  // Server-computed scalars (track 020 C2) — this page needed two NUMBERS,
+  // which used to cost the whole item array plus every item's reservations.
+  // Array fallbacks keep the stats correct for any caller still shipping items.
+  const itemCount = site.itemCount ?? (site.inventoryItems || []).length
+  const availableCount =
+    site.availableTodayCount ??
+    (site.inventoryItems || []).filter(
+      item => item.status === 'active' && (item.reservations || []).length === 0,
+    ).length
 
   const bookingUrl = slug
     ? `https://sunbnb.app/s/${slug}`

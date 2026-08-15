@@ -652,6 +652,8 @@ export default function SchematicView() {
       <ParcelList
         inventory={inventory}
         allParcelNumbers={allParcelNumbers}
+        // Schematic still loads every seat (parcel tiering is map-editor only).
+        seatCountFor={(group: number) => inventory.filter(i => i.group === group).length}
         selectedItemIds={selectedItemIds}
         onSelectParcel={handleSelectEntireParcel}
         onRestoreOrder={handleRestoreParcelOrder}

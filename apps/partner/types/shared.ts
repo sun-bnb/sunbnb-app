@@ -66,6 +66,39 @@ export interface SiteProps {
   features?: string[]
   mollieOnboardingStatus?: string | null
   hasMollieToken?: boolean
+  // Server-computed inventory scalars (track 020 C2). Tabs that only needed a
+  // COUNT used to force the whole item array (and every item's reservations,
+  // with guest emails) into the payload. Optional so any caller that still
+  // ships items keeps working.
+  itemCount?: number
+  activeItemCount?: number
+  availableTodayCount?: number
+  /**
+   * Parcel-tier summary (track 020 C2 slice 2). Present on the inventory tab
+   * INSTEAD of a full `inventoryItems` array: the editor draws overview boxes
+   * and every aggregate from these ~12 rows, and streams a parcel's seats in
+   * only when it is opened or enters the seat-zoom viewport.
+   */
+  parcels?: ParcelSummary[]
+  ungroupedCount?: number
+}
+
+export interface ParcelSummary {
+  group: number
+  count: number
+  itemGroupId: string | null
+  rows: number | null
+  seatsPerRow: number | null
+  horizontalGap: number | null
+  verticalGap: number | null
+  pairGap: number | null
+  rotation: number | null
+  locationLat: string | null
+  locationLng: string | null
+  schematicX: number | null
+  schematicY: number | null
+  category: string | null
+  price: number | null
 }
 
 export interface Product {
@@ -153,8 +186,11 @@ export interface InventoryItem {
   schematicX?: number | null
   schematicY?: number | null
   pairId?: string | null
-  pair?: InventoryItem | null
-  pairedBy?: InventoryItem | null
+  // Id stubs, not full rows (track 020 C2): the only consumers read `.id`
+  // (inventory/schematic view pair resolution). Shipping whole partner rows
+  // doubled the per-seat payload on every site tab.
+  pair?: { id: string } | null
+  pairedBy?: { id: string } | null
   sunbedGroupId?: string | null
   sunbedGroup?: { id: string; items: { id: string; number?: number; status?: string }[] } | null
   seatLabel?: string | null
