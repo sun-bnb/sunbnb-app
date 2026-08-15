@@ -324,6 +324,19 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
   (b) **bounds culling** at seat-level zoom (bounds + pan margin, re-filter on map idle).
   Applies to the partner inventory map, the user selection map, and the schematic canvas
   (viewBox intersection there). The manage grid needs nothing (already parcel-scoped).
+  **Founder design refinement (2026-08-15): the editor's low-zoom tier renders parcel
+  BOUNDING BOXES sourced from `ItemGroup` rows alone — never loading the seats.** ItemGroup
+  already carries anchor + rows×seatsPerRow + gaps + rotation, so the box is exact pure
+  math (the generateChairs footprint without generating) and a 3 000-seat overview is ~40
+  rows instead of 3 000. This bounds the PAYLOAD, not just the DOM. It works because
+  parcel-level operations never need seat data client-side: box drag → `moveParcel(delta)`
+  (set-based since P4), rotation/spacing → server-side rearrange from the anchor. Seats
+  stream in per parcel / per bounds on zoom-in or parcel focus (served by the P1
+  `(site_id, group)` index), then existing seat-level editing takes over unchanged.
+  Fallback for legacy parcels WITHOUT an ItemGroup row and for loose/ungrouped seats:
+  load items for just those (typically few). Requires restructuring the site-context load
+  (site-page/getSite currently ship all items to every tab) — the inventory tab gains its
+  own tiered loader; other tabs need item COUNTS at most.
   **Sequence: measure FIRST** — the deferred P0 app-level baseline (seed the 3 000-seat
   fixture venue into the dev DB, load the editor + user site page, measure load/pan) sets
   the before-numbers P6 is judged against; this track has twice shown "obviously faster"
