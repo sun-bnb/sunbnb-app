@@ -232,7 +232,7 @@ describe('saveReservationForMultipleItems', () => {
       items: [{ id: 'item-1', price: 1 } as any, { id: 'item-2', price: 1 } as any],
       type: 'days',
       from: '2025-07-01',
-      to: '2025-07-03', // 2 days
+      to: '2025-07-02', // inclusive last day → 2 days (Jul 1, 2)
     })
 
     expect(res.status).toBe('ok')

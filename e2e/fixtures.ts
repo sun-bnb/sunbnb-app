@@ -21,10 +21,15 @@ export const test = base.extend<Fixtures>({
   // handle.mjs openApp(): best-effort click on the "OK" button, swallow if it's not there.
   page: async ({ page }, use) => {
     const dismissCookie = async () => {
-      try {
-        await page.getByRole('button', { name: 'OK' }).click({ timeout: 2500 })
-      } catch {
-        /* banner absent / already dismissed */
+      // Banner copy changed over time ("OK" → "Decline / Accept all"). Decline
+      // is the privacy-preserving default for automated runs.
+      for (const name of ['Decline', 'OK']) {
+        try {
+          await page.getByRole('button', { name, exact: true }).click({ timeout: 1500 })
+          return
+        } catch {
+          /* try next label / banner absent */
+        }
       }
     }
     page.on('load', () => void dismissCookie())

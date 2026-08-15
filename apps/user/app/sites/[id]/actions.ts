@@ -106,11 +106,21 @@ export async function saveReservationForMultipleItems(
   // Venue-anchor the day boundaries to the site's civil day, not the browser's
   // (track 017 P3). For a 'days' reservation `from`/`to` are calendar days: the
   // client sends civil dates and the server re-anchors them here — for 'hours'
-  // reservations from/to are precise instants and pass through untouched. `to` is
-  // the EXCLUSIVE checkout day, so it anchors to that day's venue-midnight (.start,
-  // not .end): this shifts only browser→venue and preserves the day-count/billing
-  // (`daysBetween`) exactly. siteAnchoredDay also accepts a browser instant (POS /
-  // legacy clients) and recovers the venue day from it.
+  // reservations from/to are precise instants and pass through untouched.
+  //
+  // `to` is the INCLUSIVE last day of the stay and anchors to that day's
+  // venue end-of-day (.end). This is what every client actually sends: the
+  // date-range picker emits [firstDay.startOf, lastDay.endOf] and the
+  // reserve-first default is [today.start, today.end] — the SAME civil date
+  // for a one-day stay. 017 P3 originally anchored `to` to .start under an
+  // exclusive-checkout assumption, which (a) rejected every one-day booking
+  // ("End date must be after start date": from == to at venue midnight) and
+  // (b) UNDERBILLED multi-day stays by one day (13th→15th picked = 3 days
+  // pre-017 via endOf-day rounding, 2 days under exclusive anchoring).
+  // Anchoring to .end restores the pre-017 daysBetween/billing and the
+  // stored-`to` overlap semantics exactly, just venue-anchored.
+  // siteAnchoredDay also accepts a browser instant (POS / legacy clients)
+  // and recovers the venue day from it.
   const siteTz = {
     timeZone: site.timeZone ?? null,
     latitude: site.locationLat ? parseFloat(site.locationLat) : undefined,
@@ -120,7 +130,7 @@ export async function saveReservationForMultipleItems(
     ? siteAnchoredDay(siteTz, reservation.from).start
     : new Date(reservation.from)
   const to = reservation.type === 'days'
-    ? siteAnchoredDay(siteTz, reservation.to).start
+    ? siteAnchoredDay(siteTz, reservation.to).end
     : new Date(reservation.to)
 
   if (from >= to) {

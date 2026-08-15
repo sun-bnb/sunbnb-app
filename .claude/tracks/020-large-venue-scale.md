@@ -349,6 +349,32 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
 
 ## Log
 
+- **2026-08-15 (evening) — Founder-reported: one-day bookings rejected + console
+  "serialization errors". Both diagnosed via a NEW layer-0 e2e spec; neither was track-020
+  code.** (1) The rejection was track 017 P3's exclusive-checkout anchoring
+  (`saveReservationForMultipleItems` anchored the `to` civil date to venue MIDNIGHT while
+  every client — the picker emits `[firstDay.startOf, lastDay.endOf]`, the track-014
+  one-tap default `[today.start, today.end]` — sends the INCLUSIVE last day): from == to
+  at venue midnight rejected every one-day booking, and multi-day stays were UNDERBILLED
+  by one day (13th→15th picked = 3 days pre-017, 2 days exclusive). Fix: `to` anchors to
+  the venue END of its day (`.end`) — restores pre-017 billing and stored-`to` overlap
+  semantics exactly, venue-anchored. The 017 test asserting "exclusive checkout → 2 days"
+  was flipped to inclusive; 3 more date fixtures corrected; new one-day regression tests
+  (unit + integration + the e2e below). PROD never had 017 P3, so no prod data exposure;
+  TEST may hold a few short-stored multi-day rows from founder testing (cosmetic).
+  (2) The "serialization errors" were two things: a STALE `.next` incremental build
+  (availability route 500'd with `Cannot find module './vendor-chunks/tz-lookup.js'` —
+  HTML error page fed to RTK Query; fixed by killing the server and clearing `.next` — the
+  kill-app-before-dev rule striking again) layered over pre-existing dev-only Redux
+  serializableCheck warnings (Date objects in `sites.selectedItems`/`reservationDay` etc.,
+  plus RTK Query's `meta.baseQueryMeta.request`). The store now exempts exactly those
+  documented paths, so real console errors are visible again.
+  **The e2e layer grew its first real layer-0 spec**:
+  `consumer-one-day-booking.spec.ts` — self-seeding (support/db.ts psql helper), drives
+  the real one-tap guest flow to the reservation page and asserts the DB row; the
+  cookie-dismiss fixture now handles the current "Decline/Accept all" banner. Green:
+  user 521u + 88i, e2e smoke + layer-0 pass with a clean console.
+
 - **2026-08-15 (P2) — set-based availability shipped; the harness earned its keep TWICE.**
   The naive per-item `NOT EXISTS` — exactly the SQL shape this track's original P2 spec
   sketched — measured **1 525ms on the fixture, 24× slower than the JS loop it replaced**

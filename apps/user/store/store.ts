@@ -15,7 +15,37 @@ export const makeStore = () => {
       [httpApi.reducerPath]: httpApi.reducer,
     },
     middleware: (getDefaultMiddleware) =>
-      getDefaultMiddleware().concat(googlePlacesApi.middleware, httpApi.middleware),
+      getDefaultMiddleware({
+        // Dev-only serializableCheck exemptions for state that holds Date
+        // objects BY DESIGN (founder-reported console noise, 2026-08-15 —
+        // these warnings drowned out real errors during debugging):
+        //  - sites.selectedItems: full InventoryItem rows (createdAt/updatedAt
+        //    Dates) — RSC hands the site's items to the client as real Dates
+        //    and selection stores the rows verbatim (tracks 014/003 flows).
+        //  - sites.reservationDay / dateRange / timeRange: picker values kept
+        //    as Date instants.
+        // Converting these slices to plain-serializable shapes is a real
+        // refactor across the selection/booking flow — if undertaken, remove
+        // the exemptions with it. The check never runs in production.
+        serializableCheck: {
+          ignoredPaths: [
+            'sites.selectedItems',
+            'sites.reservationDay',
+            'sites.dateRange',
+            'sites.timeRange',
+          ],
+          ignoredActionPaths: [
+            // RTK Query stores the raw fetch Request/Response in action meta —
+            // the exemption the Redux docs themselves prescribe.
+            'meta.baseQueryMeta.request',
+            'meta.baseQueryMeta.response',
+            'payload.selectedItems',
+            'payload.reservationDay',
+            'payload.dateRange',
+            'payload.timeRange',
+          ],
+        },
+      }).concat(googlePlacesApi.middleware, httpApi.middleware),
   })
 }
 

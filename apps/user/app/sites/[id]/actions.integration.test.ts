@@ -84,15 +84,46 @@ describe('saveReservationForMultipleItems', () => {
       items: [{ id: item.id } as any],
       type: 'days',
       from: '2025-08-13',
-      to: '2025-08-15', // exclusive checkout → 2 occupied days (Aug 13, 14)
+      to: '2025-08-15', // INCLUSIVE last day → 3 occupied days (Aug 13, 14, 15)
     })
 
     expect(res.status).toBe('ok')
     const created = await prisma.reservation.findUnique({ where: { id: res.id! } })
-    // from = venue-midnight of Aug 13; to = venue-midnight of the Aug 15 checkout
-    // day (exclusive) — both anchored to Madrid, not the server's UTC day.
+    // from = venue-midnight of Aug 13; to = venue END-OF-DAY of Aug 15 (the
+    // picker emits [firstDay.startOf, lastDay.endOf] — `to` is the inclusive
+    // last day of the stay) — both anchored to Madrid, not the server's UTC day.
     expect(created!.from.toISOString()).toBe('2025-08-12T22:00:00.000Z')
-    expect(created!.to.toISOString()).toBe('2025-08-14T22:00:00.000Z')
+    expect(created!.to.toISOString()).toBe('2025-08-15T21:59:59.999Z')
+  })
+
+  // Bug-revealing (2026-08-15 founder report): the reserve-first default flow
+  // (track 014) books a SINGLE day — dateRange [today.start, today.end], which
+  // serialises to the SAME civil date for from and to. Under 017 P3's original
+  // exclusive-checkout anchoring both ends landed on venue midnight and every
+  // one-day booking was rejected with "End date must be after start date".
+  it('accepts a one-day booking (from == to civil date) and bills exactly one day', async () => {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { price: 20.0, timeZone: 'Europe/Madrid' })
+    const item = await createTestInventoryItem(user.id, site.id)
+
+    mockAuth.mockResolvedValue({ user: { id: user.id } } as any)
+    mockGetAvailability.mockResolvedValue([{ itemId: item.id, available: true }] as any)
+
+    const res = await saveReservationForMultipleItems({
+      siteId: site.id,
+      items: [{ id: item.id } as any],
+      type: 'days',
+      from: '2025-08-13',
+      to: '2025-08-13',
+    })
+
+    expect(res.status).toBe('ok')
+    const created = await prisma.reservation.findUnique({ where: { id: res.id! } })
+    // One venue civil day: [Aug 13 00:00, Aug 13 23:59:59.999] Madrid.
+    expect(created!.from.toISOString()).toBe('2025-08-12T22:00:00.000Z')
+    expect(created!.to.toISOString()).toBe('2025-08-13T21:59:59.999Z')
+    // 1 item × 20.00 × 1 day
+    expect(created!.paymentAmount).toBe(20)
   })
 
   it('calculates payment amount from site price × items × days', async () => {
@@ -112,7 +143,7 @@ describe('saveReservationForMultipleItems', () => {
       items: [{ id: item1.id } as any, { id: item2.id } as any],
       type: 'days',
       from: '2025-07-01',
-      to: '2025-07-04', // 3 days
+      to: '2025-07-03', // inclusive last day → 3 days (Jul 1, 2, 3)
     })
 
     expect(res.status).toBe('ok')
@@ -138,7 +169,7 @@ describe('saveReservationForMultipleItems', () => {
       items: [{ id: item.id, price: 1.0 } as any], // client tries to underpay
       type: 'days',
       from: '2025-07-01',
-      to: '2025-07-02', // 1 day
+      to: '2025-07-01', // inclusive → 1 day
     })
 
     expect(res.status).toBe('ok')

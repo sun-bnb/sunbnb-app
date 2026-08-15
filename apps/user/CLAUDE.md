@@ -83,7 +83,7 @@ RTK Query: `reservationApi` (getReservation, getReservationByDate, etc.), `place
 ```bash
 npm run test              # unit + route + server action tests (521 tests, Prisma mocked)
 npm run test:watch        # vitest in watch mode
-npm run test:integration  # integration tests against local sunbnb_test DB (87 tests, real Prisma)
+npm run test:integration  # integration tests against local sunbnb_test DB (88 tests, real Prisma)
 ```
 
 ### Unit / route tests (`vitest.config.ts`)
@@ -130,7 +130,7 @@ Requires local Docker Postgres with `sunbnb_test` DB (same DB as `packages/data`
 - `service/availability-semantics.integration.test.ts` — ORACLE-equivalence for the set-based availability rewrite (track 020 P2): the pre-P2 JS implementation runs VERBATIM as referee against a seeded matrix (~90 seats — every payment status × op-status × stay-over combo, all six inclusive-overlap boundaries, 3-seat party, far-future window) and must answer identically incl. ordering and periods; plus the `getAvailabilityForItems` scoping/absence contract (inactive/foreign/bogus ids ABSENT, never available) (5 tests)
 - `service/availabilityService.integration.test.ts` — `getAvailability` ORDERING contract (track 020 P1): seats returned in ascending seat-number order regardless of insertion order, `pickFirstAvailablePair` preselects the lowest-numbered available seat (and the next-lowest when it is booked), stability across calls. Guards the one order-dependent read path an index can silently change — fixture seats are inserted deliberately scrambled (4 tests)
 - `service/siteService.integration.test.ts` — searchSites item_count (active-only denominator), available_count (BLOCKING_STATUSES filter, date overlap, no-show/departed release rule, non-blocking statuses); countAvailableToday (wraps getAvailability for today's server-local window) (14 tests)
-- `app/sites/[id]/actions.integration.test.ts` — saveReservationForMultipleItems (DB writes, payment calc, unpaid, anonymous), saveRentalBooking (pricing, real aggregate availability check) (21 tests)
+- `app/sites/[id]/actions.integration.test.ts` — saveReservationForMultipleItems (DB writes, payment calc incl. INCLUSIVE-last-day anchoring — `to` civil date = last day of stay, one-day booking from==to accepted and billed 1 day (2026-08-15 regression), unpaid, anonymous), saveRentalBooking (pricing, real aggregate availability check) (23 tests)
 - `app/reservations/[id]/actions.integration.test.ts` — createOrder (DB prices, soldOut, appSalesEnabled, anonymous), cancelReservation (status update, refund logic) (16 tests)
 - `app/reservations/rental/[id]/actions.integration.test.ts` — rental booking detail actions against real DB (8 tests)
 - `app/tables/[tableId]/actions.integration.test.ts` — dine-in tab v2 find-or-create (first order opens tab, second joins it, fresh tab after close), DB-priced rounds, getTabState totals, pending_payment rejection, standalone restaurant (no Site: `TableTab.siteId`/`Order.siteId` null, `Order.restaurantId` set), linked-venue dual-write (15 tests)
