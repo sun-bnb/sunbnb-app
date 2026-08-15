@@ -17,7 +17,7 @@ related:
   - flow:table-booking
   - subsystem:schematic-editor
   - subsystem:payments
-last_verified: 2026-05-22
+last_verified: 2026-08-15
 ---
 
 # Subsystem: Table Reservations
@@ -48,7 +48,9 @@ reimplement domain logic. Public surface: `table-reservations-core/src/index.ts`
 (`availability.ts`) returns 30-minute slots for the venue civil date. **All wall-clock math runs in
 `Restaurant.timeZone`** (default `Europe/Madrid`) via the pure `tz.ts` helpers — never the server
 process TZ (the earlier server-TZ bug is fixed; `listReservationsForDay` + both day-view routes pass
-the civil date too). When the restaurant has `RestaurantShift` rows for the weekday they define the
+the civil date too). Day windows use `tz.ts#zonedDayBounds` (DST-safe `[start, end)` — never
+`start + 24h`), and `DEFAULT_TIME_ZONE`/`isValidTimeZone` re-export from `@repo/data/site-day`
+(see [[subsystem:venue-timezone]]). When the restaurant has `RestaurantShift` rows for the weekday they define the
 bookable windows (with **pacing** + last-seating); otherwise it falls back to `RestaurantHours`.
 Eligible tables are `active` + `onlineBookable` + capacity/party fit, optionally filtered by
 `sectionPreference` (zone) + `featureRequirements`. A slot offers a table when no `BLOCKING_*`

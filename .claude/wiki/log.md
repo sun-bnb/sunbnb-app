@@ -152,3 +152,9 @@ Operations:
 - changed: `.claude/wiki/subsystems/reservation-state-machine.md` (new, stable — browser-verified 2026-08-11), `.claude/wiki/index.md` (+1 subsystem line), `packages/data/CLAUDE.md` (machine section + issueCashCreditNote + test lists), `apps/partner/CLAUDE.md` (delegation notes, undoDepartWalkIn, matrix/bed-state/frontdesk test rows, counts 1968u/198i, auth-matrix 669, mock-contract 17), `apps/user/CLAUDE.md` (machine delegation notes, webhook 34, counts 478u/77i, machine mock).
 - reason: track 018 shipped a load-bearing new subsystem across 10 commits (608bc55…ba6a826): the founder-signed transition table + interpreter is now the ONLY reservation state writer (allowlist 36 sites/9 files → 9 sites/2 files), with two additive migrations (split_from_id, credits_invoice_id), credit notes, and the B1 double-charge family fixed by construction. Gate: future agents must edit the TABLE (not action guards) and will find the machine via CLAUDE.md/wiki instead of re-deriving the compound-state model — the defacto/intended docs in `.claude/tracks/` carry the full design record.
 - by: claude (fable-5)
+
+## [2026-08-15] ingest | Venue civil-day anchoring made platform-wide (track 017)
+- mode: add (subsystems/venue-timezone.md) + patch (entities/restaurant.md, subsystems/table-reservations.md)
+- changed: subsystems/venue-timezone.md, entities/restaurant.md, subsystems/table-reservations.md, index.md
+- reason: track 017 (11 commits, f0b51ba…d6f8e23) established a load-bearing platform invariant — every date boundary anchors to the venue civil day via @repo/data/site-day (new primitives siteDateBounds/siteMonthBounds/siteAnchoredDay/deriveTimeZoneFromCoords; Site.timeZone now written + backfilled; restaurant tz inheritance; tz.ts zonedDayBounds DST fix + dedup). New subsystem page carries the invariants + the deferred west-of-UTC gotchas.
+- by: claude

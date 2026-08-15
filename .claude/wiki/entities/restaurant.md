@@ -14,7 +14,7 @@ related:
   - subsystem:table-reservations
   - flow:table-booking
   - subsystem:auth
-last_verified: 2026-07-25
+last_verified: 2026-08-15
 ---
 
 # Restaurant
@@ -36,8 +36,9 @@ Sunbnb `Site` (the chiringuito case) — but a Restaurant can also stand alone (
   `Site.restaurantId` (also optional + unique). 1:1-optional both ways.
 - Booking config: `averageMealDuration` (default `120` min — drives slot length),
   `reservationWindow` (default `60` days bookable ahead), `timeZone` (IANA, nullable → engine
-  default; all slot wall-clock math runs in this zone), `priceRange` (1–4), `cuisineType`,
-  `tagline`, `description`.
+  default; all slot wall-clock math runs in this zone — a site-linked restaurant inherits the
+  site's coord-derived tz at create, see [[subsystem:venue-timezone]]), `priceRange` (1–4),
+  `cuisineType`, `tagline`, `description`.
 - No-show policy: `noShowPolicy` (`none` default | `deposit`) + `depositPerGuest?` — when
   `deposit`, shifts that opt in require a per-guest deposit (see `[[entity:table-reservation]]`).
 - Floor plan: `layoutWidth` / `layoutHeight` (canvas metres).
