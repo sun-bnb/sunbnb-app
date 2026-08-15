@@ -81,10 +81,12 @@ const coordsOf = async (id: string) => {
 }
 
 describe('moveParcel (real DB)', () => {
-  it('shifts every real seat and the ItemGroup anchor by exactly the delta; pool untouched', async () => {
+  it('shifts every real seat and the ItemGroup anchor by exactly the drag delta; pool untouched', async () => {
     const { site, ig, seats, pool } = await seedGeoParcel()
 
-    const res = await moveParcel(site.id, 1, 0.001, -0.002)
+    // Absolute-target contract: seat 1 (36.72130, -4.42140) dropped at
+    // (36.72230, -4.42340) → server derives delta (+0.001, -0.002).
+    const res = await moveParcel(site.id, 1, 36.7223, -4.4234, seats[0]!.id)
     expect(res.status).toBe('ok')
 
     for (const [i, expected] of [
@@ -107,17 +109,37 @@ describe('moveParcel (real DB)', () => {
     expect(poolRow.locationLng).toBe('0')
   })
 
-  it('accumulates correctly across repeated drags (string-cast round-trip)', async () => {
+  // The 2026-08-15 drag-jump regression: a second drag issued before the
+  // first drag's refresh landed used STALE client coordinates as its base, so
+  // deltas compounded and the parcel visibly jumped on release (23px measured
+  // in-browser). With absolute targets the base is the DB row, so the seat
+  // lands EXACTLY on the last drop point no matter how stale the client was.
+  it('consecutive stale-base drags land exactly on the LAST drop point (no compounding)', async () => {
     const { site, seats } = await seedGeoParcel()
-    for (let i = 0; i < 5; i++) {
-      await moveParcel(site.id, 1, 0.0001, 0.0001)
-    }
+
+    // Both targets computed from the ORIGINAL position — exactly what a
+    // client whose refresh has not landed yet would send.
+    await moveParcel(site.id, 1, 36.7213 + 0.001, -4.4214 + 0.001, seats[0]!.id)
+    await moveParcel(site.id, 1, 36.7213 + 0.0015, -4.4214 + 0.0015, seats[0]!.id)
+
     const c = await coordsOf(seats[0]!.id)
-    expect(c.lat).toBeCloseTo(36.7213 + 0.0005, 9)
-    expect(c.lng).toBeCloseTo(-4.4214 + 0.0005, 9)
+    expect(c.lat).toBeCloseTo(36.7213 + 0.0015, 9) // NOT +0.0025
+    expect(c.lng).toBeCloseTo(-4.4214 + 0.0015, 9)
   })
 
-  it('rejects a NaN delta without writing', async () => {
+  it('anchors on the ItemGroup when no anchorItemId is given (reposition click)', async () => {
+    const { site, ig, seats } = await seedGeoParcel()
+    // Anchor starts at (36.7213, -4.4214); reposition to +0.002/+0.002.
+    const res = await moveParcel(site.id, 1, 36.7233, -4.4194)
+    expect(res.status).toBe('ok')
+    const anchor = await prisma.itemGroup.findUniqueOrThrow({ where: { id: ig.id } })
+    expect(parseFloat(anchor.locationLat)).toBeCloseTo(36.7233, 9)
+    // Seats moved by the same delta, preserving formation.
+    const c = await coordsOf(seats[0]!.id)
+    expect(c.lat).toBeCloseTo(36.7213 + 0.002, 9)
+  })
+
+  it('rejects a NaN target without writing', async () => {
     const { site, seats } = await seedGeoParcel()
     const res = await moveParcel(site.id, 1, Number.NaN, 0.001)
     expect(res.status).toBe('error')

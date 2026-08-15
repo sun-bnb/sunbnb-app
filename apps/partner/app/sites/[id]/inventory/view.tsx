@@ -374,10 +374,9 @@ export default function InventoryView() {
     }
 
     if (editorMode === 'edit-parcel') {
-      const deltaLat = lat - parcelConfig.baseLat
-      const deltaLng = lng - parcelConfig.baseLng
       setParcelConfig({ ...parcelConfig, baseLat: lat, baseLng: lng })
-      moveParcel(siteId, parcelConfig.group, deltaLat, deltaLng).then(async () => {
+      // Absolute target for the ItemGroup anchor (no anchorItemId).
+      moveParcel(siteId, parcelConfig.group, lat, lng).then(async () => {
         const updatedSite = await getSite(siteId)
         if (updatedSite) setSite(updatedSite)
       })
@@ -483,14 +482,11 @@ export default function InventoryView() {
     const lat = e.latLng?.lat()
     const lng = e.latLng?.lng()
     if (lat && lng) {
-      const origLat = Number(item.locationLat)
-      const origLng = Number(item.locationLng)
-
       if (item.group > 0) {
-        // Move entire parcel by the drag delta
-        const deltaLat = lat - origLat
-        const deltaLng = lng - origLng
-        moveParcel(siteId, item.group, deltaLat, deltaLng).then(() => {
+        // Absolute target: the dragged seat lands exactly where dropped — the
+        // server computes the parcel delta from the seat's DB row, so a second
+        // drag can't compound a stale client base (2026-08-15 drag-jump fix).
+        moveParcel(siteId, item.group, lat, lng, item.id).then(() => {
           getSite(siteId).then((updatedSite) => {
             if (updatedSite) setSite(updatedSite)
           })

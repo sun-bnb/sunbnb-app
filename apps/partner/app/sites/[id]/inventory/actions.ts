@@ -407,68 +407,117 @@ export async function getItemGroup(id: string) {
 export async function moveParcel(
   siteId: string,
   group: number,
-  deltaLat: number,
-  deltaLng: number
+  targetLatOrY: number,
+  targetLngOrX: number,
+  anchorItemId?: string
 ) {
   const { error } = await requireSiteOwner(siteId)
   if (error) return { status: 'error', errors: [error] }
 
-  // A non-finite delta applied set-based below would corrupt EVERY seat of the
-  // parcel in one statement (String coords would literally store "NaN") — the
-  // same silent-teleport failure class as the 2026-08-15 incident. Reject at
-  // the boundary.
-  if (!Number.isFinite(deltaLat) || !Number.isFinite(deltaLng)) {
-    return { status: 'error', errors: ['Invalid move delta'] }
+  // ABSOLUTE-TARGET CONTRACT (track 020 / 2026-08-15 drag-jump fix): callers
+  // send where something should END UP — the dragged seat (anchorItemId set)
+  // or the ItemGroup anchor (reposition click) — and the DELTA is computed
+  // HERE from the authoritative DB row. The old client-computed delta raced:
+  // a second drag started before the first drag's refresh landed computed its
+  // delta from stale coordinates, so the parcel visibly jumped on release
+  // (reproduced at 23px with two rapid drags). With an absolute target the
+  // anchor lands exactly where dropped regardless of client staleness — the
+  // same reason single seats (saveInventoryItemLocation) were already
+  // race-free.
+  if (!Number.isFinite(targetLatOrY) || !Number.isFinite(targetLngOrX)) {
+    return { status: 'error', errors: ['Invalid move target'] }
   }
 
   const isSchematic = (await getSiteLayoutMode(siteId)) === 'schematic'
 
+  // Resolve the base the delta is measured from — inside the same transaction
+  // as the writes, so a concurrent move cannot slip between read and write.
+
   // Track 020 P4: this was one UPDATE per seat via Promise.all with NO
   // transaction — a 60-seat parcel was 60 statements, and a partial failure
-  // left the parcel silently half-moved. Now two set-based statements (seats +
+  // left the parcel silently half-moved. Two set-based statements (seats +
   // anchor) in one transaction: atomic, and independent of parcel size. Raw
   // SQL because the geo coordinates are String columns (Q5 in the track), so
   // the arithmetic needs a cast; `@updatedAt` is client-managed, so raw writes
   // must touch "updatedAt" themselves. Pool seats keep their sentinel
   // coordinates (excluded — they are not part of the parcel's geometry).
-  if (isSchematic) {
-    await prisma.$transaction([
-      prisma.$executeRaw`
-        UPDATE "InventoryItem"
-        SET schematic_x = COALESCE(schematic_x, 0) + ${deltaLng},
-            schematic_y = COALESCE(schematic_y, 0) + ${deltaLat},
-            "updatedAt" = now()
-        WHERE site_id = ${siteId} AND "group" = ${group} AND status <> 'pool'`,
-      prisma.$executeRaw`
-        UPDATE "ItemGroup"
-        SET schematic_x = COALESCE(schematic_x, 0) + ${deltaLng},
-            schematic_y = COALESCE(schematic_y, 0) + ${deltaLat},
-            "updatedAt" = now()
+  const result = await prisma.$transaction(async (tx) => {
+    // The base row is read FOR UPDATE: a second drag issued while this
+    // transaction is in flight BLOCKS on the row lock until we commit, then
+    // reads the fresh base — without the lock, its read could land before our
+    // commit while its relative UPDATE landed after, and the deltas compound
+    // (the drag-jump race, reproduced at 23-95px in-browser).
+    type BaseRow = {
+      location_lat: string
+      location_lng: string
+      schematic_x: number | null
+      schematic_y: number | null
+    }
+    let baseRows: BaseRow[]
+    if (anchorItemId) {
+      baseRows = await tx.$queryRaw<BaseRow[]>`
+        SELECT location_lat, location_lng, schematic_x, schematic_y
+        FROM "InventoryItem"
+        WHERE id = ${anchorItemId} AND site_id = ${siteId} AND "group" = ${group}
+          AND status <> 'pool'
+        FOR UPDATE`
+    } else {
+      baseRows = await tx.$queryRaw<BaseRow[]>`
+        SELECT location_lat, location_lng, schematic_x, schematic_y
+        FROM "ItemGroup"
         WHERE id IN (
           SELECT DISTINCT item_group_id FROM "InventoryItem"
           WHERE site_id = ${siteId} AND "group" = ${group} AND item_group_id IS NOT NULL
-        )`,
-    ])
-  } else {
-    await prisma.$transaction([
-      prisma.$executeRaw`
-        UPDATE "InventoryItem"
-        SET location_lat = ((location_lat::float8) + ${deltaLat})::text,
-            location_lng = ((location_lng::float8) + ${deltaLng})::text,
-            "updatedAt" = now()
-        WHERE site_id = ${siteId} AND "group" = ${group} AND status <> 'pool'`,
-      prisma.$executeRaw`
-        UPDATE "ItemGroup"
-        SET location_lat = ((location_lat::float8) + ${deltaLat})::text,
-            location_lng = ((location_lng::float8) + ${deltaLng})::text,
-            "updatedAt" = now()
-        WHERE id IN (
-          SELECT DISTINCT item_group_id FROM "InventoryItem"
-          WHERE site_id = ${siteId} AND "group" = ${group} AND item_group_id IS NOT NULL
-        )`,
-    ])
-  }
+        )
+        FOR UPDATE`
+    }
+    const base = baseRows[0]
+    if (!base) return 'not_found' as const
+    const baseLatOrY = isSchematic ? (base.schematic_y ?? 0) : parseFloat(base.location_lat)
+    const baseLngOrX = isSchematic ? (base.schematic_x ?? 0) : parseFloat(base.location_lng)
 
+    const deltaLat = targetLatOrY - baseLatOrY
+    const deltaLng = targetLngOrX - baseLngOrX
+    if (!Number.isFinite(deltaLat) || !Number.isFinite(deltaLng)) return 'invalid' as const
+
+    if (isSchematic) {
+      await tx.$executeRaw`
+        UPDATE "InventoryItem"
+        SET schematic_x = COALESCE(schematic_x, 0) + ${deltaLng},
+            schematic_y = COALESCE(schematic_y, 0) + ${deltaLat},
+            "updatedAt" = now()
+        WHERE site_id = ${siteId} AND "group" = ${group} AND status <> 'pool'`
+      await tx.$executeRaw`
+        UPDATE "ItemGroup"
+        SET schematic_x = COALESCE(schematic_x, 0) + ${deltaLng},
+            schematic_y = COALESCE(schematic_y, 0) + ${deltaLat},
+            "updatedAt" = now()
+        WHERE id IN (
+          SELECT DISTINCT item_group_id FROM "InventoryItem"
+          WHERE site_id = ${siteId} AND "group" = ${group} AND item_group_id IS NOT NULL
+        )`
+    } else {
+      await tx.$executeRaw`
+        UPDATE "InventoryItem"
+        SET location_lat = ((location_lat::float8) + ${deltaLat})::text,
+            location_lng = ((location_lng::float8) + ${deltaLng})::text,
+            "updatedAt" = now()
+        WHERE site_id = ${siteId} AND "group" = ${group} AND status <> 'pool'`
+      await tx.$executeRaw`
+        UPDATE "ItemGroup"
+        SET location_lat = ((location_lat::float8) + ${deltaLat})::text,
+            location_lng = ((location_lng::float8) + ${deltaLng})::text,
+            "updatedAt" = now()
+        WHERE id IN (
+          SELECT DISTINCT item_group_id FROM "InventoryItem"
+          WHERE site_id = ${siteId} AND "group" = ${group} AND item_group_id IS NOT NULL
+        )`
+    }
+    return 'ok' as const
+  })
+
+  if (result === 'not_found') return { status: 'error', errors: ['Parcel not found'] }
+  if (result === 'invalid') return { status: 'error', errors: ['Invalid move target'] }
   return { status: 'ok' }
 }
 

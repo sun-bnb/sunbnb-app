@@ -839,7 +839,7 @@ export const GATED_ACTIONS: GatedAction[] = [
     name: 'inventory.moveParcel',
     kind: 'action',
     gate: 'session-owner',
-    invoke: (_accessKey?) => moveParcel(SITE_ID, 1, 0.001, 0.001),
+    invoke: (_accessKey?) => moveParcel(SITE_ID, 1, 36.7213, -4.4214),
   },
   {
     name: 'inventory.moveItems',

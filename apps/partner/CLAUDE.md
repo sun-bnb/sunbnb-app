@@ -64,10 +64,10 @@ Redux slices: `reservationsSlice` (key-value store). RTK Query (`apiSlice`): `ge
 ## Testing
 
 ```bash
-npm run test              # unit tests (1983 tests across 53 files, Prisma mocked)
+npm run test              # unit tests (1985 tests across 53 files, Prisma mocked)
 npm run test:watch        # vitest in watch mode
 npm run test:coverage     # unit tests with Istanbul coverage report
-npm run test:integration  # integration tests (211 tests across 10 files, real sunbnb_test DB)
+npm run test:integration  # integration tests (212 tests across 10 files, real sunbnb_test DB)
 ```
 
 ### Test architecture spine

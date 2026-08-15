@@ -360,6 +360,11 @@ beforeEach(() => {
   vi.mocked(prisma.partnerAccount.update).mockResolvedValue({} as any)
   vi.mocked(prisma.siteBrand.upsert).mockResolvedValue({} as any)
   vi.mocked(prisma.$executeRaw as any).mockResolvedValue(1)
+  // moveParcel's absolute-target base read (locked FOR UPDATE) — one row with
+  // coordinates so the happy path computes a finite delta.
+  vi.mocked(prisma.$queryRaw as any).mockResolvedValue([
+    { location_lat: '36.72', location_lng: '-4.42', schematic_x: 0, schematic_y: 0 },
+  ])
 
   // getSite stubs (for queries.getSite — will be called even without auth guard)
   // Overrides the findFirst above to return null (simulate no site found)

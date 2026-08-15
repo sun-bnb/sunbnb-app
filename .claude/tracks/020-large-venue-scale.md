@@ -407,6 +407,25 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
 
 ## Log
 
+- **2026-08-15 (late) — Founder-reported drag-end jump: fixed with an ABSOLUTE-TARGET
+  moveParcel contract + a FOR UPDATE base lock; browser-verified to 0.0px.** The jump was
+  a stale-base race: a second drag issued before the first drag's refresh landed computed
+  its client-side delta from stale coordinates, so deltas compounded on release. Fix in
+  two layers: (1) `moveParcel(siteId, group, targetLatOrY, targetLngOrX, anchorItemId?)`
+  — callers now send where the dragged seat (or, for reposition clicks, the ItemGroup
+  anchor) should END UP, and the server derives the delta from the authoritative row —
+  the same reason single-seat saves were always race-free; (2) the base row is read
+  `FOR UPDATE` inside the transaction, so a concurrent move BLOCKS until commit and then
+  reads the fresh base — without the lock, read-then-relative-write still interleaved.
+  Locked by an integration race test (two stale-base targets → final lands EXACTLY on the
+  last drop, not compounded) and an instrumented browser run (two rapid drags → final
+  marker 0.0px from the last drop; DB checkpoints after each drag).
+  **Honest method note:** two "still failing" verification runs were MY OWN broken repro
+  fixtures (first a 5px overlapping cluster where the pointer drag never engaged — the
+  byte-identical "nearest marker" output across runs was the tell; then a reset formula
+  that scattered row-2 seats a kilometre east). The app code was right both times.
+  Verify the fixture before trusting the verdict.
+
 - **2026-08-15 (evening) — Founder-reported: one-day bookings rejected + console
   "serialization errors". Both diagnosed via a NEW layer-0 e2e spec; neither was track-020
   code.** (1) The rejection was track 017 P3's exclusive-checkout anchoring

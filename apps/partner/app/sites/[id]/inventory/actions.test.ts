@@ -110,10 +110,18 @@ describe('moveParcel (schematic mode)', () => {
   // Track 020 P4: seats + anchor now move in ONE transaction of two set-based
   // statements — a 60-seat drag was 60 UPDATEs with NO transaction (a partial
   // failure silently half-moved the parcel). Arithmetic is integration-tested.
-  it('moves seats and ItemGroup anchor atomically in one transaction', async () => {
+  // Track 020 drag-jump fix: moveParcel takes an ABSOLUTE target and computes
+  // the delta server-side from the authoritative base row (dragged seat when
+  // anchorItemId is given, else the ItemGroup anchor) — a stale client base
+  // can no longer compound across rapid consecutive drags.
+  it('moves seats and ItemGroup anchor atomically, delta computed from the DB base row', async () => {
     setLayoutMode('schematic')
+    // ItemGroup anchor currently at (schematicX 3, schematicY 5); target (9, 7)
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([
+      { location_lat: '0', location_lng: '0', schematic_x: 3, schematic_y: 5 },
+    ] as any)
 
-    const res = await moveParcel(SITE_ID, 1, 4, -2)
+    const res = await moveParcel(SITE_ID, 1, 7, 9) // targetY=7, targetX=9
     expect(res.status).toBe('ok')
 
     expect(vi.mocked(prisma.$transaction)).toHaveBeenCalledTimes(1)
@@ -121,6 +129,8 @@ describe('moveParcel (schematic mode)', () => {
     const seats = rawCall(0)
     expect(seats.sql).toContain('"InventoryItem"')
     expect(seats.sql).toContain("status <> 'pool'")
+    // delta = target − base: dX = 9−3 = 6, dY = 7−5 = 2 (bind order: dX, dY)
+    expect(seats.values.slice(0, 2)).toEqual([6, 2])
     const anchor = rawCall(1)
     expect(anchor.sql).toContain('"ItemGroup"')
     expect(anchor.sql).toContain('item_group_id')
@@ -129,7 +139,36 @@ describe('moveParcel (schematic mode)', () => {
     expect(vi.mocked(prisma.itemGroup.update)).not.toHaveBeenCalled()
   })
 
-  it('rejects a non-finite delta before touching the DB', async () => {
+  it('uses the dragged seat as the base when anchorItemId is provided', async () => {
+    setLayoutMode('geo')
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([
+      { location_lat: '36.7200', location_lng: '-4.4200', schematic_x: null, schematic_y: null },
+    ] as any)
+
+    const res = await moveParcel(SITE_ID, 1, 36.7210, -4.4190, 'seat-1')
+    expect(res.status).toBe('ok')
+
+    // Base read is a locked (FOR UPDATE) raw select scoped to the dragged
+    // seat, excluding pool sentinels.
+    const baseCall = vi.mocked(prisma.$queryRaw).mock.calls[0] as unknown as [TemplateStringsArray, ...unknown[]]
+    const baseSql = baseCall[0].join('¤')
+    expect(baseSql).toContain('FOR UPDATE')
+    expect(baseSql).toContain("status <> 'pool'")
+    expect(baseCall.slice(1)).toEqual(expect.arrayContaining(['seat-1', SITE_ID, 1]))
+    const seats = rawCall(0)
+    expect(seats.values[0]).toBeCloseTo(0.001, 10)  // deltaLat
+    expect(seats.values[1]).toBeCloseTo(0.001, 10)  // deltaLng
+  })
+
+  it('errors when no base row exists (unknown parcel), without writing', async () => {
+    setLayoutMode('geo')
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([] as any)
+    const res = await moveParcel(SITE_ID, 99, 36.72, -4.42)
+    expect(res.status).toBe('error')
+    expect(vi.mocked(prisma.$executeRaw)).not.toHaveBeenCalled()
+  })
+
+  it('rejects a non-finite target before touching the DB', async () => {
     const res = await moveParcel(SITE_ID, 1, 1, Number.POSITIVE_INFINITY)
     expect(res.status).toBe('error')
     expect(vi.mocked(prisma.$executeRaw)).not.toHaveBeenCalled()
@@ -1079,7 +1118,6 @@ describe('parcel geometry excludes pool sentinels', () => {
     vi.mocked(prisma.itemGroup.findUnique).mockResolvedValue({ id: 'ig-1', rotation: 0 } as any)
     vi.mocked(prisma.itemGroup.update).mockResolvedValue({} as any)
     vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
-    vi.mocked(prisma.$transaction).mockResolvedValue([] as any)
 
     const res = await rotateSelection(SITE_ID, ['i1', 'i2', 'pool-1'], 90)
     expect(res.status).toBe('ok')
@@ -1114,8 +1152,12 @@ describe('parcel geometry excludes pool sentinels', () => {
 
   it('moveParcel shifts only real seats — pool sentinels stay put', async () => {
     setLayoutMode('geo')
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([
+      { location_lat: '36.72', location_lng: '-4.42', schematic_x: null, schematic_y: null },
+    ] as any)
 
-    await moveParcel(SITE_ID, 1, 0.001, 0.001)
+    const dbg = await moveParcel(SITE_ID, 1, 36.721, -4.419)
+    console.log('DBG moveParcel result:', JSON.stringify(dbg))
 
     // Set-based since P4 — the pool exclusion lives in the seat UPDATE's SQL.
     const { sql } = rawCall(0)

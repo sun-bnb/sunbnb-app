@@ -456,10 +456,9 @@ export default function SchematicView() {
     }
 
     if (editorMode === 'edit-parcel') {
-      const deltaY = y - parcelConfig.baseLat
-      const deltaX = x - parcelConfig.baseLng
       setParcelConfig({ ...parcelConfig, baseLat: y, baseLng: x })
-      await moveParcel(siteId, parcelConfig.group, deltaY, deltaX)
+      // Absolute target for the ItemGroup anchor (schematic coords).
+      await moveParcel(siteId, parcelConfig.group, y, x)
       await refresh()
       return
     }
