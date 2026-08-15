@@ -273,6 +273,9 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
 
 ## Log
 
+- **2026-08-15 — Founder confirmed on the live editor: "Drag and rotate work now."** Closes
+  both incident loops (pan regression `32f3c53`, rotation teleport `15734fc`) with the only
+  verification that outranks the browser runs — the operator who hit the bugs.
 - **2026-08-15 (later) — Parcel-rotation TELEPORT: pre-existing data-corruption bug found
   via founder report, fixed, data repaired, browser-verified.** Founder: "rotation change
   displaced or hid the parcel; setting rotation to 0 didn't restore it." NOT a track-020
