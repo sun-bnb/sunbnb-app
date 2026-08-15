@@ -68,6 +68,15 @@ function DraggableParcelBox({
   const dragStartRef = useRef<{ lat: number; lng: number } | null>(null)
   const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
 
+  // Live chip offset while the box is being dragged (google moves the polygon
+  // natively, but the chip is a separate marker) — kept after drop so the chip
+  // sits at the new spot through the refresh window, then reset when the
+  // refreshed parcel data arrives (box.center changes).
+  const [chipDelta, setChipDelta] = useState<{ dLat: number; dLng: number } | null>(null)
+  useEffect(() => {
+    setChipDelta(null)
+  }, [box.center.lat, box.center.lng])
+
   const firstVertex = () => {
     const path = polyRef.current?.getPath()
     if (!path || path.getLength() === 0) return null
@@ -89,6 +98,13 @@ function DraggableParcelBox({
         onDragStart={() => {
           dragStartRef.current = firstVertex()
         }}
+        onDrag={() => {
+          const start = dragStartRef.current
+          const now = firstVertex()
+          if (start && now) {
+            setChipDelta({ dLat: now.lat - start.lat, dLng: now.lng - start.lng })
+          }
+        }}
         onDragEnd={() => {
           const start = dragStartRef.current
           const end = firstVertex()
@@ -106,7 +122,13 @@ function DraggableParcelBox({
         }}
         onClick={() => onOpen(box)}
       />
-      <SafeAdvancedMarker position={box.center}>
+      <SafeAdvancedMarker
+        position={
+          chipDelta
+            ? { lat: box.center.lat + chipDelta.dLat, lng: box.center.lng + chipDelta.dLng }
+            : box.center
+        }
+      >
         <div
           onClick={() => onOpen(box)}
           style={{
