@@ -120,8 +120,21 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
 
   if (mode === 'rearrange') {
 
+    // Pool seats (group extras) are EXCLUDED from the rearrange entirely: they
+    // carry sentinel coordinates (~0,0 — "null island"), so including them
+    //   (a) poisons the centroid-preservation average below — with 60 real
+    //       seats and 6 pool seats the "old centroid" lands at 60/66 of the
+    //       true latitude, shifting the whole parcel ~3° toward the equator
+    //       PER APPLY and persisting the corrupted anchor (each further apply
+    //       multiplies by 60/66 again — the Brisa Marina parcel-1 teleport,
+    //       2026-08-15, was exactly (60/66)^10 of the site coords);
+    //   (b) risks a pool seat being "assigned to a leftover generated
+    //       position" by the unmatched pass below, teleporting it into the
+    //       grid and renumbering it out of the pool band;
+    //   (c) lets a pool seat (which never has an itemGroupId) land at
+    //       existing[0] and trigger a DUPLICATE ItemGroup create.
     const existing = await prisma.inventoryItem.findMany({
-      where: { siteId, group },
+      where: { siteId, group, status: { not: 'pool' } },
       select: {
         id: true,
         number: true,
@@ -135,6 +148,18 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
 
     // Preserve the visual centroid across the rearrange so rotation pivots
     // around the parcel center rather than the first seat.
+    //
+    // SANITY GUARD: in every legitimate flow this shift is tiny — the grid is
+    // regenerated at the parcel's own anchor, so old and new centroids differ
+    // by at most a shape tweak (metres). A large shift means the centroid is
+    // poisoned (sentinel coords, corrupt anchor) — applying AND PERSISTING it
+    // teleports the parcel and compounds on every retry, which is exactly how
+    // an operator's "set rotation back to 0" makes things worse. Skip the
+    // shift instead: the grid regenerates at the stored anchor, which is the
+    // recoverable behaviour.
+    // Geo shifts are in degrees (0.01° ≈ 1.1 km); schematic shifts are in
+    // world units (a legit shape tweak moves the centroid well under 10).
+    const MAX_CENTROID_SHIFT = isSchematic ? 10 : 0.01
     let shiftedGenerated = generated
     let shiftedGroupData = itemGroupData
     if (existing.length > 0 && generated.length > 0) {
@@ -145,15 +170,18 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
         const newCy = generated.reduce((s, g) => s + (g.schematicY ?? 0), 0) / generated.length
         const dx = oldCx - newCx
         const dy = oldCy - newCy
-        shiftedGenerated = generated.map((g) => ({
-          ...g,
-          schematicX: (g.schematicX ?? 0) + dx,
-          schematicY: (g.schematicY ?? 0) + dy,
-        })) as typeof generated
-        shiftedGroupData = {
-          ...itemGroupData,
-          schematicX: (itemGroupData.schematicX ?? 0) + dx,
-          schematicY: (itemGroupData.schematicY ?? 0) + dy,
+        if (Number.isFinite(dx) && Number.isFinite(dy) &&
+            Math.abs(dx) <= MAX_CENTROID_SHIFT && Math.abs(dy) <= MAX_CENTROID_SHIFT) {
+          shiftedGenerated = generated.map((g) => ({
+            ...g,
+            schematicX: (g.schematicX ?? 0) + dx,
+            schematicY: (g.schematicY ?? 0) + dy,
+          })) as typeof generated
+          shiftedGroupData = {
+            ...itemGroupData,
+            schematicX: (itemGroupData.schematicX ?? 0) + dx,
+            schematicY: (itemGroupData.schematicY ?? 0) + dy,
+          }
         }
       } else {
         const oldCLat = existing.reduce((s, i) => s + parseFloat(i.locationLat), 0) / existing.length
@@ -162,15 +190,18 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
         const newCLng = generated.reduce((s, g) => s + parseFloat(g.locationLng), 0) / generated.length
         const dLat = oldCLat - newCLat
         const dLng = oldCLng - newCLng
-        shiftedGenerated = generated.map((g) => ({
-          ...g,
-          locationLat: (parseFloat(g.locationLat) + dLat).toString(),
-          locationLng: (parseFloat(g.locationLng) + dLng).toString(),
-        })) as typeof generated
-        shiftedGroupData = {
-          ...itemGroupData,
-          locationLat: (parseFloat(itemGroupData.locationLat) + dLat).toString(),
-          locationLng: (parseFloat(itemGroupData.locationLng) + dLng).toString(),
+        if (Number.isFinite(dLat) && Number.isFinite(dLng) &&
+            Math.abs(dLat) <= MAX_CENTROID_SHIFT && Math.abs(dLng) <= MAX_CENTROID_SHIFT) {
+          shiftedGenerated = generated.map((g) => ({
+            ...g,
+            locationLat: (parseFloat(g.locationLat) + dLat).toString(),
+            locationLng: (parseFloat(g.locationLng) + dLng).toString(),
+          })) as typeof generated
+          shiftedGroupData = {
+            ...itemGroupData,
+            locationLat: (parseFloat(itemGroupData.locationLat) + dLat).toString(),
+            locationLng: (parseFloat(itemGroupData.locationLng) + dLng).toString(),
+          }
         }
       }
     }
@@ -367,8 +398,11 @@ export async function moveParcel(
 
   const isSchematic = (await getSiteLayoutMode(siteId)) === 'schematic'
 
+  // Pool seats keep their sentinel coordinates — shifting them by every parcel
+  // drag slowly walks the sentinels away from (0,0) for no purpose (observed
+  // in prod-like data as accumulated micro-drift on the pool band).
   const items = await prisma.inventoryItem.findMany({
-    where: { siteId, group },
+    where: { siteId, group, status: { not: 'pool' } },
     select: {
       id: true,
       locationLat: true,
@@ -432,8 +466,9 @@ export async function moveItems(
 
   const isSchematic = (await getSiteLayoutMode(siteId)) === 'schematic'
 
+  // Pool sentinels excluded — see moveParcel/rotateSelection.
   const items = await prisma.inventoryItem.findMany({
-    where: { id: { in: itemIds }, siteId },
+    where: { id: { in: itemIds }, siteId, status: { not: 'pool' } },
     select: {
       id: true,
       locationLat: true,
@@ -527,8 +562,15 @@ export async function rotateSelection(
 
   const isSchematic = (await getSiteLayoutMode(siteId)) === 'schematic'
 
+  // Pool seats (group extras) sit at sentinel coordinates (~0,0) and must not
+  // participate in geometry: including them drags the centroid toward null
+  // island, and orbiting real seats around that poisoned centroid scatters
+  // the parcel across degrees of latitude. The inventory view filters pool
+  // from its selections, but server actions take arbitrary ids — the
+  // exclusion belongs HERE so every caller is safe (same bug class as the
+  // 2026-08-15 rearrange teleport, which was server-side pollution).
   const items = await prisma.inventoryItem.findMany({
-    where: { id: { in: itemIds }, siteId },
+    where: { id: { in: itemIds }, siteId, status: { not: 'pool' } },
     select: {
       id: true,
       locationLat: true,
@@ -596,16 +638,21 @@ export async function rotateSelection(
   const uniqueGroupIds = new Set(fullItems.map(i => i.itemGroupId).filter(Boolean))
   if (uniqueGroupIds.size === 1) {
     const itemGroupId = [...uniqueGroupIds][0]!
-    // Check all group members are included (complete parcel)
+    // Check all group members are included (complete parcel). Compare against
+    // the selected items that CARRY this itemGroupId — pool seats in the
+    // selection have none and must not make a complete parcel look partial
+    // (which silently skipped the anchor update, desyncing anchor from seats).
     const groupMemberCount = await prisma.inventoryItem.count({
       where: { itemGroupId, siteId },
     })
-    if (groupMemberCount === itemIds.length) {
+    const selectedGroupMembers = fullItems.filter(i => i.itemGroupId === itemGroupId).length
+    if (groupMemberCount === selectedGroupMembers) {
       const currentGroup = await prisma.itemGroup.findUnique({ where: { id: itemGroupId } })
       if (currentGroup) {
-        // Update centroid from new positions
+        // Update centroid from new positions — parcel members only, never the
+        // pool sentinels.
         const updatedItems = await prisma.inventoryItem.findMany({
-          where: { id: { in: itemIds } },
+          where: { id: { in: itemIds }, itemGroupId },
           select: { locationLat: true, locationLng: true, schematicX: true, schematicY: true },
         })
         const newCenterLat = isSchematic
@@ -654,8 +701,11 @@ export async function adjustItemSpacing(
 
   const isSchematic = (await getSiteLayoutMode(siteId)) === 'schematic'
 
+  // Pool sentinels excluded from geometry — see rotateSelection. Spacing is
+  // the worst case: scaling a pool seat's ~30° offset from the centroid by
+  // `factor` would fling real seats across the hemisphere.
   const items = await prisma.inventoryItem.findMany({
-    where: { id: { in: itemIds }, siteId },
+    where: { id: { in: itemIds }, siteId, status: { not: 'pool' } },
     select: {
       id: true,
       locationLat: true,
@@ -733,12 +783,16 @@ export async function adjustItemSpacing(
     const groupMemberCount = await prisma.inventoryItem.count({
       where: { itemGroupId, siteId },
     })
-    if (groupMemberCount === itemIds.length) {
+    // Compare against selected items CARRYING this itemGroupId — pool seats in
+    // the selection must not make a complete parcel look partial (see
+    // rotateSelection).
+    const selectedGroupMembers = fullItems.filter(i => i.itemGroupId === itemGroupId).length
+    if (groupMemberCount === selectedGroupMembers) {
       const currentGroup = await prisma.itemGroup.findUnique({ where: { id: itemGroupId } })
       if (currentGroup) {
-        // Update centroid from new positions
+        // Update centroid from new positions — parcel members only.
         const updatedItems = await prisma.inventoryItem.findMany({
-          where: { id: { in: itemIds } },
+          where: { id: { in: itemIds }, itemGroupId },
           select: { locationLat: true, locationLng: true, schematicX: true, schematicY: true },
         })
         const newCenterLat = isSchematic

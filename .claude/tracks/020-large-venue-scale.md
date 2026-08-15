@@ -273,6 +273,34 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
 
 ## Log
 
+- **2026-08-15 (later) — Parcel-rotation TELEPORT: pre-existing data-corruption bug found
+  via founder report, fixed, data repaired, browser-verified.** Founder: "rotation change
+  displaced or hid the parcel; setting rotation to 0 didn't restore it." NOT a track-020
+  regression (`git log -S` dates the code to `2241625`, no 020 commit touched it) — but
+  found because 020's drag work got the founder exercising the editor. Mechanism, proven
+  from the DB: the rearrange's centroid-preservation block computed the "old centroid" over
+  `findMany({ siteId, group })` — which includes POOL seats (group extras) at sentinel
+  (0,0). With 60 real + 6 pool seats, each ParcelForm apply shifted the regenerated grid
+  AND the persisted ItemGroup anchor by anchor×(60/66); the founder's ~10 rotation attempts
+  left Brisa Marina parcel 1 at exactly **(60/66)^10 = 0.3856 × site coords on both axes**
+  — mid-ocean near the equator ("hidden"), and every further attempt compounded it
+  ("rotation 0 didn't restore"). Fixes (all server-side, `inventory/actions.ts`): rearrange
+  `existing` excludes pool (also kills two latent siblings: pool seats being assigned
+  leftover grid positions, and a pool seat at existing[0] triggering a DUPLICATE ItemGroup
+  create); a **centroid-shift sanity guard** (legit shifts are metres; >0.01° / >10
+  schematic units means poisoned state — skip the shift so corruption can never persist or
+  compound again); pool excluded from rotateSelection/adjustItemSpacing/moveItems geometry
+  and from moveParcel (sentinels had measurable accumulated drag drift); complete-parcel
+  anchor-update gates now compare against selected IG members, not raw selection length.
+  (view.tsx needed nothing — its `inventory` already filters pool; first-draft edits there
+  were reverted as redundant.) **Data repaired**: parcel 1 translated back by the exact
+  corruption delta (60 seats + anchor; grid shape and spacing preserved; landed centred on
+  the site pin — founder drags it to its final spot). **6 new unit tests** (partner 1979u
+  green) incl. the corrupt-shift-skipped and small-shift-still-applied pair; **browser
+  proof** on a seeded 4-real+2-pool parcel: two "Rotate +5°" applies through the real UI →
+  centroid drift 5.3px, DB shows rotation=10, seats within a metre of home, pool sentinels
+  byte-identical at (0,0). Verifier skill gained the parcel-chip/rotate mechanics + the
+  teleport check.
 - **2026-08-15 — P3 regression (founder-reported) found, fixed, BROWSER-VERIFIED.** The
   flagged risk materialized: dragging a seat panned the map. Root cause confirmed in library
   source: `AdvancedMarker` renders `null` until Google Maps supplies its content container

@@ -933,3 +933,178 @@ describe('removeItemsFromGroup — happy path', () => {
     expect(vi.mocked(recomputeSeatLabels)).toHaveBeenCalledWith(SITE_ID)
   })
 })
+
+// ─── Pool-sentinel exclusion from parcel geometry (track 020 / 2026-08-15) ──
+//
+// Pool seats (group extras) carry sentinel coordinates (~0,0) but share the
+// parcel's group number. Including them in any average or orbit drags the
+// result toward null island — the Brisa Marina incident: each ParcelForm apply
+// shifted the whole parcel by anchor×(60/66) and PERSISTED it; ten applies
+// left the parcel at (60/66)^10 ≈ 0.386 of its true coordinates. These tests
+// encode the requirement that pool seats never participate in geometry, and
+// that an insane centroid-preservation shift is skipped rather than persisted.
+
+describe('parcel geometry excludes pool sentinels', () => {
+  it('rearrange reads existing seats WITHOUT the pool band', async () => {
+    setLayoutMode('geo')
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([
+      { id: 'i1', number: 10101, itemGroupId: 'ig-1', locationLat: '35.0', locationLng: '23.0' },
+    ] as any)
+    vi.mocked(prisma.itemGroup.update).mockResolvedValue({ id: 'ig-1' } as any)
+    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
+
+    await syncChairsWithLayout(
+      SITE_ID,
+      {
+        rows: 1, seatsPerRow: 2, horizontalGap: 1, verticalGap: 1, rotation: 0,
+        group: 1, pairSeats: false, intraPairGap: 0, baseLat: 35.0, baseLng: 23.0,
+      } as any,
+      'rearrange'
+    )
+
+    const existingQuery = vi.mocked(prisma.inventoryItem.findMany).mock.calls[0]![0]
+    expect(existingQuery?.where).toMatchObject({
+      siteId: SITE_ID,
+      group: 1,
+      status: { not: 'pool' },
+    })
+  })
+
+  it('rearrange SKIPS a corrupt centroid-preservation shift (no teleport persisted)', async () => {
+    setLayoutMode('geo')
+    // Existing seats are far from the anchor (corrupt state, e.g. a previously
+    // poisoned run). The old behaviour shifted the regenerated grid AND the
+    // stored anchor to the corrupt centroid; required behaviour: regenerate at
+    // the sane anchor, unshifted.
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([
+      { id: 'i1', number: 10101, itemGroupId: 'ig-1', locationLat: '13.6', locationLng: '9.1' },
+      { id: 'i2', number: 10102, itemGroupId: 'ig-1', locationLat: '13.6', locationLng: '9.1' },
+    ] as any)
+    vi.mocked(prisma.itemGroup.update).mockResolvedValue({ id: 'ig-1' } as any)
+    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
+
+    await syncChairsWithLayout(
+      SITE_ID,
+      {
+        rows: 1, seatsPerRow: 2, horizontalGap: 1, verticalGap: 1, rotation: 0,
+        group: 1, pairSeats: false, intraPairGap: 0, baseLat: 35.0, baseLng: 23.0,
+      } as any,
+      'rearrange'
+    )
+
+    // The regenerated seats must land at the ANCHOR (≈35, ≈23), not at the
+    // corrupt existing centroid (13.6, 9.1) — and the persisted ItemGroup
+    // anchor must stay sane too.
+    for (const call of vi.mocked(prisma.inventoryItem.update).mock.calls) {
+      const data = call[0]!.data as { locationLat?: string; locationLng?: string }
+      if (data.locationLat === undefined) continue
+      expect(Math.abs(parseFloat(data.locationLat!) - 35.0)).toBeLessThan(0.01)
+      expect(Math.abs(parseFloat(data.locationLng!) - 23.0)).toBeLessThan(0.01)
+    }
+    const igData = vi.mocked(prisma.itemGroup.update).mock.calls[0]![0]!.data as {
+      locationLat: string
+      locationLng: string
+    }
+    expect(Math.abs(parseFloat(igData.locationLat) - 35.0)).toBeLessThan(0.01)
+    expect(Math.abs(parseFloat(igData.locationLng) - 23.0)).toBeLessThan(0.01)
+  })
+
+  it('rearrange still applies a small, legitimate centroid shift', async () => {
+    setLayoutMode('geo')
+    // Existing seats sit ~0.001° from the anchor — a normal shape tweak.
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([
+      { id: 'i1', number: 10101, itemGroupId: 'ig-1', locationLat: '35.001', locationLng: '23.001' },
+      { id: 'i2', number: 10102, itemGroupId: 'ig-1', locationLat: '35.001', locationLng: '23.001' },
+    ] as any)
+    vi.mocked(prisma.itemGroup.update).mockResolvedValue({ id: 'ig-1' } as any)
+    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
+
+    await syncChairsWithLayout(
+      SITE_ID,
+      {
+        rows: 1, seatsPerRow: 2, horizontalGap: 1, verticalGap: 1, rotation: 0,
+        group: 1, pairSeats: false, intraPairGap: 0, baseLat: 35.0, baseLng: 23.0,
+      } as any,
+      'rearrange'
+    )
+
+    // Centroid preservation should pull the regenerated grid to the seats'
+    // actual location (≈35.001), not leave it at the raw anchor.
+    const withCoords = vi
+      .mocked(prisma.inventoryItem.update)
+      .mock.calls.map((c) => c[0]!.data as { locationLat?: string })
+      .filter((d) => d.locationLat !== undefined)
+    expect(withCoords.length).toBeGreaterThan(0)
+    const avgLat =
+      withCoords.reduce((s, d) => s + parseFloat(d.locationLat!), 0) / withCoords.length
+    expect(Math.abs(avgLat - 35.001)).toBeLessThan(0.0005)
+  })
+
+  it('rotateSelection ignores pool seats in the selection', async () => {
+    setLayoutMode('geo')
+    vi.mocked(prisma.inventoryItem.findMany)
+      .mockResolvedValueOnce([
+        { id: 'i1', locationLat: '35.0', locationLng: '23.0', rotation: 0 },
+        { id: 'i2', locationLat: '35.001', locationLng: '23.0', rotation: 0 },
+      ] as any)
+      .mockResolvedValueOnce([
+        { itemGroupId: 'ig-1' }, { itemGroupId: 'ig-1' }, { itemGroupId: null },
+      ] as any)
+      .mockResolvedValueOnce([
+        { locationLat: '35.0', locationLng: '23.0' },
+        { locationLat: '35.001', locationLng: '23.0' },
+      ] as any)
+    vi.mocked(prisma.inventoryItem.count).mockResolvedValue(2 as any)
+    vi.mocked(prisma.itemGroup.findUnique).mockResolvedValue({ id: 'ig-1', rotation: 0 } as any)
+    vi.mocked(prisma.itemGroup.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.$transaction).mockResolvedValue([] as any)
+
+    const res = await rotateSelection(SITE_ID, ['i1', 'i2', 'pool-1'], 90)
+    expect(res.status).toBe('ok')
+
+    // The geometry read must exclude the pool band…
+    const geometryQuery = vi.mocked(prisma.inventoryItem.findMany).mock.calls[0]![0]
+    expect(geometryQuery?.where).toMatchObject({ status: { not: 'pool' } })
+
+    // …and a pool seat in the selection must NOT stop the complete-parcel
+    // anchor update (2 of 2 group members selected → anchor written).
+    expect(vi.mocked(prisma.itemGroup.update)).toHaveBeenCalled()
+    // The anchor centroid read is restricted to the parcel's own members.
+    const centroidQuery = vi.mocked(prisma.inventoryItem.findMany).mock.calls[2]![0]
+    expect(centroidQuery?.where).toMatchObject({ itemGroupId: 'ig-1' })
+  })
+
+  it('adjustItemSpacing and moveItems exclude the pool band from geometry reads', async () => {
+    setLayoutMode('geo')
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([] as any)
+
+    await adjustItemSpacing(SITE_ID, ['i1', 'i2'], 'horizontal', 1.5)
+    // The GEOMETRY read (first query of each action) must exclude the pool
+    // band. Later metadata reads (group-membership gates) are exempt.
+    expect(
+      vi.mocked(prisma.inventoryItem.findMany).mock.calls[0]![0]?.where
+    ).toMatchObject({ status: { not: 'pool' } })
+
+    vi.mocked(prisma.inventoryItem.findMany).mockClear()
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([] as any)
+    await moveItems(SITE_ID, ['i1', 'i2'], 0.001, 0.001)
+    expect(
+      vi.mocked(prisma.inventoryItem.findMany).mock.calls[0]![0]?.where
+    ).toMatchObject({ status: { not: 'pool' } })
+  })
+
+  it('moveParcel shifts only real seats — pool sentinels stay put', async () => {
+    setLayoutMode('geo')
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([] as any)
+
+    await moveParcel(SITE_ID, 1, 0.001, 0.001)
+
+    const query = vi.mocked(prisma.inventoryItem.findMany).mock.calls[0]![0]
+    expect(query?.where).toMatchObject({
+      siteId: SITE_ID,
+      group: 1,
+      status: { not: 'pool' },
+    })
+  })
+})

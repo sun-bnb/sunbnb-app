@@ -189,12 +189,25 @@ events; `setPointerCapture` works headless). Assertions that matter:
 - **DB proof:** after drop, the parcel rows' `location_lat/lng` all changed by the SAME
   delta (moveParcel), and the solo seat's coords are byte-identical to seeded.
 
+**Parcel controls:** the parcel chip renders "1 (4)" as SEPARATE spans — click
+`getByText('(4)', { exact: true })` (bubbles to the chip). Selecting a complete parcel
+shows the "Parcel N · M seats" toolbar; rotate via `getByRole('button', { name: 'Rotate
++5°' })` (MUI Tooltip titles are the accessible names). Rotation on a complete parcel
+drives the REARRANGE path (`syncChairsWithLayout`), which regenerates the grid from the
+ItemGroup anchor — after clicking, wait ~5s (server action + full `getSite` refresh).
+Teleport check: parcel centroid drift on marker bboxes must be <25px per apply, and pool
+seats must remain byte-identical at their sentinel coords in the DB (the 2026-08-15
+rotation-teleport incident: pool sentinels polluted the rearrange centroid, shifting the
+parcel by anchor×(real/total) PER APPLY, compounding).
+
 **Pitfalls:** `AdvancedMarker` portals its children in asynchronously — markers appear
 seconds after `networkidle`; wait for the selector, then settle ~3s. This mount timing is
 also a real bug class: DOM listeners attached from a `[map]`-dep effect never bind (the
 2026-08-15 pan regression) — listeners on marker SVGs must key on the ELEMENT (callback
 ref), not just the map. A dead 3001 listener (`lsof` shows the PID but `curl` gets
 `ERR_CONNECTION_REFUSED` on both stacks) means a zombie server — kill and restart.
+Impersonation tokens are consumed even by a run that later fails — mint a fresh one per
+attempt.
 
 ## User app — other surfaces (:3002)
 
