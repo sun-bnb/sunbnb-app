@@ -57,7 +57,7 @@ Google, Facebook, Credentials (email/password with bcrypt). Anonymous support vi
 
 ## Server Actions
 
-- **`sites/[id]/actions.ts`**: `saveReservationForMultipleItems` (multi-item, auth/anonId required, price from DB), `saveRentalBooking` (availability-checked), `findAnonReservation`, `findUserReservation`
+- **`sites/[id]/actions.ts`**: `saveReservationForMultipleItems` (multi-item, auth/anonId required, price from DB; availability validated via the SCOPED `getAvailabilityForItems` — absent ids are unbookable, track 020 P2), `saveRentalBooking` (availability-checked), `findAnonReservation`, `findUserReservation`
 - **`reservations/[id]/actions.ts`**: `cancelReservation` (+ provider refund via `issueRefund` if paid), `getProducts`, `createOrder` (DB prices enforced), `completeUnpaidOrder`, `getOrderByPaymentRef`, `getOrders`
 - **`payment/actions.ts`**: `initiateDemoReservationPayment`, `initiateDemoOrderPayment`, `initiateDemoRentalPayment`, `initiateDemoTabPayment` (QR-credential, no ownership check; atomic claim + calculateTabTotal guard; on processConfirmedTabPayment error does NOT revert — poll route retries), `getReservationById`, `getReservationByPaymentRef`, `getOrderByPaymentRef`
 - **`tables/[tableId]/actions.ts`** (dine-in tabs v2, restaurant-anchored, single `tableId` param — track 002 P1.5 + dine-in-v2 decoupling): `placeTabOrder` (find-or-create open tab in-txn on the `openTableId` unique guard, P2002 → join existing; orders enter kitchen state `complete`, prices from `MenuItem`, not `Product`; anon `Order.userId = restaurant.partnerAccountId`; dual-write `siteId`/`site` connect only when the restaurant is linked to a Site), `getTabState` (open tab + rounds + `calculateTabTotal` totals, queried by `openTableId` alone; no ownership check — QR-URL-as-credential), `getDineContext` (restaurant/table + MenuItem-sourced menu mapped to the legacy product-shaped DTO; gates: flag → table active → `restaurant.dineInEnabled` — no site lookup at all, table id is the sole credential/routing key)
@@ -83,7 +83,7 @@ RTK Query: `reservationApi` (getReservation, getReservationByDate, etc.), `place
 ```bash
 npm run test              # unit + route + server action tests (521 tests, Prisma mocked)
 npm run test:watch        # vitest in watch mode
-npm run test:integration  # integration tests against local sunbnb_test DB (82 tests, real Prisma)
+npm run test:integration  # integration tests against local sunbnb_test DB (87 tests, real Prisma)
 ```
 
 ### Unit / route tests (`vitest.config.ts`)
@@ -127,6 +127,7 @@ npm run test:integration  # integration tests against local sunbnb_test DB (82 t
 ### Integration tests (`vitest.integration.config.ts`)
 
 Requires local Docker Postgres with `sunbnb_test` DB (same DB as `packages/data` integration tests — no extra setup needed). `POSTGRES_URL` set via CLI in the npm script. No mock for `@repo/data/PrismaCient` or `@repo/data/payment` — real DB writes verified.
+- `service/availability-semantics.integration.test.ts` — ORACLE-equivalence for the set-based availability rewrite (track 020 P2): the pre-P2 JS implementation runs VERBATIM as referee against a seeded matrix (~90 seats — every payment status × op-status × stay-over combo, all six inclusive-overlap boundaries, 3-seat party, far-future window) and must answer identically incl. ordering and periods; plus the `getAvailabilityForItems` scoping/absence contract (inactive/foreign/bogus ids ABSENT, never available) (5 tests)
 - `service/availabilityService.integration.test.ts` — `getAvailability` ORDERING contract (track 020 P1): seats returned in ascending seat-number order regardless of insertion order, `pickFirstAvailablePair` preselects the lowest-numbered available seat (and the next-lowest when it is booked), stability across calls. Guards the one order-dependent read path an index can silently change — fixture seats are inserted deliberately scrambled (4 tests)
 - `service/siteService.integration.test.ts` — searchSites item_count (active-only denominator), available_count (BLOCKING_STATUSES filter, date overlap, no-show/departed release rule, non-blocking statuses); countAvailableToday (wraps getAvailability for today's server-local window) (14 tests)
 - `app/sites/[id]/actions.integration.test.ts` — saveReservationForMultipleItems (DB writes, payment calc, unpaid, anonymous), saveRentalBooking (pricing, real aggregate availability check) (21 tests)

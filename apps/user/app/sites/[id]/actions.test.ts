@@ -10,6 +10,7 @@ vi.mock('next/cache', () => ({
 
 vi.mock('@/service/availabilityService', () => ({
   getAvailability: vi.fn().mockResolvedValue([]),
+  getAvailabilityForItems: vi.fn().mockResolvedValue([]),
 }))
 
 vi.mock('@/app/api/_lib/payment-ids', () => ({
@@ -26,12 +27,12 @@ import {
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
-import { getAvailability } from '@/service/availabilityService'
+import { getAvailabilityForItems } from '@/service/availabilityService'
 import { isValidEntityId } from '@/app/api/_lib/payment-ids'
 import { reserveWithConflictGuard, createRentalBookingsWithGuard } from '@repo/data/reservations'
 
 const mockAuth = vi.mocked(auth)
-const mockGetAvailability = vi.mocked(getAvailability)
+const mockGetAvailability = vi.mocked(getAvailabilityForItems)
 const mockIsValidEntityId = vi.mocked(isValidEntityId)
 const mockReserveWithConflictGuard = vi.mocked(reserveWithConflictGuard)
 const mockCreateRentalBookingsWithGuard = vi.mocked(createRentalBookingsWithGuard)

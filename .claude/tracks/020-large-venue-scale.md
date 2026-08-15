@@ -53,11 +53,11 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
   1. **USER OPS before any `main` push: `npm run migrate:test`** — migration
      `20260814065600_add_site_scoped_indexes` is applied to local + `sunbnb_test` only; the
      shared test DB must lead `main` (pre-push hook enforces).
-  2. ✅ ~~P4~~ — DONE 2026-08-15 (see roadmap). **Next slice: P2** = set-based availability
-     (public unauthenticated endpoint + booking hot path — money-adjacent; own careful
-     slice, converge on `searchSites`' NOT EXISTS shape and mind the existence-check double
-     duty at `sites/[id]/actions.ts:136-140`). P4's own deferred tail is listed in its
-     roadmap entry.
+  2. ✅ ~~P4~~ ✅ ~~P2~~ — both DONE 2026-08-15 (see roadmap). **Next: P5** (work off the
+     render path: manage write-N+1 batch, orders-poll `take`/date windows, analytics
+     `getOccupancyByDay` cost, payload narrowing incl. the user site-detail double-ship) —
+     or the P3/P4 deferred tails. Q4 (rate-limit public availability) still open, softened
+     by P2 (~36ms/request at 3 000 seats).
   3. P3 follow-up slice (second-order): `manage/view.tsx` per-render site-wide filters +
      `bed-state.ts` derive-call memoization (memoize CALLS, never fork the derivation —
      track 018 constraint). Marquee select also still unexercised in-browser.
@@ -121,7 +121,21 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
   (`:194-197`) — longer scan = longer lock = worse contention exactly when the venue is busy.
   Pure expand phase; ships ahead of `main` per `.claude/rules/migrations.md`.
 
-- ☐ **P2 — Availability as set-based SQL.** `apps/user` + `packages/data` → `user-dev`/`data-dev`.
+- ✅ **P2 — Availability as set-based SQL.** DONE 2026-08-15. `getAvailability` +
+  new scoped `getAvailabilityForItems` (booking validation no longer computes the whole
+  site) are two flat, index-driven queries run in parallel: ordered active seats + the
+  blocking links of range-overlapping reservations (drives from `Reservation(site_id,
+  from, to)`); verdict = Map lookup; `periods` DTO preserved for the public route (falls
+  out of the links query free). **Equivalence locked by an oracle test** — the pre-P2
+  implementation runs verbatim as referee over a ~90-seat matrix (every status × op ×
+  stay-over combo, all six inclusive-overlap boundaries, parties, far-future window):
+  answers identical incl. ordering and periods. Absence contract (inactive/foreign/bogus
+  ids) locked for the scoped variant. **Measured on the fixture (3 000 seats, 441k
+  reservations): old JS loop 64ms (conservative replica — the real path also dragged full
+  item rows + a Site row per reservation); naive per-item `NOT EXISTS` — the shape this
+  track originally sketched — 1 525ms (24× WORSE than the JS loop); final shape 36ms.**
+  Gate: user 521u + 87i (5 new oracle tests), tsc + lint clean.
+- ░ **P2 (original spec, for reference).** `apps/user` + `packages/data` → `user-dev`/`data-dev`.
   `availabilityService.ts:62-104` loads every active item and every overlapping reservation
   (`include: { items: true, site: true }` — the full `Site` row re-materialized *per
   reservation*), then `checkAvailability` (`:19-49`) filters the entire reservation array per
@@ -306,6 +320,22 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
    most of P6.
 
 ## Log
+
+- **2026-08-15 (P2) — set-based availability shipped; the harness earned its keep TWICE.**
+  The naive per-item `NOT EXISTS` — exactly the SQL shape this track's original P2 spec
+  sketched — measured **1 525ms on the fixture, 24× slower than the JS loop it replaced**
+  (it probes every seat's entire reservation history instead of driving from the ~160
+  reservations the date range selects). Without the P0 fixture that shape would have
+  shipped with a "converted to SQL, must be faster" narrative and REGRESSED the public
+  endpoint by an order of magnitude. Second catch: an `= ANY(<442 ids>)` periods filter
+  cost +38ms and was provably a semantic no-op. Final shape: two flat range-driven
+  queries in parallel, 36ms, verdict via Map. Equivalence proven by running the OLD
+  implementation verbatim as an oracle (same pattern as pair-selection): seeded matrix
+  across statuses × op-statuses × stay-over × overlap boundaries; identical answers.
+  Q4 (rate-limiting the public endpoint) remains open but the per-request cost is now
+  ~36ms at 3 000 seats. Also recorded: `searchSites`' available_count subquery still uses
+  the correlated wrong-side shape — fine at LIMIT 20 small sites, worth converging on the
+  links-shape if search radius ever includes a mega-venue.
 
 - **2026-08-15 (P4) — batched writes shipped; the git-stash validation pattern.** Rewrote the
   inventory write paths set-based (details in roadmap P4). The method note worth keeping:

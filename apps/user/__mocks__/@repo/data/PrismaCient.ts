@@ -95,4 +95,9 @@ const prisma = {
   }),
 }
 
+// Raw-query escape hatches (track 020 P2 — availability is set-based SQL).
+prisma.$queryRaw = vi.fn().mockResolvedValue([])
+prisma.$queryRawUnsafe = vi.fn().mockResolvedValue([])
+prisma.$executeRaw = vi.fn().mockResolvedValue(0)
+
 export default prisma

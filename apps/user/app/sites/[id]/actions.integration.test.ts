@@ -11,11 +11,12 @@ vi.mock('next/cache', () => ({
 // Availability service mocked — we test DB writes, not availability logic
 vi.mock('@/service/availabilityService', () => ({
   getAvailability: vi.fn().mockResolvedValue([]),
+  getAvailabilityForItems: vi.fn().mockResolvedValue([]),
 }))
 
 import { saveReservationForMultipleItems, saveRentalBooking, findAnonRentalBooking } from './actions'
 import { auth } from '@/app/auth'
-import { getAvailability } from '@/service/availabilityService'
+import { getAvailabilityForItems } from '@/service/availabilityService'
 import { cleanDatabase, disconnectDatabase, prisma } from '@/app/test/setup'
 import {
   createTestUser,
@@ -27,7 +28,8 @@ import {
 } from '@/app/test/fixtures'
 
 const mockAuth = vi.mocked(auth)
-const mockGetAvailability = vi.mocked(getAvailability)
+// The action validates via the SCOPED variant since track 020 P2.
+const mockGetAvailability = vi.mocked(getAvailabilityForItems)
 
 beforeEach(async () => {
   vi.clearAllMocks()

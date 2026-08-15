@@ -6,7 +6,7 @@ import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { reserveWithConflictGuard, createRentalBookingsWithGuard } from '@repo/data/reservations'
 import { siteAnchoredDay } from '@repo/data/site-day'
-import { getAvailability } from '@/service/availabilityService'
+import { getAvailabilityForItems } from '@/service/availabilityService'
 import { isValidEntityId } from '@/app/api/_lib/payment-ids'
 import { InventoryItem } from '../types'
 import {
@@ -139,7 +139,16 @@ export async function saveReservationForMultipleItems(
   // from the set are non-active seats (disabled, pool overflow, cross-site IDs,
   // bogus IDs) and must never be booked — never-trust-the-client.
   if (reservation.items?.length) {
-    const availability = await getAvailability(reservation.siteId, from, to)
+    // Track 020 P2: scoped to the requested seats — validating a 2-seat
+    // booking no longer computes availability for the whole site. Ids that are
+    // not active seats of this site are ABSENT from the result (same as the
+    // old site-wide set) and therefore rejected below.
+    const availability = await getAvailabilityForItems(
+      reservation.siteId,
+      reservation.items.map(i => i.id),
+      from,
+      to
+    )
     const availableIds = new Set(
       availability.filter(a => a.available).map(a => a.itemId)
     )
