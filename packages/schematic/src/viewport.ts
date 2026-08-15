@@ -219,3 +219,74 @@ export function boundingBoxFromPoints(points: readonly LatLng[], paddingMeters =
     { lat: south, lng: west },
   ]
 }
+
+/**
+ * Oriented (rotated) bounding box around a set of coordinates: the tightest
+ * rectangle ALIGNED WITH THE PARCEL'S ROTATION, padded by `paddingMeters`,
+ * returned as 4 corners in ring order. This is the editor's overview box —
+ * unlike `boundingBoxFromPoints` it follows the parcel's actual orientation,
+ * so a rotated parcel shows a rotated box that hugs its real bounds.
+ *
+ * Method: inverse-rotate the points around their centroid into the parcel's
+ * local frame (meters), take the axis-aligned extents there, pad, then rotate
+ * the 4 corners back and project to lat/lng at the centroid latitude.
+ */
+export function orientedBoundingBox(
+  points: readonly LatLng[],
+  rotationDeg: number,
+  paddingMeters = 2,
+): LatLng[] {
+  const finite = points.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+  if (finite.length === 0) return []
+
+  let cLat = 0
+  let cLng = 0
+  for (const p of finite) { cLat += p.lat; cLng += p.lng }
+  cLat /= finite.length
+  cLng /= finite.length
+
+  const metersPerLat = 111320
+  const metersPerLng = 111320 * Math.cos((cLat * Math.PI) / 180)
+
+  const rad = (rotationDeg * Math.PI) / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+
+  // Forward rotation convention (see parcelFootprint / generateChairGrid):
+  //   dx' = dy·sin + dx·cos,  dy' = dy·cos − dx·sin
+  // Inverse:
+  //   dx  = dx'·cos − dy'·sin,  dy = dx'·sin + dy'·cos
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+  for (const p of finite) {
+    const dxr = (p.lng - cLng) * metersPerLng
+    const dyr = (p.lat - cLat) * metersPerLat
+    const dx = dxr * cos - dyr * sin
+    const dy = dxr * sin + dyr * cos
+    if (dx < minX) minX = dx
+    if (dx > maxX) maxX = dx
+    if (dy < minY) minY = dy
+    if (dy > maxY) maxY = dy
+  }
+  minX -= paddingMeters
+  maxX += paddingMeters
+  minY -= paddingMeters
+  maxY += paddingMeters
+
+  const rotateBack = (dx: number, dy: number) => ({
+    dx: dy * sin + dx * cos,
+    dy: dy * cos - dx * sin,
+  })
+
+  return [
+    rotateBack(minX, minY),
+    rotateBack(maxX, minY),
+    rotateBack(maxX, maxY),
+    rotateBack(minX, maxY),
+  ].map(({ dx, dy }) => ({
+    lat: cLat + dy / metersPerLat,
+    lng: cLng + dx / metersPerLng,
+  }))
+}

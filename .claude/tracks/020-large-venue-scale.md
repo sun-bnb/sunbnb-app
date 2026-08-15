@@ -372,9 +372,15 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
      selects the whole parcel) plus any ungrouped seats; at seat zoom it bounds-culls
      markers to the expanded viewport (selected/editing always kept). **Measured on the
      4 436-item site: 12 chips + 0 seat SVGs mounted at overview** (was 4 436 markers).
-     Polygon wrapper copied app-side (`components/maps/polygon.tsx`). Box DRAG at the
-     parcel tier deferred (boxes are click-to-select; drag lives at seat tier +
-     reposition-click, both on the absolute-target moveParcel).
+     Polygon wrapper copied app-side (`components/maps/polygon.tsx`).
+     **Founder refinements (same day): boxes are ORIENTED (new shared
+     `orientedBoundingBox` — inverse-rotate to the parcel's local frame, tight extents,
+     property-tested to hug a 40°-rotated grid at <80% of the AABB area) and DRAGGABLE
+     (google Polygon `draggable`; drag-end feeds the parcel's first seat + drop delta into
+     the EXISTING absolute-target moveParcel rail — browser-verified: DB shifted by the
+     drag delta with the parcel span byte-identical); click on box or chip selects the
+     parcel and fitBounds-zooms into the seats tier (nudged past LOD_SEAT_ZOOM for large
+     parcels; verified 0 → 6 seat SVGs on click).**
      ☐ C2 payload tiering (never LOAD seats at overview — the site-context/inventory-tab
      loader restructure; ItemGroup rows + `parcelFootprint` replace item-derived boxes).
   D. ☐ schematic canvas viewBox culling.

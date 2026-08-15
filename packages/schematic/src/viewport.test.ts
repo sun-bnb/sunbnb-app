@@ -11,6 +11,7 @@ import { describe, it, expect } from 'vitest'
 import { generateChairGrid } from './grid'
 import {
   boundingBoxFromPoints,
+  orientedBoundingBox,
   LOD_SEAT_ZOOM,
   lodTier,
   expandBounds,
@@ -195,5 +196,79 @@ describe('boundingBoxFromPoints', () => {
       { lat: 36.7, lng: -4.4 },
     ], 1)
     expect(box).toHaveLength(4)
+  })
+})
+
+describe('orientedBoundingBox', () => {
+  const metersPerLat = 111320
+
+  it('reduces to the axis-aligned box at rotation 0', () => {
+    const pts = [
+      { lat: 36.7213, lng: -4.4214 },
+      { lat: 36.7215, lng: -4.4210 },
+    ]
+    const oriented = orientedBoundingBox(pts, 0, 2)
+    const lats = oriented.map(c => c.lat)
+    const lngs = oriented.map(c => c.lng)
+    expect(Math.max(...lats)).toBeCloseTo(36.7215 + 2 / metersPerLat, 8)
+    expect(Math.min(...lats)).toBeCloseTo(36.7213 - 2 / metersPerLat, 8)
+    expect(lngs.filter(l => l > -4.4212).length).toBe(2) // two east corners
+  })
+
+  it('hugs a rotated grid: contains every generated seat and stays TIGHT (smaller than the AABB)', () => {
+    // Build a realistic rotated parcel from the real generator.
+    const rotation = 40
+    const cells = generateChairGrid({
+      group: 1, rotation, rows: 4, seatsPerRow: 8,
+      horizontalGap: 1, verticalGap: 1.5, intraPairGap: 0.4, pairSeats: true,
+    })
+    const anchor = { lat: 36.7213, lng: -4.4214 }
+    const metersPerLng = metersPerLat * Math.cos((anchor.lat * Math.PI) / 180)
+    const pts = cells.map(c => ({
+      lat: anchor.lat + c.dy / metersPerLat,
+      lng: anchor.lng + c.dx / metersPerLng,
+    }))
+
+    const oriented = orientedBoundingBox(pts, rotation, 1)
+    expect(oriented).toHaveLength(4)
+
+    // Tightness: the oriented box area is well below the axis-aligned box area
+    // for a 40°-rotated grid (that is the whole point of orientation).
+    const area = (corners: { lat: number; lng: number }[]) => {
+      const xy = corners.map(c => ({ x: c.lng * metersPerLng, y: c.lat * metersPerLat }))
+      let a = 0
+      for (let i = 0; i < xy.length; i++) {
+        const p = xy[i]!, q = xy[(i + 1) % xy.length]!
+        a += p.x * q.y - q.x * p.y
+      }
+      return Math.abs(a / 2)
+    }
+    const aabb = boundingBoxFromPoints(pts, 1)
+    expect(area(oriented)).toBeLessThan(area(aabb) * 0.8)
+
+    // Containment: every seat inside the oriented box (inverse-rotate + rect test).
+    const cLat = pts.reduce((s, p) => s + p.lat, 0) / pts.length
+    const cLng = pts.reduce((s, p) => s + p.lng, 0) / pts.length
+    const rad = (rotation * Math.PI) / 180
+    const inv = (p: { lat: number; lng: number }) => {
+      const dxr = (p.lng - cLng) * metersPerLng
+      const dyr = (p.lat - cLat) * metersPerLat
+      return { x: dxr * Math.cos(rad) - dyr * Math.sin(rad), y: dxr * Math.sin(rad) + dyr * Math.cos(rad) }
+    }
+    const local = oriented.map(inv)
+    const xs = local.map(p => p.x)
+    const ys = local.map(p => p.y)
+    for (const p of pts) {
+      const l = inv(p)
+      expect(l.x).toBeGreaterThanOrEqual(Math.min(...xs) - 1e-6)
+      expect(l.x).toBeLessThanOrEqual(Math.max(...xs) + 1e-6)
+      expect(l.y).toBeGreaterThanOrEqual(Math.min(...ys) - 1e-6)
+      expect(l.y).toBeLessThanOrEqual(Math.max(...ys) + 1e-6)
+    }
+  })
+
+  it('returns [] for no finite points', () => {
+    expect(orientedBoundingBox([], 30)).toEqual([])
+    expect(orientedBoundingBox([{ lat: Number.NaN, lng: 1 }], 30)).toEqual([])
   })
 })

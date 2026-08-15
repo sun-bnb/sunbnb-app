@@ -3,7 +3,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { APIProvider, Map, ControlPosition, MapMouseEvent, useMap, AdvancedMarker } from '@vis.gl/react-google-maps'
-import { cullToBounds, expandBounds, lodTier, boundingBoxFromPoints, type ViewportBounds } from '@repo/schematic'
+import { cullToBounds, expandBounds, lodTier, orientedBoundingBox, LOD_SEAT_ZOOM, type ViewportBounds } from '@repo/schematic'
 import { Polygon } from '@/components/maps/polygon'
 import SunbedMarker from './SunbedMarker'
 import { InventoryItem } from '@/types/shared'
@@ -36,6 +36,95 @@ function getScaledSize(zoom: number): number {
   const metersPerPixel = 156543.03392 / Math.pow(2, zoom)
   const size = physicalLength / metersPerPixel
   return Math.max(size, 10) // minimum 10px for visibility at low zoom
+}
+
+interface ParcelBox {
+  group: number
+  count: number
+  ids: string[]
+  color: string
+  corners: Array<{ lat: number; lng: number }>
+  center: { lat: number; lng: number }
+  firstItem: InventoryItem
+}
+
+/**
+ * One overview-tier parcel: an ORIENTED bounding box (matches the parcel's
+ * real bounds and rotation) that is DRAGGABLE — dragging any box moves the
+ * whole parcel via the absolute-target moveParcel path — plus a count chip.
+ * Clicking box or chip selects the parcel and zooms to seat level.
+ */
+function DraggableParcelBox({
+  box,
+  onMoved,
+  onOpen,
+}: {
+  box: ParcelBox
+  /** Same contract as a marker drag end: (anchor item, drop event). */
+  onMoved: (item: InventoryItem, e: { latLng: { lat: () => number; lng: () => number } }) => void
+  onOpen: (box: ParcelBox) => void
+}) {
+  const polyRef = useRef<google.maps.Polygon | null>(null)
+  const dragStartRef = useRef<{ lat: number; lng: number } | null>(null)
+  const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
+
+  const firstVertex = () => {
+    const path = polyRef.current?.getPath()
+    if (!path || path.getLength() === 0) return null
+    const v = path.getAt(0)
+    return { lat: v.lat(), lng: v.lng() }
+  }
+
+  return (
+    <>
+      <Polygon
+        ref={polyRef}
+        paths={box.corners}
+        draggable
+        strokeColor={box.color}
+        strokeOpacity={0.85}
+        strokeWeight={2}
+        fillColor={box.color}
+        fillOpacity={0.14}
+        onDragStart={() => {
+          dragStartRef.current = firstVertex()
+        }}
+        onDragEnd={() => {
+          const start = dragStartRef.current
+          const end = firstVertex()
+          dragStartRef.current = null
+          if (!start || !end) return
+          const dLat = end.lat - start.lat
+          const dLng = end.lng - start.lng
+          if (Math.abs(dLat) < 1e-9 && Math.abs(dLng) < 1e-9) return
+          // The whole parcel moves by the box's drag delta: send the parcel's
+          // first seat to its new ABSOLUTE position (the server derives the
+          // delta from that seat's DB row — same rail as a seat drag).
+          const targetLat = Number(box.firstItem.locationLat) + dLat
+          const targetLng = Number(box.firstItem.locationLng) + dLng
+          onMoved(box.firstItem, { latLng: { lat: () => targetLat, lng: () => targetLng } })
+        }}
+        onClick={() => onOpen(box)}
+      />
+      <SafeAdvancedMarker position={box.center}>
+        <div
+          onClick={() => onOpen(box)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: 'white', borderRadius: 9999,
+            border: `1.5px solid ${box.color}`,
+            padding: '3px 10px', cursor: 'pointer',
+            fontSize: 12, fontWeight: 600, color: '#374151',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <span style={{ width: 8, height: 8, borderRadius: 9999, background: box.color }} />
+          {box.group} · {box.count}
+        </div>
+      </SafeAdvancedMarker>
+    </>
+  )
 }
 
 /** Inner component that has access to the map instance via useMap() */
@@ -270,7 +359,9 @@ function MapContent({
     return Object.entries(byGroup).map(([groupStr, items]) => {
       const group = Number(groupStr)
       const points = items.map((i) => ({ lat: Number(i.locationLat), lng: Number(i.locationLng) }))
-      const corners = boundingBoxFromPoints(points, 2.5)
+      // Oriented to the parcel's actual rotation so the box hugs its real
+      // bounds (seats all share the parcel rotation).
+      const corners = orientedBoundingBox(points, items[0]?.rotation ?? 0, 2.5)
       const center = {
         lat: points.reduce((s, pnt) => s + pnt.lat, 0) / points.length,
         lng: points.reduce((s, pnt) => s + pnt.lng, 0) / points.length,
@@ -282,9 +373,25 @@ function MapContent({
         color: getParcelColor(group) || '#6b7280',
         corners,
         center,
-      }
+        firstItem: items[0]!,
+      } satisfies ParcelBox
     })
   }, [tier, visibleItems])
+
+  // Click on a box/chip: select the parcel and zoom onto it (into the seats
+  // tier — fitBounds, then nudge past LOD_SEAT_ZOOM for very large parcels).
+  const openParcel = useCallback((box: ParcelBox) => {
+    onSelectionChange(box.ids)
+    if (!map) return
+    const b = new google.maps.LatLngBounds()
+    for (const c of box.corners) b.extend(c)
+    map.fitBounds(b, 60)
+    google.maps.event.addListenerOnce(map, 'idle', () => {
+      const z = map.getZoom() ?? 0
+      if (z <= LOD_SEAT_ZOOM) map.setZoom(LOD_SEAT_ZOOM + 1)
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, onSelectionChange])
 
   // Ungrouped seats have no box to live in — keep them as markers at both tiers.
   const ungroupedSeats = useMemo(
@@ -292,40 +399,16 @@ function MapContent({
     [tier, visibleItems],
   )
 
-  const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
-
   return (
     <>
       {tier === 'parcels' &&
         parcelBoxes.map((box) => (
-          <React.Fragment key={`parcel-${box.group}`}>
-            <Polygon
-              paths={box.corners}
-              strokeColor={box.color}
-              strokeOpacity={0.85}
-              strokeWeight={2}
-              fillColor={box.color}
-              fillOpacity={0.14}
-              onClick={() => onSelectionChange(box.ids)}
-            />
-            <SafeAdvancedMarker position={box.center}>
-              <div
-                onClick={() => onSelectionChange(box.ids)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  background: 'white', borderRadius: 9999,
-                  border: `1.5px solid ${box.color}`,
-                  padding: '3px 10px', cursor: 'pointer',
-                  fontSize: 12, fontWeight: 600, color: '#374151',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <span style={{ width: 8, height: 8, borderRadius: 9999, background: box.color }} />
-                {box.group} · {box.count}
-              </div>
-            </SafeAdvancedMarker>
-          </React.Fragment>
+          <DraggableParcelBox
+            key={`parcel-${box.group}`}
+            box={box}
+            onMoved={onMarkerDragEnd}
+            onOpen={openParcel}
+          />
         ))}
       {(tier === 'seats' ? culledSeats : ungroupedSeats).map((item) => {
         const isEditing = selectedItemId === item.id
