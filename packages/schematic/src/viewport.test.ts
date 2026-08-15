@@ -10,6 +10,7 @@
 import { describe, it, expect } from 'vitest'
 import { generateChairGrid } from './grid'
 import {
+  boundingBoxFromPoints,
   LOD_SEAT_ZOOM,
   lodTier,
   expandBounds,
@@ -156,5 +157,43 @@ describe('parcelFootprint', () => {
     const tilted = span(parcelFootprint(anchor, { ...config, rotation: 63 }))
     expect(tilted[0]).toBeCloseTo(flat[0]!, 5)
     expect(tilted[1]).toBeCloseTo(flat[1]!, 5)
+  })
+})
+
+describe('boundingBoxFromPoints', () => {
+  it('wraps all points with the requested padding', () => {
+    const pts = [
+      { lat: 36.7213, lng: -4.4214 },
+      { lat: 36.7215, lng: -4.4210 },
+      { lat: 36.7214, lng: -4.4216 },
+    ]
+    const box = boundingBoxFromPoints(pts, 2)
+    expect(box).toHaveLength(4)
+    const lats = box.map(c => c.lat)
+    const lngs = box.map(c => c.lng)
+    for (const p of pts) {
+      expect(p.lat).toBeLessThan(Math.max(...lats))
+      expect(p.lat).toBeGreaterThan(Math.min(...lats))
+      expect(p.lng).toBeLessThan(Math.max(...lngs))
+      expect(p.lng).toBeGreaterThan(Math.min(...lngs))
+    }
+    // padding ≈ 2m in degrees of latitude
+    expect(Math.max(...lats) - 36.7215).toBeCloseTo(2 / 111320, 8)
+  })
+
+  it('returns [] for no points and a padded box for a single point', () => {
+    expect(boundingBoxFromPoints([])).toEqual([])
+    const box = boundingBoxFromPoints([{ lat: 36.7, lng: -4.4 }], 3)
+    expect(box).toHaveLength(4)
+    expect(box[0]!.lat).toBeGreaterThan(36.7)
+    expect(box[2]!.lat).toBeLessThan(36.7)
+  })
+
+  it('ignores non-finite coordinates', () => {
+    const box = boundingBoxFromPoints([
+      { lat: Number.NaN, lng: 0 },
+      { lat: 36.7, lng: -4.4 },
+    ], 1)
+    expect(box).toHaveLength(4)
   })
 })

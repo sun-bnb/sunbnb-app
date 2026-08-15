@@ -2,7 +2,9 @@
 'use client'
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
-import { APIProvider, Map, ControlPosition, MapMouseEvent, useMap } from '@vis.gl/react-google-maps'
+import { APIProvider, Map, ControlPosition, MapMouseEvent, useMap, AdvancedMarker } from '@vis.gl/react-google-maps'
+import { cullToBounds, expandBounds, lodTier, boundingBoxFromPoints, type ViewportBounds } from '@repo/schematic'
+import { Polygon } from '@/components/maps/polygon'
 import SunbedMarker from './SunbedMarker'
 import { InventoryItem } from '@/types/shared'
 import { getParcelColor } from './chair-util'
@@ -46,6 +48,7 @@ function MapContent({
   onMarkerDragEnd,
   onSelectionChange,
   zoom,
+  viewBounds,
 }: {
   selectedItemId: string | null
   selectedItemIds: string[]
@@ -55,6 +58,7 @@ function MapContent({
   onMarkerDragEnd: (item: InventoryItem, e: any) => void
   onSelectionChange: (ids: string[]) => void
   zoom: number
+  viewBounds: ViewportBounds | null
 }) {
   const map = useMap()
   const { site } = useSite()
@@ -235,9 +239,95 @@ function MapContent({
     }
   }, [])
 
+  // Track 020 P6 (editor slice C1): two-tier LOD like the consumer map.
+  // At overview zoom the editor renders one BOX + chip per parcel instead of
+  // thousands of markers (founder-directed); at seat zoom, only the seats in
+  // the margin-expanded viewport mount. Selected/editing seats always render.
+  const tier = lodTier(zoom)
+
+  const culledSeats = useMemo(() => {
+    if (tier !== 'seats') return []
+    const always = new Set(selectedSet)
+    if (selectedItemId) always.add(selectedItemId)
+    return cullToBounds(
+      visibleItems,
+      viewBounds ? expandBounds(viewBounds) : null,
+      (i) => i.id,
+      (i) => Number(i.locationLat),
+      (i) => Number(i.locationLng),
+      { alwaysInclude: always },
+    )
+  }, [tier, visibleItems, viewBounds, selectedSet, selectedItemId])
+
+  const parcelBoxes = useMemo(() => {
+    if (tier !== 'parcels') return []
+    // (record, not a Map — `Map` here is the @vis.gl map component)
+    const byGroup: Record<number, InventoryItem[]> = {}
+    for (const i of visibleItems) {
+      if (!(i.group > 0)) continue
+      ;(byGroup[i.group] ??= []).push(i)
+    }
+    return Object.entries(byGroup).map(([groupStr, items]) => {
+      const group = Number(groupStr)
+      const points = items.map((i) => ({ lat: Number(i.locationLat), lng: Number(i.locationLng) }))
+      const corners = boundingBoxFromPoints(points, 2.5)
+      const center = {
+        lat: points.reduce((s, pnt) => s + pnt.lat, 0) / points.length,
+        lng: points.reduce((s, pnt) => s + pnt.lng, 0) / points.length,
+      }
+      return {
+        group,
+        count: items.length,
+        ids: items.map((i) => i.id),
+        color: getParcelColor(group) || '#6b7280',
+        corners,
+        center,
+      }
+    })
+  }, [tier, visibleItems])
+
+  // Ungrouped seats have no box to live in — keep them as markers at both tiers.
+  const ungroupedSeats = useMemo(
+    () => (tier === 'parcels' ? visibleItems.filter((i) => !(i.group > 0)) : []),
+    [tier, visibleItems],
+  )
+
+  const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
+
   return (
     <>
-      {visibleItems.map((item) => {
+      {tier === 'parcels' &&
+        parcelBoxes.map((box) => (
+          <React.Fragment key={`parcel-${box.group}`}>
+            <Polygon
+              paths={box.corners}
+              strokeColor={box.color}
+              strokeOpacity={0.85}
+              strokeWeight={2}
+              fillColor={box.color}
+              fillOpacity={0.14}
+              onClick={() => onSelectionChange(box.ids)}
+            />
+            <SafeAdvancedMarker position={box.center}>
+              <div
+                onClick={() => onSelectionChange(box.ids)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  background: 'white', borderRadius: 9999,
+                  border: `1.5px solid ${box.color}`,
+                  padding: '3px 10px', cursor: 'pointer',
+                  fontSize: 12, fontWeight: 600, color: '#374151',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <span style={{ width: 8, height: 8, borderRadius: 9999, background: box.color }} />
+                {box.group} · {box.count}
+              </div>
+            </SafeAdvancedMarker>
+          </React.Fragment>
+        ))}
+      {(tier === 'seats' ? culledSeats : ungroupedSeats).map((item) => {
         const isEditing = selectedItemId === item.id
         const isMultiSelected =
           selectedSet.has(item.id) ||
@@ -365,6 +455,7 @@ export default function InventoryMap({
 }: InventoryMapProps) {
 
   const [zoom, setZoom] = useState(18)
+  const [viewBounds, setViewBounds] = useState<ViewportBounds | null>(null)
   const [searchFocused, setSearchFocused] = useState(false)
   const SafeAPIProvider = APIProvider as unknown as React.ComponentType<any>
   const SafeMap = Map as unknown as React.ComponentType<any>
@@ -418,6 +509,14 @@ export default function InventoryMap({
               setZoom(newZoom)
             }
           }}
+          onIdle={(mapInstance: any) => {
+            const b = mapInstance.map.getBounds()
+            if (b) {
+              const ne = b.getNorthEast()
+              const sw = b.getSouthWest()
+              setViewBounds({ north: ne.lat(), east: ne.lng(), south: sw.lat(), west: sw.lng() })
+            }
+          }}
           onClick={onMapClick}
         >
           <MapContent
@@ -429,6 +528,7 @@ export default function InventoryMap({
             onMarkerDragEnd={onMarkerDragEnd}
             onSelectionChange={onSelectionChange}
             zoom={zoom}
+            viewBounds={viewBounds}
           />
         </SafeMap>
         <CustomMapControl

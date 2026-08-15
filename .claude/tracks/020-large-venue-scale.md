@@ -366,10 +366,18 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
      booking e2e green over the culled path. Remaining load cost is the PAYLOAD
      double-ship (P5 slice 3) — dev-mode load ~5s domcontentloaded is dominated by
      shipping 4 436 items × nested pair objects twice, no longer by marker mount.
-  C. inventory editor: C1 render culling + ItemGroup-box LOD tier (box drag →
-     `moveParcel`, zoom-in/focus → seats); C2 payload tiering (never LOAD seats at
-     overview — the site-context restructure).
-  D. schematic canvas viewBox culling.
+  C. ✅ C1 (2026-08-15): the editor's InventoryMap is two-tier — at overview zoom
+     (≤ LOD_SEAT_ZOOM, incl. the default 18) it renders one padded bounding box +
+     `parcel · count` chip per parcel (`boundingBoxFromPoints`, shared; box/chip click
+     selects the whole parcel) plus any ungrouped seats; at seat zoom it bounds-culls
+     markers to the expanded viewport (selected/editing always kept). **Measured on the
+     4 436-item site: 12 chips + 0 seat SVGs mounted at overview** (was 4 436 markers).
+     Polygon wrapper copied app-side (`components/maps/polygon.tsx`). Box DRAG at the
+     parcel tier deferred (boxes are click-to-select; drag lives at seat tier +
+     reposition-click, both on the absolute-target moveParcel).
+     ☐ C2 payload tiering (never LOAD seats at overview — the site-context/inventory-tab
+     loader restructure; ItemGroup rows + `parcelFootprint` replace item-derived boxes).
+  D. ☐ schematic canvas viewBox culling.
 - 💤 **P6 (original spec, superseded).** Gated on Q1. Viewport culling /
   clustering on the map, virtualization or parcel-scoped loading for the schematic canvas,
   and parcel-scoped queries instead of site-scoped. Only needed if Q1's target is genuinely

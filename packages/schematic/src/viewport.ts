@@ -187,3 +187,35 @@ export function parcelFootprint(anchor: LatLng, config: ParcelGridConfig): LatLn
     lng: anchor.lng + dx / metersPerLng,
   }))
 }
+
+/**
+ * Padded axis-aligned bounding box around a set of coordinates, as 4 corners
+ * (NW, NE, SE, SW). The editor's parcel tier renders THIS instead of seats at
+ * overview zoom — a deliberate box (not a hull): cheap, orientation-free, and
+ * generous for rotated parcels, which is fine at the zoom level where it shows.
+ */
+export function boundingBoxFromPoints(points: readonly LatLng[], paddingMeters = 2): LatLng[] {
+  if (points.length === 0) return []
+  let north = -Infinity
+  let south = Infinity
+  let east = -Infinity
+  let west = Infinity
+  for (const p of points) {
+    if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) continue
+    if (p.lat > north) north = p.lat
+    if (p.lat < south) south = p.lat
+    if (p.lng > east) east = p.lng
+    if (p.lng < west) west = p.lng
+  }
+  if (!Number.isFinite(north)) return []
+  const midLat = (north + south) / 2
+  const dLat = paddingMeters / 111320
+  const dLng = paddingMeters / (111320 * Math.cos((midLat * Math.PI) / 180))
+  north += dLat; south -= dLat; east += dLng; west -= dLng
+  return [
+    { lat: north, lng: west },
+    { lat: north, lng: east },
+    { lat: south, lng: east },
+    { lat: south, lng: west },
+  ]
+}
