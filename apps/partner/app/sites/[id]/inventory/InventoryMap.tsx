@@ -68,14 +68,12 @@ function DraggableParcelBox({
   const dragStartRef = useRef<{ lat: number; lng: number } | null>(null)
   const SafeAdvancedMarker = AdvancedMarker as unknown as React.ComponentType<any>
 
-  // Live chip offset while the box is being dragged (google moves the polygon
-  // natively, but the chip is a separate marker) — kept after drop so the chip
-  // sits at the new spot through the refresh window, then reset when the
-  // refreshed parcel data arrives (box.center changes).
-  const [chipDelta, setChipDelta] = useState<{ dLat: number; dLng: number } | null>(null)
-  useEffect(() => {
-    setChipDelta(null)
-  }, [box.center.lat, box.center.lng])
+  // The chip follows the box IMPERATIVELY during a drag (setting the marker
+  // element's position directly). Using React state here was a bug: the
+  // re-render made the Polygon wrapper re-apply setOptions({ paths }) every
+  // drag frame, resetting the polygon to its original corners — "only the
+  // chip moves". Zero re-renders during drag is the requirement, not a nicety.
+  const chipRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null)
 
   const firstVertex = () => {
     const path = polyRef.current?.getPath()
@@ -101,8 +99,11 @@ function DraggableParcelBox({
         onDrag={() => {
           const start = dragStartRef.current
           const now = firstVertex()
-          if (start && now) {
-            setChipDelta({ dLat: now.lat - start.lat, dLng: now.lng - start.lng })
+          if (start && now && chipRef.current) {
+            chipRef.current.position = {
+              lat: box.center.lat + (now.lat - start.lat),
+              lng: box.center.lng + (now.lng - start.lng),
+            }
           }
         }}
         onDragEnd={() => {
@@ -122,13 +123,7 @@ function DraggableParcelBox({
         }}
         onClick={() => onOpen(box)}
       />
-      <SafeAdvancedMarker
-        position={
-          chipDelta
-            ? { lat: box.center.lat + chipDelta.dLat, lng: box.center.lng + chipDelta.dLng }
-            : box.center
-        }
-      >
+      <SafeAdvancedMarker ref={chipRef} position={box.center}>
         <div
           onClick={() => onOpen(box)}
           style={{
