@@ -18,6 +18,7 @@ import beachTowelIcon from './beach-towel-transparent.png'
 import React from 'react'
 import { useSession } from 'next-auth/react'
 import SchematicSelection from './SchematicSelection'
+import { cullToBounds, expandBounds, lodTier, type ViewportBounds } from '@repo/schematic'
 import { pickFirstAvailablePair } from '@/app/sites/[id]/sunbed-preselection'
 export { resolveSelectionSet, pickFirstAvailablePair } from '@/app/sites/[id]/sunbed-preselection'
 
@@ -219,6 +220,9 @@ function SunbedSelectionGeo({
   const { reservationState, reservationMode, selectedItems } = sitesState
 
   const [zoom, setZoom] = useState<number>(20)
+  // Current map viewport (set on idle). null until the first idle — the culled
+  // marker list stays selected-seats-only for those first few hundred ms.
+  const [viewBounds, setViewBounds] = useState<ViewportBounds | null>(null)
   const [sunbedParcels, setSunbedParcels] = useState<{ [key: number]: InventoryItem[] }>({})
   const [parcelShapes, setParcelShapes] = useState<ParcelShape[]>([])
 
@@ -423,11 +427,30 @@ function SunbedSelectionGeo({
     return ids
   }, [inventoryItems])
 
-  const sunbedMarkers = (inventoryItems || []).map(item => {
-    const available = isAvailable(item)
-    const isSelected = selectedItems?.some(
-      (selected: { id: string }) => selected.id === item.id
+  // Track 020 P6 (user slice): the map opens at seat zoom, and this used to
+  // build AND mount one AdvancedMarker per seat for the ENTIRE site on every
+  // render — the "long load" at 4 500 items. Seats now render only in the
+  // seats LOD tier and only within the margin-expanded viewport; selected
+  // seats are always kept so a selection never vanishes off-screen.
+  const selectedIdSet = useMemo(
+    () => new Set<string>((selectedItems ?? []).map((i: { id: string }) => i.id)),
+    [selectedItems]
+  )
+  const visibleSeats = useMemo(() => {
+    if (lodTier(zoom) !== 'seats') return []
+    return cullToBounds(
+      inventoryItems || [],
+      viewBounds ? expandBounds(viewBounds) : null,
+      (i) => i.id,
+      (i) => Number(i.locationLat),
+      (i) => Number(i.locationLng),
+      { alwaysInclude: selectedIdSet }
     )
+  }, [inventoryItems, viewBounds, zoom, selectedIdSet])
+
+  const sunbedMarkers = visibleSeats.map(item => {
+    const available = isAvailable(item)
+    const isSelected = selectedIdSet.has(item.id)
     return (
       <SiteSunbedMarker
         key={item.id}
@@ -453,11 +476,21 @@ function SunbedSelectionGeo({
     return { lat: latSum / points.length, lng: lngSum / points.length };
   }
 
-  // Helper: Count available sunbeds in a parcel.
-  // (Assuming you have an isAvailable(item) function in scope.)
-  function getAvailableCountForParcel(parcelItems: InventoryItem[]): number {
-    return parcelItems.filter(item => isAvailable(item)).length;
-  }
+  // Per-parcel availability counts for the parcel-tier chips — memoized; the
+  // old shape re-filtered every parcel's items on every render.
+  // (plain record — `Map` here is the @vis.gl map component, not the global)
+  const parcelCounts = useMemo(() => {
+    const counts: Record<string, { total: number; available: number }> = {}
+    for (const [num, items] of Object.entries(sunbedParcels)) {
+      counts[num] = {
+        total: (items as InventoryItem[]).length,
+        available: availabilityResponse
+          ? (items as InventoryItem[]).filter(i => availableIds.has(i.id)).length
+          : 0,
+      }
+    }
+    return counts
+  }, [sunbedParcels, availableIds, availabilityResponse])
 
   const SafeAPIProvider = APIProvider as unknown as React.ComponentType<any>
   const SafeMap = Map as unknown as React.ComponentType<any>
@@ -479,18 +512,24 @@ function SunbedSelectionGeo({
           onIdle={(mapInstance: any) => {
             const newZoom = mapInstance.map.getZoom()
             setZoom(newZoom || 20)
+            const b = mapInstance.map.getBounds()
+            if (b) {
+              const ne = b.getNorthEast()
+              const sw = b.getSouthWest()
+              setViewBounds({ north: ne.lat(), east: ne.lng(), south: sw.lat(), west: sw.lng() })
+            }
           }}
           onClick={(e: any) => {
           }}
         >
           {
-            zoom > 19 ? sunbedMarkers :
+            lodTier(zoom) === 'seats' ? sunbedMarkers :
               (parcelShapes || []).map((parcelShape, idx) => {
                 // Compute the parcel centroid.
                 const centroid = getCentroid(parcelShape.shape);
-                const parcelItems = sunbedParcels[parcelShape.number] || [];
-                const totalCount = parcelItems.length;
-                const availableCount = getAvailableCountForParcel(parcelItems);
+                const counts = parcelCounts[String(parcelShape.number)] ?? { total: 0, available: 0 };
+                const totalCount = counts.total;
+                const availableCount = counts.available;
                 const hasAvailability = availableCount > 0;
                 return (
                   <React.Fragment key={idx}>

@@ -337,10 +337,31 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
   load items for just those (typically few). Requires restructuring the site-context load
   (site-page/getSite currently ship all items to every tab) — the inventory tab gains its
   own tiered loader; other tabs need item COUNTS at most.
-  **Sequence: measure FIRST** — the deferred P0 app-level baseline (seed the 3 000-seat
-  fixture venue into the dev DB, load the editor + user site page, measure load/pan) sets
-  the before-numbers P6 is judged against; this track has twice shown "obviously faster"
-  shapes measuring slower.
+  **Founder field-measurement (2026-08-15, 4 500-item site in dev): the inventory editor
+  is "surprisingly snappy" (P3 landed) but the USER site page "takes a loong time to
+  load" — user app is the priority surface.** Diagnosis: the user map already HAS an LOD
+  tier (`zoom > 19 ?` seats : parcel hulls + count chips) but opens at seat zoom 20, so
+  ALL items mount as AdvancedMarkers on load; `sunbedMarkers` also builds every element
+  per render regardless of zoom, and chip counts are O(parcels×items) per render.
+  **Slice plan (founder: common solutions first, then one surface at a time):**
+  A. ✅ shared primitives in `@repo/schematic/viewport` (2026-08-15) — `ViewportBounds`/
+     `expandBounds`/`cullToBounds` (pure, `alwaysInclude` for selected seats),
+     `LOD_SEAT_ZOOM=19` + `lodTier`, `parcelFootprint(anchor, gridConfig)` (the
+     ItemGroup-sourced rotated box — REUSES generateChairGrid for extents, so it can
+     never disagree with actual seat placement). **9 unit tests incl. a property check:
+     every seat the real generator places lies inside the claimed footprint, across
+     4 shapes × 6 rotations.**
+  B. ✅ user app `SunbedSelection` (2026-08-15) — bounds captured on idle, seat markers
+     culled to the expanded viewport at seat zoom (LOD tier switch now via shared
+     `lodTier`); selected seats always rendered; chip counts memoized. **Measured on the
+     founder's 4 436-item site: 2 mounted markers instead of 4 436**; smoke + one-day
+     booking e2e green over the culled path. Remaining load cost is the PAYLOAD
+     double-ship (P5 slice 3) — dev-mode load ~5s domcontentloaded is dominated by
+     shipping 4 436 items × nested pair objects twice, no longer by marker mount.
+  C. inventory editor: C1 render culling + ItemGroup-box LOD tier (box drag →
+     `moveParcel`, zoom-in/focus → seats); C2 payload tiering (never LOAD seats at
+     overview — the site-context restructure).
+  D. schematic canvas viewBox culling.
 - 💤 **P6 (original spec, superseded).** Gated on Q1. Viewport culling /
   clustering on the map, virtualization or parcel-scoped loading for the schematic canvas,
   and parcel-scoped queries instead of site-scoped. Only needed if Q1's target is genuinely
