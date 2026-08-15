@@ -42,28 +42,34 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
 
 ## Resume here
 
-- **PAUSED 2026-08-15 at a clean seam** (founder's call, after confirming "drag and rotate
-  work now" on the live editor). Everything built so far is committed on local `main`,
-  unpushed: P0 harness (`4ad3234`) · P1 indexes (`194cdbb`, plus the `6cb50bf` ordering fix
-  that must precede them) · P3 slice 1 render quadratics (`c86b9ad`) · pan-regression fix
-  (`32f3c53`) · rotation-teleport fix + data repair (`15734fc`). Measured results + REJECTED
-  index candidates: **[`020-scale-baseline.md`](020-scale-baseline.md)** — read before
-  touching any later phase.
+- **State 2026-08-15 (night):** P0–P5 + P6 slices A/B (LOD + culling both apps, oriented
+  draggable parcel boxes, absolute-target moveParcel, imperative chip-follow) + the
+  founder-reported perf fixes (bulk `deleteInventoryItems`, batched rearrange `unnest`
+  UPDATE) **plus all of C2 (site-tab payload tiering + the inventory editor's parcel
+  tier)** are built and green (partner 2002 unit / 223 integration; user suites green).
+  Work up to the drag-end fix is committed on local `main`, unpushed; the founder-reported
+  editor-latency set (bulk delete · rearrange batching · assignChairPairings set-based
+  rewrite · scoped `getInventoryItems` refresh) **and both C2 slices** (see the five night
+  log entries) are NOT yet committed (awaiting founder go). Founder confirmed 2026-08-15:
+  rotation and delete are "better now". Measured
+  results + REJECTED index candidates: **[`020-scale-baseline.md`](020-scale-baseline.md)**
+  — read before touching any later phase.
 - **Next action (in order):**
   1. **USER OPS before any `main` push: `npm run migrate:test`** — migration
      `20260814065600_add_site_scoped_indexes` is applied to local + `sunbnb_test` only; the
      shared test DB must lead `main` (pre-push hook enforces).
-  2. ✅ ~~P4~~ ✅ ~~P2~~ ▶ P5 slices 1+2 done (manage write-N+1 → ≤5 statements; orders
-     history capped; occupancy trend de-quadratic'd; site-context payload windowed to
-     today — killing a guest-email overshare). **Next: P5 slice 3** (user site-detail
-     double-ship) or the P3/P4 deferred tails. Q4 still open (P2 softened it to
-     ~36ms/request). Founder verified manage basic ops after slice 1.
-  3. P3 follow-up slice (second-order): `manage/view.tsx` per-render site-wide filters +
-     `bed-state.ts` derive-call memoization (memoize CALLS, never fork the derivation —
-     track 018 constraint). Marquee select also still unexercised in-browser.
-  4. Open decisions Q1 (target scale — gates P6 only) and Q4 (rate-limit the public
-     availability endpoint — may deserve to jump the queue as a security fix) remain
-     unanswered.
+  2. Commit the editor-latency + C2-slice-1 change set (on founder's ask); founder
+     browser-check that rotation and parcel delete now feel instant.
+  3. ✅ **C2 DONE** — slice 1 (non-editor tabs shed items; narrow shared seat projection;
+     scalars for count-only consumers) + slice 2 (inventory editor on the parcel tier;
+     seats streamed per parcel). Inventory RSC 5,487KB → 87KB. Founder browser-check of
+     the editor at overview/zoom-in is the outstanding confirmation.
+  4. **D — schematic canvas viewBox culling** (note: the schematic tab is now the ONLY
+     surface still loading every seat — `needsItems` in `site-page.tsx`); then tails: `manage/view.tsx` per-render
+     site-wide filters + `bed-state.ts` derive-call memoization (memoize CALLS, never fork
+     the derivation — track 018 constraint).
+  5. Open decisions: Q1 (target scale — gates P6 sizing only) and Q4 (rate-limit the
+     public availability endpoint — may deserve to jump the queue as a security fix).
 - **Do NOT re-run the P0 seeder against anything but `sunbnb_scale`** — it TRUNCATEs. The guard
   refuses `sunbnb_test` and every remote host even with `--force`; leave that guard alone.
 - **Context needed:** this file; `020-scale-baseline.md`; `.claude/rules/migrations.md`
@@ -421,6 +427,112 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
 
 ## Log
 
+- **2026-08-15 (night, 5) — C2 slice 2: the inventory editor runs on the PARCEL TIER.
+  Inventory RSC 2,117KB → 87KB (5,487KB → 87KB across both slices, ~63×).** The editor no
+  longer receives grouped seats at all: the payload is ~12 `ParcelSummary` rows
+  (`parcels.ts`, per-parcel count + the ItemGroup geometry `parcelFootprint` needs) plus the
+  ungrouped seats, and `getItemsByGroups` streams a parcel's seats when it is opened or its
+  anchor enters the expanded seat-zoom viewport. **Design choice that kept the blast radius
+  small:** streamed rows merge into the SAME site context, so all ~25 `inventory` consumers
+  in `view.tsx` (per-parcel filters, selection, pair resolution, ParcelForm…) are untouched
+  — a parcel is simply absent until loaded. Summary-tier boxes come from `parcelFootprint`
+  (never seats), and dragging one targets the **ItemGroup anchor** via `moveParcel` without
+  an anchor item — preserving the founder's "any box draggable at overview" refinement with
+  no seats client-side. `openParcel` with no ids delegates to the view, which loads then
+  selects. `SiteContext.setSite` now accepts an updater (overlapping loads would otherwise
+  drop each other's rows via stale closures). **Regression the browser caught and tests
+  could not:** the parcel bar renders `(count)` per chip from `inventory` — on the parcel
+  tier every chip read **(0)**; counts now flow through `parcelSeatCount` (summary-first,
+  array fallback), and the schematic editor, which still loads every seat, passes an
+  array-derived counter. Verified: header 4250 seats / 11 parcels and every chip count
+  correct with ZERO seats loaded; parcel open streams 117 markers; rotate +5/−5 round-trip;
+  seat panel; no console errors; parcel 1 left at its original −25°. Oracle integration
+  tests pin `getParcelSummaries` against the verbatim pre-C2 per-seat grouping (incl. pool
+  exclusion, legacy null-geometry parcels, cross-site scoping). Gates: 2002 unit / 223
+  integration, tsc + lint clean. **C2 is done; the remaining known gap is that ungrouped
+  seats still ship in full (fine — they are few by construction).**
+- **2026-08-15 (night, 4) — C2 slice 1: the site-tab payload. 5.5MB → 2.1MB (editor) and
+  → 83KB (every other tab).** MEASURED first: the inventory page's RSC document was
+  **5,487KB** while rendering only 11 markers / 598 DOM nodes — i.e. all remaining cost was
+  payload, not render (C1 culling already did its job). Audit of who actually reads
+  `site.inventoryItems` across the eight tabs `site-page.tsx` wraps found: the two editors
+  (inventory, schematic) need rows; **everything else needed at most a COUNT** — brand's
+  total + available-today, readiness's active>0 — and `item.reservations` had exactly ONE
+  consumer line in the whole set (brand), yet every tab shipped every item's reservations
+  *with guest emails*. Changes: (a) `needsItems` gate — non-editor tabs get
+  `inventoryItems: []`; (b) `getSiteItemCounts` (new plain module `item-counts.ts`, which
+  also now owns `todayReservationsWindow`) supplies the three scalars; (c) shared narrow
+  `INVENTORY_ITEM_SELECT` (`item-select.ts`) drops notes/image/userId/timestamps and
+  reduces `pair`/`pairedBy` to id stubs, applied to `site-page`, `getSite` AND
+  `getInventoryItems`; (d) brand + readiness read scalars with array fallbacks.
+  **Gotcha that only the browser could catch:** the projection const was first exported
+  from `queries.ts` — a `'use server'` file, which may export **async functions only** —
+  compiling fine, passing all 1,998 mocked unit tests, and 500-ing at request time
+  ("can only export async functions, found object"). It surfaced as RSC 3KB / 22 DOM nodes
+  in the measurement run; hence the plain companion modules. Verification: oracle
+  integration tests run the verbatim pre-C2 array expressions as referee (4 tests, incl.
+  pool sentinels + an out-of-window reservation + cross-site scoping); a merge-compatibility
+  test pins `getInventoryItems`'s projection EQUAL to `getSite`'s (drift would blank fields
+  on whatever was just edited); browser-verified the editor still functions on the narrowed
+  payload (parcel box click → 117 seats, rotate +5/−5 round-trip, seat panel, zero console
+  errors). Two false alarms worth recording: a "no seats after opening parcel" failure was
+  my SELECTOR (the toolbar tab chip reads `1 (60)` and only selects; the MAP chip reads
+  `1 · 60` and is the zoom path) — confirmed pre-existing-and-fine by git-stashing C2 and
+  reproducing; and single-seat mode legitimately has no `Rotate ±5°` button. Parcel 1 drifted
+  +5° across the verification runs and was restored to −25° through the UI (a raw
+  `ItemGroup.rotation` edit would desync the regenerated seat coords). Gates: 1998 unit /
+  219 integration, tsc + lint clean. **Remaining on the inventory tab: the 2.1MB is the
+  4,436 narrowed seat rows — C2 slice 2 (never LOAD seats at overview; ItemGroup rows +
+  `parcelFootprint`, seats streamed per parcel/bounds) is still open.**
+- **2026-08-15 (night, 3) — Rotation STILL slow, size-independent (60 vs 500 seats) →
+  MEASURED the click in-browser; the cost was the FULL-SITE REFRESH, not the write.**
+  Instrumented Playwright run on Brisa Marina parcel 1 (impersonation rail), capturing each
+  server-action POST: `syncChairsWithLayout` **56ms/33KB** (the night-1/2 fixes worked) but
+  the follow-up `getSite` refresh **951ms + 5.8MB response**, then client parse/re-render —
+  identical regardless of parcel size, and the founder's Redux-DevTools "payloads too
+  large" warning is that same state being serialized by the extension. Fix (C2-lite): new
+  `getInventoryItems(siteId, itemIds)` in `queries.ts` — same gate as getSite (null for
+  non-owner), same per-item include shape — and a `refreshItems` merge in the inventory
+  view; rotate (both paths) + spacing now refresh ONLY the touched items (null → full
+  refresh fallback). Re-measured: refresh **68ms / 89KB** (65× smaller), whole click now
+  sub-half-second. Parcel rotation restored to its original −25° after the measurement
+  clicks (net 0). Guards: coverage-contract allowlist entry mirroring getSite's, 4 new
+  queries.test.ts tests incl. an include-shape contract (the client MERGES these rows —
+  shape drift breaks the view). Gates: 1997 unit / 215 integration, tsc + lint clean.
+  Full C2 (page-load payload — the 8.8s initial settle) still open.
+- **2026-08-15 (night, 2) — Rotation STILL slow after the rearrange batch; real culprit was
+  `assignChairPairings`.** Founder re-test: delete now quick, rotation still seconds. The
+  coordinate pass was batched, but pairing still ran one `tx.inventoryItem.update` PER PAIR
+  inside an interactive transaction — which executes on ONE connection, so `Promise.all`
+  does not parallelize it: a 750-seat paired parcel (Brisa Marina's parcels are 500–750) =
+  ~375 sequential UPDATEs per rotation click, all writing pairIds that hadn't changed. Fix:
+  (a) skip pairs whose stored `pairId` already matches — a pure rotation now writes ZERO
+  pair rows and skips the transaction entirely; (b) batch remaining pairId dual-writes and
+  new-group membership assignment as `UPDATE … FROM unnest()` (transaction is now ≤4
+  set-based statements). New integration test: 200-seat paired parcel via real create →
+  rearrange +5° → SunbedGroups/pairIds **byte-identical** before/after, rotation applied —
+  measured **92ms** (was seconds). Gates: 1993 unit / 215 integration, tsc clean. Delete
+  path never touched pairing — exactly why it got fast while rotation didn't.
+- **2026-08-15 (night) — Founder-reported: rotation takes seconds; parcel delete runs "one
+  seat at a time". Both were per-seat write loops multiplied by site-wide label recomputes.**
+  (a) **Bulk delete**: `handleDeleteSelected` ran `Promise.all(ids.map(deleteInventoryItem))`
+  — each single delete carries its own auth round-trip, its own transaction AND its own
+  site-wide `recomputeSeatLabels` (60-seat parcel × 4,436-item site = the founder's wait).
+  New `deleteInventoryItems(siteId, ids)` in `inventory-actions.ts`: one transaction
+  (dissolve touched SunbedGroups, sweep survivors' legacy `pairId`, one `deleteMany`), ONE
+  label recompute. View wired; registered in `gated-actions.ts` (gate `session-owner`,
+  matrix now 676). (b) **Rearrange batching**: `syncChairsWithLayout` rearrange (the
+  rotation path) still had two per-seat `inventoryItem.update` Promise.all passes — now a
+  single `UPDATE … FROM unnest()` per mode (geo/schematic), preserving Prisma's
+  undefined-skips-field semantics for category/price via conditional `Prisma.sql` fragments,
+  `pair_id = NULL` as before. Teleport-guard unit tests rewritten to read the unnest arrays
+  (`rearrangeCoordArrays` helper). Tests: unit 33 (+5 bulk delete) / 66 (rearrange batch),
+  integration 9 (+2: group dissolution + survivor pairId sweep, foreign-site scope
+  boundary); full partner gates green (1993 unit / 214 integration / tsc). The remaining
+  rotation-latency contributor is the heavy `getSite` refresh after save — that's C2
+  (payload tiering), unchanged scope. Also diagnosed the founder's console noise:
+  `contentscript.js` MaxListenersExceededWarning / ObjectMultiplex "orphaned data" are a
+  **browser extension** (MetaMask-family inpage provider), not our app — nothing to fix.
 - **2026-08-15 (late) — Founder-reported drag-end jump: fixed with an ABSOLUTE-TARGET
   moveParcel contract + a FOR UPDATE base lock; browser-verified to 0.0px.** The jump was
   a stale-base race: a second drag issued before the first drag's refresh landed computed

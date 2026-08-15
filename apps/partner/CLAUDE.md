@@ -47,9 +47,9 @@ Google OAuth only. `app.tsx` checks session; redirects unauthenticated to `/api/
 
 - **`sites/[id]/site-actions.ts`**: `saveGeneral`, `submitForm`, `deleteSite`, `setSiteStatus`, `setPaymentProvider`, `saveBrand`, `checkSlug`, `generateSlug`, `getBrand`
 - **`sites/[id]/content-actions.ts`**: `saveContentFields`, `uploadContentImage`
-- **`sites/[id]/inventory-actions.ts`**: `createInventoryItem`, `deleteInventoryItem`, `saveInventoryItemLocation`, `saveInventoryItemProperties`, `deleteItemsByGroup`
+- **`sites/[id]/inventory-actions.ts`**: `createInventoryItem`, `deleteInventoryItem`, `deleteInventoryItems` (bulk — one transaction + one label recompute), `saveInventoryItemLocation`, `saveInventoryItemProperties`, `deleteItemsByGroup`
 - **`sites/[id]/working-hours-actions.ts`**: `addWorkingHours`, `deleteWorkingHours`
-- **`sites/[id]/queries.ts`**: `getSite` (exported), `resolveServiceFees` (private helper)
+- **`sites/[id]/queries.ts`**: `getSite` (exported), `getInventoryItems` (scoped item refresh — merged client-side instead of a full-site re-download after rotate/spacing, track 020), `resolveServiceFees` (private helper). Companion PLAIN modules (not `'use server'` — a `'use server'` file may export async functions only): `item-select.ts` (`INVENTORY_ITEM_SELECT`, the shared narrow seat projection) and `item-counts.ts` (`getSiteItemCounts`, `todayReservationsWindow`)
 - **`restaurants/[id]/queries.ts`**: `getRestaurant`, `getRestaurantLayout`, `getRestaurantMenu`, `getRestaurantShifts`, `getRestaurantCombinations`, `getRestaurantWaitlist`, `getTablesList` (active tables for dine-in QR printing)
 - **`sites/[id]/manage/actions.ts`**: `reserveItem`, `unreserveItem`, `checkInReservation`, `resumeWalkIn`, `undoDepartWalkIn` (same-day depart undo — server action only; floor surface via the Guests sheet pending, track 018), `markDeparted`, `markNoShow`, `updateReservationNotes`, `moveReservation`, `blockBed`, `unblockBed`, `holdBed`, `compBed`, `convertHoldToWalkIn`, `markRentalPickedUp`, `markRentalReturned`, `createWalkInRental`, `collectReservationPayment`/`getCollectStatus`/`cancelCollection` (QR collect), `getTillStatus`/`closeTill` (per-worker till) (all token-or-session). On-site create actions take an optional trailing `employeeId` (current-worker attribution), validated against the account via `resolveEmployeeId`; cash walk-ins record `paymentAmount` for the till. **Reservation state transitions delegate to the state machine** (`@repo/data/reservation-machine-apply` — track 018): guards, day-row atomicity, till partitioning, credit notes, and refund-vs-delete are table-driven; actions name events and map outcomes (same for `frontdesk/actions.ts` and `reservations/[id]/actions.ts`).
 - **`sites/[id]/rentals/actions.ts`**: `getRentalItems`, `createRentalItem`, `updateRentalItem`, `deleteRentalItem`, `toggleSiteFeature`
@@ -64,17 +64,17 @@ Redux slices: `reservationsSlice` (key-value store). RTK Query (`apiSlice`): `ge
 ## Testing
 
 ```bash
-npm run test              # unit tests (1985 tests across 53 files, Prisma mocked)
+npm run test              # unit tests (2002 tests across 53 files, Prisma mocked)
 npm run test:watch        # vitest in watch mode
 npm run test:coverage     # unit tests with Istanbul coverage report
-npm run test:integration  # integration tests (212 tests across 10 files, real sunbnb_test DB)
+npm run test:integration  # integration tests (223 tests across 12 files, real sunbnb_test DB)
 ```
 
 ### Test architecture spine
 
 The test suite includes four meta-guards that enforce architecture invariants:
 
-- **`app/test/auth-matrix.test.ts`** (669 tests) — Drives every action in the gated-action registry (`app/test/gated-actions.ts`) through all auth scenarios (no session, wrong owner, token-only, sudo). The single source of truth for "which actions exist and which gates they must respect."
+- **`app/test/auth-matrix.test.ts`** (676 tests) — Drives every action in the gated-action registry (`app/test/gated-actions.ts`) through all auth scenarios (no session, wrong owner, token-only, sudo). The single source of truth for "which actions exist and which gates they must respect."
 - **`app/test/coverage-contract.test.ts`** (4 tests) — Fails if the gated-action registry omits an exported server action that has an auth gate in its source. Prevents new actions from silently skipping the matrix.
 - **`app/test/mock-contract.test.ts`** (17 tests) — Verifies that the `@repo/data` mock modules expose every export from the real source packages. Prevents silent mock drift (new real export never added to mock → tests silently skip code paths).
 - **`app/test/no-inline-money.test.ts`** (2 tests) — Rejects hardcoded monetary literals (`0.XX`, `XX.00`) in server-action source files; enforces use of DB-fetched prices.
@@ -89,8 +89,8 @@ Mock modules (`__mocks__/@repo/data/`): `PrismaCient.ts`, `password-reset.ts`, `
 |---|---|---|
 | `lib/validation.test.ts` | validateImageFile, validatePassword, enum validators | 45 |
 | `app/sites/[id]/site-actions.test.ts` | saveGeneral, submitForm, deleteSite, setSiteStatus, setPaymentProvider, checkSlug, saveBrand | 37 |
-| `app/sites/[id]/inventory-actions.test.ts` | CRUD, auto-increment, ownership, cross-site pair validation | 28 |
-| `app/sites/[id]/inventory/actions.test.ts` | schematic/pool seat inventory actions; pool-sentinel exclusion from parcel geometry + centroid-shift guard (rotation-teleport regression); P4 set-based write contracts (moveParcel/moveItems raw SQL, createMany, NaN-delta guards) | 64 |
+| `app/sites/[id]/inventory-actions.test.ts` | CRUD, auto-increment, ownership, cross-site pair validation; deleteInventoryItems bulk delete (one transaction, one recomputeSeatLabels, site-scope boundary) | 33 |
+| `app/sites/[id]/inventory/actions.test.ts` | schematic/pool seat inventory actions; pool-sentinel exclusion from parcel geometry + centroid-shift guard (rotation-teleport regression); P4 set-based write contracts (moveParcel/moveItems raw SQL, batched rearrange unnest UPDATE, createMany, NaN-delta guards) | 66 |
 | `app/sites/[id]/schematic/actions.test.ts` | schematic layout actions | 16 |
 | `app/sites/[id]/products/actions.test.ts` | toggleAppSales, setOrderPaymentType, updateProduct VAT recalc, soft-delete, soldOut | 30 |
 | `app/sites/[id]/orders/actions.test.ts` | order status transitions (complete→accepted→preparing→ready→delivered), rejection, discard | 19 |
@@ -101,7 +101,7 @@ Mock modules (`__mocks__/@repo/data/`): `PrismaCient.ts`, `password-reset.ts`, `
 | `app/reservations/[id]/actions.test.ts` | reservation-detail machine-delegation contracts + notes | 22 |
 | `app/sites/[id]/rentals/actions.test.ts` | getRentalItems, createRentalItem, updateRentalItem, deleteRentalItem, toggleSiteFeature | 46 |
 | `app/sites/[id]/working-hours-actions.test.ts` | addWorkingHours, deleteWorkingHours, overlap validation | 21 |
-| `app/sites/[id]/queries.test.ts` | getSite query | 3 |
+| `app/sites/[id]/queries.test.ts` | getSite ownership guard; getInventoryItems scoped-refresh query (ownership, empty-id short-circuit, merge-compatibility shape contract vs getSite) + getItemsByGroups parcel-tier streaming query | 12 |
 | `app/restaurants/[id]/queries.test.ts` | getRestaurant, getRestaurantLayout, getRestaurantMenu, getRestaurantShifts, getRestaurantCombinations, getRestaurantWaitlist, getTablesList | 28 |
 | `app/sites/create/actions.test.ts` | site creation wizard actions | 6 |
 | `app/calendar/actions.test.ts` | createPartnerReservation (auth, availability, double-booking, paired items), getAvailableSunbeds | 12 |
@@ -120,7 +120,7 @@ Mock modules (`__mocks__/@repo/data/`): `PrismaCient.ts`, `password-reset.ts`, `
 | `app/api/auth/end-impersonation/route.test.ts` | impersonation end | 4 |
 | `app/api/onboarding-status/route.test.ts` | Mollie onboarding status sync and caching | 7 |
 | `app/api/reservations/[siteId]/route.test.ts` | ownership, date/month queries, HTTP status codes | 7 |
-| `app/test/auth-matrix.test.ts` | auth gate matrix over all gated actions | 669 |
+| `app/test/auth-matrix.test.ts` | auth gate matrix over all gated actions | 676 |
 | `app/test/coverage-contract.test.ts` | gated-action registry completeness | 4 |
 | `app/test/mock-contract.test.ts` | mock module superset of real exports | 17 |
 | `app/test/no-inline-money.test.ts` | no hardcoded monetary literals in server actions | 2 |
@@ -140,7 +140,9 @@ Requires local Docker Postgres with `sunbnb_test` DB. No `@repo/data` mocks — 
 | `app/restaurants/[id]/reservations/actions.integration.test.ts` | table reservation lifecycle, deposit invoicing, double-booking guard | 8 |
 | `app/sites/[id]/token-scope.integration.test.ts` | SecurityToken scope policy — manage vs orders gates (real DB) | 5 |
 | `app/sites/[id]/rentals/actions.integration.test.ts` | deleteRentalItem active-booking guard, getRentalItems booking count | 5 |
-| `app/sites/[id]/inventory/actions.integration.test.ts` | track 020 P4 batched writes against real Postgres: moveParcel exact set-based arithmetic (seats + anchor, pool untouched, NaN rejected), moveItems subset scope, createInventoryItem concurrent number minting (advisory lock), rearrange re-pairing across crossed legacy SunbedGroups (historical P2025 double-delete) — 3 of 6 verified to FAIL on the pre-P4 code | 6 |
+| `app/sites/[id]/parcels.integration.test.ts` | track 020 C2 slice 2: `getParcelSummaries` ORACLE-equivalence vs the pre-C2 per-seat grouping (parcels, counts, ungrouped, pool exclusion), ItemGroup geometry passthrough, legacy null-geometry parcels, site scoping | 4 |
+| `app/sites/[id]/item-counts.integration.test.ts` | track 020 C2 payload cut: `getSiteItemCounts` ORACLE-equivalence — the verbatim pre-C2 array computations (brand total/available-today, readiness active>0) run as referee over mixed statuses, pool sentinels, a now-overlapping reservation, an out-of-window one, and cross-site scoping | 4 |
+| `app/sites/[id]/inventory/actions.integration.test.ts` | track 020 P4 batched writes against real Postgres: moveParcel exact set-based arithmetic (seats + anchor, pool untouched, NaN rejected), moveItems subset scope, createInventoryItem concurrent number minting (advisory lock), rearrange re-pairing across crossed legacy SunbedGroups (historical P2025 double-delete); deleteInventoryItems bulk parcel delete (group dissolution, survivor pairId sweep, foreign-site scope); pure-rotation rearrange pair-stability (200-seat paired parcel, SunbedGroups/pairIds byte-identical, ~90ms) — 3 of the original 6 verified to FAIL on the pre-P4 code | 10 |
 
 ### Mocking patterns
 
@@ -158,5 +160,7 @@ Requires local Docker Postgres with `sunbnb_test` DB. No `@repo/data` mocks — 
 - Inventory: items have `status` (new/active/inactive), coordinates for map placement, optional pairing (double sunbeds). Parcels (grouped items) support drag-and-drop repositioning on the map — dragging any item in a group moves the entire parcel via `moveParcel()` server action. Physical sunbed size: 2.1m (must match `getScaledSize()` in InventoryMap, InventoryField, and `generateChairs()` in chair-util)
 - Equipment rentals: `RentalItem` supports `pricePerHour` and `pricePerDay`. Walk-in rentals via `CreateRentalModal` with quick-pick duration (1h, 2h, 3h, all day). `RentalBookingCard` shows time range and overdue status for hourly bookings
 - Dine-in tab QR codes: `restaurants/[id]/tables/DineInQRButton.tsx` (client, jsPDF + qrcode) generates a PDF of per-table QR cards linking to `/tables/<tableId>` (dine-in v2 canonical route — table id is globally unique, no `siteId` needed); lives in `apps/partner` ONLY (the URL encodes `CONSUMER_APP_URL` from the server — not `@repo/table-reservations-ui`). Rendered whenever the restaurant has active tables — standalone and site-linked restaurants alike (`tables/page.tsx` fetches unconditionally). `Restaurant.dineInEnabled` (toggle on the restaurant General tab, `RestaurantSettingsForm`) is the actual dine-in ordering gate consumed by the `/tables/[tableId]` consumer route — printing a QR doesn't require it to be on. Orders dashboard shows a table chip (violet pill) when `Order.tableId` is set — `page.tsx` fetches the table map via `prisma.table.findMany` after orders are loaded. Restaurant-scoped kitchen dashboard: `/restaurants/[id]/orders` (token-or-session, `verifyRestaurantAccess`) mirrors the site orders dashboard via a shared `scope` prop on the `Orders` view (`sites/[id]/orders/view.tsx`); minimal restaurant accounting (`/restaurants/[id]/accounting`, session-only) shows dine-in tab invoices for the month, no charts.
+- **Site payload tiering (track 020 C2)**: `site-page.tsx` wraps all eight site tabs, but only the two EDITOR tabs (`inventory`, `schematic`) receive seat rows — everything else gets `inventoryItems: []` plus the server-computed scalars `itemCount` / `activeItemCount` / `availableTodayCount` (`getSiteItemCounts`), which the brand stats and the readiness checklist read (array fallbacks retained). Editor rows use the shared narrow `INVENTORY_ITEM_SELECT` — no `notes`/`image`/`userId`/timestamps, and `pair`/`pairedBy` as `{ id }` stubs, not whole rows. `getSite` and `getInventoryItems` project the SAME shape (pinned by a merge-compatibility test) because the scoped refresh merges rows into the context by id. Measured on the 4,436-item dev site: inventory RSC 5,487KB → 2,117KB, count-only tabs → 83KB.
+- **Inventory editor parcel tier (track 020 C2 slice 2)**: the inventory tab payload carries `ParcelSummary` rows (`parcels.ts` → `getParcelSummaries`: per-parcel seat count + the ItemGroup geometry `parcelFootprint` needs) **plus only the ungrouped seats** — a grouped seat is not shipped until its parcel is opened or scrolls into the seat-zoom viewport, when `getItemsByGroups` streams it and it is merged into the SAME site context (so every existing `inventory`-reading consumer is unchanged; a parcel is simply absent until loaded). Overview boxes are drawn from summary geometry; a summary box drag targets the **ItemGroup anchor** (`moveParcel` without an anchor item) since no seat exists client-side. Aggregates (header totals, parcel-bar chip counts, complete-parcel checks, next parcel number) read summaries via `parcelSeatCount` — reading them off the loaded array renders `(0)`, a regression only the browser caught. `SiteContext.setSite` accepts an updater because seat loads can overlap. Measured on the 4,436-item dev site: inventory RSC **5,487KB → 87KB**.
 - Image upload: Vercel Blob `put()` in server actions; remote patterns whitelisted in `next.config.mjs`
 - UI / design system: see **`apps/partner/UI.md`** (partner design-system layer) + the general **`.claude/rules/ui.md`**; prime UI work with `/ui partner`.
