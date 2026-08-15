@@ -23,7 +23,6 @@ import { RootState } from '@/store/store'
 import { useDispatch, useSelector } from 'react-redux'
 import dayjs from 'dayjs'
 import {
-  useGetSiteByIdQuery,
   useGetAvailabilityBySiteAndTimeRangeQuery,
 } from '@/store/features/api/apiSlice'
 
@@ -101,13 +100,17 @@ export default function SiteView({ site, apiKey, brand, initialAvailableCount }:
     dispatch(setValue(updates))
   }, [])
 
-  const { data: fetchedSite, refetch: refetchSite } = useGetSiteByIdQuery({ id: site.id })
+  // Track 020 P5s3: this page previously ALSO ran useGetSiteByIdQuery here,
+  // re-downloading the entire site (all items with nested pair objects) that
+  // the server component had just shipped in the RSC payload — the result was
+  // only ever read as `fetchedSite || site` and refetch was never called. The
+  // RSC-provided prop is the single source now; the /api/sites/[id] route
+  // remains for the POS flow, which has no server-provided site.
 
-  logger.debug('Fetched site', fetchedSite)
 
   let inventoryItems = site.inventoryItems
 
-  const activeSiteForFeatures = fetchedSite || site
+  const activeSiteForFeatures = site
   const siteFeatureList = activeSiteForFeatures.features ?? ['sunbeds']
   const hasSunbedsFeature = siteFeatureList.includes('sunbeds')
 
@@ -144,7 +147,7 @@ export default function SiteView({ site, apiKey, brand, initialAvailableCount }:
 
   const now = dayjs()
 
-  const siteWorkingHours = fetchedSite?.workingHours || site.workingHours || []
+  const siteWorkingHours = site.workingHours || []
   const siteWeekDays = weekDaysOpen ? siteWorkingHours : siteWorkingHours?.filter(wh => wh.day === (now.day() === 0 ? 7 : now.day()))
 
   const whMaxHeight = weekDaysOpen ? 'max-h-[260px]' : 'max-h-[100px]'
@@ -153,7 +156,7 @@ export default function SiteView({ site, apiKey, brand, initialAvailableCount }:
 
   // ── Mobile drawer: peek height = visible portion when minimized ──
   // Heights: date range ~56px, date+time row ~48px, hours/days toggle ~36px, view mode tabs ~44px, padding ~16px
-  const activeSite = fetchedSite || site
+  const activeSite = site
   const hasSunbeds = hasSunbedsFeature
   const hasRentals = siteFeatureList.includes('rentals') && (activeSite.rentalItems?.length ?? 0) > 0
   const hasViewModeTabs = hasSunbeds && hasRentals
@@ -343,7 +346,7 @@ export default function SiteView({ site, apiKey, brand, initialAvailableCount }:
 
             </div> : null
             }
-            <ReservationView apiKey={apiKey} site={fetchedSite || site} wide={true} />
+            <ReservationView apiKey={apiKey} site={site} wide={true} />
           </div>
         </div>
       </div>
@@ -392,7 +395,7 @@ export default function SiteView({ site, apiKey, brand, initialAvailableCount }:
                 </Tabs>
               </div>
             )}
-            <ReservationView apiKey={apiKey} site={fetchedSite || site} />
+            <ReservationView apiKey={apiKey} site={site} />
           </div>
         </div>
     </div>

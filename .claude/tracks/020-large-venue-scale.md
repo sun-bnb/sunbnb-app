@@ -287,8 +287,16 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
   brand stat semantics changed deliberately: "no reservation overlapping today" instead of
   "never reserved in the site's lifetime" (a seat booked once years ago counted unavailable
   forever). Gate: partner 1983u+211i, data 360u+395i, builds 4/4.
-  **P5 remaining (slice 3):** the user site-detail double-ship (RSC payload +
-  `/api/sites/[id]` refetch — needs a read of the view's RTK flow first).
+  **Slice 3 (2026-08-15): user site-detail payload — DONE.** The view's
+  `useGetSiteByIdQuery` result was only ever read as `fetchedSite || site` with refetch
+  never called — a full duplicate download of the RSC payload; removed (the route stays
+  for POS). The RSC item payload got a tight SELECT (audited consumers read only
+  geometry/grouping fields; full rows were shipping `image`, partner-internal `notes`,
+  price, userId and timestamps per seat) and pair partners became id stubs. Measured on
+  the 4 436-item site: RSC page 4.3MB → 2.4MB, no second fetch (effective transfer
+  8.6MB → 2.4MB); domcontentloaded 4.8s → 0.7s. Remaining floor is RSC per-item encoding
+  — the future cut is user-side seat tiering (ship hulls + counts, seats per parcel on
+  zoom), same concept as editor C2.
 - ░ **P5 (original spec, for reference).** `apps/partner` + `packages/data`.
   - **Manage does a write-N+1 on render.** `manage/sunbeds/page.tsx:139-147` sequentially
     awaits `resolveTodayRow` — a `reservationDay.upsert`, i.e. a **write** — once per

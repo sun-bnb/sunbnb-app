@@ -19,17 +19,37 @@ async function getSite(idOrSlug: string, userId: string) {
         where: {
           status: 'active'
         },
-        include: {
+        // Track 020 P5s3: a tight SELECT instead of full rows. The consumer
+        // app reads only geometry/grouping fields (audited: SunbedSelection +
+        // SiteSunbedMarker + SchematicSelection + sunbed-preselection); the
+        // full rows shipped image, partner-internal `notes`, price, userId and
+        // timestamps for EVERY seat — ~4.3MB of RSC payload at 4 400 items.
+        // Pair partners are id stubs: every consumer reads only `.id`.
+        select: {
+          id: true,
+          number: true,
+          seatLabel: true,
+          locationLat: true,
+          locationLng: true,
+          schematicX: true,
+          schematicY: true,
+          rotation: true,
+          label: true,
+          status: true,
+          category: true,
+          group: true,
+          sunbedGroupId: true,
+          pairId: true,
           ...(includeReservations && {
             reservations: {
               where: { userId },
-              orderBy: { from: 'desc' }
+              orderBy: { from: 'desc' as const }
             }
           }),
-          pair: true,
-          pairedBy: true,
+          pair: { select: { id: true } },
+          pairedBy: { select: { id: true } },
           sunbedGroup: {
-            include: { items: { select: { id: true } } }
+            select: { items: { select: { id: true } } }
           }
         }
       },
