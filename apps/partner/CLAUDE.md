@@ -64,10 +64,10 @@ Redux slices: `reservationsSlice` (key-value store). RTK Query (`apiSlice`): `ge
 ## Testing
 
 ```bash
-npm run test              # unit tests (1968 tests across 53 files, Prisma mocked)
+npm run test              # unit tests (1981 tests across 53 files, Prisma mocked)
 npm run test:watch        # vitest in watch mode
 npm run test:coverage     # unit tests with Istanbul coverage report
-npm run test:integration  # integration tests (198 tests across 9 files, real sunbnb_test DB)
+npm run test:integration  # integration tests (206 tests across 10 files, real sunbnb_test DB)
 ```
 
 ### Test architecture spine
@@ -90,7 +90,7 @@ Mock modules (`__mocks__/@repo/data/`): `PrismaCient.ts`, `password-reset.ts`, `
 | `lib/validation.test.ts` | validateImageFile, validatePassword, enum validators | 45 |
 | `app/sites/[id]/site-actions.test.ts` | saveGeneral, submitForm, deleteSite, setSiteStatus, setPaymentProvider, checkSlug, saveBrand | 37 |
 | `app/sites/[id]/inventory-actions.test.ts` | CRUD, auto-increment, ownership, cross-site pair validation | 28 |
-| `app/sites/[id]/inventory/actions.test.ts` | schematic/pool seat inventory actions | 10 |
+| `app/sites/[id]/inventory/actions.test.ts` | schematic/pool seat inventory actions; pool-sentinel exclusion from parcel geometry + centroid-shift guard (rotation-teleport regression); P4 set-based write contracts (moveParcel/moveItems raw SQL, createMany, NaN-delta guards) | 64 |
 | `app/sites/[id]/schematic/actions.test.ts` | schematic layout actions | 16 |
 | `app/sites/[id]/products/actions.test.ts` | toggleAppSales, setOrderPaymentType, updateProduct VAT recalc, soft-delete, soldOut | 30 |
 | `app/sites/[id]/orders/actions.test.ts` | order status transitions (complete→accepted→preparing→ready→delivered), rejection, discard | 19 |
@@ -140,6 +140,7 @@ Requires local Docker Postgres with `sunbnb_test` DB. No `@repo/data` mocks — 
 | `app/restaurants/[id]/reservations/actions.integration.test.ts` | table reservation lifecycle, deposit invoicing, double-booking guard | 8 |
 | `app/sites/[id]/token-scope.integration.test.ts` | SecurityToken scope policy — manage vs orders gates (real DB) | 5 |
 | `app/sites/[id]/rentals/actions.integration.test.ts` | deleteRentalItem active-booking guard, getRentalItems booking count | 5 |
+| `app/sites/[id]/inventory/actions.integration.test.ts` | track 020 P4 batched writes against real Postgres: moveParcel exact set-based arithmetic (seats + anchor, pool untouched, NaN rejected), moveItems subset scope, createInventoryItem concurrent number minting (advisory lock), rearrange re-pairing across crossed legacy SunbedGroups (historical P2025 double-delete) — 3 of 6 verified to FAIL on the pre-P4 code | 6 |
 
 ### Mocking patterns
 

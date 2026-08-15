@@ -95,27 +95,25 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
       data: itemGroupData
     })
 
-    await Promise.all(
-      generated.map((item) =>
-        prisma.inventoryItem.create({
-          data: {
-            userId: session?.user?.id,
-            itemGroupId: itemGroup.id,
-            siteId,
-            status: 'active',
-            locationLat: item.locationLat,
-            locationLng: item.locationLng,
-            ...(isSchematic ? { schematicX: item.schematicX, schematicY: item.schematicY } : {}),
-            rotation: item.rotation,
-            number: item.number,
-            group: item.group,
-            category: config.category,
-            price: config.price,
-            pairId: null
-          }
-        })
-      )
-    )
+    // Track 020 P4: one createMany instead of one INSERT per seat — creating a
+    // 60-seat parcel was 60 statements.
+    await prisma.inventoryItem.createMany({
+      data: generated.map((item) => ({
+        userId: session?.user?.id,
+        itemGroupId: itemGroup.id,
+        siteId,
+        status: 'active',
+        locationLat: item.locationLat,
+        locationLng: item.locationLng,
+        ...(isSchematic ? { schematicX: item.schematicX, schematicY: item.schematicY } : {}),
+        rotation: item.rotation,
+        number: item.number,
+        group: item.group,
+        category: config.category,
+        price: config.price,
+        pairId: null,
+      })),
+    })
   }
 
   if (mode === 'rearrange') {
@@ -303,60 +301,79 @@ async function assignChairPairings({
   const idToSunbedGroupId = new Map(allItems.map((i) => [i.id, i.sunbedGroupId]))
   const tempToNumber = new Map(generated.map((i) => [i.tempId, i.number]))
 
+  // Track 020 P4: the old shape was a sequential `for` with 3-5 awaited
+  // round-trips per pair (~150 serialized queries after creating a 60-seat
+  // paired parcel), and it deleted prior SunbedGroups per pair — so re-pairing
+  // seats across two old pairs (old pair (A,B) → new pairs (A,C) + (B,D)) hit
+  // the same dissolved group twice and threw P2025 on the second delete.
+  // Now: resolve everything in memory first, then one atomic transaction.
+
+  // 1. Resolve the pair list — pure computation, no I/O.
+  const pairs: Array<{ itemId: string; pairId: string }> = []
   for (const item of generated) {
     if (!item.pairTempId || !item.isPrimary) continue
-
     const itemId = numberToId.get(item.number)
     const pairNumber = tempToNumber.get(item.pairTempId)
     const pairId = pairNumber ? numberToId.get(pairNumber) : undefined
-
-    if (itemId && pairId) {
-      // Keep existing pairId write (dual-write)
-      await prisma.inventoryItem.update({
-        where: { id: itemId },
-        data: { pairId },
-      })
-
-      // Idempotent SunbedGroup assignment: if both items already share a group, skip.
-      const existingGroupId = idToSunbedGroupId.get(itemId)
-      const pairExistingGroupId = idToSunbedGroupId.get(pairId)
-      if (existingGroupId && existingGroupId === pairExistingGroupId) {
-        // Already in the same group — nothing to do
-        continue
-      }
-
-      // Detach both from any prior (different) groups
-      const priorGroupIds = new Set(
-        [existingGroupId, pairExistingGroupId].filter(Boolean) as string[]
-      )
-      if (priorGroupIds.size > 0) {
-        await prisma.inventoryItem.updateMany({
-          where: { sunbedGroupId: { in: [...priorGroupIds] } },
-          data: { sunbedGroupId: null },
-        })
-        for (const gid of priorGroupIds) {
-          const cnt = await prisma.inventoryItem.count({ where: { sunbedGroupId: gid } })
-          if (cnt === 0) await prisma.sunbedGroup.delete({ where: { id: gid } })
-        }
-      }
-
-      // Create new 2-member SunbedGroup
-      const newGroup = await prisma.sunbedGroup.create({
-        data: {
-          siteId,
-          items: { connect: [{ id: itemId }, { id: pairId }] },
-        },
-      })
-      await prisma.inventoryItem.updateMany({
-        where: { id: { in: [itemId, pairId] } },
-        data: { sunbedGroupId: newGroup.id },
-      })
-
-      // Update local tracking so subsequent iterations see current state
-      idToSunbedGroupId.set(itemId, newGroup.id)
-      idToSunbedGroupId.set(pairId, newGroup.id)
-    }
+    if (!itemId || !pairId) continue
+    // Every resolved pair gets the legacy pairId dual-write; whether it also
+    // needs a NEW SunbedGroup is decided below (idempotent skip for pairs
+    // already sharing one).
+    pairs.push({ itemId, pairId })
   }
+  if (pairs.length === 0) return
+
+  // 2. Prior groups to dissolve — DEDUPED across all pairs (the P2025 fix).
+  //    Dissolution semantics match the old code: detach every member, then
+  //    remove the group row.
+  const priorGroupIds = new Set<string>()
+  for (const { itemId, pairId } of pairs) {
+    const a = idToSunbedGroupId.get(itemId)
+    const b = idToSunbedGroupId.get(pairId)
+    if (a && a !== b) { priorGroupIds.add(a); if (b) priorGroupIds.add(b) }
+    else if (b && a !== b) priorGroupIds.add(b)
+  }
+
+  // Pairs that still need a NEW group (not already sharing one).
+  const pairsNeedingGroup = pairs.filter(({ itemId, pairId }) => {
+    const a = idToSunbedGroupId.get(itemId)
+    const b = idToSunbedGroupId.get(pairId)
+    return !(a && a === b)
+  })
+
+  // 3. One atomic transaction: pairId dual-writes, dissolve priors, mint the
+  //    new 2-seat groups, assign memberships.
+  await prisma.$transaction(async (tx) => {
+    await Promise.all(
+      pairs.map(({ itemId, pairId }) =>
+        tx.inventoryItem.update({ where: { id: itemId }, data: { pairId } })
+      )
+    )
+
+    if (priorGroupIds.size > 0) {
+      await tx.inventoryItem.updateMany({
+        where: { sunbedGroupId: { in: [...priorGroupIds] } },
+        data: { sunbedGroupId: null },
+      })
+      await tx.sunbedGroup.deleteMany({ where: { id: { in: [...priorGroupIds] } } })
+    }
+
+    if (pairsNeedingGroup.length > 0) {
+      // createManyAndReturn preserves input order, so index i maps pair i to
+      // its minted group.
+      const newGroups = await tx.sunbedGroup.createManyAndReturn({
+        data: pairsNeedingGroup.map(() => ({ siteId })),
+      })
+      await Promise.all(
+        pairsNeedingGroup.map(({ itemId, pairId }, i) =>
+          tx.inventoryItem.updateMany({
+            where: { id: { in: [itemId, pairId] } },
+            data: { sunbedGroupId: newGroups[i]!.id },
+          })
+        )
+      )
+    }
+  })
 }
 
 export async function getItemGroup(id: string) {
@@ -396,58 +413,60 @@ export async function moveParcel(
   const { error } = await requireSiteOwner(siteId)
   if (error) return { status: 'error', errors: [error] }
 
+  // A non-finite delta applied set-based below would corrupt EVERY seat of the
+  // parcel in one statement (String coords would literally store "NaN") — the
+  // same silent-teleport failure class as the 2026-08-15 incident. Reject at
+  // the boundary.
+  if (!Number.isFinite(deltaLat) || !Number.isFinite(deltaLng)) {
+    return { status: 'error', errors: ['Invalid move delta'] }
+  }
+
   const isSchematic = (await getSiteLayoutMode(siteId)) === 'schematic'
 
-  // Pool seats keep their sentinel coordinates — shifting them by every parcel
-  // drag slowly walks the sentinels away from (0,0) for no purpose (observed
-  // in prod-like data as accumulated micro-drift on the pool band).
-  const items = await prisma.inventoryItem.findMany({
-    where: { siteId, group, status: { not: 'pool' } },
-    select: {
-      id: true,
-      locationLat: true,
-      locationLng: true,
-      schematicX: true,
-      schematicY: true,
-      itemGroupId: true,
-    },
-  })
-
-  await Promise.all(
-    items.map((item) =>
-      prisma.inventoryItem.update({
-        where: { id: item.id },
-        data: isSchematic
-          ? {
-              schematicX: (item.schematicX ?? 0) + deltaLng,
-              schematicY: (item.schematicY ?? 0) + deltaLat,
-            }
-          : {
-              locationLat: String(parseFloat(item.locationLat) + deltaLat),
-              locationLng: String(parseFloat(item.locationLng) + deltaLng),
-            },
-      })
-    )
-  )
-
-  // Also update the ItemGroup's stored anchor point
-  const itemGroupId = items[0]?.itemGroupId
-  if (itemGroupId) {
-    const ig = await prisma.itemGroup.findUnique({ where: { id: itemGroupId } })
-    if (ig) {
-      await prisma.itemGroup.update({
-        where: { id: itemGroupId },
-        data: isSchematic
-          ? {
-              schematicX: (ig.schematicX ?? 0) + deltaLng,
-              schematicY: (ig.schematicY ?? 0) + deltaLat,
-            }
-          : {
-              locationLat: String(parseFloat(ig.locationLat) + deltaLat),
-              locationLng: String(parseFloat(ig.locationLng) + deltaLng),
-            },
-      })
-    }
+  // Track 020 P4: this was one UPDATE per seat via Promise.all with NO
+  // transaction — a 60-seat parcel was 60 statements, and a partial failure
+  // left the parcel silently half-moved. Now two set-based statements (seats +
+  // anchor) in one transaction: atomic, and independent of parcel size. Raw
+  // SQL because the geo coordinates are String columns (Q5 in the track), so
+  // the arithmetic needs a cast; `@updatedAt` is client-managed, so raw writes
+  // must touch "updatedAt" themselves. Pool seats keep their sentinel
+  // coordinates (excluded — they are not part of the parcel's geometry).
+  if (isSchematic) {
+    await prisma.$transaction([
+      prisma.$executeRaw`
+        UPDATE "InventoryItem"
+        SET schematic_x = COALESCE(schematic_x, 0) + ${deltaLng},
+            schematic_y = COALESCE(schematic_y, 0) + ${deltaLat},
+            "updatedAt" = now()
+        WHERE site_id = ${siteId} AND "group" = ${group} AND status <> 'pool'`,
+      prisma.$executeRaw`
+        UPDATE "ItemGroup"
+        SET schematic_x = COALESCE(schematic_x, 0) + ${deltaLng},
+            schematic_y = COALESCE(schematic_y, 0) + ${deltaLat},
+            "updatedAt" = now()
+        WHERE id IN (
+          SELECT DISTINCT item_group_id FROM "InventoryItem"
+          WHERE site_id = ${siteId} AND "group" = ${group} AND item_group_id IS NOT NULL
+        )`,
+    ])
+  } else {
+    await prisma.$transaction([
+      prisma.$executeRaw`
+        UPDATE "InventoryItem"
+        SET location_lat = ((location_lat::float8) + ${deltaLat})::text,
+            location_lng = ((location_lng::float8) + ${deltaLng})::text,
+            "updatedAt" = now()
+        WHERE site_id = ${siteId} AND "group" = ${group} AND status <> 'pool'`,
+      prisma.$executeRaw`
+        UPDATE "ItemGroup"
+        SET location_lat = ((location_lat::float8) + ${deltaLat})::text,
+            location_lng = ((location_lng::float8) + ${deltaLng})::text,
+            "updatedAt" = now()
+        WHERE id IN (
+          SELECT DISTINCT item_group_id FROM "InventoryItem"
+          WHERE site_id = ${siteId} AND "group" = ${group} AND item_group_id IS NOT NULL
+        )`,
+    ])
   }
 
   return { status: 'ok' }
@@ -464,36 +483,31 @@ export async function moveItems(
 
   if (itemIds.length === 0) return { status: 'ok' }
 
+  // See moveParcel — a non-finite delta would corrupt the whole selection in
+  // one set-based statement.
+  if (!Number.isFinite(deltaLat) || !Number.isFinite(deltaLng)) {
+    return { status: 'error', errors: ['Invalid move delta'] }
+  }
+
   const isSchematic = (await getSiteLayoutMode(siteId)) === 'schematic'
 
-  // Pool sentinels excluded — see moveParcel/rotateSelection.
-  const items = await prisma.inventoryItem.findMany({
-    where: { id: { in: itemIds }, siteId, status: { not: 'pool' } },
-    select: {
-      id: true,
-      locationLat: true,
-      locationLng: true,
-      schematicX: true,
-      schematicY: true,
-    },
-  })
-
-  await Promise.all(
-    items.map((item) =>
-      prisma.inventoryItem.update({
-        where: { id: item.id },
-        data: isSchematic
-          ? {
-              schematicX: (item.schematicX ?? 0) + deltaLng,
-              schematicY: (item.schematicY ?? 0) + deltaLat,
-            }
-          : {
-              locationLat: String(parseFloat(item.locationLat) + deltaLat),
-              locationLng: String(parseFloat(item.locationLng) + deltaLng),
-            },
-      })
-    )
-  )
+  // Track 020 P4: one set-based statement instead of one UPDATE per item (see
+  // moveParcel for the raw-SQL rationale). Pool sentinels excluded.
+  if (isSchematic) {
+    await prisma.$executeRaw`
+      UPDATE "InventoryItem"
+      SET schematic_x = COALESCE(schematic_x, 0) + ${deltaLng},
+          schematic_y = COALESCE(schematic_y, 0) + ${deltaLat},
+          "updatedAt" = now()
+      WHERE id = ANY(${itemIds}) AND site_id = ${siteId} AND status <> 'pool'`
+  } else {
+    await prisma.$executeRaw`
+      UPDATE "InventoryItem"
+      SET location_lat = ((location_lat::float8) + ${deltaLat})::text,
+          location_lng = ((location_lng::float8) + ${deltaLng})::text,
+          "updatedAt" = now()
+      WHERE id = ANY(${itemIds}) AND site_id = ${siteId} AND status <> 'pool'`
+  }
 
   // If all moved items belong to the same group, update the ItemGroup anchor too
   const fullItems = await prisma.inventoryItem.findMany({

@@ -56,82 +56,102 @@ function setLayoutMode(mode: 'geo' | 'schematic') {
   vi.mocked(prisma.site.findUnique).mockResolvedValue({ layoutMode: mode } as any)
 }
 
+/** Reassemble a tagged-template $executeRaw call into inspectable SQL + values. */
+function rawCall(n = 0): { sql: string; values: unknown[] } {
+  const call = vi.mocked(prisma.$executeRaw).mock.calls[n]
+  if (!call) throw new Error(`no $executeRaw call #${n}`)
+  const [strings, ...values] = call as unknown as [TemplateStringsArray, ...unknown[]]
+  return { sql: strings.join('¤'), values }
+}
+
 // ─── moveItems schematic branch ────────────────────────────────────────────
 
 describe('moveItems (schematic mode)', () => {
-  it('updates schematicX/Y instead of locationLat/Lng', async () => {
+  // Track 020 P4: moveItems is now ONE set-based UPDATE (raw SQL) instead of a
+  // read + one UPDATE per item. Unit tests assert the statement's contract —
+  // target columns, pool exclusion, the selection scope, and the deltas as
+  // bind values; coordinate arithmetic is proven by the integration tests,
+  // which execute the real SQL.
+  it('issues one set-based UPDATE on schematic columns with the deltas as bind values', async () => {
     setLayoutMode('schematic')
-    vi.mocked(prisma.inventoryItem.findMany)
-      .mockResolvedValueOnce([
-        { id: 'i1', locationLat: '0', locationLng: '0', schematicX: 10, schematicY: 5 },
-        { id: 'i2', locationLat: '0', locationLng: '0', schematicX: 12, schematicY: 5 },
-      ] as any)
-      .mockResolvedValueOnce([{ group: 1, itemGroupId: null }, { group: 1, itemGroupId: null }] as any)
-    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
+    // the post-move group-anchor detection reads metadata
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([] as any)
 
-    // deltaLat=2 (north meters), deltaLng=3 (east meters) for schematic
+    // deltaLat=2 (north units), deltaLng=3 (east units) for schematic
     const res = await moveItems(SITE_ID, ['i1', 'i2'], 2, 3)
     expect(res.status).toBe('ok')
 
-    const calls = vi.mocked(prisma.inventoryItem.update).mock.calls
-    expect(calls).toHaveLength(2)
-    expect(calls[0][0].data).toEqual({ schematicX: 13, schematicY: 7 })
-    expect(calls[1][0].data).toEqual({ schematicX: 15, schematicY: 7 })
+    expect(vi.mocked(prisma.$executeRaw)).toHaveBeenCalledTimes(1)
+    const { sql, values } = rawCall()
+    expect(sql).toContain('schematic_x')
+    expect(sql).toContain('schematic_y')
+    expect(sql).toContain("status <> 'pool'")
+    expect(values).toEqual(expect.arrayContaining([3, 2, ['i1', 'i2'], SITE_ID]))
+    // No per-item updates remain.
+    expect(vi.mocked(prisma.inventoryItem.update)).not.toHaveBeenCalled()
   })
 
   it('returns ok with empty itemIds', async () => {
     const res = await moveItems(SITE_ID, [], 1, 1)
     expect(res.status).toBe('ok')
+    expect(vi.mocked(prisma.$executeRaw)).not.toHaveBeenCalled()
+  })
+
+  it('rejects a non-finite delta before touching the DB', async () => {
+    const res = await moveItems(SITE_ID, ['i1'], Number.NaN, 1)
+    expect(res.status).toBe('error')
+    expect(vi.mocked(prisma.$executeRaw)).not.toHaveBeenCalled()
   })
 })
 
 // ─── moveParcel schematic branch ───────────────────────────────────────────
 
 describe('moveParcel (schematic mode)', () => {
-  it('shifts every item in the group by delta meters', async () => {
+  // Track 020 P4: seats + anchor now move in ONE transaction of two set-based
+  // statements — a 60-seat drag was 60 UPDATEs with NO transaction (a partial
+  // failure silently half-moved the parcel). Arithmetic is integration-tested.
+  it('moves seats and ItemGroup anchor atomically in one transaction', async () => {
     setLayoutMode('schematic')
-    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValueOnce([
-      { id: 'i1', locationLat: '0', locationLng: '0', schematicX: 5, schematicY: 5, itemGroupId: 'g-1' },
-      { id: 'i2', locationLat: '0', locationLng: '0', schematicX: 6, schematicY: 5, itemGroupId: 'g-1' },
-    ] as any)
-    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
-    vi.mocked(prisma.itemGroup.findUnique).mockResolvedValue({
-      schematicX: 5,
-      schematicY: 5,
-      locationLat: '0',
-      locationLng: '0',
-    } as any)
-    vi.mocked(prisma.itemGroup.update).mockResolvedValue({} as any)
 
     const res = await moveParcel(SITE_ID, 1, 4, -2)
     expect(res.status).toBe('ok')
 
-    const calls = vi.mocked(prisma.inventoryItem.update).mock.calls
-    expect(calls[0][0].data).toEqual({ schematicX: 3, schematicY: 9 })
-    expect(calls[1][0].data).toEqual({ schematicX: 4, schematicY: 9 })
+    expect(vi.mocked(prisma.$transaction)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(prisma.$executeRaw)).toHaveBeenCalledTimes(2)
+    const seats = rawCall(0)
+    expect(seats.sql).toContain('"InventoryItem"')
+    expect(seats.sql).toContain("status <> 'pool'")
+    const anchor = rawCall(1)
+    expect(anchor.sql).toContain('"ItemGroup"')
+    expect(anchor.sql).toContain('item_group_id')
+    // No per-item updates remain.
+    expect(vi.mocked(prisma.inventoryItem.update)).not.toHaveBeenCalled()
+    expect(vi.mocked(prisma.itemGroup.update)).not.toHaveBeenCalled()
+  })
 
-    const groupUpdate = vi.mocked(prisma.itemGroup.update).mock.calls[0][0]
-    expect(groupUpdate.data).toEqual({ schematicX: 3, schematicY: 9 })
+  it('rejects a non-finite delta before touching the DB', async () => {
+    const res = await moveParcel(SITE_ID, 1, 1, Number.POSITIVE_INFINITY)
+    expect(res.status).toBe('error')
+    expect(vi.mocked(prisma.$executeRaw)).not.toHaveBeenCalled()
   })
 })
 
 // ─── moveItems geo branch (regression) ────────────────────────────────────
 
 describe('moveItems (geo mode)', () => {
-  it('updates locationLat/Lng strings', async () => {
+  it('issues one set-based UPDATE with cast arithmetic on the String coord columns', async () => {
     setLayoutMode('geo')
-    vi.mocked(prisma.inventoryItem.findMany)
-      .mockResolvedValueOnce([
-        { id: 'i1', locationLat: '40.0', locationLng: '-3.0', schematicX: null, schematicY: null },
-      ] as any)
-      .mockResolvedValueOnce([{ group: 1, itemGroupId: null }] as any)
-    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
+    // the post-move group-anchor detection reads metadata
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([] as any)
 
     const res = await moveItems(SITE_ID, ['i1'], 0.001, 0.002)
     expect(res.status).toBe('ok')
-    const data = vi.mocked(prisma.inventoryItem.update).mock.calls[0][0].data as any
-    expect(data.locationLat).toBe('40.001')
-    expect(data.locationLng).toBe('-2.998')
+
+    const { sql, values } = rawCall()
+    expect(sql).toContain('location_lat')
+    expect(sql).toContain('::float8')
+    expect(sql).toContain("status <> 'pool'")
+    expect(values).toEqual(expect.arrayContaining([0.001, 0.002, ['i1'], SITE_ID]))
   })
 })
 
@@ -558,13 +578,14 @@ describe('syncChairsWithLayout — happy path (geo mode, create)', () => {
     // syncChairsWithLayout does not have an explicit return on the create branch;
     // it returns undefined (void). The important check is that the DB writes ran.
     expect(vi.mocked(prisma.itemGroup.create)).toHaveBeenCalledOnce()
-    // rows=1, seatsPerRow=2 → 2 chairs created
-    expect(vi.mocked(prisma.inventoryItem.create)).toHaveBeenCalledTimes(2)
-    // Each item is created with the correct siteId and price
-    const createCalls = vi.mocked(prisma.inventoryItem.create).mock.calls
-    for (const call of createCalls) {
-      expect(call[0].data.siteId).toBe(SITE_ID)
-      expect(call[0].data.price).toBe(25)
+    // rows=1, seatsPerRow=2 → 2 chairs, in ONE createMany (track 020 P4 —
+    // creating a parcel was one INSERT per seat)
+    expect(vi.mocked(prisma.inventoryItem.createMany)).toHaveBeenCalledOnce()
+    const rows = vi.mocked(prisma.inventoryItem.createMany).mock.calls[0]![0]!.data as any[]
+    expect(rows).toHaveLength(2)
+    for (const row of rows) {
+      expect(row.siteId).toBe(SITE_ID)
+      expect(row.price).toBe(25)
     }
     // The action returns undefined on the happy path (no explicit return)
     expect(result).toBeUndefined()
@@ -1080,31 +1101,25 @@ describe('parcel geometry excludes pool sentinels', () => {
     vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([] as any)
 
     await adjustItemSpacing(SITE_ID, ['i1', 'i2'], 'horizontal', 1.5)
-    // The GEOMETRY read (first query of each action) must exclude the pool
-    // band. Later metadata reads (group-membership gates) are exempt.
+    // The GEOMETRY read must exclude the pool band. Later metadata reads
+    // (group-membership gates) are exempt.
     expect(
       vi.mocked(prisma.inventoryItem.findMany).mock.calls[0]![0]?.where
     ).toMatchObject({ status: { not: 'pool' } })
 
-    vi.mocked(prisma.inventoryItem.findMany).mockClear()
-    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([] as any)
+    // moveItems is set-based since P4 — its pool exclusion lives in the SQL.
     await moveItems(SITE_ID, ['i1', 'i2'], 0.001, 0.001)
-    expect(
-      vi.mocked(prisma.inventoryItem.findMany).mock.calls[0]![0]?.where
-    ).toMatchObject({ status: { not: 'pool' } })
+    expect(rawCall().sql).toContain("status <> 'pool'")
   })
 
   it('moveParcel shifts only real seats — pool sentinels stay put', async () => {
     setLayoutMode('geo')
-    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([] as any)
 
     await moveParcel(SITE_ID, 1, 0.001, 0.001)
 
-    const query = vi.mocked(prisma.inventoryItem.findMany).mock.calls[0]![0]
-    expect(query?.where).toMatchObject({
-      siteId: SITE_ID,
-      group: 1,
-      status: { not: 'pool' },
-    })
+    // Set-based since P4 — the pool exclusion lives in the seat UPDATE's SQL.
+    const { sql } = rawCall(0)
+    expect(sql).toContain("status <> 'pool'")
+    expect(sql).toContain('"group"')
   })
 })

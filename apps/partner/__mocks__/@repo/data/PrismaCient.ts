@@ -31,6 +31,7 @@ const prisma = {
     findFirst: vi.fn(),
     findMany: vi.fn(),
     create: vi.fn(),
+    createMany: vi.fn(),
     update: vi.fn(),
     updateMany: vi.fn(),
     delete: vi.fn(),
@@ -97,9 +98,14 @@ const prisma = {
     findMany: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
   sunbedGroup: {
     create: vi.fn(),
+    // createManyAndReturn preserves input order (assignChairPairings maps
+    // minted groups back to pairs by index) — default mirrors that contract.
+    createManyAndReturn: vi.fn((args: { data: unknown[] }) =>
+      Promise.resolve((args?.data ?? []).map((_, i) => ({ id: `sunbed-group-${i}` })))),
     findUnique: vi.fn(),
     findMany: vi.fn(),
     update: vi.fn(),

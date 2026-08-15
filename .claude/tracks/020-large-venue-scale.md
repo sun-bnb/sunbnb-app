@@ -53,11 +53,11 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
   1. **USER OPS before any `main` push: `npm run migrate:test`** — migration
      `20260814065600_add_site_scoped_indexes` is applied to local + `sunbnb_test` only; the
      shared test DB must lead `main` (pre-push hook enforces).
-  2. **Founder's pick of P4 vs P2**: P4 = batch writes + moveParcel transaction + the
-     createInventoryItem read-then-write race (contained, partner+data). P2 = set-based
-     availability (bigger win — public unauthenticated endpoint + booking hot path — but
-     money-adjacent; own careful slice, converge on `searchSites`' NOT EXISTS shape and mind
-     the existence-check double duty at `sites/[id]/actions.ts:136-140`).
+  2. ✅ ~~P4~~ — DONE 2026-08-15 (see roadmap). **Next slice: P2** = set-based availability
+     (public unauthenticated endpoint + booking hot path — money-adjacent; own careful
+     slice, converge on `searchSites`' NOT EXISTS shape and mind the existence-check double
+     duty at `sites/[id]/actions.ts:136-140`). P4's own deferred tail is listed in its
+     roadmap entry.
   3. P3 follow-up slice (second-order): `manage/view.tsx` per-render site-wide filters +
      `bed-state.ts` derive-call memoization (memoize CALLS, never fork the derivation —
      track 018 constraint). Marquee select also still unexercised in-browser.
@@ -195,7 +195,36 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
   **Constraint:** `bed-state.ts` is a presentation shell over the [[track:018]] machine's
   `deriveState` — memoize the *calls*, never fork the derivation. One derivation, always.
 
-- ☐ **P4 — Batch the writes (carries two correctness fixes).** `apps/partner` +
+- ✅ **P4 (core) — writes batched, three real bugs fixed.** DONE 2026-08-15.
+  All in `apps/partner` inventory actions; every fix validated by integration tests that
+  were run against the PRE-P4 code via git-stash: **3 of 6 fail on old code** (the fixes),
+  3 pass (the preserved semantics).
+  (1) **`moveParcel`**: was one UPDATE per seat via `Promise.all` with NO transaction
+  (60-seat drag = 60 statements, partial failure = silently half-moved parcel). Now TWO
+  set-based statements (seats + ItemGroup anchor) in one `$transaction` — atomic and
+  size-independent. Raw SQL with casts because geo coords are String columns (Q5);
+  raw writes set `"updatedAt"` themselves (`@updatedAt` is client-managed).
+  (2) **`moveItems`**: same set-based treatment (`id = ANY(...)`).
+  (3) **NaN-delta guards** on both — a non-finite delta in a set-based statement would
+  have corrupted the whole parcel in one write (same failure class as the teleport).
+  (4) **`createInventoryItem`**: max(number)+1 was a read-then-write race minting SILENT
+  duplicate seat numbers (no unique constraint to catch it) — reproduced with 5 genuinely
+  concurrent calls. Fixed with `pg_advisory_xact_lock(hashtext(siteId))` in a transaction.
+  (5) **`syncChairsWithLayout` create**: one `createMany` instead of one INSERT per seat.
+  (6) **`assignChairPairings`**: was a sequential loop, 3-5 awaited round-trips per pair
+  (~150 serialized queries per 60-seat paired parcel) AND carried a latent P2025 crash —
+  re-pairing seats across two old pairs deleted the same dissolved SunbedGroup twice
+  (reproduced with crossed legacy groups). Now: resolve in memory, then one atomic
+  interactive transaction (`createManyAndReturn` mints the new groups; priors dissolved
+  deduped).
+  (7) **`deleteItemsByGroup`** now recomputes seat labels like every sibling mutation.
+  Gate: partner 1981u + 206i (6 new integration), tsc + lint clean.
+  **Deferred from P4** (already `$transaction`-wrapped, per-row but atomic — lower value):
+  `rotateSelection`/`adjustItemSpacing`/`reverseParcel*` single-statement rewrites;
+  `recomputeSeatLabels` site-wide-read-per-mutation (needs a design pass — it is the
+  remaining per-mutation site scan); the view's delete-per-seat loop (`view.tsx:441`,
+  wants a bulk action + gated-actions registration).
+- ░ **P4 (original spec, for reference).** `apps/partner` +
   `packages/data` → `sunbed-inventory`/`data-dev`.
   - **`moveParcel` is not in a transaction** (`inventory/actions.ts:382-397`) — N individual
     UPDATEs via `Promise.all`. At 8 seats a partial failure is unlikely; at 200 through a
@@ -277,6 +306,20 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
    most of P6.
 
 ## Log
+
+- **2026-08-15 (P4) — batched writes shipped; the git-stash validation pattern.** Rewrote the
+  inventory write paths set-based (details in roadmap P4). The method note worth keeping:
+  every behavioural claim was validated by running the NEW integration tests against the OLD
+  code (`git stash push <files>` → run → `git stash pop`) — 3/6 failed exactly where the
+  fixes are (NaN guard, concurrent duplicate numbers, P2025 double-delete) and 3/6 passed
+  exactly where semantics had to be preserved (delta arithmetic, subset scope, pool
+  exclusion). That split is the strongest cheap evidence a rewrite can produce: it proves
+  both that the bugs were real and that the refactor changed nothing else. Also of note:
+  the raw-SQL rewrite made the unit tests assert STATEMENT CONTRACTS (SQL shape + bind
+  values via a tagged-template helper) while the ARITHMETIC moved to integration tests —
+  the honest split when mocked Prisma cannot execute SQL. Advisory-lock precedent
+  (`pg_advisory_xact_lock(hashtext(siteId))`) now exists in the codebase for
+  max+1-style minting; reusable for any per-site serialization need.
 
 - **2026-08-15 — Founder confirmed on the live editor: "Drag and rotate work now."** Closes
   both incident loops (pan regression `32f3c53`, rotation teleport `15734fc`) with the only

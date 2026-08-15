@@ -13,20 +13,29 @@ export async function createInventoryItem(inventoryItem: { siteId: string }) {
   const { session, error } = await requireSiteOwner(inventoryItem.siteId)
   if (error) return { status: 'error', errors: [error] }
 
-  const lastItem = await prisma.inventoryItem.findFirst({
-    where: { siteId: inventoryItem.siteId },
-    orderBy: { number: 'desc' },
-  })
-
-  const item = await prisma.inventoryItem.create({
-    data: {
-      number: (lastItem?.number || 0) + 1,
-      siteId: inventoryItem.siteId,
-      userId: session.user.id,
-      status: 'new',
-      locationLat: '0',
-      locationLng: '0',
-    },
+  // Track 020 P4: max(number)+1 was a read-then-write race — two concurrent
+  // creates could mint the same seat number (no unique constraint exists to
+  // catch it, so the duplicates were silent). A per-site advisory lock inside
+  // the transaction serialises the read+write; the lock releases with the
+  // transaction. hashtext() collisions across sites are harmless — worst case
+  // two unrelated creates briefly queue.
+  const item = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${inventoryItem.siteId}))`
+    const lastItem = await tx.inventoryItem.findFirst({
+      where: { siteId: inventoryItem.siteId },
+      orderBy: { number: 'desc' },
+      select: { number: true },
+    })
+    return tx.inventoryItem.create({
+      data: {
+        number: (lastItem?.number || 0) + 1,
+        siteId: inventoryItem.siteId,
+        userId: session.user.id,
+        status: 'new',
+        locationLat: '0',
+        locationLng: '0',
+      },
+    })
   })
 
   await recomputeSeatLabels(inventoryItem.siteId)
@@ -378,9 +387,14 @@ export async function deleteItemsByGroup(siteId: string, group: number) {
   const { error } = await requireSiteOwner(siteId)
   if (error) return { status: 'error', errors: [error] }
 
-  const items = await prisma.inventoryItem.deleteMany({
+  await prisma.inventoryItem.deleteMany({
     where: { siteId, group },
   })
+
+  // Track 020 P4: this was the ONLY bulk mutation that skipped the label
+  // recompute — surviving parcels kept stale seat labels after a parcel
+  // delete.
+  await recomputeSeatLabels(siteId)
 
   revalidatePath(`/sites/${siteId}/inventory`)
   return { status: 'ok' }
