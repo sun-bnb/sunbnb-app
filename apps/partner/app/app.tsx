@@ -274,7 +274,14 @@ export default function App({ children, businessEntity }: { children: React.Reac
     return <>{children}</>
   }
 
-  if (status === 'loading' || (status === 'authenticated' && !onboardingChecked)) {
+  // Full-screen spinner only on the GENUINE initial load — `loading` with no
+  // session yet. A background session refresh (`updateSession()`, window-focus
+  // refetch, cross-tab storage sync) also flips `status` to 'loading' but keeps
+  // the existing `session`; blanking the app there unmounts the current page and,
+  // on a page that re-fires `updateSession()` from a mount effect (e.g. the Mollie
+  // `?success=true` connect return), re-arms it on remount → an infinite
+  // session/onboarding-status/readiness-check request loop (ERR_INSUFFICIENT_RESOURCES).
+  if ((status === 'loading' && !session) || (status === 'authenticated' && !onboardingChecked)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-6 h-6 border-2 border-gray-200 border-t-gray-600 rounded-full animate-spin" />
