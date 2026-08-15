@@ -32,7 +32,7 @@ vi.mock('next/cache', () => ({
 }))
 
 import { moveParcel, moveItems, syncChairsWithLayout } from './actions'
-import { createInventoryItem } from '../inventory-actions'
+import { createInventoryItem, deleteInventoryItems } from '../inventory-actions'
 
 beforeAll(async () => {
   await cleanDatabase()
@@ -255,5 +255,96 @@ describe('syncChairsWithLayout rearrange — re-pairing across dissolved groups 
     expect(byNumber.get(10103)).toBeTruthy()
     expect(byNumber.get(10103)).toBe(byNumber.get(10104))
     expect(byNumber.get(10101)).not.toBe(byNumber.get(10103))
+  })
+})
+
+describe('deleteInventoryItems — bulk parcel delete (real DB)', () => {
+  it('one call removes the parcel, dissolves its SunbedGroups, clears survivor pairId', async () => {
+    const { user, site, seats, pool } = await seedGeoParcel()
+
+    // Pair seats 1+2 into a SunbedGroup and legacy-pair them (s1 holds s2).
+    const g = await prisma.sunbedGroup.create({ data: { siteId: site.id } })
+    await prisma.inventoryItem.update({
+      where: { id: seats[0]!.id }, data: { sunbedGroupId: g.id, pairId: seats[1]!.id },
+    })
+    await prisma.inventoryItem.update({
+      where: { id: seats[1]!.id }, data: { sunbedGroupId: g.id },
+    })
+    // A survivor OUTSIDE the selection whose legacy pairId points INTO it —
+    // without the pairId sweep the deleteMany would hit the FK.
+    const survivor = await createTestInventoryItem(user.id, site.id, {
+      number: 20101, locationLat: '36.7300', locationLng: '-4.4300', group: 2,
+    })
+    await prisma.inventoryItem.update({
+      where: { id: survivor.id }, data: { pairId: seats[2]!.id },
+    })
+
+    const res = await deleteInventoryItems(site.id, seats.map((x) => x.id))
+    expect(res).toEqual(expect.objectContaining({ status: 'ok', deleted: 3 }))
+
+    // Parcel gone; survivor + pool remain; survivor's dangling pairId cleared.
+    const remaining = await prisma.inventoryItem.findMany({
+      where: { siteId: site.id }, select: { id: true, pairId: true },
+    })
+    expect(remaining.map((r) => r.id).sort()).toEqual([survivor.id, pool.id].sort())
+    expect(remaining.find((r) => r.id === survivor.id)!.pairId).toBeNull()
+    expect(await prisma.sunbedGroup.findUnique({ where: { id: g.id } })).toBeNull()
+  })
+
+  it('ignores ids from another site (scope boundary of the single delete preserved)', async () => {
+    const { site, seats } = await seedGeoParcel()
+    const otherOwner = await createTestUser()
+    const otherSite = await createTestSite(otherOwner.id)
+    const foreign = await createTestInventoryItem(otherOwner.id, otherSite.id, { number: 1 })
+
+    const res = await deleteInventoryItems(site.id, [foreign.id, seats[0]!.id])
+    expect(res).toEqual(expect.objectContaining({ status: 'ok', deleted: 1 }))
+    expect(await prisma.inventoryItem.findUnique({ where: { id: foreign.id } })).not.toBeNull()
+    expect(await prisma.inventoryItem.findUnique({ where: { id: seats[0]!.id } })).toBeNull()
+  })
+})
+
+describe('syncChairsWithLayout rearrange — pure rotation is set-based and pair-stable (real DB)', () => {
+  it('rotating a large paired parcel keeps every SunbedGroup and pairId IDENTICAL (no dissolve/re-mint churn)', async () => {
+    const user = await createTestUser()
+    mockUserId = user.id
+    const site = await createTestSite(user.id, { layoutMode: 'geo' })
+
+    // Build a 200-seat paired parcel through the real create path.
+    const config = {
+      group: 1, rows: 10, seatsPerRow: 20,
+      baseLat: 36.7213, baseLng: -4.4214,
+      horizontalGap: 1, verticalGap: 1.5, intraPairGap: 0.3,
+      rotation: 0, pairSeats: true,
+    } as never
+    await syncChairsWithLayout(site.id, config, 'create')
+
+    const before = await prisma.inventoryItem.findMany({
+      where: { siteId: site.id },
+      select: { id: true, sunbedGroupId: true, pairId: true },
+      orderBy: { number: 'asc' },
+    })
+    expect(before.length).toBe(200)
+    expect(before.filter((r) => r.sunbedGroupId).length).toBe(200)
+
+    // Pure rotation (the founder's rotate button): same shape, +5°.
+    const t0 = Date.now()
+    await syncChairsWithLayout(site.id, { ...(config as object), rotation: 5 } as never, 'rearrange')
+    const elapsed = Date.now() - t0
+    // eslint-disable-next-line no-console
+    console.log(`rearrange(200 paired seats, +5°): ${elapsed}ms`)
+
+    // Pairings must be byte-identical — the slow path re-wrote (and could
+    // re-mint) every pair; the set-based path skips unchanged pairs entirely.
+    const after = await prisma.inventoryItem.findMany({
+      where: { siteId: site.id },
+      select: { id: true, sunbedGroupId: true, pairId: true },
+      orderBy: { number: 'asc' },
+    })
+    expect(after).toEqual(before)
+
+    // And the rotation actually applied.
+    const ig = await prisma.itemGroup.findFirst({ where: { number: 1 } })
+    expect(ig!.rotation).toBe(5)
   })
 })

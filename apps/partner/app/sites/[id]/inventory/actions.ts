@@ -5,6 +5,7 @@ import { auth } from '@/app/auth'
 import { requireSiteOwner } from '@/lib/auth-helpers'
 import { isValidItemStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
+import { Prisma } from '@prisma/client'
 
 import { generateChairs, generateChairsSchematic, ChairConfig } from './chair-util'
 import { recomputeSeatLabels } from '@repo/data/seat-label-db'
@@ -221,59 +222,93 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
     // Track which existing items get matched to a generated position
     const matchedIds = new Set<string>()
 
-    // Update existing chairs that match a generated position by number
-    await Promise.all(
-      shiftedGenerated.map((item) => {
-        const id = numberToId.get(item.number)
-        if (!id) return Promise.resolve()
-
+    // Pair each existing seat with its generated position: first by seat
+    // number, then remaining unmatched seats take leftover generated
+    // positions in order (so every seat in the group gets repositioned).
+    const assignments: Array<{ id: string; gen: (typeof shiftedGenerated)[number] }> = []
+    for (const gen of shiftedGenerated) {
+      const id = numberToId.get(gen.number)
+      if (id) {
         matchedIds.add(id)
-        return prisma.inventoryItem.update({
-          where: { id },
-          data: {
-            itemGroupId: itemGroup ? itemGroup.id : undefined,
-            locationLat: item.locationLat,
-            locationLng: item.locationLng,
-            ...(isSchematic ? { schematicX: item.schematicX, schematicY: item.schematicY } : {}),
-            rotation: item.rotation,
-            number: item.number,
-            group: item.group,
-            category: config.category,
-            price: config.price,
-            pairId: null, // will be updated below
-          },
-        })
-      })
-    )
-
-    // Assign remaining unmatched existing items to any leftover generated
-    // positions so that every item in the group gets repositioned.
+        assignments.push({ id, gen })
+      }
+    }
     const unmatchedExisting = existing.filter((e) => !matchedIds.has(e.id))
     const unmatchedGenerated = shiftedGenerated.filter((g) => !numberToId.has(g.number))
+    unmatchedExisting.forEach((existingItem, idx) => {
+      const gen = unmatchedGenerated[idx]
+      if (!gen) return
+      matchedIds.add(existingItem.id)
+      assignments.push({ id: existingItem.id, gen })
+    })
 
-    await Promise.all(
-      unmatchedExisting.map((existingItem, idx) => {
-        const gen = unmatchedGenerated[idx]
-        if (!gen) return Promise.resolve()
+    // Track 020: this was one UPDATE per seat via Promise.all — a rotation of
+    // a 60-seat parcel was 60 statements (founder-reported multi-second
+    // rotations). One set-based UPDATE ... FROM unnest() per rearrange.
+    // category/price mirror the old Prisma semantics: undefined = leave the
+    // column untouched (Prisma skipped the field), not NULL it.
+    if (assignments.length > 0 && itemGroup) {
+      const ids = assignments.map((a) => a.id)
+      const numbers = assignments.map((a) => a.gen.number)
+      const groups = assignments.map((a) => a.gen.group)
+      const rotations = assignments.map((a) => a.gen.rotation ?? 0)
+      const categorySet = config.category !== undefined
+        ? Prisma.sql`category = ${config.category},`
+        : Prisma.empty
+      const priceSet = config.price !== undefined
+        ? Prisma.sql`price = ${config.price},`
+        : Prisma.empty
 
-        matchedIds.add(existingItem.id)
-        return prisma.inventoryItem.update({
-          where: { id: existingItem.id },
-          data: {
-            itemGroupId: itemGroup ? itemGroup.id : undefined,
-            locationLat: gen.locationLat,
-            locationLng: gen.locationLng,
-            ...(isSchematic ? { schematicX: gen.schematicX, schematicY: gen.schematicY } : {}),
-            rotation: gen.rotation,
-            number: gen.number,
-            group: gen.group,
-            category: config.category,
-            price: config.price,
-            pairId: null,
-          },
-        })
-      })
-    )
+      if (isSchematic) {
+        const xs = assignments.map((a) => a.gen.schematicX ?? 0)
+        const ys = assignments.map((a) => a.gen.schematicY ?? 0)
+        await prisma.$executeRaw`
+          UPDATE "InventoryItem" i SET
+            item_group_id = ${itemGroup.id},
+            schematic_x = v.sx,
+            schematic_y = v.sy,
+            rotation = v.rot,
+            number = v.num,
+            "group" = v.grp,
+            ${categorySet}
+            ${priceSet}
+            pair_id = NULL,
+            "updatedAt" = now()
+          FROM (
+            SELECT unnest(${ids}::text[]) AS id,
+                   unnest(${xs}::float8[]) AS sx,
+                   unnest(${ys}::float8[]) AS sy,
+                   unnest(${rotations}::int[]) AS rot,
+                   unnest(${numbers}::int[]) AS num,
+                   unnest(${groups}::int[]) AS grp
+          ) v
+          WHERE i.id = v.id`
+      } else {
+        const lats = assignments.map((a) => a.gen.locationLat)
+        const lngs = assignments.map((a) => a.gen.locationLng)
+        await prisma.$executeRaw`
+          UPDATE "InventoryItem" i SET
+            item_group_id = ${itemGroup.id},
+            location_lat = v.lat,
+            location_lng = v.lng,
+            rotation = v.rot,
+            number = v.num,
+            "group" = v.grp,
+            ${categorySet}
+            ${priceSet}
+            pair_id = NULL,
+            "updatedAt" = now()
+          FROM (
+            SELECT unnest(${ids}::text[]) AS id,
+                   unnest(${lats}::text[]) AS lat,
+                   unnest(${lngs}::text[]) AS lng,
+                   unnest(${rotations}::int[]) AS rot,
+                   unnest(${numbers}::int[]) AS num,
+                   unnest(${groups}::int[]) AS grp
+          ) v
+          WHERE i.id = v.id`
+      }
+    }
   }
 
   await assignChairPairings({ generated, group, siteId })
@@ -294,11 +329,12 @@ async function assignChairPairings({
 }) {
   const allItems = await prisma.inventoryItem.findMany({
     where: { siteId, group },
-    select: { id: true, number: true, sunbedGroupId: true },
+    select: { id: true, number: true, sunbedGroupId: true, pairId: true },
   })
 
   const numberToId = new Map(allItems.map((i) => [i.number, i.id]))
   const idToSunbedGroupId = new Map(allItems.map((i) => [i.id, i.sunbedGroupId]))
+  const idToPairId = new Map(allItems.map((i) => [i.id, i.pairId]))
   const tempToNumber = new Map(generated.map((i) => [i.tempId, i.number]))
 
   // Track 020 P4: the old shape was a sequential `for` with 3-5 awaited
@@ -341,14 +377,30 @@ async function assignChairPairings({
     return !(a && a === b)
   })
 
-  // 3. One atomic transaction: pairId dual-writes, dissolve priors, mint the
-  //    new 2-seat groups, assign memberships.
+  // pairId dual-writes only where the stored value differs. On a pure
+  // rotation NOTHING differs — the founder's slow-rotation report (2026-08-15)
+  // was ~375 identical per-pair UPDATEs on a 750-seat parcel, executed
+  // sequentially (an interactive transaction runs on ONE connection —
+  // Promise.all does not parallelize it).
+  const pairsToWrite = pairs.filter(({ itemId, pairId }) => idToPairId.get(itemId) !== pairId)
+
+  if (pairsToWrite.length === 0 && priorGroupIds.size === 0 && pairsNeedingGroup.length === 0) {
+    return
+  }
+
+  // 3. One atomic transaction — every step set-based: batched pairId
+  //    dual-writes, dissolve priors, mint the new 2-seat groups, batched
+  //    membership assignment.
   await prisma.$transaction(async (tx) => {
-    await Promise.all(
-      pairs.map(({ itemId, pairId }) =>
-        tx.inventoryItem.update({ where: { id: itemId }, data: { pairId } })
-      )
-    )
+    if (pairsToWrite.length > 0) {
+      await tx.$executeRaw`
+        UPDATE "InventoryItem" i SET pair_id = v.pair_id, "updatedAt" = now()
+        FROM (
+          SELECT unnest(${pairsToWrite.map((p) => p.itemId)}::text[]) AS id,
+                 unnest(${pairsToWrite.map((p) => p.pairId)}::text[]) AS pair_id
+        ) v
+        WHERE i.id = v.id`
+    }
 
     if (priorGroupIds.size > 0) {
       await tx.inventoryItem.updateMany({
@@ -364,14 +416,18 @@ async function assignChairPairings({
       const newGroups = await tx.sunbedGroup.createManyAndReturn({
         data: pairsNeedingGroup.map(() => ({ siteId })),
       })
-      await Promise.all(
-        pairsNeedingGroup.map(({ itemId, pairId }, i) =>
-          tx.inventoryItem.updateMany({
-            where: { id: { in: [itemId, pairId] } },
-            data: { sunbedGroupId: newGroups[i]!.id },
-          })
-        )
-      )
+      const memberIds = pairsNeedingGroup.flatMap(({ itemId, pairId }) => [itemId, pairId])
+      const memberGroupIds = pairsNeedingGroup.flatMap((_, i) => {
+        const gid = newGroups[i]!.id
+        return [gid, gid]
+      })
+      await tx.$executeRaw`
+        UPDATE "InventoryItem" i SET sunbed_group_id = v.gid, "updatedAt" = now()
+        FROM (
+          SELECT unnest(${memberIds}::text[]) AS id,
+                 unnest(${memberGroupIds}::text[]) AS gid
+        ) v
+        WHERE i.id = v.id`
     }
   })
 }

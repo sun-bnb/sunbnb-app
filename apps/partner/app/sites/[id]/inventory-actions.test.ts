@@ -13,6 +13,7 @@ vi.mock('@/lib/auth-helpers', () => ({
 }))
 
 import {
+  deleteInventoryItems,
   createInventoryItem,
   deleteInventoryItem,
   saveInventoryItemLocation,
@@ -24,6 +25,7 @@ import {
 import { auth } from '@/app/auth'
 import { requireSiteOwner } from '@/lib/auth-helpers'
 import prisma from '@repo/data/PrismaCient'
+import { recomputeSeatLabels } from '@repo/data/seat-label-db'
 
 const mockAuth = vi.mocked(auth)
 const mockRequireSiteOwner = vi.mocked(requireSiteOwner)
@@ -161,6 +163,90 @@ describe('deleteInventoryItem', () => {
     expect(vi.mocked(prisma.sunbedGroup.delete)).toHaveBeenCalledWith({ where: { id: GROUP_ID } })
   })
 })
+
+
+// ─── deleteInventoryItems (bulk, track 020) ─────────────────────────────────
+
+describe('deleteInventoryItems', () => {
+  const setOwner = () =>
+    mockRequireSiteOwner.mockResolvedValue({ session: { user: { id: OWNER_ID } }, error: null } as any)
+
+  it('rejects when requireSiteOwner fails', async () => {
+    mockRequireSiteOwner.mockResolvedValue({ session: null, error: 'Not authenticated' } as any)
+    const res = await deleteInventoryItems(SITE_ID, ['i1'])
+    expect(res.status).toBe('error')
+    expect(vi.mocked(prisma.inventoryItem.findMany)).not.toHaveBeenCalled()
+  })
+
+  it('empty selection is an ok no-op — no queries, no label recompute', async () => {
+    setOwner()
+    const res = await deleteInventoryItems(SITE_ID, [])
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(prisma.inventoryItem.findMany)).not.toHaveBeenCalled()
+    expect(vi.mocked(recomputeSeatLabels)).not.toHaveBeenCalled()
+  })
+
+  it('scopes the row lookup to the site — foreign ids cannot be deleted', async () => {
+    setOwner()
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([])
+    const res = await deleteInventoryItems(SITE_ID, ['foreign-1'])
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(prisma.inventoryItem.findMany)).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: { in: ['foreign-1'] }, siteId: SITE_ID } })
+    )
+    expect(vi.mocked(prisma.inventoryItem.deleteMany)).not.toHaveBeenCalled()
+    expect(vi.mocked(recomputeSeatLabels)).not.toHaveBeenCalled()
+  })
+
+  it('deletes the whole selection in ONE transaction with ONE label recompute (the per-seat regression)', async () => {
+    setOwner()
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([
+      { id: 'i1', sunbedGroupId: 'g1' },
+      { id: 'i2', sunbedGroupId: 'g1' },
+      { id: 'i3', sunbedGroupId: null },
+    ] as any)
+    vi.mocked(prisma.$transaction).mockResolvedValueOnce([] as any)
+
+    const res = await deleteInventoryItems(SITE_ID, ['i1', 'i2', 'i3'])
+    expect(res).toEqual({ status: 'ok', deleted: 3 })
+
+    expect(vi.mocked(prisma.$transaction)).toHaveBeenCalledTimes(1)
+    // Group members detached, survivors' pairId cleared, one deleteMany, groups dissolved.
+    expect(vi.mocked(prisma.inventoryItem.updateMany)).toHaveBeenCalledWith({
+      where: { sunbedGroupId: { in: ['g1'] } },
+      data: { sunbedGroupId: null },
+    })
+    expect(vi.mocked(prisma.inventoryItem.updateMany)).toHaveBeenCalledWith({
+      where: { pairId: { in: ['i1', 'i2', 'i3'] } },
+      data: { pairId: null },
+    })
+    expect(vi.mocked(prisma.inventoryItem.deleteMany)).toHaveBeenCalledWith({
+      where: { id: { in: ['i1', 'i2', 'i3'] }, siteId: SITE_ID },
+    })
+    expect(vi.mocked(prisma.sunbedGroup.deleteMany)).toHaveBeenCalledWith({
+      where: { id: { in: ['g1'] } },
+    })
+    // The founder-reported slowness: N seats must NOT mean N site-wide recomputes.
+    expect(vi.mocked(recomputeSeatLabels)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(recomputeSeatLabels)).toHaveBeenCalledWith(SITE_ID)
+  })
+
+  it('skips group statements entirely for ungrouped seats', async () => {
+    setOwner()
+    vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([
+      { id: 'i1', sunbedGroupId: null },
+    ] as any)
+    vi.mocked(prisma.$transaction).mockResolvedValueOnce([] as any)
+
+    const res = await deleteInventoryItems(SITE_ID, ['i1'])
+    expect(res).toEqual({ status: 'ok', deleted: 1 })
+    expect(vi.mocked(prisma.inventoryItem.updateMany)).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: { sunbedGroupId: null } })
+    )
+    expect(vi.mocked(prisma.sunbedGroup.deleteMany)).not.toHaveBeenCalled()
+  })
+})
+
 
 // ─── saveInventoryItemLocation ──────────────────────────────────────────────
 

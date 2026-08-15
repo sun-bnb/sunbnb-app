@@ -111,6 +111,7 @@ import {
 import {
   createInventoryItem,
   deleteInventoryItem,
+  deleteInventoryItems,
   saveInventoryItemLocation,
   saveInventoryItemSchematicLocation,
   saveInventoryItemProperties,
@@ -757,6 +758,12 @@ export const GATED_ACTIONS: GatedAction[] = [
     gate: 'session-owner',
     // deleteInventoryItem fetches item by id; item stub in beforeEach provides siteId+ownership
     invoke: (_accessKey?) => deleteInventoryItem(ITEM_ID),
+  },
+  {
+    name: 'inventory-actions.deleteInventoryItems',
+    kind: 'action',
+    gate: 'session-owner',
+    invoke: (_accessKey?) => deleteInventoryItems(SITE_ID, [ITEM_ID]),
   },
   {
     name: 'inventory-actions.saveInventoryItemLocation',

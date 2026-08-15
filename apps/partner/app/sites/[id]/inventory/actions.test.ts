@@ -56,6 +56,24 @@ function setLayoutMode(mode: 'geo' | 'schematic') {
   vi.mocked(prisma.site.findUnique).mockResolvedValue({ layoutMode: mode } as any)
 }
 
+/**
+ * Find the batched rearrange UPDATE (track 020: one unnest() statement replaced
+ * the per-seat Promise.all) and return its parallel lat/lng arrays.
+ */
+function rearrangeCoordArrays(): { lats: number[]; lngs: number[] } {
+  const calls = vi.mocked(prisma.$executeRaw).mock.calls
+  for (let n = 0; n < calls.length; n++) {
+    const { sql, values } = rawCall(n)
+    if (!sql.includes('unnest') || !sql.includes('location_lat')) continue
+    const arrays = values.filter((v): v is unknown[] => Array.isArray(v))
+    // Template order: ids, lats, lngs, rotations, numbers, groups.
+    const lats = (arrays[1] ?? []).map((v) => parseFloat(String(v)))
+    const lngs = (arrays[2] ?? []).map((v) => parseFloat(String(v)))
+    return { lats, lngs }
+  }
+  throw new Error('no batched rearrange $executeRaw call found')
+}
+
 /** Reassemble a tagged-template $executeRaw call into inspectable SQL + values. */
 function rawCall(n = 0): { sql: string; values: unknown[] } {
   const call = vi.mocked(prisma.$executeRaw).mock.calls[n]
@@ -1054,13 +1072,11 @@ describe('parcel geometry excludes pool sentinels', () => {
 
     // The regenerated seats must land at the ANCHOR (≈35, ≈23), not at the
     // corrupt existing centroid (13.6, 9.1) — and the persisted ItemGroup
-    // anchor must stay sane too.
-    for (const call of vi.mocked(prisma.inventoryItem.update).mock.calls) {
-      const data = call[0]!.data as { locationLat?: string; locationLng?: string }
-      if (data.locationLat === undefined) continue
-      expect(Math.abs(parseFloat(data.locationLat!) - 35.0)).toBeLessThan(0.01)
-      expect(Math.abs(parseFloat(data.locationLng!) - 23.0)).toBeLessThan(0.01)
-    }
+    // anchor must stay sane too. Seat writes are one batched unnest UPDATE.
+    const { lats, lngs } = rearrangeCoordArrays()
+    expect(lats.length).toBeGreaterThan(0)
+    for (const lat of lats) expect(Math.abs(lat - 35.0)).toBeLessThan(0.01)
+    for (const lng of lngs) expect(Math.abs(lng - 23.0)).toBeLessThan(0.01)
     const igData = vi.mocked(prisma.itemGroup.update).mock.calls[0]![0]!.data as {
       locationLat: string
       locationLng: string
@@ -1090,13 +1106,9 @@ describe('parcel geometry excludes pool sentinels', () => {
 
     // Centroid preservation should pull the regenerated grid to the seats'
     // actual location (≈35.001), not leave it at the raw anchor.
-    const withCoords = vi
-      .mocked(prisma.inventoryItem.update)
-      .mock.calls.map((c) => c[0]!.data as { locationLat?: string })
-      .filter((d) => d.locationLat !== undefined)
-    expect(withCoords.length).toBeGreaterThan(0)
-    const avgLat =
-      withCoords.reduce((s, d) => s + parseFloat(d.locationLat!), 0) / withCoords.length
+    const { lats } = rearrangeCoordArrays()
+    expect(lats.length).toBeGreaterThan(0)
+    const avgLat = lats.reduce((s, v) => s + v, 0) / lats.length
     expect(Math.abs(avgLat - 35.001)).toBeLessThan(0.0005)
   })
 

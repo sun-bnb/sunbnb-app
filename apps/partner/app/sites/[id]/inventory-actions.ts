@@ -93,6 +93,61 @@ export async function deleteInventoryItem(id: string) {
   return { status: 'ok' }
 }
 
+// ─── Bulk Delete Inventory Items ────────────────────────────────────────────
+
+/**
+ * Set-based bulk delete (track 020 — founder-reported: deleting a parcel ran
+ * one deleteInventoryItem PER SEAT, each with its own auth round-trip, its own
+ * transaction and — the real killer — its own SITE-WIDE recomputeSeatLabels
+ * (60 seats × a 4 400-item site = a minute of label recomputes).
+ *
+ * Semantics match the single delete, applied once for the whole selection:
+ * SunbedGroups touched by any deleted seat are DISSOLVED (all members
+ * detached, group rows removed), survivors' legacy pairId pointing at deleted
+ * seats is cleared, then one deleteMany — all in one transaction — and ONE
+ * label recompute at the end.
+ */
+export async function deleteInventoryItems(siteId: string, itemIds: string[]) {
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
+  if (itemIds.length === 0) return { status: 'ok' }
+
+  // Scope to the site — ids from other sites are silently ignored, same
+  // boundary the single delete enforced via its ownership check.
+  const rows = await prisma.inventoryItem.findMany({
+    where: { id: { in: itemIds }, siteId },
+    select: { id: true, sunbedGroupId: true },
+  })
+  if (rows.length === 0) return { status: 'ok' }
+
+  const ids = rows.map((r) => r.id)
+  const groupIds = [...new Set(rows.map((r) => r.sunbedGroupId).filter(Boolean))] as string[]
+
+  await prisma.$transaction([
+    ...(groupIds.length > 0
+      ? [prisma.inventoryItem.updateMany({
+          where: { sunbedGroupId: { in: groupIds } },
+          data: { sunbedGroupId: null },
+        })]
+      : []),
+    prisma.inventoryItem.updateMany({
+      where: { pairId: { in: ids } },
+      data: { pairId: null },
+    }),
+    prisma.inventoryItem.deleteMany({ where: { id: { in: ids }, siteId } }),
+    // Members were detached in the first statement of this same transaction,
+    // so the group rows can go immediately (no post-commit emptiness check
+    // needed — unlike the single delete, we dissolve whole groups).
+    ...(groupIds.length > 0
+      ? [prisma.sunbedGroup.deleteMany({ where: { id: { in: groupIds } } })]
+      : []),
+  ])
+
+  await recomputeSeatLabels(siteId)
+  revalidatePath('/sites')
+  return { status: 'ok', deleted: ids.length }
+}
+
 // ─── Update Item Location ───────────────────────────────────────────────────
 
 export async function saveInventoryItemLocation(
