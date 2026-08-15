@@ -5,6 +5,7 @@ import { auth } from '@/app/auth'
 import { SiteProps } from '@/types/shared'
 import SiteView from './site-view'
 import ErrorCard from '@/components/ErrorCard'
+import { todayReservationsWindow } from './[id]/queries'
 
 
 export default async function SitePage(
@@ -26,6 +27,9 @@ export default async function SitePage(
     services: []
   }
 
+  // Same today-window as getSite (track 020 P5) — see todayReservationsWindow.
+  const reservationWindow = await todayReservationsWindow(params.id)
+
   site = await prisma.site.findFirst({
     where: { id: params.id },
     include: {
@@ -34,6 +38,7 @@ export default async function SitePage(
         orderBy: { number: 'asc' },
         include: {
           reservations: {
+            where: reservationWindow,
             include: {
               user: { select: { id: true, email: true } }
             },

@@ -479,14 +479,41 @@ export async function getOccupancyByDay(
   // Bucket each reservation once up front — `deriveState` is per-row, not per-day.
   const bucketed = reservations.map((res) => ({ res, bucket: occupancyBucket(res) }))
 
-  return eachSiteDayKey(tz, from, to).map((key) => {
-    // Venue civil-day bounds: a booking that spans exactly one venue day now
-    // lands in exactly ONE bucket, instead of overlapping two adjacent UTC days.
-    const dayStart = siteDateBounds(tz, key).start
-    const nextStart = new Date(siteDateBounds(tz, key).end.getTime() + 1)
-    const overlapping = bucketed.filter(
-      ({ res }) => res.from < nextStart && res.to >= dayStart,
-    )
+  // Track 020 P5: distribute each reservation onto ITS overlapping days once
+  // (binary search for the first day, then walk the span) instead of
+  // re-filtering the whole reservation list for every day of the window —
+  // that was O(days × reservations), and a sticky out-of-service block
+  // (`to` = 2999-12-31) was re-scanned on all 90 days of a trend. Day-lists
+  // preserve the original reservation order, so the per-day priority
+  // classification below sees entries in exactly the order the old
+  // `.filter()` produced.
+  const dayInfos = eachSiteDayKey(tz, from, to).map((key) => {
+    // Venue civil-day bounds: a booking that spans exactly one venue day lands
+    // in exactly ONE bucket, instead of overlapping two adjacent UTC days.
+    const bounds = siteDateBounds(tz, key)
+    return {
+      key,
+      dayStart: bounds.start,
+      nextStart: new Date(bounds.end.getTime() + 1),
+      entries: [] as typeof bucketed,
+    }
+  })
+  for (const entry of bucketed) {
+    // First day with nextStart > res.from (same predicate as the old filter:
+    // res.from < nextStart && res.to >= dayStart).
+    let lo = 0
+    let hi = dayInfos.length
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1
+      if (dayInfos[mid]!.nextStart > entry.res.from) hi = mid
+      else lo = mid + 1
+    }
+    for (let i = lo; i < dayInfos.length && dayInfos[i]!.dayStart <= entry.res.to; i++) {
+      dayInfos[i]!.entries.push(entry)
+    }
+  }
+
+  return dayInfos.map(({ key, entries: overlapping }) => {
 
     const seats: Record<OccupancyBucket, Set<string>> = {
       blocked: new Set(),

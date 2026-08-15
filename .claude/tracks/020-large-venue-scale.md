@@ -53,11 +53,11 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
   1. **USER OPS before any `main` push: `npm run migrate:test`** — migration
      `20260814065600_add_site_scoped_indexes` is applied to local + `sunbnb_test` only; the
      shared test DB must lead `main` (pre-push hook enforces).
-  2. ✅ ~~P4~~ ✅ ~~P2~~ ▶ P5 slice 1 done (manage write-N+1 → ≤5 statements; orders
-     history capped). **Next: P5 slice 2** — analytics `getOccupancyByDay` cost + payload
-     narrowing (partner site-page all-time `reservations` include needs a consumer audit;
-     user site-detail double-ship) — or the P3/P4 deferred tails. Q4 (rate-limit public
-     availability) still open, softened by P2 (~36ms/request at 3 000 seats).
+  2. ✅ ~~P4~~ ✅ ~~P2~~ ▶ P5 slices 1+2 done (manage write-N+1 → ≤5 statements; orders
+     history capped; occupancy trend de-quadratic'd; site-context payload windowed to
+     today — killing a guest-email overshare). **Next: P5 slice 3** (user site-detail
+     double-ship) or the P3/P4 deferred tails. Q4 still open (P2 softened it to
+     ~36ms/request). Founder verified manage basic ops after slice 1.
   3. P3 follow-up slice (second-order): `manage/view.tsx` per-render site-wide filters +
      `bed-state.ts` derive-call memoization (memoize CALLS, never fork the derivation —
      track 018 constraint). Marquee select also still unexercised in-browser.
@@ -274,10 +274,21 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
   `HISTORY_TAB_LIMIT` (200) rows, fetched desc + reversed so the display order is
   unchanged. Kitchen tabs stay unbounded (transient sets). Unit tests both scopes.
   Gate: partner 1983u + 211i, tsc + lint clean.
-  **P5 remaining (next slice):** analytics `getOccupancyByDay` day×seat re-walk + sticky
-  `to=2999` blocks; payload narrowing — partner `site-page.tsx` unbounded all-time
-  `reservations` include (needs a consumer audit of what inventory/other tabs actually
-  read) and the user site-detail double-ship (RSC payload + `/api/sites/[id]` refetch).
+  **Slice 2 (2026-08-15, later):** (3) `getOccupancyByDay` restructured — each reservation
+  is distributed onto its overlapping days ONCE (binary search + span walk) instead of
+  re-filtering the whole list per day (O(days×N); the sticky `to=2999` block was re-scanned
+  on all 90 days of a trend). Day-lists preserve input order so the per-day priority
+  classification is byte-identical; locked by the existing 45 analytics integration tests.
+  (4) **Site-context payload windowed to the venue-local today** (`todayReservationsWindow`
+  in `queries.ts`, applied in both `site-page.tsx` and `getSite`): the consumer audit found
+  the ONLY reader of `inventoryItems[].reservations` outside /manage is the brand page's
+  availability stat — yet every site tab shipped every reservation in site history WITH
+  guest emails to the partner client (privacy exposure, payload grew with lifetime). The
+  brand stat semantics changed deliberately: "no reservation overlapping today" instead of
+  "never reserved in the site's lifetime" (a seat booked once years ago counted unavailable
+  forever). Gate: partner 1983u+211i, data 360u+395i, builds 4/4.
+  **P5 remaining (slice 3):** the user site-detail double-ship (RSC payload +
+  `/api/sites/[id]` refetch — needs a read of the view's RTK flow first).
 - ░ **P5 (original spec, for reference).** `apps/partner` + `packages/data`.
   - **Manage does a write-N+1 on render.** `manage/sunbeds/page.tsx:139-147` sequentially
     awaits `resolveTodayRow` — a `reservationDay.upsert`, i.e. a **write** — once per
