@@ -14,6 +14,7 @@ vi.mock('@repo/data/tab-payment', () => ({
 }))
 
 import { setOrderStatus, getOrders, toggleProductSoldOut, getOpenTabs, settleTabCash, discardTab } from './actions'
+import { HISTORY_TAB_LIMIT } from './shared'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { processConfirmedTabPayment } from '@repo/data/tab-payment'
@@ -181,6 +182,29 @@ describe('getOrders', () => {
 
     const findCall = vi.mocked(prisma.order.findMany).mock.calls[0][0]
     expect(findCall.where.status.in).toContain('complete')
+    // Kitchen tabs are transient sets: unbounded, oldest-first.
+    expect(findCall.take).toBeUndefined()
+    expect(findCall.orderBy).toEqual({ createdAt: 'asc' })
+  })
+
+  // Track 020 P5: history accumulates for the site's lifetime and this action
+  // is polled every 5s — it must fetch a bounded window of the LATEST rows
+  // while presenting them in the existing oldest-first order.
+  it('caps the history tab to the latest HISTORY_TAB_LIMIT rows, presented oldest-first', async () => {
+    authenticateAsOwner()
+    // DB returns newest-first (the query orders desc)…
+    vi.mocked(prisma.order.findMany).mockResolvedValue([
+      { id: 'newest' }, { id: 'middle' }, { id: 'oldest' },
+    ] as any)
+
+    const res = await getOrders(SITE_ID, 'history')
+    expect(res.status).toBe('ok')
+
+    const findCall = vi.mocked(prisma.order.findMany).mock.calls[0][0]
+    expect(findCall.take).toBe(HISTORY_TAB_LIMIT)
+    expect(findCall.orderBy).toEqual({ createdAt: 'desc' })
+    // …and the action reverses so the display order is unchanged (oldest first).
+    expect(res.orders!.map((o: any) => o.id)).toEqual(['oldest', 'middle', 'newest'])
   })
 })
 

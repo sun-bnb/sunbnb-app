@@ -21,6 +21,7 @@ import {
   mapTabToSummary,
   type OrderTab,
   type TabSummary,
+  HISTORY_TAB_LIMIT,
 } from './shared'
 
 // Re-exported so existing consumers (view.tsx, gated-actions.ts) keep
@@ -90,6 +91,9 @@ export async function getOrders(
 
   const statuses = TAB_STATUSES[tab]
 
+  // History is capped to the latest HISTORY_TAB_LIMIT rows (track 020 P5) —
+  // it grows with site lifetime and this action is polled every 5s. Fetch
+  // newest-first, then reverse so the displayed order stays oldest-first.
   const orders = await prisma.order.findMany({
     where: {
       siteId,
@@ -99,8 +103,10 @@ export async function getOrders(
       seat: true,
       orderItems: true,
     },
-    orderBy: { createdAt: 'asc' },
+    orderBy: { createdAt: tab === 'history' ? 'desc' : 'asc' },
+    ...(tab === 'history' ? { take: HISTORY_TAB_LIMIT } : {}),
   })
+  if (tab === 'history') orders.reverse()
 
   return { status: 'ok', orders }
 }

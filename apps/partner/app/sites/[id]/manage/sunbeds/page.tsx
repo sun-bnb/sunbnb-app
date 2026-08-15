@@ -9,7 +9,7 @@ import {
   RESERVATION_REFUNDED,
 } from '@repo/data/reservation-status'
 import { siteDayBounds } from '@repo/data/site-day'
-import { resolveTodayRow } from '../reservation-day'
+import { resolveTodayRows } from '../reservation-day'
 import { validateManageToken } from '../token'
 
 
@@ -133,17 +133,26 @@ export default async function ManageSunbedsPage({
   // mid-stay it stays held. (track 012)
   const { end: endOfToday } = siteDayBounds(siteForDay)
 
-  // Lazy-upsert today's ReservationDay row for each non-blocked reservation,
-  // then attach the resulting row (+ the stayOver flag) to the reservation object
-  // so the view and BedDetail can read today's state without an extra query.
+  // Lazy-resolve today's ReservationDay rows for the non-blocked reservations,
+  // then attach the row (+ the stayOver flag) to each reservation object so the
+  // view and BedDetail can read today's state without an extra query.
+  //
+  // Track 020 P5: this was one serially-awaited UPSERT per seat-reservation
+  // (a party of 4 hit the same (reservationId, date) key 4×) on every render
+  // AND every 30s poll from every open device. resolveTodayRows dedupes by
+  // reservation and resolves the whole floor in ≤5 statements.
+  const nonBlocked: Array<{ id: string; operationalStatus: string; checkedInAt?: Date | null }> = []
   for (const item of site.inventoryItems ?? []) {
     for (const res of item.reservations ?? []) {
       // Mutate in place — the site object is only read once (server render).
       ;(res as any).stayOver = res.to <= endOfToday
       if (res.operationalStatus === 'blocked') continue
-      const todayRow = await resolveTodayRow(res, siteForDay)
-      ;(res as any).today = todayRow
+      nonBlocked.push(res)
     }
+  }
+  const todayRows = await resolveTodayRows(nonBlocked, siteForDay)
+  for (const res of nonBlocked) {
+    ;(res as any).today = todayRows.get(res.id)
   }
 
   // The roster is per-account (PartnerAccount keyed by userId === site.userId).

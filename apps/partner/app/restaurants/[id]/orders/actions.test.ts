@@ -20,6 +20,7 @@ import {
   settleRestaurantTabCash,
   discardRestaurantTab,
 } from './actions'
+import { HISTORY_TAB_LIMIT } from '../../../sites/[id]/orders/shared'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { processConfirmedTabPayment } from '@repo/data/tab-payment'
@@ -140,6 +141,22 @@ describe('getRestaurantOrders', () => {
     const findCall = vi.mocked(prisma.order.findMany).mock.calls[0][0]
     expect(findCall.where.restaurantId).toBe(RESTAURANT_ID)
     expect(findCall.where.status.in).toContain('complete')
+  })
+
+  // Mirrors the site-scoped dashboard's history cap (track 020 P5).
+  it('caps the history tab to the latest HISTORY_TAB_LIMIT rows, presented oldest-first', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.order.findMany).mockResolvedValue([
+      { id: 'newest' }, { id: 'oldest' },
+    ] as any)
+
+    const res = await getRestaurantOrders(RESTAURANT_ID, 'history')
+    expect(res.status).toBe('ok')
+
+    const findCall = vi.mocked(prisma.order.findMany).mock.calls[0][0]
+    expect(findCall.take).toBe(HISTORY_TAB_LIMIT)
+    expect(findCall.orderBy).toEqual({ createdAt: 'desc' })
+    expect(res.orders!.map((o: any) => o.id)).toEqual(['oldest', 'newest'])
   })
 
   it('rejects an invalid tab', async () => {

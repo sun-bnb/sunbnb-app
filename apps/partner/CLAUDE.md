@@ -64,10 +64,10 @@ Redux slices: `reservationsSlice` (key-value store). RTK Query (`apiSlice`): `ge
 ## Testing
 
 ```bash
-npm run test              # unit tests (1981 tests across 53 files, Prisma mocked)
+npm run test              # unit tests (1983 tests across 53 files, Prisma mocked)
 npm run test:watch        # vitest in watch mode
 npm run test:coverage     # unit tests with Istanbul coverage report
-npm run test:integration  # integration tests (206 tests across 10 files, real sunbnb_test DB)
+npm run test:integration  # integration tests (211 tests across 10 files, real sunbnb_test DB)
 ```
 
 ### Test architecture spine
@@ -131,7 +131,7 @@ Requires local Docker Postgres with `sunbnb_test` DB. No `@repo/data` mocks — 
 
 | File | What it tests | Tests |
 |---|---|---|
-| `app/sites/[id]/manage/actions.integration.test.ts` | reserveItem, checkIn, blockBed, splits (machine partition semantics), settled-unreserve row-kept, rental pickup/return, walk-in rental, till (real conflict guard) | 106 |
+| `app/sites/[id]/manage/actions.integration.test.ts` | reserveItem, checkIn, blockBed, splits (machine partition semantics), settled-unreserve row-kept, rental pickup/return, walk-in rental, till (real conflict guard); `resolveTodayRows` batch page-load resolver (seed parity with resolveTodayRow, party dedupe, present-state sync vs cycling-row untouched, concurrent batch race) | 111 |
 | `app/sites/[id]/manage/state-machine-matrix.integration.test.ts` | REAL actions driven through the machine's transition table (post-states from resolveTransition; formerly-RED bug-ledger cells B1a/b/c, D2, D10, D12 now green; COVERED/DEFERRED event manifest, shrink-only) | 19 |
 | `app/frontdesk/actions.integration.test.ts` | frontdesk transitions against real DB | 5 |
 | `app/calendar/actions.integration.test.ts` | createPartnerReservation (real DB writes, availability, cash payment) | 19 |

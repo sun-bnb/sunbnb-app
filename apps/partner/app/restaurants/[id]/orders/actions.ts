@@ -21,6 +21,7 @@ import {
   mapTabToSummary,
   type OrderTab,
   type TabSummary,
+  HISTORY_TAB_LIMIT,
 } from '@/app/sites/[id]/orders/shared'
 
 /**
@@ -98,6 +99,7 @@ export async function getRestaurantOrders(
 
   const statuses = TAB_STATUSES[tab]
 
+  // Same history cap as the site-scoped dashboard (track 020 P5).
   const orders = await prisma.order.findMany({
     where: {
       restaurantId,
@@ -107,8 +109,10 @@ export async function getRestaurantOrders(
       seat: true,
       orderItems: true,
     },
-    orderBy: { createdAt: 'asc' },
+    orderBy: { createdAt: tab === 'history' ? 'desc' : 'asc' },
+    ...(tab === 'history' ? { take: HISTORY_TAB_LIMIT } : {}),
   })
+  if (tab === 'history') orders.reverse()
 
   return { status: 'ok', orders }
 }

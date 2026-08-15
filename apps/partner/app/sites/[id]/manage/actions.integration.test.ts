@@ -59,7 +59,7 @@ import {
   settleReservation,
   closeDay,
 } from './actions'
-import { resolveTodayRow } from './reservation-day'
+import { resolveTodayRow, resolveTodayRows } from './reservation-day'
 import { siteDayBounds } from '@repo/data/site-day'
 
 // ---------------------------------------------------------------------------
@@ -3309,5 +3309,132 @@ describe('closeDay (integration)', () => {
     // Reservation still walked-in after second close too.
     const resAfterSecond = await prisma.reservation.findUnique({ where: { id: res.id } })
     expect(resAfterSecond!.operationalStatus).toBe('walked-in')
+  })
+})
+
+
+// ─── resolveTodayRows — the batch page-load resolver (track 020 P5) ──────────
+//
+// The manage page used to await resolveTodayRow once per SEAT-reservation,
+// serially, on every render and every 30s poll. resolveTodayRows replaces the
+// loop with a bounded number of statements. These tests pin the batch to the
+// SAME semantics as the single-row resolver — including the walk-in/comp
+// present-state seed + sync rules — and the per-day-cycling rows staying
+// untouched.
+
+describe('resolveTodayRows — batch semantics (track 020 P5)', () => {
+  async function seedFloor() {
+    const user = await createTestUser()
+    const site = await createTestSite(user.id)
+    mockUserId = user.id
+    const siteForDay = {
+      timeZone: site.timeZone ?? null,
+      locationLat: site.locationLat ?? null,
+      locationLng: site.locationLng ?? null,
+    }
+    const mkItem = (n: number) => createTestInventoryItem(user.id, site.id, { number: n })
+    return { user, site, siteForDay, mkItem }
+  }
+
+  it('creates missing rows with the same seed values as resolveTodayRow (expected / walk-in mirror / comp mirror)', async () => {
+    const { user, site, siteForDay, mkItem } = await seedFloor()
+    const checkedInAt = new Date('2026-08-15T09:30:00Z')
+
+    const online = await createTestReservation(user.id, site.id, [(await mkItem(1)).id], {
+      status: 'complete', operationalStatus: 'expected',
+    })
+    const walkin = await createTestReservation(user.id, site.id, [(await mkItem(2)).id], {
+      status: 'paid-in-cash', operationalStatus: 'walked-in', checkedInAt,
+    })
+    const comp = await createTestReservation(user.id, site.id, [(await mkItem(3)).id], {
+      status: 'complete', operationalStatus: 'comp', isComp: true,
+    })
+
+    const rows = await resolveTodayRows([online, walkin, comp], siteForDay)
+
+    expect(rows.get(online.id)!.operationalStatus).toBe('expected')
+    expect(rows.get(online.id)!.checkedInAt).toBeNull()
+    // walk-in mirrors parent status AND arrival time
+    expect(rows.get(walkin.id)!.operationalStatus).toBe('walked-in')
+    expect(rows.get(walkin.id)!.checkedInAt?.getTime()).toBe(checkedInAt.getTime())
+    // comp mirrors status but not checkedInAt (same as resolveTodayRow)
+    expect(rows.get(comp.id)!.operationalStatus).toBe('comp')
+    expect(rows.get(comp.id)!.checkedInAt).toBeNull()
+
+    // One DB row per reservation.
+    expect(await prisma.reservationDay.count()).toBe(3)
+  })
+
+  it('dedupes party seats — the same reservation passed once per seat creates ONE row', async () => {
+    const { user, site, siteForDay, mkItem } = await seedFloor()
+    const items = [await mkItem(1), await mkItem(2), await mkItem(3), await mkItem(4)]
+    const party = await createTestReservation(user.id, site.id, items.map(i => i.id), {
+      status: 'complete', operationalStatus: 'expected',
+    })
+
+    // The page pushes the reservation once per seat — 4 duplicates.
+    const rows = await resolveTodayRows([party, party, party, party], siteForDay)
+
+    expect(rows.size).toBe(1)
+    expect(await prisma.reservationDay.count({ where: { reservationId: party.id } })).toBe(1)
+  })
+
+  it('syncs a stale present-state row (held→walk-in convert) but leaves per-day-cycling rows untouched', async () => {
+    const { user, site, siteForDay, mkItem } = await seedFloor()
+
+    // Reservation whose day row was created while it was still a hold
+    // ('expected'), then converted to walk-in outside applyDayTransition.
+    const converted = await createTestReservation(user.id, site.id, [(await mkItem(1)).id], {
+      status: 'paid-in-cash', operationalStatus: 'expected',
+    })
+    await resolveTodayRow(converted, siteForDay) // row born 'expected'
+    await prisma.reservation.update({
+      where: { id: converted.id }, data: { operationalStatus: 'walked-in' },
+    })
+
+    // Per-day-cycling reservation already checked in TODAY — its row must not
+    // be reset by a later page load even though the seed default is 'expected'.
+    const cycled = await createTestReservation(user.id, site.id, [(await mkItem(2)).id], {
+      status: 'complete', operationalStatus: 'checked-in',
+    })
+    const { applyDayTransition } = await import('./reservation-day')
+    await applyDayTransition(cycled, siteForDay, {
+      operationalStatus: 'checked-in', checkedInAt: new Date(),
+    })
+
+    const rows = await resolveTodayRows([
+      { id: converted.id, operationalStatus: 'walked-in', checkedInAt: null },
+      { id: cycled.id, operationalStatus: 'checked-in', checkedInAt: null },
+    ], siteForDay)
+
+    expect(rows.get(converted.id)!.operationalStatus).toBe('walked-in') // synced
+    expect(rows.get(cycled.id)!.operationalStatus).toBe('checked-in')  // untouched
+  })
+
+  it('two concurrent batch calls over the same floor both succeed with one row per reservation', async () => {
+    const { user, site, siteForDay, mkItem } = await seedFloor()
+    const resList = []
+    for (let n = 1; n <= 5; n++) {
+      resList.push(await createTestReservation(user.id, site.id, [(await mkItem(n)).id], {
+        status: 'complete', operationalStatus: 'expected',
+      }))
+    }
+
+    const [a, b] = await Promise.all([
+      resolveTodayRows(resList, siteForDay),
+      resolveTodayRows(resList, siteForDay),
+    ])
+
+    expect(a.size).toBe(5)
+    expect(b.size).toBe(5)
+    for (const r of resList) {
+      expect(a.get(r.id)!.id).toBe(b.get(r.id)!.id) // same physical rows
+    }
+    expect(await prisma.reservationDay.count()).toBe(5)
+  })
+
+  it('returns an empty map for an empty floor without querying', async () => {
+    const { siteForDay } = await seedFloor()
+    expect((await resolveTodayRows([], siteForDay)).size).toBe(0)
   })
 })

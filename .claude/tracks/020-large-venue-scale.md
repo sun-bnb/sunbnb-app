@@ -53,11 +53,11 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
   1. **USER OPS before any `main` push: `npm run migrate:test`** — migration
      `20260814065600_add_site_scoped_indexes` is applied to local + `sunbnb_test` only; the
      shared test DB must lead `main` (pre-push hook enforces).
-  2. ✅ ~~P4~~ ✅ ~~P2~~ — both DONE 2026-08-15 (see roadmap). **Next: P5** (work off the
-     render path: manage write-N+1 batch, orders-poll `take`/date windows, analytics
-     `getOccupancyByDay` cost, payload narrowing incl. the user site-detail double-ship) —
-     or the P3/P4 deferred tails. Q4 (rate-limit public availability) still open, softened
-     by P2 (~36ms/request at 3 000 seats).
+  2. ✅ ~~P4~~ ✅ ~~P2~~ ▶ P5 slice 1 done (manage write-N+1 → ≤5 statements; orders
+     history capped). **Next: P5 slice 2** — analytics `getOccupancyByDay` cost + payload
+     narrowing (partner site-page all-time `reservations` include needs a consumer audit;
+     user site-detail double-ship) — or the P3/P4 deferred tails. Q4 (rate-limit public
+     availability) still open, softened by P2 (~36ms/request at 3 000 seats).
   3. P3 follow-up slice (second-order): `manage/view.tsx` per-render site-wide filters +
      `bed-state.ts` derive-call memoization (memoize CALLS, never fork the derivation —
      track 018 constraint). Marquee select also still unexercised in-browser.
@@ -261,7 +261,24 @@ the guest noticing it is large; and one big tenant no longer degrades every othe
     *why* a set-based `SET location_lat = location_lat + $1` isn't expressible today; decide
     whether P4 casts or Q5 retypes them.
 
-- ☐ **P5 — Get work off the render path.** `apps/partner` + `packages/data`.
+- ▶ **P5 (slice 1) — the write-N+1 and the unbounded poll are dead.** 2026-08-15.
+  (1) **Manage page**: `resolveTodayRows` (new, `manage/reservation-day.ts`) replaces the
+  per-seat serial `resolveTodayRow` upsert loop — the whole floor resolves in **≤5
+  statements** (1 read + createMany skipDuplicates + ≤2 grouped present-state syncs +
+  1 final read) instead of one WRITE per occupied seat per render per device; party seats
+  deduped by reservation. Seed logic extracted to a shared `seedValuesFor` so the single
+  and batch paths cannot drift; 5 integration tests pin parity (walk-in/comp mirror,
+  stale-sync vs cycling-row-untouched, concurrent batch race).
+  (2) **Orders dashboards** (site + restaurant twins): the history tab — which accumulates
+  for the site's LIFETIME and is re-fetched every 5s — is capped to the latest
+  `HISTORY_TAB_LIMIT` (200) rows, fetched desc + reversed so the display order is
+  unchanged. Kitchen tabs stay unbounded (transient sets). Unit tests both scopes.
+  Gate: partner 1983u + 211i, tsc + lint clean.
+  **P5 remaining (next slice):** analytics `getOccupancyByDay` day×seat re-walk + sticky
+  `to=2999` blocks; payload narrowing — partner `site-page.tsx` unbounded all-time
+  `reservations` include (needs a consumer audit of what inventory/other tabs actually
+  read) and the user site-detail double-ship (RSC payload + `/api/sites/[id]` refetch).
+- ░ **P5 (original spec, for reference).** `apps/partner` + `packages/data`.
   - **Manage does a write-N+1 on render.** `manage/sunbeds/page.tsx:139-147` sequentially
     awaits `resolveTodayRow` — a `reservationDay.upsert`, i.e. a **write** — once per
     *seat-reservation* (a 4-seat party is upserted 4× for the same key). It runs on every RSC

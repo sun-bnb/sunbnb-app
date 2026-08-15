@@ -53,6 +53,31 @@ function toSiteTimezone(site: SiteForDay) {
   }
 }
 
+// ── Shared seed logic ─────────────────────────────────────────────────────────
+
+/**
+ * The values a FRESH day row is born with, derived from the parent reservation.
+ * Single source shared by resolveTodayRow (upsert) and resolveTodayRows
+ * (batch createMany) so the two paths cannot drift.
+ *
+ * Walk-ins and comps are "present-now" kinds: the bed reflects the parent's
+ * current status directly (no daily re-cycle). The per-day-cycling kinds
+ * (checked-in / departed / no-show) default to `expected` on a fresh day and
+ * are then driven by the explicit transition actions (applyDayTransition).
+ */
+function seedValuesFor(reservation: { operationalStatus: string; checkedInAt?: Date | null }) {
+  const presentState =
+    reservation.operationalStatus === OP_WALKED_IN ||
+    reservation.operationalStatus === OP_COMP
+  return {
+    presentState,
+    operationalStatus: presentState ? reservation.operationalStatus : OP_EXPECTED,
+    checkedInAt: reservation.operationalStatus === OP_WALKED_IN
+      ? (reservation.checkedInAt ?? null)
+      : null,
+  }
+}
+
 // ── resolveTodayRow ───────────────────────────────────────────────────────────
 
 /**
@@ -78,14 +103,8 @@ export async function resolveTodayRow(
   const tz = toSiteTimezone(site)
   const todayKey = siteDayKey(tz)
 
-  // Walk-ins and comps are "present-now" kinds: the bed reflects the parent's
-  // current status directly (no daily re-cycle). The per-day-cycling kinds
-  // (checked-in / departed / no-show) default to `expected` on a fresh day and
-  // are then driven by the explicit transition actions (applyDayTransition).
-  const presentState =
-    reservation.operationalStatus === OP_WALKED_IN ||
-    reservation.operationalStatus === OP_COMP
-  const initialStatus = presentState ? reservation.operationalStatus : OP_EXPECTED
+  const seed = seedValuesFor(reservation)
+  const presentState = seed.presentState
 
   try {
     const row = await prisma.reservationDay.upsert({
@@ -98,10 +117,8 @@ export async function resolveTodayRow(
       create: {
         reservationId: reservation.id,
         date: new Date(todayKey),
-        operationalStatus: initialStatus,
-        checkedInAt: reservation.operationalStatus === OP_WALKED_IN
-          ? (reservation.checkedInAt ?? null)
-          : null,
+        operationalStatus: seed.operationalStatus,
+        checkedInAt: seed.checkedInAt,
         departedAt: null,
       },
       // Keep a present-state row (walked-in/comp) IN SYNC with the parent — this
@@ -130,6 +147,92 @@ export async function resolveTodayRow(
     }
     throw err
   }
+}
+
+// ── resolveTodayRows (batch) ──────────────────────────────────────────────────
+
+/**
+ * Batch form of resolveTodayRow for the manage/frontdesk page loads
+ * (track 020 P5).
+ *
+ * The page used to await resolveTodayRow once per SEAT-reservation, serially —
+ * a WRITE upsert per occupied seat on every RSC render and every 30s poll,
+ * from every open device on the floor (and a 4-seat party was upserted 4×
+ * for the same (reservationId, date) key). This resolves the same rows in a
+ * BOUNDED number of statements regardless of floor size:
+ *
+ *   1 read (existing rows) + ≤1 createMany (missing rows, skipDuplicates
+ *   absorbs concurrent-render races — both renders compute identical seed
+ *   values) + ≤2 updateMany (walked-in/comp present-state sync, grouped) +
+ *   1 final read (returns whatever the concurrent winner wrote).
+ *
+ * Semantics per reservation are identical to resolveTodayRow — both derive
+ * fresh-row values from the shared seedValuesFor and both keep present-state
+ * (walked-in/comp) rows in sync with the parent. Callers must still skip
+ * OP_BLOCKED reservations. Input may contain duplicates (party seats share a
+ * reservation); they are deduped by id.
+ *
+ * Returns a Map keyed by reservationId.
+ */
+export async function resolveTodayRows(
+  reservations: Array<{ id: string; operationalStatus: string; checkedInAt?: Date | null }>,
+  site: SiteForDay,
+): Promise<Map<string, ReservationDayRow>> {
+  if (reservations.length === 0) return new Map()
+
+  const tz = toSiteTimezone(site)
+  const date = new Date(siteDayKey(tz))
+
+  const byId = new Map<string, (typeof reservations)[number]>()
+  for (const r of reservations) if (!byId.has(r.id)) byId.set(r.id, r)
+  const distinct = [...byId.values()]
+  const ids = distinct.map((r) => r.id)
+
+  const existing = await prisma.reservationDay.findMany({
+    where: { reservationId: { in: ids }, date },
+  })
+  const existingByRes = new Map(existing.map((row) => [row.reservationId, row]))
+
+  const toCreate = distinct.filter((r) => !existingByRes.has(r.id))
+  if (toCreate.length > 0) {
+    await prisma.reservationDay.createMany({
+      data: toCreate.map((r) => {
+        const seed = seedValuesFor(r)
+        return {
+          reservationId: r.id,
+          date,
+          operationalStatus: seed.operationalStatus,
+          checkedInAt: seed.checkedInAt,
+          departedAt: null,
+        }
+      }),
+      skipDuplicates: true,
+    })
+  }
+
+  // Present-state sync — same rule as resolveTodayRow's update branch: a
+  // walked-in/comp parent whose existing row drifted (e.g. a held seat
+  // converted to a walk-in outside applyDayTransition) is pulled back in sync.
+  // Grouped by target status: at most two updateMany statements.
+  for (const status of [OP_WALKED_IN, OP_COMP]) {
+    const stale = distinct.filter(
+      (r) =>
+        r.operationalStatus === status &&
+        existingByRes.has(r.id) &&
+        existingByRes.get(r.id)!.operationalStatus !== status,
+    )
+    if (stale.length > 0) {
+      await prisma.reservationDay.updateMany({
+        where: { reservationId: { in: stale.map((r) => r.id) }, date },
+        data: { operationalStatus: status },
+      })
+    }
+  }
+
+  const rows = await prisma.reservationDay.findMany({
+    where: { reservationId: { in: ids }, date },
+  })
+  return new Map(rows.map((row) => [row.reservationId, row as ReservationDayRow]))
 }
 
 // ── applyDayTransition ────────────────────────────────────────────────────────

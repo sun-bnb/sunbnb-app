@@ -65,6 +65,18 @@ export const TAB_STATUSES: Record<OrderTab, string[]> = {
 
 export const VALID_ORDER_TABS: OrderTab[] = ['incoming', 'active', 'ready', 'history']
 
+/**
+ * History-tab window (track 020 P5). The kitchen tabs (incoming/active/ready)
+ * are transient sets and stay unbounded, but `history` accumulates for the
+ * site's LIFETIME — and the dashboard re-fetches its tab every 5 seconds, so
+ * an old site re-downloaded its entire order history 17k times a day. The cap
+ * keeps the LATEST rows (query desc, then reverse to preserve the existing
+ * oldest-first display order); anything past it is dropped from the tail end
+ * nobody scrolls to. NOT silent: the view can compare rows.length against
+ * this constant to know the window is clipped.
+ */
+export const HISTORY_TAB_LIMIT = 200
+
 // ─── Dine-in Tab Summary ──────────────────────────────────────────────────────
 
 export interface TabSummary {
