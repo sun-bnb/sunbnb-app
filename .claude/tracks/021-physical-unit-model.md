@@ -242,6 +242,19 @@ The spine. Every phase either establishes one of these or is guarded by it.
 
 ## Log
 
+- **2026-08-16 — Founder: "there is no indication of a group that does not have seats
+  anywhere." Correct, and PRODUCTION carries 2 of them.** Measured read-only: dev 0, test 0,
+  **production 2 empty units on one site** — residue of the parcel-delete bug fixed an hour
+  earlier (`deleteItemsByGroup` removed seats and left their units behind forever). They
+  reference nothing, nothing references them, and no surface shows them, so they were
+  invisible garbage. The consistency script now reports and prunes them alongside the I1
+  backfill; `--dry-run` against production confirms exactly 2 on site
+  `cmowodzrk000004l21bo1ge9v`. **User op:** `npm run backfill:units:production` (also
+  `:test`, currently a no-op) — proposed, not run, since it writes to production.
+  **The deeper point stands for P5:** once a device binds to a unit, an empty unit becomes
+  LEGITIMATE (a shade whose beds are stowed for winter) and must be visible in the editor
+  rather than pruned — at which point pruning has to become conditional. Recorded in Q5; the
+  script carries a note to revisit it then.
 - **2026-08-16 — Founder question ("does deleting the last item delete the group?") exposed
   THREE delete bugs, all now fixed.** The answer was yes for the last member — but the
   behaviour in between was wrong in ways that would have been fatal once devices bind to
