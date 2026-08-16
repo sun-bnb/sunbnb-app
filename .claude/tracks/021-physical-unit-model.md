@@ -185,20 +185,57 @@ The spine. Every phase either establishes one of these or is guarded by it.
   output across the real fixture matrix. Independently valuable — this is the fix for label
   drift under physical signage, with or without hardware.
 
-- **☐ P4 — Identity survives composition change (I2).** Extend "match and preserve" from
+- **☐ P4 — Parcel edits preserve identity, INCLUDING resize (I2).** **Scope widened
+  2026-08-16:** the editor has no resize at all — the rearrange path contains **zero** seat
+  creates, so growing a parcel leaves the new positions empty and shrinking strands the
+  surplus seats where they stood. Delete-and-recreate is therefore the only way to change
+  dimensions, which is what makes unit identity look ephemeral and what would have forced a
+  full re-assignment of every device on a parcel. A real resize — add seats for new positions,
+  remove seats for removed ones, keep the rest with their units and ordinals — fixes a live
+  editor bug and is the phase that decides whether P5 is cheap. Do it BEFORE P5. Also extend "match and preserve" from
   geometry to membership in the rearrange/pairing path. Rotation and moves already preserve
   groups (pinned by the [[track:020]] test asserting byte-identical ids across a 200-seat
   rotation); a parcel re-apply that changes pairing still dissolves and re-mints — which is
   what would destroy the existing 3- and 5-member groups. Units must be matched to their
   successors and keep their id and number.
 
-- **☐ P5 — Device binds to the unit (I5).** `Device` points at a unit; migrate existing
-  `DeviceSeat` rows; make the seat/unit FK **Restrict** so deletion is refused rather than
-  cascaded; add an append-only binding event log so the physical fact outlives any FK. Note
-  `SunbedGroup` already carries `siteId`, so this **also solves device discoverability for
-  free** — an orphaned or unbound device is reachable from its site without adding a site
-  column to `Device`. Resolves Q1 + Q2. **[[track:019]] P4 (the field binding flow) depends
-  on this (P5 here)** and should not be built before it.
+- **☐ P5 — Devices carry a LOCATION, assigned from the partner UI (revised 2026-08-16).**
+  Settled after a long design exchange; supersedes the earlier "device binds to an explicit
+  seat list" and the interim "device binds to a unit id" shapes.
+
+  **The model.** A device has ONE permanent identity — its printed 6-char code, already the
+  key in its potted URL. On first poll it **self-registers** and appears in the partner's
+  fleet list, with or without a location. The partner assigns a **seat code (location)** from
+  the UI; the assignment is returned in the **telemetry response** and the device stores it.
+  Reassignment is the same action. The server resolves location → the unit at that address →
+  state, so the device is always reporting the spot it is standing at.
+
+  **Why this shape.** The founder's framing decided it: *"a certain parasol does not have
+  intrinsic identity — where in the parcel to find a customer party is the identifying
+  factor."* The location is the domain entity; the parasol is fungible; and so is the device.
+  Two consequences fall out: a spare from the box is usable anywhere (assign it, done — no
+  bench, no reflash), and placement stays checkable by eye if enclosures carry a location
+  label.
+
+  **The one hard rule: the URL key stays the device code, never the location.** The URL is
+  potted and unreachable after installation; keying it by something reassignable means a
+  reassigned device either 401s or, worse, serves a stale location. Identity in the URL,
+  location in config.
+
+  **What it needs.**
+  - `Device` gains an assigned location + last-seen/battery/RSSI (P5 of [[track:019]] — its
+    telemetry stub persists nothing today, so the fleet list has nothing to render; that work
+    is now a PREREQUISITE, not a follow-up).
+  - Wire contract: the telemetry response gains a body carrying the assigned location. It is
+    currently a bare `204`, and the contract is deliberately unfrozen for exactly this.
+  - Assignment must be **operator-initiated and identify-confirmed**, never inferred. Silently
+    re-pointing a device is the one failure that makes a light lie about a bed.
+  - An assigned location with **no unit** (parcel shrank, spot dismounted) reads amber/
+    unavailable — never FREE.
+  - I5 restated: dismounting a spot that still has a device assigned must warn or refuse —
+    unassign first.
+  - Reconciliation views fall out for free: polling-but-unassigned, assigned-but-never-polled,
+    silent >24h, and spots with no device.
 
 - **☐ P6 — Sell policy (I4, I6).** A booking-granularity parameter resolved site → parcel →
   unit. Enforce in availability (a whole-sell unit is available only if every member is
@@ -213,14 +250,14 @@ The spine. Every phase either establishes one of these or is guarded by it.
 
 ## Open decisions
 
-1. **Q1 — Device↔unit cardinality.** Exactly one device per unit? A five-bed canopy might
-   carry one device with fewer segments, or two devices; one device might cover two adjacent
-   pairs. 1:1 vs many-to-one changes the schema. *Blocks P5.*
-2. **Q2 — LED segment mapping.** Derive segment order from the unit's member order, or keep
-   an explicit per-segment override? `DeviceSeat.position` exists today precisely to record
-   a mount fact rather than infer it — a device mounted rotated, or a row numbered
-   right-to-left, breaks derivation. Leaning: keep an override; it is cheap and the failure
-   it prevents is a lit-up wrong bed. *Blocks P5.*
+1. **Q1 — Device↔location cardinality.** One device per location is the assumed shape. Still
+   open: may two devices share a location (a wide canopy), and may one device cover two
+   adjacent locations? The assignment model makes this a UI question rather than a schema
+   one — a location field on `Device` is 1:1, a join table is n:m. *Blocks P5.*
+2. **Q2 — LED segment mapping.** With a location assigned, segment order derives from the
+   unit's member order at that address. The open case is a device mounted rotated relative to
+   the numbering, which derivation gets backwards; a per-device "reverse segments" flag is the
+   cheap answer, and the failure it prevents is a lit-up wrong bed. *Blocks P5.*
 3. **Q3 — Label scheme.** Keep the composite `{parcel}-{row}{unit}-{member}` with a
    persisted unit number, or move to a flat per-site unit number ("parasol 42")? Affects
    signage, staff speech, and anything already printed. *Blocks P2's backfill shape.*
@@ -247,6 +284,28 @@ The spine. Every phase either establishes one of these or is guarded by it.
 
 ## Log
 
+- **2026-08-16 — DEVICE BINDING MODEL SETTLED: location assigned from the UI, not a seat list
+  and not a unit id.** A long design exchange, and the founder's framing carried it: *"the
+  internal software id space is ephemeral while physical locations are not"* and *"a certain
+  parasol does not have intrinsic identity — where in the parcel to find a customer party is
+  the identifying factor."* Final shape: a device self-registers on first poll and appears in
+  the partner's fleet list; the partner assigns a seat code (location) from the UI; the
+  assignment comes back in the **telemetry response** and the device stores it.
+  **What each side conceded.** Mine: our unit ids ARE ephemeral today, because delete-and-
+  recreate is the only way to resize a parcel (verified — the rearrange path contains zero
+  create calls, so growing a parcel leaves the new positions empty and shrinking strands the
+  leftovers). That makes id-binding expensive in the workflow the editor actually forces.
+  Theirs: pure address-in-firmware would have made a failed device unreplaceable without a
+  bench — a spare is only useful for the address it was flashed with — and the assignment
+  channel solves that, since any spare can be given any location from the UI.
+  **The rule that survives from the id side:** the URL key stays the device CODE. The URL is
+  potted; keying it by a reassignable location means a reassigned device 401s or serves a
+  stale spot.
+  Consequences recorded in P5 above, and in [[track:019]]: its telemetry persistence (P5
+  there) becomes a PREREQUISITE rather than a follow-up, because the fleet list is what the
+  assignment UI is built on, and its P4 stops being a QR-scanning field flow.
+  **Still worth fixing regardless:** parcel resize is a genuine editor gap today — shrinking
+  strands seats — independent of any hardware.
 - **2026-08-16 — P3 DONE: unit ordinals are persisted; labels stop moving when neighbours
   change.** Additive migration `20260816090400_add_sunbed_group_seq` (one nullable column).
   `computeSeatLabels` now reads a unit's stored ordinal verbatim and only falls back to

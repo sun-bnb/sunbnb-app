@@ -74,6 +74,22 @@ credential half and needs amending there; the `code` half still stands.
 `HW_DEVICE_MAP` is gone. **The wire contract is deliberately NOT frozen** — that half of P2 waits
 until a real device has exercised it at bring-up. Freeze right after step 3 below succeeds.
 
+**⚠ BINDING MODEL REPLACED 2026-08-16 — see [[track:021]] P5.** Settled shape: a device
+**self-registers on first poll** and appears in the partner's fleet list; the partner assigns
+a **seat code (location)** from the UI; the assignment is returned in the **telemetry
+response** and the device stores it. Not a seat list, not a unit id, and not an address baked
+into firmware. Consequences for this track:
+- **P5 (telemetry persistence) is now a PREREQUISITE, not a follow-up** — the stub persists
+  nothing, and the fleet list is what the assignment UI renders.
+- **P4 is no longer a QR-scanning field flow.** Devices announce themselves; assignment is a
+  UI action, confirmed by the identify flash.
+- **Wire contract:** the telemetry response gains a body carrying the assigned location (it
+  is a bare `204` today). Decide before the flash/print run — after 1 500 units carry it, it
+  is expensive. The `state` URL key **stays the device code**: the URL is potted, so keying it
+  by a reassignable location would leave a reassigned device 401ing or serving a stale spot.
+- **`DeviceSeat` as an explicit seat list is superseded**; segment order derives from the
+  unit at the assigned location.
+
 **⚠ Q1 SUPERSEDED 2026-08-16 by [[track:021]].** Q1 decided the binding is an explicit **seat**
 list because "the binding is a *physical installation* fact and `SunbedGroup` is a *booking* fact".
 That reasoning was right under the model as it stood. Track 021 removes its premise: units become
