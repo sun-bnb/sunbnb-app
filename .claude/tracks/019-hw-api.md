@@ -305,12 +305,23 @@ different owners, and conflating them is what the earlier roadmap got wrong.** N
 the demo — one device, one env var, no UI. They become real at the *second and third unit*, the
 same threshold `../sunbnb-hw` ADR 0010 sets for the provisioning script.
 
-- **☐ P3 — provisioning (platform-side, a script, not a UI).** We assemble the devices, so this is
-  ours. Trivial under Q9 (no secret at all): a CLI that creates the `Device` row with a unique
-  `code`, flashes firmware carrying the shared `User-Agent` value over USB, and prints the label. The
-  `code` is the only per-unit value. Keep it a script well past the demo; under ~100 units a UI buys
-  nothing. Records the local provisioning row (code, MAC, date) and the unprovisioned-row path for a
-  failed flash.
+- **▶ P3 — provisioning. APP-SIDE HALF BUILT 2026-08-16 (uncommitted).**
+  `packages/data/scripts/provision-device.ts` + `npm run device:provision[:test|:production]`
+  creates the `Device` row and its `DeviceSeat` binding and prints the code for the sticker;
+  `packages/data/src/device-code.ts` (exported `@repo/data/device-code`, 14 unit tests) owns the
+  code rules. **The route now re-exports `normalizeDeviceCode` instead of keeping its own copy** —
+  minting and lookup sit on opposite sides of a sticker glued to a potted device, so a code minted
+  under different folding rules than the route normalises by is permanently unreachable; the
+  round-trip test is the guard. Validates before writing (unknown ids · seats spanning >1 site,
+  which the state route rejects · seats already under another device), because each of those
+  otherwise surfaces in the field as a silent amber LED. **Exercised against the real dev DB**:
+  cross-site binding refused, dry-run, a real provision (`NWJMDB`, 2 seats in mount order, MAC
+  recorded), double-bind refused, and the minted code re-resolved through the route's exact query in
+  three spellings (`NWJMDB` / `nwjmdb` / padded) — mint↔lookup agreement proven before any hardware
+  exists. Test rows deleted afterwards (the cascade took the `DeviceSeat` rows with them, confirming
+  the FK).
+  **Remaining for P3 (hardware-side, `../sunbnb-hw`):** flashing the firmware over USB and printing
+  the label in the same run, so DB row / NVS / sticker match by construction (ADR 0010).
 - **☐ P4 — binding (operator-side, a FIELD flow on a phone).** The surface Q1's explicit seat
   list makes necessary. **Not the desktop inventory editor** — binding happens standing at a
   parasol with a device in hand, so it belongs on `/sites/[id]/manage`, which is already
@@ -514,6 +525,20 @@ backend, and both drag in consumer-surface design that shouldn't gate the hardwa
   device has spoken to the API would freeze in whatever the first device turns out to disagree with,
   and bring-up is precisely the event that would expose it. The freeze is now the step immediately
   after "LED turns red from a real reservation". Everything else in P2 shipped.
+
+- **2026-08-16** — **P3's app-side half built: `device-code.ts` + a provisioning script.** Bring-up
+  otherwise needed hand-written SQL to invent a code and bind seats in the right order, which is
+  exactly the kind of thing that is wrong once and then glued to a parasol. Two things worth keeping:
+  **(1) the duplicate normalisation was collapsed** — the route's `normalizeCode` is now a re-export
+  of `@repo/data/device-code`'s, because minting and lookup must fold a code identically or the
+  device is unreachable with the sticker already attached; the `normalize(generate()) === generate()`
+  round trip is the test that guards it. **(2) the script validates before writing** — cross-site
+  bindings (which the state route rejects outright), unknown seat ids, and seats already under
+  another device are all refused at the bench, since every one of them would otherwise be diagnosed
+  by someone standing at a parasol looking at an amber LED. Generation uses a CSPRNG with a 5-bit
+  mask rather than `% 32` (256 is a multiple of 32, so no bias) and is random, never sequential,
+  which would leak fleet size to anyone reading two stickers. Verified end-to-end against the dev DB
+  including the mint↔lookup round trip; test rows cleaned up. data 374u.
 
 ## Open decisions
 

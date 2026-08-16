@@ -109,6 +109,32 @@ machine makes it explicit and is the ONLY sanctioned writer of reservation state
   poll/reconcile/cancel/delete/demo-initiate, partner matrix
   (`state-machine-matrix.integration.test.ts`) drives real actions against the table.
 
+## HW Device Codes (`src/device-code.ts`) — track 019
+
+Pure, client-safe (no prisma, no env): `DEVICE_CODE_ALPHABET` (Crockford base32 — `0-9A-Z` minus
+`I L O U`; the ambiguous glyphs are out because a human reads a code aloud from a windy beach, `U`
+so a sticker can't mint an obscenity), `DEVICE_CODE_LENGTH` (6 ≈ 1.07e9), `generateDeviceCode`
+(CSPRNG + 5-bit mask — 256 is a multiple of 32, so no modulo bias; random NEVER sequential, which
+would leak fleet size), `normalizeDeviceCode` (uppercase, `I`/`L`→`1`, `O`→`0`), `isValidDeviceCode`.
+
+**The route re-exports `normalizeDeviceCode` rather than re-implementing it** (`hw-filter.ts`
+`normalizeCode`): minting and lookup sit on opposite sides of a sticker glued to a potted device,
+so a code minted under different folding rules than the route normalises by is permanently
+unreachable. The round trip (`normalize(generate()) === generate()`) is the load-bearing test.
+
+### Provisioning script (`scripts/provision-device.ts`) — track 019 P3
+
+```bash
+npm run device:provision -- --seats <itemId,itemId>   # local; :test / :production are env-tiered
+```
+Creates the `Device` row + `DeviceSeat` binding and prints the code for the sticker. `--seats` is
+**LED MOUNT ORDER** (first id = leftmost segment, a physical fact — not a sort). Flags: `--code`
+(reuse a code on a board swap), `--mac`, `--dry-run`. Validates BEFORE writing — unknown ids, seats
+spanning >1 site (the state route rejects those), seats already under another device — because each
+of those otherwise surfaces in the field as a silent amber LED. Retries on the `code` unique
+collision, except when `--code` was explicit (retrying would mint a code that differs from the
+sticker). There is no secret to hand over (Q9), which is why this is ~100 lines.
+
 ## Password Reset (`src/password-reset.ts`)
 
 - `requestPasswordReset(email, appBaseUrl)` — SHA-256 hashed token, validates origin against `ALLOWED_ORIGINS`, max 3/hour per email, invalidates previous tokens, sends via Resend
@@ -174,7 +200,7 @@ indexes, so an index change is unobservable on a near-empty DB.
   calculation), `rate-limit.test.ts`, `reservation-status.test.ts`,
   `reservation-machine.test.ts` (37 — deriveState kind/pay/occ mapping, allowed +
   must-reject cells, table properties incl. deletes-confined-to-zero-money, partition
-  math), `reservation-machine-guard.test.ts` (single-writer ratchet), `scripts/scale-fixture-guard.test.ts` (17 — destructive-write target guard for the track-020 scale harness: refuses `sunbnb_test`, the dev DB, and every remote host, each asserted to survive `--force`)
+  math), `reservation-machine-guard.test.ts` (single-writer ratchet), `device-code.test.ts` (14 — HW code alphabet/generation/normalisation, incl. the mint↔lookup round trip and unbiased byte mapping), `scripts/scale-fixture-guard.test.ts` (17 — destructive-write target guard for the track-020 scale harness: refuses `sunbnb_test`, the dev DB, and every remote host, each asserted to survive `--force`)
 - **Integration tests** (`src/*.integration.test.ts`): `payment.integration.test.ts` (18 tests — processConfirmedReservation/Order, invoice creation, idempotency, hash chain, VAT, fees), `tab-payment.integration.test.ts` (29 tests — openTableId guard, calculateTabTotal, group invoicing, idempotency both directions, cash settle PARTNER-only receipt, kitchen-state preservation, void exclusion, standalone-restaurant block: null-siteId tabs, account/settings-tier fees, partner-anchored invoicing), `analytics.integration.test.ts` (incl. 5 tab-order paid-ness tests), `till.integration.test.ts` (79 tests — two-bucket window math, day-boundary inclusivity, closeEmployeeTill sweep + carry-over snapshot, void handling), `fee-context.integration.test.ts` (19 tests — loadFeeContext three-tier cascade + loadRestaurantFeeContext: empty site tier, account-tier override, bootstrap), `password-reset.integration.test.ts` (15 tests — token lifecycle, rate limiting, expiry, password strength), `reservation-machine-apply.integration.test.ts` (20 — settle/unreserve/split/undo-depart/GC/collect executors: till partition, money-rows-kept, I2 end-to-end, I4 defense, paid-race abandon), `credit-note.integration.test.ts` (6 — negative twin, chain link, capped partials, series independence)
 - **Config**: `vitest.config.ts` (unit, excludes `*.integration.test.ts`), `vitest.integration.config.ts` (integration, `fileParallelism: false` for shared DB)
 - **Test helpers**: `src/test/setup.ts` (DB connection, `cleanDatabase()` via TRUNCATE CASCADE), `src/test/fixtures.ts` (factory functions for all models)
