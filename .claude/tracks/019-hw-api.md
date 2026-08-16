@@ -74,6 +74,14 @@ credential half and needs amending there; the `code` half still stands.
 `HW_DEVICE_MAP` is gone. **The wire contract is deliberately NOT frozen** — that half of P2 waits
 until a real device has exercised it at bring-up. Freeze right after step 3 below succeeds.
 
+**⚠ Q1 SUPERSEDED 2026-08-16 by [[track:021]].** Q1 decided the binding is an explicit **seat**
+list because "the binding is a *physical installation* fact and `SunbedGroup` is a *booking* fact".
+That reasoning was right under the model as it stood. Track 021 removes its premise: units become
+universal and selling policy moves to parameters, so `SunbedGroup` *becomes* the physical mount
+point and the device binds to it. **P4 (the field binding flow) should not be built before 021 P4**
+— building it on seat bindings means re-binding every installed unit later. P1/P1.5/P2/P3 as shipped
+are unaffected: the wire contract, the code rules and the provisioning script all stand.
+
 **Context needed:** this file · the route + its tests · `packages/data/src/reservation-machine.ts`
 (`deriveState`, `CompoundState`) · `apps/partner/app/sites/[id]/manage/bed-state.ts` (the sibling
 consumer) · `packages/data/src/site-day.ts` · `../sunbnb-hw/docs/decisions/0008-direct-https.md`.
