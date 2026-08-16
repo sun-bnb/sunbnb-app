@@ -210,7 +210,7 @@ the kit is in transit.
   output across the real fixture matrix. Independently valuable — this is the fix for label
   drift under physical signage, with or without hardware.
 
-- **▶ P4 — Parcel edits preserve identity, including RESIZE (I2). NEXT.**
+- **▶ P4 — Parcel edits preserve identity, including RESIZE (I2). A1 + A3 DONE 2026-08-16; A2 (re-pairing preservation) remains.**
   *Independent of hardware, and a live bug on its own: the rearrange path contains **zero**
   seat creates, so growing a parcel leaves the new positions empty and shrinking strands the
   surplus seats where they stood. Delete-and-recreate is therefore the only way to change
@@ -362,6 +362,23 @@ the kit is in transit.
 
 ## Log
 
+- **2026-08-16 — P4 A1 shipped: parcel RESIZE is a real edit.** Growing creates seats (and
+  units) for the new positions; shrinking deletes the surplus instead of stranding it, and
+  prunes the units it empties. Overlapping spots keep their seat ids, unit ids and persisted
+  ordinals — the property that will let an assigned device survive a resize. Added a guard the
+  delete-and-recreate path never had: **a shrink that would remove a seat with a current or
+  future reservation is refused**, naming the count, rather than deleting a bed under a guest.
+  **Validated by git-stash against the pre-P4 code: 4 of the 5 tests FAIL there** (grow adds
+  nothing, shrink strands, no booking guard, round-trip loses seats) and the no-op test passes,
+  which is the correct signature — the tests describe the bug, not the fix. The ratchet from P1
+  fired on the new code and was **refined rather than allowlisted**: `where: { pairId: { in }}`
+  is a Prisma FILTER, not a write, so object-valued matches are now allowed and only a bare
+  scalar counts as resurrection.
+  **Non-bug worth recording:** the browser check surfaced 500s from `recomputeSeatLabels` that
+  no test could see — the long-running dev server held a Prisma client generated BEFORE the
+  `seq` migration, so it rejected the new `sunbedGroup.seq` select. A restart fixed it. Same
+  class as track 020's stale-`.next` lesson: a long-lived dev process is not a clean room.
+  Gates: partner 1992u + 238i, tsc + lint clean, editor browser-verified, I1 audit zero.
 - **2026-08-16 — Config rides the POLL response, not telemetry (founder).** Right call, and
   for three reasons rather than one: latency (the poll is the fast channel by necessity, so
   assignment becomes interactive instead of a minutes-long wait before the identify flash can

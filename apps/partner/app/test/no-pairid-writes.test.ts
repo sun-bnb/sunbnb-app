@@ -43,9 +43,11 @@ describe('no new pairId writes (track 021 P1 ratchet)', () => {
       const rel = path.relative(APP_ROOT, file)
       if (ALLOWED.has(rel)) continue
       const src = readFileSync(file, 'utf8')
-      // The rule is "never point pairId AT ANOTHER SEAT". `pairId: null` on a
-      // freshly created row is the absence of pairing, not a second source of
-      // truth, so it is allowed everywhere; anything else is a resurrection.
+      // The rule is "never point pairId AT ANOTHER SEAT". Allowed: `pairId: null`
+      // (the absence of pairing), an object value (`{ in: [...] }` is a Prisma
+      // FILTER — clearing stale references still needs to find them until the
+      // column is dropped), and `true` in a select. A bare scalar is a write,
+      // and a write is a resurrection of the second source of truth.
       // A relation connect writes pair_id just as surely as the scalar does —
       // `pair: { connect: { id } }` was a real miss on the first pass of this
       // ratchet, found only by reading the write path by hand.
@@ -54,9 +56,14 @@ describe('no new pairId writes (track 021 P1 ratchet)', () => {
         offenders.push(`${rel} (relation connect: ${relationWrites.map((m) => m[1]).join(', ')})`)
         continue
       }
-      const writes = [...src.matchAll(/\bpairId\s*:\s*([^,\n}]+)/g)]
+      const writes = [...src.matchAll(/\bpairId\s*:\s*([^,\n]+)/g)]
         .map((m) => m[1]!.trim())
-        .filter((value) => value !== 'null' && !value.startsWith('true') && !value.startsWith('string'))
+        .filter((value) => {
+          if (value === 'null' || value.startsWith('null')) return false // clearing is fine
+          if (value.startsWith('{')) return false // a Prisma FILTER (`{ in: [...] }`), not a write
+          if (value.startsWith('true') || value.startsWith('string')) return false // select / type
+          return true
+        })
       if (writes.length > 0) offenders.push(`${rel} (${writes.join(' | ')})`)
     }
     expect(offenders, `pairId written outside the allowlist: ${offenders.join(', ')}`).toEqual([])

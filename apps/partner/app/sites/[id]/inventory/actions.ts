@@ -6,10 +6,11 @@ import { requireSiteOwner } from '@/lib/auth-helpers'
 import { isValidItemStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 import { Prisma } from '@prisma/client'
+import { TERMINAL_STATUSES } from '@repo/data/reservation-status'
 
 import { generateChairs, generateChairsSchematic, ChairConfig } from './chair-util'
 import { recomputeSeatLabels } from '@repo/data/seat-label-db'
-import { ensurePlacedSeatsHaveUnits } from '@repo/data/unit'
+import { ensurePlacedSeatsHaveUnits, pruneEmptyUnits } from '@repo/data/unit'
 
 type Mode = 'create' | 'rearrange'
 
@@ -139,6 +140,7 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
         id: true,
         number: true,
         itemGroupId: true,
+        sunbedGroupId: true,
         locationLat: true,
         locationLng: true,
         schematicX: true,
@@ -309,6 +311,79 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
           ) v
           WHERE i.id = v.id`
       }
+    }
+
+    // ── Track 021 P4: RESIZE ────────────────────────────────────────────────
+    // Until now a rearrange only ever REPOSITIONED seats: growing a parcel left
+    // the new positions empty and shrinking stranded the surplus seats where
+    // they stood, so the only way to change dimensions was to delete the parcel
+    // and rebuild it — which destroys every unit identity on it (and, once
+    // devices are assigned, every location they answer for). Overlapping spots
+    // keep their seat ids, unit ids and persisted ordinals; only the difference
+    // is created or removed.
+    const surplusSeats = unmatchedExisting.slice(unmatchedGenerated.length)
+    const vacantPositions = unmatchedGenerated.slice(unmatchedExisting.length)
+
+    if (surplusSeats.length > 0) {
+      const surplusIds = surplusSeats.map((seat) => seat.id)
+
+      // A shrink must never silently delete a bed someone has booked. The
+      // parcel-delete path has no such guard, which is one more reason resize
+      // should be the way dimensions change.
+      const booked = await prisma.reservation.findMany({
+        where: {
+          siteId,
+          to: { gte: new Date() },
+          status: { notIn: [...TERMINAL_STATUSES] },
+          items: { some: { id: { in: surplusIds } } },
+        },
+        select: { id: true },
+        take: 1,
+      })
+      if (booked.length > 0) {
+        return {
+          status: 'error',
+          errors: [
+            `Cannot shrink this parcel: ${surplusSeats.length} seat(s) being removed have current or future reservations. Release them first.`,
+          ],
+        }
+      }
+
+      const emptiedUnits = [
+        ...new Set(surplusSeats.map((seat) => seat.sunbedGroupId).filter(Boolean) as string[]),
+      ]
+      await prisma.$transaction([
+        // The legacy self-FK still bites until the column is dropped.
+        prisma.inventoryItem.updateMany({
+          where: { pairId: { in: surplusIds } },
+          data: { pairId: null },
+        }),
+        prisma.inventoryItem.deleteMany({ where: { id: { in: surplusIds }, siteId } }),
+      ])
+      await pruneEmptyUnits(siteId, emptiedUnits)
+    }
+
+    if (vacantPositions.length > 0 && itemGroup) {
+      await prisma.inventoryItem.createMany({
+        data: vacantPositions.map((position) => ({
+          userId: session?.user?.id,
+          itemGroupId: itemGroup.id,
+          siteId,
+          status: 'active',
+          locationLat: position.locationLat,
+          locationLng: position.locationLng,
+          ...(isSchematic
+            ? { schematicX: position.schematicX, schematicY: position.schematicY }
+            : {}),
+          rotation: position.rotation,
+          number: position.number,
+          group: position.group,
+          category: config.category,
+          price: config.price,
+        })),
+      })
+      // Units for the new seats are minted by ensurePlacedSeatsHaveUnits below
+      // (or paired into two-member units by assignChairPairings first).
     }
   }
 
