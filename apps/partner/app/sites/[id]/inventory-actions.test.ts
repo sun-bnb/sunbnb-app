@@ -23,6 +23,7 @@ import {
 import { auth } from '@/app/auth'
 import { requireSiteOwner } from '@/lib/auth-helpers'
 import prisma from '@repo/data/PrismaCient'
+import { pruneEmptyUnits } from '@repo/data/unit'
 import { recomputeSeatLabels } from '@repo/data/seat-label-db'
 
 const mockAuth = vi.mocked(auth)
@@ -170,7 +171,7 @@ describe('deleteInventoryItem', () => {
     expect(vi.mocked(prisma.inventoryItem.delete)).toHaveBeenCalledWith({ where: { id: 'item-1' } })
   })
 
-  it('detaches item from its SunbedGroup and deletes empty group on delete', async () => {
+  it('removes the seat and prunes the unit only when it was the last member', async () => {
     mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
     const GROUP_ID = 'group-1'
     vi.mocked(prisma.inventoryItem.findUnique)
@@ -184,8 +185,9 @@ describe('deleteInventoryItem', () => {
     const res = await deleteInventoryItem('item-1')
     expect(res.status).toBe('ok')
 
-    // Should clear sunbedGroupId on all siblings
-    expect(vi.mocked(prisma.inventoryItem.updateMany)).toHaveBeenCalledWith(
+    // Track 021 P2: siblings must NOT be detached — deleting a bed is not
+    // deleting the unit, and a detached survivor would violate I1.
+    expect(vi.mocked(prisma.inventoryItem.updateMany)).not.toHaveBeenCalledWith(
       expect.objectContaining({ where: { sunbedGroupId: GROUP_ID } })
     )
     // Should delete the empty group
@@ -240,8 +242,8 @@ describe('deleteInventoryItems', () => {
     expect(res).toEqual({ status: 'ok', deleted: 3 })
 
     expect(vi.mocked(prisma.$transaction)).toHaveBeenCalledTimes(1)
-    // Group members detached, survivors' pairId cleared, one deleteMany, groups dissolved.
-    expect(vi.mocked(prisma.inventoryItem.updateMany)).toHaveBeenCalledWith({
+    // Track 021 P2: siblings stay in their unit — only the SELECTED beds go.
+    expect(vi.mocked(prisma.inventoryItem.updateMany)).not.toHaveBeenCalledWith({
       where: { sunbedGroupId: { in: ['g1'] } },
       data: { sunbedGroupId: null },
     })
@@ -252,9 +254,8 @@ describe('deleteInventoryItems', () => {
     expect(vi.mocked(prisma.inventoryItem.deleteMany)).toHaveBeenCalledWith({
       where: { id: { in: ['i1', 'i2', 'i3'] }, siteId: SITE_ID },
     })
-    expect(vi.mocked(prisma.sunbedGroup.deleteMany)).toHaveBeenCalledWith({
-      where: { id: { in: ['g1'] } },
-    })
+    // Emptiness is decided by the shared prune, not by dissolving the unit.
+    expect(vi.mocked(pruneEmptyUnits)).toHaveBeenCalledWith(SITE_ID, ['g1'])
     // The founder-reported slowness: N seats must NOT mean N site-wide recomputes.
     expect(vi.mocked(recomputeSeatLabels)).toHaveBeenCalledTimes(1)
     expect(vi.mocked(recomputeSeatLabels)).toHaveBeenCalledWith(SITE_ID)

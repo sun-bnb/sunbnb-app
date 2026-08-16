@@ -4,3 +4,4 @@ import { vi } from 'vitest'
 // mocked). Integration tests exercise the real implementation.
 export const ensurePlacedSeatsHaveUnits = vi.fn(async () => ({ created: 0 }))
 export const findUnitlessPlacedSeats = vi.fn(async () => [])
+export const pruneEmptyUnits = vi.fn(async () => ({ deleted: 0 }))

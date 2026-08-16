@@ -227,9 +227,11 @@ The spine. Every phase either establishes one of these or is guarded by it.
 4. **Q4 — What do today's multi-member groups mean?** Physical (under one shade) or
    commercial (sold together)? If both, the physical unit is a subset of grouping and P3's
    backfill must split them. *P0 answers this empirically.*
-5. **Q5 — Empty units.** A unit whose beds are all removed (winter) should persist — that is
-   the point of the model — but it needs a representation in the editor so it is not
-   mistaken for a bug, and a rule for when it may be garbage-collected.
+5. **Q5 — Empty units. PARTIALLY DECIDED 2026-08-16:** a unit whose LAST member is deleted is
+   now pruned, matching the founder's expectation that deleting the last seat removes the
+   group. Still open for P5: once a device is bound, deletion must be REFUSED rather than
+   pruned, and a "shade with no beds" (winter stow) needs a representation that is not
+   achieved by deleting every bed.
 7. **Q7 — Copy: does "paired" survive?** The seat toolbar still shows a "· paired" badge,
    now meaning "this seat's unit has more than one member". It is accurate, but the
    vocabulary is moving to units/pitches, and user-facing copy is founder-reviewed
@@ -240,6 +242,22 @@ The spine. Every phase either establishes one of these or is guarded by it.
 
 ## Log
 
+- **2026-08-16 — Founder question ("does deleting the last item delete the group?") exposed
+  THREE delete bugs, all now fixed.** The answer was yes for the last member — but the
+  behaviour in between was wrong in ways that would have been fatal once devices bind to
+  units. Proven against real Postgres before touching anything: (1) `deleteInventoryItem`
+  detached EVERY sibling from the unit before deleting the target, so removing one bed of a
+  pair left the survivor with a null group — an I1 violation — and destroyed a unit that
+  still had a bed standing in it; (2) the bulk delete did the same, set-based; (3)
+  `deleteItemsByGroup` deleted a parcel's seats and left its units behind as empty rows
+  forever (4 orphans from an 8-seat parcel). Fixed by the rule that **deleting a BED is not
+  deleting the UNIT**: delete only the selected seats, then `pruneEmptyUnits` (new, shared,
+  in `@repo/data/unit`) removes only units that lost their LAST member. Every delete path now
+  routes through that one function, which is where P5's "refuse to delete a unit with a
+  device bound" guard will live. Three tests were re-pinned from "detaches siblings" to
+  "siblings keep their unit", and four new integration tests cover the pair-survivor case,
+  its bulk twin, last-member pruning and parcel cleanup. Gates: partner 1992u + 232i, data
+  374u, tsc + lint clean.
 - **2026-08-16 — P2 COMPLETE: units are created, never assembled.** Founder answered the two
   forks: a single add places a **unit of two side by side**, and there is **no split
   affordance** — a mis-grouped unit is deleted and placed again. Implemented:

@@ -20,7 +20,8 @@ vi.mock('@/app/auth', () => ({
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
 import { syncChairsWithLayout } from './actions'
-import { createInventoryItem } from '../inventory-actions'
+import { createInventoryItem, deleteInventoryItem, deleteInventoryItems, deleteItemsByGroup } from '../inventory-actions'
+import { createTestPairedUnit } from '@/app/test/fixtures'
 import { ensurePlacedSeatsHaveUnits, findUnitlessPlacedSeats } from '@repo/data/unit'
 
 beforeAll(async () => { await cleanDatabase() })
@@ -121,5 +122,62 @@ describe('I1 — every placed seat has a unit', () => {
     const foreignRow = await prisma.inventoryItem.findUniqueOrThrow({ where: { id: foreign.id } })
     expect(foreignRow.sunbedGroupId).toBeNull()
     expect(await findUnitlessPlacedSeats(other.id)).toHaveLength(1)
+  })
+})
+
+describe('deleting a member must not destroy the unit or orphan its siblings', () => {
+  it('deleting ONE seat of a pair leaves the survivor IN its unit (I1)', async () => {
+    const user = await createTestUser()
+    mockUserId = user.id
+    const site = await createTestSite(user.id)
+    const { group, itemA, itemB } = await createTestPairedUnit(user.id, site.id, [1, 2])
+
+    await deleteInventoryItem(itemA.id)
+
+    const survivor = await prisma.inventoryItem.findUniqueOrThrow({ where: { id: itemB.id } })
+    // The bed still stands, so it is still placed — and a placed seat always
+    // belongs to a unit. Detaching it would violate I1 and, once devices bind
+    // to units, would silently orphan the device mounted there.
+    expect(survivor.sunbedGroupId).toBe(group.id)
+    expect(await findUnitlessPlacedSeats(site.id)).toEqual([])
+    // The unit itself survives — one of its two beds was removed, not the unit.
+    expect(await prisma.sunbedGroup.findUnique({ where: { id: group.id } })).not.toBeNull()
+  })
+
+  it('bulk-deleting ONE seat of a pair leaves the survivor in its unit (I1)', async () => {
+    const user = await createTestUser()
+    mockUserId = user.id
+    const site = await createTestSite(user.id)
+    const { group, itemA, itemB } = await createTestPairedUnit(user.id, site.id, [1, 2])
+
+    await deleteInventoryItems(site.id, [itemA.id])
+
+    const survivor = await prisma.inventoryItem.findUniqueOrThrow({ where: { id: itemB.id } })
+    expect(survivor.sunbedGroupId).toBe(group.id)
+    expect(await findUnitlessPlacedSeats(site.id)).toEqual([])
+  })
+
+  it('deleting the LAST member removes the now-empty unit', async () => {
+    const user = await createTestUser()
+    mockUserId = user.id
+    const site = await createTestSite(user.id)
+    const { group, itemA, itemB } = await createTestPairedUnit(user.id, site.id, [1, 2])
+
+    await deleteInventoryItems(site.id, [itemA.id, itemB.id])
+
+    expect(await prisma.sunbedGroup.findUnique({ where: { id: group.id } })).toBeNull()
+  })
+
+  it('deleting a whole parcel leaves no orphaned empty units behind', async () => {
+    const user = await createTestUser()
+    mockUserId = user.id
+    const site = await createTestSite(user.id, { layoutMode: 'geo' })
+    await syncChairsWithLayout(site.id, parcelConfig(true), 'create')
+    expect(await prisma.sunbedGroup.count({ where: { siteId: site.id } })).toBe(4)
+
+    await deleteItemsByGroup(site.id, 1)
+
+    expect(await prisma.inventoryItem.count({ where: { siteId: site.id } })).toBe(0)
+    expect(await prisma.sunbedGroup.count({ where: { siteId: site.id } })).toBe(0)
   })
 })

@@ -6,6 +6,7 @@ import { requireSiteOwner } from '@/lib/auth-helpers'
 import { isValidItemStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 import { recomputeSeatLabels } from '@repo/data/seat-label-db'
+import { pruneEmptyUnits } from '@repo/data/unit'
 import { generateChairs } from './inventory/chair-util'
 
 /** Founder decision (track 021 P2): a hand-placed unit is a PAIR by default. */
@@ -116,20 +117,19 @@ export async function deleteInventoryItem(id: string) {
     select: { sunbedGroupId: true },
   })
 
+  // Track 021 P2: deleting a BED is not deleting the UNIT. This used to detach
+  // every sibling from the group first, so removing one seat of a pair left the
+  // survivor unitless (violating I1) and destroyed a unit that still had a bed
+  // standing in it — which, once devices bind to units, silently orphans the
+  // device mounted there.
   await prisma.$transaction([
-    // Clear sunbedGroupId on all siblings so they are detached from this group
-    ...(itemForGroup?.sunbedGroupId
-      ? [prisma.inventoryItem.updateMany({
-          where: { sunbedGroupId: itemForGroup.sunbedGroupId },
-          data: { sunbedGroupId: null },
-        })]
-      : []),
+    // The legacy self-FK still bites until the column is dropped.
     prisma.inventoryItem.updateMany({ where: { pairId: id }, data: { pairId: null } }),
     prisma.inventoryItem.delete({ where: { id } }),
   ])
 
-  // Delete the now-empty SunbedGroup (must be outside $transaction so the item
-  // deletion FK is already committed before we check emptiness).
+  // Only the removal of the LAST member ends the unit (outside the transaction
+  // so the deletion is committed before emptiness is evaluated).
   if (itemForGroup?.sunbedGroupId) {
     const remaining = await prisma.inventoryItem.count({
       where: { sunbedGroupId: itemForGroup.sunbedGroupId },
@@ -174,25 +174,21 @@ export async function deleteInventoryItems(siteId: string, itemIds: string[]) {
   const ids = rows.map((r) => r.id)
   const groupIds = [...new Set(rows.map((r) => r.sunbedGroupId).filter(Boolean))] as string[]
 
+  // Track 021 P2: delete the SELECTED beds only. Detaching every sibling first
+  // (as this did) left survivors unitless — an I1 violation — and destroyed
+  // units that still had beds standing in them.
   await prisma.$transaction([
-    ...(groupIds.length > 0
-      ? [prisma.inventoryItem.updateMany({
-          where: { sunbedGroupId: { in: groupIds } },
-          data: { sunbedGroupId: null },
-        })]
-      : []),
+    // The legacy self-FK still bites until the column is dropped.
     prisma.inventoryItem.updateMany({
       where: { pairId: { in: ids } },
       data: { pairId: null },
     }),
     prisma.inventoryItem.deleteMany({ where: { id: { in: ids }, siteId } }),
-    // Members were detached in the first statement of this same transaction,
-    // so the group rows can go immediately (no post-commit emptiness check
-    // needed — unlike the single delete, we dissolve whole groups).
-    ...(groupIds.length > 0
-      ? [prisma.sunbedGroup.deleteMany({ where: { id: { in: groupIds } } })]
-      : []),
   ])
+
+  // Units that lost their LAST member end here; units that kept a bed survive
+  // with their identity intact.
+  await pruneEmptyUnits(siteId, groupIds)
 
   await recomputeSeatLabels(siteId)
   revalidatePath('/sites')
@@ -395,9 +391,26 @@ export async function deleteItemsByGroup(siteId: string, group: number) {
   const { error } = await requireSiteOwner(siteId)
   if (error) return { status: 'error', errors: [error] }
 
+  // Track 021 P2: capture the units first — after the seats are gone there is
+  // nothing left pointing at them, and they would linger as empty rows forever.
+  const unitIds = [
+    ...new Set(
+      (
+        await prisma.inventoryItem.findMany({
+          where: { siteId, group },
+          select: { sunbedGroupId: true },
+        })
+      )
+        .map((i) => i.sunbedGroupId)
+        .filter(Boolean) as string[],
+    ),
+  ]
+
   await prisma.inventoryItem.deleteMany({
     where: { siteId, group },
   })
+
+  await pruneEmptyUnits(siteId, unitIds)
 
   // Track 020 P4: this was the ONLY bulk mutation that skipped the label
   // recompute — surviving parcels kept stale seat labels after a parcel

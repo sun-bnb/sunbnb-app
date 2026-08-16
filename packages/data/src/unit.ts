@@ -83,3 +83,32 @@ export async function findUnitlessPlacedSeats(siteId?: string) {
     orderBy: [{ siteId: 'asc' }, { number: 'asc' }],
   })
 }
+
+/**
+ * Delete units that have no members left.
+ *
+ * Removing a BED is not removing the UNIT: deleting one seat of a pair must
+ * leave the survivor in its unit (I1), and only the removal of the LAST member
+ * ends the unit. Callers pass the units they touched; omitting `unitIds`
+ * sweeps the whole site.
+ *
+ * Track 021 P5 will add the guard that a unit with a device bound cannot be
+ * deleted at all — at that point this becomes the single place to enforce it,
+ * which is why every delete path routes through here rather than inlining a
+ * count-and-delete.
+ */
+export async function pruneEmptyUnits(
+  siteId: string,
+  unitIds?: string[],
+): Promise<{ deleted: number }> {
+  if (unitIds && unitIds.length === 0) return { deleted: 0 }
+
+  const result = await prisma.sunbedGroup.deleteMany({
+    where: {
+      siteId,
+      ...(unitIds ? { id: { in: unitIds } } : {}),
+      items: { none: {} },
+    },
+  })
+  return { deleted: result.count }
+}
