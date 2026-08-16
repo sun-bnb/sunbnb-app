@@ -113,3 +113,94 @@ export async function pruneEmptyUnits(
   })
   return { deleted: result.count }
 }
+
+// ─── Hardware guard (invariant I5) ──────────────────────────────────────────
+
+export interface BlockingDevice {
+  code: string
+  location: string
+}
+
+/**
+ * Devices that would be left pointing at nothing if these seats were deleted.
+ *
+ * Deleting every seat of a unit IS dismounting the parasol (Q5). If a device is
+ * assigned to that spot, the deletion must be refused — unassign first, exactly
+ * as you would unscrew the device before pulling the pole out. Without this the
+ * device keeps polling an address that no longer resolves and sits amber, and
+ * nothing in the UI explains why.
+ *
+ * A device stores an ADDRESS, not a unit id, so the check resolves each
+ * about-to-be-emptied unit's address from the seats themselves: parcel from
+ * `group`, row from the encoded `number`, ordinal from the unit row.
+ *
+ * Only units losing their LAST member block: removing one bed of a pair leaves
+ * the spot standing, and the device with it.
+ */
+export async function devicesBlockingSeatRemoval(
+  siteId: string,
+  seatIds: string[],
+): Promise<BlockingDevice[]> {
+  if (seatIds.length === 0) return []
+
+  const doomed = await prisma.inventoryItem.findMany({
+    where: { id: { in: seatIds }, siteId, status: PLACED, sunbedGroupId: { not: null } },
+    select: { id: true, group: true, number: true, sunbedGroupId: true },
+  })
+  if (doomed.length === 0) return []
+
+  const unitIds = [...new Set(doomed.map((seat) => seat.sunbedGroupId as string))]
+  const survivors = await prisma.inventoryItem.findMany({
+    where: {
+      sunbedGroupId: { in: unitIds },
+      status: PLACED,
+      id: { notIn: seatIds },
+    },
+    select: { sunbedGroupId: true },
+  })
+  const surviving = new Set(survivors.map((seat) => seat.sunbedGroupId as string))
+
+  // Units that lose every placed member — i.e. spots being dismounted.
+  const emptied = unitIds.filter((id) => !surviving.has(id))
+  if (emptied.length === 0) return []
+
+  const units = await prisma.sunbedGroup.findMany({
+    where: { id: { in: emptied } },
+    select: { id: true, seq: true },
+  })
+  const seqById = new Map(units.map((unit) => [unit.id, unit.seq]))
+
+  const addresses = doomed
+    .filter((seat) => emptied.includes(seat.sunbedGroupId as string))
+    .map((seat) => ({
+      parcel: seat.group,
+      row: Math.floor(seat.number / 100) % 100,
+      seq: seqById.get(seat.sunbedGroupId as string) ?? null,
+    }))
+    .filter((address): address is { parcel: number; row: number; seq: number } => address.seq !== null)
+
+  if (addresses.length === 0) return []
+
+  const devices = await prisma.device.findMany({
+    where: {
+      assignedSiteId: siteId,
+      OR: addresses.map((address) => ({
+        assignedParcel: address.parcel,
+        assignedRow: address.row,
+        assignedSeq: address.seq,
+      })),
+    },
+    select: { code: true, assignedParcel: true, assignedRow: true, assignedSeq: true },
+  })
+
+  return devices.map((device) => ({
+    code: device.code,
+    location: `${device.assignedParcel}-${device.assignedRow}-${device.assignedSeq}`,
+  }))
+}
+
+/** The refusal message every delete path shares, so they cannot word it differently. */
+export function deviceRemovalError(blocking: BlockingDevice[]): string {
+  const list = blocking.map((d) => `${d.code} (${d.location})`).join(', ')
+  return `Cannot remove: ${blocking.length} device(s) are mounted at these spots — ${list}. Unassign them first.`
+}

@@ -362,6 +362,23 @@ the kit is in transit.
 
 ## Log
 
+- **2026-08-16 — Step 5c: hardware blocks dismounting a spot (I5).** Deleting every seat of a
+  unit IS dismounting the parasol, so a device assigned there must stop it — unassign first,
+  exactly as you would unscrew the box before pulling the pole out. Otherwise the device polls
+  an address that no longer resolves, sits amber, and nothing explains why. Guarded in all
+  four paths that can empty a unit: single delete, bulk delete, whole-parcel delete, and a
+  resize SHRINK (same outcome, same rule). The refusal names the device codes and their
+  locations, and shares one message so the paths cannot word it differently.
+  Because a device stores an ADDRESS rather than a unit id, the check resolves each
+  about-to-be-emptied unit's address from the seats themselves. **Only units losing their LAST
+  placed member block** — removing one bed of a pair leaves the spot standing and the device
+  with it, which a test pins explicitly alongside the two refusals.
+  Validated by git-stash: all 3 fail on the pre-guard code.
+  **Found a real harness gap doing it:** `Device` has NO foreign key to `Site` (it carries an
+  address, not a relation), so the Site cascade never reached it and device rows LEAKED across
+  integration files — invisible until two files used the same code. `device`, `device_seat`
+  and `account_feature_flag` are now in `cleanDatabase`'s truncate list.
+  Gates: partner 2015u + 245i, data 379u, tsc + lint clean.
 - **2026-08-16 — Step 5b: assignment, unassignment and identify.** An operator types the
   address painted on the bed (`parcel-row-unit`) against one of their own sites; the server
   **refuses an address that holds no unit**, naming it — the mistake that would otherwise only

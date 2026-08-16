@@ -23,6 +23,7 @@ import { syncChairsWithLayout } from './actions'
 import { createInventoryItem, deleteInventoryItem, deleteInventoryItems, deleteItemsByGroup } from '../inventory-actions'
 import { createTestPairedUnit } from '@/app/test/fixtures'
 import { ensurePlacedSeatsHaveUnits, findUnitlessPlacedSeats } from '@repo/data/unit'
+import { recomputeSeatLabels } from '@repo/data/seat-label-db'
 
 beforeAll(async () => { await cleanDatabase() })
 beforeEach(async () => { await cleanDatabase(); mockUserId = null })
@@ -196,5 +197,76 @@ describe('deleting a member must not destroy the unit or orphan its siblings', (
 
     expect(await prisma.inventoryItem.count({ where: { siteId: site.id } })).toBe(0)
     expect(await prisma.sunbedGroup.count({ where: { siteId: site.id } })).toBe(0)
+  })
+})
+
+describe('I5 — hardware blocks dismounting a spot', () => {
+  /** Assign a device to the unit holding `seatNumber`, the way the UI would. */
+  async function mountDeviceOn(siteId: string, seatNumber: number, code = 'GUARD1') {
+    await recomputeSeatLabels(siteId) // assigns unit ordinals
+    const seat = await prisma.inventoryItem.findFirstOrThrow({
+      where: { siteId, number: seatNumber },
+      select: { group: true, number: true, sunbedGroup: { select: { seq: true } } },
+    })
+    return prisma.device.create({
+      data: {
+        code,
+        status: 'active',
+        assignedSiteId: siteId,
+        assignedParcel: seat.group,
+        assignedRow: Math.floor(seat.number / 100) % 100,
+        assignedSeq: seat.sunbedGroup!.seq!,
+      },
+    })
+  }
+
+  it('REFUSES to delete the last seats of a unit that has a device on it', async () => {
+    const user = await createTestUser()
+    mockUserId = user.id
+    const site = await createTestSite(user.id, { layoutMode: 'geo' })
+    await syncChairsWithLayout(site.id, parcelConfig(true), 'create')
+    const unitSeats = await prisma.inventoryItem.findMany({
+      where: { siteId: site.id }, orderBy: { number: 'asc' }, take: 2,
+    })
+    await mountDeviceOn(site.id, unitSeats[0]!.number)
+
+    const res = await deleteInventoryItems(site.id, unitSeats.map((s) => s.id))
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toMatch(/GUARD1/)
+    // Nothing was removed — the refusal is all-or-nothing.
+    expect(await prisma.inventoryItem.count({ where: { siteId: site.id } })).toBe(8)
+  })
+
+  it('ALLOWS removing one bed of a unit that has a device — the spot still stands', async () => {
+    const user = await createTestUser()
+    mockUserId = user.id
+    const site = await createTestSite(user.id, { layoutMode: 'geo' })
+    await syncChairsWithLayout(site.id, parcelConfig(true), 'create')
+    const unitSeats = await prisma.inventoryItem.findMany({
+      where: { siteId: site.id }, orderBy: { number: 'asc' }, take: 2,
+    })
+    await mountDeviceOn(site.id, unitSeats[0]!.number, 'GUARD2')
+
+    const res = await deleteInventoryItems(site.id, [unitSeats[1]!.id])
+
+    expect(res.status).toBe('ok')
+    expect(await prisma.inventoryItem.count({ where: { siteId: site.id } })).toBe(7)
+  })
+
+  it('REFUSES a whole-parcel delete when any spot in it carries a device', async () => {
+    const user = await createTestUser()
+    mockUserId = user.id
+    const site = await createTestSite(user.id, { layoutMode: 'geo' })
+    await syncChairsWithLayout(site.id, parcelConfig(true), 'create')
+    const first = await prisma.inventoryItem.findFirstOrThrow({
+      where: { siteId: site.id }, orderBy: { number: 'asc' },
+    })
+    await mountDeviceOn(site.id, first.number, 'GUARD3')
+
+    const res = await deleteItemsByGroup(site.id, 1)
+
+    expect(res.status).toBe('error')
+    expect(await prisma.inventoryItem.count({ where: { siteId: site.id } })).toBe(8)
   })
 })

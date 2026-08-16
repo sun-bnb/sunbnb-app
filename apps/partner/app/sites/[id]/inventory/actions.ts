@@ -10,7 +10,12 @@ import { TERMINAL_STATUSES } from '@repo/data/reservation-status'
 
 import { generateChairs, generateChairsSchematic, ChairConfig } from './chair-util'
 import { recomputeSeatLabels } from '@repo/data/seat-label-db'
-import { ensurePlacedSeatsHaveUnits, pruneEmptyUnits } from '@repo/data/unit'
+import {
+  ensurePlacedSeatsHaveUnits,
+  pruneEmptyUnits,
+  devicesBlockingSeatRemoval,
+  deviceRemovalError,
+} from '@repo/data/unit'
 
 type Mode = 'create' | 'rearrange'
 
@@ -340,6 +345,13 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
         select: { id: true },
         take: 1,
       })
+      // I5: a shrink that dismounts a spot with hardware on it is refused too —
+      // the same rule as an explicit delete, since the outcome is identical.
+      const blocking = await devicesBlockingSeatRemoval(siteId, surplusIds)
+      if (blocking.length > 0) {
+        return { status: 'error', errors: [deviceRemovalError(blocking)] }
+      }
+
       if (booked.length > 0) {
         return {
           status: 'error',

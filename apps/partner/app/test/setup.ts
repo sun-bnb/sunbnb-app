@@ -39,6 +39,12 @@ export async function cleanDatabase() {
   await assertTestDatabase()
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
+      -- Devices have NO foreign key to Site (they carry an ADDRESS, not a
+      -- relation), so the Site cascade does not reach them and rows leak across
+      -- test files. Same for per-account flags, which key on a user id string.
+      "device_seat",
+      "device",
+      "account_feature_flag",
       "InvoiceLine",
       "Invoice",
       "OrderItem",

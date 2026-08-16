@@ -6,7 +6,7 @@ import { requireSiteOwner } from '@/lib/auth-helpers'
 import { isValidItemStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 import { recomputeSeatLabels } from '@repo/data/seat-label-db'
-import { pruneEmptyUnits } from '@repo/data/unit'
+import { pruneEmptyUnits, devicesBlockingSeatRemoval, deviceRemovalError } from '@repo/data/unit'
 import { generateChairs } from './inventory/chair-util'
 
 /** Founder decision (track 021 P2): a hand-placed unit is a PAIR by default. */
@@ -122,6 +122,11 @@ export async function deleteInventoryItem(id: string) {
   // survivor unitless (violating I1) and destroyed a unit that still had a bed
   // standing in it — which, once devices bind to units, silently orphans the
   // device mounted there.
+  const blocking = await devicesBlockingSeatRemoval(deletedSiteId, [id])
+  if (blocking.length > 0) {
+    return { status: 'error', errors: [deviceRemovalError(blocking)] }
+  }
+
   await prisma.$transaction([
     // The legacy self-FK still bites until the column is dropped.
     prisma.inventoryItem.updateMany({ where: { pairId: id }, data: { pairId: null } }),
@@ -173,6 +178,14 @@ export async function deleteInventoryItems(siteId: string, itemIds: string[]) {
 
   const ids = rows.map((r) => r.id)
   const groupIds = [...new Set(rows.map((r) => r.sunbedGroupId).filter(Boolean))] as string[]
+
+  // Invariant I5: deleting every seat of a unit dismounts the parasol, and a
+  // device mounted there would be left pointing at nothing — polling an address
+  // that no longer resolves and sitting amber, with nothing explaining why.
+  const blocking = await devicesBlockingSeatRemoval(siteId, ids)
+  if (blocking.length > 0) {
+    return { status: 'error', errors: [deviceRemovalError(blocking)] }
+  }
 
   // Track 021 P2: delete the SELECTED beds only. Detaching every sibling first
   // (as this did) left survivors unitless — an I1 violation — and destroyed
@@ -405,6 +418,14 @@ export async function deleteItemsByGroup(siteId: string, group: number) {
         .filter(Boolean) as string[],
     ),
   ]
+
+  const doomedIds = (
+    await prisma.inventoryItem.findMany({ where: { siteId, group }, select: { id: true } })
+  ).map((item) => item.id)
+  const blocking = await devicesBlockingSeatRemoval(siteId, doomedIds)
+  if (blocking.length > 0) {
+    return { status: 'error', errors: [deviceRemovalError(blocking)] }
+  }
 
   await prisma.inventoryItem.deleteMany({
     where: { siteId, group },
