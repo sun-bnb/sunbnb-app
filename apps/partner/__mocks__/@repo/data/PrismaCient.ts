@@ -100,6 +100,26 @@ const prisma = {
     update: vi.fn(),
     updateMany: vi.fn(),
   },
+  // HW device binding (track 019 P2). No partner surface reads these yet — P4
+  // (field binding on /manage) and P5 (device health list) will; stubbed now
+  // because mock-contract.test.ts requires a delegate for every real model.
+  device: {
+    create: vi.fn(),
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+  },
+  deviceSeat: {
+    create: vi.fn(),
+    createMany: vi.fn(),
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    deleteMany: vi.fn(),
+  },
   sunbedGroup: {
     create: vi.fn(),
     // createManyAndReturn preserves input order (assignChairPairings maps

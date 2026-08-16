@@ -329,6 +329,7 @@ model InventoryItem {
   user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   orders         Order[]
   reservations   Reservation[]  @relation("InventoryItemToReservation")
+  deviceSeat     DeviceSeat?    // track 019: the HW device mounted over this seat, if any
 
   // Track 020 P1. Postgres does NOT auto-index foreign keys, so before these
   // every `where: { siteId }` was a sequential scan of the whole table across
@@ -1194,6 +1195,61 @@ model TableTab {
   @@index([restaurantId])
   @@index([paymentRef])
   @@map("table_tab")
+}
+
+/// A parasol-mounted hardware device (track 019 P2) — an ESP32-C6 that polls
+/// `/api/hw/{code}/state` and lights an LED bar for the seats under its shade.
+///
+/// There is deliberately NO token/secret column (track 019 Q9): the endpoint is
+/// gated by a soft `User-Agent` client filter, not authentication, because the
+/// data behind it is public occupancy. `code` is PUBLIC — it is printed on the
+/// device's sticker and routes to the binding; it authenticates nothing.
+model Device {
+  id         String       @id @default(cuid())
+  /// Server-issued, random 6-char Crockford base32. Public, printed on the
+  /// sticker. Random not sequential: sequential leaks fleet size.
+  code       String       @unique
+  /// Provisioning fingerprint for support. MUTABLE — a board swap re-flashes the
+  /// same code and changes this. Never treat it as identity (../sunbnb-hw ADR 0003).
+  macAddr    String?      @map("mac_addr")
+  /// provisioned → active → retired. A failed flash leaves a `provisioned` row,
+  /// which is the safe direction (the reverse would be a live device with no row).
+  status     String       @default("provisioned")
+  /// Last-values telemetry (track 019 P5 writes these; the P1.5 stub does not).
+  fw         String?
+  lastSeenAt DateTime?    @map("last_seen_at")
+  battMv     Int?         @map("batt_mv")
+  rssiDbm    Int?         @map("rssi_dbm")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+  seats      DeviceSeat[]
+
+  @@map("device")
+}
+
+/// Which seats sit under a device, and in what MOUNT order (track 019 Q1).
+///
+/// The binding is a PHYSICAL INSTALLATION fact and is stored explicitly — it is
+/// never derived from `SunbedGroup`, which is a BOOKING fact. The two coincide
+/// most of the time and are allowed to diverge: four beds grouped for booking
+/// under two parasols would make both devices light for all four seats. Deriving
+/// it would also let an ordinary inventory edit silently change what a light
+/// means, with no confirmation and no audit.
+model DeviceSeat {
+  id       String        @id @default(cuid())
+  deviceId String        @map("device_id")
+  /// A seat is under exactly one device.
+  itemId   String        @unique @map("item_id")
+  /// 0 = leftmost LED segment. A mount fact recorded at install, NOT a sort over
+  /// seat numbers — a device mounted rotated, or a row numbered right-to-left,
+  /// still lights correctly. The state response emits seats in this order.
+  position Int
+  device   Device        @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  /// Deleting a seat drops this one row rather than re-scoping the whole device.
+  item     InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, position])
+  @@map("device_seat")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.

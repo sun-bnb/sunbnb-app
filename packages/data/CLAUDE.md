@@ -30,6 +30,8 @@ Prisma schema at `packages/data/prisma/schema.prisma`. 70+ migrations. Uses `@pr
 
 Key models: User, PartnerAccount, Site, InventoryItem, Reservation, Order, OrderItem, RentalItem, RentalBooking, Invoice, InvoiceLine, Settlement, ServiceFee, Settings, PasswordResetToken, Product.
 
+**`Device` / `DeviceSeat`** (track 019 P2) — the parasol-mounted HW devices served by the user app's `/api/hw/{code}/*`. `Device.code` is a PUBLIC 6-char Crockford-base32 identifier printed on the device's sticker; there is deliberately **no token/secret column** (Q9 — the endpoint is gated by a soft `User-Agent` client filter, not auth, because the data behind it is public occupancy). `DeviceSeat` binds seats to a device with `position` = **mount order** (0 = leftmost LED segment), stored explicitly and never derived from `SunbedGroup`: the binding is a *physical installation* fact, a group is a *booking* fact, and deriving one from the other over-scopes wherever grouping ≠ shading. `status`: `provisioned → active → retired`.
+
 ## Payment Service (`src/payment.ts`)
 
 ### Pure Functions (no DB, no side effects)
