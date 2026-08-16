@@ -14,7 +14,8 @@
     "account": "Cuenta",
     "subscription": "Suscripción",
     "signOut": "Cerrar sesión",
-    "language": "Idioma"
+    "language": "Idioma",
+    "devices": "Dispositivos"
   },
   "App": {
     "mollieNotConnected": "Pagos de Mollie no conectados. Conecta tu cuenta de Mollie para aceptar pagos online.",

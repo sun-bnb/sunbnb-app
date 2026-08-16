@@ -31,6 +31,9 @@ export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const restaurantsEnabled = useFlag('restaurants')
+  // Track 021 P5: hidden until the flag exists, so operators with no hardware
+  // never see a menu entry for a fleet they do not have (useFlag defaults off).
+  const devicesEnabled = useFlag('devices')
 
   const navItems = [
     { label: t('dashboard'), href: '/' },
@@ -38,6 +41,7 @@ export default function Header() {
     { label: t('sites'), href: '/sites' },
     ...(restaurantsEnabled ? [{ label: t('restaurants'), href: '/restaurants' }] : []),
     { label: t('calendar'), href: '/calendar' },
+    ...(devicesEnabled ? [{ label: t('devices'), href: '/devices' }] : []),
     { label: t('security'), href: '/security' },
   ]
 

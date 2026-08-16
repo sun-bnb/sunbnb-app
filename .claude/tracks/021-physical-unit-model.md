@@ -123,7 +123,7 @@ thing (a fielded wire contract) is decided last — after a real device has exer
 | 1 | ✅ **P4 — parcel resize + identity** | 021 | — | DONE 2026-08-16 — resize is a real edit; re-pairing reuses units |
 | 2 | **P1(d) — drop `pairId`** | 021 | current release deployed | Destructive, so a release AFTER the code stopped reading it (expand/contract) |
 | 3 | ✅ **Device model + telemetry persistence** | 019 P5 | — | DONE 2026-08-16 — devices self-register; last-values persisted |
-| 4 | **Fleet UI** | 019 P5 | 3 | Devices self-register; surfaces unassigned / assigned-not-applied / silent / spots without devices |
+| 4 | ✅ **Fleet UI** | 019 P5 | 3 | DONE 2026-08-16 — `/devices`, flag-gated, health derived from what the device has told us |
 | 5 | **Assignment + config delivery** | 021 P5 · 019 P4 | 1, 3, 4 | Assign a location from the UI; state response carries it inside the hashed `stable`; telemetry reports what is applied |
 | 6 | **Wire contract freeze + bring-up** | 019 | 5 + hardware | Freeze only once a real device has run the contract; expensive after 1 500 units carry it |
 | 7 | **P6 — sell policy** | 021 | 1 | Independent of hardware entirely — can run in parallel with 3–6 |
@@ -362,6 +362,25 @@ the kit is in transit.
 
 ## Log
 
+- **2026-08-16 — Step 4 shipped: the fleet list.** `/devices` in the partner app, scoped by
+  the customer flashed on the device, so a unit appears in exactly one operator's list on its
+  FIRST poll with no claiming step. Health is DERIVED in a pure module rather than stored —
+  `never-seen` · `unassigned` · `pending` · `ok` · `silent` — and the ordering encodes what to
+  act on first: **silence outranks configuration**, because a device nobody can hear is a
+  fault whatever its assignment says, and a "not applied" badge on a dead unit would suggest
+  waiting rather than walking out to it. The assigned-vs-reported gap is shown explicitly
+  ("running 1-1-1" beside a different assignment), which is the whole reason telemetry echoes
+  the applied location.
+  Provisioning now takes `--partner` — without it a bench-provisioned device is invisible to
+  the operator who has to assign it. Nav entry is **flag-gated** (`useFlag('devices')` defaults
+  OFF for unknown flags), so partners with no hardware see no menu item; 3 i18n keys added
+  (en/es/fi) — **user-facing copy, so founder review before promote per `deploys.md`**.
+  Browser-verified against three seeded devices covering every state (healthy / silent-3-days
+  / never-seen, with a critical battery rendering red); rows deleted afterwards.
+  **Second stale-client incident today:** the dev server was started before the Device
+  migration and rejected `partnerAccountId`, exactly as it rejected `seq` this morning. After
+  a migration, restart the dev servers — no test can see this, only a browser.
+  Gates: partner 2006u + 242i, tsc + lint clean.
 - **2026-08-16 — Step 3 shipped: devices SELF-REGISTER and telemetry persists.** Additive
   migration `20260816111810_add_device_assignment_and_telemetry`: `Device` gains the customer
   (`partnerAccountId`), the ASSIGNED location (`assignedSiteId/Parcel/Row/Seq` — unused until

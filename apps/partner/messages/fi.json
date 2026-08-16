@@ -14,7 +14,8 @@
     "account": "Tili",
     "subscription": "Tilaus",
     "signOut": "Kirjaudu ulos",
-    "language": "Kieli"
+    "language": "Kieli",
+    "devices": "Laitteet"
   },
   "App": {
     "mollieNotConnected": "Mollie-maksuja ei ole yhdistetty. Yhdistä Mollie-tilisi vastaanottaaksesi verkkomaksuja.",

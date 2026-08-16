@@ -54,6 +54,10 @@ function parseArgs(argv: string[]): Args {
     seats,
     code: get('--code'),
     mac: get('--mac'),
+    // Track 021 P5: the customer is flashed permanently and decides whose fleet
+    // list the device appears in. Without it a provisioned device is invisible
+    // to the operator who has to assign it a location.
+    partner: get('--partner'),
     dryRun: argv.includes('--dry-run'),
   }
 }
@@ -150,6 +154,7 @@ async function main() {
         data: {
           code,
           macAddr: args.mac,
+          partnerAccountId: args.partner,
           status: 'provisioned',
           seats: {
             create: args.seats.map((itemId, position) => ({ itemId, position })),
