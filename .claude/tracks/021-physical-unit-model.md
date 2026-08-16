@@ -262,8 +262,18 @@ The spine. Every phase either establishes one of these or is guarded by it.
   - **Telemetry confirms rather than pushes**: the device reports the location it is actually
     running, so the fleet UI can distinguish ASSIGNED from APPLIED (a device that is asleep,
     out of range or dead shows as unacknowledged). Each channel does what it is good at.
-  - Firmware rule: config arrives on EVERY poll, so applying it must be idempotent — write to
-    NVS only on change, or the device rewrites the same value every cycle and burns flash.
+  - **Delivery is DECLARATIVE, not event-based.** The assignment is present in every `200`
+    body — but not on every poll: an unchanged response is a bare `304`, so it costs nothing.
+    It rides along whenever anything changes (seat state included, not just a reassignment),
+    which is what makes it **self-healing**: a device that rebooted, lost NVS, was out of range
+    during the change, or was swapped for a spare converges on its next `200` with no
+    acknowledgment protocol and nobody noticing there was anything to fix. Sending only on
+    change would require tracking what each device has acked, and would leave one that missed
+    the single transmission stale indefinitely — lighting the wrong bed while the UI insists it
+    is assigned.
+  - Firmware rule (the other side of that coin): the same config arrives repeatedly, so apply
+    it idempotently — write NVS only when it differs, or the device rewrites the same value
+    all season and burns flash.
   - Assignment must be **operator-initiated and identify-confirmed**, never inferred. Silently
     re-pointing a device is the one failure that makes a light lie about a bed.
   - An assigned location with **no unit** (parcel shrank, spot dismounted) reads amber/

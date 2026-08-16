@@ -88,8 +88,10 @@ into firmware. Consequences for this track:
   delivered on the next poll while an unchanged assignment keeps 304ing. The poll is the fast
   channel and happens anyway; telemetry is battery-constrained and would make assignment a
   wait-and-hope flow. **Telemetry gains the reverse direction instead**: the device reports the
-  location it is actually running, so the UI can separate ASSIGNED from APPLIED. Firmware must
-  apply config idempotently (it arrives every poll — write NVS only on change). Decide before the flash/print run — after 1 500 units carry it, it
+  location it is actually running, so the UI can separate ASSIGNED from APPLIED. Delivery is DECLARATIVE: the assignment is in every `200` body (an unchanged
+  response is a bare `304`, so it is free), which makes it self-healing — a rebooted, swapped
+  or out-of-range device converges on its next `200` with no ack protocol. Firmware must apply
+  it idempotently: the same value arrives repeatedly, so write NVS only when it differs. Decide before the flash/print run — after 1 500 units carry it, it
   is expensive. The `state` URL key **stays the device code**: the URL is potted, so keying it
   by a reassignable location would leave a reassigned device 401ing or serving a stale spot.
 - **`DeviceSeat` as an explicit seat list is superseded**; segment order derives from the
