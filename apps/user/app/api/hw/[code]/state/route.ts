@@ -6,15 +6,12 @@
  * first API consumer in the platform that is not a browser.
  *
  * Contract: `.claude/tracks/019-hw-api.md` (§Wire contract) — normative for both
- * repos. Two rules from it are load-bearing here and must not be "tidied":
+ * repos. One rule from it is load-bearing here and must not be "tidied":
  *
- *   1. **Never resolve doubt toward FREE.** A wrong OCCUPIED costs one unsold
- *      seat-hour; a wrong FREE puts two parties on one lounger. Anything we cannot
- *      derive confidently is OCCUPIED, and anything we cannot answer at all is a
- *      non-200 so the device shows amber instead of a confident lie.
- *   2. **Uniform 401.** An unknown code and a bad token are indistinguishable to a
- *      caller. The code is printed on a sticker on a public beach, so a
- *      distinguishable 404 would turn the code space into a free oracle.
+ *   **Never resolve doubt toward FREE.** A wrong OCCUPIED costs one unsold
+ *   seat-hour; a wrong FREE puts two parties on one lounger. Anything we cannot
+ *   derive confidently is OCCUPIED, and anything we cannot answer at all is a
+ *   non-200 so the device shows amber instead of a confident lie.
  *
  * The projection itself lives in `./projection.ts` — a Next.js route file may
  * export only the handlers and a fixed set of config fields, and it is the SECOND
@@ -22,20 +19,22 @@
  * grid's `bed-state.ts` is: never a second opinion about what a seat's state is
  * (track 018, determinism contract #1). This file is I/O only.
  *
- * P1 binds devices through `HW_DEVICE_MAP` env config and authenticates with a
- * single shared `HW_TOKEN`; P2 replaces both with the `Device` table and per-device
- * hashed tokens. The wire shape does not change when it does.
+ * The request gate (soft `User-Agent` client filter + env binding, Q9 — NOT auth;
+ * there is no secret on this surface) is shared with the telemetry post through
+ * `../hw-filter`, so the two endpoints cannot drift. P1 binds devices through
+ * `HW_DEVICE_MAP`; P2 replaces that with the `Device`/`DeviceSeat` tables, changing
+ * only `hw-filter.ts`. The wire shape does not change when it does.
  */
 
 import { NextRequest } from 'next/server'
-import { createHash, timingSafeEqual } from 'crypto'
+import { createHash } from 'crypto'
 import prisma from '@repo/data/PrismaCient'
 import { siteDayBounds, siteDayKey } from '@repo/data/site-day'
 import { RESERVATION_CANCELED, RESERVATION_REFUNDED } from '@repo/data/reservation-status'
+import { screenDeviceRequest, unavailable } from '../hw-filter'
 import {
   activeStateForSeat,
   aggregateState,
-  normalizeCode,
   wireStateFor,
   type ReservationRow,
   type WireState,
@@ -46,72 +45,12 @@ export const dynamic = 'force-dynamic'
 /** Server-driven poll cadence. Firmware obeys this and never hardcodes an interval. */
 const POLL_AFTER_SEC = 60
 
-// ─── auth ────────────────────────────────────────────────────────────────────
-
-/**
- * Uniform failure. Every rejection — bad token, unknown code, malformed code —
- * returns this exact response. Do not add a reason field or a distinct status:
- * the whole point is that a caller learns nothing about whether a code exists.
- */
-function unauthorized() {
-  return Response.json({ error: 'Unauthorized' }, { status: 401 })
-}
-
-/** Device cannot be answered honestly → non-200 so the LED goes amber, not green. */
-function unavailable() {
-  return Response.json({ error: 'Unavailable' }, { status: 503 })
-}
-
-/**
- * Constant-time bearer comparison over sha256 digests — digests are fixed-length,
- * so unlike a raw buffer compare this leaks neither content nor token length.
- */
-function bearerMatches(header: string | null, expected: string): boolean {
-  if (!header?.startsWith('Bearer ')) return false
-  const given = createHash('sha256').update(header.slice(7)).digest()
-  const want = createHash('sha256').update(expected).digest()
-  return timingSafeEqual(given, want)
-}
-
-/**
- * P1 binding: `HW_DEVICE_MAP` is JSON `{"<code>": ["<itemId>", …]}`, and **array
- * order is mount order** — index 0 is the leftmost LED segment. That is the same
- * physical fact `DeviceSeat.position` carries in P2 (Q1, decided): the binding is
- * an installation fact, never derived from booking grouping.
- */
-function seatIdsForCode(code: string): string[] | null {
-  const raw = process.env.HW_DEVICE_MAP
-  if (!raw) return null
-
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    return null
-  }
-  if (!parsed || typeof parsed !== 'object') return null
-
-  const entry = (parsed as Record<string, unknown>)[code]
-  if (!Array.isArray(entry)) return null
-
-  const ids = entry.filter((id): id is string => typeof id === 'string' && id.length > 0)
-  return ids.length > 0 ? ids : null
-}
-
 // ─── route ───────────────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest, { params }: { params: { code: string } }) {
-  const token = process.env.HW_TOKEN
-  if (!token) return unavailable()
-
-  if (!bearerMatches(request.headers.get('authorization'), token)) {
-    return unauthorized()
-  }
-
-  const code = normalizeCode(params.code)
-  const seatIds = seatIdsForCode(code)
-  // Unknown code is a 401, NOT a 404 — see the uniform-401 rule at the top.
-  if (!seatIds) return unauthorized()
+  const screened = screenDeviceRequest(request, params.code)
+  if (!screened.ok) return screened.response
+  const { code, seatIds } = screened
 
   try {
     const items = await prisma.inventoryItem.findMany({

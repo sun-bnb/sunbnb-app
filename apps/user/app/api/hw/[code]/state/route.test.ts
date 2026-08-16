@@ -7,7 +7,8 @@
  * more than the happy path and are tested hardest:
  *
  *   - **Never FREE on doubt** — every failure mode must be non-200 or OCCUPIED.
- *   - **Uniform 401** — an unknown code must be byte-identical to a bad token.
+ *   - **The soft client filter** (Q9) — scanner traffic is declined pre-DB, and an
+ *     unset config fails CLOSED rather than opening the endpoint.
  *   - **Binding order** — `seats[]` follows the mount order, not the DB's.
  */
 
@@ -17,7 +18,9 @@ import { NextRequest } from 'next/server'
 import { GET } from './route'
 // Pure helpers live in ./projection — a Next route file may export only the
 // handlers and config fields, which `next build` enforces and tsc/lint do not.
-import { normalizeCode, wireStateFor, aggregateState } from './projection'
+import { wireStateFor, aggregateState } from './projection'
+// Code normalisation is a code-identity concern and lives with the shared filter.
+import { normalizeCode } from '../hw-filter'
 import prisma from '@repo/data/PrismaCient'
 
 const mockItems = vi.mocked(prisma.inventoryItem.findMany)
@@ -25,7 +28,9 @@ const mockReservations = vi.mocked(prisma.reservation.findMany)
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-const TOKEN = 'test-hw-token'
+/** The opaque needle held in config; firmware sends it inside a fuller UA string. */
+const UA_NEEDLE = 'k3n8fq2p'
+const DEVICE_UA = `Sunbnb-Sensor/1 (${UA_NEEDLE})`
 const CODE = '7QK3M2'
 const SEAT_A = 'clxseat0000000000000000001'
 const SEAT_B = 'clxseat0000000000000000002'
@@ -71,7 +76,7 @@ function reservation(opts: {
 
 function makeRequest(code = CODE, headers: Record<string, string> = {}): NextRequest {
   return new NextRequest(`http://localhost:3002/api/hw/${code}/state`, {
-    headers: { authorization: `Bearer ${TOKEN}`, ...headers },
+    headers: { 'user-agent': DEVICE_UA, ...headers },
   })
 }
 
@@ -81,39 +86,52 @@ function makeParams(code = CODE) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  process.env.HW_TOKEN = TOKEN
+  process.env.HW_CLIENT_UA = UA_NEEDLE
   process.env.HW_DEVICE_MAP = JSON.stringify({ [CODE]: [SEAT_A, SEAT_B] })
   mockItems.mockResolvedValue([seat(SEAT_A, 12), seat(SEAT_B, 13)] as never)
   mockReservations.mockResolvedValue([] as never)
 })
 
-// ── Auth: the uniform-401 rule ────────────────────────────────────────────────
+// ── The soft client filter (Q9) ───────────────────────────────────────────────
 
-describe('auth', () => {
-  it('401s with no Authorization header', async () => {
-    const req = new NextRequest(`http://localhost:3002/api/hw/${CODE}/state`)
+describe('client filter', () => {
+  it('declines a request with no User-Agent at all', async () => {
+    const req = new NextRequest(`http://localhost:3002/api/hw/${CODE}/state`, {
+      headers: { 'user-agent': '' },
+    })
     const res = await GET(req, makeParams())
     expect(res.status).toBe(401)
   })
 
-  it('401s on a wrong token', async () => {
-    const res = await GET(makeRequest(CODE, { authorization: 'Bearer nope' }), makeParams())
-    expect(res.status).toBe(401)
+  it('declines generic scanner traffic (curl / a browser UA)', async () => {
+    for (const ua of [
+      'curl/8.4.0',
+      'python-requests/2.31.0',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+    ]) {
+      const res = await GET(makeRequest(CODE, { 'user-agent': ua }), makeParams())
+      expect(res.status).toBe(401)
+    }
   })
 
-  it('401s on a non-Bearer scheme', async () => {
-    const res = await GET(makeRequest(CODE, { authorization: `Basic ${TOKEN}` }), makeParams())
-    expect(res.status).toBe(401)
+  it('CONTAINS-matches, so a firmware version bump still passes', async () => {
+    // The whole point of matching the needle rather than the full UA: /1 → /2 must
+    // not require a server config change on a potted fleet.
+    const res = await GET(
+      makeRequest(CODE, { 'user-agent': `Sunbnb-Sensor/2 (${UA_NEEDLE})` }),
+      makeParams(),
+    )
+    expect(res.status).toBe(200)
   })
 
-  it('an unknown code is INDISTINGUISHABLE from a bad token', async () => {
+  it('an unknown code is declined identically to a failed filter', async () => {
     const unknown = await GET(makeRequest('ZZZZZZ'), makeParams('ZZZZZZ'))
-    const badToken = await GET(makeRequest(CODE, { authorization: 'Bearer nope' }), makeParams())
+    const filtered = await GET(makeRequest(CODE, { 'user-agent': 'curl/8.4.0' }), makeParams())
 
     expect(unknown.status).toBe(401)
-    expect(badToken.status).toBe(401)
-    // Byte-identical bodies: a caller must not learn that a code exists.
-    expect(await unknown.json()).toEqual(await badToken.json())
+    expect(filtered.status).toBe(401)
+    // A uniform, opaque reject — the caller learns nothing from the difference.
+    expect(await unknown.json()).toEqual(await filtered.json())
   })
 
   it('never queries the database for an unknown code', async () => {
@@ -121,8 +139,14 @@ describe('auth', () => {
     expect(mockItems).not.toHaveBeenCalled()
   })
 
-  it('503s when HW_TOKEN is not configured (never 200, never FREE)', async () => {
-    delete process.env.HW_TOKEN
+  it('never queries the database for filtered-out traffic', async () => {
+    // The filter's real job: junk costs a string compare, never a Postgres round-trip.
+    await GET(makeRequest(CODE, { 'user-agent': 'curl/8.4.0' }), makeParams())
+    expect(mockItems).not.toHaveBeenCalled()
+  })
+
+  it('fails CLOSED with 503 when HW_CLIENT_UA is unset (never 200, never FREE)', async () => {
+    delete process.env.HW_CLIENT_UA
     const res = await GET(makeRequest(), makeParams())
     expect(res.status).toBe(503)
   })

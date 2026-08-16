@@ -139,12 +139,3 @@ export function aggregateState(states: WireState[]): WireState {
     'FREE',
   )
 }
-
-/**
- * Crockford base32 normalisation (contract §Identity & credentials): uppercase,
- * `I`/`L` → `1`, `O` → `0`. A human reading a code aloud from a windy beach is the
- * reason the alphabet was chosen; this is the decode half of that promise.
- */
-export function normalizeCode(raw: string): string {
-  return raw.trim().toUpperCase().replace(/[IL]/g, '1').replace(/O/g, '0')
-}
