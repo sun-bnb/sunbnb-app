@@ -157,6 +157,23 @@ describe('deleting a member must not destroy the unit or orphan its siblings', (
     expect(await findUnitlessPlacedSeats(site.id)).toEqual([])
   })
 
+  // Founder's rule (2026-08-16): a BROKEN bed is disabled/blocked, not deleted,
+  // so the unit stands. Deleting every seat is what dismounts the parasol.
+  it('a seat taken OUT OF SERVICE keeps its unit (out of service is not removal)', async () => {
+    const user = await createTestUser()
+    mockUserId = user.id
+    const site = await createTestSite(user.id)
+    const { group, itemA } = await createTestPairedUnit(user.id, site.id, [1, 2])
+
+    await prisma.inventoryItem.update({ where: { id: itemA.id }, data: { status: 'disabled' } })
+
+    const seat = await prisma.inventoryItem.findUniqueOrThrow({ where: { id: itemA.id } })
+    expect(seat.sunbedGroupId).toBe(group.id)
+    expect(await prisma.sunbedGroup.findUnique({ where: { id: group.id } })).not.toBeNull()
+    // Still PLACED — out of service is not the pool, so I1 still applies to it.
+    expect(await findUnitlessPlacedSeats(site.id)).toEqual([])
+  })
+
   it('deleting the LAST member removes the now-empty unit', async () => {
     const user = await createTestUser()
     mockUserId = user.id

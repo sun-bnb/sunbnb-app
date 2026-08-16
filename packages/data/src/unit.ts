@@ -92,10 +92,11 @@ export async function findUnitlessPlacedSeats(siteId?: string) {
  * ends the unit. Callers pass the units they touched; omitting `unitIds`
  * sweeps the whole site.
  *
- * Track 021 P5 will add the guard that a unit with a device bound cannot be
- * deleted at all — at that point this becomes the single place to enforce it,
- * which is why every delete path routes through here rather than inlining a
- * count-and-delete.
+ * An empty unit means the parasol was dismounted (founder, 2026-08-16): a
+ * broken or seasonal bed is disabled/blocked instead of deleted, so it keeps
+ * its row and its unit. Track 021 P5 adds the one guard this needs — a unit
+ * with a DEVICE bound cannot be deleted at all — which is why every delete path
+ * routes through here rather than inlining a count-and-delete.
  */
 export async function pruneEmptyUnits(
   siteId: string,

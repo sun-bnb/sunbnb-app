@@ -10,9 +10,12 @@
  *     units behind forever, invisible in every UI (production carried 2).
  *     They reference nothing and nothing references them.
  *
- * NOTE: once devices bind to units (P5), an empty unit may be legitimate — a
- * shade whose beds are stowed — and pruning must become conditional. Revisit
- * this script then; today an empty unit is only ever residue.
+ * Pruning is the PERMANENT rule, not a stopgap (founder, 2026-08-16): a broken
+ * or seasonal bed is disabled/blocked in the manage UI, which keeps its row and
+ * therefore its unit. Deleting every seat is how a parasol is dismounted, so a
+ * unit with no members means the spot is gone. The only future conditionality
+ * is P5's guard: a unit with a DEVICE bound cannot be deleted at all — unbind
+ * the device first, exactly as you would unscrew it before removing the pole.
  *
  *   npm run backfill:units:local[:dry]
  *   npm run backfill:units:test[:dry]

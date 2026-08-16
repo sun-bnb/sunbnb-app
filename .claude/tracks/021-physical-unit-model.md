@@ -227,11 +227,16 @@ The spine. Every phase either establishes one of these or is guarded by it.
 4. **Q4 — What do today's multi-member groups mean?** Physical (under one shade) or
    commercial (sold together)? If both, the physical unit is a subset of grouping and P3's
    backfill must split them. *P0 answers this empirically.*
-5. **Q5 — Empty units. PARTIALLY DECIDED 2026-08-16:** a unit whose LAST member is deleted is
-   now pruned, matching the founder's expectation that deleting the last seat removes the
-   group. Still open for P5: once a device is bound, deletion must be REFUSED rather than
-   pruned, and a "shade with no beds" (winter stow) needs a representation that is not
-   achieved by deleting every bed.
+5. ✅ **Q5 — Empty units. RESOLVED 2026-08-16 (founder):** a unit with no members is deleted,
+   permanently — **deleting every seat IS dismounting the parasol**. There is no "stow" state
+   to model, because a broken or seasonal bed is disabled/blocked in the manage UI, which
+   keeps its row (verified: `blockBed` writes a blocking reservation with the sticky
+   out-of-service sentinel; it never deletes the seat or changes its status) and therefore
+   keeps its unit and, later, its device binding. Units and parcels are long-lived, created
+   two seats at a time. The ONLY conditionality this leaves for P5 is I5's guard: a unit with
+   a device bound cannot be deleted at all — unbind first, as you would unscrew the device
+   before removing the pole. Pinned by an integration test asserting an out-of-service seat
+   keeps its unit.
 7. **Q7 — Copy: does "paired" survive?** The seat toolbar still shows a "· paired" badge,
    now meaning "this seat's unit has more than one member". It is accurate, but the
    vocabulary is moving to units/pitches, and user-facing copy is founder-reviewed
@@ -242,6 +247,17 @@ The spine. Every phase either establishes one of these or is guarded by it.
 
 ## Log
 
+- **2026-08-16 — Q5 RESOLVED: an empty unit means the parasol is dismounted.** Founder's
+  rule, and it dissolves the "winter stow" problem I had been carrying since the design
+  conversation: a broken or seasonal bed is **disabled/blocked in the manage UI, not
+  deleted**, so it keeps its row and its unit. Verified that this holds in the code —
+  `blockBed` writes a blocking reservation with the sticky `OUT_OF_SERVICE_TO` sentinel and
+  never touches the seat row or its status — which is what makes permanent pruning safe
+  rather than lossy. So today's behaviour is the final behaviour: units are pruned when their
+  last member is DELETED, and the only future conditionality is I5's guard (a unit with a
+  device bound cannot be deleted; unbind first). The hedged "revisit when devices arrive"
+  notes in the script and helper are replaced with the rule, and an integration test pins
+  that an out-of-service seat keeps its unit — the distinction the whole rule rests on.
 - **2026-08-16 — Founder: "there is no indication of a group that does not have seats
   anywhere." Correct, and PRODUCTION carries 2 of them.** Measured read-only: dev 0, test 0,
   **production 2 empty units on one site** — residue of the parcel-delete bug fixed an hour
