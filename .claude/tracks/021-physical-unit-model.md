@@ -222,6 +222,29 @@ The spine. Every phase either establishes one of these or is guarded by it.
   reassigned device either 401s or, worse, serves a stale location. Identity in the URL,
   location in config.
 
+  **The flashing model (decided 2026-08-16).**
+
+  | | Set at | Changes | Carries |
+  |---|---|---|---|
+  | **Device code** (6-char Crockford) | bench, permanent | never | the identity in every `state` and `telemetry` request — the URL key is unchanged from what already ships |
+  | **Customer number** | bench, permanent | bulk reflash on return only | which partner's fleet list it appears in |
+  | **Site · parcel · row · position** | server, via telemetry response | any time, from the UI | the spot whose state it renders |
+
+  The code is deliberately NOT load-bearing on the daily path — once a device has a correct
+  location, resolution runs through that. It earns its place in the three states where things
+  are wrong or have not happened yet: **unconfigured** devices (twenty identical new units
+  need a handle before "assign this one" means anything), **conflict** (two devices claiming
+  one location cannot be told apart BY that location — which is exactly what is broken), and
+  **per-board history** (a repeatedly-failing unit vs a repeatedly-dark spot: warranty, RMA,
+  bad batches). It costs nothing — already printed, already the URL key.
+
+  Accepted trade-off on the permanent customer number: devices are customer-specific stock,
+  so an RMA swap or resale between customers is a **bulk bench reflash**. Fine because they
+  are sold outright; it would be friction under a lease/refurbish model.
+
+  Because location is programmable, a device must stay reachable when its location is WRONG —
+  which is the second reason identity lives in the URL and location lives in config.
+
   **What it needs.**
   - `Device` gains an assigned location + last-seen/battery/RSSI (P5 of [[track:019]] — its
     telemetry stub persists nothing today, so the fleet list has nothing to render; that work

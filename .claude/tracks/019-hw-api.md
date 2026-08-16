@@ -89,6 +89,14 @@ into firmware. Consequences for this track:
   by a reassignable location would leave a reassigned device 401ing or serving a stale spot.
 - **`DeviceSeat` as an explicit seat list is superseded**; segment order derives from the
   unit at the assigned location.
+- **Flashing model decided 2026-08-16.** PERMANENT at the bench: the 6-char device code (the
+  identity in every `state` and `telemetry` request — so **the fielded URL shape does not
+  change at all**) plus the customer number (which partner's fleet it joins; a return means a
+  bulk reflash, accepted). PROGRAMMABLE by the server: site · parcel · row · position. The
+  code stays in the URL rather than the location precisely because a device must remain
+  reachable when its location is WRONG — otherwise it is unfixable exactly when it needs
+  fixing. Net effect on this track: **the two routes keep their shape; only the telemetry
+  RESPONSE gains a body, and `Device` gains assignment + last-values columns.**
 
 **⚠ Q1 SUPERSEDED 2026-08-16 by [[track:021]].** Q1 decided the binding is an explicit **seat**
 list because "the binding is a *physical installation* fact and `SunbedGroup` is a *booking* fact".
