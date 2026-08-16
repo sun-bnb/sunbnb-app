@@ -10,7 +10,6 @@ import {
   createInventoryItem,
   deleteInventoryItem,
   saveInventoryItemSchematicLocation,
-  pairInventoryItems,
 } from '../inventory-actions'
 import { useSunbedEditing } from '../inventory/useSunbedEditing'
 import {
@@ -83,7 +82,6 @@ export default function SchematicView() {
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null)
   const [propertiesOpenId, setPropertiesOpenId] = useState<string | null>(null)
   const [editGroup, setEditGroup] = useState<number | null>(null)
-  const [pairingForId, setPairingForId] = useState<string | null>(null)
 
   const [parcelConfig, setParcelConfig] = useState<ChairConfig>({
     rows: 6,
@@ -406,11 +404,6 @@ export default function SchematicView() {
     await sunbedEditing.deleteSingle(selectedItemId)
   }
 
-  async function handleDepairItem() {
-    if (!selectedItemId) return
-    await sunbedEditing.depair(selectedItemId)
-  }
-
   // ─── Canvas interactions ───────────────────────────────────────────────
 
   async function handleElementDrop(type: string, x: number, y: number) {
@@ -432,7 +425,6 @@ export default function SchematicView() {
   }
 
   async function handleBackgroundClick(x: number, y: number) {
-    if (pairingForId) { setPairingForId(null); return }
     if (editorMode === 'create-parcel') {
       const newGroup = Math.max(0, ...inventory.map(i => i.group || 0)) + 1
       const newConfig: ChairConfig = {
@@ -481,15 +473,6 @@ export default function SchematicView() {
   }
 
   async function handleItemClick(id: string, mods: { metaKey: boolean; ctrlKey: boolean }) {
-    // Pairing mode: second click pairs the two items
-    if (pairingForId && id !== pairingForId) {
-      await pairInventoryItems(pairingForId, id)
-      setPairingForId(null)
-      await refresh()
-      return
-    }
-    setPairingForId(null)
-
     if (mods.metaKey || mods.ctrlKey) {
       setSelectedItemIds(prev =>
         prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id],
@@ -663,7 +646,6 @@ export default function SchematicView() {
             setSelectedItemIds([])
             setSelectedItemId(null)
             setItemPanelOpen(false)
-            setPairingForId(null)
             if (editorMode === 'edit-chair') setEditorMode('none')
           }}
           onDeleteSelected={handleDeleteSelected}
@@ -689,13 +671,8 @@ export default function SchematicView() {
             !!selectedItem?.sunbedGroupId &&
             inventory.filter((i) => i.sunbedGroupId === selectedItem.sunbedGroupId).length > 1
           }
-          pairingMode={!!pairingForId}
           isEditPanelOpen={itemPanelOpen}
           onRotateSingle={handleRotateSingleItem}
-          onTogglePairing={() =>
-            setPairingForId(pairingForId ? null : selectedItemId)
-          }
-          onDepairSingle={handleDepairItem}
           onEditSingle={() => setItemPanelOpen((v) => !v)}
           onDeleteSingle={handleDeleteSingleItem}
           onStartCreate={() => {

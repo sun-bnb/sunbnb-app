@@ -115,8 +115,6 @@ import {
   saveInventoryItemLocation,
   saveInventoryItemSchematicLocation,
   saveInventoryItemProperties,
-  pairInventoryItems,
-  depairInventoryItem,
   deleteItemsByGroup,
 } from '@/app/sites/[id]/inventory-actions'
 
@@ -784,19 +782,6 @@ export const GATED_ACTIONS: GatedAction[] = [
     gate: 'session-owner',
     invoke: (_accessKey?) =>
       saveInventoryItemProperties(ITEM_ID, { category: 'sunbed' }),
-  },
-  {
-    name: 'inventory-actions.pairInventoryItems',
-    kind: 'action',
-    gate: 'session-owner',
-    // pairInventoryItems fetches both items; second item stub uses findUnique returning owned item
-    invoke: (_accessKey?) => pairInventoryItems(ITEM_ID, 'matrix-item-2'),
-  },
-  {
-    name: 'inventory-actions.depairInventoryItem',
-    kind: 'action',
-    gate: 'session-owner',
-    invoke: (_accessKey?) => depairInventoryItem(ITEM_ID),
   },
   {
     name: 'inventory-actions.deleteItemsByGroup',

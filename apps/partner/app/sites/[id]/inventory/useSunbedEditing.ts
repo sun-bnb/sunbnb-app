@@ -3,8 +3,6 @@
 import {
   deleteInventoryItem,
   saveInventoryItemProperties,
-  pairInventoryItems,
-  depairInventoryItem,
 } from '../inventory-actions'
 import { rotateSelection } from './actions'
 
@@ -49,18 +47,10 @@ export function useSunbedEditing(
   /**
    * Pair two inventory items (bidirectional).
    */
-  async function pair(id1: string, id2: string) {
-    await pairInventoryItems(id1, id2)
-    await refresh()
-  }
 
   /**
    * Dissolve the pairing of an inventory item (both directions).
    */
-  async function depair(itemId: string) {
-    await depairInventoryItem(itemId)
-    await refresh()
-  }
 
   /**
    * Delete a single inventory item.
@@ -70,5 +60,5 @@ export function useSunbedEditing(
     await refresh()
   }
 
-  return { rotateSingle, pair, depair, deleteSingle }
+  return { rotateSingle, deleteSingle }
 }

@@ -49,11 +49,8 @@ interface InventoryToolbarProps {
   selectedSingleItemLabel: string | null
   selectedSingleItemParcelColor: string | null
   selectedSingleItemHasPair: boolean
-  pairingMode: boolean
   isEditPanelOpen: boolean
   onRotateSingle: (delta: number) => void
-  onTogglePairing: () => void
-  onDepairSingle: () => void
   onEditSingle: () => void
   onDeleteSingle: () => void
 }
@@ -83,11 +80,8 @@ export default function InventoryToolbar({
   selectedSingleItemLabel,
   selectedSingleItemParcelColor,
   selectedSingleItemHasPair,
-  pairingMode,
   isEditPanelOpen,
   onRotateSingle,
-  onTogglePairing,
-  onDepairSingle,
   onEditSingle,
   onDeleteSingle,
 }: InventoryToolbarProps) {
@@ -328,25 +322,9 @@ export default function InventoryToolbar({
           <span className="text-blue-200">|</span>
         </>
 
-        {selectedSingleItemHasPair
-          ? (
-              <Tooltip title="Depair">
-                <IconButton size="small" onClick={onDepairSingle} sx={{ p: 0.5 }}>
-                  <LinkOffIcon sx={{ fontSize: '1rem' }} />
-                </IconButton>
-              </Tooltip>
-            )
-          : (
-              <Tooltip title={pairingMode ? 'Click another sunbed to pair' : 'Pair with…'}>
-                <IconButton
-                  size="small"
-                  onClick={onTogglePairing}
-                  sx={{ p: 0.5, color: pairingMode ? 'primary.main' : undefined }}
-                >
-                  <LinkIcon sx={{ fontSize: '1rem' }} />
-                </IconButton>
-              </Tooltip>
-            )}
+        {/* Track 021 P2: pair / depair removed. Seats are created as units (a
+            hand-placed unit is a pair), never assembled from loose beds — so a
+            mis-grouped unit is deleted and placed again rather than split. */}
 
         <div className="ml-auto flex items-center gap-1">
           <Tooltip title="Edit sunbed">

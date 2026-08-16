@@ -9,7 +9,6 @@ import {
   saveInventoryItemLocation,
   deleteInventoryItem,
   deleteInventoryItems,
-  pairInventoryItems,
 } from '../inventory-actions'
 import { getSite, getInventoryItems, getItemsByGroups } from '../queries'
 import { useSite } from '@/app/sites/site-context'
@@ -61,7 +60,6 @@ export default function InventoryView() {
   const selectedItem = inventory.find((i) => i.id === selectedItemId)
 
   const [itemPanelOpen, setItemPanelOpen] = useState(false)
-  const [pairingMode, setPairingMode] = useState(false)
   const [selectedPlace, setSelectedPlace] = useState<any>(null)
 
   const refresh = async () => {
@@ -473,12 +471,15 @@ export default function InventoryView() {
     }
 
     if (editorMode === 'create-chair') {
-      createInventoryItem({ siteId }).then(async (result) => {
+      // Track 021 P2: one click places a UNIT (a pair by default), positioned
+      // server-side in the same transaction — the old create-at-origin then
+      // move-into-place round trip left a seat briefly on null island.
+      createInventoryItem({
+        siteId,
+        locationLat: lat.toString(),
+        locationLng: lng.toString(),
+      }).then(async (result) => {
         const newItem = result.item as InventoryItem
-        await saveInventoryItemLocation(newItem.id, {
-          locationLat: lat.toString(),
-          locationLng: lng.toString(),
-        })
         const updatedSite = await getSite(siteId)
         if (updatedSite) setSite(updatedSite)
         setSelectedItemId(newItem.id)
@@ -501,14 +502,6 @@ export default function InventoryView() {
       if (editorMode === 'edit-chair') setEditorMode('none')
       return
     }
-
-    // Pairing mode: second click on a different bed completes the pair
-    if (pairingMode && selectedItem && item.id !== selectedItem.id) {
-      pairInventoryItems(selectedItem.id, item.id).then(() => refresh())
-      setPairingMode(false)
-      return
-    }
-    setPairingMode(false)
 
     // Normal click: select the bed (show quick bar); panel stays closed
     const toggling = selectedItemId === item.id
@@ -560,11 +553,6 @@ export default function InventoryView() {
     setItemPanelOpen(false)
     setEditorMode('none')
     await sunbedEditing.deleteSingle(idToDelete)
-  }
-
-  const handleDepairItem = async () => {
-    if (!selectedItemId) return
-    await sunbedEditing.depair(selectedItemId)
   }
 
   const handleMarkerDragEnd = (item: InventoryItem, e: any) => {
@@ -709,7 +697,6 @@ export default function InventoryView() {
             setSelectedItemIds([])
             setSelectedItemId(null)
             setItemPanelOpen(false)
-            setPairingMode(false)
             if (editorMode === 'edit-chair') setEditorMode('none')
           }}
           onDeleteSelected={handleDeleteSelected}
@@ -735,11 +722,8 @@ export default function InventoryView() {
             !!selectedItem?.sunbedGroupId &&
             inventory.filter((i) => i.sunbedGroupId === selectedItem.sunbedGroupId).length > 1
           }
-          pairingMode={pairingMode}
           isEditPanelOpen={itemPanelOpen}
           onRotateSingle={handleRotateSingleItem}
-          onTogglePairing={() => setPairingMode(prev => !prev)}
-          onDepairSingle={handleDepairItem}
           onEditSingle={() => setItemPanelOpen(prev => !prev)}
           onDeleteSingle={handleDeleteSingleItem}
           onStartCreate={() => {
@@ -771,8 +755,7 @@ export default function InventoryView() {
             selectedItemId={selectedItemId}
             selectedItemIds={selectedItemIds}
             selectedGroupNumber={editGroup}
-            pairingMode={pairingMode}
-            creatingParcel={editorMode === 'create-parcel'}
+              creatingParcel={editorMode === 'create-parcel'}
             parcelSummary={editorMode === 'create-parcel' ? `${parcelConfig.rows} rows × ${parcelConfig.seatsPerRow} seats = ${parcelConfig.rows * parcelConfig.seatsPerRow} sunbeds` : undefined}
             repositionMode={(selectedParcelGroupNumber != null && editorMode === 'none') || editorMode === 'edit-parcel'}
             onMapClick={handleMapClick}

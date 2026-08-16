@@ -19,7 +19,6 @@ interface InventoryMapProps {
   selectedItemId: string | null
   selectedItemIds: string[]
   selectedGroupNumber?: number | null
-  pairingMode: boolean
   creatingParcel?: boolean
   parcelSummary?: string
   repositionMode?: boolean
@@ -170,7 +169,6 @@ function MapContent({
   selectedItemId,
   selectedItemIds,
   selectedGroupNumber,
-  pairingMode,
   onMarkerClick,
   onMarkerDragEnd,
   onSelectionChange,
@@ -183,7 +181,6 @@ function MapContent({
   selectedItemId: string | null
   selectedItemIds: string[]
   selectedGroupNumber?: number | null
-  pairingMode: boolean
   onMarkerClick: (item: InventoryItem, modifiers: { metaKey: boolean; ctrlKey: boolean }) => void
   onMarkerDragEnd: (item: InventoryItem, e: any) => void
   onSelectionChange: (ids: string[]) => void
@@ -527,10 +524,8 @@ function MapContent({
           selectedSet.has(item.id) ||
           (selectedGroupNumber != null && item.group === selectedGroupNumber)
         const itemParcelColor = getParcelColor(item.group)
-        const pairedSelected =
-          pairingMode && selectedInvItem?.sunbedGroupId
-            ? item.id !== selectedInvItem.id && item.sunbedGroupId === selectedInvItem.sunbedGroupId
-            : false
+        // Track 021 P2: pairing mode removed — units are created, not assembled.
+        const pairedSelected = false
 
         const lat = Number(item.locationLat)
         const lng = Number(item.locationLng)
@@ -636,7 +631,6 @@ export default function InventoryMap({
   selectedItemId,
   selectedItemIds,
   selectedGroupNumber,
-  pairingMode,
   creatingParcel,
   parcelSummary,
   repositionMode,
@@ -720,7 +714,6 @@ export default function InventoryMap({
             selectedItemId={selectedItemId}
             selectedItemIds={selectedItemIds}
             selectedGroupNumber={selectedGroupNumber}
-            pairingMode={pairingMode}
             onMarkerClick={onMarkerClick}
             onMarkerDragEnd={onMarkerDragEnd}
             onSelectionChange={onSelectionChange}

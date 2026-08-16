@@ -6,10 +6,34 @@ import { requireSiteOwner } from '@/lib/auth-helpers'
 import { isValidItemStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 import { recomputeSeatLabels } from '@repo/data/seat-label-db'
+import { generateChairs } from './inventory/chair-util'
+
+/** Founder decision (track 021 P2): a hand-placed unit is a PAIR by default. */
+const DEFAULT_UNIT_MEMBERS = 2
+/** Same intra-pair spacing the parcel generator uses for a paired row. */
+const DEFAULT_INTRA_PAIR_GAP = 0.4
 
 // ─── Create Inventory Item ──────────────────────────────────────────────────
 
-export async function createInventoryItem(inventoryItem: { siteId: string }) {
+/**
+ * Create a seating UNIT (track 021 P2, founder decision 2026-08-16).
+ *
+ * Seats are never created loose: one click places a unit of TWO side-by-side
+ * beds sharing a `SunbedGroup`, matching how a parcel pair is built (the offset
+ * comes from the same `generateChairGrid` a parcel uses, so a hand-placed unit
+ * and a generated one are geometrically identical). This is what replaced the
+ * old pair/unpair actions — units are created, never assembled.
+ *
+ * `locationLat`/`locationLng` are optional: without them the seats land on the
+ * sentinel origin and the caller places them, which is the pre-existing
+ * create-then-place flow the schematic editor still uses.
+ */
+export async function createInventoryItem(inventoryItem: {
+  siteId: string
+  locationLat?: string
+  locationLng?: string
+  members?: number
+}) {
   const { session, error } = await requireSiteOwner(inventoryItem.siteId)
   if (error) return { status: 'error', errors: [error] }
 
@@ -26,23 +50,42 @@ export async function createInventoryItem(inventoryItem: { siteId: string }) {
       orderBy: { number: 'desc' },
       select: { number: true },
     })
-    // Track 021 P2 (I1): every PLACED seat belongs to exactly one unit. A lone
-    // seat is a unit of one, not an ungrouped seat — the unit is what a device
-    // mounts to and what carries the persisted label number, so it must exist
-    // from the moment the seat does. (Only pool/unplaced seats hold a null
-    // group.) Minted inside the same transaction as the seat: a seat that
-    // committed without its unit would be an I1 violation nothing repairs.
+    // Track 021 P2 (I1): every PLACED seat belongs to exactly one unit, minted
+    // in the SAME transaction as the seats — a seat that committed without its
+    // unit would be an I1 violation nothing repairs.
     const unit = await tx.sunbedGroup.create({ data: { siteId: inventoryItem.siteId } })
-    return tx.inventoryItem.create({
-      data: {
-        number: (lastItem?.number || 0) + 1,
+
+    const baseLat = inventoryItem.locationLat ?? '0'
+    const baseLng = inventoryItem.locationLng ?? '0'
+    const memberCount = Math.max(1, inventoryItem.members ?? DEFAULT_UNIT_MEMBERS)
+    const placed = baseLat !== '0' || baseLng !== '0'
+
+    // Offsets from the SAME generator a parcel uses, so a hand-placed unit and
+    // a generated pair are geometrically identical. Unplaced seats (the
+    // create-then-place flow) all sit on the origin and are positioned later.
+    const offsets = placed
+      ? generateChairs({
+          baseLat: Number(baseLat), baseLng: Number(baseLng),
+          group: 0, rotation: 0, rows: 1, seatsPerRow: memberCount,
+          horizontalGap: 0, verticalGap: 0, intraPairGap: DEFAULT_INTRA_PAIR_GAP,
+          pairSeats: memberCount > 1,
+        } as never).map((c) => ({ locationLat: c.locationLat, locationLng: c.locationLng }))
+      : Array.from({ length: memberCount }, () => ({ locationLat: '0', locationLng: '0' }))
+
+    const nextNumber = (lastItem?.number || 0) + 1
+    await tx.inventoryItem.createMany({
+      data: offsets.map((offset, i) => ({
+        number: nextNumber + i,
         siteId: inventoryItem.siteId,
         userId: session.user.id,
         status: 'new',
-        locationLat: '0',
-        locationLng: '0',
+        locationLat: offset.locationLat,
+        locationLng: offset.locationLng,
         sunbedGroupId: unit.id,
-      },
+      })),
+    })
+    return tx.inventoryItem.findFirstOrThrow({
+      where: { siteId: inventoryItem.siteId, number: nextNumber },
     })
   })
 
@@ -344,110 +387,9 @@ export async function saveInventoryItemProperties(
   return { status: 'ok' }
 }
 
-// ─── Pair / Depair Items ─────────────────────────────────────────────────────
-
-export async function pairInventoryItems(id1: string, id2: string) {
-  const session = await auth()
-  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
-
-  const [item1, item2] = await Promise.all([
-    prisma.inventoryItem.findUnique({ where: { id: id1 }, select: { siteId: true, site: { select: { userId: true } } } }),
-    prisma.inventoryItem.findUnique({ where: { id: id2 }, select: { siteId: true } }),
-  ])
-  if (!item1 || item1.site.userId !== session.user.id) return { status: 'error', errors: ['Not authorized'] }
-  if (!item2 || item2.siteId !== item1.siteId) return { status: 'error', errors: ['Items must belong to the same site'] }
-
-  // Fetch current sunbedGroupIds for both items so we can clean up prior groups
-  const [prior1, prior2] = await Promise.all([
-    prisma.inventoryItem.findUnique({ where: { id: id1 }, select: { sunbedGroupId: true } }),
-    prisma.inventoryItem.findUnique({ where: { id: id2 }, select: { sunbedGroupId: true } }),
-  ])
-  const priorGroupIds = new Set(
-    [prior1?.sunbedGroupId, prior2?.sunbedGroupId].filter(Boolean) as string[]
-  )
-
-  await prisma.$transaction([
-    // Detach both items from any prior SunbedGroups
-    ...(priorGroupIds.size > 0
-      ? [prisma.inventoryItem.updateMany({
-          where: { sunbedGroupId: { in: [...priorGroupIds] } },
-          data: { sunbedGroupId: null },
-        })]
-      : []),
-    // Track 021 P1: no `pairId` write — the SunbedGroup created below IS the
-    // pairing. (Existing values are left in place; the column drops later.)
-  ])
-
-  // Delete prior groups now empty (outside transaction so FK is committed first)
-  for (const gid of priorGroupIds) {
-    const cnt = await prisma.inventoryItem.count({ where: { sunbedGroupId: gid } })
-    if (cnt === 0) await prisma.sunbedGroup.delete({ where: { id: gid } })
-  }
-
-  // Create new 2-member SunbedGroup and assign both items to it
-  const newGroup = await prisma.sunbedGroup.create({
-    data: {
-      siteId: item1.siteId,
-      items: { connect: [{ id: id1 }, { id: id2 }] },
-    },
-  })
-  await prisma.inventoryItem.updateMany({
-    where: { id: { in: [id1, id2] } },
-    data: { sunbedGroupId: newGroup.id },
-  })
-
-  await recomputeSeatLabels(item1.siteId)
-  revalidatePath('/sites')
-  return { status: 'ok' }
-}
-
-export async function depairInventoryItem(id: string) {
-  const session = await auth()
-  if (!session?.user) return { status: 'error', errors: ['Not authenticated'] }
-
-  const item = await prisma.inventoryItem.findUnique({
-    where: { id },
-    select: { siteId: true, pairId: true, sunbedGroupId: true, site: { select: { userId: true } } },
-  })
-  if (!item || item.site.userId !== session.user.id) return { status: 'error', errors: ['Not authorized'] }
-
-  // Clear sunbedGroupId on all members of this item's group, then delete the group
-  if (item.sunbedGroupId) {
-    await prisma.inventoryItem.updateMany({
-      where: { sunbedGroupId: item.sunbedGroupId },
-      data: { sunbedGroupId: null },
-    })
-    const remaining = await prisma.inventoryItem.count({
-      where: { sunbedGroupId: item.sunbedGroupId },
-    })
-    if (remaining === 0) {
-      await prisma.sunbedGroup.delete({ where: { id: item.sunbedGroupId } })
-    }
-  }
-
-  // Clear the legacy pairId mirror in BOTH directions. Bulk-generated pairs are
-  // one-directional (only the primary holds pairId; the secondary is linked
-  // solely via the pairedBy reverse-relation). Clearing only `id` and its
-  // forward `pairId` target would leave the primary still pointing at a depaired
-  // secondary, so the pair (and the pairedBy-driven UI state) would survive.
-  // Clear the item, whatever it points to, and whatever points to it.
-  await prisma.inventoryItem.updateMany({
-    where: {
-      OR: [
-        { id },
-        { pairId: id },
-        ...(item.pairId ? [{ id: item.pairId }] : []),
-      ],
-    },
-    data: { pairId: null },
-  })
-
-  await recomputeSeatLabels(item.siteId)
-  revalidatePath('/sites')
-  return { status: 'ok' }
-}
-
-// ─── Delete Parcel (all items in a group) ───────────────────────────────────
+// Track 021 P2: pairInventoryItems / depairInventoryItem removed. Seats are
+// created as UNITS (a hand-placed unit is a pair) and never assembled from or
+// split into loose beds — a mis-grouped unit is deleted and placed again.
 
 export async function deleteItemsByGroup(siteId: string, group: number) {
   const { error } = await requireSiteOwner(siteId)

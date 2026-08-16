@@ -159,7 +159,7 @@ The spine. Every phase either establishes one of these or is guarded by it.
   `.claude/rules/migrations.md`. Doing this FIRST means every later phase works against one
   representation instead of maintaining a dual-write.
 
-- **▶ P2 — Universal units (I1) — WRITE PATHS + BACKFILL DONE 2026-08-16; the pair/depair removal remains. Founder decisions 2026-08-16:** seats are **never
+- **✅ P2 — Universal units (I1) — DONE 2026-08-16. Founder decisions 2026-08-16:** seats are **never
   ungrouped** — a parcel is created as groups-of-groups, and "add a seat" creates a **unit of
   two by default** rather than a lone bed. Manual **pair/unpair is obsolete** and its actions
   (`pairInventoryItems`, `depairInventoryItem`) plus their UI are removed here.
@@ -230,12 +230,33 @@ The spine. Every phase either establishes one of these or is guarded by it.
 5. **Q5 — Empty units.** A unit whose beds are all removed (winter) should persist — that is
    the point of the model — but it needs a representation in the editor so it is not
    mistaken for a bug, and a rule for when it may be garbage-collected.
+7. **Q7 — Copy: does "paired" survive?** The seat toolbar still shows a "· paired" badge,
+   now meaning "this seat's unit has more than one member". It is accurate, but the
+   vocabulary is moving to units/pitches, and user-facing copy is founder-reviewed
+   (`.claude/rules/deploys.md`). Rename, keep, or drop.
 6. **Q6 — Site deletion.** With I5's Restrict, deleting a site with bound devices fails.
    That is arguably correct (hardware is installed there) but needs an explicit operator
    path: unbind the fleet first.
 
 ## Log
 
+- **2026-08-16 — P2 COMPLETE: units are created, never assembled.** Founder answered the two
+  forks: a single add places a **unit of two side by side**, and there is **no split
+  affordance** — a mis-grouped unit is deleted and placed again. Implemented:
+  `createInventoryItem` now creates a placed 2-seat unit in ONE transaction, taking its
+  offsets from the same `generateChairGrid` a parcel uses so a hand-placed unit and a
+  generated pair are geometrically identical (it also removed the old create-at-origin →
+  move-into-place round trip, which briefly parked every new seat on null island).
+  `pairInventoryItems`/`depairInventoryItem` deleted along with their hook helpers, both
+  editors' pairing modes, the toolbar controls, and their registry entries — 105 lines of
+  action code plus the UI. The "· paired" status BADGE was kept deliberately: it now reads
+  "this seat's unit has more than one member", which is still true and useful — **but the
+  word belongs to the retired vocabulary, so it is a copy question for the founder** (see
+  Q7). Browser-verified on a throwaway site: one click → 2 seats / 1 unit / none on the
+  origin, pair+depair controls absent, no page errors; site deleted afterwards. The
+  concurrency guard was updated, not weakened — five parallel creates now add ten seats and
+  the property under test (distinct, gapless numbers under the advisory lock) is unchanged.
+  Gates: partner 1992u + 228i, tsc + lint clean.
 - **2026-08-16 — P2 first half shipped: I1 now holds by construction, not by luck.** The real
   gap was narrower than "seats can be ungrouped": pairing only groups seats when `pairSeats`
   is ON, so a parcel created with pairing OFF produced an entire parcel of unitless seats.

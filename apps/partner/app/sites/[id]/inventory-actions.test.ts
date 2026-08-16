@@ -19,8 +19,6 @@ import {
   saveInventoryItemLocation,
   saveInventoryItemProperties,
   deleteItemsByGroup,
-  pairInventoryItems,
-  depairInventoryItem,
 } from './inventory-actions'
 import { auth } from '@/app/auth'
 import { requireSiteOwner } from '@/lib/auth-helpers'
@@ -58,27 +56,31 @@ describe('createInventoryItem', () => {
     authorizeOwner()
     vi.mocked(prisma.inventoryItem.findFirst).mockResolvedValue({ number: 5 } as any)
     vi.mocked(prisma.sunbedGroup.create).mockResolvedValue({ id: 'unit-1' } as any)
-    vi.mocked(prisma.inventoryItem.create).mockResolvedValue({ id: 'item-new', number: 6 } as any)
+    vi.mocked(prisma.inventoryItem.createMany).mockResolvedValue({ count: 2 } as any)
+    vi.mocked(prisma.inventoryItem.findFirstOrThrow).mockResolvedValue({ id: 'item-new', number: 6 } as any)
 
     const res = await createInventoryItem({ siteId: SITE_ID })
     expect(res.status).toBe('ok')
 
-    const createCall = vi.mocked(prisma.inventoryItem.create).mock.calls[0][0]
-    expect(createCall.data.number).toBe(6)
-    expect(createCall.data.status).toBe('new')
-    expect(createCall.data.locationLat).toBe('0')
-    expect(createCall.data.locationLng).toBe('0')
+    const rows = vi.mocked(prisma.inventoryItem.createMany).mock.calls[0]![0]!.data as any[]
+    expect(rows[0].number).toBe(6)
+    expect(rows[0].status).toBe('new')
+    // No coordinates supplied → seats wait on the origin for the caller to place
+    // them (the create-then-place flow the schematic editor still uses).
+    expect(rows[0].locationLat).toBe('0')
+    expect(rows[0].locationLng).toBe('0')
   })
 
   it('starts at 1 when no existing items', async () => {
     authorizeOwner()
     vi.mocked(prisma.inventoryItem.findFirst).mockResolvedValue(null)
     vi.mocked(prisma.sunbedGroup.create).mockResolvedValue({ id: 'unit-1' } as any)
-    vi.mocked(prisma.inventoryItem.create).mockResolvedValue({ id: 'item-1' } as any)
+    vi.mocked(prisma.inventoryItem.createMany).mockResolvedValue({ count: 2 } as any)
+    vi.mocked(prisma.inventoryItem.findFirstOrThrow).mockResolvedValue({ id: 'item-1' } as any)
 
     await createInventoryItem({ siteId: SITE_ID })
-    const createCall = vi.mocked(prisma.inventoryItem.create).mock.calls[0][0]
-    expect(createCall.data.number).toBe(1)
+    const rows = vi.mocked(prisma.inventoryItem.createMany).mock.calls[0]![0]!.data as any[]
+    expect(rows[0].number).toBe(1)
   })
 
   // Track 021 P2 (I1): a placed seat is never unitless. The unit is what a
@@ -89,27 +91,32 @@ describe('createInventoryItem', () => {
     authorizeOwner()
     vi.mocked(prisma.inventoryItem.findFirst).mockResolvedValue(null)
     vi.mocked(prisma.sunbedGroup.create).mockResolvedValue({ id: 'unit-1' } as any)
-    vi.mocked(prisma.inventoryItem.create).mockResolvedValue({ id: 'item-1' } as any)
+    vi.mocked(prisma.inventoryItem.createMany).mockResolvedValue({ count: 2 } as any)
+    vi.mocked(prisma.inventoryItem.findFirstOrThrow).mockResolvedValue({ id: 'item-1' } as any)
 
     await createInventoryItem({ siteId: SITE_ID })
 
     expect(vi.mocked(prisma.sunbedGroup.create)).toHaveBeenCalledWith({
       data: { siteId: SITE_ID },
     })
-    const createCall = vi.mocked(prisma.inventoryItem.create).mock.calls[0][0]
-    expect(createCall.data.sunbedGroupId).toBe('unit-1')
+    // Founder decision: a hand-placed unit is a PAIR — two seats, ONE unit.
+    const rows = vi.mocked(prisma.inventoryItem.createMany).mock.calls[0]![0]!.data as any[]
+    expect(rows).toHaveLength(2)
+    expect(rows.every((r) => r.sunbedGroupId === 'unit-1')).toBe(true)
+    expect(rows.map((r) => r.number)).toEqual([1, 2])
   })
 
   it('sets userId from session on created item', async () => {
     authorizeOwner()
     vi.mocked(prisma.inventoryItem.findFirst).mockResolvedValue(null)
     vi.mocked(prisma.sunbedGroup.create).mockResolvedValue({ id: 'unit-1' } as any)
-    vi.mocked(prisma.inventoryItem.create).mockResolvedValue({ id: 'item-1' } as any)
+    vi.mocked(prisma.inventoryItem.createMany).mockResolvedValue({ count: 2 } as any)
+    vi.mocked(prisma.inventoryItem.findFirstOrThrow).mockResolvedValue({ id: 'item-1' } as any)
 
     await createInventoryItem({ siteId: SITE_ID })
-    const createCall = vi.mocked(prisma.inventoryItem.create).mock.calls[0][0]
-    expect(createCall.data.userId).toBe(OWNER_ID)
-    expect(createCall.data.siteId).toBe(SITE_ID)
+    const rows = vi.mocked(prisma.inventoryItem.createMany).mock.calls[0]![0]!.data as any[]
+    expect(rows.every((r) => r.userId === OWNER_ID)).toBe(true)
+    expect(rows.every((r) => r.siteId === SITE_ID)).toBe(true)
   })
 })
 
@@ -413,142 +420,7 @@ describe('saveInventoryItemProperties', () => {
   })
 })
 
-// ─── pairInventoryItems ────────────────────────────────────────────────────
 
-describe('pairInventoryItems', () => {
-  it('rejects unauthenticated', async () => {
-    const res = await pairInventoryItems('item-1', 'item-2')
-    expect(res.status).toBe('error')
-    expect(res.errors).toContain('Not authenticated')
-  })
-
-  it('creates a SunbedGroup and writes NO pairId (track 021 P1)', async () => {
-    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
-    vi.mocked(prisma.inventoryItem.findUnique)
-      .mockResolvedValueOnce({ siteId: SITE_ID, site: { userId: OWNER_ID } } as any) // item1
-      .mockResolvedValueOnce({ siteId: SITE_ID } as any) // item2
-      // pre-fetch sunbedGroupId for both items
-      .mockResolvedValueOnce({ sunbedGroupId: null } as any) // prior1
-      .mockResolvedValueOnce({ sunbedGroupId: null } as any) // prior2
-    vi.mocked(prisma.inventoryItem.updateMany).mockResolvedValue({ count: 2 } as any)
-    vi.mocked(prisma.sunbedGroup.create).mockResolvedValue({ id: 'group-new' } as any)
-
-    const res = await pairInventoryItems('item-1', 'item-2')
-    expect(res.status).toBe('ok')
-
-    // The SunbedGroup IS the pairing now — nothing writes the legacy column.
-    // (Regression guard for the P1 retirement: a reintroduced dual-write here
-    // would quietly resurrect the second representation this track removes.)
-    expect(vi.mocked(prisma.inventoryItem.update)).not.toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ pairId: expect.anything() }) })
-    )
-
-    // SunbedGroup created with siteId
-    expect(vi.mocked(prisma.sunbedGroup.create)).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ siteId: SITE_ID }),
-      })
-    )
-  })
-
-  it('detaches both items from prior groups before creating new group', async () => {
-    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
-    const OLD_GROUP = 'old-group-1'
-    vi.mocked(prisma.inventoryItem.findUnique)
-      .mockResolvedValueOnce({ siteId: SITE_ID, site: { userId: OWNER_ID } } as any)
-      .mockResolvedValueOnce({ siteId: SITE_ID } as any)
-      .mockResolvedValueOnce({ sunbedGroupId: OLD_GROUP } as any)
-      .mockResolvedValueOnce({ sunbedGroupId: null } as any)
-    vi.mocked(prisma.inventoryItem.count).mockResolvedValue(0) // old group empty after detach
-    vi.mocked(prisma.inventoryItem.updateMany).mockResolvedValue({ count: 1 } as any)
-    vi.mocked(prisma.sunbedGroup.create).mockResolvedValue({ id: 'group-new' } as any)
-    vi.mocked(prisma.sunbedGroup.delete).mockResolvedValue({} as any)
-
-    const res = await pairInventoryItems('item-1', 'item-2')
-    expect(res.status).toBe('ok')
-
-    // Old group should be deleted
-    expect(vi.mocked(prisma.sunbedGroup.delete)).toHaveBeenCalledWith({ where: { id: OLD_GROUP } })
-  })
-})
-
-// ─── depairInventoryItem ──────────────────────────────────────────────────
-
-describe('depairInventoryItem', () => {
-  it('rejects unauthenticated', async () => {
-    const res = await depairInventoryItem('item-1')
-    expect(res.status).toBe('error')
-    expect(res.errors).toContain('Not authenticated')
-  })
-
-  it('clears pairId on both items and deletes the SunbedGroup', async () => {
-    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
-    const GROUP_ID = 'group-1'
-    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
-      pairId: 'item-2',
-      sunbedGroupId: GROUP_ID,
-      site: { userId: OWNER_ID },
-    } as any)
-    vi.mocked(prisma.inventoryItem.updateMany).mockResolvedValue({ count: 2 } as any)
-    vi.mocked(prisma.inventoryItem.count).mockResolvedValue(0) // group empty after clearing
-    vi.mocked(prisma.sunbedGroup.delete).mockResolvedValue({} as any)
-    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
-
-    const res = await depairInventoryItem('item-1')
-    expect(res.status).toBe('ok')
-
-    // Clears sunbedGroupId on all group members
-    expect(vi.mocked(prisma.inventoryItem.updateMany)).toHaveBeenCalledWith({
-      where: { sunbedGroupId: GROUP_ID },
-      data: { sunbedGroupId: null },
-    })
-    // Deletes the empty group
-    expect(vi.mocked(prisma.sunbedGroup.delete)).toHaveBeenCalledWith({ where: { id: GROUP_ID } })
-
-    // Clears pairId in both directions (item, its forward target, and anything pointing at it)
-    expect(vi.mocked(prisma.inventoryItem.updateMany)).toHaveBeenCalledWith({
-      where: { OR: [{ id: 'item-1' }, { pairId: 'item-1' }, { id: 'item-2' }] },
-      data: { pairId: null },
-    })
-  })
-
-  it('clears the pair when depairing the SECONDARY bed (pairId null, linked via pairedBy)', async () => {
-    // One-directional pairs (bulk-generated) hold pairId only on the primary.
-    // Depairing the secondary must still clear the primary's pairId via the
-    // reverse `{ pairId: <secondary> }` branch — otherwise the pair survives.
-    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
-    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
-      pairId: null,
-      sunbedGroupId: 'group-9',
-      site: { userId: OWNER_ID },
-    } as any)
-    vi.mocked(prisma.inventoryItem.updateMany).mockResolvedValue({ count: 1 } as any)
-    vi.mocked(prisma.inventoryItem.count).mockResolvedValue(0)
-    vi.mocked(prisma.sunbedGroup.delete).mockResolvedValue({} as any)
-
-    const res = await depairInventoryItem('secondary-id')
-    expect(res.status).toBe('ok')
-    // No forward target (pairId null), but the reverse pointer is cleared
-    expect(vi.mocked(prisma.inventoryItem.updateMany)).toHaveBeenCalledWith({
-      where: { OR: [{ id: 'secondary-id' }, { pairId: 'secondary-id' }] },
-      data: { pairId: null },
-    })
-  })
-
-  it('does not crash when item has no SunbedGroup (legacy item)', async () => {
-    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
-    vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
-      pairId: 'item-2',
-      sunbedGroupId: null,
-      site: { userId: OWNER_ID },
-    } as any)
-    vi.mocked(prisma.inventoryItem.updateMany).mockResolvedValue({ count: 2 } as any)
-
-    const res = await depairInventoryItem('item-1')
-    expect(res.status).toBe('ok')
-    expect(vi.mocked(prisma.sunbedGroup.delete)).not.toHaveBeenCalled()
-  })
-})
 
 // ─── deleteItemsByGroup ─────────────────────────────────────────────────────
 

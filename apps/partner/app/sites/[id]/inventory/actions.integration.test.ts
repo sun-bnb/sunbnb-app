@@ -189,7 +189,11 @@ describe('createInventoryItem — concurrent number minting (real DB)', () => {
       })
     ).map((i) => i.number)
 
-    expect(numbers).toEqual([7, 8, 9, 10, 11, 12])
+    // Track 021 P2: each create places a UNIT of two, so five concurrent
+    // creates add TEN seats. The property under test is unchanged and is the
+    // reason this test exists: numbers stay distinct and gapless under real
+    // concurrency (the advisory lock), never silently duplicated.
+    expect(numbers).toEqual([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
     expect(new Set(numbers).size).toBe(numbers.length)
   })
 })

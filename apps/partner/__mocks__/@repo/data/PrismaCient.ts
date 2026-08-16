@@ -28,7 +28,9 @@ const prisma = {
   },
   inventoryItem: {
     findUnique: vi.fn(),
+    findUniqueOrThrow: vi.fn(),
     findFirst: vi.fn(),
+    findFirstOrThrow: vi.fn(),
     findMany: vi.fn(),
     create: vi.fn(),
     createMany: vi.fn(),
