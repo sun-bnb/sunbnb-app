@@ -1120,6 +1120,21 @@ model AdminUser {
   createdAt DateTime @default(now())
 }
 
+/// A flag decided PER CUSTOMER (track 021 P5). Global flags answer "does this
+/// feature exist yet"; this answers "does THIS operator have it" — which is the
+/// real question for something like devices, where one customer has hardware and
+/// the rest do not. Beats the global row, loses to an env override and to sudo.
+model AccountFeatureFlag {
+  accountId String   @map("account_id")
+  name      String
+  enabled   Boolean
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@id([accountId, name])
+  @@map("account_feature_flag")
+}
+
 model FeatureFlag {
   name        String   @id
   description String

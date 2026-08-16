@@ -8,12 +8,14 @@ function SourceBadge({ source }: { source: FlagAdminRow['source'] }) {
   const styles: Record<FlagAdminRow['source'], string> = {
     sudo: 'bg-purple-500/20 text-purple-300',
     env: 'bg-amber-500/20 text-amber-300',
+    account: 'bg-blue-500/20 text-blue-300',
     db: 'bg-green-500/20 text-green-300',
     default: 'bg-gray-500/20 text-gray-300',
   }
   const label: Record<FlagAdminRow['source'], string> = {
     sudo: 'sudo override',
     env: 'env var',
+    account: 'per customer',
     db: 'database',
     default: 'env default',
   }

@@ -131,6 +131,42 @@ describe('resolveFlag — precedence', () => {
     ).toEqual({ name: 'restaurants', enabled: true, source: 'env' })
   })
 
+  // Track 021 P5: a per-CUSTOMER decision is more specific than a platform-wide
+  // one — one operator can have devices while the rest do not, which the global
+  // switch cannot express.
+  it('account override wins over the global db row', () => {
+    expect(
+      resolveFlag(def, { accountOverride: true, dbOverride: false, environment: 'production' }),
+    ).toEqual({ name: 'restaurants', enabled: true, source: 'account' })
+  })
+
+  it('account override can also turn a globally-enabled flag OFF for one customer', () => {
+    expect(
+      resolveFlag(def, { accountOverride: false, dbOverride: true, environment: 'production' }),
+    ).toEqual({ name: 'restaurants', enabled: false, source: 'account' })
+  })
+
+  it('env override still beats a per-customer row', () => {
+    process.env.FF_RESTAURANTS = 'false'
+    expect(
+      resolveFlag(def, { accountOverride: true, environment: 'production' }),
+    ).toEqual({ name: 'restaurants', enabled: false, source: 'env' })
+  })
+
+  it('sudo still beats a per-customer OFF', () => {
+    expect(resolveFlag(def, { isSudo: true, accountOverride: false })).toEqual({
+      name: 'restaurants',
+      enabled: true,
+      source: 'sudo',
+    })
+  })
+
+  it('no account row means no opinion — the global row still decides', () => {
+    expect(
+      resolveFlag(def, { accountOverride: undefined, dbOverride: true, environment: 'production' }),
+    ).toEqual({ name: 'restaurants', enabled: true, source: 'db' })
+  })
+
   it('db override wins over default', () => {
     expect(
       resolveFlag(def, { dbOverride: true, environment: 'production' }),

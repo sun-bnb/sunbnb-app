@@ -7,19 +7,21 @@ import {
 import type { ClientFlagMap } from '@repo/ui/flags'
 import { auth } from './auth'
 
-async function isSudoUser(): Promise<boolean> {
+async function sessionContext(): Promise<{ isSudo: boolean; accountId?: string }> {
   const session = await auth()
   const userId = session?.user?.id
-  if (!userId) return false
+  if (!userId) return { isSudo: false }
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { sudo: true },
   })
-  return !!user?.sudo
+  // Track 021 P5: flags resolve PER CUSTOMER here — one operator can have
+  // devices while the rest do not, which a platform-wide switch cannot express.
+  return { isSudo: !!user?.sudo, accountId: userId }
 }
 
 export async function getFlags(): Promise<FlagStates> {
-  return getFlagStates({ isSudo: await isSudoUser() })
+  return getFlagStates(await sessionContext())
 }
 
 export async function isFlagEnabled(name: FlagName): Promise<boolean> {

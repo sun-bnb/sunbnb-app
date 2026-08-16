@@ -9,9 +9,12 @@
  *      enable per call via `getFlagStates({ isSudo: true })`).
  *   2. Environment variable override — `FF_<UPPER_SNAKE_NAME>=true|false`.
  *      Useful for forcing a state in a specific deployment without a DB row.
- *   3. Database row in `feature_flag` table — toggled at runtime via the
+ *   3. PER-CUSTOMER row in `account_feature_flag` — the answer to "does THIS
+ *      operator have it", set in the admin app. Beats the global row, because a
+ *      customer-specific decision is more specific than a platform-wide one.
+ *   4. Database row in `feature_flag` table — toggled at runtime via the
  *      admin app.
- *   4. Static default for the current environment (production/test/preview/
+ *   5. Static default for the current environment (production/test/preview/
  *      development), determined from `VERCEL_ENV` (with `NODE_ENV` fallback).
  *
  * Adding a flag: append an entry to `FLAG_REGISTRY`. That's it. The admin UI
@@ -44,6 +47,17 @@ export interface FlagDefinition {
  * `new-checkout-flow` → `FF_NEW_CHECKOUT_FLOW`.
  */
 export const FLAG_REGISTRY = {
+  devices: {
+    name: 'devices',
+    description:
+      'Sunbed indicator devices (partner /devices fleet list, location assignment). Per-customer: enable for operators who actually have hardware.',
+    defaults: {
+      development: true,
+      preview: true,
+      test: false,
+      production: false,
+    },
+  },
   restaurants: {
     name: 'restaurants',
     description:
@@ -63,7 +77,7 @@ export type FlagName = keyof typeof FLAG_REGISTRY
  * Possible reasons a flag resolved to its current value. Useful for the
  * admin UI to show why a flag is on/off.
  */
-export type FlagSource = 'sudo' | 'env' | 'db' | 'default'
+export type FlagSource = 'sudo' | 'env' | 'account' | 'db' | 'default'
 
 export interface FlagState {
   name: FlagName
@@ -114,12 +128,13 @@ export function defaultForEnvironment(
 export function resolveFlag(
   def: FlagDefinition,
   options: {
+    accountOverride?: boolean
     dbOverride?: boolean
     isSudo?: boolean
     environment?: FlagEnvironment
   } = {},
 ): FlagState {
-  const { dbOverride, isSudo, environment } = options
+  const { accountOverride, dbOverride, isSudo, environment } = options
 
   if (isSudo) {
     return { name: def.name as FlagName, enabled: true, source: 'sudo' }
@@ -127,6 +142,10 @@ export function resolveFlag(
   const envOverride = readEnvOverride(def.name)
   if (envOverride !== undefined) {
     return { name: def.name as FlagName, enabled: envOverride, source: 'env' }
+  }
+  // A per-customer decision is more specific than a platform-wide one.
+  if (accountOverride !== undefined) {
+    return { name: def.name as FlagName, enabled: accountOverride, source: 'account' }
   }
   if (dbOverride !== undefined) {
     return { name: def.name as FlagName, enabled: dbOverride, source: 'db' }
@@ -159,16 +178,33 @@ async function loadDbOverrides(): Promise<Map<string, boolean>> {
   }
 }
 
+/** Per-customer overrides. Same tolerance as the global loader: a missing table
+ *  (a DB without this migration) falls back to defaults rather than crashing. */
+async function loadAccountOverrides(accountId: string): Promise<Map<string, boolean>> {
+  try {
+    const rows = await prisma.accountFeatureFlag.findMany({
+      where: { accountId },
+      select: { name: true, enabled: true },
+    })
+    return new Map(rows.map((r) => [r.name, r.enabled]))
+  } catch {
+    return new Map()
+  }
+}
+
 export async function getFlagStates(
-  options: { isSudo?: boolean } = {},
+  options: { isSudo?: boolean; accountId?: string } = {},
 ): Promise<FlagStates> {
   const env = currentFlagEnvironment()
-  const overrides = await loadDbOverrides()
+  const [overrides, accountOverrides] = await Promise.all([
+    loadDbOverrides(),
+    options.accountId ? loadAccountOverrides(options.accountId) : Promise.resolve(new Map()),
+  ])
   const result = {} as FlagStates
   for (const def of Object.values(FLAG_REGISTRY)) {
-    const dbOverride = overrides.get(def.name)
     result[def.name as FlagName] = resolveFlag(def, {
-      dbOverride,
+      accountOverride: accountOverrides.get(def.name),
+      dbOverride: overrides.get(def.name),
       isSudo: options.isSudo,
       environment: env,
     })
@@ -270,4 +306,43 @@ export async function getFlagAdminRows(): Promise<FlagAdminRow[]> {
       updatedBy: dbRow?.updatedBy ?? null,
     }
   })
+}
+
+// ─── Per-customer overrides (admin) ─────────────────────────────────────────
+
+/** Every per-customer override for one account — what the admin UI edits. */
+export async function listAccountFlags(accountId: string) {
+  return prisma.accountFeatureFlag.findMany({
+    where: { accountId },
+    select: { name: true, enabled: true, updatedAt: true, updatedBy: true },
+    orderBy: { name: 'asc' },
+  })
+}
+
+/**
+ * Turn a flag on or off FOR ONE CUSTOMER. Upsert rather than insert: setting it
+ * twice is the same as setting it once, which is what an admin toggling a
+ * switch expects.
+ */
+export async function setAccountFlag(
+  accountId: string,
+  name: string,
+  enabled: boolean,
+  updatedBy?: string,
+) {
+  return prisma.accountFeatureFlag.upsert({
+    where: { accountId_name: { accountId, name } },
+    create: { accountId, name, enabled, updatedBy },
+    update: { enabled, updatedBy },
+  })
+}
+
+/**
+ * Drop the per-customer decision so the account falls back to the global flag.
+ * Deliberately distinct from setting it to `false`: "no opinion" and "explicitly
+ * off for this customer" resolve the same today but mean different things, and
+ * only one of them survives a change to the global default.
+ */
+export async function clearAccountFlag(accountId: string, name: string) {
+  await prisma.accountFeatureFlag.deleteMany({ where: { accountId, name } })
 }

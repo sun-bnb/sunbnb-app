@@ -362,6 +362,27 @@ the kit is in transit.
 
 ## Log
 
+- **2026-08-16 — Flags became PER CUSTOMER (founder: "devices should be flagged by client and
+  enabled in admin UI").** The flag system was global only, which cannot express the real
+  question here — one operator has hardware, the rest do not. New `AccountFeatureFlag`
+  (`@@id([accountId, name])`, additive migration) slots into the resolution chain as
+  **sudo → env → ACCOUNT → global → env-default**: a customer-specific decision is more
+  specific than a platform-wide one, but a deployment-level override still wins. `devices` is
+  registered in `FLAG_REGISTRY`; the partner app now resolves flags with the session user as
+  the account. Admin gains `searchPartners` / `getAccountFlags` / `setFlagForAccount` /
+  `clearFlagForAccount`, all sudo-gated, plus a "per customer" source badge. Clearing is
+  deliberately distinct from setting `false`: "no opinion" and "off for this customer" resolve
+  alike today but diverge the moment the global default moves.
+  Verified in the browser BOTH ways on a non-sudo partner (sudo bypasses every flag, so it
+  cannot observe this): global off + no account row → nav hidden; add the account row → nav
+  visible. Rows cleaned up after.
+  **Third stale-client incident, and this one hid behind my own tolerance:**
+  `loadAccountOverrides` catches a missing table so a DB without the migration falls back to
+  defaults instead of crashing — which also swallowed the stale dev-server client and made a
+  correctly-set flag look ignored. The tolerance is right for production; the lesson is that a
+  silent fallback plus a stale process reads exactly like a logic bug.
+  The mock-contract guard also earned its keep again, failing until the new model was stubbed.
+  Gates: partner 2006u + 242i, user 544u, admin 174u, data 379u + 353i, tsc + lint clean.
 - **2026-08-16 — Step 4 shipped: the fleet list.** `/devices` in the partner app, scoped by
   the customer flashed on the device, so a unit appears in exactly one operator's list on its
   FIRST poll with no claiming step. Health is DERIVED in a pure module rather than stored —
