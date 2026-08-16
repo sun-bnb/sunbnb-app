@@ -38,23 +38,33 @@ amber = STALE/UNAVAILABLE**.
 
 ## Resume here
 
-**P1 is code complete (2026-08-13, uncommitted).** `apps/user/app/api/hw/[code]/state/route.ts`
-+ `route.test.ts` (43 tests); user app 521u green, `tsc --noEmit` and lint clean;
-`HW_TOKEN`/`HW_DEVICE_MAP` declared in `turbo.json`; route + tests documented in
+**P1 committed** (`cbb251b` + `42a6b18`); **P1.5 telemetry stub + the Q9 client-filter swap built
+2026-08-16 (uncommitted).** State route `apps/user/app/api/hw/[code]/state/route.ts` +
+`projection.ts` + `route.test.ts` (44 tests). P1.5 adds `telemetry/route.ts` + `route.test.ts`
+(11 tests) and extracts the shared request gate to `apps/user/app/api/hw/[code]/hw-filter.ts`
+(`screenDeviceRequest` + `normalizeCode`, used by BOTH endpoints so they cannot drift). **The gate
+is a soft `User-Agent` client filter, not auth** (Q9): `HW_CLIENT_UA` holds an opaque needle,
+matched with CONTAINS so a firmware version bump needs no server change; unset fails CLOSED (503).
+`HW_TOKEN` is gone. User app 533u green (HW 55); `tsc --noEmit` and lint clean.
+`HW_CLIENT_UA`/`HW_DEVICE_MAP` declared in `turbo.json`; both routes documented in
 `apps/user/CLAUDE.md`.
 
 **Next action — bring-up, when the kit lands (no code expected):**
 
-1. Set `HW_TOKEN` (any random string for the demo) and `HW_DEVICE_MAP`
-   (`{"<CODE>":["<itemId>","<itemId>"]}`, **array order = LED mount order**) on the test env.
-   Pick a real `InventoryItem` pair via `/db`.
-2. `curl -H "Authorization: Bearer $HW_TOKEN" https://test.sunbnb.app/api/hw/<CODE>/state` —
-   expect `FREE`; make a reservation on that seat; expect `RESERVED` within one poll.
+1. Set `HW_CLIENT_UA` (the opaque needle, e.g. `k3n8fq2p` — must match what the firmware sends
+   inside its `User-Agent`) and `HW_DEVICE_MAP` (`{"<CODE>":["<itemId>","<itemId>"]}`, **array
+   order = LED mount order**) on the test env. Pick a real `InventoryItem` pair via `/db`.
+2. `curl -H "User-Agent: Sunbnb-Sensor/1 ($HW_CLIENT_UA)" https://test.sunbnb.app/api/hw/<CODE>/state`
+   — expect `FREE`; make a reservation on that seat; expect `RESERVED` within one poll.
 3. Point the device at it (`../sunbnb-hw/docs/build-plan.md` §3 step 3). **Then P1 is done.**
 
+**Cross-repo obligation:** `../sunbnb-hw` must send the agreed `User-Agent`
+(`Sunbnb-Sensor/1 (<needle>)`) and must NOT send an `Authorization` header — the token model is
+gone (Q9). ADR 0010 (server-minted per-device token, mint→flash→print) is **superseded** on the
+credential half and needs amending there; the `code` half still stands.
+
 **Then P2** — `Device` + `DeviceSeat` migration per **Binding**, route switches off the env map,
-and the wire contract freezes. Q6 (check character) and Q7 (token rotation) must be answered
-before that freeze.
+and the wire contract freezes. **Q6/Q7/Q9 are all decided, so nothing blocks the freeze.**
 
 **Context needed:** this file · the route + its tests · `packages/data/src/reservation-machine.ts`
 (`deriveState`, `CompoundState`) · `apps/partner/app/sites/[id]/manage/bed-state.ts` (the sibling
@@ -66,7 +76,7 @@ from across the internet").
 
 ## Wire contract (P0 — proposed, freeze before P2)
 
-**`GET /api/hw/{code}/state`** · `Authorization: Bearer <device token>` · `If-None-Match`
+**`GET /api/hw/{code}/state`** · `User-Agent: <configured sensor value>` · `If-None-Match`
 
 ```jsonc
 {
@@ -81,6 +91,11 @@ from across the internet").
   "serverTime": "2026-08-13T09:12:04Z"
 }
 ```
+
+**`cmd` is a closed set — firmware must recognise every member before potting.** A member
+the firmware does not understand is ignored *forever* on a sealed unit, so the set freezes at
+P2 with the rest of the contract. There is **no `rotateToken`** (Q7 reversed 2026-08-16): the
+request carries no secret to rotate — see **Client filter (Q9)**.
 
 **States** (closed set — adding a member is a breaking change for fielded devices):
 `FREE` · `RESERVED` · `OCCUPIED` · `UNAVAILABLE`. `STALE` is **device-side only** (no 200 for
@@ -112,18 +127,22 @@ numbers: a device mounted rotated, or a row numbered right-to-left, still lights
 response must never fall back to an implicit database order. Freeze with the rest of the
 contract.
 
-**No enumeration oracle — 401 for everything.** Unknown code and bad token must be
-indistinguishable to a caller: same status, same body, no timing tell. The code is printed on a
-sticker on a public beach, so treating "this code exists" as free information would let anyone
-walk the code space. *(Changed 2026-08-13 from the drafted `404` on unknown code.)*
+**Uniform rejection.** A request that fails the client filter or names an unknown code returns the
+same response — same status, same body, no timing tell. Under the Q9 soft-filter model this is no
+longer an *enumeration-oracle* defence (there is no secret to protect and the code is public
+anyway); it is kept only because a uniform, opaque reject is the tidy default and the P1 code
+already does it. The status is `401` today; `403`/`404` would be equally fine for a filter — not a
+frozen wire fact.
 
 **`POST /api/hw/{code}/telemetry`** — `{ fw, battMv, rssiDbm, upSec, polls, tempC? }` → `204`.
-Last-values only (no time series). Never fails the device's poll loop. Same 401 rule.
+Last-values only (no time series). Never fails the device's poll loop. Same client filter.
 
-## Identity & credentials (decided 2026-08-13)
+## Identity & client filter (code decided 2026-08-13; credential model → soft filter 2026-08-16, Q9)
 
-**`code` and `token` are different things.** The code is *public* — it is printed on the device's
-sticker. It authenticates nothing.
+**There is no secret and no authentication.** The `code` is *public* routing (printed on the
+sticker, says *which* device is calling); the only gate is a **soft client filter** — a custom
+`User-Agent` value that says "I am the sensor firmware" and lets the server decline obviously
+non-sensor traffic. Neither authenticates anything. Full reasoning: **Client filter (Q9)** below.
 
 **Code — server-issued, random, 6 chars of Crockford base32** (`0-9A-Z` minus `I L O U`), stored
 uppercase, input normalised (Crockford folds `i→1`, `o→0`, lowercase→upper):
@@ -144,33 +163,44 @@ uppercase, input normalised (Crockford folds `i→1`, `o→0`, lowercase→upper
   0003). Record the MAC on the `Device` row as a provisioning fingerprint (support,
   anti-theft) — never as identity.
 
-**Token — 32 CSPRNG bytes → base64url (43 chars), stored as sha256 only**, constant-time compare.
-Lookup is by `code` from the path, so no index on the hash is needed. *Not* bcrypt/argon2: a
-high-entropy random secret has no dictionary to attack, and this comparison runs on every poll
-(Q3's ~1.3 M/day) where a slow KDF is a self-inflicted cost problem. Revocation = `status` flip;
-rotation is near-moot on a device potted for its service life.
+**Client filter — a custom `User-Agent` value (Q9, DECIDED 2026-08-16: soft filter, no secret).**
+The endpoint's only gate is that the request's `User-Agent` contains a configured sensor value,
+e.g. `Sunbnb-Sensor/1 (k3n8fq2p)` — a readable product tag (nice in logs) plus a short opaque
+suffix so a generic scanner (`curl`, `python-requests`, empty UA, a browser) never matches by luck.
+Checked **before the DB query**, so junk traffic is rejected cheaply. This is **obscurity, not
+authentication** — and deliberately so: the asset is not worth attacking (see Q8/Q9), so a filter
+that declines *obvious* non-sensor traffic is the proportionate design, and paying for real
+credentials, hashing, rotation or per-device secrets would be defending an adversary who won't come.
 
-**Minting (P3) — at the bench, not in the field.** Hardware half is decided in
-`../sunbnb-hw` ADR 0010; the app-side obligations it creates:
+- **Why `User-Agent` and not a bespoke header.** It is the one standard header whose literal job is
+  identifying the client, the device sends it anyway (zero extra bytes), and it is never stripped by
+  infra — where a custom `X-` header occasionally is. The device talks straight to Vercel over
+  HTTPS, so there is no proxy to mangle it.
+- **The one residual risk is cost-abuse, not data.** If the value leaks (it is extractable from any
+  device's firmware) someone could *flood* the DB-hitting endpoint to run up serverless cost. The
+  filter cannot stop a flooder who has the value — **the backstop is Vercel edge rate-limiting**, a
+  server-side lever that needs no device involvement. This is why there is **no OTA rotation** (Q7
+  reversed): rotation only earned its keep while the value was a secret; edge throttling is the
+  better abuse lever once it isn't.
+- **Config, not schema.** The expected value is a single env var (`HW_CLIENT_UA` or similar) read by
+  the shared `hw-filter.ts` gate — no config row, no `tokenHash`, no dual-valid window. Same value
+  on every unit.
 
-- **Order is mint → flash → print, in one script run**, so the database row, the NVS contents
-  and the sticker match *by construction*. The app must therefore expose a **mint** that creates
-  the `Device` row and returns `{code, token}` **once** — the token is never readable again.
-- **A failed flash leaves an unclaimed row.** Deliberately the safe direction (the reverse would
-  leave a live device with no row), but it means `Device.status` needs a real vocabulary —
-  `minted → provisioned → active → retired` — not just active/revoked.
-- **A board swap re-provisions the *same* `code` and `token`**; the enclosure, sticker and
-  binding are untouched. Identity belongs to the installed unit, not to the board. Consequence
-  for us: **`macAddr` is mutable** — re-record it on re-provision, and don't lean on it as an
-  anti-theft fingerprint, because a legitimate board swap changes it.
-- The volume alternative (shared bootstrap secret + claim-on-first-boot, server binds the MAC)
-  puts that secret in every firmware image — one recovered device compromises the claim
-  endpoint. Revisit only when per-unit flashing becomes the bottleneck.
+**Provisioning (P3) — at the bench, trivial under Q9.** No secret at all: **assign a unique `code`,
+flash firmware carrying the shared `User-Agent` value, print the sticker.** The UA value is the same
+on every unit and is not device-identifying, so there is no one-shot handling. A failed flash leaves
+an unprovisioned row (the safe direction; `Device.status` keeps `provisioned → active → retired`). A
+board swap re-flashes the *same* `code`; `macAddr` is mutable — re-record on swap, never identity.
 
-**Known limitation:** a token in plain NVS is readable by anyone with the board and a USB cable.
-ESP32-C6 supports NVS/flash encryption — worth enabling before a real fleet, not urgent now
-precisely *because* tokens are per-device: the blast radius of a stolen device is one seat's
-state plus fake telemetry.
+**Known limitation (accepted):** the `User-Agent` value is extractable from any device's firmware,
+so it is not secret and cannot be — that is the point of calling it a *filter*, not a credential.
+The exposure it accepts is cost-abuse (covered by edge rate-limiting), never a data breach, because
+there is no data of value behind it. NVS/flash encryption raises the bar to extraction but changes
+nothing about the model.
+
+**Code — server-issued, random, 6 chars of Crockford base32.** Unchanged by Q9: it is public
+routing to the seat binding, not a credential. Details in the **Code** subsection above (Q6: no
+check character).
 
 ## Binding (Q1 — DECIDED 2026-08-13: explicit seat list)
 
@@ -183,9 +213,10 @@ Store the seat list explicitly; do not derive it.
 model Device {
   id         String       @id @default(cuid())  // surrogate: lets a code be reissued without
   code       String       @unique               //   orphaning telemetry/binding history
-  tokenHash  String
+  // No token/secret at all (Q9): the only gate is a soft `User-Agent` filter read from env by
+  // hw-filter.ts — nothing per-device to store here.
   macAddr    String?      // provisioning fingerprint, MUTABLE across board swaps, never identity
-  status     String       // minted → provisioned → active → retired
+  status     String       // provisioned → active → retired
   fw         String?
   lastSeenAt DateTime?
   battMv     Int?
@@ -232,29 +263,37 @@ free, but:
   and lint clean). Env-config binding, real `deriveState` projection, no migration. **Definition
   of done is unchanged and NOT met: a device on the test env lighting red from a real
   reservation** — that needs the kit, which is in transit.
-- **☐ P1.5 — telemetry stub** *(optional, ~20 lines, no schema).* `POST /api/hw/{code}/telemetry`
-  authenticates like the state route and returns `204` without persisting. The firmware loop does
-  **both** calls; the contract says telemetry must never fail the poll loop, so a well-behaved
-  device tolerates a 404 — but a stub lets firmware exercise the real shape from day one instead
-  of discovering the endpoint at P5. Skip if bring-up goes smoothly without it.
+- **▶ P1.5 — telemetry stub. BUILT 2026-08-16 (uncommitted), no schema.** `POST
+  /api/hw/{code}/telemetry` passes the shared request gate and returns `204` without persisting —
+  a malformed/absent body is still `204` (telemetry must never fail the device's loop). 11 tests.
+  Landed with a refactor: the state route's inline gate (env binding, `normalizeCode`) moved to a
+  shared module so both endpoints screen requests identically; the state tests reran green as the
+  safety net. P5 promotes this stub to last-values writes.
+  **Q9 swap applied 2026-08-16:** the shared module is now `hw-filter.ts` / `screenDeviceRequest`
+  (renamed from `hw-auth.ts` / `authenticateDevice` — "auth" would misdescribe a filter), checking
+  `User-Agent` CONTAINS `HW_CLIENT_UA` instead of `Bearer HW_TOKEN`; unset config fails CLOSED
+  (503) so it can never silently open. `HW_TOKEN` deleted from `turbo.json`. Both routes inherited
+  it; user app 533u green, tsc + lint clean.
 - **☐ P2 — `Device` + `DeviceSeat` schema.** Additive migration per **Binding** above; `status`
-  lifecycle (`minted → provisioned → active → retired`); token stored sha256-hashed, never
-  readable back. Route switches from the env map to table lookup; `HW_DEVICE_MAP`/`HW_TOKEN`
-  deleted. **Freeze the wire contract here** — states, seat order, status codes, and Q6's check
-  character. Q6 and Q7 must be answered *before* this phase, not during it.
+  lifecycle (`provisioned → active → retired`); **no token or secret of any kind** (Q9) — the gate
+  is a soft `User-Agent` filter read from env (`HW_CLIENT_UA`), so there is no config singleton, no
+  hashing, no rotation. Route switches its binding lookup from the env map to the
+  `Device`/`DeviceSeat` tables (`HW_DEVICE_MAP` deleted); `hw-filter.ts` already does this (Q9 applied); P2 only swaps its binding source. The
+  UA-filter check (see P1.5-follow-up). **Freeze the wire contract here** — states, seat order,
+  status codes, and the `cmd` set (`null | stow | identify`, no `rotateToken`). Q6/Q7/Q9 answered, so
+  P2 is unblocked.
 
 **Phases 3–5 are the device-management surfaces. They are three different jobs with three
 different owners, and conflating them is what the earlier roadmap got wrong.** None is needed for
 the demo — one device, one env var, no UI. They become real at the *second and third unit*, the
 same threshold `../sunbnb-hw` ADR 0010 sets for the provisioning script.
 
-- **☐ P3 — minting (platform-side, a script, not a UI).** We assemble the devices, so this is
-  ours, not the operator's. A CLI that mints the `Device` row, receives `{code, token}` once,
-  writes NVS over USB and prints the label — in that order, so the DB row, the NVS contents and
-  the sticker match *by construction* (ADR 0010). Keep it a script well past the demo: under
-  ~100 units a UI buys nothing and makes the one-shot token harder to handle honestly. Also
-  needs the local mint record (code, token, MAC, date) ADR 0010 requires, and the unclaimed-row
-  path for a failed flash.
+- **☐ P3 — provisioning (platform-side, a script, not a UI).** We assemble the devices, so this is
+  ours. Trivial under Q9 (no secret at all): a CLI that creates the `Device` row with a unique
+  `code`, flashes firmware carrying the shared `User-Agent` value over USB, and prints the label. The
+  `code` is the only per-unit value. Keep it a script well past the demo; under ~100 units a UI buys
+  nothing. Records the local provisioning row (code, MAC, date) and the unprovisioned-row path for a
+  failed flash.
 - **☐ P4 — binding (operator-side, a FIELD flow on a phone).** The surface Q1's explicit seat
   list makes necessary. **Not the desktop inventory editor** — binding happens standing at a
   parasol with a device in hand, so it belongs on `/sites/[id]/manage`, which is already
@@ -287,11 +326,23 @@ backend, and both drag in consumer-surface design that shouldn't gate the hardwa
   **three divergent implementations** of "is this seat free today" — `deriveState`
   (`packages/data/src/reservation-machine.ts:108`, canonical), `getAvailability`
   (`apps/user/service/availabilityService.ts:65`, re-implements the rule inline, venue-anchored),
-  and the POS page (`apps/user/app/sites/[id]/pos/[itemId]/Reservation.tsx:32-56`, client-side,
-  browser midnight, **no status filter at all** — `page.tsx:6` includes `reservations: true`
-  unfiltered, so a *canceled* reservation still reads as "not available"). P1 adds a fourth call
-  site. The clean fix is one projection in `@repo/data` over `deriveState` that all four consume.
-  **Deferred, not denied** — the POS bug is real and deserves its own track.
+  and the POS page (client-side, browser midnight, **no status filter at all**). P1 adds a fourth
+  call site. The clean fix is one projection in `@repo/data` over `deriveState` that all four
+  consume. **Still deferred** — but see below: the POS half is now fixed.
+
+  **✅ The POS bug is FIXED (2026-08-16), one implementation retired.** The POS page no longer
+  derives availability at all: `pos/[itemId]/queries.ts` (`getPosContext`) decides it server-side
+  through the canonical `getAvailabilityForItems` and ships `availableItemIds`; the client-side
+  `isItemAvailableToday` and the unfiltered `reservations` include are deleted. Fixes canceled /
+  refunded / payment_failed bookings blocking a seat permanently from its own QR code, adds the
+  track-012 release rule, and anchors "today" to the venue civil day instead of the browser's
+  (track 017). 14 integration tests, **6 of which fail on the pre-fix algorithm** (verified by
+  running them against it). Divergent implementations: 4 → 3. The remaining unification
+  (`getAvailability` ↔ `deriveState`) is untouched and still deserves its own track.
+
+  *Adjacent finding, NOT fixed:* the parent `/sites/[id]/pos` route (`page.tsx:11`) fetches
+  `reservations` for **every seat**, unfiltered — and never uses them. Dead payload on a public
+  page (a track-020-class concern, not correctness).
 
 ## Log
 
@@ -352,16 +403,104 @@ backend, and both drag in consumer-surface design that shouldn't gate the hardwa
   rejected anchor-seat variant would have been one field on a form. None of P3–P5 is needed for
   the demo; they become real at the second and third unit.
 
+- **2026-08-16** — **P1.5 telemetry stub built, and the device authenticator extracted.**
+  `POST /api/hw/{code}/telemetry` → `204`, persists nothing (P5's job); auth is the shared
+  `authenticateDevice` in the new `apps/user/app/api/hw/[code]/hw-auth.ts`, which now owns the
+  uniform-401 rule, the constant-time bearer compare, the `HW_DEVICE_MAP` binding lookup and
+  `normalizeCode` (moved out of `state/projection.ts`, keeping projection purely about state
+  derivation). The state route was refactored onto the same authenticator so the two endpoints
+  cannot drift — the 43 state tests are the regression net and reran green. Telemetry adds 11
+  tests: uniform-401 parity (unknown code byte-identical to bad token), HW_TOKEN-unset → 503,
+  and a `204` that never depends on the body (malformed / empty / unknown-field payloads all
+  accepted — telemetry must never fail the poll loop). HW suite 54 green, tsc + lint clean.
+  Corrected the stale "P1 uncommitted" note: P1 landed in `cbb251b` + `42a6b18`.
+
+- **2026-08-16** — **Q6 and Q7 decided; the two pre-freeze wire facts are now settled.** **Q6:
+  no check character** — the code stays 6-char plain Crockford; a mistyped code fails the token
+  check anyway (the code authenticates nothing), so the check digit was buying rejection the token
+  layer already provides. **Q7: include OTA token rotation** — `cmd: "rotateToken"` reserved in the
+  frozen `cmd` set, two-phase dual-valid semantics (`Device.tokenHashNext` holds the pending hash;
+  the device acks by authenticating on the new token; old retired then; idempotent, so a mid-write
+  power loss re-sees the command instead of locking the device out), new secret fetched via a
+  dedicated authenticated call rather than inline in the ETag'd state body. Rationale: a leaked
+  per-device token (plain NVS is USB-readable) must be replaceable without a truck roll; reserving
+  the `cmd` shape costs a few lines of firmware now and is impossible to add after potting, while
+  the server side can wait for P5/P6. Firmware must handle the command before the first enclosure
+  is sealed (`../sunbnb-hw` ADR 0010). With both answered, **P2 is unblocked to freeze the wire
+  contract.**
+
+- **2026-08-16** — **Q8 decided: ONE system-wide OTA-able token, reversing Q2's per-device call.**
+  Prompted by challenging *why the API needs auth at all*. Conclusion: the read data is low-value
+  (occupancy is already public via `/api/sites/[id]/availability` and physically visible on the
+  beach), so auth is justified by the **write path** (telemetry integrity) and cost control, not by
+  data secrecy. Per-device tokens buy only self-scoped speech, single-unit revocation, and
+  per-device future authority — none worth the P3 bench-minting + per-device secret bookkeeping to
+  guard that data. So: one shared token, hashed, **OTA-rotatable** (Q7) so a leak is re-keyed from
+  the server without a truck roll — rotation is what makes the shared token acceptable. Consequences
+  folded through: `Device` loses `tokenHash`/`tokenHashNext` (token → config singleton with a
+  dual-valid rotation window); P3 collapses to assign-code / flash-shared-token / print; the
+  known-limitation note flips (a recovered device now leaks the *fleet's* token, accepted trade).
+  Note: P1's `HW_TOKEN` is *already* a single shared token, so P1 needs no change — this only reshapes
+  P2/P3. Left open (P5): the telemetry payload carries `upSec`/`polls`/`tempC` with no `Device`
+  columns yet — persist or accept-and-drop is a P5 call, not a freeze-now one.
+
+- **2026-08-16** — **Q9 decided: no credential at all — a soft `User-Agent` filter — reversing Q7
+  and hollowing out Q2/Q8.** The security model converged over the day (per-device token → shared
+  OTA-able token → shared token, no rotation → **no token**). Final reasoning: auth was only ever
+  justified by the *write* path and cost control, not data secrecy (occupancy is already public); and
+  the asset is not worth an attacker's time, the damage is non-permanent, and there is zero financial
+  consequence — so a *secret* is over-built. The gate becomes a configured `User-Agent` value
+  (`Sunbnb-Sensor/1 (…opaque…)`) checked pre-DB to decline obvious non-sensor traffic; the one
+  residual risk (a leaked value used to *flood* the DB-hitting endpoint) is covered by Vercel edge
+  rate-limiting, not by device-side rotation — which is why `rotateToken` is removed from the `cmd`
+  set and Q7 is reversed. Chose `User-Agent` over a bespoke `X-` header: it is the standard client-id
+  header, always sent, never stripped. Consequences folded through the contract: `cmd` back to
+  `null | stow | identify`; the "enumeration-oracle" framing of the uniform reject retired (kept only
+  as a tidy default); `Device` has no token field; P2 loses the whole token-config layer; P3 becomes
+  assign-code / flash-firmware / print. *(Code follow-up was noted here as pending; it shipped the
+  same day — see the next entry.)*
+
+- **2026-08-16** — **Q9 implemented.** `hw-auth.ts` → **`hw-filter.ts`**, `authenticateDevice` →
+  **`screenDeviceRequest`** (the old names would misdescribe a filter as authentication, which is
+  exactly the confusion Q9 exists to prevent). The gate is now `User-Agent` **CONTAINS**
+  `HW_CLIENT_UA`; `HW_TOKEN` deleted from `turbo.json` and the code. Two choices worth recording:
+  **(1) contains, not equality** — config holds only an opaque needle (`k3n8fq2p`) while firmware
+  sends `Sunbnb-Sensor/1 (k3n8fq2p)`, so a `/1`→`/2` bump never needs a server change; matching the
+  full UA would weld the firmware version into server config, the one thing a potted fleet cannot
+  afford. **(2) unset config fails CLOSED (503)**, never open — a missing env var must not silently
+  turn the filter off. Tests reframed from "auth" to filter semantics: real scanner UAs (`curl`,
+  `python-requests`, a browser) are declined, a version-bumped sensor UA passes, and *neither* a
+  filtered request nor an unknown code reaches the DB (the filter's actual job — junk costs a string
+  compare, not a Postgres round-trip). User app **533u green** (HW 55: 44 state + 11 telemetry), tsc
+  + lint clean. **Cross-repo:** `../sunbnb-hw` must now send that `User-Agent` and no
+  `Authorization` header; ADR 0010's credential half is superseded and needs amending there.
+
 ## Open decisions
 
 - **~~Q1 — Binding shape.~~ DECIDED 2026-08-13: explicit seat list** (`DeviceSeat` join table,
   `position` = mount order). The binding is a physical installation fact and `SunbedGroup` is a
   booking fact; deriving one from the other over-scopes wherever grouping ≠ shading and lets an
   inventory edit silently change what a light means. Full reasoning in **Binding**.
-- **~~Q2 — Token per device or per site?~~ DECIDED 2026-08-13: per device, sha256-hashed.**
-  Per-site is one env var and no provisioning, but a single recovered device would compromise a
-  whole beach — and per-device tokens are what keep a stolen device's blast radius at one seat,
-  which is also why plain-NVS storage is tolerable for now. Costs P3 minting.
+- **~~Q2 — Token per device or per site?~~ DECIDED 2026-08-13: per device — SUPERSEDED by Q8
+  (2026-08-16).** The original call optimised for blast radius (a stolen device compromises only
+  itself). Q8 reversed it: for occupancy + telemetry the data is too low-value to justify the
+  per-device cost (P3 minting, per-device secret bookkeeping), and OTA rotation makes the
+  shared-token leak remediable without a field visit. See Q8.
+- **~~Q8 — Is per-device auth worth P3 + Q7, or is a shared token enough?~~ DECIDED 2026-08-16:
+  ONE system-wide, OTA-able token.** Auth is justified by the *write* path (telemetry) and cost
+  control, not by data secrecy — the read data is already public and physically visible. Given
+  that, per-device tokens buy only (a) a device speaking solely for itself, (b) single-unit
+  revocation, and (c) per-device future authority — none of which clears the bar to guard one
+  seat's public-ish state plus fake telemetry. A single shared token, **rotatable OTA** (Q7) so a
+  leak is re-keyed from the server rather than by a truck roll, is enough. Deletes most of P3
+  (no per-device minting), moves the token to a config singleton with a dual-valid rotation window,
+  and removes the per-device `tokenHash`/`tokenHashNext` from the `Device` model.
+  **Reconsidered 2026-08-16** against per-device's one real edge — a leak rotates *one* device, not
+  the fleet — and held: OTA flattens the per-rotation cost, so per-device would only reduce rotation
+  *frequency*, and the deciding factor is **threat value, not blast radius**. **Then superseded the
+  same day by Q9**, which carried the same threat-value logic one step further — if the asset isn't
+  worth attacking, it isn't worth a *secret* at all, only a soft filter. Q8's reasoning stands; its
+  conclusion (a shared token) is now the weaker half of "no token, just a `User-Agent` filter."
 - **Q3 — Fleet invocation cost.** 1 500 devices × 60 s over a 14 h day ≈ **1.3 M invocations/day**
   against a Vercel function that queries Postgres. Irrelevant at demo scale (1 device), decisive
   at fleet scale. Options: edge + short-TTL site cache · `304` (device already sends
@@ -372,13 +511,26 @@ backend, and both drag in consumer-surface design that shouldn't gate the hardwa
   P7 populating it rather than inventing a second fallback.
 - **Q5 — Does the device get a *write* path?** Currently read-only + telemetry. A "reserve from
   the bed" button would need one; deliberately out of scope.
-- **Q6 — Check character in the code, yes or no?** One extra character buys rejection of a
-  mistyped code instead of resolution to a stranger's parasol. Only matters where a human types
-  or reads a code aloud (support calls, provisioning). Decide **before freeze** — it is a wire
-  fact, not an implementation detail.
-- **Q7 — Can a device accept a new token over the wire?** (e.g. via `cmd`.) If not, a compromised
-  fleet is a field visit per unit. Trivial to add to the contract now, impossible after potting —
-  **deadline: before the first enclosure is sealed** (`../sunbnb-hw` ADR 0010 consequences).
+- **~~Q6 — Check character in the code?~~ DECIDED 2026-08-16: NO.** The code is a **6-char plain
+  Crockford base32** identifier, no 7th check character. A mistyped code just fails the binding
+  lookup (uniform reject), it does not resolve to a stranger's parasol — the code is public routing,
+  not a credential. Not worth the extra sticker character or the QR-version cost.
+- **~~Q7 — Can a device accept a new token over the wire?~~ DECIDED 2026-08-16: YES → REVERSED
+  2026-08-16 by Q9 (NO).** OTA rotation was reserved (`cmd: "rotateToken"`) while the credential was
+  a *secret* worth re-keying on leak. Q9 removed the secret entirely (soft `User-Agent` filter), so
+  there is nothing to rotate: `rotateToken` is **removed** from the `cmd` set (back to
+  `null | stow | identify`), and the residual cost-abuse risk is handled by **edge rate-limiting**,
+  not by pushing a new value to devices. Net: no rotation machinery in firmware or server.
+- **~~Q9 — Real credential, or just a soft traffic filter?~~ DECIDED 2026-08-16: soft filter (a
+  custom `User-Agent` value).** The threat-value logic behind Q8 taken to its conclusion: an asset
+  not worth attacking is not worth a secret, only a filter that declines *obvious* non-sensor
+  traffic. The gate is a configured `User-Agent` value (`Sunbnb-Sensor/1 (…opaque…)`) checked
+  pre-DB; no token, hashing, rotation, or per-device secret. It is obscurity by design — proportion,
+  not laziness — with **Vercel edge rate-limiting** as the cost-abuse backstop. Collapses Q2, Q7,
+  the token half of P2, and most of P3. **Implemented 2026-08-16** in `hw-filter.ts`
+  (`screenDeviceRequest`, renamed from `hw-auth.ts`): `User-Agent` CONTAINS `HW_CLIENT_UA`, unset
+  fails closed, `HW_TOKEN` deleted. Revisit only if a device ever gains a consequential write
+  path (Q5).
 
 ## Links
 
