@@ -7,7 +7,13 @@ import ReservationView from './Reservation'
 import { findAnonReservation, findUserReservation } from '../../actions'
 
 
-export default function PosView({ items, site, apiKey }: { items: InventoryItem[], site: SiteProps, apiKey: string }) {
+export default function PosView({ items, site, availableItemIds, apiKey }: {
+  items: InventoryItem[],
+  site: SiteProps,
+  /** Seats the canonical availability service reports free for the venue's today. */
+  availableItemIds: string[],
+  apiKey: string
+}) {
 
   const router = useRouter()
 
@@ -48,6 +54,7 @@ export default function PosView({ items, site, apiKey }: { items: InventoryItem[
             apiKey={apiKey}
             items={items}
             site={site}
+            availableItemIds={availableItemIds}
             dateRange={{ from: availabilityFrom, to: availabilityTo }}
           />
         </div>

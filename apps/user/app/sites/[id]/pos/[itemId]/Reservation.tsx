@@ -28,33 +28,6 @@ import sunshadeIcon from '@/components/reservation/sunshade-transparent.png'
 import { useRouter } from 'next/navigation'
 import { formatSeat } from '@repo/data/seat-label'
 
-// A helper function that checks if an item is free for the current day
-function isItemAvailableToday(item: InventoryItem): boolean {
-
-  if (item.status !== 'active') return false
-  
-  if (!item.reservations || item.reservations.length === 0) {
-    // No reservations, so definitely available
-    return true;
-  }
-
-  // We'll consider "today" from midnight to midnight (ignoring times)
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  // If there's at least one reservation whose from <= today <= to, the item is NOT available
-  return !item.reservations.some((res) => {
-    const fromDate = new Date(res.from);
-    const toDate = new Date(res.to);
-
-    // Zero out hours if ignoring time portion
-    fromDate.setHours(0, 0, 0, 0);
-    toDate.setHours(0, 0, 0, 0);
-
-    return today >= fromDate && today <= toDate;
-  });
-}
-
 
 function ReservationButton({
   disabled,
@@ -135,11 +108,14 @@ export default function ReservationView({
   apiKey,
   items,
   site,
+  availableItemIds,
   dateRange
 } : {
   apiKey: string
   items: InventoryItem[],
   site: SiteProps,
+  /** Seats the canonical availability service reports free for the venue's today. */
+  availableItemIds: string[],
   dateRange: { from: string, to: string }
 }) {
 
@@ -166,13 +142,10 @@ export default function ReservationView({
 
   const dateStr = new Date().toISOString().substring(0, 10)
 
-  let isAvailable = true
-  for (let item of selectedItems) {
-    if (!isItemAvailableToday(item)) {
-      isAvailable = false
-      break
-    }
-  }
+  // Server-decided, via the canonical availability service (see ./queries.ts).
+  // Absence from the list is unbookable — never treat an unknown id as free.
+  const isAvailable =
+    selectedItems.length > 0 && selectedItems.every((item) => availableItemIds.includes(item.id))
 
   const previewElem = (
     <div>

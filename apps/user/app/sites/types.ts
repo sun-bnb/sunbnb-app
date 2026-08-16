@@ -124,7 +124,12 @@ export interface InventoryItem {
   locationLng?: string
   schematicX?: number | null
   schematicY?: number | null
-  reservations: Reservation[]
+  /**
+   * Optional: surfaces that decide availability SERVER-side (the POS seat page)
+   * never fetch reservation rows. Consumers must guard — and must not re-derive
+   * availability from them; that is `service/availabilityService`'s job.
+   */
+  reservations?: Reservation[]
   site?: { id: string } | null
 }
 

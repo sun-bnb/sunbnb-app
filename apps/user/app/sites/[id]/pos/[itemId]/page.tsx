@@ -1,76 +1,23 @@
-import prisma from '@repo/data/PrismaCient'
 import PosView from './view'
 import ErrorCard from '@/components/ErrorCard'
-
-async function getInventoryItems(id: string) {
-  
-  const item = await prisma.inventoryItem.findUnique({ 
-    where: { id: id },
-    include: {
-      reservations: true,
-      site: true,
-      pair: {
-        include: {
-          reservations: true
-        }
-      },
-      pairedBy: {
-        include: {
-          reservations: true
-        }
-      },
-      sunbedGroup: {
-        include: {
-          items: {
-            include: {
-              reservations: true
-            }
-          }
-        }
-      }
-    }
-  })
-
-  if (!item) return null
-
-  // Prefer group-based pairing (SunbedGroup source of truth).
-  // otherGroupMembers are the sibling items from the group, excluding this item.
-  const otherGroupMembers = item.sunbedGroup?.items.filter(
-    (member) => member.id !== item.id
-  ) ?? []
-
-  if (otherGroupMembers.length > 0) {
-    return {
-      site: item.site,
-      items: [item, ...otherGroupMembers]
-    }
-  }
-
-  // Fallback: legacy pairId/pairedBy self-relation for beds not yet in a group.
-  const pair = item.pair || item.pairedBy
-  if (pair) {
-    return {
-      site: item.site,
-      items: [item, pair]
-    }
-  }
-
-  return {
-    site: item.site,
-    items: [item]
-  }
-
-}
+import { getPosContext } from './queries'
 
 export default async function Pos({ params }: { params: { itemId: string }}) {
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY
     || process.env.GOOGLE_MAPS_API_KEY as string
 
-  const items = await getInventoryItems(params.itemId)
+  const context = await getPosContext(params.itemId)
 
-  if (!items) return <ErrorCard title="Item not found" message="We couldn't find the sunbed you're looking for." />
+  if (!context) return <ErrorCard title="Item not found" message="We couldn't find the sunbed you're looking for." />
 
-  return <PosView items={items.items} site={items.site} apiKey={apiKey}/>
+  return (
+    <PosView
+      items={context.items}
+      site={context.site}
+      availableItemIds={context.availableItemIds}
+      apiKey={apiKey}
+    />
+  )
 
 }
