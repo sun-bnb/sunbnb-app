@@ -93,26 +93,81 @@ const RETIRED = 'retired'
  * is still mount order, it just has a home that survives a redeploy and can be
  * edited by the P4 field-binding flow.
  */
-async function seatIdsForCode(code: string): Promise<string[] | null> {
+export interface DeviceAssignment {
+  siteId: string
+  parcel: number
+  row: number
+  seq: number
+}
+
+/**
+ * The device's ASSIGNED LOCATION (track 021 P5) — replaces the stored seat list.
+ * A device answers for whatever unit occupies its location today, so a parcel
+ * rebuilt at the same address needs no re-assignment.
+ *
+ * Returns null for retired, unknown, or not-yet-assigned devices: each has
+ * nothing to say about any seat, and an empty aggregate would render as FREE.
+ */
+async function assignmentForCode(code: string): Promise<DeviceAssignment | null> {
   const device = await prisma.device.findUnique({
     where: { code },
     select: {
       status: true,
-      seats: { select: { itemId: true }, orderBy: { position: 'asc' } },
+      assignedSiteId: true,
+      assignedParcel: true,
+      assignedRow: true,
+      assignedSeq: true,
     },
   })
 
   if (!device || device.status === RETIRED) return null
-  // A device with no seats bound yet (provisioned, not installed) has nothing to
-  // say about any seat — decline rather than answer an empty aggregate, which
-  // would render as FREE.
-  if (device.seats.length === 0) return null
 
-  return device.seats.map((s) => s.itemId)
+  const { assignedSiteId, assignedParcel, assignedRow, assignedSeq } = device
+  if (
+    assignedSiteId == null ||
+    assignedParcel == null ||
+    assignedRow == null ||
+    assignedSeq == null
+  ) {
+    return null
+  }
+
+  return {
+    siteId: assignedSiteId,
+    parcel: assignedParcel,
+    row: assignedRow,
+    seq: assignedSeq,
+  }
+}
+
+/** `parcel-row-unit`, the human address echoed to the device and shown in the UI. */
+export function formatAssignment(a: DeviceAssignment): string {
+  return `${a.parcel}-${a.row}-${a.seq}`
+}
+
+/**
+ * The seats of the unit at an assignment, in segment order.
+ *
+ * The parcel-scoped index does the narrowing; the ROW lives inside the encoded
+ * seat number (parcel*10000 + row*100 + idx) so it is filtered here. Pool spares
+ * parked at a unit are excluded — a spare is not a bed under that parasol and
+ * must never claim a segment (track 021 P0).
+ */
+export function unitSeatFilter(a: DeviceAssignment) {
+  return {
+    siteId: a.siteId,
+    group: a.parcel,
+    sunbedGroup: { seq: a.seq },
+    status: { not: 'pool' },
+  }
+}
+
+export function isInAssignedRow(number: number, a: DeviceAssignment): boolean {
+  return Math.floor(number / 100) % 100 === a.row
 }
 
 export type DeviceRequest =
-  | { ok: true; code: string; seatIds: string[] }
+  | { ok: true; code: string; assignment: DeviceAssignment | null; location: string | null }
   | { ok: false; response: Response }
 
 export interface ScreenOptions {
@@ -157,17 +212,17 @@ export async function screenDeviceRequest(
   // code is known. It always answers 204 and merely persists more when it can,
   // so an unassigned device can announce itself without the endpoint becoming
   // an existence oracle for codes printed on public stickers.
-  if (options.requireBinding === false) return { ok: true, code, seatIds: [] }
+  if (options.requireBinding === false) return { ok: true, code, assignment: null, location: null }
 
-  let seatIds: string[] | null
+  let assignment: DeviceAssignment | null
   try {
-    seatIds = await seatIdsForCode(code)
+    assignment = await assignmentForCode(code)
   } catch {
-    // The binding is unreadable — that is not the caller's fault and must not
+    // The assignment is unreadable — that is not the caller's fault and must not
     // read as "unknown device": 503 → amber, never a confident answer.
     return { ok: false, response: unavailable() }
   }
-  if (!seatIds) return { ok: false, response: unauthorized() }
+  if (!assignment) return { ok: false, response: unauthorized() }
 
-  return { ok: true, code, seatIds }
+  return { ok: true, code, assignment, location: formatAssignment(assignment) }
 }

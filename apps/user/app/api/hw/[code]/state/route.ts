@@ -31,7 +31,7 @@ import { createHash } from 'crypto'
 import prisma from '@repo/data/PrismaCient'
 import { siteDayBounds, siteDayKey } from '@repo/data/site-day'
 import { RESERVATION_CANCELED, RESERVATION_REFUNDED } from '@repo/data/reservation-status'
-import { screenDeviceRequest, unavailable } from '../hw-filter'
+import { screenDeviceRequest, unavailable, unitSeatFilter, isInAssignedRow } from '../hw-filter'
 import {
   activeStateForSeat,
   aggregateState,
@@ -50,11 +50,17 @@ const POLL_AFTER_SEC = 60
 export async function GET(request: NextRequest, { params }: { params: { code: string } }) {
   const screened = await screenDeviceRequest(request, params.code)
   if (!screened.ok) return screened.response
-  const { code, seatIds } = screened
+  const { code, assignment } = screened
+  if (!assignment) return unavailable()
 
   try {
-    const items = await prisma.inventoryItem.findMany({
-      where: { id: { in: seatIds } },
+    // Track 021 P5: the seats are THE UNIT AT THE ASSIGNED LOCATION, resolved
+    // per request rather than stored — so a parcel rebuilt at the same address
+    // needs no re-assignment. One query: the parcel-scoped index narrows it and
+    // the ROW is filtered here, because the row lives inside the encoded seat
+    // number rather than in a column.
+    const candidates = await prisma.inventoryItem.findMany({
+      where: unitSeatFilter(assignment),
       select: {
         id: true,
         number: true,
@@ -62,15 +68,19 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
         siteId: true,
         site: { select: { timeZone: true, locationLat: true, locationLng: true } },
       },
+      orderBy: { number: 'asc' },
     })
+    const items = candidates.filter((item) => isInAssignedRow(item.number, assignment))
 
-    // A binding that does not fully resolve — a DeviceSeat pointing at a seat that
-    // no longer exists — is a misconfigured device, not a free bed: answer nothing
-    // rather than a partial truth.
-    if (items.length !== seatIds.length) return unavailable()
-    // A device is mounted at one venue; seats bound across sites means the binding
-    // is wrong, and "today" would be ambiguous.
+    // Assigned to a location that holds no unit — the parcel shrank, or the spot
+    // was dismounted. That is a misconfigured device, not a free bed: answer
+    // nothing rather than a confident FREE for a bed that is not there.
+    if (items.length === 0) return unavailable()
+    // A device is mounted at one venue; a unit spanning sites means the data is
+    // wrong, and "today" would be ambiguous.
     if (new Set(items.map((i) => i.siteId)).size !== 1) return unavailable()
+
+    const seatIds = items.map((item) => item.id)
 
     const site = items[0]!.site
     const siteTz = {
@@ -104,9 +114,9 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
 
     const byId = new Map(items.map((i) => [i.id, i]))
 
-    // Emitted in BINDING order (`DeviceSeat.position`), which is mount order —
-    // not a sort over seat numbers, which would light the wrong half of a bar on a
-    // rotated mount or a right-to-left row. (Q1, decided)
+    // Emitted in seat order within the unit. Q2 remains open: a device mounted
+    // ROTATED relative to the numbering needs an explicit reverse flag, or it
+    // lights the wrong half of the bar — cheap to add, not yet built.
     const seats = seatIds.map((id) => {
       const item = byId.get(id)!
       const rows = reservations.filter((r) => r.items.some((i) => i.id === id))
@@ -126,6 +136,13 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
       state: aggregateState(seats.map((s) => s.state)),
       seats,
       pollAfterSec: POLL_AFTER_SEC,
+      // Track 021 P5: the device's CONFIG rides the poll response. It sits
+      // inside the hashed `stable` object deliberately — a reassignment then
+      // busts the ETag and reaches the device on its next poll, while an
+      // unchanged assignment keeps 304ing. Declarative, not an event: it is
+      // present in every 200, so a device that rebooted, lost NVS or was out of
+      // range simply converges, with no acknowledgement protocol.
+      location: screened.location,
       cmd: null as string | null,
     }
     const body = { ...stable, serverTime: new Date().toISOString() }

@@ -362,6 +362,27 @@ the kit is in transit.
 
 ## Log
 
+- **2026-08-16 — Step 5a: the state route now resolves BY ASSIGNED LOCATION, not by a stored
+  seat list.** A device answers for whatever unit occupies its address today, so a parcel
+  rebuilt at the same address needs no re-assignment — the property the whole model was chosen
+  for. `DeviceSeat` is superseded (left in place for the contract phase).
+  **A better shape emerged mid-implementation.** My first cut resolved seats in the gate and
+  then re-queried them in the route: two `inventoryItem` queries per poll, and it broke 30
+  tests that mock that query once. Restructured so the gate resolves only the ASSIGNMENT and
+  the route's existing query carries the location predicate — **one query instead of two**
+  (at ~1.3 M polls/day that matters), and the test churn fell from 30 failures to 4.
+  Resolution detail: the unit's ordinal is a column, but the PARCEL and ROW live inside the
+  encoded seat number, so the parcel-scoped index narrows and the row is filtered in JS. Pool
+  spares are excluded in the query — a spare parked at a unit is not a bed under that parasol.
+  Rules pinned by new tests: an assigned location holding NO unit is **503/amber, never FREE**
+  (the parcel shrank or the spot was dismounted); a PARTIAL address is not an address (401);
+  seats from another row sharing the same ordinal do not leak in (`seq` is scoped to
+  (parcel,row), so the same ordinal recurs every row); and the response now **declares the
+  location back to the device** inside the hashed `stable` object, so a reassignment busts the
+  ETag and an unchanged one keeps 304ing.
+  Q2 is still open and now visible in the code: segment order follows seat order, so a device
+  mounted ROTATED needs an explicit reverse flag or it lights the wrong half of the bar.
+  Gates: user 547u + 102i, tsc + lint clean.
 - **2026-08-16 — Flags became PER CUSTOMER (founder: "devices should be flagged by client and
   enabled in admin UI").** The flag system was global only, which cannot express the real
   question here — one operator has hardware, the rest do not. New `AccountFeatureFlag`

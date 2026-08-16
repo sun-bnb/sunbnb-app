@@ -26,9 +26,23 @@ import prisma from '@repo/data/PrismaCient'
 const mockItems = vi.mocked(prisma.inventoryItem.findMany)
 const mockDevice = vi.mocked(prisma.device.findUnique)
 
-/** A bound device row in the shape hw-filter selects: seats already in mount order. */
-function device(itemIds: string[], status = 'active') {
-  return { status, seats: itemIds.map((itemId) => ({ itemId })) }
+/**
+ * A device row in the shape hw-filter selects (track 021 P5): an ASSIGNED
+ * LOCATION rather than a stored seat list. The seats are resolved from that
+ * location per request, so they come from the item query below, not from here.
+ *
+ * Row 0 is deliberate: the fixtures' seat numbers (12, 13) decode to parcel 0,
+ * row 0 under the `parcel*10000 + row*100 + idx` encoding, so the route's row
+ * filter accepts them.
+ */
+function device(_itemIds: string[], status = 'active') {
+  return {
+    status,
+    assignedSiteId: 'site-1',
+    assignedParcel: 0,
+    assignedRow: 0,
+    assignedSeq: 1,
+  }
 }
 const mockReservations = vi.mocked(prisma.reservation.findMany)
 
@@ -186,12 +200,29 @@ describe('binding', () => {
     expect(res.status).toBe(200)
   })
 
-  it('401s when the device has no seats bound yet', async () => {
-    // An empty binding would otherwise aggregate to FREE — the one answer that
-    // must never be invented.
-    mockDevice.mockResolvedValue(device([]) as never)
+  it('401s when the device has no location assigned yet', async () => {
+    // A self-registered but unassigned device speaks for no spot. An empty
+    // aggregate would render FREE — the one answer that must never be invented.
+    mockDevice.mockResolvedValue({
+      status: 'active',
+      assignedSiteId: null,
+      assignedParcel: null,
+      assignedRow: null,
+      assignedSeq: null,
+    } as never)
     const res = await GET(makeRequest(), makeParams())
     expect(res.status).toBe(401)
+  })
+
+  it('401s when only PART of the location is set — a partial address is not one', async () => {
+    mockDevice.mockResolvedValue({
+      status: 'active',
+      assignedSiteId: 'site-1',
+      assignedParcel: 1,
+      assignedRow: null,
+      assignedSeq: 1,
+    } as never)
+    expect((await GET(makeRequest(), makeParams())).status).toBe(401)
   })
 
   it('503s (amber) when the binding lookup itself fails', async () => {
@@ -207,19 +238,40 @@ describe('binding', () => {
     )
   })
 
-  it('requests seats in mount order (position ascending), never an implicit order', async () => {
+  it('resolves the unit AT THE ASSIGNED LOCATION, excluding pool spares', async () => {
     await GET(makeRequest(), makeParams())
-    expect(mockDevice).toHaveBeenCalledWith(
+    // Track 021 P5: seats come from the location, not a stored list — and a
+    // spare parked at a unit is not a bed under that parasol, so it must never
+    // claim a segment on the bar.
+    expect(mockItems).toHaveBeenCalledWith(
       expect.objectContaining({
-        select: expect.objectContaining({
-          seats: expect.objectContaining({ orderBy: { position: 'asc' } }),
+        where: expect.objectContaining({
+          siteId: 'site-1',
+          group: 0,
+          sunbedGroup: { seq: 1 },
+          status: { not: 'pool' },
         }),
+        orderBy: { number: 'asc' },
       }),
     )
   })
 
-  it('503s when a bound seat no longer exists — a partial truth is not served', async () => {
-    mockItems.mockResolvedValue([seat(SEAT_A, 12)] as never)
+  it('ignores seats from ANOTHER ROW that share the unit ordinal', async () => {
+    // `seq` is scoped to (parcel,row), so the same ordinal recurs in every row.
+    // Row 1's seats (numbers 112/113) must not leak into row 0's device.
+    mockItems.mockResolvedValue([
+      seat(SEAT_A, 12), seat(SEAT_B, 13),
+      seat('clxseat0000000000000000009', 112),
+    ] as never)
+    const body = await (await GET(makeRequest(), makeParams())).json()
+    expect(body.seats.map((s: { id: string }) => s.id)).toEqual([SEAT_A, SEAT_B])
+  })
+
+  it('503s (amber) when the assigned location holds NO unit', async () => {
+    // The parcel shrank, or the spot was dismounted. A device standing at an
+    // address that no longer exists must show amber, never a confident FREE for
+    // a bed that is not there.
+    mockItems.mockResolvedValue([] as never)
     const res = await GET(makeRequest(), makeParams())
     expect(res.status).toBe(503)
   })
@@ -233,12 +285,17 @@ describe('binding', () => {
     expect(res.status).toBe(503)
   })
 
-  it('emits seats in BINDING order, not database order', async () => {
-    // DB returns B first; the binding says A is the leftmost LED segment.
-    mockItems.mockResolvedValue([seat(SEAT_B, 13), seat(SEAT_A, 12)] as never)
-    const res = await GET(makeRequest(), makeParams())
-    const body = await res.json()
+  it('emits seats in SEAT order within the unit (segment order)', async () => {
+    // Q2 remains open: a device mounted rotated relative to the numbering needs
+    // an explicit reverse flag, or it lights the wrong half of the bar.
+    mockItems.mockResolvedValue([seat(SEAT_A, 12), seat(SEAT_B, 13)] as never)
+    const body = await (await GET(makeRequest(), makeParams())).json()
     expect(body.seats.map((s: { id: string }) => s.id)).toEqual([SEAT_A, SEAT_B])
+  })
+
+  it('declares the assigned location back to the device (config on the poll)', async () => {
+    const body = await (await GET(makeRequest(), makeParams())).json()
+    expect(body.location).toBe('0-0-1')
   })
 
   it('normalises a Crockford-ambiguous, lowercase code before the lookup', async () => {
