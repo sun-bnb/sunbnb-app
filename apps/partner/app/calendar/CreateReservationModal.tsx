@@ -8,7 +8,6 @@ interface AvailableItem {
   id: string
   number: number
   category: string | null
-  pairId: string | null
 }
 
 export default function CreateReservationModal({

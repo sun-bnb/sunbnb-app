@@ -289,3 +289,25 @@ export async function createTestReservation(
     include: { items: true },
   })
 }
+
+/**
+ * Two seats forming one paired UNIT — i.e. sharing a `SunbedGroup`, which is
+ * how every real row in dev, test and production is shaped (track 021 P0).
+ * The legacy `pairId` self-relation is deliberately NOT set: since track 021
+ * P1, grouping is the only pairing representation.
+ */
+export async function createTestPairedUnit(
+  userId: string,
+  siteId: string,
+  numbers: [number, number] = [1, 2],
+  overrides: Record<string, any> = {}
+) {
+  const group = await prisma.sunbedGroup.create({ data: { siteId } })
+  const itemA = await createTestInventoryItem(userId, siteId, {
+    number: numbers[0], sunbedGroupId: group.id, ...overrides,
+  })
+  const itemB = await createTestInventoryItem(userId, siteId, {
+    number: numbers[1], sunbedGroupId: group.id, ...overrides,
+  })
+  return { group, itemA, itemB }
+}

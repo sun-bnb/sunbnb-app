@@ -6,6 +6,7 @@ import {
   createTestPartnerAccount,
   createTestSite,
   createTestInventoryItem,
+  createTestPairedUnit,
   createTestRentalItem,
   createTestReservation,
 } from '@/app/test/fixtures'
@@ -128,11 +129,10 @@ describe('reserveItem', () => {
     expect(res.items[0].id).toBe(item.id)
   })
 
-  it('auto-includes paired item when items are paired', async () => {
+  it('auto-includes the UNIT sibling when reserving one of its seats', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id)
-    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
-    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2, pairId: itemA.id })
+    const { itemA, itemB } = await createTestPairedUnit(user.id, site.id, [1, 2])
     mockUserId = user.id
 
     const result = await reserveItem(site.id, itemA.id)
@@ -1127,16 +1127,13 @@ describe('reserveItem — pair-expansion conflict detection (bug #2)', () => {
     expect(count).toBe(1)
   })
 
-  it('rejects reserving a primary item when its legacy pairId sibling is already booked today', async () => {
+  it('rejects reserving a seat when its UNIT sibling is already booked today', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id)
 
-    // Legacy pair: itemA has pairId pointing to itemB
-    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
-    const itemB = await createTestInventoryItem(user.id, site.id, {
-      number: 2,
-      pairId: itemA.id,
-    })
+    // A paired UNIT: both seats share a SunbedGroup (the real-world shape —
+    // track 021 P1 removed the legacy pairId chain this used to exercise).
+    const { itemA, itemB } = await createTestPairedUnit(user.id, site.id, [1, 2])
     mockUserId = user.id
 
     // Pre-existing reservation occupying the SIBLING (itemB) today

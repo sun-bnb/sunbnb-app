@@ -392,8 +392,6 @@ export default function SchematicView() {
     if (partnerIds.length === 0) {
       const legacyPartnerId =
         selectedItem.pairId ??
-        selectedItem.pair?.id ??
-        selectedItem.pairedBy?.id ??
         null
       if (legacyPartnerId) partnerIds.push(legacyPartnerId)
     }
@@ -535,19 +533,11 @@ export default function SchematicView() {
       return
     }
 
-    // Group-drag: all other group members follow.
-    // Group-first: resolve via sunbedGroupId; fall back to pairId for legacy items.
-    let groupPartners: InventoryItem[] = dragged.sunbedGroupId
+    // Group-drag: all other group members follow. SunbedGroup is the only
+    // pairing representation (track 021 P1 retired the legacy pairId chain).
+    const groupPartners: InventoryItem[] = dragged.sunbedGroupId
       ? inventory.filter((i) => i.sunbedGroupId === dragged.sunbedGroupId && i.id !== id)
       : []
-    if (groupPartners.length === 0) {
-      const legacyPartnerId =
-        dragged.pairId ?? dragged.pair?.id ?? dragged.pairedBy?.id ?? null
-      const legacyPartner = legacyPartnerId
-        ? inventory.find((i) => i.id === legacyPartnerId) ?? null
-        : null
-      if (legacyPartner) groupPartners = [legacyPartner]
-    }
     await Promise.all([
       saveInventoryItemSchematicLocation(id, x, y),
       ...groupPartners.map((partner) =>

@@ -329,12 +329,11 @@ async function assignChairPairings({
 }) {
   const allItems = await prisma.inventoryItem.findMany({
     where: { siteId, group },
-    select: { id: true, number: true, sunbedGroupId: true, pairId: true },
+    select: { id: true, number: true, sunbedGroupId: true },
   })
 
   const numberToId = new Map(allItems.map((i) => [i.number, i.id]))
   const idToSunbedGroupId = new Map(allItems.map((i) => [i.id, i.sunbedGroupId]))
-  const idToPairId = new Map(allItems.map((i) => [i.id, i.pairId]))
   const tempToNumber = new Map(generated.map((i) => [i.tempId, i.number]))
 
   // Track 020 P4: the old shape was a sequential `for` with 3-5 awaited
@@ -352,9 +351,8 @@ async function assignChairPairings({
     const pairNumber = tempToNumber.get(item.pairTempId)
     const pairId = pairNumber ? numberToId.get(pairNumber) : undefined
     if (!itemId || !pairId) continue
-    // Every resolved pair gets the legacy pairId dual-write; whether it also
-    // needs a NEW SunbedGroup is decided below (idempotent skip for pairs
-    // already sharing one).
+    // Whether this pair needs a NEW SunbedGroup is decided below (idempotent
+    // skip for pairs already sharing one).
     pairs.push({ itemId, pairId })
   }
   if (pairs.length === 0) return
@@ -377,31 +375,22 @@ async function assignChairPairings({
     return !(a && a === b)
   })
 
-  // pairId dual-writes only where the stored value differs. On a pure
-  // rotation NOTHING differs — the founder's slow-rotation report (2026-08-15)
-  // was ~375 identical per-pair UPDATEs on a 750-seat parcel, executed
-  // sequentially (an interactive transaction runs on ONE connection —
-  // Promise.all does not parallelize it).
-  const pairsToWrite = pairs.filter(({ itemId, pairId }) => idToPairId.get(itemId) !== pairId)
-
-  if (pairsToWrite.length === 0 && priorGroupIds.size === 0 && pairsNeedingGroup.length === 0) {
+  // Track 021 P1: the legacy `pairId` dual-write is gone — `SunbedGroup` is the
+  // sole representation of pairing, and every reader in both apps was already
+  // group-first (their pairId branches were labelled fallbacks and, per the P0
+  // audit, unreachable: no row in dev/test/production has a pairId without a
+  // group). The column itself is dropped in a later release.
+  //
+  // The pure-rotation fast path from track 020 is preserved: when nothing about
+  // the grouping changes, this writes NOTHING and skips the transaction (that
+  // was the founder's multi-second rotation).
+  if (priorGroupIds.size === 0 && pairsNeedingGroup.length === 0) {
     return
   }
 
-  // 3. One atomic transaction — every step set-based: batched pairId
-  //    dual-writes, dissolve priors, mint the new 2-seat groups, batched
-  //    membership assignment.
+  // 3. One atomic transaction, every step set-based: dissolve priors, mint the
+  //    new 2-seat groups, batched membership assignment.
   await prisma.$transaction(async (tx) => {
-    if (pairsToWrite.length > 0) {
-      await tx.$executeRaw`
-        UPDATE "InventoryItem" i SET pair_id = v.pair_id, "updatedAt" = now()
-        FROM (
-          SELECT unnest(${pairsToWrite.map((p) => p.itemId)}::text[]) AS id,
-                 unnest(${pairsToWrite.map((p) => p.pairId)}::text[]) AS pair_id
-        ) v
-        WHERE i.id = v.id`
-    }
-
     if (priorGroupIds.size > 0) {
       await tx.inventoryItem.updateMany({
         where: { sunbedGroupId: { in: [...priorGroupIds] } },

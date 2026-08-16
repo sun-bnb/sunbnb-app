@@ -547,8 +547,6 @@ export default function InventoryView() {
     if (partnerIds.length === 0) {
       const legacyPartnerId =
         selectedItem.pairId ??
-        selectedItem.pair?.id ??
-        selectedItem.pairedBy?.id ??
         null
       if (legacyPartnerId) partnerIds.push(legacyPartnerId)
     }

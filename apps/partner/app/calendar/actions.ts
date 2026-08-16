@@ -126,7 +126,7 @@ export async function createPartnerReservation(data: {
   for (const itemId of data.itemIds) {
     const item = await prisma.inventoryItem.findUnique({
       where: { id: itemId },
-      select: { sunbedGroupId: true, pairId: true, pairedBy: { select: { id: true } } },
+      select: { sunbedGroupId: true },
     })
     if (item?.sunbedGroupId) {
       // SunbedGroup is authoritative — include all other members
@@ -135,12 +135,6 @@ export async function createPartnerReservation(data: {
         select: { id: true },
       })
       for (const s of siblings) expandedIdSet.add(s.id)
-    } else if (item?.pairedBy) {
-      // Legacy fallback: pairedBy self-relation
-      expandedIdSet.add(item.pairedBy.id)
-    } else if (item?.pairId) {
-      // Legacy fallback: pairId self-relation
-      expandedIdSet.add(item.pairId)
     }
   }
 
@@ -207,7 +201,7 @@ export async function getAvailableSunbeds(
   const allItems = await prisma.inventoryItem.findMany({
     where: { siteId, status: 'active' },
     orderBy: { number: 'asc' },
-    select: { id: true, number: true, category: true, pairId: true },
+    select: { id: true, number: true, category: true },
   })
 
   // A no-show/departed booking frees its bed ONLY once its stay is over (no
@@ -241,7 +235,6 @@ export async function getAvailableSunbeds(
       id: i.id,
       number: i.number,
       category: i.category,
-      pairId: i.pairId,
     }))
 
   return { status: 'ok', items }

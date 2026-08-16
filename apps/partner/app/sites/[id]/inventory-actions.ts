@@ -288,11 +288,14 @@ export async function saveInventoryItemProperties(
       group: inventoryItem.group,
       label: inventoryItem.label,
       status: inventoryItem.status,
-      pair: pairItem ? { connect: { id: inventoryItem.pairId } } : undefined,
+      // Track 021 P1: the legacy `pair` relation is NOT connected any more —
+      // connecting it writes pair_id just as surely as assigning the column.
+      // The SunbedGroup below is the pairing.
     },
   })
 
-  // Dual-write: when a pair is being connected, also assign a 2-member SunbedGroup.
+  // A pairing request creates/assigns the 2-member SunbedGroup — the single
+  // representation of "these two seats are one unit".
   if (pairItem && inventoryItem.pairId) {
     // Fetch current sunbedGroupIds for both items
     const [currentItem, currentPair] = await Promise.all([
@@ -363,8 +366,8 @@ export async function pairInventoryItems(id1: string, id2: string) {
           data: { sunbedGroupId: null },
         })]
       : []),
-    prisma.inventoryItem.update({ where: { id: id1 }, data: { pairId: id2 } }),
-    prisma.inventoryItem.update({ where: { id: id2 }, data: { pairId: id1 } }),
+    // Track 021 P1: no `pairId` write — the SunbedGroup created below IS the
+    // pairing. (Existing values are left in place; the column drops later.)
   ])
 
   // Delete prior groups now empty (outside transaction so FK is committed first)

@@ -43,27 +43,18 @@ export async function getPosContext(itemId: string) {
     where: { id: itemId },
     include: {
       site: true,
-      pair: true,
-      pairedBy: true,
       sunbedGroup: { include: { items: true } },
     },
   })
 
   if (!item) return null
 
-  // Prefer group-based pairing (SunbedGroup source of truth).
-  // otherGroupMembers are the sibling items from the group, excluding this item.
+  // SunbedGroup is the source of truth for pairing (track 021 P1 retired the
+  // legacy pairId/pairedBy self-relation).
   const otherGroupMembers =
     item.sunbedGroup?.items.filter((member) => member.id !== item.id) ?? []
 
-  const pair = item.pair || item.pairedBy
-  const items =
-    otherGroupMembers.length > 0
-      ? [item, ...otherGroupMembers]
-      : // Fallback: legacy pairId/pairedBy self-relation for beds not yet in a group.
-        pair
-        ? [item, pair]
-        : [item]
+  const items = otherGroupMembers.length > 0 ? [item, ...otherGroupMembers] : [item]
 
   // The venue's civil day, not the server's UTC day and not the browser's (track 017).
   const { start, end } = siteDayBounds(siteTz(item.site))

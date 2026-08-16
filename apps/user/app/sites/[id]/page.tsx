@@ -39,15 +39,12 @@ async function getSite(idOrSlug: string, userId: string) {
           category: true,
           group: true,
           sunbedGroupId: true,
-          pairId: true,
           ...(includeReservations && {
             reservations: {
               where: { userId },
               orderBy: { from: 'desc' as const }
             }
           }),
-          pair: { select: { id: true } },
-          pairedBy: { select: { id: true } },
           sunbedGroup: {
             select: { items: { select: { id: true } } }
           }

@@ -203,18 +203,15 @@ async function siteTodayBounds(siteId: string): Promise<{ start: Date; end: Date
 }
 
 /**
- * Returns all other member IDs of the item's SunbedGroup.
- * Falls back to pairId/pairedBy for beds that pre-date SunbedGroup migration.
- * For a 2-member group this returns exactly one id — identical to the old
- * getPairItemId behaviour.
+ * Returns all other member IDs of the item's SunbedGroup — the ONLY pairing
+ * representation since track 021 P1. For a 2-member unit this returns exactly
+ * one id, identical to the old getPairItemId behaviour.
  */
 async function getGroupMemberIds(itemId: string): Promise<string[]> {
   const item = await prisma.inventoryItem.findUnique({
     where: { id: itemId },
     select: {
-      pairId: true,
       sunbedGroupId: true,
-      pairedBy: { select: { id: true } },
     },
   })
   if (!item) return []
@@ -228,9 +225,9 @@ async function getGroupMemberIds(itemId: string): Promise<string[]> {
     return siblings.map((s) => s.id)
   }
 
-  // Fallback: legacy pairId / pairedBy self-relation
-  if (item.pairedBy) return [item.pairedBy.id]
-  if (item.pairId) return [item.pairId]
+  // Track 021 P1: the legacy pairId/pairedBy fallback is gone — SunbedGroup is
+  // the only pairing representation (audit: no row anywhere carries a pairId
+  // without a group, so this branch was unreachable).
   return []
 }
 
@@ -2904,8 +2901,6 @@ export async function addSeatToGroup(siteId: string, itemId: string, accessKey?:
       number: true,
       status: true,
       sunbedGroupId: true,
-      pairId: true,
-      pairedBy: { select: { id: true } },
     },
   })
 
@@ -2933,11 +2928,13 @@ export async function addSeatToGroup(siteId: string, itemId: string, accessKey?:
       // Group already exists — use it directly
       groupId = anchor.sunbedGroupId
     } else {
-      // Self-heal: create a SunbedGroup and wire up the anchor + its pair partner
+      // Self-heal: an ungrouped anchor gets its own SunbedGroup. (Track 021 P1
+      // removed the legacy pair-partner pull — no row anywhere carries a pairId
+      // without a group, and grouping is the only pairing representation.)
       const newGroup = await tx.sunbedGroup.create({ data: { siteId } })
       groupId = newGroup.id
 
-      const pairPartnerId = anchor.pairId ?? anchor.pairedBy?.id ?? null
+      const pairPartnerId: string | null = null
 
       // Update the anchor
       await tx.inventoryItem.update({

@@ -11,8 +11,6 @@ async function getSite(idOrSlug: string) {
           reservations: {
             orderBy: { from: 'desc' }
           },
-          pair: true,
-          pairedBy: true,
           sunbedGroup: {
             include: { items: { select: { id: true } } }
           }

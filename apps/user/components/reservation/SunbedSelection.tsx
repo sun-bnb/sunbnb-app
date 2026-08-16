@@ -45,8 +45,8 @@ const getGroupMembers = (item: InventoryItem): { id: string }[] => {
   if (item.sunbedGroup?.items?.length) {
     return item.sunbedGroup.items.filter((m) => m.id !== item.id)
   }
-  const paired = item.pair || item.pairedBy
-  return paired ? [paired] : []
+  // Track 021 P1: grouping is the only pairing representation.
+  return []
 }
 
 /** Scaling function: Adjust the marker size based on the physical length of the sunbed.

@@ -22,8 +22,6 @@ async function getSiteBySlug(slug: string, userId?: string) {
               orderBy: { from: 'desc' as const }
             }
           }),
-          pair: true,
-          pairedBy: true,
           sunbedGroup: {
             include: { items: { select: { id: true } } }
           }

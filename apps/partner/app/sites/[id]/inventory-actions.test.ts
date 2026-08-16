@@ -332,7 +332,7 @@ describe('saveInventoryItemProperties', () => {
     expect(updateCall.data.pair).toBeUndefined()
   })
 
-  it('connects pair item when pairId is provided and found, creates SunbedGroup', async () => {
+  it('creates the SunbedGroup for a pairing request and connects NO pair relation', async () => {
     mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
     vi.mocked(prisma.inventoryItem.findUnique)
       .mockResolvedValueOnce({ siteId: SITE_ID, site: { userId: OWNER_ID } } as any) // ownership lookup (now selects siteId)
@@ -347,10 +347,12 @@ describe('saveInventoryItemProperties', () => {
     const res = await saveInventoryItemProperties('item-1', { pairId: 'pair-1' })
     expect(res.status).toBe('ok')
 
+    // Track 021 P1: connecting the `pair` relation writes pair_id just as surely
+    // as assigning the column — the group below is the only representation.
     const updateCall = vi.mocked(prisma.inventoryItem.update).mock.calls[0][0]
-    expect(updateCall.data.pair).toEqual({ connect: { id: 'pair-1' } })
+    expect(updateCall.data.pair).toBeUndefined()
 
-    // SunbedGroup should be created
+    // SunbedGroup should still be created — the pairing itself is preserved
     expect(vi.mocked(prisma.sunbedGroup.create)).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ siteId: SITE_ID }),
@@ -398,7 +400,7 @@ describe('pairInventoryItems', () => {
     expect(res.errors).toContain('Not authenticated')
   })
 
-  it('writes pairId bidirectionally and creates a SunbedGroup', async () => {
+  it('creates a SunbedGroup and writes NO pairId (track 021 P1)', async () => {
     mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
     vi.mocked(prisma.inventoryItem.findUnique)
       .mockResolvedValueOnce({ siteId: SITE_ID, site: { userId: OWNER_ID } } as any) // item1
@@ -412,10 +414,12 @@ describe('pairInventoryItems', () => {
     const res = await pairInventoryItems('item-1', 'item-2')
     expect(res.status).toBe('ok')
 
-    // pairId writes
-    const txCalls = vi.mocked(prisma.$transaction).mock.calls[0][0] as any[]
-    // The transaction array includes the two inventoryItem.update calls
-    expect(txCalls.length).toBeGreaterThanOrEqual(2)
+    // The SunbedGroup IS the pairing now — nothing writes the legacy column.
+    // (Regression guard for the P1 retirement: a reintroduced dual-write here
+    // would quietly resurrect the second representation this track removes.)
+    expect(vi.mocked(prisma.inventoryItem.update)).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ pairId: expect.anything() }) })
+    )
 
     // SunbedGroup created with siteId
     expect(vi.mocked(prisma.sunbedGroup.create)).toHaveBeenCalledWith(

@@ -240,7 +240,10 @@ describe('reserveItem', () => {
     expect(guardCall.itemIds).toEqual([ITEM_ID, 'pair-1'])
   })
 
-  it('includes paired item automatically via legacy pairId fallback', async () => {
+  // Track 021 P1: grouping is the ONLY pairing representation (see the calendar
+  // twin). A legacy pairId with no SunbedGroup must not silently expand a
+  // floor-staff reservation to a second bed.
+  it('does NOT expand a legacy pairId when the item has no SunbedGroup', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
       id: ITEM_ID,
@@ -252,7 +255,7 @@ describe('reserveItem', () => {
     await reserveItem(SITE_ID, ITEM_ID)
 
     const guardCall = mockGuard.mock.calls[0][0]
-    expect(guardCall.itemIds).toEqual([ITEM_ID, 'pair-1'])
+    expect(guardCall.itemIds).toEqual([ITEM_ID])
   })
 
   it('truncates guest name to 200 chars and notes to 500', async () => {
@@ -1653,7 +1656,7 @@ describe('addSeatToGroup', () => {
     expect(createCall.data.schematicY).toBeNull()
   })
 
-  it('self-heals when anchor has pairId: creates SunbedGroup and updates anchor + pair partner', async () => {
+  it('self-heals an UNGROUPED anchor into its own SunbedGroup (no legacy pair pull)', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
       siteId: SITE_ID,
@@ -1676,13 +1679,15 @@ describe('addSeatToGroup', () => {
     // A new SunbedGroup must have been created
     expect(vi.mocked(prisma.sunbedGroup.create)).toHaveBeenCalledWith({ data: { siteId: SITE_ID } })
 
-    // Both the anchor and its pairId partner must have been updated
+    // Only the anchor joins the new group. Track 021 P1: a legacy pairId must
+    // NOT drag a second seat into it — grouping is the sole pairing record, and
+    // no row in any environment carries a pairId without a group.
     const updateCalls = vi.mocked(prisma.inventoryItem.update).mock.calls
     const updatedIds = updateCalls.map(c => (c[0] as any).where.id)
     expect(updatedIds).toContain(ITEM_ID)
-    expect(updatedIds).toContain('pair-item-1')
+    expect(updatedIds).not.toContain('pair-item-1')
     const updatedGroupIds = updateCalls.map(c => (c[0] as any).data.sunbedGroupId)
-    expect(updatedGroupIds).toEqual(['group-new', 'group-new'])
+    expect(updatedGroupIds).toEqual(['group-new'])
 
     // Extra seat must be created in parcel 2's pool band
     const createCall = vi.mocked(prisma.inventoryItem.create).mock.calls[0][0]
@@ -1691,7 +1696,7 @@ describe('addSeatToGroup', () => {
     expect(createCall.data.group).toBe(2)
   })
 
-  it('self-heals when anchor has pairedBy (back-ref): updates back-ref partner', async () => {
+  it('self-heals an ungrouped anchor even when a legacy back-ref exists (partner untouched)', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
       siteId: SITE_ID,
@@ -1713,7 +1718,7 @@ describe('addSeatToGroup', () => {
     const updateCalls = vi.mocked(prisma.inventoryItem.update).mock.calls
     const updatedIds = updateCalls.map(c => (c[0] as any).where.id)
     expect(updatedIds).toContain(ITEM_ID)
-    expect(updatedIds).toContain('pair-primary-1')
+    expect(updatedIds).not.toContain('pair-primary-1')
   })
 
   it('creates the extra seat with correct band number for sequential seats', async () => {

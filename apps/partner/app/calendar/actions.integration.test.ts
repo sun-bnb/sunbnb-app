@@ -5,6 +5,7 @@ import {
   createTestSite,
   createTestInventoryItem,
   createTestReservation,
+  createTestPairedUnit,
 } from '@/app/test/fixtures'
 
 // ---------------------------------------------------------------------------
@@ -326,11 +327,12 @@ describe('createPartnerReservation', () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id, { timeZone: 'UTC' })
     // Create item A, then item B paired to A
-    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
-    const itemB = await createTestInventoryItem(user.id, site.id, { number: 2, pairId: itemA.id })
+    const pairedUnit = await createTestPairedUnit(user.id, site.id, [1, 2])
+    const itemA = pairedUnit.itemA
+    const itemB = pairedUnit.itemB
     mockUserId = user.id
 
-    // Only select itemA — itemB should be auto-included via pairId
+    // Only select itemA — itemB should be auto-included via its SunbedGroup
     const result = await createPartnerReservation({
       siteId: site.id,
       itemIds: [itemA.id],
@@ -590,15 +592,11 @@ describe('createPartnerReservation — pair-expansion conflict detection (bug #2
     expect(count).toBe(1)
   })
 
-  it('rejects booking a primary item when its legacy pairId sibling is already booked for the same period', async () => {
+  it('rejects booking a seat when its UNIT sibling is already booked for the same period', async () => {
     const user = await createTestUser()
     const site = await createTestSite(user.id, { timeZone: 'UTC' })
 
-    const itemA = await createTestInventoryItem(user.id, site.id, { number: 1 })
-    const itemB = await createTestInventoryItem(user.id, site.id, {
-      number: 2,
-      pairId: itemA.id,
-    })
+    const { itemA, itemB } = await createTestPairedUnit(user.id, site.id, [1, 2])
     mockUserId = user.id
 
     // Pre-existing reservation on the SIBLING (itemB)

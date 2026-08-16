@@ -213,7 +213,11 @@ describe('createPartnerReservation', () => {
     expect(vi.mocked(prisma.reservation.create)).not.toHaveBeenCalled()
   })
 
-  it('auto-includes paired items via legacy pairId fallback (no SunbedGroup)', async () => {
+  // Track 021 P1: SunbedGroup is the ONLY pairing representation. A legacy row
+  // carrying a pairId but no group must NOT expand — verified safe because the
+  // P0 audit found zero such rows in dev, test and production, and every write
+  // path creates the group. This pins that grouping is the sole source.
+  it('does NOT expand a legacy pairId when the item has no SunbedGroup', async () => {
     authenticateAsOwner()
     vi.mocked(prisma.inventoryItem.findMany).mockResolvedValue([{ id: 'item-1' }] as any)
     vi.mocked(prisma.inventoryItem.findUnique).mockResolvedValue({
@@ -233,7 +237,7 @@ describe('createPartnerReservation', () => {
 
     const guardCall = mockGuard.mock.calls[0][0]
     expect(guardCall.itemIds).toContain('item-1')
-    expect(guardCall.itemIds).toContain('item-pair')
+    expect(guardCall.itemIds).not.toContain('item-pair')
   })
 })
 

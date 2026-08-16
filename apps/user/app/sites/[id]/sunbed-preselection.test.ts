@@ -25,6 +25,19 @@ function makeItem(overrides: Partial<InventoryItem> & { id: string }): Inventory
   }
 }
 
+/**
+ * Two seats forming one UNIT — sharing a SunbedGroup, which is how every row in
+ * dev, test and production is actually shaped (track 021 P0/P1). The legacy
+ * pair/pairedBy self-relation it replaces is retired.
+ */
+function makeUnit(idA: string, idB: string): [InventoryItem, InventoryItem] {
+  const group = { id: `grp-${idA}`, items: [{ id: idA }, { id: idB }] }
+  return [
+    makeItem({ id: idA, sunbedGroupId: group.id, sunbedGroup: group }),
+    makeItem({ id: idB, sunbedGroupId: group.id, sunbedGroup: group }),
+  ]
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // resolveSelectionSet
 // ────────────────────────────────────────────────────────────────────────────
@@ -37,27 +50,26 @@ describe('resolveSelectionSet', () => {
     expect(result[0].id).toBe('a')
   })
 
-  it('resolves pair from the PRIMARY (forward direction: item.pair)', () => {
-    // Primary 'a' → pair → secondary 'b'
-    const secondary = makeItem({ id: 'b' })
-    const primary = makeItem({ id: 'a', pair: { id: 'b' } })
-    const inventory = [primary, secondary]
-
-    const result = resolveSelectionSet(primary, inventory)
-    const ids = result.map((i) => i.id).sort()
-    expect(ids).toEqual(['a', 'b'])
+  it('selecting either seat of a unit selects BOTH (from the first member)', () => {
+    const [a, b] = makeUnit('a', 'b')
+    const result = resolveSelectionSet(a, [a, b])
+    expect(result.map((i) => i.id).sort()).toEqual(['a', 'b'])
   })
 
-  it('resolves pair from the SECONDARY (back direction: item.pairedBy)', () => {
-    // Secondary 'b' holds pairedBy → primary 'a'
-    const primary = makeItem({ id: 'a' })
-    const secondary = makeItem({ id: 'b', pairedBy: { id: 'a' } })
-    const inventory = [primary, secondary]
+  it('selecting either seat of a unit selects BOTH (from the second member)', () => {
+    const [a, b] = makeUnit('a', 'b')
+    const result = resolveSelectionSet(b, [a, b])
+    expect(result.map((i) => i.id).sort()).toEqual(['a', 'b'])
+  })
 
-    // Starting from the secondary should still give both items.
-    const result = resolveSelectionSet(secondary, inventory)
-    const ids = result.map((i) => i.id).sort()
-    expect(ids).toEqual(['a', 'b'])
+  // Track 021 P1 contract: grouping is the ONLY pairing representation. A row
+  // carrying only the retired self-relation resolves to itself — verified safe
+  // because no such row exists in dev, test or production.
+  it('does NOT resolve a legacy pair/pairedBy without a group', () => {
+    const secondary = makeItem({ id: 'b' })
+    const primary = makeItem({ id: 'a', pair: { id: 'b' } })
+    const result = resolveSelectionSet(primary, [primary, secondary])
+    expect(result.map((i) => i.id)).toEqual(['a'])
   })
 
   it('returns only the item when pair pointer exists but partner is missing from inventory', () => {
@@ -136,12 +148,11 @@ describe('pickFirstAvailablePair', () => {
     expect(result[0].id).toBe('b')
   })
 
-  it('picks first available PRIMARY and resolves both pair sides (forward direction)', () => {
-    const secondary = makeItem({ id: 'b' })
-    const primary = makeItem({ id: 'a', pair: { id: 'b' } })
+  it('picks the first available seat and preselects its whole unit', () => {
+    const [primary, secondary] = makeUnit('a', 'b')
     const inventory = [primary, secondary]
 
-    // Availability lists primary first
+    // Availability lists the first member first
     const result = pickFirstAvailablePair(
       [
         { itemId: 'a', available: true },
@@ -153,21 +164,15 @@ describe('pickFirstAvailablePair', () => {
     expect(ids).toEqual(['a', 'b'])
   })
 
-  it('picks first available SECONDARY and resolves both pair sides (back direction)', () => {
-    const primary = makeItem({ id: 'a' })
-    const secondary = makeItem({ id: 'b', pairedBy: { id: 'a' } })
-    const inventory = [primary, secondary]
-
-    // Availability lists secondary first (primary is unavailable)
+  it('picks the first available seat and preselects its unit (second member first)', () => {
+    const [a, b] = makeUnit('a', 'b')
     const result = pickFirstAvailablePair(
       [
-        { itemId: 'a', available: false },
         { itemId: 'b', available: true },
+        { itemId: 'a', available: true },
       ],
-      inventory,
+      [a, b],
     )
-    const ids = result.map((i) => i.id).sort()
-    // Should include BOTH even though we found secondary first
-    expect(ids).toEqual(['a', 'b'])
+    expect(result.map((i) => i.id).sort()).toEqual(['a', 'b'])
   })
 })

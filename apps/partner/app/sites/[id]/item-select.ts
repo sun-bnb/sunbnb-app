@@ -33,7 +33,6 @@ export const INVENTORY_ITEM_SELECT = {
   group: true,
   itemGroupId: true,
   sunbedGroupId: true,
-  pairId: true,
-  pair: { select: { id: true } },
-  pairedBy: { select: { id: true } },
+  // Track 021 P1: `pairId`/`pair`/`pairedBy` are no longer projected — the
+  // editors resolve pairing through `sunbedGroup` alone.
 } as const

@@ -28,15 +28,9 @@ export function resolveSelectionSet(
     return members.length ? members : [item]
   }
 
-  // Bare pair — check both directions.
-  // item.pair   → this item IS the primary; partner id is item.pair.id
-  // item.pairedBy → this item IS the secondary; partner id is item.pairedBy.id
-  const partnerId = item.pair?.id ?? item.pairedBy?.id
-  if (partnerId) {
-    const partner = byId(partnerId)
-    return partner ? [item, partner] : [item]
-  }
-
+  // Track 021 P1: SunbedGroup is the only pairing representation — the legacy
+  // pair/pairedBy self-relation is retired (no row in any environment carried
+  // a pairId without a group, so this fallback was unreachable).
   return [item]
 }
 

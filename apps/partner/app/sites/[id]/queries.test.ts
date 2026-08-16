@@ -160,12 +160,14 @@ describe('getInventoryItems', () => {
     expect(scoped.notes).toBeUndefined()
     expect(scoped.image).toBeUndefined()
     expect(scoped.createdAt).toBeUndefined()
-    expect(scoped.pair).toEqual({ select: { id: true } })
-    expect(scoped.pairedBy).toEqual({ select: { id: true } })
+    // Track 021 P1: the legacy relation is no longer projected at all.
+    expect(scoped.pair).toBeUndefined()
+    expect(scoped.pairedBy).toBeUndefined()
+    expect(scoped.pairId).toBeUndefined()
     // Fields the editors DO read must be present.
     for (const f of ['id', 'number', 'seatLabel', 'locationLat', 'locationLng',
                      'schematicX', 'schematicY', 'rotation', 'status', 'group',
-                     'itemGroupId', 'sunbedGroupId', 'pairId']) {
+                     'itemGroupId', 'sunbedGroupId']) {
       expect(scoped[f], `missing projected field: ${f}`).toBe(true)
     }
   })
@@ -204,7 +206,8 @@ describe('getItemsByGroups', () => {
     // Ordering matters: seat order drives numbering/pair display in the editor.
     expect(arg.orderBy).toEqual({ number: 'asc' })
     // Same merge-compatible projection as the other two readers.
-    expect(arg.select.pair).toEqual({ select: { id: true } })
+    expect(arg.select.sunbedGroup).toBeDefined()
+    expect(arg.select.pair).toBeUndefined()
     expect(arg.select.notes).toBeUndefined()
   })
 })

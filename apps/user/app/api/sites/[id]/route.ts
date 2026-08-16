@@ -37,8 +37,6 @@ export async function GET(request: NextRequest, { params } : { params: { id: str
               orderBy: { from: 'desc' as const }
             }
           }),
-          pair: true,
-          pairedBy: true,
           sunbedGroup: {
             // Only ACTIVE group members are consumer-bookable. Pool/overflow extras
             // (status='pool', walk-in only) must never leak into the group — otherwise

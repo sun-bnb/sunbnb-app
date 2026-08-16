@@ -19,14 +19,13 @@ const STATUS_FILL = {
   unavailable: 'red',
 }
 
-/** Returns all OTHER members of this item's sunbed group for co-selection.
- *  Falls back to pair/pairedBy when no group is set. */
+/** Returns all OTHER members of this item's sunbed group for co-selection. */
 const getGroupMembers = (item: InventoryItem): { id: string }[] => {
   if (item.sunbedGroup?.items?.length) {
     return item.sunbedGroup.items.filter((m) => m.id !== item.id)
   }
-  const paired = item.pair || item.pairedBy
-  return paired ? [paired] : []
+  // Track 021 P1: grouping is the only pairing representation.
+  return []
 }
 
 export default function SchematicSelection({ site }: { site: SiteProps }) {
