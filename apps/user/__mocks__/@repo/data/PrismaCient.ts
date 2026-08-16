@@ -44,6 +44,11 @@ const prisma = {
   inventoryItem: {
     findMany: vi.fn(),
   },
+  // HW device binding (track 019 P2) — the /api/hw/{code}/* routes resolve their
+  // seat list through this instead of the old HW_DEVICE_MAP env var.
+  device: {
+    findUnique: vi.fn(),
+  },
   sunbedGroup: {
     create: vi.fn(),
     findUnique: vi.fn(),

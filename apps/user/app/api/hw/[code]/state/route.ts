@@ -19,11 +19,11 @@
  * grid's `bed-state.ts` is: never a second opinion about what a seat's state is
  * (track 018, determinism contract #1). This file is I/O only.
  *
- * The request gate (soft `User-Agent` client filter + env binding, Q9 — NOT auth;
- * there is no secret on this surface) is shared with the telemetry post through
- * `../hw-filter`, so the two endpoints cannot drift. P1 binds devices through
- * `HW_DEVICE_MAP`; P2 replaces that with the `Device`/`DeviceSeat` tables, changing
- * only `hw-filter.ts`. The wire shape does not change when it does.
+ * The request gate (soft `User-Agent` client filter + the device binding lookup,
+ * Q9 — NOT auth; there is no secret on this surface) is shared with the telemetry
+ * post through `../hw-filter`, so the two endpoints cannot drift. The binding now
+ * comes from the `Device`/`DeviceSeat` tables (P2, was the `HW_DEVICE_MAP` env var
+ * in P1); the wire shape did not change when it moved.
  */
 
 import { NextRequest } from 'next/server'
@@ -48,7 +48,7 @@ const POLL_AFTER_SEC = 60
 // ─── route ───────────────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest, { params }: { params: { code: string } }) {
-  const screened = screenDeviceRequest(request, params.code)
+  const screened = await screenDeviceRequest(request, params.code)
   if (!screened.ok) return screened.response
   const { code, seatIds } = screened
 
@@ -64,11 +64,12 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
       },
     })
 
-    // A binding that does not fully resolve is a misconfigured device, not a free
-    // bed: answer nothing rather than a partial truth.
+    // A binding that does not fully resolve — a DeviceSeat pointing at a seat that
+    // no longer exists — is a misconfigured device, not a free bed: answer nothing
+    // rather than a partial truth.
     if (items.length !== seatIds.length) return unavailable()
-    // A device is mounted at one venue; mixed sites means the map is wrong, and
-    // "today" would be ambiguous.
+    // A device is mounted at one venue; seats bound across sites means the binding
+    // is wrong, and "today" would be ambiguous.
     if (new Set(items.map((i) => i.siteId)).size !== 1) return unavailable()
 
     const site = items[0]!.site
@@ -103,7 +104,7 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
 
     const byId = new Map(items.map((i) => [i.id, i]))
 
-    // Emitted in BINDING order (the HW_DEVICE_MAP array), which is mount order —
+    // Emitted in BINDING order (`DeviceSeat.position`), which is mount order —
     // not a sort over seat numbers, which would light the wrong half of a bar on a
     // rotated mount or a right-to-left row. (Q1, decided)
     const seats = seatIds.map((id) => {

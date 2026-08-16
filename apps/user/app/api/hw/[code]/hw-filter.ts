@@ -24,10 +24,15 @@
  * Do not "harden" this into auth without revisiting Q9. If a device ever gains a
  * consequential write path (Q5), that is the trigger to reopen it.
  *
+ * The binding moved from the `HW_DEVICE_MAP` env var (P1) to the `Device` /
+ * `DeviceSeat` tables (P2). Every caller screens through here, so that swap
+ * touched only this file and left the wire contract alone.
+ *
  * Contract: `.claude/tracks/019-hw-api.md` (§Wire contract, §Identity & client filter).
  */
 
 import { NextRequest } from 'next/server'
+import prisma from '@repo/data/PrismaCient'
 
 /**
  * Uniform rejection. Every decline — failed filter, unknown code, malformed code —
@@ -66,28 +71,39 @@ function clientMatches(header: string | null, expected: string): boolean {
 }
 
 /**
- * P1 binding: `HW_DEVICE_MAP` is JSON `{"<code>": ["<itemId>", …]}`, and **array
- * order is mount order** — index 0 is the leftmost LED segment. That is the same
- * physical fact `DeviceSeat.position` carries in P2 (Q1, decided): the binding is
- * an installation fact, never derived from booking grouping.
+ * A device whose lifecycle has ended serves nothing. `provisioned` DOES serve:
+ * requiring `active` would trap bring-up — a freshly flashed device would be
+ * declined until someone flipped a status by hand — and the fail-safe still
+ * holds either way, since a declined device shows amber, never a false FREE.
  */
-function seatIdsForCode(code: string): string[] | null {
-  const raw = process.env.HW_DEVICE_MAP
-  if (!raw) return null
+const RETIRED = 'retired'
 
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    return null
-  }
-  if (!parsed || typeof parsed !== 'object') return null
+/**
+ * The binding: which seats sit under this device, **in mount order**
+ * (`DeviceSeat.position`, 0 = leftmost LED segment). A physical installation
+ * fact, stored explicitly and never derived from booking grouping (Q1).
+ *
+ * P1 read this from the `HW_DEVICE_MAP` env var; P2 reads the `Device` /
+ * `DeviceSeat` tables. The wire contract is unchanged by the swap — mount order
+ * is still mount order, it just has a home that survives a redeploy and can be
+ * edited by the P4 field-binding flow.
+ */
+async function seatIdsForCode(code: string): Promise<string[] | null> {
+  const device = await prisma.device.findUnique({
+    where: { code },
+    select: {
+      status: true,
+      seats: { select: { itemId: true }, orderBy: { position: 'asc' } },
+    },
+  })
 
-  const entry = (parsed as Record<string, unknown>)[code]
-  if (!Array.isArray(entry)) return null
+  if (!device || device.status === RETIRED) return null
+  // A device with no seats bound yet (provisioned, not installed) has nothing to
+  // say about any seat — decline rather than answer an empty aggregate, which
+  // would render as FREE.
+  if (device.seats.length === 0) return null
 
-  const ids = entry.filter((id): id is string => typeof id === 'string' && id.length > 0)
-  return ids.length > 0 ? ids : null
+  return device.seats.map((s) => s.itemId)
 }
 
 export type DeviceRequest =
@@ -95,15 +111,19 @@ export type DeviceRequest =
   | { ok: false; response: Response }
 
 /**
- * Screen a device request: client filter, then binding lookup. On any decline the
- * caller returns `.response` verbatim and must NOT branch on the reason — a uniform
- * reject is the tidy default. On success the caller gets the normalised `code` and
- * the seat binding in mount order.
+ * Screen a device request: client filter first, then binding lookup. On any
+ * decline the caller returns `.response` verbatim and must NOT branch on the
+ * reason — a uniform reject is the tidy default. On success the caller gets the
+ * normalised `code` and the seat binding in mount order.
  *
- * Both checks run BEFORE any DB access, which is the point: junk traffic costs a
- * string compare and a JSON parse, never a Postgres round-trip (Q3).
+ * ORDER MATTERS: the UA filter runs BEFORE the binding query, so junk traffic
+ * costs a string compare and never a Postgres round-trip. That is the filter's
+ * whole job at Q3's ~1.3 M polls/day.
  */
-export function screenDeviceRequest(request: NextRequest, rawCode: string): DeviceRequest {
+export async function screenDeviceRequest(
+  request: NextRequest,
+  rawCode: string,
+): Promise<DeviceRequest> {
   const expected = process.env.HW_CLIENT_UA
   // No filter configured is OUR fault, not the caller's: 503 → amber, not a decline.
   // Fail CLOSED — an unset value must never mean "let everything through".
@@ -114,7 +134,15 @@ export function screenDeviceRequest(request: NextRequest, rawCode: string): Devi
   }
 
   const code = normalizeCode(rawCode)
-  const seatIds = seatIdsForCode(code)
+
+  let seatIds: string[] | null
+  try {
+    seatIds = await seatIdsForCode(code)
+  } catch {
+    // The binding is unreadable — that is not the caller's fault and must not
+    // read as "unknown device": 503 → amber, never a confident answer.
+    return { ok: false, response: unavailable() }
+  }
   if (!seatIds) return { ok: false, response: unauthorized() }
 
   return { ok: true, code, seatIds }

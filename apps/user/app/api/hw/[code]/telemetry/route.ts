@@ -29,7 +29,7 @@ import { screenDeviceRequest } from '../hw-filter'
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest, { params }: { params: { code: string } }) {
-  const screened = screenDeviceRequest(request, params.code)
+  const screened = await screenDeviceRequest(request, params.code)
   if (!screened.ok) return screened.response
 
   // P1.5 stub: drain and drop. The body shape is read by P5, not here — but we

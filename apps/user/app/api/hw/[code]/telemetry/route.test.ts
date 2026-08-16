@@ -12,10 +12,18 @@
  *     still accepted, because telemetry must never fail the device's loop.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
 import { POST } from './route'
+import prisma from '@repo/data/PrismaCient'
+
+const mockDevice = vi.mocked(prisma.device.findUnique)
+
+/** A bound device row in the shape hw-filter selects: seats already in mount order. */
+function device(itemIds: string[], status = 'active') {
+  return { status, seats: itemIds.map((itemId) => ({ itemId })) }
+}
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -49,7 +57,7 @@ function makeParams(code = CODE) {
 
 beforeEach(() => {
   process.env.HW_CLIENT_UA = UA_NEEDLE
-  process.env.HW_DEVICE_MAP = JSON.stringify({ [CODE]: [SEAT_A, SEAT_B] })
+  mockDevice.mockResolvedValue(device([SEAT_A, SEAT_B]) as never)
 })
 
 // ── The soft client filter (Q9) ───────────────────────────────────────────────
@@ -87,6 +95,7 @@ describe('client filter', () => {
   })
 
   it('an unknown code is declined identically to a failed filter', async () => {
+    mockDevice.mockResolvedValueOnce(null as never)
     const unknown = await POST(makeRequest('ZZZZZZ'), makeParams('ZZZZZZ'))
     const filtered = await POST(
       makeRequest(CODE, { headers: { 'user-agent': 'curl/8.4.0' } }),
@@ -137,10 +146,19 @@ describe('accept', () => {
     expect(res.status).toBe(204)
   })
 
-  it('normalises the code before binding lookup (lowercase/Crockford resolves)', async () => {
-    // Map is keyed by the canonical CODE; a device sending it lowercased must still
-    // resolve, mirroring the state route’s normalisation.
+  it('normalises the code before the binding lookup', async () => {
+    // Devices are stored under the canonical code; a lowercased one must still
+    // resolve, mirroring the state route's normalisation.
     const res = await POST(makeRequest('7qk3m2'), makeParams('7qk3m2'))
     expect(res.status).toBe(204)
+    expect(mockDevice).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { code: CODE } }),
+    )
+  })
+
+  it('declines a retired device', async () => {
+    mockDevice.mockResolvedValue(device([SEAT_A, SEAT_B], 'retired') as never)
+    const res = await POST(makeRequest(), makeParams())
+    expect(res.status).toBe(401)
   })
 })

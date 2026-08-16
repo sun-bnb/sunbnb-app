@@ -29,8 +29,7 @@
     "ALLOWED_ORIGINS",
     "FF_RESTAURANTS",
     "CONSUMER_APP_URL",
-    "HW_CLIENT_UA",
-    "HW_DEVICE_MAP"
+    "HW_CLIENT_UA"
   ],
   "tasks": {
     "build": {

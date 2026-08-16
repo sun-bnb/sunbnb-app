@@ -24,6 +24,12 @@ import { normalizeCode } from '../hw-filter'
 import prisma from '@repo/data/PrismaCient'
 
 const mockItems = vi.mocked(prisma.inventoryItem.findMany)
+const mockDevice = vi.mocked(prisma.device.findUnique)
+
+/** A bound device row in the shape hw-filter selects: seats already in mount order. */
+function device(itemIds: string[], status = 'active') {
+  return { status, seats: itemIds.map((itemId) => ({ itemId })) }
+}
 const mockReservations = vi.mocked(prisma.reservation.findMany)
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -87,7 +93,7 @@ function makeParams(code = CODE) {
 beforeEach(() => {
   vi.clearAllMocks()
   process.env.HW_CLIENT_UA = UA_NEEDLE
-  process.env.HW_DEVICE_MAP = JSON.stringify({ [CODE]: [SEAT_A, SEAT_B] })
+  mockDevice.mockResolvedValue(device([SEAT_A, SEAT_B]) as never)
   mockItems.mockResolvedValue([seat(SEAT_A, 12), seat(SEAT_B, 13)] as never)
   mockReservations.mockResolvedValue([] as never)
 })
@@ -125,6 +131,7 @@ describe('client filter', () => {
   })
 
   it('an unknown code is declined identically to a failed filter', async () => {
+    mockDevice.mockResolvedValueOnce(null as never)
     const unknown = await GET(makeRequest('ZZZZZZ'), makeParams('ZZZZZZ'))
     const filtered = await GET(makeRequest(CODE, { 'user-agent': 'curl/8.4.0' }), makeParams())
 
@@ -134,14 +141,20 @@ describe('client filter', () => {
     expect(await unknown.json()).toEqual(await filtered.json())
   })
 
-  it('never queries the database for an unknown code', async () => {
+  it('does no state query for an unknown code', async () => {
+    // The binding lookup still runs (that is how the code is resolved), but the
+    // expensive seat/reservation reads must not.
+    mockDevice.mockResolvedValue(null as never)
     await GET(makeRequest('ZZZZZZ'), makeParams('ZZZZZZ'))
     expect(mockItems).not.toHaveBeenCalled()
+    expect(mockReservations).not.toHaveBeenCalled()
   })
 
-  it('never queries the database for filtered-out traffic', async () => {
-    // The filter's real job: junk costs a string compare, never a Postgres round-trip.
+  it('touches the database NOT AT ALL for filtered-out traffic', async () => {
+    // The filter's real job at ~1.3M polls/day: junk costs a string compare and
+    // never a Postgres round-trip — not even the binding lookup.
     await GET(makeRequest(CODE, { 'user-agent': 'curl/8.4.0' }), makeParams())
+    expect(mockDevice).not.toHaveBeenCalled()
     expect(mockItems).not.toHaveBeenCalled()
   })
 
@@ -155,22 +168,54 @@ describe('client filter', () => {
 // ── Binding ───────────────────────────────────────────────────────────────────
 
 describe('binding', () => {
-  it('401s when HW_DEVICE_MAP is unset', async () => {
-    delete process.env.HW_DEVICE_MAP
+  it('401s when no device row carries the code', async () => {
+    mockDevice.mockResolvedValue(null as never)
     const res = await GET(makeRequest(), makeParams())
     expect(res.status).toBe(401)
   })
 
-  it('401s when HW_DEVICE_MAP is malformed JSON', async () => {
-    process.env.HW_DEVICE_MAP = '{not json'
+  it('401s for a RETIRED device — a decommissioned unit serves nothing', async () => {
+    mockDevice.mockResolvedValue(device([SEAT_A, SEAT_B], 'retired') as never)
     const res = await GET(makeRequest(), makeParams())
     expect(res.status).toBe(401)
   })
 
-  it('401s when the code maps to an empty seat list', async () => {
-    process.env.HW_DEVICE_MAP = JSON.stringify({ [CODE]: [] })
+  it('SERVES a provisioned-but-not-yet-active device (bring-up must not be trapped)', async () => {
+    mockDevice.mockResolvedValue(device([SEAT_A, SEAT_B], 'provisioned') as never)
+    const res = await GET(makeRequest(), makeParams())
+    expect(res.status).toBe(200)
+  })
+
+  it('401s when the device has no seats bound yet', async () => {
+    // An empty binding would otherwise aggregate to FREE — the one answer that
+    // must never be invented.
+    mockDevice.mockResolvedValue(device([]) as never)
     const res = await GET(makeRequest(), makeParams())
     expect(res.status).toBe(401)
+  })
+
+  it('503s (amber) when the binding lookup itself fails', async () => {
+    mockDevice.mockRejectedValue(new Error('db down') as never)
+    const res = await GET(makeRequest(), makeParams())
+    expect(res.status).toBe(503)
+  })
+
+  it('looks the device up by the NORMALISED code', async () => {
+    await GET(makeRequest('7qk3m2'), makeParams('7qk3m2'))
+    expect(mockDevice).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { code: CODE } }),
+    )
+  })
+
+  it('requests seats in mount order (position ascending), never an implicit order', async () => {
+    await GET(makeRequest(), makeParams())
+    expect(mockDevice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          seats: expect.objectContaining({ orderBy: { position: 'asc' } }),
+        }),
+      }),
+    )
   })
 
   it('503s when a bound seat no longer exists — a partial truth is not served', async () => {
@@ -196,12 +241,14 @@ describe('binding', () => {
     expect(body.seats.map((s: { id: string }) => s.id)).toEqual([SEAT_A, SEAT_B])
   })
 
-  it('normalises a Crockford-ambiguous, lowercase code', async () => {
+  it('normalises a Crockford-ambiguous, lowercase code before the lookup', async () => {
     // Stored form is the normalised one: '7qk3il' → uppercase → I and L fold to 1.
-    process.env.HW_DEVICE_MAP = JSON.stringify({ '7QK311': [SEAT_A, SEAT_B] })
     const res = await GET(makeRequest('7qk3il'), makeParams('7qk3il'))
     expect(res.status).toBe(200)
     expect((await res.json()).code).toBe('7QK311')
+    expect(mockDevice).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { code: '7QK311' } }),
+    )
   })
 })
 
