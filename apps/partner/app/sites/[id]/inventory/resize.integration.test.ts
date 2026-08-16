@@ -143,3 +143,114 @@ describe('parcel resize', () => {
     }
   })
 })
+
+describe('re-pairing preserves unit identity (P4 A2)', () => {
+  it('reshaping a paired parcel REUSES unit rows instead of re-minting them', async () => {
+    // 1×4 paired → units {1,2} and {3,4}. Reshape to 2×2 paired → the pairs
+    // become {1,2} and {3,4} again in a different geometry, so both units must
+    // survive untouched.
+    const { site } = await seedParcel(1, 4, true)
+    const before = await snapshot(site.id)
+    expect(new Set(before.rows.map((r) => r.sunbedGroupId)).size).toBe(2)
+
+    await syncChairsWithLayout(site.id, config(2, 2, true), 'rearrange')
+
+    const after = await snapshot(site.id)
+    expect(after.rows).toHaveLength(4)
+    // Unit ROWS survive — same ids, same persisted ordinals. Before A2 these
+    // were dissolved and re-minted, losing both.
+    expect(new Set(after.units.map((u) => u.id))).toEqual(new Set(before.units.map((u) => u.id)))
+    for (const unit of before.units) {
+      expect(after.units.find((u) => u.id === unit.id)!.seq).toBe(unit.seq)
+    }
+    expect(await findUnitlessPlacedSeats(site.id)).toEqual([])
+  })
+
+  it('a re-pair that regroups members keeps a unit per pair and prunes none too many', async () => {
+    const { user, site } = await seedParcel(1, 4, true)
+    const seats = await prisma.inventoryItem.findMany({
+      where: { siteId: site.id }, orderBy: { number: 'asc' },
+    })
+    // Force a CROSSED prior grouping: (1,3) and (2,4). Re-pairing to adjacent
+    // pairs must reuse rather than dissolve, and must not leave orphans.
+    const [u1, u2] = await Promise.all([
+      prisma.sunbedGroup.create({ data: { siteId: site.id } }),
+      prisma.sunbedGroup.create({ data: { siteId: site.id } }),
+    ])
+    await prisma.inventoryItem.updateMany({
+      where: { id: { in: [seats[0]!.id, seats[2]!.id] } }, data: { sunbedGroupId: u1.id },
+    })
+    await prisma.inventoryItem.updateMany({
+      where: { id: { in: [seats[1]!.id, seats[3]!.id] } }, data: { sunbedGroupId: u2.id },
+    })
+    // Moving every seat out of the units seedParcel created leaves those empty;
+    // clear them so the STARTING state is consistent and the assertion below
+    // measures what the rearrange did, not what the fixture left behind.
+    await prisma.sunbedGroup.deleteMany({ where: { siteId: site.id, items: { none: {} } } })
+    void user
+
+    await syncChairsWithLayout(site.id, config(1, 4, true), 'rearrange')
+
+    const after = await snapshot(site.id)
+    // Two pairs, two units, every seat placed, nothing orphaned.
+    expect(new Set(after.rows.map((r) => r.sunbedGroupId)).size).toBe(2)
+    expect(await findUnitlessPlacedSeats(site.id)).toEqual([])
+    expect(await prisma.sunbedGroup.count({
+      where: { siteId: site.id, items: { none: {} } },
+    })).toBe(0)
+    // Both surviving units are REUSED rows, not fresh ones.
+    const survivingIds = new Set(after.rows.map((r) => r.sunbedGroupId))
+    expect([...survivingIds].every((id) => id === u1.id || id === u2.id)).toBe(true)
+  })
+
+  it('a reused unit evicts a member that is NOT part of the new pair', async () => {
+    // The sharp case: prior unit U = {seat1, seat3}; seat2 sits alone. The new
+    // pairing is (1,2), so the pair claims U — and seat3, which pairs with
+    // nobody, must not be left inside it. A unit is one physical spot; three
+    // beds in it would light three segments on a two-bed parasol.
+    const { site } = await seedParcel(1, 3, true)
+    const seats = await prisma.inventoryItem.findMany({
+      where: { siteId: site.id }, orderBy: { number: 'asc' },
+    })
+    const u = await prisma.sunbedGroup.create({ data: { siteId: site.id } })
+    const solo = await prisma.sunbedGroup.create({ data: { siteId: site.id } })
+    await prisma.inventoryItem.updateMany({
+      where: { id: { in: [seats[0]!.id, seats[2]!.id] } }, data: { sunbedGroupId: u.id },
+    })
+    await prisma.inventoryItem.update({
+      where: { id: seats[1]!.id }, data: { sunbedGroupId: solo.id },
+    })
+    await prisma.sunbedGroup.deleteMany({ where: { siteId: site.id, items: { none: {} } } })
+
+    await syncChairsWithLayout(site.id, config(1, 3, true), 'rearrange')
+
+    const members = await prisma.inventoryItem.groupBy({
+      by: ['sunbedGroupId'],
+      where: { siteId: site.id },
+      _count: { _all: true },
+    })
+    // Two units: one of two beds, one of one. Never a unit of three.
+    expect(members.map((m) => m._count._all).sort()).toEqual([1, 2])
+    expect(await findUnitlessPlacedSeats(site.id)).toEqual([])
+  })
+
+  it('an ODD leftover seat does not get stranded inside a reused pair unit', async () => {
+    // 3 seats with pairing on: (1,2) pair up, 3 is left over. Reusing a unit for
+    // the pair must not leave the odd seat sharing it — a unit is a physical
+    // spot, and a stray bed is its own spot.
+    const { site } = await seedParcel(1, 3, true)
+
+    await syncChairsWithLayout(site.id, config(1, 3, true), 'rearrange')
+
+    const rows = await prisma.inventoryItem.findMany({
+      where: { siteId: site.id }, select: { number: true, sunbedGroupId: true },
+      orderBy: { number: 'asc' },
+    })
+    expect(rows).toHaveLength(3)
+    const bySeat = rows.map((r) => r.sunbedGroupId)
+    // The pair shares a unit; the leftover has its own.
+    expect(bySeat[0]).toBe(bySeat[1])
+    expect(bySeat[2]).not.toBe(bySeat[0])
+    expect(await findUnitlessPlacedSeats(site.id)).toEqual([])
+  })
+})

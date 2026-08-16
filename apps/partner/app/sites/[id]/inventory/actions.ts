@@ -439,23 +439,58 @@ async function assignChairPairings({
   }
   if (pairs.length === 0) return
 
-  // 2. Prior groups to dissolve — DEDUPED across all pairs (the P2025 fix).
-  //    Dissolution semantics match the old code: detach every member, then
-  //    remove the group row.
-  const priorGroupIds = new Set<string>()
+  // 2. Decide which UNIT each pair should live in.
+  //
+  // Track 021 P4 (A2): re-pairing used to dissolve every prior unit and mint
+  // fresh ones, so changing a parcel's shape threw away unit identity — new
+  // ids, and with them the persisted label ordinal and (once assigned) the
+  // device location. A unit is the physical spot; re-pairing rearranges which
+  // beds share it, which is not a reason for the spot to cease existing.
+  //
+  // So: a pair REUSES one of its members' existing units where it can, and only
+  // genuinely new pairs mint. Units left with no members are pruned afterwards
+  // (an emptied spot is a dismounted parasol — see Q5).
+  const reusedUnitIds = new Set<string>()
+  const touchedUnitIds = new Set<string>()
+  const pairPlacements: Array<{ itemId: string; pairId: string; unitId: string | null }> = []
+
   for (const { itemId, pairId } of pairs) {
-    const a = idToSunbedGroupId.get(itemId)
-    const b = idToSunbedGroupId.get(pairId)
-    if (a && a !== b) { priorGroupIds.add(a); if (b) priorGroupIds.add(b) }
-    else if (b && a !== b) priorGroupIds.add(b)
+    const a = idToSunbedGroupId.get(itemId) ?? null
+    const b = idToSunbedGroupId.get(pairId) ?? null
+    if (a) touchedUnitIds.add(a)
+    if (b) touchedUnitIds.add(b)
+
+    // Already one unit — nothing to write, identity trivially preserved.
+    if (a && a === b) continue
+
+    // Prefer keeping a unit one of the two members already belongs to. The
+    // `reusedUnitIds` guard stops two different pairs claiming the same unit
+    // (possible when a former unit's members are split across new pairs).
+    const keep = [a, b].find((id): id is string => !!id && !reusedUnitIds.has(id)) ?? null
+    if (keep) reusedUnitIds.add(keep)
+    pairPlacements.push({ itemId, pairId, unitId: keep })
   }
 
-  // Pairs that still need a NEW group (not already sharing one).
-  const pairsNeedingGroup = pairs.filter(({ itemId, pairId }) => {
-    const a = idToSunbedGroupId.get(itemId)
-    const b = idToSunbedGroupId.get(pairId)
-    return !(a && a === b)
-  })
+  const pairsNeedingGroup = pairPlacements.filter((p) => p.unitId === null)
+  const pairsReusingGroup = pairPlacements.filter((p) => p.unitId !== null)
+
+  // Reusing a unit means the PAIR occupies it — so any current member that is
+  // not part of that pair has to leave, or a two-bed spot quietly becomes a
+  // three-bed one (and a device there would light a segment for a bed that is
+  // not under that parasol). Evicted seats are detached here and given their
+  // own unit by ensurePlacedSeatsHaveUnits immediately after.
+  const claimedMembers = new Map<string, Set<string>>()
+  for (const placement of pairsReusingGroup) {
+    claimedMembers.set(placement.unitId!, new Set([placement.itemId, placement.pairId]))
+  }
+  const evictedIds = allItems
+    .filter(
+      (item) =>
+        item.sunbedGroupId &&
+        claimedMembers.has(item.sunbedGroupId) &&
+        !claimedMembers.get(item.sunbedGroupId)!.has(item.id),
+    )
+    .map((item) => item.id)
 
   // Track 021 P1: the legacy `pairId` dual-write is gone — `SunbedGroup` is the
   // sole representation of pairing, and every reader in both apps was already
@@ -466,19 +501,32 @@ async function assignChairPairings({
   // The pure-rotation fast path from track 020 is preserved: when nothing about
   // the grouping changes, this writes NOTHING and skips the transaction (that
   // was the founder's multi-second rotation).
-  if (priorGroupIds.size === 0 && pairsNeedingGroup.length === 0) {
+  if (pairPlacements.length === 0) {
     return
   }
 
   // 3. One atomic transaction, every step set-based: dissolve priors, mint the
   //    new 2-seat groups, batched membership assignment.
   await prisma.$transaction(async (tx) => {
-    if (priorGroupIds.size > 0) {
+    if (evictedIds.length > 0) {
       await tx.inventoryItem.updateMany({
-        where: { sunbedGroupId: { in: [...priorGroupIds] } },
+        where: { id: { in: evictedIds } },
         data: { sunbedGroupId: null },
       })
-      await tx.sunbedGroup.deleteMany({ where: { id: { in: [...priorGroupIds] } } })
+    }
+
+    // Members move INTO the chosen unit; nothing is dissolved first, so a
+    // reused unit keeps its id, its ordinal and anything bound to it.
+    if (pairsReusingGroup.length > 0) {
+      const memberIds = pairsReusingGroup.flatMap((p) => [p.itemId, p.pairId])
+      const memberUnitIds = pairsReusingGroup.flatMap((p) => [p.unitId!, p.unitId!])
+      await tx.$executeRaw`
+        UPDATE "InventoryItem" i SET sunbed_group_id = v.gid, "updatedAt" = now()
+        FROM (
+          SELECT unnest(${memberIds}::text[]) AS id,
+                 unnest(${memberUnitIds}::text[]) AS gid
+        ) v
+        WHERE i.id = v.id`
     }
 
     if (pairsNeedingGroup.length > 0) {
@@ -501,6 +549,9 @@ async function assignChairPairings({
         WHERE i.id = v.id`
     }
   })
+
+  // A former unit whose members all moved elsewhere is an empty spot; prune it.
+  await pruneEmptyUnits(siteId, [...touchedUnitIds])
 }
 
 export async function getItemGroup(id: string) {

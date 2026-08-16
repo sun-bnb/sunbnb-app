@@ -33,6 +33,7 @@ vi.mock('next/cache', () => ({
 
 import { moveParcel, moveItems, syncChairsWithLayout } from './actions'
 import { createInventoryItem, deleteInventoryItems } from '../inventory-actions'
+import { findUnitlessPlacedSeats } from '@repo/data/unit'
 
 beforeAll(async () => {
   await cleanDatabase()
@@ -243,11 +244,18 @@ describe('syncChairsWithLayout rearrange — re-pairing across dissolved groups 
       )
     ).resolves.not.toThrow()
 
-    // Old crossed groups fully dissolved…
-    expect(await prisma.sunbedGroup.findUnique({ where: { id: gA.id } })).toBeNull()
-    expect(await prisma.sunbedGroup.findUnique({ where: { id: gB.id } })).toBeNull()
+    // Track 021 P4 (A2) CHANGED THE STRATEGY, not the guarantee. The crossed
+    // groups are now REUSED rather than dissolved and re-minted, because a unit
+    // is a physical spot and re-pairing only changes which beds share it —
+    // losing the row would lose its label ordinal and its device location. The
+    // crash this test exists for (deleting the same dissolved group twice,
+    // P2025) cannot happen when nothing is deleted.
+    const survivors = await prisma.sunbedGroup.findMany({
+      where: { siteId: site.id }, select: { id: true },
+    })
+    expect(survivors.map((g) => g.id).sort()).toEqual([gA.id, gB.id].sort())
 
-    // …and the seats are re-paired adjacently into fresh 2-member groups.
+    // …and the seats are re-paired adjacently, two members per unit.
     const rows = await prisma.inventoryItem.findMany({
       where: { siteId: site.id },
       select: { number: true, sunbedGroupId: true },
@@ -259,6 +267,8 @@ describe('syncChairsWithLayout rearrange — re-pairing across dissolved groups 
     expect(byNumber.get(10103)).toBeTruthy()
     expect(byNumber.get(10103)).toBe(byNumber.get(10104))
     expect(byNumber.get(10101)).not.toBe(byNumber.get(10103))
+    // No seat was left behind by the reshuffle.
+    expect(await findUnitlessPlacedSeats(site.id)).toEqual([])
   })
 })
 

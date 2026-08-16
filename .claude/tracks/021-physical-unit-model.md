@@ -120,7 +120,7 @@ thing (a fielded wire contract) is decided last — after a real device has exer
 
 | # | Phase | Track | Depends on | Why here |
 |---|---|---|---|---|
-| 1 | **P4 — parcel resize + identity** | 021 | — | Live editor bug today; decides whether device reassignment is rare or routine |
+| 1 | ✅ **P4 — parcel resize + identity** | 021 | — | DONE 2026-08-16 — resize is a real edit; re-pairing reuses units |
 | 2 | **P1(d) — drop `pairId`** | 021 | current release deployed | Destructive, so a release AFTER the code stopped reading it (expand/contract) |
 | 3 | **Device model + telemetry persistence** | 019 P5 | — | The fleet list has nothing to render until telemetry persists; buildable with no hardware |
 | 4 | **Fleet UI** | 019 P5 | 3 | Devices self-register; surfaces unassigned / assigned-not-applied / silent / spots without devices |
@@ -210,7 +210,7 @@ the kit is in transit.
   output across the real fixture matrix. Independently valuable — this is the fix for label
   drift under physical signage, with or without hardware.
 
-- **▶ P4 — Parcel edits preserve identity, including RESIZE (I2). A1 + A3 DONE 2026-08-16; A2 (re-pairing preservation) remains.**
+- **✅ P4 — Parcel edits preserve identity, including RESIZE (I2). DONE 2026-08-16.**
   *Independent of hardware, and a live bug on its own: the rearrange path contains **zero**
   seat creates, so growing a parcel leaves the new positions empty and shrinking strands the
   surplus seats where they stood. Delete-and-recreate is therefore the only way to change
@@ -362,6 +362,24 @@ the kit is in transit.
 
 ## Log
 
+- **2026-08-16 — P4 A2 shipped: re-pairing REUSES unit rows instead of dissolving them.**
+  Changing a parcel's shape used to dissolve every affected unit and mint fresh ones, throwing
+  away the id, the persisted ordinal, and (once assigned) the device location — for a change
+  that only rearranges which beds share a spot. Now a pair reuses one of its members' existing
+  units and only genuinely new pairs mint; units left with no members are pruned.
+  **The edge case was the interesting part.** Reuse introduced a bug the dissolve strategy
+  could not have: if the claimed unit held a member NOT in the new pair, that seat stayed,
+  producing a THREE-bed unit — which on a two-bed parasol would light a segment for a bed that
+  is not there. Found by constructing the case deliberately (prior unit {1,3}, new pair (1,2))
+  rather than by luck; fixed by evicting non-pair members, who are then given their own unit.
+  **An existing test had to be re-pinned, not deleted:** the crossed-legacy-groups test
+  asserted the old groups were DELETED, which encoded the dissolve STRATEGY rather than the
+  guarantee. Its actual purpose — the historical P2025 double-delete crash — is now satisfied
+  by construction, since nothing is deleted; it asserts reuse plus correct adjacent pairing.
+  Honest test accounting: of the two A2 tests, **one fails on the old code** (the regrouping
+  case) and one passes (unchanged pairings already hit track 020's fast path), so the latter
+  is a preservation guard rather than a bug-revealer.
+  Gates: partner 1992u + 242i, data 374u, tsc + lint clean, editor browser-verified, I1 zero.
 - **2026-08-16 — P4 A1 shipped: parcel RESIZE is a real edit.** Growing creates seats (and
   units) for the new positions; shrinking deletes the surplus instead of stranding it, and
   prunes the units it empties. Overlapping spots keep their seat ids, unit ids and persisted
