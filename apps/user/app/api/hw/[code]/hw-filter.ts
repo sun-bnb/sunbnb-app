@@ -33,6 +33,7 @@
 
 import { NextRequest } from 'next/server'
 import prisma from '@repo/data/PrismaCient'
+import { normalizeDeviceCode } from '@repo/data/device-code'
 
 /**
  * Uniform rejection. Every decline — failed filter, unknown code, malformed code —
@@ -54,10 +55,14 @@ export function unavailable() {
  * Crockford base32 normalisation (contract §Identity): uppercase, `I`/`L` → `1`,
  * `O` → `0`. A human reading a code aloud from a windy beach is the reason the
  * alphabet was chosen; this is the decode half of that promise.
+ *
+ * Re-exported from `@repo/data/device-code`, deliberately NOT re-implemented:
+ * minting (the provisioning script) and lookup (here) must fold a code
+ * identically. A code minted under different rules than the route normalises by
+ * is a device that can never be reached — and by then the sticker is glued to a
+ * potted enclosure.
  */
-export function normalizeCode(raw: string): string {
-  return raw.trim().toUpperCase().replace(/[IL]/g, '1').replace(/O/g, '0')
-}
+export const normalizeCode = normalizeDeviceCode
 
 /**
  * CONTAINS, not equality. `HW_CLIENT_UA` holds the opaque needle (e.g. `k3n8fq2p`)
