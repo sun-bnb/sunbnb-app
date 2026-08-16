@@ -31,6 +31,14 @@ export interface SeatLabelItem {
   number: number
   group: number
   sunbedGroupId: string | null
+  /**
+   * The unit's PERSISTED ordinal (track 021 P3). When present it is used
+   * verbatim, so inserting or removing a neighbouring unit cannot rename this
+   * one — the number painted on the bed does not move, so neither should the
+   * label. Null means "not assigned yet"; those units fall back to positional
+   * order, which is exactly what every unit did before P3.
+   */
+  unitSeq?: number | null
 }
 
 // ---------------------------------------------------------------------------
@@ -44,6 +52,19 @@ export interface SeatLabelItem {
  * @returns Map<itemId, label>
  */
 export function computeSeatLabels(items: SeatLabelItem[]): Map<string, string> {
+  return computeSeatLabelsWithUnits(items).labels
+}
+
+/**
+ * Same computation, but also returns the ordinal each unit ended up with
+ * (track 021 P3). The DB layer persists the ones that were not already stored,
+ * which is how a unit's number becomes durable: assigned once from today's
+ * positional order, then read verbatim forever after.
+ */
+export function computeSeatLabelsWithUnits(items: SeatLabelItem[]): {
+  labels: Map<string, string>
+  unitSeqs: Map<string, number>
+} {
   // kb: decision — using item.group as the parcel rather than re-deriving
   // Math.floor(number/10000) because group IS the parcel and is already
   // available on the item record; no risk of disagreement if number encoding
@@ -62,6 +83,7 @@ export function computeSeatLabels(items: SeatLabelItem[]): Map<string, string> {
   }
 
   const result = new Map<string, string>()
+  const unitSeqs = new Map<string, number>()
 
   for (const [key, bucketItems] of buckets) {
     const [parcelStr, rowStr] = key.split(':')
@@ -94,9 +116,32 @@ export function computeSeatLabels(items: SeatLabelItem[]): Map<string, string> {
       return aMin - bMin
     })
 
-    // 4. Assign groupSeq + member
+    // 4. Assign groupSeq + member.
+    //
+    // Track 021 P3: a unit with a persisted `unitSeq` keeps it. Units without
+    // one (not yet assigned) fill the remaining ordinals in positional order,
+    // skipping any already taken — so a mixed bucket stays collision-free and a
+    // fully-unassigned bucket reproduces the pre-P3 numbering exactly.
+    const taken = new Set<number>()
+    for (const [, members] of units) {
+      const persisted = members.find((m) => m.unitSeq != null)?.unitSeq
+      if (persisted != null) taken.add(persisted)
+    }
+    let nextFree = 1
+    const ordinalFor = (members: SeatLabelItem[]): number => {
+      const persisted = members.find((m) => m.unitSeq != null)?.unitSeq
+      if (persisted != null) return persisted
+      while (taken.has(nextFree)) nextFree++
+      taken.add(nextFree)
+      return nextFree
+    }
+
     for (let i = 0; i < units.length; i++) {
-      const groupSeq = i + 1 // 1-based
+      const groupSeq = ordinalFor(units[i]![1])
+      const unitKey = units[i]![0]
+      // Only real units get a persisted ordinal; `__solo_` keys are the
+      // synthetic buckets for seats that have no unit row at all.
+      if (!unitKey.startsWith('__solo_')) unitSeqs.set(unitKey, groupSeq)
       const [, members] = units[i]!
       // Order members left→right by seatIdx
       const sortedMembers = [...members].sort((a, b) => seatIdx(a) - seatIdx(b))
@@ -108,7 +153,7 @@ export function computeSeatLabels(items: SeatLabelItem[]): Map<string, string> {
     }
   }
 
-  return result
+  return { labels: result, unitSeqs }
 }
 
 // ---------------------------------------------------------------------------

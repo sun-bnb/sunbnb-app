@@ -5,7 +5,11 @@
  *     (`SunbedGroup`). Seats that pre-date universal units get their own
  *     single-member unit; pool/unplaced seats are left alone by design,
  *     because a null group is exactly what "in the pool" means.
- *  2. Orphaned EMPTY units — units with no members left. Until the delete
+ *  2. Unit ORDINALS (track 021 P3) — every unit gets its label ordinal
+ *     persisted, seeded from the CURRENT positional order so not one label
+ *     changes. Until a unit has one, its number is still derived from position
+ *     and still shifts when a neighbour is inserted or removed.
+ *  3. Orphaned EMPTY units — units with no members left. Until the delete
  *     paths were fixed, deleting a parcel removed its seats and left its
  *     units behind forever, invisible in every UI (production carried 2).
  *     They reference nothing and nothing references them.
@@ -33,10 +37,18 @@
 
 import prisma from '../index'
 import { ensurePlacedSeatsHaveUnits, findUnitlessPlacedSeats, pruneEmptyUnits } from '../src/unit'
+import { recomputeSeatLabels } from '../src/seat-label-db'
 
 const DRY_RUN = process.argv.includes('--dry-run')
 
 async function main() {
+  const unseqed = await prisma.sunbedGroup.findMany({
+    where: { seq: null },
+    select: { siteId: true },
+  })
+  const seqBySite = new Map<string, number>()
+  for (const u of unseqed) seqBySite.set(u.siteId, (seqBySite.get(u.siteId) ?? 0) + 1)
+
   const emptyUnits = await prisma.sunbedGroup.findMany({
     where: { items: { none: {} } },
     select: { id: true, siteId: true },
@@ -53,7 +65,9 @@ async function main() {
   console.log(`Orphaned EMPTY units: ${emptyUnits.length} across ${emptyBySite.size} site(s)`)
   for (const [siteId, count] of emptyBySite) console.log(`  ${siteId}  ${count}`)
 
-  if (pending.length === 0 && emptyUnits.length === 0) {
+  console.log(`Units without a persisted ordinal: ${unseqed.length} across ${seqBySite.size} site(s)`)
+
+  if (pending.length === 0 && emptyUnits.length === 0 && unseqed.length === 0) {
     console.log('Unit model already consistent — nothing to do.')
     return
   }
@@ -76,6 +90,17 @@ async function main() {
     console.log(`  ${siteId}: ${result.deleted} empty unit(s) pruned`)
   }
   if (pruned > 0) console.log(`Pruned ${pruned} empty unit(s).`)
+
+  // Assigning ordinals runs through the normal label recompute, which seeds
+  // each from today's positional order — so this writes ordinals and leaves
+  // every label exactly as it was.
+  for (const siteId of seqBySite.keys()) {
+    await recomputeSeatLabels(siteId)
+  }
+  const stillUnseqed = await prisma.sunbedGroup.count({ where: { seq: null } })
+  if (seqBySite.size > 0) {
+    console.log(`Assigned ordinals across ${seqBySite.size} site(s); units still unassigned: ${stillUnseqed}`)
+  }
 
   const remaining = await findUnitlessPlacedSeats()
   console.log(`\nCreated ${created} unit(s). Remaining unitless placed seats: ${remaining.length}`)

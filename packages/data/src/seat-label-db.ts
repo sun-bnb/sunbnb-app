@@ -5,7 +5,7 @@
  */
 
 import prisma from '../index'
-import { computeSeatLabels } from './seat-label'
+import { computeSeatLabelsWithUnits } from './seat-label'
 
 /**
  * Recompute seat labels for all inventory items belonging to a site and
@@ -15,7 +15,7 @@ import { computeSeatLabels } from './seat-label'
  * skipped. Returns the number of items updated.
  */
 export async function recomputeSeatLabels(siteId: string): Promise<number> {
-  const items = await prisma.inventoryItem.findMany({
+  const rows = await prisma.inventoryItem.findMany({
     where: { siteId },
     select: {
       id: true,
@@ -23,10 +23,31 @@ export async function recomputeSeatLabels(siteId: string): Promise<number> {
       group: true,
       sunbedGroupId: true,
       seatLabel: true,
+      sunbedGroup: { select: { seq: true } },
     },
   })
+  const items = rows.map((row) => ({ ...row, unitSeq: row.sunbedGroup?.seq ?? null }))
 
-  const computed = computeSeatLabels(items)
+  const { labels: computed, unitSeqs } = computeSeatLabelsWithUnits(items)
+
+  // Track 021 P3: persist the ordinal of any unit that did not have one, so it
+  // is read verbatim from here on. Units keep whatever they already had, which
+  // is why this is idempotent and why no label moves when it first runs.
+  const unassigned = [
+    ...new Set(
+      rows.filter((r) => r.sunbedGroupId && r.sunbedGroup?.seq == null)
+        .map((r) => r.sunbedGroupId as string),
+    ),
+  ]
+  if (unassigned.length > 0) {
+    await prisma.$transaction(
+      unassigned
+        .filter((id) => unitSeqs.has(id))
+        .map((id) =>
+          prisma.sunbedGroup.update({ where: { id }, data: { seq: unitSeqs.get(id)! } }),
+        ),
+    )
+  }
 
   const updates: Array<{ id: string; label: string }> = []
   for (const item of items) {

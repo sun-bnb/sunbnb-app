@@ -22,3 +22,13 @@ export function formatSeat(
 export function computeSeatLabels(): Map<string, string> {
   return new Map()
 }
+
+// Track 021 P3: the label computation also reports the ordinal each unit ended
+// up with, so the DB layer can persist it. Stubbed like its sibling — partner
+// unit tests never exercise the computation itself.
+export function computeSeatLabelsWithUnits(): {
+  labels: Map<string, string>
+  unitSeqs: Map<string, number>
+} {
+  return { labels: new Map(), unitSeqs: new Map() }
+}

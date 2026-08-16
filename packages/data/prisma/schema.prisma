@@ -348,6 +348,13 @@ model InventoryItem {
 model SunbedGroup {
   id        String          @id @unique @default(cuid())
   siteId    String          @map("site_id")
+  /// Track 021 P3 — the unit's PERSISTED ordinal within its (parcel, row).
+  /// Seat labels read `{parcel}-{row}{seq:02}-{member}`; deriving `seq` from
+  /// left-to-right position meant inserting or removing one unit silently
+  /// renamed every unit to its right, while the painted number on the bed did
+  /// not move. Nullable during expand: units created before this get their seq
+  /// from the existing positional order, so no label changes on release.
+  seq       Int?
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
   site      Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)

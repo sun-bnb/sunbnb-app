@@ -177,7 +177,7 @@ The spine. Every phase either establishes one of these or is guarded by it.
   `selectedSingleItemHasPair={!!sunbedGroupId}` in both editors becomes a member-count test.
   The singleton branch in `seat-label.ts` becomes dead code — its output must not change.
 
-- **☐ P3 — Persisted unit number (expand, behaviour-preserving).** Add a stored number to
+- **✅ P3 — Persisted unit number — DONE 2026-08-16 (expand, behaviour-preserving).** Add a stored number to
   `SunbedGroup` — **depends on P2**: `groupSeq` is persisted ON a unit row, and until every
   placed seat has one, singletons have nothing to carry their number. backfill it from the *current* positional ordinal so **every existing label
   is byte-identical on the day it ships**; switch `computeSeatLabels` to read the stored
@@ -247,6 +247,29 @@ The spine. Every phase either establishes one of these or is guarded by it.
 
 ## Log
 
+- **2026-08-16 — P3 DONE: unit ordinals are persisted; labels stop moving when neighbours
+  change.** Additive migration `20260816090400_add_sunbed_group_seq` (one nullable column).
+  `computeSeatLabels` now reads a unit's stored ordinal verbatim and only falls back to
+  positional order for units that have none — which is why the whole existing data suite
+  passed unchanged. New `computeSeatLabelsWithUnits` also returns the ordinals so
+  `recomputeSeatLabels` can persist any that were missing, seeded from TODAY's positional
+  order. **Proof on the local 4 592-seat DB: 2 305 units went from 0 to 100 % assigned and
+  exactly ZERO label rows changed** (full before/after diff). Three integration tests pin the
+  behaviour that motivated the phase: inserting a unit between two others does not rename the
+  one to its right, removing a unit leaves a deliberate gap rather than renumbering, and the
+  first recompute changes nothing. **The mock-contract meta-guard earned its keep** — it
+  failed the moment the new export existed without a stub, which is exactly the silent-drift
+  class it was built for. Gates: data 374u + 353i, partner 1992u + 233i, user 539u + 102i,
+  admin 174u, tsc clean, `migrate:check` reports no drift. **User ops:** `migrate:test` before
+  any `main` push (shared test DB, pre-push hook enforces), then `backfill:units:test` and
+  `:production` to assign ordinals (both now also report units without one).
+- **2026-08-16 — Backfills applied by the founder to TEST and PRODUCTION; both verified
+  consistent.** Test: 24 units created across 3 sites. Production: no unitless seats (I1
+  already held) and the 2 orphaned empty units pruned. Independent read-only confirmation
+  afterwards — test 456 placed / 240 units, production 1102 placed / 551 units, **zero
+  unitless and zero empty in both**. The arithmetic reconciles (test = 216 pairs + 24 new
+  singletons = 240 units; production = 551 pairs × 2 = 1102 seats), so P2's data half is
+  complete in every environment.
 - **2026-08-16 — Q5 RESOLVED: an empty unit means the parasol is dismounted.** Founder's
   rule, and it dissolves the "winter stow" problem I had been carrying since the design
   conversation: a broken or seasonal bed is **disabled/blocked in the manage UI, not
