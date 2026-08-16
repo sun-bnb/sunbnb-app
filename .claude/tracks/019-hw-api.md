@@ -38,22 +38,29 @@ amber = STALE/UNAVAILABLE**.
 
 ## Resume here
 
-**P1 committed** (`cbb251b` + `42a6b18`); **P1.5 telemetry stub + the Q9 client-filter swap built
-2026-08-16 (uncommitted).** State route `apps/user/app/api/hw/[code]/state/route.ts` +
-`projection.ts` + `route.test.ts` (44 tests). P1.5 adds `telemetry/route.ts` + `route.test.ts`
-(11 tests) and extracts the shared request gate to `apps/user/app/api/hw/[code]/hw-filter.ts`
-(`screenDeviceRequest` + `normalizeCode`, used by BOTH endpoints so they cannot drift). **The gate
-is a soft `User-Agent` client filter, not auth** (Q9): `HW_CLIENT_UA` holds an opaque needle,
-matched with CONTAINS so a firmware version bump needs no server change; unset fails CLOSED (503).
-`HW_TOKEN` is gone. User app 533u green (HW 55); `tsc --noEmit` and lint clean.
-`HW_CLIENT_UA`/`HW_DEVICE_MAP` declared in `turbo.json`; both routes documented in
-`apps/user/CLAUDE.md`.
+**P1 committed** (`cbb251b`, `42a6b18`); **P1.5 + Q9 filter swap committed** (`b006d21`, docs
+`cccd275`); **P2 built 2026-08-16 (uncommitted).**
+
+Two routes — `state/route.ts` (+ `projection.ts`, 49 tests) and `telemetry/route.ts` (13 tests,
+stub: persists nothing) — share ONE request gate, `hw-filter.ts` `screenDeviceRequest`, so they
+cannot drift. **The gate is a soft `User-Agent` client filter, not auth** (Q9): `HW_CLIENT_UA`
+holds an opaque needle, matched with CONTAINS so a firmware version bump needs no server change;
+unset fails CLOSED (503). No token anywhere. **The binding is now the `Device`/`DeviceSeat` tables**
+(P2, migration `20260816045431_add_hw_device_binding`, additive, applied local + `sunbnb_test`);
+`HW_TOKEN` and `HW_DEVICE_MAP` are both gone, `HW_CLIENT_UA` is the only env var in `turbo.json`.
+User 538u + 102i, data 360u + 350i, partner 2002u, admin 174u, `tsc` + lint clean; `migrate:check`
+reports no drift.
+
+**USER OPS before any `main` push:** `cd packages/data && npm run migrate:test` — the shared test DB
+needs this additive migration before main's preview runs against it (the pre-push hook enforces it).
 
 **Next action — bring-up, when the kit lands (no code expected):**
 
 1. Set `HW_CLIENT_UA` (the opaque needle, e.g. `k3n8fq2p` — must match what the firmware sends
-   inside its `User-Agent`) and `HW_DEVICE_MAP` (`{"<CODE>":["<itemId>","<itemId>"]}`, **array
-   order = LED mount order**) on the test env. Pick a real `InventoryItem` pair via `/db`.
+   inside its `User-Agent`) on the test env. Then INSERT a `Device` row (any 6-char Crockford code,
+   `status: 'provisioned'` or `'active'`) plus one `DeviceSeat` per bound seat with `position` 0,1…
+   in **LED mount order** — pick a real `InventoryItem` pair via `/db`. (P3 automates this; by hand
+   is fine for one unit.)
 2. `curl -H "User-Agent: Sunbnb-Sensor/1 ($HW_CLIENT_UA)" https://test.sunbnb.app/api/hw/<CODE>/state`
    — expect `FREE`; make a reservation on that seat; expect `RESERVED` within one poll.
 3. Point the device at it (`../sunbnb-hw/docs/build-plan.md` §3 step 3). **Then P1 is done.**
@@ -63,8 +70,9 @@ matched with CONTAINS so a firmware version bump needs no server change; unset f
 gone (Q9). ADR 0010 (server-minted per-device token, mint→flash→print) is **superseded** on the
 credential half and needs amending there; the `code` half still stands.
 
-**Then P2** — `Device` + `DeviceSeat` migration per **Binding**, route switches off the env map,
-and the wire contract freezes. **Q6/Q7/Q9 are all decided, so nothing blocks the freeze.**
+**P2 is built** (see Roadmap): the binding now lives in the `Device`/`DeviceSeat` tables and
+`HW_DEVICE_MAP` is gone. **The wire contract is deliberately NOT frozen** — that half of P2 waits
+until a real device has exercised it at bring-up. Freeze right after step 3 below succeeds.
 
 **Context needed:** this file · the route + its tests · `packages/data/src/reservation-machine.ts`
 (`deriveState`, `CompoundState`) · `apps/partner/app/sites/[id]/manage/bed-state.ts` (the sibling
@@ -74,7 +82,7 @@ consumer) · `packages/data/src/site-day.ts` · `../sunbnb-hw/docs/decisions/000
 the software half of `../sunbnb-hw/docs/build-plan.md` §3 step 2 and gates step 3 ("LED turns red
 from across the internet").
 
-## Wire contract (P0 — proposed, freeze before P2)
+## Wire contract (P0 — proposed, NOT frozen; freeze right after bring-up)
 
 **`GET /api/hw/{code}/state`** · `User-Agent: <configured sensor value>` · `If-None-Match`
 
@@ -93,8 +101,8 @@ from across the internet").
 ```
 
 **`cmd` is a closed set — firmware must recognise every member before potting.** A member
-the firmware does not understand is ignored *forever* on a sealed unit, so the set freezes at
-P2 with the rest of the contract. There is **no `rotateToken`** (Q7 reversed 2026-08-16): the
+the firmware does not understand is ignored *forever* on a sealed unit, so the set freezes with
+the rest of the contract, immediately after bring-up. There is **no `rotateToken`** (Q7 reversed 2026-08-16): the
 request carries no secret to rotate — see **Client filter (Q9)**.
 
 **States** (closed set — adding a member is a breaking change for fielded devices):
@@ -124,8 +132,9 @@ member (`UNAVAILABLE` > `OCCUPIED` > `RESERVED`).
 `DeviceSeat.position`, where 0 is the leftmost LED segment (P1: the array order in
 `HW_DEVICE_MAP`). Position is a *physical mount fact* recorded at install, not a sort over seat
 numbers: a device mounted rotated, or a row numbered right-to-left, still lights correctly. The
-response must never fall back to an implicit database order. Freeze with the rest of the
-contract.
+response must never fall back to an implicit database order. The route asks for
+`orderBy: { position: 'asc' }` and a test asserts that query shape, because an implicit order is
+exactly the kind of thing a later refactor drops silently. Freeze with the rest of the contract.
 
 **Uniform rejection.** A request that fails the client filter or names an unknown code returns the
 same response — same status, same body, no timing tell. Under the Q9 soft-filter model this is no
@@ -274,14 +283,22 @@ free, but:
   `User-Agent` CONTAINS `HW_CLIENT_UA` instead of `Bearer HW_TOKEN`; unset config fails CLOSED
   (503) so it can never silently open. `HW_TOKEN` deleted from `turbo.json`. Both routes inherited
   it; user app 533u green, tsc + lint clean.
-- **☐ P2 — `Device` + `DeviceSeat` schema.** Additive migration per **Binding** above; `status`
-  lifecycle (`provisioned → active → retired`); **no token or secret of any kind** (Q9) — the gate
-  is a soft `User-Agent` filter read from env (`HW_CLIENT_UA`), so there is no config singleton, no
-  hashing, no rotation. Route switches its binding lookup from the env map to the
-  `Device`/`DeviceSeat` tables (`HW_DEVICE_MAP` deleted); `hw-filter.ts` already does this (Q9 applied); P2 only swaps its binding source. The
-  UA-filter check (see P1.5-follow-up). **Freeze the wire contract here** — states, seat order,
-  status codes, and the `cmd` set (`null | stow | identify`, no `rotateToken`). Q6/Q7/Q9 answered, so
-  P2 is unblocked.
+- **▶ P2 — `Device` + `DeviceSeat` schema. BUILT 2026-08-16 (uncommitted).** Additive migration
+  `20260816045431_add_hw_device_binding` (two CREATE TABLEs, three indexes, two cascading FKs — no
+  DROP, no change to any existing column) applied to local + `sunbnb_test`; `migrate:check` clean.
+  `status` lifecycle `provisioned → active → retired`; **no token or secret column** (Q9). The route
+  reads its binding from the tables via `hw-filter.ts` (`HW_DEVICE_MAP` deleted from code and
+  `turbo.json`); the wire contract did not change when the source moved. Three decisions taken while
+  building, worth not re-deriving: **`provisioned` serves** (requiring `active` would trap bring-up
+  behind a manual status flip, and the fail-safe holds either way — a declined device shows amber);
+  **a device with zero bound seats is declined**, because an empty seat array would aggregate to
+  `FREE`, the one answer that must never be invented; and **a failed binding lookup is 503, not the
+  uniform decline**, so a DB outage cannot read as "unknown device". User 538u + 102i, data 360u +
+  350i, partner 2002u, admin 174u green.
+  **NOT frozen yet — deliberately.** The wire contract freeze was the other half of this phase and is
+  held until hardware bring-up has actually exercised it: freezing before any real device has ever
+  spoken to the API would freeze in whatever the first device turns out to disagree with. Freeze
+  immediately after a device lights red from a real reservation.
 
 **Phases 3–5 are the device-management surfaces. They are three different jobs with three
 different owners, and conflating them is what the earlier roadmap got wrong.** None is needed for
@@ -474,6 +491,29 @@ backend, and both drag in consumer-surface design that shouldn't gate the hardwa
   compare, not a Postgres round-trip). User app **533u green** (HW 55: 44 state + 11 telemetry), tsc
   + lint clean. **Cross-repo:** `../sunbnb-hw` must now send that `User-Agent` and no
   `Authorization` header; ADR 0010's credential half is superseded and needs amending there.
+
+- **2026-08-16** — **P2 built: the binding moved from env config to the `Device`/`DeviceSeat`
+  tables.** Additive migration `20260816045431_add_hw_device_binding` — two CREATE TABLEs, three
+  indexes, two cascading FKs, nothing touched on an existing column, so it satisfies expand/contract
+  by construction. No token column: Q9 had already removed the secret, which is most of why this
+  phase was small. `hw-filter.ts` gained the lookup (and became async); both routes inherited it
+  unchanged, which is the payoff for having extracted the shared gate in P1.5.
+
+  Three judgement calls made while building, recorded so they are not silently reversed:
+  **`provisioned` devices SERVE** — gating on `active` would have trapped bring-up behind a manual
+  status flip for no safety gain, since a declined device shows amber either way; **a device with
+  zero bound seats is declined**, because an empty `seats[]` aggregates to `FREE` and inventing a
+  FREE is the one failure this contract forbids; and **a failed binding lookup returns 503, not the
+  uniform decline**, so a DB outage cannot masquerade as "unknown device".
+
+  Caught by the meta-guards, worth noting as evidence they earn their keep: partner's
+  `mock-contract.test.ts` failed the moment the schema gained models the partner Prisma mock did not
+  stub — a class of drift that otherwise surfaces as tests silently skipping code paths months later.
+
+  **The wire contract was NOT frozen**, though P2 was scoped to freeze it. Freezing before any real
+  device has spoken to the API would freeze in whatever the first device turns out to disagree with,
+  and bring-up is precisely the event that would expose it. The freeze is now the step immediately
+  after "LED turns red from a real reservation". Everything else in P2 shipped.
 
 ## Open decisions
 
