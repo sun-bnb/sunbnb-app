@@ -26,6 +26,13 @@ export async function createInventoryItem(inventoryItem: { siteId: string }) {
       orderBy: { number: 'desc' },
       select: { number: true },
     })
+    // Track 021 P2 (I1): every PLACED seat belongs to exactly one unit. A lone
+    // seat is a unit of one, not an ungrouped seat — the unit is what a device
+    // mounts to and what carries the persisted label number, so it must exist
+    // from the moment the seat does. (Only pool/unplaced seats hold a null
+    // group.) Minted inside the same transaction as the seat: a seat that
+    // committed without its unit would be an I1 violation nothing repairs.
+    const unit = await tx.sunbedGroup.create({ data: { siteId: inventoryItem.siteId } })
     return tx.inventoryItem.create({
       data: {
         number: (lastItem?.number || 0) + 1,
@@ -34,6 +41,7 @@ export async function createInventoryItem(inventoryItem: { siteId: string }) {
         status: 'new',
         locationLat: '0',
         locationLng: '0',
+        sunbedGroupId: unit.id,
       },
     })
   })

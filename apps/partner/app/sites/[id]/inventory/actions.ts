@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client'
 
 import { generateChairs, generateChairsSchematic, ChairConfig } from './chair-util'
 import { recomputeSeatLabels } from '@repo/data/seat-label-db'
+import { ensurePlacedSeatsHaveUnits } from '@repo/data/unit'
 
 type Mode = 'create' | 'rearrange'
 
@@ -312,6 +313,12 @@ export async function syncChairsWithLayout(siteId: string, config: ChairConfig, 
   }
 
   await assignChairPairings({ generated, group, siteId })
+
+  // Track 021 P2 (I1): pairing only groups seats when `pairSeats` is on, so a
+  // parcel created without pairing would leave every seat unitless. Give any
+  // placed seat that still has no unit one of its own — scoped to this parcel,
+  // idempotent, and set-based (a pairing-off parcel can be 500 seats).
+  await ensurePlacedSeatsHaveUnits(siteId, { group })
 
   await recomputeSeatLabels(siteId)
   revalidatePath('/sites')

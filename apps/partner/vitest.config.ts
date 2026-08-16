@@ -41,6 +41,7 @@ export default defineConfig({
       '@repo/data/subscription': path.resolve(__dirname, '__mocks__/@repo/data/subscription'),
       '@repo/data/seat-label': path.resolve(__dirname, '__mocks__/@repo/data/seat-label'),
       '@repo/data/seat-label-db': path.resolve(__dirname, '__mocks__/@repo/data/seat-label-db'),
+      '@repo/data/unit': path.resolve(__dirname, '__mocks__/@repo/data/unit'),
       '@repo/data/reservations': path.resolve(__dirname, '__mocks__/@repo/data/reservations'),
       '@repo/data/refund': path.resolve(__dirname, '__mocks__/@repo/data/refund'),
       '@repo/data/reservation-payment': path.resolve(__dirname, '__mocks__/@repo/data/reservation-payment'),

@@ -159,14 +159,7 @@ The spine. Every phase either establishes one of these or is guarded by it.
   `.claude/rules/migrations.md`. Doing this FIRST means every later phase works against one
   representation instead of maintaining a dual-write.
 
-- **☐ P2 — Persisted unit number (expand, behaviour-preserving).** Add a stored number to
-  `SunbedGroup`; backfill it from the *current* positional ordinal so **every existing label
-  is byte-identical on the day it ships**; switch `computeSeatLabels` to read the stored
-  value. Guard: an oracle test asserting the new label output equals the old function's
-  output across the real fixture matrix. Independently valuable — this is the fix for label
-  drift under physical signage, with or without hardware.
-
-- **☐ P3 — Universal units (I1). Founder decisions 2026-08-16:** seats are **never
+- **▶ P2 — Universal units (I1) — WRITE PATHS + BACKFILL DONE 2026-08-16; the pair/depair removal remains. Founder decisions 2026-08-16:** seats are **never
   ungrouped** — a parcel is created as groups-of-groups, and "add a seat" creates a **unit of
   two by default** rather than a lone bed. Manual **pair/unpair is obsolete** and its actions
   (`pairInventoryItems`, `depairInventoryItem`) plus their UI are removed here.
@@ -183,6 +176,14 @@ The spine. Every phase either establishes one of these or is guarded by it.
   legitimately hold null). Fix the two real collisions found in the audit:
   `selectedSingleItemHasPair={!!sunbedGroupId}` in both editors becomes a member-count test.
   The singleton branch in `seat-label.ts` becomes dead code — its output must not change.
+
+- **☐ P3 — Persisted unit number (expand, behaviour-preserving).** Add a stored number to
+  `SunbedGroup` — **depends on P2**: `groupSeq` is persisted ON a unit row, and until every
+  placed seat has one, singletons have nothing to carry their number. backfill it from the *current* positional ordinal so **every existing label
+  is byte-identical on the day it ships**; switch `computeSeatLabels` to read the stored
+  value. Guard: an oracle test asserting the new label output equals the old function's
+  output across the real fixture matrix. Independently valuable — this is the fix for label
+  drift under physical signage, with or without hardware.
 
 - **☐ P4 — Identity survives composition change (I2).** Extend "match and preserve" from
   geometry to membership in the rearrange/pairing path. Rotation and moves already preserve
@@ -235,6 +236,29 @@ The spine. Every phase either establishes one of these or is guarded by it.
 
 ## Log
 
+- **2026-08-16 — P2 first half shipped: I1 now holds by construction, not by luck.** The real
+  gap was narrower than "seats can be ungrouped": pairing only groups seats when `pairSeats`
+  is ON, so a parcel created with pairing OFF produced an entire parcel of unitless seats.
+  Closed with one shared, set-based `ensurePlacedSeatsHaveUnits` in `@repo/data/unit` — called
+  by `syncChairsWithLayout` (scoped to the parcel) and by the backfill, so the app and the
+  migration cannot disagree about what "placed" means. `createInventoryItem` now mints the
+  unit in the SAME transaction as the seat (a seat committing without one would be an I1
+  violation nothing repairs). Collision fixed in both editors: `hasPair` was
+  `!!sunbedGroupId`, permanently true once membership is universal — it is a CARDINALITY
+  question now (`members > 1`). Backfill `backfill-units.ts` is additive-only, idempotent and
+  `--dry-run`-first: it created 24 units locally and the re-run was a clean no-op; production
+  needs **zero** (I1 already held there). **User op:** `npm run backfill:units:test` (24
+  expected — local mirrors test) before/with the deploy; production is a no-op but worth
+  running for the audit line. Gates: partner 2005u + 228i, user 539u + 102i, data 374u + 350i,
+  tsc + lint clean, editor browser-verified, and the I1 audit query returns 0.
+- **2026-08-16 — P2/P3 SWAPPED: persisted numbering depends on universal units.** Reading
+  `computeSeatLabels` end-to-end showed the ordering was backwards. The unit number
+  (`groupSeq`) is an ordinal within a `(parcel,row)` bucket, and a singleton seat participates
+  in that ordering under a synthetic `__solo_<itemId>` key with **no `SunbedGroup` row at
+  all** — so there is nowhere to persist its number until units are universal. Universal units
+  therefore comes first (now P2), persisted numbering second (now P3). Also noted for P3: the
+  ordinal is scoped to `(parcel,row)`, not site-wide, so a persisted number must preserve that
+  scoping or every existing label changes.
 - **2026-08-16 — P1 code half COMPLETE; the ratchet had a blind spot of its own.** Finishing
   the reads turned up the write I would most likely have shipped: `saveInventoryItemProperties`
   paired seats through the **Prisma relation** (`pair: { connect: { id } }`), which sets

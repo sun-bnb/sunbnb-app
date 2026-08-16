@@ -1,0 +1,125 @@
+/**
+ * Invariant I1 (track 021 P2) against REAL Postgres: every PLACED seat belongs
+ * to exactly one unit; a null `sunbedGroupId` means "not placed — in the pool",
+ * and nothing else.
+ *
+ * The gap this closes is specific: pairing only groups seats when `pairSeats`
+ * is on, so a parcel created WITHOUT pairing used to produce a whole parcel of
+ * unitless seats — and a unitless seat has nothing for a device to mount to and
+ * nowhere to carry its persisted label number.
+ */
+
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest'
+import { cleanDatabase, disconnectDatabase, prisma } from '@/app/test/setup'
+import { createTestUser, createTestSite, createTestInventoryItem } from '@/app/test/fixtures'
+
+let mockUserId: string | null = null
+vi.mock('@/app/auth', () => ({
+  auth: vi.fn(async () => (mockUserId ? { user: { id: mockUserId } } : null)),
+}))
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
+
+import { syncChairsWithLayout } from './actions'
+import { createInventoryItem } from '../inventory-actions'
+import { ensurePlacedSeatsHaveUnits, findUnitlessPlacedSeats } from '@repo/data/unit'
+
+beforeAll(async () => { await cleanDatabase() })
+beforeEach(async () => { await cleanDatabase(); mockUserId = null })
+afterAll(async () => { await cleanDatabase(); await disconnectDatabase() })
+
+const parcelConfig = (pairSeats: boolean) => ({
+  group: 1, rows: 2, seatsPerRow: 4,
+  baseLat: 36.7213, baseLng: -4.4214,
+  horizontalGap: 1, verticalGap: 1.5, intraPairGap: 0.3,
+  rotation: 0, pairSeats,
+}) as never
+
+describe('I1 — every placed seat has a unit', () => {
+  it('a parcel created WITHOUT pairing still gives every seat a unit (the gap)', async () => {
+    const user = await createTestUser()
+    mockUserId = user.id
+    const site = await createTestSite(user.id, { layoutMode: 'geo' })
+
+    await syncChairsWithLayout(site.id, parcelConfig(false), 'create')
+
+    const seats = await prisma.inventoryItem.findMany({
+      where: { siteId: site.id }, select: { sunbedGroupId: true },
+    })
+    expect(seats).toHaveLength(8)
+    expect(seats.every((s) => s.sunbedGroupId !== null)).toBe(true)
+    // Unpaired seats are units of ONE — eight seats, eight units.
+    expect(new Set(seats.map((s) => s.sunbedGroupId)).size).toBe(8)
+    expect(await findUnitlessPlacedSeats(site.id)).toEqual([])
+  })
+
+  it('a paired parcel yields two-member units, not one per seat', async () => {
+    const user = await createTestUser()
+    mockUserId = user.id
+    const site = await createTestSite(user.id, { layoutMode: 'geo' })
+
+    await syncChairsWithLayout(site.id, parcelConfig(true), 'create')
+
+    const seats = await prisma.inventoryItem.findMany({
+      where: { siteId: site.id }, select: { sunbedGroupId: true },
+    })
+    expect(seats).toHaveLength(8)
+    expect(new Set(seats.map((s) => s.sunbedGroupId)).size).toBe(4)
+    expect(await findUnitlessPlacedSeats(site.id)).toEqual([])
+  })
+
+  it('a single added seat is a unit of one', async () => {
+    const user = await createTestUser()
+    mockUserId = user.id
+    const site = await createTestSite(user.id)
+
+    const res = await createInventoryItem({ siteId: site.id })
+    expect(res.status).toBe('ok')
+
+    const seat = await prisma.inventoryItem.findFirstOrThrow({ where: { siteId: site.id } })
+    expect(seat.sunbedGroupId).not.toBeNull()
+    expect(await findUnitlessPlacedSeats(site.id)).toEqual([])
+  })
+
+  it('the backfill is idempotent and leaves POOL seats unitless (they are unplaced)', async () => {
+    const user = await createTestUser()
+    mockUserId = user.id
+    const site = await createTestSite(user.id)
+
+    // Legacy shape: placed seats with no unit, plus a free pool seat.
+    await createTestInventoryItem(user.id, site.id, { number: 1, status: 'active' })
+    await createTestInventoryItem(user.id, site.id, { number: 2, status: 'inactive' })
+    const pool = await createTestInventoryItem(user.id, site.id, { number: 9901, status: 'pool' })
+
+    const first = await ensurePlacedSeatsHaveUnits(site.id)
+    expect(first.created).toBe(2)
+
+    // Re-running changes nothing — the property the backfill must have.
+    const second = await ensurePlacedSeatsHaveUnits(site.id)
+    expect(second.created).toBe(0)
+
+    expect(await findUnitlessPlacedSeats(site.id)).toEqual([])
+    const poolRow = await prisma.inventoryItem.findUniqueOrThrow({ where: { id: pool.id } })
+    expect(poolRow.sunbedGroupId).toBeNull()
+
+    // Each placed seat got its OWN unit, not a shared one.
+    const placed = await prisma.inventoryItem.findMany({
+      where: { siteId: site.id, status: { not: 'pool' } }, select: { sunbedGroupId: true },
+    })
+    expect(new Set(placed.map((p) => p.sunbedGroupId)).size).toBe(2)
+  })
+
+  it('is scoped to the site — a neighbour venue is never touched', async () => {
+    const user = await createTestUser()
+    mockUserId = user.id
+    const site = await createTestSite(user.id)
+    const other = await createTestSite(user.id)
+    await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const foreign = await createTestInventoryItem(user.id, other.id, { number: 1 })
+
+    await ensurePlacedSeatsHaveUnits(site.id)
+
+    const foreignRow = await prisma.inventoryItem.findUniqueOrThrow({ where: { id: foreign.id } })
+    expect(foreignRow.sunbedGroupId).toBeNull()
+    expect(await findUnitlessPlacedSeats(other.id)).toHaveLength(1)
+  })
+})

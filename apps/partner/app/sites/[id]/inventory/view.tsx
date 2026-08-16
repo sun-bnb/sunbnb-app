@@ -728,7 +728,13 @@ export default function InventoryView() {
           selectedSingleItemParcelColor={
             selectedItem?.group ? getParcelColor(selectedItem.group) ?? null : null
           }
-          selectedSingleItemHasPair={!!selectedItem?.sunbedGroupId}
+          // Track 021 P2: membership is UNIVERSAL now (every placed seat is in a
+          // unit, often of one), so "has a pair" is a CARDINALITY question —
+          // `!!sunbedGroupId` would be permanently true.
+          selectedSingleItemHasPair={
+            !!selectedItem?.sunbedGroupId &&
+            inventory.filter((i) => i.sunbedGroupId === selectedItem.sunbedGroupId).length > 1
+          }
           pairingMode={pairingMode}
           isEditPanelOpen={itemPanelOpen}
           onRotateSingle={handleRotateSingleItem}

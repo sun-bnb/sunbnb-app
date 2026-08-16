@@ -57,6 +57,7 @@ describe('createInventoryItem', () => {
   it('auto-increments item number from last existing item', async () => {
     authorizeOwner()
     vi.mocked(prisma.inventoryItem.findFirst).mockResolvedValue({ number: 5 } as any)
+    vi.mocked(prisma.sunbedGroup.create).mockResolvedValue({ id: 'unit-1' } as any)
     vi.mocked(prisma.inventoryItem.create).mockResolvedValue({ id: 'item-new', number: 6 } as any)
 
     const res = await createInventoryItem({ siteId: SITE_ID })
@@ -72,6 +73,7 @@ describe('createInventoryItem', () => {
   it('starts at 1 when no existing items', async () => {
     authorizeOwner()
     vi.mocked(prisma.inventoryItem.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.sunbedGroup.create).mockResolvedValue({ id: 'unit-1' } as any)
     vi.mocked(prisma.inventoryItem.create).mockResolvedValue({ id: 'item-1' } as any)
 
     await createInventoryItem({ siteId: SITE_ID })
@@ -79,9 +81,29 @@ describe('createInventoryItem', () => {
     expect(createCall.data.number).toBe(1)
   })
 
+  // Track 021 P2 (I1): a placed seat is never unitless. The unit is what a
+  // device mounts to and what will carry the persisted label number, so it has
+  // to exist from the moment the seat does — and in the SAME transaction, or a
+  // seat could commit without one and nothing would repair it.
+  it('mints a unit for the new seat and assigns it', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.inventoryItem.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.sunbedGroup.create).mockResolvedValue({ id: 'unit-1' } as any)
+    vi.mocked(prisma.inventoryItem.create).mockResolvedValue({ id: 'item-1' } as any)
+
+    await createInventoryItem({ siteId: SITE_ID })
+
+    expect(vi.mocked(prisma.sunbedGroup.create)).toHaveBeenCalledWith({
+      data: { siteId: SITE_ID },
+    })
+    const createCall = vi.mocked(prisma.inventoryItem.create).mock.calls[0][0]
+    expect(createCall.data.sunbedGroupId).toBe('unit-1')
+  })
+
   it('sets userId from session on created item', async () => {
     authorizeOwner()
     vi.mocked(prisma.inventoryItem.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.sunbedGroup.create).mockResolvedValue({ id: 'unit-1' } as any)
     vi.mocked(prisma.inventoryItem.create).mockResolvedValue({ id: 'item-1' } as any)
 
     await createInventoryItem({ siteId: SITE_ID })
