@@ -1,8 +1,9 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useTransition } from 'react'
 import type { FleetDevice } from './queries'
 import type { DeviceHealth } from './device-health'
+import { assignDeviceLocation, unassignDevice, identifyDevice } from './actions'
 
 /**
  * The fleet list (track 021 P5, step 4). Read-only for now — assignment lands
@@ -56,7 +57,40 @@ function relative(date: Date | null): string {
   return `${Math.round(hours / 24)}d ago`
 }
 
-export default function DevicesView({ devices }: { devices: FleetDevice[] }) {
+export default function DevicesView({
+  devices,
+  sites,
+}: {
+  devices: FleetDevice[]
+  sites: { id: string; name: string }[]
+}) {
+  const [editing, setEditing] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
+
+  /**
+   * Assignment is typed as the address painted on the bed — `parcel-row-unit`.
+   * The server refuses an address that holds no unit, which is the mistake that
+   * would otherwise only surface as an amber light on a beach.
+   */
+  const submit = (deviceId: string, form: HTMLFormElement) => {
+    const data = new FormData(form)
+    const parts = String(data.get('location') ?? '').split('-').map((p) => Number(p.trim()))
+    if (parts.length !== 3 || parts.some((n) => !Number.isInteger(n) || n < 0)) {
+      setError('Enter a location as parcel-row-unit, for example 1-10-3')
+      return
+    }
+    setError(null)
+    startTransition(async () => {
+      const res = await assignDeviceLocation(deviceId, {
+        siteId: String(data.get('siteId') ?? ''),
+        parcel: parts[0]!, row: parts[1]!, seq: parts[2]!,
+      })
+      if (res.status === 'error') setError(res.errors?.[0] ?? 'Could not assign')
+      else setEditing(null)
+    })
+  }
+
   const counts = devices.reduce<Record<string, number>>((acc, d) => {
     acc[d.health] = (acc[d.health] ?? 0) + 1
     return acc
@@ -99,11 +133,13 @@ export default function DevicesView({ devices }: { devices: FleetDevice[] }) {
                   <th className="px-4 py-2 font-medium">Last seen</th>
                   <th className="px-4 py-2 font-medium">Battery</th>
                   <th className="px-4 py-2 font-medium">Signal</th>
+                  <th className="px-4 py-2" />
                 </tr>
               </thead>
               <tbody>
                 {devices.map((device) => (
-                  <tr key={device.id} className="border-b border-gray-50 last:border-0">
+                  <React.Fragment key={device.id}>
+                  <tr className="border-b border-gray-50 last:border-0">
                     <td className="px-4 py-2 font-mono text-gray-900">{device.code}</td>
                     <td className="px-4 py-2 text-gray-700">
                       {device.assignedLocation ?? <span className="text-gray-400">—</span>}
@@ -131,7 +167,79 @@ export default function DevicesView({ devices }: { devices: FleetDevice[] }) {
                     <td className="px-4 py-2 text-gray-600">
                       {device.rssiDbm != null ? `${device.rssiDbm} dBm` : '—'}
                     </td>
+                    <td className="px-4 py-2 text-right whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => { setError(null); setEditing(editing === device.id ? null : device.id) }}
+                        className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        {device.assignedLocation ? 'Move' : 'Assign'}
+                      </button>
+                      {device.assignedLocation && (
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => startTransition(async () => { await identifyDevice(device.id) })}
+                          title="Flashes the bar on the next poll, so you can confirm which box this is"
+                          className="ml-2 rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                        >
+                          Identify
+                        </button>
+                      )}
+                    </td>
                   </tr>
+                  {editing === device.id && (
+                    <tr className="border-b border-gray-50 bg-gray-50/60">
+                      <td colSpan={7} className="px-4 py-3">
+                        <form
+                          onSubmit={(e) => { e.preventDefault(); submit(device.id, e.currentTarget) }}
+                          className="flex flex-wrap items-center gap-2"
+                        >
+                          <select
+                            name="siteId"
+                            defaultValue={device.assignedSiteId ?? sites[0]?.id ?? ''}
+                            className="rounded-lg border border-gray-200 px-2 py-1 text-sm"
+                          >
+                            {sites.map((site) => (
+                              <option key={site.id} value={site.id}>{site.name}</option>
+                            ))}
+                          </select>
+                          <input
+                            name="location"
+                            defaultValue={device.assignedLocation ?? ''}
+                            placeholder="parcel-row-unit, e.g. 1-10-3"
+                            className="w-56 rounded-lg border border-gray-200 px-2 py-1 text-sm"
+                          />
+                          <button
+                            type="submit"
+                            disabled={pending}
+                            className="rounded-lg bg-accent px-3 py-1 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                          >
+                            {pending ? 'Saving…' : 'Save'}
+                          </button>
+                          {device.assignedLocation && (
+                            <button
+                              type="button"
+                              disabled={pending}
+                              onClick={() => startTransition(async () => {
+                                await unassignDevice(device.id); setEditing(null)
+                              })}
+                              className="rounded-lg border border-gray-200 px-3 py-1 text-sm text-gray-600 hover:bg-white"
+                            >
+                              Unassign
+                            </button>
+                          )}
+                          <span className="text-xs text-gray-500">
+                            Saving flashes the bar — watch the parasol to confirm it is this one.
+                          </span>
+                        </form>
+                        {error && (
+                          <p role="status" className="mt-2 text-sm text-red-600">{error}</p>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>

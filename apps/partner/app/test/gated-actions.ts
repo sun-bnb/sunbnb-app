@@ -19,6 +19,7 @@
  * change what the real action does.
  */
 
+import { assignDeviceLocation, unassignDevice, identifyDevice } from '@/app/devices/actions'
 import {
   reserveItem,
   reserveItems,
@@ -756,6 +757,25 @@ export const GATED_ACTIONS: GatedAction[] = [
     gate: 'session-owner',
     // deleteInventoryItem fetches item by id; item stub in beforeEach provides siteId+ownership
     invoke: (_accessKey?) => deleteInventoryItem(ITEM_ID),
+  },
+  {
+    name: 'devices.assignDeviceLocation',
+    kind: 'action',
+    gate: 'session-owner',
+    invoke: (_accessKey?: string) =>
+      assignDeviceLocation('device-1', { siteId: SITE_ID, parcel: 1, row: 1, seq: 1 }),
+  },
+  {
+    name: 'devices.unassignDevice',
+    kind: 'action',
+    gate: 'session-owner',
+    invoke: (_accessKey?: string) => unassignDevice('device-1'),
+  },
+  {
+    name: 'devices.identifyDevice',
+    kind: 'action',
+    gate: 'session-owner',
+    invoke: (_accessKey?: string) => identifyDevice('device-1'),
   },
   {
     name: 'inventory-actions.deleteInventoryItems',

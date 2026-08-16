@@ -124,7 +124,7 @@ thing (a fielded wire contract) is decided last — after a real device has exer
 | 2 | **P1(d) — drop `pairId`** | 021 | current release deployed | Destructive, so a release AFTER the code stopped reading it (expand/contract) |
 | 3 | ✅ **Device model + telemetry persistence** | 019 P5 | — | DONE 2026-08-16 — devices self-register; last-values persisted |
 | 4 | ✅ **Fleet UI** | 019 P5 | 3 | DONE 2026-08-16 — `/devices`, flag-gated, health derived from what the device has told us |
-| 5 | **Assignment + config delivery** | 021 P5 · 019 P4 | 1, 3, 4 | Assign a location from the UI; state response carries it inside the hashed `stable`; telemetry reports what is applied |
+| 5 | ✅ **Assignment + config delivery** | 021 P5 · 019 P4 | 1, 3, 4 | DONE 2026-08-16 — location resolution, assignment UI, identify |
 | 6 | **Wire contract freeze + bring-up** | 019 | 5 + hardware | Freeze only once a real device has run the contract; expensive after 1 500 units carry it |
 | 7 | **P6 — sell policy** | 021 | 1 | Independent of hardware entirely — can run in parallel with 3–6 |
 | 8 | **P7 — rename** | 021 | 7 | Cosmetic; last, when the vocabulary is stable |
@@ -362,6 +362,25 @@ the kit is in transit.
 
 ## Log
 
+- **2026-08-16 — Step 5b: assignment, unassignment and identify.** An operator types the
+  address painted on the bed (`parcel-row-unit`) against one of their own sites; the server
+  **refuses an address that holds no unit**, naming it — the mistake that would otherwise only
+  surface as an amber light on a beach. Assigning always queues `identify`, so the confirming
+  flash is not an extra step someone can skip: a silent re-point is the one failure that makes
+  a light lie about a bed. Commands are **one-shot and self-expiring** (2 min): there is no ack
+  channel, so a device asleep when the button was pressed must not flash an hour later at
+  whoever is standing there. They ride in the hashed `stable` object, so queuing one busts the
+  ETag and it actually arrives — pinned by a test asserting the ETag changes.
+  Registry: the three actions are `session-owner` in the auth matrix, and the matrix's device
+  stub is **ownership-aware on purpose** — a blanket mock would hand the non-owner scenario a
+  device and quietly prove the opposite of what that scenario exists to check.
+  Browser-verified end to end: `9-99-9` refused with the address named, `1-1-2` accepted, DB
+  showing the assignment plus a fresh `identify`; seeded rows removed.
+  **Two self-inflicted repeats worth naming:** I exported a CONSTANT from a `'use server'`
+  file again (500 at request time, "found number") — the same trap I hit and documented this
+  morning with `INVENTORY_ITEM_SELECT`; and the dev server needed its FOURTH restart of the day
+  after a migration. Both are invisible to tests and only a browser finds them.
+  Gates: partner 2015u + 242i, user 547u + 102i, tsc + lint clean.
 - **2026-08-16 — Step 5a: the state route now resolves BY ASSIGNED LOCATION, not by a stored
   seat list.** A device answers for whatever unit occupies its address today, so a parcel
   rebuilt at the same address needs no re-assignment — the property the whole model was chosen

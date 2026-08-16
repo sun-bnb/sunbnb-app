@@ -143,7 +143,10 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
       // present in every 200, so a device that rebooted, lost NVS or was out of
       // range simply converges, with no acknowledgement protocol.
       location: screened.location,
-      cmd: null as string | null,
+      // Delivered on the next poll and expiring on its own — `identify` flashes
+      // the bar so staff can confirm the right box before walking away. It sits
+      // in `stable`, so setting one busts the ETag and it actually arrives.
+      cmd: assignment.cmd,
     }
     const body = { ...stable, serverTime: new Date().toISOString() }
 

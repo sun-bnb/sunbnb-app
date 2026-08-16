@@ -1257,6 +1257,12 @@ model Device {
   lastSeenAt DateTime?    @map("last_seen_at")
   battMv     Int?         @map("batt_mv")
   rssiDbm    Int?         @map("rssi_dbm")
+  /// A one-shot command for the device, delivered in the state (poll) response
+  /// and EXPIRING on its own — there is no ack channel, so a command that is
+  /// never picked up must not linger forever. `identify` flashes the bar so
+  /// staff can confirm they assigned the right box before walking away.
+  pendingCmd   String?   @map("pending_cmd")
+  pendingCmdAt DateTime? @map("pending_cmd_at")
   /// Uptime seconds at last report — a drop means the device rebooted, which is
   /// the cheapest crash signal available. `polls`/`tempC` are accepted and
   /// dropped: no column earns its keep yet.

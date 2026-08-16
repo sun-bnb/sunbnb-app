@@ -98,6 +98,8 @@ export interface DeviceAssignment {
   parcel: number
   row: number
   seq: number
+  /** A one-shot command to deliver on this poll, or null. */
+  cmd: string | null
 }
 
 /**
@@ -117,6 +119,8 @@ async function assignmentForCode(code: string): Promise<DeviceAssignment | null>
       assignedParcel: true,
       assignedRow: true,
       assignedSeq: true,
+      pendingCmd: true,
+      pendingCmdAt: true,
     },
   })
 
@@ -137,7 +141,19 @@ async function assignmentForCode(code: string): Promise<DeviceAssignment | null>
     parcel: assignedParcel,
     row: assignedRow,
     seq: assignedSeq,
+    // A one-shot command EXPIRES rather than waiting for an ack there is no
+    // channel for. A device that was asleep when "identify" was pressed should
+    // not flash an hour later at whoever is standing there then.
+    cmd: freshCommand(device.pendingCmd, device.pendingCmdAt),
   }
+}
+
+/** How long a pending command stays deliverable. Mirrors the partner action. */
+export const CMD_TTL_MS = 2 * 60 * 1000
+
+function freshCommand(cmd: string | null, at: Date | null): string | null {
+  if (!cmd || !at) return null
+  return Date.now() - at.getTime() <= CMD_TTL_MS ? cmd : null
 }
 
 /** `parcel-row-unit`, the human address echoed to the device and shown in the UI. */

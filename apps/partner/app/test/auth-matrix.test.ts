@@ -349,6 +349,13 @@ beforeEach(() => {
   vi.mocked(prisma.product.create).mockResolvedValue({ id: 'new-product' } as any)
   vi.mocked(prisma.product.update).mockResolvedValue({} as any)
 
+  // Device stubs (track 021 P5). Ownership-AWARE on purpose: a blanket mock
+  // would hand the non-owner scenario a device and quietly prove the opposite
+  // of what that scenario exists to check.
+  vi.mocked(prisma.device.findFirst).mockImplementation((async (args: any) =>
+    args?.where?.partnerAccountId === OWNER_ID ? { id: 'device-1' } : null) as any)
+  vi.mocked(prisma.device.update).mockResolvedValue({} as any)
+
   // SunbedGroup stubs (for addSeatToGroup, pairInventoryItems, etc.)
   vi.mocked(prisma.sunbedGroup.create).mockResolvedValue({ id: 'new-group' } as any)
   vi.mocked(prisma.sunbedGroup.delete).mockResolvedValue({} as any)

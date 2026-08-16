@@ -69,3 +69,15 @@ export async function getFleet(): Promise<FleetDevice[]> {
     }
   })
 }
+
+/** The operator's own venues — a device may only be pointed at one of these. */
+export async function getAssignableSites(): Promise<{ id: string; name: string }[]> {
+  const session = await auth()
+  if (!session?.user) return []
+  const sites = await prisma.site.findMany({
+    where: { userId: session.user.id },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  })
+  return sites.map((site) => ({ id: site.id, name: site.name ?? 'Untitled site' }))
+}

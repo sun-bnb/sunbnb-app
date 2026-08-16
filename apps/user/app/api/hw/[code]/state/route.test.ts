@@ -293,6 +293,40 @@ describe('binding', () => {
     expect(body.seats.map((s: { id: string }) => s.id)).toEqual([SEAT_A, SEAT_B])
   })
 
+  describe('one-shot commands', () => {
+    const withCmd = (cmd: string | null, agoMs = 0) => ({
+      status: 'active',
+      assignedSiteId: 'site-1', assignedParcel: 0, assignedRow: 0, assignedSeq: 1,
+      pendingCmd: cmd,
+      pendingCmdAt: cmd ? new Date(Date.now() - agoMs) : null,
+    })
+
+    it('delivers a fresh identify command', async () => {
+      mockDevice.mockResolvedValue(withCmd('identify') as never)
+      expect((await (await GET(makeRequest(), makeParams())).json()).cmd).toBe('identify')
+    })
+
+    it('DROPS a command older than its TTL — there is no ack channel', async () => {
+      // A device asleep when "identify" was pressed must not flash an hour later
+      // at whoever happens to be standing there then.
+      mockDevice.mockResolvedValue(withCmd('identify', 10 * 60 * 1000) as never)
+      expect((await (await GET(makeRequest(), makeParams())).json()).cmd).toBeNull()
+    })
+
+    it('emits null when nothing is pending', async () => {
+      mockDevice.mockResolvedValue(withCmd(null) as never)
+      expect((await (await GET(makeRequest(), makeParams())).json()).cmd).toBeNull()
+    })
+
+    it('a pending command changes the ETag, so it actually reaches the device', async () => {
+      mockDevice.mockResolvedValue(withCmd(null) as never)
+      const quiet = (await GET(makeRequest(), makeParams())).headers.get('etag')
+      mockDevice.mockResolvedValue(withCmd('identify') as never)
+      const commanded = (await GET(makeRequest(), makeParams())).headers.get('etag')
+      expect(commanded).not.toBe(quiet)
+    })
+  })
+
   it('declares the assigned location back to the device (config on the poll)', async () => {
     const body = await (await GET(makeRequest(), makeParams())).json()
     expect(body.location).toBe('0-0-1')
