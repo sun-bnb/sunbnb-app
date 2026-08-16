@@ -122,7 +122,7 @@ thing (a fielded wire contract) is decided last — after a real device has exer
 |---|---|---|---|---|
 | 1 | ✅ **P4 — parcel resize + identity** | 021 | — | DONE 2026-08-16 — resize is a real edit; re-pairing reuses units |
 | 2 | **P1(d) — drop `pairId`** | 021 | current release deployed | Destructive, so a release AFTER the code stopped reading it (expand/contract) |
-| 3 | **Device model + telemetry persistence** | 019 P5 | — | The fleet list has nothing to render until telemetry persists; buildable with no hardware |
+| 3 | ✅ **Device model + telemetry persistence** | 019 P5 | — | DONE 2026-08-16 — devices self-register; last-values persisted |
 | 4 | **Fleet UI** | 019 P5 | 3 | Devices self-register; surfaces unassigned / assigned-not-applied / silent / spots without devices |
 | 5 | **Assignment + config delivery** | 021 P5 · 019 P4 | 1, 3, 4 | Assign a location from the UI; state response carries it inside the hashed `stable`; telemetry reports what is applied |
 | 6 | **Wire contract freeze + bring-up** | 019 | 5 + hardware | Freeze only once a real device has run the contract; expensive after 1 500 units carry it |
@@ -362,6 +362,29 @@ the kit is in transit.
 
 ## Log
 
+- **2026-08-16 — Step 3 shipped: devices SELF-REGISTER and telemetry persists.** Additive
+  migration `20260816111810_add_device_assignment_and_telemetry`: `Device` gains the customer
+  (`partnerAccountId`), the ASSIGNED location (`assignedSiteId/Parcel/Row/Seq` — unused until
+  step 5, added now so the expand happens once), the location the device REPORTS it is
+  running, and `upSec`. The telemetry route is promoted from stub to last-values writes.
+  **The load-bearing change was to the shared gate.** It declined any device without a
+  binding — which would have made self-registration impossible, since an unassigned device
+  could never announce itself into the fleet list it is assigned from. Telemetry now passes
+  `requireBinding: false` and answers **204 to anything that clears the client filter**,
+  persisting more only when it can: that keeps an unassigned device able to report AND stops
+  the endpoint becoming an existence oracle for codes printed on public stickers. The state
+  route is unchanged — an unbound device still has nothing to say about a seat, and answering
+  an empty aggregate would render as FREE.
+  Deliberate details: fields the device did NOT send are OMITTED rather than nulled ("we have
+  not heard a battery reading lately" ≠ "the battery is unknown"); `polls`/`tempC` are
+  accepted and dropped rather than freezing a guessed column into the wire; a retired device
+  that still transmits is RECORDED, because a box nobody expects still being on a pole is
+  information; and a DB failure still answers 204 — telemetry must never fail the poll loop.
+  Three stub-era tests were re-pinned to the new contract and six added. Found en route: this
+  suite had no `vi.clearAllMocks()`, which was harmless while the route only read and wrong
+  the moment it wrote — `mock.calls[0]` was another test's write.
+  Gates: user 544u + 102i, partner mock-contract 17, admin 174, tsc + lint clean,
+  `migrate:check` no drift.
 - **2026-08-16 — P4 A2 shipped: re-pairing REUSES unit rows instead of dissolving them.**
   Changing a parcel's shape used to dissolve every affected unit and mint fresh ones, throwing
   away the id, the persisted ordinal, and (once assigned) the device location — for a change

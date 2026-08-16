@@ -56,8 +56,13 @@ function makeParams(code = CODE) {
 }
 
 beforeEach(() => {
+  // Track 021 P5: the route now WRITES, so call history matters — without this,
+  // `mock.calls[0]` belongs to whichever earlier test wrote first. (Clearing
+  // wipes history, not implementations, so the device stub below still stands.)
+  vi.clearAllMocks()
   process.env.HW_CLIENT_UA = UA_NEEDLE
   mockDevice.mockResolvedValue(device([SEAT_A, SEAT_B]) as never)
+  vi.mocked(prisma.device.updateMany).mockResolvedValue({ count: 1 } as never)
 })
 
 // ── The soft client filter (Q9) ───────────────────────────────────────────────
@@ -94,18 +99,29 @@ describe('client filter', () => {
     expect(res.status).toBe(204)
   })
 
-  it('an unknown code is declined identically to a failed filter', async () => {
-    mockDevice.mockResolvedValueOnce(null as never)
+  // Track 021 P5: telemetry no longer requires a binding, because an UNASSIGNED
+  // device must be able to announce itself or it can never appear in the fleet
+  // list to be assigned from. It therefore answers 204 to any request that
+  // passes the client filter and simply persists more when it can — which also
+  // keeps it from becoming an existence oracle for codes printed on public
+  // stickers.
+  it('accepts an unknown code with 204 and writes nothing (no existence oracle)', async () => {
+    vi.mocked(prisma.device.updateMany).mockResolvedValue({ count: 0 } as never)
     const unknown = await POST(makeRequest('ZZZZZZ'), makeParams('ZZZZZZ'))
+    expect(unknown.status).toBe(204)
+    // The write is attempted but matches nothing — no row is invented.
+    expect(vi.mocked(prisma.device.updateMany)).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { code: 'ZZZZZZ' } }),
+    )
+  })
+
+  it('a failed client filter is still declined', async () => {
     const filtered = await POST(
       makeRequest(CODE, { headers: { 'user-agent': 'curl/8.4.0' } }),
       makeParams(),
     )
-
-    expect(unknown.status).toBe(401)
     expect(filtered.status).toBe(401)
-    // A uniform, opaque reject — the caller learns nothing from the difference.
-    expect(await unknown.json()).toEqual(await filtered.json())
+    expect(vi.mocked(prisma.device.updateMany)).not.toHaveBeenCalled()
   })
 
   it('fails CLOSED with 503 when HW_CLIENT_UA is unset — never opens the endpoint', async () => {
@@ -138,7 +154,7 @@ describe('accept', () => {
     expect(res.status).toBe(204)
   })
 
-  it('persists nothing — an unknown field in the payload is accepted, not rejected', async () => {
+  it('accepts an unknown field in the payload rather than rejecting it', async () => {
     const res = await POST(
       makeRequest(CODE, { body: JSON.stringify({ ...BODY, somethingNew: true }) }),
       makeParams(),
@@ -146,19 +162,62 @@ describe('accept', () => {
     expect(res.status).toBe(204)
   })
 
-  it('normalises the code before the binding lookup', async () => {
+  it('normalises the code before persisting', async () => {
     // Devices are stored under the canonical code; a lowercased one must still
     // resolve, mirroring the state route's normalisation.
     const res = await POST(makeRequest('7qk3m2'), makeParams('7qk3m2'))
     expect(res.status).toBe(204)
-    expect(mockDevice).toHaveBeenCalledWith(
+    expect(vi.mocked(prisma.device.updateMany)).toHaveBeenCalledWith(
       expect.objectContaining({ where: { code: CODE } }),
     )
   })
 
-  it('declines a retired device', async () => {
+  // A retired device that is still transmitting is INFORMATION — it means a box
+  // nobody expects is still on a pole. Record it; the fleet UI can surface it.
+  it('still records a retired device rather than declining it', async () => {
     mockDevice.mockResolvedValue(device([SEAT_A, SEAT_B], 'retired') as never)
     const res = await POST(makeRequest(), makeParams())
-    expect(res.status).toBe(401)
+    expect(res.status).toBe(204)
+    expect(vi.mocked(prisma.device.updateMany)).toHaveBeenCalled()
+  })
+
+  describe('last-values persistence', () => {
+    it('writes the reported fields and stamps lastSeenAt', async () => {
+      const res = await POST(
+        makeRequest(CODE, { body: JSON.stringify({ fw: '1.4.2', battMv: 3980, rssiDbm: -67, upSec: 91234, loc: '1-1-1' }) }),
+        makeParams(),
+      )
+      expect(res.status).toBe(204)
+      const data = vi.mocked(prisma.device.updateMany).mock.calls[0]![0]!.data as Record<string, unknown>
+      expect(data).toMatchObject({
+        fw: '1.4.2', battMv: 3980, rssiDbm: -67, upSec: 91234, reportedLocation: '1-1-1',
+      })
+      expect(data.lastSeenAt).toBeInstanceOf(Date)
+    })
+
+    it('OMITS fields the device did not send rather than nulling them', async () => {
+      // "We have not heard a battery reading lately" and "the battery is
+      // unknown" are different things to an operator — a partial payload (or a
+      // firmware that drops a field) must not wipe the last known value.
+      await POST(makeRequest(CODE, { body: JSON.stringify({ fw: '1.4.2' }) }), makeParams())
+      const data = vi.mocked(prisma.device.updateMany).mock.calls[0]![0]!.data as Record<string, unknown>
+      expect(data).toHaveProperty('fw')
+      expect(data).not.toHaveProperty('battMv')
+      expect(data).not.toHaveProperty('rssiDbm')
+      expect(data).not.toHaveProperty('reportedLocation')
+    })
+
+    it('accepts and drops polls/tempC — no column is invented for them', async () => {
+      await POST(makeRequest(CODE, { body: JSON.stringify({ polls: 42, tempC: 31.5 }) }), makeParams())
+      const data = vi.mocked(prisma.device.updateMany).mock.calls[0]![0]!.data as Record<string, unknown>
+      expect(data).not.toHaveProperty('polls')
+      expect(data).not.toHaveProperty('tempC')
+    })
+
+    it('a database failure still answers 204 (telemetry never fails the poll loop)', async () => {
+      vi.mocked(prisma.device.updateMany).mockRejectedValueOnce(new Error('db down'))
+      const res = await POST(makeRequest(CODE, { body: JSON.stringify({ fw: '1.4.2' }) }), makeParams())
+      expect(res.status).toBe(204)
+    })
   })
 })

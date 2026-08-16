@@ -48,6 +48,9 @@ const prisma = {
   // seat list through this instead of the old HW_DEVICE_MAP env var.
   device: {
     findUnique: vi.fn(),
+    findMany: vi.fn(),
+    updateMany: vi.fn(),
+    update: vi.fn(),
   },
   sunbedGroup: {
     create: vi.fn(),

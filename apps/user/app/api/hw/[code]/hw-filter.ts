@@ -115,6 +115,18 @@ export type DeviceRequest =
   | { ok: true; code: string; seatIds: string[] }
   | { ok: false; response: Response }
 
+export interface ScreenOptions {
+  /**
+   * Whether the device must already be bound to seats.
+   *
+   * TRUE (default, the state route): an unbound device has nothing to say about
+   * any seat, and answering an empty aggregate would render as FREE.
+   * FALSE (telemetry): an UNASSIGNED device must be able to announce itself, or
+   * it can never appear in the fleet list to be assigned from (track 021 P5).
+   */
+  requireBinding?: boolean
+}
+
 /**
  * Screen a device request: client filter first, then binding lookup. On any
  * decline the caller returns `.response` verbatim and must NOT branch on the
@@ -128,6 +140,7 @@ export type DeviceRequest =
 export async function screenDeviceRequest(
   request: NextRequest,
   rawCode: string,
+  options: ScreenOptions = {},
 ): Promise<DeviceRequest> {
   const expected = process.env.HW_CLIENT_UA
   // No filter configured is OUR fault, not the caller's: 503 → amber, not a decline.
@@ -139,6 +152,12 @@ export async function screenDeviceRequest(
   }
 
   const code = normalizeCode(rawCode)
+
+  // Telemetry stops here: it needs no binding, and it must NOT reveal whether a
+  // code is known. It always answers 204 and merely persists more when it can,
+  // so an unassigned device can announce itself without the endpoint becoming
+  // an existence oracle for codes printed on public stickers.
+  if (options.requireBinding === false) return { ok: true, code, seatIds: [] }
 
   let seatIds: string[] | null
   try {

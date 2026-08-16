@@ -5,10 +5,14 @@
  * → `204`. Battery / RSSI / uptime, fire-and-forget, last-values only (no time
  * series). Polled directly over HTTPS by an ESP32-C6 alongside the state GET.
  *
- * This is a STUB: it authenticates and accepts, but persists NOTHING. Its only job
- * is to let the firmware exercise the real endpoint shape from bring-up onward
- * instead of discovering it at P5 — P5 promotes it to last-values writes on the
- * `Device` row plus an operator health view.
+ * P5: promoted from the P1.5 stub to LAST-VALUES writes on the `Device` row —
+ * `fw`, `battMv`, `rssiDbm`, `upSec`, `lastSeenAt`, plus the location the device
+ * reports it is RUNNING. No time series: an operator needs "is this one dark,
+ * and is its battery going", not history.
+ *
+ * **This is also how a device SELF-REGISTERS.** Unlike the state route, it does
+ * NOT require a binding — an unassigned device must be able to announce itself,
+ * or it can never appear in the fleet list to be assigned from (track 021 P5).
  *
  * Contract: `.claude/tracks/019-hw-api.md` (§Wire contract). Two rules are
  * load-bearing here and must not be "tidied":
@@ -24,22 +28,58 @@
  */
 
 import { NextRequest } from 'next/server'
+import prisma from '@repo/data/PrismaCient'
 import { screenDeviceRequest } from '../hw-filter'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest, { params }: { params: { code: string } }) {
-  const screened = await screenDeviceRequest(request, params.code)
+  const screened = await screenDeviceRequest(request, params.code, { requireBinding: false })
   if (!screened.ok) return screened.response
 
-  // P1.5 stub: drain and drop. The body shape is read by P5, not here — but we
-  // still consume it so a device that sends a payload never sees a broken
-  // connection, and a malformed/absent body can never become a non-2xx (rule 1).
+  // Everything below is best-effort. Rule 1 is absolute: once the request is
+  // accepted the answer is 204, whatever happens — a malformed body, an unknown
+  // code, or a database that is down must never make a device retry telemetry.
   try {
-    await request.text()
+    const raw = await request.text()
+    const payload = raw ? (JSON.parse(raw) as Record<string, unknown>) : {}
+
+    await prisma.device.updateMany({
+      where: { code: screened.code },
+      data: {
+        lastSeenAt: new Date(),
+        ...pickString(payload, 'fw', 'fw'),
+        ...pickString(payload, 'loc', 'reportedLocation'),
+        ...pickInt(payload, 'battMv', 'battMv'),
+        ...pickInt(payload, 'rssiDbm', 'rssiDbm'),
+        ...pickInt(payload, 'upSec', 'upSec'),
+        // `polls` and `tempC` are accepted and dropped — no column earns its
+        // keep yet, and inventing one now would freeze a guess into the wire.
+      },
+    })
   } catch {
     // Deliberately swallowed — see rule 1.
   }
 
   return new Response(null, { status: 204 })
+}
+
+/**
+ * Field pickers that OMIT rather than null. A device sending a partial payload
+ * (or a firmware that drops a field between versions) must not wipe the last
+ * known value — "we have not heard a battery reading lately" and "the battery
+ * is unknown" are different things to an operator.
+ */
+function pickString(payload: Record<string, unknown>, from: string, to: string) {
+  const value = payload[from]
+  return typeof value === 'string' && value.length > 0 && value.length <= 64
+    ? { [to]: value }
+    : {}
+}
+
+function pickInt(payload: Record<string, unknown>, from: string, to: string) {
+  const value = payload[from]
+  return typeof value === 'number' && Number.isFinite(value)
+    ? { [to]: Math.trunc(value) }
+    : {}
 }

@@ -1222,11 +1222,30 @@ model Device {
   /// provisioned → active → retired. A failed flash leaves a `provisioned` row,
   /// which is the safe direction (the reverse would be a live device with no row).
   status     String       @default("provisioned")
+  /// The customer this device belongs to (flashed permanently at the bench, so
+  /// it lands in the right partner's fleet list with no claiming step). A
+  /// return or resale is a bulk reflash — accepted, track 021 P5.
+  partnerAccountId String?  @map("partner_account_id")
+  /// The ASSIGNED location — set from the partner UI, delivered to the device
+  /// in the state (poll) response. Resolves to "the unit at this address".
+  /// Null = self-registered but not yet assigned.
+  assignedSiteId   String?  @map("assigned_site_id")
+  assignedParcel   Int?     @map("assigned_parcel")
+  assignedRow      Int?     @map("assigned_row")
+  assignedSeq      Int?     @map("assigned_seq")
+  /// The location the device says it is RUNNING, echoed back in telemetry. The
+  /// gap between this and the assigned one is what the fleet UI shows as
+  /// "assigned but not yet applied" for a device asleep, out of range or dead.
+  reportedLocation String?  @map("reported_location")
   /// Last-values telemetry (track 019 P5 writes these; the P1.5 stub does not).
   fw         String?
   lastSeenAt DateTime?    @map("last_seen_at")
   battMv     Int?         @map("batt_mv")
   rssiDbm    Int?         @map("rssi_dbm")
+  /// Uptime seconds at last report — a drop means the device rebooted, which is
+  /// the cheapest crash signal available. `polls`/`tempC` are accepted and
+  /// dropped: no column earns its keep yet.
+  upSec      Int?         @map("up_sec")
   createdAt  DateTime     @default(now()) @map("created_at")
   updatedAt  DateTime     @updatedAt @map("updated_at")
   seats      DeviceSeat[]
