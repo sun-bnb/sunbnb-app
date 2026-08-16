@@ -83,8 +83,13 @@ into firmware. Consequences for this track:
   nothing, and the fleet list is what the assignment UI renders.
 - **P4 is no longer a QR-scanning field flow.** Devices announce themselves; assignment is a
   UI action, confirmed by the identify flash.
-- **Wire contract:** the telemetry response gains a body carrying the assigned location (it
-  is a bare `204` today). Decide before the flash/print run — after 1 500 units carry it, it
+- **Wire contract:** **config rides the STATE (poll) response** (decided 2026-08-16) — put
+  the assigned location inside the hashed `stable` object, so a change busts the ETag and is
+  delivered on the next poll while an unchanged assignment keeps 304ing. The poll is the fast
+  channel and happens anyway; telemetry is battery-constrained and would make assignment a
+  wait-and-hope flow. **Telemetry gains the reverse direction instead**: the device reports the
+  location it is actually running, so the UI can separate ASSIGNED from APPLIED. Firmware must
+  apply config idempotently (it arrives every poll — write NVS only on change). Decide before the flash/print run — after 1 500 units carry it, it
   is expensive. The `state` URL key **stays the device code**: the URL is potted, so keying it
   by a reassignable location would leave a reassigned device 401ing or serving a stale spot.
 - **`DeviceSeat` as an explicit seat list is superseded**; segment order derives from the

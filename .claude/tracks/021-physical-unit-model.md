@@ -228,7 +228,7 @@ The spine. Every phase either establishes one of these or is guarded by it.
   |---|---|---|---|
   | **Device code** (6-char Crockford) | bench, permanent | never | the identity in every `state` and `telemetry` request — the URL key is unchanged from what already ships |
   | **Customer number** | bench, permanent | bulk reflash on return only | which partner's fleet list it appears in |
-  | **Site · parcel · row · position** | server, via telemetry response | any time, from the UI | the spot whose state it renders |
+  | **Site · parcel · row · position** | server, via the **state (poll) response** | any time, from the UI | the spot whose state it renders |
 
   The code is deliberately NOT load-bearing on the daily path — once a device has a correct
   location, resolution runs through that. It earns its place in the three states where things
@@ -249,8 +249,21 @@ The spine. Every phase either establishes one of these or is guarded by it.
   - `Device` gains an assigned location + last-seen/battery/RSSI (P5 of [[track:019]] — its
     telemetry stub persists nothing today, so the fleet list has nothing to render; that work
     is now a PREREQUISITE, not a follow-up).
-  - Wire contract: the telemetry response gains a body carrying the assigned location. It is
-    currently a bare `204`, and the contract is deliberately unfrozen for exactly this.
+  - Wire contract: **config rides the STATE (poll) response, not telemetry** (decided
+    2026-08-16). The poll is the fast channel — it must be, to turn a bed red within ~60 s —
+    while telemetry is battery-constrained and infrequent, so config there would make
+    assignment a wait-and-hope flow instead of an interactive one. It also costs nothing
+    extra: the poll happens anyway, whereas receiving config on telemetry forces an extra
+    radio wake. **The existing ETag design makes it correct for free**: the route hashes a
+    `stable` object (deliberately excluding `serverTime`), so putting the assignment inside it
+    means a change busts the ETag and the device gets a 200 with new config, while an
+    unchanged assignment keeps returning 304s — preserving the 304 discipline that matters at
+    fleet scale.
+  - **Telemetry confirms rather than pushes**: the device reports the location it is actually
+    running, so the fleet UI can distinguish ASSIGNED from APPLIED (a device that is asleep,
+    out of range or dead shows as unacknowledged). Each channel does what it is good at.
+  - Firmware rule: config arrives on EVERY poll, so applying it must be idempotent — write to
+    NVS only on change, or the device rewrites the same value every cycle and burns flash.
   - Assignment must be **operator-initiated and identify-confirmed**, never inferred. Silently
     re-pointing a device is the one failure that makes a light lie about a bed.
   - An assigned location with **no unit** (parcel shrank, spot dismounted) reads amber/
@@ -307,6 +320,16 @@ The spine. Every phase either establishes one of these or is guarded by it.
 
 ## Log
 
+- **2026-08-16 — Config rides the POLL response, not telemetry (founder).** Right call, and
+  for three reasons rather than one: latency (the poll is the fast channel by necessity, so
+  assignment becomes interactive instead of a minutes-long wait before the identify flash can
+  confirm it), battery (the poll happens anyway; receiving config on telemetry forces an extra
+  radio wake), and — the neat part — **the existing ETag design makes it correct with no new
+  mechanism**. The route already hashes a `stable` object excluding `serverTime`; putting the
+  assignment inside it means a changed assignment busts the ETag and is delivered on the next
+  poll, while an unchanged one keeps returning 304s. Telemetry keeps the reverse direction:
+  the device reports the location it is RUNNING, which is what lets the fleet UI separate
+  "assigned" from "applied" for a device that is asleep or dead.
 - **2026-08-16 — DEVICE BINDING MODEL SETTLED: location assigned from the UI, not a seat list
   and not a unit id.** A long design exchange, and the founder's framing carried it: *"the
   internal software id space is ephemeral while physical locations are not"* and *"a certain
