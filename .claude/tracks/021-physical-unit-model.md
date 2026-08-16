@@ -40,7 +40,12 @@ but it wants making **before mass binding**, not after.
 
 ## Resume here
 
-- **Next action: P0 — the classification audit.** Nothing is decided empirically yet. Two
+- **▶ NEXT ACTION: P4 (A1) — make parcel resize a real edit.** See *Delivery sequence* for
+  the full ordering across this track and [[track:019]]. P0–P3 are done and committed; the
+  device binding model is settled and recorded (see P5 + the Log). Outstanding USER OPS:
+  `npm run migrate:test` before any `main` push (the `seq` migration is local + `sunbnb_test`
+  only), then `backfill:units:test` and `:production` to assign ordinals.
+- **Superseded next-action (P0, now complete):** Nothing is decided empirically yet. Two
   things must be known before schema is written:
   1. ✅ **ANSWERED 2026-08-16 — the `pairId` gate is GREEN on all three environments.**
      `pair_id IS NOT NULL AND sunbed_group_id IS NULL` = **0** in dev, test AND production.
@@ -106,6 +111,26 @@ The spine. Every phase either establishes one of these or is guarded by it.
   unit with a device bound is **refused**, not cascaded.
 - **I6 — Server-side enforcement.** Booking granularity is enforced in availability and in
   the create path, never only in the UI.
+
+## Delivery sequence
+
+The remaining work spans this track and [[track:019]]. Order is chosen so that each phase is
+independently shippable, nothing waits on hardware that does not have to, and the riskiest
+thing (a fielded wire contract) is decided last — after a real device has exercised it.
+
+| # | Phase | Track | Depends on | Why here |
+|---|---|---|---|---|
+| 1 | **P4 — parcel resize + identity** | 021 | — | Live editor bug today; decides whether device reassignment is rare or routine |
+| 2 | **P1(d) — drop `pairId`** | 021 | current release deployed | Destructive, so a release AFTER the code stopped reading it (expand/contract) |
+| 3 | **Device model + telemetry persistence** | 019 P5 | — | The fleet list has nothing to render until telemetry persists; buildable with no hardware |
+| 4 | **Fleet UI** | 019 P5 | 3 | Devices self-register; surfaces unassigned / assigned-not-applied / silent / spots without devices |
+| 5 | **Assignment + config delivery** | 021 P5 · 019 P4 | 1, 3, 4 | Assign a location from the UI; state response carries it inside the hashed `stable`; telemetry reports what is applied |
+| 6 | **Wire contract freeze + bring-up** | 019 | 5 + hardware | Freeze only once a real device has run the contract; expensive after 1 500 units carry it |
+| 7 | **P6 — sell policy** | 021 | 1 | Independent of hardware entirely — can run in parallel with 3–6 |
+| 8 | **P7 — rename** | 021 | 7 | Cosmetic; last, when the vocabulary is stable |
+
+Hardware is not on the critical path until 6: phases 3–5 are server work that can land while
+the kit is in transit.
 
 ## Roadmap
 
@@ -185,19 +210,26 @@ The spine. Every phase either establishes one of these or is guarded by it.
   output across the real fixture matrix. Independently valuable — this is the fix for label
   drift under physical signage, with or without hardware.
 
-- **☐ P4 — Parcel edits preserve identity, INCLUDING resize (I2).** **Scope widened
-  2026-08-16:** the editor has no resize at all — the rearrange path contains **zero** seat
-  creates, so growing a parcel leaves the new positions empty and shrinking strands the
+- **▶ P4 — Parcel edits preserve identity, including RESIZE (I2). NEXT.**
+  *Independent of hardware, and a live bug on its own: the rearrange path contains **zero**
+  seat creates, so growing a parcel leaves the new positions empty and shrinking strands the
   surplus seats where they stood. Delete-and-recreate is therefore the only way to change
-  dimensions, which is what makes unit identity look ephemeral and what would have forced a
-  full re-assignment of every device on a parcel. A real resize — add seats for new positions,
-  remove seats for removed ones, keep the rest with their units and ordinals — fixes a live
-  editor bug and is the phase that decides whether P5 is cheap. Do it BEFORE P5. Also extend "match and preserve" from
-  geometry to membership in the rearrange/pairing path. Rotation and moves already preserve
-  groups (pinned by the [[track:020]] test asserting byte-identical ids across a 200-seat
-  rotation); a parcel re-apply that changes pairing still dissolves and re-mints — which is
-  what would destroy the existing 3- and 5-member groups. Units must be matched to their
-  successors and keep their id and number.
+  dimensions — which is what destroys unit identity and would make device reassignment
+  routine instead of rare.*
+  - **A1 — Resize as a first-class edit.** `syncChairsWithLayout('rearrange')` gains create
+    and remove: generate the target grid, match existing seats to positions (by number, as
+    today), CREATE seats + units for positions with no seat, DELETE seats whose position is
+    gone and prune the units they empty. Overlapping spots keep their seat ids, unit ids and
+    persisted ordinals untouched.
+  - **A2 — Identity survives re-pairing.** The original P4 scope: extend match-and-preserve
+    from geometry to membership, so changing `pairSeats` or the row shape re-uses unit rows
+    instead of dissolving and re-minting them.
+  - **A3 — Guards.** Oracle test that a NO-OP resize changes nothing (no id churn, no label
+    change); tests that grow/shrink preserve every overlapping unit id + ordinal; that shrink
+    prunes only the units it empties; and that a shrink refusing to strand seats is asserted
+    against real Postgres.
+  - **Gate:** partner unit + integration, data suites, browser check of grow and shrink on a
+    throwaway site, and the I1 audit still returning zero.
 
 - **☐ P5 — Devices carry a LOCATION, assigned from the partner UI (revised 2026-08-16).**
   Settled after a long design exchange; supersedes the earlier "device binds to an explicit

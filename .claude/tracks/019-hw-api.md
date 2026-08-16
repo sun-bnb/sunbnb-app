@@ -54,7 +54,29 @@ reports no drift.
 **USER OPS before any `main` push:** `cd packages/data && npm run migrate:test` — the shared test DB
 needs this additive migration before main's preview runs against it (the pre-push hook enforces it).
 
-**Next action — bring-up, when the kit lands (no code expected):**
+**▶ REVISED PLAN 2026-08-16 — server work first, hardware only at the end.** The binding
+model changed (see the block above), so the phase order changed with it. Full cross-track
+ordering lives in [[track:021]] *Delivery sequence*; this track owns steps 3, 4 and 6:
+
+- **P5a — Device model + telemetry persistence (NEXT here, no hardware needed).** Promote the
+  P1.5 stub to last-values writes: `fw`, `lastSeenAt`, `battMv`, `rssiDbm`, plus the location
+  the device reports it is RUNNING. Add the assignment columns the UI writes. Additive
+  migration. A device self-registers on its first poll, which is what makes the fleet list
+  possible at all.
+- **P5b — Fleet UI (partner).** One list per customer: code, assigned location, applied
+  location, last seen, battery, RSSI. The reconciliation states fall out of the data —
+  polling-but-unassigned · assigned-but-never-applied · silent >24 h · spots with no device.
+- **P4 — Assignment (no longer a QR field flow).** Assign/reassign a location from that list;
+  the state response carries it inside the hashed `stable` object; `cmd: "identify"` confirms
+  the right device before anyone walks away. State resolution moves from `DeviceSeat` to
+  "the unit at the assigned location", with the hard rule that an assigned location with **no
+  unit** reads amber, never FREE.
+- **Freeze + bring-up (needs the kit).** Only after a real device has run the contract. The
+  cross-repo obligations then are: the 6-char code in every request path, the customer number
+  flashed permanently, config applied idempotently from the poll response, and the reported
+  location returned in telemetry.
+
+**Original bring-up note (still valid for the first unit):**
 
 1. Set `HW_CLIENT_UA` (the opaque needle, e.g. `k3n8fq2p` — must match what the firmware sends
    inside its `User-Agent`) on the test env. Then INSERT a `Device` row (any 6-char Crockford code,
