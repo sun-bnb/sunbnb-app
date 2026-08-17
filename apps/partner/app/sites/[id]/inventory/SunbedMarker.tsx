@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import { AdvancedMarker, useMap } from '@vis.gl/react-google-maps'
-import { formatSeat } from '@repo/data/seat-label'
+import { formatSeatId } from '@repo/data/seat-label'
 import { InventoryItem } from '@/types/shared'
 
 // Track 020 P3: props are scalars (lat/lng, overrideLat/overrideLng) rather
@@ -286,7 +286,7 @@ function SunbedMarker({
                 shapeRendering="geometricPrecision"
                 style={{ pointerEvents: 'none' }}
               >
-                {formatSeat({ seatLabel, number }, { parcel: true })}
+                {formatSeatId({ seatLabel, number }, { parcel: true })}
               </text>
             </g>
           )}

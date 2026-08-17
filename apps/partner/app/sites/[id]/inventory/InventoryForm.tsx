@@ -21,7 +21,7 @@ import { getParcelColor } from './chair-util'
 import QRPrintButton from './qr-print-button'
 import { useSite } from '@/app/sites/site-context'
 import PriceBreakdown from '@/components/PriceBreakdown'
-import { formatSeat } from '@repo/data/seat-label'
+import { formatSeatId } from '@repo/data/seat-label'
 
 interface InventoryFormProps {
   selectedItem: InventoryItem
@@ -105,7 +105,7 @@ export default function InventoryForm({
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
         <div>
           <h3 className="text-sm font-semibold text-gray-800">
-            Sunbed #{formatSeat(selectedItem, { parcel: true })}
+            Sunbed #{formatSeatId(selectedItem, { parcel: true })}
           </h3>
           <span className="text-xs text-gray-500 flex items-center gap-1">
             {selectedItem.group > 0 && (

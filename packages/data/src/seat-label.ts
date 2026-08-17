@@ -260,6 +260,76 @@ export function formatSeatLabel(
   return dashIdx === -1 ? label : label.slice(dashIdx + 1)
 }
 
+/** The four numbers a seat label carries, unpacked. */
+export interface SeatAddress {
+  parcel: number
+  row: number
+  seq: number
+  member: number
+}
+
+/**
+ * Unpack a stored `seatLabel` into its four numbers.
+ *
+ * The stored form packs row and unit ordinal into ONE segment —
+ * `{parcel}-{row}{seq:02}-{member}`, so `1-101-1` is parcel 1, row 1, unit 1,
+ * bed 1. `seq` is always zero-padded to exactly two digits, which is what makes
+ * the split unambiguous however many digits the row has: the last two are the
+ * ordinal, whatever precedes them is the row.
+ *
+ * Parsing rather than carrying the unit's stored `parcel`/`row`/`seq` columns in
+ * the payload is deliberate: the label already holds every number, and the
+ * inventory tab was cut from 5,487KB to 87KB by NOT shipping per-seat unit data
+ * (track 020 C2). This is presentation over data already present.
+ *
+ * Returns null for a missing or unrecognised label; callers fall back to the
+ * legacy number rather than showing a mangled id.
+ */
+export function parseSeatLabel(label: string | null | undefined): SeatAddress | null {
+  if (!label) return null
+  const parts = label.split('-')
+  if (parts.length !== 3) return null
+
+  const [parcelPart, middle, memberPart] = parts as [string, string, string]
+  // At least one row digit plus the two ordinal digits.
+  if (middle.length < 3) return null
+
+  const address = {
+    parcel: Number(parcelPart),
+    row: Number(middle.slice(0, -2)),
+    seq: Number(middle.slice(-2)),
+    member: Number(memberPart),
+  }
+  const values = [address.parcel, address.row, address.seq, address.member]
+  if (values.some((n) => !Number.isInteger(n) || n < 0)) return null
+  return address
+}
+
+/**
+ * The seat id as a person reads it: `{parcel}-{row}-{seq}-{member}` — the UNIT
+ * ADDRESS followed by which bed under it (track 021).
+ *
+ * The unit address is a literal prefix, which is the whole point: a device is
+ * assigned to `1-1-1`, and staff need to see at a glance that beds `1-1-1-1` and
+ * `1-1-1-2` are the ones under that parasol. The packed storage form (`1-101-1`)
+ * hides exactly that relationship.
+ *
+ * Display only — the stored `seatLabel` is untouched, so nothing a device
+ * resolves and nothing already printed or painted changes meaning.
+ * `parcel: false` omits the leading parcel, for contexts already scoped to one.
+ */
+export function formatSeatId(
+  item: { seatLabel?: string | null; number: number },
+  options: { parcel?: boolean } = {},
+): string {
+  const address = parseSeatLabel(item.seatLabel)
+  if (!address) return formatSeat(item, options)
+
+  const { parcel = true } = options
+  const head = parcel ? `${address.parcel}-` : ''
+  return `${head}${address.row}-${address.seq}-${address.member}`
+}
+
 /**
  * Display formatter for a seat: prefer the structured `seatLabel`, falling back
  * to the legacy zero-padded `number` when a seat has no label yet (e.g. created

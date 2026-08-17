@@ -20,7 +20,7 @@ import LinkOffIcon from '@mui/icons-material/LinkOff'
 import QRPrintButton from './qr-print-button'
 import { useSite } from '@/app/sites/site-context'
 import { getParcelColor } from './chair-util'
-import { formatSeat } from '@repo/data/seat-label'
+import { formatSeatId } from '@repo/data/seat-label'
 
 interface InventoryToolbarProps {
   creating: boolean
@@ -295,7 +295,7 @@ export default function InventoryToolbar({
           )}
           <span className="font-medium text-blue-800">
             {selectedSingleItemNumber != null
-              ? `Sunbed ${formatSeat({ seatLabel: selectedSingleItemLabel, number: selectedSingleItemNumber }, { parcel: true })}`
+              ? `Sunbed ${formatSeatId({ seatLabel: selectedSingleItemLabel, number: selectedSingleItemNumber }, { parcel: true })}`
               : 'Sunbed'}
           </span>
           {selectedSingleItemHasPair && (

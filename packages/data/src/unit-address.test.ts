@@ -9,7 +9,12 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { computeSeatLabelsWithUnits, type SeatLabelItem } from './seat-label'
+import {
+  computeSeatLabelsWithUnits,
+  parseSeatLabel,
+  formatSeatId,
+  type SeatLabelItem,
+} from './seat-label'
 
 /** number = parcel * 10000 + row * 100 + seatIdx */
 function encodeNumber(parcel: number, row: number, seatIdx: number): number {
@@ -193,5 +198,82 @@ describe('unit address — one ordinal cannot be claimed twice', () => {
     // Same ordinal, different rows — not a collision.
     expect(addrs.get('grpA')).toEqual({ parcel: 1, row: 3, seq: 1 })
     expect(addrs.get('grpB')).toEqual({ parcel: 1, row: 4, seq: 1 })
+  })
+})
+
+describe('the displayed seat id and the unit address cannot drift apart', () => {
+  /**
+   * The editor shows `{parcel}-{row}-{seq}-{member}` by UNPACKING the stored
+   * label, while a device is assigned the unit address computed separately. If
+   * the two ever disagree, staff read one id off the screen and the device
+   * answers for another — so pin them to each other rather than to constants.
+   */
+  it('unpacks every generated label back to its unit address', () => {
+    const items = [
+      seat('a1', 1, 3, 1, 'grpA'),
+      seat('a2', 1, 3, 2, 'grpA'),
+      seat('b1', 1, 3, 3, 'grpB'),
+      seat('c1', 2, 12, 1, 'grpC'), // two-digit row
+      seat('d1', 0, 0, 1, 'grpD'), // unparcelled
+    ]
+    const { labels, unitAddresses } = computeSeatLabelsWithUnits(items)
+
+    for (const item of items) {
+      const parsed = parseSeatLabel(labels.get(item.id))
+      const address = unitAddresses.get(item.sunbedGroupId!)!
+      expect({ parcel: parsed!.parcel, row: parsed!.row, seq: parsed!.seq }).toEqual(address)
+    }
+  })
+
+  it('renders the unit address as a literal prefix of the seat id', () => {
+    // What the packed form hides: which beds belong to the parasol a device is
+    // assigned to. `1-1-1` must be readable off `1-1-1-2` at a glance.
+    const { labels, unitAddresses } = computeSeatLabelsWithUnits([
+      seat('a1', 1, 1, 1, 'grpA'),
+      seat('a2', 1, 1, 2, 'grpA'),
+    ])
+    const address = unitAddresses.get('grpA')!
+    const prefix = `${address.parcel}-${address.row}-${address.seq}`
+
+    for (const id of ['a1', 'a2']) {
+      const shown = formatSeatId({ seatLabel: labels.get(id)!, number: 0 })
+      expect(shown.startsWith(`${prefix}-`)).toBe(true)
+    }
+    expect(formatSeatId({ seatLabel: labels.get('a2')!, number: 0 })).toBe('1-1-1-2')
+  })
+
+  it('splits a two-digit row from the ordinal correctly', () => {
+    // `seq` is zero-padded to exactly two digits, which is the only reason
+    // `1203` can be read as row 12 unit 3 rather than row 120 unit 3.
+    expect(parseSeatLabel('1-1203-2')).toEqual({ parcel: 1, row: 12, seq: 3, member: 2 })
+  })
+
+  it('reads an unparcelled seat as 0-0', () => {
+    expect(parseSeatLabel('0-001-1')).toEqual({ parcel: 0, row: 0, seq: 1, member: 1 })
+    expect(formatSeatId({ seatLabel: '0-001-1', number: 12 })).toBe('0-0-1-1')
+  })
+
+  it('omits the parcel when the context already scopes to one', () => {
+    expect(formatSeatId({ seatLabel: '1-101-2', number: 0 }, { parcel: false })).toBe('1-1-2')
+  })
+
+  it.each([
+    ['no label', null],
+    ['empty', ''],
+  ])('falls back to the legacy number when there is %s', (_l, label) => {
+    expect(parseSeatLabel(label)).toBeNull()
+    expect(formatSeatId({ seatLabel: label, number: 42 })).toBe('0042')
+  })
+
+  it.each([
+    ['too few segments', '101-1'],
+    ['middle too short', '1-11-1'],
+    ['non-numeric', '1-abc-1'],
+  ])('passes an unrecognised label (%s) through untouched', (_l, label) => {
+    // Never invent an id: a stored label we cannot unpack is still the id this
+    // seat is known by, and showing a mangled or substituted one would send
+    // someone to the wrong bed.
+    expect(parseSeatLabel(label)).toBeNull()
+    expect(formatSeatId({ seatLabel: label, number: 42 })).toBe(label)
   })
 })
