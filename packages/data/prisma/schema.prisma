@@ -165,6 +165,10 @@ model Account {
 }
 
 model PartnerAccount {
+  /// Stable EXTERNAL identifier (track 021). Devices are flashed with this, not
+  /// with `userId`, so an account restructure is a repoint here rather than a
+  /// reflash of every potted unit. Nullable during expand; backfilled.
+  code        String?      @unique
   firstName   String       @map("first_name")
   lastName    String       @map("last_name")
   email       String
@@ -1257,6 +1261,12 @@ model Device {
   lastSeenAt DateTime?    @map("last_seen_at")
   battMv     Int?         @map("batt_mv")
   rssiDbm    Int?         @map("rssi_dbm")
+  /// What the DEVICE claims its customer is, when that disagrees with the row.
+  /// Recorded, never acted on: a legitimately reflashed device and a spoofed
+  /// claim are indistinguishable from here, and this endpoint has no auth — so
+  /// a human resolves the handful of real ones instead of handing an
+  /// unauthenticated caller the ability to re-point someone else's hardware.
+  claimedPartnerCode String? @map("claimed_partner_code")
   /// Q2 (track 021): the bar's segments run left-to-right from the DEVICE's
   /// point of view, but seats are emitted in seat order — so a device mounted
   /// rotated, or on a row numbered right-to-left, lights the wrong half. This

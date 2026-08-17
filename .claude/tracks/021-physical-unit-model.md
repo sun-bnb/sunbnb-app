@@ -365,6 +365,32 @@ the kit is in transit.
 
 ## Log
 
+- **2026-08-17 — Partner codes + the claim-not-authority rule.** Founder's question — how does
+  a device show up for its customer initially — exposed a real gap: a device was visible ONLY
+  if the bench had already created its row, and telemetry `updateMany`'d an unknown code
+  silently. So a unit could be physically installed and invisible everywhere, and a
+  reflashed-on-return device kept appearing in the PREVIOUS customer's fleet forever.
+  Fixed with a **stable external `PartnerAccount.code`** (`P-XXXXX`, reusing the device code's
+  Crockford rules) that a device is flashed with instead of the internal `userId`. The point is
+  migration survival: an account restructure becomes a repoint of one column rather than
+  collecting and reflashing every potted unit. The `P-` prefix is not decoration — both are
+  short Crockford strings sitting side by side in firmware config and in support
+  conversations, and a test asserts a partner code can never validate as a device code.
+  **The rule that makes an unauthenticated claim safe:** unknown device code → self-register to
+  the claimed customer (worst case, deletable junk); known code + same customer → nothing;
+  known code + DIFFERENT customer → **record, never switch**. A legitimately reflashed device
+  and a spoofed claim are indistinguishable from the server's side, so a human resolves the
+  handful of real ones instead of an unauthenticated caller being able to re-point someone
+  else's installed hardware. Six integration tests pin exactly that boundary, and the fleet UI
+  shows a "claims P-XXXXX" badge — a recorded claim nobody sees is the same as no claim.
+  Backfill assigned codes to all 3 local accounts and is idempotent on re-run.
+  **The device-row leak from yesterday recurred in the OTHER harness**: I had fixed
+  `cleanDatabase` in the partner app but not in `packages/data`, and the same four-test failure
+  pattern appeared. Both now truncate `device`, `device_seat` and `account_feature_flag`.
+  Migration was hand-written: a unique constraint makes `migrate dev` prompt, which fails
+  non-interactively.
+  Gates: data 387u + 359i, partner 2018u + 245i, user 555u + 102i, admin 174u, tsc + lint clean,
+  no drift.
 - **2026-08-17 — Q2 RESOLVED: the last open contract item is closed.** A per-device
   `reverseSegments` flag (additive migration) flips the emitted seat order for a device
   mounted rotated. **Firmware needs no change at all** — the device still lights `seats[i]` on

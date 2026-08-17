@@ -65,6 +65,13 @@ export function unavailable() {
 export const normalizeCode = normalizeDeviceCode
 
 /**
+ * The header a device carries its customer's PARTNER CODE in. A header rather
+ * than the URL (which is potted and must never hold anything reassignable) or
+ * the body (which the state request does not have).
+ */
+export const PARTNER_HEADER = 'x-sunbnb-partner'
+
+/**
  * CONTAINS, not equality. `HW_CLIENT_UA` holds the opaque needle (e.g. `k3n8fq2p`)
  * while firmware sends a fuller, log-friendly string like
  * `Sunbnb-Sensor/1 (k3n8fq2p)` — so bumping `/1` → `/2` never needs a server

@@ -17,6 +17,12 @@ export interface FleetDevice {
   battery: ReturnType<typeof batteryLevel>
   rssiDbm: number | null
   reverseSegments: boolean
+  /**
+   * Set when the device claims a DIFFERENT customer than the one it is
+   * registered to. Recorded, never applied — surfaced here because a claim
+   * nobody sees is the same as no claim at all.
+   */
+  claimedPartnerCode: string | null
   health: DeviceHealth
 }
 
@@ -40,7 +46,7 @@ export async function getFleet(): Promise<FleetDevice[]> {
       id: true, code: true, status: true,
       assignedSiteId: true, assignedParcel: true, assignedRow: true, assignedSeq: true,
       reportedLocation: true, lastSeenAt: true, fw: true, battMv: true, rssiDbm: true,
-      reverseSegments: true,
+      reverseSegments: true, claimedPartnerCode: true,
     },
     orderBy: [{ assignedParcel: 'asc' }, { assignedRow: 'asc' }, { assignedSeq: 'asc' }, { code: 'asc' }],
   })
@@ -61,6 +67,7 @@ export async function getFleet(): Promise<FleetDevice[]> {
       battery: batteryLevel(device.battMv),
       rssiDbm: device.rssiDbm,
       reverseSegments: device.reverseSegments,
+      claimedPartnerCode: device.claimedPartnerCode,
       health: deviceHealth(
         {
           assignedLocation,

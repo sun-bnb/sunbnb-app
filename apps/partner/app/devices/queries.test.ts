@@ -46,13 +46,13 @@ describe('getFleet', () => {
         id: 'd1', code: 'NWJMDB', status: 'active',
         assignedSiteId: 's1', assignedParcel: 1, assignedRow: 1, assignedSeq: 1,
         reportedLocation: '1-1-1', lastSeenAt: new Date(), fw: '1.4.2',
-        battMv: 3200, rssiDbm: -70, reverseSegments: true,
+        battMv: 3200, rssiDbm: -70, reverseSegments: true, claimedPartnerCode: 'P-7ZZZZ',
       },
       {
         id: 'd2', code: 'K3N8FQ', status: 'provisioned',
         assignedSiteId: null, assignedParcel: null, assignedRow: null, assignedSeq: null,
         reportedLocation: null, lastSeenAt: null, fw: null, battMv: null, rssiDbm: null,
-        reverseSegments: false,
+        reverseSegments: false, claimedPartnerCode: null,
       },
     ] as never)
 
@@ -62,6 +62,9 @@ describe('getFleet', () => {
       code: 'NWJMDB', assignedLocation: '1-1-1', health: 'ok', battery: 'critical',
       // Q2: surfaced so the UI can show which way round the bar is mounted.
       reverseSegments: true,
+      // A disputed device stays with its registered owner; the claim is only
+      // surfaced, never applied.
+      claimedPartnerCode: 'P-7ZZZZ',
     })
     // Provisioned but never heard from — the "flashed, not installed" case.
     expect(fleet[1]).toMatchObject({

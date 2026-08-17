@@ -29,7 +29,8 @@
 
 import { NextRequest } from 'next/server'
 import prisma from '@repo/data/PrismaCient'
-import { screenDeviceRequest } from '../hw-filter'
+import { applyDeviceClaim } from '@repo/data/device-claim'
+import { PARTNER_HEADER, screenDeviceRequest } from '../hw-filter'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,6 +42,11 @@ export async function POST(request: NextRequest, { params }: { params: { code: s
   // accepted the answer is 204, whatever happens — a malformed body, an unknown
   // code, or a database that is down must never make a device retry telemetry.
   try {
+    // The partner CLAIM is handled before the last-values write, because it is
+    // what creates the row a first-ever poll has nothing to update. It is a
+    // claim, never authority — see `applyDeviceClaim`.
+    await applyDeviceClaim(screened.code, request.headers.get(PARTNER_HEADER))
+
     const raw = await request.text()
     const payload = raw ? (JSON.parse(raw) as Record<string, unknown>) : {}
 

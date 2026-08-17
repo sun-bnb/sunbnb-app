@@ -156,6 +156,17 @@ export default function DevicesView({
                           running {device.reportedLocation}
                         </span>
                       )}
+                      {/* A device asserting a different customer: recorded, never
+                          acted on, and shown because an unseen claim is the same
+                          as no claim. Usually a reflashed unit; occasionally not. */}
+                      {device.claimedPartnerCode && (
+                        <span
+                          title={`This device reports it belongs to ${device.claimedPartnerCode}. Nothing was changed — contact support if it is not yours.`}
+                          className="ml-2 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600"
+                        >
+                          claims {device.claimedPartnerCode}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-2">
                       <span
