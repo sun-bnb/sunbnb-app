@@ -102,9 +102,7 @@ const prisma = {
     update: vi.fn(),
     updateMany: vi.fn(),
   },
-  // HW device binding (track 019 P2). No partner surface reads these yet — P4
-  // (field binding on /manage) and P5 (device health list) will; stubbed now
-  // because mock-contract.test.ts requires a delegate for every real model.
+  // HW devices (track 019 P2 / 021 P5) — the fleet list and assignment actions.
   device: {
     create: vi.fn(),
     findUnique: vi.fn(),
@@ -113,6 +111,11 @@ const prisma = {
     update: vi.fn(),
     delete: vi.fn(),
   },
+  // Track 021: NO app code reads or writes DeviceSeat any more — a device is
+  // placed by an assigned address, not bound to seat rows. This delegate stays
+  // only because the MODEL still exists: the mock mirrors the real client, and
+  // mock-contract.test.ts requires a delegate for every real model. Delete it
+  // together with the contract migration that drops the table.
   deviceSeat: {
     create: vi.fn(),
     createMany: vi.fn(),

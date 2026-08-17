@@ -19,11 +19,11 @@
  * grid's `bed-state.ts` is: never a second opinion about what a seat's state is
  * (track 018, determinism contract #1). This file is I/O only.
  *
- * The request gate (soft `User-Agent` client filter + the device binding lookup,
- * Q9 — NOT auth; there is no secret on this surface) is shared with the telemetry
- * post through `../hw-filter`, so the two endpoints cannot drift. The binding now
- * comes from the `Device`/`DeviceSeat` tables (P2, was the `HW_DEVICE_MAP` env var
- * in P1); the wire shape did not change when it moved.
+ * The request gate (soft `User-Agent` client filter + the device lookup, Q9 —
+ * NOT auth; there is no secret on this surface) is shared with the telemetry post
+ * through `../hw-filter`, so the two endpoints cannot drift. Placement has moved
+ * twice — `HW_DEVICE_MAP` (P1), `DeviceSeat` bindings (P2), now an assigned
+ * ADDRESS (track 021) — and the wire shape did not change with any of them.
  */
 
 import { NextRequest } from 'next/server'

@@ -1,24 +1,35 @@
 /**
  * Provision an HW device (track 019 P3, app-side half).
  *
- * Creates the `Device` row and its `DeviceSeat` binding, and prints the code to
- * put on the sticker. The hardware half — flashing firmware over USB and printing
- * the label — is `../sunbnb-hw`'s job (ADR 0010); this is the database step of
- * that run.
+ * Mints the `Device` row and prints the code to put on the sticker. The hardware
+ * half — flashing firmware over USB and printing the label — is `../sunbnb-hw`'s
+ * job (ADR 0010); this is the database step of that run.
+ *
+ * **It does not place the device.** Position is an ADDRESS assigned in the
+ * partner fleet UI once the unit is on a pole (track 021). This script used to
+ * require `--seats <itemId,itemId>` and write `DeviceSeat` rows binding a device
+ * to specific seats; since resolution moved to addresses, nothing read those
+ * rows, and the script left the assigned address null — so every device it
+ * provisioned was declined on its first poll until someone assigned it anyway.
+ * The flag was pure ceremony and is gone.
+ *
+ * That also matches the model rather than fighting it: devices are
+ * interchangeable and easy to move, positions are the durable thing, and whoever
+ * runs this at a bench has no business knowing which parasol a unit will end up
+ * under.
  *
  * There is **no secret to hand over** (track 019 Q9): every device carries the
  * same `User-Agent` needle, so provisioning mints an identifier and nothing else.
- * That is why this is ~100 lines instead of the mint→flash→print one-shot-token
+ * That is why this is short instead of the mint→flash→print one-shot-token
  * ceremony earlier drafts of the track designed.
  *
- *   npm run device:provision -- --seats <itemId,itemId>   # local
- *   npm run device:provision:test -- --seats <itemId,itemId>
- *   npm run device:provision:production -- --seats <itemId,itemId>
+ *   npm run device:provision -- --partner <partnerAccountId>   # local
+ *   npm run device:provision:test -- --partner <partnerAccountId>
+ *   npm run device:provision:production -- --partner <partnerAccountId>
  *
  * Flags:
- *   --seats <ids>   REQUIRED. Comma-separated InventoryItem ids in **LED MOUNT
- *                   ORDER** — first id is the leftmost segment. This is a
- *                   physical fact you read off the installed device, not a sort.
+ *   --partner <id>  The customer whose fleet list this device appears in. Without
+ *                   it nobody can see the device to assign it a location.
  *   --code <code>   Reuse a specific code (a board swap keeps the sticker, ADR
  *                   0003). Validated against the Crockford rules.
  *   --mac <addr>    Record the board's MAC as a provisioning fingerprint.
@@ -33,9 +44,9 @@ import {
 } from '../src/device-code'
 
 type Args = {
-  seats: string[]
   code?: string
   mac?: string
+  partner?: string
   dryRun: boolean
 }
 
@@ -45,13 +56,7 @@ function parseArgs(argv: string[]): Args {
     return i >= 0 ? argv[i + 1] : undefined
   }
 
-  const seats = (get('--seats') ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-
   return {
-    seats,
     code: get('--code'),
     mac: get('--mac'),
     // Track 021 P5: the customer is flashed permanently and decides whose fleet
@@ -65,79 +70,20 @@ function parseArgs(argv: string[]): Args {
 async function main() {
   const args = parseArgs(process.argv.slice(2))
 
-  if (args.seats.length === 0) {
-    throw new Error(
-      'No seats given. Pass --seats <itemId,itemId> in LED MOUNT ORDER ' +
-        '(first id = leftmost segment). A device with no seats bound is declined ' +
-        'by the state route, so an unbound row would be dead on arrival.',
-    )
-  }
-
-  if (new Set(args.seats).size !== args.seats.length) {
-    throw new Error('Duplicate seat ids — each LED segment must map to a distinct seat.')
-  }
-
-  // Validate the binding BEFORE writing. Every check here is a failure the device
-  // would otherwise express in the field as a silent amber LED, diagnosable only
-  // by someone standing at the parasol.
-  const items = await prisma.inventoryItem.findMany({
-    where: { id: { in: args.seats } },
-    select: { id: true, siteId: true, number: true, seatLabel: true, status: true },
-  })
-
-  const missing = args.seats.filter((id) => !items.some((i) => i.id === id))
-  if (missing.length > 0) {
-    throw new Error(`Unknown InventoryItem id(s): ${missing.join(', ')}`)
-  }
-
-  // The state route refuses a binding spanning multiple sites — "today" would be
-  // ambiguous across venues. Catch it at the bench, not as a 503 on a beach.
-  const siteIds = new Set(items.map((i) => i.siteId))
-  if (siteIds.size !== 1) {
-    throw new Error(
-      `Seats span ${siteIds.size} sites (${[...siteIds].join(', ')}). A device is ` +
-        'mounted at one venue; the state route rejects a cross-site binding.',
-    )
-  }
-
-  const inactive = items.filter((i) => i.status !== 'active')
-  if (inactive.length > 0) {
-    // Not fatal: a seat can be activated later. Worth saying out loud, because the
-    // seat will not be bookable and the light will look wrong to whoever installed it.
-    console.warn(
-      `⚠ ${inactive.length} bound seat(s) are not active: ` +
-        inactive.map((i) => `${i.seatLabel ?? i.number} (${i.status})`).join(', '),
-    )
-  }
-
-  const alreadyBound = await prisma.deviceSeat.findMany({
-    where: { itemId: { in: args.seats } },
-    select: { itemId: true, device: { select: { code: true } } },
-  })
-  if (alreadyBound.length > 0) {
-    throw new Error(
-      'Seat(s) already under another device: ' +
-        alreadyBound.map((b) => `${b.itemId} → ${b.device.code}`).join(', ') +
-        '. Rebind by deleting the old DeviceSeat row first.',
-    )
-  }
-
   if (args.code && !isValidDeviceCode(args.code)) {
     throw new Error(
       `--code "${args.code}" is not a valid device code (6 Crockford base32 symbols, no I L O U).`,
     )
   }
 
-  const byId = new Map(items.map((i) => [i.id, i]))
-  const order = args.seats
-    .map((id, position) => {
-      const item = byId.get(id)!
-      return `    ${position}: ${item.seatLabel ?? item.number} (${id})`
-    })
-    .join('\n')
+  if (!args.partner) {
+    // Not fatal — a device can be re-pointed later — but worth saying out loud:
+    // an ownerless device appears in nobody's fleet list, so nobody can assign
+    // it a location, and it stays declined forever.
+    console.warn('⚠ No --partner given: this device will appear in no fleet list.')
+  }
 
-  console.log(`Site:  ${[...siteIds][0]}`)
-  console.log(`Seats (LED mount order, 0 = leftmost):\n${order}`)
+  console.log(`Partner: ${args.partner ?? '(none)'}`)
 
   if (args.dryRun) {
     console.log('\n--dry-run: nothing written.')
@@ -156,9 +102,6 @@ async function main() {
           macAddr: args.mac,
           partnerAccountId: args.partner,
           status: 'provisioned',
-          seats: {
-            create: args.seats.map((itemId, position) => ({ itemId, position })),
-          },
         },
         select: { id: true, code: true },
       })
@@ -166,8 +109,10 @@ async function main() {
       console.log(`\n✅ Provisioned device ${device.id}`)
       console.log(`\n    CODE: ${device.code}\n`)
       console.log('Next: flash the firmware and print this code on the sticker')
-      console.log('(../sunbnb-hw ADR 0010). The device serves while `provisioned`;')
-      console.log("flip status to 'active' once it is installed and verified.")
+      console.log('(../sunbnb-hw ADR 0010), then assign it a location in the partner')
+      console.log("fleet UI — a device with no address is declined until then.")
+      console.log("The device serves while `provisioned`; flip status to 'active'")
+      console.log('once it is installed and verified.')
       return
     } catch (e: unknown) {
       const isCodeCollision =

@@ -24,9 +24,10 @@
  * Do not "harden" this into auth without revisiting Q9. If a device ever gains a
  * consequential write path (Q5), that is the trigger to reopen it.
  *
- * The binding moved from the `HW_DEVICE_MAP` env var (P1) to the `Device` /
- * `DeviceSeat` tables (P2). Every caller screens through here, so that swap
- * touched only this file and left the wire contract alone.
+ * How a device is placed has changed twice — the `HW_DEVICE_MAP` env var (P1),
+ * then `Device`/`DeviceSeat` seat bindings (P2), now an assigned ADDRESS
+ * resolved against `SunbedGroup` (track 021). Every caller screens through here,
+ * so each swap touched only this file and left the wire contract alone.
  *
  * Contract: `.claude/tracks/019-hw-api.md` (§Wire contract, §Identity & client filter).
  */
@@ -91,14 +92,13 @@ function clientMatches(header: string | null, expected: string): boolean {
 const RETIRED = 'retired'
 
 /**
- * The binding: which seats sit under this device, **in mount order**
- * (`DeviceSeat.position`, 0 = leftmost LED segment). A physical installation
- * fact, stored explicitly and never derived from booking grouping (Q1).
+ * Where this device is mounted. The seats under it follow from the address, so
+ * the device is bound to a SPOT rather than to specific seat rows — a parcel
+ * rebuilt at the same address needs no re-assignment.
  *
- * P1 read this from the `HW_DEVICE_MAP` env var; P2 reads the `Device` /
- * `DeviceSeat` tables. The wire contract is unchanged by the swap — mount order
- * is still mount order, it just has a home that survives a redeploy and can be
- * edited by the P4 field-binding flow.
+ * Segment order comes from the unit's seats in seat order, flipped by
+ * `reverseSegments` for a rotated mount (Q2). That is a physical installation
+ * fact and is resolved server-side, never on the device.
  */
 export interface DeviceAssignment {
   siteId: string

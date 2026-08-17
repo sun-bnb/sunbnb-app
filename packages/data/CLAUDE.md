@@ -30,7 +30,9 @@ Prisma schema at `packages/data/prisma/schema.prisma`. 70+ migrations. Uses `@pr
 
 Key models: User, PartnerAccount, Site, InventoryItem, Reservation, Order, OrderItem, RentalItem, RentalBooking, Invoice, InvoiceLine, Settlement, ServiceFee, Settings, PasswordResetToken, Product.
 
-**`Device` / `DeviceSeat`** (track 019 P2) — the parasol-mounted HW devices served by the user app's `/api/hw/{code}/*`. `Device.code` is a PUBLIC 6-char Crockford-base32 identifier printed on the device's sticker; there is deliberately **no token/secret column** (Q9 — the endpoint is gated by a soft `User-Agent` client filter, not auth, because the data behind it is public occupancy). `DeviceSeat` binds seats to a device with `position` = **mount order** (0 = leftmost LED segment), stored explicitly and never derived from `SunbedGroup`: the binding is a *physical installation* fact, a group is a *booking* fact, and deriving one from the other over-scopes wherever grouping ≠ shading. `status`: `provisioned → active → retired`.
+**`Device`** (track 019 P2 / 021) — the parasol-mounted HW devices served by the user app's `/api/hw/{code}/*`. `Device.code` is a PUBLIC 6-char Crockford-base32 identifier printed on the device's sticker; there is deliberately **no token/secret column** (Q9 — the endpoint is gated by a soft `User-Agent` client filter, not auth, because the data behind it is public occupancy). A device is placed by an **assigned ADDRESS** (`assignedSiteId`/`assignedParcel`/`assignedRow`/`assignedSeq`) set in the partner fleet UI, and answers for whatever unit occupies that address today — so a parcel rebuilt at the same spot needs no re-assignment. `status`: `provisioned → active → retired`.
+
+**`DeviceSeat` is LEGACY and unreferenced.** It bound a device to specific seat rows before resolution moved to addresses; no app code reads or writes it (the partner Prisma mock keeps a delegate only because the model still exists). Its table drop is a pending contract migration, alongside `InventoryItem.pairId`.
 
 **`SunbedGroup` address** (track 021) — `parcel` + `row` (column `row_idx`; `ROW` is reserved and the inventory editor writes raw SQL) complete the unit's address alongside `seq`, under `@@unique([siteId, parcel, row, seq])`. Before this, parcel lived on `InventoryItem.group` and row was decoded out of `InventoryItem.number`, so two-thirds of a unit's address sat on its members — unconstrainable (no unique index spans two tables), resolvable only by fetching a parcel and filtering in JS, and silently re-pointable by a seat renumber. Derived from **placed seats only**: a `pool` extra carries a `nextPoolNumber` value decoding to a different row, so counting it relocates the unit. **`recomputeSeatLabels` is the only writer** — units are created bare everywhere and get their address there. A unit whose placed seats disagree (mid-rearrange) keeps its stored address rather than being given a guess; one with no placed seats surrenders it, so it cannot block the index against a real unit built on that spot later. Backfill: `npm run backfill:addresses:{local,test,production}[:dry]`, which verifies itself in raw SQL and fails if any address disagrees with the data or any `seq` moved.
 
@@ -129,15 +131,19 @@ unreachable. The round trip (`normalize(generate()) === generate()`) is the load
 ### Provisioning script (`scripts/provision-device.ts`) — track 019 P3
 
 ```bash
-npm run device:provision -- --seats <itemId,itemId>   # local; :test / :production are env-tiered
+npm run device:provision -- --partner <partnerAccountId>   # local; :test / :production are env-tiered
 ```
-Creates the `Device` row + `DeviceSeat` binding and prints the code for the sticker. `--seats` is
-**LED MOUNT ORDER** (first id = leftmost segment, a physical fact — not a sort). Flags: `--code`
-(reuse a code on a board swap), `--mac`, `--dry-run`. Validates BEFORE writing — unknown ids, seats
-spanning >1 site (the state route rejects those), seats already under another device — because each
-of those otherwise surfaces in the field as a silent amber LED. Retries on the `code` unique
-collision, except when `--code` was explicit (retrying would mint a code that differs from the
-sticker). There is no secret to hand over (Q9), which is why this is ~100 lines.
+Mints the `Device` row and prints the code for the sticker. It does **not** place the device:
+position is an address assigned in the partner fleet UI once the unit is on a pole. It used to
+require `--seats <itemId,itemId>` and write `DeviceSeat` rows — but nothing read those once
+resolution moved to addresses, and it left the assigned address null, so every device it
+provisioned was declined on its first poll until someone assigned it anyway. The flag was pure
+ceremony and is gone; it also matches the model, since whoever runs this at a bench has no
+business knowing which parasol a unit ends up under. Flags: `--partner` (whose fleet list it
+appears in — without it nobody can see it to assign it), `--code` (reuse a code on a board swap),
+`--mac`, `--dry-run`. Retries on the `code` unique collision, except when `--code` was explicit
+(retrying would mint a code that differs from the sticker). There is no secret to hand over (Q9),
+which is why this is short.
 
 ## Password Reset (`src/password-reset.ts`)
 
