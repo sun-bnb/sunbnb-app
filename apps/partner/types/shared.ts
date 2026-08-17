@@ -185,12 +185,6 @@ export interface InventoryItem {
   locationLng?: string
   schematicX?: number | null
   schematicY?: number | null
-  pairId?: string | null
-  // Id stubs, not full rows (track 020 C2): the only consumers read `.id`
-  // (inventory/schematic view pair resolution). Shipping whole partner rows
-  // doubled the per-seat payload on every site tab.
-  pair?: { id: string } | null
-  pairedBy?: { id: string } | null
   sunbedGroupId?: string | null
   sunbedGroup?: { id: string; items: { id: string; number?: number; status?: string }[] } | null
   seatLabel?: string | null

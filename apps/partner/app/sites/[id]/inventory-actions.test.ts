@@ -362,63 +362,12 @@ describe('saveInventoryItemProperties', () => {
     expect(updateCall.data.pair).toBeUndefined()
   })
 
-  it('creates the SunbedGroup for a pairing request and connects NO pair relation', async () => {
-    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
-    vi.mocked(prisma.inventoryItem.findUnique)
-      .mockResolvedValueOnce({ siteId: SITE_ID, site: { userId: OWNER_ID } } as any) // ownership lookup (now selects siteId)
-      .mockResolvedValueOnce({ id: 'pair-1', siteId: SITE_ID } as any) // pair item lookup
-      // Dual-write: fetch sunbedGroupId for current item and pair (siteId reused, no re-fetch)
-      .mockResolvedValueOnce({ sunbedGroupId: null } as any) // currentItem group check
-      .mockResolvedValueOnce({ sunbedGroupId: null } as any) // currentPair group check
-    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
-    vi.mocked(prisma.inventoryItem.updateMany).mockResolvedValue({ count: 2 } as any)
-    vi.mocked(prisma.sunbedGroup.create).mockResolvedValue({ id: 'group-new' } as any)
+  // Track 021: the manual pair-two-seats path these covered is GONE — it was
+  // unreachable (pairId is not projected to the client and no caller passed it),
+  // and pairing is expressed by the SunbedGroup a seat is created into. Nothing
+  // replaces them: a removed code path needs no test, and asserting the action
+  // ignores a field it no longer accepts would not compile.
 
-    const res = await saveInventoryItemProperties('item-1', { pairId: 'pair-1' })
-    expect(res.status).toBe('ok')
-
-    // Track 021 P1: connecting the `pair` relation writes pair_id just as surely
-    // as assigning the column — the group below is the only representation.
-    const updateCall = vi.mocked(prisma.inventoryItem.update).mock.calls[0][0]
-    expect(updateCall.data.pair).toBeUndefined()
-
-    // SunbedGroup should still be created — the pairing itself is preserved
-    expect(vi.mocked(prisma.sunbedGroup.create)).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ siteId: SITE_ID }),
-      })
-    )
-  })
-
-  it('does not connect pair when pairId item is not found', async () => {
-    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
-    vi.mocked(prisma.inventoryItem.findUnique)
-      .mockResolvedValueOnce({ site: { userId: OWNER_ID } } as any) // ownership lookup
-      .mockResolvedValueOnce(null) // pair item not found
-    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
-
-    const res = await saveInventoryItemProperties('item-1', { pairId: 'nonexistent' })
-    expect(res.status).toBe('ok')
-
-    const updateCall = vi.mocked(prisma.inventoryItem.update).mock.calls[0][0]
-    expect(updateCall.data.pair).toBeUndefined()
-  })
-
-  // saveInventoryItemProperties validates that the pair item belongs to the same site —
-  // pairItem.siteId !== item.siteId triggers a 'Pair item must belong to the same site' error.
-  it('should reject pairId belonging to a different site', async () => {
-    mockAuth.mockResolvedValue({ user: { id: OWNER_ID } } as any)
-    vi.mocked(prisma.inventoryItem.findUnique)
-      .mockResolvedValueOnce({ site: { userId: OWNER_ID }, siteId: SITE_ID } as any) // ownership lookup - item on SITE_ID
-      .mockResolvedValueOnce({ id: 'cross-site-pair', siteId: OTHER_SITE_ID } as any) // pair item on OTHER_SITE_ID
-    vi.mocked(prisma.inventoryItem.update).mockResolvedValue({} as any)
-
-    const res = await saveInventoryItemProperties('item-1', { pairId: 'cross-site-pair' })
-
-    // Correct behavior: should reject cross-site pairing
-    expect(res.status).toBe('error')
-    expect(res.errors).toBeDefined()
-  })
 })
 
 

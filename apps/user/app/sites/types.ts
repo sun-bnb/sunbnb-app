@@ -114,8 +114,6 @@ export interface InventoryItem {
   group: number
   status: string
   category?: string | null
-  pair?: { id: string } | null
-  pairedBy?: { id: string } | null
   sunbedGroupId?: string | null
   sunbedGroup?: { items: { id: string }[] } | null
   price?: number | null

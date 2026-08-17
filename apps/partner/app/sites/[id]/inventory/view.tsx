@@ -536,13 +536,6 @@ export default function InventoryView() {
           .filter((i) => i.sunbedGroupId === selectedItem.sunbedGroupId && i.id !== selectedItemId)
           .map((i) => i.id)
       : []
-    // pairId fallback: for items not yet in a group, use the old pairId chain.
-    if (partnerIds.length === 0) {
-      const legacyPartnerId =
-        selectedItem.pairId ??
-        null
-      if (legacyPartnerId) partnerIds.push(legacyPartnerId)
-    }
     await sunbedEditing.rotateSingle(selectedItemId, selectedItem.rotation ?? 0, delta, partnerIds)
   }
 

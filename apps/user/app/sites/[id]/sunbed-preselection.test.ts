@@ -17,8 +17,6 @@ function makeItem(overrides: Partial<InventoryItem> & { id: string }): Inventory
     group: 1,
     status: 'active',
     reservations: [],
-    pair: null,
-    pairedBy: null,
     sunbedGroupId: null,
     sunbedGroup: null,
     ...overrides,
@@ -28,7 +26,7 @@ function makeItem(overrides: Partial<InventoryItem> & { id: string }): Inventory
 /**
  * Two seats forming one UNIT — sharing a SunbedGroup, which is how every row in
  * dev, test and production is actually shaped (track 021 P0/P1). The legacy
- * pair/pairedBy self-relation it replaces is retired.
+ * pair/pairedBy self-relation it replaced is gone from the type entirely.
  */
 function makeUnit(idA: string, idB: string): [InventoryItem, InventoryItem] {
   const group = { id: `grp-${idA}`, items: [{ id: idA }, { id: idB }] }
@@ -62,29 +60,16 @@ describe('resolveSelectionSet', () => {
     expect(result.map((i) => i.id).sort()).toEqual(['a', 'b'])
   })
 
-  // Track 021 P1 contract: grouping is the ONLY pairing representation. A row
-  // carrying only the retired self-relation resolves to itself — verified safe
-  // because no such row exists in dev, test or production.
-  it('does NOT resolve a legacy pair/pairedBy without a group', () => {
-    const secondary = makeItem({ id: 'b' })
-    const primary = makeItem({ id: 'a', pair: { id: 'b' } })
-    const result = resolveSelectionSet(primary, [primary, secondary])
-    expect(result.map((i) => i.id)).toEqual(['a'])
-  })
+  // Track 021: two tests here asserted that a legacy `pair`/`pairedBy` pointer
+  // was IGNORED in favour of the group. The fields are gone from InventoryItem,
+  // so that is now structural — there is nothing left to ignore, and a test
+  // constructing one would not compile.
 
-  it('returns only the item when pair pointer exists but partner is missing from inventory', () => {
-    const item = makeItem({ id: 'a', pair: { id: 'missing' } })
-    const result = resolveSelectionSet(item, [item])
-    expect(result).toHaveLength(1)
-    expect(result[0].id).toBe('a')
-  })
-
-  it('resolves via sunbedGroup when group is present (supersedes pair pointer)', () => {
+  it('resolves via sunbedGroup when group is present', () => {
     const itemA = makeItem({
       id: 'a',
       sunbedGroupId: 'g1',
       sunbedGroup: { items: [{ id: 'a' }, { id: 'b' }] },
-      pair: { id: 'c' }, // pair pointer present but should be ignored
     })
     const itemB = makeItem({ id: 'b', sunbedGroupId: 'g1', sunbedGroup: { items: [{ id: 'a' }, { id: 'b' }] } })
     // 'c' is intentionally absent from inventory

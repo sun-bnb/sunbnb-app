@@ -287,7 +287,6 @@ export async function saveInventoryItemProperties(
     number?: number
     group?: number
     label?: string
-    pairId?: string
     status?: string
   }
 ) {
@@ -327,17 +326,6 @@ export async function saveInventoryItemProperties(
 
   const itemSiteId = item.siteId
 
-  const pairItem = inventoryItem.pairId
-    ? await prisma.inventoryItem.findUnique({ where: { id: inventoryItem.pairId }, select: { id: true, siteId: true } })
-    : undefined
-
-  if (pairItem) {
-    // Verify the pair item belongs to the same site
-    if (pairItem.siteId !== itemSiteId) {
-      return { status: 'error', errors: ['Pair item must belong to the same site'] }
-    }
-  }
-
   await prisma.inventoryItem.update({
     where: { id },
     data: {
@@ -348,48 +336,12 @@ export async function saveInventoryItemProperties(
       group: inventoryItem.group,
       label: inventoryItem.label,
       status: inventoryItem.status,
-      // Track 021 P1: the legacy `pair` relation is NOT connected any more —
-      // connecting it writes pair_id just as surely as assigning the column.
-      // The SunbedGroup below is the pairing.
+      // Track 021: there is no pairing to express here. Seats are created as
+      // units and a unit is a SunbedGroup; the manual pair-two-seats path this
+      // action used to carry was unreachable (never projected to the client, no
+      // caller passed it) and is gone.
     },
   })
-
-  // A pairing request creates/assigns the 2-member SunbedGroup — the single
-  // representation of "these two seats are one unit".
-  if (pairItem && inventoryItem.pairId) {
-    // Fetch current sunbedGroupIds for both items
-    const [currentItem, currentPair] = await Promise.all([
-      prisma.inventoryItem.findUnique({ where: { id }, select: { sunbedGroupId: true } }),
-      prisma.inventoryItem.findUnique({ where: { id: inventoryItem.pairId }, select: { sunbedGroupId: true } }),
-    ])
-
-    // Detach both from any prior groups and delete groups that become empty
-    const priorGroupIds = new Set(
-      [currentItem?.sunbedGroupId, currentPair?.sunbedGroupId].filter(Boolean) as string[]
-    )
-    if (priorGroupIds.size > 0) {
-      await prisma.inventoryItem.updateMany({
-        where: { sunbedGroupId: { in: [...priorGroupIds] } },
-        data: { sunbedGroupId: null },
-      })
-      for (const gid of priorGroupIds) {
-        const cnt = await prisma.inventoryItem.count({ where: { sunbedGroupId: gid } })
-        if (cnt === 0) await prisma.sunbedGroup.delete({ where: { id: gid } })
-      }
-    }
-
-    const newGroup = await prisma.sunbedGroup.create({
-      data: {
-        siteId: itemSiteId,
-        items: { connect: [{ id }, { id: inventoryItem.pairId }] },
-      },
-    })
-    // Explicitly set sunbedGroupId on both items (connect above sets it via relation)
-    await prisma.inventoryItem.updateMany({
-      where: { id: { in: [id, inventoryItem.pairId] } },
-      data: { sunbedGroupId: newGroup.id },
-    })
-  }
 
   await recomputeSeatLabels(itemSiteId)
   revalidatePath('/sites')
