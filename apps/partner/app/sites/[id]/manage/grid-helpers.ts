@@ -1,4 +1,4 @@
-import { formatSeat } from '@repo/data/seat-label'
+import { formatSeatId } from '@repo/data/seat-label'
 
 /** Width (px) reserved for the row-label badge column. Must match Tailwind w-9 = 36px. */
 export const ROW_LABEL_WIDTH = 36
@@ -6,11 +6,15 @@ export const ROW_LABEL_WIDTH = 36
 /**
  * Display label for a group-extra pool seat: the NEXT member of its group's unit.
  *
- * A group's regular members carry stored seat labels like "103-1", "103-2"
- * (parcel-stripped form). An extra added to that group should read as the next
- * member — "103-3", "103-4", … — ordered among the group's extras by ascending
+ * A group's regular members display as "1-3-1", "1-3-2" (parcel-stripped
+ * `{row}-{seq}-{member}`). An extra added to that group should read as the next
+ * member — "1-3-3", "1-3-4", … — ordered among the group's extras by ascending
  * seat number (their pool-band number). Falls back to "+N" only when the group
  * has no labeled regular member to derive the base from.
+ *
+ * Splitting on the LAST dash is what makes this format-agnostic: the member is
+ * always the final segment, so the same code produced "103-3" under the packed
+ * form and "1-3-3" under the unpacked one.
  *
  * @param extra        the group-extra pool item to label
  * @param groupMembers all OTHER members of the same SunbedGroup (regular + extras)
@@ -32,11 +36,11 @@ export function groupExtraSeatLabel(
     const dash = label.lastIndexOf('-')
     return dash === -1 ? 0 : (parseInt(label.slice(dash + 1), 10) || 0)
   }
-  const rep = formatSeat(labeled[0]!, { parcel: false }) // e.g. "103-2"
+  const rep = formatSeatId(labeled[0]!, { parcel: false }) // e.g. "1-3-2"
   const dash = rep.lastIndexOf('-')
-  const base = dash === -1 ? rep : rep.slice(0, dash)     // "103"
+  const base = dash === -1 ? rep : rep.slice(0, dash)     // "1-3"
   const maxMember = Math.max(
-    ...labeled.map(m => memberIndexOf(formatSeat(m, { parcel: false }))),
+    ...labeled.map(m => memberIndexOf(formatSeatId(m, { parcel: false }))),
   )
   return `${base}-${maxMember + ordinal}`
 }

@@ -26,7 +26,7 @@ import sunbedIcon from './sunbed-icon-transparent.png'
 import sunbedPerfIcon from '@/components/reservation/sunbed-perforated-transparent.png'
 import sunshadeIcon from '@/components/reservation/sunshade-transparent.png'
 import { useRouter } from 'next/navigation'
-import { formatSeat } from '@repo/data/seat-label'
+import { formatSeatId } from '@repo/data/seat-label'
 
 
 function ReservationButton({
@@ -160,8 +160,8 @@ export default function ReservationView({
                 <div className="text-left">DATE: <b>{dateStr}</b></div>
                 {
                   items.length === 1 ? 
-                    <div className="text-left">SEAT NUMBER: <b>{formatSeat(items[0]!)}</b></div> :
-                    <div className="text-left">SEAT NUMBERS: <b>{items.map(item => formatSeat(item)).join(', ')}</b></div>
+                    <div className="text-left">SEAT NUMBER: <b>{formatSeatId(items[0]!)}</b></div> :
+                    <div className="text-left">SEAT NUMBERS: <b>{items.map(item => formatSeatId(item)).join(', ')}</b></div>
                 }
                 
               </div>
@@ -228,10 +228,10 @@ export default function ReservationView({
           {
             items.length === 1 ?
               <div className="text-[rgb(142,114,49)] ">
-                SEAT {formatSeat(items[0]!)}
+                SEAT {formatSeatId(items[0]!)}
               </div> :
               <div className="text-[rgb(142,114,49)] ">
-                SEATS {items.map(item => formatSeat(item)).join(', ')}
+                SEATS {items.map(item => formatSeatId(item)).join(', ')}
               </div>
           }
           

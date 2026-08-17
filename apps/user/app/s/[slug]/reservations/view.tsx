@@ -20,7 +20,7 @@ import {
   RESERVATION_PAYMENT_FAILED,
   RESERVATION_REFUNDED,
 } from '@repo/data/reservation-status'
-import { formatSeat } from '@repo/data/seat-label'
+import { formatSeatId } from '@repo/data/seat-label'
 
 const statusToChipColor: Record<string, 'default' | 'success' | 'error'> = {
   [RESERVATION_PENDING]: 'default',
@@ -139,7 +139,7 @@ function BrandedReservationCard({
   fgColor: string
 }) {
   const t = useTranslations('Reservations')
-  const seatNumbers = reservation.items?.map((i) => formatSeat(i)).join(', ')
+  const seatNumbers = reservation.items?.map((i) => formatSeatId(i)).join(', ')
 
   const dateContent =
     reservation.type === 'hours' ? (

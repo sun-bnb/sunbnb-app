@@ -21,18 +21,20 @@ describe('groupExtraSeatLabel', () => {
   const extra1 = { id: 'e1', number: 19901, status: 'pool' }
   const extra2 = { id: 'e2', number: 19902, status: 'pool' }
 
-  it('labels the first extra as the next group member (103-3)', () => {
-    expect(groupExtraSeatLabel(extra1, [reg1, reg2])).toBe('103-3')
+  // Displayed parcel-stripped, so the unit reads `{row}-{seq}` and the extra
+  // takes the next member: regulars 1-3-1 / 1-3-2 → first extra 1-3-3.
+  it('labels the first extra as the next group member (1-3-3)', () => {
+    expect(groupExtraSeatLabel(extra1, [reg1, reg2])).toBe('1-3-3')
   })
 
   it('numbers multiple extras sequentially by ascending seat number', () => {
-    expect(groupExtraSeatLabel(extra1, [reg1, reg2, extra2])).toBe('103-3')
-    expect(groupExtraSeatLabel(extra2, [reg1, reg2, extra1])).toBe('103-4')
+    expect(groupExtraSeatLabel(extra1, [reg1, reg2, extra2])).toBe('1-3-3')
+    expect(groupExtraSeatLabel(extra2, [reg1, reg2, extra1])).toBe('1-3-4')
   })
 
   it('derives the member offset from the highest labeled regular member, not the count', () => {
     // A single labeled member "1-103-2" (member 2) → next extra is member 3, not 2.
-    expect(groupExtraSeatLabel(extra1, [reg2])).toBe('103-3')
+    expect(groupExtraSeatLabel(extra1, [reg2])).toBe('1-3-3')
   })
 
   it('falls back to "+N" when the group has no labeled regular member', () => {

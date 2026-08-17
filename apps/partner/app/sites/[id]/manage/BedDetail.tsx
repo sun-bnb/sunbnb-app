@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl'
 import dayjs from 'dayjs'
 import NoteIcon from '@mui/icons-material/Note'
 import PaymentIcon from '@mui/icons-material/Payment'
-import { formatSeat } from '@repo/data/seat-label'
+import { formatSeatId } from '@repo/data/seat-label'
 import { InventoryItem, Reservation } from '@/types/shared'
 import {
   reserveItem,
@@ -274,7 +274,7 @@ export default function BedDetail({
 
   // For header display: show companion info only when exactly one group peer AND in sync
   const pairItem = groupItems.length === 1 ? groupItems[0]! : null
-  const pairNumber = (isPool || isGroupExtra || !inSync) ? undefined : (pairItem ? formatSeat(pairItem, { parcel: true }) : undefined)
+  const pairNumber = (isPool || isGroupExtra || !inSync) ? undefined : (pairItem ? formatSeatId(pairItem, { parcel: true }) : undefined)
   const poolSeq = (isPool || isGroupExtra) ? getPoolSeq(item) : null
   // A group-extra reads as the next member of its group (e.g. "103-3"); a free
   // pool seat keeps the "+N" sequence label.
@@ -510,12 +510,12 @@ export default function BedDetail({
                 </span>
                 <span className="text-[10px] text-gray-400 dark:text-gray-500 font-normal leading-none">
                   {isGroupExtra && pairItem
-                    ? t('groupExtraSeat', { n: formatSeat(pairItem, { parcel: true }) })
+                    ? t('groupExtraSeat', { n: formatSeatId(pairItem, { parcel: true }) })
                     : t('additionalSeat')}
                 </span>
               </div>
             ) : (
-              <span className="text-2xl sm:text-3xl font-black">#{formatSeat(item, { parcel: true })}</span>
+              <span className="text-2xl sm:text-3xl font-black">#{formatSeatId(item, { parcel: true })}</span>
             )}
             {pairNumber && !isGroupExtra && (
               <span className="text-base sm:text-lg text-gray-400 dark:text-gray-500 font-medium">+ #{pairNumber}</span>

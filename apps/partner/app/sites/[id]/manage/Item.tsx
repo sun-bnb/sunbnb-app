@@ -4,7 +4,7 @@ import React from 'react'
 import CreditCardIcon from '@mui/icons-material/CreditCard'
 import { InventoryItem } from '@/types/shared'
 import { getCellAppearance } from './bed-state'
-import { formatSeat } from '@repo/data/seat-label'
+import { formatSeatId } from '@repo/data/seat-label'
 
 export default function SunbedItem({
   siteId,
@@ -49,7 +49,7 @@ export default function SunbedItem({
               : <span className="text-[10px] leading-none">{icon}</span>
           )}
           <span className="text-[10px] leading-none opacity-70">
-            {formatSeat(item, { parcel: false })}
+            {formatSeatId(item, { parcel: false })}
           </span>
         </>
       )}
