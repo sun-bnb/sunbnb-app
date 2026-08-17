@@ -54,6 +54,32 @@ reports no drift.
 **USER OPS before any `main` push:** `cd packages/data && npm run migrate:test` — the shared test DB
 needs this additive migration before main's preview runs against it (the pre-push hook enforces it).
 
+**✅ FIRMWARE ALIGNED 2026-08-17 — `../sunbnb-hw` commit `95de474`** (builds clean, not
+flashed). Both halves of the contract now implement the same model, verified field by field:
+the state response carries `location`, the device echoes it back as `loc` in telemetry, and
+telemetry serves a device with NO assignment (`requireBinding: false`) — which is what lets an
+unassigned unit appear in the fleet list to be assigned from. 72 HW route tests green.
+
+Firmware decisions worth keeping visible: telemetry now fires **as soon as the location
+changes** rather than on the 12-hour cadence, because the fleet UI reads the assigned-vs-
+reported gap and would otherwise show "not applied" for half a day after a device had already
+converged; and a location counts as reported only once the POST actually returned 2xx, so a
+dropped request retries at poll cadence instead of leaving a unit looking permanently
+un-converged.
+
+**Correction carried into both repos:** `seats[]` is NOT in mount order — it is seat order
+within the unit, so a device mounted ROTATED lights the wrong half of the bar. That is **Q2:
+open, cheap, not built**, and the firmware deliberately does NOT compensate on-device, which
+would be a second opinion about a physical fact the server is about to carry (the same
+reasoning that keeps the state projection off the device).
+
+Noted by the founder and worth preserving: ADR 0008's binding bullet has held **three models
+in five days** — anchor seat, `DeviceSeat` list, assigned location. That churn is itself the
+argument for the device never storing a binding.
+
+**Bring-up prerequisites (still outstanding):** `HW_CLIENT_UA` set on the target env (not set
+locally today) and a `Device` row with the customer + a location, or nothing goes green.
+
 **▶ REVISED PLAN 2026-08-16 — server work first, hardware only at the end.** The binding
 model changed (see the block above), so the phase order changed with it. Full cross-track
 ordering lives in [[track:021]] *Delivery sequence*; this track owns steps 3, 4 and 6:

@@ -362,6 +362,23 @@ the kit is in transit.
 
 ## Log
 
+- **2026-08-17 — Firmware aligned (`../sunbnb-hw` `95de474`); the wire contract is implemented
+  on both sides.** Checked field by field rather than assumed: the state response emits
+  `location`, the device echoes `loc` in telemetry (which is exactly what the route reads into
+  `reportedLocation`), and telemetry serves an UNASSIGNED device — the self-registration path
+  the fleet list depends on. 72 HW route tests green.
+  Two firmware behaviours make the fleet UI honest: telemetry fires as soon as the location
+  CHANGES (not on the 12-hour cadence), or "assigned but not applied" would have lied for half
+  a day about a device that had already converged; and a location counts as reported only
+  after a 2xx, so a dropped POST retries rather than leaving a unit looking un-converged.
+  **Q2 is now the last open contract item.** `seats[]` is seat order, not mount order, so a
+  rotated device lights the wrong half of the bar. The firmware deliberately does NOT
+  compensate — that would put a second opinion about a physical fact on the device, the same
+  reasoning that keeps the state projection server-side. The fix belongs here, and it is
+  cheap: a per-device reverse flag delivered with the assignment.
+  Founder's observation, worth keeping: ADR 0008's binding bullet has held THREE models in
+  five days (anchor seat → DeviceSeat list → assigned location), which is itself the argument
+  for the device never storing a binding.
 - **2026-08-16 — Step 5c: hardware blocks dismounting a spot (I5).** Deleting every seat of a
   unit IS dismounting the parasol, so a device assigned there must stop it — unassign first,
   exactly as you would unscrew the box before pulling the pole out. Otherwise the device polls
