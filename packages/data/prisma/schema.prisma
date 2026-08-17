@@ -359,10 +359,39 @@ model SunbedGroup {
   /// not move. Nullable during expand: units created before this get their seq
   /// from the existing positional order, so no label changes on release.
   seq       Int?
+  /// Track 021 — the rest of the unit's ADDRESS, completing `seq`.
+  ///
+  /// Position is the identity (see the track's paradigm section): a unit is
+  /// "the sunbeds standing at this spot", and `{parcel}-{row}-{seq}` names the
+  /// spot. Before this, only `seq` lived here — parcel came from
+  /// `InventoryItem.group` and row was decoded out of `InventoryItem.number`,
+  /// so two-thirds of a unit's address lived on its members. That made the
+  /// address unconstrainable (no unique index can span two tables), made
+  /// resolving one a parcel-wide fetch plus a JS filter, and let a seat
+  /// renumber silently re-point a device bound to the old address.
+  ///
+  /// Derived from the unit's PLACED seats only. `pool` extras carry synthetic
+  /// numbers from `nextPoolNumber` that decode to a different row than the unit
+  /// they hang off, so including them makes the address ambiguous — verified
+  /// against real data before this shipped.
+  ///
+  /// Nullable during expand, and permanently null for a unit holding no placed
+  /// seat (no physical position to name). Written ONLY by `recomputeSeatLabels`.
+  parcel    Int?
+  row       Int?            @map("row_idx")
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
   site      Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
   items     InventoryItem[]
+
+  /// Two units cannot occupy one spot. Enforced rather than merely observed:
+  /// the property held for all 3,096 units across local/test/production when
+  /// this was added, but nothing was stopping it from breaking.
+  ///
+  /// Postgres treats NULLs as distinct here, so a unit with no address (no
+  /// placed seats) never collides — which is also why this index can be created
+  /// BEFORE the backfill populates the columns.
+  @@unique([siteId, parcel, row, seq])
 }
 
 model ItemGroup {

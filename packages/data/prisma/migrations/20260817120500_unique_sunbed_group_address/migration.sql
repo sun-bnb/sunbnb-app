@@ -1,0 +1,14 @@
+-- Track 021 — two units cannot occupy one spot.
+--
+-- Position is the identity, so an address that two units can both claim is not
+-- an address. The property already held for all 3,096 units across local, test
+-- and production when this shipped; nothing was enforcing it, and a rearrange
+-- that moved a unit into a row where its ordinal was already taken would have
+-- broken it silently — two beds answering to one name, and a device bound to
+-- that name lighting whichever the query happened to return first.
+--
+-- Safe to create BEFORE the backfill populates the columns: Postgres treats
+-- NULLs as distinct in a unique index, so the all-NULL pre-backfill state has
+-- no collisions, and a unit that legitimately has no address (no placed seats)
+-- never collides afterwards either.
+CREATE UNIQUE INDEX "SunbedGroup_site_id_parcel_row_idx_seq_key" ON "SunbedGroup"("site_id", "parcel", "row_idx", "seq");

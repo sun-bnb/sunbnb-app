@@ -39,6 +39,27 @@ export interface SeatLabelItem {
    * order, which is exactly what every unit did before P3.
    */
   unitSeq?: number | null
+  /**
+   * Needed to tell a PLACED seat from a `pool` extra. A unit's address is
+   * derived from its placed seats only: `nextPoolNumber` mints pool numbers
+   * that decode to a different row than the unit the extra hangs off, so
+   * counting them makes the address ambiguous (observed on real data — three
+   * such units in the dev DB, none yet in test or production).
+   *
+   * Optional so existing callers that only want labels are unaffected; absent
+   * is treated as placed, which is what every seat was before pool extras.
+   */
+  status?: string | null
+}
+
+/**
+ * A unit's position, and therefore its identity (track 021). `{parcel}-{row}-{seq}`
+ * is the address painted on the bed and typed into a device assignment.
+ */
+export interface UnitAddress {
+  parcel: number
+  row: number
+  seq: number
 }
 
 // ---------------------------------------------------------------------------
@@ -64,6 +85,15 @@ export function computeSeatLabels(items: SeatLabelItem[]): Map<string, string> {
 export function computeSeatLabelsWithUnits(items: SeatLabelItem[]): {
   labels: Map<string, string>
   unitSeqs: Map<string, number>
+  /**
+   * The full address per unit (track 021), for units whose position can be
+   * derived confidently. A unit is ABSENT when it holds no placed seat (nothing
+   * physical to name) or when its placed seats disagree about parcel or row —
+   * writing a half-right address would silently re-point whatever device is
+   * bound to it, so we decline instead, the same way the HW route declines
+   * rather than resolving doubt toward FREE.
+   */
+  unitAddresses: Map<string, UnitAddress>
 } {
   // kb: decision — using item.group as the parcel rather than re-deriving
   // Math.floor(number/10000) because group IS the parcel and is already
@@ -84,6 +114,11 @@ export function computeSeatLabelsWithUnits(items: SeatLabelItem[]): {
 
   const result = new Map<string, string>()
   const unitSeqs = new Map<string, number>()
+  // Ordinal per (bucket, unit) rather than per unit. A unit with a pool extra
+  // appears in TWO buckets — the extra's synthetic number puts it in another
+  // row — and the address must take the ordinal from the bucket its PLACED
+  // seats are in, which is also the one their labels use.
+  const bucketSeqs = new Map<string, number>()
 
   for (const [key, bucketItems] of buckets) {
     const [parcelStr, rowStr] = key.split(':')
@@ -122,22 +157,35 @@ export function computeSeatLabelsWithUnits(items: SeatLabelItem[]): {
     // one (not yet assigned) fill the remaining ordinals in positional order,
     // skipping any already taken — so a mixed bucket stays collision-free and a
     // fully-unassigned bucket reproduces the pre-P3 numbering exactly.
+    //
+    // A persisted ordinal is honoured only if no EARLIER unit in this bucket
+    // already claimed it. Two units holding the same `seq` used to both keep it
+    // and emit an identical label; that cannot happen in any environment's data
+    // today (checked before this shipped), but a rearrange that moves a unit
+    // into a row where its ordinal is already spoken for would produce it — and
+    // once UNIQUE(site, parcel, row, seq) exists, a duplicate stops being a
+    // cosmetic label clash and becomes a failed write. Positional order decides
+    // the winner, so the outcome does not depend on row order from the DB.
+    const persistedOf = (members: SeatLabelItem[]) =>
+      members.find((m) => m.unitSeq != null)?.unitSeq ?? null
     const taken = new Set<number>()
-    for (const [, members] of units) {
-      const persisted = members.find((m) => m.unitSeq != null)?.unitSeq
-      if (persisted != null) taken.add(persisted)
-    }
+    const keepsPersisted = units.map(([, members]) => {
+      const persisted = persistedOf(members)
+      if (persisted == null || taken.has(persisted)) return false
+      taken.add(persisted)
+      return true
+    })
     let nextFree = 1
-    const ordinalFor = (members: SeatLabelItem[]): number => {
-      const persisted = members.find((m) => m.unitSeq != null)?.unitSeq
-      if (persisted != null) return persisted
+    const ordinalFor = (members: SeatLabelItem[], index: number): number => {
+      if (keepsPersisted[index]) return persistedOf(members)!
       while (taken.has(nextFree)) nextFree++
       taken.add(nextFree)
       return nextFree
     }
 
     for (let i = 0; i < units.length; i++) {
-      const groupSeq = ordinalFor(units[i]![1])
+      const groupSeq = ordinalFor(units[i]![1], i)
+      bucketSeqs.set(`${key}|${units[i]![0]}`, groupSeq)
       const unitKey = units[i]![0]
       // Only real units get a persisted ordinal; `__solo_` keys are the
       // synthetic buckets for seats that have no unit row at all.
@@ -153,7 +201,38 @@ export function computeSeatLabelsWithUnits(items: SeatLabelItem[]): {
     }
   }
 
-  return { labels: result, unitSeqs }
+  // ---------------------------------------------------------------------------
+  // Unit addresses (track 021)
+  //
+  // Deliberately a separate pass over units rather than a by-product of the
+  // bucket loop: the bucket loop is driven by every seat, and a unit's address
+  // must be driven only by its PLACED ones.
+  // ---------------------------------------------------------------------------
+  const unitAddresses = new Map<string, UnitAddress>()
+  const placedByUnit = new Map<string, SeatLabelItem[]>()
+  for (const item of items) {
+    if (!item.sunbedGroupId) continue
+    if (item.status === 'pool') continue
+    if (!placedByUnit.has(item.sunbedGroupId)) placedByUnit.set(item.sunbedGroupId, [])
+    placedByUnit.get(item.sunbedGroupId)!.push(item)
+  }
+
+  for (const [unitId, members] of placedByUnit) {
+    const parcels = new Set(members.map((m) => m.group))
+    const rows = new Set(members.map((m) => Math.floor(m.number / 100) % 100))
+    // Seats of one unit that disagree about where they are. Decline rather than
+    // pick one — see the doc on `unitAddresses`.
+    if (parcels.size !== 1 || rows.size !== 1) continue
+
+    const parcel = members[0]!.group
+    const row = Math.floor(members[0]!.number / 100) % 100
+    const seq = bucketSeqs.get(`${parcel}:${row}|${unitId}`)
+    if (seq == null) continue
+
+    unitAddresses.set(unitId, { parcel, row, seq })
+  }
+
+  return { labels: result, unitSeqs, unitAddresses }
 }
 
 // ---------------------------------------------------------------------------
