@@ -85,8 +85,6 @@ export default async function ManageSunbedsPage({
             },
             orderBy: { from: 'asc' },
           },
-          pair: true,
-          pairedBy: true,
           sunbedGroup: {
             include: {
               items: {

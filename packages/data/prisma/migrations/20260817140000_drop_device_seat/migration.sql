@@ -1,0 +1,18 @@
+-- Track 021 — drop the legacy device↔seat binding.
+--
+-- `device_seat` bound a device to specific seat rows. Since resolution moved to
+-- an assigned ADDRESS (`device.assigned_site_id`/`_parcel`/`_row`/`_seq`
+-- resolved against `SunbedGroup`), nothing has read it: a device answers for
+-- whatever unit stands at its address, which is why a parcel rebuilt on the same
+-- spot needs no re-binding. The last writer — the `--seats` flag on
+-- `provision-device.ts` — was removed in the preceding release.
+--
+-- CONTRACT step, and safe to run as one: no code path reads or writes the table,
+-- and nothing holds a foreign key TO it (it points at `device` and
+-- `InventoryItem`, not the reverse), so dropping it cannot orphan another row or
+-- fail another table's constraint.
+--
+-- The rows themselves carry no information that is not in the assignment: a
+-- device's position is its address, and mount order comes from the unit's seats
+-- in seat order (flipped by `device.reverse_segments` for a rotated mount).
+DROP TABLE "device_seat";

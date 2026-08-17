@@ -1,0 +1,24 @@
+-- Track 021 — retire the legacy seat-pairing self-relation (step 1 of 3).
+--
+-- `InventoryItem.pair_id` predates `SunbedGroup`. It is fully redundant: every
+-- row carrying one points at a seat in its OWN unit — 2,251/2,251 rows on the
+-- dev DB and 216/216 on test, none pointing elsewhere, none dangling — so the
+-- column holds nothing `sunbed_group_id` does not already say. No code reads it.
+--
+-- WHY THIS STEP EXISTS INSTEAD OF DROPPING THE COLUMN NOW. `main` and `test`
+-- deploy from different branches onto ONE database, so a migration must satisfy
+-- the furthest-ahead branch while staying safe for the furthest-behind one.
+-- Deployed code still writes `pairId: null` on seat creation, and Prisma emits
+-- every field it is given — dropping the column today would make those inserts
+-- fail on the branch that is behind.
+--
+-- So this release drops only the FOREIGN KEY. That is backward-compatible in
+-- both directions: old code keeps writing `pairId: null` unchanged, and with no
+-- FK a seat delete can no longer be blocked by another row pointing at it —
+-- which is the only reason the `updateMany({ pairId: null })` sweeps in the
+-- delete paths exist. Step 2 removes those sweeps and the remaining writes in a
+-- code release; step 3 drops the unique index and the column.
+--
+-- Not destructive: the column, its values and its unique index all survive, so
+-- this step is reversible by re-adding the constraint.
+ALTER TABLE "InventoryItem" DROP CONSTRAINT "InventoryItem_pair_id_fkey";
