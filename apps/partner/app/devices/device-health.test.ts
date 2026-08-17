@@ -75,6 +75,14 @@ describe('formatLocation', () => {
 })
 
 describe('batteryLevel', () => {
+  it('treats a ZERO reading as no measurement, not a flat cell', () => {
+    // The first real firmware capture (0.1.0) reports battMv: 0 because the
+    // board has no fuel gauge yet. Classifying that as critical would raise a
+    // false alarm on every healthy device in the fleet.
+    expect(batteryLevel(0)).toBe('unknown')
+    expect(batteryLevel(-1)).toBe('unknown')
+  })
+
   it('classifies cell voltage — the one number that predicts a field failure', () => {
     expect(batteryLevel(4100)).toBe('ok')
     expect(batteryLevel(3599)).toBe('low')

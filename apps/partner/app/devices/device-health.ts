@@ -54,6 +54,11 @@ export function formatLocation(parts: {
 /** Battery guidance: cell voltage is the one number that predicts a field failure. */
 export function batteryLevel(battMv: number | null): 'ok' | 'low' | 'critical' | 'unknown' {
   if (battMv == null) return 'unknown'
+  // A zero or negative reading is the ABSENCE of a measurement, not a flat
+  // cell — a board with no fuel gauge reports 0, and calling that "critical"
+  // sends someone out to a parasol that is fine. Seen in the first real
+  // firmware capture (0.1.0 reports battMv: 0).
+  if (battMv <= 0) return 'unknown'
   if (battMv < 3300) return 'critical'
   if (battMv < 3600) return 'low'
   return 'ok'
