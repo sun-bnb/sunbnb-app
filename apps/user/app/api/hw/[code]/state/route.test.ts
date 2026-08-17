@@ -35,13 +35,14 @@ const mockDevice = vi.mocked(prisma.device.findUnique)
  * row 0 under the `parcel*10000 + row*100 + idx` encoding, so the route's row
  * filter accepts them.
  */
-function device(_itemIds: string[], status = 'active') {
+function device(_itemIds: string[], status = 'active', reverseSegments = false) {
   return {
     status,
     assignedSiteId: 'site-1',
     assignedParcel: 0,
     assignedRow: 0,
     assignedSeq: 1,
+    reverseSegments,
   }
 }
 const mockReservations = vi.mocked(prisma.reservation.findMany)
@@ -324,6 +325,44 @@ describe('binding', () => {
       mockDevice.mockResolvedValue(withCmd('identify') as never)
       const commanded = (await GET(makeRequest(), makeParams())).headers.get('etag')
       expect(commanded).not.toBe(quiet)
+    })
+  })
+
+  // ── Q2: mount orientation ───────────────────────────────────────────────
+  describe('rotated mounts', () => {
+    it('emits seats RIGHT-TO-LEFT when the device is flagged reversed', async () => {
+      // The bar's segments run left-to-right from the DEVICE's point of view. A
+      // device mounted rotated would otherwise light the wrong bed — the failure
+      // this flag exists to prevent, resolved server-side so firmware never
+      // holds its own opinion about a physical fact.
+      mockDevice.mockResolvedValue(device([], 'active', true) as never)
+      const body = await (await GET(makeRequest(), makeParams())).json()
+      expect(body.seats.map((s: { id: string }) => s.id)).toEqual([SEAT_B, SEAT_A])
+    })
+
+    it('leaves seat order alone when not flagged (the default)', async () => {
+      const body = await (await GET(makeRequest(), makeParams())).json()
+      expect(body.seats.map((s: { id: string }) => s.id)).toEqual([SEAT_A, SEAT_B])
+    })
+
+    it('flipping the flag changes the ETag, so a fix reaches the device', async () => {
+      const forward = (await GET(makeRequest(), makeParams())).headers.get('etag')
+      mockDevice.mockResolvedValue(device([], 'active', true) as never)
+      const reversed = (await GET(makeRequest(), makeParams())).headers.get('etag')
+      expect(reversed).not.toBe(forward)
+    })
+
+    it('reverses the STATES with the seats, not just the ids', async () => {
+      // A half-applied flip would be worse than none: the right bed lit with the
+      // wrong bed's state is a confident lie.
+      mockReservations.mockResolvedValue([
+        reservation({ itemIds: [SEAT_A], status: 'complete', operationalStatus: 'expected' }),
+      ] as never)
+      mockDevice.mockResolvedValue(device([], 'active', true) as never)
+      const body = await (await GET(makeRequest(), makeParams())).json()
+      const seatA = body.seats.find((s: { id: string }) => s.id === SEAT_A)
+      expect(body.seats[1].id).toBe(SEAT_A)
+      expect(seatA.state).toBe('RESERVED')
     })
   })
 

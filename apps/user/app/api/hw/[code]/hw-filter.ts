@@ -100,6 +100,8 @@ export interface DeviceAssignment {
   seq: number
   /** A one-shot command to deliver on this poll, or null. */
   cmd: string | null
+  /** Q2: emit seats right-to-left, for a device mounted rotated. */
+  reverseSegments: boolean
 }
 
 /**
@@ -121,6 +123,7 @@ async function assignmentForCode(code: string): Promise<DeviceAssignment | null>
       assignedSeq: true,
       pendingCmd: true,
       pendingCmdAt: true,
+      reverseSegments: true,
     },
   })
 
@@ -145,6 +148,7 @@ async function assignmentForCode(code: string): Promise<DeviceAssignment | null>
     // channel for. A device that was asleep when "identify" was pressed should
     // not flash an hour later at whoever is standing there then.
     cmd: freshCommand(device.pendingCmd, device.pendingCmdAt),
+    reverseSegments: device.reverseSegments,
   }
 }
 

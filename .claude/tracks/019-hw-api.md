@@ -68,10 +68,11 @@ dropped request retries at poll cadence instead of leaving a unit looking perman
 un-converged.
 
 **Correction carried into both repos:** `seats[]` is NOT in mount order — it is seat order
-within the unit, so a device mounted ROTATED lights the wrong half of the bar. That is **Q2:
-open, cheap, not built**, and the firmware deliberately does NOT compensate on-device, which
-would be a second opinion about a physical fact the server is about to carry (the same
-reasoning that keeps the state projection off the device).
+within the unit, so a device mounted ROTATED lights the wrong half of the bar. That was **Q2 — RESOLVED
+server-side 2026-08-17**: a per-device `reverseSegments` flag flips the emitted order, so the
+firmware needs no change (it still lights `seats[i]` on segment `i`) and never holds a second
+opinion about a physical fact. **With Q2 closed, nothing about the wire is known-wrong — the
+contract can be frozen at bring-up.**
 
 Noted by the founder and worth preserving: ADR 0008's binding bullet has held **three models
 in five days** — anchor seat, `DeviceSeat` list, assigned location. That churn is itself the

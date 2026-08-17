@@ -332,10 +332,13 @@ the kit is in transit.
    open: may two devices share a location (a wide canopy), and may one device cover two
    adjacent locations? The assignment model makes this a UI question rather than a schema
    one — a location field on `Device` is 1:1, a join table is n:m. *Blocks P5.*
-2. **Q2 — LED segment mapping.** With a location assigned, segment order derives from the
-   unit's member order at that address. The open case is a device mounted rotated relative to
-   the numbering, which derivation gets backwards; a per-device "reverse segments" flag is the
-   cheap answer, and the failure it prevents is a lit-up wrong bed. *Blocks P5.*
+2. ✅ **Q2 — LED segment mapping. RESOLVED 2026-08-17.** Segment order derives from the unit's
+   member order, flipped by a per-device `reverseSegments` flag for a device mounted rotated
+   (or a row numbered right-to-left). Resolved SERVER-side: the firmware deliberately does not
+   compensate, because a device holding its own opinion about a physical fact is what this
+   design keeps avoiding — the same reasoning that keeps the state projection off the device.
+   The operator toggles it beside the assignment, where the need is discovered, and flipping
+   it queues an identify so the fix is confirmed without walking back and forth.
 3. **Q3 — Label scheme.** Keep the composite `{parcel}-{row}{unit}-{member}` with a
    persisted unit number, or move to a flat per-site unit number ("parasol 42")? Affects
    signage, staff speech, and anything already printed. *Blocks P2's backfill shape.*
@@ -362,6 +365,21 @@ the kit is in transit.
 
 ## Log
 
+- **2026-08-17 — Q2 RESOLVED: the last open contract item is closed.** A per-device
+  `reverseSegments` flag (additive migration) flips the emitted seat order for a device
+  mounted rotated. **Firmware needs no change at all** — the device still lights `seats[i]` on
+  segment `i`; the server simply emits them the other way round, which is why this belongs
+  here and not on the board.
+  Tests pin the parts that would be worse than useless if half-done: the flag reverses the
+  STATES with the ids (the right bed lit with the wrong bed's state is a confident lie), the
+  default is untouched order, and flipping the flag **changes the ETag** so the fix actually
+  reaches a device that is otherwise 304ing. Operator half browser-verified — toggle offered
+  beside the assignment, DB showing `reverse_segments` set with a fresh `identify` queued so
+  the installer sees the fix immediately; seeded row removed.
+  The wire half is covered by 76 route tests rather than a live call: `HW_CLIENT_UA` is unset
+  locally and belongs to the founder's bring-up, so I did not add env vars to their config.
+  Gates: user 555u + 102i, partner 2018u + 245i, tsc + lint clean, no migration drift.
+  **The contract can now be frozen** — nothing about the wire is still known-wrong.
 - **2026-08-17 — Firmware aligned (`../sunbnb-hw` `95de474`); the wire contract is implemented
   on both sides.** Checked field by field rather than assumed: the state response emits
   `location`, the device echoes `loc` in telemetry (which is exactly what the route reads into

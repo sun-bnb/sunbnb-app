@@ -16,6 +16,7 @@ export interface FleetDevice {
   battMv: number | null
   battery: ReturnType<typeof batteryLevel>
   rssiDbm: number | null
+  reverseSegments: boolean
   health: DeviceHealth
 }
 
@@ -39,6 +40,7 @@ export async function getFleet(): Promise<FleetDevice[]> {
       id: true, code: true, status: true,
       assignedSiteId: true, assignedParcel: true, assignedRow: true, assignedSeq: true,
       reportedLocation: true, lastSeenAt: true, fw: true, battMv: true, rssiDbm: true,
+      reverseSegments: true,
     },
     orderBy: [{ assignedParcel: 'asc' }, { assignedRow: 'asc' }, { assignedSeq: 'asc' }, { code: 'asc' }],
   })
@@ -58,6 +60,7 @@ export async function getFleet(): Promise<FleetDevice[]> {
       battMv: device.battMv,
       battery: batteryLevel(device.battMv),
       rssiDbm: device.rssiDbm,
+      reverseSegments: device.reverseSegments,
       health: deviceHealth(
         {
           assignedLocation,

@@ -3,7 +3,12 @@
 import React, { useState, useTransition } from 'react'
 import type { FleetDevice } from './queries'
 import type { DeviceHealth } from './device-health'
-import { assignDeviceLocation, unassignDevice, identifyDevice } from './actions'
+import {
+  assignDeviceLocation,
+  unassignDevice,
+  identifyDevice,
+  setDeviceSegmentOrder,
+} from './actions'
 
 /**
  * The fleet list (track 021 P5, step 4). Read-only for now — assignment lands
@@ -229,6 +234,20 @@ export default function DevicesView({
                               Unassign
                             </button>
                           )}
+                          <label className="flex items-center gap-1.5 text-sm text-gray-700">
+                            <input
+                              type="checkbox"
+                              defaultChecked={device.reverseSegments}
+                              disabled={pending}
+                              onChange={(e) => {
+                                const reversed = e.currentTarget.checked
+                                startTransition(async () => {
+                                  await setDeviceSegmentOrder(device.id, reversed)
+                                })
+                              }}
+                            />
+                            Bar mounted the other way round
+                          </label>
                           <span className="text-xs text-gray-500">
                             Saving flashes the bar — watch the parasol to confirm it is this one.
                           </span>

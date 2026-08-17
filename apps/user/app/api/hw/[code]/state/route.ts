@@ -114,10 +114,14 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
 
     const byId = new Map(items.map((i) => [i.id, i]))
 
-    // Emitted in seat order within the unit. Q2 remains open: a device mounted
-    // ROTATED relative to the numbering needs an explicit reverse flag, or it
-    // lights the wrong half of the bar — cheap to add, not yet built.
-    const seats = seatIds.map((id) => {
+    // Emitted in seat order within the unit, flipped when the device is mounted
+    // rotated (Q2). The bar's segments run left-to-right from the DEVICE's point
+    // of view, so a rotated mount — or a row numbered right-to-left — would
+    // otherwise light the wrong half. Resolved HERE rather than on the device:
+    // firmware holding its own opinion about a physical fact is the thing this
+    // design keeps avoiding, and it is why the projection lives server-side too.
+    const orderedIds = assignment.reverseSegments ? [...seatIds].reverse() : seatIds
+    const seats = orderedIds.map((id) => {
       const item = byId.get(id)!
       const rows = reservations.filter((r) => r.items.some((i) => i.id === id))
       const state = activeStateForSeat(rows as ReservationRow[], endOfToday)

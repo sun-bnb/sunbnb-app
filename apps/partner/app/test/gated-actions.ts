@@ -19,7 +19,12 @@
  * change what the real action does.
  */
 
-import { assignDeviceLocation, unassignDevice, identifyDevice } from '@/app/devices/actions'
+import {
+  assignDeviceLocation,
+  unassignDevice,
+  identifyDevice,
+  setDeviceSegmentOrder,
+} from '@/app/devices/actions'
 import {
   reserveItem,
   reserveItems,
@@ -770,6 +775,12 @@ export const GATED_ACTIONS: GatedAction[] = [
     kind: 'action',
     gate: 'session-owner',
     invoke: (_accessKey?: string) => unassignDevice('device-1'),
+  },
+  {
+    name: 'devices.setDeviceSegmentOrder',
+    kind: 'action',
+    gate: 'session-owner',
+    invoke: (_accessKey?: string) => setDeviceSegmentOrder('device-1', true),
   },
   {
     name: 'devices.identifyDevice',

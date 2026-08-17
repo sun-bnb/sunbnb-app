@@ -119,3 +119,26 @@ export async function identifyDevice(deviceId: string) {
   revalidatePath('/devices')
   return { status: 'ok' as const }
 }
+
+/**
+ * Q2: flip which end of the bar is which, for a device mounted rotated (or a
+ * row numbered right-to-left).
+ *
+ * Server-side on purpose. The firmware deliberately does not compensate — that
+ * would put a second opinion about a physical fact on the device, the same
+ * reasoning that keeps the state projection here. The operator discovers the
+ * need by looking at the bar, so the control lives next to the assignment, and
+ * flipping it queues an identify so they can confirm the fix without walking
+ * back and forth.
+ */
+export async function setDeviceSegmentOrder(deviceId: string, reversed: boolean) {
+  const owned = await ownedDevice(deviceId)
+  if ('error' in owned) return { status: 'error' as const, errors: [owned.error] }
+
+  await prisma.device.update({
+    where: { id: deviceId },
+    data: { reverseSegments: reversed, pendingCmd: 'identify', pendingCmdAt: new Date() },
+  })
+  revalidatePath('/devices')
+  return { status: 'ok' as const }
+}
