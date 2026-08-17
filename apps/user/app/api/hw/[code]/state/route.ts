@@ -31,7 +31,7 @@ import { createHash } from 'crypto'
 import prisma from '@repo/data/PrismaCient'
 import { siteDayBounds, siteDayKey } from '@repo/data/site-day'
 import { RESERVATION_CANCELED, RESERVATION_REFUNDED } from '@repo/data/reservation-status'
-import { screenDeviceRequest, unavailable, unitSeatFilter, isInAssignedRow } from '../hw-filter'
+import { screenDeviceRequest, unavailable, unitAddressWhere, SEGMENT_SEATS } from '../hw-filter'
 import {
   activeStateForSeat,
   aggregateState,
@@ -56,21 +56,26 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
   try {
     // Track 021 P5: the seats are THE UNIT AT THE ASSIGNED LOCATION, resolved
     // per request rather than stored — so a parcel rebuilt at the same address
-    // needs no re-assignment. One query: the parcel-scoped index narrows it and
-    // the ROW is filtered here, because the row lives inside the encoded seat
-    // number rather than in a column.
-    const candidates = await prisma.inventoryItem.findMany({
-      where: unitSeatFilter(assignment),
+    // needs no re-assignment. One indexed lookup on the unit's stored address
+    // (UNIQUE(site_id, parcel, row_idx, seq)); the row used to be filtered here
+    // in JS because it lived inside the encoded seat number.
+    const unit = await prisma.sunbedGroup.findUnique({
+      where: unitAddressWhere(assignment),
       select: {
-        id: true,
-        number: true,
-        seatLabel: true,
-        siteId: true,
-        site: { select: { timeZone: true, locationLat: true, locationLng: true } },
+        items: {
+          where: SEGMENT_SEATS,
+          select: {
+            id: true,
+            number: true,
+            seatLabel: true,
+            siteId: true,
+            site: { select: { timeZone: true, locationLat: true, locationLng: true } },
+          },
+          orderBy: { number: 'asc' },
+        },
       },
-      orderBy: { number: 'asc' },
     })
-    const items = candidates.filter((item) => isInAssignedRow(item.number, assignment))
+    const items = unit?.items ?? []
 
     // Assigned to a location that holds no unit — the parcel shrank, or the spot
     // was dismounted. That is a misconfigured device, not a free bed: answer

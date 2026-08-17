@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { unitAddressWhere, SEGMENT_SEATS } from '@repo/data/unit-address'
 
 /**
  * Device assignment (track 021 P5).
@@ -55,12 +56,15 @@ export async function assignDeviceLocation(
   // Refuse to assign an address that holds no unit. The device would poll,
   // resolve nothing and sit amber — a failure the operator would only discover
   // by walking out to it, so catch it here where it can still be corrected.
-  const candidates = await prisma.inventoryItem.findMany({
-    where: { siteId, group: parcel, sunbedGroup: { seq }, status: { not: 'pool' } },
-    select: { number: true },
+  //
+  // Track 021: the SAME indexed lookup the HW state route resolves with. It used
+  // to re-derive the address from seats independently, so this check and the
+  // thing it was protecting could disagree about whether a spot existed.
+  const unit = await prisma.sunbedGroup.findUnique({
+    where: unitAddressWhere({ siteId, parcel, row, seq }),
+    select: { items: { where: SEGMENT_SEATS, select: { id: true }, take: 1 } },
   })
-  const exists = candidates.some((item) => Math.floor(item.number / 100) % 100 === row)
-  if (!exists) {
+  if (!unit || unit.items.length === 0) {
     return {
       status: 'error' as const,
       errors: [`No sunbed unit at ${parcel}-${row}-${seq} on that site`],

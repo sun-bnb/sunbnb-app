@@ -173,25 +173,18 @@ export function formatAssignment(a: DeviceAssignment): string {
 }
 
 /**
- * The seats of the unit at an assignment, in segment order.
+ * The unit standing at an assignment, looked up by its stored ADDRESS — one
+ * indexed hit on `UNIQUE(site_id, parcel, row_idx, seq)` (track 021).
  *
- * The parcel-scoped index does the narrowing; the ROW lives inside the encoded
- * seat number (parcel*10000 + row*100 + idx) so it is filtered here. Pool spares
- * parked at a unit are excluded — a spare is not a bed under that parasol and
- * must never claim a segment (track 021 P0).
+ * Re-exported from `@repo/data/unit-address` rather than written here: the same
+ * lookup has to be used by the partner action that assigns a device and by the
+ * guard that refuses to delete the seats under one. Each used to re-derive the
+ * address separately — parcel from `InventoryItem.group`, row decoded out of
+ * `InventoryItem.number` — which is precisely how a device, the UI that assigned
+ * it and the guard protecting it could end up with three different opinions
+ * about where it was.
  */
-export function unitSeatFilter(a: DeviceAssignment) {
-  return {
-    siteId: a.siteId,
-    group: a.parcel,
-    sunbedGroup: { seq: a.seq },
-    status: { not: 'pool' },
-  }
-}
-
-export function isInAssignedRow(number: number, a: DeviceAssignment): boolean {
-  return Math.floor(number / 100) % 100 === a.row
-}
+export { unitAddressWhere, SEGMENT_SEATS } from '@repo/data/unit-address'
 
 export type DeviceRequest =
   | { ok: true; code: string; assignment: DeviceAssignment | null; location: string | null }

@@ -36,6 +36,7 @@
     "./seat-label": "./src/seat-label.ts",
     "./seat-label-db": "./src/seat-label-db.ts",
     "./unit": "./src/unit.ts",
+    "./unit-address": "./src/unit-address.ts",
     "./reservations": "./src/reservations.ts",
     "./site-day": "./src/site-day.ts",
     "./fiscal": "./src/fiscal.ts",

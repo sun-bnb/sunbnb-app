@@ -23,7 +23,7 @@ import { wireStateFor, aggregateState } from './projection'
 import { normalizeCode } from '../hw-filter'
 import prisma from '@repo/data/PrismaCient'
 
-const mockItems = vi.mocked(prisma.inventoryItem.findMany)
+const mockUnit = vi.mocked(prisma.sunbedGroup.findUnique)
 const mockDevice = vi.mocked(prisma.device.findUnique)
 
 /**
@@ -109,7 +109,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   process.env.HW_CLIENT_UA = UA_NEEDLE
   mockDevice.mockResolvedValue(device([SEAT_A, SEAT_B]) as never)
-  mockItems.mockResolvedValue([seat(SEAT_A, 12), seat(SEAT_B, 13)] as never)
+  mockUnit.mockResolvedValue({ items: [seat(SEAT_A, 12), seat(SEAT_B, 13)] } as never)
   mockReservations.mockResolvedValue([] as never)
 })
 
@@ -161,7 +161,7 @@ describe('client filter', () => {
     // expensive seat/reservation reads must not.
     mockDevice.mockResolvedValue(null as never)
     await GET(makeRequest('ZZZZZZ'), makeParams('ZZZZZZ'))
-    expect(mockItems).not.toHaveBeenCalled()
+    expect(mockUnit).not.toHaveBeenCalled()
     expect(mockReservations).not.toHaveBeenCalled()
   })
 
@@ -170,7 +170,7 @@ describe('client filter', () => {
     // never a Postgres round-trip — not even the binding lookup.
     await GET(makeRequest(CODE, { 'user-agent': 'curl/8.4.0' }), makeParams())
     expect(mockDevice).not.toHaveBeenCalled()
-    expect(mockItems).not.toHaveBeenCalled()
+    expect(mockUnit).not.toHaveBeenCalled()
   })
 
   it('fails CLOSED with 503 when HW_CLIENT_UA is unset (never 200, never FREE)', async () => {
@@ -241,47 +241,67 @@ describe('binding', () => {
 
   it('resolves the unit AT THE ASSIGNED LOCATION, excluding pool spares', async () => {
     await GET(makeRequest(), makeParams())
-    // Track 021 P5: seats come from the location, not a stored list — and a
-    // spare parked at a unit is not a bed under that parasol, so it must never
-    // claim a segment on the bar.
-    expect(mockItems).toHaveBeenCalledWith(
+    // Track 021: one indexed lookup on the unit's stored address. Seats come
+    // from the location, not a stored list — and a spare parked at a unit is not
+    // a bed under that parasol, so it must never claim a segment on the bar.
+    expect(mockUnit).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({
-          siteId: 'site-1',
-          group: 0,
-          sunbedGroup: { seq: 1 },
-          status: { not: 'pool' },
+        where: {
+          siteId_parcel_row_seq: { siteId: 'site-1', parcel: 0, row: 0, seq: 1 },
+        },
+        select: expect.objectContaining({
+          items: expect.objectContaining({
+            where: { status: { not: 'pool' } },
+            orderBy: { number: 'asc' },
+          }),
         }),
-        orderBy: { number: 'asc' },
       }),
     )
   })
 
-  it('ignores seats from ANOTHER ROW that share the unit ordinal', async () => {
-    // `seq` is scoped to (parcel,row), so the same ordinal recurs in every row.
-    // Row 1's seats (numbers 112/113) must not leak into row 0's device.
-    mockItems.mockResolvedValue([
-      seat(SEAT_A, 12), seat(SEAT_B, 13),
-      seat('clxseat0000000000000000009', 112),
-    ] as never)
-    const body = await (await GET(makeRequest(), makeParams())).json()
-    expect(body.seats.map((s: { id: string }) => s.id)).toEqual([SEAT_A, SEAT_B])
+  it('addresses the unit by ROW as well as parcel and ordinal', async () => {
+    // `seq` is scoped to (parcel,row), so the same ordinal recurs in EVERY row:
+    // 1-1-1 and 1-2-1 are different parasols. The row used to be filtered out of
+    // an over-fetched parcel in JS; it is now part of the key, so dropping it
+    // from the lookup would quietly serve a neighbouring row's unit. Nothing
+    // downstream would catch that — the seats would simply be the wrong ones.
+    mockDevice.mockResolvedValue({ ...device([]), assignedRow: 4 } as never)
+
+    await GET(makeRequest(), makeParams())
+
+    expect(mockUnit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          siteId_parcel_row_seq: { siteId: 'site-1', parcel: 0, row: 4, seq: 1 },
+        },
+      }),
+    )
+  })
+
+  it('answers nothing when no unit stands at the assigned address', async () => {
+    // The spot was dismounted, or the parcel shrank under a device still bound
+    // to it. A missing unit is a misconfigured device, never a free bed.
+    mockUnit.mockResolvedValue(null as never)
+
+    const res = await GET(makeRequest(), makeParams())
+
+    expect(res.status).not.toBe(200)
   })
 
   it('503s (amber) when the assigned location holds NO unit', async () => {
     // The parcel shrank, or the spot was dismounted. A device standing at an
     // address that no longer exists must show amber, never a confident FREE for
     // a bed that is not there.
-    mockItems.mockResolvedValue([] as never)
+    mockUnit.mockResolvedValue({ items: [] } as never)
     const res = await GET(makeRequest(), makeParams())
     expect(res.status).toBe(503)
   })
 
   it('503s when bound seats span more than one site', async () => {
-    mockItems.mockResolvedValue([
+    mockUnit.mockResolvedValue({ items: [
       seat(SEAT_A, 12),
       { ...seat(SEAT_B, 13), siteId: 'site-2' },
-    ] as never)
+    ] } as never)
     const res = await GET(makeRequest(), makeParams())
     expect(res.status).toBe(503)
   })
@@ -289,7 +309,7 @@ describe('binding', () => {
   it('emits seats in SEAT order within the unit (segment order)', async () => {
     // Q2 remains open: a device mounted rotated relative to the numbering needs
     // an explicit reverse flag, or it lights the wrong half of the bar.
-    mockItems.mockResolvedValue([seat(SEAT_A, 12), seat(SEAT_B, 13)] as never)
+    mockUnit.mockResolvedValue({ items: [seat(SEAT_A, 12), seat(SEAT_B, 13)] } as never)
     const body = await (await GET(makeRequest(), makeParams())).json()
     expect(body.seats.map((s: { id: string }) => s.id)).toEqual([SEAT_A, SEAT_B])
   })
@@ -534,7 +554,7 @@ describe('today-row resolution (read-only)', () => {
     // 1.3M polls/day must not become 1.3M upserts. The mock has no
     // reservationDay model at all — this asserts the shape of the query set.
     expect(mockReservations).toHaveBeenCalledTimes(1)
-    expect(mockItems).toHaveBeenCalledTimes(1)
+    expect(mockUnit).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -609,7 +629,7 @@ describe('wire shape', () => {
   })
 
   it('prefers seatLabel over the seat number for the label', async () => {
-    mockItems.mockResolvedValue([seat(SEAT_A, 12, 'A12'), seat(SEAT_B, 13)] as never)
+    mockUnit.mockResolvedValue({ items: [seat(SEAT_A, 12, 'A12'), seat(SEAT_B, 13)] } as never)
     const body = await (await GET(makeRequest(), makeParams())).json()
     expect(body.seats.map((s: { label: string }) => s.label)).toEqual(['A12', '13'])
   })

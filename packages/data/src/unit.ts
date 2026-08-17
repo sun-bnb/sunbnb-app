@@ -130,9 +130,8 @@ export interface BlockingDevice {
  * device keeps polling an address that no longer resolves and sits amber, and
  * nothing in the UI explains why.
  *
- * A device stores an ADDRESS, not a unit id, so the check resolves each
- * about-to-be-emptied unit's address from the seats themselves: parcel from
- * `group`, row from the encoded `number`, ordinal from the unit row.
+ * A device stores an ADDRESS, not a unit id, so the check reads the address off
+ * each about-to-be-emptied unit and looks for a device pointing at it.
  *
  * Only units losing their LAST member block: removing one bed of a pair leaves
  * the spot standing, and the device with it.
@@ -145,7 +144,7 @@ export async function devicesBlockingSeatRemoval(
 
   const doomed = await prisma.inventoryItem.findMany({
     where: { id: { in: seatIds }, siteId, status: PLACED, sunbedGroupId: { not: null } },
-    select: { id: true, group: true, number: true, sunbedGroupId: true },
+    select: { sunbedGroupId: true },
   })
   if (doomed.length === 0) return []
 
@@ -164,20 +163,21 @@ export async function devicesBlockingSeatRemoval(
   const emptied = unitIds.filter((id) => !surviving.has(id))
   if (emptied.length === 0) return []
 
+  // Track 021: read the unit's STORED address rather than re-deriving it from
+  // the seats. The derivation used to live here, in the HW state route and in
+  // the partner assign action independently — three copies of one rule, any of
+  // which could drift. A unit with no stored address is not skipped silently
+  // below: it cannot have been assigned to in the first place, because the
+  // assign action resolves through the same column.
   const units = await prisma.sunbedGroup.findMany({
     where: { id: { in: emptied } },
-    select: { id: true, seq: true },
+    select: { parcel: true, row: true, seq: true },
   })
-  const seqById = new Map(units.map((unit) => [unit.id, unit.seq]))
 
-  const addresses = doomed
-    .filter((seat) => emptied.includes(seat.sunbedGroupId as string))
-    .map((seat) => ({
-      parcel: seat.group,
-      row: Math.floor(seat.number / 100) % 100,
-      seq: seqById.get(seat.sunbedGroupId as string) ?? null,
-    }))
-    .filter((address): address is { parcel: number; row: number; seq: number } => address.seq !== null)
+  const addresses = units.filter(
+    (unit): unit is { parcel: number; row: number; seq: number } =>
+      unit.parcel !== null && unit.row !== null && unit.seq !== null,
+  )
 
   if (addresses.length === 0) return []
 
