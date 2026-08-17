@@ -3,7 +3,7 @@
 import React from 'react'
 import { jsPDF } from 'jspdf'
 import QRCode from 'qrcode'
-import { formatSeat } from '@repo/data/seat-label'
+import { formatSeatId } from '@repo/data/seat-label'
 import Button from '@mui/material/Button'
 import { InventoryItem } from '@/types/shared'
 
@@ -83,7 +83,7 @@ export default function QRPrintButton({ siteId, label, items }: Props) {
       // Draw seat label beneath the QR code
       doc.setFontSize(20)
       doc.setFont('helvetica', 'normal')
-      const seatText = `SEAT ${formatSeat(item!, { parcel: true })}`
+      const seatText = `SEAT ${formatSeatId(item!, { parcel: true })}`
       const seatW = doc.getTextWidth(seatText)
       const seatX = originX + (frameW - seatW) / 2
       const seatY = qrY + qrSize + 10
