@@ -76,6 +76,34 @@ but it wants making **before mass binding**, not after.
 - **Do NOT** start with the schema. P0 is an audit precisely because the backfill shape
   depends on what the existing multi-member groups mean.
 
+## THE PARADIGM (founder, 2026-08-17) — read this before changing anything here
+
+Stated three times across the design conversation, and restated explicitly to stop drift.
+Everything below in this track is subordinate to it; where an implementation disagrees, the
+implementation is wrong.
+
+1. **Position is the identity.** A sunbed's human-readable identification is its LOCATION in
+   the parcel. Not a row id, not a label chosen by anyone — where it is.
+2. **Groups are DERIVED from positioning.** A group is not an independent object with a life
+   of its own; it is "the sunbeds standing at this spot".
+3. **Unparcelled sunbeds are running numbers under a `0-0-` prefix** (parcel 0, row 0).
+4. **A device shows the state of the parasol (group) it is attached to**, and devices are
+   **assigned to POSITIONS**, not to groups-as-entities.
+5. **Parasols are planted and stay put** — year after year. Nobody shuffles them, and an
+   individual parasol has no intrinsic identity; they are interchangeable.
+6. **Devices are easy to move and re-assign.** They are the mobile half of the pair.
+7. **A real-world layout change is a RECREATE, and that is normal.** If zoning changes or a
+   parcel is re-dimensioned or moved, the parcel is simply recreated in the inventory and, on
+   the ground, devices are re-attached according to the new positions. This is expected
+   operational work, **not a failure mode to engineer around**.
+
+**What point 7 corrects in this track's own history:** P4 (identity surviving resize and
+re-pairing) was framed as the thing that decides whether device work is "rare or routine".
+That over-weighted it. Preserving identity is worth having so that *software-only* churn — a
+re-pair, a shape tweak that moves nothing physically — does not send anyone to the beach. But
+when the WORLD changes, recreating and re-attaching is the intended workflow, and no amount of
+identity preservation should be built to avoid it.
+
 ## Operating constraint (founder, 2026-08-16)
 
 **The system stays usable throughout.** No migration in this track may reset or rebuild the
