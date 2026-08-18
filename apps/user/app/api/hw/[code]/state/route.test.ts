@@ -22,6 +22,7 @@ import { wireStateFor, aggregateState } from './projection'
 // Code normalisation is a code-identity concern and lives with the shared filter.
 import { normalizeCode } from '../hw-filter'
 import prisma from '@repo/data/PrismaCient'
+import { getPreference, getPreferenceCached } from '@repo/data/preferences'
 
 const mockUnit = vi.mocked(prisma.sunbedGroup.findUnique)
 const mockDevice = vi.mocked(prisma.device.findUnique)
@@ -46,6 +47,7 @@ function device(_itemIds: string[], status = 'active', reverseSegments = false) 
   }
 }
 const mockReservations = vi.mocked(prisma.reservation.findMany)
+const mockPreference = vi.mocked(getPreferenceCached)
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -605,6 +607,45 @@ describe('fail-safe', () => {
     mockReservations.mockRejectedValue(new Error('connection lost at 10.0.0.5') as never)
     const body = await (await GET(makeRequest(), makeParams())).json()
     expect(JSON.stringify(body)).not.toContain('10.0.0.5')
+  })
+})
+
+// ── Poll cadence (the `device-poll-interval-sec` platform preference) ─────────
+//
+// The cadence is the fleet's only throttle and firmware never second-guesses it,
+// so what the route must guarantee is that the number it serves is the one the
+// platform preference resolves to — not a constant compiled into this release.
+
+describe('poll cadence', () => {
+  it('serves the resolved preference, not a hardcoded interval', async () => {
+    mockPreference.mockResolvedValueOnce(300 as never)
+    const body = await (await GET(makeRequest(), makeParams())).json()
+    expect(body.pollAfterSec).toBe(300)
+    expect(mockPreference).toHaveBeenCalledWith('device-poll-interval-sec')
+  })
+
+  it('changes the ETag when the cadence changes, so a 304 cannot hide it', async () => {
+    // The steady state of a free bed is 304 forever. A cadence change only reaches
+    // a device because `pollAfterSec` is inside the hashed object — if it were
+    // moved out next to `serverTime`, this test is what would notice.
+    const first = await GET(makeRequest(), makeParams())
+    const etagAt60 = first.headers.get('etag')
+
+    mockPreference.mockResolvedValueOnce(120 as never)
+    const second = await GET(makeRequest(CODE, { 'if-none-match': etagAt60! }), makeParams())
+
+    expect(second.status).toBe(200)
+    expect(second.headers.get('etag')).not.toBe(etagAt60)
+    expect((await second.json()).pollAfterSec).toBe(120)
+  })
+
+  it('reads through the cached accessor, not a query per poll', async () => {
+    // ~1.3 M polls/day at fleet scale (Q3): the read that resolves this number
+    // must be the per-instance cached one, or the cadence control costs more
+    // than it saves.
+    await GET(makeRequest(), makeParams())
+    expect(mockPreference).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(getPreference)).not.toHaveBeenCalled()
   })
 })
 

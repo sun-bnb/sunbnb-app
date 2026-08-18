@@ -1172,6 +1172,24 @@ model AccountFeatureFlag {
   @@map("account_feature_flag")
 }
 
+/// A platform-wide PREFERENCE — one tunable scalar the platform operator sets in
+/// the admin app, instead of it living as a constant in a deployed source file.
+/// Sibling of `FeatureFlag`: that one answers "does this feature exist", this one
+/// answers "with what value does it run". Same shape for the same reason — a
+/// registry in `@repo/data/preferences` is the source of truth for which keys
+/// exist, their type, bounds and default; a row here is only an OVERRIDE, so a
+/// key that no longer exists in the registry is inert rather than load-bearing.
+/// `value` is stored as text and parsed per the registry entry's type: one table
+/// serves every future preference without a migration per setting.
+model PlatformPreference {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("platform_preference")
+}
+
 model FeatureFlag {
   name        String   @id
   description String

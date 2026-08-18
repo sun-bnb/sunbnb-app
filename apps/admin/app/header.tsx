@@ -15,6 +15,7 @@ const navItems = [
   { label: 'Platform', href: '/platform' },
   { label: 'Users', href: '/users' },
   { label: 'Flags', href: '/flags' },
+  { label: 'Preferences', href: '/preferences' },
   { label: 'Audit', href: '/audit' },
 ]
 

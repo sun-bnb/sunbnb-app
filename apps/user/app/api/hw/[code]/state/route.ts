@@ -31,6 +31,7 @@ import { createHash } from 'crypto'
 import prisma from '@repo/data/PrismaCient'
 import { siteDayBounds, siteDayKey } from '@repo/data/site-day'
 import { RESERVATION_CANCELED, RESERVATION_REFUNDED } from '@repo/data/reservation-status'
+import { getPreferenceCached } from '@repo/data/preferences'
 import { screenDeviceRequest, unavailable, unitAddressWhere, SEGMENT_SEATS } from '../hw-filter'
 import {
   activeStateForSeat,
@@ -42,8 +43,28 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-/** Server-driven poll cadence. Firmware obeys this and never hardcodes an interval. */
-const POLL_AFTER_SEC = 60
+/**
+ * Server-driven poll cadence. Firmware obeys it and never hardcodes an interval,
+ * so this number is the fleet's only cadence control — which is why it is a
+ * platform preference set in the admin app (`device-poll-interval-sec`) rather
+ * than a constant that needs a deploy to change. The registry default is 60 s;
+ * `getPreferenceCached` falls back to it whenever the row is missing, unreadable
+ * or out of the registry's bounds, so a bad or absent value can never reach a
+ * potted device.
+ *
+ * Cached per serverless instance (5 min) deliberately: at fleet scale this route
+ * runs ~1.3 M times a day (Q3) and this value changes a handful of times a year —
+ * a synchronous read per poll would buy nothing. The cost is that a change takes
+ * up to the TTL plus one poll to reach the fleet.
+ *
+ * Still one number for every device. State-aware cadence (fast while FREE, slow
+ * otherwise — `../sunbnb-hw` ADR 0006) and night backoff stay deferred; when they
+ * land they read this as their base, and they work through the ETag for free,
+ * because `pollAfterSec` sits inside the hashed `stable` object below.
+ */
+async function resolvePollAfterSec(): Promise<number> {
+  return getPreferenceCached('device-poll-interval-sec')
+}
 
 // ─── route ───────────────────────────────────────────────────────────────────
 
@@ -97,6 +118,10 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
     const { start: startOfToday, end: endOfToday } = siteDayBounds(siteTz)
     const todayKey = siteDayKey(siteTz)
 
+    // Alongside the reservation read, not before it: the cached path resolves
+    // without a query on all but the first poll of an instance.
+    const pollAfterSecPromise = resolvePollAfterSec()
+
     const reservations = await prisma.reservation.findMany({
       where: {
         items: { some: { id: { in: seatIds } } },
@@ -137,6 +162,8 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
       }
     })
 
+    const pollAfterSec = await pollAfterSecPromise
+
     // Everything the device acts on. `serverTime` is deliberately NOT in here:
     // it changes every request, so including it would make the ETag unique per
     // poll and the 304 path dead code.
@@ -144,7 +171,7 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
       code,
       state: aggregateState(seats.map((s) => s.state)),
       seats,
-      pollAfterSec: POLL_AFTER_SEC,
+      pollAfterSec,
       // Track 021 P5: the device's CONFIG rides the poll response. It sits
       // inside the hashed `stable` object deliberately — a reassignment then
       // busts the ETag and reaches the device on its next poll, while an

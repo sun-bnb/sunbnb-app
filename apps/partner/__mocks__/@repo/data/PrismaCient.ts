@@ -218,6 +218,12 @@ const prisma = {
     upsert: vi.fn(),
     deleteMany: vi.fn(),
   },
+  platformPreference: {
+    findMany: vi.fn(),
+    findUnique: vi.fn(),
+    upsert: vi.fn(),
+    deleteMany: vi.fn(),
+  },
   featureFlag: {
     findMany: vi.fn(),
     upsert: vi.fn(),

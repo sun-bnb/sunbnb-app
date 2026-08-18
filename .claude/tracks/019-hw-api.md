@@ -659,6 +659,16 @@ backend, and both drag in consumer-surface design that shouldn't gate the hardwa
   at fleet scale. Options: edge + short-TTL site cache · `304` (device already sends
   `If-None-Match`) · state-aware cadence (fast only while `FREE` in opening hours, ADR 0006) · a
   per-site batch endpoint. Decide **before** the first paying operator, not before P1.
+
+  **Partial, 2026-08-18: the cadence is now a knob, not a constant.** `pollAfterSec` reads the
+  `device-poll-interval-sec` platform preference (`@repo/data/preferences`, set on the admin
+  `/preferences` tab; registry default 60 s, bounds 10–3600), so the whole fleet can be slowed
+  down without a deploy — the cheapest available answer to an invocation bill, and the one that
+  works on already-potted units. Read through a 5-minute per-instance cache: a synchronous
+  lookup on every poll would spend what the knob exists to save, at the cost of a change taking
+  up to the TTL plus one poll to land. **State awareness is still deferred** — this is one number
+  for every device in every state. It stays inside the ETag-hashed `stable` object, which is what
+  lets a change reach a device that has been 304ing on a free bed for hours.
 - **Q4 — `Site.timeZone` is a dead column** (track 017: never written). The device needs the
   venue's civil day. P1 falls back the way `site-day.ts` already does; P2 should depend on 017's
   P7 populating it rather than inventing a second fallback.

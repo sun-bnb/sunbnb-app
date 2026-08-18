@@ -26,6 +26,7 @@
     "./reservation-machine": "./src/reservation-machine.ts",
     "./reservation-machine-apply": "./src/reservation-machine-apply.ts",
     "./flags": "./src/flags.ts",
+    "./preferences": "./src/preferences.ts",
     "./impersonation": "./src/impersonation.ts",
     "./mollie-tokens": "./src/mollie-tokens.ts",
     "./refund": "./src/refund.ts",
