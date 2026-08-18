@@ -28,6 +28,7 @@
     "NODE_ENV",
     "ALLOWED_ORIGINS",
     "FF_RESTAURANTS",
+    "PREF_*",
     "CONSUMER_APP_URL",
     "HW_CLIENT_UA"
   ],
