@@ -151,6 +151,24 @@ describe('grouped seats', () => {
     expect(context!.availableItemIds).toEqual([a.id])
   })
 
+  it('a pool spare parked on the unit is not one of its beds', async () => {
+    // A `pool` seat carries sentinel coordinates and a synthetic number — it is
+    // stock, not a bed under the parasol (track 021 P0). It is never in the
+    // availability set, so surfacing it as a unit member made the `every()`
+    // check on the POS page unsatisfiable: the QR on a physically free pair
+    // read "Reserved" forever. Three real units on the dev site were in this
+    // state, which is how it was found.
+    const a = await createTestInventoryItem(userId, siteId, { number: 1 })
+    const b = await createTestInventoryItem(userId, siteId, { number: 2 })
+    const spare = await createTestInventoryItem(userId, siteId, { number: 9901, status: 'pool' })
+    await createTestSunbedGroup(siteId, [a.id, b.id, spare.id])
+
+    const context = await getPosContext(a.id)
+
+    expect(context!.items.map((i) => i.id).sort()).toEqual([a.id, b.id].sort())
+    expect(context!.availableItemIds.sort()).toEqual([a.id, b.id].sort())
+  })
+
   it('a canceled booking on a group member frees the whole pair', async () => {
     const a = await createTestInventoryItem(userId, siteId, { number: 1 })
     const b = await createTestInventoryItem(userId, siteId, { number: 2 })

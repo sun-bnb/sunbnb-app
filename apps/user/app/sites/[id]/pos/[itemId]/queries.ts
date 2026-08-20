@@ -23,6 +23,7 @@
 
 import prisma from '@repo/data/PrismaCient'
 import { siteDayBounds } from '@repo/data/site-day'
+import { SEGMENT_SEATS } from '@repo/data/unit-address'
 import { getAvailabilityForItems } from '@/service/availabilityService'
 
 /** Build the `SiteTimezone` shape `siteDayBounds` expects from a site row. */
@@ -43,7 +44,13 @@ export async function getPosContext(itemId: string) {
     where: { id: itemId },
     include: {
       site: true,
-      sunbedGroup: { include: { items: true } },
+      // `pool` spares are excluded: a spare parked on a unit is not a bed under
+      // that parasol (track 021 P0, the same `SEGMENT_SEATS` rule the HW device
+      // resolver uses). Including them made the whole unit unbookable from its
+      // own QR — a pool seat is never in the availability set (absence is
+      // unbookable), so the `every()` availability check below could never pass,
+      // and the seat read "Reserved" forever.
+      sunbedGroup: { include: { items: { where: SEGMENT_SEATS } } },
     },
   })
 
