@@ -10,7 +10,7 @@ import Button from '@mui/material/Button'
 import CheckIcon from '@mui/icons-material/Check'
 import BlockIcon from '@mui/icons-material/Block'
 import CircularProgress from '@mui/material/CircularProgress'
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown'
 import { setValue } from '@/store/features/sites/sitesSlice'
@@ -25,8 +25,16 @@ import PaymentView from '@/app/payment/Payment'
 import sunbedIcon from './sunbed-icon-transparent.png'
 import sunbedPerfIcon from '@/components/reservation/sunbed-perforated-transparent.png'
 import sunshadeIcon from '@/components/reservation/sunshade-transparent.png'
+import beachTowelIcon from '@/components/reservation/beach-towel-transparent.png'
 import { useRouter } from 'next/navigation'
 import { formatSeatId } from '@repo/data/seat-label'
+import {
+  canPickSeats,
+  initialSeatSelection,
+  selectionPrice,
+  toggleSeatId,
+  unitIsSellable,
+} from './pos-seat-selection'
 
 
 function ReservationButton({
@@ -104,6 +112,79 @@ function ReservationButton({
   )
 }
 
+/**
+ * The seat id, drawn on the unit illustration directly above the bed it names,
+ * so a guest standing at the parasol can match a bed in the picture to the one
+ * painted on it. Sits above the parasol's top edge (it starts at -25px), which
+ * is why the illustration is given headroom rather than the label a backdrop.
+ */
+function SeatLabel({ item, className }: { item: InventoryItem; className?: string }) {
+  return (
+    <div
+      className={`absolute top-[-52px] z-20 text-center text-lg font-semibold text-[rgb(142,114,49)] ${className ?? ''}`}
+    >
+      {formatSeatId(item)}
+    </div>
+  )
+}
+
+/**
+ * One bed of the unit: the sunbed art with a towel laid over it when the seat is
+ * selected. The towel is the selection indicator — a bed with a towel on it is
+ * taken, which is what the guest sees on the sand — and it only appears where
+ * the guest can actually choose (a site that allows partial booking, on a unit
+ * with more than one bed). A seat somebody else already holds is dimmed and
+ * inert: it is not the guest's to pick.
+ */
+function UnitBed({
+  item,
+  width,
+  selected,
+  available,
+  selectable,
+  onToggle,
+  className,
+  style,
+}: {
+  item: InventoryItem
+  width: number
+  selected: boolean
+  available: boolean
+  selectable: boolean
+  onToggle: (item: InventoryItem) => void
+  className?: string
+  style?: React.CSSProperties
+}) {
+  return (
+    <div
+      className={`absolute ${selectable ? 'cursor-pointer' : ''} ${available ? '' : 'opacity-40'} ${className ?? ''}`}
+      style={{ width: `${width}px`, ...style }}
+      onClick={() => selectable && onToggle(item)}
+      role={selectable ? 'button' : undefined}
+      aria-pressed={selectable ? selected : undefined}
+      aria-label={selectable ? `Seat ${formatSeatId(item)}` : undefined}
+    >
+      <Image src={sunbedPerfIcon} alt="Sunbed" width={width} />
+      {selected && (
+        <Image
+          src={beachTowelIcon}
+          alt="Towel"
+          width={Math.round(width * 0.85)}
+          style={{
+            position: 'absolute',
+            top: '34%',
+            // Centred off its own width, so resizing the towel doesn't drift it
+            // off the bed the way a hardcoded left offset did.
+            left: '50%',
+            transform: 'translateX(-50%) rotate(30deg)',
+            transformOrigin: 'center',
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
 export default function ReservationView({
   apiKey,
   items,
@@ -133,19 +214,52 @@ export default function ReservationView({
 
   logger.debug('Reservation By Id ITEM', pendingReservationId, reservation)
 
-  let selectedItems = items
-
-  let totalPrice = 0
-  for (let item of selectedItems) {
-    totalPrice += item.price! || 0
-  }
-
-  const dateStr = new Date().toISOString().substring(0, 10)
+  // Drawn left-to-right by seat number, so a unit looks the same whichever
+  // bed's QR was scanned — `items` leads with the scanned seat, which used to
+  // make the second bed's QR read "SEATS 1-101-2, 1-101-1".
+  const orderedItems = useMemo(
+    () => [...items].sort((a, b) => a.number - b.number),
+    [items],
+  )
 
   // Server-decided, via the canonical availability service (see ./queries.ts).
   // Absence from the list is unbookable — never treat an unknown id as free.
-  const isAvailable =
-    selectedItems.length > 0 && selectedItems.every((item) => availableItemIds.includes(item.id))
+  const availableSet = useMemo(() => new Set(availableItemIds), [availableItemIds])
+
+  const picking = canPickSeats(site, orderedItems)
+
+  // The whole unit starts selected — a parasol with two beds is what the guest
+  // walked up to — and clicks take beds out of the booking or put them back.
+  const [selectedIds, setSelectedIds] = useState<string[]>(() =>
+    initialSeatSelection(items, availableItemIds),
+  )
+
+  const toggleSeat = (item: InventoryItem) => {
+    if (!picking || !availableSet.has(item.id)) return
+    setSelectedIds((prev) => toggleSeatId(prev, item.id))
+  }
+
+  // Without per-seat picking the selection IS the unit, exactly as before.
+  const selectedItems = picking
+    ? orderedItems.filter((item) => selectedIds.includes(item.id))
+    : items
+
+  const totalPrice = selectionPrice(selectedItems, site.price)
+
+  const dateStr = new Date().toISOString().substring(0, 10)
+
+  const isAvailable = unitIsSellable(orderedItems, availableItemIds, picking)
+
+  // Everything deselected is a legal state: nothing to reserve, so no price and
+  // no button.
+  const canReserve = isAvailable && selectedItems.length > 0
+
+  // The towel says "this bed is in your booking" — it only means something
+  // where the guest can take beds out. On a whole-unit site the art is
+  // unchanged: every bed is always in the booking, so a towel on each would be
+  // decoration the guest cannot act on.
+  const isTowelled = (item: InventoryItem) =>
+    picking && selectedItems.some((selected) => selected.id === item.id)
 
   const previewElem = (
     <div>
@@ -154,23 +268,25 @@ export default function ReservationView({
           {
             !reservation ? 
               <div className="w-[200px]">
-                <ReservationButton disabled={!isAvailable || selectedItems.length === 0} items={items} site={site} dateRange={dateRange} /> 
+                <ReservationButton disabled={!canReserve} items={selectedItems} site={site} dateRange={dateRange} /> 
               </div>:
               <div className="block mt-[6px] ml-[6px]">
                 <div className="text-left">DATE: <b>{dateStr}</b></div>
                 {
-                  items.length === 1 ? 
-                    <div className="text-left">SEAT NUMBER: <b>{formatSeatId(items[0]!)}</b></div> :
-                    <div className="text-left">SEAT NUMBERS: <b>{items.map(item => formatSeatId(item)).join(', ')}</b></div>
+                  selectedItems.length === 1 ? 
+                    <div className="text-left">SEAT NUMBER: <b>{formatSeatId(selectedItems[0]!)}</b></div> :
+                    <div className="text-left">SEAT NUMBERS: <b>{selectedItems.map(item => formatSeatId(item)).join(', ')}</b></div>
                 }
                 
               </div>
           }
           
         </div>
-        <div className="text-center text-[64px] -mt-[20px]">
-          {totalPrice} €
-        </div>
+        {selectedItems.length > 0 && (
+          <div className="text-center text-[64px] -mt-[20px]">
+            {totalPrice} €
+          </div>
+        )}
       </div>
     </div>
   )
@@ -188,12 +304,9 @@ export default function ReservationView({
 
     ) : (
       <div className="mx-[4px] mt-[8px] h-[420px]">
-        {
-          selectedItems.length > 0 && <div className="mt-[10px]">
-            {previewElem}
-          </div>
-
-        }
+        <div className="mt-[10px]">
+          {previewElem}
+        </div>
       </div>
     )
   
@@ -224,34 +337,36 @@ export default function ReservationView({
             Chiringuito La Cepa Playa
           </div>
         </div>
-        <div className="w-full flex justify-center mt-[24px]">
+        <div className="flex justify-center mt-[72px]">
           {
-            items.length === 1 ?
-              <div className="text-[rgb(142,114,49)] ">
-                SEAT {formatSeatId(items[0]!)}
+            orderedItems.length === 1 ?
+              <div className="relative w-[300px] shrink-0">
+                <SeatLabel item={orderedItems[0]!} className="left-0 w-full" />
+                <Image src={sunbedIcon} alt="Sunbed icon" width={300} />
               </div> :
-              <div className="text-[rgb(142,114,49)] ">
-                SEATS {items.map(item => formatSeatId(item)).join(', ')}
-              </div>
-          }
-          
-        </div>
-        <div className="flex justify-center mt-[16px]">
-          {
-            items.length === 1 ?
-              <Image src={sunbedIcon} alt="Sunbed icon" width={300} /> :
-              <div className="relative h-[300px] w-[300px] ml-[16px] mt-[8px]">
-                <Image src={sunbedPerfIcon} alt="Sunbed icon" width={150} style={{
-                  position: 'absolute',
-                  top: '0px',
-                  left: '0px'
-                }} />
-                <Image src={sunbedPerfIcon} alt="Sunbed icon" width={150} style={{
-                  position: 'absolute',
-                  top: '0px',
-                  right: '0px'
-                }} />
-                <Image src={sunshadeIcon} alt="Sunshade icon" width={200} style={{
+              <div className="relative h-[300px] w-[300px] shrink-0">
+                <SeatLabel item={orderedItems[0]!} className="left-0 w-[150px]" />
+                <SeatLabel item={orderedItems[1]!} className="right-0 w-[150px]" />
+                <UnitBed
+                  item={orderedItems[0]!}
+                  width={150}
+                  selected={isTowelled(orderedItems[0]!)}
+                  available={availableSet.has(orderedItems[0]!.id)}
+                  selectable={picking && availableSet.has(orderedItems[0]!.id)}
+                  onToggle={toggleSeat}
+                  style={{ top: '0px', left: '0px' }}
+                />
+                <UnitBed
+                  item={orderedItems[1]!}
+                  width={150}
+                  selected={isTowelled(orderedItems[1]!)}
+                  available={availableSet.has(orderedItems[1]!.id)}
+                  selectable={picking && availableSet.has(orderedItems[1]!.id)}
+                  onToggle={toggleSeat}
+                  style={{ top: '0px', right: '0px' }}
+                />
+                {/* Last, so the parasol shades the beds and their towels. */}
+                <Image src={sunshadeIcon} alt="Sunshade icon" width={200} className="pointer-events-none" style={{
                   position: 'absolute',
                   top: '-25px',
                   left: '50px'
@@ -271,7 +386,7 @@ export default function ReservationView({
         </div>
       </div>
       {
-        selectedItems.length > 0 && <div style={{ zIndex: 11 }} className={`fixed left-0 w-full ${bgColor} text-white text-center px-2 pb-4
+        <div style={{ zIndex: 11 }} className={`fixed left-0 w-full ${bgColor} text-white text-center px-2 pb-4
           ${panelBottom} border-t transition-bottom duration-500`}>
           {
             focused ?
