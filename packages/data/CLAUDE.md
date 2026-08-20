@@ -38,6 +38,10 @@ Key models: User, PartnerAccount, Site, InventoryItem, Reservation, Order, Order
 
 **`SunbedGroup` address** (track 021) — `parcel` + `row` (column `row_idx`; `ROW` is reserved and the inventory editor writes raw SQL) complete the unit's address alongside `seq`, under `@@unique([siteId, parcel, row, seq])`. Before this, parcel lived on `InventoryItem.group` and row was decoded out of `InventoryItem.number`, so two-thirds of a unit's address sat on its members — unconstrainable (no unique index spans two tables), resolvable only by fetching a parcel and filtering in JS, and silently re-pointable by a seat renumber. Derived from **placed seats only**: a `pool` extra carries a `nextPoolNumber` value decoding to a different row, so counting it relocates the unit. **`recomputeSeatLabels` is the only writer** — units are created bare everywhere and get their address there. A unit whose placed seats disagree (mid-rearrange) keeps its stored address rather than being given a guess; one with no placed seats surrenders it, so it cannot block the index against a real unit built on that spot later. Backfill: `npm run backfill:addresses:{local,test,production}[:dry]`, which verifies itself in raw SQL and fails if any address disagrees with the data or any `seq` moved.
 
+**`Site.code`** (track 022) — the site's stable EXTERNAL identifier, `S-` + 6 Crockford
+symbols, and the site half of the printed QR URL (`/q/S-K7M2X9/1-1-1`). Nullable during
+expand, `@unique`, backfilled. Rules in `src/site-code.ts`; never rewritten once assigned.
+
 **`PlatformPreference`** — one global tunable per row (`key` → text `value`), the value
 sibling of `FeatureFlag`: flags answer "does this feature exist yet", preferences answer
 "with what value does it run". A row is only ever an OVERRIDE — which keys exist, their
@@ -47,7 +51,7 @@ never been written to still produces the value the code was written against. Tex
 parsed per the entry's type: one table serves every future setting with no migration per
 setting.
 
-**`src/unit-address.ts`** — pure (no prisma), the shared way to ask for a unit BY address: `unitAddressWhere` (a `findUnique` key on `UNIQUE(site_id, parcel, row_idx, seq)`), `SEGMENT_SEATS` (everything but `pool` spares), `formatUnitLocation`. Shared deliberately: a device's position is read by three parties that must agree — the HW state route serving it, the partner action assigning it, and `devicesBlockingSeatRemoval` refusing to delete the seats under it. Each used to re-derive the address itself, which is how a device, the UI that assigned it and the guard protecting it could hold three different opinions about where it was.
+**`src/unit-address.ts`** — pure (no prisma), the shared way to ask for a unit BY address: `unitAddressWhere` (a `findUnique` key on `UNIQUE(site_id, parcel, row_idx, seq)`), `SEGMENT_SEATS` (everything but `pool` spares), `formatUnitLocation` and its inverse `parseUnitAddress` (track 022 — reads `1-1-1` back out of a printed QR URL, and accepts the four-segment seat id `1-1-1-2` as the same unit; **syntax only, not domain bounds** — parcel 0 / row 0 are live addresses in real data, so it validates the shape and lets the DB say what exists, capping at int4 so a mistyped URL 404s instead of 500ing). Shared deliberately: a device's position is read by three parties that must agree — the HW state route serving it, the partner action assigning it, and `devicesBlockingSeatRemoval` refusing to delete the seats under it. Each used to re-derive the address itself, which is how a device, the UI that assigned it and the guard protecting it could hold three different opinions about where it was.
 
 ## Payment Service (`src/payment.ts`)
 
@@ -156,6 +160,32 @@ appears in — without it nobody can see it to assign it), `--code` (reuse a cod
 (retrying would mint a code that differs from the sticker). There is no secret to hand over (Q9),
 which is why this is short.
 
+## Site Codes (`src/site-code.ts`) — track 022
+
+Pure, client-safe (no prisma, no env): the **site half of the printed QR URL**
+(`/q/S-K7M2X9/1-1-1`). `SITE_CODE_PREFIX` (`S-`, so a site, partner (`P-`) and device
+(bare) code can't be confused in a support call), `SITE_CODE_BODY_LENGTH` (6 = 32^6 ≈
+1.07e9), `generateSiteCode` (CSPRNG + 5-bit mask over `DEVICE_CODE_ALPHABET`, random never
+sequential), `normalizeSiteCode` (uppercase, `I`/`L`→`1`, `O`→`0`, `U`→`V`, prefix restored
+whether given or not — so a hand-typed lowercase URL still resolves), `isValidSiteCode`,
+`isSiteCodeCollision` (P2002 attributed to `code` — every writer mints optimistically and
+retries, and must NOT swallow the other unique constraints on `Site`).
+
+Why a site needs an external id: `Site.id` is a 25-char cuid — half of the old 80-char POS
+URL, and therefore half of the card's QR-density problem. **Not `slug`**: partner-editable
+(a rename kills every printed card), variable-length, no uniqueness constraint.
+
+The **round trip** (`normalize(generate()) === generate()`) is the load-bearing test, for the
+same reason as the device code: minting and lookup sit on opposite sides of a card glued to
+a lounger. `SITE_CODE_BODY_LENGTH` is deliberately its own constant, not a reuse of
+`DEVICE_CODE_LENGTH` — the 4 characters of slack under the QR version-3 cap are reserved
+for a longer unit ADDRESS (a venue past parcel 99), not for the fleet to spend.
+
+**Minting**: `apps/partner/lib/site-create.ts` `createSiteWithCode` — both partner creation
+paths (the wizard and `submitForm`) route through it. Backfill for existing rows:
+`npm run backfill:site-codes:{local,test,production}[:dry]` (fills NULLs only — never
+rewrites a code, which would orphan every card already printed for that venue).
+
 ## Password Reset (`src/password-reset.ts`)
 
 - `requestPasswordReset(email, appBaseUrl)` — SHA-256 hashed token, validates origin against `ALLOWED_ORIGINS`, max 3/hour per email, invalidates previous tokens, sends via Resend
@@ -231,7 +261,7 @@ indexes, so an index change is unobservable on a near-empty DB.
   calculation), `rate-limit.test.ts`, `reservation-status.test.ts`,
   `reservation-machine.test.ts` (37 — deriveState kind/pay/occ mapping, allowed +
   must-reject cells, table properties incl. deletes-confined-to-zero-money, partition
-  math), `reservation-machine-guard.test.ts` (single-writer ratchet), `device-code.test.ts` (14 — HW code alphabet/generation/normalisation, incl. the mint↔lookup round trip and unbiased byte mapping), `preferences.test.ts` (30 — registry/env/DB/default resolution, and the property that matters: an out-of-range or unparseable value NEVER reaches a consumer, it falls through to the shipped default; plus cache TTL + write invalidation), `scripts/scale-fixture-guard.test.ts` (17 — destructive-write target guard for the track-020 scale harness: refuses `sunbnb_test`, the dev DB, and every remote host, each asserted to survive `--force`), `unit-address.test.ts` (15 — unit address derivation: placed-seats-only (a pool extra must not relocate the unit), absent status = placed, declines rather than guesses when a unit's seats disagree about parcel or row, and one ordinal can never be claimed twice in a row. Both defects were injected back into the source to confirm the tests catch them — 2 failures each, no collateral)
+  math), `reservation-machine-guard.test.ts` (single-writer ratchet), `device-code.test.ts` (14 — HW code alphabet/generation/normalisation, incl. the mint↔lookup round trip and unbiased byte mapping), `preferences.test.ts` (30 — registry/env/DB/default resolution, and the property that matters: an out-of-range or unparseable value NEVER reaches a consumer, it falls through to the shipped default; plus cache TTL + write invalidation), `scripts/scale-fixture-guard.test.ts` (17 — destructive-write target guard for the track-020 scale harness: refuses `sunbnb_test`, the dev DB, and every remote host, each asserted to survive `--force`), `unit-address.test.ts` (40 — unit address derivation + `parseUnitAddress` round trip/rejection: placed-seats-only (a pool extra must not relocate the unit), absent status = placed, declines rather than guesses when a unit's seats disagree about parcel or row, and one ordinal can never be claimed twice in a row. Both defects were injected back into the source to confirm the tests catch them — 2 failures each, no collateral)
 - **Integration tests** (`src/*.integration.test.ts`): `payment.integration.test.ts` (18 tests — processConfirmedReservation/Order, invoice creation, idempotency, hash chain, VAT, fees), `tab-payment.integration.test.ts` (29 tests — openTableId guard, calculateTabTotal, group invoicing, idempotency both directions, cash settle PARTNER-only receipt, kitchen-state preservation, void exclusion, standalone-restaurant block: null-siteId tabs, account/settings-tier fees, partner-anchored invoicing), `analytics.integration.test.ts` (incl. 5 tab-order paid-ness tests), `till.integration.test.ts` (79 tests — two-bucket window math, day-boundary inclusivity, closeEmployeeTill sweep + carry-over snapshot, void handling), `fee-context.integration.test.ts` (19 tests — loadFeeContext three-tier cascade + loadRestaurantFeeContext: empty site tier, account-tier override, bootstrap), `password-reset.integration.test.ts` (15 tests — token lifecycle, rate limiting, expiry, password strength), `reservation-machine-apply.integration.test.ts` (20 — settle/unreserve/split/undo-depart/GC/collect executors: till partition, money-rows-kept, I2 end-to-end, I4 defense, paid-race abandon), `credit-note.integration.test.ts` (6 — negative twin, chain link, capped partials, series independence), `unit-address.integration.test.ts` (11 — `recomputeSeatLabels` as address writer, checked against a RAW-SQL oracle that derives the address the pre-column way: idempotency, no seq ever moves, pool-only unit stays unaddressed, address follows a genuine row change, is surrendered when the unit stops standing anywhere, is held rather than clobbered mid-rearrange, and the unique constraint refusing a second unit on one spot while allowing the same address at another site), `device-guard.integration.test.ts` (8 — `devicesBlockingSeatRemoval`: refuses to delete a unit's last placed seat while a device is assigned to it, allows it while a sibling survives, still refuses when only a `pool` spare would be left, and ignores devices at the same address on another site or in a different ROW of the same parcel. Two defects — dropping the row from the device match, and counting spares as survivors — were injected to confirm the tests catch them)
 - **Config**: `vitest.config.ts` (unit, excludes `*.integration.test.ts`), `vitest.integration.config.ts` (integration, `fileParallelism: false` for shared DB)
 - **Test helpers**: `src/test/setup.ts` (DB connection, `cleanDatabase()` via TRUNCATE CASCADE), `src/test/fixtures.ts` (factory functions for all models)

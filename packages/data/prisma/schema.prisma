@@ -212,6 +212,18 @@ model CustomSubscription {
 
 model Site {
   id              String                   @id @unique @default(cuid())
+  /// Stable EXTERNAL identifier (track 022) — the site half of the printed QR
+  /// URL: `/q/S-K7M2X9/1-1-1`. `id` is a 25-char cuid, which was half of an
+  /// 80-character URL and therefore half of the card's QR-density problem.
+  ///
+  /// NOT `slug`: that one is partner-editable (a rename would silently kill
+  /// every card already glued to a lounger at that venue), variable-length, and
+  /// carries no uniqueness constraint here.
+  ///
+  /// Public, and authenticates nothing — it is printed on a card on a public
+  /// beach and routes to a public booking page. Format and minting rules live in
+  /// `src/site-code.ts`. Nullable during expand; backfilled.
+  code            String?                  @unique
   userId          String                   @map("user_id")
   name            String
   locationLat     String                   @map("location_lat")

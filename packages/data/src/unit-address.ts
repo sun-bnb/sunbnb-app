@@ -52,3 +52,46 @@ export const SEGMENT_SEATS = { status: { not: 'pool' } } as const
 export function formatUnitLocation(location: Omit<UnitLocation, 'siteId'>): string {
   return `${location.parcel}-${location.row}-${location.seq}`
 }
+
+/**
+ * The inverse of `formatUnitLocation` (track 022) — read an address back out of
+ * a string, for the printed QR URL `/q/{siteCode}/{parcel}-{row}-{seq}`.
+ *
+ * It lives next to the formatter deliberately: this module exists because three
+ * parties re-deriving one address is how they came to disagree about it, and a
+ * parser written somewhere else would be a fourth opinion about the same string.
+ *
+ * **Syntax only, not domain bounds.** It accepts any non-negative integers and
+ * lets the database say whether a unit stands there. `0` is deliberately legal:
+ * parcel 0 / row 0 are live addresses in real data (21 units in both the dev and
+ * test databases), so a parser that "sensibly" required 1 would 404 them.
+ *
+ * A FOURTH segment is accepted and ignored — `1-1-1-2` is what `formatSeatId`
+ * prints on the card, and it names a bed inside this unit. The page renders the
+ * whole unit either way (the scanned seat is not used), so accepting the longer
+ * form costs nothing and means a card printed with it keeps resolving if the
+ * format ever gains that meaning.
+ *
+ * @returns the address, or `null` for anything malformed — no throwing, because
+ *   every caller is handling untrusted URL input and wants a 404, not a 500.
+ */
+export function parseUnitAddress(raw: string): Omit<UnitLocation, 'siteId'> | null {
+  const parts = raw.trim().split('-')
+  if (parts.length !== 3 && parts.length !== 4) return null
+
+  const numbers: number[] = []
+  for (const part of parts.slice(0, 3)) {
+    // Digits only: this rejects '', '+1', '-1', '1.0', '1e3' and ' 1' — all of
+    // which `Number()` would happily accept or coerce, some into a value that
+    // then queries a DIFFERENT unit than the string names.
+    if (!/^\d+$/.test(part)) return null
+    const value = Number(part)
+    // Postgres int4. Past this the query throws instead of returning nothing,
+    // which turns a mistyped URL into a 500.
+    if (value > 2147483647) return null
+    numbers.push(value)
+  }
+
+  const [parcel, row, seq] = numbers as [number, number, number]
+  return { parcel, row, seq }
+}

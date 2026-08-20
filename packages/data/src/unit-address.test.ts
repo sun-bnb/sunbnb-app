@@ -15,6 +15,7 @@ import {
   formatSeatId,
   type SeatLabelItem,
 } from './seat-label'
+import { parseUnitAddress, formatUnitLocation } from './unit-address'
 
 /** number = parcel * 10000 + row * 100 + seatIdx */
 function encodeNumber(parcel: number, row: number, seatIdx: number): number {
@@ -275,5 +276,63 @@ describe('the displayed seat id and the unit address cannot drift apart', () => 
     // someone to the wrong bed.
     expect(parseSeatLabel(label)).toBeNull()
     expect(formatSeatId({ seatLabel: label, number: 42 })).toBe(label)
+  })
+})
+
+/**
+ * Track 022 — the printed QR URL carries this address as a string, so the parser
+ * is the other half of a contract whose first half is glued to a lounger.
+ */
+describe('parseUnitAddress', () => {
+  it('round-trips whatever formatUnitLocation produced', () => {
+    // The property that keeps the URL and the card in agreement. If these two
+    // ever drift, a card resolves to the wrong unit or to nothing at all.
+    for (const address of [
+      { parcel: 1, row: 1, seq: 1 },
+      { parcel: 13, row: 15, seq: 25 },
+      { parcel: 0, row: 0, seq: 7 },
+      { parcel: 123, row: 150, seq: 250 },
+    ]) {
+      expect(parseUnitAddress(formatUnitLocation(address))).toEqual(address)
+    }
+  })
+
+  it('accepts parcel 0 and row 0 — they are live addresses, not sentinels', () => {
+    // 21 units sit at parcel 0 / row 0 in both the dev and test databases. A
+    // parser that "sensibly" demanded 1 would 404 every card printed for them.
+    expect(parseUnitAddress('0-0-1')).toEqual({ parcel: 0, row: 0, seq: 1 })
+  })
+
+  it('accepts the four-segment seat id and resolves it to the same unit', () => {
+    // `1-1-1-2` is what formatSeatId prints on the card. The member names a bed
+    // inside the unit; the page renders the whole unit either way.
+    expect(parseUnitAddress('1-1-1-2')).toEqual(parseUnitAddress('1-1-1'))
+  })
+
+  it('tolerates surrounding whitespace from a hand-typed URL', () => {
+    expect(parseUnitAddress('  2-3-4 ')).toEqual({ parcel: 2, row: 3, seq: 4 })
+  })
+
+  it.each([
+    ['too few segments', '1-1'],
+    ['too many segments', '1-1-1-2-3'],
+    ['empty', ''],
+    ['empty segment', '1--1'],
+    ['non-numeric', '1-a-1'],
+    ['negative', '1--1-1'],
+    ['decimal', '1-1.0-1'],
+    ['exponent', '1-1e3-1'],
+    ['inner whitespace', '1- 1-1'],
+    ['plus-signed', '+1-1-1'],
+  ])('rejects %s', (_label, raw) => {
+    // Number() would coerce several of these into a value that queries a
+    // DIFFERENT unit than the string names — silently serving the wrong bed.
+    expect(parseUnitAddress(raw)).toBeNull()
+  })
+
+  it('rejects a value past int4 rather than letting the query throw', () => {
+    // Past this Postgres errors, which turns a mistyped URL into a 500.
+    expect(parseUnitAddress('1-1-2147483648')).toBeNull()
+    expect(parseUnitAddress('1-1-2147483647')).toEqual({ parcel: 1, row: 1, seq: 2147483647 })
   })
 })
