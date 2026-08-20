@@ -80,7 +80,7 @@ expected → checked-in → departed
 | Path | Where | Notes |
 |---|---|---|
 | Online booking | `apps/user/app/sites/[id]/actions.ts#saveReservationForMultipleItems` | Auth or anonId required; multi-item; price from DB |
-| POS / QR (anonymous) | `apps/user/app/sites/[id]/pos/...` → same action | Uses `anonId` from localStorage |
+| POS / QR (anonymous) | `apps/user/app/q/[site]/[unit]` (canonical) — the legacy `sites/[id]/pos/...` redirects here → same action | Uses `anonId` from localStorage. The printed card's URL is keyed by **site code + unit address** (`/q/S-K7M2X9/1-1-1`), never by ids: it names the SPOT, so the card survives a parcel rebuilt in place (track 022) |
 | Walk-in (partner) | `apps/partner/app/sites/[id]/manage/actions.ts#reserveItem` | Token-gated via `accessKey`; sets `operationalStatus: walked-in` |
 | Calendar (partner) | `apps/partner/app/calendar/actions.ts#createPartnerReservation` | Authenticated partner action |
 

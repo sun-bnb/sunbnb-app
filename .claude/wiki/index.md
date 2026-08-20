@@ -70,7 +70,7 @@ These are concepts that warrant pages but have not been synthesized. Create them
 
 **Flows:** `pos-anonymous`, `password-reset`, `refund`, `reservation-cancellation`, `parcel-edit`, `subscription-checkout`
 
-**Subsystems:** `email`, `cron`, `i18n`, `image-upload`, `postgis`, `state-management`, `testing`
+**Subsystems:** `email`, `cron`, `i18n`, `image-upload`, `postgis`, `state-management`, `testing`, `physical-identity` (the external-code family — `Device.code` / `PartnerAccount.code` / `Site.code` — and the unit ADDRESS `{parcel}-{row}-{seq}` that the HW state route and the QR entry route both resolve by. Two consumers now share it, so it has earned a page; **hold until [[track:021]] lands in production**, since its columns are still mid-expand and a page written now would document a moving model)
 
 **Apps:** `apps/user`, `apps/partner`, `apps/admin` (deep-dive companions to the per-app `CLAUDE.md`)
 
