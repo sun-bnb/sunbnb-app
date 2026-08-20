@@ -39,7 +39,17 @@ function siteTz(site: {
   }
 }
 
-export async function getPosContext(itemId: string) {
+/**
+ * Find the unit a scanned SEAT belongs to (the pre-track-022 key).
+ *
+ * Kept as its own step so the availability tail below can be shared with the
+ * short `/q/{siteCode}/{parcel}-{row}-{seq}` route, which finds the same unit by
+ * ADDRESS instead. Two ways in, one set of rules about what is bookable.
+ *
+ * Also returns the unit's address when it has one, so the legacy route can
+ * redirect to its short form instead of rendering a second copy of this page.
+ */
+export async function loadPosUnitByItem(itemId: string) {
   const item = await prisma.inventoryItem.findUnique({
     where: { id: itemId },
     include: {
@@ -63,21 +73,52 @@ export async function getPosContext(itemId: string) {
 
   const items = otherGroupMembers.length > 0 ? [item, ...otherGroupMembers] : [item]
 
-  // The venue's civil day, not the server's UTC day and not the browser's (track 017).
-  const { start, end } = siteDayBounds(siteTz(item.site))
+  const unit = item.sunbedGroup
+  const address =
+    unit && unit.parcel !== null && unit.row !== null && unit.seq !== null
+      ? { parcel: unit.parcel, row: unit.row, seq: unit.seq }
+      : null
 
-  const availability = item.site
-    ? await getAvailabilityForItems(
-        item.site.id,
-        items.map((i) => i.id),
-        start,
-        end,
-      )
-    : []
+  return { site: item.site, items, address }
+}
+
+/**
+ * The seats of this unit that are free for the venue's TODAY.
+ *
+ * The one place the POS pages decide availability, whichever key found the unit.
+ * It delegates to the canonical `getAvailabilityForItems` and does not
+ * re-implement any part of it — see this file's header for what happened the
+ * last time a POS page derived this for itself.
+ */
+export async function posAvailability(
+  site: { id: string; timeZone?: string | null; locationLat?: string | null; locationLng?: string | null } | null,
+  items: { id: string }[],
+): Promise<string[]> {
+  if (!site) return []
+
+  // The venue's civil day, not the server's UTC day and not the browser's (track 017).
+  const { start, end } = siteDayBounds(siteTz(site))
+
+  const availability = await getAvailabilityForItems(
+    site.id,
+    items.map((i) => i.id),
+    start,
+    end,
+  )
+  return availability.filter((a) => a.available).map((a) => a.itemId)
+}
+
+/**
+ * The legacy seat-keyed entry point, unchanged in contract: `/sites/{id}/pos/{itemId}`
+ * and its tests still call this.
+ */
+export async function getPosContext(itemId: string) {
+  const unit = await loadPosUnitByItem(itemId)
+  if (!unit) return null
 
   return {
-    site: item.site,
-    items,
-    availableItemIds: availability.filter((a) => a.available).map((a) => a.itemId),
+    site: unit.site,
+    items: unit.items,
+    availableItemIds: await posAvailability(unit.site, unit.items),
   }
 }

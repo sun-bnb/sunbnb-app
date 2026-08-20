@@ -23,6 +23,9 @@ const App = ({ children }: {
     if (
       pathname.includes('/demo') ||
       pathname.includes('/pos') ||
+      // The short QR entry (track 022) is the same chrome-free landing as /pos.
+      // startsWith, not includes: '/q' as a substring would match unrelated paths.
+      pathname.startsWith('/q/') ||
       (pathname.includes('/reservations') && status === 'unauthenticated') ||
       pathname.includes('/receipt') || 
       pathname.includes('/pass') || 
