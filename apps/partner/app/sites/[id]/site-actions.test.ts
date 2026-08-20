@@ -26,6 +26,7 @@ import {
   submitForm,
   deleteSite,
   setSiteStatus,
+  setPartialGroupBooking,
   setPaymentProvider,
   checkSlug,
   generateSlug,
@@ -416,6 +417,45 @@ describe('setSiteStatus', () => {
     vi.mocked(prisma.site.update).mockResolvedValue({} as any)
     const res = await setSiteStatus(SITE_ID, 'active')
     expect(res.status).toBe('ok')
+  })
+})
+
+// ─── setPartialGroupBooking ─────────────────────────────────────────────────
+
+describe('setPartialGroupBooking', () => {
+  it('rejects unauthenticated user without writing', async () => {
+    const res = await setPartialGroupBooking(SITE_ID, true)
+    expect(res.status).toBe('error')
+    expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
+  })
+
+  it('enables partial group booking for the owner', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+    const res = await setPartialGroupBooking(SITE_ID, true)
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(prisma.site.update)).toHaveBeenCalledWith({
+      where: { id: SITE_ID },
+      data: { partialGroupBookingEnabled: true },
+    })
+  })
+
+  it('disables it again — the write is the flag, not a toggle of stored state', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+    const res = await setPartialGroupBooking(SITE_ID, false)
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(prisma.site.update)).toHaveBeenCalledWith({
+      where: { id: SITE_ID },
+      data: { partialGroupBookingEnabled: false },
+    })
+  })
+
+  it('refuses a non-boolean value rather than coercing it', async () => {
+    authorizeOwner()
+    const res = await setPartialGroupBooking(SITE_ID, 'yes' as unknown as boolean)
+    expect(res.status).toBe('error')
+    expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
   })
 })
 

@@ -64,6 +64,8 @@ export interface SiteProps {
   paymentProvider?: string
   noShowDeadlineMinutes?: number | null
   features?: string[]
+  /** Guests may book part of a sunbed unit (a SunbedGroup), not just the whole unit. */
+  partialGroupBookingEnabled?: boolean
   mollieOnboardingStatus?: string | null
   hasMollieToken?: boolean
   // Server-computed inventory scalars (track 020 C2). Tabs that only needed a

@@ -240,6 +240,13 @@ model Site {
   paymentProvider String                   @default("mollie") @map("payment_provider")
   noShowDeadlineMinutes Int?                @map("no_show_deadline_minutes")
   features        String[]                 @default(["sunbeds"])
+  /// Sunbed reservations are unit-granular by default: a guest books a whole
+  /// SunbedGroup (the beds standing together under one parasol), never a part
+  /// of it. With this on, any subset of a unit — down to a single seat — is
+  /// bookable, in all three flows (online, venue/POS, on-site manage grid).
+  /// Opt-in per site, because splitting a unit means a stranger can end up on
+  /// the neighbouring bed, which many venues sell against.
+  partialGroupBookingEnabled Boolean         @default(false) @map("partial_group_booking_enabled")
   layoutMode      String                   @default("geo") @map("layout_mode")
   layoutWidth     Float?                   @map("layout_width")
   layoutHeight    Float?                   @map("layout_height")

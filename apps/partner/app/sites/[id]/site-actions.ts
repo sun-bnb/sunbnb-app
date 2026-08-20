@@ -297,6 +297,34 @@ export async function setSiteStatus(id: string, status: string) {
   return { status: 'ok' }
 }
 
+// ─── Set Partial Group Booking ──────────────────────────────────────────────
+
+/**
+ * Toggle whether guests may book PART of a sunbed unit (a SunbedGroup) rather
+ * than the whole unit. Off by default — a venue that sells "your own parasol"
+ * must opt in before a stranger can land on the neighbouring bed.
+ *
+ * Its own action rather than a `saveGeneral` field: `saveGeneral` is the
+ * debounced text autosave and re-writes name/price/coords on every keystroke,
+ * which is the wrong write for a policy switch that changes what is bookable.
+ */
+export async function setPartialGroupBooking(siteId: string, enabled: boolean) {
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
+
+  if (typeof enabled !== 'boolean') {
+    return { status: 'error', errors: ['Invalid value'] }
+  }
+
+  await prisma.site.update({
+    where: { id: siteId },
+    data: { partialGroupBookingEnabled: enabled },
+  })
+
+  revalidatePath('/sites')
+  return { status: 'ok', partialGroupBookingEnabled: enabled }
+}
+
 // ─── Set Payment Provider ───────────────────────────────────────────────────
 
 export async function setPaymentProvider(

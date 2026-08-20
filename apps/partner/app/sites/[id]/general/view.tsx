@@ -41,6 +41,7 @@ import {
   saveGeneral,
   deleteSite,
   setSiteStatus,
+  setPartialGroupBooking,
 } from '../site-actions'
 import { addWorkingHours, deleteWorkingHours, updateWorkingHours } from '../working-hours-actions'
 import { toggleSiteFeature } from '../rentals/actions'
@@ -355,6 +356,9 @@ export default function GeneralView() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [features, setFeatures] = useState<string[]>(site.features || ['sunbeds'])
+  const [partialGroupBooking, setPartialGroupBookingLocal] = useState(
+    site.partialGroupBookingEnabled ?? false,
+  )
   const [layoutMode, setLayoutMode] = useState<'geo' | 'schematic'>(
     (site.layoutMode as 'geo' | 'schematic' | undefined) ?? 'geo',
   )
@@ -835,6 +839,43 @@ export default function GeneralView() {
       </div>
 
       <Divider sx={{ mb: 3 }} />
+
+      {/* Reservation rules */}
+      {features.includes('sunbeds') && (
+        <>
+          <div className="mb-5">
+            <h3 className="text-sm font-medium text-gray-700 mb-2">{t('reservationRules')}</h3>
+            <p className="text-xs text-gray-500 mb-3">{t('reservationRulesDesc')}</p>
+            <div className={`flex items-center justify-between rounded-lg border-2 p-3 transition-all ${
+              partialGroupBooking
+                ? 'border-blue-300 bg-blue-50'
+                : 'border-gray-200 bg-gray-50'
+            }`}>
+              <div className="flex items-center gap-3">
+                <EventAvailableIcon className={partialGroupBooking ? 'text-blue-600' : 'text-gray-400'} />
+                <div>
+                  <div className="text-sm font-medium text-gray-700">{t('partialGroupBooking')}</div>
+                  <div className="text-xs text-gray-500">{t('partialGroupBookingDesc')}</div>
+                </div>
+              </div>
+              <Switch
+                checked={partialGroupBooking}
+                onChange={async () => {
+                  const next = !partialGroupBooking
+                  setPartialGroupBookingLocal(next)
+                  const result = await setPartialGroupBooking(site.id!, next)
+                  // Revert on failure — the switch must never show a policy the
+                  // site isn't actually running.
+                  if (result.status !== 'ok') setPartialGroupBookingLocal(!next)
+                }}
+                color="primary"
+              />
+            </div>
+          </div>
+
+          <Divider sx={{ mb: 3 }} />
+        </>
+      )}
 
       {/* Layout mode */}
       <div className="mb-5">

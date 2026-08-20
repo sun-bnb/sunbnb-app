@@ -104,6 +104,7 @@ import {
   saveGeneral,
   saveLayoutDimensions,
   setSiteStatus,
+  setPartialGroupBooking,
   saveBrand,
   submitForm,
 } from '@/app/sites/[id]/site-actions'
@@ -1156,6 +1157,12 @@ export const GATED_ACTIONS: GatedAction[] = [
     kind: 'action',
     gate: 'session-owner',
     invoke: (_accessKey?) => setSiteStatus(SITE_ID, 'active'),
+  },
+  {
+    name: 'site-actions.setPartialGroupBooking',
+    kind: 'action',
+    gate: 'session-owner',
+    invoke: (_accessKey?) => setPartialGroupBooking(SITE_ID, true),
   },
   {
     name: 'site-actions.saveBrand',
