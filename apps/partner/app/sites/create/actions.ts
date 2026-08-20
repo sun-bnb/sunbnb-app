@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import { requireSiteOwner } from '@/lib/auth-helpers'
 import { validateImageFile, safeBlobKey } from '@/lib/validation'
+import { createSiteWithCode } from '@/lib/site-create'
 import prisma from '@repo/data/PrismaCient'
 import { canCreateSite, getEffectiveSubscriptionForUser } from '@repo/data/subscription'
 import { put } from '@vercel/blob'
@@ -57,19 +58,17 @@ export async function createSite(
   const price = Number(input.price)
   const vat = Number(input.vat)
 
-  // 1. Create the site
-  const { id: siteId } = await prisma.site.create({
-    data: {
-      name: input.name.trim(),
-      type: input.type || 'paid',
-      price: price > 0 ? price : null,
-      vat: vat > 0 ? vat : null,
-      locationLat: input.locationLat,
-      locationLng: input.locationLng,
-      description: input.description || null,
-      services: input.services,
-      user: { connect: { id: session.user.id } },
-    },
+  // 1. Create the site (with its minted QR code — track 022)
+  const { id: siteId } = await createSiteWithCode({
+    name: input.name.trim(),
+    type: input.type || 'paid',
+    price: price > 0 ? price : null,
+    vat: vat > 0 ? vat : null,
+    locationLat: input.locationLat,
+    locationLng: input.locationLng,
+    description: input.description || null,
+    services: input.services,
+    user: { connect: { id: session.user.id } },
   })
 
   // 2. Set PostGIS coords

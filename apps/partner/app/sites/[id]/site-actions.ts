@@ -7,6 +7,7 @@ import { isValidSiteStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 import { getEffectiveSubscriptionForUser } from '@repo/data/subscription'
 import { deriveTimeZoneFromCoords } from '@repo/data/site-day'
+import { createSiteWithCode } from '@/lib/site-create'
 
 // ─── Save Schematic Canvas Dimensions ───────────────────────────────────────
 
@@ -248,7 +249,7 @@ export async function submitForm(
   }
 
   if (!siteId) {
-    const { id: newSiteId } = await prisma.site.create({ data: siteData })
+    const { id: newSiteId } = await createSiteWithCode(siteData)
 
     await prisma.$executeRaw`
       UPDATE "Site" SET coords = ST_MakePoint(location_lat::double precision, location_lng::double precision)
