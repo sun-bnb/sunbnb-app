@@ -375,7 +375,7 @@ export default function InventoryToolbar({
         ⇧ Shift+drag to select · ⌘+click to multi-select
       </span>
       <div className="ml-auto">
-        <QRPrintButton siteId={site.id!} label="Print QR Codes" items={site.inventoryItems!} />
+        <QRPrintButton siteId={site.id!} siteCode={site.code} label="Print QR Codes" items={site.inventoryItems!} />
       </div>
     </div>
   )

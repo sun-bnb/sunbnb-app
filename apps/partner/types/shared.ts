@@ -28,6 +28,11 @@ export interface LayoutElementProps {
 
 export interface SiteProps {
   id?: string | undefined
+  /**
+   * `Site.code` (track 022) — the site half of the printed QR URL
+   * (`/q/S-K7M2X9/1-1-1`). Optional: nullable until backfilled.
+   */
+  code?: string | null
   name?: string | undefined
   userId?: string | undefined
   locationLat?: string | undefined

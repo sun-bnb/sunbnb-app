@@ -4,23 +4,35 @@ import React from 'react'
 import { jsPDF } from 'jspdf'
 import QRCode from 'qrcode'
 import { formatSeatId } from '@repo/data/seat-label'
+import { qrCardUrl } from './qr-url'
 import Button from '@mui/material/Button'
 import { InventoryItem } from '@/types/shared'
 
 interface Props {
   siteId: string
+  /**
+   * `Site.code` — the short QR URL's site half (track 022). Optional because an
+   * environment may not have been backfilled yet; `qrCardUrl` then prints the
+   * legacy URL, which still resolves.
+   */
+  siteCode?: string | null
   label: string
   items: InventoryItem[]
 }
 
-export default function QRPrintButton({ siteId, label, items }: Props) {
+export default function QRPrintButton({ siteId, siteCode, label, items }: Props) {
   const handlePrint = async () => {
     if (!items || items.length === 0) return
 
     // 1) Generate QR code data-URLs for every item
     const qrDataUrls = await Promise.all(
       items.map(async (item) => {
-        const url = `${process.env.NEXT_PUBLIC_APP_URL}/sites/${siteId}/pos/${item.id}`
+        const url = qrCardUrl({
+          appUrl: process.env.NEXT_PUBLIC_APP_URL as string,
+          siteId,
+          siteCode,
+          item,
+        })
         return QRCode.toDataURL(url, { margin: 1, width: 300 })
       })
     )

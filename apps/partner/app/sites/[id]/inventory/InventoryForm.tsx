@@ -200,7 +200,7 @@ export default function InventoryForm({
 
         {/* Quick actions */}
         <div className="flex gap-2 mb-4 flex-wrap">
-          <QRPrintButton siteId={site.id!} label="QR Code" items={[selectedItem]} />
+          <QRPrintButton siteId={site.id!} siteCode={site.code} label="QR Code" items={[selectedItem]} />
           {selectedItem.group > 0 && (
             <Button
               size="small"
