@@ -20,6 +20,7 @@ import { useSession } from 'next-auth/react'
 import SchematicSelection from './SchematicSelection'
 import { cullToBounds, expandBounds, lodTier, type ViewportBounds } from '@repo/schematic'
 import { pickFirstAvailablePair } from '@/app/sites/[id]/sunbed-preselection'
+import { toggleSeatSelection } from '@/app/sites/[id]/seat-selection'
 export { resolveSelectionSet, pickFirstAvailablePair } from '@/app/sites/[id]/sunbed-preselection'
 
 /** Helper: Check if the site is open on a given day and time range */
@@ -37,16 +38,6 @@ function isSiteOpen(
   const openTo = reservationDay.hour(closeTime.getHours()).minute(closeTime.getMinutes())
   const notWorkingHours = !rdOpeningHours || dayjs(openFrom).isAfter(from) || dayjs(openTo).isBefore(to)
   return !notWorkingHours
-}
-
-/** Helper: Return all OTHER members of this item's sunbed group (used by co-selection logic).
- *  Falls back to pair/pairedBy only when no group is present, preserving backward compat. */
-const getGroupMembers = (item: InventoryItem): { id: string }[] => {
-  if (item.sunbedGroup?.items?.length) {
-    return item.sunbedGroup.items.filter((m) => m.id !== item.id)
-  }
-  // Track 021 P1: grouping is the only pairing representation.
-  return []
 }
 
 /** Scaling function: Adjust the marker size based on the physical length of the sunbed.
@@ -281,6 +272,15 @@ function SunbedSelectionGeo({
 
   const inventoryItems = site.inventoryItems
 
+  // A plain record, not a Map — `Map` is the Google Maps component in this file.
+  const itemById = useMemo(() => {
+    const byId: Record<string, InventoryItem> = {}
+    for (const item of inventoryItems || []) byId[item.id] = item
+    return byId
+  }, [inventoryItems])
+
+  const partialGroupBooking = site.partialGroupBookingEnabled ?? false
+
   function groupByParcel(items: InventoryItem[]): Record<string, InventoryItem[]> {
     return items.reduce((acc, item) => {
       // Adjust this key as needed; here we use item.parcelId if present, otherwise the item id.
@@ -369,27 +369,16 @@ function SunbedSelectionGeo({
 
   const dynamicSize = getScaledSize(zoom)
 
-  // Toggle selection: if an item is available, toggle its selection state.
-  // Co-selects/deselects all other members of the item's sunbed group (group-authoritative;
-  // falls back to pair/pairedBy when no group is set).
+  // Toggle selection. Whole-unit by default; per-seat once a unit is in play
+  // when the site allows partial group booking — see `seat-selection.ts`.
   const toggleSelection = (item: InventoryItem): void => {
     if (!isAvailable(item)) return
-    const alreadySelected = selectedItems?.some(
-      (selected: { id: string }) => selected.id === item.id
-    )
-    const groupMembers = getGroupMembers(item)
-    let updatedItems = [...(selectedItems || [])]
-    if (alreadySelected) {
-      const removeIds = new Set([item.id, ...groupMembers.map((m) => m.id)])
-      updatedItems = updatedItems.filter((selected: { id: string }) => !removeIds.has(selected.id))
-    } else {
-      updatedItems.push(item)
-      for (const member of groupMembers) {
-        if (!updatedItems.some((selected: { id: string }) => selected.id === member.id)) {
-          updatedItems.push(member)
-        }
-      }
-    }
+    const updatedItems = toggleSeatSelection(item, selectedItems, {
+      partialGroupBooking,
+      isAvailable,
+      resolveItem: (id) => itemById[id],
+    })
+    if (updatedItems === selectedItems) return
     dispatch(setValue({ selectedItems: updatedItems }))
   }
 

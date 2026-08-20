@@ -18,6 +18,8 @@ export interface SiteProps {
   services: string[]
   paymentProvider?: string
   features?: string[]
+  /** Site.partialGroupBookingEnabled — guests may book part of a sunbed unit, not just the whole unit. */
+  partialGroupBookingEnabled?: boolean
   rentalPaymentType?: string | null
   rentalItems?: RentalItemProps[]
   layoutMode?: string | null

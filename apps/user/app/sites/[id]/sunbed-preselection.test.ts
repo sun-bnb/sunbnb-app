@@ -149,6 +149,21 @@ describe('pickFirstAvailablePair', () => {
     expect(ids).toEqual(['a', 'b'])
   })
 
+  it('preselects only the FREE seats of a partly-booked unit', () => {
+    // With partial group booking a unit can be half-taken (and the venue can
+    // block one bed from the manage grid regardless of the flag). Preselecting
+    // the booked sibling puts the flow in a state the server rejects on Reserve.
+    const [a, b] = makeUnit('a', 'b')
+    const result = pickFirstAvailablePair(
+      [
+        { itemId: 'a', available: true },
+        { itemId: 'b', available: false },
+      ],
+      [a, b],
+    )
+    expect(result.map((i) => i.id)).toEqual(['a'])
+  })
+
   it('picks the first available seat and preselects its unit (second member first)', () => {
     const [a, b] = makeUnit('a', 'b')
     const result = pickFirstAvailablePair(

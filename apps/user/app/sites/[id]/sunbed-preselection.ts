@@ -34,6 +34,11 @@ export function resolveSelectionSet(
  * Pick the first available item in availability-list order, then resolve the
  * full selection set (its unit). Returns [] when nothing is available.
  *
+ * Unit members that are NOT available are dropped: a unit can be partly booked
+ * — by a partial-group booking, or by the venue blocking one bed from the
+ * manage grid — and preselecting a seat somebody else holds puts the flow in a
+ * state the server rejects the moment the guest presses Reserve.
+ *
  * @param availabilityList   - ordered array from the availability API response
  * @param inventoryItems     - full item list (carry unit fields + coordinates)
  */
@@ -42,12 +47,18 @@ export function pickFirstAvailablePair(
   inventoryItems: InventoryItem[],
 ): InventoryItem[] {
   const byId = (id: string) => inventoryItems.find((i) => i.id === id)
+  const availableIds = new Set(
+    availabilityList.filter((a) => a.available).map((a) => a.itemId),
+  )
 
   for (const entry of availabilityList) {
     if (!entry.available) continue
     const item = byId(entry.itemId)
     if (!item) continue
-    return resolveSelectionSet(item, inventoryItems)
+    // Never empty: the seat we picked is itself available.
+    return resolveSelectionSet(item, inventoryItems).filter((i) =>
+      availableIds.has(i.id),
+    )
   }
 
   return []

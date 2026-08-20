@@ -7,6 +7,7 @@ import { SchematicRenderer } from '@repo/schematic'
 import type { LayoutElementDTO, SchematicItem } from '@repo/schematic/types'
 import { InventoryItem, SiteProps } from '@/app/sites/types'
 import { setValue } from '@/store/features/sites/sitesSlice'
+import { toggleSeatSelection } from '@/app/sites/[id]/seat-selection'
 import { RootState } from '@/store/store'
 import { useGetAvailabilityBySiteAndTimeRangeQuery } from '@/store/features/api/apiSlice'
 import { beachPalette } from './schematicPalette'
@@ -17,15 +18,6 @@ const STATUS_FILL = {
   available: 'green',
   selected: 'blue',
   unavailable: 'red',
-}
-
-/** Returns all OTHER members of this item's sunbed group for co-selection. */
-const getGroupMembers = (item: InventoryItem): { id: string }[] => {
-  if (item.sunbedGroup?.items?.length) {
-    return item.sunbedGroup.items.filter((m) => m.id !== item.id)
-  }
-  // Track 021 P1: grouping is the only pairing representation.
-  return []
 }
 
 export default function SchematicSelection({ site }: { site: SiteProps }) {
@@ -92,24 +84,19 @@ export default function SchematicSelection({ site }: { site: SiteProps }) {
     }
   }, [availabilityResponse])
 
+  // Whole-unit by default; per-seat once a unit is in play when the site
+  // allows partial group booking — see `seat-selection.ts`.
+  const partialGroupBooking = site.partialGroupBookingEnabled ?? false
+
   const toggleSelection = (itemId: string): void => {
     const item = itemById.get(itemId)
     if (!item || !isAvailable(item)) return
-    const alreadySelected = selectedItems?.some((sel: { id: string }) => sel.id === item.id)
-    const groupMembers = getGroupMembers(item)
-    let updated = [...(selectedItems || [])]
-    if (alreadySelected) {
-      const removeIds = new Set([item.id, ...groupMembers.map((m) => m.id)])
-      updated = updated.filter((sel: { id: string }) => !removeIds.has(sel.id))
-    } else {
-      updated.push(item)
-      for (const member of groupMembers) {
-        if (!updated.some((sel: { id: string }) => sel.id === member.id)) {
-          // Push the full InventoryItem if found, otherwise the stub (id-only) from the group
-          updated.push(itemById.get(member.id) ?? member)
-        }
-      }
-    }
+    const updated = toggleSeatSelection(item, selectedItems, {
+      partialGroupBooking,
+      isAvailable,
+      resolveItem: (id) => itemById.get(id),
+    })
+    if (updated === selectedItems) return
     dispatch(setValue({ selectedItems: updated }))
   }
 
