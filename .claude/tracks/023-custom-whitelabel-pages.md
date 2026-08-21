@@ -531,6 +531,24 @@ That extraction is the real engineering in this track. Everything else is plumbi
   Green: user 652u (+8 incl. 4 anchor + 6 brand-kit − reshuffles), data 486u, admin 202u,
   partner 2056u, tsc + lint clean, `next build` clean.
 
+- **2026-08-21 — Alcúdia exported to TEST and live.** Site `cmt2szuuj…`, code **`S-HWFNA3`**
+  (minted fresh — codes are per-database by design, which is exactly why the registry keys on
+  `customBrandKey` and not on the code), 4,040 seats / 2,020 units labelled and addressed, 30
+  parcel rotations, brand row, cover image (the blob store is env-agnostic — same URL, no
+  re-upload), `customBrandKey: 'alcudia'` + enabled. Verified in the browser at
+  `test.sunbnb.app/s/alcudia`.
+  - **A verification lesson worth more than the export.** I first "verified" with
+    `curl | grep` and concluded the deployment predated the brand fork — including a probe
+    that pointed the row at `reference` and also found nothing. Both were meaningless: a brand
+    module is loaded through `next/dynamic` behind a client boundary, which is precisely what
+    gives it its own chunk, so **its markup is never in the server HTML**. The greps could
+    only ever have found the standard page. The founder looked in a browser and saw it working.
+    Recorded in `apps/user/CLAUDE.md`: verify a deployed brand page in a BROWSER — a response
+    grep is structurally blind to it.
+  - Q9 confirmed in the wild: the tab title is "Alcúdia Beach Club", from `generateMetadata`
+    reading the brand row. The shell owns layout and copy, not metadata — so `brandName` and
+    `tagline` stay in effect and stay editable in the partner tab, exactly as D2 predicts.
+
 ## Links
 
 - [[track:022]] — short QR URLs; Q6's scope question overlaps (the QR/POS pages are another
