@@ -116,18 +116,38 @@ export async function recomputeSeatLabels(siteId: string): Promise<number> {
     ),
   ]
   if (unassigned.length > 0) {
-    await prisma.$transaction(
-      unassigned
-        // Prefer the ordinal from the bucket the unit's PLACED seats sit in.
-        // For a unit with no pool extras these are the same value; for one with
-        // extras they can differ, and the address must win — otherwise the
-        // stored triple would mix a seq from one row with a parcel/row from
-        // another, and UNIQUE(site, parcel, row, seq) would be guarding a
-        // combination that names no real spot.
-        .map((id) => ({ id, seq: unitAddresses.get(id)?.seq ?? unitSeqs.get(id) }))
-        .filter((u): u is { id: string; seq: number } => u.seq != null)
-        .map(({ id, seq }) => prisma.sunbedGroup.update({ where: { id }, data: { seq } })),
-    )
+    const seqIds: string[] = []
+    const seqValues: number[] = []
+    for (const id of unassigned) {
+      // Prefer the ordinal from the bucket the unit's PLACED seats sit in.
+      // For a unit with no pool extras these are the same value; for one with
+      // extras they can differ, and the address must win — otherwise the
+      // stored triple would mix a seq from one row with a parcel/row from
+      // another, and UNIQUE(site, parcel, row, seq) would be guarding a
+      // combination that names no real spot.
+      const seq = unitAddresses.get(id)?.seq ?? unitSeqs.get(id)
+      if (seq != null) {
+        seqIds.push(id)
+        seqValues.push(seq)
+      }
+    }
+    // ONE set-based statement, not one per unit. A beach-sized site has
+    // thousands of units, and `$transaction([...updates])` sends a statement
+    // each — 2,020 of them blew the 5 s interactive-transaction timeout on the
+    // first import of a real 4,040-seat beach, so the site could never be
+    // labelled at all. Same `unnest` shape `persistUnitAddresses` below already
+    // uses, and the IS DISTINCT FROM guard keeps it idempotent.
+    if (seqIds.length > 0) {
+      await prisma.$executeRawUnsafe(
+        `UPDATE "SunbedGroup" AS g
+            SET seq = v.seq
+           FROM unnest($1::text[], $2::int[]) AS v(id, seq)
+          WHERE g.id = v.id
+            AND g.seq IS DISTINCT FROM v.seq`,
+        seqIds,
+        seqValues,
+      )
+    }
   }
 
   await persistUnitAddresses(rows, unitAddresses)
@@ -142,13 +162,17 @@ export async function recomputeSeatLabels(siteId: string): Promise<number> {
 
   if (updates.length === 0) return 0
 
-  await prisma.$transaction(
-    updates.map(({ id, label }) =>
-      prisma.inventoryItem.update({
-        where: { id },
-        data: { seatLabel: label },
-      }),
-    ),
+  // Set-based for the same reason as the seq write above: one statement per
+  // seat is fine for an edit that moves a handful and fatal for an import that
+  // touches four thousand.
+  await prisma.$executeRawUnsafe(
+    `UPDATE "InventoryItem" AS i
+        SET seat_label = v.label
+       FROM unnest($1::text[], $2::text[]) AS v(id, label)
+      WHERE i.id = v.id
+        AND i.seat_label IS DISTINCT FROM v.label`,
+    updates.map((u) => u.id),
+    updates.map((u) => u.label),
   )
 
   return updates.length
