@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest'
 import {
   resolveSelectionSet,
   pickFirstAvailablePair,
+  inventoryAnchor,
 } from '@/app/sites/[id]/sunbed-preselection'
 import type { InventoryItem } from '@/app/sites/types'
 
@@ -174,5 +175,44 @@ describe('pickFirstAvailablePair', () => {
       [a, b],
     )
     expect(result.map((i) => i.id).sort()).toEqual(['a', 'b'])
+  })
+})
+
+describe('inventoryAnchor', () => {
+  const seat = (lat: number, lng: number) => ({ locationLat: String(lat), locationLng: String(lng) })
+
+  it('lands on a REAL seat, not the bounding-box centre, when the beach curves', () => {
+    // A crescent: seats along an arc, bbox centre in the empty middle (the sea).
+    // This is the Alcúdia shape — the old bbox-centre answer opened the map at
+    // seat-level zoom over open water with every seat culled.
+    const arc = Array.from({ length: 9 }, (_, i) => {
+      const a = (i / 8) * Math.PI
+      return seat(39.8 + 0.02 * Math.sin(a), 3.1 + 0.02 * Math.cos(a))
+    })
+
+    const anchor = inventoryAnchor(arc)!
+    const isRealSeat = arc.some(
+      (s) => Number(s.locationLat) === anchor.lat && Number(s.locationLng) === anchor.lng,
+    )
+
+    expect(isRealSeat).toBe(true)
+    // And it picks a mid-arc seat, not an end: the "middle of the site" intent survives.
+    expect(anchor.lat).toBeCloseTo(39.82, 2)
+  })
+
+  it('returns the centre seat of a compact grid — behaviour the common site keeps', () => {
+    const grid = [seat(39.8, 3.1), seat(39.8004, 3.1), seat(39.8002, 3.1002)]
+
+    expect(inventoryAnchor(grid)).toEqual({ lat: 39.8002, lng: 3.1002 })
+  })
+
+  it('ignores seats with unparseable coordinates rather than poisoning the centre', () => {
+    const items = [seat(39.8, 3.1), { locationLat: undefined, locationLng: undefined }]
+
+    expect(inventoryAnchor(items)).toEqual({ lat: 39.8, lng: 3.1 })
+  })
+
+  it('returns null for an empty inventory so the caller can fall back to the site pin', () => {
+    expect(inventoryAnchor([])).toBeNull()
   })
 })

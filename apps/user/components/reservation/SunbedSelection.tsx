@@ -19,7 +19,7 @@ import React from 'react'
 import { useSession } from 'next-auth/react'
 import SchematicSelection from './SchematicSelection'
 import { cullToBounds, expandBounds, lodTier, type ViewportBounds } from '@repo/schematic'
-import { pickFirstAvailablePair } from '@/app/sites/[id]/sunbed-preselection'
+import { inventoryAnchor, pickFirstAvailablePair } from '@/app/sites/[id]/sunbed-preselection'
 import { toggleSeatSelection } from '@/app/sites/[id]/seat-selection'
 export { resolveSelectionSet, pickFirstAvailablePair } from '@/app/sites/[id]/sunbed-preselection'
 
@@ -346,15 +346,16 @@ function SunbedSelectionGeo({
   // frames the sunbeds rather than the site's marketing pin. We deliberately do NOT
   // fit-to-bounds here — fitting all seats zooms out to parcel level; opening at the
   // farthest zoom where individual seats are still visible (zoom 20) is the goal.
+  // The SEAT nearest the inventory's centre, not the raw bounding-box centre:
+  // on a beach that curves, the bbox centre is in the water, and zoom 20 over
+  // open sea renders no seats at all (found on the 2.8 km Alcúdia site).
   const inventoryCenter = useMemo(() => {
-    const itemLats = (inventoryItems || []).map(item => Number(item.locationLat))
-    const itemLngs = (inventoryItems || []).map(item => Number(item.locationLng))
-    return itemLats.length > 0
-      ? {
-          lat: (Math.max(...itemLats) + Math.min(...itemLats)) / 2,
-          lng: (Math.max(...itemLngs) + Math.min(...itemLngs)) / 2,
-        }
-      : { lat: Number(site.locationLat), lng: Number(site.locationLng) }
+    return (
+      inventoryAnchor(inventoryItems || []) ?? {
+        lat: Number(site.locationLat),
+        lng: Number(site.locationLng),
+      }
+    )
   }, [inventoryItems, site.locationLat, site.locationLng])
 
   let notWorkingHours = false

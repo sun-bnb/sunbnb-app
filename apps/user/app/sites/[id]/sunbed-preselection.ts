@@ -63,3 +63,42 @@ export function pickFirstAvailablePair(
 
   return []
 }
+
+/**
+ * Where the map should OPEN: a real seat near the middle of the inventory.
+ *
+ * The naive answer — the bounding-box centre of all seats — is only on the sand
+ * when the inventory is compact. A beach that CURVES (Alcúdia: 43 parcels along
+ * a 2.8 km bay) puts its bounding-box centre in the water, and the map then
+ * opens at seat-level zoom over open sea with every seat culled out of view.
+ * Anchoring on the seat nearest that centre keeps the "middle of the site"
+ * intent, but lands on a bed that exists.
+ *
+ * Pure so it can be tested against exactly that shape of inventory.
+ */
+export function inventoryAnchor(
+  items: { locationLat?: string; locationLng?: string }[],
+): { lat: number; lng: number } | null {
+  const placed = items
+    .map((i) => ({ lat: Number(i.locationLat), lng: Number(i.locationLng) }))
+    .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+  if (placed.length === 0) return null
+
+  const lats = placed.map((p) => p.lat)
+  const lngs = placed.map((p) => p.lng)
+  const centre = {
+    lat: (Math.max(...lats) + Math.min(...lats)) / 2,
+    lng: (Math.max(...lngs) + Math.min(...lngs)) / 2,
+  }
+
+  let best = placed[0]!
+  let bestD = Infinity
+  for (const p of placed) {
+    // Squared equirectangular distance — ranking only, no need for haversine.
+    const dLat = p.lat - centre.lat
+    const dLng = (p.lng - centre.lng) * Math.cos((centre.lat * Math.PI) / 180)
+    const d = dLat * dLat + dLng * dLng
+    if (d < bestD) { bestD = d; best = p }
+  }
+  return { lat: best.lat, lng: best.lng }
+}
