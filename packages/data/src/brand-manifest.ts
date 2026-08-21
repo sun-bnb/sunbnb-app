@@ -30,7 +30,7 @@
  * and register the import in that app's registry. The registry test fails if any
  * of the three drifts from the others.
  */
-export const BRAND_KEYS = ['reference'] as const
+export const BRAND_KEYS = ['reference', 'alcudia'] as const
 
 export type BrandKey = (typeof BRAND_KEYS)[number]
 

@@ -35,4 +35,5 @@ import type { BrandPageProps } from './types'
 
 export const BRAND_MODULES: Record<BrandKey, ComponentType<BrandPageProps>> = {
   reference: dynamic(() => import('@/brands/reference')),
+  alcudia: dynamic(() => import('@/brands/alcudia')),
 }

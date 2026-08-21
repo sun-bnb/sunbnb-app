@@ -219,23 +219,19 @@ That extraction is the real engineering in this track. Everything else is plumbi
 
 ## Resume here
 
-- **▶ NEXT ACTION: P5 — customer #1.** The mechanism is complete and proven end to end
-  (P1–P4); what is left is a real bespoke shell. That is a design exercise, not a plumbing one:
-  pick the customer, build `apps/user/brands/<key>/`, add the key to `BRAND_KEYS` and the
-  registry, write its smoke test (it must mount `BookingSurface`), and promote the brand-kit
-  checklist from *What a bespoke module gets, and what it owes* into a reviewable list.
-- **Context needed:** this file · `apps/user/brands/reference/index.tsx` (the worked example of
-  the contract) · `apps/user/brands/types.ts` · `components/booking/BookingSurface.tsx` ·
-  `.claude/rules/ui.md` + `/ui user` before touching presentation.
-- **Local state for looking at it:** `brisa-marina` (`S-MKV0ZJ`) is set to
-  `customBrandKey: 'reference'`, `customBrandEnabled: true` in the LOCAL dev DB, so
-  `/s/brisa-marina` serves the reference module and the partner brand tab shows the
-  statement-of-fact panel. Revert both fields to see the standard behaviour.
-- **Blocked by:** nothing. Q6 (does the brand reach the reservations page, receipts, QR pass,
-  emails?) and Q8 (exact read-only panel copy — the current wording is a first draft and is
-  user-facing, so it wants a review before promote) are open.
-- **NOT browser-verified:** the partner app is behind a login. P4 has unit coverage only; the
-  panel and the skipped Business gate want an eyeball on `/sites/{id}/brand` at :3001.
+- **▶ NEXT ACTION: founder review of the Alcúdia page** (`/s/alcudia` locally — the site is
+  wired live in the local DB). It is customer #1 of the mechanism: all five phases of this
+  track are done. After review: USER OPS `npm run migrate:test` (three migrations queued:
+  site code, custom_brand_enabled, custom_brand_key), then commit/push per the deploy ladder.
+- **Remaining open questions:** Q6 (does the brand reach the reservations page, receipts, QR
+  pass, emails?) and Q8 (read-only panel copy — user-facing, wants copy review). Backlog: P6
+  block tier (dead unless volume), P7 brand reach.
+- **Engine fix that fell out of P5:** `SunbedSelection` opened the map on the bounding-box
+  centre of all seats — in the WATER on a beach that curves, with every seat culled at zoom
+  20. Now anchors on the real seat nearest that centre (`inventoryAnchor` in the pure
+  `sunbed-preselection.ts`, +4 tests incl. the crescent case). This also closes track 014's
+  deferred "recenter map on preselected pair" in spirit: the map now always opens on beds.
+- **Do NOT** let the reference module grow into a design; it is the wiring demo and says so.
 
 ## Roadmap
 
@@ -265,8 +261,15 @@ That extraction is the real engineering in this track. Everything else is plumbi
   the slug control instead of the editor. The Business-plan gate is skipped for a bespoke site.
   The false "preview only, won't be saved" banner is gone. +7 tests.
 
-- ☐ **P5 — Customer #1.** The first real bespoke shell + its smoke test + the brand-kit review
-  checklist promoted from the list above.
+- ✅ **P5 — Customer #1: Alcúdia** (2026-08-21). `brands/alcudia/` — the "bathymetric descent"
+  page (dry sand → deepening tinted panels separated by depth-contour lines → a deep-teal
+  footer past the sandbar), three typographic voices via `next/font/google` (Bricolage
+  Grotesque / Source Serif 4 / Spline Sans Mono), live data throughout (price, bed and parasol
+  counts, hours, availability — a source test REJECTS a hardcoded euro amount), the cover
+  photo's CC BY attribution finally housed in the footer, and a mobile CTA that opens the real
+  drawer through the store. Smoke test = the brand-kit obligations asserted against source
+  (BookingSurface mounted, 'use client', data-not-copy, attribution, reduced-motion). Own
+  chunk confirmed at build. Browser-verified desktop + mobile, full CTA→drawer→RESERVE loop.
 - 💤 **P6 — Block-document tier.** Superseded by D1; revisit only if hand-authoring becomes
   the bottleneck.
 - 💤 **P7 — Brand reach beyond the landing page** (reservations page, receipts, QR pass,
@@ -495,6 +498,28 @@ That extraction is the real engineering in this track. Everything else is plumbi
   - The panel copy is a first draft and user-facing, so it wants a founder review before
     promote (`.claude/rules/deploys.md`).
   Green: partner 2056u, tsc + lint clean.
+
+- **2026-08-21 — P5 done: the Alcúdia page, browser-verified end to end.** Design thesis:
+  the beach's one famous truth is shallowness, so the page is a slow wade — each section a
+  step deeper (tinted panels + bathymetric contour separators with measured depths), footer
+  past the sandbar; the booking panel keeps a constant pale surface, the raft you can always
+  climb onto. Three type voices with one job each (Bricolage = the shout, Source Serif = the
+  holiday prose, Spline Mono = the measuring voice: depths, hours, counts, codes). Notes:
+  - **Copy is data where it can be**: price, bed/parasol counts, hours and availability all
+    come from the payload, and the smoke test REJECTS a literal euro amount in source — the
+    tariff can rise without the page lying.
+  - **The CC BY photo credit found its home** — the earlier caveat that nothing renders a
+    photo credit is resolved by the brand footer.
+  - **An engine bug surfaced immediately**: the map opened on the seats' bounding-box centre,
+    which on a 2.8 km curved bay is open water at zoom 20 with every seat culled. Fixed in the
+    engine (`inventoryAnchor`: nearest real seat to the centre), tested with a crescent
+    inventory, benefits every site. First proof of the D3 bet: building a real brand page
+    against real inventory finds engine defects a compact demo site never would.
+  - **Both real brands confirmed as separate chunks** at build; the page chunk stays clean.
+  - Local demo wiring: Alcúdia is live (`customBrandKey: 'alcudia'`, enabled); Brisa Marina
+    reverted to the standard branded page.
+  Green: user 652u (+8 incl. 4 anchor + 6 brand-kit − reshuffles), data 486u, admin 202u,
+  partner 2056u, tsc + lint clean, `next build` clean.
 
 ## Links
 
