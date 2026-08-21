@@ -57,3 +57,47 @@ export async function updatePaymentProvider(
   revalidatePath('/sites')
   return { status: 'ok' }
 }
+
+// ─── Custom Brand Page (track 023) ─────────────────────────────────────────
+
+/**
+ * Switch a site's bespoke brand page on or off.
+ *
+ * This is the LIVE half of a two-gate design: a per-site React module in
+ * `apps/user/brands` decides whether a bespoke page EXISTS, and this column
+ * decides whether it is serving. Keeping them separate is what allows a merged
+ * page to sit dark until the customer approves it, and a broken one to be pulled
+ * without a revert and a deploy.
+ *
+ * Admin-only rather than partner-editable: a bespoke page is platform-delivered
+ * work, and the partner has no way to author or withdraw one.
+ *
+ * Switching it on for a site with no module is harmless and allowed — the user
+ * app falls back to the standard page. That ordering is deliberate: the switch
+ * can be armed before the code ships.
+ */
+export async function setCustomBrand(
+  siteId: string,
+  enabled: boolean,
+): Promise<{ status: string; errors?: string[] }> {
+  await requireSudo()
+
+  if (!siteId?.trim()) {
+    return { status: 'error', errors: ['Site ID is required'] }
+  }
+
+  // Typed, not coerced. A string ('false'), a checkbox 'on', or an absent value
+  // would each be truthy or falsy by accident and silently flip a customer's
+  // storefront the wrong way.
+  if (typeof enabled !== 'boolean') {
+    return { status: 'error', errors: ['Enabled must be a boolean'] }
+  }
+
+  await prisma.site.update({
+    where: { id: siteId },
+    data: { customBrandEnabled: enabled },
+  })
+
+  revalidatePath('/sites')
+  return { status: 'ok' }
+}

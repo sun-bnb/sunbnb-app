@@ -19,6 +19,7 @@ export default async function SitesPage() {
       name: true,
       status: true,
       paymentProvider: true,
+      customBrandEnabled: true,
       user: {
         select: {
           name: true,
@@ -40,6 +41,7 @@ export default async function SitesPage() {
     name: s.name,
     status: s.status,
     paymentProvider: s.paymentProvider,
+    customBrandEnabled: s.customBrandEnabled,
     ownerName: s.user.partnerAccount?.company ?? s.user.name ?? s.user.email,
     hasMollie: !!s.user.partnerAccount?.mollieAccessToken,
   }))

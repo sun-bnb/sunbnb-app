@@ -42,6 +42,12 @@ Key models: User, PartnerAccount, Site, InventoryItem, Reservation, Order, Order
 symbols, and the site half of the printed QR URL (`/q/S-K7M2X9/1-1-1`). Nullable during
 expand, `@unique`, backfilled. Rules in `src/site-code.ts`; never rewritten once assigned.
 
+**`Site.customBrandEnabled`** (track 023) — this site renders a BESPOKE brand page (a per-site
+React module in `apps/user/brands`) instead of the standard `/s/{slug}` one. Admin-only. One of
+TWO gates: the registry answers "does a bespoke page exist", this column answers "is it live",
+so a merged page can sit dark and a broken one can be pulled without a deploy. On with no module
+falls back to the standard page by design.
+
 **`PlatformPreference`** — one global tunable per row (`key` → text `value`), the value
 sibling of `FeatureFlag`: flags answer "does this feature exist yet", preferences answer
 "with what value does it run". A row is only ever an OVERRIDE — which keys exist, their

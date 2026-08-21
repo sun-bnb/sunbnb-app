@@ -259,6 +259,19 @@ model Site {
   /// Opt-in per site, because splitting a unit means a stranger can end up on
   /// the neighbouring bed, which many venues sell against.
   partialGroupBookingEnabled Boolean         @default(false) @map("partial_group_booking_enabled")
+  /// Track 023 — this site renders a BESPOKE brand page instead of the standard
+  /// branded one at `/s/{slug}`. Admin-only: bespoke work is platform-delivered,
+  /// not partner-configurable.
+  ///
+  /// It is one of TWO gates, and it deliberately cannot act alone. The other is
+  /// a per-site React module registered in `apps/user/brands`. The registry
+  /// answers "does a bespoke page EXIST"; this column answers "is it LIVE" — so
+  /// a merged page can sit dark until the customer approves it, and a broken one
+  /// can be pulled without a revert and a deploy.
+  ///
+  /// On alone (no module) the standard page renders, deliberately: a bespoke
+  /// page failing must cost the customer their design, not their bookings.
+  customBrandEnabled Boolean               @default(false) @map("custom_brand_enabled")
   layoutMode      String                   @default("geo") @map("layout_mode")
   layoutWidth     Float?                   @map("layout_width")
   layoutHeight    Float?                   @map("layout_height")

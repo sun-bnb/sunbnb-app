@@ -1,15 +1,66 @@
 'use client'
 
 import { useState } from 'react'
-import { updatePaymentProvider } from './actions'
+import { setCustomBrand, updatePaymentProvider } from './actions'
 
 interface SiteRow {
   id: string
   name: string
   status: string
   paymentProvider: string
+  customBrandEnabled: boolean
   ownerName: string
   hasMollie: boolean
+}
+
+/**
+ * The LIVE half of the custom-brand gate (track 023). The other half is whether
+ * a per-site module exists in `apps/user/brands` — which this page cannot see,
+ * so the label says "enabled", not "live". A site switched on with no module
+ * still serves the standard page.
+ */
+function CustomBrandToggle({ site }: { site: SiteRow }) {
+  const [enabled, setEnabled] = useState(site.customBrandEnabled)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleToggle = async () => {
+    const next = !enabled
+    setSaving(true)
+    setError(null)
+    try {
+      const result = await setCustomBrand(site.id, next)
+      if (result.status === 'ok') {
+        setEnabled(next)
+      } else {
+        setError(result.errors?.[0] ?? 'Failed')
+      }
+    } catch {
+      setError('Failed')
+    }
+    setSaving(false)
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        disabled={saving}
+        onClick={handleToggle}
+        className={`px-3 py-1 rounded text-xs font-medium border disabled:opacity-40 disabled:cursor-not-allowed ${
+          enabled
+            ? 'border-green-700 text-green-300 hover:bg-green-900/30'
+            : 'border-gray-700 text-gray-400 hover:bg-gray-800'
+        }`}
+      >
+        {enabled ? 'On' : 'Off'}
+      </button>
+      {saving && <span className="text-[10px] text-gray-500">saving…</span>}
+      {error && <span className="text-[10px] text-red-400" title={error}>⚠</span>}
+    </div>
+  )
 }
 
 function ProviderSelect({ site }: { site: SiteRow }) {
@@ -83,6 +134,7 @@ export default function SitesView({
               <th className="text-left px-4 py-2.5 font-medium">Partner</th>
               <th className="text-left px-4 py-2.5 font-medium">Status</th>
               <th className="text-left px-4 py-2.5 font-medium">Payment</th>
+              <th className="text-left px-4 py-2.5 font-medium">Custom brand</th>
             </tr>
           </thead>
           <tbody>
@@ -103,6 +155,9 @@ export default function SitesView({
                 </td>
                 <td className="px-4 py-3">
                   <ProviderSelect site={site} />
+                </td>
+                <td className="px-4 py-3">
+                  <CustomBrandToggle site={site} />
                 </td>
               </tr>
             ))}
