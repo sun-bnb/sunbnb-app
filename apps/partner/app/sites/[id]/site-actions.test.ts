@@ -31,6 +31,7 @@ import {
   checkSlug,
   generateSlug,
   saveBrand,
+  saveSlug,
 } from './site-actions'
 import { auth } from '@/app/auth'
 import { requireSiteOwner } from '@/lib/auth-helpers'
@@ -735,5 +736,123 @@ describe('submitForm — off-platform billing entitlement', () => {
     const res = await submitForm({ status: '' }, formData)
 
     expect(res.status).toBe('ok')
+  })
+})
+
+/**
+ * Track 023 D2 — the brand tab exposes a field iff that field is still in
+ * effect for what a guest sees.
+ *
+ * The UI half of that rule is a hidden form, which is not a guard: a stale tab
+ * or a crafted request still posts. These pin the server half, and the case that
+ * matters most is the one where the rule must NOT fire — a half-configured site
+ * still renders the standard page, so its tokens are genuinely live and locking
+ * the partner out would strand controls with no owner.
+ */
+describe('saveBrand under a custom brand page (track 023 D2)', () => {
+  const tokens = {
+    siteId: SITE_ID,
+    brandName: 'My Brand',
+    slug: 'my-brand',
+    tagline: '',
+    bgColor: '#fff',
+    fgColor: '#000',
+  }
+
+  it('REFUSES token writes while a bespoke page is live', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      customBrandEnabled: true,
+      customBrandKey: 'reference',
+    } as never)
+
+    const res = await saveBrand(tokens)
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('custom brand page')
+    expect(vi.mocked(prisma.siteBrand.upsert)).not.toHaveBeenCalled()
+  })
+
+  it('still accepts them when the switch is on but NO module is assigned', async () => {
+    // The standard page is what renders, so the tokens are in effect and the
+    // partner must keep control of them.
+    authorizeOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      customBrandEnabled: true,
+      customBrandKey: null,
+    } as never)
+    vi.mocked(prisma.site.findFirst).mockResolvedValue(null as never)
+
+    const res = await saveBrand(tokens)
+
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(prisma.siteBrand.upsert)).toHaveBeenCalled()
+  })
+
+  it('still accepts them when a module is assigned but the switch is OFF', async () => {
+    // Merged-but-dark: the guest sees the standard page, so its look is still
+    // the partner's to set.
+    authorizeOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      customBrandEnabled: false,
+      customBrandKey: 'reference',
+    } as never)
+    vi.mocked(prisma.site.findFirst).mockResolvedValue(null as never)
+
+    const res = await saveBrand(tokens)
+
+    expect(res.status).toBe('ok')
+  })
+})
+
+describe('saveSlug', () => {
+  it('writes the normalised slug to the site', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.site.findFirst).mockResolvedValue(null as never)
+
+    const res = await saveSlug(SITE_ID, '  My-Beach!!  ')
+
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(prisma.site.update)).toHaveBeenCalledWith({
+      where: { id: SITE_ID },
+      data: { slug: 'my-beach' },
+    })
+  })
+
+  it('SURVIVES a live custom brand page — the address is not presentation', async () => {
+    // The whole point of splitting this out of saveBrand. Rejecting the action
+    // wholesale would have taken the slug down with the tokens, and a rename is
+    // safe because the brand registry keys on customBrandKey, not the slug.
+    authorizeOwner()
+    vi.mocked(prisma.site.findUnique).mockResolvedValue({
+      customBrandEnabled: true,
+      customBrandKey: 'reference',
+    } as never)
+    vi.mocked(prisma.site.findFirst).mockResolvedValue(null as never)
+
+    const res = await saveSlug(SITE_ID, 'my-beach')
+
+    expect(res.status).toBe('ok')
+  })
+
+  it('rejects a slug already taken by another site', async () => {
+    authorizeOwner()
+    vi.mocked(prisma.site.findFirst).mockResolvedValue({ id: 'other-site' } as never)
+
+    const res = await saveSlug(SITE_ID, 'my-beach')
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('already taken')
+    expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
+  })
+
+  it('rejects a slug that is too short', async () => {
+    authorizeOwner()
+
+    const res = await saveSlug(SITE_ID, 'ab')
+
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('at least 3')
+    expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
   })
 })

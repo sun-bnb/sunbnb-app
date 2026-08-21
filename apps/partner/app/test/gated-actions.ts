@@ -106,6 +106,7 @@ import {
   setSiteStatus,
   setPartialGroupBooking,
   saveBrand,
+  saveSlug,
   submitForm,
 } from '@/app/sites/[id]/site-actions'
 
@@ -1177,6 +1178,12 @@ export const GATED_ACTIONS: GatedAction[] = [
         bgColor: '#ffffff',
         fgColor: '#000000',
       }),
+  },
+  {
+    name: 'site-actions.saveSlug',
+    kind: 'action',
+    gate: 'session-owner',
+    invoke: (_accessKey?) => saveSlug(SITE_ID, 'sunny-beach'),
   },
   {
     name: 'site-actions.submitForm',

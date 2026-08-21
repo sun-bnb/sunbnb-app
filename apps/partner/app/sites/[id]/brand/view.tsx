@@ -17,7 +17,8 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorIcon from '@mui/icons-material/Error'
 import InputAdornment from '@mui/material/InputAdornment'
 import { useSite } from '@/app/sites/site-context'
-import { getBrand, saveBrand, checkSlug, generateSlug } from '@/app/sites/[id]/site-actions'
+import { getBrand, saveBrand, saveSlug, checkSlug, generateSlug } from '@/app/sites/[id]/site-actions'
+import { resolveBrandRender } from '@repo/data/brand-manifest'
 import dayjs from 'dayjs'
 
 const serviceIcons: { [key: string]: React.ReactElement } = {
@@ -33,7 +34,18 @@ export default function BrandView() {
 
   const { site } = useSite()
 
-  if (site.subscriptionTier !== 'BUSINESS') {
+  // Track 023 D2: the tab offers a field only while that field is still in
+  // effect for what a guest sees. Under a live bespoke page the shell decides
+  // its own look, so the tokens go read-only — but the slug is the ADDRESS, not
+  // presentation, and stays the customer's to change.
+  const isCustomBrand = resolveBrandRender(site).mode === 'custom'
+
+  // The Business gate gets skipped for a bespoke site. A custom page is
+  // platform-delivered work, not a plan entitlement, so pitching its owner an
+  // upgrade for "a branded booking page" they already have would be absurd —
+  // and it would take the slug control with it, which D2 says stays theirs
+  // whatever the plan.
+  if (!isCustomBrand && site.subscriptionTier !== 'BUSINESS') {
     return (
       <div className="container mx-auto p-4">
         <div className="mt-8 flex flex-col items-center text-center max-w-md mx-auto">
@@ -153,14 +165,20 @@ export default function BrandView() {
       setSaving(true)
       setMessage(null)
       try {
-        const result = await saveBrand({
-          siteId: site.id!,
-          brandName,
-          slug,
-          tagline,
-          bgColor,
-          fgColor,
-        })
+        // Track 023 D2: under a live bespoke page only the slug is still in
+        // effect, so only the slug is written. Saving the tokens too would
+        // record a change the operator can never see — and the server rejects
+        // it anyway.
+        const result = isCustomBrand
+          ? await saveSlug(site.id!, slug)
+          : await saveBrand({
+              siteId: site.id!,
+              brandName,
+              slug,
+              tagline,
+              bgColor,
+              fgColor,
+            })
         if (result.status === 'ok') {
           setMessage({ type: 'success', text: 'Saved' })
         } else {
@@ -200,11 +218,98 @@ export default function BrandView() {
     )
   }
 
+  const savingIndicator = (
+    <div className="flex items-center gap-1.5 mt-1 text-xs text-gray-400">
+      {saving && <><CircularProgress size={12} /> <span>Saving…</span></>}
+      {!saving && message?.type === 'success' && <><CheckCircleIcon sx={{ fontSize: 14, color: '#16a34a' }} /> <span className="text-green-600">{message.text}</span></>}
+      {!saving && message?.type === 'error' && <><ErrorIcon sx={{ fontSize: 14, color: '#dc2626' }} /> <span className="text-red-600">{message.text}</span></>}
+    </div>
+  )
+
+  const slugField = (
+    <TextField
+      label="URL slug"
+      fullWidth
+      value={slug}
+      onChange={(e) => handleSlugChange(e.target.value)}
+      placeholder="my-beach"
+      helperText={
+        slugStatus === 'checking' ? 'Checking availability…'
+          : slugStatus === 'available' ? `✓ sunbnb.app/s/${slug} is available`
+          : slugStatus === 'taken' ? 'This slug is already taken'
+          : slugStatus === 'too-short' ? 'Slug must be at least 3 characters'
+          : slug ? `sunbnb.app/s/${slug}` : 'Auto-generated from site name'
+      }
+      error={slugStatus === 'taken' || slugStatus === 'too-short'}
+      color={slugStatus === 'available' ? 'success' : undefined}
+      size="small"
+      InputProps={{
+        endAdornment: (
+          <InputAdornment position="end">
+            {slugStatus === 'checking' && <CircularProgress size={16} />}
+            {slugStatus === 'available' && <CheckCircleIcon fontSize="small" sx={{ color: '#16a34a' }} />}
+            {slugStatus === 'taken' && <ErrorIcon fontSize="small" color="error" />}
+          </InputAdornment>
+        ),
+      }}
+      FormHelperTextProps={slugStatus === 'available' ? { sx: { color: '#16a34a' } } : undefined}
+    />
+  )
+
+  const previewLink = (
+    <div className="flex items-center gap-2 px-4 py-3 bg-sky-50 border border-sky-200 rounded">
+      <LanguageIcon fontSize="small" className="text-sky-600" />
+      <code className="text-sm text-sky-800 flex-1 truncate">{bookingUrl}</code>
+      <Button
+        size="small"
+        variant="text"
+        endIcon={<OpenInNewIcon fontSize="small" />}
+        href={bookingUrl}
+        target="_blank"
+        sx={{ textTransform: 'none', fontSize: '0.75rem' }}
+      >
+        Preview
+      </Button>
+    </div>
+  )
+
+  // A bespoke page is live: state that, keep the address editable, and offer
+  // nothing that would not take effect (track 023 D2).
+  if (isCustomBrand) {
+    return (
+      <div className="pt-2">
+        <div className="mt-4 mb-6 flex items-start justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800">Custom brand page</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              This site has a bespoke booking page designed for it. Its look is set in the design
+              itself rather than here, so the colour and text settings are not shown — they would
+              have no effect. To change the design, contact Sunbnb.
+            </p>
+          </div>
+          {savingIndicator}
+        </div>
+
+        <div className="flex flex-col gap-6">
+          {previewLink}
+
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <LanguageIcon fontSize="small" className="text-gray-500" />
+              <h3 className="font-medium text-gray-700">Address</h3>
+            </div>
+            <p className="text-sm text-gray-500 mb-3">
+              Your booking page&apos;s web address is still yours to change.
+            </p>
+            {slugField}
+          </section>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="pt-2">
-      <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        Brand customization is coming soon. Changes made here are preview only and won&apos;t be saved.
-      </div>
       <div className="mt-4 mb-6 flex items-start justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-800">Branded Booking Page</h2>

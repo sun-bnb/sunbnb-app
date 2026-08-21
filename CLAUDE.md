@@ -201,5 +201,4 @@ Vercel-managed via git branches: `main` → preview, `test` → test.sunbnb.app,
 - Export path typo: `"./PrismaCient"` (missing 'l' in Client)
 - `messages/en.json` in partner app has typo: `"Acccount"` (triple 'c')
 - MUI and Tailwind coexist — progressive migration toward pure Tailwind in partner app
-- Brand page (`/sites/[id]/brand`) is partially implemented — client state only, not persisted
 - Reservation types include "hours" and "days" — hours mode is fully supported for equipment rentals across all apps; sunbed reservations use days mode only

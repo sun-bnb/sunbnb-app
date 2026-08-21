@@ -33,6 +33,9 @@ export interface SiteProps {
    * (`/q/S-K7M2X9/1-1-1`). Optional: nullable until backfilled.
    */
   code?: string | null
+  /** Site.customBrandEnabled / customBrandKey (track 023) — the two gates behind a bespoke page. */
+  customBrandEnabled?: boolean | null
+  customBrandKey?: string | null
   name?: string | undefined
   userId?: string | undefined
   locationLat?: string | undefined

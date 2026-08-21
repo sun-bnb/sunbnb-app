@@ -7,6 +7,7 @@ import { isValidSiteStatus } from '@/lib/validation'
 import prisma from '@repo/data/PrismaCient'
 import { getEffectiveSubscriptionForUser } from '@repo/data/subscription'
 import { deriveTimeZoneFromCoords } from '@repo/data/site-day'
+import { resolveBrandRender } from '@repo/data/brand-manifest'
 import { createSiteWithCode } from '@/lib/site-create'
 
 // ─── Save Schematic Canvas Dimensions ───────────────────────────────────────
@@ -439,6 +440,54 @@ export async function generateSlug(
 
 // ─── Save Brand Settings ────────────────────────────────────────────────────
 
+/**
+ * Normalise and validate a slug, checking it is free on another site.
+ * Shared by `saveBrand` and `saveSlug` so the two cannot disagree about what a
+ * valid public URL is.
+ */
+async function validateSlug(
+  raw: string | null | undefined,
+  siteId: string,
+): Promise<{ slug: string | null; errors: string[] }> {
+  const errors: string[] = []
+  const slug = raw?.trim().toLowerCase().replace(/[^a-z0-9-]/g, '') || null
+  if (slug) {
+    if (slug.length < 3) errors.push('Slug must be at least 3 characters')
+    if (slug.length > 60) errors.push('Slug must be at most 60 characters')
+    const existing = await prisma.site.findFirst({ where: { slug, id: { not: siteId } } })
+    if (existing) errors.push('This URL slug is already taken')
+  }
+  return { slug, errors }
+}
+
+/**
+ * The site's public URL, on its own (track 023 D2).
+ *
+ * Separate from `saveBrand` because the two are governed differently once a
+ * bespoke brand page is live: the colour tokens stop being in effect and the tab
+ * stops offering them, while the slug is the ADDRESS and stays the customer's to
+ * change. A single action writing both would have to reject or accept them
+ * together, and rejecting would take the slug down with the tokens.
+ *
+ * Safe under a custom page precisely because the brand registry keys on
+ * `Site.customBrandKey`, not the slug — a rename cannot orphan a module.
+ */
+export async function saveSlug(
+  siteId: string,
+  rawSlug: string,
+): Promise<{ status: string; errors?: string[] }> {
+  const { error } = await requireSiteOwner(siteId)
+  if (error) return { status: 'error', errors: [error] }
+
+  const { slug, errors } = await validateSlug(rawSlug, siteId)
+  if (errors.length > 0) return { status: 'error', errors }
+
+  await prisma.site.update({ where: { id: siteId }, data: { slug } })
+
+  revalidatePath('/sites')
+  return { status: 'ok' }
+}
+
 export async function saveBrand(input: {
   siteId: string
   brandName: string
@@ -450,6 +499,22 @@ export async function saveBrand(input: {
   const { error } = await requireSiteOwner(input.siteId)
   if (error) return { status: 'error', errors: [error] }
 
+  // Track 023 D2: a field is writable only while it is still in effect. Under a
+  // live bespoke page the shell decides its own look, so these tokens are not
+  // read by anything — accepting them would record a change the operator can
+  // never see. The UI hides them, but a hidden form still posts from a stale tab
+  // or a crafted request, so the rule lives here.
+  const site = await prisma.site.findUnique({
+    where: { id: input.siteId },
+    select: { customBrandEnabled: true, customBrandKey: true },
+  })
+  if (site && resolveBrandRender(site).mode === 'custom') {
+    return {
+      status: 'error',
+      errors: ['This site uses a custom brand page — its appearance is set in code, not here'],
+    }
+  }
+
   const errors: string[] = []
   if (!input.brandName?.trim()) errors.push('Brand name is required')
   if (input.brandName && input.brandName.length > 200) errors.push('Brand name is too long (max 200)')
@@ -457,17 +522,8 @@ export async function saveBrand(input: {
   if (input.bgColor && !/^#[0-9a-fA-F]{3,8}$/.test(input.bgColor)) errors.push('Invalid background color')
   if (input.fgColor && !/^#[0-9a-fA-F]{3,8}$/.test(input.fgColor)) errors.push('Invalid foreground color')
 
-  // Validate slug format
-  const slug = input.slug?.trim().toLowerCase().replace(/[^a-z0-9-]/g, '') || null
-  if (slug) {
-    if (slug.length < 3) errors.push('Slug must be at least 3 characters')
-    if (slug.length > 60) errors.push('Slug must be at most 60 characters')
-    // Check uniqueness
-    const existing = await prisma.site.findFirst({
-      where: { slug, id: { not: input.siteId } },
-    })
-    if (existing) errors.push('This URL slug is already taken')
-  }
+  const { slug, errors: slugErrors } = await validateSlug(input.slug, input.siteId)
+  errors.push(...slugErrors)
 
   if (errors.length > 0) return { status: 'error', errors }
 

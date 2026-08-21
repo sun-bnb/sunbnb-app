@@ -219,25 +219,23 @@ That extraction is the real engineering in this track. Everything else is plumbi
 
 ## Resume here
 
-- **▶ NEXT ACTION: P4 — the partner brand tab follows the effective render (D2).** Per field:
-  tokens read-only under a live custom page, **slug always editable**, everything editable when
-  the standard page is what renders. Read the state with the same `resolveBrandRender` the
-  other two surfaces use. Split `saveBrand` so the slug write survives the token rejection,
-  guard server-side (a hidden form still posts), and register both in the gated-action registry
-  so the auth matrix carries them.
-- **Context needed:** this file · `apps/partner/app/sites/[id]/brand/view.tsx` +
-  `site-actions.ts` (`saveBrand`, `checkSlug`, `generateSlug`) ·
-  `packages/data/src/brand-manifest.ts` (`resolveBrandRender`) ·
-  `apps/partner/app/test/gated-actions.ts` (the registry the auth matrix drives).
-- **Then P5 — customer #1**: a real bespoke shell + its smoke test + the brand-kit checklist.
+- **▶ NEXT ACTION: P5 — customer #1.** The mechanism is complete and proven end to end
+  (P1–P4); what is left is a real bespoke shell. That is a design exercise, not a plumbing one:
+  pick the customer, build `apps/user/brands/<key>/`, add the key to `BRAND_KEYS` and the
+  registry, write its smoke test (it must mount `BookingSurface`), and promote the brand-kit
+  checklist from *What a bespoke module gets, and what it owes* into a reviewable list.
+- **Context needed:** this file · `apps/user/brands/reference/index.tsx` (the worked example of
+  the contract) · `apps/user/brands/types.ts` · `components/booking/BookingSurface.tsx` ·
+  `.claude/rules/ui.md` + `/ui user` before touching presentation.
 - **Local state for looking at it:** `brisa-marina` (`S-MKV0ZJ`) is set to
   `customBrandKey: 'reference'`, `customBrandEnabled: true` in the LOCAL dev DB, so
-  `/s/brisa-marina` serves the reference module. Revert with a `prisma.site.update` setting the
-  key null and the switch false.
-- **Blocked by:** nothing. Q6 (scope beyond the landing page) and Q8 (read-only panel copy) are
-  P4/P7 questions. **Q9 answered by P3:** the shell owns its layout and copy but NOT its
-  metadata — `generateMetadata` still builds title/description from the brand fields, so
-  `brandName`/`tagline` remain in effect and stay editable under D2's rule.
+  `/s/brisa-marina` serves the reference module and the partner brand tab shows the
+  statement-of-fact panel. Revert both fields to see the standard behaviour.
+- **Blocked by:** nothing. Q6 (does the brand reach the reservations page, receipts, QR pass,
+  emails?) and Q8 (exact read-only panel copy — the current wording is a first draft and is
+  user-facing, so it wants a review before promote) are open.
+- **NOT browser-verified:** the partner app is behind a login. P4 has unit coverage only; the
+  panel and the skipped Business gate want an eyeball on `/sites/{id}/brand` at :3001.
 
 ## Roadmap
 
@@ -260,10 +258,13 @@ That extraction is the real engineering in this track. Everything else is plumbi
   select (`setCustomBrandKey`, manifest-validated, +9 tests) and a resolved-state badge. Two
   corrections fell out of building it — the registry key and the splitting mechanism, see Log.
 
-- ☐ **P4 — Partner brand tab follows the effective render (D2).** Per-field: tokens read-only
-  under a live custom page, **slug always editable**, everything editable when the standard
-  page is what renders. Split `saveBrand` so the slug write survives the token rejection;
-  guard server-side; auth matrix + gated-action registry updated.
+- ✅ **P4 — Partner brand tab follows the effective render** (2026-08-21). `saveSlug` split out
+  of `saveBrand` (shared `validateSlug`, registered in the gated-action registry so the auth
+  matrix drives it); `saveBrand` refuses token writes while a bespoke page is live, and still
+  accepts them in both half-configured states; the tab renders a statement-of-fact panel with
+  the slug control instead of the editor. The Business-plan gate is skipped for a bespoke site.
+  The false "preview only, won't be saved" banner is gone. +7 tests.
+
 - ☐ **P5 — Customer #1.** The first real bespoke shell + its smoke test + the brand-kit review
   checklist promoted from the list above.
 - 💤 **P6 — Block-document tier.** Superseded by D1; revisit only if hand-authoring becomes
@@ -468,6 +469,32 @@ That extraction is the real engineering in this track. Everything else is plumbi
     stored is indistinguishable from a deleted module (both `unknown-key`, both quietly serving
     the standard page), and the person who made the typo is the least likely to notice.
   Green: user 642u, data 486u, admin 202u, tsc + lint clean, `next build` clean.
+
+- **2026-08-21 — P4 done.** The brand tab now follows the effective render, and the split that
+  D2 predicted turned out to be exactly the right shape.
+  - **`saveSlug` exists because the guard has to be field-level.** `saveBrand` wrote the slug
+    and the tokens in one call, so "reject while a bespoke page is live" would have taken the
+    address down with the appearance. Both share one `validateSlug`, so they cannot disagree
+    about what a valid public URL is, and `saveSlug` is registered in the gated-action registry
+    — the coverage-contract meta-guard caught it as an unregistered action within a minute of
+    it existing, which is the guard working as designed.
+  - **The rule is asserted where it must NOT fire, not only where it must.** A site switched on
+    with no module, or with a module but the switch off, still renders the STANDARD page, so its
+    tokens are genuinely in effect and the partner keeps control of them. That half is the one a
+    naive `if (customBrandEnabled) reject` would get wrong.
+  - **Found while checking what the founder would see: the Business-plan gate swallowed the new
+    panel.** Brisa Marina's partner is on STARTER, so the brand tab returned the "upgrade for a
+    branded booking page" upsell before reaching any of this — to the owner of a site that
+    already has a bespoke page, and it would have hidden the slug control D2 says stays theirs
+    whatever the plan. The gate is now skipped for a bespoke site: platform-delivered work is
+    not a plan entitlement.
+  - **Removed a false user-facing claim**: the brand tab carried an amber banner reading
+    "Brand customization is coming soon. Changes made here are preview only and won't be
+    saved." `saveBrand` has been persisting all along. The matching stale line in the root
+    `CLAUDE.md` is gone too.
+  - The panel copy is a first draft and user-facing, so it wants a founder review before
+    promote (`.claude/rules/deploys.md`).
+  Green: partner 2056u, tsc + lint clean.
 
 ## Links
 

@@ -18,7 +18,7 @@ Google OAuth only. `app.tsx` checks session; redirects unauthenticated to `/api/
 | `/sites/[id]` | Site detail — tabbed layout | Auth |
 | `/sites/[id]/general` | Site settings — name, type, price, VAT, working hours, map location | Auth |
 | `/sites/[id]/content` | Cover photo upload, description, service toggles | Auth |
-| `/sites/[id]/brand` | Brand customization — name, slug, colors (partially implemented) | Auth |
+| `/sites/[id]/brand` | Brand customization — name, slug, tagline, colors; debounced auto-save via `saveBrand` (it DOES persist — the old "preview only, won't be saved" banner was false and is gone). **Follows the effective render** (track 023 D2): when a bespoke brand page is LIVE the tab states that instead of offering the tokens, and keeps only the slug — the address is not presentation, and a rename is safe because the brand registry keys on `customBrandKey`. The Business-plan gate is skipped for a bespoke site (platform-delivered work, not a plan entitlement — pitching an upgrade for a branded page they already have would also hide the slug control) | Auth |
 | `/sites/[id]/inventory` | Inventory editor — Google Maps with sunbed markers, parcels, bulk ops | Auth |
 | `/sites/[id]/products` | F&B product management — add/edit/delete with images | Auth |
 | `/sites/[id]/accounting` | Monthly accounting — revenue, tax, order/reservation breakdowns | Auth |
@@ -45,7 +45,7 @@ Google OAuth only. `app.tsx` checks session; redirects unauthenticated to `/api/
 
 ## Server Actions
 
-- **`sites/[id]/site-actions.ts`**: `saveGeneral`, `submitForm`, `deleteSite`, `setSiteStatus`, `setPaymentProvider`, `setPartialGroupBooking` (the site's booking-granularity policy — see below), `saveBrand`, `checkSlug`, `generateSlug`, `getBrand`
+- **`sites/[id]/site-actions.ts`**: `saveGeneral`, `submitForm`, `deleteSite`, `setSiteStatus`, `setPaymentProvider`, `setPartialGroupBooking` (the site's booking-granularity policy — see below), `saveBrand` (REJECTS token writes while a bespoke page is live — a hidden form still posts), `saveSlug` (the address alone, always allowed: splitting it out is what stops a token rejection taking the slug with it), `checkSlug`, `generateSlug`, `getBrand`
 - **`sites/[id]/content-actions.ts`**: `saveContentFields`, `uploadContentImage`
 - **`sites/[id]/inventory-actions.ts`**: `createInventoryItem`, `deleteInventoryItem`, `deleteInventoryItems` (bulk — one transaction + one label recompute), `saveInventoryItemLocation`, `saveInventoryItemProperties`, `deleteItemsByGroup`
 - **`sites/[id]/working-hours-actions.ts`**: `addWorkingHours`, `deleteWorkingHours`
@@ -64,7 +64,7 @@ Redux slices: `reservationsSlice` (key-value store). RTK Query (`apiSlice`): `ge
 ## Testing
 
 ```bash
-npm run test              # unit tests (2002 tests across 53 files, Prisma mocked)
+npm run test              # unit tests (2056 tests across 59 files, Prisma mocked)
 npm run test:watch        # vitest in watch mode
 npm run test:coverage     # unit tests with Istanbul coverage report
 npm run test:integration  # integration tests (223 tests across 12 files, real sunbnb_test DB)
