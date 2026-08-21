@@ -24,6 +24,13 @@ describe('alcudia brand module', () => {
     expect(source).toMatch(/<BookingSurface\s[^>]*apiKey=\{apiKey\}/)
   })
 
+  it('keeps the drawer closed on arrival — this layout leads with the hero', () => {
+    // A deliberate inversion of the standard page's reserve-first default: the
+    // brand page's landing moment is the page itself, and the CTA, the peeked
+    // date field and the pill all still open the funnel on demand.
+    expect(source).toMatch(/<BookingSurface\s[^>]*openOnMount=\{false\}/)
+  })
+
   it('is a client component — the registry code-splits through a client boundary', () => {
     expect(source.trimStart().startsWith("'use client'")).toBe(true)
   })

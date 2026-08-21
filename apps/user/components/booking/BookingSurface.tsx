@@ -80,10 +80,19 @@ export default function BookingSurface({
   site,
   apiKey,
   theme,
+  openOnMount = true,
 }: {
   site: SiteProps
   apiKey: string
   theme?: BookingTheme
+  /**
+   * Open the mobile drawer expanded on first load — the reserve-first default
+   * the standard page chose deliberately (track 014). A brand shell whose hero
+   * IS the landing moment can opt out; everything that opens the drawer later
+   * (the peeked date field's onOpen, a CTA dispatching `focused: true`, tab
+   * switches) still works, so opting out delays the funnel, never hides it.
+   */
+  openOnMount?: boolean
 }) {
   const dispatch = useDispatch()
   const sitesState = useSelector((state: RootState) => state.sites)
@@ -97,11 +106,14 @@ export default function BookingSurface({
   // Runs once per mount — if the guest collapses the drawer afterwards it stays
   // collapsed; `focused: true` is never forced again.
   useEffect(() => {
-    const updates: Record<string, unknown> = { focused: true }
+    // Today is committed UNCONDITIONALLY: downstream components read
+    // reservationDay as a real value, not a render-time fallback (track 014).
+    // Only the drawer's auto-open is negotiable.
+    const updates: Record<string, unknown> = openOnMount ? { focused: true } : {}
     if (!sitesState.reservationDay) {
       updates.reservationDay = dayjs().toDate()
     }
-    dispatch(setValue(updates))
+    if (Object.keys(updates).length > 0) dispatch(setValue(updates))
   }, [])
 
   const features = site.features ?? ['sunbeds']

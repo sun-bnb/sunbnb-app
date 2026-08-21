@@ -297,7 +297,10 @@ export default function AlcudiaBrandPage({ site, apiKey, initialAvailableCount }
         </main>
 
         {/* The raft: the platform's booking funnel, constant against the descent. */}
-        <BookingSurface site={site} apiKey={apiKey} theme={{ background: '#FDFDFB', foreground: INK }} />
+        {/* openOnMount off: on a phone this page IS the landing moment — the
+            drawer stays at its peek until the guest asks for it (the CTA, the
+            date field, or the pill), instead of covering the hero on arrival. */}
+        <BookingSurface site={site} apiKey={apiKey} theme={{ background: '#FDFDFB', foreground: INK }} openOnMount={false} />
       </div>
 
       <Contour depth="2.0 m" note="PAST THE SANDBAR" />

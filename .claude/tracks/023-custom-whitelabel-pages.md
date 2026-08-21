@@ -499,6 +499,16 @@ That extraction is the real engineering in this track. Everything else is plumbi
     promote (`.claude/rules/deploys.md`).
   Green: partner 2056u, tsc + lint clean.
 
+- **2026-08-21 — BookingSurface gains `openOnMount` (default true).** Founder asked for the
+  drawer NOT to auto-open on the Alcúdia layout. Done as an engine contract knob rather than a
+  brand-side hack: the shell passes `openOnMount={false}`, the standard page keeps its
+  track-014 reserve-first default untouched, and `reservationDay` is still committed on mount
+  unconditionally (downstream reads it as a real value). Safe because every later opener — the
+  peeked date field's `onOpen`, the brand CTA, the pill, tab switches — still dispatches
+  `focused: true`, so opting out delays the funnel, never hides it. Browser-verified at phone
+  width: hero owns the arrival, drawer waits at its peek, CTA → drawer → RESERVE loop intact.
+  A source assertion in the alcudia test pins the choice as deliberate.
+
 - **2026-08-21 — P5 done: the Alcúdia page, browser-verified end to end.** Design thesis:
   the beach's one famous truth is shallowness, so the page is a slow wade — each section a
   step deeper (tinted panels + bathymetric contour separators with measured depths), footer
