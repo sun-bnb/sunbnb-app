@@ -1,0 +1,410 @@
+---
+id: 023-custom-whitelabel-pages
+title: Custom whitelabel pages — bespoke brand experiences for key customers
+status: active
+created: 2026-08-21
+updated: 2026-08-21
+worktree: null
+---
+
+## Goal
+
+Sell a **hand-crafted brand experience** to important customers: a per-site whitelabel page
+that looks designed rather than themed, switched on from the admin UI, and rendered from
+artefacts authored per site — without forking the booking funnel to get it.
+
+Today `/s/[slug]` renders the standard `SiteView` with five brand fields
+(`brandName`, `tagline`, `bgColor`, `fgColor`, `logoUrl` — `apps/user/app/sites/[id]/view.tsx:69`).
+That is a *theme*, not a brand experience: same layout, same order, same components, different
+colours. For a flagship customer the ask is different — their own hero, their own sections,
+their own voice, their photography, possibly their typography.
+
+End state: a small number of sites render a bespoke page; the rest are unaffected; and the
+bespoke ones still book, pay, and reconcile through exactly the same machinery as everyone
+else.
+
+## The premise that shapes every other decision
+
+**The whitelabel page is not a brochure. It is the booking funnel.**
+
+`/s/[slug]` mounts real machinery: availability for the venue's civil day, seat selection
+(unit-granular or per-seat per `partialGroupBookingEnabled`), the mobile reservation drawer,
+anonymous `anonId` identity, the in-page payment step, and the reservation flow behind it.
+A customer who buys a "custom page" is not buying a landing page — they are buying *their
+storefront*, and it has to sell.
+
+Every artefact format has to be judged against that first:
+
+| Format | Design freedom | Keeps the booking engine? |
+|---|---|---|
+| More `SiteBrand` colour fields | low | yes |
+| Structured block document (JSON) | medium | yes, if a `booking` block mounts it |
+| Per-site React module in the repo | high | yes |
+| Uploaded HTML/CSS bundle rendered in an iframe | high | **no** — loses session, Redux, the drawer, i18n |
+| Uploaded HTML injected into the page | high | **no** — and it is an XSS surface under our own origin |
+
+The last two are what "artefacts created manually" first suggests, and they are the two that
+fail. So the shape is **custom shell, shared engine**: the artefact owns everything around
+the booking surface, and the booking surface stays one component the platform maintains.
+
+## Decision (founder, 2026-08-21)
+
+**D1 — the artefact is a per-site React module in this repo.** Git is the versioning, code
+review is the safety net, the design system is right there, and there is no runtime
+sanitisation surface. This answers Q1 (a developer authors it) and, by accepting the repo as
+the home, Q2 (a customer-visible change ships on the normal `commit → push → promote →
+deploy` ladder).
+
+Two consequences worth stating plainly, because they are the price of the choice:
+
+- **A hero-copy tweak is a deploy.** There is no CMS behind this and no admin text field. For
+  a flagship customer that is usually fine — they are buying a designed page, not a blog —
+  but "change this line by Friday" costs a release, not a save.
+- **The block-document tier is now unnecessary**, not merely deferred. Its whole purpose was
+  to give non-developers layout freedom without a deploy; with D1 that constituency does not
+  exist. It stays in the backlog only for the day volume makes hand-authoring the bottleneck.
+
+### D2 — the brand tab exposes a field iff that field is still in effect (founder, 2026-08-21)
+
+When a custom brand page is **enabled AND its module exists**, the partner's brand tab stops
+offering the token editor and states the fact instead: this site runs a custom brand page,
+here is its public URL.
+
+**The slug is the exception, and it stays editable** (founder, correcting the first reading of
+this). The slug is not presentation — it is the address. It remains in effect no matter who
+renders the page, it is the customer's own URL, and a rename cannot orphan anything because
+the registry is keyed by `Site.code`, not by the slug. That keying decision was made to stop a
+rename silently dropping a customer back to the standard page; the dividend is that renaming
+stays safe, so there is no reason to take it away.
+
+Generalising the correction rather than patching it:
+
+> **The brand tab exposes a field if and only if that field is still in effect for what the
+> guest actually sees.**
+
+That single rule produces every case:
+
+| Field | Custom page live? | Editable | Why |
+|---|---|---|---|
+| slug | yes | **yes** | still the URL — routing reads it regardless of who renders |
+| colours, logo, tagline | yes | no | the shell decides its own look; editing what nothing reads is a lie |
+| everything | switch on, module MISSING | yes | the standard page is rendering, so the tokens are genuinely in effect |
+| everything | switch off | yes | today's behaviour, unchanged |
+
+The fallback row is why the rule is phrased around the *resolved render* rather than the
+switch: one resolver answers which page renders and which controls to offer, so the two cannot
+drift, and a half-configured site never leaves live controls with no owner.
+
+Consequences worth stating before they surprise someone:
+
+- **`saveBrand` needs a FIELD-level guard, not an action-level one.** It currently takes
+  brandName, slug, tagline and both colours in a single call, so "reject when custom is live"
+  would take the slug down with the tokens. Cleanest split: a `saveSlug` that is always
+  allowed, and token writes rejected while a custom page is live. Both need auth-matrix rows.
+- **Read-only UI is not a guard.** A hidden form still posts from a stale tab or a crafted
+  request, so the rejection has to live in the action.
+
+### D3 — brands live in the user app, with full access to it (founder, 2026-08-21)
+
+Location: **`apps/user/brands/<name>/`**, outside `app/`. The App Router never walks it, so it
+needs no underscore-private convention — it sits beside `components/`, `service/` and `store/`
+as what it is, a library that happens to be customer-specific. `@/*` already maps to the app
+root, so `@/brands/alcudia` works with no config change.
+
+`packages/brands/*` was considered and **rejected**. It would have given each brand its own
+dependency graph and a structurally enforced boundary — and the boundary is precisely what we
+do not want. **A brand reaching into app internals is a feature, not a cost:** a shell that
+cannot touch the store, a server action, a hook or the i18n messages either re-implements them
+badly or forces the platform to grow "brand-safe" APIs nobody else needs. That is a tax paid
+for isolation from an adversary that does not exist — brand code is ours, reviewed by us, and
+shipped in the same release. Full access is also what keeps a bespoke page *thin*: it reuses
+the drawer, the availability read and the translations instead of duplicating them, and
+duplication is the real threat to both polish and maintenance.
+
+No eslint import restriction on `brands/**`. It would re-erect by convention the wall we just
+declined to build.
+
+The residue to be honest about: brands become **coupled to internals**, so an internal refactor
+can break a customer's page. That is not an argument for a wall — it is an argument for a
+per-brand smoke test and a booking component with a supported contract, both already in the
+plan. The boundary that actually protects a customer here is a failing test, not a forbidden
+import.
+
+## How it works
+
+Two gates, deliberately answering different questions:
+
+| Gate | Question | Where |
+|---|---|---|
+| **Registry entry** | Does a bespoke page EXIST for this site? | the repo — `apps/user/app/s/_brands/registry.ts` |
+| **`customBrandEnabled`** | Is it LIVE right now? | `Site` column, switched in the admin UI |
+
+Both must be true, and neither is redundant. The registry alone would mean "merged = live",
+with no way to stage a page or pull it without a revert. The switch alone would point at
+nothing. Together they give a kill switch that needs no deploy, and a merged-but-dark page
+that can be enabled per environment.
+
+```
+apps/user/brands/
+  registry.ts            static map: Site.code → () => import('@/brands/alcudia')
+  alcudia/
+    index.tsx            the shell — owns layout, sections, type, imagery
+    ...                  brand-local components/assets
+```
+
+- **Only the matched brand loads.** The lazy behaviour comes from the IMPORT SHAPE, not the
+  location: a static map of `() => import(…)` thunks makes the bundler emit one chunk per
+  brand, and the page awaits only the one it matched. Two ways to silently undo it, both worth
+  a comment in the registry: a template-literal path (`import(\`@/brands/${code}\`)`) cannot be
+  enumerated, so nothing splits; and a barrel `brands/index.ts` re-exporting every brand pulls
+  the lot back in through one static import.
+- **What "on demand" does and does not mean.** Only the matched brand is evaluated server-side,
+  and only its client chunks reach the browser. Every brand still ships inside the deployment
+  bundle — a cold-start-size question at dozens of brands, not a per-request one.
+- **Unverified until built:** the chunk-splitting is confident from the mechanism but has not
+  been demonstrated in this repo's Next 14 setup. P3 builds once and inspects
+  `.next/server/chunks` plus the client manifest.
+- **Keyed by `Site.code`, not by slug.** The slug is partner-editable from the brand tab; a
+  rename would orphan the registry entry and silently drop the customer back to the standard
+  page with nothing in the logs. `Site.code` ([[track:022]]) is immutable, short and readable —
+  minted for the printed QR URL, and it turns out to be exactly the stable per-site key this
+  needs. The DIRECTORY is still named for the customer, because `s-mkv0zj/` tells a developer
+  nothing.
+- **Fail-safe direction: fall back to the standard page, never to an error.** Switch on but no
+  registry entry, or the import throws → render `standard`. A bespoke page failing must cost
+  the customer their design, not their bookings. (Same doctrine as [[track:022]]'s conditional
+  redirect.)
+- **Preview comes free.** Code in the repo means `main` gets a Vercel preview deploy, so a
+  customer can approve their page at a preview URL before the switch is ever flipped in
+  production. That is Q6 answered by the pipeline rather than by a feature.
+- **Tailwind must scan `./brands/**`** — the user app's content globs list `./app/**` and
+  `./components/**` only, so every class used only in a brand would be purged from the build.
+  Same trap the shared `@repo/*` packages already document.
+
+**Three surfaces need the same answer, so the answer is shared.** The React modules live in
+`apps/user`, but the partner app must know whether one exists (D2) and the admin app should
+say so honestly. A tiny **manifest** — the list of site codes that have a module, pure, no
+React, no prisma — belongs in `@repo/data` beside the other shared identity helpers, with the
+user app's registry test-pinned to cover exactly the manifest in both directions. That is the
+same reasoning as `unit-address`: three parties that must agree about one fact should not each
+derive it. The admin switch then shows the real state rather than the stored one — *enabled and
+live*, or *enabled, awaiting code* — the way `/preferences` already warns when an env override
+means the saved value is not the effective one.
+
+## What a bespoke module gets, and what it owes
+
+It receives the server-loaded payload the standard page already builds (site, brand, working
+hours, rental items, availability count) — the shell decides presentation, never data access.
+
+In return it MUST render, and a review checklist should enforce:
+
+1. the **booking mount** (see below) — the page has to sell;
+2. working hours and the legal/footer content;
+3. i18n fallbacks for anything not hand-written in the customer's language;
+4. page metadata (title/description/OG) — it is a public, indexable storefront.
+
+## Prerequisite nobody can skip
+
+**The booking engine has to become a component with a stable prop contract** before the first
+bespoke shell exists. Today it is entangled in `SiteView` (`apps/user/app/sites/[id]/view.tsx`)
+with the chrome, header, hours and services. A shell needs to mount *just the funnel*.
+
+Until that seam exists, "custom page" means "a copy of SiteView with edits" — which is N
+copies to re-check every time the drawer, the payment step or the seat-selection policy
+changes. With the seam, a bespoke shell is a layout that mounts one supported component, and
+a smoke test per module ("it mounts the booking component") turns an engine refactor into a
+failing test rather than a customer discovering it.
+
+That extraction is the real engineering in this track. Everything else is plumbing.
+
+## Resume here
+
+- **▶ NEXT ACTION: P2 — extract the booking engine.** The prerequisite everything else waits
+  on. `SiteView` (`apps/user/app/sites/[id]/view.tsx`) currently mixes the funnel with the page
+  chrome, header, hours and services; split out a booking component with an explicit prop
+  contract that the standard page mounts exactly as it does today. Behaviour-preserving, so
+  the existing user-app tests are the guard — 628 unit + 111 integration must stay green, and
+  a browser pass over `/sites/[id]` and `/s/[slug]` is worth it since the drawer is involved.
+- **Context needed:** this file · `apps/user/app/sites/[id]/view.tsx` (the seam) ·
+  `apps/user/app/s/[slug]/view.tsx` (the branded caller, which shows what a shell needs) ·
+  `apps/user/app/sites/[id]/seat-selection.ts` + `sunbed-preselection.ts` (policy the funnel
+  carries) · `.claude/rules/ui.md` and `/ui user` before touching presentation.
+- **Blocked by:** nothing. Q6 (scope beyond the landing page), Q8 (read-only panel copy) and
+  Q9 (who owns metadata) can be answered when P3/P4 reach them.
+- **P1 is done but NOT browser-verified** — the admin app sits behind a sudo login. The column
+  was confirmed readable through the generated client (all six local sites, default `false`);
+  the toggle UI itself has only unit coverage.
+
+## Roadmap
+
+- ✅ **P1 — `customBrandEnabled` + the admin switch** (2026-08-21). Additive column
+  (migration `20260821080420_add_site_custom_brand_enabled`, local + `sunbnb_test`),
+  `setCustomBrand` in `apps/admin/app/sites/actions.ts` (sudo-gated, boolean-typed, +11 tests),
+  and a Custom brand column in the admin sites table. Nothing reads the column yet — zero
+  behaviour change by construction.
+- ☐ **P2 — Extract the booking engine.** `SiteView` splits into page chrome and a booking
+  component with an explicit prop contract; the standard page mounts it exactly as before.
+  Behaviour-preserving.
+- ☐ **P3 — The `brands/` mechanism + the shared manifest.** `apps/user/brands/` with a static
+  `Site.code → () => import(…)` registry, the pure manifest in `@repo/data` (test-pinned
+  against the registry both ways), the single `resolveBrandRender` used by every surface, the
+  fall-back-to-standard rule, the Tailwind `./brands/**` glob, and a reference module built
+  against a local site so the wiring is proven before a customer depends on it. **Build once
+  and confirm one chunk per brand** (`.next/server/chunks` + client manifest) — the load-on-
+  demand claim is the reason for this shape and should not stay assumed. Admin switch upgrades
+  to showing the RESOLVED state (*live* vs *awaiting code*).
+- ☐ **P4 — Partner brand tab follows the effective render (D2).** Per-field: tokens read-only
+  under a live custom page, **slug always editable**, everything editable when the standard
+  page is what renders. Split `saveBrand` so the slug write survives the token rejection;
+  guard server-side; auth matrix + gated-action registry updated.
+- ☐ **P5 — Customer #1.** The first real bespoke shell + its smoke test + the brand-kit review
+  checklist promoted from the list above.
+- 💤 **P6 — Block-document tier.** Superseded by D1; revisit only if hand-authoring becomes
+  the bottleneck.
+- 💤 **P7 — Brand reach beyond the landing page** (reservations page, receipts, QR pass,
+  emails) — see Q6.
+
+## Open decisions
+
+- ✅ **Q1 — Who authors a bespoke page?** ANSWERED: a developer, in this repo (D1).
+- ✅ **Q2 — Is a deploy per customer change acceptable?** ANSWERED by implication in D1 —
+  accepting the repo as the artefact home accepts the release ladder. Recorded explicitly
+  because it is the recurring complaint this design will attract.
+- ✅ **Q6 (preview) — how does a customer approve before go-live?** ANSWERED by the pipeline:
+  `main` deploys to a Vercel preview, and the switch stays off until they say yes.
+- **Q3 — Who owns a bespoke page after launch?** The maintenance cost is real: every engine
+  change means re-checking N shells. P2 (one supported booking component) plus a per-module
+  smoke test is the mitigation; whether that is *enough* is a question for the second customer.
+- **Q4 — How many bespoke customers in 12 months?** No longer decides the architecture, but it
+  decides when P5 stops being dead.
+- **Q5 — A `customBrandEnabled` boolean, not a `brandMode` enum.** With D1 the middle tiers do
+  not exist, and a four-value column where two values are unimplemented is a lie in the schema.
+  Boolean now; widen deliberately if P5 ever revives. (Same reasoning that gave
+  `partialGroupBookingEnabled` its own column rather than a `features[]` entry.)
+- **Q6 — Scope boundary.** Does the brand stop at `/s/[slug]`, or reach `/s/[slug]/reservations`,
+  the QR/POS pages ([[track:022]]), receipts, the QR pass and confirmation emails? A customer
+  who sees their brand on the landing page and ours on the receipt will ask. Cheapest
+  defensible line: landing + reservations now, transactional surfaces later.
+- ✅ **Q7 — Is this partner-visible at all?** ANSWERED (D2): the tab exposes a field iff that
+  field is still in effect. Tokens go read-only under a live custom page; **the slug stays
+  editable**, because it is the address rather than presentation; the fallback case keeps
+  everything editable.
+- **Q8 (from D2) — what does the read-only panel say?** Minimum: that the site runs a custom
+  brand page, plus its live URL and the slug control. Open: whether it also shows the tokens as
+  disabled fields (honest but noisy), and whether it names a route for requesting changes.
+- **Q9 (from D2) — does a bespoke shell own its own page metadata?** `generateMetadata` in
+  `/s/[slug]/page.tsx` builds title/description from the brand fields today. If a shell
+  supplies its own, `brandName`/`tagline` stop being in effect and the D2 rule makes them
+  read-only. If metadata stays platform-generated, they remain in effect and must stay
+  editable. Decide this when P3 defines the module contract — it is the rule applied, not a
+  new rule.
+
+## Findings (2026-08-21)
+
+- **The root `CLAUDE.md` claim that the brand page is "client state only, not persisted" is
+  stale.** `saveBrand` (`apps/partner/app/sites/[id]/site-actions.ts:442`) validates and
+  persists `brandName`, `slug`, `tagline`, `bgColor`, `fgColor`, including slug uniqueness.
+  Fix that line when this track touches the area.
+- **Local data is thin for design work.** Three sites have a slug AND a `SiteBrand` row
+  (`brisa-marina`, `alonso-beach`, `la-playa-digital`) but **every colour and logo field is
+  null across all of them**, so the branded page renders at its fallbacks (`#faf9f6` /
+  `#111827`). Any design pass needs a seeded brand first.
+- **`SiteBrand` already carries more columns than the page reads** — `primary_color`,
+  `accent_color`, `bg_image_url` (+ dimensions) exist in the schema and are unused by
+  `SiteViewBrand`. Tier 1 is partly a matter of consuming what is already stored.
+- **Per-account gating already exists** (`AccountFeatureFlag`, resolved ahead of the global
+  row in `packages/data/src/flags.ts`), so there IS precedent for customer-specific behaviour
+  toggled from admin — just not for a per-site multi-value mode.
+
+## Log
+
+- **2026-08-21 — Scoped.** Founder asked for admin-enabled custom brand UI per site, rendered
+  from manually created per-site artefacts, to sell a polished experience to important
+  customers. Surveyed the existing surface (branded route, `SiteBrand`, admin sites page,
+  flags, Blob usage) and framed the artefact question against the constraint that decides it:
+  the branded page is the booking funnel, so any artefact format that cannot mount the
+  booking engine is disqualified regardless of how much design freedom it offers. Proposed a
+  four-value `brandMode` with a three-tier ladder behind it, DB for documents / Blob for
+  media / repo for bespoke modules, and the sequencing recommendation to build bespoke FIRST
+  and extract the block vocabulary from two real customers rather than inventing it. Awaiting
+  Q1/Q2/Q4 before any code.
+
+- **2026-08-21 — D1 decided: per-site React modules in the repo.** Founder: "git is exactly
+  the right place to keep the artefacts". That collapses the design — the block-document tier
+  is superseded rather than deferred (its purpose was deploy-free authoring by non-developers,
+  a constituency that does not exist under D1), and the four-value `brandMode` becomes a
+  boolean. Design consequences worked through and recorded above: TWO gates (registry entry =
+  exists, `customBrandEnabled` = live) because either alone loses something real; the registry
+  keyed by **`Site.code`** rather than the partner-editable slug, which would silently orphan
+  a customer's page on a rename — an unplanned second use for the identifier [[track:022]]
+  minted last week; a static import map, since a template-literal dynamic import cannot be
+  code-split; `_brands` underscore-prefixed so the App Router never routes it; and fall back to
+  the standard page rather than an error, because a bespoke page failing must cost the customer
+  their design, not their bookings. Preview turns out to be free (Vercel preview on `main`),
+  which answers the old Q6. The roadmap now leads with the small shippable switch (P1) and the
+  real work behind it (P2, the booking-engine seam).
+
+- **2026-08-21 — D2 decided: the brand tab follows the effective render.** Founder: with a
+  custom brand enabled and its code present, the partner brand tab should only display that
+  fact. Taken as stated and generalised to the invariant above — editor iff the standard page
+  is what a guest sees — because the fallback case (enabled, module missing) leaves the token
+  fields genuinely in effect, and hiding the editor there would strand live controls with no
+  owner. Two consequences recorded: the partner also loses slug editing while custom is live
+  (the brand tab owns the public URL), and the read-only tab needs a server-side guard in
+  `saveBrand`, since a hidden form still posts. **Amended within the hour**: the founder
+  restored slug editing under a live custom page. Rather than carve out an exception, the rule
+  was restated as *a field is exposed iff it is still in effect* — which yields the slug
+  (routing reads it either way), the tokens (nothing reads them under a bespoke shell), and the
+  fallback case (everything in effect) without special-casing any of them. It also surfaced Q9:
+  if `generateMetadata` keeps building title/description from `brandName`, that field is still
+  in effect and stays editable by the same rule. The `Site.code` keying decision is what makes
+  a rename safe, so keeping the control costs nothing. The guard consequently has to be
+  field-level: `saveBrand` writes slug and tokens in one call today, so rejecting the action
+  wholesale would take the slug with it. The decision also pulled a shared **manifest**
+  into the design: `apps/user` owns the modules, but the partner app must know one exists and
+  the admin switch should report *live* vs *awaiting code*, so the list of branded site codes
+  becomes a pure module in `@repo/data` with the registry test-pinned against it — the
+  `unit-address` argument again, three parties that must agree about one fact.
+
+- **2026-08-21 — D3 decided: brands live in `apps/user/brands/<name>`.** The question was
+  whether `packages/brands/alcudia` would load on demand; the answer is that laziness comes
+  from the import shape, not the location, so both options are equivalent on that axis and the
+  choice is really about the dependency boundary. Founder chose the app, and then made the
+  sharper point: a brand reaching into app internals **is a feature**. Recorded as such —
+  isolation here would buy nothing against an adversary that does not exist (brand code is
+  ours, reviewed, shipped in the same release) while pushing bespoke shells toward
+  re-implementing what they cannot import. No eslint boundary rule either, for the same reason.
+  The residue is real coupling to internals, mitigated by the per-brand smoke test and the
+  booking component's contract rather than by a wall. Location settled at `apps/user/brands/`
+  rather than under `app/`, so the router never walks it and the underscore-private convention
+  is unnecessary; `@/*` already resolves it. Two footguns written into the plan (template-
+  literal import path, barrel re-export), plus the Tailwind glob, plus a build-time check that
+  the chunk-splitting is real rather than assumed.
+
+- **2026-08-21 — P1 done.** `Site.customBrandEnabled` (additive, defaulted, migration applied
+  to local + `sunbnb_test`), a sudo-gated `setCustomBrand`, and a Custom brand toggle in the
+  admin sites table. Nothing reads the column, so behaviour is unchanged by construction —
+  which is the point of shipping it first: the switch can be armed before the code that obeys
+  it exists.
+  - **The action refuses non-booleans rather than coercing them.** `'false'`, `'on'`,
+    `undefined`, `null` and `1` are each truthy or falsy by accident, and coercion would flip a
+    customer's storefront the wrong way while reporting success. Five cases pinned.
+  - **`false` is tested as carefully as `true`.** The kill switch is half the reason this
+    column exists; a disable path that silently no-ops would only be discovered while trying to
+    pull a broken page.
+  - Both sudo cases assert that **nothing is written**, not just that the call throws.
+  - Not browser-verified: the admin app is behind a sudo login. Verified instead that the
+    column reads through the regenerated Prisma client for all six local sites (default
+    `false`), which is the schema↔client↔column mapping most likely to be silently wrong.
+  - The generated `migration.sql` was left exactly as Prisma wrote it — `migrate dev` had
+    already applied it, so adding an explanatory comment would have desynced the recorded
+    checksum. The reasoning lives on the schema field instead.
+  Green: admin 193u (+11), user 628u, partner 2046u, tsc + lint clean, `migrate:check` clean.
+
+## Links
+
+- [[track:022]] — short QR URLs; Q6's scope question overlaps (the QR/POS pages are another
+  guest-facing surface a branded customer will expect to carry their brand).
+- [[subsystem:design-system]] — the design language a bespoke shell should build ON, not
+  around; `/ui user` primes it.
+- [[entity:reservation]] — the funnel the branded page must keep intact.
