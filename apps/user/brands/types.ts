@@ -23,3 +23,26 @@ export interface BrandPageProps {
   /** Seats free today, server-computed; the funnel falls back to it while its own query resolves. */
   initialAvailableCount?: number
 }
+
+/**
+ * The page title and description a bespoke shell claims for itself.
+ *
+ * A brand page that renders its own name in its own words should say the same
+ * thing in the browser tab, the search result and the shared link. Left to the
+ * platform, those come from `SiteBrand.brandName`/`tagline` — fields the shell
+ * does not read, cannot see, and (under D2) the partner can no longer edit,
+ * which is how "Platja d'Alcúdia" ended up titled "Alcúdia Beach Club".
+ *
+ * Deliberately plain data, in its own module per brand: `generateMetadata` runs
+ * on the server, and reaching into the component to find a string would drag a
+ * client module into the metadata path and undo the code splitting.
+ *
+ * The OG image is NOT here — that is `Site.image`, the cover the operator
+ * uploads, and it stays theirs.
+ */
+export interface BrandMetadata {
+  /** Browser tab, search result, shared link. Keep it the name the page shows. */
+  title: string
+  /** One sentence, under ~160 characters, written for someone who has not arrived yet. */
+  description: string
+}

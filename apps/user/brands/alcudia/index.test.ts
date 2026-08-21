@@ -13,6 +13,8 @@ import { readFileSync } from 'node:fs'
 
 import { describe, it, expect } from 'vitest'
 
+import { metadata } from './meta'
+
 const source = readFileSync(new URL('./index.tsx', import.meta.url), 'utf8')
 
 describe('alcudia brand module', () => {
@@ -52,5 +54,28 @@ describe('alcudia brand module', () => {
 
   it('respects reduced motion', () => {
     expect(source).toContain('prefers-reduced-motion')
+  })
+})
+
+describe('alcudia metadata', () => {
+  it('titles the tab with the name the PAGE shows', () => {
+    // The invariant, not the string: a link labelled differently from the page
+    // it opens reads as a different venue. The page's h1 is split across lines
+    // in the markup, so compare against its rendered text.
+    const h1 = source.match(/<h1[\s\S]*?>([\s\S]*?)<\/h1>/)![1]!
+    const rendered = h1
+      .replace(/<br\s*\/?>/g, ' ')
+      .replace(/&apos;/g, "'")
+      .replace(/\{[^}]*\}/g, '')
+      .replace(/<[^>]*>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    expect(rendered).toBe(metadata.title)
+  })
+
+  it('describes the beach to someone who has not arrived yet, within a search snippet', () => {
+    expect(metadata.description.length).toBeLessThanOrEqual(160)
+    expect(metadata.description).toMatch(/sunbed/i)
   })
 })

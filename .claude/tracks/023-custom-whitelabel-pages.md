@@ -549,6 +549,30 @@ That extraction is the real engineering in this track. Everything else is plumbi
     reading the brand row. The shell owns layout and copy, not metadata — so `brandName` and
     `tagline` stay in effect and stay editable in the partner tab, exactly as D2 predicts.
 
+- **2026-08-21 — Q9 CLOSED the other way: a bespoke shell titles itself.** The live test page
+  rendered "Platja d'Alcúdia" under a tab reading "Alcúdia Beach Club", which is how the
+  earlier "metadata stays platform-generated" answer showed its cost: a link labelled
+  differently from the page it opens reads as a different venue. `generateMetadata` now prefers
+  `BRAND_METADATA[key]` when a bespoke page is live, falling back to the brand row otherwise —
+  the same in-effect rule as D2 and the page fork.
+  - **The metadata map is deliberately NOT in `registry.ts`.** That map is the `next/dynamic`
+    client boundary; reaching through it from a server-side `generateMetadata` would put every
+    brand back in the shared bundle. `brands/<key>/meta.ts` is plain data, statically imported
+    — two strings per brand, needed on every render, no component behind them. Chunking
+    re-verified after the change.
+  - **A test pins the invariant rather than the string**: the tab title must equal the page's
+    `<h1>`, parsed out of source, so renaming one forces the other.
+  - **This makes D2 correct rather than merely consistent.** `brandName`/`tagline` were still
+    quietly in effect via metadata while the partner tab already hid them — a field in effect
+    with no owner, the exact state D2 exists to prevent. Now they genuinely are not read by a
+    custom page.
+  - **Fixture honesty, founder-directed:** the `SiteBrand` row carried "Alcúdia Beach Club",
+    a commercial-sounding name INVENTED for the fixture and attached to a real, municipally
+    operated beach (EMSA) with a real photo of it. Renamed on local and test to the beach's
+    actual name, "Platja d'Alcúdia"; tagline and cover kept. Worth a standing rule: seeded
+    fixtures modelled on real places should carry the real name or an obviously fictional one,
+    never a plausible invention.
+
 ## Links
 
 - [[track:022]] — short QR URLs; Q6's scope question overlaps (the QR/POS pages are another

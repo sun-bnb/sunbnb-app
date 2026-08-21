@@ -5,6 +5,7 @@ import { Metadata } from 'next'
 import BrandedSiteView from './view'
 import { resolveBrandRender } from '@repo/data/brand-manifest'
 import BrandMount from '@/brands/BrandMount'
+import { BRAND_METADATA } from '@/brands/metadata'
 import { countAvailableToday } from '@/service/availabilityService'
 
 async function getSiteBySlug(slug: string, userId?: string) {
@@ -46,8 +47,16 @@ export async function generateMetadata({ params }: { params: { slug: string } })
     include: { brand: true },
   })
 
-  const title = site?.brand?.brandName || site?.name || 'Book'
-  const description = site?.brand?.tagline || site?.description || ''
+  // A bespoke shell titles itself (track 023 Q9). It renders its own name in
+  // its own words, and the brand-row tokens it does not read — and that the
+  // partner can no longer edit under D2 — would otherwise title the tab as a
+  // different venue than the page shows.
+  const render = site ? resolveBrandRender(site) : null
+  const brandMeta = render?.mode === 'custom' && render.key ? BRAND_METADATA[render.key] : null
+
+  const title = brandMeta?.title || site?.brand?.brandName || site?.name || 'Book'
+  const description = brandMeta?.description || site?.brand?.tagline || site?.description || ''
+  // The cover stays the operator's, whoever writes the words.
   const image = site?.image || undefined
 
   return {

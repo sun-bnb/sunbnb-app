@@ -22,7 +22,7 @@ vi.mock('@/brands/BrandMount', () => ({ default: () => null }))
 import prisma from '@repo/data/PrismaCient'
 import BrandedSiteView from './view'
 import BrandMount from '@/brands/BrandMount'
-import BrandedSitePage from './page'
+import BrandedSitePage, { generateMetadata } from './page'
 
 const findFirst = vi.mocked(prisma.site.findFirst)
 
@@ -93,5 +93,51 @@ describe('/s/[slug] brand fork', () => {
     const result = await BrandedSitePage({ params: { slug: 'nope' } })
 
     expect(result.type).toBe('div')
+  })
+})
+
+/**
+ * Page metadata under a bespoke shell (track 023 Q9).
+ *
+ * The tab, the search result and the shared link are the first thing a guest
+ * sees and the last thing anyone checks. A shell that renders its own name must
+ * title itself with it — otherwise a link to "Platja d'Alcúdia" arrives labelled
+ * "Alcúdia Beach Club", which reads as a different venue.
+ */
+describe('/s/[slug] metadata', () => {
+  it('takes the title and description from the module when a bespoke page is live', async () => {
+    const meta = await generateMetadata({ params: { slug: 'brisa-marina' } })
+
+    // 'reference' is the key the mocked site row carries.
+    expect(meta.title).toBe('Reference brand module')
+    expect(meta.description).toContain('Wiring demo')
+  })
+
+  it('falls back to the brand row when the standard page is what renders', async () => {
+    // Same rule as the page fork: the tokens are in effect exactly when the
+    // standard page is showing, so the metadata comes from them there.
+    findFirst.mockResolvedValue(
+      site({ customBrandEnabled: false, brand: { brandName: 'Brisa Marina', tagline: 'Premium beach' } }) as never,
+    )
+
+    const meta = await generateMetadata({ params: { slug: 'brisa-marina' } })
+
+    expect(meta.title).toBe('Brisa Marina')
+    expect(meta.description).toBe('Premium beach')
+  })
+
+  it('keeps the OPERATOR cover as the shared image, whoever writes the words', async () => {
+    findFirst.mockResolvedValue(site({ image: 'https://blob/cover.jpg' }) as never)
+
+    const meta = await generateMetadata({ params: { slug: 'brisa-marina' } })
+
+    expect(meta.openGraph?.images).toEqual([{ url: 'https://blob/cover.jpg' }])
+    expect(meta.title).toBe('Reference brand module')
+  })
+
+  it('still titles an unknown slug rather than throwing', async () => {
+    findFirst.mockResolvedValue(null as never)
+
+    await expect(generateMetadata({ params: { slug: 'nope' } })).resolves.toMatchObject({ title: 'Book' })
   })
 })
