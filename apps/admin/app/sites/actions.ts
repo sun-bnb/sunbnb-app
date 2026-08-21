@@ -2,6 +2,7 @@
 
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
+import { isKnownBrandKey } from '@repo/data/brand-manifest'
 import { revalidatePath } from 'next/cache'
 
 async function requireSudo() {
@@ -96,6 +97,43 @@ export async function setCustomBrand(
   await prisma.site.update({
     where: { id: siteId },
     data: { customBrandEnabled: enabled },
+  })
+
+  revalidatePath('/sites')
+  return { status: 'ok' }
+}
+
+/**
+ * Assign (or clear) WHICH bespoke module renders a site.
+ *
+ * The key is validated against the shared manifest rather than accepted as free
+ * text. A typo would otherwise be indistinguishable from a deleted module: both
+ * resolve to `unknown-key` and quietly serve the standard page, and the operator
+ * who made the typo is the least likely person to notice. Clearing is explicit —
+ * an empty string stores NULL rather than a key nothing answers to.
+ *
+ * Assigning a key does NOT make the page live; `setCustomBrand` does. Two gates,
+ * so a module can be assigned and reviewed while the customer decides.
+ */
+export async function setCustomBrandKey(
+  siteId: string,
+  key: string | null,
+): Promise<{ status: string; errors?: string[] }> {
+  await requireSudo()
+
+  if (!siteId?.trim()) {
+    return { status: 'error', errors: ['Site ID is required'] }
+  }
+
+  const trimmed = key?.trim() || null
+
+  if (trimmed !== null && !isKnownBrandKey(trimmed)) {
+    return { status: 'error', errors: ['Unknown brand key'] }
+  }
+
+  await prisma.site.update({
+    where: { id: siteId },
+    data: { customBrandKey: trimmed },
   })
 
   revalidatePath('/sites')

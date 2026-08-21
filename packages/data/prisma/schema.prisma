@@ -272,6 +272,18 @@ model Site {
   /// On alone (no module) the standard page renders, deliberately: a bespoke
   /// page failing must cost the customer their design, not their bookings.
   customBrandEnabled Boolean               @default(false) @map("custom_brand_enabled")
+  /// Track 023 — WHICH bespoke brand module renders this site, e.g. `alcudia`.
+  ///
+  /// Not `Site.code`, and not the slug. The code is minted per DATABASE, so the
+  /// same venue carries different codes in dev, test and production — a registry
+  /// committed against one of them would resolve nowhere else, including the
+  /// Vercel previews that run on the test DB. The slug is partner-editable. This
+  /// column is the join instead: the key lives in code (a directory under
+  /// `apps/user/brands`), and each environment's row points at it.
+  ///
+  /// Nullable: most sites have no bespoke module. A key that matches nothing in
+  /// the registry resolves to the standard page, exactly like `enabled` off.
+  customBrandKey  String?                  @map("custom_brand_key")
   layoutMode      String                   @default("geo") @map("layout_mode")
   layoutWidth     Float?                   @map("layout_width")
   layoutHeight    Float?                   @map("layout_height")

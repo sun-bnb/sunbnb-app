@@ -18,7 +18,12 @@ Port 3003. Requires `sudo: true` on User record.
   on for a site with no module is allowed and harmless: the user app falls back to the standard
   branded page, because a bespoke page failing must cost the customer their design, not their
   bookings. Admin-only — bespoke work is platform-delivered, and the partner can neither author
-  nor withdraw one. The label says "enabled", not "live": this page cannot see the registry.
+  nor withdraw one. The row carries BOTH gates: a **module select** (`setCustomBrandKey` →
+  `Site.customBrandKey`, validated against `BRAND_KEYS` so a typo cannot be stored — it would
+  be indistinguishable from a deleted module) and the **On/Off switch**, plus a badge showing
+  the RESOLVED state from `resolveBrandRender`: *live* · *off* · *no module* · *unknown key*.
+  "Enabled" and "live" are different states, and the gap between them is what an operator
+  needs to see.
 - **Preferences** (`/preferences`): platform-wide tunables that would otherwise be constants in a
   deployed source file — one card per entry in the `PREFERENCE_REGISTRY` (`@repo/data/preferences`),
   grouped by the registry's `group`. The page owns no validation or key list of its own: bounds,
@@ -33,12 +38,12 @@ Port 3003. Requires `sudo: true` on User record.
 
 Run: `npm test`, `npm run test:watch`, `npm run test:coverage`
 
-### Test Files (193 tests)
+### Test Files (202 tests)
 
 - `app/users/actions.test.ts` — Admin user CRUD, user deletion with cascade cleanup, requireSudo guard
 - `app/settlements/actions.test.ts` — Settlement lifecycle (preview, generate, close, approve, markPaid, revert), validation
 - `app/fees/actions.test.ts` — Service fee CRUD, service code CRUD, search sites/accounts, platform fees
-- `app/sites/actions.test.ts` — updatePaymentProvider with Mollie token verification; setCustomBrand (track 023, 11 tests): sudo gate (unauthenticated AND signed-in-non-sudo, both asserted to write nothing), enable/disable both travelling faithfully (the kill switch needs `false` to work as well as `true`), blank site id refused pre-DB, `revalidatePath('/sites')`, and a table of NON-boolean inputs (`'false'`, `'on'`, `undefined`, `null`, `1`) refused rather than coerced — each is truthy or falsy by accident and would flip a customer's storefront the wrong way while reporting success
+- `app/sites/actions.test.ts` — updatePaymentProvider with Mollie token verification; setCustomBrand (track 023, 11 tests): sudo gate (unauthenticated AND signed-in-non-sudo, both asserted to write nothing), enable/disable both travelling faithfully (the kill switch needs `false` to work as well as `true`), blank site id refused pre-DB, `revalidatePath('/sites')`, and a table of NON-boolean inputs (`'false'`, `'on'`, `undefined`, `null`, `1`) refused rather than coerced — each is truthy or falsy by accident and would flip a customer's storefront the wrong way while reporting success; setCustomBrandKey (9 tests): sudo gate, a key validated against the shared manifest and REFUSED when unknown, and `''`/whitespace/null all clearing to NULL rather than storing a key nothing answers to
 - `app/platform/actions.test.ts` — Business entity settings, country/currency/VAT settings, deleteSettings referential integrity
 - `app/preferences/actions.test.ts` — Preferences sudo gate + registry pass-through (8 tests): every action rejected for unauthenticated and non-sudo callers with nothing written, raw value + acting admin id forwarded unchanged, registry rejection surfaced not swallowed, unregistered key refused without touching the store. Validation itself is asserted in `packages/data/src/preferences.test.ts` — the action deliberately has no opinion about bounds
 - `app/api/health/route.test.ts` — Health check with sudo-gated operational details

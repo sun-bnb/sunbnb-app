@@ -23,6 +23,7 @@
     "./device-code": "./src/device-code.ts",
     "./partner-code": "./src/partner-code.ts",
     "./site-code": "./src/site-code.ts",
+    "./brand-manifest": "./src/brand-manifest.ts",
     "./device-claim": "./src/device-claim.ts",
     "./reservation-machine": "./src/reservation-machine.ts",
     "./reservation-machine-apply": "./src/reservation-machine-apply.ts",

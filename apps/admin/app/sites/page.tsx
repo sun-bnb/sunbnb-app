@@ -2,6 +2,7 @@ import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { redirect } from 'next/navigation'
 import SitesView from './view'
+import { resolveBrandRender } from '@repo/data/brand-manifest'
 
 export default async function SitesPage() {
   const session = await auth()
@@ -20,6 +21,7 @@ export default async function SitesPage() {
       status: true,
       paymentProvider: true,
       customBrandEnabled: true,
+      customBrandKey: true,
       user: {
         select: {
           name: true,
@@ -42,6 +44,10 @@ export default async function SitesPage() {
     status: s.status,
     paymentProvider: s.paymentProvider,
     customBrandEnabled: s.customBrandEnabled,
+    customBrandKey: s.customBrandKey,
+    // The RESOLVED state, not the stored one: "on" and "live" are different
+    // things, and only this side knows which modules exist.
+    brandReason: resolveBrandRender(s).reason,
     ownerName: s.user.partnerAccount?.company ?? s.user.name ?? s.user.email,
     hasMollie: !!s.user.partnerAccount?.mollieAccessToken,
   }))

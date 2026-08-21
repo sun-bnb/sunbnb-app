@@ -1,7 +1,10 @@
 import prisma from '@repo/data/PrismaCient'
+import logger from '@/utils/logger'
 import { auth } from '@/app/auth'
 import { Metadata } from 'next'
 import BrandedSiteView from './view'
+import { resolveBrandRender } from '@repo/data/brand-manifest'
+import BrandMount from '@/brands/BrandMount'
 import { countAvailableToday } from '@/service/availabilityService'
 
 async function getSiteBySlug(slug: string, userId?: string) {
@@ -80,6 +83,21 @@ export default async function BrandedSitePage({ params }: { params: { slug: stri
   const initialAvailableCount = siteFeatures.includes('sunbeds')
     ? (await countAvailableToday(site.id)).availableCount
     : undefined
+
+  // Track 023: a site with a bespoke module assigned AND the admin switch on
+  // renders that instead. `resolveBrandRender` is the ONE answer to "what does a
+  // guest see", shared with the partner brand tab and the admin fleet list.
+  const render = resolveBrandRender(site)
+  if (render.mode === 'custom' && render.key) {
+    return (
+      <BrandMount
+        brandKey={render.key}
+        site={site}
+        apiKey={apiKey}
+        initialAvailableCount={initialAvailableCount}
+      />
+    )
+  }
 
   return (
     <BrandedSiteView

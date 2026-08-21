@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { setCustomBrand, updatePaymentProvider } from './actions'
+import { setCustomBrand, setCustomBrandKey, updatePaymentProvider } from './actions'
+import { BRAND_KEYS, type BrandRenderReason } from '@repo/data/brand-manifest'
 
 interface SiteRow {
   id: string
@@ -9,46 +10,91 @@ interface SiteRow {
   status: string
   paymentProvider: string
   customBrandEnabled: boolean
+  customBrandKey: string | null
+  brandReason: BrandRenderReason
   ownerName: string
   hasMollie: boolean
 }
 
+/** Human wording for what a guest actually gets, resolved from BOTH gates. */
+const REASON_LABEL: Record<BrandRenderReason, { text: string; className: string }> = {
+  live: { text: 'live', className: 'bg-green-400/10 text-green-400' },
+  disabled: { text: 'off', className: 'bg-gray-800 text-gray-500' },
+  'no-key': { text: 'no module', className: 'bg-amber-400/10 text-amber-400' },
+  'unknown-key': { text: 'unknown key', className: 'bg-red-400/10 text-red-400' },
+}
+
 /**
- * The LIVE half of the custom-brand gate (track 023). The other half is whether
- * a per-site module exists in `apps/user/brands` — which this page cannot see,
- * so the label says "enabled", not "live". A site switched on with no module
- * still serves the standard page.
+ * Both halves of the custom-brand gate (track 023): WHICH module renders the
+ * site, and whether it is switched on. The badge shows the RESOLVED answer,
+ * because "enabled" and "live" are different states and the gap between them —
+ * switched on with no module assigned — is the one an operator needs to see.
  */
-function CustomBrandToggle({ site }: { site: SiteRow }) {
+function CustomBrandControls({ site }: { site: SiteRow }) {
   const [enabled, setEnabled] = useState(site.customBrandEnabled)
+  const [brandKey, setBrandKey] = useState(site.customBrandKey ?? '')
+  const [reason, setReason] = useState<BrandRenderReason>(site.brandReason)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleToggle = async () => {
-    const next = !enabled
+  /** Mirror of the server's resolver, so the badge updates without a reload. */
+  const resolve = (isEnabled: boolean, key: string): BrandRenderReason => {
+    if (!key) return isEnabled ? 'no-key' : 'disabled'
+    if (!(BRAND_KEYS as readonly string[]).includes(key)) return 'unknown-key'
+    return isEnabled ? 'live' : 'disabled'
+  }
+
+  const run = async (fn: () => Promise<{ status: string; errors?: string[] }>, apply: () => void) => {
     setSaving(true)
     setError(null)
     try {
-      const result = await setCustomBrand(site.id, next)
-      if (result.status === 'ok') {
-        setEnabled(next)
-      } else {
-        setError(result.errors?.[0] ?? 'Failed')
-      }
+      const result = await fn()
+      if (result.status === 'ok') apply()
+      else setError(result.errors?.[0] ?? 'Failed')
     } catch {
       setError('Failed')
     }
     setSaving(false)
   }
 
+  const badge = REASON_LABEL[reason]
+
   return (
     <div className="flex items-center gap-2">
+      <select
+        value={brandKey}
+        disabled={saving}
+        onChange={(e) => {
+          const next = e.target.value
+          run(() => setCustomBrandKey(site.id, next || null), () => {
+            setBrandKey(next)
+            setReason(resolve(enabled, next))
+          })
+        }}
+        className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none focus:border-gray-500 disabled:opacity-40"
+      >
+        <option value="">— none —</option>
+        {BRAND_KEYS.map((key) => (
+          <option key={key} value={key}>{key}</option>
+        ))}
+        {/* A key assigned before its module was deleted still has to be shown,
+            or the select would silently misreport what the row holds. */}
+        {brandKey && !(BRAND_KEYS as readonly string[]).includes(brandKey) && (
+          <option value={brandKey}>{brandKey} (missing)</option>
+        )}
+      </select>
       <button
         type="button"
         role="switch"
         aria-checked={enabled}
         disabled={saving}
-        onClick={handleToggle}
+        onClick={() => {
+          const next = !enabled
+          run(() => setCustomBrand(site.id, next), () => {
+            setEnabled(next)
+            setReason(resolve(next, brandKey))
+          })
+        }}
         className={`px-3 py-1 rounded text-xs font-medium border disabled:opacity-40 disabled:cursor-not-allowed ${
           enabled
             ? 'border-green-700 text-green-300 hover:bg-green-900/30'
@@ -57,6 +103,9 @@ function CustomBrandToggle({ site }: { site: SiteRow }) {
       >
         {enabled ? 'On' : 'Off'}
       </button>
+      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${badge.className}`}>
+        {badge.text}
+      </span>
       {saving && <span className="text-[10px] text-gray-500">saving…</span>}
       {error && <span className="text-[10px] text-red-400" title={error}>⚠</span>}
     </div>
@@ -157,7 +206,7 @@ export default function SitesView({
                   <ProviderSelect site={site} />
                 </td>
                 <td className="px-4 py-3">
-                  <CustomBrandToggle site={site} />
+                  <CustomBrandControls site={site} />
                 </td>
               </tr>
             ))}

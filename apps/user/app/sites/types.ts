@@ -20,6 +20,12 @@ export interface SiteProps {
   features?: string[]
   /** Site.partialGroupBookingEnabled — guests may book part of a sunbed unit, not just the whole unit. */
   partialGroupBookingEnabled?: boolean
+  /** Site.code (track 022) — the immutable short id printed on QR cards. */
+  code?: string | null
+  /** Site.customBrandEnabled (track 023) — is the bespoke brand page serving? */
+  customBrandEnabled?: boolean | null
+  /** Site.customBrandKey (track 023) — WHICH module in `brands/` renders it. */
+  customBrandKey?: string | null
   rentalPaymentType?: string | null
   rentalItems?: RentalItemProps[]
   layoutMode?: string | null

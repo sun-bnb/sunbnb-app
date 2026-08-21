@@ -219,22 +219,25 @@ That extraction is the real engineering in this track. Everything else is plumbi
 
 ## Resume here
 
-- **▶ NEXT ACTION: P3 — the `brands/` mechanism.** `apps/user/brands/` with a static
-  `Site.code → () => import(…)` registry, the pure manifest in `@repo/data` (test-pinned
-  against the registry in both directions), one `resolveBrandRender` shared by every surface,
-  the fall-back-to-standard rule wired into `/s/[slug]`, the Tailwind `./brands/**` content
-  glob, and a reference module built against a local site. **Build once and confirm one chunk
-  per brand** (`.next/server/chunks` + the client manifest) — the whole shape rests on that
-  claim and it is still unverified. Then upgrade the admin switch to report the RESOLVED state
-  (*live* vs *awaiting code*).
-- **The mount point P3 builds on is ready:** `components/booking/BookingSurface.tsx`. A brand
-  shell renders its own layout and mounts that; it must never copy the drawer.
-- **Context needed:** this file · `apps/user/components/booking/BookingSurface.tsx` (the
-  contract) · `apps/user/app/s/[slug]/page.tsx` + `view.tsx` (where the fork goes) ·
-  `packages/data/src/site-code.ts` ([[track:022]]) · `apps/user/tailwind.config.js`.
-- **Blocked by:** nothing. Q6, Q8 and Q9 can be answered when P3/P4 reach them.
-- **Good local target:** `brisa-marina` (`S-MKV0ZJ`) — it is the site with a genuinely custom
-  brand colour, so a reference module has something to sit against.
+- **▶ NEXT ACTION: P4 — the partner brand tab follows the effective render (D2).** Per field:
+  tokens read-only under a live custom page, **slug always editable**, everything editable when
+  the standard page is what renders. Read the state with the same `resolveBrandRender` the
+  other two surfaces use. Split `saveBrand` so the slug write survives the token rejection,
+  guard server-side (a hidden form still posts), and register both in the gated-action registry
+  so the auth matrix carries them.
+- **Context needed:** this file · `apps/partner/app/sites/[id]/brand/view.tsx` +
+  `site-actions.ts` (`saveBrand`, `checkSlug`, `generateSlug`) ·
+  `packages/data/src/brand-manifest.ts` (`resolveBrandRender`) ·
+  `apps/partner/app/test/gated-actions.ts` (the registry the auth matrix drives).
+- **Then P5 — customer #1**: a real bespoke shell + its smoke test + the brand-kit checklist.
+- **Local state for looking at it:** `brisa-marina` (`S-MKV0ZJ`) is set to
+  `customBrandKey: 'reference'`, `customBrandEnabled: true` in the LOCAL dev DB, so
+  `/s/brisa-marina` serves the reference module. Revert with a `prisma.site.update` setting the
+  key null and the switch false.
+- **Blocked by:** nothing. Q6 (scope beyond the landing page) and Q8 (read-only panel copy) are
+  P4/P7 questions. **Q9 answered by P3:** the shell owns its layout and copy but NOT its
+  metadata — `generateMetadata` still builds title/description from the brand fields, so
+  `brandName`/`tagline` remain in effect and stay editable under D2's rule.
 
 ## Roadmap
 
@@ -248,14 +251,15 @@ That extraction is the real engineering in this track. Everything else is plumbi
   `{ site, apiKey, theme? }`; `SiteView` 403 → 266 lines and is now the page around it. Peek
   arithmetic extracted to the pure `app/sites/[id]/peek-height.ts` (+6 tests, previously
   untested). Browser-verified on both the standard and branded pages.
-- ☐ **P3 — The `brands/` mechanism + the shared manifest.** `apps/user/brands/` with a static
-  `Site.code → () => import(…)` registry, the pure manifest in `@repo/data` (test-pinned
-  against the registry both ways), the single `resolveBrandRender` used by every surface, the
-  fall-back-to-standard rule, the Tailwind `./brands/**` glob, and a reference module built
-  against a local site so the wiring is proven before a customer depends on it. **Build once
-  and confirm one chunk per brand** (`.next/server/chunks` + client manifest) — the load-on-
-  demand claim is the reason for this shape and should not stay assumed. Admin switch upgrades
-  to showing the RESOLVED state (*live* vs *awaiting code*).
+- ✅ **P3 — The `brands/` mechanism + the shared manifest** (2026-08-21). `apps/user/brands/`
+  with a `dynamic()` registry, `BrandMount` client boundary, `types.ts` contract and a plain
+  `reference` module; `@repo/data/brand-manifest` (`BRAND_KEYS`, `isKnownBrandKey`,
+  `resolveBrandRender`, +8 tests); the fork and fall-back in `/s/[slug]` (+7 tests); registry ↔
+  manifest pinned at compile time by `Record<BrandKey, …>` and at runtime by a test (+2);
+  Tailwind `./brands/**`; vitest include extended to `brands/**`. Admin gained the module
+  select (`setCustomBrandKey`, manifest-validated, +9 tests) and a resolved-state badge. Two
+  corrections fell out of building it — the registry key and the splitting mechanism, see Log.
+
 - ☐ **P4 — Partner brand tab follows the effective render (D2).** Per-field: tokens read-only
   under a live custom page, **slug always editable**, everything editable when the standard
   page is what renders. Split `saveBrand` so the slug write survives the token rejection;
@@ -438,6 +442,32 @@ That extraction is the real engineering in this track. Everything else is plumbi
     `accent_color` and never looked at `bg_color`/`fg_color`, the only two the page reads.
     `brisa-marina` has a custom `#b9e1ef` and renders visibly branded. Corrected above.
   Green: user 634u (+6), tsc + lint clean.
+
+- **2026-08-21 — P3 done. Two things I had told the founder turned out to be wrong, and both
+  were caught by building rather than reasoning.**
+  - **`Site.code` cannot key the registry.** Codes are minted per DATABASE, so the same venue
+    carries different ones in dev, test and production; a committed registry keyed on one would
+    resolve nowhere else — including the Vercel previews that run against the TEST database,
+    which is exactly the "preview is free" property D1 relied on. Replaced by
+    `Site.customBrandKey`: the key lives in code, each environment's row points at it, and one
+    module can serve a chain of sites. D3's "keyed by `Site.code`" is superseded; the reasoning
+    that rejected the SLUG still stands.
+  - **The import shape alone does not code-split, in the App Router.** I had told the founder
+    laziness comes from the import shape rather than the location. The location half was right;
+    the shape half was not. Measured with two brands: a bare `() => import(…)` awaited in a
+    server component puts every brand in `/s/[slug]`'s page chunk, and so does `next/dynamic`
+    called from server code. Only a `dynamic()` reached through a CLIENT boundary
+    (`BrandMount`) emits one chunk per brand — confirmed by rebuilding and finding the two
+    brands in separate chunk files with the page chunk clean, then again with a single brand.
+    A source-check test now guards it, because nothing else can see it.
+  - **Q9 answered in passing:** the shell owns layout and copy, not metadata. `generateMetadata`
+    still builds title/description from `brandName`/`tagline`, so by D2's rule those fields stay
+    editable in the partner tab. Convenient rather than clever — a bespoke page still wants a
+    sensible OG card, and leaving that with the platform means one less thing per shell.
+  - The admin select validates against the manifest rather than accepting free text: a typo
+    stored is indistinguishable from a deleted module (both `unknown-key`, both quietly serving
+    the standard page), and the person who made the typo is the least likely to notice.
+  Green: user 642u, data 486u, admin 202u, tsc + lint clean, `next build` clean.
 
 ## Links
 

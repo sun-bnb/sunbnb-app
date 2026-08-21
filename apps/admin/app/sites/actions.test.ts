@@ -8,7 +8,8 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }))
 
-import { setCustomBrand, updatePaymentProvider } from './actions'
+import { setCustomBrand, setCustomBrandKey, updatePaymentProvider } from './actions'
+import { BRAND_KEYS } from '@repo/data/brand-manifest'
 import { auth } from '@/app/auth'
 import { revalidatePath } from 'next/cache'
 import prisma from '@repo/data/PrismaCient'
@@ -181,6 +182,94 @@ describe('setCustomBrand', () => {
     vi.mocked(prisma.site.update).mockResolvedValue({} as any)
 
     await setCustomBrand('site-1', true)
+
+    expect(vi.mocked(revalidatePath)).toHaveBeenCalledWith('/sites')
+  })
+})
+
+/**
+ * Track 023 — WHICH bespoke module renders a site.
+ *
+ * The key is a join between admin data and committed code, and the failure it
+ * has to prevent is the quiet one: a key nothing answers to resolves to the
+ * standard page, which looks exactly like "not enabled yet". Validating on the
+ * way in keeps that state reachable only by deleting a module, never by typing.
+ */
+describe('setCustomBrandKey', () => {
+  const KNOWN = BRAND_KEYS[0]
+
+  it('throws when not authenticated, and writes nothing', async () => {
+    await expect(setCustomBrandKey('site-1', KNOWN)).rejects.toThrow('Not authenticated')
+    expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
+  })
+
+  it('throws for a signed-in NON-sudo user', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'user-1' } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as any)
+
+    await expect(setCustomBrandKey('site-1', KNOWN)).rejects.toThrow('sudo required')
+    expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
+  })
+
+  it('assigns a key that exists in the manifest', async () => {
+    authenticateAsSudo()
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+
+    const res = await setCustomBrandKey('site-1', KNOWN)
+
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(prisma.site.update)).toHaveBeenCalledWith({
+      where: { id: 'site-1' },
+      data: { customBrandKey: KNOWN },
+    })
+  })
+
+  it('REFUSES a key no module answers to', async () => {
+    // Stored, it would resolve to the standard page — indistinguishable from
+    // "not set up yet", and the person who typed it is the least likely to notice.
+    authenticateAsSudo()
+
+    const res = await setCustomBrandKey('site-1', 'brisa-marnia')
+
+    expect(res.status).toBe('error')
+    expect(res.errors![0]).toBe('Unknown brand key')
+    expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['null', null],
+    ['an empty string', ''],
+    ['whitespace', '   '],
+  ])('clears the assignment when given %s, storing NULL', async (_label, value) => {
+    // The select's "— none —" sends ''. Storing that verbatim would be a key
+    // nothing answers to, i.e. the exact state the validation above prevents.
+    authenticateAsSudo()
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+
+    const res = await setCustomBrandKey('site-1', value)
+
+    expect(res.status).toBe('ok')
+    expect(vi.mocked(prisma.site.update)).toHaveBeenCalledWith({
+      where: { id: 'site-1' },
+      data: { customBrandKey: null },
+    })
+  })
+
+  it('rejects a blank site id without touching the database', async () => {
+    authenticateAsSudo()
+
+    const res = await setCustomBrandKey('  ', KNOWN)
+
+    expect(res.status).toBe('error')
+    expect(res.errors![0]).toBe('Site ID is required')
+    expect(vi.mocked(prisma.site.update)).not.toHaveBeenCalled()
+  })
+
+  it('revalidates the sites page', async () => {
+    authenticateAsSudo()
+    vi.mocked(prisma.site.update).mockResolvedValue({} as any)
+
+    await setCustomBrandKey('site-1', KNOWN)
 
     expect(vi.mocked(revalidatePath)).toHaveBeenCalledWith('/sites')
   })

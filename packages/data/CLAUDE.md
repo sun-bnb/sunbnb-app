@@ -42,6 +42,22 @@ Key models: User, PartnerAccount, Site, InventoryItem, Reservation, Order, Order
 symbols, and the site half of the printed QR URL (`/q/S-K7M2X9/1-1-1`). Nullable during
 expand, `@unique`, backfilled. Rules in `src/site-code.ts`; never rewritten once assigned.
 
+**`Site.customBrandKey`** (track 023) — WHICH bespoke module renders this site (`reference`,
+`alcudia`…). Not `Site.code` and not the slug: the code is minted per DATABASE, so the same
+venue has different ones in dev/test/production and a committed registry keyed on one would
+resolve nowhere else (including the Vercel previews that run on the test DB); the slug is
+partner-editable. The key lives in code, each environment's row points at it, and one module
+can serve a chain of sites.
+
+**`src/brand-manifest.ts`** — pure, client-safe: `BRAND_KEYS` (every module in
+`apps/user/brands`), `isKnownBrandKey`, and `resolveBrandRender(site) → { mode, key, reason }`,
+the ONE answer to "what does a guest see" shared by the user app (which page), the partner brand
+tab (whether the token editor is still in effect) and the admin fleet list (*live* vs *awaiting
+code* vs *unknown key*). Both gates must pass; everything else resolves to the standard page,
+because a bespoke page that is missing, misconfigured or switched off must cost the customer
+their design and never their bookings. The React modules cannot live here — they are in
+`apps/user` — so the LIST lives here and a test pins the two together.
+
 **`Site.customBrandEnabled`** (track 023) — this site renders a BESPOKE brand page (a per-site
 React module in `apps/user/brands`) instead of the standard `/s/{slug}` one. Admin-only. One of
 TWO gates: the registry answers "does a bespoke page exist", this column answers "is it live",
