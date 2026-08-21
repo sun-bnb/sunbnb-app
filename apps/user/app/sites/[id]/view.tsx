@@ -3,15 +3,11 @@
 import logger from '@/utils/logger'
 
 import { Reservation, SiteProps } from '@/app/sites/types'
-import Tabs from '@mui/material/Tabs'
-import Tab from '@mui/material/Tab'
 import Divider from '@mui/material/Divider'
 import RestaurantIcon from '@mui/icons-material/Restaurant'
 import WcIcon from '@mui/icons-material/Wc'
 import SurfingIcon from '@mui/icons-material/Surfing'
 import LocalBarIcon from '@mui/icons-material/LocalBar'
-import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown'
-import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import EventNoteIcon from '@mui/icons-material/EventNote'
@@ -26,7 +22,7 @@ import {
   useGetAvailabilityBySiteAndTimeRangeQuery,
 } from '@/store/features/api/apiSlice'
 
-import ReservationView from './Reservation'
+import BookingSurface from '@/components/booking/BookingSurface'
 import { useRouter, usePathname } from 'next/navigation'
 import { CookieConsent } from '@repo/ui/cookie-consent'
 
@@ -40,31 +36,6 @@ const serviceIcons: {
 }
 
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-
-const withHours = false
-
-const Backdrop = ({ onClick }: { onClick?: () => void }) => {
-  return (
-    <div
-      onClick={onClick} // Optional: handle clicks to close
-      // Mobile-only scrim: it pairs with the lg:hidden reservation drawer (z-11).
-      // On desktop there is no drawer — the reservation panel is the sticky
-      // sidebar (no elevated z-index), so an un-guarded backdrop would shadow and
-      // disable the whole page until clicked. Switching the Equipment tab sets
-      // `focused: true`, which is what surfaced this. Keep it hidden at lg+.
-      className="lg:hidden"
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100vw',
-        height: '100vh',
-        backgroundColor: 'rgba(0, 0, 0, 0.5)', // Dark transparent background
-        zIndex: 10, // Ensure it's above other elements
-      }}
-    />
-  );
-}
 
 export interface SiteViewBrand {
   brandName: string
@@ -81,24 +52,12 @@ export default function SiteView({ site, apiKey, brand, initialAvailableCount }:
 
   const dispatch = useDispatch()
   const sitesState = useSelector((state: RootState) => state.sites)
-  const { reservationMode, pendingReservationId } = sitesState
-
-  let focused = sitesState.focused !== undefined ? sitesState.focused : false
 
   const [ weekDaysOpen, setWeekDaysOpen ] = useState<boolean>(false)
 
-  // P0: on mount, open the drawer expanded and commit today as the default
-  // reservationDay so downstream components (SunbedSelection, ReservationView)
-  // see a real committed value rather than a render-time fallback.
-  // This runs once per mount — if the user collapses the drawer afterwards it
-  // stays collapsed (we never force focused:true again after mount).
-  useEffect(() => {
-    const updates: Record<string, unknown> = { focused: true }
-    if (!sitesState.reservationDay) {
-      updates.reservationDay = dayjs().toDate()
-    }
-    dispatch(setValue(updates))
-  }, [])
+  // The booking funnel — drawer state, the on-mount bootstrap and the peek
+  // arithmetic — lives in BookingSurface (track 023 P2). This component is the
+  // page AROUND it: cover, counts, services, description, opening hours.
 
   // Track 020 P5s3: this page previously ALSO ran useGetSiteByIdQuery here,
   // re-downloading the entire site (all items with nested pair objects) that
@@ -154,26 +113,6 @@ export default function SiteView({ site, apiKey, brand, initialAvailableCount }:
 
   const t = useTranslations('SiteView')
 
-  // ── Mobile drawer: peek height = visible portion when minimized ──
-  // Heights: date range ~56px, date+time row ~48px, hours/days toggle ~36px, view mode tabs ~44px, padding ~16px
-  const activeSite = site
-  const hasSunbeds = hasSunbedsFeature
-  const hasRentals = siteFeatureList.includes('rentals') && (activeSite.rentalItems?.length ?? 0) > 0
-  const hasViewModeTabs = hasSunbeds && hasRentals
-  const hasHourlyEquipment = hasRentals && (activeSite.rentalItems || []).some((ri: any) => ri.pricePerHour != null && ri.pricePerHour > 0)
-  const viewMode = sitesState.viewMode || (hasSunbeds ? 'sunbeds' : 'equipment')
-  // Sunbeds tab: date range picker (56) + padding (16) = 72
-  // Equipment tab with hourly pricing, hours mode: hours/days toggle (36) + date+time picker (48) + padding (16) = 100
-  // Equipment tab with hourly pricing, days mode: toggle (36) + date range (56) + padding (16) = 108
-  // Equipment tab without hourly pricing: date range picker (56) + padding (16) = 72
-  const currentMode = reservationMode || 'days'
-  const isHourly = currentMode === 'hours'
-  const isEquipmentTab = viewMode === 'equipment'
-  const BASE_PEEK = isEquipmentTab && hasHourlyEquipment
-    ? (isHourly ? 100 : 108)
-    : 66
-  const PEEK_HEIGHT = BASE_PEEK + (hasViewModeTabs ? 52 : 0)
-  
   return (
     <div className={`mx-auto max-w-6xl min-h-screen ${brand ? '' : 'bg-cream pt-[80px]'}`}
       style={brand ? { backgroundColor: brand.bgColor || '#faf9f6', color: brand.fgColor || '#111827' } : undefined}
@@ -185,14 +124,6 @@ export default function SiteView({ site, apiKey, brand, initialAvailableCount }:
         hasAnalytics
         stickyOffsetClass={brand ? 'top-0' : 'top-[80px]'}
       />
-      {
-        // Scrim shows whenever the drawer is open, including the initial auto-open —
-        // it frames the reservation panel and lets a background tap dismiss it.
-        focused &&
-          <Backdrop onClick={() => {
-            dispatch(setValue({ focused: false }))
-          }} />
-      }
       <div className="lg:flex lg:gap-8 lg:px-6 lg:pt-4">
         {/* Left column: site info */}
         <div className="lg:flex-[3] lg:min-w-0">
@@ -242,7 +173,7 @@ export default function SiteView({ site, apiKey, brand, initialAvailableCount }:
         <div className={brand ? 'px-3' : 'py-3 px-3'}>
           <div className={`flex justify-between items-center ${brand ? 'bg-black/30 -mx-3 px-3 py-2' : ''}`}>
             <div className="flex items-center gap-3 text-sm">
-              {hasSunbeds && (
+              {hasSunbedsFeature && (
               <div>
                 <span className="mr-1">&#x26F1;</span>
                 <span className={brand ? 'text-green-400 font-medium' : (availableCount || 0) > 0 ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>{availableCount}</span>
@@ -323,81 +254,13 @@ export default function SiteView({ site, apiKey, brand, initialAvailableCount }:
           </div>
         </div>
         </div>
-        {/* Right column: reservation panel — sticky sidebar on desktop, fixed drawer on mobile */}
-        <div className="hidden lg:block lg:flex-[2] lg:min-w-[360px] lg:max-w-[480px]">
-          <div className={`lg:sticky lg:top-[80px] px-3 pb-4 ${brand ? '' : 'bg-cream'}`}
-            style={brand ? { backgroundColor: brand.bgColor || '#faf9f6' } : undefined}
-          >
-            {
-                withHours ?
-            <div className="w-full">
-
-                  <div className="mb-4">
-                    <Tabs variant="fullWidth" value={reservationMode || 'days'} onChange={(e, value) => {
-                      dispatch(setValue({
-                        reservationMode: value,
-                        focused: true
-                      }))
-                    }} aria-label="Reservation mode">
-                      <Tab value="days" label={t('Days')} />
-                      <Tab value="hours" label={t('Hours')} />
-                    </Tabs>
-                  </div>
-
-            </div> : null
-            }
-            <ReservationView apiKey={apiKey} site={site} wide={true} />
-          </div>
-        </div>
+        {/* The booking funnel: sticky sidebar at lg, fixed drawer below it. */}
+        <BookingSurface
+          site={site}
+          apiKey={apiKey}
+          theme={brand ? { background: brand.bgColor, foreground: brand.fgColor } : undefined}
+        />
       </div>
-        {/* Mobile spacer to prevent content from hiding behind the fixed drawer */}
-        <div className="lg:hidden" style={{ height: `${PEEK_HEIGHT + 16}px` }} />
-
-        {/* ── Mobile reservation drawer ── */}
-        <div
-          className={`lg:hidden fixed left-0 w-full text-center border-t transition-transform duration-500 ease-in-out ${brand ? '' : 'bg-cream text-white border-subtle'}`}
-          style={{
-            zIndex: 11,
-            bottom: 0,
-            transform: focused ? 'translateY(0)' : `translateY(calc(100% - ${PEEK_HEIGHT}px))`,
-            ...(brand ? { backgroundColor: brand.bgColor || '#faf9f6', color: brand.fgColor || '#111827', borderColor: `${brand.fgColor || '#111827'}15` } : {}),
-          }}
-        >
-          {/* Minimize / maximize pill button */}
-          {(focused || pendingReservationId) && (
-            <div
-              className="text-black absolute w-[100px] rounded-full border shadow-soft cursor-pointer"
-              style={{
-                left: 'calc(50% - 50px)',
-                top: '-15px',
-                zIndex: 2,
-                ...(brand
-                  ? { backgroundColor: brand.bgColor || '#faf9f6', borderColor: `${brand.fgColor || '#111827'}15`, color: brand.fgColor || '#111827' }
-                  : { backgroundColor: 'var(--color-cream, #faf9f6)', borderColor: 'var(--color-subtle, #e5e7eb)' }),
-              }}
-              onClick={() => {
-                dispatch(setValue({ focused: !focused }))
-              }}
-            >
-              {focused ? <KeyboardDoubleArrowDownIcon /> : <KeyboardDoubleArrowUpIcon />}
-            </div>
-          )}
-
-          {/* Drawer content: date range field stays visible as peek, rest scrolls off */}
-          <div className={`px-3 ${focused ? 'pt-4 pb-4' : 'pt-0 pb-1'}`}>
-            {withHours && (
-              <div className="w-full mb-4">
-                <Tabs variant="fullWidth" value={reservationMode || 'days'} onChange={(e, value) => {
-                  dispatch(setValue({ reservationMode: value, focused: true }))
-                }} aria-label="Reservation mode">
-                  <Tab value="days" label={t('Days')} />
-                  <Tab value="hours" label={t('Hours')} />
-                </Tabs>
-              </div>
-            )}
-            <ReservationView apiKey={apiKey} site={site} />
-          </div>
-        </div>
     </div>
   )
 

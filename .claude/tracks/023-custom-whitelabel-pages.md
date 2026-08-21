@@ -219,21 +219,22 @@ That extraction is the real engineering in this track. Everything else is plumbi
 
 ## Resume here
 
-- **▶ NEXT ACTION: P2 — extract the booking engine.** The prerequisite everything else waits
-  on. `SiteView` (`apps/user/app/sites/[id]/view.tsx`) currently mixes the funnel with the page
-  chrome, header, hours and services; split out a booking component with an explicit prop
-  contract that the standard page mounts exactly as it does today. Behaviour-preserving, so
-  the existing user-app tests are the guard — 628 unit + 111 integration must stay green, and
-  a browser pass over `/sites/[id]` and `/s/[slug]` is worth it since the drawer is involved.
-- **Context needed:** this file · `apps/user/app/sites/[id]/view.tsx` (the seam) ·
-  `apps/user/app/s/[slug]/view.tsx` (the branded caller, which shows what a shell needs) ·
-  `apps/user/app/sites/[id]/seat-selection.ts` + `sunbed-preselection.ts` (policy the funnel
-  carries) · `.claude/rules/ui.md` and `/ui user` before touching presentation.
-- **Blocked by:** nothing. Q6 (scope beyond the landing page), Q8 (read-only panel copy) and
-  Q9 (who owns metadata) can be answered when P3/P4 reach them.
-- **P1 is done but NOT browser-verified** — the admin app sits behind a sudo login. The column
-  was confirmed readable through the generated client (all six local sites, default `false`);
-  the toggle UI itself has only unit coverage.
+- **▶ NEXT ACTION: P3 — the `brands/` mechanism.** `apps/user/brands/` with a static
+  `Site.code → () => import(…)` registry, the pure manifest in `@repo/data` (test-pinned
+  against the registry in both directions), one `resolveBrandRender` shared by every surface,
+  the fall-back-to-standard rule wired into `/s/[slug]`, the Tailwind `./brands/**` content
+  glob, and a reference module built against a local site. **Build once and confirm one chunk
+  per brand** (`.next/server/chunks` + the client manifest) — the whole shape rests on that
+  claim and it is still unverified. Then upgrade the admin switch to report the RESOLVED state
+  (*live* vs *awaiting code*).
+- **The mount point P3 builds on is ready:** `components/booking/BookingSurface.tsx`. A brand
+  shell renders its own layout and mounts that; it must never copy the drawer.
+- **Context needed:** this file · `apps/user/components/booking/BookingSurface.tsx` (the
+  contract) · `apps/user/app/s/[slug]/page.tsx` + `view.tsx` (where the fork goes) ·
+  `packages/data/src/site-code.ts` ([[track:022]]) · `apps/user/tailwind.config.js`.
+- **Blocked by:** nothing. Q6, Q8 and Q9 can be answered when P3/P4 reach them.
+- **Good local target:** `brisa-marina` (`S-MKV0ZJ`) — it is the site with a genuinely custom
+  brand colour, so a reference module has something to sit against.
 
 ## Roadmap
 
@@ -242,9 +243,11 @@ That extraction is the real engineering in this track. Everything else is plumbi
   `setCustomBrand` in `apps/admin/app/sites/actions.ts` (sudo-gated, boolean-typed, +11 tests),
   and a Custom brand column in the admin sites table. Nothing reads the column yet — zero
   behaviour change by construction.
-- ☐ **P2 — Extract the booking engine.** `SiteView` splits into page chrome and a booking
-  component with an explicit prop contract; the standard page mounts it exactly as before.
-  Behaviour-preserving.
+- ✅ **P2 — Extract the booking engine** (2026-08-21). `components/booking/BookingSurface.tsx`
+  owns the funnel (sidebar, drawer, scrim, pill, bootstrap, `ReservationView`) behind
+  `{ site, apiKey, theme? }`; `SiteView` 403 → 266 lines and is now the page around it. Peek
+  arithmetic extracted to the pure `app/sites/[id]/peek-height.ts` (+6 tests, previously
+  untested). Browser-verified on both the standard and branded pages.
 - ☐ **P3 — The `brands/` mechanism + the shared manifest.** `apps/user/brands/` with a static
   `Site.code → () => import(…)` registry, the pure manifest in `@repo/data` (test-pinned
   against the registry both ways), the single `resolveBrandRender` used by every surface, the
@@ -305,10 +308,16 @@ That extraction is the real engineering in this track. Everything else is plumbi
   stale.** `saveBrand` (`apps/partner/app/sites/[id]/site-actions.ts:442`) validates and
   persists `brandName`, `slug`, `tagline`, `bgColor`, `fgColor`, including slug uniqueness.
   Fix that line when this track touches the area.
-- **Local data is thin for design work.** Three sites have a slug AND a `SiteBrand` row
-  (`brisa-marina`, `alonso-beach`, `la-playa-digital`) but **every colour and logo field is
-  null across all of them**, so the branded page renders at its fallbacks (`#faf9f6` /
-  `#111827`). Any design pass needs a seeded brand first.
+- **Local brand data — CORRECTED 2026-08-21.** Three sites have a slug AND a `SiteBrand` row
+  (`brisa-marina`, `alonso-beach`, `la-playa-digital`). An earlier note here claimed every
+  colour field was null; that was wrong, and wrong in the way that matters: it was based on a
+  query that selected `primary_color`/`accent_color` and never looked at `bg_color`/`fg_color`
+  — the only two the page actually reads. **`bg_color` and `fg_color` are set on all three**,
+  and `brisa-marina` carries a genuinely custom `#b9e1ef`, so it renders visibly branded today
+  (confirmed in the browser: the drawer and sidebar paint that blue). Null across all three:
+  `primary_color`, `accent_color`, `logo_url`, `bg_image_url` — none of which `SiteViewBrand`
+  consumes. So a design pass has a real branded site to work against; what it lacks is a logo
+  and a background image.
 - **`SiteBrand` already carries more columns than the page reads** — `primary_color`,
   `accent_color`, `bg_image_url` (+ dimensions) exist in the schema and are unused by
   `SiteViewBrand`. Tier 1 is partly a matter of consuming what is already stored.
@@ -400,6 +409,35 @@ That extraction is the real engineering in this track. Everything else is plumbi
     already applied it, so adding an explanatory comment would have desynced the recorded
     checksum. The reasoning lives on the schema field instead.
   Green: admin 193u (+11), user 628u, partner 2046u, tsc + lint clean, `migrate:check` clean.
+
+- **2026-08-21 — P2 done, browser-verified.** The funnel is one component:
+  `components/booking/BookingSurface.tsx` takes `{ site, apiKey, theme? }` and owns the sticky
+  sidebar, the fixed drawer, the scrim, the minimise pill, the on-mount bootstrap and the
+  `ReservationView` mount. `SiteView` went 403 → 266 lines and is now honestly just the page
+  around the funnel.
+  - **`theme` is two colours, not `SiteViewBrand`.** The funnel does not care about a brand
+    name, a tagline or a logo, and accepting the whole object would tie it to whatever that
+    shape becomes. Same instinct as keeping the booking engine out of a bespoke shell: the
+    narrower the contract, the fewer reasons to change it.
+  - **The peek arithmetic came out as a pure module** (`app/sites/[id]/peek-height.ts`, +6
+    tests). It had four branches, no test, and a phone-only failure mode — a wrong peek clips
+    the date field or leaves a slab of empty panel, which no desktop check or type error would
+    catch. Placed under `app/` rather than beside the component because the user app's vitest
+    include is `app/**` and `store/**` only; that is the existing split (pure logic under
+    `app/`, JSX under `components/`), not a new convention.
+  - **Dead code removed rather than moved:** `const withHours = false` gated two Days/Hours
+    `Tabs` blocks that could never render. Carrying unreachable branches into a new component
+    would have been worse than deleting them.
+  - **Browser-verified, and the DOM confirmed the extracted maths:** the collapsed drawer reads
+    `translateY(calc(100% - 118px))` and the spacer is `134px` on Brisa Marina — 66 (sunbeds) +
+    52 (both tabs), and 118 + 16 — matching `peekHeight` exactly. Branded page: the drawer and
+    sidebar paint the site's `bg_color` through the new `theme` prop, no `bg-cream` fallback
+    class, zero console errors.
+  - **A correction fell out of that check.** The Findings note claiming every local brand
+    colour was null was wrong — it came from a query that selected `primary_color`/
+    `accent_color` and never looked at `bg_color`/`fg_color`, the only two the page reads.
+    `brisa-marina` has a custom `#b9e1ef` and renders visibly branded. Corrected above.
+  Green: user 634u (+6), tsc + lint clean.
 
 ## Links
 
