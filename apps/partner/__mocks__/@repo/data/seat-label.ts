@@ -66,3 +66,14 @@ export function computeSeatLabelsWithUnits(): {
 } {
   return { labels: new Map(), unitSeqs: new Map() }
 }
+
+// REAL implementation, like its siblings above: pure arithmetic over the
+// `parcel*10000 + row*100 + seatIdx` encoding, and the manage grid's parcel
+// bucketing depends on it being right rather than stubbed.
+export function decodeSeatNumber(number: number): { parcel: number; row: number; seatIdx: number } {
+  return {
+    parcel: Math.floor(number / 10000),
+    row: Math.floor(number / 100) % 100,
+    seatIdx: number % 100,
+  }
+}

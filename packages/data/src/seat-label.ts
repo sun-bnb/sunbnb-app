@@ -306,6 +306,34 @@ export function parseSeatLabel(label: string | null | undefined): SeatAddress | 
 }
 
 /**
+ * Decode `InventoryItem.number` into the position it packs.
+ *
+ * The encoding is `parcel * 10000 + row * 100 + seatIdx`, and pool extras use
+ * the same per-parcel block with row 99 (see `nextPoolNumber`).
+ *
+ * Exported because consumers kept re-deriving it, and the manage grid derived
+ * it by SLICING THE STRING — `str[0]` as the parcel, `str[1..3]` as the row.
+ * That silently caps a site at NINE parcels: every parcel from 10 up collapses
+ * into a single-digit bucket and drags a misread row and position with it.
+ * Arithmetic has no such ceiling, which is the whole reason the number is
+ * packed this way rather than concatenated.
+ */
+export interface DecodedSeatNumber {
+  parcel: number
+  row: number
+  /** Position within the row, left to right. 1-based. */
+  seatIdx: number
+}
+
+export function decodeSeatNumber(number: number): DecodedSeatNumber {
+  return {
+    parcel: Math.floor(number / 10000),
+    row: Math.floor(number / 100) % 100,
+    seatIdx: number % 100,
+  }
+}
+
+/**
  * The seat id as a person reads it: `{parcel}-{row}-{seq}-{member}` — the UNIT
  * ADDRESS followed by which bed under it (track 021).
  *

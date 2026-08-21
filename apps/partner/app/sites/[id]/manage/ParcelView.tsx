@@ -12,6 +12,7 @@ import {
 } from './grid-helpers'
 import { createPoolSeat } from './actions'
 import { getBedState, getCellAppearance } from './bed-state'
+import { decodeSeatNumber } from '@repo/data/seat-label'
 
 function PoolCell({
   item,
@@ -24,7 +25,7 @@ function PoolCell({
   hideDetail?: boolean
   selected?: boolean
 }) {
-  const parcel = parseInt(String(item.number)[0]!, 10)
+  const { parcel } = decodeSeatNumber(item.number)
   const POOL_BAND_BASE = 9900
   const seq = item.number - (parcel * 10000 + POOL_BAND_BASE)
   const { bg, icon } = getCellAppearance(item)
@@ -126,12 +127,16 @@ const DETAIL_HIDE_BELOW = 0.6
 
 // ── ParcelView ────────────────────────────────────────────────────────────────
 
+/**
+ * Positional parts of a seat number, via the canonical decoder.
+ *
+ * This used to slice the string — `str[0]` as the parcel — which capped the
+ * grid at nine parcels: a 43-parcel site showed nine, each polluted with seats
+ * from other parcels carrying misread rows and positions.
+ */
 function parseSunbedNumber(num: number) {
-  const str = String(num)
-  const parcel = parseInt(str[0]!, 10)
-  const row = parseInt(str.substring(1, 3), 10)
-  const position = parseInt(str.substring(3), 10)
-  return { parcel, row, position }
+  const { parcel, row, seatIdx } = decodeSeatNumber(num)
+  return { parcel, row, position: seatIdx }
 }
 
 interface ParcelViewProps {

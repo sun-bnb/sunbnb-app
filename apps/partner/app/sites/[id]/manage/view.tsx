@@ -26,13 +26,18 @@ import {
 } from './actions'
 import { RESERVATION_COMPLETE, RESERVATION_HELD, RESERVATION_PAID_IN_CASH } from '@repo/data/reservation-status'
 import CollectPaymentModal from './CollectPaymentModal'
+import { decodeSeatNumber } from '@repo/data/seat-label'
 
+/**
+ * Positional parts of a seat number, via the canonical decoder.
+ *
+ * This used to slice the string — `str[0]` as the parcel — which capped the
+ * grid at nine parcels: a 43-parcel site showed nine, each polluted with seats
+ * from other parcels carrying misread rows and positions.
+ */
 function parseSunbedNumber(num: number) {
-  const str = String(num)
-  const parcel = parseInt(str[0]!, 10)
-  const row = parseInt(str.substring(1, 3), 10)
-  const position = parseInt(str.substring(3), 10)
-  return { parcel, row, position }
+  const { parcel, row, seatIdx } = decodeSeatNumber(num)
+  return { parcel, row, position: seatIdx }
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -184,7 +189,7 @@ export default function ManageView({
     const nums = [...new Set(
       (site.inventoryItems ?? [])
         .filter(i => i.status !== 'pool')
-        .map(i => parseInt(String(i.number)[0]!, 10))
+        .map(i => parseSunbedNumber(i.number).parcel)
     )].sort((a, b) => a - b)
     return nums[0]
   })()
@@ -456,7 +461,7 @@ export default function ManageView({
 
   // Free pool items by parcel
   const poolByParcel = freePoolItems.reduce((acc, item) => {
-    const parcel = parseInt(String(item.number)[0]!, 10)
+    const { parcel } = parseSunbedNumber(item.number)
     if (!acc[parcel]) acc[parcel] = []
     acc[parcel]!.push(item)
     return acc
@@ -486,7 +491,9 @@ export default function ManageView({
     if (!itemId) return
     const item = inventoryItems.find(i => i.id === itemId)
     if (!item) return
-    const parcel = parseInt(String(item.number)[0]!, 10)
+    // Locate-from-search: with the parcel misread, this silently failed the
+    // `includes` guard and left the operator on the wrong parcel.
+    const { parcel } = parseSunbedNumber(item.number)
     if (!Number.isNaN(parcel) && parcelNums.includes(parcel)) selectView(parcel)
     setSelectedItem(item)
     setSelectedItemIsPool(false)

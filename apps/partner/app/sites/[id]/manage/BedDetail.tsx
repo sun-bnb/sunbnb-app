@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl'
 import dayjs from 'dayjs'
 import NoteIcon from '@mui/icons-material/Note'
 import PaymentIcon from '@mui/icons-material/Payment'
-import { formatSeatId } from '@repo/data/seat-label'
+import { decodeSeatNumber, formatSeatId } from '@repo/data/seat-label'
 import { InventoryItem, Reservation } from '@/types/shared'
 import {
   reserveItem,
@@ -86,7 +86,9 @@ const TOGGLE_VISIBLE_STATES: BedState[] = ['available']
 // Pool seat numbering: number = parcel*10000 + 9900 + seq
 const POOL_BAND_BASE = 9900
 function getPoolSeq(item: InventoryItem): number {
-  const parcel = parseInt(String(item.number)[0]!, 10)
+  // Arithmetic, not `str[0]`: a spare in parcel 12 decoded as parcel 1 and
+  // reported a sequence in the hundred-thousands.
+  const { parcel } = decodeSeatNumber(item.number)
   return item.number - (parcel * 10000 + POOL_BAND_BASE)
 }
 
