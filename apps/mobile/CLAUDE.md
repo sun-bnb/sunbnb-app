@@ -1,62 +1,86 @@
 # Mobile App (apps/mobile)
 
-React Native floor app for on-site staff — iOS + Android. **Not built yet.** This file is the
-context boundary; the RN scaffold, `package.json` and workspace wiring land at P7 of
-[[track:024]] (`.claude/tracks/024-card-present-payments.md`). Until then `apps/*` globs this
-directory as a workspace but npm skips it, so the lockfile stays untouched.
+Expo / React Native floor app for on-site staff — iOS + Android. The native home of the
+token-gated floor surfaces, and the host of Viva card-present payments ([[track:024]]).
+**Status: scaffolded and bundling** — pairing flow, tab shell, and a v0 sunbed grid running
+against the partner HTTP surface. Screens are being built toward web parity per the approved
+mockups (see the track).
 
-## Why it exists
+## Stack
 
-Card-present payments. The floor can take cash or show a QR the guest pays on their own phone;
-neither serves a guest standing at the parasol with a card. Viva's softPOS is reachable only
-from a native app, so the floor surfaces move onto one.
+Expo SDK 57 · React Native 0.86 · React 19 · TypeScript · Expo Router (file routes under
+`src/app/`) · StyleSheet + `src/theme.ts` design tokens today (NativeWind planned with the
+full screen build). Lives in this monorepo as workspace `mobile`; React 19 / RN deps nest
+under `apps/mobile/node_modules` while the Next apps stay on React 18 at the root.
 
-**In this monorepo, not a separate repo** — it shares `@repo/data`, the rules tree, the wiki,
-and the single-writer ratchet. A separate repo would have meant copying logic and syncing it.
+Lint uses the repo's eslint 8 stack (`@repo/eslint-config`), **not** `eslint-config-expo` —
+the Expo config hoists to the root where it collides with the workspace's eslint 8. Don't
+reintroduce it without solving that.
 
-## Scope boundary
+## Commands
 
-**In:** the token-gated on-site surfaces — the manage grid (`apps/partner/app/sites/[id]/manage`)
-and the order dashboards (`sites/[id]/orders`, later `restaurants/[id]/orders`).
+```bash
+cd apps/mobile
+npm start                 # expo dev server (QR → Expo Go / dev build)
+npx tsc --noEmit          # typecheck
+npm run lint
+npx expo export --platform android   # headless Metro bundle — the "does it build" check
+```
 
-**Out:** the partner portal (session/Google-OAuth surfaces — sites, inventory, accounting,
-calendar, `frontdesk`), the consumer app, admin.
+`EXPO_PUBLIC_API_URL` points at the partner app origin (default `https://local.sunbnb.app:3001`).
 
-The line is the auth model: this app carries a `SecurityToken` access key, never a NextAuth
-session. That is why the scope is what it is — see `apps/partner/app/sites/[id]/manage/token.ts`
-`validateManageToken`.
+**Testing on a real phone (Expo Go):** the phone can't resolve `local.sunbnb.app` and won't trust
+the mkcert cert, so partner's dev server also listens on plain HTTP port **3011** (see
+`apps/partner/server.js`). Same Wi-Fi, then:
+`EXPO_PUBLIC_API_URL=http://<Mac-LAN-IP>:3011 npm start` and scan the QR with Expo Go.
+
+## How it talks to the backend
+
+RN cannot call Next server actions. The app uses the token-gated HTTP surface in
+apps/partner (track 024 P6.5):
+
+- `GET /api/manage/context?siteId&key` — pairing verification → `{ site, isAdmin }`
+- `GET /api/manage/grid?siteId&key` — the full grid payload (dates arrive as ISO strings)
+- `POST /api/manage/rpc` — `{ action, args }` forwarded to an allowlisted manage server
+  action; the allowlist (`apps/partner/app/api/manage/rpc/registry.ts`) is test-enforced to
+  be a subset of the gated-action registry, so the auth matrix covers everything exposed.
+
+Client: `src/lib/api.ts`. Auth model: a `SecurityToken` access key, paired once
+(`src/app/pairing.tsx` → `src/lib/pairing.ts`, expo-secure-store) — never a NextAuth session,
+never a key in a URL. Admin keys unlock the Today tab (till summary / day close / trends).
+
+## Structure
+
+- `src/app/` — routes: `index` (pairing gate) · `pairing` · `(tabs)/{beds,rentals,guests,today}`
+- `src/lib/` — `api.ts` (HTTP client) · `pairing.ts` (secure-store + input parsing) · `config.ts`
+- `src/theme.ts` — design-language tokens incl. the BedState → color map (mirrors
+  `@repo/floor-core/bed-state`'s Tailwind vocabulary)
 
 ## Three constraints that shape everything
 
-- **RN cannot call Next server actions.** No public HTTP contract exists for them, and
-  `apps/partner/app/sites/[id]/manage/actions.ts` is ~3.4k lines of them. The app talks to an
-  HTTP layer in front of the gated actions (P6.5), which must keep the
-  `verifySiteOwnership(siteId, accessKey)` gate and stay inside the gated-action registry
-  (`apps/partner/app/test/gated-actions.ts`) so the auth matrix still covers it.
-- **The payment leg cannot run in an emulator, ever.** Play Integrity rejects emulators by
-  design and an AVD has no NFC. Day-to-day UI work is fine in emulator/Simulator; the card tap
-  needs a real Android 8.1+ NFC handset. Viva's Terminal DEMO app + a demo account give
-  simulated transactions with no money moved.
-- **The payment UI is Viva's, not ours.** Viva has no embeddable softPOS SDK on either
-  platform — payment hands off to the `viva.com Terminal` app via Android intents / iOS URL
-  schemes and returns via callback. Our side is: build the request, handle the callback, and
-  **verify server-side** — a callback query string is user-typable and is never authoritative.
+- **RN cannot call Next server actions** — everything goes through the HTTP surface above;
+  new floor actions must be added to the RPC allowlist AND already sit in the gated-action
+  registry (`apps/partner/app/test/gated-actions.ts`).
+- **The payment leg cannot run in an emulator, ever.** Play Integrity rejects emulators and
+  an AVD has no NFC. UI work is fine in emulator/Simulator; the card tap needs a real
+  Android 8.1+ NFC handset (Viva Terminal DEMO app + demo account, no money moved).
+- **The payment UI is Viva's, not ours.** Card collect = deep link to the `viva.com Terminal`
+  app (scheme `sunbnbfloor` carries the callback) → **verify server-side** — a callback query
+  string is user-typable and never authoritative.
 
 ## Share vs reimplement
 
-**Import, never copy** — the client-safe `@repo/data` modules (`reservation-machine`,
-`seat-label`, `site-day`, `unit-address`, `reservation-status`) and the extracted pure logic
-(`bed-state.ts`, `grid-helpers.ts`, `seat-selection.ts`, `pos-seat-selection.ts`,
-`reservation-day.ts`). Copying any of these puts a second opinion on seat state outside the
-single-writer ratchet (`packages/data/src/reservation-machine-guard.test.ts`) — the drift that
-would land in till partitioning or collect-abandon, and land silently.
+**Import, never copy** — `@repo/floor-core` (`types`, `bed-state`, `grid-helpers`) and the
+client-safe `@repo/data` modules (`reservation-machine`, `seat-label`, `site-day`,
+`reservation-status`). Copying any of these puts a second opinion on seat state outside the
+single-writer ratchet. **Reimplement** — screens only (RN renders `<View>`/`<Text>`).
 
-**Reimplement** — screens only. RN renders `<View>`/`<Text>`; JSX and Tailwind do not port.
-UI drift is visible; logic drift is not.
+Never import a `@repo/data` submodule that transitively pulls prisma/pg — Metro will choke or
+worse, bundle it. `npx expo export` is the check.
 
 ## Pointers
 
-- Design record, decisions, roadmap, open questions: `.claude/tracks/024-card-present-payments.md`
-- Reservation state machine (the app is a *reader* of it): `packages/data/CLAUDE.md`
-- Floor surfaces being ported: `apps/partner/CLAUDE.md` § manage / orders
+- Design record, roadmap, mockups, open questions: `.claude/tracks/024-card-present-payments.md`
+- Reservation state machine (this app is a *reader*): `packages/data/CLAUDE.md`
+- The web surfaces being ported: `apps/partner/CLAUDE.md` § manage
 - Payment doctrine: `.claude/rules/payments.md`
