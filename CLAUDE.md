@@ -8,8 +8,9 @@ Sunbnb is a sunbed reservation SaaS platform — a Turborepo monorepo with:
 - `apps/partner/` — B2B portal for venue operators (port 3001)
 - `apps/user/` — Consumer booking app (port 3002)
 - `apps/admin/` — Platform admin (port 3003)
-- `apps/mobile/` — React Native floor app for on-site staff (iOS + Android) — **not built yet**, see [[track:024]]
+- `apps/mobile/` — Expo/React Native floor app for on-site staff (iOS + Android) — scaffolded, building toward v1, see [[track:024]]
 - `packages/data/` — `@repo/data` — Prisma schema, migrations, shared DB client, payment logic, auth, email
+- `packages/floor-core/` — `@repo/floor-core` — floor view-model types + `bed-state`/`grid-helpers`, shared by the partner manage grid and the mobile app
 - `packages/ui/` — `@repo/ui` — Shared React components (Button, TextField, Card, Code)
 - `packages/eslint-config/` — `@repo/eslint-config`
 - `packages/typescript-config/` — `@repo/typescript-config`
@@ -26,7 +27,7 @@ doctrine the agents below already follow.
 | `apps/user/` | `apps/user/CLAUDE.md` | `apps/user/TESTING.md` · `apps/user/UI.md` |
 | `apps/partner/` | `apps/partner/CLAUDE.md` | `apps/partner/TESTING.md` · `apps/partner/UI.md` |
 | `apps/admin/` | `apps/admin/CLAUDE.md` | `apps/admin/UI.md` |
-| `apps/mobile/` | `apps/mobile/CLAUDE.md` | not built yet — [[track:024]] |
+| `apps/mobile/` | `apps/mobile/CLAUDE.md` | [[track:024]] |
 | `packages/data/` | `packages/data/CLAUDE.md` | `packages/data/TESTING.md` |
 | `packages/ui/` | `packages/ui/CLAUDE.md` | — |
 

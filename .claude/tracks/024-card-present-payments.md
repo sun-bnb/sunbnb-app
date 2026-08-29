@@ -1,9 +1,9 @@
 ---
 id: 024-card-present-payments
 title: Card-present payments — Viva as the card rail, and the floor app that hosts it
-status: proposed
+status: active
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-08-29
 worktree: null
 ---
 
@@ -134,8 +134,16 @@ Q1 (below) must be answered before the app repo is created.
 
 ## Resume here
 
-**Next action — one conversation with Viva's ISV partner team, before any code.** It resolves
-the three unknowns that decide the shape of everything after:
+**Next action — W1 (seat tap → bed-detail sheet) from the P7 parity work list below.**
+(Context: mockups approved 2026-08-29;
+foundations all landed the same day: `@repo/floor-core`, the P6.5 HTTP surface, and the
+`apps/mobile` scaffold with a live beds-grid v0). Order: bed-detail sheet (all 13 branches,
+per the design-pass inventory) + the collect flow (QR/cash through the RPC collect triple) →
+multiselect + move mode → rentals / guests / today tabs → QR-camera pairing (expo-camera).
+To run: partner locally (`cd apps/partner && source .env.local && npm run dev`; also serves
+plain HTTP :3011 for simulators/phones), then `cd apps/mobile && EXPO_PUBLIC_API_URL=http://localhost:3011 npm start`,
+pair by pasting a manage URL. The Viva ISV conversation is **still open and gates only the
+payment leg (W8/P2–P4)** — wire "Tap card" behind a flag when answered. Its unknowns:)
 
 1. **Tap-on-Phone UI model** — can a payment render inside a third-party Android app, or does it
    always hand off to Viva.com Terminal? If hand-off only: what exactly do Semi-Unattended and
@@ -180,19 +188,135 @@ per-partner OAuth at `packages/data/prisma/schema.prisma:188`.
   `apps/partner/app/restaurants/[id]/orders/page.tsx:3` imports `@/app/sites/[id]/orders/view` —
   the restaurant kitchen dashboard *is* the site orders view under a `scope` prop. Moving it breaks
   a surface explicitly out of scope; promote it to a package instead.
+- ☑ **P6-lite (DONE 2026-08-29) — `@repo/floor-core`.** Floor view-model types (`Reservation`/`InventoryItem`/`ReservationDayRow`) + `bed-state` + `grid-helpers` moved out of
+  the manage surface as a package (git renames, 50 tests); partner re-points, `types/shared.ts`
+  re-exports. `reservation-day.ts` stays server-side (imports prisma).
 - 💤 **P6 — Extract the floor app.** Pure move, no behaviour change, existing tests green.
-- 💤 **P6.5 — HTTP surface for the floor actions.** Prerequisite for P7 that the RN decision creates:
+- ☑ **P6.5 (DONE 2026-08-29) — HTTP surface for the floor actions.** Prerequisite for P7 that the RN decision creates:
   the app cannot call server actions, so the floor's gated actions need API routes (or one RPC
   endpoint) in front of them. Must preserve the `verifySiteOwnership(siteId, accessKey)` gate and stay
   inside the gated-action registry (`apps/partner/app/test/gated-actions.ts`) so the auth matrix still
   covers them — a second entry point that bypasses the matrix is the failure mode to design against.
-- 💤 **P7 — React Native app** (`apps/mobile`, in-monorepo per the 2026-08-29 revision to D1). Gated on Q1 and P6.5. Pairing replaces the
+  **Shipped:** `POST /api/manage/rpc` forwards 46 allowlisted actions (allowlist⊆gated-registry
+  enforced by test; the route holds no auth — every action verifies its accessKey, so the auth
+  matrix covers the RPC); `GET /api/manage/grid` via the extracted `loadManageGrid` loader shared
+  with `sunbeds/page.tsx`; `GET /api/manage/context` for pairing. +20 tests; 245 integration green.
+- ◐ **P7 (IN PROGRESS 2026-08-29) — React Native app** (`apps/mobile`, in-monorepo). Scaffold DONE:
+  Expo SDK 57 / RN 0.86 / Expo Router, pairing (paste-link → verify via /api/manage/context →
+  expo-secure-store), tab shell (Beds/Rentals/Guests/Today[admin-gated]), beds grid v0 on live
+  data via `@repo/floor-core` with 30 s polling; Metro bundles clean (`expo export`), repo-wide
+  lint+tests green. **Pan/pinch-zoom canvas DONE (verified in iOS Simulator + founder-confirmed):**
+  `src/components/GridCanvas.tsx` ports the web transform surface (clampAxis / zoomAround /
+  fit-to-view / 0.6× detail-hide) on gesture-handler + reanimated with a top-left transform origin;
+  `src/lib/grid-layout.ts` ports ParcelView's column construction (pairs, group gaps, extra-seat
+  columns, pool section) over `@repo/floor-core/grid-helpers`, and cell colors map from
+  `getCellAppearance`'s exact class strings so the derivation stays single-source. Remaining:
+  bed-detail sheet + actions, multiselect/move, toolbar (zoom buttons, reverse, dark), rentals/
+  guests/today tabs, QR-camera pairing, then the Viva leg. Dev loop note: partner `server.js` now
+  also serves plain HTTP on :3011 for phones/simulators that can't trust the mkcert cert. Pairing replaces the
   access-key-in-a-URL; card collect is a deep-link launch + callback, needing little or no native
   bridging while Viva stays app-to-app.
 - 💤 **P8 — Mollie → Viva for online.** Only if the card rail proves out. Replaces `mollie-tokens.ts`,
   `reservation-payment.ts`, the webhook route, `getPaymentStatus`, refunds, onboarding-status and
   `applicationFee` handling — **on the live revenue path**, plus re-onboarding every venue. Would
   make [[track:003]] moot. Not a side quest; its own track when it comes.
+
+## P7 parity work list (mobile ↔ web manage surface)
+
+Detailed execution plan to full web parity, derived from the 2026-08-29 behaviour inventories
+(grid/BedDetail/bulk in one pass; sheets/till/collect/rentals/admin in the other). Order = build
+order; each block lands with its RPC wiring and a Simulator verification pass.
+
+- ☑ **W0 — Foundations (done 2026-08-29).** Pairing, tab shell, live grid data, counters, parcel
+  tabs, pan/pinch canvas with real column geometry, pool section, fit-to-view, 0.6× detail-hide.
+
+- ☐ **W1 — Seat interaction & bed-detail sheet** (web: `BedDetail.tsx`, 13 branches)
+  - W1.1 Tap-to-select on the canvas: coordinate hit-test through the transform, with the web's
+    6 px pan-threshold guard so a drag never selects.
+  - W1.2 Sheet chrome: slide-up bottom sheet, backdrop-close, `#seatId` header + state badge
+    (Free/Reserved/Occupied/Blocked/Comp) + companion `+#n` chip, error banner, live re-resolve
+    of the open seat on the 30 s refresh.
+  - W1.3 Group-scope toggle (Pair/Group vs Seat; in-sync detection; visible only on `available`).
+  - W1.4 OccupantInfo row: name/fallback, notes icon + tooltip, paid icon, check-in time pill,
+    `{n}D` multi-day chip.
+  - W1.5 Branch `available`: guest-name input, multi-day toggle + date picker (min tomorrow,
+    max +90 d), Block / Comp / Reserve (hold), Walk-in (free site) or pay fork (paid site), and
+    the seat-management footer (addSeatToGroup / removeGroupSeat / deletePoolSeat) + wire the
+    pool "+" button (createPoolSeat).
+  - W1.6 Branches `expected`: COMPLETE (check-in / mark no-show / cancel) · PAID_IN_CASH
+    (resumeWalkIn / refund-or-unreserve) · HELD (name/date edit, convert to cash/card walk-in,
+    release) · failed (remove) · in-flight (read-only chip).
+  - W1.7 Branches present/other: checked-in (depart / cancel) · walked-in (inline Settle amount
+    editor, Collect with splitWalkInSeat seat-split, depart, cancel/refund/unreserve) · blocked
+    (unblock) · comp (end comp).
+  - W1.8 Confirm panel (no-show / depart / unreserve with partitioned `freedSeatShare` /
+    `settledTotal` amounts / remove / cancel) + the Mollie refund sub-control. The web's "Enable
+    refunds" reconnect redirect needs an owner session — on mobile show guidance instead.
+
+- ☐ **W2 — Collect payment (QR + cash)**
+  - W2.1 CollectPaymentModal port: the CollectActions triple over RPC (create / 2.5 s poll /
+    cancel), amount header, QR render (add `react-native-qrcode-svg`), demo mode, complete /
+    failed / canceling states, cancel-never-frees-the-bed semantics.
+  - W2.2 Method chooser per the approved mockups (Cash / QR / Tap card) — Tap card hidden behind
+    a feature flag until W8.
+
+- ☐ **W3 — Worker & till**
+  - W3.1 Worker selector: roster from the grid payload, initials chip in the header, per-site
+    persistence, stale-worker validation; thread `currentWorkerId` through every create/settle
+    RPC argument (reserveItem(s), holdBed(s), compBed(s), blockBed(s), convertHoldToWalkIn,
+    unreserveItem, settleReservation, createWalkInRental).
+  - W3.2 TillSheet: getTillStatus / closeTill, carry-over banner, sweepable-total two-step
+    confirm, closed state.
+
+- ☐ **W4 — Multiselect & move**
+  - W4.1 Extract the web's seatKind classification + bulk verb matrix out of `view.tsx` into
+    `@repo/floor-core` (pure, tested) so web and mobile share one opinion — same doctrine that
+    moved bed-state.
+  - W4.2 Long-press (450 ms) multiselect, selection rings on the canvas, non-modal bulk sheet,
+    tap-toggles-selection, FAB/tab suppression while selecting.
+  - W4.3 Bulk verbs + execution semantics: sequential per-seat/per-reservation runners,
+    all-or-nothing grouped creates, subset-aware convert/depart splits, bulkCardEligible
+    one-booking card rule, partial-failure counts, selectionRefundTotal confirmations.
+  - W4.4 Move mode: banner + bulk queue, destination validation (free seat, or free group of
+    exactly n), moveReservationToSeats.
+
+- ☐ **W5 — Guests tab.** findReservations search (250 ms debounce, 0 ms empty), expected-today
+  default list, status-pill precedence (Upcoming/Paid/Hold/Seated), locate → switch to Beds tab,
+  right parcel, open the seat's sheet.
+
+- ☐ **W6 — Rentals tab.** Counters (out / waiting), RentalBookingCard (Give/Back, overdue,
+  paid-online chip, collect via the rental triple), CreateRentalModal (cart with stock clamping,
+  duration quick-picks + custom hours 1–12, cash/card/free, giant GO; card path opens the collect
+  modal on the returned bookingIds).
+
+- ☐ **W7 — Today tab (admin).** Daily summary (open-tills + day-report modes, per-employee cards
+  with itemized lists and close-till), day close, trends (7d/30d/1y windows, revenue/occupancy/
+  sunbeds metrics, KPI tiles, stacked channel chart via react-native-svg or victory-native,
+  daily breakdown, CSV → share sheet). Venue-local `todayIso` always comes from the server —
+  never the device clock.
+
+- ☐ **W8 — Viva card-present leg** (gated on the P0 ISV call; = roadmap P1–P4). Merchant
+  connect, `collect.start` card effect key, deep-link launch of viva.com Terminal +
+  `sunbnbfloor://` callback + mandatory server-side verification, refunds branch; emulator
+  stub-responder tests; the real NFC handset for the tap itself.
+
+- ☐ **W9 — App shell & platform**
+  - W9.1 QR-camera pairing (expo-camera), unpair/switch-site, expired-key (401) → back to pairing.
+  - W9.2 Dark mode (the web manage surface has it; palette + toggle).
+  - W9.3 i18n EN/ES/FI — decide the message source: the floor namespaces live in partner
+    `messages/*.json`; extract to a shared package or copy deliberately.
+  - W9.4 Performance at Brisa Marina scale (4k+ items): profile, memoization, possibly
+    render-only-visible rows; refetch-on-foreground (AppState) on top of the 30 s poll.
+  - W9.5 NativeWind adoption decision (D2 intent) once screens stabilize — or commit to
+    StyleSheet + tokens and amend D2.
+  - W9.6 Tests & CI: vitest for grid-layout, the api client, and the W4.1 verb matrix; mobile
+    test script in turbo.
+  - W9.7 EAS: link the project, dev builds + internal distribution (prerequisite for W8 device
+    testing), real app icons + splash.
+
+**Deliberate non-parity** (per the approved mockups): landing menu + floating buttons → bottom
+tab bar; guests/rentals FABs → tabs; worker FAB → header chip; toolbar zoom buttons are optional
+on touch (pinch is primary) — revisit after field use.
 
 ## Development & test environment (established 2026-08-29)
 
@@ -268,6 +392,32 @@ emulator/simulator — only the payment leg needs hardware.
   emulator for the payment leg, the payment UI is Viva's) and the share-vs-reimplement rule, and
   points at this track rather than restating it.
 
+- **2026-08-29 (design kickoff)** — Founder redirect: mobile-app quality is priority 1, web
+  reproducibility a close 2nd, no requirement to tie code to the web implementation. Framework
+  re-evaluated and settled as **D2 (Expo + React Native)**; v1 scope fixed to the manage grid.
+  Sequencing revised: P0 (Viva ISV call) no longer gates UI/API work, only the payment leg.
+  Design pass ran: two exhaustive behaviour inventories of the manage surface (grid/BedDetail
+  branches/bulk verbs/move mode, and till model/collect triple/rentals/admin pages), then phone
+  mockups published for review — native IA: bottom tab bar (Beds · Rentals · Guests ·
+  Today[admin-only]), worker chip in the header, a pairing screen (QR scan → secure storage)
+  replacing the access-key-in-a-URL, and the collect flow gaining a **"Tap card"** method
+  beside QR and cash, with an explicit server-verification step in its progress UI. Mockups:
+  claude.ai artifact "Sunbnb Floor App".
+
+- **2026-08-29 (build session)** — Mockups approved; foundations shipped, everything green
+  (12 lint / 9 test turbo tasks). **(1) `@repo/floor-core`** — types + `bed-state` +
+  `grid-helpers` extracted (git renames preserve blame), partner re-points, `types/shared.ts`
+  re-exports; `reservation-day.ts` deliberately left server-side (imports prisma). **(2) P6.5**
+  — RPC + grid + context routes (see roadmap). **(3) P7 scaffold** — Expo SDK 57 at
+  `apps/mobile`, deep-link scheme `sunbnbfloor` reserved for the Viva callback; nested React 19
+  beside root React 18. Gotchas: `eslint-config-expo` abandoned — it hoists to the repo root
+  and collides with the workspace's eslint 8 (`ERR_PACKAGE_PATH_NOT_EXPORTED` on
+  `eslint/config`), so mobile lints with `@repo/eslint-config`; a stale
+  `apps/mobile/node_modules` lockfile subtree from `expo lint`'s auto-setup had to be purged
+  from `package-lock.json` by hand. NativeWind deferred to the screen build (scaffold screens
+  are thin StyleSheet; D2's NativeWind intent unchanged). Context docs synced (root +
+  `apps/mobile/CLAUDE.md`).
+
 ## Open decisions
 
 - **Q1 — Does Viva Tap-on-Phone render inside a third-party app, or always hand off to Viva.com
@@ -329,6 +479,17 @@ emulator/simulator — only the payment leg needs hardware.
     auth matrix. Copying *those* is where a silent divergence would land in till partitioning or
     collect-abandon, where "never frees a bed" and "splits can't create money" are load-bearing.
     Copying screens is comparatively safe — UI drift is visible, logic drift is not.
+- **D2 (DECIDED 2026-08-29) — Expo + React Native, confirmed after re-evaluating against
+  Flutter.** The founder dropped the tie-to-web requirement (mobile quality priority 1, web
+  reproducibility close 2nd), which reopened Flutter; the decisive ground is not web UI reuse but
+  that the dangerous logic (reservation machine, `bed-state`, seat selection, till partitioning)
+  is TypeScript already extracted as pure modules — RN **imports** them inside the single-writer
+  ratchet, Flutter would fork them into Dart where drift is silent. Viva app-to-app needs
+  near-zero native code in RN, so Flutter's usual bridge advantage doesn't apply here. Concrete
+  stack: Expo SDK (dev builds + EAS), TypeScript, Expo Router, NativeWind, EAS Update for OTA
+  fixes mid-season. Screens are designed native-first (bottom sheets, tab bar, gestures) and
+  reproduce web's behaviour contract, not its layouts. **v1 scope: manage grid only** — orders
+  dashboards wait for v2.
 - **Q4 — Floor app scope.** Token-gated family is `manage/*` + `sites/[id]/orders` +
   `restaurants/[id]/orders`. `frontdesk` is session-gated (`frontdesk/page.tsx:2`) and stays with the
   portal. Restaurants are out of scope by decision, but share the orders view (see P5 gotcha).
