@@ -33,6 +33,8 @@ export interface GridPayload {
   }
   employees: { id: string; name: string }[]
   isAdmin: boolean
+  /** Venue-local civil day (YYYY-MM-DD) — never derive from the device clock. */
+  todayIso?: string
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

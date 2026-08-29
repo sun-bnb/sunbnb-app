@@ -289,7 +289,7 @@ order; each block lands with its RPC wiring and a Simulator verification pass.
   duration quick-picks + custom hours 1–12, cash/card/free, giant GO; card path opens the collect
   modal on the returned bookingIds).
 
-- ☐ **W7 — Today tab (admin).** Daily summary (open-tills + day-report modes, per-employee cards
+- ☑ **W7 (DONE 2026-08-29) — Today tab (admin).** Daily summary (open-tills + day-report modes, per-employee cards
   with itemized lists and close-till), day close, trends (7d/30d/1y windows, revenue/occupancy/
   sunbeds metrics, KPI tiles, stacked channel chart via react-native-svg or victory-native,
   daily breakdown, CSV → share sheet). Venue-local `todayIso` always comes from the server —
@@ -441,6 +441,15 @@ emulator/simulator — only the payment leg needs hardware.
   (`src/lib/grid-store.ts`, useSyncExternalStore) feeding all tabs; rental view-model types
   moved to @repo/floor-core (partner re-exports). Remaining: W7 Today tab, W8 Viva (gated),
   W9 platform.
+
+- **2026-08-29 (night, W7)** — **Today tab shipped**: Summary (open tills itemized with
+  per-employee close + the close-independent day-report header math; day-report mode with a
+  date stepper and channel badges), Day close (two-step, carry-over note, closeDay), Trends
+  (7d/30d/1y × revenue/occupancy/sunbeds, stacked channel bars drawn with plain Views — no
+  chart lib — KPI tiles, daily breakdown; CSV export deferred to W9's share-sheet pass).
+  Server-side venue-local `todayIso` added to the grid payload (`loadManageGrid`) so no client
+  ever derives the till day from the device clock. Parity work list now W0–W7 complete;
+  remaining: W8 Viva (gated on the ISV call), W9 platform.
 
 ## Open decisions
 

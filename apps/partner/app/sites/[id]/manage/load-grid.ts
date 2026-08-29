@@ -19,7 +19,7 @@ import {
   RESERVATION_CANCELED,
   RESERVATION_REFUNDED,
 } from '@repo/data/reservation-status'
-import { siteDayBounds } from '@repo/data/site-day'
+import { siteDayBounds, siteDayKey } from '@repo/data/site-day'
 import { resolveTodayRows } from './reservation-day'
 import { validateManageToken } from './token'
 
@@ -29,6 +29,8 @@ export type LoadManageGridResult =
       site: SiteProps
       employees: { id: string; name: string }[]
       isAdmin: boolean
+      /** Venue-local civil day (YYYY-MM-DD) — clients never use the device clock. */
+      todayIso: string
     }
   | { ok: false; error: { title: string; message: string } }
 
@@ -175,5 +177,8 @@ export async function loadManageGrid(
     site: site as SiteProps,
     employees,
     isAdmin: tokenResult.isAdmin,
+    // Venue-local civil day — clients must never derive "today" for till/report
+    // windows from the device clock (migrations doctrine: server owns the day).
+    todayIso: siteDayKey(siteForDay),
   }
 }
