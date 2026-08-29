@@ -16,6 +16,9 @@ import ParcelView from './ParcelView'
 import RentalsSection from './RentalsSection'
 import { getActiveReservation, getBedState, isFailedReservationStatus, type BedState , selectionRefundTotal } from '@repo/floor-core/bed-state'
 import {
+  seatKind, classifySelection, getSelectionGroups as computeSelectionGroups,
+} from '@repo/floor-core/bulk'
+import {
   moveReservationToSeats,
   blockBed, compBed, blockBeds, compBeds, convertHoldToWalkIn,
   holdBeds, reserveItems,
@@ -576,22 +579,8 @@ export default function ManageView({
   // the safe ones: bulk Create on an all-free selection, and Free/clear on a
   // selection of no-money / cash-offline states. Paid bookings (reserved /
   // checked-in) are deliberately excluded — their bulk cancel+refund is slice 4.
-  type SeatKind = 'available' | 'reserved' | 'cash-reserved' | 'held' | 'failed' | 'inflight' | 'checked-in' | 'walked-in' | 'comp' | 'blocked'
-  const seatKind = (item: InventoryItem): SeatKind => {
-    const st = getBedState(item)
-    if (st !== 'expected') return st as SeatKind // available / checked-in / walked-in / blocked / comp
-    const res = getActiveReservation(item)
-    if (!res) return 'available'
-    if (isFailedReservationStatus(res.status)) return 'failed'
-    if (res.status === RESERVATION_HELD) return 'held'
-    if (res.status === RESERVATION_COMPLETE) return 'reserved'
-    // Cash-reserved: a calendar advance booking paid in cash, or a multiday
-    // walk-in's between-days leg — AWAITING THE GUEST, not the payment provider.
-    // Its arrival verb is resumeWalkIn (machine staff.resume); do not lump it
-    // with genuinely mid-payment rows. (track 018 follow-up)
-    if (res.status === RESERVATION_PAID_IN_CASH) return 'cash-reserved'
-    return 'inflight'
-  }
+  // seatKind / SeatKind moved to @repo/floor-core/bulk ([[track:024]] W4.1) —
+  // one classification for web and mobile.
 
   // Run a per-seat action over the selection SEQUENTIALLY (so concurrent calls
   // can't race on a reservation shared by several selected seats), then refresh.
@@ -662,33 +651,7 @@ export default function ManageView({
    *   - `isSubset`: selectedItemIds.length < totalSeats → a partial selection
    * Returns a Map from reservationId → { anySelectedItemId, selectedItemIds, isSubset }.
    */
-  const getSelectionGroups = () => {
-    const selItems_ = inventoryItems.filter(i => selectedIds.includes(i.id))
-    // Count total seats per reservation across ALL inventoryItems (not just the selection).
-    const totalSeatsByRes = new Map<string, number>()
-    for (const item of inventoryItems) {
-      const res = getActiveReservation(item)
-      if (!res) continue
-      totalSeatsByRes.set(res.id, (totalSeatsByRes.get(res.id) ?? 0) + 1)
-    }
-    const groups = new Map<string, { anyItemId: string; selectedItemIds: string[]; isSubset: boolean }>()
-    for (const i of selItems_) {
-      const res = getActiveReservation(i)
-      if (!res) continue
-      const existing = groups.get(res.id)
-      if (existing) {
-        existing.selectedItemIds.push(i.id)
-        existing.isSubset = existing.selectedItemIds.length < (totalSeatsByRes.get(res.id) ?? existing.selectedItemIds.length)
-      } else {
-        groups.set(res.id, {
-          anyItemId: i.id,
-          selectedItemIds: [i.id],
-          isSubset: 1 < (totalSeatsByRes.get(res.id) ?? 1),
-        })
-      }
-    }
-    return groups
-  }
+  const getSelectionGroups = () => computeSelectionGroups(inventoryItems, selectedIds)
 
   /**
    * Bulk walk-in — CASH path.
@@ -911,49 +874,18 @@ export default function ManageView({
   //   Rent: available → create walk-in · held → convert hold to walk-in
   //   Reserve/Comp/Block: available only
   //   Free (make available): held/walk-in/comp/blocked/failed (no-money vacates)
-  const selItems = inventoryItems.filter(i => selectedIds.includes(i.id))
-  const can = (states: SeatKind[]) => selItems.length > 0 && selItems.every(i => states.includes(seatKind(i)))
-  // Bulk actions are offered only for a SINGLE status — a mixed selection (e.g.
-  // blocked + occupied) gets no action, for clarity. checked-in and walked-in
-  // count as one "occupied" status (same colour, same depart / move / vacate verbs).
-  const statusGroup = (k: SeatKind) => (k === 'checked-in' || k === 'walked-in') ? 'occupied' : (k === 'reserved' || k === 'cash-reserved') ? 'booked' : k
-  const sameStatus = selItems.length > 0 && new Set(selItems.map(i => statusGroup(seatKind(i)))).size === 1
-  const allAvailable = can(['available'])                         // → the full create row
-  const canRent = can(['available', 'held']) && sameStatus
-  const selKinds = new Set(selItems.map(seatKind))
-  const homogeneous = selKinds.size === 1 ? [...selKinds][0] : null
-
-  // Card (QR) is only possible when a bulk walk-in/check-in collapses to exactly
-  // ONE reservation — QR targets a single reservation id. True for all-available
-  // (one grouped booking) and for a single selected hold; false across multiple
-  // holds. Gates whether the Card button is offered next to Cash.
-  const bulkFreeCount = selItems.filter(i => seatKind(i) === 'available').length
-  const bulkHeldResIds = new Set(
-    selItems
-      .filter(i => seatKind(i) === 'held')
-      .map(i => getActiveReservation(i)?.id)
-      .filter((id): id is string => !!id)
-  )
-  const bulkCardEligible = (bulkFreeCount > 0 ? 1 : 0) + bulkHeldResIds.size === 1
-
-  // Paid lane — reservation-level transitions (whole-reservation semantics).
-  const canCheckIn = can(['reserved', 'cash-reserved'])
-  const canDepart = can(['checked-in', 'walked-in']) && sameStatus
-  const canNoShow = can(['reserved'])
-  // Real Mollie-paid bookings must NEVER be canceled silently (no refund). Cancel
-  // is hidden in bulk when any selected booking is Mollie-paid — those are canceled
-  // one at a time via the tap dialog, which surfaces the manual refund control.
-  const canCancelStates = can(['reserved', 'checked-in']) && sameStatus
-  const hasMolliePaid = selItems.some(i => {
-    const r = getActiveReservation(i)
-    return !!r?.paymentRef && r.paymentRef.startsWith('tr_')
-  })
-  const canCancel = canCancelStates && !hasMolliePaid
-  const cancelBlockedByPaid = canCancelStates && hasMolliePaid
+  // The verb matrix lives in @repo/floor-core/bulk ([[track:024]] W4.1) — one
+  // shared classification for web and mobile. See SelectionVerbs for the rules.
+  const bulkSel = classifySelection(inventoryItems, selectedIds)
+  const {
+    sameStatus, allAvailable, canRent, bulkCardEligible,
+    canCheckIn, canDepart, canNoShow, canCancel, cancelBlockedByPaid,
+  } = bulkSel
+  const homogeneous = bulkSel.homogeneousKind
 
   // Move applies to any selection of relocatable bookings (same states the tap
   // dialog shows Move on). Each booking is relocated in turn via the move queue.
-  const canMove = can(['reserved', 'cash-reserved', 'held', 'checked-in', 'walked-in']) && sameStatus
+  const canMove = bulkSel.canMove
   // Square Move button — sits on the dominant action's row (like the tap dialog);
   // rendered standalone when Move is the only applicable verb.
   const bulkMoveSquare = (
@@ -980,8 +912,8 @@ export default function ManageView({
   // Cash-family release/refund eligibility: red walked-in AND fuchsia cash-reserved
   // (between-days legs, mid-stay departed, cash advance bookings) — mixed across
   // parties allowed, it's all the same cash rails. (track 018 bulk refund)
-  const canCashRelease = can(['walked-in', 'cash-reserved'])
-  const bulkRefundTotal = canCashRelease ? selectionRefundTotal(inventoryItems, selectedIds) : 0
+  const canCashRelease = bulkSel.canCashRelease
+  const bulkRefundTotal = bulkSel.refundTotal
 
   // bulkFree (which dispatches the right per-seat vacate). Null when not freeable.
   const freeButton = (() => {

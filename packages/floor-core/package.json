@@ -5,13 +5,23 @@
   "exports": {
     "./types": "./src/types.ts",
     "./bed-state": "./src/bed-state.ts",
-    "./grid-helpers": "./src/grid-helpers.ts"
+    "./grid-helpers": "./src/grid-helpers.ts",
+    "./bulk": "./src/bulk.ts"
   },
   "typesVersions": {
     "*": {
-      "types": ["./src/types.ts"],
-      "bed-state": ["./src/bed-state.ts"],
-      "grid-helpers": ["./src/grid-helpers.ts"]
+      "types": [
+        "./src/types.ts"
+      ],
+      "bed-state": [
+        "./src/bed-state.ts"
+      ],
+      "grid-helpers": [
+        "./src/grid-helpers.ts"
+      ],
+      "bulk": [
+        "./src/bulk.ts"
+      ]
     }
   },
   "scripts": {
