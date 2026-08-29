@@ -29,13 +29,33 @@ export type GridCell =
   | { kind: 'seat'; key: string; item: InventoryItem }
   | { kind: 'extra'; key: string; item: InventoryItem; label: string }
 
+export interface HitRect {
+  x: number
+  y: number
+  w: number
+  h: number
+  item: InventoryItem
+  isPool: boolean
+  isGroupExtra: boolean
+}
+
 export interface ParcelLayout {
   parcelNum: number
   rows: { row: number; cells: GridCell[] }[]
   poolItems: InventoryItem[]
+  /** Tap targets in content coordinates (scale 1) for the canvas hit-test. */
+  hitRects: HitRect[]
   /** Fixed content-box size at scale 1 — drives pan clamping and fit-to-view. */
   contentW: number
   contentH: number
+}
+
+/** Find the cell under a content-space point (post-transform coordinates). */
+export function hitTest(layout: ParcelLayout, cx: number, cy: number): HitRect | null {
+  for (const r of layout.hitRects) {
+    if (cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h) return r
+  }
+  return null
 }
 
 export function parcelNumbers(items: InventoryItem[]): number[] {
@@ -155,8 +175,40 @@ export function buildParcelLayout(
   const poolRows = Math.ceil(poolCellCount / perPoolRow)
   const poolH = 12 + 1 + (poolItems.length > 0 ? 22 : 0) + poolRows * (POOL_CELL_H + CELL_GAP) + 12
 
+  // ── Hit rects (content coordinates at scale 1, mirroring the render flow) ──
+  const hitRects: HitRect[] = []
+  rows.forEach(({ cells }, rowIdx) => {
+    const cellY = rowIdx * rowH + ROW_PAD_V
+    let x = ROW_LABEL_WIDTH
+    for (const cell of cells) {
+      x += CELL_GAP
+      if (cell.kind === 'gap') {
+        x += GROUP_GAP_PX
+        continue
+      }
+      if (cell.kind === 'seat' || cell.kind === 'extra') {
+        hitRects.push({
+          x, y: cellY, w: CELL_W, h: CELL_H,
+          item: cell.item, isPool: false, isGroupExtra: cell.kind === 'extra',
+        })
+      }
+      x += CELL_W
+    }
+  })
+  const poolCellsTop = rows.length * rowH + 12 + 1 + 12 + (poolItems.length > 0 ? 20 : 0)
+  poolItems.forEach((item, idx) => {
+    const r = Math.floor(idx / perPoolRow)
+    const c = idx % perPoolRow
+    hitRects.push({
+      x: c * (POOL_CELL_W + CELL_GAP),
+      y: poolCellsTop + r * (POOL_CELL_H + CELL_GAP),
+      w: POOL_CELL_W, h: POOL_CELL_H,
+      item, isPool: true, isGroupExtra: false,
+    })
+  })
+
   const contentH = rows.length * rowH + poolH + 24
-  return { parcelNum, rows, poolItems, contentW, contentH }
+  return { parcelNum, rows, poolItems, hitRects, contentW, contentH }
 }
 
 /** Pool-band sequence number, as the web PoolCell shows it. */

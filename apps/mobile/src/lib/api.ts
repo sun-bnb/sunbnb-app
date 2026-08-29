@@ -24,6 +24,7 @@ export interface GridPayload {
   site: {
     id: string
     name: string
+    type?: string | null
     features?: string[] | null
     inventoryItems: InventoryItem[]
     [k: string]: unknown

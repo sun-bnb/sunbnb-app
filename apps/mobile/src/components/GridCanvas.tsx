@@ -20,7 +20,8 @@ import { getCellAppearance } from '@repo/floor-core/bed-state'
 import type { InventoryItem } from '@repo/floor-core/types'
 import {
   CELL_GAP, CELL_H, CELL_W, GROUP_GAP_PX, POOL_CELL_H, POOL_CELL_W,
-  ROW_LABEL_WIDTH, ROW_MB, ROW_PAD_V, poolSeq, type GridCell, type ParcelLayout,
+  ROW_LABEL_WIDTH, ROW_MB, ROW_PAD_V, hitTest, poolSeq,
+  type GridCell, type HitRect, type ParcelLayout,
 } from '@/lib/grid-layout'
 import { cellColors, colors } from '@/theme'
 
@@ -36,7 +37,19 @@ function clampAxis(t: number, contentScaled: number, viewport: number, start: bo
   return Math.min(0, Math.max(viewport - contentScaled, t))
 }
 
-export default function GridCanvas({ layout }: { layout: ParcelLayout }) {
+export default function GridCanvas({
+  layout,
+  onTapCell,
+  onLongPressCell,
+  selectedIds,
+}: {
+  layout: ParcelLayout
+  /** Tap resolved through the transform; null = tapped empty canvas. */
+  onTapCell?: (hit: HitRect | null) => void
+  onLongPressCell?: (hit: HitRect) => void
+  /** Ids ringed as multiselected. */
+  selectedIds?: string[]
+}) {
   const scale = useSharedValue(1)
   const tx = useSharedValue(0)
   const ty = useSharedValue(0)
@@ -87,7 +100,43 @@ export default function GridCanvas({ layout }: { layout: ParcelLayout }) {
       ty.value = clampAxis(e.focalY - pinchStart.value.cy * s1, contentH * s1, vh.value, true)
     })
 
-  const gestures = Gesture.Simultaneous(pan, pinch)
+  // Tap → hit-test through the transform. Tap's default maxDistance cancels it
+  // once the finger travels (the web's TAP_THRESHOLD guard), so a pan or pinch
+  // never selects a seat.
+  const handleTap = useCallback(
+    (x: number, y: number) => {
+      const cx = (x - tx.value) / scale.value
+      const cy = (y - ty.value) / scale.value
+      onTapCell?.(hitTest(layout, cx, cy))
+    },
+    [layout, onTapCell, scale, tx, ty],
+  )
+
+  // 450 ms stationary press = the web's long-press-to-multiselect.
+  const handleLongPress = useCallback(
+    (x: number, y: number) => {
+      const cx = (x - tx.value) / scale.value
+      const cy = (y - ty.value) / scale.value
+      const hit = hitTest(layout, cx, cy)
+      if (hit && onLongPressCell) onLongPressCell(hit)
+    },
+    [layout, onLongPressCell, scale, tx, ty],
+  )
+
+  const tap = Gesture.Tap()
+    .maxDuration(300) // a completed long-press must not also fire the tap
+    .onEnd((e, success) => {
+      if (success) runOnJS(handleTap)(e.x, e.y)
+    })
+
+  const longPress = Gesture.LongPress()
+    .minDuration(450)
+    .maxDistance(8)
+    .onStart(e => {
+      runOnJS(handleLongPress)(e.x, e.y)
+    })
+
+  const gestures = Gesture.Simultaneous(pan, pinch, tap, longPress)
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: tx.value }, { translateY: ty.value }, { scale: scale.value }],
@@ -119,7 +168,15 @@ export default function GridCanvas({ layout }: { layout: ParcelLayout }) {
                 <Text style={styles.rowLabelText}>R{row}</Text>
               </View>
               {cells.map(cell => (
-                <CellView key={cell.key} cell={cell} hideDetail={hideDetail} />
+                <CellView
+                  key={cell.key}
+                  cell={cell}
+                  hideDetail={hideDetail}
+                  selected={
+                    (cell.kind === 'seat' || cell.kind === 'extra') &&
+                    !!selectedIds?.includes(cell.item.id)
+                  }
+                />
               ))}
             </View>
           ))}
@@ -130,14 +187,26 @@ export default function GridCanvas({ layout }: { layout: ParcelLayout }) {
   )
 }
 
-const CellView = memo(function CellView({ cell, hideDetail }: { cell: GridCell; hideDetail: boolean }) {
+const CellView = memo(function CellView({
+  cell, hideDetail, selected = false,
+}: {
+  cell: GridCell
+  hideDetail: boolean
+  selected?: boolean
+}) {
   if (cell.kind === 'gap') return <View style={{ width: GROUP_GAP_PX }} />
   if (cell.kind === 'empty') return <View style={{ width: CELL_W, height: CELL_H }} />
   const { bg, icon } = getCellAppearance(cell.item)
   const c = cellColors(bg)
   const label = cell.kind === 'extra' ? cell.label : formatSeatId(cell.item, { parcel: false })
   return (
-    <View style={[styles.cell, { backgroundColor: c.bg, borderColor: c.border }]}>
+    <View
+      style={[
+        styles.cell,
+        { backgroundColor: c.bg, borderColor: c.border },
+        selected && styles.cellSelected,
+      ]}
+    >
       {!hideDetail && (
         <>
           {icon === 'card' ? (
@@ -231,6 +300,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 1,
   },
+  cellSelected: { borderColor: '#3b82f6', borderWidth: 3 },
   cellGlyph: { fontSize: 11, fontWeight: '700', lineHeight: 12 },
   cellLabel: { fontSize: 10, lineHeight: 12 },
   cardGlyph: {
