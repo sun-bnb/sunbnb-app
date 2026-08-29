@@ -652,6 +652,34 @@ const UNGATED_ALLOWLIST: AllowlistEntry[] = [
     file: 'app/sites/[id]/products/actions.ts',
     reason: 'SAFE — ownership enforced via requireSiteOwner(siteId) at products/actions.ts:271; returns [] for non-owners. Auth-only (non-standard return: Product[] not { status })',
   },
+
+  // ── Route handlers: manage-floor HTTP surface (track 024 P6.5) ─────────────
+  // These three routes exist so the React Native floor app (no server-action
+  // access) can reach the same token-gated manage surface the web app uses.
+  // None carries auth logic of its own — each forwards to code that already
+  // verifies the accessKey (verifySiteOwnership/verifySiteAdmin inside
+  // manage/actions.ts, or validateManageToken directly). The RPC route's
+  // allowlist is separately proven to be a subset of GATED_ACTIONS by
+  // app/api/manage/rpc/registry.gated-subset.test.ts, so every action it can
+  // reach is already covered by the auth-rejection matrix under its
+  // 'manage.<name>' entry — registering the route handler itself here (rather
+  // than duplicating 46 manage.* entries under a new route-shaped name) avoids
+  // a second, drift-prone description of the same gate.
+  {
+    export: 'POST',
+    file: 'app/api/manage/rpc/route.ts',
+    reason: 'Pure forwarder, no auth of its own — every action in RPC_ACTIONS already verifies accessKey internally, and registry.gated-subset.test.ts pins RPC_ACTIONS ⊆ GATED_ACTIONS (manage.* entries) so the matrix covers it',
+  },
+  {
+    export: 'GET',
+    file: 'app/api/manage/grid/route.ts',
+    reason: 'Delegates entirely to loadManageGrid → validateManageToken (SecurityToken expiry + resource + site match check); 401 on failure. Covered by grid/route.test.ts',
+  },
+  {
+    export: 'GET',
+    file: 'app/api/manage/context/route.ts',
+    reason: 'Delegates entirely to validateManageToken (SecurityToken expiry + resource + site match check); 401 on failure. Covered by context/route.test.ts',
+  },
 ]
 
 // ─── Build allowlist set ──────────────────────────────────────────────────────
