@@ -21,6 +21,7 @@
     "@mui/x-date-pickers": "^6.0.0",
     "@prisma/client": "^7",
     "@repo/data": "file:../../packages/data",
+    "@repo/floor-core": "*",
     "@repo/schematic": "*",
     "@repo/ui": "*",
     "@types/bcryptjs": "^2.4.6",

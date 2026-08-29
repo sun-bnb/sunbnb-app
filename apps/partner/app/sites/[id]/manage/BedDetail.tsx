@@ -37,7 +37,7 @@ import {
 import {
   RESERVATION_COMPLETE, RESERVATION_HELD, RESERVATION_PAID_IN_CASH,
 } from '@repo/data/reservation-status'
-import { groupExtraSeatLabel } from './grid-helpers'
+import { groupExtraSeatLabel } from '@repo/floor-core/grid-helpers'
 import CollectPaymentModal from './CollectPaymentModal'
 import {
   getActiveReservation,
@@ -46,7 +46,7 @@ import {
   freedSeatShare,
   settledTotal,
   type BedState,
-} from './bed-state'
+} from '@repo/floor-core/bed-state'
 
 // stateLabels built dynamically inside component using translations
 

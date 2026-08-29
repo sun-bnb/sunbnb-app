@@ -3,7 +3,7 @@
 import React from 'react'
 import CreditCardIcon from '@mui/icons-material/CreditCard'
 import { InventoryItem } from '@/types/shared'
-import { getCellAppearance } from './bed-state'
+import { getCellAppearance } from '@repo/floor-core/bed-state'
 import { formatSeatId } from '@repo/data/seat-label'
 
 export default function SunbedItem({

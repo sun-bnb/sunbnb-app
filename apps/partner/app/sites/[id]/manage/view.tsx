@@ -14,7 +14,7 @@ import TillSheet from './TillSheet'
 import GuestSearchSheet from './GuestSearchSheet'
 import ParcelView from './ParcelView'
 import RentalsSection from './RentalsSection'
-import { getActiveReservation, getBedState, isFailedReservationStatus, type BedState , selectionRefundTotal } from './bed-state'
+import { getActiveReservation, getBedState, isFailedReservationStatus, type BedState , selectionRefundTotal } from '@repo/floor-core/bed-state'
 import {
   moveReservationToSeats,
   blockBed, compBed, blockBeds, compBeds, convertHoldToWalkIn,

@@ -3,14 +3,6 @@ import {
   groupExtraSeatLabel,
   buildDisplayColumns,
 } from './grid-helpers'
-import type { InventoryItem } from '@/types/shared'
-
-// ── Fixtures ────────────────────────────────────────────────────────────────
-
-function makeItem(number: number): InventoryItem {
-  return { id: `id-${number}`, number, group: 1, status: 'active' } as InventoryItem
-}
-
 // ── groupExtraSeatLabel ──────────────────────────────────────────────────────
 
 describe('groupExtraSeatLabel', () => {

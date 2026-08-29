@@ -9,9 +9,9 @@ import Item from './Item'
 import {
   ROW_LABEL_WIDTH, groupExtraSeatLabel,
   buildDisplayColumns, type DisplayColumn,
-} from './grid-helpers'
+} from '@repo/floor-core/grid-helpers'
 import { createPoolSeat } from './actions'
-import { getBedState, getCellAppearance } from './bed-state'
+import { getBedState, getCellAppearance } from '@repo/floor-core/bed-state'
 import { decodeSeatNumber } from '@repo/data/seat-label'
 
 function PoolCell({

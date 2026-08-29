@@ -13,7 +13,7 @@
  * contract #1: one derivation, every consumer.
  */
 
-import { InventoryItem, Reservation } from '@/types/shared'
+import { InventoryItem, Reservation } from './types'
 import {
   deriveState,
   partitionAmount,

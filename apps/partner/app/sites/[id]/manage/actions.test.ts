@@ -108,7 +108,7 @@ import { processConfirmedReservation, processCashRentalBooking } from '@repo/dat
 // Aliased to __mocks__ — the DB interpreter of the state machine (track 018 P4).
 import { applyTransition } from '@repo/data/reservation-machine-apply'
 import dayjs from 'dayjs'
-import { getActiveReservation } from './bed-state'
+import { getActiveReservation } from '@repo/floor-core/bed-state'
 
 const mockAuth = vi.mocked(auth)
 const mockApply = vi.mocked(applyTransition)
