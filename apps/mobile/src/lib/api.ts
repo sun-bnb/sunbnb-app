@@ -1,5 +1,5 @@
 import { API_URL } from './config'
-import type { InventoryItem } from '@repo/floor-core/types'
+import type { InventoryItem, RentalBookingProps, RentalItemProps } from '@repo/floor-core/types'
 
 /** The server-action response contract, unchanged over HTTP. */
 export interface ActionResult {
@@ -27,6 +27,8 @@ export interface GridPayload {
     type?: string | null
     features?: string[] | null
     inventoryItems: InventoryItem[]
+    rentalItems?: RentalItemProps[]
+    rentalBookings?: RentalBookingProps[]
     [k: string]: unknown
   }
   employees: { id: string; name: string }[]

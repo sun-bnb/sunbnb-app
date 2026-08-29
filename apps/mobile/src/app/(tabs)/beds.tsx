@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useFocusEffect } from 'expo-router'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { getActiveReservation, getBedState } from '@repo/floor-core/bed-state'
@@ -9,13 +10,13 @@ import GridCanvas from '@/components/GridCanvas'
 import TillSheet from '@/components/TillSheet'
 import WorkerSheet from '@/components/WorkerSheet'
 import { PersonIcon } from '@/components/icons'
-import { getGrid, rpc, type GridPayload } from '@/lib/api'
+import { decodeSeatNumber } from '@repo/data/seat-label'
+import { rpc } from '@/lib/api'
 import { buildParcelLayout, parcelNumbers, type HitRect } from '@/lib/grid-layout'
-import { loadPairing, type Pairing } from '@/lib/pairing'
+import { refreshGrid, useGridStore } from '@/lib/grid-store'
+import { consumeLocate } from '@/lib/locate'
 import { loadWorkerId, saveWorkerId, workerInitials } from '@/lib/worker'
 import { colors, statusTints } from '@/theme'
-
-const POLL_MS = 30_000
 
 /**
  * The sunbed grid — the web manage grid's core screen: live data, parcel
@@ -24,9 +25,7 @@ const POLL_MS = 30_000
  */
 export default function Beds() {
   const insets = useSafeAreaInsets()
-  const [pairing, setPairing] = useState<Pairing | null>(null)
-  const [grid, setGrid] = useState<GridPayload | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const { pairing, grid, error } = useGridStore()
   const [parcel, setParcel] = useState<number | null>(null)
   const [selected, setSelected] = useState<{ id: string; isPool: boolean; isGroupExtra: boolean } | null>(null)
   const [workerId, setWorkerId] = useState<string | null>(null)
@@ -38,30 +37,6 @@ export default function Beds() {
   const [moveError, setMoveError] = useState<string | null>(null)
   const [movePending, setMovePending] = useState(false)
 
-  const fetchGrid = useCallback(async (p: Pairing) => {
-    try {
-      const res = await getGrid(p.siteId, p.accessKey)
-      if (res.status === 'ok' && 'site' in res) {
-        setGrid(res as GridPayload)
-        setError(null)
-      } else {
-        setError(res.errors?.[0] ?? 'Could not load the grid.')
-      }
-    } catch {
-      setError('Could not reach the server.')
-    }
-  }, [])
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | undefined
-    loadPairing().then(p => {
-      if (!p) return
-      setPairing(p)
-      fetchGrid(p)
-      timer = setInterval(() => fetchGrid(p), POLL_MS)
-    })
-    return () => clearInterval(timer)
-  }, [fetchGrid])
 
   const items: InventoryItem[] = grid?.site.inventoryItems ?? []
   const employees = grid?.employees ?? []
@@ -73,6 +48,20 @@ export default function Beds() {
   }, [pairing, grid])
 
   const currentWorker = employees.find(e => e.id === workerId) ?? null
+
+  // Guests-tab locate: switch to the seat's parcel and open its sheet.
+  useFocusEffect(
+    useCallback(() => {
+      const itemId = consumeLocate()
+      if (!itemId) return
+      const item = items.find(i => i.id === itemId)
+      if (!item) return
+      setParcel(decodeSeatNumber(item.number).parcel)
+      setSelectedIds([])
+      setMovingRes(null)
+      setSelected({ id: item.id, isPool: item.status === 'pool', isGroupExtra: item.status === 'pool' && !!item.sunbedGroupId })
+    }, [items]),
+  )
 
   const parcels = useMemo(() => parcelNumbers(items), [items])
   const activeParcel = parcel ?? parcels[0] ?? null
@@ -163,7 +152,7 @@ export default function Beds() {
           } else {
             setMovingRes(null)
           }
-          void fetchGrid(pairing)
+          void refreshGrid()
         } else {
           setMoveError(res.errors?.[0] ?? 'Move failed')
         }
@@ -173,7 +162,7 @@ export default function Beds() {
         setMovePending(false)
       }
     },
-    [movingRes, movePending, items, moveQueue, pairing, fetchGrid],
+    [movingRes, movePending, items, moveQueue, pairing],
   )
 
   // Tap dispatch by mode: move destination → selection toggle → bed detail.
@@ -303,7 +292,7 @@ export default function Beds() {
           workerId={workerId ?? undefined}
           siteIsPaid={grid?.site.type === 'paid'}
           onClearSelection={() => setSelectedIds([])}
-          onChanged={() => fetchGrid(pairing)}
+          onChanged={() => void refreshGrid()}
           onStartMove={startMove}
         />
       )}
@@ -329,7 +318,7 @@ export default function Beds() {
           accessKey={pairing.accessKey}
           worker={currentWorker}
           onClose={() => setShowTill(false)}
-          onClosed={() => fetchGrid(pairing)}
+          onClosed={() => void refreshGrid()}
         />
       )}
       {liveSelectedItem && pairing && selected && (
@@ -344,7 +333,7 @@ export default function Beds() {
           siteIsPaid={grid?.site.type === 'paid'}
           currentWorkerId={workerId ?? undefined}
           onClose={() => setSelected(null)}
-          onChanged={() => fetchGrid(pairing)}
+          onChanged={() => void refreshGrid()}
           onMove={resId => startMove([resId])}
         />
       )}

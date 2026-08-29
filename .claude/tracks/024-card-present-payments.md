@@ -280,11 +280,11 @@ order; each block lands with its RPC wiring and a Simulator verification pass.
   - W4.4 Move mode: banner + bulk queue, destination validation (free seat, or free group of
     exactly n), moveReservationToSeats.
 
-- ☐ **W5 — Guests tab.** findReservations search (250 ms debounce, 0 ms empty), expected-today
+- ☑ **W5 (DONE 2026-08-29) — Guests tab.** findReservations search (250 ms debounce, 0 ms empty), expected-today
   default list, status-pill precedence (Upcoming/Paid/Hold/Seated), locate → switch to Beds tab,
   right parcel, open the seat's sheet.
 
-- ☐ **W6 — Rentals tab.** Counters (out / waiting), RentalBookingCard (Give/Back, overdue,
+- ☑ **W6 (DONE 2026-08-29) — Rentals tab.** Counters (out / waiting), RentalBookingCard (Give/Back, overdue,
   paid-online chip, collect via the rental triple), CreateRentalModal (cart with stock clamping,
   duration quick-picks + custom hours 1–12, cash/card/free, giant GO; card path opens the collect
   modal on the returned bookingIds).
@@ -431,6 +431,16 @@ emulator/simulator — only the payment leg needs hardware.
   old bundle silently), and the worker chip is dev-shifted 56px left because Expo Go's
   floating dev button covers the true corner. Remaining: W5–W7 tabs, W8 Viva (gated), W9
   platform.
+
+- **2026-08-29 (late, tabs session)** — **W5 + W6 shipped.** Guests tab: findReservations over
+  RPC with the 250 ms/0 ms debounce split, status-pill precedence, and locate → Beds via a
+  tiny cross-tab channel (`src/lib/locate.ts`) consumed on focus. Rentals tab: counters,
+  Give/Back transitions, cash-collect on uncollected walk-ins, and the Rent Out modal
+  (two-tap happy path, stock clamping, card path collects via the rental triple with NO till
+  entry). Supporting refactor: grid fetch + 30 s poll moved to a shared module store
+  (`src/lib/grid-store.ts`, useSyncExternalStore) feeding all tabs; rental view-model types
+  moved to @repo/floor-core (partner re-exports). Remaining: W7 Today tab, W8 Viva (gated),
+  W9 platform.
 
 ## Open decisions
 
