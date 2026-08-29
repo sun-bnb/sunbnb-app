@@ -191,35 +191,7 @@ interface OrderItem {
 
 }
 
-export interface RentalItemProps {
-  id: string
-  siteId: string
-  name: string
-  description?: string | null
-  imageUrl?: string | null
-  category?: string | null
-  pricePerHour?: number | null
-  pricePerDay?: number | null
-  totalQuantity: number
-  active: boolean
-}
-
-export interface RentalBookingProps {
-  id: string
-  siteId: string
-  rentalItemId: string
-  userId: string
-  from: Date
-  to: Date
-  quantity: number
-  durationType: string
-  totalPrice: number
-  status: string
-  operationalStatus: string
-  guestName?: string | null
-  paymentRef?: string | null
-  pickedUpAt?: Date | null
-  returnedAt?: Date | null
-  rentalItem: RentalItemProps
-  user: { id: string; name?: string | null; email: string }
-}
+// Rental view-model types moved to @repo/floor-core ([[track:024]] W6) —
+// shared with the mobile floor app. Re-exported for existing imports.
+import type { RentalItemProps, RentalBookingProps } from '@repo/floor-core/types'
+export type { RentalItemProps, RentalBookingProps }
