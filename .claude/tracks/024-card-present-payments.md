@@ -230,7 +230,7 @@ order; each block lands with its RPC wiring and a Simulator verification pass.
 - ☑ **W0 — Foundations (done 2026-08-29).** Pairing, tab shell, live grid data, counters, parcel
   tabs, pan/pinch canvas with real column geometry, pool section, fit-to-view, 0.6× detail-hide.
 
-- ☐ **W1 — Seat interaction & bed-detail sheet** (web: `BedDetail.tsx`, 13 branches)
+- ☑ **W1 (DONE 2026-08-29) — Seat interaction & bed-detail sheet** (web: `BedDetail.tsx`, 13 branches)
   - W1.1 Tap-to-select on the canvas: coordinate hit-test through the transform, with the web's
     6 px pan-threshold guard so a drag never selects.
   - W1.2 Sheet chrome: slide-up bottom sheet, backdrop-close, `#seatId` header + state badge
@@ -253,14 +253,14 @@ order; each block lands with its RPC wiring and a Simulator verification pass.
     `settledTotal` amounts / remove / cancel) + the Mollie refund sub-control. The web's "Enable
     refunds" reconnect redirect needs an owner session — on mobile show guidance instead.
 
-- ☐ **W2 — Collect payment (QR + cash)**
+- ☑ **W2 (DONE 2026-08-29, W2.2's Tap-card flag pending Viva) — Collect payment (QR + cash)**
   - W2.1 CollectPaymentModal port: the CollectActions triple over RPC (create / 2.5 s poll /
     cancel), amount header, QR render (add `react-native-qrcode-svg`), demo mode, complete /
     failed / canceling states, cancel-never-frees-the-bed semantics.
   - W2.2 Method chooser per the approved mockups (Cash / QR / Tap card) — Tap card hidden behind
     a feature flag until W8.
 
-- ☐ **W3 — Worker & till**
+- ☑ **W3 (DONE 2026-08-29) — Worker & till**
   - W3.1 Worker selector: roster from the grid payload, initials chip in the header, per-site
     persistence, stale-worker validation; thread `currentWorkerId` through every create/settle
     RPC argument (reserveItem(s), holdBed(s), compBed(s), blockBed(s), convertHoldToWalkIn,
@@ -268,7 +268,7 @@ order; each block lands with its RPC wiring and a Simulator verification pass.
   - W3.2 TillSheet: getTillStatus / closeTill, carry-over banner, sweepable-total two-step
     confirm, closed state.
 
-- ☐ **W4 — Multiselect & move**
+- ☑ **W4 (DONE 2026-08-29) — Multiselect & move**
   - W4.1 Extract the web's seatKind classification + bulk verb matrix out of `view.tsx` into
     `@repo/floor-core` (pure, tested) so web and mobile share one opinion — same doctrine that
     moved bed-state.
@@ -417,6 +417,20 @@ emulator/simulator — only the payment leg needs hardware.
   from `package-lock.json` by hand. NativeWind deferred to the screen build (scaffold screens
   are thin StyleSheet; D2's NativeWind intent unchanged). Context docs synced (root +
   `apps/mobile/CLAUDE.md`).
+
+- **2026-08-29 (evening, screens session)** — **W1–W4 shipped and founder-tested in the iOS
+  Simulator**; four commits (extraction 4a41afe + screens f815b51 preceded by the morning's
+  foundations). The bed-detail sheet carries all 13 branches with per-action pending keys; the
+  collect triple runs end-to-end in demo mode (QR via react-native-qrcode-svg); worker
+  attribution + the day-anchored till close work against real data; multiselect/move run on
+  the NEW `@repo/floor-core/bulk` module — the web view was refactored onto it in the same
+  pass, so the verb matrix is single-source (13 new tests; partner suite unchanged at 2026).
+  UI polish rounds from founder review: stroke-SVG icon set replacing emoji/text glyphs,
+  full-width scope toggle, centered captions/links, per-button spinners. Dev-loop gotchas
+  recorded: Metro must restart after installing a new native-module dep (hot reload keeps the
+  old bundle silently), and the worker chip is dev-shifted 56px left because Expo Go's
+  floating dev button covers the true corner. Remaining: W5–W7 tabs, W8 Viva (gated), W9
+  platform.
 
 ## Open decisions
 
