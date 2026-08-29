@@ -8,18 +8,30 @@ Sunbnb is a sunbed reservation SaaS platform — a Turborepo monorepo with:
 - `apps/partner/` — B2B portal for venue operators (port 3001)
 - `apps/user/` — Consumer booking app (port 3002)
 - `apps/admin/` — Platform admin (port 3003)
+- `apps/mobile/` — React Native floor app for on-site staff (iOS + Android) — **not built yet**, see [[track:024]]
 - `packages/data/` — `@repo/data` — Prisma schema, migrations, shared DB client, payment logic, auth, email
 - `packages/ui/` — `@repo/ui` — Shared React components (Button, TextField, Card, Code)
 - `packages/eslint-config/` — `@repo/eslint-config`
 - `packages/typescript-config/` — `@repo/typescript-config`
 
-## App & Package Details
+## App & Package Details — read the one you're working in
 
-@apps/user/CLAUDE.md
-@apps/partner/CLAUDE.md
-@apps/admin/CLAUDE.md
-@packages/data/CLAUDE.md
-@packages/ui/CLAUDE.md
+These are **pointers, not imports**. Each app/package carries its own `CLAUDE.md`; read the one
+whose code you are touching rather than carrying all five in every session. Auto-loading the whole
+tree cost ~97 KB of context per session regardless of task, which contradicts the pulled-depth
+doctrine the agents below already follow.
+
+| Surface | Context | Detail pulled on demand |
+|---|---|---|
+| `apps/user/` | `apps/user/CLAUDE.md` | `apps/user/TESTING.md` · `apps/user/UI.md` |
+| `apps/partner/` | `apps/partner/CLAUDE.md` | `apps/partner/TESTING.md` · `apps/partner/UI.md` |
+| `apps/admin/` | `apps/admin/CLAUDE.md` | `apps/admin/UI.md` |
+| `apps/mobile/` | `apps/mobile/CLAUDE.md` | not built yet — [[track:024]] |
+| `packages/data/` | `packages/data/CLAUDE.md` | `packages/data/TESTING.md` |
+| `packages/ui/` | `packages/ui/CLAUDE.md` | — |
+
+Cross-cutting rules in `.claude/rules/` stay auto-loaded and apply everywhere. When a question spans
+surfaces, start at `.claude/wiki/index.md` rather than reading several app files end to end.
 
 ## LLM Wiki
 
@@ -43,13 +55,24 @@ When to use: **before** starting non-trivial multi-session work, check the regis
 
 ## Agents & protocol
 
-A **two-tier** agent model: per-surface **developer generalists** (`user-dev`, `partner-dev`, `admin-dev`, `data-dev` — one per app/package) for coverage, and narrow cross-app **feature specialists** (e.g. `sunbed-inventory`) for depth. Definitions live in `.claude/agents/`.
+**Two tiers:** per-surface developer generalists (`user-dev`, `partner-dev`, `admin-dev`, `data-dev`)
+for coverage, plus narrow cross-app specialists (e.g. `sunbed-inventory`) for depth. Definitions in
+`.claude/agents/`.
 
-- **Lean prompts, pulled depth.** An agent definition carries identity, scope boundary, and *how to pull* knowledge — not copied route maps or state machines. At task start each agent queries the recall vector store (`.claude/scripts/knowledge-recall.mjs`), reads its playbook (`.claude/knowledge/<agent>.md`), and consults the live canon (the `CLAUDE.md` tree, `.claude/rules/`, `.claude/wiki/`). Capability lives in the pulled stores; the prompt is the wiring.
-- **Self-improving.** Agents run a closed **produce → curate → promote** loop: a gated task-end retrospective emits `kb:` markers + curated playbook entries (produce); `.claude/knowledge/workflows/groom.md` dedupes/prunes and rebuilds each playbook's navigation index (curate); the **trust ladder** in `.claude/knowledge/README.md` promotes recurring, verified insight episodic → curated → canonical (`/wiki ingest`, proposed not silent). Agents never edit their own definitions.
-- **Shared protocol:** `.claude/agent-protocol.md` — every agent follows it. Emit `kb:` markers (`decision`/`incident`/`gotcha`/`dead-end`/`observation`); the distiller captures them verbatim into the recall store. Return the standard final-report schema.
-- **Shared capabilities** are skills + a wiki page, cited by all (not copied per-agent): e.g. `/schematic` + `subsystems/schematic-editor.md` is the grid/coordinate/editor layer behind the sunbed and table UIs; `/ui` + `subsystems/design-system.md` is the design language; `/db` (`.claude/commands/db.md`) is schema-aware, env-tiered, read-only DB inspection (reading rows for design/debugging/data-fix scoping — the data counterpart to `/migrate`'s schema/DDL).
-- **Architecture is a concern, not an agent.** Cross-app design, blast-radius, and trade-off review are owned by the orchestrator and governed by `.claude/rules/architecture.md`; deep context-isolated design delegates to the `Plan` agent. There is no architect agent; generalists are the fallback when no specialist owns the surface.
+**Lean prompts, pulled depth.** An agent definition carries identity, scope boundary, and *how to
+pull* knowledge — never copied route maps or state machines. At task start it queries the recall
+store (`.claude/scripts/knowledge-recall.mjs`), reads its playbook (`.claude/knowledge/<agent>.md`),
+and consults the live canon. The same doctrine governs this file: see the pointer table above.
+
+**Self-improving.** A produce → curate → promote loop with a trust ladder; agents never edit their
+own definitions. Mechanics: `.claude/knowledge/README.md`.
+
+**Shared protocol** (`kb:` markers, final-report schema): `.claude/agent-protocol.md` — every agent
+follows it. **Shared capabilities** are skills + a wiki page cited by all, not copied per agent:
+`/schematic`, `/ui`, `/db`.
+
+**Architecture is a concern, not an agent** — owned by the orchestrator, governed by
+`.claude/rules/architecture.md`; deep design delegates to the `Plan` agent.
 
 ## Commands
 
@@ -174,13 +197,19 @@ Vercel-managed via git branches: `main` → preview, `test` → test.sunbnb.app,
 
 ### Payment Architecture
 
-**Stripe** handles **partner subscriptions only** (STARTER/PRO/BUSINESS tiers in the partner app — platform-as-merchant, which is correct for SaaS billing). **Consumer Stripe was removed** (reservation/order PaymentIntents, Elements, webhooks, `_lib/stripe.ts`): it was a platform-collecting charge that didn't meet the marketplace/commission legal model. Until it's rebuilt on Stripe Connect, consumer payments are **Mollie or demo only**. See `.claude/tracks/003-stripe-connect-compliance.md`.
+**Stripe = partner subscriptions only** (platform-as-merchant, correct for SaaS billing). Consumer
+Stripe was removed — it was a platform-collecting charge that did not meet the marketplace/commission
+legal model ([[track:003]]). Consumer payments are **Mollie or demo only**.
 
-**Mollie for Platforms** handles all real consumer marketplace payments (consumer → Sunbnb → venue operator). Partner tokens stored as `mollieAccessToken` on PartnerAccount, refreshed via OAuth. Platform commission collected as `applicationFee`. **Agent model**: each payment yields two invoices — a **gross PARTNER** invoice (partner = merchant of record, books the full consumer price) and a separate **B2B PLATFORM commission** invoice billed to the partner; they do not sum to the consumer total. See `.claude/rules/payments.md`.
+**Mollie for Platforms** carries real consumer marketplace payments; partner OAuth tokens on
+`PartnerAccount`, commission as `applicationFee`. **Demo mode** (`NEXT_PUBLIC_DEMO_MODE`) mints
+`pi_demo_*` refs through the same invoicing path.
 
-**Demo mode** (`NEXT_PUBLIC_DEMO_MODE`): Generates fake `pi_demo_{timestamp}` refs, runs the same invoice creation logic. The demo checkout redirects to `/payment/complete` reusing the `payment_intent` query-param contract — a Stripe-shaped contract the demo path kept after consumer Stripe was removed.
+**Agent model** — each payment yields a gross PARTNER invoice plus a separate B2B PLATFORM
+commission invoice; they do not sum to the consumer total. The rule is canonical in
+`.claude/rules/payments.md`; the subsystem walkthrough is `.claude/wiki/subsystems/payments.md`.
 
-**Mollie reservation flow**: User selects sunbeds → reservation created (pending) → in-page payment step (the `Payment` component, no `/payment` route) → POST `/api/payment/mollie/create-payment` → payment created on partner's Mollie account → redirect to Mollie checkout → return to `/payment/complete?reservationId=...` → `processConfirmedReservation()` creates Invoice + InvoiceLines → status set to `complete`. POST `/api/webhooks/mollie` confirms in parallel; GET `/api/reservations/[id]` polling + `/api/reconcile` are the fallbacks (all re-verify via the provider-agnostic `getPaymentStatus`). `redirectUrl` validated against `APP_URL`/`NEXT_PUBLIC_APP_URL`.
+**Card-present** (Viva, in progress): [[track:024]].
 
 ### Settlement System
 

@@ -58,6 +58,7 @@ Invokable via `/wiki <op>` (see `.claude/commands/wiki.md`).
 - [`subsystem:schematic-editor`](subsystems/schematic-editor.md) — **draft** — shared grid geometry + editor chrome behind sunbed inventory & restaurant tables
 - [`subsystem:design-system`](subsystems/design-system.md) — **draft** — UI design language: `accent` token, component classes, identity header, `Toggle`; canonical conventions in `.claude/rules/ui.md`. Prime with `/ui`
 - [`subsystem:employee-till`](subsystems/employee-till.md) — **draft** — floor-staff roster (`/account/staff`) + automatic per-worker attribution + per-worker cash till/close (`TillSheet`) + manager monthly breakdown (accounting); `@repo/data/till`. Track 008
+- [`subsystem:migrations`](subsystems/migrations.md) — **stable** — environment topology (`main`+`test` share ONE test DB, production isolated) and the laptop-run migration sequence. The declarative rules stay canonical + auto-loaded in `.claude/rules/migrations.md`; this page holds the narrative you need only when actually running one
 - [`subsystem:venue-timezone`](subsystems/venue-timezone.md) — **stable** — every date boundary anchors to the venue's civil day (track 017): `@repo/data/site-day` primitives (day/month bounds, write anchor, tz derivation) + `tz.ts` wall-clock converters; `Site.timeZone` auto-derived on save + backfill. Never hand-roll day math
 
 ---

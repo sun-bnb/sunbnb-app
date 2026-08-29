@@ -98,17 +98,41 @@ When editing:
 - **Defer to the wiki for narratives.** If you find yourself writing more than 3–4 paragraphs of end-to-end flow, stop — that belongs on a `[[flow:…]]` page. Add a one-line pointer here and recommend `/wiki ingest` instead.
 - **Defer to `.claude/rules/` for cross-cutting rules.** A rule that applies to all three apps belongs in `.claude/rules/`, not duplicated across three CLAUDE.md files.
 - **Cross-link rather than duplicate.** When CLAUDE.md needs to mention a concept the wiki covers, use a short pointer like *"see `.claude/wiki/flows/reservation-payment.md`"*, not a paragraph of synthesis.
-- **Stay within size budgets** (target lines, auto-loaded means tight):
+- **Stay within size budgets — measured in BYTES, not lines.** A line budget cannot see a
+  1,000-byte table cell, which is exactly how this layer reached 137 KB while every file "passed"
+  its line target. Check with `wc -c`, not `wc -l`.
 
   | File | Target | Hard cap |
   |---|---|---|
-  | Root `CLAUDE.md` | ≤ 200 | 280 |
-  | `apps/*/CLAUDE.md` | ≤ 300 | 400 |
-  | `packages/data/CLAUDE.md` | ≤ 250 | 350 |
-  | `packages/ui/CLAUDE.md` | ≤ 100 | 150 |
-  | Each `.claude/rules/*.md` | ≤ 50 | 80 |
+  | Root `CLAUDE.md` | ≤ 12 KB | 16 KB |
+  | `apps/*/CLAUDE.md` | ≤ 12 KB | 22 KB |
+  | `packages/data/CLAUDE.md` | ≤ 12 KB | 22 KB |
+  | `packages/ui/CLAUDE.md` | ≤ 2 KB | 4 KB |
+  | Each `.claude/rules/*.md` | ≤ 3 KB | 5 KB |
+  | **Any single line, all files** | ≤ 300 B | 500 B |
 
-  Hitting the cap is a smell. Split a section out to the wiki, or distill.
+  The per-line cap is the load-bearing one: prose smuggled into a table cell is how the previous
+  budget was defeated. Reflowing a long cell into short lines *increases* line count while
+  *reducing* bytes — that is a win, not a regression.
+
+  Check the whole layer with:
+
+  ```bash
+  for f in CLAUDE.md apps/*/CLAUDE.md packages/*/CLAUDE.md .claude/rules/*.md; do
+    printf "%7d B  %5d B longest-line  %s\n" $(wc -c < "$f") \
+      $(awk '{if(length($0)>m)m=length($0)}END{print m}' "$f") "$f"
+  done
+  ```
+
+  Hitting a cap is a smell. Split detail out to an on-demand sibling (`TESTING.md`, `UI.md`,
+  `REFERENCE.md` — pulled by a skill or read when relevant, never auto-loaded), or to the wiki if
+  it is a narrative. Do not append and hope.
+
+- **Never re-add `@` imports to the root `CLAUDE.md`.** Per-app context is read when working in
+  that app; the root file is a router (see its *App & Package Details* table). Importing the tree
+  put ~97 KB in every session regardless of task and contradicted the pulled-depth doctrine the
+  agent layer already follows.
+
 
 ### Step 5 — What belongs where
 

@@ -26,54 +26,22 @@ scripts enforce migrate-before-deploy.
 
 ## Schema
 
-Prisma schema at `packages/data/prisma/schema.prisma`. 70+ migrations. Uses `@prisma/adapter-pg` driver adapter. PostGIS extension for spatial queries (`geometry` type with GiST index).
+Prisma schema at `packages/data/prisma/schema.prisma` — 70+ migrations, `@prisma/adapter-pg` driver
+adapter, PostGIS (`geometry` + GiST index) for spatial queries.
 
-Key models: User, PartnerAccount, Site, InventoryItem, Reservation, Order, OrderItem, RentalItem, RentalBooking, Invoice, InvoiceLine, Settlement, ServiceFee, Settings, PasswordResetToken, Product.
+Core models: User, PartnerAccount, Site, InventoryItem, SunbedGroup, Reservation, ReservationDay,
+Order, OrderItem, RentalItem, RentalBooking, Restaurant, Table, TableTab, MenuItem, Invoice,
+InvoiceLine, Settlement, ServiceFee, Settings, Employee, TillEntry, TillClose, Device,
+PlatformPreference, FeatureFlag, SecurityToken, PasswordResetToken, Product.
 
-**`Device`** (track 019 P2 / 021) — the parasol-mounted HW devices served by the user app's `/api/hw/{code}/*`. `Device.code` is a PUBLIC 6-char Crockford-base32 identifier printed on the device's sticker; there is deliberately **no token/secret column** (Q9 — the endpoint is gated by a soft `User-Agent` client filter, not auth, because the data behind it is public occupancy). A device is placed by an **assigned ADDRESS** (`assignedSiteId`/`assignedParcel`/`assignedRow`/`assignedSeq`) set in the partner fleet UI, and answers for whatever unit occupies that address today — so a parcel rebuilt at the same spot needs no re-assignment. `status`: `provisioned → active → retired`.
+**Model histories, identifier conventions and in-flight retirements** — why `Site.code` exists and
+is never rewritten, the `SunbedGroup` address (`parcel`/`row_idx`/`seq`) and its single writer, the
+three-step `InventoryItem.pairId` retirement, `Device` placement by address, brand-manifest gating,
+`PlatformPreference` vs `FeatureFlag`, and the shared `unit-address` helpers: **`packages/data/REFERENCE.md`**.
+Read it before touching any of those — several carry constraints that are not visible in the schema.
 
-**`DeviceSeat` is GONE** (dropped 2026-08-17). It bound a device to specific seat rows before resolution moved to addresses; nothing read it, and nothing held a foreign key to it, so the table drop was a single safe contract step.
-
-**`InventoryItem.pairId` is retiring in three steps** (track 021). It is fully redundant with `SunbedGroup` — every row carrying one points at a seat in its OWN unit (2,251/2,251 dev, 216/216 test), and nothing reads it. Step 1 (done) dropped the FOREIGN KEY only, which is what the `updateMany({ pairId: null })` sweeps in the delete paths existed to protect against. Step 2 removes those sweeps and the remaining `pairId: null` writes in a code release. Step 3 drops the unique index and the column. The column cannot go earlier because `main` and `test` share one database and the branch that is behind still writes the field.
-
-**`SunbedGroup` address** (track 021) — `parcel` + `row` (column `row_idx`; `ROW` is reserved and the inventory editor writes raw SQL) complete the unit's address alongside `seq`, under `@@unique([siteId, parcel, row, seq])`. Before this, parcel lived on `InventoryItem.group` and row was decoded out of `InventoryItem.number`, so two-thirds of a unit's address sat on its members — unconstrainable (no unique index spans two tables), resolvable only by fetching a parcel and filtering in JS, and silently re-pointable by a seat renumber. Derived from **placed seats only**: a `pool` extra carries a `nextPoolNumber` value decoding to a different row, so counting it relocates the unit. **`recomputeSeatLabels` is the only writer** — units are created bare everywhere and get their address there. A unit whose placed seats disagree (mid-rearrange) keeps its stored address rather than being given a guess; one with no placed seats surrenders it, so it cannot block the index against a real unit built on that spot later. Backfill: `npm run backfill:addresses:{local,test,production}[:dry]`, which verifies itself in raw SQL and fails if any address disagrees with the data or any `seq` moved.
-
-**`Site.code`** (track 022) — the site's stable EXTERNAL identifier, `S-` + 6 Crockford
-symbols, and the site half of the printed QR URL (`/q/S-K7M2X9/1-1-1`). Nullable during
-expand, `@unique`, backfilled. Rules in `src/site-code.ts`; never rewritten once assigned.
-
-**`Site.customBrandKey`** (track 023) — WHICH bespoke module renders this site (`reference`,
-`alcudia`…). Not `Site.code` and not the slug: the code is minted per DATABASE, so the same
-venue has different ones in dev/test/production and a committed registry keyed on one would
-resolve nowhere else (including the Vercel previews that run on the test DB); the slug is
-partner-editable. The key lives in code, each environment's row points at it, and one module
-can serve a chain of sites.
-
-**`src/brand-manifest.ts`** — pure, client-safe: `BRAND_KEYS` (every module in
-`apps/user/brands`), `isKnownBrandKey`, and `resolveBrandRender(site) → { mode, key, reason }`,
-the ONE answer to "what does a guest see" shared by the user app (which page), the partner brand
-tab (whether the token editor is still in effect) and the admin fleet list (*live* vs *awaiting
-code* vs *unknown key*). Both gates must pass; everything else resolves to the standard page,
-because a bespoke page that is missing, misconfigured or switched off must cost the customer
-their design and never their bookings. The React modules cannot live here — they are in
-`apps/user` — so the LIST lives here and a test pins the two together.
-
-**`Site.customBrandEnabled`** (track 023) — this site renders a BESPOKE brand page (a per-site
-React module in `apps/user/brands`) instead of the standard `/s/{slug}` one. Admin-only. One of
-TWO gates: the registry answers "does a bespoke page exist", this column answers "is it live",
-so a merged page can sit dark and a broken one can be pulled without a deploy. On with no module
-falls back to the standard page by design.
-
-**`PlatformPreference`** — one global tunable per row (`key` → text `value`), the value
-sibling of `FeatureFlag`: flags answer "does this feature exist yet", preferences answer
-"with what value does it run". A row is only ever an OVERRIDE — which keys exist, their
-type, bounds and default live in the `PREFERENCE_REGISTRY` in `src/preferences.ts`, so a
-key dropped from the registry is inert rather than load-bearing, and a database that has
-never been written to still produces the value the code was written against. Text `value`
-parsed per the entry's type: one table serves every future setting with no migration per
-setting.
-
-**`src/unit-address.ts`** — pure (no prisma), the shared way to ask for a unit BY address: `unitAddressWhere` (a `findUnique` key on `UNIQUE(site_id, parcel, row_idx, seq)`), `SEGMENT_SEATS` (everything but `pool` spares), `formatUnitLocation` and its inverse `parseUnitAddress` (track 022 — reads `1-1-1` back out of a printed QR URL, and accepts the four-segment seat id `1-1-1-2` as the same unit; **syntax only, not domain bounds** — parcel 0 / row 0 are live addresses in real data, so it validates the shape and lets the DB say what exists, capping at int4 so a mistyped URL 404s instead of 500ing). Shared deliberately: a device's position is read by three parties that must agree — the HW state route serving it, the partner action assigning it, and `devicesBlockingSeatRemoval` refusing to delete the seats under it. Each used to re-derive the address itself, which is how a device, the UI that assigned it and the guard protecting it could hold three different opinions about where it was.
+Migration doctrine: `.claude/rules/migrations.md` (rules) · `.claude/wiki/subsystems/migrations.md`
+(topology + sequence).
 
 ## Payment Service (`src/payment.ts`)
 
@@ -254,39 +222,15 @@ window and are **close-independent** — daily accumulation never changes when t
 ## Testing
 
 ```bash
-npm run test                  # unit tests — pure logic, no DB, no mocking
-npm run test:integration      # integration tests — requires local sunbnb_test DB
-npm run test:integration:setup  # run prisma migrate deploy against sunbnb_test
+npm run test                    # unit — pure logic, no DB, no mocking
+npm run test:integration        # requires local sunbnb_test DB
+npm run test:integration:setup  # prisma migrate deploy against sunbnb_test
 ```
 
-### Scale benchmark harness (track 020)
+A separate `sunbnb_scale` DB backs the track-020 benchmark harness (`npm run scale:*`); its target
+guard refuses any non-local host even with `--force`.
 
-```bash
-docker exec sunbnb-postgres psql -U postgres -c "CREATE DATABASE sunbnb_scale;"
-npm run scale:setup    # migrate deploy → sunbnb_scale
-npm run scale:seed     # deterministic fixture (flags: --parcels --seats --control-sites
-                       #   --control-seats --history-months --history-per-month)
-npm run scale:bench    # EXPLAIN ANALYZE the app's real query shapes (--json, --plans)
-npm run scale:reset    # drop fixture data, keep the schema
-```
-
-A **separate `sunbnb_scale` DB** — never `sunbnb_test`, which the integration suites TRUNCATE
-between files. `seed-scale-fixture.ts` truncates before seeding, so its target guard
-(`scripts/scale-fixture-guard.ts`, unit-tested) refuses any non-local host and any database
-off the allowlist **even with `--force`**. Measured baselines and the rejected-index record
-live in `.claude/tracks/020-scale-baseline.md`.
-
-Volume is not optional: Postgres prefers a sequential scan on a small table regardless of
-indexes, so an index change is unobservable on a near-empty DB.
-
-- **Unit tests** (`src/*.test.ts`): `payment.test.ts` (round, VAT, fee cascade, fee
-  calculation), `rate-limit.test.ts`, `reservation-status.test.ts`,
-  `reservation-machine.test.ts` (37 — deriveState kind/pay/occ mapping, allowed +
-  must-reject cells, table properties incl. deletes-confined-to-zero-money, partition
-  math), `reservation-machine-guard.test.ts` (single-writer ratchet), `device-code.test.ts` (14 — HW code alphabet/generation/normalisation, incl. the mint↔lookup round trip and unbiased byte mapping), `preferences.test.ts` (30 — registry/env/DB/default resolution, and the property that matters: an out-of-range or unparseable value NEVER reaches a consumer, it falls through to the shipped default; plus cache TTL + write invalidation), `scripts/scale-fixture-guard.test.ts` (17 — destructive-write target guard for the track-020 scale harness: refuses `sunbnb_test`, the dev DB, and every remote host, each asserted to survive `--force`), `unit-address.test.ts` (40 — unit address derivation + `parseUnitAddress` round trip/rejection: placed-seats-only (a pool extra must not relocate the unit), absent status = placed, declines rather than guesses when a unit's seats disagree about parcel or row, and one ordinal can never be claimed twice in a row. Both defects were injected back into the source to confirm the tests catch them — 2 failures each, no collateral)
-- **Integration tests** (`src/*.integration.test.ts`): `payment.integration.test.ts` (18 tests — processConfirmedReservation/Order, invoice creation, idempotency, hash chain, VAT, fees), `tab-payment.integration.test.ts` (29 tests — openTableId guard, calculateTabTotal, group invoicing, idempotency both directions, cash settle PARTNER-only receipt, kitchen-state preservation, void exclusion, standalone-restaurant block: null-siteId tabs, account/settings-tier fees, partner-anchored invoicing), `analytics.integration.test.ts` (incl. 5 tab-order paid-ness tests), `till.integration.test.ts` (79 tests — two-bucket window math, day-boundary inclusivity, closeEmployeeTill sweep + carry-over snapshot, void handling), `fee-context.integration.test.ts` (19 tests — loadFeeContext three-tier cascade + loadRestaurantFeeContext: empty site tier, account-tier override, bootstrap), `password-reset.integration.test.ts` (15 tests — token lifecycle, rate limiting, expiry, password strength), `reservation-machine-apply.integration.test.ts` (20 — settle/unreserve/split/undo-depart/GC/collect executors: till partition, money-rows-kept, I2 end-to-end, I4 defense, paid-race abandon), `credit-note.integration.test.ts` (6 — negative twin, chain link, capped partials, series independence), `unit-address.integration.test.ts` (11 — `recomputeSeatLabels` as address writer, checked against a RAW-SQL oracle that derives the address the pre-column way: idempotency, no seq ever moves, pool-only unit stays unaddressed, address follows a genuine row change, is surrendered when the unit stops standing anywhere, is held rather than clobbered mid-rearrange, and the unique constraint refusing a second unit on one spot while allowing the same address at another site), `device-guard.integration.test.ts` (8 — `devicesBlockingSeatRemoval`: refuses to delete a unit's last placed seat while a device is assigned to it, allows it while a sibling survives, still refuses when only a `pool` spare would be left, and ignores devices at the same address on another site or in a different ROW of the same parcel. Two defects — dropping the row from the device match, and counting spares as survivors — were injected to confirm the tests catch them)
-- **Config**: `vitest.config.ts` (unit, excludes `*.integration.test.ts`), `vitest.integration.config.ts` (integration, `fileParallelism: false` for shared DB)
-- **Test helpers**: `src/test/setup.ts` (DB connection, `cleanDatabase()` via TRUNCATE CASCADE), `src/test/fixtures.ts` (factory functions for all models)
+Full per-file inventory, config split and the scale harness: **`packages/data/TESTING.md`**.
 
 ## Known Quirks
 - Exports both Prisma client AND duplicated UI components (TextField, Button) — same components also exist in `@repo/ui`
