@@ -45,7 +45,10 @@ import {
 } from './reservation-machine'
 import { randomUUID } from 'node:crypto'
 import { recordSettlement } from './till'
-import { processConfirmedReservation, issueCashCreditNote } from './payment'
+import {
+  processConfirmedReservation, issueCashCreditNote,
+  loadFeeContext, resolveServiceFee, calculateServiceFeeAmount, round,
+} from './payment'
 import {
   createReservationMolliePayment,
   reverifyAndFinalizeReservation,
@@ -55,6 +58,19 @@ import {
   BLOCKING_STATUSES, OP_DEPARTED, OP_NO_SHOW,
   RESERVATION_PAID_IN_CASH, RESERVATION_PROCESSING,
 } from './reservation-status'
+import {
+  getVivaClient, isVivaPaymentRef, sessionFromVivaRef, vivaRefFromSession, toCents,
+  VivaFeeGuardError, type VivaSession,
+} from './viva'
+
+/** sunbed-rental service code, shared with the QR/Mollie card-collect cascade lookup. */
+const VIVA_SERVICE_CODE = 'sunbed-rental'
+
+/** Default window `runCollectAbandonCard` polls `getSession` for after an abort
+ * that doesn't resolve synchronously (raced the card read). Overridable via
+ * `opts.collect.abortPollMs` — tests set this near-zero to stay fast. */
+const DEFAULT_ABORT_POLL_MS = 8_000
+const ABORT_POLL_INTERVAL_MS = 1_000
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -82,6 +98,19 @@ export interface ApplyOpts {
     demo?: boolean
     buildRedirectUrl?: (anonId: string) => string
     webhookUrl?: string
+    /** 'card' routes collect.start/abandon through the Viva rows (cardPresent
+     * condition) instead of QR/Mollie. Defaults to 'qr'. */
+    method?: 'qr' | 'card'
+    /** Required for a 'card' collect.start — the paired Viva Cloud Terminal
+     * device (`VivaTerminal.terminalId`). Also accepted on collect.abandon so
+     * the executor can resolve the terminal's `cashRegisterId` for abort;
+     * when omitted on abandon, `cancelReservationVivaPayment` falls back to
+     * the site's terminals (unambiguous only when there is exactly one). */
+    terminalId?: string
+    /** Override the abort-then-poll window (ms) on a card collect.abandon
+     * whose abort didn't resolve synchronously. Default 8000; tests pass a
+     * small value to stay fast. */
+    abortPollMs?: number
   }
   /**
    * Provider-refund handler for user.cancel (the providerRefund effect). The
@@ -110,6 +139,7 @@ const IMPLEMENTED: ReadonlySet<EffectKey> = new Set<EffectKey>([
   // composite executors (mollieCreate/demo write the ref; invoiceOnline emails).
   'amountFromDb', 'mintAnonId', 'mollieCreate', 'setPaymentRef',
   'reverifyOnce', 'mollieCancel', 'invoiceOnline', 'email', 'providerRefund',
+  'vivaSale', 'vivaAbort',
 ])
 
 // ─── Loading ─────────────────────────────────────────────────────────────────
@@ -185,6 +215,13 @@ function computeConditions(r: Loaded, opts: ApplyOpts, now: Date): Condition[] {
 
   if (r.refundedAt) conds.push('refundedAt')
   if (opts.cash) conds.push('cash')
+
+  // cardPresent is a FACT: opts.collect.method on collect.start, or the
+  // stored paymentRef's prefix on collect.abandon/pay.fail (the caller may
+  // not repeat `method` on abandon — the ref itself already says which rail).
+  if (opts.collect?.method === 'card' || isVivaPaymentRef(r.paymentRef)) {
+    conds.push('cardPresent')
+  }
 
   // subset is a FACT about opts.itemIds vs the reservation's seats
   if (opts.itemIds && opts.itemIds.length > 0) {
@@ -529,6 +566,15 @@ async function runCollectStart(
     return { outcome: 'rejected', state, event: row.event, reason: 'nothing to charge for this reservation' }
   }
 
+  // Card-present (Viva): no anonId (nothing for the guest's browser). Demo
+  // stays on the QR/demo path below REGARDLESS of method — a demo card
+  // collect still mints a pi_demo_ ref, per the collect flow's existing
+  // "demo short-circuits the provider" contract.
+  if (collect.method === 'card' && !collect.demo) {
+    await prisma.reservation.update({ where: { id: r.id }, data: { paymentAmount: amount } })
+    return runCollectStartCard(r, state, row, opts, amount)
+  }
+
   // mintAnonId + persist the DB-computed amount (non-state columns — direct write).
   const anonId = r.anonId ?? randomUUID()
   await prisma.reservation.update({
@@ -566,6 +612,85 @@ async function runCollectStart(
   return { outcome: 'applied', transition: row, state, data: { amount, checkoutUrl: created.checkoutUrl } }
 }
 
+/**
+ * Card-present collect.start (Viva Cloud Terminal). Requires a paired
+ * `VivaTerminal` on this site and a connected `vivaMerchantId`; the ISV
+ * markup is the `sunbed-rental` cascade fee (same lookup as the online path,
+ * `processConfirmedReservation` ~L611), guarded 0 < fee < amount by the
+ * client's shared `assertValidIsvFee` (VivaFeeGuardError) — a guard failure
+ * is a clear effect-failed, never a silently-dropped fee. On any failure the
+ * reservation REVERTS to the unsettled cash walk-in, mirroring the Mollie branch.
+ */
+async function runCollectStartCard(
+  r: Loaded,
+  state: CompoundState,
+  row: TransitionSpec,
+  opts: ApplyOpts,
+  amount: number,
+): Promise<ApplyResult> {
+  const terminalId = opts.collect?.terminalId
+  if (!terminalId) {
+    return { outcome: 'effect-failed', effect: 'vivaSale', event: row.event, error: 'terminalId not supplied' }
+  }
+  const terminal = await prisma.vivaTerminal.findUnique({ where: { terminalId } })
+  if (!terminal || terminal.siteId !== r.siteId) {
+    return { outcome: 'effect-failed', effect: 'vivaSale', event: row.event, error: 'Viva terminal not found for this site' }
+  }
+
+  const { site, partnerAccount, settings } = await loadFeeContext(r.siteId, VIVA_SERVICE_CODE)
+  // Deliberate v1 assumption (documented, revisit once Viva answers the
+  // own-venue/no-fee question — see .claude/tracks/024-card-present-payments.md
+  // Q2/Q3): every connected venue pays the ISV markup, no own-merchant carve-out.
+  if (!partnerAccount?.vivaMerchantId) {
+    return { outcome: 'effect-failed', effect: 'vivaSale', event: row.event, error: 'venue has not connected Viva' }
+  }
+
+  const tier = partnerAccount.subscription?.plan?.tier ?? null
+  const matchedFee = resolveServiceFee(
+    site.serviceFees,
+    partnerAccount.serviceFees,
+    settings?.serviceFees ?? [],
+    VIVA_SERVICE_CODE,
+    tier,
+  )
+  const feeAmount = round(calculateServiceFeeAmount(matchedFee, amount))
+  const amountCents = toCents(amount)
+  const feeCents = toCents(feeAmount)
+
+  const sessionId = randomUUID()
+  const seatCount = r.items.length
+  const customerTrns = site.name ? `${site.name} · ${seatCount} seat${seatCount === 1 ? '' : 's'}` : 'Sunbnb'
+
+  try {
+    await getVivaClient().createSale({
+      sessionId,
+      terminalId,
+      cashRegisterId: terminal.cashRegisterId,
+      amount: amountCents,
+      currencyCode: '978',
+      merchantReference: r.id,
+      customerTrns,
+      isvDetails: { amount: feeCents, terminalMerchantId: partnerAccount.vivaMerchantId },
+    })
+  } catch (e) {
+    await prisma.reservation.update({
+      where: { id: r.id },
+      data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
+    })
+    const message =
+      e instanceof VivaFeeGuardError
+        ? `ISV fee guard rejected the sale (fee ${feeCents}c vs amount ${amountCents}c): ${e.message}`
+        : e instanceof Error ? e.message : 'Viva sale failed'
+    return { outcome: 'effect-failed', effect: 'vivaSale', event: row.event, error: message }
+  }
+
+  await prisma.reservation.update({
+    where: { id: r.id },
+    data: { paymentRef: vivaRefFromSession(sessionId), status: RESERVATION_PROCESSING },
+  })
+  return { outcome: 'applied', transition: row, state, data: { amount, card: true, sessionId } }
+}
+
 // ─── Composite executor: collect.abandon (operator closed the QR) ────────────
 
 /**
@@ -581,6 +706,7 @@ async function runCollectAbandon(
   r: Loaded,
   state: CompoundState,
   row: TransitionSpec,
+  opts: ApplyOpts,
 ): Promise<ApplyResult> {
   const asConfirm = (): ApplyResult => ({
     outcome: 'applied',
@@ -591,6 +717,10 @@ async function runCollectAbandon(
 
   const fin = await reverifyAndFinalizeReservation(r.id)
   if (fin.settled === 'complete') return asConfirm()
+
+  if (isVivaPaymentRef(r.paymentRef)) {
+    return runCollectAbandonCard(r, state, row, opts, asConfirm)
+  }
 
   const cancel = await cancelReservationMolliePayment(r.id)
   if (cancel.status === 'paid') {
@@ -604,6 +734,80 @@ async function runCollectAbandon(
     data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
   })
   return { outcome: 'applied', transition: row, state, data: { paymentStatus: 'cash' } }
+}
+
+/**
+ * Poll `getSession` until it leaves `pending` or `deadline` passes. First call
+ * always happens (even when `pollMs` is 0) — a session already resolved by
+ * the time we ask (declined/aborted/approved) returns on the first check with
+ * no wait, which is what keeps the fee-guard/immediate-marker tests fast; the
+ * `pollMs` window only matters for a session still genuinely `pending`.
+ */
+async function pollVivaSession(sessionId: string, pollMs: number, now: Date): Promise<VivaSession> {
+  const client = getVivaClient()
+  const deadline = now.getTime() + pollMs
+  let session = await client.getSession(sessionId)
+  while (session.state === 'pending' && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, ABORT_POLL_INTERVAL_MS))
+    session = await client.getSession(sessionId)
+  }
+  return session
+}
+
+/**
+ * Card-present collect.abandon. Viva's abort only works BEFORE the card is
+ * read (`cancelReservationVivaPayment`'s `error` status covers both "abort
+ * failed" and "abort raced an in-progress read" — the http client's 200/409
+ * both mean "go re-fetch the session"). On that ambiguity we poll rather than
+ * revert: reverting a possibly-authorised card would strand a charge the
+ * guest's bank thinks succeeded. This is the ONE deliberate divergence from
+ * the Mollie abandon (which reverts unconditionally on anything but 'paid').
+ */
+async function runCollectAbandonCard(
+  r: Loaded,
+  state: CompoundState,
+  row: TransitionSpec,
+  opts: ApplyOpts,
+  asConfirm: () => ApplyResult,
+): Promise<ApplyResult> {
+  const sessionId = sessionFromVivaRef(r.paymentRef!)
+  let cashRegisterId: string | undefined
+  if (opts.collect?.terminalId) {
+    const terminal = await prisma.vivaTerminal.findUnique({ where: { terminalId: opts.collect.terminalId } })
+    cashRegisterId = terminal?.cashRegisterId
+  }
+
+  const revertToCash = async (): Promise<ApplyResult> => {
+    await prisma.reservation.update({
+      where: { id: r.id },
+      data: { status: RESERVATION_PAID_IN_CASH, paymentRef: null },
+    })
+    return { outcome: 'applied', transition: row, state, data: { paymentStatus: 'cash' } }
+  }
+
+  const cancel = await cancelReservationMolliePayment(r.id, cashRegisterId)
+  if (cancel.status === 'paid') {
+    const fin2 = await reverifyAndFinalizeReservation(r.id)
+    if (fin2.settled === 'complete') return asConfirm()
+  }
+  if (cancel.status === 'canceled') return revertToCash()
+
+  // abort errored or raced the card read (still 'pending' at the API) — poll
+  // rather than guess. NEVER revert while the outcome is unresolved.
+  const pollMs = opts.collect?.abortPollMs ?? DEFAULT_ABORT_POLL_MS
+  const session = await pollVivaSession(sessionId, pollMs, opts.now ?? new Date())
+  if (session.state === 'approved') {
+    const fin3 = await reverifyAndFinalizeReservation(r.id)
+    if (fin3.settled === 'complete') return asConfirm()
+    // Viva says approved but our own re-verify didn't confirm yet — stay
+    // processing rather than guess; the next poll/webhook will finalize it.
+    return { outcome: 'applied', transition: row, state, data: { paymentStatus: 'processing' } }
+  }
+  if (session.state === 'declined' || session.state === 'aborted') return revertToCash()
+
+  // still pending (or unknown) after the poll window — stay processing, the
+  // caller keeps polling. This is the divergence documented above.
+  return { outcome: 'applied', transition: row, state, data: { paymentStatus: 'processing' } }
 }
 
 // ─── applyTransition ─────────────────────────────────────────────────────────
@@ -652,7 +856,7 @@ export async function applyTransition(
     return runCollectStart(r, state, row, { ...opts, now })
   }
   if (event === 'collect.abandon') {
-    return runCollectAbandon(r, state, row)
+    return runCollectAbandon(r, state, row, { ...opts, now })
   }
   if (row.effects.includes('seatPartition')) {
     const { newReservationId } = await runSplit(r, row, { ...opts, now })

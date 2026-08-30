@@ -31,6 +31,7 @@ import {
   RESERVATION_PROCESSING,
   RESERVATION_PAYMENT_FAILED,
 } from './reservation-status'
+import { getVivaClient, isVivaPaymentRef, sessionFromVivaRef, toCents } from './viva'
 
 export type CancelPaymentResult =
   | { status: 'canceled' }
@@ -270,6 +271,23 @@ export async function getReservationPaymentStatus(
   if (isDemoPaymentRef(ref)) {
     return { status: 'ok', providerStatus: 'paid', succeeded: true, failed: false }
   }
+  if (isVivaPaymentRef(ref)) {
+    // unknown (transient 404) reads as pending, not failed — a live tap must
+    // never be reverted by a lookup race (see reservation-machine-apply.ts's
+    // abandon-while-pending divergence).
+    try {
+      const session = await getVivaClient().getSession(sessionFromVivaRef(ref))
+      return {
+        status: 'ok',
+        providerStatus: session.state,
+        succeeded: session.state === 'approved',
+        failed: session.state === 'declined' || session.state === 'aborted',
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Viva session lookup failed'
+      return { status: 'error', error: msg }
+    }
+  }
   if (!isMolliePaymentRef(ref)) {
     return { status: 'error', error: `Unknown payment provider for ref: ${ref}` }
   }
@@ -351,6 +369,8 @@ export async function reverifyAndFinalizeReservation(
  */
 export async function cancelReservationMolliePayment(
   reservationId: string,
+  /** Only meaningful for a Viva ref — see `cancelReservationVivaPayment`. */
+  cashRegisterId?: string,
 ): Promise<CancelPaymentResult> {
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
@@ -358,6 +378,12 @@ export async function cancelReservationMolliePayment(
   })
 
   const paymentRef = reservation?.paymentRef ?? null
+
+  // Early viva branch — the name stays Mollie-specific (every app imports it)
+  // but a viva_ ref delegates to the Viva abort path instead.
+  if (paymentRef && isVivaPaymentRef(paymentRef)) {
+    return cancelReservationVivaPayment(reservationId, cashRegisterId)
+  }
 
   // No ref or demo ref — nothing to cancel with a provider.
   if (!paymentRef || isDemoPaymentRef(paymentRef)) {
@@ -419,4 +445,125 @@ export async function cancelReservationMolliePayment(
     status: 'error',
     error: `Failed to cancel payment (${delRes.status})`,
   }
+}
+
+/**
+ * Cancel an in-flight Viva Cloud Terminal sale session (the card-present
+ * counterpart to `cancelReservationMolliePayment`, which delegates here for
+ * a `viva_` ref). ONLY talks to Viva — the caller (`reservation-machine-apply.ts`
+ * `runCollectAbandon`) owns all local state changes based on the returned status.
+ *
+ * `cashRegisterId` is required by Viva's abort endpoint (only the register that
+ * opened the session may abort it — `VivaTerminal.cashRegisterId` in the
+ * schema doc comment) and is NOT recoverable from the session id alone. The
+ * caller (the machine executor) resolves it from the terminal the collect
+ * started on and passes it in; this standalone helper falls back to the
+ * site's terminals when the caller doesn't have it — unambiguous only when
+ * the site has exactly one.
+ *
+ * Status semantics for the caller (mirrors `cancelReservationMolliePayment`):
+ * - `canceled` → the session resolved aborted/declined; caller reverts to cash.
+ * - `paid`     → the card was already read and the session resolved `approved`
+ *               while the abort raced it; caller should finalize as complete.
+ * - `error`    → abort did not resolve synchronously (still `pending` — Viva's
+ *               abort only works before the card is read) or failed outright.
+ *               The caller must poll `getSession` rather than revert — a card
+ *               may be mid-authorisation.
+ */
+export async function cancelReservationVivaPayment(
+  reservationId: string,
+  cashRegisterId?: string,
+): Promise<CancelPaymentResult> {
+  const reservation = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    select: { paymentRef: true, siteId: true },
+  })
+  const paymentRef = reservation?.paymentRef ?? null
+  if (!paymentRef || !isVivaPaymentRef(paymentRef)) {
+    return { status: 'canceled' }
+  }
+
+  let register = cashRegisterId
+  if (!register) {
+    const terminals = await prisma.vivaTerminal.findMany({
+      where: { siteId: reservation!.siteId },
+      select: { cashRegisterId: true },
+    })
+    if (terminals.length === 1) register = terminals[0]!.cashRegisterId
+  }
+  if (!register) {
+    return {
+      status: 'error',
+      error: 'Cannot resolve the Viva cash register to abort with — pass cashRegisterId explicitly',
+    }
+  }
+
+  try {
+    const session = await getVivaClient().abortSession(sessionFromVivaRef(paymentRef), register)
+    if (session.state === 'aborted' || session.state === 'declined') return { status: 'canceled' }
+    if (session.state === 'approved') return { status: 'paid' }
+    // pending (abort raced the card read — Viva's 200/409 both mean "go
+    // re-fetch") or unknown → the caller polls, never reverts blind.
+    return { status: 'error', error: `Viva abort did not resolve (session state: ${session.state})` }
+  } catch (err) {
+    return { status: 'error', error: err instanceof Error ? err.message : 'Viva abort failed' }
+  }
+}
+
+/**
+ * Refund a completed Viva card-present sale. Minimal, idempotent via the
+ * reservation's `refundedAt` stamp (same precedent as the Mollie/demo path in
+ * `refund.ts` — the caller guards on `Reservation.refundedAt` before calling).
+ * `isvDetails` on a refund carries ONLY `terminalMerchantId` — Viva reverses
+ * the original ISV fee itself (`VivaRefundRequest` doc comment in `types.ts`).
+ *
+ * Not wired into `refund.ts`'s `issueReservationRefund` (that function takes a
+ * `partnerAccountId` and dispatches on `tr_`/`pi_demo_` prefixes only) —
+ * exported here for the apps to call directly on a `viva_` ref, same shape
+ * (`RefundOutcome`-compatible) so a future dispatcher extension is a one-line add.
+ */
+export async function refundReservationVivaPayment(
+  reservationId: string,
+): Promise<{ status: 'ok' } | { status: 'error'; error: string }> {
+  const reservation = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    select: { paymentRef: true, paymentAmount: true, refundedAt: true, siteId: true },
+  })
+  const paymentRef = reservation?.paymentRef ?? null
+  if (!paymentRef || !isVivaPaymentRef(paymentRef)) {
+    return { status: 'error', error: 'No Viva payment to refund' }
+  }
+  if (reservation!.refundedAt) {
+    return { status: 'ok' } // idempotent — already refunded
+  }
+
+  const { partnerAccount } = await loadFeeContext(reservation!.siteId, SERVICE_CODE)
+  if (!partnerAccount?.vivaMerchantId) {
+    return { status: 'error', error: 'Venue has not connected Viva' }
+  }
+
+  const terminals = await prisma.vivaTerminal.findMany({
+    where: { siteId: reservation!.siteId },
+    select: { terminalId: true, cashRegisterId: true },
+  })
+  const terminal = terminals[0]
+  if (!terminal) {
+    return { status: 'error', error: 'No Viva terminal registered for this site' }
+  }
+
+  const amount = reservation!.paymentAmount ?? 0
+  try {
+    await getVivaClient().refund({
+      sessionId: `${sessionFromVivaRef(paymentRef)}-refund`,
+      parentSessionId: sessionFromVivaRef(paymentRef),
+      terminalId: terminal.terminalId,
+      cashRegisterId: terminal.cashRegisterId,
+      amount: toCents(amount),
+      merchantReference: reservationId,
+      isvDetails: { terminalMerchantId: partnerAccount.vivaMerchantId },
+    })
+  } catch (err) {
+    return { status: 'error', error: err instanceof Error ? err.message : 'Viva refund failed' }
+  }
+  return { status: 'ok' }
 }

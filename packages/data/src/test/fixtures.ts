@@ -66,6 +66,23 @@ export async function createTestSite(
   })
 }
 
+// ─── Viva Terminal (track 024, W8, packet A3) ───────────────────────────────
+
+export async function createTestVivaTerminal(
+  siteId: string,
+  overrides: Record<string, any> = {}
+) {
+  const id = nextId()
+  return prisma.vivaTerminal.create({
+    data: {
+      siteId,
+      terminalId: `term-${id}`,
+      cashRegisterId: `register-${id}`,
+      ...overrides,
+    },
+  })
+}
+
 // ─── Settings ───────────────────────────────────────────────────────────────
 
 export async function createTestSettings(overrides: Record<string, any> = {}) {

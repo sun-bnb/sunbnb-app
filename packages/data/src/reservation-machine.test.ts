@@ -120,6 +120,27 @@ describe('resolveTransition — allowed cells', () => {
       .toBe('unsettled')
   })
 
+  it('collect rail: cardPresent selects the Viva row; without it the QR/Mollie row still resolves (bug-revealing)', () => {
+    const unsettled = S('walkin', 'unsettled', 'present')
+    const cardStart = resolveTransition(unsettled, 'collect.start', ['cardPresent'])
+    expect(cardStart?.effects).toEqual(expect.arrayContaining(['vivaSale', 'setPaymentRef']))
+    expect(cardStart?.effects).not.toContain('mollieCreate')
+    expect(cardStart?.effects).not.toContain('mintAnonId')
+
+    const qrStart = resolveTransition(unsettled, 'collect.start')
+    expect(qrStart?.effects).toEqual(expect.arrayContaining(['mollieCreate', 'mintAnonId', 'setPaymentRef']))
+    expect(qrStart?.effects).not.toContain('vivaSale')
+
+    const collecting = S('walkin', 'collecting', 'present')
+    const cardAbandon = resolveTransition(collecting, 'collect.abandon', ['cardPresent'])
+    expect(cardAbandon?.effects).toEqual(expect.arrayContaining(['vivaAbort', 'clearPaymentRef']))
+    expect(cardAbandon?.effects).not.toContain('mollieCancel')
+
+    const qrAbandon = resolveTransition(collecting, 'collect.abandon')
+    expect(qrAbandon?.effects).toEqual(expect.arrayContaining(['mollieCancel', 'clearPaymentRef']))
+    expect(qrAbandon?.effects).not.toContain('vivaAbort')
+  })
+
   it('depart branches on hasFutureDays vs lastDay', () => {
     const s = S('walkin', 'settled', 'present')
     expect(resolveTransition(s, 'staff.depart', ['hasFutureDays'])?.post.occ).toBe('expected')
@@ -180,10 +201,10 @@ describe('resolveTransition — MUST-REJECT cells (the D-list, model level)', ()
     expect(resolveTransition(S('walkin', 'settled', 'present'), 'collect.start')).toBeNull()
   })
 
-  it('D5: collect.abandon never deletes — its only row reverts to unsettled', () => {
+  it('D5: collect.abandon never deletes — every row (QR + card-present) reverts to unsettled', () => {
     const rows = TRANSITIONS.filter((t) => t.event === 'collect.abandon')
-    expect(rows).toHaveLength(1)
-    expect(rows[0]!.post).toEqual({ pay: 'unsettled' })
+    expect(rows).toHaveLength(2)
+    for (const row of rows) expect(row.post).toEqual({ pay: 'unsettled' })
   })
 
   it('D10: check-in requires online·complete — holds and mid-payment rows rejected', () => {
