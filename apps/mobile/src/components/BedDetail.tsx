@@ -20,7 +20,7 @@ import { groupExtraSeatLabel } from '@repo/floor-core/grid-helpers'
 import type { InventoryItem, Reservation } from '@repo/floor-core/types'
 import CollectPaymentModal, { type CollectActions } from '@/components/CollectPaymentModal'
 import { BanknoteIcon, BlockIcon, CalendarIcon, CloseIcon, MoveIcon, QrIcon, StarIcon } from '@/components/icons'
-import { rpc, type ActionResult } from '@/lib/api'
+import { rpc, type ActionResult, type CollectChoice, type VivaTerminal } from '@/lib/api'
 import { poolSeq } from '@/lib/grid-layout'
 import { colors } from '@/theme'
 
@@ -55,7 +55,7 @@ function daysPastToday(to: unknown): number {
 
 export default function BedDetailSheet({
   siteId, accessKey, item, groupItems, reservationItemIds, isPool, isGroupExtra,
-  siteIsPaid, currentWorkerId, onClose, onChanged, onMove,
+  siteIsPaid, currentWorkerId, onClose, onChanged, onMove, terminals = [], selectedTerminalId = null,
 }: {
   siteId: string
   accessKey: string
@@ -70,7 +70,11 @@ export default function BedDetailSheet({
   onChanged: () => void
   /** Enter move mode for this reservation (closes the sheet). */
   onMove?: (reservationId: string) => void
+  /** Site Viva terminals — non-empty enables Tap card in the collect modal ([[track:024]] W8). */
+  terminals?: VivaTerminal[]
+  selectedTerminalId?: string | null
 }) {
+  const cardLabel = terminals.length > 0 ? 'Card' : 'Card (QR)'
   const state = getBedState(item)
   const reservation = getActiveReservation(item)
   const collected = !!reservation && reservation.status === RESERVATION_COMPLETE
@@ -377,7 +381,7 @@ export default function BedDetailSheet({
                             }
                           />
                           <PayBtn
-                            label="Card (QR)" bg={colors.info} icon={<QrIcon />} pending={pendingKey === 'card'} disabled={busy}
+                            label={cardLabel} bg={colors.info} icon={<QrIcon />} pending={pendingKey === 'card'} disabled={busy}
                             onPress={() =>
                               void walkInCard('card', () =>
                                 rpc('reserveItem', [siteId, item.id, guestName || undefined, undefined, accessKey, untilArg, pairArg, worker, false]),
@@ -441,6 +445,7 @@ export default function BedDetailSheet({
                     onUnreserve={() => setPendingConfirm('unreserve')}
                     onRelease={() => void run('release', () => rpc('releaseHold', [siteId, item.id, accessKey]))}
                     onMove={onMove && reservation ? () => { onClose(); onMove(reservation.id) } : undefined}
+                    cardLabel={cardLabel}
                     onConvert={(cash: boolean) => {
                       const args = [
                         siteId, item.id, accessKey, guestName || reservation.guestName || undefined,
@@ -564,6 +569,8 @@ export default function BedDetailSheet({
         <CollectPaymentModal
           subtitle={header}
           actions={collectActionsFor(siteId, collectTarget, accessKey)}
+          terminals={terminals}
+          selectedTerminalId={selectedTerminalId}
           onSettled={onChanged}
           onClose={() => {
             setCollectTarget(null)
@@ -577,9 +584,17 @@ export default function BedDetailSheet({
 
 function collectActionsFor(siteId: string, reservationId: string, accessKey: string): CollectActions {
   return {
-    create: () => rpc('collectReservationPayment', [siteId, reservationId, accessKey]),
+    create: (choice: CollectChoice) =>
+      rpc('collectReservationPayment', [
+        siteId, reservationId, accessKey,
+        ...(choice.method === 'card' ? [{ method: 'card', terminalId: choice.terminalId }] : []),
+      ]),
     poll: () => rpc('getCollectStatus', [siteId, reservationId, accessKey]),
-    cancel: () => rpc('cancelCollection', [siteId, reservationId, accessKey]),
+    cancel: opts =>
+      rpc('cancelCollection', [
+        siteId, reservationId, accessKey,
+        ...(opts?.terminalId ? [{ terminalId: opts.terminalId }] : []),
+      ]),
   }
 }
 
@@ -604,6 +619,7 @@ function ExpectedBranch(props: {
   onRelease: () => void
   onMove?: () => void
   onConvert: (cash: boolean) => void
+  cardLabel: string
 }) {
   const r = props.reservation
   if (r.status === RESERVATION_COMPLETE) {
@@ -660,7 +676,7 @@ function ExpectedBranch(props: {
             <Text style={styles.caption}>Walk-in — how are they paying?</Text>
             <View style={styles.rowGap8}>
               <PayBtn label="Cash" bg={colors.danger} icon={<BanknoteIcon />} pending={props.pendingKey === 'cash'} disabled={props.pendingKey !== null} onPress={() => props.onConvert(true)} />
-              <PayBtn label="Card (QR)" bg={colors.info} icon={<QrIcon />} pending={props.pendingKey === 'card'} disabled={props.pendingKey !== null} onPress={() => props.onConvert(false)} />
+              <PayBtn label={props.cardLabel} bg={colors.info} icon={<QrIcon />} pending={props.pendingKey === 'card'} disabled={props.pendingKey !== null} onPress={() => props.onConvert(false)} />
             </View>
           </View>
         ) : (

@@ -100,3 +100,13 @@ export function MoveIcon({ size = 18, color = '#4b5563', strokeWidth = 1.8 }: Ic
     </Svg>
   )
 }
+
+export function CardIcon({ size = 20, color = '#6b7280', strokeWidth = 1.8 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round">
+      <Rect x={2.5} y={5.5} width={19} height={13} rx={2} />
+      <Path d="M2.5 10h19" />
+      <Path d="M6.5 14.5h4" />
+    </Svg>
+  )
+}

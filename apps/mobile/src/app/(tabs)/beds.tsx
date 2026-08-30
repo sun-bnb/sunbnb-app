@@ -9,12 +9,13 @@ import BulkSheet from '@/components/BulkSheet'
 import GridCanvas from '@/components/GridCanvas'
 import TillSheet from '@/components/TillSheet'
 import WorkerSheet from '@/components/WorkerSheet'
-import { PersonIcon } from '@/components/icons'
+import { CardIcon, PersonIcon } from '@/components/icons'
 import { decodeSeatNumber } from '@repo/data/seat-label'
 import { rpc } from '@/lib/api'
 import { buildParcelLayout, parcelNumbers, type HitRect } from '@/lib/grid-layout'
 import { refreshGrid, useGridStore } from '@/lib/grid-store'
 import { consumeLocate } from '@/lib/locate'
+import { useTerminals } from '@/lib/terminal'
 import { loadWorkerId, saveWorkerId, workerInitials } from '@/lib/worker'
 import { colors, statusTints } from '@/theme'
 
@@ -48,6 +49,7 @@ export default function Beds() {
   }, [pairing, grid])
 
   const currentWorker = employees.find(e => e.id === workerId) ?? null
+  const { terminals, selected: selectedTerminal, select: selectTerminal } = useTerminals(pairing, grid)
 
   // Guests-tab locate: switch to the seat's parcel and open its sheet.
   useFocusEffect(
@@ -209,17 +211,24 @@ export default function Beds() {
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <Text style={styles.siteName}>{pairing?.siteName ?? grid?.site.name ?? ''}</Text>
-          {employees.length > 0 && (
-            <Pressable
-              onPress={() => setShowWorkers(true)}
-              style={[styles.workerChip, currentWorker && styles.workerChipActive]}
-            >
-              {currentWorker ? (
-                <Text style={styles.workerChipText}>{workerInitials(currentWorker.name)}</Text>
-              ) : (
-                <PersonIcon />
+          {(employees.length > 0 || terminals.length > 0) && (
+            <View style={styles.chipRow}>
+              {selectedTerminal && (
+                <Pressable onPress={() => setShowWorkers(true)} style={styles.terminalChip}>
+                  <CardIcon size={14} color={colors.body} />
+                </Pressable>
               )}
-            </Pressable>
+              <Pressable
+                onPress={() => setShowWorkers(true)}
+                style={[styles.workerChip, currentWorker && styles.workerChipActive]}
+              >
+                {currentWorker ? (
+                  <Text style={styles.workerChipText}>{workerInitials(currentWorker.name)}</Text>
+                ) : (
+                  <PersonIcon />
+                )}
+              </Pressable>
+            </View>
           )}
         </View>
         <View style={styles.counterRow}>
@@ -291,6 +300,8 @@ export default function Beds() {
           selectedIds={selectedIds}
           workerId={workerId ?? undefined}
           siteIsPaid={grid?.site.type === 'paid'}
+          terminals={terminals}
+          selectedTerminalId={selectedTerminal?.terminalId ?? null}
           onClearSelection={() => setSelectedIds([])}
           onChanged={() => void refreshGrid()}
           onStartMove={startMove}
@@ -300,6 +311,12 @@ export default function Beds() {
         <WorkerSheet
           employees={employees}
           currentWorkerId={workerId}
+          terminals={terminals}
+          selectedTerminalId={selectedTerminal?.terminalId ?? null}
+          onSelectTerminal={id => {
+            selectTerminal(id)
+            setShowWorkers(false)
+          }}
           onSelect={id => {
             setWorkerId(id)
             void saveWorkerId(pairing.siteId, id)
@@ -332,6 +349,8 @@ export default function Beds() {
           isGroupExtra={selected.isGroupExtra}
           siteIsPaid={grid?.site.type === 'paid'}
           currentWorkerId={workerId ?? undefined}
+          terminals={terminals}
+          selectedTerminalId={selectedTerminal?.terminalId ?? null}
           onClose={() => setSelected(null)}
           onChanged={() => void refreshGrid()}
           onMove={resId => startMove([resId])}
@@ -374,13 +393,18 @@ const styles = StyleSheet.create({
   },
   siteName: { fontSize: 17, fontWeight: '600', color: colors.heading },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  // In Expo Go the floating dev-tools button covers the top-right corner —
+  // shift the chips clear of it in dev only.
+  chipRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginRight: __DEV__ ? 56 : 0 },
+  terminalChip: {
+    width: 26, height: 26, borderRadius: 999, backgroundColor: colors.chipBg,
+    borderWidth: 1, borderColor: colors.borderInput,
+    alignItems: 'center', justifyContent: 'center',
+  },
   workerChip: {
     width: 34, height: 34, borderRadius: 999, backgroundColor: colors.cardBg,
     borderWidth: 1, borderColor: colors.borderInput,
     alignItems: 'center', justifyContent: 'center',
-    // In Expo Go the floating dev-tools button covers the top-right corner —
-    // shift the chip clear of it in dev only.
-    marginRight: __DEV__ ? 56 : 0,
   },
   workerChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   workerChipText: { fontSize: 12, fontWeight: '600', color: '#ffffff' },

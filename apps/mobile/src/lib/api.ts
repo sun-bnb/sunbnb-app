@@ -73,3 +73,18 @@ export function rpc<T extends ActionResult = ActionResult>(action: string, args:
     body: JSON.stringify({ action, args }),
   })
 }
+
+/** A Viva cloud terminal (a staff phone running the viva.com Terminal app) registered on the site. */
+export interface VivaTerminal {
+  id: string
+  terminalId: string
+  label: string
+  lastSeenAt: string | null
+}
+
+/** How a collect is taken: the guest's own phone (QR) or a tap on a Viva terminal. */
+export type CollectChoice = { method: 'qr' } | { method: 'card'; terminalId: string }
+
+export function listVivaTerminals(siteId: string, accessKey: string) {
+  return rpc<ActionResult & { terminals?: VivaTerminal[] }>('listVivaTerminals', [siteId, accessKey])
+}

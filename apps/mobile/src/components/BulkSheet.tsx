@@ -18,7 +18,7 @@ import { classifySelection, getSelectionGroups } from '@repo/floor-core/bulk'
 import type { InventoryItem } from '@repo/floor-core/types'
 import CollectPaymentModal, { type CollectActions } from '@/components/CollectPaymentModal'
 import { BanknoteIcon, BlockIcon, CalendarIcon, CloseIcon, MoveIcon, QrIcon, StarIcon } from '@/components/icons'
-import { rpc, type ActionResult } from '@/lib/api'
+import { rpc, type ActionResult, type CollectChoice, type VivaTerminal } from '@/lib/api'
 import { colors } from '@/theme'
 
 const DAY_MS = 86_400_000
@@ -28,7 +28,7 @@ type ConfirmKind = 'no-show' | 'depart' | 'unreserve' | 'cancel'
 
 export default function BulkSheet({
   siteId, accessKey, items, selectedIds, workerId, siteIsPaid,
-  onClearSelection, onChanged, onStartMove,
+  onClearSelection, onChanged, onStartMove, terminals = [], selectedTerminalId = null,
 }: {
   siteId: string
   accessKey: string
@@ -40,7 +40,10 @@ export default function BulkSheet({
   onChanged: () => void
   /** Enter move mode with the distinct reservation ids touched by the selection. */
   onStartMove: (reservationIds: string[]) => void
+  terminals?: VivaTerminal[]
+  selectedTerminalId?: string | null
 }) {
+  const cardLabel = terminals.length > 0 ? 'Card' : 'Card (QR)'
   const [guestName, setGuestName] = useState('')
   const [until, setUntil] = useState('')
   const [busy, setBusy] = useState(false)
@@ -346,7 +349,7 @@ export default function BulkSheet({
                       <View style={styles.rowGap8}>
                         <PayBtn label="Cash" bg={colors.danger} icon={<BanknoteIcon />} disabled={busy} onPress={bulkRentCash} />
                         {sel.bulkCardEligible && (
-                          <PayBtn label="Card (QR)" bg={colors.info} icon={<QrIcon />} disabled={busy} onPress={() => void bulkRentCard()} />
+                          <PayBtn label={cardLabel} bg={colors.info} icon={<QrIcon />} disabled={busy} onPress={() => void bulkRentCard()} />
                         )}
                       </View>
                     </View>
@@ -362,7 +365,7 @@ export default function BulkSheet({
                     <>
                       <PayBtn label="Cash" bg={colors.danger} icon={<BanknoteIcon />} disabled={busy} onPress={bulkRentCash} />
                       {sel.bulkCardEligible && (
-                        <PayBtn label="Card (QR)" bg={colors.info} icon={<QrIcon />} disabled={busy} onPress={() => void bulkRentCard()} />
+                        <PayBtn label={cardLabel} bg={colors.info} icon={<QrIcon />} disabled={busy} onPress={() => void bulkRentCard()} />
                       )}
                     </>
                   ) : (
@@ -413,6 +416,8 @@ export default function BulkSheet({
       {collectTarget && (
         <CollectPaymentModal
           actions={collectActionsFor(siteId, collectTarget, accessKey)}
+          terminals={terminals}
+          selectedTerminalId={selectedTerminalId}
           onSettled={onChanged}
           onClose={() => {
             setCollectTarget(null)
@@ -426,9 +431,17 @@ export default function BulkSheet({
 
 function collectActionsFor(siteId: string, reservationId: string, accessKey: string): CollectActions {
   return {
-    create: () => rpc('collectReservationPayment', [siteId, reservationId, accessKey]),
+    create: (choice: CollectChoice) =>
+      rpc('collectReservationPayment', [
+        siteId, reservationId, accessKey,
+        ...(choice.method === 'card' ? [{ method: 'card', terminalId: choice.terminalId }] : []),
+      ]),
     poll: () => rpc('getCollectStatus', [siteId, reservationId, accessKey]),
-    cancel: () => rpc('cancelCollection', [siteId, reservationId, accessKey]),
+    cancel: opts =>
+      rpc('cancelCollection', [
+        siteId, reservationId, accessKey,
+        ...(opts?.terminalId ? [{ terminalId: opts.terminalId }] : []),
+      ]),
   }
 }
 

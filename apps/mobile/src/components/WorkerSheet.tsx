@@ -1,20 +1,27 @@
 /**
  * Worker roster picker — the mobile form of the web ManageWorkerFab popover:
  * one row per employee, a Till entry when a worker is set, and "No worker".
+ * When the site has Viva terminals a "Terminal" section follows: the one
+ * phone the server pushes card sales to ([[track:024]] W8). Hidden otherwise.
  */
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { BanknoteIcon, CheckIcon } from '@/components/icons'
+import { BanknoteIcon, CardIcon, CheckIcon } from '@/components/icons'
+import type { VivaTerminal } from '@/lib/api'
 import { workerInitials } from '@/lib/worker'
 import { colors } from '@/theme'
 
 export default function WorkerSheet({
   employees, currentWorkerId, onSelect, onOpenTill, onClose,
+  terminals = [], selectedTerminalId = null, onSelectTerminal,
 }: {
   employees: { id: string; name: string }[]
   currentWorkerId: string | null
   onSelect: (id: string | null) => void
   onOpenTill: () => void
   onClose: () => void
+  terminals?: VivaTerminal[]
+  selectedTerminalId?: string | null
+  onSelectTerminal?: (terminalId: string | null) => void
 }) {
   return (
     <Modal transparent animationType="slide" onRequestClose={onClose}>
@@ -22,8 +29,8 @@ export default function WorkerSheet({
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={styles.sheet}>
           <View style={styles.handle} />
-          <Text style={styles.title}>Worker</Text>
-          <ScrollView bounces={false} style={{ maxHeight: 380 }}>
+          <ScrollView bounces={false} style={{ maxHeight: 520 }}>
+            {employees.length > 0 && <Text style={styles.title}>Worker</Text>}
             {employees.map(e => {
               const active = e.id === currentWorkerId
               return (
@@ -40,21 +47,47 @@ export default function WorkerSheet({
                 </Pressable>
               )
             })}
+            {currentWorkerId && (
+              <>
+                <View style={styles.divider} />
+                <Pressable style={styles.row} onPress={onOpenTill}>
+                  <View style={[styles.avatar, { backgroundColor: '#f0fdf4' }]}>
+                    <BanknoteIcon color="#16a34a" />
+                  </View>
+                  <Text style={styles.rowText}>Till</Text>
+                </Pressable>
+                <Pressable style={styles.row} onPress={() => onSelect(null)}>
+                  <Text style={[styles.rowText, { color: colors.muted }]}>No worker</Text>
+                </Pressable>
+              </>
+            )}
+            {terminals.length > 0 && (
+              <>
+                {employees.length > 0 && <View style={styles.divider} />}
+                <Text style={[styles.title, employees.length > 0 && { marginTop: 8 }]}>Terminal</Text>
+                <Text style={styles.hint}>Card taps are sent to this phone's viva.com Terminal app.</Text>
+                {terminals.map(t => {
+                  const active = t.terminalId === selectedTerminalId
+                  return (
+                    <Pressable key={t.id} style={styles.row} onPress={() => onSelectTerminal?.(t.terminalId)}>
+                      <View style={[styles.avatar, active && { backgroundColor: colors.accent }]}>
+                        <CardIcon color={active ? '#ffffff' : colors.body} />
+                      </View>
+                      <Text style={[styles.rowText, active && { fontWeight: '600' }]} numberOfLines={1}>
+                        {t.label}
+                      </Text>
+                      {active && <CheckIcon />}
+                    </Pressable>
+                  )
+                })}
+                {selectedTerminalId && (
+                  <Pressable style={styles.row} onPress={() => onSelectTerminal?.(null)}>
+                    <Text style={[styles.rowText, { color: colors.muted }]}>No terminal</Text>
+                  </Pressable>
+                )}
+              </>
+            )}
           </ScrollView>
-          {currentWorkerId && (
-            <>
-              <View style={styles.divider} />
-              <Pressable style={styles.row} onPress={onOpenTill}>
-                <View style={[styles.avatar, { backgroundColor: '#f0fdf4' }]}>
-                  <BanknoteIcon color="#16a34a" />
-                </View>
-                <Text style={styles.rowText}>Till</Text>
-              </Pressable>
-              <Pressable style={styles.row} onPress={() => onSelect(null)}>
-                <Text style={[styles.rowText, { color: colors.muted }]}>No worker</Text>
-              </Pressable>
-            </>
-          )}
         </View>
       </View>
     </Modal>
@@ -72,6 +105,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center', marginBottom: 8,
   },
   title: { fontSize: 17, fontWeight: '600', color: colors.heading, marginBottom: 6 },
+  hint: { fontSize: 12, color: colors.muted, marginBottom: 4 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11 },
   avatar: {
     width: 36, height: 36, borderRadius: 999, backgroundColor: colors.chipBg,
