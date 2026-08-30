@@ -189,6 +189,29 @@ model PartnerAccount {
   mollieRefreshToken   String?      @map("mollie_refresh_token")
   mollieTokenExpiresAt DateTime?    @map("mollie_token_expires_at")
   mollieOnboardingStatus String?    @map("mollie_onboarding_status")
+  /// Viva ISV connected-account id (track 024, W8, P1 — merchant connect).
+  /// Unlike Mollie there is no per-partner OAuth token pair: the ISV credential
+  /// is ours alone, and this id is what identifies the venue's connected
+  /// account to Viva (`POST /isv/v1/accounts` -> `accountId`, packet A2's
+  /// `src/viva/accounts.ts`).
+  vivaAccountId          String?    @map("viva_account_id")
+  /// The venue's Viva merchant id, present once connected/verified
+  /// (`GET /isv/v1/accounts/{accountId}` -> `merchantId`, or the `Account
+  /// Connected` webhook). This is what becomes `isvDetails.terminalMerchantId`
+  /// on a Cloud Terminal sale (`src/viva/http-client.ts`).
+  vivaMerchantId         String?    @map("viva_merchant_id")
+  /// Plain string in Viva's own vocabulary, NOT the accounts client's
+  /// normalised `VivaAccountVerificationStatus` — this column is a cache of
+  /// whatever the last poll/webhook reported, kept alongside `vivaConnectedAt`
+  /// for support/debugging; the normalised enum lives only in `accounts.ts`'s
+  /// return type, never persisted, per this repo's String-column-not-enum
+  /// status convention (`src/reservation-status.ts`).
+  vivaVerificationStatus String?    @map("viva_verification_status")
+  /// The merchant's own store/source code under our ISV account (Sales >
+  /// Physical payments), applied as `isvDetails.sourceCode` on a sale when
+  /// the venue has its own rather than inheriting the ISV Partner default.
+  vivaSourceCode         String?    @map("viva_source_code")
+  vivaConnectedAt        DateTime?  @map("viva_connected_at")
   invoices            Invoice[]
   settlements         Settlement[]
   subscription        Subscription?
@@ -313,8 +336,42 @@ model Site {
   tillCloses      TillClose[]
   tillEntries     TillEntry[]
   tableTabs       TableTab[]
+  vivaTerminals   VivaTerminal[]
 
   @@index([coords], map: "site_coords_idx", type: Gist)
+}
+
+/// Binds a physical Viva Cloud Terminal ISV device (`terminalId`) to the site
+/// that owns it (track 024, W8, P1 — merchant connect). A terminal belongs to
+/// exactly one site at a time — `terminalId` is unique, not a composite key —
+/// because it is a physical device standing at one venue, unlike e.g. a
+/// `SunbedGroup` address which is per-site by construction.
+///
+/// `cashRegisterId` is minted by US (free text on the Viva side) when a
+/// collect session opens and is NOT re-derivable at abort time from anything
+/// else — Viva requires the SAME `cashRegisterId` that created a session to
+/// abort it (`abortSession(sessionId, cashRegisterId)` in `src/viva/types.ts`).
+/// Defaulting it to the site id keeps that value stable across the whole
+/// terminal's lifetime rather than reconstructing it per-session.
+model VivaTerminal {
+  id             String    @id @default(cuid())
+  siteId         String    @map("site_id")
+  /// Viva's Terminal ID (`ISVSearchDevicesResponse[].terminalId`, or the
+  /// Terminal app's "Source Terminal ID").
+  terminalId     String    @unique @map("terminal_id")
+  /// Staff-facing label ("Bar iPad", "Terminal 2") — the Viva terminal id
+  /// alone means nothing to a beach-side operator picking a device.
+  label          String?
+  /// Stable identifier for the till/device that opens a collect session —
+  /// see the model doc comment for why this must be stored, not recomputed.
+  cashRegisterId String    @map("cash_register_id")
+  lastSeenAt     DateTime? @map("last_seen_at")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  site           Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId])
+  @@map("viva_terminal")
 }
 
 model SiteBrand {
