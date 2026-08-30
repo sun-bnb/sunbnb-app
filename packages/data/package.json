@@ -45,7 +45,9 @@
     "./fiscal": "./src/fiscal.ts",
     "./tab-payment": "./src/tab-payment.ts",
     "./payment-math": "./src/payment-math.ts",
-    "./mollie-app-fee": "./src/mollie-app-fee.ts"
+    "./mollie-app-fee": "./src/mollie-app-fee.ts",
+    "./viva": "./src/viva/index.ts",
+    "./viva/refs": "./src/viva/refs.ts"
   },
   "typesVersions": {
     "*": {
@@ -141,6 +143,12 @@
       ],
       "mollie-app-fee": [
         "./src/mollie-app-fee.ts"
+      ],
+      "viva": [
+        "./src/viva/index.ts"
+      ],
+      "viva/refs": [
+        "./src/viva/refs.ts"
       ]
     }
   },
