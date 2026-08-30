@@ -68,6 +68,10 @@ import {
   closeDay,
   getManageTrends,
   getManageTrendsCsv,
+  listVivaTerminals,
+  discoverVivaTerminals,
+  registerVivaTerminal,
+  removeVivaTerminal,
 } from '@/app/sites/[id]/manage/actions'
 
 /** A registry entry: any function taking JSON-serializable args and returning a JSON-serializable value. */
@@ -135,4 +139,10 @@ export const RPC_ACTIONS: Record<string, RpcHandler> = {
   // ── Trends (admin-token-gated) ──────────────────────────────────────────
   getManageTrends,
   getManageTrendsCsv,
+
+  // ── Viva terminal registry (track 024 W8) ──────────────────────────────
+  listVivaTerminals,
+  discoverVivaTerminals,
+  registerVivaTerminal,
+  removeVivaTerminal,
 }

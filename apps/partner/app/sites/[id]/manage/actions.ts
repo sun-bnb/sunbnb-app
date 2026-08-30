@@ -35,6 +35,7 @@ import {
   type ReservationStatsSummary,
 } from '@repo/data/analytics'
 import { processConfirmedReservation, processCashRentalBooking } from '@repo/data/payment'
+import { getVivaClient } from '@repo/data/viva'
 import { applyDayTransition } from './reservation-day'
 import { applyTransition } from '@repo/data/reservation-machine-apply'
 import { siteDayKey, siteDayBounds } from '@repo/data/site-day'
@@ -1982,6 +1983,7 @@ export async function collectReservationPayment(
   siteId: string,
   reservationId: string,
   accessKey?: string,
+  opts?: { method?: 'qr' | 'card'; terminalId?: string },
 ) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
@@ -1994,23 +1996,33 @@ export async function collectReservationPayment(
     return { status: 'error', errors: ['Reservation not found'] }
   }
 
+  const isCard = opts?.method === 'card'
+  if (isCard && !opts?.terminalId) {
+    return { status: 'error', errors: ['A terminal is required to collect by card'] }
+  }
+
+  // The consumer-app redirect/webhook precondition only applies to the QR
+  // (Mollie checkout) path — card-present never sends the guest's browser
+  // anywhere, so it has no CONSUMER_APP_URL dependency.
   const consumerAppUrl = process.env.CONSUMER_APP_URL
-  if (!DEMO_MODE && !consumerAppUrl) {
+  if (!isCard && !DEMO_MODE && !consumerAppUrl) {
     return { status: 'error', errors: ['Online payments are not configured (CONSUMER_APP_URL)'] }
   }
 
   const result = await applyTransition(reservationId, 'collect.start', {
-    collect: {
-      demo: DEMO_MODE,
-      buildRedirectUrl: (anonId) =>
-        new URL(
-          `/payment/complete?reservationId=${reservationId}&anonId=${anonId}`,
-          consumerAppUrl!,
-        ).toString(),
-      webhookUrl: consumerAppUrl
-        ? new URL('/api/webhooks/mollie', consumerAppUrl).toString()
-        : undefined,
-    },
+    collect: isCard
+      ? { demo: DEMO_MODE, method: 'card', terminalId: opts!.terminalId }
+      : {
+          demo: DEMO_MODE,
+          buildRedirectUrl: (anonId) =>
+            new URL(
+              `/payment/complete?reservationId=${reservationId}&anonId=${anonId}`,
+              consumerAppUrl!,
+            ).toString(),
+          webhookUrl: consumerAppUrl
+            ? new URL('/api/webhooks/mollie', consumerAppUrl).toString()
+            : undefined,
+        },
   })
 
   if (result.outcome === 'effect-failed') {
@@ -2022,7 +2034,9 @@ export async function collectReservationPayment(
 
   revalidatePath(`/sites/${siteId}/manage`)
   const data = result.data ?? {}
-  return { status: 'ok', amount: data.amount as number, ...(data.demo ? { demo: true } : { checkoutUrl: data.checkoutUrl as string }) }
+  if (data.demo) return { status: 'ok', amount: data.amount as number, demo: true }
+  if (data.card) return { status: 'ok', amount: data.amount as number, card: true }
+  return { status: 'ok', amount: data.amount as number, checkoutUrl: data.checkoutUrl as string }
 }
 
 /**
@@ -2084,6 +2098,7 @@ export async function cancelCollection(
   siteId: string,
   reservationId: string,
   accessKey?: string,
+  opts?: { terminalId?: string },
 ) {
   const ownership = await verifySiteOwnership(siteId, accessKey)
   if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
@@ -2104,13 +2119,21 @@ export async function cancelCollection(
     }
   }
 
-  const result = await applyTransition(reservationId, 'collect.abandon')
+  const result = await applyTransition(reservationId, 'collect.abandon', {
+    collect: { terminalId: opts?.terminalId },
+  })
   if (result.outcome !== 'applied') {
     return { status: 'error', errors: ['Could not abandon the collection'] }
   }
 
   revalidatePath(`/sites/${siteId}/manage`)
-  return { status: 'ok', paymentStatus: (result.data?.paymentStatus ?? 'cash') as 'complete' | 'cash' }
+  // A card abort that raced the terminal's card read (or is still mid-tap)
+  // resolves neither cash nor complete — the modal keeps polling instead of
+  // closing (reservation-machine-apply.ts runCollectAbandonCard).
+  return {
+    status: 'ok',
+    paymentStatus: (result.data?.paymentStatus ?? 'cash') as 'complete' | 'cash' | 'processing',
+  }
 }
 
 // ─── Split one seat off a multi-seat walk-in (Seat-collect primitive) ────────
@@ -3368,4 +3391,144 @@ export async function getManageTrendsCsv(
 
   const csv = toFiguresCsv(await getReservationDayStats(siteId, from, to))
   return { status: 'ok', csv }
+}
+// ─── Viva terminal registry (track 024, W8, packet C1) ──────────────────────
+//
+// Binds physical Viva Cloud Terminal devices (`VivaTerminal.terminalId`) to a
+// site so the collect flow (packet C2) can offer a terminal picker. Same
+// token-or-session gate (`verifySiteOwnership`) as every other manage action —
+// registered in the gated-action registry and the RPC allowlist so the auth
+// matrix and the mobile app both cover it automatically.
+
+export interface VivaTerminalRow {
+  id: string
+  terminalId: string
+  label: string | null
+  lastSeenAt: Date | null
+}
+
+/** Registered terminals for the site, oldest-first. */
+export async function listVivaTerminals(
+  siteId: string,
+  accessKey?: string,
+): Promise<{ status: string; terminals?: VivaTerminalRow[]; errors?: string[] }> {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const terminals = await prisma.vivaTerminal.findMany({
+    where: { siteId },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, terminalId: true, label: true, lastSeenAt: true },
+  })
+
+  return { status: 'ok', terminals: terminals ?? [] }
+}
+
+export interface VivaDiscoveredDevice {
+  terminalId: string
+  statusId: number
+  sourceCode?: string
+  /** Already bound to THIS site's registry. */
+  registered: boolean
+  label: string | null
+}
+
+/**
+ * Searches the venue's Viva merchant for devices (`ISVSearchDevicesResponse`)
+ * and marks which ones are already registered to this site. Requires the
+ * site's partner account to be Viva-connected (`PartnerAccount.vivaMerchantId`)
+ * — packet A2's merchant-connect leg, done via `/account/viva`.
+ */
+export async function discoverVivaTerminals(
+  siteId: string,
+  accessKey?: string,
+): Promise<{ status: string; devices?: VivaDiscoveredDevice[]; errors?: string[] }> {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const partnerAccount = await prisma.partnerAccount.findUnique({
+    where: { userId: ownership.userId },
+    select: { vivaMerchantId: true },
+  })
+  if (!partnerAccount?.vivaMerchantId) {
+    return { status: 'error', errors: ['Viva not connected'] }
+  }
+
+  const [devices, registered] = await Promise.all([
+    getVivaClient().searchDevices(partnerAccount.vivaMerchantId),
+    prisma.vivaTerminal.findMany({
+      where: { siteId },
+      select: { terminalId: true, label: true },
+    }),
+  ])
+
+  const registeredMap = new Map((registered ?? []).map((r) => [r.terminalId, r.label]))
+
+  return {
+    status: 'ok',
+    devices: (devices ?? []).map((d) => ({
+      terminalId: d.terminalId,
+      statusId: d.statusId,
+      sourceCode: d.sourceCode,
+      registered: registeredMap.has(d.terminalId),
+      label: registeredMap.get(d.terminalId) ?? null,
+    })),
+  }
+}
+
+/**
+ * Registers (or relabels) a Viva terminal for this site. `terminalId` is
+ * globally unique (`VivaTerminal.terminalId @unique` — a physical device
+ * belongs to one site), so a terminal already bound to a DIFFERENT site is
+ * rejected rather than silently re-parented by the upsert.
+ * `cashRegisterId` defaults to the site id (see the model's doc comment in
+ * schema.prisma — it must stay stable across the terminal's lifetime).
+ */
+export async function registerVivaTerminal(
+  siteId: string,
+  terminalId: string,
+  label?: string,
+  accessKey?: string,
+): Promise<{ status: string; terminal?: VivaTerminalRow; errors?: string[] }> {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  if (!terminalId || !terminalId.trim()) {
+    return { status: 'error', errors: ['Terminal id is required'] }
+  }
+
+  const existing = await prisma.vivaTerminal.findUnique({ where: { terminalId } })
+  if (existing && existing.siteId !== siteId) {
+    return { status: 'error', errors: ['This terminal is already registered to another site'] }
+  }
+
+  const terminal = await prisma.vivaTerminal.upsert({
+    where: { terminalId },
+    create: { siteId, terminalId, label: label ?? null, cashRegisterId: siteId },
+    update: { label: label ?? null },
+    select: { id: true, terminalId: true, label: true, lastSeenAt: true },
+  })
+
+  revalidatePath(`/sites/${siteId}/general`)
+  return { status: 'ok', terminal }
+}
+
+/** Removes a terminal from this site's registry (does not touch Viva itself). */
+export async function removeVivaTerminal(
+  siteId: string,
+  terminalId: string,
+  accessKey?: string,
+): Promise<{ status: string; errors?: string[] }> {
+  const ownership = await verifySiteOwnership(siteId, accessKey)
+  if ('error' in ownership) return { status: 'error', errors: [ownership.error] }
+
+  const existing = await prisma.vivaTerminal.findUnique({ where: { terminalId } })
+  if (!existing || existing.siteId !== siteId) {
+    return { status: 'error', errors: ['Terminal not found for this site'] }
+  }
+
+  await prisma.vivaTerminal.delete({ where: { terminalId } })
+
+  revalidatePath(`/sites/${siteId}/general`)
+  return { status: 'ok' }
 }

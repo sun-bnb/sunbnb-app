@@ -3507,6 +3507,48 @@ describe('collectReservationPayment (machine-delegating)', () => {
     expect(res.status).toBe('error')
     expect(res.errors).toContain('boom')
   })
+
+  it('card method passes method/terminalId through to collect.start, skipping the CONSUMER_APP_URL precondition', async () => {
+    delete process.env.CONSUMER_APP_URL // card must not need it, unlike QR
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID } as any)
+    mockApply.mockResolvedValueOnce({
+      outcome: 'applied', transition: {} as any, state: {} as any,
+      data: { amount: 17, card: true },
+    } as any)
+
+    const res = await collectReservationPayment(SITE_ID, RES_ID, undefined, { method: 'card', terminalId: 'term-1' })
+    expect(res.status).toBe('ok')
+    expect((res as any).amount).toBe(17)
+    expect((res as any).card).toBe(true)
+    expect((res as any).checkoutUrl).toBeUndefined()
+
+    const [id, event, opts] = mockApply.mock.calls[0]!
+    expect(id).toBe(RES_ID)
+    expect(event).toBe('collect.start')
+    expect((opts as any).collect).toEqual({ demo: false, method: 'card', terminalId: 'term-1' })
+  })
+
+  it('missing terminalId with method:card errors before touching the machine', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID } as any)
+
+    const res = await collectReservationPayment(SITE_ID, RES_ID, undefined, { method: 'card' })
+    expect(res.status).toBe('error')
+    expect(mockApply).not.toHaveBeenCalled()
+  })
+
+  it('a card effect-failed maps to {status: error}', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({ siteId: SITE_ID } as any)
+    mockApply.mockResolvedValueOnce({
+      outcome: 'effect-failed', effect: 'vivaSale', event: 'collect.start', error: 'terminal offline',
+    } as any)
+
+    const res = await collectReservationPayment(SITE_ID, RES_ID, undefined, { method: 'card', terminalId: 'term-1' })
+    expect(res.status).toBe('error')
+    expect(res.errors).toContain('terminal offline')
+  })
 })
 
 describe('getCollectStatus (machine pay.fail for the revert)', () => {
@@ -3549,7 +3591,36 @@ describe('cancelCollection (machine collect.abandon — D5: never deletes)', () 
     const res = await cancelCollection(SITE_ID, RES_ID)
     expect(res.status).toBe('ok')
     expect((res as any).paymentStatus).toBe('cash')
-    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'collect.abandon')
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'collect.abandon', { collect: { terminalId: undefined } })
+  })
+
+  it('passes opts.terminalId through to collect.abandon', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      siteId: SITE_ID, status: 'processing',
+    } as any)
+    mockApply.mockResolvedValueOnce({
+      outcome: 'applied', transition: {} as any, state: {} as any,
+      data: { paymentStatus: 'cash' },
+    } as any)
+
+    await cancelCollection(SITE_ID, RES_ID, undefined, { terminalId: 'term-1' })
+    expect(mockApply).toHaveBeenCalledWith(RES_ID, 'collect.abandon', { collect: { terminalId: 'term-1' } })
+  })
+
+  it('maps a racing card abort (still processing) through — the modal keeps polling', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      siteId: SITE_ID, status: 'processing',
+    } as any)
+    mockApply.mockResolvedValueOnce({
+      outcome: 'applied', transition: {} as any, state: {} as any,
+      data: { paymentStatus: 'processing' },
+    } as any)
+
+    const res = await cancelCollection(SITE_ID, RES_ID, undefined, { terminalId: 'term-1' })
+    expect(res.status).toBe('ok')
+    expect((res as any).paymentStatus).toBe('processing')
   })
 
   it('a paid race resolves as complete (the machine reports the pay.confirm row)', async () => {

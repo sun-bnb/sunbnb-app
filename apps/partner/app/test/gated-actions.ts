@@ -75,6 +75,10 @@ import {
   getDayShiftItems,
   getManageTrends,
   getManageTrendsCsv,
+  listVivaTerminals,
+  discoverVivaTerminals,
+  registerVivaTerminal,
+  removeVivaTerminal,
 } from '@/app/sites/[id]/manage/actions'
 
 import {
@@ -558,6 +562,30 @@ export const GATED_ACTIONS: GatedAction[] = [
     kind: 'action',
     gate: 'token-or-session',
     invoke: (accessKey?) => settleReservation(SITE_ID, RES_ID, 10, accessKey),
+  },
+  {
+    name: 'manage.listVivaTerminals',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => listVivaTerminals(SITE_ID, accessKey),
+  },
+  {
+    name: 'manage.discoverVivaTerminals',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => discoverVivaTerminals(SITE_ID, accessKey),
+  },
+  {
+    name: 'manage.registerVivaTerminal',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => registerVivaTerminal(SITE_ID, 'matrix-terminal-1', 'Matrix terminal', accessKey),
+  },
+  {
+    name: 'manage.removeVivaTerminal',
+    kind: 'action',
+    gate: 'token-or-session',
+    invoke: (accessKey?) => removeVivaTerminal(SITE_ID, 'matrix-terminal-1', accessKey),
   },
 
   // ══════════════════════════════════════════════════════════════════════════

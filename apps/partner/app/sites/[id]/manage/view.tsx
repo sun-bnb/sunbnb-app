@@ -25,10 +25,11 @@ import {
   unblockBed, uncompBed, releaseHold, unreserveItem, removeFailedReservation,
   checkInReservation, resumeWalkIn, markNoShow, markDeparted, cancelReservation,
   collectReservationPayment, getCollectStatus, cancelCollection,
+  listVivaTerminals,
   type ReservationMatch,
 } from './actions'
 import { RESERVATION_COMPLETE, RESERVATION_HELD, RESERVATION_PAID_IN_CASH } from '@repo/data/reservation-status'
-import CollectPaymentModal from './CollectPaymentModal'
+import CollectPaymentModal, { type CollectTerminalOption } from './CollectPaymentModal'
 import { decodeSeatNumber } from '@repo/data/seat-label'
 
 /**
@@ -125,6 +126,20 @@ export default function ManageView({
   const [currentWorkerId, setCurrentWorkerId] = useState<string | null>(null)
   const [showTill, setShowTill] = useState(false)
   const [showGuests, setShowGuests] = useState(false)
+
+  // ── Card-present (Viva) terminals — drives the Collect modal's method
+  // chooser. Loaded once; a site with none keeps every Collect modal exactly
+  // as before (QR immediately, no chooser).
+  const [vivaTerminals, setVivaTerminals] = useState<CollectTerminalOption[]>([])
+  useEffect(() => {
+    let cancelled = false
+    listVivaTerminals(site.id!, accessKey).then((res) => {
+      if (!cancelled && res.status === 'ok' && res.terminals) {
+        setVivaTerminals(res.terminals.map(term => ({ terminalId: term.terminalId, label: term.label })))
+      }
+    })
+    return () => { cancelled = true }
+  }, [site.id, accessKey])
 
   useEffect(() => {
     try {
@@ -1193,6 +1208,7 @@ export default function ManageView({
           onMove={handleStartMove}
           siteIsPaid={site.type === 'paid'}
           onCollected={() => router.refresh()}
+          collectTerminals={vivaTerminals}
         />
       )}
 
@@ -1201,10 +1217,11 @@ export default function ManageView({
       {showBulkCollect && bulkCollectTargetId && (
         <CollectPaymentModal
           actions={{
-            create: () => collectReservationPayment(site.id!, bulkCollectTargetId, accessKey),
+            create: (choice) => collectReservationPayment(site.id!, bulkCollectTargetId, accessKey, choice),
             poll:   () => getCollectStatus(site.id!, bulkCollectTargetId, accessKey),
-            cancel: () => cancelCollection(site.id!, bulkCollectTargetId, accessKey),
+            cancel: (choice) => cancelCollection(site.id!, bulkCollectTargetId, accessKey, choice),
           }}
+          terminals={vivaTerminals}
           onClose={() => { setShowBulkCollect(false); setBulkCollectTargetId(null) }}
           onSettled={() => {
             setShowBulkCollect(false)

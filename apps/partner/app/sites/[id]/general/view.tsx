@@ -33,6 +33,8 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
 
 import SurfingIcon from '@mui/icons-material/Surfing'
 
+import CardTerminalsCard from './CardTerminalsCard'
+
 import { useSite } from '@/app/sites/site-context'
 import { ServiceFee } from '@/types/shared'
 import MapHandler from '@/components/maps/map-handler'
@@ -777,6 +779,9 @@ export default function GeneralView() {
           </div>
         </div>
       )}
+
+      {/* Card terminals (Viva) — track 024 W8 packet C1 */}
+      {isPaid && site.id && <CardTerminalsCard siteId={site.id} />}
 
       <Divider sx={{ mb: 3 }} />
 

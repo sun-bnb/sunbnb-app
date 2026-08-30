@@ -38,7 +38,7 @@ import {
   RESERVATION_COMPLETE, RESERVATION_HELD, RESERVATION_PAID_IN_CASH,
 } from '@repo/data/reservation-status'
 import { groupExtraSeatLabel } from '@repo/floor-core/grid-helpers'
-import CollectPaymentModal from './CollectPaymentModal'
+import CollectPaymentModal, { type CollectTerminalOption } from './CollectPaymentModal'
 import {
   getActiveReservation,
   getBedState,
@@ -188,6 +188,7 @@ export default function BedDetail({
   onMove,
   siteIsPaid = false,
   onCollected,
+  collectTerminals = [],
 }: {
   siteId: string
   item: InventoryItem
@@ -215,6 +216,8 @@ export default function BedDetail({
   siteIsPaid?: boolean
   /** Refresh the grid after a collection settles. */
   onCollected?: () => void
+  /** Registered Viva Cloud Terminal devices for this site (empty = QR-only Collect modal, unchanged). */
+  collectTerminals?: CollectTerminalOption[]
 }) {
   const t = useTranslations('BedDetail')
   const [isPending, startTransition] = useTransition()
@@ -1523,10 +1526,11 @@ export default function BedDetail({
       {showCollect && collectTargetId && (
         <CollectPaymentModal
           actions={{
-            create: () => collectReservationPayment(siteId, collectTargetId, accessKey),
+            create: (choice) => collectReservationPayment(siteId, collectTargetId, accessKey, choice),
             poll:   () => getCollectStatus(siteId, collectTargetId, accessKey),
-            cancel: () => cancelCollection(siteId, collectTargetId, accessKey),
+            cancel: (choice) => cancelCollection(siteId, collectTargetId, accessKey, choice),
           }}
+          terminals={collectTerminals}
           onClose={() => { setShowCollect(false); setCollectTargetId(null) }}
           onSettled={() => onCollected?.()}
         />

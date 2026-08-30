@@ -27,6 +27,8 @@ export default async function Account() {
       bankAccount: true,
       mollieAccessToken: true,
       mollieOnboardingStatus: true,
+      vivaAccountId: true,
+      vivaVerificationStatus: true,
     },
   })
 
@@ -69,6 +71,11 @@ export default async function Account() {
     onboardingStatus: dbAccount?.mollieOnboardingStatus ?? null,
   }
 
-  return <AccountView account={account} mollieStatus={mollieStatus} />
+  const vivaStatus = {
+    isConnected: !!dbAccount?.vivaAccountId,
+    verificationStatus: dbAccount?.vivaVerificationStatus ?? null,
+  }
+
+  return <AccountView account={account} mollieStatus={mollieStatus} vivaStatus={vivaStatus} />
 
 }

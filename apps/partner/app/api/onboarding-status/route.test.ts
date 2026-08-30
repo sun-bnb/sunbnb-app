@@ -8,16 +8,25 @@ vi.mock('@/app/api/_lib/mollie', () => ({
   fetchMollieProfile: vi.fn(),
 }))
 
+// `@repo/data/viva` has no vitest.config.ts alias (no prisma import), mock it
+// outright — same reasoning as `@/app/api/_lib/mollie` above.
+vi.mock('@repo/data/viva', () => ({
+  getVivaAccountsClient: vi.fn(),
+}))
+
 import { GET } from './route'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { fetchMollieProfile } from '@/app/api/_lib/mollie'
+import { getVivaAccountsClient } from '@repo/data/viva'
 
 const mockAuth = vi.mocked(auth)
 const mockFetchMollieProfile = vi.mocked(fetchMollieProfile)
+const mockGetVivaAccountsClient = vi.mocked(getVivaAccountsClient)
 const mockAccountFindUnique = vi.mocked(prisma.partnerAccount.findUnique)
 const mockAccountUpdate = vi.mocked(prisma.partnerAccount.update)
 const mockSiteFindMany = vi.mocked(prisma.site.findMany)
+const mockGetConnectedAccount = vi.fn()
 
 const USER_ID = 'user-1'
 
@@ -25,13 +34,17 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockAuth.mockResolvedValue(null)
   mockSiteFindMany.mockResolvedValue([] as any)
+  mockGetVivaAccountsClient.mockReturnValue({
+    createConnectedAccount: vi.fn(),
+    getConnectedAccount: mockGetConnectedAccount,
+  } as any)
 })
 
 describe('GET /api/onboarding-status', () => {
   it('returns hasAccount=false when not authenticated', async () => {
     const response = await GET()
     const data = await response.json()
-    expect(data).toEqual({ hasAccount: false, hasMollie: false })
+    expect(data).toEqual({ hasAccount: false, hasMollie: false, hasViva: false })
     expect(mockFetchMollieProfile).not.toHaveBeenCalled()
   })
 
@@ -143,5 +156,85 @@ describe('GET /api/onboarding-status', () => {
 
     expect(mockAccountUpdate).not.toHaveBeenCalled()
     expect(data.mollieOnboardingStatus).toBe('needs-data')
+  })
+
+  it('does not call Viva when no vivaAccountId is connected', async () => {
+    mockAuth.mockResolvedValue({ user: { id: USER_ID } } as any)
+    mockAccountFindUnique.mockResolvedValue({
+      company: 'Acme',
+      mollieAccessToken: null,
+      mollieOnboardingStatus: null,
+      vivaAccountId: null,
+      vivaVerificationStatus: null,
+    } as any)
+
+    const response = await GET()
+    const data = await response.json()
+
+    expect(data.hasViva).toBe(false)
+    expect(mockGetConnectedAccount).not.toHaveBeenCalled()
+  })
+
+  it('live-syncs Viva verification status and writes merchantId on change', async () => {
+    mockAuth.mockResolvedValue({ user: { id: USER_ID } } as any)
+    mockAccountFindUnique.mockResolvedValue({
+      company: 'Acme',
+      mollieAccessToken: null,
+      mollieOnboardingStatus: null,
+      vivaAccountId: 'acct-1',
+      vivaVerificationStatus: 'pending',
+    } as any)
+    mockGetConnectedAccount.mockResolvedValue({
+      accountId: 'acct-1',
+      verificationStatus: 'verified',
+      merchantId: 'merchant-xyz',
+      raw: {},
+    })
+
+    const response = await GET()
+    const data = await response.json()
+
+    expect(mockGetConnectedAccount).toHaveBeenCalledWith('acct-1')
+    expect(mockAccountUpdate).toHaveBeenCalledWith({
+      where: { userId: USER_ID },
+      data: { vivaVerificationStatus: 'verified', vivaMerchantId: 'merchant-xyz' },
+    })
+    expect(data.hasViva).toBe(true)
+    expect(data.vivaVerificationStatus).toBe('verified')
+  })
+
+  it('does not poll Viva once verification status is already verified', async () => {
+    mockAuth.mockResolvedValue({ user: { id: USER_ID } } as any)
+    mockAccountFindUnique.mockResolvedValue({
+      company: 'Acme',
+      mollieAccessToken: null,
+      mollieOnboardingStatus: null,
+      vivaAccountId: 'acct-1',
+      vivaVerificationStatus: 'verified',
+    } as any)
+
+    const response = await GET()
+    const data = await response.json()
+
+    expect(mockGetConnectedAccount).not.toHaveBeenCalled()
+    expect(data.vivaVerificationStatus).toBe('verified')
+  })
+
+  it('falls back to cached Viva status when the lookup throws', async () => {
+    mockAuth.mockResolvedValue({ user: { id: USER_ID } } as any)
+    mockAccountFindUnique.mockResolvedValue({
+      company: 'Acme',
+      mollieAccessToken: null,
+      mollieOnboardingStatus: null,
+      vivaAccountId: 'acct-1',
+      vivaVerificationStatus: 'pending',
+    } as any)
+    mockGetConnectedAccount.mockRejectedValue(new Error('network failure'))
+
+    const response = await GET()
+    const data = await response.json()
+
+    expect(mockAccountUpdate).not.toHaveBeenCalled()
+    expect(data.vivaVerificationStatus).toBe('pending')
   })
 })

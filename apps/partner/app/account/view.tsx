@@ -197,9 +197,59 @@ function MollieStatusCard({ mollieStatus }: { mollieStatus: MollieStatus }) {
   )
 }
 
+/* ── Viva status card ──────────────────────────────────────── */
+
+export interface VivaStatus {
+  isConnected: boolean
+  verificationStatus: string | null
+}
+
+function VivaStatusCard({ vivaStatus }: { vivaStatus: VivaStatus }) {
+  const t = useTranslations('Account')
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold text-gray-900">{t('vivaPayments')}</h2>
+        <Link
+          href="/account/viva"
+          className="text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+        >
+          {t('manage')} &rarr;
+        </Link>
+      </div>
+
+      <div className="flex items-center gap-3">
+        {vivaStatus.isConnected ? (
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700">
+            <span className="w-2 h-2 rounded-full bg-green-500" />
+            {t('vivaConnected')}
+            {vivaStatus.verificationStatus && vivaStatus.verificationStatus !== 'verified' && (
+              <span className="badge bg-amber-50 text-amber-700 ml-1">{vivaStatus.verificationStatus}</span>
+            )}
+          </span>
+        ) : (
+          <div className="flex items-center justify-between w-full">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400">
+              <span className="w-2 h-2 rounded-full bg-gray-300" />
+              {t('vivaNotConnected')}
+            </span>
+            <Link
+              href="/account/viva"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
+            >
+              {t('connectViva')}
+            </Link>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /* ── Main view ─────────────────────────────────────────────── */
 
-export default function AccountView({ account, mollieStatus }: { account: AccountProps; mollieStatus: MollieStatus }) {
+export default function AccountView({ account, mollieStatus, vivaStatus }: { account: AccountProps; mollieStatus: MollieStatus; vivaStatus: VivaStatus }) {
   const t = useTranslations('Account')
   const [formState, formAction] = useFormState(submitForm, { status: '' })
 
@@ -240,6 +290,9 @@ export default function AccountView({ account, mollieStatus }: { account: Accoun
 
       {/* Mollie payment status */}
       <MollieStatusCard mollieStatus={mollieStatus} />
+
+      {/* Viva card-present status */}
+      <VivaStatusCard vivaStatus={vivaStatus} />
 
       <form action={formAction}>
 

@@ -402,6 +402,23 @@ const UNGATED_ALLOWLIST: AllowlistEntry[] = [
     reason: 'Session-gated: refreshes tokens for session.user\'s own PartnerAccount (getValidMollieToken(session.user.id))',
   },
 
+  // ── Server actions: account/viva (session-scoped Viva connect ops) ────────
+  {
+    export: 'connectViva',
+    file: 'app/account/viva/actions.ts',
+    reason: 'Session-gated: creates/refreshes the Viva connected account for session.user\'s own PartnerAccount (where: { userId: session.user.id })',
+  },
+  {
+    export: 'refreshVivaStatus',
+    file: 'app/account/viva/actions.ts',
+    reason: 'Session-gated: polls Viva for session.user\'s own vivaAccountId, scoped to userId: session.user.id',
+  },
+  {
+    export: 'disconnectViva',
+    file: 'app/account/viva/actions.ts',
+    reason: 'Session-gated: clears viva* fields on session.user\'s own PartnerAccount (where: { userId: session.user.id })',
+  },
+
   // ── Server actions: account/subscription (session-scoped subscription read) ─
   {
     export: 'getSubscriptionData',

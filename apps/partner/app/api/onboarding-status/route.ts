@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { fetchMollieProfile } from '@/app/api/_lib/mollie'
+import { getVivaAccountsClient } from '@repo/data/viva'
 
 export async function GET() {
   const session = await auth()
   if (!session?.user) {
-    return NextResponse.json({ hasAccount: false, hasMollie: false })
+    return NextResponse.json({ hasAccount: false, hasMollie: false, hasViva: false })
   }
 
   const [account, integratedPaymentsSites] = await Promise.all([
@@ -16,6 +17,8 @@ export async function GET() {
         company: true,
         mollieAccessToken: true,
         mollieOnboardingStatus: true,
+        vivaAccountId: true,
+        vivaVerificationStatus: true,
       },
     }),
     prisma.site.findMany({
@@ -54,10 +57,33 @@ export async function GET() {
     }
   }
 
+  // Same live-sync shape for Viva: no push events for connected-account
+  // verification either, so poll while not yet verified and stop once it is.
+  let vivaVerificationStatus = account?.vivaVerificationStatus ?? null
+  if (account?.vivaAccountId && vivaVerificationStatus !== 'verified') {
+    try {
+      const connected = await getVivaAccountsClient().getConnectedAccount(account.vivaAccountId)
+      if (connected.verificationStatus !== 'unknown' && connected.verificationStatus !== vivaVerificationStatus) {
+        await prisma.partnerAccount.update({
+          where: { userId: session.user.id },
+          data: {
+            vivaVerificationStatus: connected.verificationStatus,
+            vivaMerchantId: connected.merchantId ?? null,
+          },
+        })
+      }
+      vivaVerificationStatus = connected.verificationStatus
+    } catch (err: any) {
+      console.error('[OnboardingStatus] Viva live sync failed, using cached value:', err?.message)
+    }
+  }
+
   return NextResponse.json({
     hasAccount: !!account?.company,
     hasMollie: !!account?.mollieAccessToken,
     mollieOnboardingStatus,
+    hasViva: !!account?.vivaAccountId,
+    vivaVerificationStatus,
     hasIntegratedPayments: integratedPaymentsSites.length > 0,
   })
 }

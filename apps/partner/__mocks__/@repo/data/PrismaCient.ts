@@ -335,6 +335,12 @@ const prisma = {
     findUnique: vi.fn(),
     findMany: vi.fn(),
   },
+  vivaTerminal: {
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    upsert: vi.fn(),
+    delete: vi.fn(),
+  },
   // spatial_ref_sys is a PostGIS system table exposed by Prisma; partner app
   // never queries it via the client (uses $queryRawUnsafe for spatial ops).
   spatial_ref_sys: {
