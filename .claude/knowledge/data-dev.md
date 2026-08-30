@@ -19,6 +19,9 @@ sections.
 - **PostGIS notes** — _none yet_
 - **Cross-app blast radius** — schema/export changes that rippled to app mocks — see SunbedGroup (2026-06-14)
 - **Till module (day-anchored two-bucket rework)** — `closeEmployeeTill` shared writer, `today`/`carryOver` window math, keeping civil-day reports' return shape genuinely unchanged, `tsc --noEmit` non-functional for this package (2026-07-23)
+- **Viva ISV Cloud Terminal client (track 024 W8 A1)** — stub-vs-http client contract split, module-level dev stub store, noUncheckedIndexedAccess in fetch-mock tests, spec-vs-brief contradictions (2026-08-30)
+- **Viva merchant connect — schema + ISV accounts client (track 024 W8 A2)** — `/isv/v1/accounts` not `/platforms/v1/accounts`, `verified: boolean` not a status-string vocabulary, no legalName/taxNumber/etc in the create body, token cache generalised by scope (2026-08-30)
+- **Viva card-present collect rows — machine table + executors + status/cancel/refund (track 024 W8 A3)** — edit-the-table-not-the-actions applied to a real payment rail; abandon-while-pending never reverts (the one Mollie divergence); vi.mock('./viva') wrapping pattern for spying on a stub singleton (2026-08-30)
 - **Rejected approaches** — dead-ends, so nobody re-tries them — _none yet_
 
 ---
@@ -144,6 +147,198 @@ sections.
 **`tsc --noEmit` is non-functional for this package:** running it bare fails immediately with `TS2209: project root is ambiguous ... export map entry '.'` — a pre-existing issue with the package.json `exports` map, unrelated to any code change (reproduces on a clean checkout). No `typecheck` script exists in `package.json`; only `lint`+`test`+`test:integration` are the enforced gates. Even with `--rootDir .` to work around it, the package has pre-existing `noUncheckedIndexedAccess` violations in files never touched by this task (`payment.test.ts`, `refund.test.ts`, `rental-emails.test.ts`, `test/fixtures.ts`) — confirms tsc has never been clean here. The established integration-test convention for extracting one row from an array is `arr.find(...)!`, not raw `arr[0]` indexing (raw indexing trips `noUncheckedIndexedAccess`); `till.integration.test.ts` (both before and after this rework) uses raw indexing in several spots — a pre-existing pattern, not something to "fix" opportunistically mid-task.
 **Prevention:** When a rework spec lists some functions as "unchanged", check whether a shared TS type is used by both the changed and unchanged functions before extending that type — split types rather than let field additions leak. When `npx tsc --noEmit` errors immediately with TS2209 in this package, that's the known ambiguous-rootDir issue, not something introduced by your change — verify via `git show HEAD:<file>` / a stash-free check that the same class of error predates your diff before spending time "fixing" it.
 
+## Viva ISV Cloud Terminal client (track 024, W8, packet A1)
+
+### 2026-08-30: stub-vs-http VivaClient split, module-level dev stub, spec contradicted the brief in three places
+**Pattern:** Built `packages/data/src/viva/{types,refs,http-client,stub-client,index}.ts` as a
+`VivaClient` interface (`createSale`/`getSession`/`abortSession`/`refund`/`searchDevices`) with
+two implementations selected by `getVivaClient()` (`VIVA_MODE` env, defaults to stub when no
+`VIVA_ISV_CLIENT_ID`). The fee guard (`isvDetails.amount` must be `>0` and `< amount` — Viva
+declines a fee ≥ the sale) is a SHARED pure function (`assertValidIsvFee` in `types.ts`), called
+by both implementations, so the http and stub clients can't drift on the one rule most worth
+testing. `refs.ts` (the `viva_<sessionId>` payment-ref convention) is a separate file with zero
+imports from `http-client`/`stub-client` — client-safe, mirrors `site-code.ts`/`device-code.ts`.
+
+**Spec (OpenAPI, downloaded to scratchpad) contradicted the task brief in three places — always
+verify against the actual `.yaml`, not just the track log's prose summary:**
+1. All `/ecr/isv/v1/*` ISV endpoints live in `cloud.yaml` (the Cloud Terminal API spec), NOT
+   `isv.yaml` (a different, unrelated ISV Payment API) — the brief pointed at both files as if
+   the ISV scheme might be in either.
+2. Abort is `DELETE /ecr/isv/v1/sessions/{SessionId}` with a REQUIRED `cashRegisterId` QUERY
+   PARAM ("only the register that created the session may abort it") — not a bare DELETE by id.
+   Response codes worth encoding: 200/409 both mean "go re-fetch the session" (409 = abort
+   already in progress, possibly because the card already got read and the session resolved);
+   404 = unknown; 403 = genuine permission error, not a race.
+3. `ISVSearchDevicesOptions.merchantId` is REQUIRED by the spec, not optional as the brief's
+   `searchDevices(merchantId?)` signature implied — made it required in the `VivaClient`
+   interface and flagged the open question for A2 (where does a per-site `merchantId` come from
+   before P1's merchant-connect model exists — needed to search a venue's devices at all).
+
+**Dev-loop stub design:** `stub-client.ts`'s session store is MODULE-LEVEL (`Map`, not per-client-
+instance) so a separately-constructed client in another route/test sees what an earlier one
+wrote — matches the real API (the session lives at Viva regardless of which local call created
+it). `createSale`'s `sessionId` carrying the substring `decline` or `abort` (case-insensitive)
+forces an immediate terminal outcome instead of the timed auto-approve — lets a test or a partner
+dev-loop drive every branch without waiting or mocking `fetch`. `stubState.reset()` must run in
+`beforeEach`/`afterEach` or state leaks across tests in the same file (same failure mode as any
+module-level store — see the `rate-limit.ts` per-process cleanup precedent).
+
+**`toCents()` — round() first is NOT a float-precision fix; don't oversell it in a doc comment.**
+Tried to find a real case where `Math.round(round(x)*100) !== Math.round(x*100)` by brute-force
+search (thousands of values, including reverse-VAT-style divisions) — found NONE. Double-rounding
+to the same precision (cents) essentially never crosses a boundary twice in JS float arithmetic.
+The actual reason to route through `@repo/data`'s `round()` first is consistency (`round()` is
+the ONE authoritative rounding decision for money everywhere else in the codebase per
+`.claude/rules/payments.md`), not correctness-of-this-one-conversion. Don't write a test/comment
+claiming a "verified pitfall divergence" without actually reproducing one — caught this in review
+before it shipped as a false claim.
+
+**`tsc --noEmit` in this package needs `--rootDir .`** (TS2209 ambiguous project root otherwise —
+same pre-existing issue the till-module entry above documents) and even then flags
+`noUncheckedIndexedAccess` on any NEW test file that indexes a mock-call array
+(`fn.mock.calls[i][j]`) — same class as the existing `arr.find(...)!` convention. Fixed by adding
+a small typed `call(fn, i)` helper in the test file that throws a clear message if the index is
+missing, rather than sprinkling `!` at every call site (14 occurrences in one file — the helper
+paid for itself immediately). Verify a `tsc --noEmit --rootDir .` failure predates your diff by
+grepping the offending file list against files you didn't touch (`payment.test.ts`,
+`refund.test.ts`, `rental-emails.test.ts`, `test/fixtures.ts`, `till.integration.test.ts` are the
+known pre-existing set) before spending time on it.
+
+**Prevention:** For any new `@repo/data` submodule with two implementations selected by env
+(stub/real), put invariant validation (fee guards, amount checks) in a THIRD, shared pure
+function/file both implementations call — never duplicate the rule into each implementation
+separately, even when the brief only explicitly assigns it to one. When a task brief describes an
+external API from a track log's prose summary, always re-derive the request/response shapes from
+the actual downloaded spec file(s) before coding — the brief's field lists and endpoint
+guesses can be stale or simply wrong about which file something lives in.
+
+
+## Viva merchant connect — schema + ISV accounts client (track 024, W8, packet A2)
+
+### 2026-08-30: PartnerAccount.viva* + VivaTerminal migration, and `src/viva/accounts.ts`
+**Pattern:** Additive migration `add_viva_merchant_connect` — 5 nullable `PartnerAccount.viva*`
+columns (mirrors the existing `mollie*` columns' `@map` snake_case style) + a new `VivaTerminal`
+table (`@@map("viva_terminal")`, `terminalId @unique` — a physical terminal belongs to one site,
+not a composite key) with `Site.vivaTerminals[]`. Ran clean: `npm run migrate:local` (Docker was
+down at task start — `open -a Docker`, poll `docker info` in a loop, then `docker start
+sunbnb-postgres`, all before the migrate step; the container had exited, not just "not running"),
+`migrate:check` reports no drift, and all 20 integration test files / 378 tests still pass — proof
+an additive migration doesn't perturb existing DB-dependent behavior.
+
+**Reused A1's token cache by generalising it, not duplicating it** — exactly what A1's own
+"Prevention" note (below) says to do, and the brief asked for explicitly. `http-client.ts`'s
+`getAccessToken`/`fetchAccessToken`/`tokenCache` took a `scope` parameter (defaulted to the
+existing `ECR_SCOPE` so Cloud Terminal call sites are unaffected) and the cache key became
+`env:clientId:scope`; `apiBase`/`parseErrorBody`/`requireOk` were exported (previously
+module-private) for `accounts.ts` to reuse — connected-accounts calls (`urn:viva:payments:core:api:isv`
+scope) hit the SAME host (`{demo-,}api.vivapayments.com`) as the Cloud Terminal sale endpoints
+(`urn:viva:payments:ecr:api` scope), just a different path prefix (`/isv/v1/*` vs `/ecr/isv/v1/*`).
+
+**Spec (`isv.yaml`, `connected_account_request`/`connected_account_response`/
+`retrieve_account_response` definitions) contradicted the task brief in three places — same
+lesson as A1, verify the actual schema block, not the brief's field list or endpoint guess:**
+1. Path is `/isv/v1/accounts[/{accountId}]`, NOT `/platforms/v1/accounts` as the brief stated.
+2. The create request (`connected_account_request`) accepts ONLY `email`, `returnUrl`, and
+   `branding { partnerName, logoUrl, primaryColor? }` — no `legalName`/`tradeName`/`taxNumber`/
+   `mobile`/`address`, which the brief's `VivaCreateConnectedAccountInput` asked for. Kept those
+   fields on the TypeScript input type (a caller's onboarding form already collects them) but the
+   HTTP client deliberately drops them before building the wire body — verified by a test that
+   asserts `body.legalName`/`taxNumber`/etc are `undefined` after a round trip with all of them set.
+3. The retrieve response (`retrieve_account_response`) exposes a **boolean** `verified` field, not
+   a status-STRING vocabulary. There is no API value distinguishing "rejected" from "still
+   pending" — only the *webhook* is named "Account Verification Status Changed" (eventTypeId
+   8194), implying a richer vocabulary exists somewhere Viva-side that this REST response doesn't
+   surface. Normalised `verified: true -> 'verified'`, `false -> 'pending'`, missing/malformed ->
+   `'unknown'`; kept `'rejected'` in the `VivaAccountVerificationStatus` union for forward
+   compatibility with a future webhook consumer, but documented in three places (module doc
+   comment, type doc comment, and this entry) that nothing in `accounts.ts` can produce it today —
+   don't let a caller assume `getConnectedAccount` will ever return it.
+
+**Single-file deliverable, unlike A1's five-file split.** The brief named one file
+(`src/viva/accounts.ts`) for the whole feature — types + http client + stub client + module-level
+store all live there, re-exported via `export * from './accounts'` in `index.ts` alongside a new
+`getVivaAccountsClient()` that shares `resolveMode()`/`configFromEnv()` with `getVivaClient()`
+(ONE `VIVA_MODE` switch controls both clients, deliberately — a dev/test session can't end up with
+the sale client stubbed and the accounts client hitting the real API by forgetting a second flag).
+
+**Prevention:** When a task brief's TypeScript interface has MORE fields than the actual API
+schema declares, keep the extra fields on the input type (callers already have the data and
+shouldn't need a Viva-specific subset) but add an explicit test proving they do NOT reach the wire
+— an interface that silently over-promises is worse than one that's honest about what's optional.
+
+
 ## Rejected approaches
 
 <!-- Approaches tried and rejected — record so a future session doesn't re-try them -->
+
+
+## Viva card-present collect rows — machine table + executors + status/cancel/refund (track 024, W8, packet A3)
+
+### 2026-08-30: cardPresent condition rows, runCollectStartCard/runCollectAbandonCard, viva branches in reservation-payment.ts
+**Pattern:** Added `'cardPresent'` to `CONDITIONS` and `'vivaSale'`/`'vivaAbort'` to `EFFECTS` in
+`reservation-machine.ts`. Two new TRANSITIONS rows (`collect.start` / `collect.abandon`, both
+`when: ['cardPresent']`) inserted ABOVE the existing QR/Mollie rows for the same event — `resolveTransition`
+takes the first full match, so ordering alone makes "cardPresent present → Viva row; absent → QR row"
+work with zero branching logic in the resolver itself. `computeConditions` derives `cardPresent` as a
+FACT: `opts.collect?.method === 'card'` on start, OR `isVivaPaymentRef(r.paymentRef)` on abandon/fail —
+the abandon caller never has to repeat `method`, the stored ref prefix already says which rail. This is
+the same edit-the-table-not-the-actions doctrine track 018 established, now proven on a second payment
+provider without touching `resolveTransition`, `applyTransition`'s dispatch skeleton, or any other row.
+
+**The one deliberate Mollie divergence, and why it's structurally different:** Mollie's
+`collect.abandon` always resolves definitively (cancel succeeds, or 422→already-paid) because Mollie's
+DELETE is synchronous. Viva's abort is NOT — it only works before the card is read; after that (or on
+any ambiguity resolving *which* `cashRegisterId` opened the session) the caller must poll
+`getSession` rather than guess. `runCollectAbandonCard` therefore has a THIRD outcome beyond
+cash-revert/pay.confirm: "stays processing" (`data.paymentStatus: 'processing'`, no DB write at all) —
+reverting a possibly-authorised card would strand a charge the guest's bank already approved.
+Bug-revealing integration test: give the site a SECOND `VivaTerminal` (defeats
+`cancelReservationVivaPayment`'s "exactly one terminal" cashRegisterId fallback) with a genuinely
+unresolved session (never `stubState.resolveNow`'d) → `cancel.status === 'error'` → poll branch →
+`abortPollMs: 0` keeps it fast → asserts status stays `'processing'`, ref still `viva_`.
+
+**`getReservationPaymentStatus`'s viva branch is what makes `reverifyAndFinalizeReservation` "just
+work" for Viva with zero changes to that function** — it already dispatches purely on the return shape
+(`succeeded`/`failed`), so adding the viva branch inside `getReservationPaymentStatus` (approved→succeeded,
+declined/aborted→failed, pending/unknown→neither — unknown must NOT read as failed, a transient 404
+must not revert a live tap) was the only change needed for "abandon after approve resolves as
+pay.confirm" to work identically to the Mollie case, via the SAME reverify-then-cancel call sequence
+already in `runCollectAbandon`.
+
+**`cancelReservationMolliePayment` gained a `cashRegisterId?` param and an early
+`isVivaPaymentRef` branch delegating to a new `cancelReservationVivaPayment`** — the exported name
+stays Mollie-specific (every app imports that path, same "don't fix the typo" discipline as
+`./PrismaCient`) but now silently routes viva_ refs correctly. `cancelReservationVivaPayment` resolves
+`cashRegisterId` from the caller OR (fallback) the site's `VivaTerminal`s when there's exactly one —
+ambiguous with 0 or 2+, which is also the knob the test above uses to force the poll branch
+deterministically without needing to fake a real Viva 409 race.
+
+**Test technique — spying on a module-level stub singleton via `vi.mock` + `vi.hoisted`:**
+`stub-client.ts`'s session store is module-level (by A1 design), so `getVivaClient()` returning a
+FRESH object per call is fine for production but makes `vi.spyOn` on one instance useless for
+intercepting calls the executor makes through its OWN `getVivaClient()` call. Fix:
+`vi.mock('./viva', async (importOriginal) => { const client = actual.createStubVivaClient(); return
+{ ...actual, getVivaClient: () => ({ ...client, createSale: (req) => { spy(req); return
+client.createSale(req) } }) } })` with `const { spy } = vi.hoisted(...)` — ONE memoized client shared
+by every `getVivaClient()` call in the file (executor's and the test's own), spread-copied because the
+stub's methods don't use `this`. **Gotcha:** a *dynamic* `await import('./viva')` after the `vi.mock`
+call to "guarantee" getting the mocked version is unnecessary AND breaks `tsc --noEmit` (`TS1309`
+top-level await under this tsconfig's module setting) even though vitest/esbuild runs it fine — `vi.mock`
+is hoisted above every static import in the same file by Vitest's transform, so a normal top-level
+`import { getVivaClient } from './viva'` already receives the mocked version; no dynamic import needed.
+
+**Fee guard test without inspecting internals:** to prove "fee-guard failure (fee ≥ amount) reverts to
+cash" without needing an isvDetails spy, seed a SITE-level `ServiceFee` override (`chargeType:
+'percentage', percentage: 150`, via `createTestServiceFee(settingsId, { siteId, ... })` — site-level wins
+the cascade unconditionally over settings' bootstrap default) so the real `resolveServiceFee` +
+`calculateServiceFeeAmount` cascade computes a fee exceeding the sale amount, and the shared
+`assertValidIsvFee` (A1) throws for real. Cleaner than mocking `assertValidIsvFee` — exercises the
+actual cascade.
+
+**Prevention:** When a second payment provider needs the SAME abandon/reverify shape as an
+existing one, check whether the existing generic function (`reverifyAndFinalizeReservation` here)
+already dispatches purely on a normalized return shape from a per-provider function
+(`getReservationPaymentStatus`) — if so, the new provider is a branch inside that ONE function, not a
+parallel copy of the generic caller. When a stub client's session store is module-level, `vi.mock` +
+`vi.hoisted` a single memoized instance rather than spying per-call-site — spread-copying the object to
+override one method is safe exactly when the implementation doesn't close over `this`.

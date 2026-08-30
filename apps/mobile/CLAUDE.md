@@ -64,9 +64,12 @@ never a key in a URL. Admin keys unlock the Today tab (till summary / day close 
 - **The payment leg cannot run in an emulator, ever.** Play Integrity rejects emulators and
   an AVD has no NFC. UI work is fine in emulator/Simulator; the card tap needs a real
   Android 8.1+ NFC handset (Viva Terminal DEMO app + demo account, no money moved).
-- **The payment UI is Viva's, not ours.** Card collect = deep link to the `viva.com Terminal`
-  app (scheme `sunbnbfloor` carries the callback) → **verify server-side** — a callback query
-  string is user-typable and never authoritative.
+- **The payment UI is Viva's, not ours.** Card collect is **server-push**: the partner backend
+  sends the sale to the staff phone's `viva.com Terminal` app via Viva's Cloud Terminal API
+  (ISV endpoints) and the app polls the collect status exactly like the QR flow. The phone only
+  supplies a `terminalId` (picked once, stored with the pairing) — no Viva credentials, no
+  deep-link callback, nothing on the device is authoritative. The `sunbnbfloor` scheme stays
+  reserved but unused by the payment leg.
 
 ## Share vs reimplement
 

@@ -3,7 +3,7 @@ id: 024-card-present-payments
 title: Card-present payments — Viva as the card rail, and the floor app that hosts it
 status: active
 created: 2026-08-28
-updated: 2026-08-29
+updated: 2026-08-30
 worktree: null
 ---
 
@@ -134,16 +134,22 @@ Q1 (below) must be answered before the app repo is created.
 
 ## Resume here
 
-**Next action — W1 (seat tap → bed-detail sheet) from the P7 parity work list below.**
-(Context: mockups approved 2026-08-29;
-foundations all landed the same day: `@repo/floor-core`, the P6.5 HTTP surface, and the
-`apps/mobile` scaffold with a live beds-grid v0). Order: bed-detail sheet (all 13 branches,
-per the design-pass inventory) + the collect flow (QR/cash through the RPC collect triple) →
-multiselect + move mode → rentals / guests / today tabs → QR-camera pairing (expo-camera).
-To run: partner locally (`cd apps/partner && source .env.local && npm run dev`; also serves
-plain HTTP :3011 for simulators/phones), then `cd apps/mobile && EXPO_PUBLIC_API_URL=http://localhost:3011 npm start`,
-pair by pasting a manage URL. The Viva ISV conversation is **still open and gates only the
-payment leg (W8/P2–P4)** — wire "Tap card" behind a flag when answered. Its unknowns:)
+**Next action — verify W8 in the dev loop, then close the gaps.** (1) Run partner + mobile with
+`VIVA_MODE=stub`: connect Viva at `/account/viva` then press Refresh — the stub auto-verifies on first
+Retrieve (`VIVA_STUB_AUTO_VERIFY` defaults on; tests set it off) and mints a merchant id, register a terminal from Discover on the site General tab,
+then Collect → Tap card on a walk-in and watch the stub auto-approve after `VIVA_STUB_RESOLVE_AFTER_MS`
+(default 4 s); try Cancel before/after approval. (2) Gaps in order: rentals card collect (same
+triple, `rental-payment.ts`), dispatch `refundReservationVivaPayment` from `refund.ts`, webhook
+receiver for *Transaction POS ECR Session Created/Failed*, own-venue no-fee fork once Viva answers.
+(3) Send the Viva Sales email (Gmail draft) / interest form; when the demo ISV credentials arrive,
+set `VIVA_ENV=demo` + `VIVA_ISV_*` in partner `.env.local` and repeat (1) against the real demo API
+with the Terminal DEMO app on the NFC handset. **Before pushing main:** `npm run migrate:test`.
+
+**Context a cold agent needs:** the 2026-08-30 log entries (mechanics + build session); playbook
+sections in `.claude/knowledge/{data-dev,partner-dev}.md`; the machine rows at
+`packages/data/src/reservation-machine.ts` (`cardPresent`), executors in `reservation-machine-apply.ts`
+(`runCollectStartCard` / `runCollectAbandonCard`), `apps/partner/app/sites/[id]/manage/actions.ts`
+(collect trio + terminal registry), `apps/mobile/src/lib/terminal.ts`. Remaining P0 unknowns:
 
 1. **Tap-on-Phone UI model** — can a payment render inside a third-party Android app, or does it
    always hand off to Viva.com Terminal? If hand-off only: what exactly do Semi-Unattended and
@@ -154,9 +160,10 @@ payment leg (W8/P2–P4)** — wire "Tap card" behind a flag when answered. Its 
 3. **ISV markup mechanics** — confirm the markup applies to Tap-on-Phone card-present transactions
    (cash is documented as excluded, implying card is in), the monthly-credit settlement shape, and
    whether marketplace real-time split also covers POS. See Q2.
-4. **Cloud Terminal API viability** — can it target a Tap-on-Phone device (not just hardware
-   terminals)? If yes, card payments ship from the existing web app and the native app decouples
-   from this track entirely.
+4. **Cloud Terminal API viability — ANSWERED 2026-08-30: yes.** Docs list Tap-on-Phone on Android
+   and iOS as supported devices and state "This integration supports ISV scheme" with `/ecr/isv/v1/*`
+   endpoints. W8 is now designed server-push-first (see the 2026-08-30 log entry); app-to-app is a
+   fallback only because it exposes `ISV_clientSecret` on the device.
 
 **Context a cold agent needs:** this file's *Decision* and *Finding* sections; the collect seam
 at `apps/partner/app/sites/[id]/manage/CollectPaymentModal.tsx:24` (`CollectActions` triple) and
@@ -170,17 +177,22 @@ per-partner OAuth at `packages/data/prisma/schema.prisma:188`.
 
 - ☐ **P0 — Provider due diligence** (the Resume-here conversation). Answers Q1, Q2, Q5. Deliverable:
   a decision on whether card ships web-first (Cloud Terminal API) or waits for the native app.
-- ☐ **P1 — Viva merchant connect.** `vivaAccessToken`/`vivaRefreshToken`/expiry + onboarding status
-  on `PartnerAccount`, mirroring the four `mollie*` columns (`schema.prisma:188`) and the
-  `/api/onboarding-status` route. Additive migration. Partner-app connect flow next to the Mollie one.
-- ☐ **P2 — The collect transition.** New effect key on `collect.start` (`reservation-machine.ts:277`)
-  swapping `mollieCreate` for a card-rail equivalent; everything downstream (`pay.confirm`,
-  `pay.fail`, `collect.abandon`'s never-frees-a-bed rule, till partitioning on splits) unchanged.
-  **Edit the table, not the actions** — [[track:018]] doctrine.
-- ☐ **P3 — Server-side verification.** The client's word on payment success is never authoritative:
-  a callback query string is user-typable, so status resolves by server lookup against Viva's
-  transaction API keyed on our own client-transaction id. Mirrors the existing webhook-vs-poll
-  doctrine; `getCollectStatus` keeps its meaning.
+- ◐ **P1 — Viva merchant connect (REDESIGNED 2026-08-30, in progress).** No tokens: `PartnerAccount`
+  gains `vivaAccountId` / `vivaMerchantId` / `vivaVerificationStatus` / `vivaSourceCode` /
+  `vivaConnectedAt`; a `VivaTerminal` table binds `terminalId` ↔ site (per-device pick). Connect =
+  Create-connected-account → onboarding URL → `Account Connected` / verification webhooks; existing
+  Viva merchants link via the same invite. Additive migration. Partner connect page beside Mollie's.
+- ◐ **P2 — The collect transition (in progress 2026-08-30).** New condition `cardPresent` + rows on
+  `collect.start` / `collect.abandon` with `vivaSale` / `vivaAbort` effects (server-push via the
+  Cloud Terminal ISV sale; `paymentRef = viva_<sessionId>`, sessionId minted by us = idempotency
+  key; `isvDetails.amount` = the `sunbed-rental` cascade fee in cents, guarded 0 < fee < amount).
+  Everything downstream (`pay.confirm`, `pay.fail`, never-frees-a-bed, till partitioning) unchanged.
+  **Edit the table, not the actions** — [[track:018]] doctrine. `@repo/data/viva` client + in-process
+  stub (`VIVA_MODE=stub`) make the rail buildable with no Viva credentials.
+- ◐ **P3 — Server-side verification.** Intrinsic under server-push: the result is read from
+  `GET /ecr/isv/v1/sessions/{sessionId}` inside `getReservationPaymentStatus` (viva branch); the
+  client never carries a result. v1 = 2.5 s polling like Mollie; the *POS ECR Session Created/
+  Failed* webhooks are later hardening. `getCollectStatus` keeps its meaning.
 - ☐ **P4 — Refunds.** `issueRefund` / `getPaymentStatus` (`apps/user/app/api/_lib/payment-provider.ts`)
   gain a Viva branch. Already provider-agnostic over Mollie + demo, so this is a branch not a rewrite.
   Watch for refunds performed *in the Viva app* that the machine never hears about.
@@ -295,10 +307,12 @@ order; each block lands with its RPC wiring and a Simulator verification pass.
   daily breakdown, CSV → share sheet). Venue-local `todayIso` always comes from the server —
   never the device clock.
 
-- ☐ **W8 — Viva card-present leg** (gated on the P0 ISV call; = roadmap P1–P4). Merchant
-  connect, `collect.start` card effect key, deep-link launch of viva.com Terminal +
-  `sunbnbfloor://` callback + mandatory server-side verification, refunds branch; emulator
-  stub-responder tests; the real NFC handset for the tap itself.
+- ◐ **W8 — Viva card-present leg (STARTED 2026-08-30, built against the stub; = roadmap P1–P4).**
+  Packets: A1 `@repo/data/viva` client + stub · A2 schema/migration + machine rows + payment-status
+  branches · C partner actions/RPC (`collectReservationPayment` gains `{ method: 'card', terminalId }`),
+  web modal "Tap card" + terminal chooser, `/account/viva` connect page · D mobile "Tap card" method
+  + terminal pick at pairing. Real Viva credentials gate only the final swap from stub to demo API
+  and the handset tap.
 
 - ☐ **W9 — App shell & platform**
   - W9.1 QR-camera pairing (expo-camera), unpair/switch-site, expired-key (401) → back to pairing.
@@ -450,6 +464,86 @@ emulator/simulator — only the payment leg needs hardware.
   Server-side venue-local `todayIso` added to the grid payload (`loadManageGrid`) so no client
   ever derives the till day from the device clock. Parity work list now W0–W7 complete;
   remaining: W8 Viva (gated on the ISV call), W9 platform.
+
+- **2026-08-30 (ISV mechanics pass, docs verified)** — Read the ISV program page, the ISV Payment API
+  spec (`/downloads/payment-isv-api.yaml`), the Cloud Terminal API spec (`/downloads/eft-pos-api.yml`),
+  and the Android/iOS sale pages. Findings that change the W8 design:
+  1. **Cloud Terminal API supports Tap-on-Phone on Android AND iOS, and "supports ISV scheme"** — with
+     dedicated `/ecr/isv/v1/transactions:sale`, `:refund`, `/ecr/isv/v1/sessions/{sessionId}` endpoints,
+     bearer from **our ISV client credentials** (scope `urn:viva:payments:ecr:api`), body
+     `{ sessionId, terminalId, amount, currencyCode, merchantReference, isvDetails: { amount,
+     terminalMerchantId, sourceCode } }`. Result by polling the session or the *Transaction POS ECR
+     Session Created/Failed* webhooks. **Q4 answered: yes** — the server pushes the sale to the staff
+     phone's Terminal app; nothing secret leaves the server and the result never transits the client.
+  2. **App-to-app puts `ISV_clientSecret` in the intent/URL on the staff phone** (both platforms) —
+     the platform's ISV secret would be extractable from any paired device. Disqualifying as the
+     primary path; Cloud Terminal is now the primary design, app-to-app at most a fallback.
+  3. **iOS caveat (Apple policy):** if the Terminal app shows a PIN screen, the calling app is reset to
+     its idle screen and loses state. Another reason to drive from the server, not the client.
+  4. **Merchant model:** no per-merchant OAuth tokens (unlike Mollie). We onboard venues with
+     `POST /platforms/v1/accounts` (Create a connected account) using ISV credentials → `accountId` +
+     onboarding `redirectUrl`; Viva runs KYB; `Account Connected` / `Account Verification Status
+     Changed` webhooks; the retrieve call yields the venue `merchantId`. Existing Viva merchants link
+     through the same flow. Demo env cannot follow the redirect — Viva links accounts by `accountId`.
+  5. **ISV fee facts:** set per merchant and even per transaction; withheld by Viva, credited to our
+     ISV account in the first 10 working days of the following month; reversed on refund; a fee ≥ the
+     sale amount **declines the payment**; FX at ECB rate if currencies differ (FI/ES both EUR).
+     Terminal-app multi-merchant mode (Viva support enables it) lets one login switch merchants.
+  6. Setup we still owe Viva Sales: flag prod + demo accounts as ISV partner; Google Play emails of
+     the test device(s); logo 341×250 PNG, 3×24-char description, sales/support contact, and a public
+     pricing page for the ISV directory. ISV source code = a "store" under Sales › Physical payments.
+  7. **Test strategy (founder-confirmed 2026-08-30):** all ISV-side work runs in Viva's demo
+     environment with self-created demo ISV + demo "venue" accounts (link by `accountId` at sign-up;
+     no KYB) and the Terminal DEMO app on the NFC handset. **Production first merchant = Sunbnb
+     España SL** — needed as the operating entity anyway — onboarded via the same connected-account
+     + KYB flow every venue will use, so the first live tap exercises the real ISV → ES-merchant
+     money flow before any beach club is onboarded. **Entity plan (founder, 2026-08-30):** there is no Sunbnb FI. **Refactory DX Oy** (the
+     founder's Finnish software company, Viva-verified) is the **ISV partner / operator for the
+     production onboarding test**, and **Sunbnb España SL onboards as a real connected merchant**
+     through the live invitation → KYB → `Account Connected` path — the one leg demo cannot
+     exercise. The ISV account is itself a merchant account, so an entity can be ISV and operator
+     at once; own-operated venues simply carry no markup (fork: connected venue → `/ecr/isv/v1`
+     with the cascade fee; own venue → merchant endpoint, or ISV endpoint with `amount: 0` if Viva
+     accepts it — ask). **Migration caveat:** connected accounts belong to the ISV account that
+     invited them, so moving the ISV role to Sunbnb España SL later means re-inviting venues —
+     settle the long-term ISV entity before the first external venue is connected.
+
+- **2026-08-30 (W8 build session, against the stub)** — Server-push rail built end-to-end with
+  no Viva credentials, six agent packets, everything green (lint 12/12; tests 9/9: data 560 unit +
+  387 integration, partner 2090, user 659; mobile tsc/lint/`expo export` clean).
+  **A1** `@repo/data/viva` — Cloud Terminal ISV client (`createSale` / `getSession` / `abortSession`
+  / `refund` / `searchDevices`), token cache keyed by scope, `viva_<sessionId>` refs, in-process
+  stub (`VIVA_MODE=stub`, default when no `VIVA_ISV_CLIENT_ID`; `decline`/`abort` sessionId markers,
+  timed auto-approve). **A2** migration `20260830085819_add_viva_merchant_connect` (additive:
+  `PartnerAccount.viva*` ×5, `viva_terminal`) + connected-accounts client (`POST/GET /isv/v1/accounts`
+  — the body takes only email/returnUrl/branding; verification is a boolean `verified`, no status
+  vocabulary, no reissue-invitation endpoint). **A3** machine: `cardPresent` condition, rows above the
+  QR rows (first-match-wins, resolver untouched), `vivaSale`/`vivaAbort` executors; abandon after
+  the card is read polls and **stays `processing`** rather than reverting (Viva's abort only works
+  before the read; "cancel" afterwards means refund). Status/cancel/refund Viva branches. **C1**
+  `/account/viva` connect/refresh/disconnect, terminal registry RPCs (`listVivaTerminals`,
+  `discoverVivaTerminals`, `registerVivaTerminal`, `removeVivaTerminal`), "Card terminals" card on
+  the site General tab, onboarding-status parity. **C2** `collectReservationPayment(…, opts?: {
+  method, terminalId })`, `cancelCollection(…, opts?: { terminalId })` returning `processing`, web
+  modal QR / Tap card chooser (shown only when the site has terminals — that IS the feature flag).
+  **D** mobile: per-site persisted terminal pick (AsyncStorage, worker-chip pattern), Terminal
+  section in the worker sheet, card-icon header chip, Tap card in the collect modal; rentals stay
+  QR-only. **Not done / next:** rentals card collect; `refundReservationVivaPayment` not yet
+  dispatched from `refund.ts`; webhooks (POS ECR Session Created/Failed) for hardening; own-venue
+  no-fee fork (awaits Viva); the migration is applied to LOCAL only — run `npm run migrate:test`
+  before pushing `main` (pre-push hook enforces it). Real-device verification needs the ISV-flagged
+  demo account + Terminal DEMO app (P0 asks are drafted in Gmail to support@viva.com, unsent).
+
+- **2026-08-30 (browser verification, stub)** — Verified with Playwright on the local dev DB:
+  `/account/viva` Connect → Refresh → Verified (stub auto-verifies; `VIVA_STUB_AUTO_VERIFY=false`
+  keeps it pending — added this session because the module-level stub store gave a running app no
+  way to "complete KYB"); site General → Discover lists the two stub terminals → Register
+  `16000010`; manage grid walk-in → Collect → "How is the guest paying?" Scan QR / Tap card →
+  "Tap the card on 16000010 · Waiting for payment…" → stub approval → Paid; DB: `status=complete`,
+  `payment_ref=viva_<uuid>`, PARTNER-2026-00093 €8.50 gross + PLATFORM-2026-00018 €0.43 commission.
+  Cancel before approval → seat stays Occupied as an unsettled cash walk-in (`paid-in-cash`,
+  ref null), Settle/Collect offered again. Test rows deleted; the dev account's stub Viva connection
+  + registered terminal were LEFT in place for manual testing.
 
 ## Open decisions
 

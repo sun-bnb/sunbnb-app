@@ -22,6 +22,8 @@ pointer here + the full entry in its section below.)*
 - **BedDetail state-machine patterns** — convertHoldToWalkIn in-place update + multi-day $transaction extend, pendingConfirm per-branch guards, inSync-gated toggle, walk-in disconnect depart — see "BedDetail state-machine patterns"
 - **Manage surface routing** — token-gated sub-routes, admin-tier gating, `validateManageToken` convention, `closeDay` cash-up-only contract, `DayCloseView` frontend pattern — see "Token-gated sub-routes and admin-tier gating on the manage surface", "closeDay — cash-up only, does not touch the floor", "DayCloseView — todayIso derivation and dual-fetch pattern"
 - **Till day-anchoring (track 016 P3/P4)** — reuse `siteTodayBounds(siteId)` for dayStart, `EmployeeTill` vs `EmployeeCashTotal` type split, mock defaults must carry full bucket shape — see "Wiring a data-layer signature change requiring a new required param into manage/actions.ts"; UI headline-vs-close-anchor split + locale date formatting — see "Day-anchored till UI (track 016 P4)"
+- **Viva merchant connect + terminal registry (track 024 W8 C1)** — idempotent connect (no re-issue invitation), UNGATED_ALLOWLIST for session-gated account actions, VivaTerminal upsert cross-site guard — see "Viva connect page and terminal registry"
+- **Viva card-present collect leg (track 024 W8 C2)** — generic result-shape mapping (`data.demo`/`data.card`/`checkoutUrl`) over branching on the caller's requested method, terminals-present as the chooser flag (no env var), the modal's `cancel()` "still processing" branch that keeps polling instead of closing, `toHaveBeenCalledWith` assertion decay when an action starts always passing a 4th opts arg — see "Card-present Collect leg: action contract + modal chooser"
 - **Rejected approaches** — dead-ends, so nobody re-tries them — see "React onWheel prop"
 - **Mollie lib tests** — mocking strategy for app/api/_lib/mollie.ts — see "Testing mollie.ts: mocking boundary + scope separator"
 - **Restaurant query tests** — mocking @repo/table-reservations-core while keeping real auth-helpers — see "Mocking @repo/table-reservations-core for queries.ts tests"
@@ -526,6 +528,144 @@ skipping or silently expanding scope.
 package for the OTHER file(s) selecting/returning that same record shape (`grep -rn "guestSelectionEnabled"
 packages/table-reservations-core/src` — every sibling boolean toggle shows exactly which files it already
 touches) before assuming the named list is complete.
+
+## Viva merchant connect + terminal registry (track 024, W8, packet C1)
+
+### 2026-08-30: Viva connect page idempotency, session-gated action coverage, terminal upsert guard
+**Idempotency constraint the UI has to work around:** Viva's `POST /isv/v1/accounts` mints a
+BRAND NEW `accountId` on every call — there is no "get or create" semantics, and the connected-
+accounts API has no "reissue invitation" endpoint. So `connectViva()` must never call
+`createConnectedAccount` a second time once `PartnerAccount.vivaAccountId` is set (would orphan
+the first connected account at Viva), but that means a partner who didn't finish the FIRST
+onboarding link has no way to get a fresh one from this client — the literal packet brief's
+"pending (open onboarding link again + Refresh)" UI copy cannot be built as a real re-open action.
+Resolved by making the idempotent path a pure status refresh (`redirectUrl: null,
+alreadyConnected: true`) and having the pending-state UI point at email guidance instead ("check
+your inbox for the invitation Viva sent you") + a Refresh button — never re-derive or fabricate a
+clickable re-open link client-side.
+**Session-gated (not token-gated) actions need the UNGATED_ALLOWLIST, not GATED_ACTIONS:**
+`connectViva`/`refreshVivaStatus`/`disconnectViva` are `auth()`-only (mirrors
+`disconnectMollie`/`refreshMollieTokens` in `app/account/mollie/actions.ts`), scoped to
+`session.user.id` — NOT `verifySiteOwnership`/`accessKey`. `coverage-contract.test.ts` fails the
+build ("UNGOVERNED server action") if a new `'use server'` export isn't in either `GATED_ACTIONS`
+(`app/test/gated-actions.ts`) or `UNGATED_ALLOWLIST` (inside `coverage-contract.test.ts` itself,
+with a one-line justification string) — for session-only account actions the entry goes in the
+latter, right next to the Mollie precedent.
+**VivaTerminal upsert needs an explicit cross-site guard `upsert` alone doesn't give you:**
+`terminalId` is globally `@unique` (a physical device belongs to one site at a time), so
+`registerVivaTerminal` must `findUnique` first and reject when `existing.siteId !== siteId` —
+otherwise the upsert would silently re-parent a terminal from one venue to another on a typo'd id.
+**`@repo/data/viva` needs no vitest.config.ts alias** — like `@/app/api/_lib/mollie`, it has no
+prisma import (server-only `fetch`), so partner unit tests `vi.mock('@repo/data/viva', () => ({
+getVivaAccountsClient: vi.fn() }))` directly rather than routing through `__mocks__/@repo/data/`.
+Server actions that DO touch `prisma.vivaTerminal` (the manage-actions.ts terminal registry) still
+need the `vivaTerminal` delegate added to `__mocks__/@repo/data/PrismaCient.ts` — `mock-contract.
+test.ts` enforces this via `Prisma.dmmf` model-delegate parity, independent of the submodule check.
+**Auth-matrix "ok" scenarios reach real business logic, not just the auth gate:** for
+`token-or-session` actions, `SCENARIOS` includes `owner session → ok` / `valid token → ok`
+branches that execute the function body past the gate. Since the global `PrismaCient` mock's
+`vi.fn()` delegates return `undefined` by default (no per-scenario stub), any new action must
+defensively guard `?? []` / `if (!x) return {status:'error',...}` rather than assume a truthy
+DB row — otherwise the "ok" scenario throws (a raw exception, not a `{status:'error'}`) and the
+matrix runner's assertion fails on a scenario that has nothing to do with auth. The matrix's
+reject/ok predicate checks the error *message* against a fixed auth-error set (see the existing
+"auth-matrix ok/reject predicate" entry above), so a business-logic error like `'Viva not
+connected'` is correctly read as "auth passed" — only an unhandled throw is a problem.
+**Pre-existing, out-of-scope failure found during verification — do not "fix" it from an
+unrelated packet:** `mock-contract.test.ts`'s reservation-payment submodule check was already RED
+on this branch before this packet touched anything — `packages/data/src/reservation-payment.ts`
+carries uncommitted `cancelReservationVivaPayment`/`refundReservationVivaPayment` exports from the
+concurrent collect-transition work (track 024 P2/C2, `viva-collect.integration.test.ts` also
+present untracked) that hadn't updated `apps/partner/__mocks__/@repo/data/reservation-payment.ts`
+yet. Confirmed via `git diff --stat` that the file was modified outside this packet's edits before
+touching anything. Left alone deliberately — the collect/machine surface is explicitly out of
+scope for C1 ("Do NOT touch manage/actions.ts collect functions... packet C2, after the
+data-package machine work lands"), and patching someone else's in-flight mock is exactly the kind
+of collision a shared working tree creates. Report it, don't silently absorb it into an unrelated
+diff.
+**Prevention:** When a packet brief describes UI copy assuming an API capability, verify the
+capability exists in the actual client (accounts.ts's real interface, not the brief's prose)
+before writing the component — an idempotent "connect" and a re-issuable "invitation link" are
+not the same guarantee, and only one of them is buildable here. When `npm run test` surfaces a
+failure in a file you never touched, `git diff --stat <path>` before spending any time on it —
+a shared-tree session may have concurrent in-flight packets leaving intermediate red states that
+are not yours to fix.
+
+## Card-present Collect leg: action contract + modal chooser (track 024, W8, packet C2)
+
+### 2026-08-30: collectReservationPayment/cancelCollection card branch, terminals-present as the chooser flag, cancel()'s "still processing" branch
+
+**Fixed contract, packet dependency:** This packet shipped in parallel with the mobile app's own
+collect-leg packet, both consuming the SAME `applyTransition('collect.start'/'collect.abandon', {
+collect: {...} })` contract landed by A3 (`ApplyOpts.collect.method`/`terminalId`/`abortPollMs`).
+Neither surface could change the action's positional signature or field names without breaking the
+other — `collectReservationPayment(siteId, reservationId, accessKey?, opts?: { method, terminalId
+})` and `cancelCollection(siteId, reservationId, accessKey?, opts?: { terminalId })` are additive-only
+(new 4th param), so every existing call site (bulk collect in view.tsx, rentals, the auth-matrix
+fixture which invokes with only `accessKey`) kept compiling untouched.
+
+**Result-shape mapping is generic, not branched on the caller's requested method:** the demo path
+short-circuits card entirely inside the machine (`runCollectStart`'s `collect.method === 'card' &&
+!collect.demo` guard — see data-dev's A3 entry), so a card-method request can still come back with
+`data.demo: true` (never `data.card`). The action must inspect the RETURNED `result.data` shape, not
+echo back what it asked for:
+```
+if (data.demo) return { status: 'ok', amount, demo: true }
+if (data.card) return { status: 'ok', amount, card: true }
+return { status: 'ok', amount, checkoutUrl }
+```
+**Terminal-id validated before the machine call:** `method === 'card'` with no `terminalId` returns
+`{status:'error'}` in the action itself (`mockApply` never called) — cheaper failure than letting
+`runCollectStartCard`'s own `!terminalId` guard fire after a full `applyTransition` load+derive+resolve
+round trip, and gives a clean early-return unit test (`expect(mockApply).not.toHaveBeenCalled()`).
+**CONSUMER_APP_URL precondition is QR-only:** card never redirects the guest's browser anywhere, so
+the `!DEMO_MODE && !consumerAppUrl` check must be skipped when `isCard` — gate it as `!isCard &&
+!DEMO_MODE && !consumerAppUrl`, not by removing the check.
+
+**Modal chooser flag: terminals-present, not an env var.** `CollectPaymentModal`'s new `terminals:
+{terminalId, label}[]` prop defaults to `[]` — an empty array skips the QR/Tap-card chooser phase
+entirely and the modal behaves byte-identically to its pre-card form (auto-starts QR on mount, same
+phases). This means a rental caller (`CreateRentalModal.tsx`, `RentalBookingCard.tsx`) that never
+passes the prop needs ZERO changes even though `CollectActions.create`'s type gained a required
+`choice` parameter — a function with fewer declared params (`() => collectRentalPayment(...)`) is
+still assignable to a callback type expecting one, so the existing rental call sites type-check
+unmodified. Only the two reservation callers (`view.tsx`'s bulk-collect modal, `BedDetail.tsx`) load
+`listVivaTerminals(siteId, accessKey)` once (client-side `useEffect` in `ManageView`) and thread the
+result down as `collectTerminals` / `terminals`.
+
+**`cancel()`'s new "still processing" branch is a modal-stays-open state, not a close path:** a card
+abort that raced the terminal reading the card returns `{status:'ok', paymentStatus:'processing'}`
+from `cancelCollection` (mirrors `runCollectAbandonCard`'s poll branch in the A3 machine). The modal's
+`handleClose` must special-case this: set a `raced` flag, flip phase BACK to `'awaiting'` (not close),
+disable further close attempts (`canDismiss = phase !== 'canceling' && !raced`), and keep the existing
+poll `useEffect` running — the next poll tick resolves it to `complete`/`failed` for real. Closing
+anyway (or re-issuing another cancel) would either strand a charge the guest's bank already approved
+or double-cancel a resolving session.
+
+**Existing `toHaveBeenCalledWith` assertion decay:** `cancelCollection` calling `applyTransition`
+unconditionally with a 3rd `{ collect: { terminalId } }` arg (even when `opts` is undefined, so
+`terminalId: undefined`) broke a pre-existing exact-args assertion
+(`toHaveBeenCalledWith(RES_ID, 'collect.abandon')`, no 3rd arg) — same class of decay as the
+2026-07-23 till-day-anchoring entry above (a callee gains an argument, the caller's mock assertion
+must widen to `expect.objectContaining`/the literal new shape, not just "still passes"). Fixed by
+updating the assertion to `toHaveBeenCalledWith(RES_ID, 'collect.abandon', { collect: { terminalId:
+undefined } })` rather than loosening it — the exact shape IS the contract other packets (mobile) are
+coding against.
+
+**Mock-contract fix was pre-existing red, not caused by this packet:** `packages/data/src/
+reservation-payment.ts` had picked up `cancelReservationVivaPayment`/`refundReservationVivaPayment`
+exports from the concurrent A3 work before this session started (see the 2026-08-30 C1 entry's
+"pre-existing failure" note) — extending `__mocks__/@repo/data/reservation-payment.ts` with both
+(`vi.fn().mockResolvedValue({status:'canceled'})` / `{status:'ok'}`) was step 0 of this packet, not a
+regression to chase down.
+
+**Prevention:** When a shared action contract is being consumed by two parallel in-flight packets
+(web + mobile here), treat the signature as frozen the moment it's stated in the brief — additive
+params only, and map on the CALLEE's returned shape rather than the CALLER's requested intent,
+since a short-circuit branch inside the callee (demo-overrides-card here) can silently produce a
+different shape than what was asked for. When adding a required param to a thunk type consumed by
+multiple call sites, check whether the existing call sites are arrow functions with fewer params
+before assuming they all need updating — TS structural typing accepts them unchanged.
 
 ## Rejected approaches
 
