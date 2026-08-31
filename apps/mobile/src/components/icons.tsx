@@ -110,3 +110,44 @@ export function CardIcon({ size = 20, color = '#6b7280', strokeWidth = 1.8 }: Ic
     </Svg>
   )
 }
+
+// ── Tab bar ────────────────────────────────────────────────────────────────
+
+/** Sun lounger: tilted backrest + flat seat on two legs. */
+export function BedsIcon({ size = 22, color = '#6b7280', strokeWidth = 1.8 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M3 14.5h18M3 14.5l1.5-6 4 2.5M9 14.5V11M5.5 14.5V19M18.5 14.5V19M8.5 11h11.5" />
+    </Svg>
+  )
+}
+
+/** Surfboard (equipment rental). */
+export function RentalsIcon({ size = 22, color = '#6b7280', strokeWidth = 1.8 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M19.5 4.5c-4.5 0-11 4-14.5 10.5-.9 1.7-1 3.3-.5 4.5.9.5 2.5.4 4.5-.5C15.5 15.5 19.5 9 19.5 4.5Z" />
+      <Path d="M8 12.5l3.5 3.5" />
+    </Svg>
+  )
+}
+
+/** Two people (guests). */
+export function GuestsIcon({ size = 22, color = '#6b7280', strokeWidth = 1.8 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx={9} cy={8} r={3.5} />
+      <Path d="M2.5 20c1.2-3.3 3.6-4.8 6.5-4.8s5.3 1.5 6.5 4.8" />
+      <Path d="M15.5 4.8a3.5 3.5 0 0 1 0 6.4M17 15.4c2 .5 3.6 1.9 4.5 4.6" />
+    </Svg>
+  )
+}
+
+/** Bar chart (today: summary, day close, trends). */
+export function TodayIcon({ size = 22, color = '#6b7280', strokeWidth = 1.8 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M4 20h16M7 16.5v-5M12 16.5V7M17 16.5v-8" />
+    </Svg>
+  )
+}
