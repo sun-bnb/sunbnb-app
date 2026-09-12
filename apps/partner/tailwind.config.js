@@ -8,7 +8,14 @@ module.exports = {
     // Scan the shared restaurant UI + schematic-editor packages so their Tailwind
     // utility classes are generated in the partner build (they ship no own CSS).
     "../../packages/table-reservations-ui/src/**/*.{js,ts,jsx,tsx}",
-    "../../packages/schematic-editor/src/**/*.{js,ts,jsx,tsx}"
+    "../../packages/schematic-editor/src/**/*.{js,ts,jsx,tsx}",
+    // floor-core owns the seat-tile palette (`getCellAppearance` in bed-state.ts),
+    // so the manage grid's fills live in a package, not in this app. Without this
+    // glob every class unique to it is purged and a seat renders with only the
+    // utilities that happen to appear elsewhere in the app — which is exactly how
+    // free beds lost `bg-green-300` and kept `border-green-500`, reading as empty
+    // outlines, while `bg-red-400` survived because BedDetail also uses it.
+    "../../packages/floor-core/src/**/*.{js,ts,jsx,tsx}"
   ],
   theme: {
     extend: {
