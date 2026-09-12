@@ -215,9 +215,23 @@ window and are **close-independent** — daily accumulation never changes when t
   paths) / `setPreference` (validates, invalidates the cache) / `getPreferenceAdminRows`.
   **Values are validated on the way in AND on the way out** — the setter explains a rejection to
   the admin, the reader silently falls back to the default, because a row can outlive a bounds
-  change or arrive by direct SQL and its consumers are in the field. First entry:
-  `device-poll-interval-sec` (default 60) — the HW poll cadence the user app's
-  `/api/hw/{code}/state` serves as `pollAfterSec`, formerly a constant in that route
+  change or arrive by direct SQL and its consumers are in the field. Types are `number` ·
+  `boolean` · `string` · `enum` (a closed set rendered as a dropdown; the stored value is the
+  WIRE ID, never the label, because the id travels to a potted device). Entries:
+  `device-power-mode` (enum, default `deep_sleep`) and `device-poll-interval-sec` (default 60) —
+  the power policy the user app's `/api/hw/{code}/state` serves as `powerMode` + `pollAfterSec`,
+  both formerly constants in that route.
+  **These two are the one COUPLED pair in an otherwise flat registry**: each mode can only keep
+  its own band of cadences (track 025), so `setPreference` refuses an interval the active mode
+  cannot serve and RE-FITS the stored interval when the mode changes, and
+  `getPreferenceAdminRows` reports the interval a device would actually get rather than the
+  stored one. The coupling lives in this module, not the admin form, so a script obeys it too
+- `src/device-power.ts` — **PURE** (no Prisma; a client component may import it): the three
+  device power modes, their measured poll bands (continuous 1–15 s · light sleep 10–30 s · deep
+  sleep 30–300 s, from `../sunbnb-hw` exp 005), `clampPollInterval` and `resolveDevicePolicy`.
+  The bands OVERLAP on purpose — the mode is an explicit field precisely because it cannot be
+  inferred from a cadence in the overlap. Both fallbacks point at `deep_sleep` / the cheap end of
+  a band: a wrong slow value costs response time, a wrong fast one costs the battery in days
 
 ## Testing
 

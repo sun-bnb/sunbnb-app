@@ -12,6 +12,7 @@ import { vi } from 'vitest'
 /** Registry defaults, keyed as in `PREFERENCE_REGISTRY`. */
 const DEFAULTS: Record<string, number | boolean | string> = {
   'device-poll-interval-sec': 60,
+  'device-power-mode': 'deep_sleep',
 }
 
 export const getPreference = vi.fn(async (key: string) => DEFAULTS[key])

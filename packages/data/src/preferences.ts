@@ -33,6 +33,16 @@
  */
 
 import prisma from '../index'
+import {
+  DEVICE_POWER_MODES,
+  POLL_INTERVAL_MAX,
+  POLL_INTERVAL_MIN,
+  clampPollInterval,
+  devicePowerModeLabel,
+  isDevicePowerMode,
+  pollBandFor,
+  type DevicePowerMode,
+} from './device-power'
 
 // ─── Registry ───────────────────────────────────────────────────────────────
 
@@ -68,10 +78,22 @@ export interface StringPreference extends BasePreference {
   maxLength: number
 }
 
+/**
+ * A closed set of values — rendered as a dropdown, never a free-text box. The
+ * stored value is the wire id (`light_sleep`), not the label: the id travels to
+ * a potted device and must never change when someone rewords the UI.
+ */
+export interface EnumPreference extends BasePreference {
+  type: 'enum'
+  default: string
+  options: readonly { value: string; label: string }[]
+}
+
 export type PreferenceDefinition =
   | NumberPreference
   | BooleanPreference
   | StringPreference
+  | EnumPreference
 
 /**
  * The canonical list of platform preferences. Add new entries here — the admin
@@ -82,16 +104,26 @@ export type PreferenceDefinition =
  * `PREF_DEVICE_POLL_INTERVAL_SEC`.
  */
 export const PREFERENCE_REGISTRY = {
+  'device-power-mode': {
+    key: 'device-power-mode',
+    type: 'enum',
+    label: 'Device power mode',
+    group: 'Hardware',
+    description:
+      'How a sunbed indicator spends the gap between polls. Served as `powerMode` on every 200 from /api/hw/{code}/state, so the fleet is switched centrally rather than reflashed. CONTINUOUS keeps the CPU up (~1 s response, ~3 days on a cell) — for a demo or a busy afternoon. LIGHT SLEEP clock-gates the chip but HOLDS the Wi-Fi association, so a poll costs a request rather than a rejoin (~9 days); its cost is AP-side beacon upkeep and is roughly flat with cadence. DEEP SLEEP powers the chip down and pays a full Wi-Fi join per wake (~4.5 months at 60 s); its cost scales with cadence. The two cross at about 27 s, which is why each mode accepts a different range of poll intervals — changing the mode re-fits the interval to the new band.',
+    default: 'deep_sleep',
+    options: DEVICE_POWER_MODES.map((m) => ({ value: m, label: devicePowerModeLabel(m) })),
+  },
   'device-poll-interval-sec': {
     key: 'device-poll-interval-sec',
     type: 'number',
     label: 'Device poll interval',
     group: 'Hardware',
     description:
-      'How often a sunbed indicator device asks the server for seat state, in seconds. Served as `pollAfterSec` on every 200 from /api/hw/{code}/state; firmware obeys it and never hardcodes an interval. Lower = a light that flips sooner, more serverless invocations and more battery; higher = the reverse. A change reaches a device on its next poll (the value is part of the response ETag, so it busts the 304 that would otherwise hide it).',
+      'How often a sunbed indicator device asks the server for seat state, in seconds. Served as `pollAfterSec` on every 200 from /api/hw/{code}/state; firmware obeys it and never hardcodes an interval. Lower = a light that flips sooner, more serverless invocations and more battery; higher = the reverse. A change reaches a device on its next poll (the value is part of the response ETag, so it busts the 304 that would otherwise hide it). THE ALLOWED RANGE DEPENDS ON THE POWER MODE — continuous 1–15 s, light sleep 10–30 s, deep sleep 30–300 s — because a mode that physically cannot keep a cadence must not be told to (deep sleep pays a full Wi-Fi join per wake, so it has a floor around 30 s). A value outside the active mode is refused here, and re-fitted automatically when the mode changes.',
     default: 60,
-    min: 10,
-    max: 3600,
+    min: POLL_INTERVAL_MIN,
+    max: POLL_INTERVAL_MAX,
     unit: 'seconds',
   },
 } as const satisfies Record<string, PreferenceDefinition>
@@ -100,7 +132,9 @@ export type PreferenceKey = keyof typeof PREFERENCE_REGISTRY
 
 /** The value type of one registry entry, so callers keep number/boolean/string. */
 export type PreferenceValue<K extends PreferenceKey> =
-  (typeof PREFERENCE_REGISTRY)[K]['default']
+  (typeof PREFERENCE_REGISTRY)[K] extends { type: 'enum' }
+    ? string
+    : (typeof PREFERENCE_REGISTRY)[K]['default']
 
 export type PreferenceSource = 'env' | 'db' | 'default'
 
@@ -142,6 +176,12 @@ export function parsePreferenceValue(
     if (v === '0' || v === 'false' || v === 'off' || v === 'no') return false
     return undefined
   }
+  if (def.type === 'enum') {
+    // Fold case and separators so `Light Sleep`, `light-sleep` and `light_sleep`
+    // all land — an operator types a label, the wire carries an id.
+    const v = trimmed.toLowerCase().replace(/[\s-]+/g, '_')
+    return def.options.some((o) => o.value === v) ? v : undefined
+  }
   if (trimmed.length > def.maxLength) return undefined
   return trimmed
 }
@@ -172,6 +212,12 @@ export function validatePreferenceValue(
   }
   if (def.type === 'boolean') {
     return { ok: false, error: `${def.label} must be true or false` }
+  }
+  if (def.type === 'enum') {
+    return {
+      ok: false,
+      error: `${def.label} must be one of: ${def.options.map((o) => o.value).join(', ')}`,
+    }
   }
   return { ok: false, error: `${def.label} must be 1–${def.maxLength} characters` }
 }
@@ -257,11 +303,51 @@ export function clearPreferenceCache(): void {
   cache.clear()
 }
 
+// ─── The one cross-key rule: power mode constrains poll interval ────────────
+//
+// Preferences are otherwise independent, and keeping them so is what lets the
+// registry stay a flat list. These two are not: a poll interval is only
+// meaningful inside a power mode's band, because a mode that physically cannot
+// keep a cadence must never be told to try (track 025). The coupling is
+// therefore handled HERE, in the module that owns validation, rather than in
+// the admin form — a script or a future API must obey the same rule.
+
+const MODE_KEY = 'device-power-mode'
+const POLL_KEY = 'device-poll-interval-sec'
+
+/** The mode currently in effect, resolved through env → DB → default. */
+export async function getDevicePowerMode(): Promise<DevicePowerMode> {
+  const mode = await getPreference(MODE_KEY)
+  // `deep_sleep` is the safe fallback, not the fast one: a device polling every
+  // second on a misread value empties its cell in days.
+  return isDevicePowerMode(mode) ? mode : 'deep_sleep'
+}
+
+/**
+ * Re-fit the stored poll interval after a mode change, so the admin never sees
+ * a number the fleet is not actually being given. Writes only when the stored
+ * value is out of band; silent when there is nothing to do.
+ */
+async function refitPollInterval(mode: DevicePowerMode, adminUserId?: string): Promise<void> {
+  const current = (await getPreference(POLL_KEY)) as number
+  const fitted = clampPollInterval(mode, current)
+  if (fitted === current) return
+  const value = serializePreferenceValue(fitted)
+  await prisma.platformPreference.upsert({
+    where: { key: POLL_KEY },
+    create: { key: POLL_KEY, value, updatedBy: adminUserId ?? null },
+    update: { value, updatedBy: adminUserId ?? null },
+  })
+  clearPreferenceCache()
+}
+
 /**
  * Write an override. Admin app only.
  *
  * - `raw = null` deletes the row, so the preference falls back to env/default.
  * - Rejects a value the registry does not accept, with a message for the admin.
+ * - Enforces the power-mode band on the poll interval, and re-fits the interval
+ *   when the mode changes (see the block above).
  */
 export async function setPreference(
   key: PreferenceKey,
@@ -274,11 +360,31 @@ export async function setPreference(
   if (raw === null) {
     await prisma.platformPreference.deleteMany({ where: { key } })
     clearPreferenceCache()
+    // Resetting the mode can widen or narrow the band under a stored interval.
+    if (key === MODE_KEY) await refitPollInterval(await getDevicePowerMode(), adminUserId)
     return { status: 'ok' }
   }
 
   const validated = validatePreferenceValue(def, raw)
   if (!validated.ok) return { status: 'error', errors: [validated.error] }
+
+  // Refused rather than silently clamped: the admin asked for a specific
+  // cadence, and quietly serving a different one is how a fleet ends up running
+  // something nobody chose.
+  if (key === POLL_KEY) {
+    const mode = await getDevicePowerMode()
+    const band = pollBandFor(mode)
+    const seconds = validated.value as number
+    if (seconds < band.min || seconds > band.max) {
+      return {
+        status: 'error',
+        errors: [
+          `${devicePowerModeLabel(mode)} mode accepts ${band.min}–${band.max} seconds. ` +
+            `Change the power mode first to use ${seconds} s.`,
+        ],
+      }
+    }
+  }
 
   const value = serializePreferenceValue(validated.value)
   await prisma.platformPreference.upsert({
@@ -287,6 +393,11 @@ export async function setPreference(
     update: { value, updatedBy: adminUserId ?? null },
   })
   clearPreferenceCache()
+
+  if (key === MODE_KEY && isDevicePowerMode(validated.value)) {
+    await refitPollInterval(validated.value, adminUserId)
+  }
+
   return { status: 'ok' }
 }
 
@@ -302,6 +413,8 @@ export interface PreferenceAdminRow {
   min: number | null
   max: number | null
   maxLength: number | null
+  /** Choices for an enum preference, in registry order. */
+  options: readonly { value: string; label: string }[] | null
   default: number | boolean | string
   /** The raw stored override, or null when no row exists. */
   dbValue: string | null
@@ -324,12 +437,27 @@ export async function getPreferenceAdminRows(): Promise<PreferenceAdminRow[]> {
   }
   const byKey = new Map(rows.map((r) => [r.key, r]))
 
+  // Resolved once up front: the poll interval's `resolved` is reported as what
+  // a DEVICE would actually be served, which the band can move. An admin page
+  // showing 60 while the fleet runs 30 would be a lie in the one place an
+  // operator goes to find out what the fleet is doing.
+  const modeRaw = resolvePreference(
+    PREFERENCE_REGISTRY[MODE_KEY] as PreferenceDefinition,
+    byKey.get(MODE_KEY)?.value ?? null,
+  ).value
+  const activeMode: DevicePowerMode = isDevicePowerMode(modeRaw) ? modeRaw : 'deep_sleep'
+
   return Object.values(PREFERENCE_REGISTRY).map((raw) => {
     const def = raw as PreferenceDefinition
     const row = byKey.get(def.key)
     const envRaw = process.env[envVarForPreference(def.key)]
     const envAccepted = parsePreferenceValue(def, envRaw)
-    const { value, source } = resolvePreference(def, row?.value ?? null)
+    const resolvedRaw = resolvePreference(def, row?.value ?? null)
+    const source = resolvedRaw.source
+    const value =
+      def.key === POLL_KEY
+        ? clampPollInterval(activeMode, resolvedRaw.value as number)
+        : resolvedRaw.value
 
     return {
       key: def.key as PreferenceKey,
@@ -341,6 +469,7 @@ export async function getPreferenceAdminRows(): Promise<PreferenceAdminRow[]> {
       min: def.type === 'number' ? def.min : null,
       max: def.type === 'number' ? def.max : null,
       maxLength: def.type === 'string' ? def.maxLength : null,
+      options: def.type === 'enum' ? def.options : null,
       default: def.default,
       dbValue: row?.value ?? null,
       envValue: envAccepted === undefined ? null : String(envRaw).trim(),

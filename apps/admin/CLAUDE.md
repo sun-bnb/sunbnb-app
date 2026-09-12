@@ -29,10 +29,16 @@ Port 3003. Requires `sudo: true` on User record.
   grouped by the registry's `group`. The page owns no validation or key list of its own: bounds,
   types and defaults come from the registry, so a script or a future API is held to the same rules.
   Each row shows the resolved value and WHERE it came from (env var → database → built-in default),
-  and warns when an env override means the value saved here is recorded but not in effect. First
-  entry: `device-poll-interval-sec`, the cadence every HW device polls at (`pollAfterSec` on
-  `/api/hw/{code}/state` in the user app). Add a setting by appending to the registry — the tab
-  lists it automatically.
+  and warns when an env override means the value saved here is recorded but not in effect.
+  Entries: `device-power-mode` (a dropdown — continuous · light sleep · deep sleep) and
+  `device-poll-interval-sec`, together the power policy every HW device is served on
+  `/api/hw/{code}/state` in the user app (`powerMode` + `pollAfterSec`). **Those two are coupled
+  and the page must not pretend otherwise**: each mode keeps only its own band of cadences, so
+  saving an out-of-band interval is refused with the mode named, and changing the mode re-fits
+  the stored interval. That is why a save RESYNCS every row from the server (`listPreferences`)
+  rather than patching only the row that was edited — otherwise the interval on screen would
+  contradict the change that just moved it. Add a setting by appending to the registry — the tab
+  lists it automatically, including `enum` entries, which render as a dropdown of their options.
 
 ## Testing
 

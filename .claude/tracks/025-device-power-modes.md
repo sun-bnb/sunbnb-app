@@ -36,7 +36,13 @@ cadences and a persistent connection would need an amendment to
 
 ## Resume here
 
-**Next action — Phase 1.** The measurement this track was going to open with has already
+**Server half of Phase 2 is DONE (2026-09-12)** — the wire carries `powerMode`, and both it and
+the cadence are admin preferences with the bands enforced. See the Log entry and Phase 2 below.
+
+**Next action — Phase 1 (firmware, `sunbnb-hw`).** The device must READ `powerMode` from the poll
+response and act on it; until it does, the server is switching a fleet that is not listening.
+
+**Original next action — Phase 1.** The measurement this track was going to open with has already
 been done; see the Log entry for 2026-09-11 (revised). The band boundaries are grounded in
 exp 005's measured figures, not in projections, so the design can proceed.
 
@@ -113,10 +119,23 @@ chosen at runtime.
 - ☐ Re-check `indicator.c`'s `esp_sleep_get_wakeup_cause()` branch, the second place that
   assumes the boot/wake distinction.
 
-### ☐ Phase 2 — the wire
+### ◐ Phase 2 — the wire — SERVER HALF DONE 2026-09-12
 
-- ☐ Decide how the mode reaches the device (see **Open decisions**).
-- ☐ Server-side policy: which mode for which venue, at which hours, on what battery.
+- ✅ **How the mode reaches the device: an explicit `powerMode` field** in the state response,
+  inside the hashed `stable` object beside `pollAfterSec`, so a change busts the ETag and reaches
+  a device that would otherwise 304 for hours (D1 settled — see below). Contract:
+  [[track:019]] §Wire contract.
+- ✅ **Both values are platform preferences** set in admin `/preferences`: `device-power-mode`
+  (enum) and `device-poll-interval-sec`. The bands are enforced as a COUPLED pair — an interval
+  the active mode cannot keep is refused, a mode change re-fits the stored interval, and the
+  route clamps again on the way out (an env override or a direct SQL edit can still present a
+  number no mode can serve, and a potted device obeys it all season). `@repo/data/device-power`
+  is the pure module holding the bands. Defaults `deep_sleep` / 60 s reproduce today's behaviour
+  exactly, so shipping the field changed nothing in the field.
+- ☐ **Firmware must read `powerMode`** and switch at runtime — that is Phase 1, in `sunbnb-hw`.
+  Until it does, the field is served and ignored.
+- ☐ Server-side policy: which mode for which venue, at which hours, on what battery. Today it is
+  ONE policy for the whole fleet; per-site and time-of-day are deferred.
 - ☐ **Hysteresis belongs on the server.** Each deep-sleep entry and exit costs a boot;
   a device flipping modes every poll would be worse than either mode alone.
 
@@ -136,6 +155,10 @@ Inferring costs no new wire field: 1–15 s → continuous, 60 s+ → deep. But 
 *overlap* at 10–15 s and 60 s, and the overlap is where the interesting decisions live —
 "60 s, but stay associated because a change is expected" is not expressible as a number.
 Leaning toward an explicit field, with cadence still carried by `poll_after_sec`.
+**DECIDED 2026-09-12 — an explicit field.** `powerMode` is served in the state response; the
+bands overlap at 10–15 s and 30 s, so a cadence cannot carry the decision in exactly the range
+where the decision is interesting. Shipped server-side; firmware does not read it yet.
+
 **Direction settled 2026-09-12 (track 019 wire v2):** whichever it is, the mode reaches the device
 inside the hashed `stable` object of the state response — alongside `pollAfterSec`, `location` and
 `cmd` — and the device's side (battery, RSSI, uptime, running location) reaches the server as the
@@ -188,6 +211,28 @@ the DRV8833's `STBY` pin rather than the retired LED gate.
 
 Lesson worth keeping: the summary line of an experiment can quote a projection while its own
 tables hold the measurement. Read the tables.
+
+**2026-09-12 — Phase 2's server half shipped; D1 answered with an explicit field.** The wire now
+carries `powerMode` (continuous · light_sleep · deep_sleep) beside `pollAfterSec`, both resolved
+from platform preferences rather than constants, so the mode is a fleet-wide switch an operator
+throws in the admin app. The bands from the Goal table are enforced in code
+(`@repo/data/device-power`), and the preference registry gained its first coupled pair to do it:
+the poll interval is validated against the ACTIVE mode's band, refused when it does not fit, and
+re-fitted automatically when the mode changes — the alternative, a silent clamp, would leave the
+admin page reporting a cadence the fleet is not running.
+
+Two fail-safe directions were chosen deliberately and are worth not re-litigating: an unreadable
+mode resolves to `deep_sleep`, and a non-numeric interval to the CHEAP end of its band. Both
+point the same way — a wrong slow value costs response time, a wrong fast one empties a cell in
+days on a parasol nobody is watching.
+
+Defaults were picked so that shipping this changed nothing in the field: `deep_sleep` at 60 s is
+precisely what the fleet already ran, and per Phase 0's corrected crossover (~27 s) deep sleep is
+also the *correct* mode at that cadence.
+
+**The device still ignores the field** — reading it, and switching `esp_pm_configure` / the
+deep-sleep branch at runtime, is Phase 1 and lives in `sunbnb-hw`.
+
 
 ## Links
 

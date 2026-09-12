@@ -690,15 +690,25 @@ describe('fail-safe', () => {
   })
 })
 
-// ── Poll cadence (the `device-poll-interval-sec` platform preference) ─────────
+// ── Power policy (the `device-power-mode` + `device-poll-interval-sec` prefs) ──
 //
-// The cadence is the fleet's only throttle and firmware never second-guesses it,
-// so what the route must guarantee is that the number it serves is the one the
-// platform preference resolves to — not a constant compiled into this release.
+// Cadence and mode are the fleet's only power controls and firmware never
+// second-guesses either, so what the route must guarantee is that what it serves
+// is what the platform preferences resolve to — not a constant compiled into
+// this release — and that the pair is always physically servable.
+
+/** Set both preferences by key; the route reads them together. */
+function preferences(overrides: { mode?: string; intervalSec?: number } = {}) {
+  const values: Record<string, unknown> = {
+    'device-power-mode': overrides.mode ?? 'deep_sleep',
+    'device-poll-interval-sec': overrides.intervalSec ?? 60,
+  }
+  mockPreference.mockImplementation(async (key: string) => values[key] as never)
+}
 
 describe('poll cadence', () => {
   it('serves the resolved preference, not a hardcoded interval', async () => {
-    mockPreference.mockResolvedValueOnce(300 as never)
+    preferences({ intervalSec: 300 })
     const body = await (await GET(makeRequest(), makeParams())).json()
     expect(body.pollAfterSec).toBe(300)
     expect(mockPreference).toHaveBeenCalledWith('device-poll-interval-sec')
@@ -711,7 +721,7 @@ describe('poll cadence', () => {
     const first = await GET(makeRequest(), makeParams())
     const etagAt60 = first.headers.get('etag')
 
-    mockPreference.mockResolvedValueOnce(120 as never)
+    preferences({ intervalSec: 120 })
     const second = await GET(makeRequest(CODE, { 'if-none-match': etagAt60! }), makeParams())
 
     expect(second.status).toBe(200)
@@ -720,12 +730,63 @@ describe('poll cadence', () => {
   })
 
   it('reads through the cached accessor, not a query per poll', async () => {
-    // ~1.3 M polls/day at fleet scale (Q3): the read that resolves this number
-    // must be the per-instance cached one, or the cadence control costs more
-    // than it saves.
+    // ~1.3 M polls/day at fleet scale (Q3): the reads that resolve the policy
+    // must be the per-instance cached ones, or the control costs more than it
+    // saves. Two keys, both cached, issued together.
     await GET(makeRequest(), makeParams())
-    expect(mockPreference).toHaveBeenCalledTimes(1)
+    expect(mockPreference).toHaveBeenCalledTimes(2)
     expect(vi.mocked(getPreference)).not.toHaveBeenCalled()
+  })
+})
+
+describe('power mode', () => {
+  it('serves the resolved mode alongside the cadence', async () => {
+    preferences({ mode: 'light_sleep', intervalSec: 20 })
+    const body = await (await GET(makeRequest(), makeParams())).json()
+    expect(body).toMatchObject({ powerMode: 'light_sleep', pollAfterSec: 20 })
+  })
+
+  it('serves every mode the platform can select', async () => {
+    for (const [mode, intervalSec] of [
+      ['continuous', 5],
+      ['light_sleep', 20],
+      ['deep_sleep', 120],
+    ] as const) {
+      preferences({ mode, intervalSec })
+      const body = await (await GET(makeRequest(), makeParams())).json()
+      expect(body).toMatchObject({ powerMode: mode, pollAfterSec: intervalSec })
+    }
+  })
+
+  it('changes the ETag when the mode changes, so a 304 cannot hide it', async () => {
+    // Same reasoning as the cadence: a device parked on a free bed 304s for
+    // hours, and a fleet-wide switch to continuous has to reach it anyway.
+    const first = await GET(makeRequest(), makeParams())
+    const etag = first.headers.get('etag')
+
+    preferences({ mode: 'continuous', intervalSec: 60 })
+    const second = await GET(makeRequest(CODE, { 'if-none-match': etag! }), makeParams())
+
+    expect(second.status).toBe(200)
+    expect(second.headers.get('etag')).not.toBe(etag)
+  })
+
+  it('never serves a cadence the mode cannot keep', async () => {
+    // A stale row, an env override or a direct SQL edit can all present a
+    // number no mode can serve. A potted device obeys it all season, so the
+    // route fits it to the band rather than passing it through.
+    preferences({ mode: 'light_sleep', intervalSec: 300 })
+    const body = await (await GET(makeRequest(), makeParams())).json()
+    expect(body).toMatchObject({ powerMode: 'light_sleep', pollAfterSec: 30 })
+  })
+
+  it('falls back to DEEP SLEEP on an unreadable mode, never to continuous', async () => {
+    // The fallback direction is the point: a wrong deep_sleep costs response
+    // time, a wrong continuous costs the battery in days.
+    preferences({ mode: 'hibernate', intervalSec: 60 })
+    const body = await (await GET(makeRequest(), makeParams())).json()
+    expect(body.powerMode).toBe('deep_sleep')
+    expect(body.pollAfterSec).toBe(60)
   })
 })
 

@@ -32,6 +32,7 @@ import prisma from '@repo/data/PrismaCient'
 import { siteDayBounds, siteDayKey } from '@repo/data/site-day'
 import { RESERVATION_CANCELED, RESERVATION_REFUNDED } from '@repo/data/reservation-status'
 import { getPreferenceCached } from '@repo/data/preferences'
+import { resolveDevicePolicy, type DevicePolicy } from '@repo/data/device-power'
 import { screenDeviceRequest, unavailable, unitAddressWhere, SEGMENT_SEATS } from '../hw-filter'
 import {
   activeStateForSeat,
@@ -44,26 +45,42 @@ import {
 export const dynamic = 'force-dynamic'
 
 /**
- * Server-driven poll cadence. Firmware obeys it and never hardcodes an interval,
- * so this number is the fleet's only cadence control — which is why it is a
- * platform preference set in the admin app (`device-poll-interval-sec`) rather
- * than a constant that needs a deploy to change. The registry default is 60 s;
- * `getPreferenceCached` falls back to it whenever the row is missing, unreadable
- * or out of the registry's bounds, so a bad or absent value can never reach a
- * potted device.
+ * Server-driven power policy: the MODE a device runs in and the CADENCE it polls
+ * at. Firmware obeys both and hardcodes neither, so these two values are the
+ * fleet's only power controls — which is why they are platform preferences set
+ * in the admin app (`device-power-mode`, `device-poll-interval-sec`) rather than
+ * constants that need a deploy to change.
+ *
+ * The mode is the thing cadence cannot express (track 025). `pollAfterSec` tunes
+ * responsiveness WITHIN a mode; it cannot cross between them, because deep sleep
+ * pays a full Wi-Fi join per wake and has a floor around 30 s, while continuous
+ * cannot be afforded for a whole day. So each mode accepts its own band and the
+ * cadence is fitted to it here — see `@repo/data/device-power`.
+ *
+ * The clamp is the SECOND check. The admin write path already refuses an
+ * out-of-band interval and re-fits the stored one when the mode changes, so this
+ * normally does nothing; it exists because an env override, a direct SQL edit or
+ * a row left by an older release can all present a number no mode can serve, and
+ * the consumer is potted on a beach and will obey it all season.
  *
  * Cached per serverless instance (5 min) deliberately: at fleet scale this route
- * runs ~1.3 M times a day (Q3) and this value changes a handful of times a year —
+ * runs ~1.3 M times a day (Q3) and these values change a handful of times a year —
  * a synchronous read per poll would buy nothing. The cost is that a change takes
- * up to the TTL plus one poll to reach the fleet.
+ * up to the TTL plus one poll to reach the fleet. Both reads are issued together
+ * rather than in sequence: they are independent, and the second would otherwise
+ * add a round trip to the first poll of every cold instance.
  *
- * Still one number for every device. State-aware cadence (fast while FREE, slow
- * otherwise — `../sunbnb-hw` ADR 0006) and night backoff stay deferred; when they
- * land they read this as their base, and they work through the ETag for free,
- * because `pollAfterSec` sits inside the hashed `stable` object below.
+ * Still one policy for every device. Per-site policy, state-aware cadence (fast
+ * while FREE — `../sunbnb-hw` ADR 0006) and night backoff stay deferred; when
+ * they land they read this as their base, and they work through the ETag for
+ * free, because both values sit inside the hashed `stable` object below.
  */
-async function resolvePollAfterSec(): Promise<number> {
-  return getPreferenceCached('device-poll-interval-sec')
+async function resolveDevicePolicyFromPreferences(): Promise<DevicePolicy> {
+  const [mode, intervalSec] = await Promise.all([
+    getPreferenceCached('device-power-mode'),
+    getPreferenceCached('device-poll-interval-sec'),
+  ])
+  return resolveDevicePolicy(mode, intervalSec)
 }
 
 // ─── route ───────────────────────────────────────────────────────────────────
@@ -120,7 +137,7 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
 
     // Alongside the reservation read, not before it: the cached path resolves
     // without a query on all but the first poll of an instance.
-    const pollAfterSecPromise = resolvePollAfterSec()
+    const policyPromise = resolveDevicePolicyFromPreferences()
 
     const reservations = await prisma.reservation.findMany({
       where: {
@@ -162,7 +179,7 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
       }
     })
 
-    const pollAfterSec = await pollAfterSecPromise
+    const policy = await policyPromise
 
     // Everything the device acts on. `serverTime` is deliberately NOT in here:
     // it changes every request, so including it would make the ETag unique per
@@ -171,7 +188,16 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
       code,
       state: aggregateState(seats.map((s) => s.state)),
       seats,
-      pollAfterSec,
+      pollAfterSec: policy.pollAfterSec,
+      // How the device spends the gap between polls (track 025). It rides the
+      // same hashed object as the cadence, so switching the fleet from deep
+      // sleep to continuous busts the ETag and reaches every device on its next
+      // poll — including the ones parked on a free bed that would otherwise
+      // 304 for hours. An EXPLICIT field rather than something inferred from
+      // `pollAfterSec`: the bands overlap at 10–15 s and 30 s, and "30 s, but
+      // stay associated because a change is expected" is not expressible as a
+      // number (track 025 D1).
+      powerMode: policy.mode,
       // Track 021 P5: the device's CONFIG rides the poll response. It sits
       // inside the hashed `stable` object deliberately — a reassignment then
       // busts the ETag and reaches the device on its next poll, while an

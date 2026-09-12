@@ -200,6 +200,11 @@ from across the internet").
     { "id": "cly…", "label": "A13", "state": "OCCUPIED" }
   ],
   "pollAfterSec": 60,           // server-driven cadence; device obeys, firmware never hardcodes
+  "powerMode": "deep_sleep",    // continuous | light_sleep | deep_sleep — how the device spends
+                                //   the gap between polls (track 025). EXPLICIT, not inferred
+                                //   from pollAfterSec: the bands overlap. Always paired with a
+                                //   cadence its band can keep; an unreadable value serves
+                                //   deep_sleep, never continuous
   "cmd": null,                  // null | "stow" (deep sleep until spring) | "identify"
   "serverTime": "2026-08-13T09:12:04Z"
 }
@@ -247,6 +252,19 @@ longer an *enumeration-oracle* defence (there is no secret to protect and the co
 anyway); it is kept only because a uniform, opaque reject is the tidy default and the P1 code
 already does it. The status is `401` today; `403`/`404` would be equally fine for a filter — not a
 frozen wire fact.
+
+**`powerMode` (added 2026-09-12, track 025).** A closed set — `continuous` · `light_sleep` ·
+`deep_sleep` — served inside the hashed `stable` object beside `pollAfterSec`, so a fleet-wide
+switch busts the ETag and reaches a device parked on a free bed that would otherwise 304 for
+hours. **Firmware must recognise every member before potting**, like `cmd`: an unknown mode on a
+sealed unit is ignored forever. Both values come from platform preferences (`device-power-mode`,
+`device-poll-interval-sec`, admin `/preferences`), and the server guarantees the PAIR is
+servable — each mode keeps only its own band (continuous 1–15 s · light sleep 10–30 s · deep
+sleep 30–300 s, measured in `../sunbnb-hw` exp 005), the admin write path refuses an out-of-band
+interval and re-fits the stored one on a mode change, and the route clamps again on the way out.
+An unreadable mode resolves to `deep_sleep`: a wrong slow value costs response time, a wrong
+`continuous` costs the cell in days. The bands OVERLAP deliberately at 10–15 s and 30 s, which is
+why this is a field of its own rather than something inferred from the number (D1).
 
 **Tracking rides the poll (wire v2, 2026-09-12).** The device's self-report travels on the
 state GET as ONE request header, alongside `User-Agent`, `If-None-Match` and `x-sunbnb-partner`:
@@ -764,6 +782,20 @@ backend, and both drag in consumer-surface design that shouldn't gate the hardwa
   state(const telemetry_t *)` sets the header per request, `main.c` builds the report per poll and
   marks the location reported on any `ok` poll. `batt` is omitted until the ADC lands. Track 025
   D1 gains a settled direction: whatever the mode field is, it rides the response inside `stable`.
+
+- **2026-09-12 — `powerMode` joins the wire (track 025 Phase 2, server half).** The response now
+  carries the power mode beside the cadence, both from platform preferences, both inside the
+  hashed `stable` object. New pure `@repo/data/device-power` owns the three modes, their measured
+  bands and `resolveDevicePolicy`; `@repo/data/preferences` gains an `enum` type (stored value is
+  the wire id, never the label) and the registry's first COUPLED pair — an interval the active
+  mode cannot keep is refused with the mode named, a mode change re-fits the stored interval, and
+  the admin row reports what a device would actually be served rather than what is stored. The
+  admin page resyncs every row after a save for that reason. Defaults chosen so nothing in the
+  field changes today: `deep_sleep` at 60 s is exactly the cadence the fleet already runs, and 60
+  sits inside the deep band. Tests: data 591 (45 preferences + 16 device-power), user 695 (HW 116,
+  of which 76 state), admin 202, partner 2090; tsc + lint clean. **Firmware half NOT done** — the
+  device must learn to read `powerMode` and switch `esp_pm_configure` / the deep-sleep branch at
+  runtime, which is track 025 Phase 1 in `../sunbnb-hw`.
 
 ## Links
 

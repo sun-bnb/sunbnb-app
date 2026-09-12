@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import type { PreferenceAdminRow } from '@repo/data/preferences'
-import { savePreference, resetPreference } from './actions'
+import { savePreference, resetPreference, listPreferences } from './actions'
 
 function SourceBadge({ source }: { source: PreferenceAdminRow['source'] }) {
   const styles: Record<PreferenceAdminRow['source'], string> = {
@@ -27,9 +27,17 @@ function SourceBadge({ source }: { source: PreferenceAdminRow['source'] }) {
 function PreferenceRow({
   row,
   onSaved,
+  onResync,
 }: {
   row: PreferenceAdminRow
   onSaved: (key: string, patch: Partial<PreferenceAdminRow>) => void
+  /**
+   * Re-read every row from the server. Needed because preferences are not
+   * always independent: changing the device power mode re-fits the stored poll
+   * interval to the new mode's band, so patching only the row that was edited
+   * would leave a stale number on screen next to the change that moved it.
+   */
+  onResync: () => void
 }) {
   const [draft, setDraft] = useState(String(row.dbValue ?? row.resolved))
   const [error, setError] = useState<string | null>(null)
@@ -55,6 +63,7 @@ function PreferenceRow({
         resolved: row.envValue !== null ? row.resolved : parsed,
         source: row.envValue !== null ? 'env' : 'db',
       })
+      onResync()
     })
   }
 
@@ -73,6 +82,7 @@ function PreferenceRow({
         resolved: row.envValue !== null ? row.resolved : row.default,
         source: row.envValue !== null ? 'env' : 'default',
       })
+      onResync()
     })
   }
 
@@ -102,6 +112,14 @@ function PreferenceRow({
               </span>
             </span>
           )}
+          {row.type === 'enum' && row.options && (
+            <span>
+              allowed:{' '}
+              <span className="text-gray-300">
+                {row.options.map((o) => o.value).join(' · ')}
+              </span>
+            </span>
+          )}
           <span>
             env var:{' '}
             <span className="text-gray-300">{row.envValue === null ? '—' : row.envValue}</span>
@@ -124,7 +142,19 @@ function PreferenceRow({
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0">
-        {row.type === 'boolean' ? (
+        {row.type === 'enum' && row.options ? (
+          <select
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            className="w-36 px-2 py-1.5 rounded bg-gray-950 border border-gray-700 text-sm text-gray-200"
+          >
+            {row.options.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        ) : row.type === 'boolean' ? (
           <select
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -176,6 +206,17 @@ export default function PreferencesView({
     setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...p } : r)))
   }
 
+  // A write can move a value the admin did not touch (the power mode re-fits
+  // the poll interval), so the whole set is re-read after any save. The local
+  // patch above stays because it lands immediately; this corrects it.
+  const resync = () => {
+    listPreferences()
+      .then(setRows)
+      .catch(() => {
+        /* The optimistic patch stands; a reload will show the truth. */
+      })
+  }
+
   const groups = rows.reduce<Record<string, PreferenceAdminRow[]>>((acc, row) => {
     ;(acc[row.group] ??= []).push(row)
     return acc
@@ -201,7 +242,7 @@ export default function PreferencesView({
           <h2 className="text-sm font-semibold text-gray-300 mb-2">{group}</h2>
           <div className="rounded-lg border border-gray-800 divide-y divide-gray-800 bg-gray-900/40">
             {groupRows.map((row) => (
-              <PreferenceRow key={row.key} row={row} onSaved={patch} />
+              <PreferenceRow key={row.key} row={row} onSaved={patch} onResync={resync} />
             ))}
           </div>
         </div>
