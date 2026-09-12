@@ -3,7 +3,7 @@ id: 021-physical-unit-model
 title: Physical unit model — durable mount point, policy split from structure
 status: active
 created: 2026-08-16
-updated: 2026-08-16
+updated: 2026-09-12
 worktree: null
 ---
 
@@ -846,6 +846,14 @@ the kit is in transit.
   premise: once units are universal (I1) and selling policy moves to parameters (I4),
   `SunbedGroup` stops being a booking fact and becomes the physical one — so binding to it is
   no longer over-scoping, it is binding to exactly the right object. Recorded in 019 too.
+
+- **2026-09-12 — Tracking moved onto the poll (track 019 wire v2).** The two firmware behaviours
+  recorded on 2026-08-17 (telemetry fires on a location change; a location counts as reported only
+  after a 2xx) are superseded: the device now reports the location it is running as `loc` in the
+  `x-sunbnb-telemetry` request header on EVERY poll, and the server records it on a throttle before
+  the assignment check. Self-registration happens on the poll too. The assigned-vs-applied gap the
+  fleet UI shows is unchanged in meaning and now converges within one poll. The telemetry POST is a
+  legacy escape hatch. Normative text: [[track:019]] §Wire contract → *Tracking rides the poll*.
 
 ## Links
 

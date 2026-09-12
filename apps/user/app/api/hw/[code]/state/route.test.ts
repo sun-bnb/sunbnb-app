@@ -23,6 +23,7 @@ import { wireStateFor, aggregateState } from './projection'
 import { normalizeCode } from '../hw-filter'
 import prisma from '@repo/data/PrismaCient'
 import { getPreference, getPreferenceCached } from '@repo/data/preferences'
+import { applyDeviceClaim } from '@repo/data/device-claim'
 
 const mockUnit = vi.mocked(prisma.sunbedGroup.findUnique)
 const mockDevice = vi.mocked(prisma.device.findUnique)
@@ -405,6 +406,85 @@ describe('binding', () => {
 })
 
 // ── State derivation ──────────────────────────────────────────────────────────
+
+// ── Tracking: the report header (wire v2) ─────────────────────────────────────
+
+describe('tracking', () => {
+  const mockWrite = vi.mocked(prisma.device.updateMany)
+  const REPORT = 'fw=0.1.0;rssi=-61;up=8812;polls=42;loc=1-1-1'
+
+  /** A row that was written a second ago with exactly what the header carries. */
+  function freshRow() {
+    return {
+      ...device([SEAT_A, SEAT_B]),
+      fw: '0.1.0', rssiDbm: -61, upSec: 8000, reportedLocation: '1-1-1', battMv: null,
+      lastSeenAt: new Date(Date.now() - 1000),
+    }
+  }
+
+  it('records the header report on the device row', async () => {
+    const res = await GET(makeRequest(CODE, { 'x-sunbnb-telemetry': REPORT }), makeParams())
+    expect(res.status).toBe(200)
+    const data = mockWrite.mock.calls[0]![0]!.data as Record<string, unknown>
+    expect(data).toMatchObject({ fw: '0.1.0', rssiDbm: -61, upSec: 8812, reportedLocation: '1-1-1' })
+    expect(data).not.toHaveProperty('polls')
+    expect(data.lastSeenAt).toBeInstanceOf(Date)
+    expect(mockWrite).toHaveBeenCalledWith(expect.objectContaining({ where: { code: CODE } }))
+  })
+
+  it('records an UNASSIGNED device before declining it — that is how it reaches the fleet list', async () => {
+    mockDevice.mockResolvedValue({
+      status: 'active', assignedSiteId: null, assignedParcel: null, assignedRow: null, assignedSeq: null,
+    } as never)
+    const res = await GET(makeRequest(CODE, { 'x-sunbnb-telemetry': REPORT }), makeParams())
+    expect(res.status).toBe(401)
+    expect(mockWrite).toHaveBeenCalled()
+  })
+
+  it('REGISTERS an unknown code through the partner claim, then declines it', async () => {
+    mockDevice.mockResolvedValue(null as never)
+    const res = await GET(
+      makeRequest('ZZZZZZ', { 'x-sunbnb-telemetry': REPORT, 'x-sunbnb-partner': 'P-K7M2X' }),
+      makeParams('ZZZZZZ'),
+    )
+    expect(res.status).toBe(401)
+    expect(vi.mocked(applyDeviceClaim)).toHaveBeenCalledWith('ZZZZZZ', 'P-K7M2X')
+    expect(mockWrite).toHaveBeenCalled()
+  })
+
+  it('does NOT write when the row is fresh and nothing moved (the throttle)', async () => {
+    mockDevice.mockResolvedValue(freshRow() as never)
+    const res = await GET(makeRequest(CODE, { 'x-sunbnb-telemetry': REPORT }), makeParams())
+    expect(res.status).toBe(200)
+    expect(mockWrite).not.toHaveBeenCalled()
+    // The claim costs a partner lookup, so it rides the same throttle.
+    expect(vi.mocked(applyDeviceClaim)).not.toHaveBeenCalled()
+  })
+
+  it('writes when a reported value moves — a new running location', async () => {
+    mockDevice.mockResolvedValue(freshRow() as never)
+    await GET(makeRequest(CODE, { 'x-sunbnb-telemetry': 'fw=0.1.0;rssi=-61;loc=2-1-1' }), makeParams())
+    expect(mockWrite).toHaveBeenCalled()
+  })
+
+  it('stamps lastSeenAt on a poll with NO header once the floor has passed', async () => {
+    mockDevice.mockResolvedValue({ ...freshRow(), lastSeenAt: new Date(Date.now() - 10 * 60 * 1000) } as never)
+    await GET(makeRequest(), makeParams())
+    const data = mockWrite.mock.calls[0]![0]!.data as Record<string, unknown>
+    expect(Object.keys(data)).toEqual(['lastSeenAt'])
+  })
+
+  it('a failed write never costs the device its poll', async () => {
+    mockWrite.mockRejectedValueOnce(new Error('db down'))
+    const res = await GET(makeRequest(CODE, { 'x-sunbnb-telemetry': REPORT }), makeParams())
+    expect(res.status).toBe(200)
+  })
+
+  it('a report header on filtered-out traffic is never recorded', async () => {
+    await GET(makeRequest(CODE, { 'user-agent': 'curl/8.4.0', 'x-sunbnb-telemetry': REPORT }), makeParams())
+    expect(mockWrite).not.toHaveBeenCalled()
+  })
+})
 
 describe('state derivation', () => {
   async function stateFor(rows: ReturnType<typeof reservation>[]): Promise<string> {

@@ -3,7 +3,7 @@ id: 025-device-power-modes
 title: Device power modes — server-selected cadence bands
 status: proposed
 created: 2026-09-11
-updated: 2026-09-11
+updated: 2026-09-12
 worktree: null
 ---
 
@@ -136,6 +136,11 @@ Inferring costs no new wire field: 1–15 s → continuous, 60 s+ → deep. But 
 *overlap* at 10–15 s and 60 s, and the overlap is where the interesting decisions live —
 "60 s, but stay associated because a change is expected" is not expressible as a number.
 Leaning toward an explicit field, with cadence still carried by `poll_after_sec`.
+**Direction settled 2026-09-12 (track 019 wire v2):** whichever it is, the mode reaches the device
+inside the hashed `stable` object of the state response — alongside `pollAfterSec`, `location` and
+`cmd` — and the device's side (battery, RSSI, uptime, running location) reaches the server as the
+`x-sunbnb-telemetry` header on the same poll. No new request in either direction; D3's battery
+input is already on the wire as `batt` (omitted until the ADC lands).
 
 **D2 — Is up to one interval of escape latency acceptable?** A sleeping device cannot be
 reached, so leaving deep sleep always waits for the next scheduled wake. "The venue got

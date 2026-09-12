@@ -3,7 +3,7 @@ id: 019-hw-api
 title: HW API — device state endpoint + telemetry
 status: proposed
 created: 2026-08-13
-updated: 2026-08-13
+updated: 2026-09-12
 worktree: null
 ---
 
@@ -14,8 +14,11 @@ backend, with **no new infrastructure**: no MQTT broker, no fleet worker, no sep
 The device is an ESP32-C6 that joins Wi-Fi and does exactly two HTTPS calls against this app:
 
 ```
-GET  /api/hw/{code}/state       → the seat state its LED bar renders
-POST /api/hw/{code}/telemetry   → battery / RSSI / uptime (fire-and-forget)
+GET  /api/hw/{code}/state       → the seat state its LED bar renders; carries the device's
+                                   self-report (battery / RSSI / uptime / running location)
+                                   as the `x-sunbnb-telemetry` request header — wire v2
+POST /api/hw/{code}/telemetry   → LEGACY escape hatch for a report that outgrows a header;
+                                   nothing calls it in normal operation
 ```
 
 Everything else about the device is hardware's problem. The end state for this track: a device
@@ -37,6 +40,20 @@ Device LED language: **green breathe = FREE · red pulse = RESERVED · off = OCC
 amber = STALE/UNAVAILABLE**.
 
 ## Resume here
+
+**▶ WIRE v2 — 2026-09-12: ONE request.** Tracking, assignment and identification all ride the
+state poll. **Uplink** is the `x-sunbnb-telemetry` request header (`fw=…;batt=…;rssi=…;up=…;
+polls=…;loc=…`), recorded by the shared screen step with a THROTTLED write, before the
+assignment check — so an unassigned device registers and appears in the fleet list from its
+first poll. **Downlink** is unchanged: `location`, `cmd` and `pollAfterSec` inside the hashed
+`stable` object. The telemetry POST is kept as an escape hatch and writes through the same
+recorder, unthrottled. Trigger: the firmware had stopped calling the POST ("to be folded into
+the poll"), so the fleet list showed *Silent · 25d ago* for a device polling every minute.
+Full definition: **§Wire contract → Tracking rides the poll**. Server: `apps/user/app/api/hw/
+[code]/device-report.ts` (+ `hw-filter.ts` `screenDeviceRequest`), 111 HW tests green.
+Firmware half applied in `../sunbnb-hw` (`api.h`/`api.c`/`main.c`, builds clean, UNCOMMITTED,
+not flashed) — the hardware project should read this contract and take or redo that diff.
+
 
 **P1 committed** (`cbb251b`, `42a6b18`); **P1.5 + Q9 filter swap committed** (`b006d21`, docs
 `cccd275`); **P2 built 2026-08-16 (uncommitted).**
@@ -172,7 +189,7 @@ from across the internet").
 
 ## Wire contract (P0 — proposed, NOT frozen; freeze right after bring-up)
 
-**`GET /api/hw/{code}/state`** · `User-Agent: <configured sensor value>` · `If-None-Match`
+**`GET /api/hw/{code}/state`** · `User-Agent: <configured sensor value>` · `If-None-Match` · `x-sunbnb-partner: <partner code>` · `x-sunbnb-telemetry: <self-report, wire v2 — see *Tracking rides the poll* below>`
 
 ```jsonc
 {
@@ -231,8 +248,40 @@ anyway); it is kept only because a uniform, opaque reject is the tidy default an
 already does it. The status is `401` today; `403`/`404` would be equally fine for a filter — not a
 frozen wire fact.
 
-**`POST /api/hw/{code}/telemetry`** — `{ fw, battMv, rssiDbm, upSec, polls, tempC? }` → `204`.
-Last-values only (no time series). Never fails the device's poll loop. Same client filter.
+**Tracking rides the poll (wire v2, 2026-09-12).** The device's self-report travels on the
+state GET as ONE request header, alongside `User-Agent`, `If-None-Match` and `x-sunbnb-partner`:
+
+```
+x-sunbnb-telemetry: fw=0.1.0;rssi=-61;up=8812;polls=42;loc=3-1-2;batt=3312
+```
+
+- `key=value` pairs, `;`-separated, whitespace around pairs tolerated. **Every key optional**;
+  send it on **every poll** (the server throttles, the device does not).
+- Keys: `fw` (≤64 chars) · `batt` (mV, integer) · `rssi` (dBm, integer, may be negative) · `up`
+  (seconds since boot, integer) · `polls` (integer, accepted and dropped) · `loc` (the location
+  the device is RUNNING, ≤64 chars — echo of the last `location` it adopted). **Omit a field you
+  do not know** rather than sending `0` or an empty value: the server's writer OMITS rather than
+  nulls, so an absent field leaves the last known value alone, and `0 mV` would overwrite a real
+  reading. An unknown key is ignored, so firmware may add one without a server change.
+- **Recorded before any decline.** The screen step reads the `Device` row once, records the report,
+  and only then checks the assignment — so a device with no location is still tracked, and an
+  UNKNOWN code with a valid `x-sunbnb-partner` claim is REGISTERED (self-registration moved here
+  from the POST). Filtered-out traffic (bad `User-Agent`) is never recorded. A failed write never
+  costs the device its poll: the response is whatever it would have been.
+- **Throttled write.** The row is written when `fw` or `loc` changed, battery moved ≥50 mV, RSSI
+  moved ≥6 dB, `up` DROPPED (reboot signal), or `lastSeenAt` is older than 5 min; otherwise the
+  poll touches nothing beyond the read it already makes. The partner claim (a partner lookup) runs
+  on the same throttle. This is what keeps track 025's 1–15 s continuous cadence affordable.
+- **Both directions declarative.** The device says what it runs on every poll; the server says what
+  it should run on every 200. The fleet UI's assigned-vs-applied gap needs no ack protocol — the
+  old "reported only once the POST returned 2xx" firmware rule is gone.
+- `polls` and `tempC`-class extras: accepted and dropped, no column earns its keep yet.
+
+**`POST /api/hw/{code}/telemetry`** — LEGACY escape hatch, `{ fw, battMv, rssiDbm, upSec, polls,
+tempC?, loc? }` → `204`. Same client filter, same recorder as the header, but UNTHROTTLED (a call
+here is rare and explicit). Not called by firmware in normal operation; kept for a report that
+outgrows a header (a boot diagnostic dump). Never fails the device's poll loop: a malformed or
+absent body, and a database that is down, are all `204`.
 
 ## Identity & client filter (code decided 2026-08-13; credential model → soft filter 2026-08-16, Q9)
 
@@ -694,6 +743,27 @@ backend, and both drag in consumer-surface design that shouldn't gate the hardwa
   (`screenDeviceRequest`, renamed from `hw-auth.ts`): `User-Agent` CONTAINS `HW_CLIENT_UA`, unset
   fails closed, `HW_TOKEN` deleted. Revisit only if a device ever gains a consequential write
   path (Q5).
+
+- **2026-09-12 — WIRE v2: tracking folded into the state poll; one request carries everything.**
+  Found via the partner fleet list on test: Brisa Marina's `QWGGVX` read *Silent · 25d ago* while
+  the device had been polling all day. The firmware had dropped the telemetry POST ("being folded
+  into the state poll", `../sunbnb-hw` `bdc7ff9` recorded it as an open decision), and `lastSeenAt`
+  was only ever written by that POST. Decision (founder, on the argument that a second request on
+  a battery-constrained device is a request that gets dropped, and that on an open connection it
+  costs ~0.0013 mAh either way — the cost was never energy, it was two code paths): the report
+  rides the poll as the `x-sunbnb-telemetry` request header; assignment (`location`) and
+  identification (`cmd`) already rode the response and stay there; the POST is kept as an
+  unthrottled escape hatch. Server: new `device-report.ts` (parser, `reportIsDue` throttle,
+  `recordDeviceReport`), `screenDeviceRequest` does ONE `Device` read for assignment + last
+  values and records before the assignment check (so unassigned devices register on the poll);
+  the telemetry route screens with `track: false` and writes through the same recorder with
+  `force`. Throttle: `fw`/`loc` change, ≥50 mV, ≥6 dB, uptime drop, or 5-min `lastSeenAt`
+  floor — bounds writes to roughly what the periodic POST would have cost even at track 025's
+  1 s cadence. HW suite 111 green (21 report + 19 telemetry + 71 state), user app 690 green, tsc
+  + lint clean. Firmware half applied in the sibling repo (uncommitted, builds clean): `api_poll_
+  state(const telemetry_t *)` sets the header per request, `main.c` builds the report per poll and
+  marks the location reported on any `ok` poll. `batt` is omitted until the ADC lands. Track 025
+  D1 gains a settled direction: whatever the mode field is, it rides the response inside `stable`.
 
 ## Links
 

@@ -2,7 +2,10 @@
  * HW API — shared device request filter (track 019, Q9).
  *
  * ONE gate for every `/api/hw/{code}/*` endpoint, so its behaviour cannot drift
- * between the state poll and the telemetry post.
+ * between the state poll and the legacy telemetry post. It also RECORDS the
+ * device's self-report (`./device-report`), which rides the poll as a header —
+ * so a device is tracked by the one request it always makes, and an unassigned
+ * one is registered before it is declined.
  *
  * **This is a soft client filter, NOT authentication — deliberately.** There is no
  * secret anywhere in this surface: the request carries a `User-Agent` naming the
@@ -35,6 +38,7 @@
 import { NextRequest } from 'next/server'
 import prisma from '@repo/data/PrismaCient'
 import { normalizeDeviceCode } from '@repo/data/device-code'
+import { TELEMETRY_HEADER, parseTelemetryHeader, recordDeviceReport } from './device-report'
 
 /**
  * Uniform rejection. Every decline — failed filter, unknown code, malformed code —
@@ -112,28 +116,34 @@ export interface DeviceAssignment {
 }
 
 /**
- * The device's ASSIGNED LOCATION (track 021 P5) — replaces the stored seat list.
- * A device answers for whatever unit occupies its location today, so a parcel
- * rebuilt at the same address needs no re-assignment.
- *
- * Returns null for retired, unknown, or not-yet-assigned devices: each has
- * nothing to say about any seat, and an empty aggregate would render as FREE.
+ * ONE row read per request. The assignment (what to serve) and the last values
+ * (what the device's report is compared against before it earns a write) come
+ * from the same `findUnique`, so tracking costs no extra query on the poll.
  */
-async function assignmentForCode(code: string): Promise<DeviceAssignment | null> {
-  const device = await prisma.device.findUnique({
-    where: { code },
-    select: {
-      status: true,
-      assignedSiteId: true,
-      assignedParcel: true,
-      assignedRow: true,
-      assignedSeq: true,
-      pendingCmd: true,
-      pendingCmdAt: true,
-      reverseSegments: true,
-    },
-  })
+const DEVICE_SELECT = {
+  status: true,
+  assignedSiteId: true,
+  assignedParcel: true,
+  assignedRow: true,
+  assignedSeq: true,
+  pendingCmd: true,
+  pendingCmdAt: true,
+  reverseSegments: true,
+  fw: true,
+  battMv: true,
+  rssiDbm: true,
+  upSec: true,
+  reportedLocation: true,
+  lastSeenAt: true,
+} as const
 
+type DeviceRow = NonNullable<Awaited<ReturnType<typeof readDevice>>>
+
+function readDevice(code: string) {
+  return prisma.device.findUnique({ where: { code }, select: DEVICE_SELECT })
+}
+
+function assignmentFromRow(device: DeviceRow | null): DeviceAssignment | null {
   if (!device || device.status === RETIRED) return null
 
   const { assignedSiteId, assignedParcel, assignedRow, assignedSeq } = device
@@ -200,6 +210,12 @@ export interface ScreenOptions {
    * it can never appear in the fleet list to be assigned from (track 021 P5).
    */
   requireBinding?: boolean
+  /**
+   * Record the report header on this request (default TRUE). The legacy
+   * telemetry POST passes false and records its JSON body itself, so a request
+   * is never written twice.
+   */
+  track?: boolean
 }
 
 /**
@@ -228,20 +244,34 @@ export async function screenDeviceRequest(
 
   const code = normalizeCode(rawCode)
 
-  // Telemetry stops here: it needs no binding, and it must NOT reveal whether a
-  // code is known. It always answers 204 and merely persists more when it can,
-  // so an unassigned device can announce itself without the endpoint becoming
+  let device: DeviceRow | null
+  try {
+    device = await readDevice(code)
+  } catch {
+    // The row is unreadable — that is not the caller's fault and must not read
+    // as "unknown device": 503 → amber, never a confident answer.
+    return { ok: false, response: unavailable() }
+  }
+
+  // TRACKING, before any decline. The report rides every poll as a header
+  // (`../device-report`), and it is recorded for a device that is about to be
+  // declined for having no assignment — that is precisely the device that must
+  // appear in the fleet list to be assigned from. Self-registration is the
+  // `device === null` case: the partner claim creates the row. Best-effort and
+  // swallowing; the poll never pays for a failed write.
+  if (options.track !== false) {
+    await recordDeviceReport(code, parseTelemetryHeader(request.headers.get(TELEMETRY_HEADER)), {
+      partnerClaim: request.headers.get(PARTNER_HEADER),
+      last: device,
+    })
+  }
+
+  // The legacy telemetry POST stops here: it needs no binding, and it must NOT
+  // reveal whether a code is known — it always answers 204, so it never becomes
   // an existence oracle for codes printed on public stickers.
   if (options.requireBinding === false) return { ok: true, code, assignment: null, location: null }
 
-  let assignment: DeviceAssignment | null
-  try {
-    assignment = await assignmentForCode(code)
-  } catch {
-    // The assignment is unreadable — that is not the caller's fault and must not
-    // read as "unknown device": 503 → amber, never a confident answer.
-    return { ok: false, response: unavailable() }
-  }
+  const assignment = assignmentFromRow(device)
   if (!assignment) return { ok: false, response: unauthorized() }
 
   return { ok: true, code, assignment, location: formatAssignment(assignment) }

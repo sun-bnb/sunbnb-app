@@ -17,6 +17,7 @@ import { NextRequest } from 'next/server'
 
 import { POST } from './route'
 import prisma from '@repo/data/PrismaCient'
+import { applyDeviceClaim } from '@repo/data/device-claim'
 
 const mockDevice = vi.mocked(prisma.device.findUnique)
 
@@ -212,6 +213,26 @@ describe('accept', () => {
       const data = vi.mocked(prisma.device.updateMany).mock.calls[0]![0]!.data as Record<string, unknown>
       expect(data).not.toHaveProperty('polls')
       expect(data).not.toHaveProperty('tempC')
+    })
+
+
+    it('writes UNTHROTTLED — a call here is rare and explicit', async () => {
+      // The poll's header recorder skips a fresh, unchanged row; this legacy
+      // path is the escape hatch and always lands.
+      mockDevice.mockResolvedValue({
+        fw: '1.4.2', battMv: 3980, rssiDbm: -67, upSec: 1, reportedLocation: '1-1-1',
+        lastSeenAt: new Date(),
+      } as never)
+      await POST(
+        makeRequest(CODE, { body: JSON.stringify({ fw: '1.4.2', battMv: 3980, rssiDbm: -67, upSec: 2, loc: '1-1-1' }) }),
+        makeParams(),
+      )
+      expect(vi.mocked(prisma.device.updateMany)).toHaveBeenCalledTimes(1)
+    })
+
+    it('applies the partner claim from the header', async () => {
+      await POST(makeRequest(CODE, { headers: { 'x-sunbnb-partner': 'P-K7M2X' } }), makeParams())
+      expect(vi.mocked(applyDeviceClaim)).toHaveBeenCalledWith(CODE, 'P-K7M2X')
     })
 
     it('a database failure still answers 204 (telemetry never fails the poll loop)', async () => {
