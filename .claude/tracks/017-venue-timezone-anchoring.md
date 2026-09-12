@@ -3,7 +3,7 @@ id: 017-venue-timezone-anchoring
 title: Venue timezone anchoring — one civil-day convention across the platform
 status: done
 created: 2026-08-11
-updated: 2026-08-13
+updated: 2026-09-12
 worktree: null
 ---
 
@@ -45,17 +45,17 @@ in any query window, write path, or money boundary.
   - **Q3** — whether to restate P1's past short-by-a-day settlements (fix-forward is fine; decide
     at accounting time).
   - **Q5** — resolved by P7's auto-derive (the stored value IS the derivation; no silent guess).
-  - **Deferred: conflict-guard release predicate** (`packages/data/reservations.ts`
-    `findConflictingReservation`) still uses a SERVER-tz `endOfToday` — benign east of UTC,
-    inverted west of UTC. Venue-anchor before any non-EU launch (comment in place).
+  - **✅ CLOSED 2026-09-12: conflict-guard release predicate** (`packages/data/reservations.ts`
+    `findConflictingReservation`) is now venue-anchored via a new `venueEndOfToday(tx, siteId)`.
+    It was NOT benign east of UTC as this entry claimed — see the 2026-09-12 log entry.
   - **Deferred: existing linked restaurants** — P7's inheritance is create-time only; a backfill
     could derive their tz from the linked site's coords (Restaurant has no geo columns).
 - **Still open:** **Q3** (whether past short-by-a-day settlements from P1 get restated) — unrelated
   to P3, decide when settling accounts. **Q5** (surface a "tz was guessed" signal) — cheap, tie to P7.
-- **Deferred functional fix (documented, not lost):** the conflict-guard release predicate
-  `findConflictingReservation` in `packages/data/src/reservations.ts` still uses a SERVER-tz
-  `endOfToday` — benign east of UTC, inverted west of UTC. Venue-anchor it (thread site tz →
-  `siteDayBounds(siteTz).end`) before any non-EU launch. Comment corrected in place.
+- **✅ Deferred functional fix CLOSED 2026-09-12:** `findConflictingReservation` now resolves the
+  venue's end-of-today from the site's own timezone. The deferral rested on a wrong premise —
+  "benign east of UTC" holds only while the venue and the server are on the same civil DATE, and
+  the EU fleet crosses that line nightly. See the log entry.
 - **Context needed:**
   - This file.
   - `packages/data/src/site-day.ts` — the canonical primitive (read it first; it is correct,
@@ -426,6 +426,33 @@ in any query window, write path, or money boundary.
 - **Q5 — Is a "timezone was guessed" signal worth surfacing** in the partner UI when a site has
   no stored `timeZone` and resolution fell through to Madrid? Cheap, and would have made this
   whole class visible earlier.
+
+**2026-09-12 — the deferred conflict-guard predicate is fixed, and the reason it was deferred was
+wrong.** `findConflictingReservation` compared a venue-anchored `to` against the SERVER's
+`endOfToday`. This track twice recorded that as benign east of UTC and a non-EU-launch concern.
+It is neither. The comparison only agrees while the venue and the server sit on the same civil
+date; once the venue's date rolls and the server's has not, venue-today's end is a LATER instant
+than server-today's, `to <= endOfToday` goes false, and **a departed guest's lounger cannot be
+re-let**. For a Helsinki venue on the Frankfurt deployment that is the hour before midnight, every
+night — an EU-only fleet, today.
+
+Found by the partner integration suite, which fails only inside that window; the user ran it at
+23:08 local. Three of the five failures were genuinely runner-anchored test bugs (a UTC-derived
+"tomorrow" that named the venue's today, and two runner-midnight assertions) and were fixed as
+such. The other two were this defect.
+
+Fix: `venueEndOfToday(tx, siteId)` resolves the bound through `siteDayBounds` from the site's own
+timezone, one primary-key lookup inside the transaction the guard already runs. It is resolved
+inside the guard rather than threaded in by callers because every caller has a `siteId` and none
+has a timezone — asking each to parse `locationLat` itself is the duplication that
+`@repo/data/unit-address` was extracted to end.
+
+Regression cover is deliberately clock-independent: two sites at UTC+14 and UTC-11, which are
+never on the same civil date, so whatever hour the suite runs at one of them disagrees with the
+server. Both fail against the old code and pass against the new; verified by restoring the old
+line and watching three tests go red. The existing stay-over tests were venue-anchored at the same
+time — they had been asserting against the runner's midnight.
+
 
 ## Links
 

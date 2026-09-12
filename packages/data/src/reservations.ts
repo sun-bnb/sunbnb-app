@@ -20,7 +20,8 @@
  *     (i.e. BLOCKING_STATUSES from reservation-status.ts). PAYMENT_FAILED,
  *     CANCELED, REFUNDED are non-blocking by default — those beds are free again.
  *   - Operational status frees a bed ONLY when the booking's stay is OVER, i.e. it
- *     has no remaining reserved days (`to` <= end of today). So a no-show/departed
+ *     has no remaining reserved days (`to` <= end of the VENUE's today — resolved
+ *     from the site's own timezone, never the server's clock). So a no-show/departed
  *     single-day or last-day booking frees its bed (rebookable); a multiday booking
  *     departed mid-stay keeps its future days (no double-sell). A reservation with
  *     future days is reused only by an explicit release (status -> canceled).
@@ -46,6 +47,7 @@ import {
   OP_RETURNED,
   RENTAL_CANCELED,
 } from './reservation-status'
+import { siteDayBounds } from './site-day'
 
 // ─── Shared private type ─────────────────────────────────────────────────────
 
@@ -99,6 +101,34 @@ export type ConflictGuardResult =
  * Must be called via `tx`, not the outer `prisma` client, so it operates on
  * the locked, consistent snapshot.
  */
+/**
+ * The venue-local end of today for a site, as a UTC instant.
+ *
+ * One primary-key lookup inside the caller's transaction. It is deliberately
+ * resolved here rather than threaded in by callers: every caller already has a
+ * `siteId` and none of them has a timezone, so asking them for one would put the
+ * same `parseFloat(locationLat)` dance in each and let them disagree — which is
+ * the class of bug `@repo/data/unit-address` was extracted to stop.
+ *
+ * A site that cannot be read falls back to the platform default zone inside
+ * `siteDayBounds`, which is the same answer the old server-clock code gave for a
+ * Madrid-time deployment. No caller can turn this into a hard failure.
+ */
+async function venueEndOfToday(tx: Tx, siteId: string, now: Date = new Date()): Promise<Date> {
+  const site = await tx.site.findUnique({
+    where: { id: siteId },
+    select: { timeZone: true, locationLat: true, locationLng: true },
+  })
+  return siteDayBounds(
+    {
+      timeZone: site?.timeZone ?? null,
+      latitude: site?.locationLat ? parseFloat(site.locationLat) : undefined,
+      longitude: site?.locationLng ? parseFloat(site.locationLng) : undefined,
+    },
+    now,
+  ).end
+}
+
 async function findConflictingReservation(
   tx: Tx,
   params: {
@@ -118,17 +148,23 @@ async function findConflictingReservation(
   // rebookable; a multiday booking departed mid-stay keeps its future days (no
   // double-sell).
   //
-  // `to` is now VENUE-anchored across all write paths (track 017 P3): manage /
-  // calendar store the venue end-of-last-day; the consumer stores the venue
-  // midnight of the exclusive checkout day. This `endOfToday` is still the
-  // SERVER's end-of-today — a deliberate, EU-benign approximation: for a venue
-  // east of UTC the server boundary is LATER than the venue's, so a departed
-  // bed still releases correctly. It is INVERTED west of UTC (server end-of-today
-  // is earlier → a departed bed would not release until the next server day).
-  // Venue-anchor this (thread the site tz through `params` and use
-  // `siteDayBounds(siteTz).end`) before any non-EU launch. See track 017.
-  const endOfToday = new Date()
-  endOfToday.setHours(23, 59, 59, 999)
+  // "End of today" is the VENUE's, resolved from the site's own timezone — it
+  // must be, because `to` is venue-anchored on every write path (track 017 P3):
+  // manage and calendar store the venue end-of-last-day, the consumer stores the
+  // venue midnight of the exclusive checkout day. Comparing those against the
+  // SERVER's midnight is comparing two different clocks, and it was wrong here
+  // until 2026-09-12.
+  //
+  // The failure was not theoretical and not only a non-EU problem, which is what
+  // the old comment here claimed. Whenever the venue's civil date has rolled and
+  // the server's has not, venue-today's end is a LATER instant than server-
+  // today's, `to <= endOfToday` goes false, and a departed same-day booking stops
+  // releasing its bed — the staff cannot re-let a lounger the guest has left.
+  // For a Helsinki venue on a Frankfurt deployment that is the hour before
+  // midnight, every night; west of the server it lasts until the server's own
+  // midnight. Found by the partner integration suite, which fails only when run
+  // inside that window.
+  const endOfToday = await venueEndOfToday(tx, params.siteId)
   return tx.reservation.findFirst({
     where: {
       siteId: params.siteId,

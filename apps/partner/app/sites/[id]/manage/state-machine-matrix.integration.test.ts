@@ -147,8 +147,24 @@ const activeTillSum = async (reservationId: string) => {
   return agg._sum.amount ?? 0
 }
 
+/**
+ * "Tomorrow" AT THE VENUE, as a YYYY-MM-DD `until` string.
+ *
+ * This has to be the site's civil day, not a UTC one. `until` is resolved by
+ * `resolveStayBounds` → `siteDayBounds` against the SITE's timezone, and the
+ * fixture site sits in Europe/Helsinki (from its hardcoded coordinates). A
+ * UTC-derived "now + 24 h" therefore names the venue's TODAY, not its tomorrow,
+ * for every instant after the venue's midnight but before UTC's — which on a
+ * CEST runner is the hour between 23:00 and midnight, every night. The stay
+ * then lands on a single civil day, `hasFutureDays` is false, and a depart that
+ * should cycle to `expected` terminates at `departed` instead.
+ *
+ * Noon UTC is used as the anchor instant so adding a day cannot skip or repeat
+ * one across any DST transition.
+ */
 const tomorrowStr = () => {
-  const d = new Date(Date.now() + 24 * 3600_000)
+  const d = new Date(`${siteDayKey(siteTz())}T12:00:00.000Z`)
+  d.setUTCDate(d.getUTCDate() + 1)
   return d.toISOString().slice(0, 10)
 }
 

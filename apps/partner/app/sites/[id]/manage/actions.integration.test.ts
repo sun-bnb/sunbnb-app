@@ -2900,9 +2900,12 @@ describe('compBeds — grouped comp', () => {
     expect(res.guestName).toBe('VIP Guest')
     expect(res.items).toHaveLength(3)
     expect(res.items.map(i => i.id).sort()).toEqual([itemA.id, itemB.id, itemC.id].sort())
-    // Today-only window (not sticky)
-    const endOfToday = new Date(new Date().setHours(23, 59, 59, 999))
-    expect(res.to.getTime()).toBeLessThanOrEqual(endOfToday.getTime() + 1000)
+    // Today-only window (not sticky). The bound is the VENUE's end-of-day, which
+    // is what compBeds writes — a runner-local midnight is a different instant
+    // whenever the site's civil day has rolled and the runner's has not (the
+    // Helsinki fixture against a CEST runner, between 23:00 and midnight).
+    const { end: endOfVenueToday } = fixtureDay(site)
+    expect(res.to.getTime()).toBeLessThanOrEqual(endOfVenueToday.getTime() + 1000)
   })
 
   it('uncomp ONE seat (applyToGroup=false) leaves the other 2 still comped', async () => {

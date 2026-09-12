@@ -28,6 +28,7 @@ import {
   createTestRentalBooking,
   resetCounter,
 } from './test/fixtures'
+import { siteDayBounds } from './site-day'
 import {
   reserveWithConflictGuard,
   moveReservationWithConflictGuard,
@@ -46,6 +47,27 @@ import {
   RENTAL_COMPLETE,
   OP_RESERVED,
 } from './reservation-status'
+
+type SiteRow = { timeZone: string | null; locationLat: string | null; locationLng: string | null }
+
+/**
+ * The VENUE's civil day — the only clock the guard's stay-over rule may be
+ * asserted against.
+ *
+ * Every write path stores `to` venue-anchored (track 017 P3), and since
+ * 2026-09-12 `findConflictingReservation` compares against the venue's
+ * end-of-today too. A test that anchors its fixture to the RUNNER's midnight is
+ * therefore testing a different clock, and agrees with the guard only while the
+ * two happen to sit on the same civil date. The fixture site is in
+ * Europe/Helsinki, so on any runner west of it those dates diverge for the last
+ * hours of the runner's day.
+ */
+const venueDay = (site: SiteRow) =>
+  siteDayBounds({
+    timeZone: site.timeZone,
+    latitude: site.locationLat ? parseFloat(site.locationLat) : undefined,
+    longitude: site.locationLng ? parseFloat(site.locationLng) : undefined,
+  })
 
 beforeEach(async () => {
   await cleanDatabase()
@@ -274,9 +296,9 @@ describe('reserveWithConflictGuard — non-blocking statuses', () => {
   // matching, the stay-over exception fires, and the test fails claiming the guard
   // is broken when it is behaving correctly. (Was '2026-08-01'..'2026-08-07'; began
   // failing 2026-08-08.)
-  const futureStay = () => {
-    const from = new Date(new Date().setHours(0, 0, 0, 0))
-    const to = new Date(new Date().setHours(23, 59, 59, 999))
+  const futureStay = (site: SiteRow) => {
+    const { start: from, end } = venueDay(site)
+    const to = new Date(end)
     to.setDate(to.getDate() + 6)
     return { from, to }
   }
@@ -286,7 +308,7 @@ describe('reserveWithConflictGuard — non-blocking statuses', () => {
     const site = await createTestSite(user.id)
     const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
 
-    const { from, to } = futureStay()
+    const { from, to } = futureStay(site)
 
     await createTestReservation(user.id, site.id, [item.id], {
       from,
@@ -314,7 +336,7 @@ describe('reserveWithConflictGuard — non-blocking statuses', () => {
     const site = await createTestSite(user.id)
     const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
 
-    const { from, to } = futureStay()
+    const { from, to } = futureStay(site)
 
     await createTestReservation(user.id, site.id, [item.id], {
       from,
@@ -345,8 +367,7 @@ describe('reserveWithConflictGuard — non-blocking statuses', () => {
     const site = await createTestSite(user.id)
     const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
 
-    const from = new Date(new Date().setHours(0, 0, 0, 0))
-    const to = new Date(new Date().setHours(23, 59, 59, 999))
+    const { start: from, end: to } = venueDay(site)
 
     await createTestReservation(user.id, site.id, [item.id], {
       from,
@@ -367,6 +388,88 @@ describe('reserveWithConflictGuard — non-blocking statuses', () => {
     })
 
     expect(result.outcome).toBe('created')
+  })
+
+  /**
+   * The regression this pair exists for (fixed 2026-09-12).
+   *
+   * The stay-over rule used to compare a venue-anchored `to` against the
+   * SERVER's end-of-today. Whenever a venue's civil date had rolled and the
+   * server's had not (or the reverse), the comparison silently stopped matching
+   * and a departed guest's lounger could not be re-let — staff standing at an
+   * empty bed, told it is occupied.
+   *
+   * These two are deliberately clock-independent: UTC+14 and UTC-11 are 25 hours
+   * apart, so they are NEVER on the same civil date, and any server sits between
+   * them. Whatever hour the suite runs at, at least one of the two disagrees with
+   * the server's day — which is what made the old code fail here and what makes
+   * this a real guard rather than a test that only passes at lunchtime.
+   */
+  for (const [label, timeZone] of [
+    ['far EAST of any server', 'Pacific/Kiritimati'],
+    ['far WEST of any server', 'Pacific/Midway'],
+  ] as const) {
+    it(`DEPARTED same-day frees the bed for a venue ${label} (venue clock, not the server's)`, async () => {
+      const user = await createTestUser()
+      const site = await createTestSite(user.id, { timeZone })
+      const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
+
+      // Anchored to the VENUE's own day, exactly as every write path stores it.
+      const { start: from, end: to } = venueDay(site)
+
+      await createTestReservation(user.id, site.id, [item.id], {
+        from,
+        to,
+        status: RESERVATION_COMPLETE,
+        operationalStatus: OP_DEPARTED,
+      })
+
+      const result = await reserveWithConflictGuard({
+        itemIds: [item.id],
+        siteId: site.id,
+        userId: user.id,
+        from,
+        to,
+        type: 'days',
+        status: RESERVATION_PAID_IN_CASH,
+        operationalStatus: OP_WALKED_IN,
+      })
+
+      expect(result.outcome).toBe('created')
+    })
+  }
+
+  it('a departed booking with days left still blocks in the venue that is a day AHEAD of the server', async () => {
+    // The other half of the rule: venue-anchoring must not turn into "always
+    // free". A multiday stay departed on day 1 keeps its remaining days, and
+    // that has to hold in the same timezone where the old bug hid.
+    const user = await createTestUser()
+    const site = await createTestSite(user.id, { timeZone: 'Pacific/Kiritimati' })
+    const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
+
+    const { start: from, end } = venueDay(site)
+    const to = new Date(end)
+    to.setDate(to.getDate() + 2)
+
+    await createTestReservation(user.id, site.id, [item.id], {
+      from,
+      to,
+      status: RESERVATION_COMPLETE,
+      operationalStatus: OP_DEPARTED,
+    })
+
+    const result = await reserveWithConflictGuard({
+      itemIds: [item.id],
+      siteId: site.id,
+      userId: user.id,
+      from,
+      to,
+      type: 'days',
+      status: RESERVATION_PAID_IN_CASH,
+      operationalStatus: OP_WALKED_IN,
+    })
+
+    expect(result.outcome).toBe('conflict')
   })
 })
 
