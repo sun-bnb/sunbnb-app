@@ -18,7 +18,7 @@ npm run test:integration  # integration tests (223 tests across 12 files, real s
 
 The test suite includes four meta-guards that enforce architecture invariants:
 
-- **`app/test/auth-matrix.test.ts`** (676 tests) — Drives every action in the gated-action registry (`app/test/gated-actions.ts`) through all auth scenarios (no session, wrong owner, token-only, sudo). The single source of truth for "which actions exist and which gates they must respect."
+- **`app/test/auth-matrix.test.ts`** (718 tests) — Drives every action in the gated-action registry (`app/test/gated-actions.ts`) through all auth scenarios (no session, wrong owner, token-only, sudo). The single source of truth for "which actions exist and which gates they must respect."
 - **`app/test/coverage-contract.test.ts`** (4 tests) — Fails if the gated-action registry omits an exported server action that has an auth gate in its source. Prevents new actions from silently skipping the matrix.
 - **`app/test/mock-contract.test.ts`** (17 tests) — Verifies that the `@repo/data` mock modules expose every export from the real source packages. Prevents silent mock drift (new real export never added to mock → tests silently skip code paths).
 - **`app/test/no-inline-money.test.ts`** (2 tests) — Rejects hardcoded monetary literals (`0.XX`, `XX.00`) in server-action source files; enforces use of DB-fetched prices.
@@ -65,7 +65,7 @@ Mock modules (`__mocks__/@repo/data/`): `PrismaCient.ts`, `password-reset.ts`, `
 | `app/api/auth/end-impersonation/route.test.ts` | impersonation end | 4 |
 | `app/api/onboarding-status/route.test.ts` | Mollie onboarding status sync and caching | 7 |
 | `app/api/reservations/[siteId]/route.test.ts` | ownership, date/month queries, HTTP status codes | 7 |
-| `app/test/auth-matrix.test.ts` | auth gate matrix over all gated actions | 676 |
+| `app/test/auth-matrix.test.ts` | auth gate matrix over all gated actions | 718 |
 | `app/test/coverage-contract.test.ts` | gated-action registry completeness | 4 |
 | `app/test/mock-contract.test.ts` | mock module superset of real exports | 17 |
 | `app/test/no-inline-money.test.ts` | no hardcoded monetary literals in server actions | 2 |

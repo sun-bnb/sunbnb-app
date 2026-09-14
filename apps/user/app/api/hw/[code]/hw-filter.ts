@@ -129,6 +129,8 @@ const DEVICE_SELECT = {
   pendingCmd: true,
   pendingCmdAt: true,
   reverseSegments: true,
+  powerMode: true,
+  pollIntervalSec: true,
   fw: true,
   battMv: true,
   rssiDbm: true,
@@ -196,9 +198,38 @@ export function formatAssignment(a: DeviceAssignment): string {
  */
 export { unitAddressWhere, SEGMENT_SEATS } from '@repo/data/unit-address'
 
+/**
+ * This device's own power policy, or null when it inherits the platform pair.
+ *
+ * A SIBLING of the assignment rather than a field on it: the assignment answers
+ * "where is this device mounted", and `cmd`/`reverseSegments` sit there because
+ * both are facts about that mount. A power policy is orthogonal to the mount —
+ * and it is the slot a future per-site policy feeds too (track 025).
+ *
+ * Normalised to the PAIR here and nothing more: the columns are carried through
+ * only when both are set, because half an override is not one. Whether the mode
+ * is legal and the cadence in band is judged by `resolveDevicePolicyForDevice`,
+ * so that logic stays pure and testable without a database.
+ */
+export interface DevicePowerOverride {
+  mode: string
+  intervalSec: number
+}
+
 export type DeviceRequest =
-  | { ok: true; code: string; assignment: DeviceAssignment | null; location: string | null }
+  | {
+      ok: true
+      code: string
+      assignment: DeviceAssignment | null
+      location: string | null
+      powerOverride: DevicePowerOverride | null
+    }
   | { ok: false; response: Response }
+
+function powerOverrideFromRow(device: DeviceRow | null): DevicePowerOverride | null {
+  if (!device?.powerMode || device.pollIntervalSec == null) return null
+  return { mode: device.powerMode, intervalSec: device.pollIntervalSec }
+}
 
 export interface ScreenOptions {
   /**
@@ -269,10 +300,18 @@ export async function screenDeviceRequest(
   // The legacy telemetry POST stops here: it needs no binding, and it must NOT
   // reveal whether a code is known — it always answers 204, so it never becomes
   // an existence oracle for codes printed on public stickers.
-  if (options.requireBinding === false) return { ok: true, code, assignment: null, location: null }
+  if (options.requireBinding === false) {
+    return { ok: true, code, assignment: null, location: null, powerOverride: null }
+  }
 
   const assignment = assignmentFromRow(device)
   if (!assignment) return { ok: false, response: unauthorized() }
 
-  return { ok: true, code, assignment, location: formatAssignment(assignment) }
+  return {
+    ok: true,
+    code,
+    assignment,
+    location: formatAssignment(assignment),
+    powerOverride: powerOverrideFromRow(device),
+  }
 }

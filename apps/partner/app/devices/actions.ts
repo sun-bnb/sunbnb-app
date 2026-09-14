@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { unitAddressWhere, SEGMENT_SEATS } from '@repo/data/unit-address'
+import { validateDevicePolicy } from '@repo/data/device-power'
 
 /**
  * Device assignment (track 021 P5).
@@ -142,6 +143,58 @@ export async function setDeviceSegmentOrder(deviceId: string, reversed: boolean)
   await prisma.device.update({
     where: { id: deviceId },
     data: { reverseSegments: reversed, pendingCmd: 'identify', pendingCmdAt: new Date() },
+  })
+  revalidatePath('/devices')
+  return { status: 'ok' as const }
+}
+
+/**
+ * The device's own power policy (track 025), overriding the platform default an
+ * admin sets in `/preferences`.
+ *
+ * A PAIR, always written together: the mode decides which cadences physically
+ * exist, so an interval only means anything inside one. Half an override would
+ * have to be resolved by clamping — a device running a number nobody chose — so
+ * the pair is validated by the shared `validateDevicePolicy` (the same function
+ * the admin writer calls, so a refusal reads the same on both surfaces) and the
+ * database refuses a half-set row besides (`device_power_policy_pair_chk`).
+ *
+ * NOTE it does NOT queue an `identify`, unlike every other action here. The
+ * flash exists so someone at the parasol can confirm which box they addressed —
+ * a physical fact. A cadence is not visible on the bar, this is a desk
+ * operation, and on a deep-sleep device the command would usually expire
+ * unfired anyway (the TTL is shorter than the poll). The change reaches the
+ * device on its next poll regardless: both values sit inside the state
+ * response's hashed object, so it busts the ETag on its own.
+ */
+export async function setDevicePowerPolicy(
+  deviceId: string,
+  mode: string,
+  intervalSec: number | string,
+) {
+  const owned = await ownedDevice(deviceId)
+  if ('error' in owned) return { status: 'error' as const, errors: [owned.error] }
+
+  const validated = validateDevicePolicy(mode, intervalSec)
+  if (!validated.ok) return { status: 'error' as const, errors: [validated.error] }
+
+  await prisma.device.update({
+    where: { id: deviceId },
+    data: { powerMode: validated.mode, pollIntervalSec: validated.pollAfterSec },
+  })
+  revalidatePath('/devices')
+  return { status: 'ok' as const }
+}
+
+/** Drop the override, so the device follows the platform default again. */
+export async function clearDevicePowerPolicy(deviceId: string) {
+  const owned = await ownedDevice(deviceId)
+  if ('error' in owned) return { status: 'error' as const, errors: [owned.error] }
+
+  await prisma.device.update({
+    where: { id: deviceId },
+    // Both columns, never one: a half-cleared row is half a policy.
+    data: { powerMode: null, pollIntervalSec: null },
   })
   revalidatePath('/devices')
   return { status: 'ok' as const }

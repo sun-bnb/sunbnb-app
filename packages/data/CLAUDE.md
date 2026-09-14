@@ -225,13 +225,40 @@ window and are **close-independent** — daily accumulation never changes when t
   its own band of cadences (track 025), so `setPreference` refuses an interval the active mode
   cannot serve and RE-FITS the stored interval when the mode changes, and
   `getPreferenceAdminRows` reports the interval a device would actually get rather than the
-  stored one. The coupling lives in this module, not the admin form, so a script obeys it too
+  stored one. The coupling lives in this module, not the admin form, so a script obeys it too.
+  `setDevicePolicy(mode, interval, adminId)` is the PAIRED writer the admin form uses: it
+  validates the interval against the mode *being saved* (not the stored one) and upserts both
+  keys in one `$transaction`, so the poll route can never read a switched mode beside the old
+  interval. It REFUSES rather than re-fits, because a caller that can see both values is
+  choosing, not drifting — the silent re-fit stays only on the single-key path, where the
+  caller does not know about the other key. `resetDevicePolicy()` drops both rows together.
+  `getPlatformDevicePolicy()` reads the pair RAW through the cache — the poll route and the
+  partner fleet query both call it, and hand it to `resolveDevicePolicyForDevice` together with
+  the device's own override (`Device.powerMode` / `pollIntervalSec`), so the platform value is
+  now a DEFAULT rather than the fleet's policy. Note the deliberate asymmetry: a platform change
+  reaches a device within the 5-min cache TTL plus one poll, a per-device override on its very
+  next poll (it rides the device row the route already reads) — do not "fix" that by caching the
+  override
 - `src/device-power.ts` — **PURE** (no Prisma; a client component may import it): the three
-  device power modes, their measured poll bands (continuous 1–15 s · light sleep 10–30 s · deep
-  sleep 30–300 s, from `../sunbnb-hw` exp 005), `clampPollInterval` and `resolveDevicePolicy`.
-  The bands OVERLAP on purpose — the mode is an explicit field precisely because it cannot be
-  inferred from a cadence in the overlap. Both fallbacks point at `deep_sleep` / the cheap end of
-  a band: a wrong slow value costs response time, a wrong fast one costs the battery in days
+  device power modes, their poll bands (continuous 1–15 s · light sleep 10–45 s · deep
+  sleep 30–300 s — floors from `../sunbnb-hw` exp 005, light sleep's ceiling an operating
+  choice past the 27 s crossover), `clampPollInterval`, `resolveDevicePolicy`, and the
+  person-facing `validatePollInterval` / `describePollBand` / `validateDevicePolicy` (the ONE
+  write-path pair check, called by both the admin preferences writer and the partner per-device
+  writer so a refusal reads the same on both), plus `resolveDevicePolicyForDevice` — the
+  device-over-platform cascade, shaped like `resolveServiceFee`. Its rules are deliberate: a
+  half-set or unreadable override INHERITS the platform pair (half a policy is not one, and an
+  illegal mode leaves no band to clamp against), while an out-of-band interval is CLAMPED inside
+  the device's own mode rather than bounced to the platform — bands have moved once already, and
+  a narrowing that flipped a `deep_sleep`/300 device to a `continuous`/5 platform default would
+  flatten its cell in three days. The bands OVERLAP on purpose —
+  the mode is an explicit field precisely because it cannot be inferred from a cadence in the
+  overlap. Both fallbacks point at `deep_sleep` / the cheap end of a band: a wrong slow value
+  costs response time, a wrong fast one costs the battery in days.
+  **`clampPollInterval` vs `validatePollInterval`** is the same band asked by different
+  callers: a fielded device gets the nearest legal cadence (it cannot read an error), a person
+  choosing one gets a refusal naming the mode and its band. The admin form and `setDevicePolicy`
+  both call the latter, so what the operator reads while typing is what the server would answer
 
 ## Testing
 

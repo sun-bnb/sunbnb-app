@@ -6,6 +6,8 @@ import prisma from '@repo/data/PrismaCient'
 import {
   getPreferenceAdminRows,
   setPreference,
+  setDevicePolicy,
+  resetDevicePolicy as resetDevicePolicyOverrides,
   isPreferenceKey,
   type PreferenceAdminRow,
 } from '@repo/data/preferences'
@@ -49,5 +51,31 @@ export async function resetPreference(key: string) {
   }
   const result = await setPreference(key, null)
   if (result.status === 'ok') revalidatePath('/preferences')
+  return result
+}
+
+/**
+ * Save the device power policy as one unit — the mode, and the cadence that has to
+ * fit inside it.
+ *
+ * Separate from `savePreference` because the two keys are coupled: each mode keeps
+ * only its own band of poll intervals, so a mode change and the interval beneath it
+ * have to be judged together. Saving them one at a time is what forces the server
+ * to either refuse the second write or silently re-fit it, and neither is what the
+ * admin asked for. Validation itself stays in `@repo/data/preferences` — this
+ * action has no opinion about the bands.
+ */
+export async function saveDevicePolicy(mode: string, intervalSec: string) {
+  const session = await requireSudo()
+  const result = await setDevicePolicy(mode, intervalSec, session.user.id)
+  if (result.status === 'ok') revalidatePath('/preferences')
+  return result
+}
+
+/** Drop both device-policy overrides, so the pair falls back to env/default. */
+export async function resetDevicePolicy() {
+  await requireSudo()
+  const result = await resetDevicePolicyOverrides()
+  revalidatePath('/preferences')
   return result
 }

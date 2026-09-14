@@ -21,3 +21,19 @@ export const getPreferences = vi.fn(async () => ({ ...DEFAULTS }))
 export const setPreference = vi.fn(async () => ({ status: 'ok' as const }))
 export const getPreferenceAdminRows = vi.fn(async () => [])
 export const clearPreferenceCache = vi.fn()
+
+/**
+ * The platform half of the device power policy.
+ *
+ * Deliberately implemented on top of `getPreferenceCached` rather than as its
+ * own `vi.fn()` with a canned value: the route tests steer the policy by
+ * stubbing the key-level accessor (the `preferences()` helper), and a mock that
+ * bypassed it would quietly ignore them while still passing.
+ */
+export const getPlatformDevicePolicy = vi.fn(async () => {
+  const [mode, intervalSec] = await Promise.all([
+    getPreferenceCached('device-power-mode'),
+    getPreferenceCached('device-poll-interval-sec'),
+  ])
+  return { mode: String(mode), intervalSec: intervalSec as number }
+})

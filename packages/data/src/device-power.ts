@@ -14,11 +14,18 @@
  *   deep_sleep  Chip off between polls; every wake pays a full Wi-Fi join, so
  *               the cost SCALES with cadence. ~11 mAh/day at 60 s, ~4.5 months.
  *
- * **The bands are measured, not chosen** (`../sunbnb-hw` exp 005 §9). Deep sleep
- * and staying associated cross at about 27 s on the measured 4.56 s wake, which
- * is why light sleep owns the middle and deep sleep everything above. Deep sleep
- * cannot reach below ~30 s at all: the join is the floor. Continuous exists for
- * the range below that, where neither sleeping mode can go.
+ * **The bands come from measurement** (`../sunbnb-hw` exp 005 §9). Deep sleep and
+ * staying associated cross at about 27 s on the measured 4.56 s wake, which is why
+ * light sleep owns the middle. Deep sleep cannot reach below ~30 s at all: the join
+ * is the floor. Continuous exists for the range below that, where neither sleeping
+ * mode can go.
+ *
+ * Light sleep's CEILING (45 s) deliberately sits past the 27 s crossover rather than
+ * on it. Crossing it is not a cliff — light sleep is roughly flat with cadence, so
+ * 45 s costs about what 27 s does; deep sleep is merely cheaper there. Holding the
+ * association is worth that on a venue whose AP is fussy about rejoins, or where
+ * deep sleep's reset-per-wake is not wanted yet. The FLOOR of each band is physics
+ * and must not be widened; light sleep's ceiling is an operating choice.
  *
  * PURE — no Prisma import, so a client component may import it (the admin
  * preferences UI does). The preference plumbing lives in `./preferences`.
@@ -44,7 +51,7 @@ export interface PollBand {
  */
 export const POLL_BANDS: Record<DevicePowerMode, PollBand> = {
   continuous: { min: 1, max: 15 },
-  light_sleep: { min: 10, max: 30 },
+  light_sleep: { min: 10, max: 45 },
   deep_sleep: { min: 30, max: 300 },
 }
 
@@ -85,6 +92,49 @@ export function clampPollInterval(mode: DevicePowerMode, seconds: number): numbe
   return Math.min(band.max, Math.max(band.min, Math.round(seconds)))
 }
 
+/** "1–15 seconds" — the band as the admin UI and the error messages say it. */
+export function describePollBand(mode: DevicePowerMode): string {
+  const band = POLL_BANDS[mode]
+  return `${band.min}–${band.max} seconds`
+}
+
+/**
+ * Validate a candidate interval AGAINST A MODE, with an explanation.
+ *
+ * PURE and client-safe on purpose: the admin form validates the pair as the
+ * operator types (changing the mode has to invalidate an interval the new mode
+ * cannot keep, before a save is attempted), and the server validates the same pair
+ * on the write path. Both call this, so the message the admin reads while typing is
+ * the message the server would have answered with.
+ *
+ * Note this REFUSES rather than clamps — the opposite of `clampPollInterval`, and
+ * the difference is who is asking. A person choosing a cadence must be told their
+ * number is not available in this mode; a device already in the field must be given
+ * the nearest legal number rather than an error it cannot read.
+ */
+export function validatePollInterval(
+  mode: DevicePowerMode,
+  raw: string | number,
+): { ok: true; seconds: number } | { ok: false; error: string } {
+  const trimmed = typeof raw === 'string' ? raw.trim() : raw
+  if (trimmed === '') return { ok: false, error: 'Poll interval is required' }
+
+  const n = Number(trimmed)
+  if (!Number.isFinite(n)) return { ok: false, error: 'Poll interval must be a number' }
+  if (!Number.isInteger(n)) {
+    return { ok: false, error: 'Poll interval must be a whole number of seconds' }
+  }
+
+  const band = POLL_BANDS[mode]
+  if (n < band.min || n > band.max) {
+    return {
+      ok: false,
+      error: `${devicePowerModeLabel(mode)} accepts ${describePollBand(mode)} — ${n} s is outside that range.`,
+    }
+  }
+  return { ok: true, seconds: n }
+}
+
 export interface DevicePolicy {
   mode: DevicePowerMode
   /** The cadence actually served, always inside the mode's band. */
@@ -107,4 +157,70 @@ export function resolveDevicePolicy(
   const mode = isDevicePowerMode(rawMode) ? rawMode : 'deep_sleep'
   const pollAfterSec = clampPollInterval(mode, rawInterval)
   return { mode, pollAfterSec, clamped: pollAfterSec !== rawInterval }
+}
+
+/**
+ * Validate a mode + interval as ONE policy, the way a person sets it.
+ *
+ * The single write-path check, shared by the admin preferences writer
+ * (`setDevicePolicy`) and the partner per-device writer, so a refusal reads the
+ * same wherever it is triggered. Bounds live in `POLL_BANDS`, never in a form.
+ */
+export function validateDevicePolicy(
+  rawMode: unknown,
+  rawInterval: string | number,
+):
+  | { ok: true; mode: DevicePowerMode; pollAfterSec: number }
+  | { ok: false; error: string } {
+  if (!isDevicePowerMode(rawMode)) {
+    return { ok: false, error: `Power mode must be one of: ${DEVICE_POWER_MODES.join(', ')}` }
+  }
+  const interval = validatePollInterval(rawMode, rawInterval)
+  if (!interval.ok) return { ok: false, error: interval.error }
+  return { ok: true, mode: rawMode, pollAfterSec: interval.seconds }
+}
+
+/** Where the policy a device is being served actually came from. */
+export type DevicePolicySource = 'device' | 'platform'
+
+export interface ResolvedDevicePolicy extends DevicePolicy {
+  source: DevicePolicySource
+}
+
+/**
+ * The policy one device runs: its own override when it has a usable one, the
+ * platform pair otherwise. A tier cascade in the shape of `resolveServiceFee`
+ * (`./payment`) — first match wins, tiers arrive as arguments, so this stays
+ * pure and testable without a database.
+ *
+ * The decision table, and it is deliberate in every row:
+ *
+ *   both columns null      → platform policy verbatim            (`platform`)
+ *   exactly one set        → platform policy                     (`platform`)
+ *   both set, mode illegal → platform policy                     (`platform`)
+ *   both set, mode legal   → that mode, interval CLAMPED into it  (`device`)
+ *
+ * A HALF-SET override inherits because half a policy is not a policy anyone
+ * chose, and the platform pair is known-good. An ILLEGAL MODE inherits for the
+ * same reason plus a sharper one: there is no band to clamp against, so nothing
+ * of the operator's intent survives to preserve.
+ *
+ * An OUT-OF-BAND interval, though, is clamped inside the device's OWN mode
+ * rather than bounced to the platform pair — and the difference is a flat cell.
+ * Bands are code-owned policy and have already moved once (light sleep's
+ * ceiling, track 025). If a narrowing turned a device overridden to
+ * `deep_sleep`/300 s into "inherit", and the platform happened to be
+ * `continuous`/5 s, that device would go from polling five times an hour to
+ * once a second and be dead in three days. Clamping keeps the operator's intent
+ * — this mode, roughly this cadence — and keeps the module's fail-safe
+ * direction intact: garbage costs response time, never the battery.
+ */
+export function resolveDevicePolicyForDevice(
+  override: { mode: unknown; intervalSec: number | null | undefined },
+  platform: { mode: unknown; intervalSec: number },
+): ResolvedDevicePolicy {
+  if (override.intervalSec != null && isDevicePowerMode(override.mode)) {
+    return { ...resolveDevicePolicy(override.mode, override.intervalSec), source: 'device' }
+  }
+  return { ...resolveDevicePolicy(platform.mode, platform.intervalSec), source: 'platform' }
 }

@@ -8,7 +8,17 @@ import {
   unassignDevice,
   identifyDevice,
   setDeviceSegmentOrder,
+  setDevicePowerPolicy,
+  clearDevicePowerPolicy,
 } from './actions'
+import {
+  DEVICE_POWER_MODES,
+  describePollBand,
+  devicePowerModeLabel,
+  isDevicePowerMode,
+  validatePollInterval,
+  type DevicePowerMode,
+} from '@repo/data/device-power'
 
 /**
  * The fleet list (track 021 P5, step 4). Read-only for now — assignment lands
@@ -52,6 +62,137 @@ const BATTERY: Record<FleetDevice['battery'], string> = {
   unknown: 'text-gray-400',
 }
 
+/** Room for a pill in a dense row — the full label rides the `title`. */
+const SHORT_MODE: Record<DevicePowerMode, string> = {
+  continuous: 'Cont.',
+  light_sleep: 'Light',
+  deep_sleep: 'Deep',
+}
+
+/**
+ * What each mode costs the cell, in the only unit an operator cares about.
+ * Shown because the fleet default is a platform decision but this one is
+ * theirs: continuous at 1 s is a legal choice here, and it should be an
+ * INFORMED one rather than a surprise on a Saturday.
+ */
+const MODE_COST: Record<DevicePowerMode, string> = {
+  continuous: 'reacts in ~1 s, about 3 days on a cell',
+  light_sleep: 'stays connected, about 9 days on a cell',
+  deep_sleep: 'sleeps between polls, months on a cell',
+}
+
+/**
+ * The per-device power policy, compact (track 025).
+ *
+ * Its own component so the draft state lives with the row it belongs to, and so
+ * the mode/interval pair can be validated as the operator types — with the same
+ * pure function the server re-checks — without dragging that state through the
+ * whole table. The pair is saved together: a mode change that invalidates the
+ * cadence is refused here rather than silently re-fitted.
+ */
+function PowerPolicyEditor({
+  device,
+  platformPolicy,
+  onDone,
+}: {
+  device: FleetDevice
+  platformPolicy: { mode: DevicePowerMode; pollAfterSec: number }
+  onDone: () => void
+}) {
+  const [mode, setMode] = useState<string>(device.policy.mode)
+  const [seconds, setSeconds] = useState(String(device.policy.pollAfterSec))
+  const [error, setError] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
+
+  const draftMode: DevicePowerMode | null = isDevicePowerMode(mode) ? mode : null
+  const check = draftMode
+    ? validatePollInterval(draftMode, seconds)
+    : ({ ok: false, error: 'Pick a power mode' } as const)
+  const invalid = check.ok ? null : check.error
+
+  const save = () => {
+    setError(null)
+    startTransition(async () => {
+      const res = await setDevicePowerPolicy(device.id, mode, seconds.trim())
+      if (res.status === 'error') setError(res.errors?.[0] ?? 'Could not save')
+      else onDone()
+    })
+  }
+
+  const useDefault = () => {
+    setError(null)
+    startTransition(async () => {
+      const res = await clearDevicePowerPolicy(device.id)
+      if (res.status === 'error') setError(res.errors?.[0] ?? 'Could not clear')
+      else onDone()
+    })
+  }
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          aria-label="Power mode"
+          value={mode}
+          onChange={(e) => { setMode(e.target.value); setError(null) }}
+          className="rounded-lg border border-gray-200 px-2 py-1 text-sm"
+        >
+          {DEVICE_POWER_MODES.map((m) => (
+            <option key={m} value={m}>{devicePowerModeLabel(m)}</option>
+          ))}
+        </select>
+        <input
+          aria-label="Poll interval in seconds"
+          type="number"
+          inputMode="numeric"
+          value={seconds}
+          min={draftMode ? undefined : 1}
+          onChange={(e) => { setSeconds(e.target.value); setError(null) }}
+          className={`w-20 rounded-lg border px-2 py-1 text-sm ${
+            invalid ? 'border-red-300' : 'border-gray-200'
+          }`}
+        />
+        <span className="text-sm text-gray-500">seconds</span>
+        <button
+          type="button"
+          disabled={pending || invalid !== null}
+          onClick={save}
+          title={invalid ?? undefined}
+          className="rounded-lg bg-accent px-3 py-1 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+        >
+          {pending ? 'Saving…' : 'Save'}
+        </button>
+        {device.policyOverride && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={useDefault}
+            className="rounded-lg border border-gray-200 px-3 py-1 text-sm text-gray-600 hover:bg-white"
+          >
+            Use venue default
+          </button>
+        )}
+      </div>
+      {/* The band hint is the resting state; the refusal replaces it, because it
+          says the same thing plus the verdict. */}
+      <p
+        role={invalid ? 'alert' : undefined}
+        className={`mt-2 text-xs ${invalid ? 'text-red-600' : 'text-gray-500'}`}
+      >
+        {invalid ??
+          (draftMode
+            ? `${devicePowerModeLabel(draftMode)} accepts ${describePollBand(draftMode)} — ${MODE_COST[draftMode]}. Takes effect on this device's next poll (up to ${device.policy.pollAfterSec} s).`
+            : '')}
+      </p>
+      <p className="mt-1 text-xs text-gray-400">
+        Venue default: {devicePowerModeLabel(platformPolicy.mode).toLowerCase()} ·{' '}
+        {platformPolicy.pollAfterSec} s
+      </p>
+      {error && <p role="status" className="mt-2 text-sm text-red-600">{error}</p>}
+    </div>
+  )
+}
+
 function relative(date: Date | null): string {
   if (!date) return 'never'
   const mins = Math.round((Date.now() - new Date(date).getTime()) / 60000)
@@ -65,11 +206,16 @@ function relative(date: Date | null): string {
 export default function DevicesView({
   devices,
   sites,
+  platformPolicy,
 }: {
   devices: FleetDevice[]
   sites: { id: string; name: string }[]
+  platformPolicy: { mode: DevicePowerMode; pollAfterSec: number }
 }) {
   const [editing, setEditing] = useState<string | null>(null)
+  // Its own key, so opening the power editor does not collapse a half-typed
+  // assignment (and vice versa).
+  const [editingPolicy, setEditingPolicy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
@@ -184,6 +330,28 @@ export default function DevicesView({
                       {device.rssiDbm != null ? `${device.rssiDbm} dBm` : '—'}
                     </td>
                     <td className="px-4 py-2 text-right whitespace-nowrap">
+                      {/* Effective policy, and whether it is this device's own.
+                          Muted when inherited: an operator scanning the column
+                          should see only the devices that differ from the venue. */}
+                      <button
+                        type="button"
+                        title={
+                          device.policyOverride
+                            ? `${devicePowerModeLabel(device.policy.mode)} every ${device.policy.pollAfterSec} s — set on this device`
+                            : `${devicePowerModeLabel(device.policy.mode)} every ${device.policy.pollAfterSec} s — the venue default`
+                        }
+                        onClick={() => {
+                          setError(null)
+                          setEditingPolicy(editingPolicy === device.id ? null : device.id)
+                        }}
+                        className={`mr-2 rounded-full border px-2.5 py-1 text-xs font-medium hover:bg-gray-50 ${
+                          device.policyOverride
+                            ? 'border-gray-900 text-gray-900'
+                            : 'border-gray-200 text-gray-500'
+                        }`}
+                      >
+                        {SHORT_MODE[device.policy.mode]} · {device.policy.pollAfterSec}s
+                      </button>
                       <button
                         type="button"
                         onClick={() => { setError(null); setEditing(editing === device.id ? null : device.id) }}
@@ -266,6 +434,17 @@ export default function DevicesView({
                         {error && (
                           <p role="status" className="mt-2 text-sm text-red-600">{error}</p>
                         )}
+                      </td>
+                    </tr>
+                  )}
+                  {editingPolicy === device.id && (
+                    <tr className="border-b border-gray-50 bg-gray-50/60">
+                      <td colSpan={7} className="px-4 py-3">
+                        <PowerPolicyEditor
+                          device={device}
+                          platformPolicy={platformPolicy}
+                          onDone={() => setEditingPolicy(null)}
+                        />
                       </td>
                     </tr>
                   )}

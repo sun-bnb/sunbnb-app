@@ -17,7 +17,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/app/auth', () => ({ auth: vi.fn() }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
-import { assignDeviceLocation } from './actions'
+import { assignDeviceLocation, setDevicePowerPolicy, clearDevicePowerPolicy } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 
@@ -140,6 +140,100 @@ describe('assignDeviceLocation — boundaries', () => {
     const res = await assignDeviceLocation(DEVICE_ID, AT)
 
     expect(res.status).toBe('error')
+    expect(mockDeviceUpdate).not.toHaveBeenCalled()
+  })
+})
+
+// ── Per-device power policy (track 025) ──────────────────────────────────────
+//
+// The operator is choosing how their own devices spend their battery, so the
+// properties here are the ones a wrong answer makes expensive: nobody edits a
+// fleet they do not own, the pair is never written half-set (a mode without a
+// cadence is resolved by clamping, i.e. a number nobody chose), and an interval
+// the chosen mode physically cannot keep never reaches the row.
+
+describe('setDevicePowerPolicy — the pair, or nothing', () => {
+  it('writes both columns together', async () => {
+    const result = await setDevicePowerPolicy(DEVICE_ID, 'light_sleep', 20)
+
+    expect(result).toEqual({ status: 'ok' })
+    expect(mockDeviceUpdate).toHaveBeenCalledWith({
+      where: { id: DEVICE_ID },
+      data: { powerMode: 'light_sleep', pollIntervalSec: 20 },
+    })
+  })
+
+  it('accepts the interval as a string, the way a form sends it', async () => {
+    await setDevicePowerPolicy(DEVICE_ID, 'deep_sleep', '120')
+    expect(mockDeviceUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { powerMode: 'deep_sleep', pollIntervalSec: 120 } }),
+    )
+  })
+
+  it('refuses an interval the chosen mode cannot keep, and writes nothing', async () => {
+    for (const [mode, seconds] of [
+      ['continuous', 60],
+      ['light_sleep', 5],
+      ['deep_sleep', 10],
+    ] as const) {
+      const result = await setDevicePowerPolicy(DEVICE_ID, mode, seconds)
+      expect(result.status).toBe('error')
+    }
+    expect(mockDeviceUpdate).not.toHaveBeenCalled()
+  })
+
+  it('names the mode and its band in the refusal — the operator has to fix it', async () => {
+    const result = await setDevicePowerPolicy(DEVICE_ID, 'continuous', 60)
+    expect(result.status).toBe('error')
+    if (result.status === 'error') {
+      expect(result.errors[0]).toContain('Continuous')
+      expect(result.errors[0]).toContain('1–15 seconds')
+    }
+  })
+
+  it('refuses an unknown mode without touching the database', async () => {
+    for (const mode of ['hibernate', 'Light Sleep', '']) {
+      expect((await setDevicePowerPolicy(DEVICE_ID, mode, 20)).status).toBe('error')
+    }
+    expect(mockDeviceUpdate).not.toHaveBeenCalled()
+  })
+
+  it('refuses a device the operator does not own, and writes nothing', async () => {
+    mockDevice.mockResolvedValue(null as never)
+    expect((await setDevicePowerPolicy(DEVICE_ID, 'light_sleep', 20)).status).toBe('error')
+    expect(mockDeviceUpdate).not.toHaveBeenCalled()
+  })
+
+  it('refuses an unauthenticated caller, and writes nothing', async () => {
+    mockAuth.mockResolvedValue(null as never)
+    expect((await setDevicePowerPolicy(DEVICE_ID, 'light_sleep', 20)).status).toBe('error')
+    expect(mockDeviceUpdate).not.toHaveBeenCalled()
+  })
+
+  it('does NOT queue an identify — a cadence is not visible on the bar', async () => {
+    // Unlike assignment and segment order, both of which are confirmed by
+    // looking at the parasol. A deep-sleep device would also usually outlive
+    // the command's TTL before its next poll.
+    await setDevicePowerPolicy(DEVICE_ID, 'light_sleep', 20)
+    const data = mockDeviceUpdate.mock.calls[0]?.[0].data as Record<string, unknown>
+    expect(data).not.toHaveProperty('pendingCmd')
+  })
+})
+
+describe('clearDevicePowerPolicy', () => {
+  it('nulls BOTH columns, so the device follows the venue default again', async () => {
+    const result = await clearDevicePowerPolicy(DEVICE_ID)
+
+    expect(result).toEqual({ status: 'ok' })
+    expect(mockDeviceUpdate).toHaveBeenCalledWith({
+      where: { id: DEVICE_ID },
+      data: { powerMode: null, pollIntervalSec: null },
+    })
+  })
+
+  it('refuses a device the operator does not own, and writes nothing', async () => {
+    mockDevice.mockResolvedValue(null as never)
+    expect((await clearDevicePowerPolicy(DEVICE_ID)).status).toBe('error')
     expect(mockDeviceUpdate).not.toHaveBeenCalled()
   })
 })

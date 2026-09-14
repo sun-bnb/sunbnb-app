@@ -40,7 +40,8 @@ import {
   clampPollInterval,
   devicePowerModeLabel,
   isDevicePowerMode,
-  pollBandFor,
+  validateDevicePolicy,
+  validatePollInterval,
   type DevicePowerMode,
 } from './device-power'
 
@@ -110,7 +111,7 @@ export const PREFERENCE_REGISTRY = {
     label: 'Device power mode',
     group: 'Hardware',
     description:
-      'How a sunbed indicator spends the gap between polls. Served as `powerMode` on every 200 from /api/hw/{code}/state, so the fleet is switched centrally rather than reflashed. CONTINUOUS keeps the CPU up (~1 s response, ~3 days on a cell) — for a demo or a busy afternoon. LIGHT SLEEP clock-gates the chip but HOLDS the Wi-Fi association, so a poll costs a request rather than a rejoin (~9 days); its cost is AP-side beacon upkeep and is roughly flat with cadence. DEEP SLEEP powers the chip down and pays a full Wi-Fi join per wake (~4.5 months at 60 s); its cost scales with cadence. The two cross at about 27 s, which is why each mode accepts a different range of poll intervals — changing the mode re-fits the interval to the new band.',
+      'How a sunbed indicator spends the gap between polls. THE FLEET DEFAULT — served as `powerMode` on every 200 from /api/hw/{code}/state to every device that does not carry its own override (set per device by the operator in the partner fleet page), so the fleet is switched centrally rather than reflashed. CONTINUOUS keeps the CPU up (~1 s response, ~3 days on a cell) — for a demo or a busy afternoon. LIGHT SLEEP clock-gates the chip but HOLDS the Wi-Fi association, so a poll costs a request rather than a rejoin (~9 days); its cost is AP-side beacon upkeep and is roughly flat with cadence. DEEP SLEEP powers the chip down and pays a full Wi-Fi join per wake (~4.5 months at 60 s); its cost scales with cadence. The two cross at about 27 s, which is why each mode accepts a different range of poll intervals — pick the mode first, then a cadence inside its band.',
     default: 'deep_sleep',
     options: DEVICE_POWER_MODES.map((m) => ({ value: m, label: devicePowerModeLabel(m) })),
   },
@@ -120,7 +121,7 @@ export const PREFERENCE_REGISTRY = {
     label: 'Device poll interval',
     group: 'Hardware',
     description:
-      'How often a sunbed indicator device asks the server for seat state, in seconds. Served as `pollAfterSec` on every 200 from /api/hw/{code}/state; firmware obeys it and never hardcodes an interval. Lower = a light that flips sooner, more serverless invocations and more battery; higher = the reverse. A change reaches a device on its next poll (the value is part of the response ETag, so it busts the 304 that would otherwise hide it). THE ALLOWED RANGE DEPENDS ON THE POWER MODE — continuous 1–15 s, light sleep 10–30 s, deep sleep 30–300 s — because a mode that physically cannot keep a cadence must not be told to (deep sleep pays a full Wi-Fi join per wake, so it has a floor around 30 s). A value outside the active mode is refused here, and re-fitted automatically when the mode changes.',
+      'How often a sunbed indicator device asks the server for seat state, in seconds. THE FLEET DEFAULT — served as `pollAfterSec` on every 200 from /api/hw/{code}/state to every device without its own override; firmware obeys it and never hardcodes an interval. Lower = a light that flips sooner, more serverless invocations and more battery; higher = the reverse. A change reaches a device on its next poll (the value is part of the response ETag, so it busts the 304 that would otherwise hide it). THE ALLOWED RANGE DEPENDS ON THE POWER MODE — continuous 1–15 s, light sleep 10–45 s, deep sleep 30–300 s — because a mode that physically cannot keep a cadence must not be told to (deep sleep pays a full Wi-Fi join per wake, so it has a floor around 30 s). An interval the selected mode cannot keep is refused — in the admin form as you type, and on every other write path.',
     default: 60,
     min: POLL_INTERVAL_MIN,
     max: POLL_INTERVAL_MAX,
@@ -315,6 +316,30 @@ export function clearPreferenceCache(): void {
 const MODE_KEY = 'device-power-mode'
 const POLL_KEY = 'device-poll-interval-sec'
 
+/**
+ * The PLATFORM pair — the policy every device runs unless it carries its own
+ * override (`Device.powerMode` / `Device.pollIntervalSec`, track 025).
+ *
+ * Raw on purpose: the caller feeds these to `resolveDevicePolicyForDevice`
+ * together with the device's override, and resolution/clamping happens once, in
+ * the pure module, rather than twice with a chance of disagreeing.
+ *
+ * Read through the 5-minute per-instance cache because the first caller is the
+ * hardware poll route (~1.3 M/day at fleet scale) and these values change a
+ * handful of times a year. The consequence is an asymmetry worth knowing: a
+ * PLATFORM change reaches a device within the TTL plus one poll, while a
+ * per-device override reaches it on the very next poll — the override rides the
+ * device row the route already reads, and must never be moved behind a cache to
+ * "match".
+ */
+export async function getPlatformDevicePolicy(): Promise<{ mode: string; intervalSec: number }> {
+  const [mode, intervalSec] = await Promise.all([
+    getPreferenceCached(MODE_KEY),
+    getPreferenceCached(POLL_KEY),
+  ])
+  return { mode: String(mode), intervalSec: intervalSec as number }
+}
+
 /** The mode currently in effect, resolved through env → DB → default. */
 export async function getDevicePowerMode(): Promise<DevicePowerMode> {
   const mode = await getPreference(MODE_KEY)
@@ -373,15 +398,11 @@ export async function setPreference(
   // something nobody chose.
   if (key === POLL_KEY) {
     const mode = await getDevicePowerMode()
-    const band = pollBandFor(mode)
-    const seconds = validated.value as number
-    if (seconds < band.min || seconds > band.max) {
+    const fits = validatePollInterval(mode, validated.value as number)
+    if (!fits.ok) {
       return {
         status: 'error',
-        errors: [
-          `${devicePowerModeLabel(mode)} mode accepts ${band.min}–${band.max} seconds. ` +
-            `Change the power mode first to use ${seconds} s.`,
-        ],
+        errors: [`${fits.error} Change the power mode first, or save both together.`],
       }
     }
   }
@@ -398,6 +419,76 @@ export async function setPreference(
     await refitPollInterval(validated.value, adminUserId)
   }
 
+  return { status: 'ok' }
+}
+
+/**
+ * Write the device power policy as ONE unit — the mode, and the cadence that has
+ * to fit inside it.
+ *
+ * `setPreference` can still write either key alone (a script, a future API) and
+ * re-fits the interval when the mode moves under it. That silent re-fit is right
+ * for a caller that only knows about one key, and wrong for the admin form, where
+ * the operator can see both: there a mode change that invalidates the cadence must
+ * be REFUSED and shown, not quietly corrected to a number nobody chose. The pair is
+ * therefore validated together and written in one transaction, so the stored pair
+ * is never momentarily inconsistent — the hardware state route reads the two keys
+ * independently and could otherwise catch a switched mode beside the old interval.
+ */
+export async function setDevicePolicy(
+  rawMode: string,
+  rawInterval: string,
+  adminUserId?: string,
+): Promise<{ status: 'ok' } | { status: 'error'; errors: string[] }> {
+  const modeDef = PREFERENCE_REGISTRY[MODE_KEY] as PreferenceDefinition
+  const pollDef = PREFERENCE_REGISTRY[POLL_KEY] as PreferenceDefinition
+
+  // The registry parse comes FIRST and stays lenient — it folds case and
+  // separators, so `Light Sleep` from an env var or a script lands on the wire
+  // id. The partner surface has no such need (its <select> carries wire ids),
+  // which is why only the BAND check below is shared between the two writers,
+  // not the parsing. Don't "unify" them.
+  const modeResult = validatePreferenceValue(modeDef, rawMode)
+  if (!modeResult.ok) return { status: 'error', errors: [modeResult.error] }
+  const intervalResult = validatePreferenceValue(pollDef, rawInterval)
+  if (!intervalResult.ok) return { status: 'error', errors: [intervalResult.error] }
+
+  // Then the one shared pair rule: this mode, with this cadence — judged against
+  // the mode being SAVED, not the stored one, which is the point of the paired
+  // write. Same function the partner per-device writer calls, so a refusal reads
+  // the same wherever it is triggered.
+  const validated = validateDevicePolicy(modeResult.value, intervalResult.value as number)
+  if (!validated.ok) return { status: 'error', errors: [validated.error] }
+  const { mode, pollAfterSec } = validated
+
+  const modeValue = serializePreferenceValue(mode)
+  const pollValue = serializePreferenceValue(pollAfterSec)
+  await prisma.$transaction([
+    prisma.platformPreference.upsert({
+      where: { key: MODE_KEY },
+      create: { key: MODE_KEY, value: modeValue, updatedBy: adminUserId ?? null },
+      update: { value: modeValue, updatedBy: adminUserId ?? null },
+    }),
+    prisma.platformPreference.upsert({
+      where: { key: POLL_KEY },
+      create: { key: POLL_KEY, value: pollValue, updatedBy: adminUserId ?? null },
+      update: { value: pollValue, updatedBy: adminUserId ?? null },
+    }),
+  ])
+  clearPreferenceCache()
+  return { status: 'ok' }
+}
+
+/**
+ * Drop both overrides together, so the policy falls back to env/default as a pair.
+ * Clearing one alone could leave a stored interval outside the band of the default
+ * mode — legal for the reader, which clamps, but a lie on the admin page.
+ */
+export async function resetDevicePolicy(): Promise<{ status: 'ok' }> {
+  await prisma.platformPreference.deleteMany({
+    where: { key: { in: [MODE_KEY, POLL_KEY] } },
+  })
+  clearPreferenceCache()
   return { status: 'ok' }
 }
 

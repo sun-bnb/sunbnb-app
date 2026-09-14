@@ -24,6 +24,8 @@ import {
   unassignDevice,
   identifyDevice,
   setDeviceSegmentOrder,
+  setDevicePowerPolicy,
+  clearDevicePowerPolicy,
 } from '@/app/devices/actions'
 import {
   reserveItem,
@@ -817,6 +819,20 @@ export const GATED_ACTIONS: GatedAction[] = [
     kind: 'action',
     gate: 'session-owner',
     invoke: (_accessKey?: string) => identifyDevice('device-1'),
+  },
+  {
+    name: 'devices.setDevicePowerPolicy',
+    kind: 'action',
+    // The stub pair must be LEGAL — the owner-session scenario asserts a
+    // non-error, so an out-of-band pair here would read as a gate failure.
+    gate: 'session-owner',
+    invoke: (_accessKey?: string) => setDevicePowerPolicy('device-1', 'light_sleep', 20),
+  },
+  {
+    name: 'devices.clearDevicePowerPolicy',
+    kind: 'action',
+    gate: 'session-owner',
+    invoke: (_accessKey?: string) => clearDevicePowerPolicy('device-1'),
   },
   {
     name: 'inventory-actions.deleteInventoryItems',

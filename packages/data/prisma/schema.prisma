@@ -1426,6 +1426,16 @@ model Device {
   /// hold a second opinion about a physical fact, which is the same reason the
   /// state projection is not on the device.
   reverseSegments Boolean @default(false) @map("reverse_segments")
+  /// Per-device power policy (track 025), overriding the platform preference
+  /// pair (`device-power-mode` + `device-poll-interval-sec`). A PAIR: both null
+  /// means "inherit the platform policy", and anything less than a complete,
+  /// in-band pair is IGNORED rather than repaired — a half-override is not a
+  /// policy anyone chose, and the platform value is known-good. Enforced by the
+  /// writer and by the resolver rather than by a CHECK constraint: this row is
+  /// read on every poll, and a constraint violation there would be a 500 on the
+  /// serving path instead of a device quietly running the fleet default.
+  powerMode       String? @map("power_mode")
+  pollIntervalSec Int?    @map("poll_interval_sec")
   /// A one-shot command for the device, delivered in the state (poll) response
   /// and EXPIRING on its own — there is no ack channel, so a command that is
   /// never picked up must not linger forever. `identify` flashes the bar so

@@ -16,6 +16,8 @@ vi.mock('@/app/auth', () => ({
 vi.mock('@repo/data/preferences', () => ({
   getPreferenceAdminRows: vi.fn(),
   setPreference: vi.fn(),
+  setDevicePolicy: vi.fn(),
+  resetDevicePolicy: vi.fn(),
   isPreferenceKey: (key: string) => key === 'device-poll-interval-sec',
 }))
 
@@ -23,14 +25,27 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }))
 
-import { listPreferences, savePreference, resetPreference } from './actions'
+import {
+  listPreferences,
+  savePreference,
+  resetPreference,
+  saveDevicePolicy,
+  resetDevicePolicy,
+} from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
-import { getPreferenceAdminRows, setPreference } from '@repo/data/preferences'
+import {
+  getPreferenceAdminRows,
+  setPreference,
+  setDevicePolicy,
+  resetDevicePolicy as resetDevicePolicyOverrides,
+} from '@repo/data/preferences'
 
 const mockAuth = vi.mocked(auth)
 const mockGetRows = vi.mocked(getPreferenceAdminRows)
 const mockSet = vi.mocked(setPreference)
+const mockSetPolicy = vi.mocked(setDevicePolicy)
+const mockResetPolicy = vi.mocked(resetDevicePolicyOverrides)
 
 const KEY = 'device-poll-interval-sec'
 
@@ -38,6 +53,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockAuth.mockResolvedValue(null)
   mockSet.mockResolvedValue({ status: 'ok' } as never)
+  mockSetPolicy.mockResolvedValue({ status: 'ok' } as never)
+  mockResetPolicy.mockResolvedValue({ status: 'ok' } as never)
 })
 
 function authenticateAsSudo() {
@@ -55,7 +72,11 @@ describe('sudo gate', () => {
     await expect(listPreferences()).rejects.toThrow('Not authenticated')
     await expect(savePreference(KEY, '120')).rejects.toThrow('Not authenticated')
     await expect(resetPreference(KEY)).rejects.toThrow('Not authenticated')
+    await expect(saveDevicePolicy('continuous', '5')).rejects.toThrow('Not authenticated')
+    await expect(resetDevicePolicy()).rejects.toThrow('Not authenticated')
     expect(mockSet).not.toHaveBeenCalled()
+    expect(mockSetPolicy).not.toHaveBeenCalled()
+    expect(mockResetPolicy).not.toHaveBeenCalled()
   })
 
   it('rejects a signed-in non-sudo user on every action', async () => {
@@ -63,7 +84,11 @@ describe('sudo gate', () => {
     await expect(listPreferences()).rejects.toThrow('sudo required')
     await expect(savePreference(KEY, '120')).rejects.toThrow('sudo required')
     await expect(resetPreference(KEY)).rejects.toThrow('sudo required')
+    await expect(saveDevicePolicy('continuous', '5')).rejects.toThrow('sudo required')
+    await expect(resetDevicePolicy()).rejects.toThrow('sudo required')
     expect(mockSet).not.toHaveBeenCalled()
+    expect(mockSetPolicy).not.toHaveBeenCalled()
+    expect(mockResetPolicy).not.toHaveBeenCalled()
   })
 })
 
@@ -116,6 +141,49 @@ describe('resetPreference', () => {
     authenticateAsSudo()
     const result = await resetPreference('made-up-key')
     expect(result.status).toBe('error')
+    expect(mockSet).not.toHaveBeenCalled()
+  })
+})
+
+describe('saveDevicePolicy', () => {
+  it('forwards the pair and the acting admin id in ONE call', async () => {
+    // The point of the paired action: the mode and the interval reach the registry
+    // together, so the band check runs against the mode being saved rather than
+    // the one still stored.
+    authenticateAsSudo()
+    const result = await saveDevicePolicy('continuous', '5')
+    expect(result).toEqual({ status: 'ok' })
+    expect(mockSetPolicy).toHaveBeenCalledWith('continuous', '5', 'admin-1')
+    expect(mockSet).not.toHaveBeenCalled()
+  })
+
+  it('surfaces a band rejection rather than swallowing it', async () => {
+    authenticateAsSudo()
+    mockSetPolicy.mockResolvedValue({
+      status: 'error',
+      errors: ['Continuous accepts 1–15 seconds — 60 s is outside that range.'],
+    } as never)
+    const result = await saveDevicePolicy('continuous', '60')
+    expect(result).toEqual({
+      status: 'error',
+      errors: ['Continuous accepts 1–15 seconds — 60 s is outside that range.'],
+    })
+  })
+
+  it('has no opinion of its own about modes or bands', async () => {
+    // An unknown mode is the registry's call, not the action's — otherwise the
+    // rules would live in two places and drift.
+    authenticateAsSudo()
+    await saveDevicePolicy('hibernate', '5')
+    expect(mockSetPolicy).toHaveBeenCalledWith('hibernate', '5', 'admin-1')
+  })
+})
+
+describe('resetDevicePolicy', () => {
+  it('clears both overrides in one call', async () => {
+    authenticateAsSudo()
+    await expect(resetDevicePolicy()).resolves.toEqual({ status: 'ok' })
+    expect(mockResetPolicy).toHaveBeenCalledTimes(1)
     expect(mockSet).not.toHaveBeenCalled()
   })
 })

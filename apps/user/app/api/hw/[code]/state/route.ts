@@ -31,8 +31,8 @@ import { createHash } from 'crypto'
 import prisma from '@repo/data/PrismaCient'
 import { siteDayBounds, siteDayKey } from '@repo/data/site-day'
 import { RESERVATION_CANCELED, RESERVATION_REFUNDED } from '@repo/data/reservation-status'
-import { getPreferenceCached } from '@repo/data/preferences'
-import { resolveDevicePolicy, type DevicePolicy } from '@repo/data/device-power'
+import { getPlatformDevicePolicy } from '@repo/data/preferences'
+import { resolveDevicePolicyForDevice } from '@repo/data/device-power'
 import { screenDeviceRequest, unavailable, unitAddressWhere, SEGMENT_SEATS } from '../hw-filter'
 import {
   activeStateForSeat,
@@ -70,18 +70,21 @@ export const dynamic = 'force-dynamic'
  * rather than in sequence: they are independent, and the second would otherwise
  * add a round trip to the first poll of every cold instance.
  *
- * Still one policy for every device. Per-site policy, state-aware cadence (fast
- * while FREE — `../sunbnb-hw` ADR 0006) and night backoff stay deferred; when
- * they land they read this as their base, and they work through the ETag for
- * free, because both values sit inside the hashed `stable` object below.
+ * The platform pair is now a DEFAULT, not the whole story: a device carrying
+ * its own override (`Device.powerMode` / `pollIntervalSec`, set by the operator
+ * in the partner fleet page) runs that instead. The override rides the device
+ * row this route already reads, so it costs no query and — unlike the platform
+ * pair — reaches the device on its very next poll rather than after the cache
+ * TTL. Do not "fix" that asymmetry by caching it.
+ *
+ * The platform read stays unconditional even when an override exists: it is
+ * cache-warm, and it is the fallback for every device without one.
+ *
+ * Per-site policy, state-aware cadence (fast while FREE — `../sunbnb-hw`
+ * ADR 0006) and night backoff stay deferred; when they land they read this as
+ * their base, and they work through the ETag for free, because both values sit
+ * inside the hashed `stable` object below.
  */
-async function resolveDevicePolicyFromPreferences(): Promise<DevicePolicy> {
-  const [mode, intervalSec] = await Promise.all([
-    getPreferenceCached('device-power-mode'),
-    getPreferenceCached('device-poll-interval-sec'),
-  ])
-  return resolveDevicePolicy(mode, intervalSec)
-}
 
 // ─── route ───────────────────────────────────────────────────────────────────
 
@@ -137,7 +140,7 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
 
     // Alongside the reservation read, not before it: the cached path resolves
     // without a query on all but the first poll of an instance.
-    const policyPromise = resolveDevicePolicyFromPreferences()
+    const platformPolicyPromise = getPlatformDevicePolicy()
 
     const reservations = await prisma.reservation.findMany({
       where: {
@@ -179,7 +182,12 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
       }
     })
 
-    const policy = await policyPromise
+    // Device override first, platform pair as the fallback — one resolver, so the
+  // fleet page and the wire cannot disagree about what a device is running.
+  const policy = resolveDevicePolicyForDevice(
+    screened.powerOverride ?? { mode: null, intervalSec: null },
+    await platformPolicyPromise,
+  )
 
     // Everything the device acts on. `serverTime` is deliberately NOT in here:
     // it changes every request, so including it would make the ETag unique per

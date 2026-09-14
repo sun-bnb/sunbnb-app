@@ -777,7 +777,7 @@ describe('power mode', () => {
     // route fits it to the band rather than passing it through.
     preferences({ mode: 'light_sleep', intervalSec: 300 })
     const body = await (await GET(makeRequest(), makeParams())).json()
-    expect(body).toMatchObject({ powerMode: 'light_sleep', pollAfterSec: 30 })
+    expect(body).toMatchObject({ powerMode: 'light_sleep', pollAfterSec: 45 })
   })
 
   it('falls back to DEEP SLEEP on an unreadable mode, never to continuous', async () => {
@@ -857,5 +857,87 @@ describe('normalizeCode', () => {
     expect(normalizeCode('7qk3m2')).toBe('7QK3M2')
     expect(normalizeCode(' 7qk3m2 ')).toBe('7QK3M2')
     expect(normalizeCode('IL0O')).toBe('1100')
+  })
+})
+
+// ── Per-device power policy (Device.powerMode / pollIntervalSec) ──────────────
+//
+// The platform pair is the fleet DEFAULT; a device carrying its own complete
+// pair runs that instead (track 025). The properties that matter here are that
+// the override wins, that it cannot escape its own band, that anything less than
+// a complete pair falls back to the known-good platform value rather than to
+// half a policy — and that none of it costs an extra query, because the override
+// rides the row the client filter already reads.
+
+/** A device row carrying its own power policy. */
+function deviceWithPolicy(mode: string | null, intervalSec: number | null) {
+  return { ...device([SEAT_A, SEAT_B]), powerMode: mode, pollIntervalSec: intervalSec }
+}
+
+describe('device power override', () => {
+  beforeEach(() => {
+    preferences({ mode: 'deep_sleep', intervalSec: 60 })
+  })
+
+  it('serves the device its OWN policy, ignoring the platform pair', async () => {
+    mockDevice.mockResolvedValue(deviceWithPolicy('continuous', 5) as never)
+    const body = await (await GET(makeRequest(), makeParams())).json()
+    expect(body).toMatchObject({ powerMode: 'continuous', pollAfterSec: 5 })
+  })
+
+  it('falls back to the platform pair for a device with no override', async () => {
+    mockDevice.mockResolvedValue(deviceWithPolicy(null, null) as never)
+    const body = await (await GET(makeRequest(), makeParams())).json()
+    expect(body).toMatchObject({ powerMode: 'deep_sleep', pollAfterSec: 60 })
+  })
+
+  it('serves the platform pair when only HALF an override is stored', async () => {
+    // A restore or a hand-run UPDATE can leave one column set; the DB constraint
+    // refuses it, but the device on the pole must survive one that got through.
+    for (const half of [deviceWithPolicy('continuous', null), deviceWithPolicy(null, 5)]) {
+      mockDevice.mockResolvedValue(half as never)
+      const body = await (await GET(makeRequest(), makeParams())).json()
+      expect(body).toMatchObject({ powerMode: 'deep_sleep', pollAfterSec: 60 })
+    }
+  })
+
+  it('never serves a cadence the OVERRIDING mode cannot keep', async () => {
+    mockDevice.mockResolvedValue(deviceWithPolicy('light_sleep', 300) as never)
+    const body = await (await GET(makeRequest(), makeParams())).json()
+    expect(body).toMatchObject({ powerMode: 'light_sleep', pollAfterSec: 45 })
+  })
+
+  it('falls back to the platform pair on an unreadable override mode', async () => {
+    mockDevice.mockResolvedValue(deviceWithPolicy('hibernate', 20) as never)
+    const body = await (await GET(makeRequest(), makeParams())).json()
+    expect(body).toMatchObject({ powerMode: 'deep_sleep', pollAfterSec: 60 })
+  })
+
+  it('changes the ETag when the override changes, so a 304 cannot hide it', async () => {
+    // The whole point of the values living inside `stable`: a device parked on a
+    // free bed would otherwise 304 for hours and never learn its new cadence.
+    mockDevice.mockResolvedValue(deviceWithPolicy(null, null) as never)
+    const etag = (await GET(makeRequest(), makeParams())).headers.get('etag')
+
+    mockDevice.mockResolvedValue(deviceWithPolicy('light_sleep', 20) as never)
+    const second = await GET(makeRequest({ 'if-none-match': etag as string }), makeParams())
+
+    expect(second.status).toBe(200)
+    expect(await second.json()).toMatchObject({ powerMode: 'light_sleep', pollAfterSec: 20 })
+  })
+
+  it('costs no extra query — the override rides the row the filter already reads', async () => {
+    mockDevice.mockResolvedValue(deviceWithPolicy('light_sleep', 20) as never)
+    await GET(makeRequest(), makeParams())
+    expect(mockDevice).toHaveBeenCalledTimes(1)
+  })
+
+  it('still reads the platform pair, because it is the fallback', async () => {
+    // Tempting optimization, deliberately not taken: skipping the platform read
+    // when an override exists saves nothing on a warm instance and leaves the
+    // route with no value to fall back to when the override turns out unusable.
+    mockDevice.mockResolvedValue(deviceWithPolicy('light_sleep', 20) as never)
+    await GET(makeRequest(), makeParams())
+    expect(mockPreference).toHaveBeenCalled()
   })
 })

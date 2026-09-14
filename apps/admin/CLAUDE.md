@@ -30,28 +30,40 @@ Port 3003. Requires `sudo: true` on User record.
   types and defaults come from the registry, so a script or a future API is held to the same rules.
   Each row shows the resolved value and WHERE it came from (env var → database → built-in default),
   and warns when an env override means the value saved here is recorded but not in effect.
-  Entries: `device-power-mode` (a dropdown — continuous · light sleep · deep sleep) and
-  `device-poll-interval-sec`, together the power policy every HW device is served on
-  `/api/hw/{code}/state` in the user app (`powerMode` + `pollAfterSec`). **Those two are coupled
-  and the page must not pretend otherwise**: each mode keeps only its own band of cadences, so
-  saving an out-of-band interval is refused with the mode named, and changing the mode re-fits
-  the stored interval. That is why a save RESYNCS every row from the server (`listPreferences`)
-  rather than patching only the row that was edited — otherwise the interval on screen would
-  contradict the change that just moved it. Add a setting by appending to the registry — the tab
-  lists it automatically, including `enum` entries, which render as a dropdown of their options.
+  Add a setting by appending to the registry — the tab lists it automatically, including `enum`
+  entries, which render as a dropdown of their options. A save RESYNCS every row from the server
+  (`listPreferences`) rather than patching only the row that was edited, because a write can move
+  a value the admin did not touch.
+  **The one exception to one-card-per-entry is the device power policy** (`device-power-mode` +
+  `device-poll-interval-sec`, the pair every HW device is served on `/api/hw/{code}/state` as
+  `powerMode` + `pollAfterSec`). They are rendered as ONE card with the interval NESTED under the
+  mode, and saved together through `saveDevicePolicy` → `setDevicePolicy`, because the mode
+  decides which cadences physically exist and the interval is only meaningful inside its band
+  (track 025: continuous 1–15 s · light sleep 10–45 s · deep sleep 30–300 s). Two sibling rows
+  with a Save each invited the sequence the server then had to paper over — set the mode, watch
+  the interval be silently re-fitted to a number nobody chose. The form validates the pair in the
+  browser with the PURE `validatePollInterval` from `@repo/data/device-power` against the mode
+  currently selected *in the form*, so switching the mode immediately invalidates a cadence the
+  new mode cannot keep, names which other mode could, and disables the save; `setDevicePolicy`
+  re-checks and writes both keys in one transaction. `@repo/data/preferences` cannot be imported
+  by this client component (it pulls in Prisma), so the two keys are literals in `view.tsx` — a
+  rename degrades to generic rows rather than to a wrong write. **Since track 025's per-device
+  override, this card sets the fleet DEFAULT, not the fleet**: a device carrying its own pair
+  (`Device.powerMode`/`pollIntervalSec`, set by the operator in the partner fleet page) runs that
+  instead, and the registry copy says so.
 
 ## Testing
 
 Run: `npm test`, `npm run test:watch`, `npm run test:coverage`
 
-### Test Files (202 tests)
+### Test Files (206 tests)
 
 - `app/users/actions.test.ts` — Admin user CRUD, user deletion with cascade cleanup, requireSudo guard
 - `app/settlements/actions.test.ts` — Settlement lifecycle (preview, generate, close, approve, markPaid, revert), validation
 - `app/fees/actions.test.ts` — Service fee CRUD, service code CRUD, search sites/accounts, platform fees
 - `app/sites/actions.test.ts` — updatePaymentProvider with Mollie token verification; setCustomBrand (track 023, 11 tests): sudo gate (unauthenticated AND signed-in-non-sudo, both asserted to write nothing), enable/disable both travelling faithfully (the kill switch needs `false` to work as well as `true`), blank site id refused pre-DB, `revalidatePath('/sites')`, and a table of NON-boolean inputs (`'false'`, `'on'`, `undefined`, `null`, `1`) refused rather than coerced — each is truthy or falsy by accident and would flip a customer's storefront the wrong way while reporting success; setCustomBrandKey (9 tests): sudo gate, a key validated against the shared manifest and REFUSED when unknown, and `''`/whitespace/null all clearing to NULL rather than storing a key nothing answers to
 - `app/platform/actions.test.ts` — Business entity settings, country/currency/VAT settings, deleteSettings referential integrity
-- `app/preferences/actions.test.ts` — Preferences sudo gate + registry pass-through (8 tests): every action rejected for unauthenticated and non-sudo callers with nothing written, raw value + acting admin id forwarded unchanged, registry rejection surfaced not swallowed, unregistered key refused without touching the store. Validation itself is asserted in `packages/data/src/preferences.test.ts` — the action deliberately has no opinion about bounds
+- `app/preferences/actions.test.ts` — Preferences sudo gate + registry pass-through (12 tests): every action (including the paired `saveDevicePolicy` / `resetDevicePolicy`) rejected for unauthenticated and non-sudo callers with nothing written, raw value + acting admin id forwarded unchanged, registry rejection surfaced not swallowed, unregistered key refused without touching the store, and the mode+interval pair forwarded in ONE call so the band is judged against the mode being saved. Validation itself is asserted in `packages/data/src/preferences.test.ts` — the action deliberately has no opinion about bounds or modes
 - `app/api/health/route.test.ts` — Health check with sudo-gated operational details
 - `app/api/auth/forgot-password/route.test.ts` — Rate limiting, email validation, enumeration protection
 - `app/api/auth/reset-password/route.test.ts` — Rate limiting, token/password validation, password strength mismatch

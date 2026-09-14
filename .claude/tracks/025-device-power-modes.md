@@ -234,6 +234,66 @@ also the *correct* mode at that cadence.
 deep-sleep branch at runtime, is Phase 1 and lives in `sunbnb-hw`.
 
 
+**2026-09-14 — the admin form became one setting in two levels; light sleep's ceiling widened to
+45 s.** The `/preferences` page rendered the mode and the cadence as two sibling rows with a Save
+button each, which is a false picture of a coupled pair: the only way to move both was to save
+one and let the server re-fit the other to a number nobody chose. They are now ONE card — mode at
+the top level, interval nested under it — saved together through `setDevicePolicy`, which
+validates the interval against the mode BEING SAVED and upserts both keys in a single
+transaction (the poll route reads the two keys independently and could otherwise catch a switched
+mode beside the old interval). The form validates as the operator types, using the pure
+`validatePollInterval` the server also calls, so changing the mode immediately flags a cadence
+the new mode cannot keep, names the mode(s) that could, and disables the save.
+
+**Refuse here, clamp there** is the rule the two paths now split on, and it is worth not
+re-litigating: a caller that can SEE both values is choosing, so an impossible pair is an error
+to correct; a fielded device cannot read an error, so it gets the nearest legal cadence. The
+silent re-fit therefore stays on the single-key `setPreference` path (a script that knows about
+one key only) and is gone from the admin form.
+
+**Light sleep now accepts 10–45 s, not 10–30 s** (founder call, 2026-09-14). The FLOOR of every
+band is still physics; this is a ceiling, and crossing the 27 s crossover is not a cliff — light
+sleep is roughly flat with cadence, so 45 s costs about what 27 s does and deep sleep is merely
+cheaper there. The 30–45 s overlap buys the option of holding the association at a slow cadence:
+a venue whose AP is unhappy about a rejoin every wake, or a fleet not yet ready for deep sleep's
+reset-per-wake, can sit there deliberately.
+
+**2026-09-14 (later) — the policy became per-device; the platform pair is now a DEFAULT.** A
+`Device.powerMode` / `pollIntervalSec` pair overrides the platform preference, set by the venue
+operator in the partner fleet page (`/devices`) as a compact badge + one-line editor. Resolution is
+the pure `resolveDevicePolicyForDevice` — the cascade shape of `resolveServiceFee`, device tier
+then platform tier — called by BOTH the HW poll route and the fleet query, so the badge an operator
+reads and the value a device runs come from one function.
+
+**It costs no query.** The override rides the `Device` row `screenDeviceRequest` already reads on
+every poll, which is exactly why it lives on the row rather than behind a keyed lookup. It also
+reaches the device faster than a platform change does — next poll, versus the 5-minute preference
+cache plus a poll — and that asymmetry is deliberate. The wire is unchanged: `powerMode` and
+`pollAfterSec` keep their place inside the hashed `stable` object, so an override busts the ETag on
+its own and no firmware work was needed.
+
+**Three decisions worth not re-litigating:**
+
+- **Refuse for a person, clamp for a device.** The partner form and `validateDevicePolicy` REFUSE
+  an impossible pair, naming the mode and its band; the serving path still clamps. A caller who can
+  see both values is choosing; a potted device cannot read an error.
+- **A half-set or unreadable override INHERITS; an out-of-band one CLAMPS inside its own mode.**
+  Half a policy is not a policy, and an illegal mode leaves no band to clamp against — but a band
+  narrowing must never flip a device overridden to `deep_sleep`/300 s onto a `continuous`/5 s
+  platform default, which would flatten its cell in three days. The DB carries a pairing CHECK
+  (`device_power_policy_pair_chk`) constraining the PAIRING only, never the values — bands are code
+  policy and have already moved once.
+- **No `identify` on a policy change**, unlike every other device mutation. The flash confirms a
+  physical fact (which box, which way round); a cadence is not visible on the bar, and on a
+  deep-sleep device the command's TTL is shorter than the poll interval, so it would usually expire
+  unfired and train operators that the flash is unreliable.
+
+**Accepted cost risk, decided by the founder:** the partner surface offers all three modes, so an
+operator can legally put their own devices on `continuous`/1 s — up to ~60× the default invocation
+rate on a route that already runs ~1.3 M/day, with no cap and no admin visibility. Mitigated by
+disclosure rather than restriction: the editor states each mode's battery cost. If the bill ever
+argues back, the lever is a floor preference enforced in the partner action, not removing the mode.
+
 ## Links
 
 - [[track:019-hw-api]] — the wire contract this extends

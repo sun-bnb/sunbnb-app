@@ -258,10 +258,15 @@ frozen wire fact.
 switch busts the ETag and reaches a device parked on a free bed that would otherwise 304 for
 hours. **Firmware must recognise every member before potting**, like `cmd`: an unknown mode on a
 sealed unit is ignored forever. Both values come from platform preferences (`device-power-mode`,
-`device-poll-interval-sec`, admin `/preferences`), and the server guarantees the PAIR is
-servable — each mode keeps only its own band (continuous 1–15 s · light sleep 10–30 s · deep
-sleep 30–300 s, measured in `../sunbnb-hw` exp 005), the admin write path refuses an out-of-band
-interval and re-fits the stored one on a mode change, and the route clamps again on the way out.
+`device-poll-interval-sec`, admin `/preferences`) UNLESS the device carries its own pair
+(`Device.powerMode`/`pollIntervalSec`, partner `/devices` — track 025, 2026-09-14), in which case
+that wins; the wire shape is identical either way, so firmware neither knows nor cares which tier
+answered. The server guarantees the PAIR is servable — each mode keeps only its own band (continuous 1–15 s · light sleep 10–45 s · deep
+sleep 30–300 s — floors measured in `../sunbnb-hw` exp 005; light sleep's 45 s ceiling is an
+operating choice past the 27 s crossover, where holding the association still beats a rejoin per
+wake on a fussy AP), the admin write path refuses an out-of-band interval — the `/preferences`
+form saves the pair through `setDevicePolicy` and refuses a mode change the cadence cannot
+follow, the single-key path re-fits — and the route clamps again on the way out.
 An unreadable mode resolves to `deep_sleep`: a wrong slow value costs response time, a wrong
 `continuous` costs the cell in days. The bands OVERLAP deliberately at 10–15 s and 30 s, which is
 why this is a field of its own rather than something inferred from the number (D1).
