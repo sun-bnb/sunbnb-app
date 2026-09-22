@@ -1853,11 +1853,16 @@ describe('grouped reservation lifecycle (track 011 P3)', () => {
     const i3 = await createTestInventoryItem(user.id, site.id, { number: 3 })
     mockUserId = user.id
 
+    // Venue-local day, like the depart test above: the stay-over exception the
+    // rebooking below relies on compares `to` against the VENUE's end-of-today
+    // (findConflictingReservation), so a runner-local 23:59 lands an hour past
+    // it for the Helsinki fixture on a CEST runner and the seats stay held.
+    const { start: today0, end: today23 } = fixtureDay(site)
     const groupRes = await createTestReservation(user.id, site.id, [i1.id, i2.id, i3.id], {
       status: 'complete',
       operationalStatus: 'expected',
-      from: new Date(new Date().setHours(0, 0, 0, 0)),
-      to: new Date(new Date().setHours(23, 59, 59, 999)),
+      from: today0,
+      to: today23,
     })
 
     const noShowResult = await markNoShow(site.id, groupRes.id)
