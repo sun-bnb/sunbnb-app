@@ -3,7 +3,7 @@ id: 024-card-present-payments
 title: Card-present payments — Viva as the card rail, and the floor app that hosts it
 status: active
 created: 2026-08-28
-updated: 2026-08-30
+updated: 2026-09-22
 worktree: null
 ---
 
@@ -134,22 +134,41 @@ Q1 (below) must be answered before the app repo is created.
 
 ## Resume here
 
-**Next action — verify W8 in the dev loop, then close the gaps.** (1) Run partner + mobile with
-`VIVA_MODE=stub`: connect Viva at `/account/viva` then press Refresh — the stub auto-verifies on first
-Retrieve (`VIVA_STUB_AUTO_VERIFY` defaults on; tests set it off) and mints a merchant id, register a terminal from Discover on the site General tab,
-then Collect → Tap card on a walk-in and watch the stub auto-approve after `VIVA_STUB_RESOLVE_AFTER_MS`
-(default 4 s); try Cancel before/after approval. (2) Gaps in order: rentals card collect (same
-triple, `rental-payment.ts`), dispatch `refundReservationVivaPayment` from `refund.ts`, webhook
-receiver for *Transaction POS ECR Session Created/Failed*, own-venue no-fee fork once Viva answers.
-(3) Send the Viva Sales email (Gmail draft) / interest form; when the demo ISV credentials arrive,
-set `VIVA_ENV=demo` + `VIVA_ISV_*` in partner `.env.local` and repeat (1) against the real demo API
-with the Terminal DEMO app on the NFC handset. **Before pushing main:** `npm run migrate:test`.
+**Next action — chase Viva. The code is not what is blocking; the vendor relationship is.**
+Two separate threads, both stalled on their side:
 
-**Context a cold agent needs:** the 2026-08-30 log entries (mechanics + build session); playbook
-sections in `.claude/knowledge/{data-dev,partner-dev}.md`; the machine rows at
-`packages/data/src/reservation-machine.ts` (`cardPresent`), executors in `reservation-machine-apply.ts`
-(`runCollectStartCard` / `runCollectAbandonCard`), `apps/partner/app/sites/[id]/manage/actions.ts`
-(collect trio + terminal registry), `apps/mobile/src/lib/terminal.ts`. Remaining P0 unknowns:
+1. **ISV partner program.** The interest form went in **2026-09-22**. Viva support will not answer
+   commercial questions by email — their 08-31 reply redirected every partnership question to that
+   form, so this is the only live channel for Q1–Q3 below. Nothing to do but wait for their ISV team.
+2. **Merchant account (Refactory DX Oy) — stuck in KYC.** Agreement signed 08-29. On 08-31 the
+   Onboarding & Activation team asked for "a valid residence permit or Finnish ID card"; a passport
+   photo went back 09-03 with the note that a Finnish citizen holds no residence permit. **No reply
+   in 19 days** — inbox, spam and trash all checked. Their own footer says account verification moves
+   faster through the **in-dashboard chat** than email. Founder action, not an agent one.
+
+**Buildable today with zero vendor dependency.** The stub rail is complete and was browser-verified
+2026-08-30, but nothing has been run since — **no `VIVA_*` variable is set in any `.env.local` or in
+`dev-env.local`**. (1) Set `VIVA_MODE=stub` in partner `.env.local`, connect at `/account/viva` then
+press Refresh (the stub auto-verifies on first Retrieve — `VIVA_STUB_AUTO_VERIFY` defaults on; tests
+set it off) and mints a merchant id; register a terminal from Discover on the site General tab; then
+Collect → Tap card on a walk-in and watch the stub approve after `VIVA_STUB_RESOLVE_AFTER_MS`
+(default 4 s); try Cancel before/after approval. (2) Gaps in order: rentals card collect (same triple,
+`rental-payment.ts`), dispatch `refundReservationVivaPayment` from `refund.ts`, webhook receiver for
+*Transaction POS ECR Session Created/Failed*, own-venue no-fee fork once Viva answers. (3) When demo
+ISV credentials arrive, set `VIVA_ENV=demo` + `VIVA_ISV_*` in partner `.env.local` and repeat (1)
+against the real demo API with the Terminal DEMO app on the NFC handset. **Before pushing main:**
+`npm run migrate:test`.
+
+**Shipped state (2026-08-30, pushed — on `main` and `test`):** `a141809` `@repo/data/viva` (Cloud
+Terminal ISV client + in-process stub) and `aabd179` (partner connect page, terminal registry,
+Tap-card collect leg). The five `viva_*` columns on `PartnerAccount` plus `VivaTerminal` are live on
+the TEST DB; **production does not have them yet**. **Zero partner accounts are connected on test
+(0 of 3)** — the rail has never run against anything but the stub.
+
+**What Viva has already answered** (08-31, support@viva.com): one legal entity may hold two Viva
+accounts, provided they are different accounts and not the same company twice; and a Finnish ISV
+whose merchants are in Spain is fine, since both are euro. Remaining P0 unknowns — the reason the
+interest form matters:
 
 1. **Tap-on-Phone UI model** — can a payment render inside a third-party Android app, or does it
    always hand off to Viva.com Terminal? If hand-off only: what exactly do Semi-Unattended and
@@ -162,21 +181,28 @@ sections in `.claude/knowledge/{data-dev,partner-dev}.md`; the machine rows at
    whether marketplace real-time split also covers POS. See Q2.
 4. **Cloud Terminal API viability — ANSWERED 2026-08-30: yes.** Docs list Tap-on-Phone on Android
    and iOS as supported devices and state "This integration supports ISV scheme" with `/ecr/isv/v1/*`
-   endpoints. W8 is now designed server-push-first (see the 2026-08-30 log entry); app-to-app is a
+   endpoints. W8 is designed server-push-first (see the 2026-08-30 log entry); app-to-app is a
    fallback only because it exposes `ISV_clientSecret` on the device.
 
-**Context a cold agent needs:** this file's *Decision* and *Finding* sections; the collect seam
-at `apps/partner/app/sites/[id]/manage/CollectPaymentModal.tsx:24` (`CollectActions` triple) and
-`.../manage/actions.ts:1981` (`collectReservationPayment`); the machine cell at
-`packages/data/src/reservation-machine.ts:277` (`collect.start`); the Mollie precedent for
-per-partner OAuth at `packages/data/prisma/schema.prisma:188`.
+**Context a cold agent needs:** the 2026-08-30 and 2026-09-22 log entries; playbook sections in
+`.claude/knowledge/{data-dev,partner-dev}.md`; the machine rows at
+`packages/data/src/reservation-machine.ts` (`cardPresent`), executors in `reservation-machine-apply.ts`
+(`runCollectStartCard` / `runCollectAbandonCard`), `apps/partner/app/sites/[id]/manage/actions.ts`
+(collect trio + terminal registry), `apps/mobile/src/lib/terminal.ts`, the connect flow at
+`apps/partner/app/account/viva/actions.ts` (`connectViva` is idempotent by design — `POST
+/isv/v1/accounts` mints a fresh id every call, so a second call would orphan the first account), and
+the Mollie precedent for per-partner OAuth at `packages/data/prisma/schema.prisma:188`.
 
-**Blocked by:** nothing technical. Every phase below is gated on Q1/Q2 answers, not on code.
+**Blocked by:** Viva, on both threads above. Nothing technical — every remaining phase is gated on
+Q1–Q3 answers or on KYC clearing, not on code.
 
 ## Roadmap
 
-- ☐ **P0 — Provider due diligence** (the Resume-here conversation). Answers Q1, Q2, Q5. Deliverable:
+- ◐ **P0 — Provider due diligence (open, waiting on Viva).** Answers Q1, Q2, Q5. Deliverable:
   a decision on whether card ships web-first (Cloud Terminal API) or waits for the native app.
+  Q5 (Cloud Terminal viability) answered 2026-08-30 from the docs — yes. Q1–Q3 went to Viva's ISV
+  team via the vendor-solutions interest form on 2026-09-22, after support declined to answer
+  partnership questions by email; the merchant account is separately stuck in KYC (see Resume here).
 - ◐ **P1 — Viva merchant connect (REDESIGNED 2026-08-30, in progress).** No tokens: `PartnerAccount`
   gains `vivaAccountId` / `vivaMerchantId` / `vivaVerificationStatus` / `vivaSourceCode` /
   `vivaConnectedAt`; a `VivaTerminal` table binds `terminalId` ↔ site (per-device pick). Connect =
@@ -544,6 +570,32 @@ emulator/simulator — only the payment leg needs hardware.
   Cancel before approval → seat stays Occupied as an unsettled cash walk-in (`paid-in-cash`,
   ref null), Settle/Collect offered again. Test rows deleted; the dev account's stub Viva connection
   + registered terminal were LEFT in place for manual testing.
+
+- **2026-09-22 (vendor status pass — no code)** — Three weeks after the build session, reconstructed
+  where the Viva relationship actually stands, because the track still read "send the Viva Sales
+  email" as its next action and both threads had moved. **Timeline:** 08-29 agreement signed +
+  "create your credentials" + an onboarding task list; 08-30 ISV Partner Program email sent to
+  `support@viva.com`; 08-31 support replied — **all partnership questions go through the
+  vendor-solutions interest form**, plus two answers in passing (one legal entity may hold two Viva
+  accounts if they are different accounts and not the same company twice; a Finnish ISV with Spanish
+  merchants is fine, both euro); 08-31 the Onboarding & Activation team asked for "a valid residence
+  permit or Finnish ID card"; 09-03 a passport photo was sent with the note that a Finnish citizen
+  holds no residence permit; **silence since — 19 days, confirmed against inbox, spam and trash.**
+  The likely snag is literal checklist matching (permit/ID card asked, passport supplied), and Viva's
+  own signature says verification moves faster through the in-dashboard chat than email.
+  **The interest form was submitted 2026-09-22** (300-char limit; partner type selected **ISV**, not
+  marketplace — it matches how the existing thread is already titled, it is the program the Cloud
+  Terminal `/ecr/isv/v1/*` scheme and the demo credentials live under, and marketplace is a product
+  consumed as an ISV rather than a separate door). Q1–Q3 therefore remain open and now depend on that
+  form reaching Viva's ISV team.
+  **State verified rather than assumed:** both 08-30 commits (`a141809`, `aabd179`) are pushed and sit
+  on `main` and `test`; the five `viva_*` columns + `VivaTerminal` are on the TEST DB but **not on
+  production**; **0 of 3 partner accounts on test carry a `viva_account_id`**, and **no `VIVA_*`
+  variable is set in any `.env.local` or in `dev-env.local`** — so the stub loop the last session left
+  as the next action has not been run since, and the rail has still only ever met the stub.
+  **Nothing was built or changed this session.** Founder actions, in order: chase KYC via the
+  dashboard chat (it gates the merchant account regardless of how the partnership conversation goes),
+  then wait on the ISV team.
 
 ## Open decisions
 
