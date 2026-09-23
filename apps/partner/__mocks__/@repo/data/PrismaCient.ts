@@ -111,6 +111,21 @@ const prisma = {
     update: vi.fn(),
     delete: vi.fn(),
   },
+  // Track 019 P6: the telemetry time series. NO partner code reads it yet — the
+  // fleet page still shows the last-value columns on `device`. The delegate is
+  // here because the mock mirrors the real client and mock-contract.test.ts
+  // requires one per model; it gains real call sites when the fleet page starts
+  // charting trends (chg/day, batt − vmin widening).
+  deviceTelemetry: {
+    create: vi.fn(),
+    createMany: vi.fn(),
+    findMany: vi.fn(),
+    findFirst: vi.fn(),
+    count: vi.fn(),
+    deleteMany: vi.fn(),
+    aggregate: vi.fn(),
+    groupBy: vi.fn(),
+  },
   // Track 021: NO app code reads or writes DeviceSeat any more — a device is
   // placed by an assigned address, not bound to seat rows. This delegate stays
   // only because the MODEL still exists: the mock mirrors the real client, and
