@@ -1443,9 +1443,101 @@ model Device {
   pendingCmd   String?   @map("pending_cmd")
   pendingCmdAt DateTime? @map("pending_cmd_at")
   /// Uptime seconds at last report — a drop means the device rebooted, which is
-  /// the cheapest crash signal available. `polls`/`tempC` are accepted and
-  /// dropped: no column earns its keep yet.
+  /// the cheapest crash signal available.
   upSec      Int?         @map("up_sec")
+  /// ESP32 on-die temperature, °C. The CHIP, not the cell and not the air — it
+  /// runs warm relative to ambient, so it is a trend and a "case cooking in the
+  /// sun" signal, never a calibrated environmental reading.
+  tempC      Int?         @map("temp_c")
+  /// Cell current, µA, SIGNED: positive = discharging, negative = charging.
+  /// Microamps because deep sleep lives near 3.5 mA and integer mA would
+  /// quantise away the mode that matters most. 0 is a real measurement (an idle
+  /// cell), not a missing one — the firmware omits the key when it cannot read.
+  currentUa  Int?         @map("current_ua")
+  /// Net charge since the device's counter was last zeroed, µAh, same sign
+  /// convention. Integrates `currentUa`, so it IS the solar energy balance over
+  /// days, and it is the real state-of-charge signal: LiFePO4 rests 3.2–3.3 V on
+  /// a famously flat curve, so `battMv` alone says almost nothing about
+  /// remaining capacity. A counter, not an absolute — a reboot does NOT reset it.
+  chargeUah  Int?         @map("charge_uah")
+  /// Why the device last restarted: `poweron` · `brownout` · `panic` · `wdt` ·
+  /// `sw` · `deepsleep` · `other`. `brownout` is the one to act on — the supply
+  /// sagged under load, which on this hardware has meant a failing cell or a bad
+  /// connection. Stored as the raw token, unvalidated against a list, so a
+  /// firmware that gains a cause reports it instead of leaving a stale one here.
+  resetReason String?     @map("reset_reason")
+  /// The power mode the device says is ACTUALLY IN FORCE — not the stored
+  /// setting in `powerMode` (a console cable holds a unit in continuous whatever
+  /// NVS says). The applied half of the declarative loop, so the fleet UI can
+  /// show an assigned-vs-applied gap for power the way it does for location.
+  reportedPowerMode String? @map("reported_power_mode")
+  /// Smallest free heap since boot, bytes. The only leak detector available once
+  /// a unit is potted: a slow decline across days is the signal, a single value
+  /// means little.
+  heapFreeBytes Int?      @map("heap_free_bytes")
+  /// Consecutive FAILED polls, as counted by the device. Distinguishes "polling
+  /// happily" from "polling and being declined", which are identical in a poll
+  /// count. Non-zero on a device that is still reporting means the request
+  /// reaches us and is being rejected. The device ZEROES it on a successful
+  /// poll and builds its report BEFORE polling, so a non-zero value arrives on
+  /// exactly one poll — the one that recovered — and reads as "this is what the
+  /// outage cost", not "this device is failing now".
+  pollFails  Int?         @map("poll_fails")
+  /// CELL-side temperature, °C, from the INA228's own die — not `tempC`, which
+  /// is the ESP32's. The one that speaks to cell capacity, and the only
+  /// measurement of the case interior that exists: the 40–45 °C the PETG choice
+  /// rests on has always been an estimate (../sunbnb-hw).
+  cellTempC  Int?         @map("cell_temp_c")
+  /// The face the disc is actually SHOWING (`FREE` · `RESERVED` · `OCCUPIED` ·
+  /// `UNAVAILABLE` · `STALE`), in the server's own state vocabulary. The applied
+  /// half of the STATE loop, and the third one of these after location and power
+  /// mode: compare it against the state we served to catch a device that polls
+  /// happily and renders the wrong thing — the one failure a poll count cannot
+  /// see. `STALE` is the device's own "I have lost the server" face, so it
+  /// arrives on the recovery poll rather than during the outage.
+  reportedFace String?    @map("reported_face")
+  /// The poll interval the device says is IN FORCE, seconds — the applied half
+  /// of `pollIntervalSec` the way `reportedPowerMode` is of `powerMode`. Also
+  /// reveals the device's CONNECTIVITY LADDER: it degrades itself when it cannot
+  /// reach us (15 s while retrying, 3600 s once it has given up), so this
+  /// disagreeing with the assignment can mean "backed off deliberately" rather
+  /// than "not obeying" — read it with `pollFails` before calling it a fault.
+  reportedIntervalSec Int? @map("reported_interval_sec")
+  /// Wi-Fi channel in use. Tells apart units on different APs in one venue,
+  /// which RSSI alone cannot — the cheapest way to find the one bad AP behind a
+  /// cluster of weak units.
+  wifiChannel Int?        @map("wifi_channel")
+  /// LOWEST cell voltage the device saw in the poll window it last reported, mV.
+  /// `battMv` is a spot reading and spot readings land BETWEEN the radio's
+  /// bursts, so they describe the quiet moments. **Read this as a gap, not a
+  /// level:** `battMv - vminMv` is the sag under load, and that gap widening
+  /// over weeks is internal resistance rising — the cell ageing. It moves long
+  /// before resting voltage does, which makes it the earliest warning that
+  /// bursts are about to brown the chip out.
+  ///
+  /// NOTE the window: the device resets its extremes every poll, and we write on
+  /// a throttled subset, so this is "the window ending at the last write", not
+  /// "the worst since the last write". Honest for a trend (the sampling point is
+  /// fixed in the poll cycle, so two reports are comparable), and the strongest
+  /// argument for the deferred time series. Never publish it as a headline
+  /// number — it is opportunistic, not a peak detector (../sunbnb-hw).
+  vminMv     Int?         @map("vmin_mv")
+  /// HIGHEST cell current in that same window, µA, signed as `currentUa` is.
+  /// Prices the burst instead of the idle — one sample caught mid-join measured
+  /// 82.7 mA against a ~25 mA idle. A rising `imaxUa` beside a falling `vminMv`
+  /// is the same ageing story from the other side. Same window caveat as above,
+  /// and the absolute value UNDERSTATES the true peak by design.
+  imaxUa     Int?         @map("imax_ua")
+  /// How many times the device has detected charge-complete and ZEROED its
+  /// charge counter. Load-bearing for reading `chargeUah`: after the first step
+  /// `chargeUah` means "µAh drawn since the cell was last full", and **a step
+  /// here is the only thing that distinguishes a real anchor from someone typing
+  /// `ina reset` at a bench**. Any consumer taking a `chargeUah` delta MUST
+  /// check this first — across a step, the counter was reset, and the delta is
+  /// not a discharge. It lives in RTC memory, so it survives deep sleep and
+  /// DECREASES to 0 on a power cut, which also clears the INA228's accumulator:
+  /// a decrease invalidates a `chargeUah` baseline exactly as a step does.
+  fullCount  Int?         @map("full_count")
   createdAt  DateTime     @default(now()) @map("created_at")
   updatedAt  DateTime     @updatedAt @map("updated_at")
 

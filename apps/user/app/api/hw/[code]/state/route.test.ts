@@ -422,6 +422,16 @@ describe('tracking', () => {
     }
   }
 
+  /**
+   * A full report in the order ../sunbnb-hw `api_format_report` emits it
+   * (907f228), light-sleep flavour — so `slp` is present and `wake`/`wjoin`
+   * are not. Taken from the firmware source, not the doc's prose example.
+   */
+  const REPORT_V2 =
+    'fw=0.1.0;batt=3174;vmin=3102;rssi=-36;up=412;polls=27;slp=850;temp=24;drops=2;retry=5;' +
+    'cur=25100;imax=82700;chg=-1852;rst=poweron;mode=light_sleep;heap=241088;fails=0;' +
+    'ctemp=31;disc=FREE;iv=60;chan=6;full=2;loc=1-1-1'
+
   it('records the header report on the device row', async () => {
     const res = await GET(makeRequest(CODE, { 'x-sunbnb-telemetry': REPORT }), makeParams())
     expect(res.status).toBe(200)
@@ -472,6 +482,79 @@ describe('tracking', () => {
     await GET(makeRequest(), makeParams())
     const data = mockWrite.mock.calls[0]![0]!.data as Record<string, unknown>
     expect(Object.keys(data)).toEqual(['lastSeenAt'])
+  })
+
+  it('records the full v2 report — twenty-two keys in, nineteen columns out', async () => {
+    const res = await GET(makeRequest(CODE, { 'x-sunbnb-telemetry': REPORT_V2 }), makeParams())
+    expect(res.status).toBe(200)
+    const data = mockWrite.mock.calls[0]![0]!.data as Record<string, unknown>
+    expect(data).toMatchObject({
+      fw: '0.1.0', battMv: 3174, rssiDbm: -36, upSec: 412, tempC: 24, currentUa: 25100,
+      chargeUah: -1852, resetReason: 'poweron', reportedPowerMode: 'light_sleep',
+      heapFreeBytes: 241088, pollFails: 0, cellTempC: 31, reportedFace: 'FREE',
+      reportedIntervalSec: 60, wifiChannel: 6, vminMv: 3102, imaxUa: 82700, fullCount: 2,
+      reportedLocation: '1-1-1',
+    })
+    // The diagnostic counters stay off the row.
+    for (const key of ['polls', 'slp', 'drops', 'retry']) expect(data).not.toHaveProperty(key)
+  })
+
+  it('a full v2 report that only drifted inside its thresholds still writes NOTHING', async () => {
+    // The shape that decides the invocation bill at track 025's 1 s cadence:
+    // eighteen keys arriving every second must not become a row write per second.
+    mockDevice.mockResolvedValue({
+      ...freshRow(),
+      fw: '0.1.0', battMv: 3174, rssiDbm: -36, upSec: 400, tempC: 24, currentUa: 3500,
+      chargeUah: -1852, resetReason: 'poweron', reportedPowerMode: 'light_sleep',
+      heapFreeBytes: 241088, pollFails: 0, cellTempC: 31, reportedFace: 'FREE',
+      reportedIntervalSec: 60, wifiChannel: 6, vminMv: 3102, imaxUa: 25000, fullCount: 2,
+    } as never)
+    const res = await GET(makeRequest(CODE, { 'x-sunbnb-telemetry': REPORT_V2 }), makeParams())
+    expect(res.status).toBe(200)
+    expect(mockWrite).not.toHaveBeenCalled()
+  })
+
+  it('writes the poll a brownout appears — the one reset cause to act on', async () => {
+    mockDevice.mockResolvedValue({ ...freshRow(), resetReason: 'poweron' } as never)
+    await GET(makeRequest(CODE, { 'x-sunbnb-telemetry': 'fw=0.1.0;rssi=-61;loc=1-1-1;rst=brownout' }), makeParams())
+    const data = mockWrite.mock.calls[0]![0]!.data as Record<string, unknown>
+    expect(data.resetReason).toBe('brownout')
+  })
+
+  it('records a device that recovered from the connectivity ladder', async () => {
+    // The whole outage arrives on the one poll that gets through: the device
+    // backed itself off to deep sleep at an hour's cadence and showed STALE.
+    // That must be RECORDED, and it must not read as disobedience — it is a
+    // unit that lost us and made itself cheap (../sunbnb-hw 1b6c00b).
+    mockDevice.mockResolvedValue({
+      ...freshRow(),
+      reportedPowerMode: 'light_sleep', reportedIntervalSec: 60, pollFails: 0, reportedFace: 'FREE',
+    } as never)
+    await GET(
+      makeRequest(CODE, {
+        'x-sunbnb-telemetry':
+          'fw=0.1.0;rssi=-36;up=8812;loc=1-1-1;mode=deep_sleep;iv=3600;fails=24;disc=STALE',
+      }),
+      makeParams(),
+    )
+    const data = mockWrite.mock.calls[0]![0]!.data as Record<string, unknown>
+    expect(data).toMatchObject({
+      reportedPowerMode: 'deep_sleep', reportedIntervalSec: 3600, pollFails: 24, reportedFace: 'STALE',
+    })
+  })
+
+  it('records a charge-complete ANCHOR the poll it fires', async () => {
+    // The step in `full` is the only thing that distinguishes a real anchor
+    // from someone typing `ina reset` at a bench, and it is what tells a
+    // consumer that `chg`'s zero point moved — a chg delta across it is not a
+    // discharge. It must never wait out the throttle.
+    mockDevice.mockResolvedValue({ ...freshRow(), fullCount: 2, chargeUah: -184000 } as never)
+    await GET(
+      makeRequest(CODE, { 'x-sunbnb-telemetry': 'fw=0.1.0;rssi=-61;loc=1-1-1;full=3;chg=0' }),
+      makeParams(),
+    )
+    const data = mockWrite.mock.calls[0]![0]!.data as Record<string, unknown>
+    expect(data).toMatchObject({ fullCount: 3, chargeUah: 0 })
   })
 
   it('a failed write never costs the device its poll', async () => {

@@ -208,11 +208,23 @@ describe('accept', () => {
       expect(data).not.toHaveProperty('reportedLocation')
     })
 
-    it('accepts and drops polls/tempC — no column is invented for them', async () => {
-      await POST(makeRequest(CODE, { body: JSON.stringify({ polls: 42, tempC: 31.5 }) }), makeParams())
+    it('persists the v2 fields and still drops the counters that earn no column', async () => {
+      // `tempC` gained a column on 2026-09-22 with the rest of the v2 set; the
+      // diagnostic counters (`polls`, `slp`, `wake`, `wjoin`, `drops`, `retry`)
+      // did not, and still must not invent one.
+      await POST(
+        makeRequest(CODE, {
+          body: JSON.stringify({ polls: 42, drops: 2, tempC: 31.5, resetReason: 'brownout', chargeUah: 0 }),
+        }),
+        makeParams(),
+      )
       const data = vi.mocked(prisma.device.updateMany).mock.calls[0]![0]!.data as Record<string, unknown>
       expect(data).not.toHaveProperty('polls')
-      expect(data).not.toHaveProperty('tempC')
+      expect(data).not.toHaveProperty('drops')
+      expect(data.tempC).toBe(31)
+      expect(data.resetReason).toBe('brownout')
+      // Zero is a measurement for the energy fields, not a gap.
+      expect(data.chargeUah).toBe(0)
     })
 
 

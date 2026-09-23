@@ -41,16 +41,37 @@ amber = STALE/UNAVAILABLE**.
 
 ## Resume here
 
-**▶ WIRE v2 — 2026-09-12: ONE request.** Tracking, assignment and identification all ride the
-state poll. **Uplink** is the `x-sunbnb-telemetry` request header (`fw=…;batt=…;rssi=…;up=…;
-polls=…;loc=…`), recorded by the shared screen step with a THROTTLED write, before the
-assignment check — so an unassigned device registers and appears in the fleet list from its
-first poll. **Downlink** is unchanged: `location`, `cmd` and `pollAfterSec` inside the hashed
+**▶ NEXT: the fleet UI has nothing reading the v2 columns.** As of 2026-09-22 the server stores
+NINETEEN last-value fields per device and the partner devices page still shows four (last seen,
+battery, RSSI, fw). Worth surfacing first, in the hardware doc's own order of value:
+`resetReason = brownout` (the supply sagged under load — a failing cell or a bad connection, and
+the only attribution a field reboot gets), `chargeUah` trending negative (the unit is losing the
+energy race and will die), and `pollFails` non-zero while the device still reports. Then the two
+remaining applied-vs-assigned loops: `reportedPowerMode` + `reportedIntervalSec` close track 025's
+for POWER, and `reportedFace` closes one for STATE — a device rendering the wrong face while
+polling happily is invisible to every other field.
+
+**Two traps for whoever builds that page.** `chargeUah` is a counter with a moving zero — take a
+delta across a `fullCount` change and you will read an anchor as a catastrophic discharge; and
+`vminMv`/`imaxUa` are window SAMPLES, not the worst since the last write (see §Wire contract).
+
+**Read the ladder before designing those badges.** `mode`/`iv` disagreeing with the assignment can
+mean the device backed ITSELF off after losing us (see §Wire contract → the ladder), so the gap is
+a fault only when `fails` says it is not. Nothing is blocked — the data is written on every poll
+that earns one.
+
+**▶ WIRE v2 — 2026-09-12: ONE request; field set extended 2026-09-22.** Tracking, assignment and
+identification all ride the state poll. **Uplink** is the `x-sunbnb-telemetry` request header
+(`fw=…;batt=…;rssi=…;up=…;temp=…;cur=…;chg=…;rst=…;mode=…;heap=…;fails=…;loc=…`), recorded by the
+shared screen step with a THROTTLED write, before the assignment check — so an unassigned device
+registers and appears in the fleet list from its first poll. **Downlink** is unchanged: `location`, `cmd` and `pollAfterSec` inside the hashed
 `stable` object. The telemetry POST is kept as an escape hatch and writes through the same
 recorder, unthrottled. Trigger: the firmware had stopped calling the POST ("to be folded into
 the poll"), so the fleet list showed *Silent · 25d ago* for a device polling every minute.
-Full definition: **§Wire contract → Tracking rides the poll**. Server: `apps/user/app/api/hw/
-[code]/device-report.ts` (+ `hw-filter.ts` `screenDeviceRequest`), 111 HW tests green.
+Full definition: **§Wire contract → Tracking rides the poll** (the field table is normative;
+`../sunbnb-hw/docs/telemetry-fields.md` describes what the firmware emits and defers to it).
+Server: `apps/user/app/api/hw/[code]/device-report.ts` (+ `hw-filter.ts` `screenDeviceRequest`),
+143 HW tests green.
 Firmware half applied in `../sunbnb-hw` (`api.h`/`api.c`/`main.c`, builds clean, UNCOMMITTED,
 not flashed) — the hardware project should read this contract and take or redo that diff.
 
@@ -271,37 +292,124 @@ An unreadable mode resolves to `deep_sleep`: a wrong slow value costs response t
 `continuous` costs the cell in days. The bands OVERLAP deliberately at 10–15 s and 30 s, which is
 why this is a field of its own rather than something inferred from the number (D1).
 
-**Tracking rides the poll (wire v2, 2026-09-12).** The device's self-report travels on the
-state GET as ONE request header, alongside `User-Agent`, `If-None-Match` and `x-sunbnb-partner`:
+**Tracking rides the poll (wire v2, 2026-09-12; field set extended 2026-09-22).** The device's
+self-report travels on the state GET as ONE request header, alongside `User-Agent`, `If-None-Match`
+and `x-sunbnb-partner`:
 
 ```
-x-sunbnb-telemetry: fw=0.1.0;rssi=-61;up=8812;polls=42;loc=3-1-2;batt=3312
+x-sunbnb-telemetry: fw=0.1.0;batt=3174;vmin=3102;rssi=-36;up=412;polls=27;slp=850;temp=24;drops=2;retry=5;cur=25100;imax=82700;chg=-1852;rst=poweron;mode=light_sleep;heap=241088;fails=0;ctemp=31;disc=FREE;iv=60;chan=6;full=2;loc=1-1-1
 ```
 
-- `key=value` pairs, `;`-separated, whitespace around pairs tolerated. **Every key optional**;
-  send it on **every poll** (the server throttles, the device does not).
-- Keys: `fw` (≤64 chars) · `batt` (mV, integer) · `rssi` (dBm, integer, may be negative) · `up`
-  (seconds since boot, integer) · `polls` (integer, accepted and dropped) · `loc` (the location
-  the device is RUNNING, ≤64 chars — echo of the last `location` it adopted). **Omit a field you
-  do not know** rather than sending `0` or an empty value: the server's writer OMITS rather than
-  nulls, so an absent field leaves the last known value alone, and `0 mV` would overwrite a real
-  reading. An unknown key is ignored, so firmware may add one without a server change.
+That is a LIGHT-sleep unit: `slp` applies and `wake`/`wjoin` do not. A deep-sleep one swaps them,
+so **22 keys is a full report, not 24** — the table has 24 rows. A measured one came to 179 bytes.
+Verified against `../sunbnb-hw` `firmware/device/main/api.c` `api_format_report` at `2feb0ad`, which
+is the emitter of record — `docs/telemetry-fields.md` there describes the same set, but its prose
+example omits `slp` on a light-sleep device and shows `fw` as a git short hash when `FW_VERSION` is
+currently the literal `"0.1.0"`.
+
+- `key=value` pairs, `;`-separated, in the order below, whitespace around pairs tolerated.
+  **Every key optional**; send it on **every poll** (the server throttles, the device does not).
+  **512 bytes max** including the terminator — on overflow the firmware emits an EMPTY header
+  rather than a truncated one, because a truncated integer parses as a plausible wrong number.
+- **Stored keys** (each a last-value column on `Device`):
+
+  | Key | Type / unit | Column | Notes |
+  |---|---|---|---|
+  | `fw` | string ≤64 | `fw` | Today a static `FW_VERSION` (`"0.1.0"`), not a build hash. The key is emitted even when the value is NULL, so **`fw=` is on the wire** — an empty value is read as absent, never stored as `""` |
+  | `batt` | int, mV | `battMv` | Cell voltage. LiFePO4's curve is flat 3.2–3.3 V — **do not derive a percentage from it**; that is `chg`'s job |
+  | `vmin` | int, mV | `vminMv` | **Lowest** cell voltage in the last poll window. `batt` is a spot reading and spot readings land BETWEEN the radio's bursts. **Read it as a gap:** `batt − vmin` is the sag under load, and that gap widening over weeks is internal resistance rising — the cell ageing, visible long before resting voltage moves, and the earliest warning that bursts are about to brown the chip out |
+  | `rssi` | int, dBm, negative | `rssiDbm` | Prices a poll (~7× energy between −80 and −34 dBm) and predicts join failure |
+  | `up` | int, seconds | `upSec` | A **DROP** is the reboot signal — pair with `rst` for the cause |
+  | `temp` | int, °C | `tempC` | **ESP32 on-die**, not the cell and not the air. A trend, not a calibrated reading |
+  | `cur` | int, µA, **signed** | `currentUa` | **Positive = discharging, negative = charging.** µA because deep sleep lives near 3.5 mA |
+  | `imax` | int, µA, **signed** | `imaxUa` | **Highest** cell current in that window. Prices the burst instead of the idle — one sample mid-join measured 82.7 mA against a ~25 mA idle. Rising `imax` beside falling `vmin` is the same ageing story from the other side. **Understates the true peak by design; never a headline number** |
+  | `chg` | int, µAh, **signed** | `chargeUah` | Net charge since the counter was zeroed — the solar energy balance, and the real state-of-charge signal. **ANCHORED since 2026-09-22**: the firmware zeroes it at charge-complete, so it reads "µAh drawn since the cell was last full" — but only from the first `full` step on. An `up` drop does **not** reset it; a `full` change does. **Any consumer taking a `chg` delta must check `full` first** |
+  | `rst` | word ≤32, `[a-z0-9_]` | `resetReason` | `poweron` · `brownout` · `panic` · `wdt` · `sw` · `deepsleep` · `other`. **`brownout` is the one to alert on.** An unknown word is STORED, not dropped — a stale reason beside a fresh crash is worse |
+  | `mode` | word ≤32, `[a-z0-9_]` | `reportedPowerMode` | The mode **actually in force**, not the stored setting — a console cable holds a unit in continuous whatever NVS says. The applied half of track 025's loop. `continuous` · `light_sleep` · `deep_sleep`, or **`?`** — the firmware's `power_mode_name()` returns `?` for a mode outside its table, and `?` is DROPPED, not stored: it says "I cannot name my mode", which is an absent value, not a new one |
+  | `heap` | int, bytes | `heapFreeBytes` | Smallest free heap since boot — the only leak detector once a unit is potted |
+  | `fails` | int | `pollFails` | Consecutive failed polls. The device zeroes it on a success and builds its report BEFORE polling, so a non-zero value arrives on exactly one poll — the one that RECOVERED. Read it as "what the outage cost", not "failing now" |
+  | `ctemp` | int, °C | `cellTempC` | **CELL-side**, from the INA228's own die — not `temp`, which is the ESP32's. Speaks to cell capacity, and is the only measurement of the case interior that exists: the 40–45 °C the PETG choice rests on was an estimate |
+  | `disc` | word ≤32, `[A-Za-z0-9_]` | `reportedFace` | The face the disc is **actually showing** — `FREE` · `RESERVED` · `OCCUPIED` · `UNAVAILABLE` · `STALE`, our OWN state vocabulary handed back. The third applied-vs-assigned loop after location and power, and the only way to catch a device that polls happily and renders the wrong thing. `?` for an unknown state, dropped like `mode`'s |
+  | `iv` | int, seconds | `reportedIntervalSec` | The poll interval **in force** — the applied half of `pollIntervalSec`. Also exposes the ladder (below), so a disagreement is not automatically disobedience |
+  | `chan` | int | `wifiChannel` | Wi-Fi channel. Separates units on different APs in one venue, which RSSI alone cannot — the cheapest way to find the one bad AP behind a cluster of weak units |
+  | `full` | int | `fullCount` | Charge-complete firings. **Load-bearing for reading `chg`:** after the first step `chg` means "µAh drawn since the cell was last full", and a step here is the only thing that distinguishes a real anchor from someone typing `ina reset` at a bench. Lives in RTC memory — survives deep sleep, DECREASES to 0 on a power cut, which also clears the INA228's accumulator |
+  | `loc` | string ≤64 | `reportedLocation` | The location the device is RUNNING — echo of the last `location` it adopted |
+
+- **Enum words are matched by SHAPE, not case, and the case is preserved.** `rst`/`mode` are lower
+  snake (`brownout`, `light_sleep`); `disc` comes back in CAPS because `seat_state_name()` returns
+  the exact tokens our own projection emits. Folding the case would break the one comparison `disc`
+  exists for. A firmware `?` (both `power_mode_name` and `seat_state_name` return it for a value
+  outside their tables) means "I cannot name this" and is DROPPED — the one case where leaving the
+  last known value alone is right, because it is an absent value, not a new one.
+- **Accepted and dropped** (diagnostic detail that reads well in a log line and does not earn a
+  schema): `polls` · `slp` · `wake` · `wjoin` · `drops` · `retry`. An unknown key is likewise
+  ignored, so firmware may add one without a server change.
+- **Omit a field you do not know** rather than sending `0` or an empty value: **an absent key means
+  "I don't know" and leaves the stored value alone — it does not mean zero.** The server's writer
+  OMITS rather than nulls, and `0 mV` would overwrite a real reading with a dead cell. The converse
+  holds for `cur`, `chg` and `fails`, where zero is a real measurement (an idle cell, an exactly
+  balanced day, a device polling happily): the firmware carries validity flags for those rather
+  than using 0 as a sentinel, and the server stores a reported 0.
+- **The server re-checks the sentinels rather than trusting them.** `batt ≤ 0`, `rssi = 0`,
+  `temp ≤ −999`, `heap ≤ 0` and `fails < 0` are read as ABSENT, mirroring the firmware formatter's
+  own guards. This is not belt-and-braces: the legacy POST applies none of them and sends
+  `{"battMv":0,"rssiDbm":0}` unconditionally, which is how a `battMv: 0` reached the fleet list and
+  forced the "a zero reading is the ABSENCE of a measurement" branch in
+  `apps/partner/app/devices/device-health.ts`. Enforcing it in the shared recorder makes the two
+  paths mean the same thing, which was the point of sharing one.
 - **Recorded before any decline.** The screen step reads the `Device` row once, records the report,
   and only then checks the assignment — so a device with no location is still tracked, and an
   UNKNOWN code with a valid `x-sunbnb-partner` claim is REGISTERED (self-registration moved here
   from the POST). Filtered-out traffic (bad `User-Agent`) is never recorded. A failed write never
   costs the device its poll: the response is whatever it would have been.
-- **Throttled write.** The row is written when `fw` or `loc` changed, battery moved ≥50 mV, RSSI
-  moved ≥6 dB, `up` DROPPED (reboot signal), or `lastSeenAt` is older than 5 min; otherwise the
+- **Throttled write.** The row is written when `fw`, `loc`, `rst` or `mode` changed, `fails`
+  crossed the zero/non-zero edge, battery moved ≥50 mV, RSSI ≥6 dB, `temp` ≥5 °C, `chg` ≥5 000 µAh,
+  `heap` ≥8 KiB, `up` DROPPED (reboot signal), or `lastSeenAt` is older than 5 min; otherwise the
   poll touches nothing beyond the read it already makes. The partner claim (a partner lookup) runs
-  on the same throttle. This is what keeps track 025's 1–15 s continuous cadence affordable.
+  on the same throttle. This is what keeps track 025's 1–15 s continuous cadence affordable —
+  **adding thirteen keys to the report did not add thirteen triggers.** Two deliberate omissions:
+  `cur` NEVER triggers a write (it swings between ~3.5 mA asleep and ~20 mA awake inside one poll,
+  so any threshold degenerates into a write per poll — it rides along on writes earned by something
+  else, and `chg` integrates it anyway), and `fails` triggers on the EDGE rather than the count,
+  because a device being declined every poll would otherwise write every poll. `disc`, `iv` and
+  `chan` are change-triggered like `mode` — all discrete and rare; `disc` moves a few times a day
+  per seat, not per poll, and each move is the applied seat state, which is worth a row. `full`
+  triggers on ANY change including a decrease, because it is what makes `chg` readable at all.
+  `vmin` is thresholded on `batt`'s own band; `imax` rides along like `cur`, being dominated by
+  whether the window held a join.
+
+- **A window value in a throttled store is a SAMPLE.** The device resets its extremes every poll,
+  so each report's `vmin`/`imax` covers one poll interval — but we write on a throttled subset, so
+  the row holds *the window ending at the last write*, not *the worst since the last write*. That
+  is honest for the trend the pair is for (the sampling point is fixed in the poll cycle, so two
+  reports are comparable), and it is exactly why `vmin` earns a trigger: without one, a 60 s
+  cadence under the 5-min floor samples one window in five and systematically misses the bad ones.
+  It is also the strongest argument yet for the deferred time series — a series keeps every window
+  rather than a sample of them.
+
+**The connectivity ladder is not a fault** (`../sunbnb-hw` `1b6c00b`). A device that cannot reach us
+degrades ITSELF — `light_sleep` at 15 s while it retries, `deep_sleep` at 3600 s once it gives up
+(20 failures ≈ 5 min). It cannot report while that is happening, so the whole episode lands on the
+ONE poll that recovers, carrying `fails` ≫ 0 beside a `mode`/`iv` that disagree with what we
+assigned and `disc=STALE`. All of those trigger, so the recovery is recorded; the next poll — after
+the device has taken the mode from our 200 and zeroed its counter — records the return to normal.
+Two rows for an outage of any length. **A consumer must not read that first row as disobedience:**
+`fails > 0` with `iv = 3600` is a unit that backed off deliberately and is now costing almost
+nothing, not a unit that is broken. Any 200 restores the served mode.
 - **Both directions declarative.** The device says what it runs on every poll; the server says what
   it should run on every 200. The fleet UI's assigned-vs-applied gap needs no ack protocol — the
   old "reported only once the POST returned 2xx" firmware rule is gone.
-- `polls` and `tempC`-class extras: accepted and dropped, no column earns its keep yet.
+- **Time series deferred.** Every stored field is a LAST VALUE. `chg`, `cur`, `batt`, `rssi` and
+  `heap` are worth a series — the trend is the signal, and `chg` over days is what settles whether
+  a deployed unit is energy-positive — but a per-device time series is a table, a retention policy
+  and a write path of its own, and the last value is what the fleet list reads today. Open, P6.
 
-**`POST /api/hw/{code}/telemetry`** — LEGACY escape hatch, `{ fw, battMv, rssiDbm, upSec, polls,
-tempC?, loc? }` → `204`. Same client filter, same recorder as the header, but UNTHROTTLED (a call
+**`POST /api/hw/{code}/telemetry`** — LEGACY escape hatch, `{ fw, battMv, rssiDbm, upSec, tempC,
+currentUa, chargeUah, resetReason, reportedPowerMode, heapFreeBytes, pollFails, loc }` → `204`. The
+body names the COLUMNS where the header names the wire keys — it predates the header and is written
+by hand, not by the poll loop. The SERVER accepts that whole set; the firmware's
+`api_post_telemetry` still builds the v1 six (`fw` `loc` `battMv` `rssiDbm` `upSec` `polls`) and
+nothing calls it in normal operation, so the extra fields are for a hand-written boot dump. Same client filter, same recorder as the header, but UNTHROTTLED (a call
 here is rare and explicit). Not called by firmware in normal operation; kept for a report that
 outgrows a header (a boot diagnostic dump). Never fails the device's poll loop: a malformed or
 absent body, and a database that is down, are all `204`.
@@ -492,10 +600,13 @@ same threshold `../sunbnb-hw` ADR 0010 sets for the provisioning script.
   whether a deployment takes a morning or a week. Rebinding uses the same flow (seat replaced,
   parasol moved); a board swap does **not** — that is a re-provision at the bench (P3), same
   code, sticker and binding untouched (ADR 0003 + 0010).
-- **☐ P5 — telemetry persistence + operator health view.** Promote the P1.5 stub to last-values
-  writes, then a partner-side list (site → devices: last seen, battery, RSSI, fw) so an operator
-  sees a dead device before a guest does. Cell voltage is the one number that predicts a field
-  failure.
+- **◧ P5 — telemetry persistence + operator health view.** *Persistence DONE* — last-values
+  writes shipped 2026-09-12, extended to the full v2 field set 2026-09-22 (twelve columns; see the
+  §Wire contract table). The partner list exists and shows last seen, battery, RSSI, fw. *Health
+  view still owes the v2 signals:* `resetReason` (`brownout` first), `chargeUah` trend,
+  `pollFails`, and `reportedPowerMode` as an assigned-vs-applied badge. Note cell VOLTAGE is the
+  weaker of the two energy numbers on this chemistry — `chargeUah` is the one that predicts a
+  field failure; `battMv` barely ranks a fleet between 3.2 and 3.3 V.
 - **💤 P6 — fleet scale.** Only when a real fleet exists: edge runtime, short-TTL per-site cache,
   `304` discipline, cadence throttling via `pollAfterSec`, `cmd: "stow"` for off-season. See Q3
   for the invocation arithmetic.
@@ -801,6 +912,122 @@ backend, and both drag in consumer-surface design that shouldn't gate the hardwa
   of which 76 state), admin 202, partner 2090; tsc + lint clean. **Firmware half NOT done** — the
   device must learn to read `powerMode` and switch `esp_pm_configure` / the deep-sleep branch at
   runtime, which is track 025 Phase 1 in `../sunbnb-hw`.
+
+- **2026-09-22 — The v2 field set lands: five stored keys become twelve.** Trigger: the firmware
+  gained fields 12–17 (`cur` `chg` `rst` `mode` `heap` `fails`) on `907f228` and documented the
+  whole emitted set in `../sunbnb-hw/docs/telemetry-fields.md`; the server was keeping five keys
+  and dropping the rest, so the most valuable measurements the hardware makes were being parsed
+  and thrown away on every poll. Three of them change what is knowable at all: **`chg`** is the
+  net energy balance since the counter was zeroed and is the real state-of-charge signal (LiFePO4
+  rests 3.2–3.3 V on a flat curve, so `batt` alone barely ranks a fleet), **`rst=brownout`** is
+  the only attribution a field reboot ever gets, and **`mode`** is the APPLIED power mode — track
+  025's declarative loop could show an assigned-vs-applied gap for location but not for power,
+  because the server only ever learned the mode it asked for. Added as nullable last-value columns
+  (`20260922133255_add_device_telemetry_v2_fields`, additive, applied local + `sunbnb_test`):
+  `tempC` `currentUa` `chargeUah` `resetReason` `reportedPowerMode` `heapFreeBytes` `pollFails`.
+  `polls` `slp` `wake` `wjoin` `drops` `retry` stay accepted-and-dropped — log-line detail that
+  does not earn a schema, which is what this track already said about `polls`.
+
+  **The throttle did not grow with the field set**, and that was the design work. `rst`/`mode`
+  trigger on change (discrete, rare, actionable that poll); `temp`/`chg`/`heap` are thresholded
+  (5 °C · 5 000 µAh · 8 KiB) alongside battery and RSSI; **`fails` triggers on the zero/non-zero
+  EDGE, not the count** — a device being declined every poll would otherwise write every poll,
+  which is precisely the traffic the throttle exists for; and **`cur` never triggers at all** — it
+  swings between ~3.5 mA asleep and ~20 mA awake inside one poll, so any threshold on it
+  degenerates into a write per poll. It rides along on writes earned by something else, which is
+  all a last value of an instantaneous current is worth, and `chg` integrates it anyway. Regression
+  net for the bill: a full eighteen-key report that drifted inside every threshold writes nothing.
+  Enum words (`rst`, `mode`) are shape-checked (`[a-z0-9_]{1,32}`) but NOT checked against a known
+  list — dropping an unknown value would leave the previous reason standing next to a fresh crash.
+  The legacy POST carries the same fields by column name and shares the recorder. HW suite 143
+  green (37 report + 19 telemetry + 87 state), user app green, tsc + lint clean.
+  **Not done, deliberately:** no time series (P6 — `chg` over days is what settles whether a unit
+  is energy-positive, but that is a table, a retention policy and a write path), and **no fleet UI
+  yet** — the columns are written and nothing reads them; the alerting order the hardware doc
+  suggests (`brownout` → `chg` trending negative → climbing `fails` → declining `heap`) is the
+  shape the partner devices page should take next.
+
+  **Checked against the emitter, not the doc** (same day, after the first pass was written from
+  `telemetry-fields.md` alone). `../sunbnb-hw` `api.c` `api_format_report` @ `907f228` is the
+  source of truth, and it differs from its own doc in four ways that reached this side:
+  1. **`mode=?` is reachable** — `power_mode_name()` returns `"?"` outside its table. Dropped, not
+     stored: it means "I cannot name my mode", which is absent, not a new mode.
+  2. **`fw=` is emitted for a NULL version** (the key is written unconditionally), and `FW_VERSION`
+     is the literal `"0.1.0"`, not the git short hash the doc's example shows. Read as absent.
+  3. **The legacy POST applies none of the formatter's sentinel guards** and sends
+     `{"battMv":0,"rssiDbm":0}` unconditionally — the origin of the `battMv: 0` workaround in the
+     partner fleet page. The sentinels now live in the shared recorder, so both paths agree.
+  4. **The 512-byte overflow rule is not implemented as documented.** The doc promises an EMPTY
+     header rather than a truncated one, but only the first `snprintf` (the `fw` field) empties the
+     buffer; every later field guards with `(size_t)n < cap` while `n` already holds snprintf's
+     would-have-written length, so an overflow yields a TRUNCATED header — and a truncated integer
+     parses as a plausible wrong number, exactly the failure the rule exists to prevent. **Not
+     reachable today** (worst case ≈ 340 bytes against a 512 buffer) and **not worked around here**
+     — the fix belongs in the firmware, and a length heuristic on this side would codify the bug.
+     Left as a hardware-side note.
+
+- **2026-09-22 (second pass) — four more applied-state fields; the device now reports what it is
+  DOING, not just how it is.** `../sunbnb-hw` `3e94d67` + `1b6c00b` added `ctemp` `disc` `iv`
+  `chan` (22 keys in the table, 20 in any one report — `slp` and `wake`/`wjoin` are exclusive by
+  mode; a measured report is 150 of 512 bytes). Stored as
+  `20260922162512_add_device_telemetry_applied_state_fields` (additive, nullable, local +
+  `sunbnb_test`): `cellTempC` `reportedFace` `reportedIntervalSec` `wifiChannel`. This goes BEYOND
+  the hardware doc's "suggested storage" list, which was not updated for the four — the reasoning
+  for each is in the field table, and `chan` is the marginal one (it is closest to the
+  accepted-and-dropped counters; kept because there is no log to read it from instead).
+
+  **`disc` is the valuable one**: the face the unit is actually showing, in our OWN state
+  vocabulary. It is the third applied-vs-assigned loop after location and power mode, and the only
+  one that catches a device polling happily while rendering the wrong thing — a failure a poll
+  count, an uptime and a battery reading are all blind to.
+
+  **Two firmware facts forced code changes rather than additions.** (1) `seat_state_name()` returns
+  `FREE`/`RESERVED`/…/`STALE` in CAPS — our word rule was `[a-z0-9_]` and would have silently
+  dropped every disc report. It is now `[A-Za-z0-9_]`, case PRESERVED, because `disc` is only ever
+  read against the state we served and folding it would break that comparison. The cost is that
+  `mode=DEEP` is now stored verbatim instead of rejected; that is the same trade already made for
+  an unknown `rst`, and the firmware only ever emits lower snake there. (2) The **connectivity
+  ladder** means `mode` and `iv` MOVE ON THEIR OWN when a device loses us (light/15 s, then
+  deep/3600 s), and since it cannot report during the outage, the whole episode arrives on the one
+  recovering poll. So an assigned-vs-applied gap in power is no longer automatically a fault —
+  documented in the contract, and pinned by a test, because the fleet UI is about to read exactly
+  those columns and "backed off deliberately" and "not obeying" look identical without `fails`.
+
+  Throttle unchanged in shape: `disc`/`iv`/`chan` change-trigger like `mode`, `ctemp` shares the
+  5 °C band with `temp`. HW suite 154 green (47 report + 19 telemetry + 88 state), user app 733,
+  tsc + lint clean, `migrate:check` clean.
+
+- **2026-09-22 (third pass) — the charge counter gains an ANCHOR, and the cell gains a window.**
+  `../sunbnb-hw` `2feb0ad` added `vmin` `imax` `full` (24 keys in the table, 22 in one report;
+  measured at 179 of 512 bytes). Stored as `20260922164655_add_device_telemetry_cell_extremes`
+  (additive, nullable, local + `sunbnb_test`): `vminMv` `imaxUa` `fullCount`. Nineteen columns.
+
+  **`full` is the one that changes how an existing field must be read.** `chg` used to count from
+  an arbitrary moment — "42 mAh since something". The firmware now detects charge-complete (CV
+  ceiling AND tapered current, three polls running) and zeroes the counter there, so `chg` becomes
+  "µAh drawn since the cell was last full". `full` counts those firings, and **a step in it is the
+  only thing that distinguishes a real anchor from someone typing `ina reset` at a bench**. So any
+  consumer taking a `chg` delta must check `full` first: across a step the counter was reset and
+  the delta is not a discharge. It triggers a write on ANY change including a DECREASE — it lives
+  in RTC memory and drops to 0 on a power cut, which also clears the INA228's accumulator, so a
+  decrease invalidates a `chg` baseline exactly as a step does. The contract's `chg` row now says
+  this; it is the kind of thing a fleet UI gets silently wrong once and never notices.
+
+  **`vmin`/`imax` forced a genuinely new throttle question, not another threshold.** They are
+  WINDOW extremes and the device resets its window every poll — but we write on a throttled subset,
+  so the row holds *the window ending at the last write*, not *the worst since the last write*. At
+  60 s under the 5-min floor that is one window in five, and the missed ones are exactly the bad
+  ones. `vmin` therefore earns a trigger on `batt`'s own band (it is the same quantity read at the
+  window's worst, and `batt − vmin` — the sag — is the earliest ageing signal available, moving
+  long before resting voltage does). `imax` does NOT: it is dominated by whether the window held a
+  Wi-Fi join (82.7 mA mid-join against ~25 mA idle), so a threshold fires on the join schedule
+  rather than on anything actionable, and the hardware doc explicitly says never to publish it as a
+  headline number. Both are documented in the code and the contract as SAMPLES, which is the
+  strongest argument yet for the P6 time series — a series keeps every window instead of a sample.
+
+  No parser surprises this pass: emission order, sentinels (`vmin > 0`, `full >= 0`, `imax` on a
+  validity flag so 0 is a reading) and spellings all matched the doc. HW suite 158 green (50 report
+  + 19 telemetry + 89 state), user app 737, tsc + lint clean, `migrate:check` clean.
 
 ## Links
 

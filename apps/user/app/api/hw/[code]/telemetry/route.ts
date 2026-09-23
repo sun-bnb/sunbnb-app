@@ -1,8 +1,11 @@
 /**
  * HW API — device telemetry (track 019, P1.5 → P5 → legacy).
  *
- * `POST /api/hw/{code}/telemetry` — `{ fw, battMv, rssiDbm, upSec, polls, tempC?, loc? }`
- * → `204`. Last-values only, fire-and-forget.
+ * `POST /api/hw/{code}/telemetry` — the full last-value set by COLUMN name
+ * (`{ fw, battMv, rssiDbm, upSec, tempC, currentUa, chargeUah, resetReason,
+ * reportedPowerMode, heapFreeBytes, pollFails, cellTempC, reportedFace,
+ * reportedIntervalSec, wifiChannel, vminMv, imaxUa, fullCount, loc }`) → `204`.
+ * Fire-and-forget.
  *
  * **Not the tracking path any more.** Tracking rides the state poll as the
  * `x-sunbnb-telemetry` request header (`../device-report`), because a second
@@ -45,7 +48,13 @@ export async function POST(request: NextRequest, { params }: { params: { code: s
     const payload = raw ? (JSON.parse(raw) as Record<string, unknown>) : {}
     const last = await prisma.device.findUnique({
       where: { code: screened.code },
-      select: { fw: true, battMv: true, rssiDbm: true, upSec: true, reportedLocation: true, lastSeenAt: true },
+      select: {
+        fw: true, battMv: true, rssiDbm: true, upSec: true, tempC: true,
+        currentUa: true, chargeUah: true, resetReason: true, reportedPowerMode: true,
+        heapFreeBytes: true, pollFails: true, cellTempC: true, reportedFace: true,
+        reportedIntervalSec: true, wifiChannel: true, vminMv: true, imaxUa: true,
+        fullCount: true, reportedLocation: true, lastSeenAt: true,
+      },
     })
     await recordDeviceReport(screened.code, reportFromBody(payload), {
       partnerClaim: request.headers.get(PARTNER_HEADER),
