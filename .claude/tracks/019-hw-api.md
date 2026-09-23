@@ -51,6 +51,12 @@ remaining applied-vs-assigned loops: `reportedPowerMode` + `reportedIntervalSec`
 for POWER, and `reportedFace` closes one for STATE — a device rendering the wrong face while
 polling happily is invisible to every other field.
 
+**The history is now being collected** (P6, 2026-09-23): every recorded report is appended to
+`device_telemetry`, retained for `device-telemetry-retention-days` (admin, default 365). Nothing
+reads it yet — that is the other half of the next job, and the one that pays for the collection:
+capacity learned from `chg` across an anchor-to-cutoff span, `chg`/day per unit against the fleet,
+`batt − vmin` widening over weeks.
+
 **Two traps for whoever builds that page.** `chargeUah` is a counter with a moving zero — take a
 delta across a `fullCount` change and you will read an anchor as a catastrophic discharge; and
 `vminMv`/`imaxUa` are window SAMPLES, not the worst since the last write (see §Wire contract).
@@ -399,10 +405,15 @@ nothing, not a unit that is broken. Any 200 restores the served mode.
 - **Both directions declarative.** The device says what it runs on every poll; the server says what
   it should run on every 200. The fleet UI's assigned-vs-applied gap needs no ack protocol — the
   old "reported only once the POST returned 2xx" firmware rule is gone.
-- **Time series deferred.** Every stored field is a LAST VALUE. `chg`, `cur`, `batt`, `rssi` and
-  `heap` are worth a series — the trend is the signal, and `chg` over days is what settles whether
-  a deployed unit is energy-positive — but a per-device time series is a table, a retention policy
-  and a write path of its own, and the last value is what the fleet list reads today. Open, P6.
+- **Time series SHIPPED (2026-09-23).** Every `Device` column above is still a LAST VALUE — that
+  is what the fleet list reads — and every recorded report is now ALSO appended to
+  `device_telemetry` in the same transaction, so the two cannot disagree about one report. The
+  series inherits this throttle rather than the poll rate: it is the sequence of readings the
+  server KEPT, which is the only affordable meaning of "keep every reading" against ~1.3 M
+  polls/day (Q3). It carries `mode` and `iv` as well as the numbers, because the energy questions
+  are asked PER MODE. Retention is `device-telemetry-retention-days` (admin preferences, default
+  365), swept daily by `/api/cron/prune-telemetry`, oldest first. **Nothing reads it yet** — it is
+  collected now because a trend cannot be backfilled.
 
 **`POST /api/hw/{code}/telemetry`** — LEGACY escape hatch, `{ fw, battMv, rssiDbm, upSec, tempC,
 currentUa, chargeUah, resetReason, reportedPowerMode, heapFreeBytes, pollFails, loc }` → `204`. The
@@ -607,7 +618,20 @@ same threshold `../sunbnb-hw` ADR 0010 sets for the provisioning script.
   `pollFails`, and `reportedPowerMode` as an assigned-vs-applied badge. Note cell VOLTAGE is the
   weaker of the two energy numbers on this chemistry — `chargeUah` is the one that predicts a
   field failure; `battMv` barely ranks a fleet between 3.2 and 3.3 V.
-- **💤 P6 — fleet scale.** Only when a real fleet exists: edge runtime, short-TTL per-site cache,
+- **◧ P6 — telemetry history. COLLECTION DONE 2026-09-23; nothing reads it.** `device_telemetry`
+  (BIGSERIAL id — the one table expected to reach 10^8 rows, where a cuid costs ~3x an int8 in the
+  heap and again in every index) takes a row per recorded report, written in the poll's own
+  transaction. Bounded by `device-telemetry-retention-days` (default 365) and swept daily by
+  `/api/cron/prune-telemetry`, which deletes in bounded, resumable chunks rather than one
+  unbounded DELETE — the table is largest exactly when someone has just shortened the window.
+  **The open question is volume, not correctness:** at the 5-min floor a 1500-unit fleet writes
+  ~4.3e5 rows/day, so a year is ~1.6e8 rows. The lever nobody has needed yet is a COARSER FLOOR
+  for the series than for the last-value row (hourly would cut it ~10x and still answer every
+  question in `../sunbnb-hw/docs/telemetry-fields.md`, whose finest is harvest bucketed by hour).
+  Deliberately not built: the fleet is a handful of units today, and a second throttle is a second
+  thing to keep honest. Next: something that READS it — capacity learned from `chg` across an
+  anchor-to-cutoff span, `chg`/day per unit against the fleet, `batt − vmin` widening.
+- **💤 P7 — fleet scale.** Only when a real fleet exists: edge runtime, short-TTL per-site cache,
   `304` discipline, cadence throttling via `pollAfterSec`, `cmd: "stow"` for off-season. See Q3
   for the invocation arithmetic.
 
@@ -1028,6 +1052,37 @@ backend, and both drag in consumer-surface design that shouldn't gate the hardwa
   No parser surprises this pass: emission order, sentinels (`vmin > 0`, `full >= 0`, `imax` on a
   validity flag so 0 is a reading) and spellings all matched the doc. HW suite 158 green (50 report
   + 19 telemetry + 89 state), user app 737, tsc + lint clean, `migrate:check` clean.
+
+- **2026-09-23 — telemetry history: keep every reading the server keeps.** Founder ask: save all
+  telemetry readings, cap it from the admin preferences beside the power policy, a year by default.
+  Built `device_telemetry` + `device-telemetry-retention-days` + a daily sweep.
+
+  **The design question was what "every reading" can mean.** The device reports on every poll, and
+  recording every poll is precisely what this track's throttle exists to avoid (~1.3 M polls/day,
+  Q3) — so the series is written on the SAME trigger as the last-value row, in the SAME
+  transaction. That keeps one throttle to reason about rather than two that drift, and makes the
+  series exactly "the readings we kept". The cost is that resolution follows `reportIsDue`: at
+  most one row per device per 5 min, plus one per notable change. Volume, stated because it is the
+  thing that will bite: ~4.3e5 rows/day at 1500 units, ~1.6e8 for a year. The unbuilt lever is a
+  coarser floor for the series than for the Device row (hourly ≈ 10x fewer rows and still answers
+  every question the hardware doc lists, the finest being harvest bucketed by hour). Not built
+  because the fleet is a handful of units and a second throttle is a second thing to keep honest.
+
+  **Retention is the only bound**, so the preference is a storage budget, not a nicety — its
+  description says so, and that shortening it DELETES history irreversibly on the next sweep. The
+  sweep deletes in bounded chunks with a per-run ceiling rather than one `deleteMany`: it runs in a
+  serverless invocation against a table that is largest exactly when someone has just cut the
+  window, and a timeout mid-delete would mean the next run starts over. Chunked, it is resumable
+  and idempotent by construction. `complete: false` reports the ceiling, not a failure.
+
+  Admin needed NO code: the preferences page is registry-driven, so a `number` entry in group
+  `Hardware` renders itself beside the coupled power card. Also unified the two writers behind one
+  `measurementData()` — the last-value row and the series were listing nineteen fields each, which
+  is exactly the duplication that drifts. Tests: 6 for the cron gate (it destroys data no backfill
+  can reconstruct, so an unset secret fails CLOSED), 7 for the sweep, 6 for the append and for the
+  throttle declining to append. Turned `preferences.test.ts`'s hand-written key list into one
+  derived from the registry — it broke on the new key while asserting nothing a registry-derived
+  check does not. User 749, data 625, admin 206, tsc + lint clean, `migrate:check` clean.
 
 ## Links
 

@@ -17,6 +17,7 @@ import {
   reportFromBody,
   reportIsDue,
   reportData,
+  telemetryRowData,
   BATT_DELTA_MV,
   RSSI_DELTA_DB,
   TEMP_DELTA_C,
@@ -481,6 +482,32 @@ describe('reportIsDue — the throttle', () => {
         NOW,
       ),
     ).toBe(false)
+  })
+})
+
+describe('telemetryRowData — the history row', () => {
+  it('carries the measurements with recordedAt, and no lastSeenAt', () => {
+    // `lastSeenAt` says "when did we last hear from this unit" and belongs to
+    // the Device row; the series says "when was this reading taken".
+    const row = telemetryRowData({ fw: '0.1.0', battMv: 3174, chargeUah: -1852 }, NOW)
+    expect(row).toEqual({ recordedAt: NOW, fw: '0.1.0', battMv: 3174, chargeUah: -1852 })
+    expect(row).not.toHaveProperty('lastSeenAt')
+  })
+
+  it('OMITS what the device did not report rather than writing zeros', () => {
+    // A null in the series means "not reported in this reading". Inventing a
+    // zero would corrupt every average and every delta taken across it —
+    // worse here than on the last-value row, which at least shows one number.
+    const row = telemetryRowData({ battMv: 3174 }, NOW)
+    expect(row).toEqual({ recordedAt: NOW, battMv: 3174 })
+    expect(row).not.toHaveProperty('currentUa')
+    expect(row).not.toHaveProperty('chargeUah')
+  })
+
+  it('keeps a reported zero, because for cur/chg/fails zero is a reading', () => {
+    expect(telemetryRowData({ currentUa: 0, chargeUah: 0, pollFails: 0 }, NOW)).toEqual({
+      recordedAt: NOW, currentUa: 0, chargeUah: 0, pollFails: 0,
+    })
   })
 })
 

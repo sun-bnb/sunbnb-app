@@ -35,6 +35,14 @@
  * which is simpler than the "reported only once the POST returned 2xx" rule the
  * firmware used to carry.
  *
+ * Every recorded report is ALSO appended to `device_telemetry` in the same
+ * transaction (track 019 P6). The Device columns answer "how is this unit now",
+ * which is what the fleet list needs; the series answers the questions that are
+ * trends — energy balance per day, what a power mode really costs, a cell
+ * ageing — and a trend cannot be backfilled, so it is collected before anything
+ * reads it. Retention is the `device-telemetry-retention-days` preference,
+ * swept daily; `@repo/data/device-telemetry` carries the arithmetic.
+ *
  * The write is THROTTLED, and that is the one thing that makes this affordable:
  * at the continuous cadence track 025 introduces (1–15 s) a row write per poll
  * would multiply Q3's invocation arithmetic by the poll rate. The screen step
@@ -434,14 +442,16 @@ function movedPast(reported: number | undefined, stored: number | null, delta: n
 }
 
 /**
- * The `data` for the row write: everything reported, plus the timestamp.
+ * The measurements alone, keyed by column — the ONE list of telemetry fields in
+ * this module, shared by the last-value write and the history append so the two
+ * can never end up carrying different sets.
+ *
  * Every field is spread conditionally — OMITTED when absent, never nulled —
- * which is the server half of "absent means I don't know". A reported `0` is
+ * which is the server half of "absent means I don't know". A reported `0` IS
  * written, because for `cur`, `chg` and `fails` zero is an answer.
  */
-export function reportData(report: DeviceReport, now: Date) {
+function measurementData(report: DeviceReport) {
   return {
-    lastSeenAt: now,
     ...(report.fw !== undefined ? { fw: report.fw } : {}),
     ...(report.reportedLocation !== undefined ? { reportedLocation: report.reportedLocation } : {}),
     ...(report.battMv !== undefined ? { battMv: report.battMv } : {}),
@@ -462,6 +472,25 @@ export function reportData(report: DeviceReport, now: Date) {
     ...(report.imaxUa !== undefined ? { imaxUa: report.imaxUa } : {}),
     ...(report.fullCount !== undefined ? { fullCount: report.fullCount } : {}),
   }
+}
+
+/** The `data` for the last-value row write: the measurements, plus the stamp. */
+export function reportData(report: DeviceReport, now: Date) {
+  return { lastSeenAt: now, ...measurementData(report) }
+}
+
+/**
+ * The HISTORY row for this report — the same measurements without the
+ * last-value bookkeeping. `lastSeenAt` is the Device row's "when did we last
+ * hear anything from this unit"; the series carries `recordedAt`, the same
+ * instant said about one READING rather than about the unit.
+ *
+ * Absent stays absent here for a stronger reason than on the Device row: a null
+ * in the series means "not reported in this reading", and a series that invented
+ * zeros would make every average and every delta taken across it wrong.
+ */
+export function telemetryRowData(report: DeviceReport, now: Date) {
+  return { recordedAt: now, ...measurementData(report) }
 }
 
 export interface RecordOptions {
@@ -494,7 +523,22 @@ export async function recordDeviceReport(
     const due = options.force || !options.last || reportIsDue(options.last, report, now)
     if (!due) return false
     await applyDeviceClaim(code, options.partnerClaim)
-    await prisma.device.updateMany({ where: { code }, data: reportData(report, now) })
+    // ONE transaction, so the last-value row and the series cannot disagree
+    // about what this device reported — and one round trip, because this sits
+    // on the poll path. The series row is appended for every recorded report,
+    // which is what makes the history exactly the sequence of readings we kept
+    // (`@repo/data/device-telemetry` has the volume arithmetic).
+    //
+    // `connect` by `code` resolves the device without a lookup of our own. For
+    // an unknown code the connect fails and the whole transaction rolls back —
+    // which matches the old behaviour exactly, since `updateMany` on a code
+    // with no row wrote nothing either.
+    await prisma.$transaction([
+      prisma.device.updateMany({ where: { code }, data: reportData(report, now) }),
+      prisma.deviceTelemetry.create({
+        data: { device: { connect: { code } }, ...telemetryRowData(report, now) },
+      }),
+    ])
     return true
   } catch {
     return false

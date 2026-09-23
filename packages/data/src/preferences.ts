@@ -127,6 +127,18 @@ export const PREFERENCE_REGISTRY = {
     max: POLL_INTERVAL_MAX,
     unit: 'seconds',
   },
+  'device-telemetry-retention-days': {
+    key: 'device-telemetry-retention-days',
+    type: 'number',
+    label: 'Telemetry history retention',
+    group: 'Hardware',
+    description:
+      'How long a recorded telemetry reading is kept, in days. Every reading the server records is appended to a history (device_telemetry) so the questions that are TRENDS rather than states can be answered later — is this unit energy-positive, what does each power mode actually cost on real hardware, is the cell ageing, is one unit faulty against the fleet. Nothing reads that history yet; it is being collected now because a trend cannot be backfilled. The sweep runs daily and deletes the OLDEST rows past this age — it is the only thing bounding the table, so treat it as a storage budget, not a nicety. Rough arithmetic: one device writes at most ~288 rows/day (the 5-minute floor) plus one per notable change, so a 1500-unit fleet at the default 365 days is on the order of 10^8 rows. Lower this, or raise the write floor, before the fleet grows — and note that shortening it DELETES history on the next sweep, which cannot be undone.',
+    default: 365,
+    min: 1,
+    max: 3650,
+    unit: 'days',
+  },
 } as const satisfies Record<string, PreferenceDefinition>
 
 export type PreferenceKey = keyof typeof PREFERENCE_REGISTRY

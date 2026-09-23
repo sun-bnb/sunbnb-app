@@ -553,10 +553,15 @@ describe('getPreferenceAdminRows', () => {
 describe('getPreferences', () => {
   it('resolves every registry key in one query', async () => {
     findMany.mockResolvedValue([{ key: 'device-poll-interval-sec', value: '90' }])
-    await expect(getPreferences()).resolves.toEqual({
-      'device-poll-interval-sec': 90,
-      'device-power-mode': 'deep_sleep',
-    })
+    const resolved = await getPreferences()
+    // Completeness is asserted against the REGISTRY rather than a hand-written
+    // list: the property is "no preference is silently missing from the bulk
+    // read", and a fixed list only taxed whoever added the next one.
+    expect(Object.keys(resolved).sort()).toEqual(Object.keys(PREFERENCE_REGISTRY).sort())
+    // A stored row overrides; every other key falls back to its shipped default.
+    expect(resolved['device-poll-interval-sec']).toBe(90)
+    expect(resolved['device-power-mode']).toBe('deep_sleep')
+    expect(resolved['device-telemetry-retention-days']).toBe(365)
     expect(findMany).toHaveBeenCalledTimes(1)
   })
 })

@@ -103,6 +103,14 @@ const prisma = {
     findMany: vi.fn(),
     updateMany: vi.fn(),
   },
+  // Telemetry history (track 019 P6) — written beside the Device row on every
+  // recorded report, and swept by /api/cron/prune-telemetry.
+  deviceTelemetry: {
+    create: vi.fn(),
+    findMany: vi.fn(),
+    deleteMany: vi.fn(),
+    count: vi.fn(),
+  },
   $transaction: vi.fn((arg: unknown) => {
     if (Array.isArray(arg)) return Promise.all(arg)
     if (typeof arg === 'function') return (arg as (tx: unknown) => unknown)(prisma)

@@ -411,6 +411,7 @@ describe('binding', () => {
 
 describe('tracking', () => {
   const mockWrite = vi.mocked(prisma.device.updateMany)
+  const mockSeries = vi.mocked(prisma.deviceTelemetry.create)
   const REPORT = 'fw=0.1.0;rssi=-61;up=8812;polls=42;loc=1-1-1'
 
   /** A row that was written a second ago with exactly what the header carries. */
@@ -555,6 +556,48 @@ describe('tracking', () => {
     )
     const data = mockWrite.mock.calls[0]![0]!.data as Record<string, unknown>
     expect(data).toMatchObject({ fullCount: 3, chargeUah: 0 })
+  })
+
+  it('APPENDS a history row for every recorded report, in the same transaction', async () => {
+    // The Device columns answer "how is this unit now"; the series answers the
+    // questions that are trends, and a trend cannot be backfilled — so it is
+    // collected before anything reads it (track 019 P6).
+    const res = await GET(makeRequest(CODE, { 'x-sunbnb-telemetry': REPORT_V2 }), makeParams())
+    expect(res.status).toBe(200)
+    expect(mockSeries).toHaveBeenCalledTimes(1)
+    const row = mockSeries.mock.calls[0]![0]!.data as Record<string, unknown>
+    expect(row).toMatchObject({
+      device: { connect: { code: CODE } },
+      fw: '0.1.0', battMv: 3174, vminMv: 3102, chargeUah: -1852, fullCount: 2,
+      reportedPowerMode: 'light_sleep', reportedIntervalSec: 60, reportedFace: 'FREE',
+    })
+    expect(row.recordedAt).toBeInstanceOf(Date)
+    // The series never carries the last-value bookkeeping.
+    expect(row).not.toHaveProperty('lastSeenAt')
+    // One transaction, so the two can never disagree about one report.
+    expect(vi.mocked(prisma.$transaction)).toHaveBeenCalledTimes(1)
+  })
+
+  it('appends NOTHING when the throttle declines the report', async () => {
+    // This is what keeps the series affordable: it is the sequence of readings
+    // the server KEPT, so it inherits the throttle rather than the poll rate.
+    mockDevice.mockResolvedValue({
+      ...freshRow(),
+      fw: '0.1.0', battMv: 3174, rssiDbm: -36, upSec: 400, tempC: 24, currentUa: 3500,
+      chargeUah: -1852, resetReason: 'poweron', reportedPowerMode: 'light_sleep',
+      heapFreeBytes: 241088, pollFails: 0, cellTempC: 31, reportedFace: 'FREE',
+      reportedIntervalSec: 60, wifiChannel: 6, vminMv: 3102, imaxUa: 25000, fullCount: 2,
+    } as never)
+    const res = await GET(makeRequest(CODE, { 'x-sunbnb-telemetry': REPORT_V2 }), makeParams())
+    expect(res.status).toBe(200)
+    expect(mockWrite).not.toHaveBeenCalled()
+    expect(mockSeries).not.toHaveBeenCalled()
+  })
+
+  it('a failed series append never costs the device its poll', async () => {
+    vi.mocked(prisma.$transaction).mockRejectedValueOnce(new Error('series write failed'))
+    const res = await GET(makeRequest(CODE, { 'x-sunbnb-telemetry': REPORT_V2 }), makeParams())
+    expect(res.status).toBe(200)
   })
 
   it('a failed write never costs the device its poll', async () => {

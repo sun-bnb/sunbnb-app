@@ -238,7 +238,18 @@ window and are **close-independent** — daily accumulation never changes when t
   now a DEFAULT rather than the fleet's policy. Note the deliberate asymmetry: a platform change
   reaches a device within the 5-min cache TTL plus one poll, a per-device override on its very
   next poll (it rides the device row the route already reads) — do not "fix" that by caching the
-  override
+  override. Third entry, uncoupled: `device-telemetry-retention-days` (default 365) bounds the
+  `device_telemetry` series and is the ONLY thing that does, so treat it as a storage budget —
+  shortening it DELETES history on the next daily sweep and cannot be undone
+- `src/device-telemetry.ts` — the retention sweep for `device_telemetry`, the time series behind
+  `Device`'s telemetry columns (track 019 P6). A row is appended per RECORDED report — the series
+  inherits `reportIsDue`'s throttle, not the poll rate, because recording every poll was never
+  affordable (~1.3 M polls/day). `pruneDeviceTelemetry()` deletes past
+  `device-telemetry-retention-days`, oldest first, in bounded chunks: the sweep runs in a
+  serverless invocation against a table that is largest exactly when someone has just shortened
+  the window, so it is RESUMABLE (whatever it commits stands) and capped per run rather than
+  unbounded. Called by the user app's `/api/cron/prune-telemetry` daily. The volume arithmetic
+  is in the module header — read it before raising the default
 - `src/device-power.ts` — **PURE** (no Prisma; a client component may import it): the three
   device power modes, their poll bands (continuous 1–15 s · light sleep 10–45 s · deep
   sleep 30–300 s — floors from `../sunbnb-hw` exp 005, light sleep's ceiling an operating

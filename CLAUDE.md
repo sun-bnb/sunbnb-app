@@ -222,7 +222,7 @@ commission invoice; they do not sum to the consumer total. The rule is canonical
 - **Image upload**: Vercel Blob `put()` in server actions; remote patterns whitelisted in `next.config.mjs`
 - **Error handling**: Server actions return `{ status: 'ok' | 'error', errors?: string[] }`; UI shows auto-dismissing banners
 - **i18n**: `next-intl` with `getRequestConfig()` from `Accept-Language` header. Message files in `messages/{en,es,fi}.json`
-- **Cron jobs**: `/api/reservations-cleanup` (partner, every 15 min) cleans stale bookings; `/api/cron/send-reminders` (user, daily 07:00 UTC) sends reminder emails
+- **Cron jobs**: `/api/reservations-cleanup` (partner, every 15 min) cleans stale bookings; `/api/cron/send-reminders` (user, daily 07:00 UTC) sends reminder emails; `/api/cron/prune-telemetry` (user, daily 03:20 UTC) evicts device telemetry history past the `device-telemetry-retention-days` preference
 - **Equipment rentals**: Sites enable via `features[]` array (add `"rentals"`). Supports hourly and daily bookings (`durationType: 'hours' | 'days'`). Availability checked by aggregating booked quantities for overlapping time windows. Categories: surfboard, paddleboard, kayak, pedal boat, snorkel, other
 
 ## Known Quirks

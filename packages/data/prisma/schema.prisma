@@ -1540,8 +1540,76 @@ model Device {
   fullCount  Int?         @map("full_count")
   createdAt  DateTime     @default(now()) @map("created_at")
   updatedAt  DateTime     @updatedAt @map("updated_at")
+  /// The HISTORY of the columns above. The fields here are a LAST VALUE — what
+  /// the fleet list reads — and answer "how is this unit now". Every question
+  /// worth asking of telemetry is a TREND (is this unit energy-positive, what
+  /// does a power mode really cost, is the cell ageing), and a trend needs the
+  /// series.
+  telemetry  DeviceTelemetry[]
 
   @@map("device")
+}
+
+/// One recorded telemetry reading — the time series behind `Device`'s last-value
+/// columns (track 019 P6).
+///
+/// **A row per RECORDED report, not per poll.** The device reports on every poll
+/// and the server throttles the write (`reportIsDue`); this table is written in
+/// the same transaction as the `Device` row, so the series is exactly the
+/// sequence of readings the server kept. Recording every poll was never
+/// affordable — that is the whole reason the throttle exists — so "every
+/// reading" means every reading we keep, at most one per device per 5 min plus
+/// one for each notable change.
+///
+/// **Bounded by `device-telemetry-retention-days`** (admin preferences, default
+/// 365), swept daily by `/api/cron/prune-telemetry`. Oldest rows are evicted
+/// first; nothing else caps the table, so that preference is the only thing
+/// standing between this and unbounded growth. Read the volume arithmetic in
+/// `packages/data/src/device-telemetry.ts` before raising it.
+///
+/// The id is a BIGSERIAL rather than the cuid every other model uses — a
+/// deliberate break. This is the one table expected to hold tens of millions of
+/// rows, where a 25-char string key costs ~3x an int8 in the heap and again in
+/// every index.
+model DeviceTelemetry {
+  id         BigInt   @id @default(autoincrement())
+  deviceId   String   @map("device_id")
+  device     Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  /// When the SERVER recorded it. The device has no clock it can trust across a
+  /// deep-sleep reset, so there is no device-side timestamp to prefer.
+  recordedAt DateTime @default(now()) @map("recorded_at")
+
+  /// Every field is nullable and carries the same meaning as its `Device`
+  /// counterpart: absent = the device did not report it on the poll that earned
+  /// this row, NOT zero. Field docs live on `Device`; they are not duplicated.
+  fw                  String?
+  battMv              Int?     @map("batt_mv")
+  vminMv              Int?     @map("vmin_mv")
+  rssiDbm             Int?     @map("rssi_dbm")
+  upSec               Int?     @map("up_sec")
+  tempC               Int?     @map("temp_c")
+  cellTempC           Int?     @map("cell_temp_c")
+  currentUa           Int?     @map("current_ua")
+  imaxUa              Int?     @map("imax_ua")
+  chargeUah           Int?     @map("charge_uah")
+  fullCount           Int?     @map("full_count")
+  heapFreeBytes       Int?     @map("heap_free_bytes")
+  pollFails           Int?     @map("poll_fails")
+  wifiChannel         Int?     @map("wifi_channel")
+  /// Carried into the series because the energy questions are asked PER MODE:
+  /// "what does each power mode actually cost" is a `chargeUah` delta segmented
+  /// by these two, which is impossible if the series only holds the numbers.
+  reportedIntervalSec Int?     @map("reported_interval_sec")
+  reportedPowerMode   String?  @map("reported_power_mode")
+  resetReason         String?  @map("reset_reason")
+  reportedFace        String?  @map("reported_face")
+  reportedLocation    String?  @map("reported_location")
+
+  /// The series read: one device, oldest→newest over a window.
+  @@index([deviceId, recordedAt])
+  /// The prune read: everything older than the cutoff, across all devices.
+  @@index([recordedAt])
+  @@map("device_telemetry")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
