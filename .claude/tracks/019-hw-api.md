@@ -405,15 +405,17 @@ nothing, not a unit that is broken. Any 200 restores the served mode.
 - **Both directions declarative.** The device says what it runs on every poll; the server says what
   it should run on every 200. The fleet UI's assigned-vs-applied gap needs no ack protocol — the
   old "reported only once the POST returned 2xx" firmware rule is gone.
-- **Time series SHIPPED (2026-09-23).** Every `Device` column above is still a LAST VALUE — that
-  is what the fleet list reads — and every recorded report is now ALSO appended to
-  `device_telemetry` in the same transaction, so the two cannot disagree about one report. The
-  series inherits this throttle rather than the poll rate: it is the sequence of readings the
-  server KEPT, which is the only affordable meaning of "keep every reading" against ~1.3 M
-  polls/day (Q3). It carries `mode` and `iv` as well as the numbers, because the energy questions
-  are asked PER MODE. Retention is `device-telemetry-retention-days` (admin preferences, default
-  365), swept daily by `/api/cron/prune-telemetry`, oldest first. **Nothing reads it yet** — it is
-  collected now because a trend cannot be backfilled.
+- **Time series SHIPPED (2026-09-23), UNTHROTTLED.** Every `Device` column above is still a LAST
+  VALUE — that is what the fleet list reads — and **every reading is appended to
+  `device_telemetry`, one row per poll that carries a report**. The throttle above governs the
+  last-value row ONLY, and that split is the point: `Device` is a cache of the latest reading, so
+  skipping a write to it loses nothing now that the history is complete, while the series is the
+  record and a record with holes cannot say what the cell did between two samples. A poll with no
+  report header appends nothing — no reading is not a row of nulls. The series carries `mode` and
+  `iv` as well as the numbers, because the energy questions are asked PER MODE. Retention is
+  `device-telemetry-retention-days` (admin preferences, default 365), swept daily by
+  `/api/cron/prune-telemetry`, oldest first. **Nothing reads it yet** — it is collected at full
+  fidelity now because a trend cannot be backfilled.
 
 **`POST /api/hw/{code}/telemetry`** — LEGACY escape hatch, `{ fw, battMv, rssiDbm, upSec, tempC,
 currentUa, chargeUah, resetReason, reportedPowerMode, heapFreeBytes, pollFails, loc }` → `204`. The
@@ -624,13 +626,14 @@ same threshold `../sunbnb-hw` ADR 0010 sets for the provisioning script.
   transaction. Bounded by `device-telemetry-retention-days` (default 365) and swept daily by
   `/api/cron/prune-telemetry`, which deletes in bounded, resumable chunks rather than one
   unbounded DELETE — the table is largest exactly when someone has just shortened the window.
-  **The open question is volume, not correctness:** at the 5-min floor a 1500-unit fleet writes
-  ~4.3e5 rows/day, so a year is ~1.6e8 rows. The lever nobody has needed yet is a COARSER FLOOR
-  for the series than for the last-value row (hourly would cut it ~10x and still answer every
-  question in `../sunbnb-hw/docs/telemetry-fields.md`, whose finest is harvest bucketed by hour).
-  Deliberately not built: the fleet is a handful of units today, and a second throttle is a second
-  thing to keep honest. Next: something that READS it — capacity learned from `chg` across an
-  anchor-to-cutoff span, `chg`/day per unit against the fleet, `batt − vmin` widening.
+  **The open question is volume, not correctness**, and it got sharper when the series was
+  unthrottled (founder call, same day): the POLL INTERVAL now sets the row rate — 1440
+  rows/device/day at the 60 s default, 5760 at the ladder's 15 s. One unit under bring-up is
+  trivial; **a 1500-unit fleet at 60 s is ~2.2e6 rows/DAY**, ~8e8 rows and past 100 GB at a
+  365-day window. Three levers, in order of bluntness: shorten retention (one admin field),
+  lengthen the poll interval, or reintroduce a sampling floor for the series alone. Next: something
+  that READS it — capacity learned from `chg` across an anchor-to-cutoff span, `chg`/day per unit
+  against the fleet, `batt − vmin` widening.
 - **💤 P7 — fleet scale.** Only when a real fleet exists: edge runtime, short-TTL per-site cache,
   `304` discipline, cadence throttling via `pollAfterSec`, `cmd: "stow"` for off-season. See Q3
   for the invocation arithmetic.
@@ -1083,6 +1086,31 @@ backend, and both drag in consumer-surface design that shouldn't gate the hardwa
   throttle declining to append. Turned `preferences.test.ts`'s hand-written key list into one
   derived from the registry — it broke on the new key while asserting nothing a registry-derived
   check does not. User 749, data 625, admin 206, tsc + lint clean, `migrate:check` clean.
+
+- **2026-09-23 — the series is UNTHROTTLED; the throttle keeps the last-value row only.** Founder
+  call, hours after P6 shipped: "we don't need it at the moment, write down literally every
+  reading." The first cut had the history inherit `reportIsDue`, which made it at most one row per
+  device per 5 min — defensible for a 1500-unit fleet, wrong for the fleet that exists, which is
+  one board under bring-up polling every 15 s. A throttled series answers "what did the cell do
+  between 10:33 and 10:38" with a shrug, and bring-up is exactly when that question is asked.
+
+  The split is now explicit and is the reason this costs nothing: **`Device` is a CACHE of the
+  latest reading, `device_telemetry` is the RECORD.** Skipping a last-value write loses no
+  information once the history is complete, so `reportIsDue` keeps doing its real job (bounding
+  row writes on the poll path, which is what track 025's 1 s cadence rests on) while the series
+  takes every reading. The partner claim stays on the throttle too — it is a device's identity,
+  not one of its readings, and it costs a partner lookup. A poll with no report header appends
+  nothing: no reading is not a row of nulls, and a fabricated sample would corrupt every average
+  taken across it.
+
+  **Consequence to watch:** the poll interval is now a STORAGE lever as much as a battery one.
+  1440 rows/device/day at 60 s, 5760 at 15 s; ~2.2e6 rows/day at 1500 units. Retention is the
+  blunt instrument and it is one field in the admin app. The arithmetic is in
+  `packages/data/src/device-telemetry.ts`, the preference description an operator actually reads,
+  and the roadmap above — deliberately in all three, because this is the kind of number that is
+  obvious the day it is written and invisible the day it matters. Tests: the old "appends NOTHING
+  when the throttle declines" case is inverted (it now asserts the reading IS kept while the
+  last-value row is not written), plus a case for the no-header poll. User 750 green.
 
 ## Links
 

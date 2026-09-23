@@ -10,24 +10,25 @@
  *
  * ## The volume arithmetic, because it is the whole design
  *
- * A row is appended per RECORDED report, not per poll. The device reports on
- * every poll and the server throttles the write (`reportIsDue`), so the series
- * is exactly the sequence of readings the server kept:
+ * **A row per POLL that carries a report — unthrottled** (founder call,
+ * 2026-09-23: full fidelity matters more than volume while the fleet is being
+ * brought up, and a throttled series answers "what did the cell do between
+ * 10:33 and 10:38" with a shrug). `reportIsDue` still throttles the `Device`
+ * last-value row, which costs nothing now that the history is complete: that row
+ * is a cache of the latest reading, this table is the record.
  *
- *   worst case per device = the 5-minute `lastSeenAt` floor  = 288 rows/day
- *   plus one row per notable change (mode, disc, brownout, a threshold crossed)
+ * So the POLL INTERVAL sets the row rate, which makes the cadence preference a
+ * storage lever as much as a battery one:
  *
- * At today's handful of devices that is nothing. At the planned 1 500-unit fleet
- * it is ~4.3 x 10^5 rows/day, and the default 365-day retention holds ~1.6 x
- * 10^8 rows. **That is the number to look at before raising the default**, and
- * the two levers are this retention window and the write floor in
- * `reportIsDue` (a coarser floor for the history than for the last-value row
- * would decouple them, and is the obvious next move if the fleet grows before
- * anything reads the series).
+ *   one device at 60 s (the fleet default) = 1 440 rows/day
+ *   one device at 15 s (the ladder's retry) = 5 760 rows/day
  *
- * Recording every poll was never affordable — that is why the throttle exists
- * at all (track 019 Q3: ~1.3 M polls/day) — so "keep every reading" means every
- * reading the server keeps.
+ * One unit under bring-up is trivial. **A 1 500-unit fleet at 60 s is ~2.2 x
+ * 10^6 rows per DAY** — roughly 8 x 10^8 rows and comfortably past 100 GB at the
+ * default 365-day retention. Three levers exist when that day comes, in order of
+ * bluntness: shorten retention (this preference), lengthen the poll interval, or
+ * reintroduce a sampling floor for the series alone. The first is one field in
+ * the admin app; do not let the table get there by accident.
  *
  * ## Why a chunked delete rather than one `deleteMany`
  *

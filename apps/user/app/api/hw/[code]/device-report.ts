@@ -35,13 +35,19 @@
  * which is simpler than the "reported only once the POST returned 2xx" rule the
  * firmware used to carry.
  *
- * Every recorded report is ALSO appended to `device_telemetry` in the same
- * transaction (track 019 P6). The Device columns answer "how is this unit now",
- * which is what the fleet list needs; the series answers the questions that are
- * trends — energy balance per day, what a power mode really costs, a cell
- * ageing — and a trend cannot be backfilled, so it is collected before anything
- * reads it. Retention is the `device-telemetry-retention-days` preference,
- * swept daily; `@repo/data/device-telemetry` carries the arithmetic.
+ * EVERY reading is appended to `device_telemetry` (track 019 P6) — one row per
+ * poll that carries a report, unthrottled. The Device columns answer "how is
+ * this unit now", which is what the fleet list needs; the series answers the
+ * questions that are trends — energy balance per day, what a power mode really
+ * costs, a cell ageing — and a trend cannot be backfilled, so it is collected
+ * at full fidelity before anything reads it.
+ *
+ * **The throttle below governs the LAST-VALUE row only.** That split is the
+ * point: the Device row is a cache of the latest reading and skipping a write
+ * to it loses nothing now that the history is complete, while the series is the
+ * record and must not have holes. Retention is the
+ * `device-telemetry-retention-days` preference, swept daily;
+ * `@repo/data/device-telemetry` carries the volume arithmetic.
  *
  * The write is THROTTLED, and that is the one thing that makes this affordable:
  * at the continuous cadence track 025 introduces (1–15 s) a row write per poll
@@ -520,25 +526,36 @@ export async function recordDeviceReport(
   now = new Date(),
 ): Promise<boolean> {
   try {
+    // EVERY reading is kept. The throttle governs the LAST-VALUE row only — it
+    // exists to keep the poll's row write affordable, and now that the series
+    // captures each reading it costs no information at all: `Device` is a cache
+    // of the latest, the history is the record.
+    const hasReading = Object.keys(report).length > 0
     const due = options.force || !options.last || reportIsDue(options.last, report, now)
-    if (!due) return false
-    await applyDeviceClaim(code, options.partnerClaim)
-    // ONE transaction, so the last-value row and the series cannot disagree
-    // about what this device reported — and one round trip, because this sits
-    // on the poll path. The series row is appended for every recorded report,
-    // which is what makes the history exactly the sequence of readings we kept
-    // (`@repo/data/device-telemetry` has the volume arithmetic).
-    //
-    // `connect` by `code` resolves the device without a lookup of our own. For
-    // an unknown code the connect fails and the whole transaction rolls back —
-    // which matches the old behaviour exactly, since `updateMany` on a code
-    // with no row wrote nothing either.
-    await prisma.$transaction([
-      prisma.device.updateMany({ where: { code }, data: reportData(report, now) }),
-      prisma.deviceTelemetry.create({
-        data: { device: { connect: { code } }, ...telemetryRowData(report, now) },
-      }),
-    ])
+    if (!due && !hasReading) return false
+
+    const writes = []
+    if (due) {
+      writes.push(prisma.device.updateMany({ where: { code }, data: reportData(report, now) }))
+    }
+    if (hasReading) {
+      // `connect` by `code` resolves the device without a lookup of our own. For
+      // an unknown code the connect fails and the transaction rolls back — which
+      // matches the old behaviour, since `updateMany` on a code with no row
+      // wrote nothing either.
+      writes.push(
+        prisma.deviceTelemetry.create({
+          data: { device: { connect: { code } }, ...telemetryRowData(report, now) },
+        }),
+      )
+    }
+
+    // The partner claim costs a partner lookup, so it stays on the throttle —
+    // it is a device's IDENTITY, not one of its readings.
+    if (due) await applyDeviceClaim(code, options.partnerClaim)
+    // One transaction when both run, so the last-value row and the series can
+    // never disagree about a single report.
+    await prisma.$transaction(writes)
     return true
   } catch {
     return false

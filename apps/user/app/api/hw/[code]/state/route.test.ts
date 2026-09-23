@@ -463,13 +463,15 @@ describe('tracking', () => {
     expect(mockWrite).toHaveBeenCalled()
   })
 
-  it('does NOT write when the row is fresh and nothing moved (the throttle)', async () => {
+  it('does NOT write the LAST-VALUE row when it is fresh and nothing moved', async () => {
     mockDevice.mockResolvedValue(freshRow() as never)
     const res = await GET(makeRequest(CODE, { 'x-sunbnb-telemetry': REPORT }), makeParams())
     expect(res.status).toBe(200)
     expect(mockWrite).not.toHaveBeenCalled()
     // The claim costs a partner lookup, so it rides the same throttle.
     expect(vi.mocked(applyDeviceClaim)).not.toHaveBeenCalled()
+    // ...but the reading itself is still kept. The throttle is about the cache.
+    expect(mockSeries).toHaveBeenCalledTimes(1)
   })
 
   it('writes when a reported value moves — a new running location', async () => {
@@ -578,9 +580,10 @@ describe('tracking', () => {
     expect(vi.mocked(prisma.$transaction)).toHaveBeenCalledTimes(1)
   })
 
-  it('appends NOTHING when the throttle declines the report', async () => {
-    // This is what keeps the series affordable: it is the sequence of readings
-    // the server KEPT, so it inherits the throttle rather than the poll rate.
+  it('appends EVERY reading, even one the throttle declines to store as a value', async () => {
+    // The throttle governs the last-value row only. A poll whose numbers all
+    // drifted inside their thresholds is still a reading, and the series must
+    // not have holes — the Device row is a cache, the history is the record.
     mockDevice.mockResolvedValue({
       ...freshRow(),
       fw: '0.1.0', battMv: 3174, rssiDbm: -36, upSec: 400, tempC: 24, currentUa: 3500,
@@ -591,6 +594,19 @@ describe('tracking', () => {
     const res = await GET(makeRequest(CODE, { 'x-sunbnb-telemetry': REPORT_V2 }), makeParams())
     expect(res.status).toBe(200)
     expect(mockWrite).not.toHaveBeenCalled()
+    expect(mockSeries).toHaveBeenCalledTimes(1)
+    const row = mockSeries.mock.calls[0]![0]!.data as Record<string, unknown>
+    expect(row).toMatchObject({ battMv: 3174, chargeUah: -1852, reportedFace: 'FREE' })
+    // The partner claim is a device's IDENTITY, not a reading — still throttled.
+    expect(vi.mocked(applyDeviceClaim)).not.toHaveBeenCalled()
+  })
+
+  it('appends NOTHING for a poll that carries no report at all', async () => {
+    // No header is no reading. A row of nulls would be a fabricated sample and
+    // would corrupt every average taken across it.
+    mockDevice.mockResolvedValue({ ...freshRow(), lastSeenAt: new Date(Date.now() - 10 * 60 * 1000) } as never)
+    await GET(makeRequest(), makeParams())
+    expect(mockWrite).toHaveBeenCalled()
     expect(mockSeries).not.toHaveBeenCalled()
   })
 

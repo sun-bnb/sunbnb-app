@@ -1553,19 +1553,21 @@ model Device {
 /// One recorded telemetry reading — the time series behind `Device`'s last-value
 /// columns (track 019 P6).
 ///
-/// **A row per RECORDED report, not per poll.** The device reports on every poll
-/// and the server throttles the write (`reportIsDue`); this table is written in
-/// the same transaction as the `Device` row, so the series is exactly the
-/// sequence of readings the server kept. Recording every poll was never
-/// affordable — that is the whole reason the throttle exists — so "every
-/// reading" means every reading we keep, at most one per device per 5 min plus
-/// one for each notable change.
+/// **A row per POLL that carries a report — unthrottled.** `reportIsDue` still
+/// throttles the `Device` last-value row, and that costs nothing: `Device` is a
+/// cache of the LATEST reading, this table is the RECORD, and a record with
+/// holes cannot answer what the cell did between two samples. The poll interval
+/// therefore sets the row rate — 1440 rows/device/day at the 60 s default, 5760
+/// at 15 s — which makes the cadence preference a storage lever as much as a
+/// battery one.
 ///
 /// **Bounded by `device-telemetry-retention-days`** (admin preferences, default
 /// 365), swept daily by `/api/cron/prune-telemetry`. Oldest rows are evicted
 /// first; nothing else caps the table, so that preference is the only thing
-/// standing between this and unbounded growth. Read the volume arithmetic in
-/// `packages/data/src/device-telemetry.ts` before raising it.
+/// standing between this and unbounded growth — and unthrottled writes make that
+/// load-bearing at fleet scale (~2.2M rows/day at 1500 units on a 60 s cadence).
+/// Read the volume arithmetic in `packages/data/src/device-telemetry.ts` before
+/// the fleet grows.
 ///
 /// The id is a BIGSERIAL rather than the cuid every other model uses — a
 /// deliberate break. This is the one table expected to hold tens of millions of

@@ -240,11 +240,14 @@ window and are **close-independent** — daily accumulation never changes when t
   next poll (it rides the device row the route already reads) — do not "fix" that by caching the
   override. Third entry, uncoupled: `device-telemetry-retention-days` (default 365) bounds the
   `device_telemetry` series and is the ONLY thing that does, so treat it as a storage budget —
-  shortening it DELETES history on the next daily sweep and cannot be undone
+  shortening it DELETES history on the next daily sweep and cannot be undone. Writes are
+  unthrottled, so ~2.2M rows/day at a 1500-unit fleet on a 60 s cadence: shorten it before then
 - `src/device-telemetry.ts` — the retention sweep for `device_telemetry`, the time series behind
-  `Device`'s telemetry columns (track 019 P6). A row is appended per RECORDED report — the series
-  inherits `reportIsDue`'s throttle, not the poll rate, because recording every poll was never
-  affordable (~1.3 M polls/day). `pruneDeviceTelemetry()` deletes past
+  `Device`'s telemetry columns (track 019 P6). A row is appended per POLL that carries a report,
+  UNTHROTTLED (founder call 2026-09-23) — `reportIsDue` throttles only the `Device` last-value
+  row, which costs nothing since that row is a cache of the latest reading and this table is the
+  record. The poll interval therefore sets the row rate (1440/device/day at 60 s), so retention is
+  load-bearing at fleet scale. `pruneDeviceTelemetry()` deletes past
   `device-telemetry-retention-days`, oldest first, in bounded chunks: the sweep runs in a
   serverless invocation against a table that is largest exactly when someone has just shortened
   the window, so it is RESUMABLE (whatever it commits stands) and capped per run rather than
