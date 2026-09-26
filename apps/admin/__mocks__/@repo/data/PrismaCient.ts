@@ -20,6 +20,12 @@ const prisma = {
     update: vi.fn(),
     count: vi.fn(),
   },
+  // The preferences page reports how many devices a Wi-Fi broadcast has
+  // reached, counted straight off the fleet.
+  device: {
+    count: vi.fn(),
+    findMany: vi.fn(),
+  },
   settings: {
     findFirst: vi.fn(),
     findMany: vi.fn(),

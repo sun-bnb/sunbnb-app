@@ -12,11 +12,23 @@ import {
   type DevicePowerMode,
 } from '@repo/data/device-power'
 import {
+  SSID_MAX_BYTES,
+  PSK_MAX_LENGTH,
+  PSK_MIN_LENGTH,
+  ssidByteLength,
+  validateWifiNetwork,
+} from '@repo/data/device-wifi'
+import {
   savePreference,
   resetPreference,
   saveDevicePolicy,
   resetDevicePolicy,
   listPreferences,
+  saveDeviceWifi,
+  startWifiBroadcast,
+  stopWifiBroadcast,
+  getWifiBroadcastStatus,
+  type WifiBroadcastStatus,
 } from './actions'
 
 /**
@@ -30,6 +42,17 @@ import {
  */
 const MODE_KEY = 'device-power-mode'
 const POLL_KEY = 'device-poll-interval-sec'
+
+/**
+ * The Wi-Fi keys, rendered as one card the same way the power pair is — and
+ * hidden from the generic list, because the password must never appear in a
+ * plain text input and the broadcast stamp is operational state rather than
+ * something to hand-edit.
+ */
+const WIFI_SSID_KEY = 'device-wifi-ssid'
+const WIFI_PASSWORD_KEY = 'device-wifi-password'
+const WIFI_BROADCAST_KEY = 'device-wifi-broadcast-started-at'
+const WIFI_KEYS = [WIFI_SSID_KEY, WIFI_PASSWORD_KEY, WIFI_BROADCAST_KEY]
 
 function SourceBadge({ source }: { source: PreferenceAdminRow['source'] }) {
   const styles: Record<PreferenceAdminRow['source'], string> = {
@@ -336,6 +359,328 @@ function DevicePolicyCard({
   )
 }
 
+/** mm:ss left in the broadcast window. */
+function formatRemaining(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000))
+  const m = Math.floor(total / 60)
+  const sec = total % 60
+  return `${m}:${String(sec).padStart(2, '0')}`
+}
+
+/**
+ * Device Wi-Fi: the credentials, and the BROADCAST that delivers them.
+ *
+ * Two operations with two buttons, and the separation is the security design
+ * rather than a layout choice. The device poll endpoint has no authentication
+ * (track 019 Q9) and device codes are public — printed on the sticker — so a
+ * password standing in every reply would be readable by anyone holding a code
+ * for as long as the network existed. Instead: saving stages the pair and
+ * changes nothing on the wire; an explicit, CONFIRMED broadcast opens a bounded
+ * window in which each device is served the pair exactly once.
+ *
+ * The password is never sent to this component. `getPreferenceAdminRows`
+ * redacts it, so the field shows whether one is set and writes blind — a blank
+ * field means "unchanged", and an open network is an explicit choice.
+ */
+function DeviceWifiCard({ onResync }: { onResync: () => void }) {
+  const [status, setStatus] = useState<WifiBroadcastStatus | null>(null)
+  const [ssid, setSsid] = useState('')
+  const [password, setPassword] = useState('')
+  const [openNetwork, setOpenNetwork] = useState(false)
+  const [revealPassword, setRevealPassword] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+  const [pending, startTransition] = useTransition()
+  const [now, setNow] = useState(() => Date.now())
+
+  const refresh = () => {
+    getWifiBroadcastStatus()
+      .then((next) => {
+        setStatus(next)
+        setSsid((current) => (current === '' ? next.ssid : current))
+      })
+      .catch(() => setError('Could not read the broadcast status.'))
+  }
+
+  useEffect(refresh, [])
+
+  /**
+   * While a window is open the card polls: the countdown has to tick, and the
+   * delivered count is the only feedback this wire gives — devices never
+   * acknowledge, so "14 of 20 reached" is assembled from their polls landing.
+   * Idle, it does nothing.
+   */
+  useEffect(() => {
+    if (!status?.open) return
+    const timer = setInterval(() => {
+      setNow(Date.now())
+      refresh()
+    }, 5000)
+    return () => clearInterval(timer)
+  }, [status?.open])
+
+  const remaining = status?.startedAt
+    ? Math.max(0, new Date(status.startedAt).getTime() + status.windowMs - now)
+    : 0
+  const open = (status?.open ?? false) && remaining > 0
+
+  // Validated in the browser with the same pure rules the server applies, so a
+  // refusal reads identically wherever it is triggered. A blank password over a
+  // stored one is "unchanged" and validates against the stored pair instead.
+  const keepingPassword = !openNetwork && password === '' && (status?.passwordSet ?? false)
+  const check = keepingPassword
+    ? ({ ok: true } as const)
+    : validateWifiNetwork(ssid, openNetwork ? '' : password)
+  const invalid = check.ok ? null : check.error
+  const ssidBytes = ssidByteLength(ssid)
+
+  function handleSave() {
+    setError(null)
+    startTransition(async () => {
+      const result = await saveDeviceWifi(
+        ssid,
+        openNetwork ? '' : password === '' ? null : password,
+      )
+      if (result.status === 'error') {
+        setError(result.errors.join(' '))
+        return
+      }
+      setPassword('')
+      setOpenNetwork(false)
+      setSaved(true)
+      refresh()
+      onResync()
+    })
+  }
+
+  function handleBroadcast() {
+    setError(null)
+    setConfirming(false)
+    startTransition(async () => {
+      const result = await startWifiBroadcast()
+      if (result.status === 'error') {
+        setError(result.errors.join(' '))
+        return
+      }
+      setNow(Date.now())
+      refresh()
+      onResync()
+    })
+  }
+
+  function handleStop() {
+    setError(null)
+    startTransition(async () => {
+      await stopWifiBroadcast()
+      refresh()
+      onResync()
+    })
+  }
+
+  return (
+    <div className="rounded-lg border border-gray-800 bg-gray-900/40 p-4 space-y-4">
+      <div>
+        <h3 className="text-sm font-medium text-gray-200">Device Wi-Fi</h3>
+        <p className="text-xs text-gray-500 mt-1">
+          The network sunbed indicators should join, so a unit can be moved to a new
+          access point without opening it up. Saving only stores it — devices receive
+          it during a broadcast, once each.
+        </p>
+      </div>
+
+      <div className="rounded border border-amber-900/60 bg-amber-950/30 px-3 py-2">
+        <p className="text-xs text-amber-200">
+          The device poll endpoint has <span className="font-semibold">no authentication</span>,
+          and device codes are printed on the stickers. While a broadcast is open, anyone
+          who knows a code can read this password. Give the devices their own isolated
+          SSID — never a venue&rsquo;s main Wi-Fi.
+        </p>
+      </div>
+
+      {/* ── credentials ───────────────────────────────────────────────── */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label htmlFor="device-wifi-ssid-input" className="block text-xs text-gray-400 mb-1">
+            SSID
+          </label>
+          <input
+            id="device-wifi-ssid-input"
+            type="text"
+            value={ssid}
+            onChange={(e) => {
+              setSsid(e.target.value)
+              setSaved(false)
+              setError(null)
+            }}
+            className={`w-full px-2 py-1.5 rounded bg-gray-950 border text-sm text-gray-200 ${
+              invalid ? 'border-red-600' : 'border-gray-700'
+            }`}
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            {ssidBytes}/{SSID_MAX_BYTES} bytes
+          </p>
+        </div>
+
+        <div>
+          <label
+            htmlFor="device-wifi-password-input"
+            className="block text-xs text-gray-400 mb-1"
+          >
+            Password
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              id="device-wifi-password-input"
+              type={revealPassword ? 'text' : 'password'}
+              autoComplete="new-password"
+              disabled={openNetwork}
+              value={password}
+              placeholder={
+                status?.passwordSet ? 'unchanged' : `${PSK_MIN_LENGTH}–${PSK_MAX_LENGTH} characters`
+              }
+              onChange={(e) => {
+                setPassword(e.target.value)
+                setSaved(false)
+                setError(null)
+              }}
+              className="flex-1 px-2 py-1.5 rounded bg-gray-950 border border-gray-700 text-sm text-gray-200 disabled:opacity-40"
+            />
+            <button
+              type="button"
+              onClick={() => setRevealPassword((v) => !v)}
+              disabled={openNetwork || password === ''}
+              className="px-2 py-1.5 rounded text-xs border border-gray-700 text-gray-300 hover:bg-gray-800 disabled:opacity-40"
+            >
+              {revealPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          <label className="flex items-center gap-2 mt-2 text-xs text-gray-400">
+            <input
+              type="checkbox"
+              checked={openNetwork}
+              onChange={(e) => {
+                setOpenNetwork(e.target.checked)
+                setSaved(false)
+                setError(null)
+              }}
+              className="accent-gray-500"
+            />
+            Open network (no password)
+          </label>
+          {/* The stored password is never sent to the browser, so the field
+              cannot be prefilled — blank has to mean "leave it alone", and
+              clearing one has to be an explicit choice rather than an
+              accidental consequence of editing the SSID. */}
+          {status?.passwordSet && !openNetwork && (
+            <p className="text-xs text-gray-500 mt-1">
+              A password is stored. Leave blank to keep it.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {invalid && (
+        <p role="alert" className="text-xs text-red-400">
+          {invalid}
+        </p>
+      )}
+
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={pending || invalid !== null}
+          onClick={handleSave}
+          className="px-3 py-1.5 rounded text-sm font-medium border border-green-700 text-green-300 hover:bg-green-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Save credentials
+        </button>
+        {saved && !error && <span className="text-xs text-green-400">Saved. Not yet broadcast.</span>}
+      </div>
+
+      {/* ── broadcast ─────────────────────────────────────────────────── */}
+      <div className="border-t border-gray-800 pt-4 space-y-3">
+        {open ? (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              <span role="status" className="text-sm text-gray-200">
+                Broadcasting <span className="text-gray-400">{status?.ssid}</span> —{' '}
+                {formatRemaining(remaining)} left
+              </span>
+            </div>
+            <p className="text-xs text-gray-500">
+              {status?.reached ?? 0} of {status?.total ?? 0} device
+              {(status?.total ?? 0) === 1 ? '' : 's'} reached. Each device is served once;
+              units that are asleep or out of range pick it up when they next poll, until
+              the window closes.
+            </p>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={handleStop}
+              className="px-3 py-1.5 rounded text-sm font-medium border border-red-800 text-red-300 hover:bg-red-950/40 disabled:opacity-40"
+            >
+              Stop broadcasting
+            </button>
+          </>
+        ) : confirming ? (
+          <>
+            <p className="text-sm text-amber-200">
+              Broadcast <span className="font-semibold">{status?.ssid}</span> to{' '}
+              {status?.total ?? 0} device{(status?.total ?? 0) === 1 ? '' : 's'}? The
+              password will be readable on the open poll endpoint for the next{' '}
+              {Math.round((status?.windowMs ?? 0) / 60000)} minutes.
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={pending}
+                onClick={handleBroadcast}
+                className="px-3 py-1.5 rounded text-sm font-medium border border-amber-600 text-amber-200 hover:bg-amber-900/30 disabled:opacity-40"
+              >
+                Confirm broadcast
+              </button>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => setConfirming(false)}
+                className="px-3 py-1.5 rounded text-sm font-medium border border-gray-700 text-gray-300 hover:bg-gray-800 disabled:opacity-40"
+              >
+                Cancel
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              disabled={pending || !(status?.ready ?? false)}
+              onClick={() => setConfirming(true)}
+              title={status?.ready ? undefined : 'Save a valid SSID and password first'}
+              className="px-3 py-1.5 rounded text-sm font-medium border border-amber-700 text-amber-300 hover:bg-amber-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Broadcast to fleet
+            </button>
+            <p className="text-xs text-gray-500">
+              Opens a {Math.round((status?.windowMs ?? 0) / 60000)}-minute window. Every
+              device that polls inside it receives the network once, then the response stops
+              carrying it. Broadcast again to re-send — for example after correcting a
+              password.
+            </p>
+          </>
+        )}
+
+        {error && (
+          <p role="alert" className="text-xs text-red-400">
+            {error}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function PreferenceRow({
   row,
   onSaved,
@@ -548,9 +893,15 @@ export default function PreferencesView({
         // keeps the generic one-row-per-preference form.
         const showCoupled =
           coupled !== null && groupRows.some((r) => r.key === MODE_KEY || r.key === POLL_KEY)
-        const plainRows = showCoupled
-          ? groupRows.filter((r) => r.key !== MODE_KEY && r.key !== POLL_KEY)
-          : groupRows
+        // The Wi-Fi keys are always pulled out of the generic list, whether or
+        // not the card renders: a password must never reach a plain text input,
+        // and the broadcast stamp is operational state, not a tunable.
+        const showWifi = groupRows.some((r) => WIFI_KEYS.includes(r.key))
+        const plainRows = groupRows.filter(
+          (r) =>
+            !WIFI_KEYS.includes(r.key) &&
+            !(showCoupled && (r.key === MODE_KEY || r.key === POLL_KEY)),
+        )
 
         return (
           <div key={group} className="space-y-3">
@@ -562,6 +913,7 @@ export default function PreferencesView({
                 onResync={resync}
               />
             )}
+            {showWifi && <DeviceWifiCard onResync={resync} />}
             {plainRows.length > 0 && (
               <div className="rounded-lg border border-gray-800 divide-y divide-gray-800 bg-gray-900/40">
                 {plainRows.map((row) => (

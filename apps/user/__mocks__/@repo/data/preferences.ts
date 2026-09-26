@@ -8,11 +8,20 @@
  * the registry default, and a test that cares overrides it per call.
  */
 import { vi } from 'vitest'
+// The pure Wi-Fi rules carry no prisma import, so the mock uses the REAL ones:
+// a stubbed validator would let a route test pass on a pair the server would
+// refuse.
+import { parseBroadcastStartedAt, resolveWifiNetwork } from '@repo/data/device-wifi'
 
 /** Registry defaults, keyed as in `PREFERENCE_REGISTRY`. */
 const DEFAULTS: Record<string, number | boolean | string> = {
   'device-poll-interval-sec': 60,
   'device-power-mode': 'deep_sleep',
+  // No network configured and no broadcast running — the resting state, so a
+  // route test that says nothing about Wi-Fi gets a response without it.
+  'device-wifi-ssid': '',
+  'device-wifi-password': '',
+  'device-wifi-broadcast-started-at': '',
 }
 
 export const getPreference = vi.fn(async (key: string) => DEFAULTS[key])
@@ -37,3 +46,33 @@ export const getPlatformDevicePolicy = vi.fn(async () => {
   ])
   return { mode: String(mode), intervalSec: intervalSec as number }
 })
+
+/**
+ * The Wi-Fi pair and the broadcast window, built on `getPreferenceCached` for
+ * the same reason `getPlatformDevicePolicy` is: the route tests steer this by
+ * stubbing the key-level accessor, and a canned value would ignore them while
+ * still passing.
+ */
+export const getDeviceWifiBroadcast = vi.fn(async () => {
+  const [ssid, password, startedRaw] = await Promise.all([
+    getPreferenceCached('device-wifi-ssid'),
+    getPreferenceCached('device-wifi-password'),
+    getPreferenceCached('device-wifi-broadcast-started-at'),
+  ])
+  return {
+    network: resolveWifiNetwork(String(ssid ?? ''), String(password ?? '')),
+    startedAt: parseBroadcastStartedAt(String(startedRaw ?? '')),
+  }
+})
+
+export const getDeviceWifiNetwork = vi.fn(async () => {
+  const broadcast = await getDeviceWifiBroadcast()
+  return broadcast.network
+})
+
+export const setDeviceWifiNetwork = vi.fn(async () => ({ status: 'ok' as const }))
+export const startDeviceWifiBroadcast = vi.fn(async () => ({
+  status: 'ok' as const,
+  startedAt: new Date(),
+}))
+export const stopDeviceWifiBroadcast = vi.fn(async () => ({ status: 'ok' as const }))

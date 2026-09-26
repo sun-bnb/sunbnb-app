@@ -92,6 +92,9 @@ describe('parseTelemetryHeader', () => {
       heapFreeBytes: 241088,
       pollFails: 0,
       cellTempC: 31,
+      wifiDrops: 2,
+      wifiRetries: 5,
+      lightSleepPerMille: 850,
       reportedFace: 'FREE',
       reportedIntervalSec: 60,
       wifiChannel: 6,
@@ -230,11 +233,49 @@ describe('parseTelemetryHeader', () => {
   })
 
   it('drops the diagnostic counters that earn no column', () => {
-    // `polls` `slp` `wake` `wjoin` `drops` `retry` are accepted and dropped:
-    // useful in a log line, not worth a schema (telemetry-fields.md agrees).
-    expect(parseTelemetryHeader('polls=27;slp=850;wake=4560;wjoin=3100;drops=2;retry=5;fw=0.1.0')).toEqual({
+    // Only `polls` `wake` `wjoin` are still accepted and dropped: useful in a
+    // log line, not worth a schema. The Wi-Fi counters LEFT this set on
+    // 2026-09-26 — see the test below.
+    expect(parseTelemetryHeader('polls=27;wake=4560;wjoin=3100;fw=0.1.0')).toEqual({
       fw: '0.1.0',
     })
+  })
+
+  it('stores the Wi-Fi health counters that used to be dropped', () => {
+    // The two stories these exist to separate: `joins`/`drops` climbing is the
+    // AP dropping the device, `stale`/`tmo` climbing is the kept-open poll
+    // connection dying. On 2026-09-26 that distinction was only visible on a
+    // USB console, which a potted unit does not have.
+    expect(
+      parseTelemetryHeader('drops=2;retry=5;joins=7;stale=3;tmo=1;slp=850;fw=0.1.0'),
+    ).toEqual({
+      fw: '0.1.0',
+      wifiDrops: 2,
+      wifiRetries: 5,
+      wifiJoins: 7,
+      wifiStaleReuses: 3,
+      wifiStaleTimeouts: 1,
+      lightSleepPerMille: 850,
+    })
+  })
+
+  it('reads the applied half of Wi-Fi provisioning', () => {
+    expect(parseTelemetryHeader('ssid=Venue-Devices;netfail=1;fw=0.1.0')).toEqual({
+      fw: '0.1.0',
+      reportedSsid: 'Venue-Devices',
+      netFail: true,
+    })
+  })
+
+  it('refuses an over-long SSID rather than truncating it', () => {
+    // Measured in BYTES, the same rule the write path applies — a truncated
+    // SSID would read as "applied a different network" in the fleet UI.
+    const tooLong = 'a'.repeat(33)
+    expect(parseTelemetryHeader(`ssid=${tooLong};fw=0.1.0`)).toEqual({ fw: '0.1.0' })
+  })
+
+  it('refuses a negative Wi-Fi counter — a count cannot be negative', () => {
+    expect(parseTelemetryHeader('drops=-1;fw=0.1.0')).toEqual({ fw: '0.1.0' })
   })
 
   it('tolerates whitespace around pairs', () => {

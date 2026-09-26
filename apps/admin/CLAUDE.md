@@ -52,18 +52,41 @@ Port 3003. Requires `sudo: true` on User record.
   (`Device.powerMode`/`pollIntervalSec`, set by the operator in the partner fleet page) runs that
   instead, and the registry copy says so.
 
+  **The second exception is the device Wi-Fi card** (`device-wifi-ssid` + `device-wifi-password` +
+  `device-wifi-broadcast-started-at`). All three are pulled out of the generic list: a password must
+  never land in a plain text input, and the broadcast stamp is operational state rather than a
+  tunable. The card has **two buttons for two operations, and that separation is the security
+  design** — the HW poll endpoint has no authentication (track 019 Q9) and device codes are public,
+  printed on the stickers, so *saving* stores the pair and changes nothing on the wire, while
+  *broadcasting* (behind an inline confirm naming the SSID, the device count and the window) opens a
+  30-minute window in which **each device is served the credentials exactly once**
+  (`Device.wifiSentAt` vs the broadcast start). The window expires on its own — there is no ack
+  channel, so a forgotten broadcast must not leave a password readable. While it is open the card
+  polls for the countdown and the reached/total count, which is the only delivery feedback this wire
+  gives. The password never crosses to the browser: `getPreferenceAdminRows` redacts any definition
+  marked `secret`, so the field reports only whether one is set and writes blind — a blank field
+  means "unchanged" (`saveDeviceWifi(ssid, null)`), and an open network is an explicit checkbox.
+  Rules live in the PURE `@repo/data/device-wifi`, which this client component may import because it
+  carries no Prisma; `setDeviceWifiNetwork` writes the pair in one transaction so the serving path
+  can never read a new SSID beside an old password.
+
 ## Testing
 
 Run: `npm test`, `npm run test:watch`, `npm run test:coverage`
 
-### Test Files (206 tests)
+### Test Files (215 tests)
 
 - `app/users/actions.test.ts` — Admin user CRUD, user deletion with cascade cleanup, requireSudo guard
 - `app/settlements/actions.test.ts` — Settlement lifecycle (preview, generate, close, approve, markPaid, revert), validation
 - `app/fees/actions.test.ts` — Service fee CRUD, service code CRUD, search sites/accounts, platform fees
 - `app/sites/actions.test.ts` — updatePaymentProvider with Mollie token verification; setCustomBrand (track 023, 11 tests): sudo gate (unauthenticated AND signed-in-non-sudo, both asserted to write nothing), enable/disable both travelling faithfully (the kill switch needs `false` to work as well as `true`), blank site id refused pre-DB, `revalidatePath('/sites')`, and a table of NON-boolean inputs (`'false'`, `'on'`, `undefined`, `null`, `1`) refused rather than coerced — each is truthy or falsy by accident and would flip a customer's storefront the wrong way while reporting success; setCustomBrandKey (9 tests): sudo gate, a key validated against the shared manifest and REFUSED when unknown, and `''`/whitespace/null all clearing to NULL rather than storing a key nothing answers to
 - `app/platform/actions.test.ts` — Business entity settings, country/currency/VAT settings, deleteSettings referential integrity
-- `app/preferences/actions.test.ts` — Preferences sudo gate + registry pass-through (12 tests): every action (including the paired `saveDevicePolicy` / `resetDevicePolicy`) rejected for unauthenticated and non-sudo callers with nothing written, raw value + acting admin id forwarded unchanged, registry rejection surfaced not swallowed, unregistered key refused without touching the store, and the mode+interval pair forwarded in ONE call so the band is judged against the mode being saved. Validation itself is asserted in `packages/data/src/preferences.test.ts` — the action deliberately has no opinion about bounds or modes
+- `app/preferences/actions.test.ts` — Preferences sudo gate + registry pass-through (21 tests): every action (including the paired `saveDevicePolicy` / `resetDevicePolicy`) rejected for unauthenticated and non-sudo callers with nothing written, raw value + acting admin id forwarded unchanged, registry rejection surfaced not swallowed, unregistered key refused without touching the store, and the mode+interval pair forwarded in ONE call so the band is judged against the mode being saved. Validation itself is asserted in `packages/data/src/preferences.test.ts` — the action deliberately has no opinion about bounds or modes. The Wi-Fi block (9 tests) adds the
+  gate on `saveDeviceWifi`/`startWifiBroadcast`/`stopWifiBroadcast`/`getWifiBroadcastStatus` —
+  the only thing between a signed-in non-admin and a credential on an unauthenticated wire — plus
+  the two properties the exposure design rests on: **saving never starts a broadcast**, and a
+  password never appears in the status payload the client component receives (asserted by
+  searching the serialized result for the value)
 - `app/api/health/route.test.ts` — Health check with sudo-gated operational details
 - `app/api/auth/forgot-password/route.test.ts` — Rate limiting, email validation, enumeration protection
 - `app/api/auth/reset-password/route.test.ts` — Rate limiting, token/password validation, password strength mismatch

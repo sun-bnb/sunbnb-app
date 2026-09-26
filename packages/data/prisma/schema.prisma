@@ -1538,6 +1538,50 @@ model Device {
   /// DECREASES to 0 on a power cut, which also clears the INA228's accumulator:
   /// a decrease invalidates a `chargeUah` baseline exactly as a step does.
   fullCount  Int?         @map("full_count")
+  /// Wi-Fi health counters, all SINCE BOOT and all restarting on a deep-sleep
+  /// wake — so on a deep-sleep fleet these describe one wake cycle, not the
+  /// unit's life. The last value is a SAMPLE of the last recorded poll (the
+  /// Device row is throttled); the trend lives in `device_telemetry`, which is
+  /// what these were added for. Read them as a pair of stories:
+  /// `wifiJoins`/`wifiDrops` climbing says the AP keeps dropping the device,
+  /// `wifiStaleReuses`/`wifiStaleTimeouts` climbing says the kept-open poll
+  /// connection keeps dying. Telling those apart used to need the USB console,
+  /// and a deployed unit has none — on 2026-09-26 a phone hotspot's power
+  /// saving produced reconnect bursts that were 64% of a 75-minute drain.
+  wifiDrops          Int? @map("wifi_drops")
+  wifiRetries        Int? @map("wifi_retries")
+  wifiJoins          Int? @map("wifi_joins")
+  wifiStaleReuses    Int? @map("wifi_stale_reuses")
+  /// Of the stale reuses, the ones that burned a full 5 s timeout of radio
+  /// before reconnecting. The expensive subset — this is the drain signal.
+  wifiStaleTimeouts  Int? @map("wifi_stale_timeouts")
+  /// Share of time actually spent in light sleep, per THOUSAND (0–1000). The
+  /// applied half of the light-sleep mode: a device assigned light sleep that
+  /// reports a low value is not getting the sleep the mode is chosen for.
+  lightSleepPerMille Int? @map("light_sleep_per_mille")
+  /// The SSID the device says it is joined to — the applied half of the served
+  /// `device-wifi-ssid` pair, the fourth of these declarative loops after
+  /// location, power mode and disc face. Compare it against the offered SSID to
+  /// see whether a provisioning change has actually taken.
+  reportedSsid String? @map("reported_ssid")
+  /// When the device last reported that an OFFERED network was tried and
+  /// FAILED (`netfail=1`). A TIMESTAMP rather than the boolean the wire
+  /// carries, because the firmware only ever sends the failure and never its
+  /// absence: under the omit-don't-zero rule a stored boolean would latch true
+  /// on the first bad password and stay true forever, long after a corrected
+  /// one had been picked up. "Last failed at" answers what an operator actually
+  /// asks — is it failing NOW — and ages out on its own. The per-reading
+  /// boolean is kept in `device_telemetry.net_fail`, where each row is one poll
+  /// and stickiness cannot arise.
+  netFailAt DateTime? @map("net_fail_at")
+  /// When this device was last SERVED the broadcast Wi-Fi pair. The credentials
+  /// are not a standing field on the wire — an operator opens a bounded window
+  /// and each device receives them exactly once inside it. This column is the
+  /// "once": a device is served when `wifiSentAt` is null or older than the
+  /// broadcast's start, so starting a NEW broadcast re-arms the whole fleet
+  /// without touching a single device row, and a mistyped password is corrected
+  /// by broadcasting again. See `@repo/data/device-wifi` `shouldSendWifi`.
+  wifiSentAt DateTime? @map("wifi_sent_at")
   createdAt  DateTime     @default(now()) @map("created_at")
   updatedAt  DateTime     @updatedAt @map("updated_at")
   /// The HISTORY of the columns above. The fields here are a LAST VALUE — what
@@ -1606,6 +1650,16 @@ model DeviceTelemetry {
   resetReason         String?  @map("reset_reason")
   reportedFace        String?  @map("reported_face")
   reportedLocation    String?  @map("reported_location")
+  wifiDrops           Int?     @map("wifi_drops")
+  wifiRetries         Int?     @map("wifi_retries")
+  wifiJoins           Int?     @map("wifi_joins")
+  wifiStaleReuses     Int?     @map("wifi_stale_reuses")
+  wifiStaleTimeouts   Int?     @map("wifi_stale_timeouts")
+  lightSleepPerMille  Int?     @map("light_sleep_per_mille")
+  reportedSsid        String?  @map("reported_ssid")
+  /// Per-READING, so unlike `Device.netFailAt` a boolean is safe here: a row is
+  /// one poll, and null means the device did not report a failure on that poll.
+  netFail             Boolean? @map("net_fail")
 
   /// The series read: one device, oldest→newest over a window.
   @@index([deviceId, recordedAt])

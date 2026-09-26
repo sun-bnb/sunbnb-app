@@ -31,8 +31,9 @@ import { createHash } from 'crypto'
 import prisma from '@repo/data/PrismaCient'
 import { siteDayBounds, siteDayKey } from '@repo/data/site-day'
 import { RESERVATION_CANCELED, RESERVATION_REFUNDED } from '@repo/data/reservation-status'
-import { getPlatformDevicePolicy } from '@repo/data/preferences'
+import { getPlatformDevicePolicy, getDeviceWifiBroadcast } from '@repo/data/preferences'
 import { resolveDevicePolicyForDevice } from '@repo/data/device-power'
+import { shouldSendWifi } from '@repo/data/device-wifi'
 import { screenDeviceRequest, unavailable, unitAddressWhere, SEGMENT_SEATS } from '../hw-filter'
 import {
   activeStateForSeat,
@@ -141,6 +142,9 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
     // Alongside the reservation read, not before it: the cached path resolves
     // without a query on all but the first poll of an instance.
     const platformPolicyPromise = getPlatformDevicePolicy()
+    // Same reasoning as the policy read: independent of the reservation query,
+    // and cache-warm on all but the first poll of an instance.
+    const wifiBroadcastPromise = getDeviceWifiBroadcast()
 
     const reservations = await prisma.reservation.findMany({
       where: {
@@ -189,6 +193,25 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
     await platformPolicyPromise,
   )
 
+    // ── Wi-Fi provisioning: a BROADCAST, not a standing field ───────────────
+    //
+    // The pair rides `stable` like everything else, but only on the ONE poll
+    // this device is served. That is the whole security posture: the endpoint
+    // has no authentication (Q9) and device codes are public, so a password
+    // present on every reply would be readable by anyone holding a code, for as
+    // long as the network exists. An operator opens a bounded window instead,
+    // and each device takes the pair once inside it.
+    //
+    // Because it sits inside the hashed object, the credential-carrying poll
+    // cannot be a 304 — the hash differs from whatever the device last saw, so
+    // it gets a real body. The poll after it differs again (the fields are
+    // gone) and costs one more 200. Two extra bodies per device per broadcast
+    // is the entire wire cost.
+    const wifiBroadcast = await wifiBroadcastPromise
+    const sendWifi =
+      wifiBroadcast.network !== null &&
+      shouldSendWifi(wifiBroadcast.startedAt, screened.wifiSentAt)
+
     // Everything the device acts on. `serverTime` is deliberately NOT in here:
     // it changes every request, so including it would make the ETag unique per
     // poll and the 304 path dead code.
@@ -217,6 +240,11 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
       // the bar so staff can confirm the right box before walking away. It sits
       // in `stable`, so setting one busts the ETag and it actually arrives.
       cmd: assignment.cmd,
+      // Both fields or neither — the firmware ignores a lone one, so half a
+      // pair would look configured and do nothing.
+      ...(sendWifi && wifiBroadcast.network
+        ? { ssid: wifiBroadcast.network.ssid, password: wifiBroadcast.network.password }
+        : {}),
     }
     const body = { ...stable, serverTime: new Date().toISOString() }
 
@@ -231,6 +259,25 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
     // and the first lever against Q3's invocation arithmetic.
     if (request.headers.get('if-none-match') === etag) {
       return new Response(null, { status: 304, headers })
+    }
+
+    // Record the send only on the path that actually hands the pair over, and
+    // only after the 304 branch above has been ruled out. Getting this order
+    // wrong in either direction is a real failure: marking before the 304 check
+    // would burn a device's one delivery on a reply that carried no body, and
+    // not marking at all would serve the password on every poll of the window,
+    // which is the exposure the broadcast exists to bound.
+    //
+    // BEST-EFFORT, like the telemetry write: a DB failure here must not cost
+    // the device its state. The cost of a failed write is that this device is
+    // served again on its next poll inside the window — a repeat, not a miss,
+    // which is the right way round for a delivery nobody acknowledges.
+    if (sendWifi) {
+      try {
+        await prisma.device.updateMany({ where: { code }, data: { wifiSentAt: new Date() } })
+      } catch {
+        /* ignored on purpose — see above */
+      }
     }
 
     return Response.json(body, { headers })

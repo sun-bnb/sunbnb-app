@@ -150,6 +150,18 @@ const DEVICE_SELECT = {
   imaxUa: true,
   fullCount: true,
   reportedLocation: true,
+  wifiDrops: true,
+  wifiRetries: true,
+  wifiJoins: true,
+  wifiStaleReuses: true,
+  wifiStaleTimeouts: true,
+  lightSleepPerMille: true,
+  reportedSsid: true,
+  // The Wi-Fi broadcast's "already served this device" stamp. It rides the one
+  // Device read this step already makes — the alternative is a second query on
+  // the hottest route in the platform, for a field that is null on almost every
+  // poll.
+  wifiSentAt: true,
   lastSeenAt: true,
 } as const
 
@@ -237,6 +249,8 @@ export type DeviceRequest =
       assignment: DeviceAssignment | null
       location: string | null
       powerOverride: DevicePowerOverride | null
+      /** When this device was last served the broadcast Wi-Fi pair; null = never. */
+      wifiSentAt: Date | null
     }
   | { ok: false; response: Response }
 
@@ -315,7 +329,14 @@ export async function screenDeviceRequest(
   // reveal whether a code is known — it always answers 204, so it never becomes
   // an existence oracle for codes printed on public stickers.
   if (options.requireBinding === false) {
-    return { ok: true, code, assignment: null, location: null, powerOverride: null }
+    return {
+      ok: true,
+      code,
+      assignment: null,
+      location: null,
+      powerOverride: null,
+      wifiSentAt: null,
+    }
   }
 
   const assignment = assignmentFromRow(device)
@@ -327,5 +348,6 @@ export async function screenDeviceRequest(
     assignment,
     location: formatAssignment(assignment),
     powerOverride: powerOverrideFromRow(device),
+    wifiSentAt: device?.wifiSentAt ?? null,
   }
 }

@@ -66,6 +66,48 @@ mean the device backed ITSELF off after losing us (see §Wire contract → the l
 a fault only when `fails` says it is not. Nothing is blocked — the data is written on every poll
 that earns one.
 
+**▶ WIRE v2.2 — 2026-09-26: Wi-Fi health keys, and server-provided Wi-Fi as a BROADCAST.**
+Answers `../sunbnb-hw/docs/app-requests/2026-09-26-wifi-health-and-provisioning.md` (firmware for
+both halves built on `deep-sleep-and-disc-variant`, not flashed).
+
+**Uplink (part B).** Six keys leave the accepted-and-dropped set and earn columns on BOTH `device`
+and `device_telemetry`: `drops` `retry` `joins` `stale` `tmo` `slp` → `wifiDrops` `wifiRetries`
+`wifiJoins` `wifiStaleReuses` `wifiStaleTimeouts` `lightSleepPerMille`. All counters SINCE BOOT,
+restarting on a deep-sleep wake, omitted at zero. They exist to separate two stories a poll count
+cannot: `joins`/`drops` climbing is **the AP dropping the device**, `stale`/`tmo` climbing is **the
+kept-open poll connection dying**. Trigger: on 2026-09-26 a phone hotspot's power saving produced
+reconnect bursts that were 64 % of a 75-minute drain, and telling the two apart was possible only on
+a USB console — which a potted unit does not have. Only `polls` `wake` `wjoin` are still dropped.
+
+**Uplink (part A's applied half).** `ssid` → `reportedSsid` (byte-limited like the write path) and
+`netfail=1` → `netFail` per reading. On `Device` the flag is stored as `netFailAt`, a TIMESTAMP:
+the firmware only ever sends the failure, never its absence, so under omit-don't-zero a boolean
+would latch true on the first bad password and never clear. Both `ssid` and `netfail` TRIGGER a
+last-value write — an operator who has just broadcast is watching for exactly these.
+
+**Downlink (part A) — `ssid` + `password`, both or neither, inside the hashed `stable` object.**
+Shape as decided by the founder 2026-09-26 (`password` `""` for open, else 8–63; `ssid` ≤ 32 BYTES).
+**Q9's security question was answered with the spec's option 2, not option 1:** the pair is NOT a
+standing field. Credentials are stored in two platform preferences and change nothing on the wire;
+an explicit, CONFIRMED operator action in admin `/preferences` opens a **30-minute window**
+(`WIFI_BROADCAST_WINDOW_MS`), and inside it **each device is served exactly once** — `Device.wifiSentAt`
+against the broadcast's start stamp, so a new broadcast re-arms the whole fleet without touching a
+device row and a mistyped password is corrected by broadcasting again. The window expires on its
+own, for the same reason `pendingCmd` does: this wire has no ack channel, so a forgotten broadcast
+must not leave a password readable to anyone holding a (public, sticker-printed) device code.
+The send is recorded only on the 200 path — marking before the 304 check would burn a device's one
+delivery on a reply with no body. Exposure is therefore a bounded window rather than every reply
+forever; the isolated-SSID policy still stands on top of it.
+
+Rules: `@repo/data/device-wifi` (PURE — refuses rather than repairs: edge whitespace is rejected
+because preference reads trim, so a trailing space would be silently dropped and the fleet would
+fail to join a password that looks right on screen). Server: `state/route.ts`, `device-report.ts`,
+`hw-filter.ts` (the `wifiSentAt` read rides the one Device query the screen step already makes).
+Admin: `/preferences` Wi-Fi card — save and broadcast are separate buttons, the password is redacted
+out of the row payload (`secret: true`) and never reaches the browser. Migration
+`20260926191118_add_device_wifi_health_and_provisioning`, additive, applied local only.
+Part C (served charge target + heat thresholds) is recorded in the HW doc and NOT built.
+
 **▶ WIRE v2 — 2026-09-12: ONE request; field set extended 2026-09-22.** Tracking, assignment and
 identification all ride the state poll. **Uplink** is the `x-sunbnb-telemetry` request header
 (`fw=…;batt=…;rssi=…;up=…;temp=…;cur=…;chg=…;rst=…;mode=…;heap=…;fails=…;loc=…`), recorded by the

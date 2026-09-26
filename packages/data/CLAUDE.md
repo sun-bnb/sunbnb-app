@@ -253,6 +253,27 @@ window and are **close-independent** — daily accumulation never changes when t
   the window, so it is RESUMABLE (whatever it commits stands) and capped per run rather than
   unbounded. Called by the user app's `/api/cron/prune-telemetry` daily. The volume arithmetic
   is in the module header — read it before raising the default
+- `src/device-wifi.ts` — **PURE** (no Prisma; the admin form imports it): the rules for the Wi-Fi
+  pair a device is given so a unit can be moved to a new AP without a console (track 019, HW
+  `docs/app-requests/2026-09-26-wifi-health-and-provisioning.md`). `SSID_MAX_BYTES` (32 — **bytes**,
+  not characters: 9 beach emoji are 18 code units and 36 bytes), `PSK_MIN_LENGTH`/`PSK_MAX_LENGTH`
+  (8–63, or `''` for an open network), `validateWifiNetwork` (write path, explains itself),
+  `resolveWifiNetwork` (read path, silent, never returns half a pair — the device ignores a lone
+  field, so half would look configured and do nothing). It **refuses rather than repairs**, and the
+  one rule that looks fussy is load-bearing: edge whitespace is rejected because preference reads
+  TRIM, so a password stored with a trailing space would be served without it and the fleet would
+  fail to join a network that looks correct in the admin form.
+  The BROADCAST half is the security posture (Q9 option 2, founder 2026-09-26): credentials are
+  stored but not served, an operator opens a `WIFI_BROADCAST_WINDOW_MS` (30 min) window, and
+  `shouldSendWifi(startedAt, device.wifiSentAt)` serves **each device exactly once** inside it.
+  Comparing against the START — not a stored boolean — is what lets a new broadcast re-arm the whole
+  fleet without touching a device row, which is how a mistyped password is corrected. `isBroadcastOpen`
+  rejects a FUTURE start stamp rather than trusting it, and `parseBroadcastStartedAt` reads anything
+  unparseable as "no broadcast": both fail toward *not* exposing a password on an open endpoint.
+  Writers/readers in `./preferences` (`setDeviceWifiNetwork` — one transaction, `null` password means
+  keep the stored one · `startDeviceWifiBroadcast` / `stopDeviceWifiBroadcast` ·
+  `getDeviceWifiBroadcast`, cached on a **30 s** TTL rather than the policy's 5 min, because a late
+  START is a nuisance while a late STOP keeps a password reachable)
 - `src/device-power.ts` — **PURE** (no Prisma; a client component may import it): the three
   device power modes, their poll bands (continuous 1–15 s · light sleep 10–45 s · deep
   sleep 30–300 s — floors from `../sunbnb-hw` exp 005, light sleep's ceiling an operating

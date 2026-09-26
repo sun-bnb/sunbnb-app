@@ -53,7 +53,10 @@ export async function POST(request: NextRequest, { params }: { params: { code: s
         currentUa: true, chargeUah: true, resetReason: true, reportedPowerMode: true,
         heapFreeBytes: true, pollFails: true, cellTempC: true, reportedFace: true,
         reportedIntervalSec: true, wifiChannel: true, vminMv: true, imaxUa: true,
-        fullCount: true, reportedLocation: true, lastSeenAt: true,
+        fullCount: true, reportedLocation: true,
+        wifiDrops: true, wifiRetries: true, wifiJoins: true, wifiStaleReuses: true,
+        wifiStaleTimeouts: true, lightSleepPerMille: true, reportedSsid: true,
+        lastSeenAt: true,
       },
     })
     await recordDeviceReport(screened.code, reportFromBody(payload), {

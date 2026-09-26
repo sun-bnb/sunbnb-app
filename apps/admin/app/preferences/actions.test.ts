@@ -18,6 +18,11 @@ vi.mock('@repo/data/preferences', () => ({
   setPreference: vi.fn(),
   setDevicePolicy: vi.fn(),
   resetDevicePolicy: vi.fn(),
+  setDeviceWifiNetwork: vi.fn(),
+  getDeviceWifiNetwork: vi.fn(),
+  getDeviceWifiBroadcast: vi.fn(),
+  startDeviceWifiBroadcast: vi.fn(),
+  stopDeviceWifiBroadcast: vi.fn(),
   isPreferenceKey: (key: string) => key === 'device-poll-interval-sec',
 }))
 
@@ -31,6 +36,10 @@ import {
   resetPreference,
   saveDevicePolicy,
   resetDevicePolicy,
+  saveDeviceWifi,
+  startWifiBroadcast,
+  stopWifiBroadcast,
+  getWifiBroadcastStatus,
 } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
@@ -39,6 +48,11 @@ import {
   setPreference,
   setDevicePolicy,
   resetDevicePolicy as resetDevicePolicyOverrides,
+  setDeviceWifiNetwork,
+  getDeviceWifiNetwork,
+  getDeviceWifiBroadcast,
+  startDeviceWifiBroadcast,
+  stopDeviceWifiBroadcast,
 } from '@repo/data/preferences'
 
 const mockAuth = vi.mocked(auth)
@@ -46,6 +60,11 @@ const mockGetRows = vi.mocked(getPreferenceAdminRows)
 const mockSet = vi.mocked(setPreference)
 const mockSetPolicy = vi.mocked(setDevicePolicy)
 const mockResetPolicy = vi.mocked(resetDevicePolicyOverrides)
+const mockSetWifi = vi.mocked(setDeviceWifiNetwork)
+const mockGetWifi = vi.mocked(getDeviceWifiNetwork)
+const mockGetBroadcast = vi.mocked(getDeviceWifiBroadcast)
+const mockStartBroadcast = vi.mocked(startDeviceWifiBroadcast)
+const mockStopBroadcast = vi.mocked(stopDeviceWifiBroadcast)
 
 const KEY = 'device-poll-interval-sec'
 
@@ -55,6 +74,12 @@ beforeEach(() => {
   mockSet.mockResolvedValue({ status: 'ok' } as never)
   mockSetPolicy.mockResolvedValue({ status: 'ok' } as never)
   mockResetPolicy.mockResolvedValue({ status: 'ok' } as never)
+  mockSetWifi.mockResolvedValue({ status: 'ok' } as never)
+  mockGetWifi.mockResolvedValue({ ssid: 'Venue-Devices', password: 'hunter2hunter2' } as never)
+  mockGetBroadcast.mockResolvedValue({ network: null, startedAt: null } as never)
+  mockStartBroadcast.mockResolvedValue({ status: 'ok', startedAt: new Date() } as never)
+  mockStopBroadcast.mockResolvedValue({ status: 'ok' } as never)
+  vi.mocked(prisma.device.count).mockResolvedValue(0 as never)
 })
 
 function authenticateAsSudo() {
@@ -185,5 +210,95 @@ describe('resetDevicePolicy', () => {
     await expect(resetDevicePolicy()).resolves.toEqual({ status: 'ok' })
     expect(mockResetPolicy).toHaveBeenCalledTimes(1)
     expect(mockSet).not.toHaveBeenCalled()
+  })
+})
+
+// ── Device Wi-Fi ────────────────────────────────────────────────────────────
+//
+// The Wi-Fi password is served on an endpoint with NO authentication (track 019
+// Q9), which makes the sudo gate on these actions the only thing standing
+// between a signed-in non-admin and putting a credential on the open wire. The
+// second property tested here is that saving and broadcasting stay SEPARATE:
+// storing a pair must never start a broadcast by itself.
+
+describe('device wi-fi', () => {
+  it('rejects an unauthenticated caller on every wi-fi action', async () => {
+    await expect(saveDeviceWifi('Venue', 'hunter2hunter2')).rejects.toThrow('Not authenticated')
+    await expect(startWifiBroadcast()).rejects.toThrow('Not authenticated')
+    await expect(stopWifiBroadcast()).rejects.toThrow('Not authenticated')
+    await expect(getWifiBroadcastStatus()).rejects.toThrow('Not authenticated')
+    expect(mockSetWifi).not.toHaveBeenCalled()
+    expect(mockStartBroadcast).not.toHaveBeenCalled()
+    expect(mockStopBroadcast).not.toHaveBeenCalled()
+  })
+
+  it('rejects a signed-in non-sudo caller, writing nothing', async () => {
+    authenticateAsNonSudo()
+    await expect(saveDeviceWifi('Venue', 'hunter2hunter2')).rejects.toThrow('sudo required')
+    await expect(startWifiBroadcast()).rejects.toThrow('sudo required')
+    await expect(stopWifiBroadcast()).rejects.toThrow('sudo required')
+    expect(mockSetWifi).not.toHaveBeenCalled()
+    expect(mockStartBroadcast).not.toHaveBeenCalled()
+    expect(mockStopBroadcast).not.toHaveBeenCalled()
+  })
+
+  it('forwards the pair and the acting admin unchanged', async () => {
+    // No opinion of its own about SSID bytes or password length — that lives in
+    // `@repo/data/device-wifi`, so a script obeys the same rules.
+    authenticateAsSudo()
+    await saveDeviceWifi('Venue-Devices', 'hunter2hunter2')
+    expect(mockSetWifi).toHaveBeenCalledWith('Venue-Devices', 'hunter2hunter2', 'admin-1')
+  })
+
+  it('passes a null password through as "keep the stored one"', async () => {
+    // The form never receives the password back, so a blank field means
+    // unchanged — coercing it to '' here would wipe the credential whenever
+    // someone edited only the SSID.
+    authenticateAsSudo()
+    await saveDeviceWifi('Venue-Devices', null)
+    expect(mockSetWifi).toHaveBeenCalledWith('Venue-Devices', null, 'admin-1')
+  })
+
+  it('saving does NOT start a broadcast', async () => {
+    // The whole exposure design rests on this: storing a password changes
+    // nothing on the wire.
+    authenticateAsSudo()
+    await saveDeviceWifi('Venue-Devices', 'hunter2hunter2')
+    expect(mockStartBroadcast).not.toHaveBeenCalled()
+  })
+
+  it('surfaces a registry rejection rather than swallowing it', async () => {
+    authenticateAsSudo()
+    mockSetWifi.mockResolvedValue({ status: 'error', errors: ['too short'] } as never)
+    await expect(saveDeviceWifi('Venue', 'x')).resolves.toEqual({
+      status: 'error',
+      errors: ['too short'],
+    })
+  })
+
+  it('starts and stops a broadcast as the acting admin', async () => {
+    authenticateAsSudo()
+    await startWifiBroadcast()
+    expect(mockStartBroadcast).toHaveBeenCalledWith('admin-1')
+    await stopWifiBroadcast()
+    expect(mockStopBroadcast).toHaveBeenCalledWith('admin-1')
+  })
+
+  it('refuses to start when the module says no network is stored', async () => {
+    authenticateAsSudo()
+    mockStartBroadcast.mockResolvedValue({
+      status: 'error',
+      errors: ['Save a valid SSID and password before broadcasting.'],
+    } as never)
+    await expect(startWifiBroadcast()).resolves.toMatchObject({ status: 'error' })
+  })
+
+  it('never reports a password back to the browser', async () => {
+    // The status is rendered in a client component; the value itself must stay
+    // on the server, so only the fact that one is set crosses the boundary.
+    authenticateAsSudo()
+    const status = await getWifiBroadcastStatus()
+    expect(status.passwordSet).toBe(true)
+    expect(JSON.stringify(status)).not.toContain('hunter2hunter2')
   })
 })

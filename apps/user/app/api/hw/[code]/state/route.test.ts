@@ -840,10 +840,24 @@ describe('fail-safe', () => {
 // this release — and that the pair is always physically servable.
 
 /** Set both preferences by key; the route reads them together. */
-function preferences(overrides: { mode?: string; intervalSec?: number } = {}) {
+function preferences(
+  overrides: {
+    mode?: string
+    intervalSec?: number
+    wifiSsid?: string
+    wifiPassword?: string
+    /** When the current Wi-Fi broadcast started; omitted = none running. */
+    broadcastStartedAt?: Date | null
+  } = {},
+) {
   const values: Record<string, unknown> = {
     'device-power-mode': overrides.mode ?? 'deep_sleep',
     'device-poll-interval-sec': overrides.intervalSec ?? 60,
+    'device-wifi-ssid': overrides.wifiSsid ?? '',
+    'device-wifi-password': overrides.wifiPassword ?? '',
+    'device-wifi-broadcast-started-at': overrides.broadcastStartedAt
+      ? overrides.broadcastStartedAt.toISOString()
+      : '',
   }
   mockPreference.mockImplementation(async (key: string) => values[key] as never)
 }
@@ -872,11 +886,12 @@ describe('poll cadence', () => {
   })
 
   it('reads through the cached accessor, not a query per poll', async () => {
-    // ~1.3 M polls/day at fleet scale (Q3): the reads that resolve the policy
-    // must be the per-instance cached ones, or the control costs more than it
-    // saves. Two keys, both cached, issued together.
+    // ~1.3 M polls/day at fleet scale (Q3): every preference the poll resolves
+    // must come from the per-instance cache, or the control costs more than it
+    // saves. Five keys now — the power pair, plus the Wi-Fi pair and the
+    // broadcast stamp — and NONE of them may reach the uncached accessor.
     await GET(makeRequest(), makeParams())
-    expect(mockPreference).toHaveBeenCalledTimes(2)
+    expect(mockPreference).toHaveBeenCalledTimes(5)
     expect(vi.mocked(getPreference)).not.toHaveBeenCalled()
   })
 })
@@ -1081,5 +1096,138 @@ describe('device power override', () => {
     mockDevice.mockResolvedValue(deviceWithPolicy('light_sleep', 20) as never)
     await GET(makeRequest(), makeParams())
     expect(mockPreference).toHaveBeenCalled()
+  })
+})
+
+// ── Wi-Fi provisioning: a broadcast, once per device ─────────────────────────
+//
+// The endpoint has NO authentication (Q9) and device codes are public, printed
+// on the sticker. A password standing in every reply would therefore be
+// readable by anyone holding a code, for as long as the network existed. These
+// tests pin the two halves of the mitigation: the pair travels only inside an
+// operator's bounded window, and each device consumes it exactly once.
+
+describe('wi-fi broadcast', () => {
+  const SSID = 'Venue-Devices'
+  const PASSWORD = 'correct-horse-battery'
+  const mockDeviceUpdate = vi.mocked(prisma.device.updateMany)
+
+  /**
+   * `device.updateMany` is shared with the telemetry recorder, which writes on
+   * most polls — so "was it called" says nothing. Only the calls carrying
+   * `wifiSentAt` are a Wi-Fi delivery being recorded.
+   */
+  function wifiWrites() {
+    return mockDeviceUpdate.mock.calls.filter(
+      (call) => (call[0] as { data?: Record<string, unknown> })?.data?.wifiSentAt !== undefined,
+    )
+  }
+
+  /** A device that has never been served, with a broadcast running right now. */
+  function broadcasting(overrides: { wifiSentAt?: Date | null } = {}) {
+    preferences({
+      wifiSsid: SSID,
+      wifiPassword: PASSWORD,
+      broadcastStartedAt: new Date(),
+    })
+    mockDevice.mockResolvedValue({
+      ...device([SEAT_A, SEAT_B]),
+      wifiSentAt: overrides.wifiSentAt ?? null,
+    } as never)
+  }
+
+  it('omits the pair entirely when no broadcast is running', async () => {
+    preferences({ wifiSsid: SSID, wifiPassword: PASSWORD })
+    const body = await (await GET(makeRequest(), makeParams())).json()
+    expect(body).not.toHaveProperty('ssid')
+    expect(body).not.toHaveProperty('password')
+  })
+
+  it('serves the pair to a device that has not had it yet', async () => {
+    broadcasting()
+    const body = await (await GET(makeRequest(), makeParams())).json()
+    expect(body).toMatchObject({ ssid: SSID, password: PASSWORD })
+  })
+
+  it('records the delivery, so the next poll does not repeat it', async () => {
+    broadcasting()
+    await GET(makeRequest(), makeParams())
+    expect(wifiWrites()).toHaveLength(1)
+    expect(wifiWrites()[0]![0]).toMatchObject({ where: { code: CODE } })
+  })
+
+  it('does not serve a device already served in THIS broadcast', async () => {
+    // Served one second after the broadcast opened.
+    broadcasting({ wifiSentAt: new Date(Date.now() + 1000) })
+    const body = await (await GET(makeRequest(), makeParams())).json()
+    expect(body).not.toHaveProperty('password')
+    expect(wifiWrites()).toHaveLength(0)
+  })
+
+  it('serves a device again once a NEW broadcast starts', async () => {
+    // The recovery path for a mistyped password: the stored stamp predates the
+    // new window, so the whole fleet is re-armed without touching device rows.
+    preferences({
+      wifiSsid: SSID,
+      wifiPassword: PASSWORD,
+      broadcastStartedAt: new Date(),
+    })
+    mockDevice.mockResolvedValue({
+      ...device([SEAT_A, SEAT_B]),
+      wifiSentAt: new Date(Date.now() - 86_400_000),
+    } as never)
+    const body = await (await GET(makeRequest(), makeParams())).json()
+    expect(body).toMatchObject({ ssid: SSID, password: PASSWORD })
+  })
+
+  it('stops serving once the window has closed', async () => {
+    preferences({
+      wifiSsid: SSID,
+      wifiPassword: PASSWORD,
+      broadcastStartedAt: new Date(Date.now() - 86_400_000),
+    })
+    const body = await (await GET(makeRequest(), makeParams())).json()
+    expect(body).not.toHaveProperty('password')
+    expect(wifiWrites()).toHaveLength(0)
+  })
+
+  it('serves nothing when a broadcast is open but no network is configured', async () => {
+    preferences({ broadcastStartedAt: new Date() })
+    const body = await (await GET(makeRequest(), makeParams())).json()
+    expect(body).not.toHaveProperty('ssid')
+    expect(wifiWrites()).toHaveLength(0)
+  })
+
+  it('never serves half a pair — a lone field would be ignored by the device', async () => {
+    // A password with no SSID: the stored pair is invalid, so nothing is sent
+    // rather than a field that makes the fleet look provisioned.
+    preferences({ wifiPassword: PASSWORD, broadcastStartedAt: new Date() })
+    const body = await (await GET(makeRequest(), makeParams())).json()
+    expect(body).not.toHaveProperty('ssid')
+    expect(body).not.toHaveProperty('password')
+  })
+
+  it('does not burn the one delivery on a 304, which carries no body', async () => {
+    broadcasting()
+    const first = await GET(makeRequest(), makeParams())
+    expect(first.status).toBe(200)
+    const etag = first.headers.get('etag')!
+
+    mockDeviceUpdate.mockClear()
+    const second = await GET(makeRequest(CODE, { 'if-none-match': etag }), makeParams())
+    expect(second.status).toBe(304)
+    expect(wifiWrites()).toHaveLength(0)
+  })
+
+  it('busts the ETag, so a device parked on a free bed still receives it', async () => {
+    // Without this the pair would be invisible to exactly the devices most
+    // likely to be idle — the ones 304ing for hours on an unchanged seat.
+    preferences({ wifiSsid: SSID, wifiPassword: PASSWORD })
+    const quiet = await GET(makeRequest(), makeParams())
+    const quietEtag = quiet.headers.get('etag')
+
+    broadcasting()
+    const loud = await GET(makeRequest(), makeParams())
+    expect(loud.headers.get('etag')).not.toBe(quietEtag)
   })
 })

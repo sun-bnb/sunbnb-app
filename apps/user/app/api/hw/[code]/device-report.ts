@@ -18,10 +18,15 @@
  * query string so the URL — potted into the device — stays exactly what it is.
  *
  * The field set grew on 2026-09-22 (`../sunbnb-hw/docs/telemetry-fields.md`,
- * firmware `907f228`) from five keys to eighteen. Eleven earn a last-value
- * column; the diagnostic counters (`polls` `slp` `wake` `wjoin` `drops` `retry`)
- * are still accepted and dropped — they are useful in a log line and do not earn
- * a schema. Three of the new ones change what an operator can see at all:
+ * firmware `907f228`) from five keys to eighteen, and again on 2026-09-26 with
+ * the Wi-Fi health set (`drops` `retry` `joins` `stale` `tmo` `slp`) plus the
+ * `ssid`/`netfail` applied half of Wi-Fi provisioning. Only `polls`, `wake` and
+ * `wjoin` are still accepted and dropped — they read well in a log line and do
+ * not earn a schema. The Wi-Fi counters DID earn one, reversing the earlier
+ * call: a phone hotspot's power saving turned reconnect bursts into 64% of a
+ * 75-minute drain on 2026-09-26, and telling "the AP keeps dropping us"
+ * (`joins`/`drops`) from "the kept-open connection keeps dying" (`stale`/`tmo`)
+ * was possible only on a USB console — which a potted unit does not have. Three of the new ones change what an operator can see at all:
  * `chg` is the solar energy balance and the real state-of-charge signal (a
  * LiFePO4 cell rests 3.2–3.3 V on a flat curve, so `batt` alone barely ranks a
  * fleet), `rst=brownout` is the only attribution a field reboot ever gets, and
@@ -60,6 +65,7 @@
 
 import prisma from '@repo/data/PrismaCient'
 import { applyDeviceClaim } from '@repo/data/device-claim'
+import { SSID_MAX_BYTES, ssidByteLength } from '@repo/data/device-wifi'
 
 export const TELEMETRY_HEADER = 'x-sunbnb-telemetry'
 
@@ -103,6 +109,28 @@ export interface DeviceReport {
   /** Charge-complete firings: a STEP means `chargeUah`'s zero point moved. */
   fullCount?: number
   reportedLocation?: string
+  /**
+   * Wi-Fi health, all counters SINCE BOOT and all restarting on a deep-sleep
+   * wake. Two stories, and the whole point is telling them apart without a USB
+   * console: `wifiJoins`/`wifiDrops` climbing is the AP dropping the device,
+   * `wifiStaleReuses`/`wifiStaleTimeouts` climbing is the kept-open poll
+   * connection dying. Stored per reading in `device_telemetry`.
+   */
+  wifiDrops?: number
+  wifiRetries?: number
+  wifiJoins?: number
+  wifiStaleReuses?: number
+  wifiStaleTimeouts?: number
+  /** Share of time actually in light sleep, per thousand (0–1000). */
+  lightSleepPerMille?: number
+  /** The SSID the device is joined to — the applied half of the served pair. */
+  reportedSsid?: string
+  /**
+   * The device tried an OFFERED network and it failed. Only ever sent as true
+   * (the firmware omits it otherwise), which is exactly why the Device row
+   * stores a TIMESTAMP instead — see `netFailAt` in the schema.
+   */
+  netFail?: boolean
 }
 
 /** The last-values columns the writer compares against and updates. */
@@ -126,6 +154,13 @@ export interface DeviceLastValues {
   imaxUa: number | null
   fullCount: number | null
   reportedLocation: string | null
+  wifiDrops: number | null
+  wifiRetries: number | null
+  wifiJoins: number | null
+  wifiStaleReuses: number | null
+  wifiStaleTimeouts: number | null
+  lightSleepPerMille: number | null
+  reportedSsid: string | null
   lastSeenAt: Date | null
 }
 
@@ -180,6 +215,9 @@ const WORD_RE = /^[A-Za-z0-9_]+$/
  */
 const WORD_UNKNOWN = '?'
 
+/** Control characters never survive the header or the device's NVS string. */
+const CONTROL_CHAR_RE = /[\u0000-\u001F\u007F]/
+
 /**
  * Sentinel floors, mirroring the guards in the firmware's own formatter
  * (`../sunbnb-hw` `api.c` `api_format_report`): it omits `batt` unless `> 0`,
@@ -210,6 +248,15 @@ const SENTINEL_FLOOR: Partial<Record<IntField, number>> = {
   wifiChannel: 1,
   vminMv: 1,
   fullCount: 0,
+  // The Wi-Fi counters are counts: negative is not a reading, it is corruption.
+  // The firmware omits them at zero, so a floor of 0 costs nothing and catches
+  // a mangled header.
+  wifiDrops: 0,
+  wifiRetries: 0,
+  wifiJoins: 0,
+  wifiStaleReuses: 0,
+  wifiStaleTimeouts: 0,
+  lightSleepPerMille: 0,
   // `imaxUa` has no floor on purpose: like `cur` and `chg` it carries a validity
   // FLAG on the device, so 0 is a reading rather than a gap.
 }
@@ -286,9 +333,40 @@ export function parseTelemetryHeader(value: string | null): DeviceReport {
       case 'mode':
         assignWord(report, 'reportedPowerMode', raw)
         break
-      // `polls` `slp` `wake` `wjoin` `drops` `retry`, and anything newer:
-      // accepted and dropped. They are diagnostic detail that reads well in a
-      // log line and does not earn a column.
+      // Wi-Fi health (2026-09-26). These six were previously in the
+      // accepted-and-dropped set; they earn columns now because the question
+      // they answer — is the AP dropping us, or is the kept-open connection
+      // dying — was only answerable on a USB console, and a deployed unit has
+      // none. All are counters since boot, restarting on a deep-sleep wake,
+      // and the firmware omits them when zero or unknown.
+      case 'drops':
+        assignInt(report, 'wifiDrops', raw)
+        break
+      case 'retry':
+        assignInt(report, 'wifiRetries', raw)
+        break
+      case 'joins':
+        assignInt(report, 'wifiJoins', raw)
+        break
+      case 'stale':
+        assignInt(report, 'wifiStaleReuses', raw)
+        break
+      case 'tmo':
+        assignInt(report, 'wifiStaleTimeouts', raw)
+        break
+      case 'slp':
+        assignInt(report, 'lightSleepPerMille', raw)
+        break
+      // The applied half of the served Wi-Fi pair.
+      case 'ssid':
+        assignSsid(report, raw)
+        break
+      case 'netfail':
+        assignNetFail(report, raw)
+        break
+      // `polls` `wake` `wjoin`, and anything newer: accepted and dropped. They
+      // are diagnostic detail that reads well in a log line and does not earn a
+      // schema.
       default:
         break
     }
@@ -300,6 +378,8 @@ type IntField =
   | 'battMv' | 'rssiDbm' | 'upSec' | 'tempC' | 'currentUa' | 'chargeUah' | 'heapFreeBytes'
   | 'pollFails' | 'cellTempC' | 'reportedIntervalSec' | 'wifiChannel'
   | 'vminMv' | 'imaxUa' | 'fullCount'
+  | 'wifiDrops' | 'wifiRetries' | 'wifiJoins' | 'wifiStaleReuses' | 'wifiStaleTimeouts'
+  | 'lightSleepPerMille'
 type WordField = 'resetReason' | 'reportedPowerMode' | 'reportedFace'
 
 function assignInt(report: DeviceReport, key: IntField, raw: string) {
@@ -317,6 +397,34 @@ export function assignNumber(report: DeviceReport, key: IntField, value: number)
   const floor = SENTINEL_FLOOR[key]
   if (floor !== undefined && n < floor) return
   report[key] = n
+}
+
+/**
+ * The SSID the device is joined to. Length-checked against the SAME byte limit
+ * the write path enforces, so the two halves of the loop agree about what a
+ * legal SSID is; control characters are dropped for the reason they are refused
+ * on the way out.
+ *
+ * NOTE a wire limitation that belongs to the header format, not to this field:
+ * the report is `key=value` pairs joined by `;`, so an SSID containing `;` or
+ * `=` cannot round-trip. Nothing escapes it today. It costs an unreadable
+ * applied-half for an exotic network name and never anything more — the value
+ * is only ever compared against what we offered, never joined to.
+ */
+function assignSsid(report: DeviceReport, raw: string) {
+  if (CONTROL_CHAR_RE.test(raw)) return
+  if (ssidByteLength(raw) > SSID_MAX_BYTES) return
+  report.reportedSsid = raw
+}
+
+/**
+ * `netfail=1` — an OFFERED network was tried and failed. The firmware only ever
+ * sends the failure, never its absence, so `0` is accepted as an explicit
+ * "no failure" but is not expected on the wire.
+ */
+function assignNetFail(report: DeviceReport, raw: string) {
+  if (raw === '1' || raw === 'true') report.netFail = true
+  else if (raw === '0' || raw === 'false') report.netFail = false
 }
 
 function assignWord(report: DeviceReport, key: WordField, raw: string) {
@@ -340,10 +448,15 @@ export function reportFromBody(payload: Record<string, unknown>): DeviceReport {
     const v = payload[key]
     if (typeof v === 'string' && v !== WORD_UNKNOWN && v.length <= WORD_MAX && WORD_RE.test(v)) report[key] = v
   }
+  const ssid = payload.reportedSsid
+  if (typeof ssid === 'string' && ssid.length > 0) assignSsid(report, ssid)
+  if (typeof payload.netFail === 'boolean') report.netFail = payload.netFail
   for (const key of [
     'battMv', 'rssiDbm', 'upSec', 'tempC', 'currentUa', 'chargeUah', 'heapFreeBytes',
     'pollFails', 'cellTempC', 'reportedIntervalSec', 'wifiChannel',
     'vminMv', 'imaxUa', 'fullCount',
+    'wifiDrops', 'wifiRetries', 'wifiJoins', 'wifiStaleReuses', 'wifiStaleTimeouts',
+    'lightSleepPerMille',
   ] as const) {
     const v = payload[key]
     // Same sentinel rules as the header — the body is the path that actually
@@ -423,6 +536,14 @@ export function reportIsDue(last: DeviceLastValues, report: DeviceReport, now: D
   if (report.reportedFace !== undefined && report.reportedFace !== last.reportedFace) return true
   if (report.reportedIntervalSec !== undefined && report.reportedIntervalSec !== last.reportedIntervalSec) return true
   if (report.wifiChannel !== undefined && report.wifiChannel !== last.wifiChannel) return true
+  // The applied half of a provisioning change: an operator who has just
+  // broadcast a network is watching for exactly this to move, so it surfaces on
+  // the poll it appears on rather than waiting out the floor.
+  if (report.reportedSsid !== undefined && report.reportedSsid !== last.reportedSsid) return true
+  // An offered network was tried and FAILED — almost always a mistyped
+  // password. Discrete, rare, and the thing that tells an operator to fix the
+  // credentials and broadcast again.
+  if (report.netFail === true) return true
   // Any change, a DECREASE included: `full` lives in RTC memory and drops to 0
   // on a power cut, which also clears the INA228's accumulator — so a decrease
   // invalidates a `chargeUah` baseline exactly as a step does.
@@ -477,12 +598,37 @@ function measurementData(report: DeviceReport) {
     ...(report.vminMv !== undefined ? { vminMv: report.vminMv } : {}),
     ...(report.imaxUa !== undefined ? { imaxUa: report.imaxUa } : {}),
     ...(report.fullCount !== undefined ? { fullCount: report.fullCount } : {}),
+    ...(report.wifiDrops !== undefined ? { wifiDrops: report.wifiDrops } : {}),
+    ...(report.wifiRetries !== undefined ? { wifiRetries: report.wifiRetries } : {}),
+    ...(report.wifiJoins !== undefined ? { wifiJoins: report.wifiJoins } : {}),
+    ...(report.wifiStaleReuses !== undefined ? { wifiStaleReuses: report.wifiStaleReuses } : {}),
+    ...(report.wifiStaleTimeouts !== undefined
+      ? { wifiStaleTimeouts: report.wifiStaleTimeouts }
+      : {}),
+    ...(report.lightSleepPerMille !== undefined
+      ? { lightSleepPerMille: report.lightSleepPerMille }
+      : {}),
+    ...(report.reportedSsid !== undefined ? { reportedSsid: report.reportedSsid } : {}),
   }
 }
 
-/** The `data` for the last-value row write: the measurements, plus the stamp. */
+/**
+ * The `data` for the last-value row write: the measurements, plus the stamp.
+ *
+ * `netFailAt` is the ONE field that is shaped differently here than in the
+ * series, and deliberately. The wire carries a boolean the firmware only ever
+ * sends as true, so under the omit-don't-zero rule a stored boolean would latch
+ * on the first bad password and stay true for the life of the device. A
+ * TIMESTAMP answers the question an operator actually asks — is it failing NOW
+ * — and ages out by itself. The per-reading boolean lives in the series, where
+ * a row is one poll and stickiness cannot arise.
+ */
 export function reportData(report: DeviceReport, now: Date) {
-  return { lastSeenAt: now, ...measurementData(report) }
+  return {
+    lastSeenAt: now,
+    ...measurementData(report),
+    ...(report.netFail === true ? { netFailAt: now } : {}),
+  }
 }
 
 /**
@@ -496,7 +642,11 @@ export function reportData(report: DeviceReport, now: Date) {
  * zeros would make every average and every delta taken across it wrong.
  */
 export function telemetryRowData(report: DeviceReport, now: Date) {
-  return { recordedAt: now, ...measurementData(report) }
+  return {
+    recordedAt: now,
+    ...measurementData(report),
+    ...(report.netFail !== undefined ? { netFail: report.netFail } : {}),
+  }
 }
 
 export interface RecordOptions {

@@ -44,6 +44,14 @@ import {
   validatePollInterval,
   type DevicePowerMode,
 } from './device-power'
+import {
+  PSK_MAX_LENGTH,
+  SSID_MAX_BYTES,
+  parseBroadcastStartedAt,
+  resolveWifiNetwork,
+  validateWifiNetwork,
+  type WifiNetwork,
+} from './device-wifi'
 
 // ─── Registry ───────────────────────────────────────────────────────────────
 
@@ -56,6 +64,14 @@ interface BasePreference {
   description: string
   /** Grouping header in the admin UI. */
   group: string
+  /**
+   * Never leave this value's plaintext in a payload the admin page renders.
+   * `getPreferenceAdminRows` redacts it — the row reports only WHETHER a value
+   * is set, and the form writes blind. The admin app is sudo-gated, so this is
+   * not a trust boundary; it is about not spraying a Wi-Fi password through
+   * server-component props, a browser cache and any screen someone is sharing.
+   */
+  secret?: boolean
 }
 
 export interface NumberPreference extends BasePreference {
@@ -138,6 +154,37 @@ export const PREFERENCE_REGISTRY = {
     min: 1,
     max: 3650,
     unit: 'days',
+  },
+  'device-wifi-ssid': {
+    key: 'device-wifi-ssid',
+    type: 'string',
+    label: 'Device Wi-Fi SSID',
+    group: 'Hardware',
+    description:
+      'The network a sunbed indicator should join, handed to devices so a unit can be moved to a new access point without opening it up and attaching a USB console. STORING IT CHANGES NOTHING ON THE WIRE — the pair is delivered by an explicit, confirmed BROADCAST, so a network can be staged days before the switch. At most 32 bytes (the Wi-Fi limit is bytes, not characters). The device echoes the network it actually joined back as telemetry, so the fleet page can show whether a change has taken.',
+    default: '',
+    maxLength: SSID_MAX_BYTES,
+  },
+  'device-wifi-password': {
+    key: 'device-wifi-password',
+    type: 'string',
+    label: 'Device Wi-Fi password',
+    group: 'Hardware',
+    description:
+      'The passphrase for that network — 8-63 characters, or empty for an open network. ⚠ THE DEVICE POLL ENDPOINT HAS NO AUTHENTICATION (track 019 Q9): the only gate is a User-Agent needle that is not secret, and device codes are public — they are printed on the sticker. While a broadcast is open, anyone who knows a device code can read this password. That is why delivery is a bounded, explicitly confirmed window in which each device is served exactly once, rather than a field on every reply. GIVE THE DEVICES THEIR OWN ISOLATED SSID so this password protects nothing but the devices\u2019 own network, and never put a venue\u2019s main Wi-Fi here.',
+    default: '',
+    maxLength: PSK_MAX_LENGTH,
+    secret: true,
+  },
+  'device-wifi-broadcast-started-at': {
+    key: 'device-wifi-broadcast-started-at',
+    type: 'string',
+    label: 'Wi-Fi broadcast started',
+    group: 'Hardware',
+    description:
+      'When the current Wi-Fi broadcast was started, ISO-8601 — OPERATIONAL STATE rather than a tunable, kept here because this table is the platform singleton store and it brings the audit columns (who started it, when) with it. Not edited by hand: the Wi-Fi card starts and stops a broadcast, and the window closes on its own. An env override is the escape hatch for a broadcast that must be killed without database access — set it to the empty string.',
+    default: '',
+    maxLength: 40,
   },
 } as const satisfies Record<string, PreferenceDefinition>
 
@@ -504,6 +551,152 @@ export async function resetDevicePolicy(): Promise<{ status: 'ok' }> {
   return { status: 'ok' }
 }
 
+// ─── Device Wi-Fi: stored credentials, and the broadcast that delivers them ──
+//
+// Three keys, one feature, and the split is the security design. The SSID and
+// password are STORED state — writing them changes nothing on the wire. The
+// third key is the broadcast's start stamp, and only while that window is open
+// does the state route carry the pair, once per device. Saving and broadcasting
+// are therefore separate operations with separate buttons, so an operator can
+// stage a network without exposing its password, and cannot expose it by
+// accident while editing.
+
+const WIFI_SSID_KEY = 'device-wifi-ssid'
+const WIFI_PASSWORD_KEY = 'device-wifi-password'
+const WIFI_BROADCAST_KEY = 'device-wifi-broadcast-started-at'
+
+/**
+ * Store the pair. VALIDATED TOGETHER, because the device ignores a lone field —
+ * half a pair stored would look configured in the admin form and do nothing on
+ * the wire. Same reasoning as `setDevicePolicy`, and the rules live in the pure
+ * `./device-wifi` so a script obeys them too.
+ *
+ * Clearing BOTH fields is legal and is how a network is removed. It does not
+ * stop a broadcast in flight — `stopDeviceWifiBroadcast` does that — but the
+ * serving path resolves the pair per poll, so a cleared network stops being
+ * served immediately anyway.
+ */
+export async function setDeviceWifiNetwork(
+  rawSsid: string,
+  rawPassword: string | null,
+  adminUserId?: string,
+): Promise<{ status: 'ok' } | { status: 'error'; errors: string[] }> {
+  // `null` = KEEP the stored password. The admin form never receives the
+  // password back (it is redacted out of the rows), so a blank field there
+  // means "I did not touch this" — and without this branch, editing only the
+  // SSID would silently wipe the password and the next broadcast would push a
+  // network nothing can join. An OPEN network is the empty string, which the
+  // form sends explicitly.
+  const password =
+    rawPassword === null ? String(await getPreference(WIFI_PASSWORD_KEY)) : rawPassword
+  const validated = validateWifiNetwork(rawSsid ?? '', password)
+  if (!validated.ok) return { status: 'error', errors: [validated.error] }
+
+  const ssid = validated.network?.ssid ?? ''
+  const storedPassword = validated.network?.password ?? ''
+
+  // One transaction: the two keys are read together on the serving path, and a
+  // poll landing between two separate writes could take a new SSID beside the
+  // old password — which is precisely the pair that fails to join.
+  await prisma.$transaction([
+    prisma.platformPreference.upsert({
+      where: { key: WIFI_SSID_KEY },
+      create: { key: WIFI_SSID_KEY, value: ssid, updatedBy: adminUserId ?? null },
+      update: { value: ssid, updatedBy: adminUserId ?? null },
+    }),
+    prisma.platformPreference.upsert({
+      where: { key: WIFI_PASSWORD_KEY },
+      create: { key: WIFI_PASSWORD_KEY, value: storedPassword, updatedBy: adminUserId ?? null },
+      update: { value: storedPassword, updatedBy: adminUserId ?? null },
+    }),
+  ])
+  clearPreferenceCache()
+  return { status: 'ok' }
+}
+
+/** The stored pair, or null when no complete, valid network is configured. */
+export async function getDeviceWifiNetwork(): Promise<WifiNetwork | null> {
+  const [ssid, password] = await Promise.all([
+    getPreference(WIFI_SSID_KEY),
+    getPreference(WIFI_PASSWORD_KEY),
+  ])
+  return resolveWifiNetwork(String(ssid), String(password))
+}
+
+/**
+ * Open the broadcast window. Refuses when no valid network is stored — a
+ * broadcast of nothing would look like it worked and reach no device.
+ *
+ * Starting a broadcast is what RE-ARMS the fleet: every device is served once
+ * per broadcast, judged against this stamp, so a corrected password reaches
+ * units that already took the wrong one. No device rows are touched.
+ */
+export async function startDeviceWifiBroadcast(
+  adminUserId?: string,
+  now: Date = new Date(),
+): Promise<{ status: 'ok'; startedAt: Date } | { status: 'error'; errors: string[] }> {
+  const network = await getDeviceWifiNetwork()
+  if (!network) {
+    return {
+      status: 'error',
+      errors: ['Save a valid SSID and password before broadcasting.'],
+    }
+  }
+  const value = now.toISOString()
+  await prisma.platformPreference.upsert({
+    where: { key: WIFI_BROADCAST_KEY },
+    create: { key: WIFI_BROADCAST_KEY, value, updatedBy: adminUserId ?? null },
+    update: { value, updatedBy: adminUserId ?? null },
+  })
+  clearPreferenceCache()
+  return { status: 'ok', startedAt: now }
+}
+
+/**
+ * Close the window early. The row is emptied rather than deleted so the audit
+ * columns keep saying who stopped it and when; an empty string parses as "no
+ * broadcast" on every read path.
+ */
+export async function stopDeviceWifiBroadcast(
+  adminUserId?: string,
+): Promise<{ status: 'ok' }> {
+  await prisma.platformPreference.upsert({
+    where: { key: WIFI_BROADCAST_KEY },
+    create: { key: WIFI_BROADCAST_KEY, value: '', updatedBy: adminUserId ?? null },
+    update: { value: '', updatedBy: adminUserId ?? null },
+  })
+  clearPreferenceCache()
+  return { status: 'ok' }
+}
+
+/**
+ * The serving path's read: the network to offer and when the current broadcast
+ * started. The route decides per device whether this poll is the one.
+ *
+ * Cached, but on a SHORT ttl rather than the 5 minutes the power policy uses.
+ * The poll route runs ~1.3 M times a day, so an uncached read per poll is the
+ * cost the cache exists to avoid — but the two directions are not symmetrical
+ * here: a late START is a nuisance, while a late STOP keeps a password
+ * reachable after an operator has pulled it. Thirty seconds bounds the second
+ * one to something an operator will sit through, and still collapses almost
+ * every poll onto a cache hit.
+ */
+export async function getDeviceWifiBroadcast(): Promise<{
+  network: WifiNetwork | null
+  startedAt: Date | null
+}> {
+  const WIFI_TTL_MS = 30 * 1000
+  const [ssid, password, startedRaw] = await Promise.all([
+    getPreferenceCached(WIFI_SSID_KEY, WIFI_TTL_MS),
+    getPreferenceCached(WIFI_PASSWORD_KEY, WIFI_TTL_MS),
+    getPreferenceCached(WIFI_BROADCAST_KEY, WIFI_TTL_MS),
+  ])
+  return {
+    network: resolveWifiNetwork(String(ssid), String(password)),
+    startedAt: parseBroadcastStartedAt(String(startedRaw)),
+  }
+}
+
 /** Everything the admin UI renders for one preference. */
 export interface PreferenceAdminRow {
   key: PreferenceKey
@@ -527,6 +720,14 @@ export interface PreferenceAdminRow {
   source: PreferenceSource
   updatedAt: Date | null
   updatedBy: string | null
+  /** True when this value is redacted below — the form writes it blind. */
+  secret: boolean
+  /**
+   * For a secret: whether a non-empty value is in effect. It is the only thing
+   * about the value that crosses to the client, and it is what lets the form
+   * say "set" instead of showing the password.
+   */
+  isSet: boolean
 }
 
 export async function getPreferenceAdminRows(): Promise<PreferenceAdminRow[]> {
@@ -562,6 +763,13 @@ export async function getPreferenceAdminRows(): Promise<PreferenceAdminRow[]> {
         ? clampPollInterval(activeMode, resolvedRaw.value as number)
         : resolvedRaw.value
 
+    // A secret never leaves in plaintext. These rows are props on a server
+    // component, so the value would otherwise land in the HTML payload, the
+    // browser's memory and any screen recording of the admin page — for a
+    // password whose whole design is a bounded exposure window.
+    const secret = def.secret === true
+    const isSet = secret ? String(value) !== '' : false
+
     return {
       key: def.key as PreferenceKey,
       type: def.type,
@@ -574,12 +782,14 @@ export async function getPreferenceAdminRows(): Promise<PreferenceAdminRow[]> {
       maxLength: def.type === 'string' ? def.maxLength : null,
       options: def.type === 'enum' ? def.options : null,
       default: def.default,
-      dbValue: row?.value ?? null,
-      envValue: envAccepted === undefined ? null : String(envRaw).trim(),
-      resolved: value,
+      dbValue: secret ? null : (row?.value ?? null),
+      envValue: secret ? null : envAccepted === undefined ? null : String(envRaw).trim(),
+      resolved: secret ? '' : value,
       source,
       updatedAt: row?.updatedAt ?? null,
       updatedBy: row?.updatedBy ?? null,
+      secret,
+      isSet,
     }
   })
 }
