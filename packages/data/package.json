@@ -47,6 +47,7 @@
     "./fiscal": "./src/fiscal.ts",
     "./tab-payment": "./src/tab-payment.ts",
     "./payment-math": "./src/payment-math.ts",
+    "./pricing-tiers": "./src/pricing-tiers.ts",
     "./mollie-app-fee": "./src/mollie-app-fee.ts",
     "./viva": "./src/viva/index.ts",
     "./viva/refs": "./src/viva/refs.ts"
@@ -146,6 +147,9 @@
       "payment-math": [
         "./src/payment-math.ts"
       ],
+      "pricing-tiers": [
+        "./src/pricing-tiers.ts"
+      ],
       "mollie-app-fee": [
         "./src/mollie-app-fee.ts"
       ],
@@ -182,6 +186,9 @@
     "backfill:partner-codes:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx --yes tsx scripts/backfill-partner-codes.ts",
     "backfill:partner-codes:production:dry": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx --yes tsx scripts/backfill-partner-codes.ts --dry-run",
     "backfill:partner-codes:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx --yes tsx scripts/backfill-partner-codes.ts",
+    "seed:pricing:local": "npx --yes tsx prisma/seed-subscriptions.ts",
+    "seed:pricing:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx --yes tsx prisma/seed-subscriptions.ts",
+    "seed:pricing:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx --yes tsx prisma/seed-subscriptions.ts",
     "backfill:site-codes:local:dry": "npx --yes tsx scripts/backfill-site-codes.ts --dry-run",
     "backfill:site-codes:local": "npx --yes tsx scripts/backfill-site-codes.ts",
     "backfill:site-codes:test:dry": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx --yes tsx scripts/backfill-site-codes.ts --dry-run",

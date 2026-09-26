@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { SubscriptionPlan, Subscription } from '@prisma/client'
+import { PRICING_TIERS } from '@repo/data/pricing-tiers'
 
 interface SubscriptionWithPlan extends Subscription {
   plan: SubscriptionPlan
@@ -15,10 +16,28 @@ interface SubscriptionData {
   isCustomMaxSites: boolean
 }
 
+// Same ladder as the public pricing page, same source: the venue caps come from
+// PRICING_TIERS so an in-app card can never promise a limit `canCreateSite`
+// won't grant. The commission is shown separately, as a badge.
 const TIER_FEATURES: Record<string, string[]> = {
-  STARTER: ['1 site', '5% service fee', 'Integrated payments', 'Community support'],
-  PRO: ['1 site', '2% service fee', 'Integrated payments', 'Off-platform billing', 'Priority support'],
-  BUSINESS: ['Unlimited sites', 'No service fee', 'Integrated payments', 'Off-platform billing', 'Branded booking page', 'Dedicated support'],
+  STARTER: [
+    '1 beach or venue',
+    'Sunbed reservations + QR ordering',
+    'Integrated card payments',
+    'Community support',
+  ],
+  PRO: [
+    `Up to ${PRICING_TIERS.PRO.maxSites} venues`,
+    'Everything in Starter',
+    'Off-platform billing',
+    'Priority support',
+  ],
+  BUSINESS: [
+    `Up to ${PRICING_TIERS.BUSINESS.maxSites} venues`,
+    'Everything in Pro',
+    'Branded booking page',
+    'Dedicated support',
+  ],
 }
 
 const DEFAULT_COLORS = {
@@ -33,7 +52,7 @@ const TIER_COLORS: Record<string, typeof DEFAULT_COLORS> = {
   PRO: {
     ring: 'ring-blue-500 ring-2',
     badge: 'bg-blue-100 text-blue-700',
-    badgeText: 'Popular',
+    badgeText: 'Most chosen',
     button: 'bg-blue-600 text-white hover:bg-blue-700',
   },
   BUSINESS: {
@@ -110,7 +129,7 @@ export default function SubscriptionView({ data }: { data: SubscriptionData }) {
           <div className="text-right">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Sites used</p>
             <p className="text-xl font-bold text-gray-900 mt-1">
-              {siteCount} / {effectiveMaxSites === 999 ? '∞' : effectiveMaxSites}
+              {siteCount} / {effectiveMaxSites >= 999 ? '∞' : effectiveMaxSites}
               {isCustomMaxSites && (
                 <span className="ml-1.5 text-xs font-normal text-indigo-500">(custom)</span>
               )}
@@ -164,6 +183,14 @@ export default function SubscriptionView({ data }: { data: SubscriptionData }) {
                     <span className="text-sm text-gray-500"> / month</span>
                   </>
                 )}
+              </div>
+
+              {/* Commission — the term that actually costs the partner money */}
+              <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+                <span className="text-base font-bold text-amber-700">
+                  {PRICING_TIERS[plan.tier].commissionPercent}%
+                </span>
+                <span className="text-xs text-gray-500 ml-1.5">commission per Sunbnb purchase</span>
               </div>
 
               {/* Features */}

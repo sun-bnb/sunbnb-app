@@ -4,6 +4,7 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import sunbnbLogo from '@/app/sunbnb-logo.svg'
+import { PRICING_TIERS, PRICING_TIER_ORDER, FEATURED_TIER } from '@repo/data/pricing-tiers'
 
 interface BusinessEntity {
   companyName: string
@@ -75,48 +76,54 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
     },
   ]
 
-  const plans = [
-    {
-      name: t('planStarter'),
-      price: t('planStarterPrice'),
-      note: t('planStarterNote'),
-      highlight: false,
-      features: [
-        t('feat1Site'),
-        t('featIntegratedPayments'),
-        t('feat5Fee'),
-        t('featCommunitySupport'),
-      ],
-      footnote: t('starterFeeNote'),
-    },
-    {
-      name: t('planPro'),
-      price: '€29',
-      note: t('planProNote'),
-      highlight: true,
-      features: [
-        t('feat1Site'),
-        t('featIntegratedPayments'),
-        t('featOffPlatformBilling'),
-        t('feat2Fee'),
-        t('featPrioritySupport'),
-      ],
-    },
-    {
-      name: t('planBusiness'),
-      price: '€79',
-      note: t('planBusinessNote'),
-      highlight: false,
-      features: [
-        t('featUnlimitedSites'),
-        t('featIntegratedPayments'),
-        t('featOffPlatformBilling'),
-        t('featNoFee'),
-        t('featBranded'),
-        t('featDedicatedSupport'),
-      ],
-    },
-  ]
+  // Card copy per tier. The numbers — price, venue cap, commission — come from
+  // PRICING_TIERS, the same catalog the DB is seeded from, so the page can't
+  // advertise a rate the cascade doesn't charge. Only the wording is translated.
+  const planNameKeys = {
+    STARTER: 'planStarter',
+    PRO: 'planPro',
+    BUSINESS: 'planBusiness',
+  } as const
+
+  const planNoteKeys = {
+    STARTER: 'planStarterNote',
+    PRO: 'planProNote',
+    BUSINESS: 'planBusinessNote',
+  } as const
+
+  const planFeatureLines = {
+    STARTER: [
+      t('feat1Venue'),
+      t('featReservationsQr'),
+      t('featCardPayments'),
+      t('featCommunitySupport'),
+    ],
+    PRO: [
+      t('featUpToVenues', { count: PRICING_TIERS.PRO.maxSites }),
+      t('featEverythingIn', { plan: PRICING_TIERS.STARTER.name }),
+      t('featOffPlatformBilling'),
+      t('featPrioritySupport'),
+    ],
+    BUSINESS: [
+      t('featUpToVenues', { count: PRICING_TIERS.BUSINESS.maxSites }),
+      t('featEverythingIn', { plan: PRICING_TIERS.PRO.name }),
+      t('featBranded'),
+      t('featDedicatedSupport'),
+    ],
+  } as const
+
+  const plans = PRICING_TIER_ORDER.map((tier) => {
+    const spec = PRICING_TIERS[tier]
+    return {
+      tier,
+      name: t(planNameKeys[tier]),
+      price: spec.monthlyPrice === 0 ? t('planStarterPrice') : `€${spec.monthlyPrice}`,
+      note: t(planNoteKeys[tier]),
+      commission: `${spec.commissionPercent}%`,
+      highlight: tier === FEATURED_TIER,
+      features: planFeatureLines[tier],
+    }
+  })
 
   return (
     <div className="min-h-screen bg-white">
@@ -194,20 +201,28 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-3xl mx-auto">
           {plans.map((p) => (
             <div
-              key={p.name}
-              className={`rounded-xl p-5 border flex flex-col ${
+              key={p.tier}
+              className={`relative rounded-xl p-5 border flex flex-col ${
                 p.highlight
                   ? 'border-blue-500 ring-2 ring-blue-500 bg-white'
                   : 'border-gray-200 bg-white'
               }`}
             >
+              {p.highlight && (
+                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap">
+                  {t('planMostChosen')}
+                </span>
+              )}
               <p className="text-sm font-semibold text-gray-900">{p.name}</p>
-              <div className="mt-2 mb-4">
+              <div className="mt-2 mb-3">
                 <span className="text-2xl font-bold text-gray-900">{p.price}</span>
                 <span className="text-sm text-gray-400 ml-1">{p.note}</span>
-                {p.footnote && (
-                  <p className="text-xs text-gray-400 mt-1">{p.footnote}</p>
-                )}
+              </div>
+              {/* Commission is the headline term of the deal, not a footnote —
+                  it is what a partner actually pays on every sale. */}
+              <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+                <span className="text-base font-bold text-amber-700">{p.commission}</span>
+                <span className="text-xs text-gray-500 ml-1.5">{t('commissionLabel')}</span>
               </div>
               <ul className="space-y-2 mb-5 flex-1">
                 {p.features.map((f) => (

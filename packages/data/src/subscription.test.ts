@@ -3,6 +3,9 @@ import {
   resolveEffectiveSubscription,
   resolveEffectiveFeatures,
   TIER_FEATURE_DEFAULTS,
+  PRICING_TIERS,
+  PRICING_TIER_ORDER,
+  COMMISSIONED_SERVICE_CODES,
 } from './subscription'
 import type { SubscriptionTier } from '@prisma/client'
 
@@ -189,5 +192,84 @@ describe('resolveEffectiveFeatures', () => {
     for (const key of Object.keys(result) as (keyof typeof result)[]) {
       expect(typeof result[key]).toBe('boolean')
     }
+  })
+})
+
+// ─── PRICING_TIERS (the published ladder) ───────────────────────────────────
+//
+// These are not "does the constant still say what it says" assertions — they
+// pin the SHAPE a pricing ladder has to have to be sellable. A partner who pays
+// more must never get less, or the upgrade button is a downgrade button, and
+// the paid tiers must actually buy something or the page is a lie.
+
+describe('PRICING_TIERS', () => {
+  it('covers every tier the enum can hold, in ascending order', () => {
+    expect(PRICING_TIER_ORDER).toEqual(Object.keys(PRICING_TIERS))
+  })
+
+  it('Starter is genuinely free — the landing page promises "Free forever"', () => {
+    expect(PRICING_TIERS.STARTER.monthlyPrice).toBe(0)
+  })
+
+  it('monthly price strictly increases up the ladder', () => {
+    const prices = PRICING_TIER_ORDER.map((t) => PRICING_TIERS[t].monthlyPrice)
+    for (let i = 1; i < prices.length; i++) {
+      expect(prices[i]).toBeGreaterThan(prices[i - 1]!)
+    }
+  })
+
+  it('site allowance never shrinks as the price rises', () => {
+    // The mockup's Starter card once read "Unlimited beaches & venues" above a
+    // Pro card capped at 3 — upgrading would have COST the partner capacity.
+    const caps = PRICING_TIER_ORDER.map((t) => PRICING_TIERS[t].maxSites)
+    for (let i = 1; i < caps.length; i++) {
+      expect(caps[i]).toBeGreaterThan(caps[i - 1]!)
+    }
+  })
+
+  it('commission strictly falls as the price rises — that is what the fee buys', () => {
+    const rates = PRICING_TIER_ORDER.map((t) => PRICING_TIERS[t].commissionPercent)
+    for (let i = 1; i < rates.length; i++) {
+      expect(rates[i]).toBeLessThan(rates[i - 1]!)
+    }
+  })
+
+  it('every tier takes a positive commission — no tier is a free ride', () => {
+    // A 0% tier makes the PLATFORM commission invoice a zero-total document and
+    // leaves the marketplace with no revenue on that partner's sales.
+    for (const tier of PRICING_TIER_ORDER) {
+      expect(PRICING_TIERS[tier].commissionPercent).toBeGreaterThan(0)
+    }
+  })
+
+  it('every tier allows at least one site', () => {
+    for (const tier of PRICING_TIER_ORDER) {
+      expect(PRICING_TIERS[tier].maxSites).toBeGreaterThanOrEqual(1)
+    }
+  })
+
+  it('an entitlement is never withdrawn by paying more', () => {
+    // Feature defaults must be monotonic too: a key true on a cheaper tier has
+    // to stay true above it.
+    const keys = Object.keys(TIER_FEATURE_DEFAULTS.STARTER) as (keyof typeof TIER_FEATURE_DEFAULTS.STARTER)[]
+    for (const key of keys) {
+      let seenTrue = false
+      for (const tier of PRICING_TIER_ORDER) {
+        const value = resolveEffectiveFeatures(tier, null)[key]
+        if (seenTrue) expect(value).toBe(true)
+        if (value) seenTrue = true
+      }
+    }
+  })
+
+  it('names every consumer purchase type the commission applies to', () => {
+    // Seeding a code here creates its platform fee rows; omitting one silently
+    // drops that purchase type to the tier-null default (a flat €1), which is
+    // not what "commission per Sunbnb purchase" says on the card.
+    expect([...COMMISSIONED_SERVICE_CODES]).toEqual([
+      'sunbed-rental',
+      'food-and-beverage',
+      'equipment-rental',
+    ])
   })
 })

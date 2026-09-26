@@ -15,6 +15,18 @@
 import prisma from '../index'
 import { SubscriptionStatus, SubscriptionTier } from '@prisma/client'
 
+// ─── Pricing Tier Catalog ───────────────────────────────────────────────────
+// Lives in ./pricing-tiers so client components (the landing page, the plan
+// cards) can read the ladder without dragging prisma into the browser bundle.
+// Re-exported here so server callers keep a single import site.
+
+export {
+  PRICING_TIERS,
+  PRICING_TIER_ORDER,
+  FEATURED_TIER,
+  COMMISSIONED_SERVICE_CODES,
+} from './pricing-tiers'
+
 // ─── Feature Catalog ────────────────────────────────────────────────────────
 
 /**
