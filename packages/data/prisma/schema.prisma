@@ -768,6 +768,12 @@ model Invoice {
 
   @@index([tableReservationId])
   @@index([tableTabId])
+  /// The fiscal register reads one issuer type over a month window, and the
+  /// per-issuer series/chain lookups will read the same shape. Neither had an
+  /// index until 2026-09-29 — `getLastHash` was doing an unindexed scan ordered
+  /// by invoiced_at on EVERY invoice creation.
+  @@index([issuerType, invoicedAt])
+  @@index([accountId])
   @@index([creditsInvoiceId])
 }
 

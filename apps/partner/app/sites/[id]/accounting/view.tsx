@@ -118,7 +118,10 @@ interface MonthlyFiscalReport {
   platformCommission: number
   platformReverseCharge: boolean
   processingFees: number
+  /** Credit notes in the period (positive magnitude). Totals above are net of them. */
   refunds: { count: number; amount: number }
+  /** Refunds with no crediting document — a watchdog; should read zero. */
+  unInvoicedRefunds: { count: number; amount: number }
   lines: FiscalInvoiceLine[]
 }
 
@@ -1203,8 +1206,26 @@ export default function AccountingView() {
                 </span>
               </div>
 
-              {/* Credit-note caveat */}
-              <p className="text-[11px] text-gray-400 pt-1">{t('refundsNotCreditNotesHint')}</p>
+              {/* Refunds that never became a credit note. Hidden when zero —
+                  this is a watchdog, and a row that always reads €0.00 stops
+                  being read at all. */}
+              {fiscalReport.unInvoicedRefunds.count > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-amber-700">{t('unInvoicedRefundsLabel')}</span>
+                  <span className="text-xs font-semibold text-amber-700 tabular-nums">
+                    €{fiscalReport.unInvoicedRefunds.amount.toFixed(2)}
+                    <span className="text-amber-600/70 font-normal ml-1">
+                      ({fiscalReport.unInvoicedRefunds.count})
+                    </span>
+                  </span>
+                </div>
+              )}
+
+              <p className="text-[11px] text-gray-400 pt-1">
+                {fiscalReport.unInvoicedRefunds.count > 0
+                  ? t('unInvoicedRefundsHint')
+                  : t('refundsCreditNotesHint')}
+              </p>
             </div>
           </div>
         )}

@@ -17,5 +17,6 @@ export const getMonthlyFiscalReport = vi.fn().mockResolvedValue({
   platformReverseCharge: false,
   processingFees: 0,
   refunds: { count: 0, amount: 0 },
+  unInvoicedRefunds: { count: 0, amount: 0 },
   lines: [],
 })

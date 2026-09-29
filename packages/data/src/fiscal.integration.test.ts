@@ -9,6 +9,10 @@ import {
   createTestRentalItem,
   createTestRentalBooking,
   createTestOrder,
+  createTestRestaurant,
+  createTestTable,
+  createTestTableTab,
+  createTestTableReservation,
   resetCounter,
 } from './test/fixtures'
 import { getMonthlyFiscalReport } from './fiscal'
@@ -291,8 +295,8 @@ describe('getMonthlyFiscalReport', () => {
     })
   })
 
-  describe('refunds (informational)', () => {
-    it('counts refunded reservations + rental bookings + orders in the period', async () => {
+  describe('unInvoicedRefunds (the watchdog)', () => {
+    it('flags refunded reservations + rentals + orders that produced no credit note', async () => {
       const user = await createTestUser()
       await createTestPartnerAccount(user.id)
       const site = await createTestSite(user.id)
@@ -327,8 +331,13 @@ describe('getMonthlyFiscalReport', () => {
 
       const report = await getMonthlyFiscalReport(site.id, MONTH_FROM, MONTH_TO)
 
-      expect(report.refunds.count).toBe(3)
-      expect(report.refunds.amount).toBe(75)  // 40 + 15 + 20
+      // None of these produced a crediting document, so all three are money
+      // that moved without a document — which is precisely what the register
+      // must surface rather than quietly fold into a total.
+      expect(report.unInvoicedRefunds.count).toBe(3)
+      expect(report.unInvoicedRefunds.amount).toBe(75)  // 40 + 15 + 20
+      // And no credit notes exist, so the documented-refund figure is zero.
+      expect(report.refunds).toEqual({ count: 0, amount: 0 })
     })
 
     it('excludes refunds outside the window', async () => {
@@ -347,8 +356,8 @@ describe('getMonthlyFiscalReport', () => {
 
       const report = await getMonthlyFiscalReport(site.id, MONTH_FROM, MONTH_TO)
 
-      expect(report.refunds.count).toBe(0)
-      expect(report.refunds.amount).toBe(0)
+      expect(report.unInvoicedRefunds).toEqual({ count: 0, amount: 0 })
+      expect(report.refunds).toEqual({ count: 0, amount: 0 })
     })
   })
 
@@ -634,8 +643,10 @@ describe('getMonthlyFiscalReport', () => {
       expect(report.processingFees).toBeCloseTo(0.30, 2)   // 0.30 + null(→0)
 
       // ── Refunds ──
-      expect(report.refunds.count).toBe(1)
-      expect(report.refunds.amount).toBe(25)
+      // Status-derived refund with no credit note → the watchdog, not `refunds`.
+      expect(report.unInvoicedRefunds.count).toBe(1)
+      expect(report.unInvoicedRefunds.amount).toBe(25)
+      expect(report.refunds).toEqual({ count: 0, amount: 0 })
 
       // ── Lines: 3 PARTNER (inv1 line1, inv1 line2, inv1 fee line) + 1 PARTNER (inv3) + 1 PLATFORM = 5 ──
       // inv1 has 3 lines, inv2 has 1, inv3 has 1
@@ -649,6 +660,190 @@ describe('getMonthlyFiscalReport', () => {
 
       // PLATFORM line has reverseCharge = true
       expect(platformLines[0]!.reverseCharge).toBe(true)
+    })
+  })
+
+  // ── Regression: invoices that the register used to omit entirely ──────────
+  //
+  // Until 2026-09-29 the site-scoping OR had no branch for `tableTabId` or
+  // `tableReservationId`, so every dine-in and deposit invoice was invisible to
+  // the accountant's export. Two tab invoices existed in production by then.
+
+  describe('dine-in tab and table-deposit invoices', () => {
+    it('includes a LINKED restaurant tab invoice in the register', async () => {
+      const user = await createTestUser()
+      await createTestPartnerAccount(user.id)
+      const site = await createTestSite(user.id)
+      const restaurant = await createTestRestaurant(user.id, { siteId: site.id })
+      const table = await createTestTable(restaurant.id)
+      const tab = await createTestTableTab(table.id, site.id, {
+        restaurantId: restaurant.id,
+        status: 'paid',
+      })
+
+      const inv = await createTestInvoice(user.id, {
+        tableTabId: tab.id,
+        issuerType: 'PARTNER',
+        invoicedAt: d('2026-07-14T20:00:00Z'),
+        totalCharge: 40,
+        totalTax: 8.4,
+        totalAmount: 48.4,
+      })
+      await createTestInvoiceLine(inv.id, {
+        charge: 40, tax: 8.4, amount: 48.4, vatRate: 21, description: 'Dine-in tab',
+      })
+
+      const report = await getMonthlyFiscalReport(site.id, MONTH_FROM, MONTH_TO)
+
+      expect(report.count).toBe(1)
+      expect(report.gross).toBe(48.4)
+      expect(report.lines).toHaveLength(1)
+      expect(report.lines[0]!.description).toBe('Dine-in tab')
+    })
+
+    it('includes a table-deposit invoice via the restaurant\'s site', async () => {
+      // A deposit has no siteId of its own — it reaches the site only through
+      // tableReservation → restaurant → siteId.
+      const user = await createTestUser()
+      await createTestPartnerAccount(user.id)
+      const site = await createTestSite(user.id)
+      const restaurant = await createTestRestaurant(user.id, { siteId: site.id })
+      const tableRes = await createTestTableReservation(restaurant.id, {
+        from: d('2026-07-20T18:00:00Z'),
+        to: d('2026-07-20T20:00:00Z'),
+      })
+
+      const inv = await createTestInvoice(user.id, {
+        tableReservationId: tableRes.id,
+        issuerType: 'PARTNER',
+        invoicedAt: d('2026-07-20T18:05:00Z'),
+        totalCharge: 20,
+        totalTax: 4.2,
+        totalAmount: 24.2,
+      })
+      await createTestInvoiceLine(inv.id, {
+        charge: 20, tax: 4.2, amount: 24.2, vatRate: 21, description: 'No-show deposit',
+      })
+
+      const report = await getMonthlyFiscalReport(site.id, MONTH_FROM, MONTH_TO)
+
+      expect(report.count).toBe(1)
+      expect(report.gross).toBe(24.2)
+      expect(report.lines[0]!.description).toBe('No-show deposit')
+    })
+
+    it('excludes a STANDALONE restaurant tab — it belongs to no site', async () => {
+      // Not a gap: a standalone restaurant's invoices are reported by the
+      // restaurant's own export. A site register claiming them would double-count.
+      const user = await createTestUser()
+      await createTestPartnerAccount(user.id)
+      const site = await createTestSite(user.id)
+      const standalone = await createTestRestaurant(user.id, { siteId: null })
+      const table = await createTestTable(standalone.id)
+      const tab = await createTestTableTab(table.id, null, {
+        restaurantId: standalone.id,
+        status: 'paid',
+      })
+
+      const inv = await createTestInvoice(user.id, {
+        tableTabId: tab.id,
+        issuerType: 'PARTNER',
+        invoicedAt: d('2026-07-14T20:00:00Z'),
+        totalCharge: 40, totalTax: 8.4, totalAmount: 48.4,
+      })
+      await createTestInvoiceLine(inv.id, { charge: 40, tax: 8.4, amount: 48.4, vatRate: 21 })
+
+      const report = await getMonthlyFiscalReport(site.id, MONTH_FROM, MONTH_TO)
+
+      expect(report.count).toBe(0)
+      expect(report.lines).toHaveLength(0)
+    })
+  })
+
+  describe('credit notes', () => {
+    it('reports the credit note in `refunds` AND nets it out of the totals, once', async () => {
+      // A credit note is a negative PARTNER invoice, so it is a document in the
+      // register in its own right. The whole point of this test is that it is
+      // counted once, not subtracted a second time via `refunds`.
+      const user = await createTestUser()
+      await createTestPartnerAccount(user.id)
+      const site = await createTestSite(user.id)
+      const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
+      const res = await createTestReservation(user.id, site.id, [item.id], {
+        createdAt: d('2026-07-05T09:00:00Z'),
+      })
+
+      const receipt = await createTestInvoice(user.id, {
+        reservationId: res.id,
+        invoicedAt: d('2026-07-05T10:00:00Z'),
+        invoiceNumber: 'PARTNER-2026-00001',
+        totalCharge: 100, totalTax: 21, totalAmount: 121,
+      })
+      await createTestInvoiceLine(receipt.id, { charge: 100, tax: 21, amount: 121, vatRate: 21 })
+
+      const creditNote = await createTestInvoice(user.id, {
+        reservationId: res.id,
+        creditsInvoiceId: receipt.id,
+        invoicedAt: d('2026-07-06T10:00:00Z'),
+        invoiceNumber: 'PARTNER-CN-2026-00001',
+        totalCharge: -100, totalTax: -21, totalAmount: -121,
+      })
+      await createTestInvoiceLine(creditNote.id, {
+        charge: -100, tax: -21, amount: -121, vatRate: 21, productCode: 'cash-refund-credit',
+      })
+
+      const report = await getMonthlyFiscalReport(site.id, MONTH_FROM, MONTH_TO)
+
+      // Both documents counted; the money nets to zero exactly once.
+      expect(report.count).toBe(2)
+      expect(report.gross).toBe(0)
+      expect(report.net).toBe(0)
+      expect(report.vat).toBe(0)
+      // The refund is reported as a positive magnitude, for visibility only.
+      expect(report.refunds).toEqual({ count: 1, amount: 121 })
+      // And it is NOT ALSO in the watchdog — it has a crediting document.
+      expect(report.unInvoicedRefunds).toEqual({ count: 0, amount: 0 })
+      expect(report.lines).toHaveLength(2)
+    })
+
+    it('does not flag a reservation whose credit note lands in a LATER month', async () => {
+      // A July sale refunded in August is fully documented. Reporting it as
+      // un-invoiced in July would fire a false alarm every single month-end.
+      const user = await createTestUser()
+      await createTestPartnerAccount(user.id)
+      const site = await createTestSite(user.id)
+      const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
+      const res = await createTestReservation(user.id, site.id, [item.id], {
+        status: 'refunded',
+        paymentAmount: 121,
+        refundedAt: d('2026-08-03T12:00:00Z'),
+        createdAt: d('2026-07-05T09:00:00Z'),   // sold in July
+      })
+
+      const receipt = await createTestInvoice(user.id, {
+        reservationId: res.id,
+        invoicedAt: d('2026-07-05T10:00:00Z'),
+        totalCharge: 100, totalTax: 21, totalAmount: 121,
+      })
+      await createTestInvoiceLine(receipt.id, { charge: 100, tax: 21, amount: 121, vatRate: 21 })
+
+      // Credit note issued in AUGUST — outside the July window entirely.
+      const creditNote = await createTestInvoice(user.id, {
+        reservationId: res.id,
+        creditsInvoiceId: receipt.id,
+        invoicedAt: d('2026-08-03T12:00:00Z'),
+        totalCharge: -100, totalTax: -21, totalAmount: -121,
+      })
+      await createTestInvoiceLine(creditNote.id, { charge: -100, tax: -21, amount: -121, vatRate: 21 })
+
+      const report = await getMonthlyFiscalReport(site.id, MONTH_FROM, MONTH_TO)
+
+      // July shows the sale, and no false alarm.
+      expect(report.count).toBe(1)
+      expect(report.gross).toBe(121)
+      expect(report.unInvoicedRefunds).toEqual({ count: 0, amount: 0 })
+      // The credit note itself belongs to August's register, not July's.
+      expect(report.refunds).toEqual({ count: 0, amount: 0 })
     })
   })
 })

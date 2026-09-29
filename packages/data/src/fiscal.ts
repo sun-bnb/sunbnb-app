@@ -4,24 +4,44 @@
  *
  * This is a READ-ONLY helper; no writes, no auth (the caller's responsibility).
  *
- * Site scoping:
+ * Site scoping — every way an Invoice can belong to a site:
  *   - Reservation invoices:  reservation.siteId = siteId  (PARTNER + PLATFORM)
  *   - Order invoices:        order.siteId = siteId        (PARTNER + PLATFORM)
+ *   - Dine-in tab invoices:  tableTab.siteId = siteId
+ *   - Table deposits:        tableReservation.restaurant.siteId = siteId
  *   - Rental invoices:       no direct FK on Invoice → siteId; linked only via
  *     paymentRef on RentalBooking.  We fetch the set of paymentRefs belonging to
  *     the site's RentalBookings (both online refs like `tr_…` and cash refs like
  *     `cash-rental-<id>`) and match Invoice.paymentRef IN (...).  This is a
  *     single extra findMany on RentalBooking + an IN clause on Invoice — acceptable
  *     for a monthly report.
- *   Reservation + order invoices are scoped precisely via the relation join.
- *   Rental invoices are scoped via the paymentRef-set approach described above.
  *
- * Refunds note:
- *   Cash refunds are NOT yet formal credit notes — they do not produce a counter-
- *   Invoice in the database. The `refunds` field is therefore informational only,
- *   derived from status/refundedAt on the underlying records (same definition as
- *   `getMonthlySourceSummary`).  When formal credit notes are introduced, this
- *   helper must be updated to include them in `lines` as well.
+ *   The tab and deposit branches were MISSING until 2026-09-29: a register that
+ *   is handed to an accountant, and that will become the evidence base for
+ *   Veri*factu, silently omitted every dine-in and deposit invoice belonging to
+ *   a site-LINKED restaurant. No production row was affected when this was
+ *   fixed — the only restaurant there is standalone — so this is a hole closed
+ *   before the first linked restaurant falls into it, not a correction.
+ *
+ *   A STANDALONE restaurant (dine-in v2, `Restaurant.siteId = null`) has no site,
+ *   so its tabs cannot appear in any site-scoped register. That is correct, not a
+ *   gap — those invoices belong to the restaurant's own report
+ *   (`getRestaurantTabInvoicesByMonth` in the partner app), and a site register
+ *   claiming them would be double-counting.
+ *
+ * Refunds:
+ *   Formal credit notes now exist (`issueCashCreditNote`, series
+ *   `PARTNER-CN-YYYY-NNNNN`). A credit note is a NEGATIVE PARTNER invoice, so it
+ *   already flows through `count`, `gross`, `net`, `vat` and `lines` as a
+ *   document in its own right — that is what a register is supposed to show, and
+ *   it is why the totals here are net of refunds without anything being
+ *   subtracted twice.
+ *
+ *   `refunds` reports those credit notes (count + positive magnitude) so the
+ *   partner can see the refund side explicitly. `unInvoicedRefunds` is the
+ *   residual: source records marked refunded that produced NO credit note. It
+ *   exists to be watched, not to be added to anything — it should trend to zero,
+ *   and a non-zero value means money moved without a document.
  *
  * VAT rate bucketing:
  *   InvoiceLine.vatRate is nullable. Lines with vatRate = null are bucketed under
@@ -96,12 +116,25 @@ export interface MonthlyFiscalReport {
    */
   processingFees: number
 
-  // ─── Refunds (informational) ──────────────────────────────────────────────
+  // ─── Refunds ──────────────────────────────────────────────────────────────
   /**
-   * Cash/manual refunds derived from reservation/order/rental status — NOT
-   * formal credit notes. See module doc comment for the credit-note caveat.
+   * Formal credit notes dated in the period: how many, and their total as a
+   * POSITIVE magnitude (the invoices themselves carry negative totals).
+   *
+   * Do NOT subtract this from `gross`/`net`/`vat` — those are already net of it,
+   * because a credit note is itself a PARTNER invoice in the set.
    */
   refunds: { count: number; amount: number }
+  /**
+   * Refunds that never became a credit note — source records flagged refunded
+   * with no crediting document anywhere in the ledger.
+   *
+   * A watchdog, not an accounting figure. Rentals and orders can only ever land
+   * here today: `issueCashCreditNote` covers reservations only. Anything here is
+   * money that moved without a document, which is exactly what a fiscal register
+   * must not hide.
+   */
+  unInvoicedRefunds: { count: number; amount: number }
 
   // ─── Register rows (CSV export) ──────────────────────────────────────────
   /**
@@ -153,6 +186,16 @@ export async function getMonthlyFiscalReport(
       OR: [
         { reservation: { siteId } },
         { order: { siteId } },
+        // Dine-in tabs and table deposits were MISSING from this list until
+        // 2026-09-29, so a LINKED restaurant's invoices were silently absent
+        // from the register an accountant is handed. Both FKs are indexed on
+        // Invoice. (Production's only restaurant is standalone, so no real row
+        // was ever wrongly omitted — this closes the hole before the first
+        // site-linked restaurant walks into it.)
+        { tableTab: { siteId } },
+        // A deposit has no siteId of its own — it hangs off the restaurant,
+        // and only a LINKED restaurant has a site. See the module header.
+        { tableReservation: { restaurant: { siteId } } },
         ...(rentalPaymentRefs.length > 0
           ? [{ paymentRef: { in: rentalPaymentRefs } }]
           : []),
@@ -180,9 +223,18 @@ export async function getMonthlyFiscalReport(
   // Register rows (PARTNER + PLATFORM lines)
   const lines: FiscalInvoiceLine[] = []
 
+  // Credit notes are PARTNER invoices with a crediting link; they are counted
+  // as documents above AND reported separately here, never subtracted twice.
+  let creditNoteCount = 0
+  let creditNoteAmount = 0
+
   for (const inv of invoices) {
     if (inv.issuerType === 'PARTNER') {
       partnerCount += 1
+      if (inv.creditsInvoiceId != null) {
+        creditNoteCount += 1
+        creditNoteAmount += Math.abs(inv.totalAmount)
+      }
       partnerGross += inv.totalAmount
       partnerNet += inv.totalCharge
       partnerVat += inv.totalTax
@@ -240,11 +292,14 @@ export async function getMonthlyFiscalReport(
       gross: round(sums.gross),
     }))
 
-  // 4. Refunds — informational; derived from source record status (not invoice credit notes).
-  //    Same definition as getMonthlySourceSummary:
-  //      reservations with refundedAt != null (createdAt in range)
-  //      rental bookings with status = RENTAL_REFUNDED (createdAt in range)
-  //      orders with status = ORDER_REFUNDED (createdAt in range)
+  // 4. The refund residual — source records flagged refunded that produced no
+  //    crediting document. The credited ones are already counted above, as the
+  //    negative invoices they are.
+  //
+  //    Window: the SOURCE record's createdAt, which is the definition
+  //    `getMonthlySourceSummary` uses and is kept for comparability. Note it does
+  //    not match the credit note's own `invoicedAt` window — a sale refunded in a
+  //    later month is deliberately reported against the month it was sold.
   const [refundedReservations, refundedRentals, refundedOrders] = await Promise.all([
     prisma.reservation.findMany({
       where: {
@@ -252,7 +307,7 @@ export async function getMonthlyFiscalReport(
         refundedAt: { not: null },
         createdAt: { gte: rangeStart, lt: rangeEnd },
       },
-      select: { paymentAmount: true },
+      select: { id: true, paymentAmount: true },
     }),
     prisma.rentalBooking.findMany({
       where: {
@@ -272,15 +327,46 @@ export async function getMonthlyFiscalReport(
     }),
   ])
 
-  let refundAmount = 0
-  for (const r of refundedReservations) refundAmount += r.paymentAmount ?? 0
-  for (const r of refundedRentals) refundAmount += r.paymentAmount ?? 0
-  for (const o of refundedOrders) refundAmount += o.paymentAmount ?? 0
+  // Which of those reservations DO have a credit note — searched across all time,
+  // not just this window: a July sale refunded in August is fully documented, and
+  // reporting it as un-invoiced in July would be a false alarm every month-end.
+  const refundedReservationIds = refundedReservations.map((r) => r.id)
+  const creditedReservationIds = new Set(
+    refundedReservationIds.length > 0
+      ? (
+          await prisma.invoice.findMany({
+            where: {
+              reservationId: { in: refundedReservationIds },
+              creditsInvoiceId: { not: null },
+            },
+            select: { reservationId: true },
+          })
+        )
+          .map((inv) => inv.reservationId)
+          .filter((id): id is string => id !== null)
+      : [],
+  )
 
-  const refunds = {
-    count: refundedReservations.length + refundedRentals.length + refundedOrders.length,
-    amount: round(refundAmount),
+  let unInvoicedCount = 0
+  let unInvoicedAmount = 0
+  for (const r of refundedReservations) {
+    if (creditedReservationIds.has(r.id)) continue
+    unInvoicedCount += 1
+    unInvoicedAmount += r.paymentAmount ?? 0
   }
+  // Rentals and orders have no credit-note path at all yet, so every refunded one
+  // is by definition un-invoiced.
+  for (const r of refundedRentals) {
+    unInvoicedCount += 1
+    unInvoicedAmount += r.paymentAmount ?? 0
+  }
+  for (const o of refundedOrders) {
+    unInvoicedCount += 1
+    unInvoicedAmount += o.paymentAmount ?? 0
+  }
+
+  const refunds = { count: creditNoteCount, amount: round(creditNoteAmount) }
+  const unInvoicedRefunds = { count: unInvoicedCount, amount: round(unInvoicedAmount) }
 
   return {
     count: partnerCount,
@@ -292,6 +378,7 @@ export async function getMonthlyFiscalReport(
     platformReverseCharge,
     processingFees: round(processingFeesSum),
     refunds,
+    unInvoicedRefunds,
     lines,
   }
 }
