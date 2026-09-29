@@ -51,8 +51,8 @@ stream is what an inspector asks for. Store `huellaInput` verbatim — it is the
 debug a rejection.
 
 **Context needed:**
-- `packages/data/src/tax/es-verifactu/huella.ts` — canonical string + serialization helpers.
-  **Read its header before trusting the field order** (see Open decisions D1).
+- `packages/data/src/tax/es-verifactu/huella.ts` — canonical string + serialization helpers,
+  now verified against the official spec (D1 closed) and pinned by AEAT's own three vectors.
 - `packages/data/src/tax/es-verifactu/tipo-factura.ts` — `classifyTipoFactura`, `buildDesglose`.
 - `packages/data/src/tax/regime.ts` — `resolveTaxRegime`, `regimeRequiresRecords`.
 - `packages/data/src/invoice-series.ts` — the per-issuer allocator and `lockInvoiceSeries`;
@@ -140,10 +140,13 @@ clean-slate deletion (D3) is deferred to cutover.
   universal, transmission Spain-only. Live legal page: **left as-is**, gap closed by
   shipping. Existing invoices: **test data, clean-slate delete at cutover** (D3). Track 015's
   production cash backfill: **skipped**, which unblocked P2 immediately.
-- **2026-09-29 — Huella provenance.** AEAT's FAQ describes the field list in prose and defers
-  the detail to a technical document that could not be retrieved. The order came from a
-  third-party implementation citing AEAT and was **independently verified**: its published
-  test vector hashes to exactly the stated value. Good evidence, not proof — see D1.
+- **2026-09-29 — Huella provenance, then D1 closed.** The order was first taken from a
+  third-party implementation citing AEAT and independently verified against its published
+  vector — good evidence, not proof. The official AEAT document was then located and read
+  (v0.1.2, 27/08/2024): the field order and format were confirmed correct, and one gap was
+  found — values must be TRIMMED, which the implementation was not doing. All three
+  official worked examples are now pinned. Also learned from §7, and load-bearing for P7: a
+  mismatched huella is "Aceptado con errores", not a rejection.
 - **2026-09-29 — The accidental mutex.** P2 found that all seven writers' in-transaction
   idempotency re-checks were useless against concurrent callers, and that duplicates had
   been prevented only by the shared counter colliding on `invoice_number` and throwing
@@ -152,10 +155,20 @@ clean-slate deletion (D3) is deferred to cutover.
 
 ## Open decisions
 
-- **D1 — Confirm the huella field order against the official AEAT document** before the first
-  real submission. `HUELLA_SPEC_VERSION` is stored per record so a correction stays
-  distinguishable, and `PrimerRegistro='S'` restarts a chain, but a format error is only
-  discovered once a chain exists. *Highest-cost error in the track.*
+- ✅ **D1 — CLOSED 2026-09-29.** The official document was located and read:
+  *"Detalle de las especificaciones técnicas para generación de la huella o hash de los
+  registros de facturación"*, AEAT v0.1.2 (27/08/2024),
+  `agenciatributaria.es/static_files/AEAT_Desarrolladores/EEDD/IVA/VERI-FACTU/Veri-Factu_especificaciones_huella_hash_registros.pdf`.
+  Field order (alta 8, anulación 5), the `nombre=valor&` format, the empty previous-huella
+  for a first record, UTF-8 and uppercase 64-char hex were all **confirmed correct**. One
+  gap was found and fixed: §3 requires every value to be **trimmed**, which the
+  implementation was not doing. All three of the document's worked examples (§6.1 first
+  alta, §6.2 chained alta, §6.3 anulación) are now pinned as tests.
+  **Carry forward into P7:** §7 says a huella that disagrees with AEAT's own recomputation
+  is *"Aceptado con errores"* — **accepted, not rejected**. A format error therefore never
+  announces itself on submission; it accumulates silently down a chain. That is why the
+  vectors are tests, and why the response handler must treat accepted-with-errors as a
+  failure to investigate rather than a success.
 - **D2 — Can Sunbnb submit on partners' behalf, and under what instrument** (third-party
   issuance + AEAT *apoderamiento*, colaborador social, or neither)? One platform certificate
   in an env var, or a per-partner encrypted keystore — and there is no secret-storage

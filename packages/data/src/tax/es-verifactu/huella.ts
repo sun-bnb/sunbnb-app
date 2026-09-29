@@ -5,25 +5,27 @@
  * PURE. No prisma, no clock, no I/O: every input is passed in, which is what
  * makes it testable against a published vector.
  *
- * ## Provenance, and why you should re-check it
+ * ## Provenance — the official document
  *
- * The canonical field order below was taken from a third-party implementation
- * citing AEAT, and CONFIRMED self-consistent: the vector in `huella.test.ts`
- * hashes to exactly the value that source publishes. The field list also
- * matches the one AEAT's own FAQ describes in prose.
+ * Field order, format, trimming and output encoding all come from AEAT's
+ * "Detalle de las especificaciones técnicas para generación de la huella o hash
+ * de los registros de facturación", **v0.1.2, 27/08/2024**, §3–§6. All three of
+ * that document's worked examples are pinned as tests: a first alta, a chained
+ * alta, and an anulación.
  *
- * That is good evidence, not proof. The FAQ defers the detail to a separate
- * document ("Detalle de las especificaciones técnicas para la generación de la
- * huella o hash de los registros") which was not retrievable when this was
- * written. **Before the first real submission, confirm the field order and
- * formatting against that document.** This is the highest-cost error in the
- * project: every record is built on the one before it, so a format mistake is
- * only discovered once a chain exists.
+ * `HUELLA_SPEC_VERSION` records which revision produced a stored huella. The
+ * document is versioned and has already been revised twice (0.1.1 corrected the
+ * anulación example, 0.1.2 clarified numeric handling), so a future revision
+ * that changes the string must stay distinguishable rather than being silently
+ * mixed into one unverifiable chain. AEAT allows restarting a chain with
+ * `PrimerRegistro='S'` if it comes to that.
  *
- * `HUELLA_SPEC_VERSION` is stored on every record precisely so a correction
- * stays distinguishable rather than silently mixed into one unverifiable chain.
- * AEAT permits restarting a chain with `PrimerRegistro='S'`, which is the
- * escape hatch if this turns out to be wrong.
+ * ## A wrong huella does not bounce — it is "Aceptado con errores"
+ *
+ * §7: when the huella a system submits does not match AEAT's own recomputation,
+ * the record is accepted **with errors**, not rejected. So a format mistake does
+ * not announce itself on the first submission; it accumulates silently across a
+ * chain. That is precisely why the vectors below are tests rather than a comment.
  *
  * ## The formatting rule that matters
  *
@@ -38,7 +40,7 @@
 import { createHash } from 'crypto'
 
 /** Bump when the canonical string changes. Stored per record. */
-export const HUELLA_SPEC_VERSION = 'aeat-2024-alta-v1'
+export const HUELLA_SPEC_VERSION = 'aeat-huella-v0.1.2'
 
 /** SHA-256, UTF-8 input, UPPERCASE hex output — 64 characters. */
 function sha256Upper(input: string): string {
@@ -66,17 +68,33 @@ export interface AltaHuellaInput {
   fechaHoraHusoGenRegistro: string
 }
 
+/**
+ * One `nombre=valor` pair.
+ *
+ * TRIMS the value, per §3: "eliminando los espacios al inicio y al final de
+ * cada valor" — the document's own Java reference does `valor.trim()`. An
+ * untrimmed value would hash differently from the same invoice submitted by any
+ * conforming system, and §7 means that disagreement surfaces as "accepted with
+ * errors" rather than a rejection, so it would not announce itself.
+ *
+ * A null or absent value renders as the bare name and `=`, per §3 and the
+ * reference's `(valor == null) ? "" : valor.trim()`.
+ */
+function field(name: string, value: string | null | undefined): string {
+  return `${name}=${(value ?? '').trim()}`
+}
+
 /** The canonical string, exposed so a rejection can be debugged against it. */
 export function altaHuellaInputString(input: AltaHuellaInput): string {
   return [
-    `IDEmisorFactura=${input.idEmisorFactura}`,
-    `NumSerieFactura=${input.numSerieFactura}`,
-    `FechaExpedicionFactura=${input.fechaExpedicionFactura}`,
-    `TipoFactura=${input.tipoFactura}`,
-    `CuotaTotal=${input.cuotaTotal}`,
-    `ImporteTotal=${input.importeTotal}`,
-    `Huella=${input.huellaAnterior}`,
-    `FechaHoraHusoGenRegistro=${input.fechaHoraHusoGenRegistro}`,
+    field('IDEmisorFactura', input.idEmisorFactura),
+    field('NumSerieFactura', input.numSerieFactura),
+    field('FechaExpedicionFactura', input.fechaExpedicionFactura),
+    field('TipoFactura', input.tipoFactura),
+    field('CuotaTotal', input.cuotaTotal),
+    field('ImporteTotal', input.importeTotal),
+    field('Huella', input.huellaAnterior),
+    field('FechaHoraHusoGenRegistro', input.fechaHoraHusoGenRegistro),
   ].join('&')
 }
 
@@ -95,11 +113,11 @@ export interface AnulacionHuellaInput {
 
 export function anulacionHuellaInputString(input: AnulacionHuellaInput): string {
   return [
-    `IDEmisorFacturaAnulada=${input.idEmisorFacturaAnulada}`,
-    `NumSerieFacturaAnulada=${input.numSerieFacturaAnulada}`,
-    `FechaExpedicionFacturaAnulada=${input.fechaExpedicionFacturaAnulada}`,
-    `Huella=${input.huellaAnterior}`,
-    `FechaHoraHusoGenRegistro=${input.fechaHoraHusoGenRegistro}`,
+    field('IDEmisorFacturaAnulada', input.idEmisorFacturaAnulada),
+    field('NumSerieFacturaAnulada', input.numSerieFacturaAnulada),
+    field('FechaExpedicionFacturaAnulada', input.fechaExpedicionFacturaAnulada),
+    field('Huella', input.huellaAnterior),
+    field('FechaHoraHusoGenRegistro', input.fechaHoraHusoGenRegistro),
   ].join('&')
 }
 
@@ -112,7 +130,14 @@ export function computeAnulacionHuella(input: AnulacionHuellaInput): string {
 // These produce the strings that go into BOTH the XML and the huella, so the
 // two cannot disagree. Use them; do not format at a call site.
 
-/** Money as AEAT expects it: two decimals, dot separator. */
+/**
+ * Money as AEAT expects it: two decimals, dot separator.
+ *
+ * §3 says one or two decimal places are treated indistinctly and trailing zeros
+ * are irrelevant — `123.1` and `123.10` are both valid for the same invoice. Two
+ * decimals is therefore a choice, not a requirement, and it is the one made here
+ * so the string hashed is the string the XML carries.
+ */
 export function formatImporte(value: number): string {
   return value.toFixed(2)
 }
