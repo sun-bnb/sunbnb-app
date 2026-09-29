@@ -51,6 +51,8 @@
     "./payment-math": "./src/payment-math.ts",
     "./receipt": "./src/receipt.ts",
     "./receipt-model": "./src/receipt-model.ts",
+    "./tax/es-verifactu/huella": "./src/tax/es-verifactu/huella.ts",
+    "./tax/es-verifactu/tipo-factura": "./src/tax/es-verifactu/tipo-factura.ts",
     "./tax/regime": "./src/tax/regime.ts",
     "./vat-id": "./src/vat-id.ts",
     "./pricing-tiers": "./src/pricing-tiers.ts",
@@ -161,6 +163,12 @@
       ],
       "receipt-model": [
         "./src/receipt-model.ts"
+      ],
+      "tax/es-verifactu/huella": [
+        "./src/tax/es-verifactu/huella.ts"
+      ],
+      "tax/es-verifactu/tipo-factura": [
+        "./src/tax/es-verifactu/tipo-factura.ts"
       ],
       "tax/regime": [
         "./src/tax/regime.ts"
