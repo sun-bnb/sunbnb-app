@@ -49,6 +49,8 @@
     "./tab-payment": "./src/tab-payment.ts",
     "./invoice-series": "./src/invoice-series.ts",
     "./payment-math": "./src/payment-math.ts",
+    "./tax/regime": "./src/tax/regime.ts",
+    "./vat-id": "./src/vat-id.ts",
     "./pricing-tiers": "./src/pricing-tiers.ts",
     "./mollie-app-fee": "./src/mollie-app-fee.ts",
     "./viva": "./src/viva/index.ts",
@@ -151,6 +153,12 @@
       ],
       "payment-math": [
         "./src/payment-math.ts"
+      ],
+      "tax/regime": [
+        "./src/tax/regime.ts"
+      ],
+      "vat-id": [
+        "./src/vat-id.ts"
       ],
       "pricing-tiers": [
         "./src/pricing-tiers.ts"
