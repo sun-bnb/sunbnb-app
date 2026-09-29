@@ -122,6 +122,11 @@ clean-slate deletion (D3) is deferred to cutover.
 - ☐ **P8 — Anulación and rectificativa completeness.** **A credit note is an `Alta` of a
   rectificativa, not an `Anulación`**; anulación is for a record issued in error. Getting
   that wrong is a compliance defect that looks like a working feature.
+- ☐ **P9a — The declaración responsable, in the product.** A route in the partner app
+  rendering the signed declaration, reachable from anywhere in the software and carrying the
+  running version, plus a downloadable copy for resellers and customers. Small, but it is a
+  hard requirement of RD 1007/2023 that no other phase covers, and it is the only phase that
+  touches the "certified software" line on the legal page (see D4).
 - ☐ **P9 — Ops surface.** Pending/blocked/rejected per issuer, both verify routines runnable
   on demand, per-invoice CSV, **certificate expiry countdown** (a representative cert is
   often one year — an unmonitored time bomb), and the alerts "invoice with no record" and
@@ -147,6 +152,12 @@ clean-slate deletion (D3) is deferred to cutover.
   found — values must be TRIMMED, which the implementation was not doing. All three
   official worked examples are now pinned. Also learned from §7, and load-bearing for P7: a
   mismatched huella is "Aceptado con errores", not a rejection.
+- **2026-09-29 — D4 answered.** AEAT does not certify, approve or homologate billing
+  software at all; RD 1007/2023 works by the PRODUCER self-certifying, with no registry and
+  no filing. Sunbnb is that producer. Two consequences: the live legal page's "certified
+  software (homologado)" describes a mechanism that does not exist, and the declaration must
+  be visible INSIDE the software in every version — so this does have an engineering half
+  (P9a), contrary to what was recorded when the track opened.
 - **2026-09-29 — The accidental mutex.** P2 found that all seven writers' in-transaction
   idempotency re-checks were useless against concurrent callers, and that duplicates had
   been prevented only by the shared counter colliding on `invoice_number` and throwing
@@ -177,9 +188,33 @@ clean-slate deletion (D3) is deferred to cutover.
   rather than freeze them behind a legacy chain, which is what removes the legacy code path
   entirely. Deferred to cutover so the old code cannot re-mint the same numbers; take a dump
   and re-confirm the row count first.
-- **D4 — Is Sunbnb a *productor de software* owing a *declaración responsable*?** The legal
-  page already claims "certified software (homologado)" and **no engineering phase restores
-  that claim** — only a signed declaration does.
+- ◐ **D4 — ANSWERED 2026-09-29; one signature and one screen outstanding.** Source: AEAT FAQ
+  *"Certificación de los sistemas informáticos: declaración responsable"*.
+  - **Sunbnb is the obligated party.** The declaration is issued by "la persona o entidad
+    productora del sistema informático" — the producer, not the partner using it. It applies
+    even to software a company builds only for itself, so there is no reading under which
+    this falls to the venues.
+  - **There is no such thing as AEAT-certified or homologated billing software.** The FAQ
+    is explicit that this is *auto-certificación* by the producer: "no se requiere de
+    procesos de certificación realizados por otras personas, entidades u organismos
+    independientes", and "no se prevé ningún registro previo del producto". No approval, no
+    registry, no list to be on. **The live legal page's claim of "certified software
+    (software de facturación homologado)" therefore describes a mechanism that does not
+    exist** — that is not an unkept promise like the QR, it is a wrong statement about how
+    the regime works, and it is the one line on that page that shipping cannot make true.
+    Founder decision needed on the wording; not edited here, since it is a legal document.
+  - **Not filed with AEAT.** The producer keeps it and produces it on request, from either
+    the tax administration or a customer.
+  - **Contents:** data identifying the system — its type, composition, functionality and
+    installation characteristics — plus the producer's identifying and location data, and
+    the date and place of signing.
+  - **I was wrong that no engineering phase touches this.** Requirement: it must appear "por
+    escrito y de modo visible en el propio sistema informático en cada una de sus versiones",
+    reachable quickly from any point in the software, AND be available externally to a buyer
+    or reseller in a free, widely-used format. The second half is a PDF the company
+    publishes; **the first half is a screen we have to build** — see P9a.
+  - **Remaining:** the founder signs the declaration (content is drawable from the bullet
+    above), and P9a ships the in-app surface.
 - **D5 — F2 ceiling.** Implemented conservatively at €400; hospitality likely qualifies for
   €3,000. Has never bound (largest invoice ever €216) and the classifier REFUSES rather than
   guesses above it.
