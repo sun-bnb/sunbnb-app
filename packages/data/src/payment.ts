@@ -122,6 +122,79 @@ export function calculateServiceFeeAmount(
   )
 }
 
+// ─── Credit-note VAT apportionment ──────────────────────────────────────────
+
+export interface CreditVatBucket {
+  /** The rate the ORIGINAL sale was taxed at. Carried, never derived. */
+  vatRate: number | null
+  gross: number
+  base: number
+  vat: number
+}
+
+/**
+ * Split a credit amount across the VAT rates the original invoice carried.
+ *
+ * Why not just divide `totalTax` by `totalCharge`? Because that produces a
+ * blended rate, and a blended rate is not a legal `TipoImpositivo`. Production
+ * credit notes carry 20.98, 21.01 and 21.03 for exactly this reason; AEAT
+ * rejects them. A rectificativa declares the same rates as the document it
+ * corrects, so those rates are carried through.
+ *
+ * Proportional to each rate's share of the original gross, with the rounding
+ * remainder assigned to the LARGEST bucket — so the parts always sum back to
+ * `amount` to the cent, whatever the split. A credit that did not sum to the
+ * refund would show up later as an unexplained balance.
+ *
+ * Exported for testing; the rounding is the part worth pinning.
+ */
+export function apportionCreditByVatRate(
+  lines: { vatRate: number | null; charge: number; tax: number; amount: number }[],
+  amount: number,
+): CreditVatBucket[] {
+  const byRate = new Map<number | null, number>()
+  for (const line of lines) {
+    byRate.set(line.vatRate, (byRate.get(line.vatRate) ?? 0) + line.amount)
+  }
+
+  const totalGross = Array.from(byRate.values()).reduce((a, b) => a + b, 0)
+
+  // No lines, or a zero-total original: nothing to apportion against. Fall back
+  // to one bucket at the single rate present, if there is one.
+  if (byRate.size === 0 || totalGross <= 0) {
+    const only = byRate.size === 1 ? Array.from(byRate.keys())[0]! : null
+    const { baseAmount, vatAmount } = computeVatAndBaseAmounts(amount, only ?? 0)
+    return [{ vatRate: only, gross: round(amount), base: baseAmount, vat: vatAmount }]
+  }
+
+  const entries = Array.from(byRate.entries()).sort(([, a], [, b]) => b - a)
+
+  // Cents, so the remainder arithmetic is exact.
+  const targetCents = Math.round(amount * 100)
+  const shares = entries.map(([rate, gross]) => ({
+    rate,
+    exact: (gross / totalGross) * targetCents,
+  }))
+  const floors = shares.map((s) => Math.floor(s.exact))
+  let remainder = targetCents - floors.reduce((a, b) => a + b, 0)
+
+  // Entries are sorted by gross descending, so the remainder lands on the
+  // largest bucket first — the one where a cent is least visible.
+  const cents = floors.slice()
+  for (let i = 0; remainder > 0; i = (i + 1) % cents.length) {
+    cents[i] = cents[i]! + 1
+    remainder -= 1
+  }
+
+  return shares
+    .map((share, i) => {
+      const gross = round(cents[i]! / 100)
+      const { baseAmount, vatAmount } = computeVatAndBaseAmounts(gross, share.rate ?? 0)
+      return { vatRate: share.rate, gross, base: baseAmount, vat: vatAmount }
+    })
+    .filter((b) => b.gross !== 0)
+}
+
 // ─── Commission (PLATFORM) invoice helpers ──────────────────────────────────
 
 /**
@@ -795,6 +868,9 @@ export async function issueCashCreditNote(
       totalAmount: { gt: 0 },
     },
     orderBy: { invoicedAt: 'asc' },
+    // The lines carry the rates the sale was actually taxed at. A credit note
+    // must reuse them rather than derive one — see below.
+    include: { invoiceLines: true },
   })
   if (!receipt) return { status: 'skipped', reason: 'no-receipt' }
 
@@ -821,10 +897,19 @@ export async function issueCashCreditNote(
     if (requested <= 0) return { status: 'skipped' as const, reason: 'zero-amount' as const }
     const amount = Math.min(requested, creditable)
 
-    // VAT at the receipt's own effective rate — proportional to the original.
-    const effectiveVatRate =
-      receipt.totalCharge > 0 ? (receipt.totalTax / receipt.totalCharge) * 100 : 0
-    const { baseAmount, vatAmount } = computeVatAndBaseAmounts(amount, effectiveVatRate)
+    // VAT at the rates the RECEIPT actually carried, apportioned across them.
+    //
+    // This used to derive one effective rate as `totalTax / totalCharge * 100`,
+    // which drifts: production credit notes carry stored rates of 20.98, 21.01
+    // and 21.03 instead of 21. A fiscal record must declare a legal rate, and
+    // AEAT rejects 20.98 outright — so the rate is carried, never recomputed.
+    //
+    // A partial credit is split across the receipt's rate buckets in proportion
+    // to what each contributed, with the remainder going to the largest bucket
+    // so the parts always sum back to `amount` exactly.
+    const buckets = apportionCreditByVatRate(receipt.invoiceLines, amount)
+    const baseAmount = round(buckets.reduce((sum, b) => sum + b.base, 0))
+    const vatAmount = round(buckets.reduce((sum, b) => sum + b.vat, 0))
 
     const creditNoteIdentityKey = receipt.accountId
     const creditNoteIdentity = await allocateInvoiceIdentity(tx, {
@@ -854,17 +939,21 @@ export async function issueCashCreditNote(
       },
     })
 
-    await tx.invoiceLine.create({
-      data: {
-        invoiceId: creditNote.id,
-        charge: -baseAmount,
-        tax: -vatAmount,
-        amount: -amount,
-        vatRate: round(effectiveVatRate),
-        productCode: 'cash-refund-credit',
-        description: `Credit note for ${receipt.invoiceNumber ?? receipt.id} — cash refund`,
-      },
-    })
+    // One line per rate. A single line could not express a receipt taxed at two
+    // rates without inventing a blended one, which is the defect being fixed.
+    for (const bucket of buckets) {
+      await tx.invoiceLine.create({
+        data: {
+          invoiceId: creditNote.id,
+          charge: -bucket.base,
+          tax: -bucket.vat,
+          amount: -bucket.gross,
+          vatRate: bucket.vatRate,
+          productCode: 'cash-refund-credit',
+          description: `Credit note for ${receipt.invoiceNumber ?? receipt.id} — cash refund`,
+        },
+      })
+    }
 
     return {
       status: 'created' as const,
