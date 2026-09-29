@@ -347,6 +347,19 @@ const prisma = {
     findUnique: vi.fn(),
     upsert: vi.fn(),
   },
+  // Veri*factu records (track 026). The partner app never reads them — the
+  // record builder in @repo/data does — but the mock-contract guard requires a
+  // stub for every real model delegate, which is what catches a stale mock.
+  verifactuRecord: {
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    count: vi.fn(),
+    create: vi.fn(),
+  },
+  verifactuChain: {
+    findUnique: vi.fn(),
+    upsert: vi.fn(),
+  },
   session: {
     findMany: vi.fn(),
     deleteMany: vi.fn(),

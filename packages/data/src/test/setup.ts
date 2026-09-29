@@ -50,6 +50,15 @@ export async function cleanDatabase() {
       -- across test files. Same for per-account flags, which key on a user id.
       "device",
       "account_feature_flag",
+      -- The fiscal chains have NO foreign key to anything we truncate below --
+      -- they are keyed on an issuer NIF and a partner id, not on a row we own --
+      -- so nothing cascades to them and their sequences leak across test files,
+      -- which shows up as a chainSeq starting at 3 instead of 1. Same reason
+      -- the device table is listed here.
+      "verifactu_record",
+      "verifactu_chain",
+      "invoice_series",
+      "invoice_chain",
       "InvoiceLine",
       "Invoice",
       "OrderItem",

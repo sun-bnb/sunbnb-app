@@ -785,6 +785,11 @@ model Invoice {
   /// column exists so a future format change is distinguishable rather than
   /// silently mixed into one unverifiable chain.
   hashVersion      String?           @map("hash_version")
+  /// `F1` · `F2` · `R1` · `R5` — what KIND of document this is under RD
+  /// 1619/2012. It belongs on the invoice rather than on the fiscal record
+  /// because it is a property of the document itself, decided at issuance and
+  /// then fixed; a record is one of possibly several filings ABOUT it.
+  tipoFactura      String?           @map("tipo_factura")
   // Credit-note link (track 018 P2d / track 015 deferred): a credit note is an
   // Invoice with negative totals whose creditsInvoiceId points at the original
   // receipt it rectifies. Own number series (PARTNER-CN-YYYY-NNNNN), same
@@ -805,6 +810,7 @@ model Invoice {
   tableReservation TableReservation? @relation(fields: [tableReservationId], references: [id])
   tableTab         TableTab?         @relation(fields: [tableTabId], references: [id])
   invoiceLines     InvoiceLine[]
+  verifactuRecords VerifactuRecord[]
 
   @@index([tableReservationId])
   @@index([tableTabId])
@@ -890,6 +896,103 @@ model InvoiceChain {
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   @@map("invoice_chain")
+}
+
+/// A Veri*factu billing record — what is filed with AEAT ABOUT an invoice.
+///
+/// Its OWN table rather than columns on `Invoice`, for three reasons that all
+/// point the same way:
+///   - It is 1:N. One invoice can produce an `ALTA`, a later `ANULACION` if it
+///     was issued in error, and a rectificativa's own `ALTA`. Columns hold one.
+///   - Submission state is CHURNY — attempts, backoff, errors, a CSV — while
+///     `Invoice` is meant to be immutable. Mixing them would have the audit
+///     trail rewriting the thing it audits.
+///   - The *registro* stream is what an inspector asks for. It is a ledger in
+///     its own right, not an attribute of something else.
+model VerifactuRecord {
+  id        String  @id @default(cuid())
+  invoiceId String  @map("invoice_id")
+  invoice   Invoice @relation(fields: [invoiceId], references: [id])
+
+  /// `ALTA` (a filing) or `ANULACION` (voiding a record issued in error).
+  /// NOTE a credit note is an ALTA of a rectificativa, NOT an anulación —
+  /// getting that wrong is a compliance defect that looks like a feature.
+  recordType String @map("record_type")
+
+  /// Identity as it goes on the wire, frozen at generation. Re-deriving it
+  /// later would let a corrected partner NIF silently change what was filed.
+  issuerNif         String  @map("issuer_nif")
+  numSerieFactura   String  @map("num_serie_factura")
+  /// `DD-MM-YYYY` in the ISSUER'S timezone, not UTC.
+  fechaExpedicion   String  @map("fecha_expedicion")
+  tipoFactura       String  @map("tipo_factura")
+  /// `S` (sustitución) or `I` (diferencias) on a rectificativa; null otherwise.
+  tipoRectificativa String? @map("tipo_rectificativa")
+
+  /// The chain. `huellaInput` is stored VERBATIM because it is the only way to
+  /// debug a disagreement: AEAT reports that the huella differs, not which
+  /// field caused it — and per §7 that arrives as "aceptado con errores"
+  /// rather than as a rejection, so nothing else would surface it.
+  huella                   String
+  huellaPrevious           String? @map("huella_previous")
+  huellaInput              String  @map("huella_input")
+  /// Position in the issuer's record chain. Not a series sequence — an ALTA
+  /// and an ANULACION share one chain.
+  chainSeq                 Int     @map("chain_seq")
+  /// ISO 8601 with a real offset, e.g. `2026-07-10T19:20:30+02:00`.
+  fechaHoraHusoGenRegistro String  @map("fecha_hora_huso_gen_registro")
+
+  /// VAT breakdown per rate, and the software block RD 1007/2023 requires.
+  desglose           Json
+  sistemaInformatico Json?   @map("sistema_informatico")
+  payloadXml         String? @map("payload_xml")
+
+  /// Submission state. `pending` -> `sent` | `error` | `blocked`.
+  /// `blocked` is terminal-until-fixed: an invalid issuer NIF, or a partner who
+  /// has not granted representation (no colaborador social may submit without
+  /// prior authorisation). `/api/reconcile` has no such state, which is why a
+  /// permanently-failing row there retries forever in silence.
+  status          String    @default("pending")
+  attempts        Int       @default(0)
+  lastError       String?   @map("last_error")
+  lastAttemptAt   DateTime? @map("last_attempt_at")
+  nextAttemptAt   DateTime? @map("next_attempt_at")
+  /// AEAT's código seguro de verificación, once accepted.
+  csv             String?
+  aeatResponseXml String?   @map("aeat_response_xml")
+  submittedAt     DateTime? @map("submitted_at")
+
+  /// Which revision of the huella spec produced this. The document is versioned
+  /// and has been revised twice already.
+  specVersion String   @map("spec_version")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  /// The chain's own uniqueness, per obligated issuer.
+  @@unique([issuerNif, chainSeq])
+  /// One filing of each kind per invoice — the idempotency guard.
+  @@unique([invoiceId, recordType])
+  /// The submission sweep's query.
+  @@index([status, nextAttemptAt])
+  @@map("verifactu_record")
+}
+
+/// The head of one ISSUER's record chain — O(1) "what do I chain onto".
+///
+/// Keyed on the NIF rather than on `PartnerAccount.userId`, unlike
+/// `InvoiceChain`. That difference is deliberate: this chain belongs to the
+/// obligated TAXPAYER as AEAT knows them, and that identity IS the NIF. The
+/// invoice chain keys on the account because a partner's NIF is mutable free
+/// text that may be corrected; here a corrected NIF is genuinely a different
+/// filer, and starting a new chain is right rather than a bug.
+model VerifactuChain {
+  issuerNif    String   @id @map("issuer_nif")
+  lastHuella   String?  @map("last_huella")
+  lastChainSeq Int      @default(0) @map("last_chain_seq")
+  lastRecordId String?  @map("last_record_id")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("verifactu_chain")
 }
 
 model InvoiceLine {
