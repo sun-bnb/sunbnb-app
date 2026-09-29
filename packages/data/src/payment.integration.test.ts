@@ -221,8 +221,11 @@ describe('processConfirmedReservation', () => {
       orderBy: { invoiceNumber: 'asc' },
     })
 
-    expect(partnerInvoices[0]!.invoiceNumber).toBe(`PARTNER-${year}-00001`)
-    expect(partnerInvoices[1]!.invoiceNumber).toBe(`PARTNER-${year}-00002`)
+    // Sequential WITHIN this issuer's own F series — the whole point of
+    // per-issuer numbering is that another partner's sales cannot appear
+    // between these two.
+    expect(partnerInvoices[0]!.invoiceNumber).toMatch(new RegExp(`^[A-Z0-9]+-F-${year}-00001$`))
+    expect(partnerInvoices[1]!.invoiceNumber).toMatch(new RegExp(`^[A-Z0-9]+-F-${year}-00002$`))
   })
 
   it('handles percentage-based service fee', async () => {
@@ -368,7 +371,7 @@ describe('processConfirmedReservation', () => {
     expect(partnerInvoice.totalTax).toBe(expectedTotals.vatAmount)
 
     // Invoice has a number and hash
-    expect(partnerInvoice.invoiceNumber).toMatch(/^PARTNER-\d{4}-\d{5}$/)
+    expect(partnerInvoice.invoiceNumber).toMatch(/^[A-Z0-9]+-F-\d{4}-\d{5}$/)
     expect(partnerInvoice.hash).toBeTruthy()
   })
 
@@ -419,7 +422,7 @@ describe('processConfirmedReservation', () => {
     expect(partnerInvoice!.invoicedAt.toISOString()).toBe(pastDate.toISOString())
     // Invoice number must carry the past year, not the current year
     expect(partnerInvoice!.invoiceNumber).toMatch(
-      new RegExp(`^PARTNER-${pastYear}-\\d{5}$`)
+      new RegExp(`^[A-Z0-9]+-F-${pastYear}-\\d{5}$`)
     )
   })
 
@@ -857,7 +860,7 @@ describe('processConfirmedOrder — cash path (skipCommission: true)', () => {
     expect(partnerInvoice.totalAmount).toBe(19.0)
 
     // Invoice has a number and hash
-    expect(partnerInvoice.invoiceNumber).toMatch(/^PARTNER-\d{4}-\d{5}$/)
+    expect(partnerInvoice.invoiceNumber).toMatch(/^[A-Z0-9]+-F-\d{4}-\d{5}$/)
     expect(partnerInvoice.hash).toBeTruthy()
   })
 
@@ -895,7 +898,7 @@ describe('processConfirmedOrder — cash path (skipCommission: true)', () => {
 
     expect(partnerInvoice!.invoicedAt.toISOString()).toBe(pastDate.toISOString())
     expect(partnerInvoice!.invoiceNumber).toMatch(
-      new RegExp(`^PARTNER-${pastYear}-\\d{5}$`)
+      new RegExp(`^[A-Z0-9]+-F-${pastYear}-\\d{5}$`)
     )
   })
 
@@ -994,7 +997,7 @@ describe('processCashRentalBooking', () => {
     expect(partnerInvoice.totalTax).toBe(expected.vatAmount)
 
     // Invoice has a number and hash
-    expect(partnerInvoice.invoiceNumber).toMatch(/^PARTNER-\d{4}-\d{5}$/)
+    expect(partnerInvoice.invoiceNumber).toMatch(/^[A-Z0-9]+-F-\d{4}-\d{5}$/)
     expect(partnerInvoice.hash).toBeTruthy()
   })
 
@@ -1033,7 +1036,7 @@ describe('processCashRentalBooking', () => {
 
     expect(partnerInvoice!.invoicedAt.toISOString()).toBe(pastDate.toISOString())
     expect(partnerInvoice!.invoiceNumber).toMatch(
-      new RegExp(`^PARTNER-${pastYear}-\\d{5}$`)
+      new RegExp(`^[A-Z0-9]+-F-${pastYear}-\\d{5}$`)
     )
   })
 

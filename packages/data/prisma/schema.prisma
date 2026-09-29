@@ -183,6 +183,12 @@ model PartnerAccount {
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
   userId               String       @id @unique @map("user_id")
+  /// The human-readable stem of this partner's invoice numbers (`AB` →
+  /// `AB-F-2026-00001`). GLOBALLY UNIQUE because the rendered number carries a
+  /// unique constraint of its own: two partners sharing a prefix would collide
+  /// on their Nth invoice, inside a payment transaction. Assigned once and then
+  /// immutable — it is printed on documents a customer holds.
+  invoiceSeriesPrefix  String?      @unique @map("invoice_series_prefix")
   businessId           String?      @map("business_id")
   mollieProfileId      String?      @map("mollie_profile_id")
   mollieAccessToken    String?      @map("mollie_access_token")
@@ -745,6 +751,22 @@ model Invoice {
   invoiceNumber    String?           @unique @map("invoice_number")
   previousHash     String?           @map("previous_hash")
   hash             String?
+  /// Per-ISSUER numbering (track 026). The series key is the issuing entity —
+  /// `PartnerAccount.userId` for a partner receipt, the literal `PLATFORM` for
+  /// Sunbnb's own commission invoices. Deliberately NOT the NIF: that field is
+  /// mutable free text, and re-keying a series when a partner corrects their
+  /// tax id would fork it in two.
+  seriesKey        String?           @map("series_key")
+  /// `F` = factura, `R` = rectificativa (credit note). Each has its own dense
+  /// counter within an issuer-year, so a refund never puts a gap in the sales
+  /// sequence.
+  seriesCode       String?           @map("series_code")
+  seriesYear       Int?              @map("series_year")
+  seriesSeq        Int?              @map("series_seq")
+  /// Which canonical string `hash` was computed over. One value today; the
+  /// column exists so a future format change is distinguishable rather than
+  /// silently mixed into one unverifiable chain.
+  hashVersion      String?           @map("hash_version")
   // Credit-note link (track 018 P2d / track 015 deferred): a credit note is an
   // Invoice with negative totals whose creditsInvoiceId points at the original
   // receipt it rectifies. Own number series (PARTNER-CN-YYYY-NNNNN), same
@@ -772,6 +794,11 @@ model Invoice {
   /// per-issuer series/chain lookups will read the same shape. Neither had an
   /// index until 2026-09-29 — `getLastHash` was doing an unindexed scan ordered
   /// by invoiced_at on EVERY invoice creation.
+  /// The allocator's uniqueness guarantee, independent of how the number is
+  /// rendered. NULLs don't collide in Postgres, so rows predating this are fine.
+  @@unique([seriesKey, seriesCode, seriesYear, seriesSeq])
+  /// Chain walks: one issuer, in chain order.
+  @@index([seriesKey, seriesSeq])
   @@index([issuerType, invoicedAt])
   @@index([accountId])
   @@index([creditsInvoiceId])
@@ -799,6 +826,52 @@ model Settlement {
   account        PartnerAccount   @relation(fields: [accountId], references: [userId])
   site           Site             @relation(fields: [siteId], references: [id])
   invoices       Invoice[]
+}
+
+/// The invoice-number counter, one row per (issuer, series, year).
+///
+/// A COUNTER, not a derived max. The old allocator read the highest existing
+/// number with `SELECT … LIMIT 1 FOR UPDATE`, which locks nothing when no row
+/// matches — so two concurrent transactions opening the same empty series both
+/// computed seq 1 and one died on the unique constraint INSIDE the payment
+/// transaction: card charged, no invoice. Per-issuer series makes that empty
+/// case routine (every new partner, every 1 January), so the max-scan is gone.
+model InvoiceSeries {
+  id         String   @id @default(cuid())
+  /// `PartnerAccount.userId`, or the literal `PLATFORM`.
+  seriesKey  String   @map("series_key")
+  /// `F` = factura · `R` = rectificativa.
+  seriesCode String   @map("series_code")
+  year       Int
+  /// Last allocated sequence. The next invoice takes `lastSeq + 1`.
+  lastSeq    Int      @default(0) @map("last_seq")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@unique([seriesKey, seriesCode, year])
+  @@map("invoice_series")
+}
+
+/// The head of one issuer's hash chain — O(1) lookup of "what do I chain onto".
+///
+/// SEPARATE from InvoiceSeries because the two have different grain: an issuer
+/// has ONE chain spanning every series and every year, while a counter resets
+/// per series-year. Replacing the old `findFirst(orderBy: invoicedAt desc)`,
+/// which ordered by a DATE — so a back-dated receipt chained onto whatever had
+/// the latest date rather than onto the actual previous record, and the chain
+/// did not follow its own numbering.
+model InvoiceChain {
+  /// `PartnerAccount.userId`, or the literal `PLATFORM`.
+  seriesKey     String   @id @map("series_key")
+  /// Hash of the most recent invoice in this chain; null before the first.
+  lastHash      String?  @map("last_hash")
+  /// Position of that invoice in the chain — the chain's own ordinal, which is
+  /// not a series sequence, because F and R share one chain.
+  lastSeqNo     Int      @default(0) @map("last_seq_no")
+  lastInvoiceId String?  @map("last_invoice_id")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("invoice_chain")
 }
 
 model InvoiceLine {

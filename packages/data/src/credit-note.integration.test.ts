@@ -72,7 +72,9 @@ describe('issueCashCreditNote', () => {
     expect(cn.creditsInvoiceId).toBe(receipt.id)
     expect(cn.totalAmount).toBe(-20)
     expect(cn.issuerType).toBe('PARTNER')
-    expect(cn.invoiceNumber).toMatch(/^PARTNER-CN-\d{4}-00001$/)
+    // Per-issuer now: <prefix>-R-<year>-<seq>. The prefix is derived from the
+    // partner's company name, so the test asserts the SHAPE, not the stem.
+    expect(cn.invoiceNumber).toMatch(/^[A-Z0-9]+-R-\d{4}-00001$/)
     // Internal consistency: base + VAT = total (negated reverse-VAT)
     expect(cn.totalCharge + cn.totalTax).toBeCloseTo(cn.totalAmount, 2)
     // Proportional to the receipt's own effective VAT
@@ -132,10 +134,10 @@ describe('issueCashCreditNote', () => {
   })
 
   it('CN series does not disturb the plain PARTNER receipt sequence', async () => {
-    const { reservation } = await receiptedWalkIn(20) // PARTNER-YYYY-00001
-    await issueCashCreditNote(reservation.id)         // PARTNER-CN-YYYY-00001
+    const { reservation } = await receiptedWalkIn(20) // <prefix>-F-YYYY-00001
+    await issueCashCreditNote(reservation.id)         // <prefix>-R-YYYY-00001
 
     const { receipt: second } = await receiptedWalkIn(10, 1)
-    expect(second.invoiceNumber).toMatch(/^PARTNER-\d{4}-00002$/) // dense, CN-independent
+    expect(second.invoiceNumber).toMatch(/^[A-Z0-9]+-F-\d{4}-00002$/) // dense, R-independent
   })
 })

@@ -47,6 +47,7 @@
     "./site-day": "./src/site-day.ts",
     "./fiscal": "./src/fiscal.ts",
     "./tab-payment": "./src/tab-payment.ts",
+    "./invoice-series": "./src/invoice-series.ts",
     "./payment-math": "./src/payment-math.ts",
     "./pricing-tiers": "./src/pricing-tiers.ts",
     "./mollie-app-fee": "./src/mollie-app-fee.ts",
@@ -144,6 +145,9 @@
       ],
       "tab-payment": [
         "./src/tab-payment.ts"
+      ],
+      "invoice-series": [
+        "./src/invoice-series.ts"
       ],
       "payment-math": [
         "./src/payment-math.ts"

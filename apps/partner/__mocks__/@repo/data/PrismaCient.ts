@@ -336,6 +336,17 @@ const prisma = {
     createMany: vi.fn(),
     findMany: vi.fn(),
   },
+  // Per-issuer numbering (track 026). The partner app never reads these — the
+  // allocator in @repo/data does — but the mock-contract guard requires a stub
+  // for every real model delegate, which is what catches a mock going stale.
+  invoiceSeries: {
+    findUnique: vi.fn(),
+    upsert: vi.fn(),
+  },
+  invoiceChain: {
+    findUnique: vi.fn(),
+    upsert: vi.fn(),
+  },
   session: {
     findMany: vi.fn(),
     deleteMany: vi.fn(),

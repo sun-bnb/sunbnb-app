@@ -249,8 +249,8 @@ describe('processChargedTableDeposit', () => {
       orderBy: { invoiceNumber: 'asc' },
     })
 
-    expect(partnerInvoices[0]!.invoiceNumber).toBe(`PARTNER-${year}-00001`)
-    expect(partnerInvoices[1]!.invoiceNumber).toBe(`PARTNER-${year}-00002`)
+    expect(partnerInvoices[0]!.invoiceNumber).toMatch(new RegExp(`^[A-Z0-9]+-F-${year}-00001$`))
+    expect(partnerInvoices[1]!.invoiceNumber).toMatch(new RegExp(`^[A-Z0-9]+-F-${year}-00002$`))
   })
 
   // ── Idempotency ────────────────────────────────────────────────────────────
@@ -267,16 +267,19 @@ describe('processChargedTableDeposit', () => {
     expect(invoices).toHaveLength(2)
   })
 
-  it('concurrent calls — unique constraint prevents double-invoice; one call throws', async () => {
-    // Bug-revealing: two concurrent calls both pass the outer idempotency guard
-    // (neither has committed yet), so both enter the transaction. The sequential
-    // invoice number is acquired inside the transaction under FOR UPDATE (safe
-    // against sequential calls), but two concurrent transactions can acquire
-    // different numbers and race on INSERT. The invoice_number unique constraint
-    // fires on the loser, throwing rather than silently no-op-ing.
+  it('concurrent calls — the second waits, sees the first, and no-ops', async () => {
+    // This test used to assert that one caller THREW. That was never the design:
+    // both callers passed the outer guard, both entered a transaction, and the
+    // duplicate was stopped only because every writer shared one global
+    // `PARTNER-YYYY-NNNNN` sequence, so the two collided on the invoice_number
+    // unique constraint and one died INSIDE a payment transaction.
     //
-    // Expected: exactly one call succeeds; the other rejects. No duplicate
-    // invoices are created — data integrity is preserved by the DB constraint.
+    // Per-issuer numbering removes that collision, so the serialisation is now
+    // deliberate: each writer takes the issuer's advisory lock before its
+    // idempotency re-check. The second caller waits, sees the first caller's
+    // committed invoices, and returns cleanly. Same protection, no exception
+    // thrown at a payment path, and no reliance on a constraint that existed
+    // for a different purpose.
     const { tableReservation } = await setupDeposit()
 
     const results = await Promise.allSettled([
@@ -284,13 +287,10 @@ describe('processChargedTableDeposit', () => {
       processChargedTableDeposit(tableReservation.id),
     ])
 
-    const fulfilled = results.filter((r) => r.status === 'fulfilled')
-    const rejected = results.filter((r) => r.status === 'rejected')
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(0)
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(2)
 
-    // Exactly one winner; the constraint prevents data corruption
-    expect(fulfilled).toHaveLength(1)
-    expect(rejected).toHaveLength(1)
-
+    // The load-bearing assertion: still exactly one PARTNER + one PLATFORM.
     const invoices = await prisma.invoice.findMany({
       where: { tableReservationId: tableReservation.id },
     })

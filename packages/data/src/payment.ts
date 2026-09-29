@@ -24,7 +24,6 @@
  * - Veri*factu ready: sequential invoice numbering and hash chaining per issuer
  */
 
-import crypto from 'crypto'
 import prisma from '../index'
 import { ServiceFee, SubscriptionTier } from '@prisma/client'
 import { getBusinessEntity } from './business-entity'
@@ -54,6 +53,15 @@ const TAB_ORDER_VOID_STATUSES = [
   ORDER_REFUNDED,
 ]
 import { resolveEffectiveFeatures, type SubscriptionFeatureKey } from './subscription'
+import {
+  allocateInvoiceIdentity,
+  ensureSeriesPrefix,
+  lockInvoiceSeries,
+  PLATFORM_SERIES_KEY,
+  PLATFORM_SERIES_PREFIX,
+  SERIES_FACTURA,
+  SERIES_RECTIFICATIVA,
+} from './invoice-series'
 
 // ─── Financial Utilities ────────────────────────────────────────────────────
 // Pure math lives in ./payment-math (client-safe, no prisma); re-exported here
@@ -158,91 +166,14 @@ function computeCommissionVat(
   return { base: baseAmount, vat: vatAmount, vatRate: platformVatRate, reverseCharge: false }
 }
 
-// ─── Invoice Numbering & Hashing (Veri*factu) ───────────────────────────────
-
-/**
- * Generate the next sequential invoice number for a given issuer type.
- * Format: PARTNER-YYYY-NNNNN or PLATFORM-YYYY-NNNNN
- *
- * Uses a raw query with FOR UPDATE to lock the row and prevent concurrent
- * transactions from generating duplicate numbers. The invoiceNumber column
- * also has a unique constraint as a safety net.
- *
- * @param year - The invoice year to use for numbering. Defaults to the
- *   current year. Pass `invoicedAt.getFullYear()` when back-dating so that
- *   a historical receipt is numbered in its sale year, not the current year.
- */
-async function nextInvoiceNumber(
-  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
-  issuerType: string,
-  year: number = new Date().getFullYear(),
-  /**
-   * Optional sub-series discriminator. Credit notes number in their own series
-   * (`PARTNER-CN-YYYY-NNNNN`) — the CN prefix keeps them out of the plain
-   * `PARTNER-YYYY-%` LIKE window, so both sequences stay dense and independent
-   * while sharing the issuer's hash chain.
-   */
-  series?: string
-): Promise<string> {
-  const prefix = `${issuerType}-${series ? `${series}-` : ''}${year}-`
-
-  // Lock the latest row for this issuer type to serialise number generation
-  const rows = await tx.$queryRawUnsafe<{ invoice_number: string | null }[]>(
-    `SELECT invoice_number FROM "Invoice"
-     WHERE issuer_type = $1 AND invoice_number LIKE $2
-     ORDER BY invoice_number DESC
-     LIMIT 1
-     FOR UPDATE`,
-    issuerType,
-    `${prefix}%`
-  )
-
-  let seq = 1
-  const lastNumber = rows[0]?.invoice_number
-  if (lastNumber) {
-    const parts = lastNumber.split('-')
-    const lastSeq = parseInt(parts[parts.length - 1] ?? '0', 10)
-    if (!isNaN(lastSeq)) seq = lastSeq + 1
-  }
-
-  return `${prefix}${String(seq).padStart(5, '0')}`
-}
-
-/**
- * Compute SHA-256 hash for Veri*factu chain.
- * Hash input: invoiceNumber|invoicedAt|totalAmount|issuerVatNumber|previousHash
- */
-function computeInvoiceHash(
-  invoiceNumber: string,
-  invoicedAt: Date,
-  totalAmount: number,
-  issuerVatNumber: string | null,
-  previousHash: string | null
-): string {
-  const input = [
-    invoiceNumber,
-    invoicedAt.toISOString(),
-    totalAmount.toFixed(2),
-    issuerVatNumber ?? '',
-    previousHash ?? '',
-  ].join('|')
-  return crypto.createHash('sha256').update(input).digest('hex')
-}
-
-/**
- * Get the hash of the last invoice in the chain for this issuer type.
- */
-async function getLastHash(
-  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
-  issuerType: string
-): Promise<string | null> {
-  const last = await tx.invoice.findFirst({
-    where: { issuerType, hash: { not: null } },
-    orderBy: { invoicedAt: 'desc' },
-    select: { hash: true },
-  })
-  return last?.hash ?? null
-}
+// ─── Invoice Numbering & Hashing ────────────────────────────────────────────
+//
+// Both moved to `./invoice-series` when numbering became PER ISSUER (track 026).
+// What used to live here keyed the series and the chain on the `issuerType`
+// string, so every partner in every country shared one sequence and one chain —
+// and `computeInvoiceHash` was private, which made the integrity claim
+// impossible to verify from outside this file. See that module's header for the
+// two concurrency/ordering defects the move also fixes.
 
 // ─── Fee Context Loading ────────────────────────────────────────────────────
 
@@ -657,6 +588,10 @@ export async function processConfirmedReservation(
   const feeCountry = feeSettings?.country ?? ''
 
   await prisma.$transaction(async (tx) => {
+    // Serialise this issuer first, so the re-check below actually sees a
+    // concurrent caller's work instead of racing it. See lockInvoiceSeries.
+    await lockInvoiceSeries(tx, partnerAccount?.userId ?? '')
+
     // Double-check idempotency inside transaction (race-safe)
     const current = await tx.reservation.findUnique({
       where: { id: reservationId },
@@ -667,15 +602,21 @@ export async function processConfirmedReservation(
     const invoicedAt = invoicedAtOverride ?? new Date()
     // Invoice number year comes from invoicedAt so that backfilled receipts
     // are numbered in their sale year, not the current calendar year.
-    const invoiceYear = invoicedAt.getFullYear()
 
     // ── 1. PARTNER Invoice (product lines) ──
 
     const { baseAmount: partnerBase, vatAmount: partnerVat } =
       computeVatAndBaseAmounts(partnerAmount, siteVatRate)
 
-    const partnerInvoiceNumber = await nextInvoiceNumber(tx, 'PARTNER', invoiceYear)
-    const partnerPrevHash = await getLastHash(tx, 'PARTNER')
+    const partnerIdentityKey = partnerAccount?.userId ?? ''
+    const partnerIdentity = await allocateInvoiceIdentity(tx, {
+      seriesKey: partnerIdentityKey,
+      seriesCode: SERIES_FACTURA,
+      invoicedAt,
+      totalAmount: partnerAmount,
+      issuerVatNumber: partnerAccount?.businessId ?? null,
+      prefix: await ensureSeriesPrefix(tx, partnerIdentityKey),
+    })
 
     const partnerInvoice = await tx.invoice.create({
       data: {
@@ -689,12 +630,7 @@ export async function processConfirmedReservation(
         issuerVatNumber: partnerAccount?.businessId ?? null,
         issuerCompanyName: partnerAccount?.company ?? null,
         issuerCompanyAddress: partnerAccount?.address ?? null,
-        invoiceNumber: partnerInvoiceNumber,
-        previousHash: partnerPrevHash,
-        hash: computeInvoiceHash(
-          partnerInvoiceNumber, invoicedAt, partnerAmount,
-          partnerAccount?.businessId ?? null, partnerPrevHash
-        ),
+        ...partnerIdentity,
       },
     })
 
@@ -727,8 +663,14 @@ export async function processConfirmedReservation(
         partnerAccount?.country, partnerAccount?.businessId, feeCountry
       )
 
-      const platformInvoiceNumber = await nextInvoiceNumber(tx, 'PLATFORM', invoiceYear)
-      const platformPrevHash = await getLastHash(tx, 'PLATFORM')
+      const platformIdentity = await allocateInvoiceIdentity(tx, {
+        seriesKey: PLATFORM_SERIES_KEY,
+        seriesCode: SERIES_FACTURA,
+        invoicedAt,
+        totalAmount: totalServiceFee,
+        issuerVatNumber: businessEntity.vatId || null,
+        prefix: PLATFORM_SERIES_PREFIX,
+      })
 
       const platformInvoice = await tx.invoice.create({
         data: {
@@ -744,12 +686,7 @@ export async function processConfirmedReservation(
           issuerCompanyAddress: businessEntity.companyAddress || null,
           ...commissionRecipientFields(partnerAccount),
           reverseCharge: commission.reverseCharge,
-          invoiceNumber: platformInvoiceNumber,
-          previousHash: platformPrevHash,
-          hash: computeInvoiceHash(
-            platformInvoiceNumber, invoicedAt, totalServiceFee,
-            businessEntity.vatId || null, platformPrevHash
-          ),
+          ...platformIdentity,
         },
       })
 
@@ -824,9 +761,9 @@ export type CashCreditNoteResult =
  * site's configured VAT has changed since the sale.
  *
  * Idempotent per remaining balance: re-running with the same amount after a
- * full credit is a no-op ('fully-credited'). Race-safe: the FOR UPDATE
- * invoice-number lock serialises concurrent issuers, and the balance re-check
- * runs inside the transaction.
+ * full credit is a no-op ('fully-credited'). Race-safe: the transaction takes
+ * the issuer's advisory lock before the balance re-check, so a concurrent
+ * issuer waits and then sees the committed credit rather than racing it.
  */
 export async function issueCashCreditNote(
   reservationId: string,
@@ -846,11 +783,16 @@ export async function issueCashCreditNote(
   if (!receipt) return { status: 'skipped', reason: 'no-receipt' }
 
   const invoicedAt = opts?.invoicedAt ?? new Date()
-  const invoiceYear = invoicedAt.getFullYear()
 
   const result = await prisma.$transaction(async (tx) => {
-    // Balance check INSIDE the tx (serialised by the number lock below for
-    // concurrent credit issuers on the same issuer series).
+    // Serialise this issuer BEFORE the balance check. The old comment claimed
+    // the number lock below did this, but that lock was taken after the check —
+    // what actually stopped two concurrent credit notes was the global
+    // invoice_number collision, which per-issuer numbering removes.
+    await lockInvoiceSeries(tx, receipt.accountId)
+
+    // Balance check INSIDE the tx, now genuinely race-safe: a concurrent issuer
+    // waits here and then sees the credit the first one committed.
     const credited = await tx.invoice.aggregate({
       where: { creditsInvoiceId: receipt.id },
       _sum: { totalAmount: true },
@@ -868,8 +810,15 @@ export async function issueCashCreditNote(
       receipt.totalCharge > 0 ? (receipt.totalTax / receipt.totalCharge) * 100 : 0
     const { baseAmount, vatAmount } = computeVatAndBaseAmounts(amount, effectiveVatRate)
 
-    const invoiceNumber = await nextInvoiceNumber(tx, 'PARTNER', invoiceYear, 'CN')
-    const previousHash = await getLastHash(tx, 'PARTNER')
+    const creditNoteIdentityKey = receipt.accountId
+    const creditNoteIdentity = await allocateInvoiceIdentity(tx, {
+      seriesKey: creditNoteIdentityKey,
+      seriesCode: SERIES_RECTIFICATIVA,
+      invoicedAt,
+      totalAmount: -amount,
+      issuerVatNumber: receipt.issuerVatNumber,
+      prefix: await ensureSeriesPrefix(tx, creditNoteIdentityKey),
+    })
 
     const creditNote = await tx.invoice.create({
       data: {
@@ -885,12 +834,7 @@ export async function issueCashCreditNote(
         issuerCompanyName: receipt.issuerCompanyName,
         issuerCompanyAddress: receipt.issuerCompanyAddress,
         product: receipt.product,
-        invoiceNumber,
-        previousHash,
-        hash: computeInvoiceHash(
-          invoiceNumber, invoicedAt, -amount,
-          receipt.issuerVatNumber, previousHash,
-        ),
+        ...creditNoteIdentity,
       },
     })
 
@@ -906,7 +850,12 @@ export async function issueCashCreditNote(
       },
     })
 
-    return { status: 'created' as const, invoiceId: creditNote.id, invoiceNumber, amount }
+    return {
+      status: 'created' as const,
+      invoiceId: creditNote.id,
+      invoiceNumber: creditNoteIdentity.invoiceNumber,
+      amount,
+    }
   })
 
   return result
@@ -990,6 +939,10 @@ export async function processConfirmedRentalBooking(
   const feeCountry = feeSettings?.country ?? ''
 
   await prisma.$transaction(async (tx) => {
+    // Serialise this issuer first, so the re-check below actually sees a
+    // concurrent caller's work instead of racing it. See lockInvoiceSeries.
+    await lockInvoiceSeries(tx, partnerAccount?.userId ?? '')
+
     // Double-check idempotency inside transaction
     const current = await tx.rentalBooking.findMany({
       where: { paymentRef },
@@ -1003,8 +956,15 @@ export async function processConfirmedRentalBooking(
     const { baseAmount: partnerBase, vatAmount: partnerVat } =
       computeVatAndBaseAmounts(partnerAmount, siteVatRate)
 
-    const partnerInvoiceNumber = await nextInvoiceNumber(tx, 'PARTNER')
-    const partnerPrevHash = await getLastHash(tx, 'PARTNER')
+    const partnerIdentityKey = partnerAccount?.userId ?? ''
+    const partnerIdentity = await allocateInvoiceIdentity(tx, {
+      seriesKey: partnerIdentityKey,
+      seriesCode: SERIES_FACTURA,
+      invoicedAt,
+      totalAmount: partnerAmount,
+      issuerVatNumber: partnerAccount?.businessId ?? null,
+      prefix: await ensureSeriesPrefix(tx, partnerIdentityKey),
+    })
 
     const partnerInvoice = await tx.invoice.create({
       data: {
@@ -1018,12 +978,7 @@ export async function processConfirmedRentalBooking(
         issuerVatNumber: partnerAccount?.businessId ?? null,
         issuerCompanyName: partnerAccount?.company ?? null,
         issuerCompanyAddress: partnerAccount?.address ?? null,
-        invoiceNumber: partnerInvoiceNumber,
-        previousHash: partnerPrevHash,
-        hash: computeInvoiceHash(
-          partnerInvoiceNumber, invoicedAt, partnerAmount,
-          partnerAccount?.businessId ?? null, partnerPrevHash
-        ),
+        ...partnerIdentity,
       },
     })
 
@@ -1056,8 +1011,14 @@ export async function processConfirmedRentalBooking(
         partnerAccount?.country, partnerAccount?.businessId, feeCountry
       )
 
-      const platformInvoiceNumber = await nextInvoiceNumber(tx, 'PLATFORM')
-      const platformPrevHash = await getLastHash(tx, 'PLATFORM')
+      const platformIdentity = await allocateInvoiceIdentity(tx, {
+        seriesKey: PLATFORM_SERIES_KEY,
+        seriesCode: SERIES_FACTURA,
+        invoicedAt,
+        totalAmount: totalServiceFee,
+        issuerVatNumber: businessEntity.vatId || null,
+        prefix: PLATFORM_SERIES_PREFIX,
+      })
 
       const platformInvoice = await tx.invoice.create({
         data: {
@@ -1073,12 +1034,7 @@ export async function processConfirmedRentalBooking(
           issuerCompanyAddress: businessEntity.companyAddress || null,
           ...commissionRecipientFields(partnerAccount),
           reverseCharge: commission.reverseCharge,
-          invoiceNumber: platformInvoiceNumber,
-          previousHash: platformPrevHash,
-          hash: computeInvoiceHash(
-            platformInvoiceNumber, invoicedAt, totalServiceFee,
-            businessEntity.vatId || null, platformPrevHash
-          ),
+          ...platformIdentity,
         },
       })
 
@@ -1181,6 +1137,10 @@ export async function processCashRentalBooking(
   const siteVatRate = site.rentalVat ?? site.vat ?? 0
 
   await prisma.$transaction(async (tx) => {
+    // Serialise this issuer first, so the re-check below actually sees a
+    // concurrent caller's work instead of racing it. See lockInvoiceSeries.
+    await lockInvoiceSeries(tx, partnerAccount?.userId ?? '')
+
     // Double-check idempotency inside transaction (race-safe) — by paymentRef.
     const invoiceCount = await tx.invoice.count({ where: { paymentRef: cashRef } })
     if (invoiceCount > 0) return
@@ -1188,15 +1148,21 @@ export async function processCashRentalBooking(
     const invoicedAt = invoicedAtOverride ?? new Date()
     // Invoice number year comes from invoicedAt so that backfilled receipts
     // are numbered in their sale year, not the current calendar year.
-    const invoiceYear = invoicedAt.getFullYear()
 
     // ── PARTNER Invoice (single equipment line) ──
 
     const { baseAmount: partnerBase, vatAmount: partnerVat } =
       computeVatAndBaseAmounts(bookingPrice, siteVatRate)
 
-    const partnerInvoiceNumber = await nextInvoiceNumber(tx, 'PARTNER', invoiceYear)
-    const partnerPrevHash = await getLastHash(tx, 'PARTNER')
+    const partnerIdentityKey = partnerAccount?.userId ?? ''
+    const partnerIdentity = await allocateInvoiceIdentity(tx, {
+      seriesKey: partnerIdentityKey,
+      seriesCode: SERIES_FACTURA,
+      invoicedAt,
+      totalAmount: bookingPrice,
+      issuerVatNumber: partnerAccount?.businessId ?? null,
+      prefix: await ensureSeriesPrefix(tx, partnerIdentityKey),
+    })
 
     const partnerInvoice = await tx.invoice.create({
       data: {
@@ -1210,12 +1176,7 @@ export async function processCashRentalBooking(
         issuerVatNumber: partnerAccount?.businessId ?? null,
         issuerCompanyName: partnerAccount?.company ?? null,
         issuerCompanyAddress: partnerAccount?.address ?? null,
-        invoiceNumber: partnerInvoiceNumber,
-        previousHash: partnerPrevHash,
-        hash: computeInvoiceHash(
-          partnerInvoiceNumber, invoicedAt, bookingPrice,
-          partnerAccount?.businessId ?? null, partnerPrevHash
-        ),
+        ...partnerIdentity,
       },
     })
 
@@ -1366,6 +1327,10 @@ export async function processConfirmedOrder(
   const feeCountry = feeSettings?.country ?? ''
 
   await prisma.$transaction(async (tx) => {
+    // Serialise this issuer first, so the re-check below actually sees a
+    // concurrent caller's work instead of racing it. See lockInvoiceSeries.
+    await lockInvoiceSeries(tx, partnerAccount?.userId ?? '')
+
     // Double-check idempotency inside transaction (race-safe).
     // Same logic as the outer guard: cash path checks invoice existence only.
     const current = await tx.order.findUnique({
@@ -1378,12 +1343,18 @@ export async function processConfirmedOrder(
     const invoicedAt = invoicedAtOverride ?? new Date()
     // Invoice number year comes from invoicedAt so that backfilled receipts
     // are numbered in their sale year, not the current calendar year.
-    const invoiceYear = invoicedAt.getFullYear()
 
     // ── 1. PARTNER Invoice (product lines) ──
 
-    const partnerInvoiceNumber = await nextInvoiceNumber(tx, 'PARTNER', invoiceYear)
-    const partnerPrevHash = await getLastHash(tx, 'PARTNER')
+    const partnerIdentityKey = partnerAccount?.userId ?? ''
+    const partnerIdentity = await allocateInvoiceIdentity(tx, {
+      seriesKey: partnerIdentityKey,
+      seriesCode: SERIES_FACTURA,
+      invoicedAt,
+      totalAmount: totalPartnerAmount,
+      issuerVatNumber: partnerAccount?.businessId ?? null,
+      prefix: await ensureSeriesPrefix(tx, partnerIdentityKey),
+    })
 
     const partnerInvoice = await tx.invoice.create({
       data: {
@@ -1397,12 +1368,7 @@ export async function processConfirmedOrder(
         issuerVatNumber: partnerAccount?.businessId ?? null,
         issuerCompanyName: partnerAccount?.company ?? null,
         issuerCompanyAddress: partnerAccount?.address ?? null,
-        invoiceNumber: partnerInvoiceNumber,
-        previousHash: partnerPrevHash,
-        hash: computeInvoiceHash(
-          partnerInvoiceNumber, invoicedAt, totalPartnerAmount,
-          partnerAccount?.businessId ?? null, partnerPrevHash
-        ),
+        ...partnerIdentity,
       },
     })
 
@@ -1430,8 +1396,14 @@ export async function processConfirmedOrder(
         partnerAccount?.country, partnerAccount?.businessId, feeCountry
       )
 
-      const platformInvoiceNumber = await nextInvoiceNumber(tx, 'PLATFORM', invoiceYear)
-      const platformPrevHash = await getLastHash(tx, 'PLATFORM')
+      const platformIdentity = await allocateInvoiceIdentity(tx, {
+        seriesKey: PLATFORM_SERIES_KEY,
+        seriesCode: SERIES_FACTURA,
+        invoicedAt,
+        totalAmount: serviceFeeAmount,
+        issuerVatNumber: businessEntity.vatId || null,
+        prefix: PLATFORM_SERIES_PREFIX,
+      })
 
       const platformInvoice = await tx.invoice.create({
         data: {
@@ -1447,12 +1419,7 @@ export async function processConfirmedOrder(
           issuerCompanyAddress: businessEntity.companyAddress || null,
           ...commissionRecipientFields(partnerAccount),
           reverseCharge: commission.reverseCharge,
-          invoiceNumber: platformInvoiceNumber,
-          previousHash: platformPrevHash,
-          hash: computeInvoiceHash(
-            platformInvoiceNumber, invoicedAt, serviceFeeAmount,
-            businessEntity.vatId || null, platformPrevHash
-          ),
+          ...platformIdentity,
         },
       })
 
@@ -1570,6 +1537,10 @@ export async function processChargedTableDeposit(
   const feeCountry = feeSettings?.country ?? ''
 
   await prisma.$transaction(async (tx) => {
+    // Serialise this issuer first, so the re-check below actually sees a
+    // concurrent caller's work instead of racing it. See lockInvoiceSeries.
+    await lockInvoiceSeries(tx, partnerAccount?.userId ?? '')
+
     // Double-check idempotency inside transaction (race-safe)
     const current = await tx.tableReservation.findUnique({
       where: { id: tableReservationId },
@@ -1584,8 +1555,15 @@ export async function processChargedTableDeposit(
     const { baseAmount: partnerBase, vatAmount: partnerVat } =
       computeVatAndBaseAmounts(partnerAmount, siteVatRate)
 
-    const partnerInvoiceNumber = await nextInvoiceNumber(tx, 'PARTNER')
-    const partnerPrevHash = await getLastHash(tx, 'PARTNER')
+    const partnerIdentityKey = partnerAccount?.userId ?? ''
+    const partnerIdentity = await allocateInvoiceIdentity(tx, {
+      seriesKey: partnerIdentityKey,
+      seriesCode: SERIES_FACTURA,
+      invoicedAt,
+      totalAmount: partnerAmount,
+      issuerVatNumber: partnerAccount?.businessId ?? null,
+      prefix: await ensureSeriesPrefix(tx, partnerIdentityKey),
+    })
 
     const partnerInvoice = await tx.invoice.create({
       data: {
@@ -1599,12 +1577,7 @@ export async function processChargedTableDeposit(
         issuerVatNumber: partnerAccount?.businessId ?? null,
         issuerCompanyName: partnerAccount?.company ?? null,
         issuerCompanyAddress: partnerAccount?.address ?? null,
-        invoiceNumber: partnerInvoiceNumber,
-        previousHash: partnerPrevHash,
-        hash: computeInvoiceHash(
-          partnerInvoiceNumber, invoicedAt, partnerAmount,
-          partnerAccount?.businessId ?? null, partnerPrevHash
-        ),
+        ...partnerIdentity,
         product: 'restaurant',
       },
     })
@@ -1630,8 +1603,14 @@ export async function processChargedTableDeposit(
         partnerAccount?.country, partnerAccount?.businessId, feeCountry
       )
 
-      const platformInvoiceNumber = await nextInvoiceNumber(tx, 'PLATFORM')
-      const platformPrevHash = await getLastHash(tx, 'PLATFORM')
+      const platformIdentity = await allocateInvoiceIdentity(tx, {
+        seriesKey: PLATFORM_SERIES_KEY,
+        seriesCode: SERIES_FACTURA,
+        invoicedAt,
+        totalAmount: totalServiceFee,
+        issuerVatNumber: businessEntity.vatId || null,
+        prefix: PLATFORM_SERIES_PREFIX,
+      })
 
       const platformInvoice = await tx.invoice.create({
         data: {
@@ -1647,12 +1626,7 @@ export async function processChargedTableDeposit(
           issuerCompanyAddress: businessEntity.companyAddress || null,
           ...commissionRecipientFields(partnerAccount),
           reverseCharge: commission.reverseCharge,
-          invoiceNumber: platformInvoiceNumber,
-          previousHash: platformPrevHash,
-          hash: computeInvoiceHash(
-            platformInvoiceNumber, invoicedAt, totalServiceFee,
-            businessEntity.vatId || null, platformPrevHash
-          ),
+          ...platformIdentity,
           product: 'restaurant',
         },
       })
@@ -1923,6 +1897,10 @@ export async function processConfirmedTabPayment(
   const paymentRef = tab.paymentRef
 
   await prisma.$transaction(async (tx) => {
+    // Serialise this issuer first, so the re-check below actually sees a
+    // concurrent caller's work instead of racing it. See lockInvoiceSeries.
+    await lockInvoiceSeries(tx, partnerAccount?.userId ?? '')
+
     // Double-check idempotency inside transaction (race-safe).
     // Both TAB_PAID and TAB_SETTLED_CASH are terminal — a cash-settled tab
     // must not be re-processable by a late online webhook, and vice versa.
@@ -1937,8 +1915,15 @@ export async function processConfirmedTabPayment(
 
     // ── 1. PARTNER Invoice (all order item lines) ──
 
-    const partnerInvoiceNumber = await nextInvoiceNumber(tx, 'PARTNER')
-    const partnerPrevHash = await getLastHash(tx, 'PARTNER')
+    const partnerIdentityKey = partnerAccount?.userId ?? ''
+    const partnerIdentity = await allocateInvoiceIdentity(tx, {
+      seriesKey: partnerIdentityKey,
+      seriesCode: SERIES_FACTURA,
+      invoicedAt,
+      totalAmount: totalPartnerAmount,
+      issuerVatNumber: partnerAccount?.businessId ?? null,
+      prefix: await ensureSeriesPrefix(tx, partnerIdentityKey),
+    })
 
     const partnerInvoice = await tx.invoice.create({
       data: {
@@ -1953,12 +1938,7 @@ export async function processConfirmedTabPayment(
         issuerVatNumber: partnerAccount?.businessId ?? null,
         issuerCompanyName: partnerAccount?.company ?? null,
         issuerCompanyAddress: partnerAccount?.address ?? null,
-        invoiceNumber: partnerInvoiceNumber,
-        previousHash: partnerPrevHash,
-        hash: computeInvoiceHash(
-          partnerInvoiceNumber, invoicedAt, totalPartnerAmount,
-          partnerAccount?.businessId ?? null, partnerPrevHash
-        ),
+        ...partnerIdentity,
         product: 'restaurant',
       },
     })
@@ -1985,8 +1965,14 @@ export async function processConfirmedTabPayment(
         partnerAccount?.country, partnerAccount?.businessId, feeCountry
       )
 
-      const platformInvoiceNumber = await nextInvoiceNumber(tx, 'PLATFORM')
-      const platformPrevHash = await getLastHash(tx, 'PLATFORM')
+      const platformIdentity = await allocateInvoiceIdentity(tx, {
+        seriesKey: PLATFORM_SERIES_KEY,
+        seriesCode: SERIES_FACTURA,
+        invoicedAt,
+        totalAmount: serviceFeeAmount,
+        issuerVatNumber: businessEntity.vatId || null,
+        prefix: PLATFORM_SERIES_PREFIX,
+      })
 
       const platformInvoice = await tx.invoice.create({
         data: {
@@ -2003,12 +1989,7 @@ export async function processConfirmedTabPayment(
           issuerCompanyAddress: businessEntity.companyAddress || null,
           ...commissionRecipientFields(partnerAccount),
           reverseCharge: commission.reverseCharge,
-          invoiceNumber: platformInvoiceNumber,
-          previousHash: platformPrevHash,
-          hash: computeInvoiceHash(
-            platformInvoiceNumber, invoicedAt, serviceFeeAmount,
-            businessEntity.vatId || null, platformPrevHash
-          ),
+          ...platformIdentity,
           product: 'restaurant',
         },
       })
