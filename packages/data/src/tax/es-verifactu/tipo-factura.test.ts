@@ -3,7 +3,9 @@ import {
   buildDesglose,
   classifyTipoFactura,
   isLegalEsVatRate,
-  SIMPLIFIED_INVOICE_CEILING,
+  SIMPLIFIED_CEILING_GENERAL,
+  SIMPLIFIED_CEILING_LISTED,
+  simplifiedCeilingFor,
 } from './tipo-factura'
 
 describe('classifyTipoFactura', () => {
@@ -53,30 +55,66 @@ describe('classifyTipoFactura', () => {
     expect(r.ok).toBe(false)
   })
 
-  it('REFUSES a recipient-less sale above the simplified ceiling', () => {
+  it('REFUSES a recipient-less sale above the ceiling that applies to it', () => {
     // It can be neither F2 (over the limit) nor F1 (no recipient details were
     // ever collected). Surfacing that is the only honest option.
     const r = classifyTipoFactura({
-      totalAmount: SIMPLIFIED_INVOICE_CEILING + 0.01,
+      totalAmount: SIMPLIFIED_CEILING_GENERAL + 0.01,
       hasRecipient: false,
       creditsInvoice: false,
+      productCodes: ['sunbed-rental'],
     })
     expect(r.ok).toBe(false)
-    if (!r.ok) expect(r.reason).toContain('ceiling')
+    if (!r.ok) expect(r.reason).toContain('RD 1619/2012')
   })
 
   it('accepts a sale exactly at the ceiling', () => {
     expect(
       classifyTipoFactura({
-        totalAmount: SIMPLIFIED_INVOICE_CEILING,
+        totalAmount: SIMPLIFIED_CEILING_GENERAL,
         hasRecipient: false,
         creditsInvoice: false,
+        productCodes: ['sunbed-rental'],
+      }),
+    ).toEqual({ ok: true, tipoFactura: 'F2' })
+  })
+
+  it('lets a hostelería sale run to the higher ceiling', () => {
+    // RD 1619/2012 art. 4.2.e — the clearest entry on the list for a chiringuito.
+    expect(
+      classifyTipoFactura({
+        totalAmount: 1500,
+        hasRecipient: false,
+        creditsInvoice: false,
+        productCodes: ['food-and-beverage'],
       }),
     ).toEqual({ ok: true, tipoFactura: 'F2' })
   })
 
   it('never binds on real data — the largest invoice ever issued is 216', () => {
-    expect(SIMPLIFIED_INVOICE_CEILING).toBeGreaterThan(216)
+    expect(SIMPLIFIED_CEILING_GENERAL).toBeGreaterThan(216)
+  })
+})
+
+describe('simplifiedCeilingFor', () => {
+  it('puts hostelería on the higher ceiling and loungers on the general one', () => {
+    expect(simplifiedCeilingFor(['food-and-beverage'])).toBe(SIMPLIFIED_CEILING_LISTED)
+    expect(simplifiedCeilingFor(['sunbed-rental'])).toBe(SIMPLIFIED_CEILING_GENERAL)
+  })
+
+  it('takes the LOWEST ceiling on a mixed receipt', () => {
+    // A receipt with loungers and drinks is not covered by the higher limit
+    // merely because half of it would be. The alternative is deciding a mixed
+    // sale is whichever half is convenient.
+    expect(simplifiedCeilingFor(['food-and-beverage', 'sunbed-rental']))
+      .toBe(SIMPLIFIED_CEILING_GENERAL)
+  })
+
+  it('treats an unclassified or missing code as general', () => {
+    // A code nobody has classified is not evidence of belonging to the list.
+    expect(simplifiedCeilingFor(['something-new'])).toBe(SIMPLIFIED_CEILING_GENERAL)
+    expect(simplifiedCeilingFor([null])).toBe(SIMPLIFIED_CEILING_GENERAL)
+    expect(simplifiedCeilingFor([])).toBe(SIMPLIFIED_CEILING_GENERAL)
   })
 })
 

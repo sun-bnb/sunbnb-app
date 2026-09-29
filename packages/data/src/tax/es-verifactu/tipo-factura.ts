@@ -10,18 +10,67 @@
 export type TipoFactura = 'F1' | 'F2' | 'R1' | 'R5'
 
 /**
- * Ceiling for a *factura simplificada*.
+ * Ceilings for a *factura simplificada*, from **RD 1619/2012 art. 4**.
  *
- * €400 is the general limit. Certain activities — hospitality and restaurant
- * services among them — are allowed €3,000, which very likely covers a beach
- * club, but "very likely" is not a basis for choosing a tax document type, so
- * the conservative figure stands until the asesor confirms which applies.
+ * The general limit is €400 including VAT. A listed set of operations gets
+ * €3,000 — and the list is by ACTIVITY, not by invoice, which is the part that
+ * matters here: a beach club selling both drinks and sunbed hire is under two
+ * different ceilings at the same counter.
  *
- * In practice this has never bound: the largest invoice ever issued on the
- * platform is €216 and the average is €26.65. The classifier still REFUSES
- * above it rather than guessing, so the day it does bind, someone is told.
+ * Art. 4.2's list, verbatim: ventas al por menor · ventas o servicios en
+ * ambulancia · ventas o servicios a domicilio del consumidor · transportes de
+ * personas y sus equipajes · **servicios de hostelería y restauración** ·
+ * salas de baile y discotecas · servicios telefónicos en cabinas · peluquería e
+ * institutos de belleza · **utilización de instalaciones deportivas** · revelado
+ * de fotografías · aparcamiento de vehículos · alquiler de películas ·
+ * tintorería y lavandería · autopistas de peaje.
  */
-export const SIMPLIFIED_INVOICE_CEILING = 400
+export const SIMPLIFIED_CEILING_GENERAL = 400
+export const SIMPLIFIED_CEILING_LISTED = 3000
+
+/**
+ * Which ceiling each of our product codes sits under.
+ *
+ * `food-and-beverage` and `no-show-deposit` are *hostelería y restauración*
+ * (art. 4.2.e) — the clearest entry on the list for a chiringuito, and a
+ * table deposit is ancillary to that same service.
+ *
+ * `sunbed-rental` and `equipment-rental` are held at the GENERAL ceiling, which
+ * is a deliberate conservative reading rather than a settled one. Hiring a
+ * lounger is not a *venta al por menor* (nothing is sold) and a sunbed is not an
+ * *instalación deportiva*; equipment hire has a better claim to 4.2.i but it is
+ * an argument, not a fact. Being wrong in this direction costs nothing today —
+ * the largest invoice ever issued on the platform is €216 — while being wrong
+ * the other way would file a real sale as the wrong document type. Narrowing
+ * this is D5 in the track, and it is now a single question for the asesor
+ * rather than an open-ended one.
+ */
+const CEILING_BY_PRODUCT_CODE: Record<string, number> = {
+  'food-and-beverage': SIMPLIFIED_CEILING_LISTED,
+  'no-show-deposit': SIMPLIFIED_CEILING_LISTED,
+  'sunbed-rental': SIMPLIFIED_CEILING_GENERAL,
+  'equipment-rental': SIMPLIFIED_CEILING_GENERAL,
+}
+
+/**
+ * The ceiling governing an invoice, given what it sells.
+ *
+ * Takes the LOWEST applicable ceiling across the lines. A receipt mixing
+ * loungers and drinks is not covered by the higher limit merely because part of
+ * it would be — the conservative reading is the only safe one, and the
+ * alternative is deciding that a mixed sale is whichever half is convenient.
+ *
+ * An unknown product code also lands on the general ceiling: a code nobody has
+ * classified is not evidence of belonging to the list.
+ */
+export function simplifiedCeilingFor(productCodes: (string | null)[]): number {
+  const ceilings = productCodes.map(
+    (code) => (code && CEILING_BY_PRODUCT_CODE[code]) || SIMPLIFIED_CEILING_GENERAL,
+  )
+  return ceilings.length === 0
+    ? SIMPLIFIED_CEILING_GENERAL
+    : Math.min(...ceilings)
+}
 
 export interface ClassifyInput {
   /** Gross total. Negative for a credit note. */
@@ -30,6 +79,11 @@ export interface ClassifyInput {
   hasRecipient: boolean
   /** Set when this document credits another one. */
   creditsInvoice: boolean
+  /**
+   * The invoice's line product codes, which decide the simplified ceiling.
+   * Omitted means the general ceiling — the safe default.
+   */
+  productCodes?: (string | null)[]
   /** The kind of the invoice being credited, when this is a credit note. */
   creditedTipoFactura?: TipoFactura | null
 }
@@ -71,13 +125,14 @@ export function classifyTipoFactura(input: ClassifyInput): ClassifyResult {
 
   if (input.hasRecipient) return { ok: true, tipoFactura: 'F1' }
 
-  if (Math.abs(input.totalAmount) > SIMPLIFIED_INVOICE_CEILING) {
+  const ceiling = simplifiedCeilingFor(input.productCodes ?? [])
+  if (Math.abs(input.totalAmount) > ceiling) {
     return {
       ok: false,
       reason:
         `A sale of ${input.totalAmount.toFixed(2)} exceeds the simplified-invoice ceiling ` +
-        `of ${SIMPLIFIED_INVOICE_CEILING} and has no recipient, so it can be neither F2 nor F1. ` +
-        'Collect the customer’s tax details, or confirm the higher ceiling for this activity.',
+        `of ${ceiling} that applies to what it sells (RD 1619/2012 art. 4), and it has no ` +
+        'recipient, so it can be neither F2 nor F1. Collect the customer’s tax details.',
     }
   }
 

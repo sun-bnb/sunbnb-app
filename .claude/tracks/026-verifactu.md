@@ -152,6 +152,11 @@ clean-slate deletion (D3) is deferred to cutover.
   found — values must be TRIMMED, which the implementation was not doing. All three
   official worked examples are now pinned. Also learned from §7, and load-bearing for P7: a
   mismatched huella is "Aceptado con errores", not a rejection.
+- **2026-09-29 — D5 narrowed.** RD 1619/2012 art. 4 read in full. The simplified-invoice
+  ceiling turns out to attach to the ACTIVITY rather than the invoice, so the single
+  constant was the wrong model and the classifier now derives the ceiling from line product
+  codes, lowest wins on a mixed receipt. F&B is settled at €3,000 (art. 4.2.e); whether
+  sunbed and equipment hire are on the list at all is the one question left.
 - **2026-09-29 — D4 answered.** AEAT does not certify, approve or homologate billing
   software at all; RD 1007/2023 works by the PRODUCER self-certifying, with no registry and
   no filing. Sunbnb is that producer. Two consequences: the live legal page's "certified
@@ -215,9 +220,22 @@ clean-slate deletion (D3) is deferred to cutover.
     publishes; **the first half is a screen we have to build** — see P9a.
   - **Remaining:** the founder signs the declaration (content is drawable from the bullet
     above), and P9a ships the in-app surface.
-- **D5 — F2 ceiling.** Implemented conservatively at €400; hospitality likely qualifies for
-  €3,000. Has never bound (largest invoice ever €216) and the classifier REFUSES rather than
-  guesses above it.
+- ◐ **D5 — NARROWED 2026-09-29 to one question.** Source: **RD 1619/2012 art. 4** (BOE),
+  read in full. General ceiling €400 incl. VAT; €3,000 for a closed list of activities.
+  - **The ceiling attaches to the OPERATION, not the invoice** — which was the real finding.
+    A beach club selling drinks and lounger hire at the same counter is under two different
+    ceilings, so a single constant was the wrong model. `simplifiedCeilingFor` now derives it
+    from the line product codes and takes the LOWEST on a mixed receipt: a receipt is not
+    covered by the higher limit merely because half of it would be.
+  - **Settled:** `food-and-beverage` and `no-show-deposit` are *servicios de hostelería y
+    restauración* (art. 4.2.e) → €3,000. The clearest entry on the list for a chiringuito.
+  - **The one remaining question for the asesor:** do `sunbed-rental` and `equipment-rental`
+    fall within the art. 4.2 list at all? Hiring a lounger is not a *venta al por menor*
+    (nothing is sold) and a sunbed is not an *instalación deportiva*; equipment hire has a
+    better claim to 4.2.i but it is an argument, not a fact. Both are held at the general
+    €400 in the meantime. Being wrong that way costs nothing today — the largest invoice
+    ever issued is €216 — while being wrong the other way files a real sale as the wrong
+    document type.
 - **D6 — Legacy data.** 120 invoices carry `"Alonso Beach"` as issuer tax id and 29 credit
   notes carry illegal VAT rates. Both are frozen, not corrected — `buildDesglose` refuses the
   rates so they cannot reach AEAT by accident. D3 removes both when it runs.
