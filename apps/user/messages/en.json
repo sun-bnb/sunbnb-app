@@ -153,6 +153,7 @@
   "Receipt": {
     "Location": "Location",
     "Date": "Date",
+    "Table": "Table",
     "Seats": "Seats",
     "Invoice": "Invoice",
     "Item": "Item",
@@ -295,7 +296,8 @@
     "paidSubtitle": "Thank you! Enjoy the rest of your day.",
     "startNewOrder": "Start a new order",
     "tabClosedTitle": "This tab is closed",
-    "tabClosedSubtitle": "This tab has already been settled or cancelled."
+    "tabClosedSubtitle": "This tab has already been settled or cancelled.",
+    "viewReceipt": "View receipt"
   },
   "TableBooking": {
     "pageTitle": "Book a table at {name}",

@@ -256,6 +256,10 @@ export default function DineView({
 
   // Capture the pre-payment totals so we can display them on the paid screen
   const [prePaidTotal, setPrePaidTotal] = useState<number | undefined>(undefined)
+  // …and the tab's id, which is the only way to reach its receipt afterwards:
+  // paying closes the tab, `getTabState` looks up by openTableId and then
+  // returns null, so by the time the paid screen renders the id is gone.
+  const [paidTabId, setPaidTabId] = useState<string | undefined>(undefined)
 
   const fetchTab = useCallback(async () => {
     const res = await getTabState(context.table.id)
@@ -296,6 +300,9 @@ export default function DineView({
     const prevStatus = prevTabStatusRef.current
     if (tab !== null) {
       prevTabStatusRef.current = tab.status
+      // A companion phone never presses pay, so this is its only chance to
+      // learn the id before the tab closes and disappears from getTabState.
+      setPaidTabId(tab.id)
     }
 
     // If we're currently watching pending_payment (companion phone) and tab
@@ -430,9 +437,11 @@ export default function DineView({
   // ── Close & pay handlers ──────────────────────────────────────────────────
 
   const handlePayClick = () => {
-    // Capture totals before payment so paid state can display them
+    // Capture totals and the tab id before payment, so the paid state can
+    // display the one and link to the receipt for the other.
     if (tab) {
       setPrePaidTotal(tab.totals.payableTotal)
+      setPaidTabId(tab.id)
     }
     setUiState({ phase: 'confirm_pay' })
   }
@@ -533,6 +542,15 @@ export default function DineView({
             <p className="text-2xl font-bold text-gray-900 mt-2">{total.toFixed(2)}&nbsp;€</p>
           )}
         </div>
+        {paidTabId && (
+          <a
+            href={`/tabs/${paidTabId}/receipt`}
+            className="text-sm font-medium text-gray-600 underline underline-offset-4
+                       active:text-gray-900"
+          >
+            {t('viewReceipt')}
+          </a>
+        )}
         <button
           onClick={() => {
             // Navigate back to the dine page without ?tabReturn so a fresh tab

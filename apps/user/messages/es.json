@@ -152,6 +152,7 @@
   "Receipt": {
     "Location": "Ubicación",
     "Date": "Fecha",
+    "Table": "Mesa",
     "Seats": "Asientos",
     "Invoice": "Factura",
     "Item": "Artículo",
@@ -294,7 +295,8 @@
     "paidSubtitle": "¡Gracias! Disfruta el resto del día.",
     "startNewOrder": "Hacer un nuevo pedido",
     "tabClosedTitle": "Esta cuenta está cerrada",
-    "tabClosedSubtitle": "Esta cuenta ya ha sido liquidada o cancelada."
+    "tabClosedSubtitle": "Esta cuenta ya ha sido liquidada o cancelada.",
+    "viewReceipt": "Ver recibo"
   },
   "TableBooking": {
     "pageTitle": "Reservar mesa en {name}",

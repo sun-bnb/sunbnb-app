@@ -1,127 +1,37 @@
-import prisma from '@repo/data/PrismaCient'
 import { auth } from '@/app/auth'
-import ReceiptPage, { ReceiptProps, InvoiceSection } from '@/app/reservations/[id]/receipt/ReceiptPage'
-
-async function getRentalBooking(id: string) {
-  return prisma.rentalBooking.findUnique({
-    where: { id },
-    include: {
-      site: {
-        include: {
-          user: {
-            include: {
-              partnerAccount: true,
-            },
-          },
-        },
-      },
-      rentalItem: { select: { id: true, name: true, category: true } },
-    },
-  })
-}
+import { buildRentalReceipt } from '@repo/data/receipt'
+import ReceiptPage from '@/app/reservations/[id]/receipt/ReceiptPage'
 
 /**
- * Extract country code from a service fee description like "Equipment rental service fee (FI)".
+ * Consumer receipt for an equipment rental.
+ *
+ * This file was a near-copy of the reservation route, down to its own
+ * `extractCountryCode` and section mapping. Both now share
+ * `@repo/data/receipt`; a rental's only link to its invoice is the paymentRef
+ * the group shares, which the loader owns.
  */
-function extractCountryCode(lines: { description: string | null }[]): string | null {
-  for (const line of lines) {
-    const match = line.description?.match(/\(([A-Z]{2,3})\)\s*$/)
-    if (match) return match[1]!
-  }
-  return null
-}
-
-function buildSection(invoice: {
-  invoiceNumber: string | null
-  issuerCompanyName: string | null
-  issuerVatNumber: string | null
-  issuerCompanyAddress: string | null
-  totalCharge: number
-  totalTax: number
-  totalAmount: number
-  invoiceLines: {
-    description: string | null
-    charge: number
-    vatRate: number | null
-    tax: number
-    amount: number
-  }[]
-}, fallbackName: string, fallbackPhone?: string | null): InvoiceSection {
-  return {
-    invoiceNumber: invoice.invoiceNumber,
-    merchantName: invoice.issuerCompanyName ?? fallbackName,
-    merchantVatId: invoice.issuerVatNumber,
-    merchantAddress: invoice.issuerCompanyAddress,
-    merchantPhone: fallbackPhone ?? null,
-    vatCountryCode: extractCountryCode(invoice.invoiceLines),
-    lines: invoice.invoiceLines.map((l) => ({
-      description: l.description,
-      charge: l.charge,
-      vatRate: l.vatRate,
-      vat: l.tax,
-      total: l.amount,
-    })),
-    subtotalCharge: invoice.totalCharge,
-    subtotalVat: invoice.totalTax,
-    subtotalAmount: invoice.totalAmount,
-  }
-}
-
-export default async function RentalReceipt({ params }: { params: { id: string } }) {
-
+export default async function RentalReceipt({
+  params,
+  searchParams,
+}: {
+  params: { id: string }
+  searchParams: { [key: string]: string }
+}) {
+  const { anonId: anonIdParam } = searchParams
   const session = await auth()
-  if (!session?.user) return <div>Not authorized</div>
 
-  const booking = await getRentalBooking(params.id)
-  if (!booking) return <div>Booking not found</div>
-  if (booking.userId !== session.user.id) return <div>Not authorized</div>
+  const result = await buildRentalReceipt(params.id)
 
-  if (!booking.paymentRef) {
-    return <div>No payment record found</div>
+  if (result.status === 'not-found') return <div>Rental not found</div>
+  if (result.status === 'no-invoice') return <div>Receipt is not ready yet</div>
+
+  const owner = result.owner
+  if (owner) {
+    const authorized = session?.user?.id
+      ? owner.userId === session.user.id
+      : Boolean(anonIdParam) && owner.anonId === anonIdParam
+    if (!authorized) return <div>Not authorized</div>
   }
 
-  // Look up invoices by paymentRef
-  const invoices = await prisma.invoice.findMany({
-    where: { paymentRef: booking.paymentRef },
-    include: { invoiceLines: true },
-  })
-
-  const partnerInvoice = invoices.find((i) => i.issuerType === 'PARTNER')
-
-  if (!partnerInvoice) {
-    return <div>Invoice not found</div>
-  }
-
-  const { partnerAccount } = booking.site.user
-
-  const date =
-    partnerInvoice.invoicedAt.toISOString().substring(0, 10) +
-    ' ' +
-    partnerInvoice.invoicedAt.toISOString().substring(11, 19)
-
-  const fromDate = booking.from.toISOString().substring(0, 10)
-  const toDate = booking.to.toISOString().substring(0, 10)
-  const rentalDate = fromDate === toDate ? fromDate : `${fromDate} – ${toDate}`
-
-  const partnerSection = buildSection(
-    partnerInvoice,
-    partnerAccount?.company ?? 'Partner',
-    partnerAccount?.phoneNumber
-  )
-
-  const platformSection = null
-
-  const grandTotal = partnerInvoice.totalAmount
-
-  const receipt: ReceiptProps = {
-    date,
-    siteName: booking.site?.name ?? null,
-    reservationDate: rentalDate,
-    seatNumbers: null,
-    partnerSection,
-    platformSection,
-    grandTotal,
-  }
-
-  return <ReceiptPage receipt={receipt} />
+  return <ReceiptPage receipt={result.receipt} />
 }

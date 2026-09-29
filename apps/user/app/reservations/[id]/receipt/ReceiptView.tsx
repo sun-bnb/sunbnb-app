@@ -3,10 +3,12 @@
 import React, { ComponentType } from 'react'
 import { PDFDownloadLink } from '@react-pdf/renderer'
 import { useTranslations } from 'next-intl'
-import { ReceiptProps, InvoiceSection, formatCurrency } from './ReceiptPage'
+import type { ReceiptModel } from '@repo/data/receipt-model'
+import { formatReceiptAmount as formatCurrency } from '@repo/data/receipt-model'
 import PdfReceipt from './PdfReceipt'
 
-function SectionBlock({ section, label }: { section: InvoiceSection; label?: string }) {
+/** The merchant block: who issued it, the lines, and the totals. */
+function SectionBlock({ section, label }: { section: ReceiptModel; label?: string }) {
   const t = useTranslations('Receipt')
   return (
     <div className="mb-2">
@@ -15,15 +17,15 @@ function SectionBlock({ section, label }: { section: InvoiceSection; label?: str
         {label && (
           <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">{label}</div>
         )}
-        <div className="text-sm font-bold text-gray-900">{section.merchantName}</div>
-        {section.merchantVatId && (
-          <div className="text-xs text-gray-500 mt-0.5">{section.merchantVatId}</div>
+        <div className="text-sm font-bold text-gray-900">{section.merchant.name}</div>
+        {section.merchant.vatId && (
+          <div className="text-xs text-gray-500 mt-0.5">{section.merchant.vatId}</div>
         )}
-        {section.merchantAddress && (
-          <div className="text-xs text-gray-500 mt-0.5">{section.merchantAddress}</div>
+        {section.merchant.address && (
+          <div className="text-xs text-gray-500 mt-0.5">{section.merchant.address}</div>
         )}
-        {section.merchantPhone && (
-          <div className="text-xs text-gray-500 mt-0.5">{section.merchantPhone}</div>
+        {section.merchant.phone && (
+          <div className="text-xs text-gray-500 mt-0.5">{section.merchant.phone}</div>
         )}
         {section.invoiceNumber && (
           <div className="text-[10px] text-gray-400 mt-1">{t('Invoice')} {section.invoiceNumber}</div>
@@ -85,12 +87,12 @@ function SectionBlock({ section, label }: { section: InvoiceSection; label?: str
   )
 }
 
-function ReceiptDoc({ receipt }: { receipt: ReceiptProps }) {
+function ReceiptDoc({ receipt }: { receipt: ReceiptModel }) {
   const t = useTranslations('Receipt')
   return (
     <div className="max-w-md mx-auto bg-white text-gray-800">
       {/* Reservation info */}
-      {(receipt.siteName || receipt.reservationDate || receipt.seatNumbers) && (
+      {(receipt.siteName || receipt.periodLabel || receipt.seatNumbers || receipt.tableLabel) && (
         <div className="px-5 py-3 border-b border-dashed border-gray-200">
           {receipt.siteName && (
             <div className="flex justify-between text-xs">
@@ -98,10 +100,16 @@ function ReceiptDoc({ receipt }: { receipt: ReceiptProps }) {
               <span className="font-medium text-gray-800">{receipt.siteName}</span>
             </div>
           )}
-          {receipt.reservationDate && (
+          {receipt.periodLabel && (
             <div className="flex justify-between text-xs mt-1">
               <span className="text-gray-500">{t('Date')}</span>
-              <span className="font-medium text-gray-800">{receipt.reservationDate}</span>
+              <span className="font-medium text-gray-800">{receipt.periodLabel}</span>
+            </div>
+          )}
+          {receipt.tableLabel && (
+            <div className="flex justify-between text-xs mt-1">
+              <span className="text-gray-500">{t('Table')}</span>
+              <span className="font-medium text-gray-800">{receipt.tableLabel}</span>
             </div>
           )}
           {receipt.seatNumbers && (
@@ -113,13 +121,9 @@ function ReceiptDoc({ receipt }: { receipt: ReceiptProps }) {
         </div>
       )}
 
-      {/* Partner section — products/services */}
-      <SectionBlock section={receipt.partnerSection} label={t('Service Provider')} />
-
-      {/* Platform section — service fee */}
-      {receipt.platformSection && (
-        <SectionBlock section={receipt.platformSection} label={t('Platform Fee')} />
-      )}
+      {/* The seller of record. There is deliberately no platform section —
+          see ReceiptPage. */}
+      <SectionBlock section={receipt} label={t('Service Provider')} />
 
       {/* Grand total */}
       <div className="mx-5 border-t-2 border-gray-400 pt-3 pb-4">
@@ -131,13 +135,13 @@ function ReceiptDoc({ receipt }: { receipt: ReceiptProps }) {
 
       {/* Footer */}
       <div className="px-5 pb-5 text-center text-[10px] text-gray-400">
-        {receipt.date}
+        {receipt.issuedAt}
       </div>
     </div>
   )
 }
 
-export default function ReceiptView({ receipt }: { receipt: ReceiptProps }) {
+export default function ReceiptView({ receipt }: { receipt: ReceiptModel }) {
   const t = useTranslations('Receipt')
   const SafePDFDownloadLink = PDFDownloadLink as unknown as ComponentType<any>
 

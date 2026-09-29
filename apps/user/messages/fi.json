@@ -152,6 +152,7 @@
   "Receipt": {
     "Location": "Sijainti",
     "Date": "Päivämäärä",
+    "Table": "Pöytä",
     "Seats": "Paikat",
     "Invoice": "Lasku",
     "Item": "Tuote",
@@ -294,7 +295,8 @@
     "paidSubtitle": "Kiitos! Nauti lopusta päivästä.",
     "startNewOrder": "Aloita uusi tilaus",
     "tabClosedTitle": "Tämä lasku on suljettu",
-    "tabClosedSubtitle": "Tämä lasku on jo selvitetty tai peruttu."
+    "tabClosedSubtitle": "Tämä lasku on jo selvitetty tai peruttu.",
+    "viewReceipt": "Näytä kuitti"
   },
   "TableBooking": {
     "pageTitle": "Varaa pöytä: {name}",

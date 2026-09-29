@@ -11,6 +11,8 @@
  */
 
 import prisma from '../index'
+import { buildReservationReceipt } from './receipt'
+import type { ReceiptModel } from './receipt-model'
 import { sendEmail } from './email'
 import { siteDayKey } from './site-day'
 import {
@@ -181,33 +183,24 @@ function cancellationHtml(data: ReservationEmailData): string {
 
 // ─── Template: Receipt ──────────────────────────────────────────────────────
 
-interface ReceiptInvoice {
-  invoiceNumber: string | null
-  invoicedAt: Date
-  issuerCompanyName: string | null
-  issuerVatNumber: string | null
-  issuerCompanyAddress: string | null
-  totalCharge: number
-  totalTax: number
-  totalAmount: number
-  invoiceLines: {
-    description: string | null
-    charge: number
-    tax: number
-    amount: number
-    vatRate: number | null
-  }[]
-}
-
-function receiptHtml(invoice: ReceiptInvoice, siteName: string): string {
-  const merchant = invoice.issuerCompanyName ?? siteName
-  const lineRows = invoice.invoiceLines
+/**
+ * The EMAIL presenter of a receipt.
+ *
+ * Takes the same `ReceiptModel` as the HTML view and the PDF document, which is
+ * how the three stop drifting. They already had: this template showed a VAT
+ * RATE column where the other two showed a VAT AMOUNT, so a guest comparing the
+ * email against the page saw different numbers under the same heading. It now
+ * shows the amount, matching them.
+ */
+function receiptHtml(receipt: ReceiptModel): string {
+  const merchant = receipt.merchant.name
+  const lineRows = receipt.lines
     .map(
       (l) => `
       <tr>
         <td style="padding:8px 0;border-bottom:1px solid #f0f0f0;color:#333;">${l.description ?? '—'}</td>
-        <td style="padding:8px 0;border-bottom:1px solid #f0f0f0;text-align:right;color:#888;">${l.vatRate != null ? `${l.vatRate}%` : '—'}</td>
-        <td style="padding:8px 0;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;">€${l.amount.toFixed(2)}</td>
+        <td style="padding:8px 0;border-bottom:1px solid #f0f0f0;text-align:right;color:#888;">€${l.vat.toFixed(2)}</td>
+        <td style="padding:8px 0;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;">€${l.total.toFixed(2)}</td>
       </tr>`,
     )
     .join('')
@@ -219,14 +212,14 @@ function receiptHtml(invoice: ReceiptInvoice, siteName: string): string {
     <table style="width:100%;border-collapse:collapse;font-size:13px;color:#333;margin-bottom:16px;">
       <tr>
         <td style="padding:4px 0;color:#888;width:130px;">Receipt no.</td>
-        <td style="padding:4px 0;font-weight:600;">${invoice.invoiceNumber ?? '—'}</td>
+        <td style="padding:4px 0;font-weight:600;">${receipt.invoiceNumber ?? '—'}</td>
       </tr>
       <tr>
         <td style="padding:4px 0;color:#888;">Date</td>
-        <td style="padding:4px 0;">${formatDate(invoice.invoicedAt)}</td>
+        <td style="padding:4px 0;">${receipt.issuedAt}</td>
       </tr>
-      ${invoice.issuerVatNumber ? `<tr><td style="padding:4px 0;color:#888;">VAT no.</td><td style="padding:4px 0;">${invoice.issuerVatNumber}</td></tr>` : ''}
-      ${invoice.issuerCompanyAddress ? `<tr><td style="padding:4px 0;color:#888;vertical-align:top;">Address</td><td style="padding:4px 0;">${invoice.issuerCompanyAddress}</td></tr>` : ''}
+      ${receipt.merchant.vatId ? `<tr><td style="padding:4px 0;color:#888;">VAT no.</td><td style="padding:4px 0;">${receipt.merchant.vatId}</td></tr>` : ''}
+      ${receipt.merchant.address ? `<tr><td style="padding:4px 0;color:#888;vertical-align:top;">Address</td><td style="padding:4px 0;">${receipt.merchant.address}</td></tr>` : ''}
     </table>
 
     <table style="width:100%;border-collapse:collapse;font-size:14px;color:#333;">
@@ -241,15 +234,15 @@ function receiptHtml(invoice: ReceiptInvoice, siteName: string): string {
     <table style="width:100%;border-collapse:collapse;font-size:14px;color:#333;margin-top:12px;">
       <tr>
         <td style="padding:4px 0;text-align:right;color:#888;">Net</td>
-        <td style="padding:4px 0;text-align:right;width:100px;">€${invoice.totalCharge.toFixed(2)}</td>
+        <td style="padding:4px 0;text-align:right;width:100px;">€${receipt.subtotalCharge.toFixed(2)}</td>
       </tr>
       <tr>
         <td style="padding:4px 0;text-align:right;color:#888;">VAT</td>
-        <td style="padding:4px 0;text-align:right;">€${invoice.totalTax.toFixed(2)}</td>
+        <td style="padding:4px 0;text-align:right;">€${receipt.subtotalVat.toFixed(2)}</td>
       </tr>
       <tr>
         <td style="padding:8px 0;text-align:right;font-weight:700;border-top:1px solid #eee;">Total paid</td>
-        <td style="padding:8px 0;text-align:right;font-weight:700;border-top:1px solid #eee;">€${invoice.totalAmount.toFixed(2)}</td>
+        <td style="padding:8px 0;text-align:right;font-weight:700;border-top:1px solid #eee;">€${receipt.grandTotal.toFixed(2)}</td>
       </tr>
     </table>
   `)
@@ -347,26 +340,19 @@ export async function sendReceiptEmail(
   reservationId: string,
   toEmail: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const reservation = await prisma.reservation.findUnique({
-    where: { id: reservationId },
-    include: {
-      site: { select: { name: true } },
-      invoices: {
-        where: { issuerType: 'PARTNER' },
-        include: { invoiceLines: true },
-      },
-    },
-  })
-  if (!reservation) return { ok: false, error: 'Reservation not found' }
+  // One loader for every receipt surface — the query and mapping that used to
+  // live here were a fourth copy of the same thing.
+  const result = await buildReservationReceipt(reservationId)
+  if (result.status === 'not-found') return { ok: false, error: 'Reservation not found' }
+  if (result.status === 'no-invoice') return { ok: false, error: 'Receipt is not ready yet' }
 
-  const invoice = reservation.invoices[0]
-  if (!invoice) return { ok: false, error: 'Receipt is not ready yet' }
+  const { receipt } = result
 
   try {
     await sendEmail({
       to: toEmail,
-      subject: `Your receipt — ${reservation.site?.name ?? 'Sunbnb'}`,
-      html: receiptHtml(invoice, reservation.site?.name ?? 'Sunbnb'),
+      subject: `Your receipt — ${receipt.siteName ?? 'Sunbnb'}`,
+      html: receiptHtml(receipt),
     })
     return { ok: true }
   } catch (err) {

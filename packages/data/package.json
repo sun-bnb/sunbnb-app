@@ -49,6 +49,8 @@
     "./tab-payment": "./src/tab-payment.ts",
     "./invoice-series": "./src/invoice-series.ts",
     "./payment-math": "./src/payment-math.ts",
+    "./receipt": "./src/receipt.ts",
+    "./receipt-model": "./src/receipt-model.ts",
     "./tax/regime": "./src/tax/regime.ts",
     "./vat-id": "./src/vat-id.ts",
     "./pricing-tiers": "./src/pricing-tiers.ts",
@@ -153,6 +155,12 @@
       ],
       "payment-math": [
         "./src/payment-math.ts"
+      ],
+      "receipt": [
+        "./src/receipt.ts"
+      ],
+      "receipt-model": [
+        "./src/receipt-model.ts"
       ],
       "tax/regime": [
         "./src/tax/regime.ts"

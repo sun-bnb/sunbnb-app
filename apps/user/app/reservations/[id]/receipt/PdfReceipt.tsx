@@ -6,7 +6,7 @@ import {
   View,
   StyleSheet,
 } from '@react-pdf/renderer'
-import { ReceiptProps, InvoiceSection } from './ReceiptPage'
+import type { ReceiptModel } from '@repo/data/receipt-model'
 
 function fmt(value: number): string {
   return value.toFixed(2)
@@ -191,7 +191,7 @@ function SectionPdf({
   SafeView,
   SafeText,
 }: {
-  section: InvoiceSection
+  section: ReceiptModel
   label?: string
   SafeView: React.ComponentType<any>
   SafeText: React.ComponentType<any>
@@ -203,15 +203,15 @@ function SectionPdf({
 
       {/* Merchant header */}
       <SafeView style={s.merchantHeader}>
-        <SafeText style={s.companyName}>{section.merchantName}</SafeText>
-        {section.merchantVatId ? (
-          <SafeText style={s.subText}>{section.merchantVatId}</SafeText>
+        <SafeText style={s.companyName}>{section.merchant.name}</SafeText>
+        {section.merchant.vatId ? (
+          <SafeText style={s.subText}>{section.merchant.vatId}</SafeText>
         ) : null}
-        {section.merchantAddress ? (
-          <SafeText style={s.subText}>{section.merchantAddress}</SafeText>
+        {section.merchant.address ? (
+          <SafeText style={s.subText}>{section.merchant.address}</SafeText>
         ) : null}
-        {section.merchantPhone ? (
-          <SafeText style={s.subText}>{section.merchantPhone}</SafeText>
+        {section.merchant.phone ? (
+          <SafeText style={s.subText}>{section.merchant.phone}</SafeText>
         ) : null}
         {section.invoiceNumber ? (
           <SafeText style={s.invoiceNum}>Invoice {section.invoiceNumber}</SafeText>
@@ -264,13 +264,14 @@ function SectionPdf({
   )
 }
 
-export default function PdfReceipt({ receipt }: { receipt: ReceiptProps }) {
+export default function PdfReceipt({ receipt }: { receipt: ReceiptModel }) {
   const SafeDocument = Document as unknown as React.ComponentType<any>
   const SafePage = Page as unknown as React.ComponentType<any>
   const SafeText = Text as unknown as React.ComponentType<any>
   const SafeView = View as unknown as React.ComponentType<any>
 
-  const hasInfo = receipt.siteName || receipt.reservationDate || receipt.seatNumbers
+  const hasInfo =
+    receipt.siteName || receipt.periodLabel || receipt.seatNumbers || receipt.tableLabel
 
   return (
     <SafeDocument>
@@ -284,10 +285,16 @@ export default function PdfReceipt({ receipt }: { receipt: ReceiptProps }) {
                 <SafeText style={s.infoValue}>{receipt.siteName}</SafeText>
               </SafeView>
             )}
-            {receipt.reservationDate && (
+            {receipt.periodLabel && (
               <SafeView style={s.infoRow}>
                 <SafeText style={s.infoLabel}>Date</SafeText>
-                <SafeText style={s.infoValue}>{receipt.reservationDate}</SafeText>
+                <SafeText style={s.infoValue}>{receipt.periodLabel}</SafeText>
+              </SafeView>
+            )}
+            {receipt.tableLabel && (
+              <SafeView style={s.infoRow}>
+                <SafeText style={s.infoLabel}>Table</SafeText>
+                <SafeText style={s.infoValue}>{receipt.tableLabel}</SafeText>
               </SafeView>
             )}
             {receipt.seatNumbers && (
@@ -299,23 +306,13 @@ export default function PdfReceipt({ receipt }: { receipt: ReceiptProps }) {
           </SafeView>
         )}
 
-        {/* Partner section */}
+        {/* The seller of record. No platform section — see ReceiptPage. */}
         <SectionPdf
-          section={receipt.partnerSection}
+          section={receipt}
           label="Service Provider"
           SafeView={SafeView}
           SafeText={SafeText}
         />
-
-        {/* Platform section */}
-        {receipt.platformSection && (
-          <SectionPdf
-            section={receipt.platformSection}
-            label="Platform Fee"
-            SafeView={SafeView}
-            SafeText={SafeText}
-          />
-        )}
 
         {/* Grand total */}
         <SafeView style={s.grandTotalSection}>
@@ -327,7 +324,7 @@ export default function PdfReceipt({ receipt }: { receipt: ReceiptProps }) {
 
         {/* Footer */}
         <SafeView style={s.footer}>
-          <SafeText>{receipt.date}</SafeText>
+          <SafeText>{receipt.issuedAt}</SafeText>
         </SafeView>
       </SafePage>
     </SafeDocument>
