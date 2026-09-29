@@ -190,6 +190,24 @@ model PartnerAccount {
   /// immutable — it is printed on documents a customer holds.
   invoiceSeriesPrefix  String?      @unique @map("invoice_series_prefix")
   businessId           String?      @map("business_id")
+  /// How far `businessId` got through `@repo/data/vat-id`: missing · invalid ·
+  /// unchecked (well-formed, no checksum for that country) · valid. RECORDED,
+  /// never used to block a sale: a till that refuses at 14:00 in August turns
+  /// into an UN-INVOICED cash sale, which is a real offence with no remedy,
+  /// where a late or corrected record has a defined one.
+  vatIdStatus          String?      @map("vat_id_status")
+  vatIdCheckedAt       DateTime?    @map("vat_id_checked_at")
+  /// Province/region, where it changes the fiscal regime — Basque and
+  /// Navarrese issuers fall under TicketBAI, not Veri*factu. Set by an
+  /// operator and NEVER geocoded from a venue's coordinates: a beach club's
+  /// location does not determine its domicilio fiscal, and a Bilbao company
+  /// can run a venue in Málaga. Null for a Spanish partner means "not yet
+  /// classified", which resolves to NO regime rather than a guessed one.
+  taxRegion            String?      @map("tax_region")
+  /// Excluded from every fiscal path. Production carries an account whose
+  /// company is "gdhgdhg" and whose tax id is "wdcecec"; flagging it is
+  /// cheaper and safer than deleting rows that other tables reference.
+  isTestAccount        Boolean      @default(false) @map("is_test_account")
   mollieProfileId      String?      @map("mollie_profile_id")
   mollieAccessToken    String?      @map("mollie_access_token")
   mollieRefreshToken   String?      @map("mollie_refresh_token")

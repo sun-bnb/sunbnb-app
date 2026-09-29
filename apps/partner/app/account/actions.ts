@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache';
+import { validateVatId } from '@repo/data/vat-id'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 
@@ -67,6 +68,23 @@ export async function submitForm(
     country: formData.get('country') as string,
     bankAccount: formData.get('bankAccount') as string
   }
+
+  // Validate the tax id and RECORD the verdict — never reject the save on it.
+  //
+  // This id is stamped on every invoice as `issuerVatNumber` and fed into the
+  // invoice hash, so junk there is baked into the partner's integrity chain
+  // (production carries the literal string "Alonso Beach" as one). But refusing
+  // the form would leave a venue unable to finish onboarding over a checksum,
+  // and a venue that cannot onboard sells for cash without invoicing at all —
+  // a worse outcome than a flagged id we can chase. Enforcement belongs at
+  // transmission, where the remedy is "fix it and re-send".
+  const vatCheck = validateVatId(accountData.businessId, accountData.country)
+  const taxIdentity = {
+    businessId: vatCheck.normalized || accountData.businessId,
+    vatIdStatus: vatCheck.status,
+    vatIdCheckedAt: new Date(),
+  }
+  Object.assign(accountData, taxIdentity)
 
   const account = await prisma.partnerAccount.findUnique({ where: { userId: session.user.id } })
 

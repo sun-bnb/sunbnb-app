@@ -1,6 +1,7 @@
 'use server'
 
 import { auth } from '@/app/auth'
+import { validateVatId } from '@repo/data/vat-id'
 import prisma from '@repo/data/PrismaCient'
 import { revalidatePath } from 'next/cache'
 
@@ -32,22 +33,40 @@ export async function saveBusinessEntity(input: {
   const errors: string[] = []
   if (!input.companyName?.trim()) errors.push('Company name is required')
   if (!input.contactEmail?.trim()) errors.push('Contact email is required')
-  if (errors.length > 0) return { status: 'error', errors }
 
-  // Upsert into the singleton Settings row
-  const existing = await prisma.settings.findFirst()
+  // Unlike a partner's tax id, THIS one is rejected rather than merely flagged.
+  // A partner types theirs at onboarding or on a phone at a venue, where
+  // refusing the form can leave them selling for cash with no invoicing at all;
+  // this is a sudo operator at a desk, the value goes on every commission
+  // invoice we issue as our own identity, and there is no cost to being strict.
+  const vatId = input.vatId?.trim() ?? ''
+  if (vatId !== '') {
+    // The id carries its own country prefix when it has one; that is a better
+    // signal here than any Settings row, since identity spans all of them.
+    const prefix = /^[A-Za-z]{2}/.test(vatId) ? vatId.slice(0, 2) : null
+    const check = validateVatId(vatId, prefix)
+    if (check.status === 'invalid') {
+      errors.push(check.error ?? 'VAT number is not valid')
+    }
+  }
+  if (errors.length > 0) return { status: 'error', errors }
 
   const data = {
     companyName: input.companyName.trim(),
     companyAddress: input.companyAddress.trim(),
     businessId: input.businessId.trim(),
-    vatId: input.vatId.trim(),
+    vatId,
     contactEmail: input.contactEmail.trim(),
     contactPhone: input.contactPhone.trim(),
   }
 
-  if (existing) {
-    await prisma.settings.update({ where: { id: existing.id }, data })
+  // Identity is a SINGLETON that happens to be copied onto every per-country
+  // Settings row, so it is written to all of them. The old code updated
+  // whichever row `findFirst()` returned — no `where`, no `orderBy` — which is
+  // how the rows can disagree and why reading them back was non-deterministic.
+  const existing = await prisma.settings.findMany({ select: { id: true } })
+  if (existing.length > 0) {
+    await prisma.settings.updateMany({ data })
   } else {
     await prisma.settings.create({ data })
   }

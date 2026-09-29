@@ -26,7 +26,7 @@
 
 import prisma from '../index'
 import { ServiceFee, SubscriptionTier } from '@prisma/client'
-import { getBusinessEntity } from './business-entity'
+import { getBusinessEntity, isPlatformIssuable } from './business-entity'
 import {
   RESERVATION_COMPLETE,
   RENTAL_COMPLETE,
@@ -575,6 +575,22 @@ export async function processConfirmedReservation(
   // creating the commission invoice, but load outside the transaction to keep
   // the transaction short and avoid blocking on an external read).
   const businessEntity = skipCommission ? null : await getBusinessEntity()
+  // Our OWN commission invoice needs our own legal identity. When the
+  // platform entity is unconfigured the PARTNER receipt is still written and
+  // only the commission invoice is skipped — that one is B2B bookkeeping
+  // between us and the partner and can be back-filled, while the receipt is
+  // the consumer's legally required document. Letting OUR missing config
+  // destroy THEIR document would be the wrong trade.
+  //
+  // No log when skipCommission is set: that is a cash sale deliberately
+  // issuing a receipt only, not a misconfiguration.
+  const platformIssuable = businessEntity !== null && isPlatformIssuable(businessEntity)
+  if (businessEntity !== null && !platformIssuable) {
+    console.error(
+      '[Invoice] Platform business entity unconfigured (no company name or tax id) — ' +
+        'skipping the PLATFORM commission invoice. Set it in admin → Platform.',
+    )
+  }
 
   // Use the VAT rate & country from the fee's associated settings
   const feeSettings =
@@ -657,7 +673,7 @@ export async function processConfirmedReservation(
 
     // ── 2. PLATFORM Invoice (service fee) — skipped for cash/walk-in receipts ──
 
-    if (!skipCommission && totalServiceFee > 0 && businessEntity) {
+    if (!skipCommission && totalServiceFee > 0 && businessEntity && platformIssuable) {
       const commission = computeCommissionVat(
         totalServiceFee, platformVatRate,
         partnerAccount?.country, partnerAccount?.businessId, feeCountry
@@ -928,6 +944,19 @@ export async function processConfirmedRentalBooking(
   const partnerAmount = totalPayment
 
   const businessEntity = await getBusinessEntity()
+  // Our OWN commission invoice needs our own legal identity. When the
+  // platform entity is unconfigured, the PARTNER receipt is still written
+  // and only the commission invoice is skipped: that document is B2B
+  // bookkeeping between us and the partner and can be back-filled, while
+  // the receipt is the consumer's legally required one. Letting OUR
+  // missing config destroy THEIR document would be the wrong trade.
+  const platformIssuable = isPlatformIssuable(businessEntity)
+  if (!platformIssuable) {
+    console.error(
+      '[Invoice] Platform business entity unconfigured (no company name or tax id) — ' +
+        'skipping the PLATFORM commission invoice. Set it in admin → Platform.',
+    )
+  }
 
   const feeSettings = matchedFee
     ? await prisma.settings.findUnique({
@@ -1005,7 +1034,7 @@ export async function processConfirmedRentalBooking(
 
     // ── 2. PLATFORM Invoice (service fee) ──
 
-    if (totalServiceFee > 0) {
+    if (totalServiceFee > 0 && platformIssuable) {
       const commission = computeCommissionVat(
         totalServiceFee, platformVatRate,
         partnerAccount?.country, partnerAccount?.businessId, feeCountry
@@ -1314,6 +1343,22 @@ export async function processConfirmedOrder(
   // creating the commission invoice, but load outside the transaction to keep
   // the transaction short and avoid blocking on an external read).
   const businessEntity = skipCommission ? null : await getBusinessEntity()
+  // Our OWN commission invoice needs our own legal identity. When the
+  // platform entity is unconfigured the PARTNER receipt is still written and
+  // only the commission invoice is skipped — that one is B2B bookkeeping
+  // between us and the partner and can be back-filled, while the receipt is
+  // the consumer's legally required document. Letting OUR missing config
+  // destroy THEIR document would be the wrong trade.
+  //
+  // No log when skipCommission is set: that is a cash sale deliberately
+  // issuing a receipt only, not a misconfiguration.
+  const platformIssuable = businessEntity !== null && isPlatformIssuable(businessEntity)
+  if (businessEntity !== null && !platformIssuable) {
+    console.error(
+      '[Invoice] Platform business entity unconfigured (no company name or tax id) — ' +
+        'skipping the PLATFORM commission invoice. Set it in admin → Platform.',
+    )
+  }
 
   // Use the VAT rate & country from the fee's associated settings
   const feeSettings =
@@ -1390,7 +1435,7 @@ export async function processConfirmedOrder(
 
     // ── 2. PLATFORM Invoice (service fee) — skipped for cash/walk-in receipts ──
 
-    if (!skipCommission && serviceFeeAmount > 0 && businessEntity) {
+    if (!skipCommission && serviceFeeAmount > 0 && businessEntity && platformIssuable) {
       const commission = computeCommissionVat(
         serviceFeeAmount, platformVatRate,
         partnerAccount?.country, partnerAccount?.businessId, feeCountry
@@ -1526,6 +1571,19 @@ export async function processChargedTableDeposit(
   const partnerAmount = totalDeposit
 
   const businessEntity = await getBusinessEntity()
+  // Our OWN commission invoice needs our own legal identity. When the
+  // platform entity is unconfigured, the PARTNER receipt is still written
+  // and only the commission invoice is skipped: that document is B2B
+  // bookkeeping between us and the partner and can be back-filled, while
+  // the receipt is the consumer's legally required one. Letting OUR
+  // missing config destroy THEIR document would be the wrong trade.
+  const platformIssuable = isPlatformIssuable(businessEntity)
+  if (!platformIssuable) {
+    console.error(
+      '[Invoice] Platform business entity unconfigured (no company name or tax id) — ' +
+        'skipping the PLATFORM commission invoice. Set it in admin → Platform.',
+    )
+  }
 
   const feeSettings = matchedFee
     ? await prisma.settings.findUnique({
@@ -1597,7 +1655,7 @@ export async function processChargedTableDeposit(
 
     // ── 2. PLATFORM Invoice (service fee) ──
 
-    if (totalServiceFee > 0) {
+    if (totalServiceFee > 0 && platformIssuable) {
       const commission = computeCommissionVat(
         totalServiceFee, platformVatRate,
         partnerAccount?.country, partnerAccount?.businessId, feeCountry
@@ -1883,6 +1941,22 @@ export async function processConfirmedTabPayment(
     : calculateServiceFeeAmount(matchedFee, totalPartnerAmount)
 
   const businessEntity = skipCommission ? null : await getBusinessEntity()
+  // Our OWN commission invoice needs our own legal identity. When the
+  // platform entity is unconfigured the PARTNER receipt is still written and
+  // only the commission invoice is skipped — that one is B2B bookkeeping
+  // between us and the partner and can be back-filled, while the receipt is
+  // the consumer's legally required document. Letting OUR missing config
+  // destroy THEIR document would be the wrong trade.
+  //
+  // No log when skipCommission is set: that is a cash sale deliberately
+  // issuing a receipt only, not a misconfiguration.
+  const platformIssuable = businessEntity !== null && isPlatformIssuable(businessEntity)
+  if (businessEntity !== null && !platformIssuable) {
+    console.error(
+      '[Invoice] Platform business entity unconfigured (no company name or tax id) — ' +
+        'skipping the PLATFORM commission invoice. Set it in admin → Platform.',
+    )
+  }
 
   const feeSettings =
     !skipCommission && matchedFee
@@ -1959,7 +2033,7 @@ export async function processConfirmedTabPayment(
 
     // ── 2. PLATFORM Invoice (service fee) — skipped for cash settlements ──
 
-    if (!skipCommission && serviceFeeAmount > 0 && businessEntity) {
+    if (!skipCommission && serviceFeeAmount > 0 && businessEntity && platformIssuable) {
       const commission = computeCommissionVat(
         serviceFeeAmount, platformVatRate,
         partnerAccount?.country, partnerAccount?.businessId, feeCountry

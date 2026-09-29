@@ -55,31 +55,67 @@ describe('saveBusinessEntity', () => {
 
   it('creates settings when none exist', async () => {
     authenticateAsSudo()
-    vi.mocked(prisma.settings.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.settings.findMany).mockResolvedValue([] as any)
     vi.mocked(prisma.settings.create).mockResolvedValue({} as any)
 
     const res = await saveBusinessEntity({
+      // A real Y-tunnus: 7·1+9·2+10·3+5·4+8·5+4·6+2·7 = 153, 153 mod 11 = 10,
+      // check digit 1. The old fixture used 'FI123', which is not one.
       companyName: 'Sunbnb Oy', companyAddress: 'Helsinki', businessId: '123',
-      vatId: 'FI123', contactEmail: 'admin@sunbnb.app', contactPhone: '+358',
+      vatId: 'FI12345671', contactEmail: 'admin@sunbnb.app', contactPhone: '+358',
     })
     expect(res.status).toBe('ok')
     expect(vi.mocked(prisma.settings.create)).toHaveBeenCalledTimes(1)
   })
 
-  it('updates existing settings', async () => {
+  it('writes identity to EVERY settings row, not an arbitrary one', async () => {
+    // Identity is a singleton copied onto each per-country row. The old code
+    // updated whichever row findFirst() happened to return — no where, no
+    // orderBy — which is how the rows drift apart and why reading them back
+    // was non-deterministic.
     authenticateAsSudo()
-    vi.mocked(prisma.settings.findFirst).mockResolvedValue({ id: 'set-1' } as any)
-    vi.mocked(prisma.settings.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.settings.findMany).mockResolvedValue([
+      { id: 'set-es' }, { id: 'set-fi' },
+    ] as any)
+    vi.mocked(prisma.settings.updateMany).mockResolvedValue({ count: 2 } as any)
 
     const res = await saveBusinessEntity({
       companyName: 'Updated Co', companyAddress: 'addr', businessId: 'b',
       vatId: 'v', contactEmail: 'e@e.com', contactPhone: '+1',
     })
     expect(res.status).toBe('ok')
-    expect(vi.mocked(prisma.settings.update)).toHaveBeenCalledWith({
-      where: { id: 'set-1' },
+    expect(vi.mocked(prisma.settings.updateMany)).toHaveBeenCalledWith({
       data: expect.objectContaining({ companyName: 'Updated Co' }),
     })
+    expect(vi.mocked(prisma.settings.update)).not.toHaveBeenCalled()
+  })
+
+  it('REJECTS an invalid platform tax id, unlike a partner\'s', async () => {
+    // The platform's own id goes on every commission invoice we issue as our
+    // identity, and it is set by a sudo operator at a desk — so strictness
+    // costs nothing here, where refusing a partner's form at a venue could
+    // leave them selling for cash with no invoicing at all.
+    authenticateAsSudo()
+    vi.mocked(prisma.settings.findMany).mockResolvedValue([{ id: 'set-1' }] as any)
+
+    const res = await saveBusinessEntity({
+      companyName: 'Sunbnb España SL', companyAddress: 'addr', businessId: 'b',
+      vatId: 'ESB22435704', contactEmail: 'e@e.com', contactPhone: '+1',
+    })
+    expect(res.status).toBe('error')
+    expect(vi.mocked(prisma.settings.updateMany)).not.toHaveBeenCalled()
+  })
+
+  it('accepts the real platform tax id', async () => {
+    authenticateAsSudo()
+    vi.mocked(prisma.settings.findMany).mockResolvedValue([{ id: 'set-1' }] as any)
+    vi.mocked(prisma.settings.updateMany).mockResolvedValue({ count: 1 } as any)
+
+    const res = await saveBusinessEntity({
+      companyName: 'Sunbnb España SL', companyAddress: 'addr', businessId: 'B22435705',
+      vatId: 'ESB22435705', contactEmail: 'e@e.com', contactPhone: '+1',
+    })
+    expect(res.status).toBe('ok')
   })
 })
 

@@ -204,6 +204,47 @@ describe('processConfirmedReservation', () => {
     expect(partnerInvoices[1]!.previousHash).toBe(partnerInvoices[0]!.hash)
   })
 
+  it('an UNCONFIGURED platform still writes the receipt, and skips only the commission', async () => {
+    // The trade this encodes: a PARTNER receipt is the consumer's legally
+    // required document, while the PLATFORM commission invoice is B2B
+    // bookkeeping between us and the partner that can be back-filled. So OUR
+    // missing configuration must never destroy THEIR document.
+    //
+    // This is not hypothetical. The fee-context bootstrap creates a Settings
+    // row with no company name and no tax id, and that is how PLATFORM-2026-00001
+    // reached production naming "Platform Operator" with a NULL tax id — a
+    // placeholder on a real invoice, inside the hash chain that certified it.
+    const { reservation } = await setupReservation()
+
+    // Strip the platform's identity, leaving the VAT rate the fee cascade needs.
+    await prisma.settings.updateMany({ data: { companyName: null, vatId: null } })
+
+    await expect(processConfirmedReservation(reservation.id)).resolves.not.toThrow()
+
+    const partner = await prisma.invoice.findMany({ where: { issuerType: 'PARTNER' } })
+    const platform = await prisma.invoice.findMany({ where: { issuerType: 'PLATFORM' } })
+
+    expect(partner).toHaveLength(1)
+    expect(platform).toHaveLength(0)
+
+    // And the receipt that WAS written is a real one, not a placeholder.
+    expect(partner[0]!.invoiceNumber).toBeTruthy()
+    expect(partner[0]!.hash).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it('never issues a PLATFORM invoice naming the placeholder identity', async () => {
+    // The specific defect: "Platform Operator" is the DEFAULTS constant, not a
+    // company. If it ever appears as an issuer again, this fails.
+    const { reservation } = await setupReservation()
+    await prisma.settings.updateMany({ data: { companyName: null, vatId: null } })
+    await processConfirmedReservation(reservation.id)
+
+    const placeholders = await prisma.invoice.findMany({
+      where: { issuerCompanyName: 'Platform Operator' },
+    })
+    expect(placeholders).toHaveLength(0)
+  })
+
   it('generates sequential invoice numbers', async () => {
     const { reservation: res1, user, site } = await setupReservation()
 

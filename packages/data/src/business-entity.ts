@@ -108,6 +108,22 @@ export async function requirePlatformIssuer(): Promise<BusinessEntity> {
  * partner invoices: those carry the PARTNER's identity, and a missing platform
  * entity is no reason to stop a venue selling a sunbed.
  */
+/**
+ * Can a PLATFORM invoice legitimately name us as the issuer?
+ *
+ * The non-throwing form, for the payment path. False when the platform entity
+ * is unconfigured — which is not hypothetical: the fee-context bootstrap
+ * creates a `Settings` row with no company name and no tax id, and that is how
+ * a placeholder identity reached a real invoice.
+ */
+export function isPlatformIssuable(entity: BusinessEntity): boolean {
+  return (
+    entity.companyName.trim() !== '' &&
+    entity.companyName !== DEFAULTS.companyName &&
+    entity.vatId.trim() !== ''
+  )
+}
+
 export function assertPlatformIssuable(entity: BusinessEntity): void {
   const named = entity.companyName.trim() !== '' && entity.companyName !== DEFAULTS.companyName
   const identified = entity.vatId.trim() !== ''
