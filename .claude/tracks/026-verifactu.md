@@ -60,10 +60,9 @@ debug a rejection.
 - `packages/data/src/payment.ts` — seven writers, each already taking the issuer lock before
   its idempotency re-check.
 
-**Blocked by (does not block the schema, DOES block phase 7):** asesor answer to D2 —
-whether Sunbnb may submit on partners' behalf under an *apoderamiento*. It decides whether
-transmission needs ONE platform certificate in an env var or a per-partner encrypted
-keystore, and the record schema is where that assumption first gets baked in.
+**No longer blocked.** D2 is closed: Sunbnb submits as a *colaborador social* under Convenio
+17, using ONE platform certificate, with each partner's representation collected in-product
+(P7a). The record schema can proceed on that assumption.
 
 **Not yet done and easy to forget:** seven commits are unpushed; the production
 clean-slate deletion (D3) is deferred to cutover.
@@ -111,6 +110,12 @@ clean-slate deletion (D3) is deferred to cutover.
   data-URI images, and the email receipt is the copy a guest keeps. `qrcode` must be added
   to `apps/user`. *Makes true: "every receipt includes a QR code" — the most conspicuous
   false claim on the live page.*
+- ☐ **P7a — Capture the representation grant.** AEAT explicitly blesses a web form or
+  onboarding pop-up with electronic signature (D2, §16 Q4), so this is a product surface, not
+  paperwork: the partner grants Sunbnb representation for VERI*FACTU remission, the grant is
+  stored with its timestamp and evidence, and **the submission sweep refuses any partner who
+  has not granted it** — *"ningún colaborador social realice envíos sin estar previamente
+  autorizado"*. Blocks P7 for any given partner, not P7 as a whole.
 - ☐ **P7 — Transmission.** SOAP over mTLS with a stub for CI (`packages/data/src/viva/` is
   the mode-switch pattern). DB-state-as-queue sweep modelled on `/api/reconcile` but WITH
   the attempt counter, backoff and `blocked` terminal state it lacks. **Wire the cron in
@@ -152,6 +157,14 @@ clean-slate deletion (D3) is deferred to cutover.
   found — values must be TRIMMED, which the implementation was not doing. All three
   official worked examples are now pinned. Also learned from §7, and load-bearing for P7: a
   mismatched huella is "Aceptado con errores", not a rejection.
+- **2026-09-29 — D2 closed, and the deadline is NOT what the legal page says.** AEAT's
+  developer FAQ v1.3 answers the representation question outright (see D2) and also records
+  that **Real Decreto-ley 15/2025 of 2 December moved the compliance dates**: corporate
+  income taxpayers from 1 Jan 2026 to **1 Jan 2027**, everyone else from 1 Jul 2026 to
+  **1 Jul 2027**. The live legal page's "Compliance became obligatory from 1 January 2026"
+  is therefore wrong, and this track's earlier framing of being months past a deadline was
+  wrong with it. We are ahead of it, not behind — which changes the urgency but not the
+  exposure, since the page still claims a QR that does not exist.
 - **2026-09-29 — D5 narrowed.** RD 1619/2012 art. 4 read in full. The simplified-invoice
   ceiling turns out to attach to the ACTIVITY rather than the invoice, so the single
   constant was the wrong model and the classifier now derives the ceiling from line product
@@ -185,10 +198,37 @@ clean-slate deletion (D3) is deferred to cutover.
   announces itself on submission; it accumulates silently down a chain. That is why the
   vectors are tests, and why the response handler must treat accepted-with-errors as a
   failure to investigate rather than a success.
-- **D2 — Can Sunbnb submit on partners' behalf, and under what instrument** (third-party
-  issuance + AEAT *apoderamiento*, colaborador social, or neither)? One platform certificate
-  in an env var, or a per-partner encrypted keystore — and there is no secret-storage
-  pattern in this repo at all. **Blocks P7; shapes P5.**
+- ✅ **D2 — CLOSED 2026-09-29.** Source: AEAT *"Aclaraciones a dudas de los desarrolladores"*
+  v1.3 (4 Dec 2025), §16 — the section is literally titled *"Representación de los obligados a
+  emitir facturas (OEF) por parte de las empresas de software. Convenio de colaboración 17"*.
+  - **The mechanism is COLABORACIÓN SOCIAL, not a per-partner apoderamiento.** Q1: *"Sí, a
+    través de la figura de la colaboración social (artículos 79 a 81 RD 1065/2007 y Orden
+    HAC/1398/2003) o del apoderamiento. Pueden ser colaboradores sociales a este respecto
+    tanto las empresas suministradoras de software que hayan suscrito el correspondiente
+    Convenio de colaboración social como los profesionales de la gestión tributaria."*
+  - **Convenio 17 is the one for software companies** (001/002 are for intermediaries). It
+    covers exactly our shape — the "direct" case, where the OEF grants representation
+    straight to the software company rather than through a gestor.
+  - **ONE certificate. Sunbnb's own.** Because Sunbnb submits as the colaborador social, the
+    identity on the wire is ours. **P7 therefore needs one platform certificate in encrypted
+    env vars, not a per-partner keystore** — the question that shaped this whole phase.
+  - **Per-partner authorisation is still required, and may be collected IN-PRODUCT.** Q4 asks
+    precisely our question — signing a paper model with every client is costly — and answers:
+    *"la utilización auxiliar de formularios web, pop-ups al iniciar la relación o cualquier
+    otro sistema informático que asegure que el uso del API de remisión solo se produce tras
+    el otorgamiento y aceptación de la representación es perfectamente válida"*, provided the
+    grant is completed and signed, electronic signature included. See **P7a**.
+  - **Never submit for a partner who has not granted it:** *"ningún colaborador social realice
+    envíos sin estar previamente autorizado"*. The originals can be demanded if an
+    irregularity arises, so the grants must be retained as evidence.
+  - **To sign Convenio 17**, send to the local Delegación or `comunicacion.sepri@correo.aeat.es`:
+    a formal request under art. 92 Ley 58/2003; the entity's name and NIF; the statutes article
+    covering the objeto social; the name/NIF of the signatory plus either a secretary's
+    certificate of appointment or an escritura de apoderamiento; and a contact name, NIF,
+    phone, address and email. **Founder action — nothing engineering can do for this one.**
+  - A standardized per-partner model also exists (Anexo II, Resolución DG AEAT 18-12-2024,
+    BOE 31-12-2024) if a paper route is ever preferred.
+
 - **D3 — The production clean-slate deletion.** Founder chose to delete the 132 test invoices
   rather than freeze them behind a legacy chain, which is what removes the legacy code path
   entirely. Deferred to cutover so the old code cannot re-mint the same numbers; take a dump
