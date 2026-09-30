@@ -51,6 +51,7 @@
     "./payment-math": "./src/payment-math.ts",
     "./receipt": "./src/receipt.ts",
     "./receipt-model": "./src/receipt-model.ts",
+    "./tax/es-verifactu/health": "./src/tax/es-verifactu/health.ts",
     "./tax/es-verifactu/huella": "./src/tax/es-verifactu/huella.ts",
     "./tax/es-verifactu/qr": "./src/tax/es-verifactu/qr.ts",
     "./tax/es-verifactu/record": "./src/tax/es-verifactu/record.ts",
@@ -167,6 +168,9 @@
       "receipt-model": [
         "./src/receipt-model.ts"
       ],
+      "tax/es-verifactu/health": [
+        "./src/tax/es-verifactu/health.ts"
+      ],
       "tax/es-verifactu/huella": [
         "./src/tax/es-verifactu/huella.ts"
       ],
@@ -211,6 +215,9 @@
     "migrate:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx prisma migrate deploy && npx prisma generate",
     "migrate:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx prisma migrate deploy && npx prisma generate",
     "migrate:check": "./scripts/with-db-url.sh POSTGRES_URL npx prisma migrate diff --from-config-datasource --to-schema ./prisma/schema.prisma --exit-code",
+    "verifactu:health:local": "npx --yes tsx scripts/verifactu-health.ts",
+    "verifactu:health:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx --yes tsx scripts/verifactu-health.ts",
+    "verifactu:health:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx --yes tsx scripts/verifactu-health.ts",
     "migrate:status:local": "./scripts/with-db-url.sh POSTGRES_URL npx prisma migrate status",
     "migrate:status:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx prisma migrate status",
     "migrate:status:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx prisma migrate status",

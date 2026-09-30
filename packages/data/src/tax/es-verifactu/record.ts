@@ -52,6 +52,64 @@ export type RecordOutcome =
   | { status: 'blocked'; reason: string }
 
 /**
+ * A record's submission state.
+ *
+ * Constants rather than bare strings because three things now read them — the
+ * writer, the submission sweep and the health check — and a typo in any one of
+ * them is a silent disagreement about whether a record has been filed.
+ *
+ * `BLOCKED` is terminal-until-fixed: an invalid issuer NIF, or a partner who has
+ * not granted representation. `/api/reconcile` has no such state, which is
+ * exactly why a permanently-failing row there retries forever in silence.
+ */
+export const RECORD_PENDING = 'pending'
+export const RECORD_SENT = 'sent'
+export const RECORD_ERROR = 'error'
+export const RECORD_BLOCKED = 'blocked'
+
+/** States that still owe AEAT a successful submission. */
+export const RECORD_UNSENT_STATUSES = [RECORD_PENDING, RECORD_ERROR, RECORD_BLOCKED] as const
+
+/** The fields needed to decide whose invoice this is. */
+export interface InvoiceIssuerFields {
+  issuerType: string
+  issuerVatNumber: string | null
+  account: { country: string | null; taxRegion: string | null } | null
+}
+
+/**
+ * Whose invoice is this, for tax purposes?
+ *
+ * Exported and shared rather than inlined, because the health check has to agree
+ * with the writer about what is in scope. If they each derived it, the detector
+ * could report an invoice as correctly skipped that the writer thought it should
+ * have filed — the same class of bug as deriving the invoice date twice.
+ *
+ * The trap it encapsulates: on a PLATFORM commission invoice `accountId` is the
+ * RECIPIENT partner, not the issuer — the issuer is Sunbnb. Resolving the regime
+ * off `account.country` there would file OUR invoice under the customer's
+ * jurisdiction, and for the Finnish partner it would file it nowhere at all. The
+ * platform's own jurisdiction is keyed on the issuing tax id, because the
+ * platform has more than one entity and only one of them is Spanish.
+ */
+export function resolveInvoiceIssuerJurisdiction(invoice: InvoiceIssuerFields): {
+  country: string | null
+  taxRegion: string | null
+} {
+  return invoice.issuerType === 'PLATFORM'
+    ? platformIssuerJurisdiction(invoice.issuerVatNumber)
+    : {
+        country: invoice.account?.country ?? null,
+        taxRegion: invoice.account?.taxRegion ?? null,
+      }
+}
+
+/** Does this invoice owe AEAT a Veri*factu record at all? */
+export function invoiceRequiresRecord(invoice: InvoiceIssuerFields): boolean {
+  return regimeRequiresRecords(resolveTaxRegime(resolveInvoiceIssuerJurisdiction(invoice)))
+}
+
+/**
  * Write the record for an invoice, inside the caller's transaction.
  *
  * Re-reads the invoice rather than taking it as an argument: the caller has
@@ -74,26 +132,8 @@ export async function recordInvoiceForTax(
   })
   if (!invoice) return { status: 'blocked', reason: 'Invoice disappeared mid-transaction' }
 
-  // ── whose invoice IS this? ──
-  //
-  // A trap worth stating: on a PLATFORM commission invoice `accountId` is the
-  // RECIPIENT partner, not the issuer — the issuer is Sunbnb. Resolving the
-  // regime off `account.country` there would file OUR invoice under the
-  // customer's jurisdiction, and for the Finnish partner it would file it
-  // nowhere at all. The platform's own jurisdiction is keyed on the issuing
-  // tax id, because the platform has more than one entity and only one of them
-  // is Spanish.
-  const issuerJurisdiction =
-    invoice.issuerType === 'PLATFORM'
-      ? platformIssuerJurisdiction(invoice.issuerVatNumber)
-      : {
-          country: invoice.account?.country ?? null,
-          taxRegion: invoice.account?.taxRegion ?? null,
-        }
-
-  // ── in scope? ──
-  const regime = resolveTaxRegime(issuerJurisdiction)
-  if (!regimeRequiresRecords(regime)) return { status: 'out-of-scope' }
+  // ── in scope? See resolveInvoiceIssuerJurisdiction for the PLATFORM trap. ──
+  if (!invoiceRequiresRecord(invoice)) return { status: 'out-of-scope' }
 
   const issuerNif = (invoice.issuerVatNumber ?? '').trim()
   if (issuerNif === '') {
