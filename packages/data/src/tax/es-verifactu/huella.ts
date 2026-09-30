@@ -150,6 +150,23 @@ export function formatImporte(value: number): string {
  * date off the UTC instant files the record under the wrong day. The venue's
  * timezone is on `Site.timeZone` (track 017).
  */
+/**
+ * The time zone a Spanish issuer's invoice DATE is derived in.
+ *
+ * Shared by the record builder and the QR builder on purpose: the QR's `fecha`
+ * and the record's `FechaExpedicionFactura` are cotejed against each other, so
+ * if the two ever derive the date differently every scan fails while every unit
+ * test passes. One constant, two callers.
+ *
+ * Deliberately NOT `Site.timeZone`: the issue date belongs to the ISSUER's
+ * territory, not the venue's, and a Spanish company may run a venue abroad (the
+ * dev data has sites in Brazil and Crete). The known gap is the Canary Islands,
+ * which are `Atlantic/Canary` and under IGIC rather than IVA — out of this
+ * regime's scope altogether, and a `taxRegion` case to settle if a partner ever
+ * establishes there.
+ */
+export const ES_ISSUER_TIME_ZONE = 'Europe/Madrid'
+
 export function formatFechaExpedicion(at: Date, timeZone: string): string {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone,

@@ -205,7 +205,31 @@ function receiptHtml(receipt: ReceiptModel): string {
     )
     .join('')
 
+  // The AEAT QR block. §3 of the QR spec puts it before the invoice content,
+  // which in an email means above everything. Absent for a non-Spanish issuer.
+  //
+  // This is the reason the PNG is served from a route rather than inlined as a
+  // data URI: Gmail strips `data:` images, and the emailed receipt is the copy a
+  // guest keeps. The code is 132 px (35 mm at 96 dpi) with 23 px (6 mm) of white
+  // quiet zone around it, supplied here rather than baked into the image.
+  //
+  // The literals are legal wording and are deliberately not translated, and the
+  // legend must stay at or above the surrounding text size — not fine print.
+  const fiscalBlock = receipt.fiscal
+    ? `
+    <table role="presentation" style="width:100%;border-collapse:collapse;margin:0 0 20px;">
+      <tr><td align="center" style="padding:0 0 4px;font-size:13px;color:#1a1a2e;">${receipt.fiscal.labelAbove}</td></tr>
+      <tr><td align="center" style="padding:0;">
+        <a href="${receipt.fiscal.qrUrl}" style="display:inline-block;background:#ffffff;padding:23px;text-decoration:none;">
+          <img src="${receipt.fiscal.qrImageUrl}" width="132" height="132" alt="${receipt.fiscal.labelAbove}" style="display:block;width:132px;height:132px;border:0;" />
+        </a>
+      </td></tr>
+      <tr><td align="center" style="padding:4px 0 0;font-size:13px;font-weight:700;color:#1a1a2e;">${receipt.fiscal.legendBelow}</td></tr>
+    </table>`
+    : ''
+
   return emailLayout(`
+    ${fiscalBlock}
     <h1 style="margin:0 0 4px;font-size:22px;color:#1a1a2e;">Receipt</h1>
     <p style="color:#666;margin:0 0 20px;font-size:15px;">${merchant}</p>
 

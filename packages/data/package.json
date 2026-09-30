@@ -52,6 +52,7 @@
     "./receipt": "./src/receipt.ts",
     "./receipt-model": "./src/receipt-model.ts",
     "./tax/es-verifactu/huella": "./src/tax/es-verifactu/huella.ts",
+    "./tax/es-verifactu/qr": "./src/tax/es-verifactu/qr.ts",
     "./tax/es-verifactu/record": "./src/tax/es-verifactu/record.ts",
     "./tax/es-verifactu/sistema-informatico": "./src/tax/es-verifactu/sistema-informatico.ts",
     "./tax/es-verifactu/tipo-factura": "./src/tax/es-verifactu/tipo-factura.ts",
@@ -168,6 +169,9 @@
       ],
       "tax/es-verifactu/huella": [
         "./src/tax/es-verifactu/huella.ts"
+      ],
+      "tax/es-verifactu/qr": [
+        "./src/tax/es-verifactu/qr.ts"
       ],
       "tax/es-verifactu/record": [
         "./src/tax/es-verifactu/record.ts"

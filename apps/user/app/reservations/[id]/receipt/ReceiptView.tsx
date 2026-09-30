@@ -91,6 +91,41 @@ function ReceiptDoc({ receipt }: { receipt: ReceiptModel }) {
   const t = useTranslations('Receipt')
   return (
     <div className="max-w-md mx-auto bg-white text-gray-800">
+      {/* The AEAT QR goes FIRST — §3 of the QR spec puts it before any content
+          the invoicing system generates, once, at the top. Absent for a
+          non-Spanish issuer, which is the normal case outside Spain.
+
+          Sizes: the code itself is 35 mm (132 px at 96 dpi), inside art. 21.1's
+          30–40 mm, with 6 mm (23 px) of white quiet zone supplied here rather
+          than baked into the PNG — see the qr.png route for why. The two
+          literals are legal wording and are NOT translated. */}
+      {receipt.fiscal && (
+        <div className="flex flex-col items-center px-5 pt-5 pb-3">
+          <div className="text-xs text-gray-900 mb-1">{receipt.fiscal.labelAbove}</div>
+          <a
+            href={receipt.fiscal.qrUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bg-white"
+            style={{ padding: '23px' }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={receipt.fiscal.qrImageUrl}
+              alt={receipt.fiscal.labelAbove}
+              width={132}
+              height={132}
+              style={{ width: '132px', height: '132px', imageRendering: 'pixelated' }}
+            />
+          </a>
+          {/* "igual o superior" to the rest of the invoice data — text-xs is the
+              body size on this receipt, so this must not become fine print. */}
+          <div className="text-xs font-semibold text-gray-900 mt-1">
+            {receipt.fiscal.legendBelow}
+          </div>
+        </div>
+      )}
+
       {/* Reservation info */}
       {(receipt.siteName || receipt.periodLabel || receipt.seatNumbers || receipt.tableLabel) && (
         <div className="px-5 py-3 border-b border-dashed border-gray-200">

@@ -15,6 +15,7 @@ import {
   buildReservationReceipt,
   buildTabReceipt,
 } from './receipt'
+import { AEAT_QR_URL_PRODUCTION } from './tax/es-verifactu/qr'
 
 beforeEach(async () => {
   await cleanDatabase()
@@ -210,5 +211,91 @@ describe('buildTabReceipt', () => {
   it('reports an unpaid tab as not-ready', async () => {
     const { tab } = await setupTab(true)
     expect(await buildTabReceipt(tab.id)).toEqual({ status: 'no-invoice' })
+  })
+})
+
+// ─── the fiscal block (track 026 phase 6) ───────────────────────────────────
+
+describe('the AEAT QR on a receipt', () => {
+  async function setup(partner: Record<string, unknown>) {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id, { company: 'Alonso Beach SL', ...partner })
+    const site = await createTestSite(user.id, { name: 'Alonso Beach' })
+    const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const reservation = await createTestReservation(user.id, site.id, [item.id])
+    await invoiceFor(user.id, { reservationId: reservation.id }, [
+      { description: 'Sunbed 1-1-1', charge: 100, tax: 21, amount: 121, vatRate: 21 },
+    ])
+    const result = await buildReservationReceipt(reservation.id)
+    if (result.status !== 'ok') throw new Error(`expected ok, got ${result.status}`)
+    return result.receipt
+  }
+
+  it('carries the QR, the payload and both legal literals for a Spanish issuer', async () => {
+    const receipt = await setup({ country: 'ES', taxRegion: 'MA' })
+    expect(receipt.fiscal).not.toBeNull()
+    const fiscal = receipt.fiscal!
+
+    expect(fiscal.qrUrl.startsWith(`${AEAT_QR_URL_PRODUCTION}?`)).toBe(true)
+    // The payload describes the INVOICE, from stored values.
+    expect(fiscal.qrUrl).toContain('nif=B22435705')
+    expect(fiscal.qrUrl).toContain('numserie=AB-F-2026-00001')
+    // 09:30 UTC on 10 July is still the 10th in Madrid; the date is the issuer's.
+    expect(fiscal.qrUrl).toContain('fecha=10-07-2026')
+    expect(fiscal.qrUrl).toContain('importe=121.00')
+
+    expect(fiscal.labelAbove).toBe('QR tributario:')
+    expect(fiscal.legendBelow).toBe('VERI*FACTU')
+    expect(fiscal.qrImageUrl).toMatch(/\/api\/receipts\/[a-z0-9-]+\/qr\.png$/)
+  })
+
+  it('does NOT put the CSV — or anything AEAT returns — in the payload', async () => {
+    // This is the property that makes an asynchronous, retrying transmission
+    // lawful: the receipt is complete before AEAT has seen the record. If a
+    // future change makes the QR depend on a submission response, the checkout
+    // starts blocking on a tax agency.
+    const receipt = await setup({ country: 'ES', taxRegion: 'MA' })
+    const params = new URL(receipt.fiscal!.qrUrl).searchParams
+    expect([...params.keys()].sort()).toEqual(['fecha', 'importe', 'nif', 'numserie'])
+    expect(params.has('csv')).toBe(false)
+    // §7.2: formato=json must never appear in a QR.
+    expect(params.has('formato')).toBe(false)
+  })
+
+  it('has no fiscal block for a Finnish issuer', async () => {
+    const receipt = await setup({ country: 'FI', taxRegion: null })
+    expect(receipt.fiscal).toBeNull()
+  })
+
+  it('has no fiscal block for a Spanish issuer in a foral territory', async () => {
+    // Bizkaia is TicketBAI, not Veri*factu. A QR pointing at AEAT's cotejo
+    // service would be a claim about a filing that was never made there.
+    const receipt = await setup({ country: 'ES', taxRegion: 'BI' })
+    expect(receipt.fiscal).toBeNull()
+  })
+
+  it('has no fiscal block for a Spanish issuer whose region is unset', async () => {
+    const receipt = await setup({ country: 'ES', taxRegion: null })
+    expect(receipt.fiscal).toBeNull()
+  })
+
+  it('omits the QR rather than drawing an unscannable one when the issuer has no NIF', async () => {
+    // Production issued exactly this once: an invoice with a NULL tax id. The
+    // receipt is the legal obligation and still has to be produced.
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id, { country: 'ES', taxRegion: 'MA' })
+    const site = await createTestSite(user.id)
+    const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
+    const reservation = await createTestReservation(user.id, site.id, [item.id])
+    await invoiceFor(user.id, { reservationId: reservation.id, issuerVatNumber: null }, [
+      { description: 'Sunbed', charge: 100, tax: 21, amount: 121, vatRate: 21 },
+    ])
+
+    const result = await buildReservationReceipt(reservation.id)
+    expect(result.status).toBe('ok')
+    if (result.status !== 'ok') return
+    expect(result.receipt.fiscal).toBeNull()
+    // The receipt itself is intact.
+    expect(result.receipt.grandTotal).toBe(121)
   })
 })

@@ -18,10 +18,14 @@
 
 import prisma from '../index'
 import { formatSeatId } from './seat-label'
+import { buildInvoiceQrUrl, QR_LABEL_ABOVE, QR_LEGEND_BELOW } from './tax/es-verifactu/qr'
+import { ES_ISSUER_TIME_ZONE, formatFechaExpedicion } from './tax/es-verifactu/huella'
+import { resolveTaxRegime } from './tax/regime'
 import {
   extractVatCountryCode,
   formatIssuedAt,
   formatStayPeriod,
+  type ReceiptFiscal,
   type ReceiptKind,
   type ReceiptModel,
 } from './receipt-model'
@@ -42,8 +46,22 @@ export type ReceiptResult =
    */
   | { status: 'no-invoice' }
 
+/**
+ * Everything `toModel` reads off an invoice. Shared by the nested includes and
+ * the two kinds that query `Invoice` directly — they used to carry their own
+ * `{ invoiceLines: true }`, so a field added here would have been silently
+ * absent on rentals and tabs.
+ */
+const INVOICE_ROW_INCLUDE = {
+  invoiceLines: true,
+  // The issuer's jurisdiction, for the Veri*factu gate. Read off the invoice
+  // rather than off the site's owner because the invoice is the document being
+  // described, and the two can differ for a standalone restaurant.
+  account: { select: { country: true, taxRegion: true } },
+} as const
+
 const INVOICE_INCLUDE = {
-  invoices: { include: { invoiceLines: true } },
+  invoices: { include: INVOICE_ROW_INCLUDE },
 } as const
 
 const SITE_INCLUDE = {
@@ -51,6 +69,7 @@ const SITE_INCLUDE = {
 } as const
 
 type InvoiceRow = {
+  id: string
   invoiceNumber: string | null
   invoicedAt: Date
   issuerCompanyName: string | null
@@ -66,6 +85,48 @@ type InvoiceRow = {
     tax: number
     amount: number
   }[]
+  account: { country: string | null; taxRegion: string | null } | null
+}
+
+/**
+ * The QR and legend, or null when the issuer is not a Spanish Veri*factu filer.
+ *
+ * Returns null rather than throwing on a payload the spec would reject — the
+ * receipt is the legal obligation and must still be issued. A Spanish invoice
+ * that ends up here without a QR is the same defect as one without a record, and
+ * is surfaced by the same alert (P9) rather than by refusing the guest a
+ * document.
+ */
+function buildFiscal(invoice: InvoiceRow): ReceiptFiscal | null {
+  const regime = resolveTaxRegime({
+    country: invoice.account?.country ?? null,
+    taxRegion: invoice.account?.taxRegion ?? null,
+  })
+  if (regime !== 'ES_VERIFACTU') return null
+
+  const qr = buildInvoiceQrUrl({
+    issuerNif: invoice.issuerVatNumber ?? '',
+    invoiceNumber: invoice.invoiceNumber ?? '',
+    fechaExpedicion: formatFechaExpedicion(invoice.invoicedAt, ES_ISSUER_TIME_ZONE),
+    totalAmount: invoice.totalAmount,
+  })
+  if (!qr.ok) {
+    console.error(
+      `[Verifactu] ${invoice.invoiceNumber ?? invoice.id} gets no QR: ${qr.reason}`,
+    )
+    return null
+  }
+
+  // Absolute when configured, because the emailed receipt is the copy a guest
+  // keeps and a relative src is silently blank there. The relative fallback
+  // keeps local development working without the env var.
+  const base = (process.env.CONSUMER_APP_URL ?? '').replace(/\/+$/, '')
+  return {
+    qrUrl: qr.url,
+    qrImageUrl: `${base}/api/receipts/${invoice.id}/qr.png`,
+    labelAbove: QR_LABEL_ABOVE,
+    legendBelow: QR_LEGEND_BELOW,
+  }
 }
 
 /** The PARTNER invoice, or null. Credit notes carry a crediting link and are
@@ -114,6 +175,7 @@ function toModel(
     subtotalVat: invoice.totalTax,
     subtotalAmount: invoice.totalAmount,
     grandTotal: invoice.totalAmount,
+    fiscal: buildFiscal(invoice),
   }
 }
 
@@ -176,7 +238,7 @@ export async function buildRentalReceipt(bookingId: string): Promise<ReceiptResu
 
   const invoices = await prisma.invoice.findMany({
     where: { paymentRef: booking.paymentRef },
-    include: { invoiceLines: true },
+    include: INVOICE_ROW_INCLUDE,
   })
   const invoice = partnerInvoiceOf(invoices as never)
   if (!invoice) return { status: 'no-invoice' }
@@ -215,7 +277,7 @@ export async function buildTabReceipt(tabId: string): Promise<ReceiptResult> {
 
   const invoices = await prisma.invoice.findMany({
     where: { tableTabId: tabId },
-    include: { invoiceLines: true },
+    include: INVOICE_ROW_INCLUDE,
   })
   const invoice = partnerInvoiceOf(invoices as never)
   if (!invoice) return { status: 'no-invoice' }

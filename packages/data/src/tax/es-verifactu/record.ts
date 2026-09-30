@@ -30,6 +30,7 @@ import {
   formatFechaExpedicion,
   formatFechaHoraHusoGenRegistro,
   formatImporte,
+  ES_ISSUER_TIME_ZONE,
   HUELLA_SPEC_VERSION,
 } from './huella'
 import { buildDesglose, classifyTipoFactura, type TipoFactura } from './tipo-factura'
@@ -122,7 +123,7 @@ export async function recordInvoiceForTax(
   // Falls back to Madrid rather than UTC: this branch only runs for a Spanish
   // issuer, and UTC would be an hour or two wrong all year, which is exactly
   // the failure this field exists to avoid.
-  const timeZone = 'Europe/Madrid'
+  const timeZone = ES_ISSUER_TIME_ZONE
   const fechaExpedicion = formatFechaExpedicion(invoice.invoicedAt, timeZone)
   const fechaHoraHusoGenRegistro = formatFechaHoraHusoGenRegistro(now, timeZone)
 

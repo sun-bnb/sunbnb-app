@@ -4,6 +4,7 @@ import {
   Page,
   Text,
   View,
+  Image,
   StyleSheet,
 } from '@react-pdf/renderer'
 import type { ReceiptModel } from '@repo/data/receipt-model'
@@ -176,6 +177,37 @@ const s = StyleSheet.create({
     fontWeight: 'bold',
     color: '#111827',
   },
+  // Fiscal QR (AEAT). Sizes are in points: 1 mm = 2.8346 pt.
+  //
+  // art. 21.1 puts the CODE between 30 and 40 mm, so the image is 35 mm (99 pt)
+  // and carries no baked-in quiet zone — the padding below is the quiet zone,
+  // at 6 mm (17 pt), which is §3's recommendation rather than its 2 mm floor.
+  qrBlock: {
+    marginBottom: 12,
+    display: 'flex',
+    alignItems: 'center',
+  },
+  qrLabel: {
+    // "igual o superior" to the rest of the invoice data — the body text here is
+    // 8–9 pt, so this must not be shrunk into fine print.
+    fontSize: 9,
+    color: '#111827',
+    marginBottom: 4,
+  },
+  qrFrame: {
+    backgroundColor: '#ffffff',
+    padding: 17,
+  },
+  qrImage: {
+    width: 99,
+    height: 99,
+  },
+  qrLegend: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginTop: 4,
+  },
   // Footer
   footer: {
     textAlign: 'center',
@@ -269,6 +301,7 @@ export default function PdfReceipt({ receipt }: { receipt: ReceiptModel }) {
   const SafePage = Page as unknown as React.ComponentType<any>
   const SafeText = Text as unknown as React.ComponentType<any>
   const SafeView = View as unknown as React.ComponentType<any>
+  const SafeImage = Image as unknown as React.ComponentType<any>
 
   const hasInfo =
     receipt.siteName || receipt.periodLabel || receipt.seatNumbers || receipt.tableLabel
@@ -276,6 +309,19 @@ export default function PdfReceipt({ receipt }: { receipt: ReceiptModel }) {
   return (
     <SafeDocument>
       <SafePage size="A5" style={s.page}>
+        {/* The AEAT QR goes FIRST — §3 of the QR spec puts it before any content
+            the invoicing system generates, once, on page one. Absent for a
+            non-Spanish issuer. */}
+        {receipt.fiscal && (
+          <SafeView style={s.qrBlock}>
+            <SafeText style={s.qrLabel}>{receipt.fiscal.labelAbove}</SafeText>
+            <SafeView style={s.qrFrame}>
+              <SafeImage style={s.qrImage} src={receipt.fiscal.qrImageUrl} />
+            </SafeView>
+            <SafeText style={s.qrLegend}>{receipt.fiscal.legendBelow}</SafeText>
+          </SafeView>
+        )}
+
         {/* Reservation info */}
         {hasInfo && (
           <SafeView style={s.infoSection}>

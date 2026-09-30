@@ -42,6 +42,33 @@ export interface ReceiptMerchant {
   phone: string | null
 }
 
+/**
+ * The fiscal block a Spanish receipt must carry (track 026 phase 6).
+ *
+ * Present only when the ISSUER is a Spanish Veri*factu filer — the Finnish
+ * partner's receipt has none, and every presenter must therefore treat this as
+ * optional rather than assuming a QR. Computed once in `receipt.ts` so the four
+ * surfaces inherit one decision instead of each re-deriving the regime.
+ *
+ * The literals are legal text and arrive already fixed. Do NOT put them through
+ * next-intl: `QR tributario:` and `VERI*FACTU` are mandated wording, not copy,
+ * and a locale file must not be able to change them.
+ */
+export interface ReceiptFiscal {
+  /**
+   * The AEAT cotejo URL the QR encodes. It carries the issuer NIF, the invoice
+   * number, the date and the total — and deliberately NOT the CSV, which is why
+   * a receipt is never waiting on AEAT.
+   */
+  qrUrl: string
+  /** Where the rendered PNG of `qrUrl` is served. */
+  qrImageUrl: string
+  /** Always above the QR (§3 of AEAT's QR spec). */
+  labelAbove: string
+  /** Always below it, for a verifiable-invoice system (art. 20.1.b). */
+  legendBelow: string
+}
+
 export interface ReceiptModel {
   kind: ReceiptKind
   invoiceNumber: string | null
@@ -80,6 +107,11 @@ export interface ReceiptModel {
    * branch was unreachable, and this is why it should stay that way.
    */
   grandTotal: number
+  /**
+   * Spanish fiscal furniture, or null when the issuer is not a Veri*factu
+   * filer. Null is the normal case outside Spain — render nothing, not a gap.
+   */
+  fiscal: ReceiptFiscal | null
 }
 
 /** Two decimals, no currency symbol — presenters add their own. */
