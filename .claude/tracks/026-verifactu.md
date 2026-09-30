@@ -40,49 +40,63 @@ implements them. No partner is in a foral territory today.
 
 ## Resume here
 
-**Next action — P7.0: the missing-record detector.** Small, and it is a debt this track
-created rather than a new feature. P5 made a blocked invoice write **no record at all** on the
-argument that a placeholder would put a hole in the chain, and justified that in
-`record.ts`'s own header with "the gap is surfaced by the missing-record alert rather than by
-breaking a payment". That alert does not exist, so today a blocked Spanish invoice is visible
-only as a `console.error` in a Vercel log. It is also the instrument that answers the question
-P7.1 needs answered first: **are our own commission invoices actually filable?**
+**Next action — P7.1: transmission for the PLATFORM issuer only.** The detector (P7.0) is in
+and has already told us what we need to know before switching anything on, including two
+things that must be fixed first (see *Blocking data fixes* below).
 
-**Shape:** a query for in-scope invoices with no `VerifactuRecord`, plus a count of records
-stuck `pending`, added to `fiscal.ts` beside the `unInvoicedRefunds` watchdog P1 already
-established there. No new dependency, no new surface — the number can be rendered in P9's ops
-page later. Split by `issuerType` so "our own" and "partners'" are separately visible.
+**Why platform-only, and why it is not blocked:** AEAT error `4112` accepts the certificate
+holder as *Obligado Emisión*, and Sunbnb España SL **is** the obligado on its own PLATFORM
+commission invoices. So the whole transport — mTLS, chain order, the sweep, backoff,
+`Aceptado con errores` — can be built and proven against **production** AEAT on the €14
+certificate alone, with no Convenio and no partner signature. Partners are a filter widening
+afterwards (P7.2), gated on P7a.
 
-**Then P7.1 — transmission for the PLATFORM issuer only**, which is buildable now and is NOT
-blocked on either external process (see below). Stub-mode first so CI can run it.
-
-### The sequencing that changed, and why
-
-AEAT enforces representation at the service, not just in law: `4112 = El titular del
-certificado debe ser Obligado Emisión, Colaborador Social, Apoderado o Sucesor`, and it is in
-the list of errors that reject the **whole envío**. But *Obligado Emisión* is an accepted
-role, and Sunbnb España SL **is** the obligado on its own PLATFORM commission invoices. So the
-entire transport — mTLS, chain order, the sweep, backoff, `Aceptado con errores` — can be
-built and proven against **production** AEAT on the €14 certificate alone, with no Convenio
-and no partner signature. Partner submission is a filter widening afterwards (P7.2), gated on
-P7a. AEAT's services have been live since 23 April 2025.
+**Shape:**
+- `packages/data/src/tax/es-verifactu/client.ts` + `stub-client.ts` with an
+  `AEAT_MODE=stub|http` switch mirroring `packages/data/src/viva/`, so CI never needs a
+  certificate and **a missing certificate fails CLOSED rather than silently skipping**.
+- The sweep reads `VerifactuRecord` where `status` is one of `RECORD_UNSENT_STATUSES` and
+  `nextAttemptAt <= now()`, restricted to `issuerNif` folding to `PLATFORM_ES_ISSUER_NIF`.
+  Attempt counter, exponential backoff, `blocked` as terminal-until-fixed — the things
+  `/api/reconcile` lacks.
+- **Stop at the first failure for a given NIF.** Records within a chain must arrive in order;
+  head-of-line blocking is correct here and a maintainer will otherwise "fix" it into a
+  compliance breach. Different NIFs proceed independently. A message carries a single
+  `ObligadoEmision`, so never batch across issuers — `4112` rejects the whole envío.
+- **Wire the cron in `vercel.json` in the same commit.** `/api/reconcile` is the standing
+  proof that a route shipped without its trigger stays dark forever.
 
 **Context needed:**
-- `packages/data/src/fiscal.ts` — where the detector goes; `unInvoicedRefunds` is the
-  precedent for a watchdog that should read zero.
-- `packages/data/src/tax/es-verifactu/record.ts` — `VerifactuRecord` carries
-  `status`/`nextAttemptAt`/`chainSeq`; `VerifactuChain` is keyed on `issuerNif`.
-- `packages/data/src/tax/es-verifactu/sistema-informatico.ts` — `PLATFORM_ES_ISSUER_NIF` is
-  the filter P7.1 restricts the sweep to.
-- `packages/data/src/viva/` — the stub-vs-real mode-switch pattern to copy.
-- `.claude/rules/migrations.md` + `vercel.json` — the cron must be wired in the same commit.
+- `packages/data/src/tax/es-verifactu/health.ts` — `getVerifactuHealth`, and the
+  `RECORD_*` constants live in `record.ts` beside it.
+- `packages/data/src/tax/es-verifactu/sistema-informatico.ts` — `PLATFORM_ES_ISSUER_NIF`
+  (the filter) and `platformIssuerJurisdiction` (which folds an `ES` prefix — load-bearing).
+- `packages/data/src/viva/` — the stub-vs-real mode switch to copy.
+- `npm run verifactu:health:{local,test,production}` — run it before and after.
 
-**Not yet done and easy to forget:** **21 commits are unpushed**, 4 of them carrying migrations
-(`20260929113904`, `20260929120000`, `20260929140000`, `20260929160000`) — all applied to the
-LOCAL Docker `sunbnb_test` but **not** to the Neon TEST database, so `.githooks/pre-push` will
-block a `main` push until `npm run migrate:test` runs. All four are additive, so applying them
-ahead of the code is correct per expand/contract. The production clean-slate deletion (D3) is
-deferred to cutover; D4's signature and the remaining half of D5 are founder/asesor actions.
+### Blocking data fixes, both admin actions rather than code
+
+Found by running the detector against the TEST database:
+
+1. **No partner has `taxRegion` set**, so no Spanish partner is in scope at all. One issuer
+   (12 invoices) is `country = ES` with `taxRegion` null. Until this is set in admin, a
+   Spanish partner's invoices are silently *out of scope* rather than filed — which is why
+   `unresolvedEsIssuers` exists and why the report refuses to say "complete" while any remain.
+2. **The `Settings` rows are mislabelled.** There are two: one with `country = 'ES'` and a
+   NULL `vatId`/`companyName`, and one with `country = 'FI'` carrying
+   `vatId = 'ESB22435705'` / `companyName = 'Sunbnb España SL'`. The Spanish company's
+   identity is sitting on the row labelled Finland. `getBusinessEntity()` prefers a row with
+   a `vatId`, so it currently picks the right identity — by preference, not by country — which
+   works and is fragile. Fix the labelling before P7.1 files anything real.
+
+Neither blocks writing the transport; both block trusting what it sends.
+
+**Not yet done and easy to forget:** the production clean-slate deletion (D3) is deferred to
+cutover — and note `verifactu_record` does not exist on production yet, so
+`verifactu:health:production` cannot run until those migrations ship. D4's signature and the
+remaining half of D5 are founder/asesor actions. One full-suite run failed on
+`record.integration.test.ts`'s platform assertion and has not reproduced in four runs since;
+watch it rather than assume it is gone.
 
 ## Roadmap
 
@@ -147,14 +161,27 @@ deferred to cutover; D4's signature and the remaining half of D5 are founder/ase
   padding; verified by decoding the generated PNG with CoreImage (both margin-0 and margin-4
   round-trip to the exact URL). *Makes true: "every receipt includes a QR code formatted per
   AEAT specifications" — the most conspicuous false claim on the live page.*
-- ▶ **P7.0 — The missing-record detector.** Pulled out of P9 and put first, because P5's
-  design depends on it: a blocked invoice writes no record by design, and `record.ts` claims
-  the absence "is surfaced by the missing-record alert" — which does not exist. A promise in a
-  code comment that is not kept. In `fiscal.ts` beside `unInvoicedRefunds`, split by
-  `issuerType`, counting both in-scope invoices with no record and records stuck `pending`.
-  Also the prerequisite for P7.1: it tells us whether our own commission invoices are filable
-  before we start sending them.
-- ☐ **P7.1 — Transmission, PLATFORM issuer only.** The whole transport, restricted to
+- ✅ **P7.0 — The missing-record detector** (`2a2a458`, `6a12838`).
+  `getVerifactuHealth` + `describeVerifactuHealth` in
+  `tax/es-verifactu/health.ts`, wired the same day as
+  `npm run verifactu:health:{local,test,production}` (exit 1 when unhealthy, so it can gate a
+  cron or CI). Reports: in-scope invoices with no record split by `issuerType`, records by
+  submission state, the oldest unsent record, and per-issuer chain contiguity — `chainSeq` runs
+  1..N, so a count below the chain head means a record inside the chain is GONE, which
+  re-sending cannot repair. Extracted `resolveInvoiceIssuerJurisdiction` and `RECORD_*` status
+  constants out of `record.ts` so the detector cannot disagree with the writer about scope or
+  about what "filed" means.
+  **Running it found three things no test would have.** (a) It first reported *"register
+  complete"* on TEST with zero records — because no partner has `taxRegion`, so nothing was
+  ever in scope: the same shape as the refunds figure this track already fixed, structurally
+  always €0.00 while €576 had been credited. `unresolvedEsIssuers` now names that and
+  `healthy` is false while any remain. (b) All 8 PLATFORM invoices on TEST are unfilable —
+  seven with a NULL tax id and the name "Platform Operator", one carrying a *partner's*
+  Finnish VAT number as the issuer of our own commission invoice. (c) The platform `vatId` is
+  stored as `ESB22435705` with the country prefix, so `foldNif`'s prefix stripping is
+  load-bearing: without it every commission invoice of ours resolves to a different company
+  and drops silently out of scope.
+- ▶ **P7.1 — Transmission, PLATFORM issuer only.** The whole transport, restricted to
   `issuerNif === PLATFORM_ES_ISSUER_NIF`. Not blocked on the Convenio or on any partner:
   `4112` accepts the certificate holder as *Obligado Emisión* and we are that on our own
   commission invoices, so this can be proven against **production** AEAT with the €14
@@ -319,6 +346,21 @@ deferred to cutover; D4's signature and the remaining half of D5 are founder/ase
   invisible outside a Vercel log. It is also the instrument that tells us whether our own
   commission invoices are filable before P7.1 starts sending them.
   Corrected a figure repeated several times in this track: **4** unpushed migrations, not 5.
+
+- **2026-09-30 — P7.0 shipped, and it earned its place by failing usefully on first run.**
+  The detector said *"Veri\*factu register complete"* against the TEST database while holding
+  zero records, because `resolveTaxRegime` returns `NONE` for a `country = 'ES'` partner whose
+  `taxRegion` is unset — so no invoice was ever in scope and every figure read clean. That is
+  the third instance in this track of the same defect shape: a number that cannot be wrong
+  because nothing reaches it (the others being `fiscal.ts`'s refunds, always €0.00 beside €576
+  of credit notes, and the `Desglose` built before the invoice lines existed). The report now
+  names unclassified Spanish issuers and refuses to call itself complete while any exist.
+  It also surfaced that all 8 PLATFORM invoices on TEST are unfilable, one of them issued
+  under a partner's Finnish VAT number, and that the platform's stored `vatId` carries an `ES`
+  prefix — making the prefix folding in `platformIssuerJurisdiction` load-bearing rather than
+  defensive. Both now have tests.
+  Wired as a CLI in the same commit, per this track's own rule: `/api/reconcile` is the
+  standing proof that a route shipped without its trigger stays dark forever.
 
 ## Open decisions
 
