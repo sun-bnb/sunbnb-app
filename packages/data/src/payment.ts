@@ -53,6 +53,8 @@ const TAB_ORDER_VOID_STATUSES = [
   ORDER_REFUNDED,
 ]
 import { resolveEffectiveFeatures, type SubscriptionFeatureKey } from './subscription'
+import { recordInvoiceForTax } from './tax/es-verifactu/record'
+import { sistemaInformatico } from './tax/es-verifactu/sistema-informatico'
 import {
   allocateInvoiceIdentity,
   ensureSeriesPrefix,
@@ -723,6 +725,7 @@ export async function processConfirmedReservation(
       },
     })
 
+
     // Product lines — one per sunbed item, at the full listed price (gross).
     const partnerLines = reservation.items.map((item) => {
       const itemPrice = round(item.price ?? site.price ?? 0)
@@ -742,6 +745,19 @@ export async function processConfirmedReservation(
 
     if (partnerLines.length > 0) {
       await tx.invoiceLine.createMany({ data: partnerLines })
+    }
+
+    // File it with AEAT, in THIS transaction — an in-scope invoice and its record
+    // must not be able to exist separately. This sits AFTER the lines on purpose:
+    // the record carries the VAT breakdown, which is built from them, so filing
+    // beside the invoice header would block every record for having no desglose.
+    // Out-of-scope issuers write nothing; an invoice that cannot be filed still
+    // stands, surfaced by the missing-record alert rather than by failing a payment.
+    const partnerInvoiceRecord = await recordInvoiceForTax(tx, partnerInvoice.id, sistemaInformatico())
+    if (partnerInvoiceRecord.status === 'blocked') {
+      console.error(
+        `[Verifactu] ${partnerInvoice.invoiceNumber} cannot be filed: ${partnerInvoiceRecord.reason}`,
+      )
     }
 
     // ── 2. PLATFORM Invoice (service fee) — skipped for cash/walk-in receipts ──
@@ -779,6 +795,7 @@ export async function processConfirmedReservation(
         },
       })
 
+
       await tx.invoiceLine.create({
         data: {
           charge: commission.base,
@@ -790,6 +807,19 @@ export async function processConfirmedReservation(
           description: `Reservation service fee${feeCountry ? ` (${feeCountry})` : ''}`,
         },
       })
+
+      // File it with AEAT, in THIS transaction — an in-scope invoice and its record
+      // must not be able to exist separately. This sits AFTER the lines on purpose:
+      // the record carries the VAT breakdown, which is built from them, so filing
+      // beside the invoice header would block every record for having no desglose.
+      // Out-of-scope issuers write nothing; an invoice that cannot be filed still
+      // stands, surfaced by the missing-record alert rather than by failing a payment.
+      const platformInvoiceRecord = await recordInvoiceForTax(tx, platformInvoice.id, sistemaInformatico())
+      if (platformInvoiceRecord.status === 'blocked') {
+        console.error(
+          `[Verifactu] ${platformInvoice.invoiceNumber} cannot be filed: ${platformInvoiceRecord.reason}`,
+        )
+      }
     }
 
     // Only advance the payment status for online payments. Cash walk-ins stay
@@ -939,6 +969,7 @@ export async function issueCashCreditNote(
       },
     })
 
+
     // One line per rate. A single line could not express a receipt taxed at two
     // rates without inventing a blended one, which is the defect being fixed.
     for (const bucket of buckets) {
@@ -953,6 +984,19 @@ export async function issueCashCreditNote(
           description: `Credit note for ${receipt.invoiceNumber ?? receipt.id} — cash refund`,
         },
       })
+    }
+
+    // File it with AEAT, in THIS transaction — an in-scope invoice and its record
+    // must not be able to exist separately. This sits AFTER the lines on purpose:
+    // the record carries the VAT breakdown, which is built from them, so filing
+    // beside the invoice header would block every record for having no desglose.
+    // Out-of-scope issuers write nothing; an invoice that cannot be filed still
+    // stands, surfaced by the missing-record alert rather than by failing a payment.
+    const creditNoteRecord = await recordInvoiceForTax(tx, creditNote.id, sistemaInformatico())
+    if (creditNoteRecord.status === 'blocked') {
+      console.error(
+        `[Verifactu] ${creditNote.invoiceNumber} cannot be filed: ${creditNoteRecord.reason}`,
+      )
     }
 
     return {
@@ -1100,6 +1144,7 @@ export async function processConfirmedRentalBooking(
       },
     })
 
+
     // One line per booking, at the full price (gross).
     const partnerLines = bookings.map((booking) => {
       const bookingPrice = round(booking.paymentAmount ?? booking.totalPrice ?? 0)
@@ -1119,6 +1164,19 @@ export async function processConfirmedRentalBooking(
 
     if (partnerLines.length > 0) {
       await tx.invoiceLine.createMany({ data: partnerLines })
+    }
+
+    // File it with AEAT, in THIS transaction — an in-scope invoice and its record
+    // must not be able to exist separately. This sits AFTER the lines on purpose:
+    // the record carries the VAT breakdown, which is built from them, so filing
+    // beside the invoice header would block every record for having no desglose.
+    // Out-of-scope issuers write nothing; an invoice that cannot be filed still
+    // stands, surfaced by the missing-record alert rather than by failing a payment.
+    const partnerInvoiceRecord = await recordInvoiceForTax(tx, partnerInvoice.id, sistemaInformatico())
+    if (partnerInvoiceRecord.status === 'blocked') {
+      console.error(
+        `[Verifactu] ${partnerInvoice.invoiceNumber} cannot be filed: ${partnerInvoiceRecord.reason}`,
+      )
     }
 
     // ── 2. PLATFORM Invoice (service fee) ──
@@ -1156,6 +1214,7 @@ export async function processConfirmedRentalBooking(
         },
       })
 
+
       await tx.invoiceLine.create({
         data: {
           charge: commission.base,
@@ -1167,6 +1226,19 @@ export async function processConfirmedRentalBooking(
           description: `Equipment rental service fee${feeCountry ? ` (${feeCountry})` : ''}`,
         },
       })
+
+      // File it with AEAT, in THIS transaction — an in-scope invoice and its record
+      // must not be able to exist separately. This sits AFTER the lines on purpose:
+      // the record carries the VAT breakdown, which is built from them, so filing
+      // beside the invoice header would block every record for having no desglose.
+      // Out-of-scope issuers write nothing; an invoice that cannot be filed still
+      // stands, surfaced by the missing-record alert rather than by failing a payment.
+      const platformInvoiceRecord = await recordInvoiceForTax(tx, platformInvoice.id, sistemaInformatico())
+      if (platformInvoiceRecord.status === 'blocked') {
+        console.error(
+          `[Verifactu] ${platformInvoice.invoiceNumber} cannot be filed: ${platformInvoiceRecord.reason}`,
+        )
+      }
     }
 
     // Mark all bookings as complete
@@ -1298,6 +1370,7 @@ export async function processCashRentalBooking(
       },
     })
 
+
     // Single line: one booking at the full listed price (gross)
     await tx.invoiceLine.create({
       data: {
@@ -1310,6 +1383,19 @@ export async function processCashRentalBooking(
         description: `${booking.rentalItem?.name ?? 'Equipment'} × ${booking.quantity}`,
       },
     })
+
+    // File it with AEAT, in THIS transaction — an in-scope invoice and its record
+    // must not be able to exist separately. This sits AFTER the lines on purpose:
+    // the record carries the VAT breakdown, which is built from them, so filing
+    // beside the invoice header would block every record for having no desglose.
+    // Out-of-scope issuers write nothing; an invoice that cannot be filed still
+    // stands, surfaced by the missing-record alert rather than by failing a payment.
+    const partnerInvoiceRecord = await recordInvoiceForTax(tx, partnerInvoice.id, sistemaInformatico())
+    if (partnerInvoiceRecord.status === 'blocked') {
+      console.error(
+        `[Verifactu] ${partnerInvoice.invoiceNumber} cannot be filed: ${partnerInvoiceRecord.reason}`,
+      )
+    }
 
     // Status is NOT mutated — cash walk-in rental stays in its operational state.
   })
@@ -1506,6 +1592,7 @@ export async function processConfirmedOrder(
       },
     })
 
+
     const itemLines = itemCalcs.map(({ lineBase, lineVat, itemGross, item }) => {
       return {
         charge: lineBase,
@@ -1520,6 +1607,19 @@ export async function processConfirmedOrder(
 
     if (itemLines.length > 0) {
       await tx.invoiceLine.createMany({ data: itemLines })
+    }
+
+    // File it with AEAT, in THIS transaction — an in-scope invoice and its record
+    // must not be able to exist separately. This sits AFTER the lines on purpose:
+    // the record carries the VAT breakdown, which is built from them, so filing
+    // beside the invoice header would block every record for having no desglose.
+    // Out-of-scope issuers write nothing; an invoice that cannot be filed still
+    // stands, surfaced by the missing-record alert rather than by failing a payment.
+    const partnerInvoiceRecord = await recordInvoiceForTax(tx, partnerInvoice.id, sistemaInformatico())
+    if (partnerInvoiceRecord.status === 'blocked') {
+      console.error(
+        `[Verifactu] ${partnerInvoice.invoiceNumber} cannot be filed: ${partnerInvoiceRecord.reason}`,
+      )
     }
 
     // ── 2. PLATFORM Invoice (service fee) — skipped for cash/walk-in receipts ──
@@ -1557,6 +1657,7 @@ export async function processConfirmedOrder(
         },
       })
 
+
       await tx.invoiceLine.create({
         data: {
           charge: commission.base,
@@ -1568,6 +1669,19 @@ export async function processConfirmedOrder(
           description: `Order service fee${feeCountry ? ` (${feeCountry})` : ''}`,
         },
       })
+
+      // File it with AEAT, in THIS transaction — an in-scope invoice and its record
+      // must not be able to exist separately. This sits AFTER the lines on purpose:
+      // the record carries the VAT breakdown, which is built from them, so filing
+      // beside the invoice header would block every record for having no desglose.
+      // Out-of-scope issuers write nothing; an invoice that cannot be filed still
+      // stands, surfaced by the missing-record alert rather than by failing a payment.
+      const platformInvoiceRecord = await recordInvoiceForTax(tx, platformInvoice.id, sistemaInformatico())
+      if (platformInvoiceRecord.status === 'blocked') {
+        console.error(
+          `[Verifactu] ${platformInvoice.invoiceNumber} cannot be filed: ${platformInvoiceRecord.reason}`,
+        )
+      }
     }
 
     // Only advance the payment status for online payments. Cash walk-in orders
@@ -1729,6 +1843,7 @@ export async function processChargedTableDeposit(
       },
     })
 
+
     // Single line: the kept no-show deposit
     await tx.invoiceLine.create({
       data: {
@@ -1741,6 +1856,19 @@ export async function processChargedTableDeposit(
         description: `No-show deposit — ${tableReservation.guestName} (party of ${tableReservation.partySize})`,
       },
     })
+
+    // File it with AEAT, in THIS transaction — an in-scope invoice and its record
+    // must not be able to exist separately. This sits AFTER the lines on purpose:
+    // the record carries the VAT breakdown, which is built from them, so filing
+    // beside the invoice header would block every record for having no desglose.
+    // Out-of-scope issuers write nothing; an invoice that cannot be filed still
+    // stands, surfaced by the missing-record alert rather than by failing a payment.
+    const partnerInvoiceRecord = await recordInvoiceForTax(tx, partnerInvoice.id, sistemaInformatico())
+    if (partnerInvoiceRecord.status === 'blocked') {
+      console.error(
+        `[Verifactu] ${partnerInvoice.invoiceNumber} cannot be filed: ${partnerInvoiceRecord.reason}`,
+      )
+    }
 
     // ── 2. PLATFORM Invoice (service fee) ──
 
@@ -1778,6 +1906,7 @@ export async function processChargedTableDeposit(
         },
       })
 
+
       await tx.invoiceLine.create({
         data: {
           charge: commission.base,
@@ -1789,6 +1918,19 @@ export async function processChargedTableDeposit(
           description: `No-show deposit service fee${feeCountry ? ` (${feeCountry})` : ''}`,
         },
       })
+
+      // File it with AEAT, in THIS transaction — an in-scope invoice and its record
+      // must not be able to exist separately. This sits AFTER the lines on purpose:
+      // the record carries the VAT breakdown, which is built from them, so filing
+      // beside the invoice header would block every record for having no desglose.
+      // Out-of-scope issuers write nothing; an invoice that cannot be filed still
+      // stands, surfaced by the missing-record alert rather than by failing a payment.
+      const platformInvoiceRecord = await recordInvoiceForTax(tx, platformInvoice.id, sistemaInformatico())
+      if (platformInvoiceRecord.status === 'blocked') {
+        console.error(
+          `[Verifactu] ${platformInvoice.invoiceNumber} cannot be filed: ${platformInvoiceRecord.reason}`,
+        )
+      }
     }
   })
 }
@@ -2106,6 +2248,7 @@ export async function processConfirmedTabPayment(
       },
     })
 
+
     const itemLines = allItemCalcs.map(({ lineBase, lineVat, itemGross, item }) => ({
       charge: lineBase,
       tax: lineVat,
@@ -2118,6 +2261,19 @@ export async function processConfirmedTabPayment(
 
     if (itemLines.length > 0) {
       await tx.invoiceLine.createMany({ data: itemLines })
+    }
+
+    // File it with AEAT, in THIS transaction — an in-scope invoice and its record
+    // must not be able to exist separately. This sits AFTER the lines on purpose:
+    // the record carries the VAT breakdown, which is built from them, so filing
+    // beside the invoice header would block every record for having no desglose.
+    // Out-of-scope issuers write nothing; an invoice that cannot be filed still
+    // stands, surfaced by the missing-record alert rather than by failing a payment.
+    const partnerInvoiceRecord = await recordInvoiceForTax(tx, partnerInvoice.id, sistemaInformatico())
+    if (partnerInvoiceRecord.status === 'blocked') {
+      console.error(
+        `[Verifactu] ${partnerInvoice.invoiceNumber} cannot be filed: ${partnerInvoiceRecord.reason}`,
+      )
     }
 
     // ── 2. PLATFORM Invoice (service fee) — skipped for cash settlements ──
@@ -2157,6 +2313,7 @@ export async function processConfirmedTabPayment(
         },
       })
 
+
       await tx.invoiceLine.create({
         data: {
           charge: commission.base,
@@ -2168,6 +2325,19 @@ export async function processConfirmedTabPayment(
           description: `Dine-in tab service fee${feeCountry ? ` (${feeCountry})` : ''}`,
         },
       })
+
+      // File it with AEAT, in THIS transaction — an in-scope invoice and its record
+      // must not be able to exist separately. This sits AFTER the lines on purpose:
+      // the record carries the VAT breakdown, which is built from them, so filing
+      // beside the invoice header would block every record for having no desglose.
+      // Out-of-scope issuers write nothing; an invoice that cannot be filed still
+      // stands, surfaced by the missing-record alert rather than by failing a payment.
+      const platformInvoiceRecord = await recordInvoiceForTax(tx, platformInvoice.id, sistemaInformatico())
+      if (platformInvoiceRecord.status === 'blocked') {
+        console.error(
+          `[Verifactu] ${platformInvoice.invoiceNumber} cannot be filed: ${platformInvoiceRecord.reason}`,
+        )
+      }
     }
 
     // ── 3. Mark all orders paid and close the tab ──

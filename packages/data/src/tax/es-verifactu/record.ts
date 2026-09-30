@@ -23,7 +23,7 @@
  * ops alert is what makes absence visible.
  */
 
-import prisma from '../../index'
+import prisma from '../../../index'
 import {
   computeAltaHuella,
   altaHuellaInputString,
@@ -34,6 +34,12 @@ import {
 } from './huella'
 import { buildDesglose, classifyTipoFactura, type TipoFactura } from './tipo-factura'
 import { resolveTaxRegime, regimeRequiresRecords } from '../regime'
+import {
+  platformIssuerJurisdiction,
+  type SistemaInformatico,
+} from './sistema-informatico'
+
+export type { SistemaInformatico }
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
@@ -43,21 +49,6 @@ export type RecordOutcome =
   | { status: 'out-of-scope' }
   /** In scope, but the invoice cannot be filed as it stands. Surfaced, not thrown. */
   | { status: 'blocked'; reason: string }
-
-/**
- * Identify the software producing the record, as RD 1007/2023 requires on every
- * one. Deliberately a constant rather than config: it describes THIS build, and
- * a deployment that could change it in a database is a deployment that could
- * file records under someone else's identity.
- */
-export interface SistemaInformatico {
-  nombreRazon: string
-  nif: string
-  nombreSistemaInformatico: string
-  idSistemaInformatico: string
-  version: string
-  numeroInstalacion: string
-}
 
 /**
  * Write the record for an invoice, inside the caller's transaction.
@@ -82,11 +73,25 @@ export async function recordInvoiceForTax(
   })
   if (!invoice) return { status: 'blocked', reason: 'Invoice disappeared mid-transaction' }
 
+  // ── whose invoice IS this? ──
+  //
+  // A trap worth stating: on a PLATFORM commission invoice `accountId` is the
+  // RECIPIENT partner, not the issuer — the issuer is Sunbnb. Resolving the
+  // regime off `account.country` there would file OUR invoice under the
+  // customer's jurisdiction, and for the Finnish partner it would file it
+  // nowhere at all. The platform's own jurisdiction is keyed on the issuing
+  // tax id, because the platform has more than one entity and only one of them
+  // is Spanish.
+  const issuerJurisdiction =
+    invoice.issuerType === 'PLATFORM'
+      ? platformIssuerJurisdiction(invoice.issuerVatNumber)
+      : {
+          country: invoice.account?.country ?? null,
+          taxRegion: invoice.account?.taxRegion ?? null,
+        }
+
   // ── in scope? ──
-  const regime = resolveTaxRegime({
-    country: invoice.account?.country ?? null,
-    taxRegion: invoice.account?.taxRegion ?? null,
-  })
+  const regime = resolveTaxRegime(issuerJurisdiction)
   if (!regimeRequiresRecords(regime)) return { status: 'out-of-scope' }
 
   const issuerNif = (invoice.issuerVatNumber ?? '').trim()
@@ -164,7 +169,9 @@ export async function recordInvoiceForTax(
       huellaInput: altaHuellaInputString(huellaInput),
       chainSeq,
       fechaHoraHusoGenRegistro,
-      desglose: desglose.entries,
+      // Spread into plain objects: Prisma's Json input type does not accept a
+      // typed array directly, and a cast would hide a real shape change later.
+      desglose: desglose.entries.map((e) => ({ ...e })),
       sistemaInformatico: { ...sistemaInformatico },
       specVersion: HUELLA_SPEC_VERSION,
     },

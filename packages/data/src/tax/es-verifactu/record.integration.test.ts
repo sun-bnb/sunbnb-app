@@ -1,6 +1,17 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest'
 import { cleanDatabase, disconnectDatabase, prisma } from '../../test/setup'
-import { createTestUser, createTestPartnerAccount, resetCounter } from '../../test/fixtures'
+import {
+  createTestUser,
+  createTestPartnerAccount,
+  createTestSite,
+  createTestInventoryItem,
+  createTestReservation,
+  createTestSettings,
+  createTestServiceFee,
+  resetCounter,
+} from '../../test/fixtures'
+import { processConfirmedReservation } from '../../payment'
+import { PLATFORM_ES_ISSUER_NIF } from './sistema-informatico'
 import { recordInvoiceForTax } from './record'
 import { HUELLA_SPEC_VERSION } from './huella'
 
@@ -218,5 +229,106 @@ describe('recordInvoiceForTax', () => {
     const recs = await prisma.verifactuRecord.findMany({ orderBy: { chainSeq: 'asc' } })
     expect(recs.map((r) => r.chainSeq)).toEqual([1, 2])
     expect(recs[1]!.huellaPrevious).toBe(recs[0]!.huella)
+  })
+
+  // ── the wiring, through the real payment path ───────────────────────────
+
+  describe('through processConfirmedReservation', () => {
+    /** An ES partner selling one €121 sunbed, with a chosen platform entity. */
+    async function sellOneSunbed(opts: {
+      partnerCountry: string
+      partnerTaxRegion: string | null
+      platform: Record<string, unknown>
+    }) {
+      const user = await createTestUser()
+      await createTestPartnerAccount(user.id, {
+        company: 'Alonso Beach SL',
+        country: opts.partnerCountry,
+        taxRegion: opts.partnerTaxRegion,
+        // Deliberately NOT the platform's own NIF — the partner and the platform
+        // are separate filers on separate chains.
+        businessId: 'B29806043',
+      })
+      const site = await createTestSite(user.id, { vat: 21, price: 121 })
+      const settings = await createTestSettings(opts.platform)
+      await createTestServiceFee(settings.id)
+      const item = await createTestInventoryItem(user.id, site.id, { number: 1 })
+      const reservation = await createTestReservation(user.id, site.id, [item.id], {
+        paymentAmount: 121,
+        status: 'processing',
+      })
+
+      await processConfirmedReservation(reservation.id)
+
+      return prisma.invoice.findMany({
+        where: { reservationId: reservation.id },
+        include: { verifactuRecords: true },
+      })
+    }
+
+    const SPANISH_PLATFORM = { country: 'ES', vat: 21, vatId: PLATFORM_ES_ISSUER_NIF }
+
+    it('files a record for the PARTNER sale and for OUR commission invoice', async () => {
+      // The builder being correct is one thing; being CALLED is another, and
+      // this is the only test that proves the seven writers in payment.ts
+      // actually invoke it. It caught the wiring sitting BEFORE the invoice
+      // lines were written, which blocked every record for having no desglose —
+      // something no unit test of the builder can see.
+      const invoices = await sellOneSunbed({
+        partnerCountry: 'ES',
+        partnerTaxRegion: 'MA',
+        platform: SPANISH_PLATFORM,
+      })
+
+      const partner = invoices.find((i) => i.issuerType === 'PARTNER')
+      const platform = invoices.find((i) => i.issuerType === 'PLATFORM')
+      expect(partner).toBeDefined()
+      expect(platform).toBeDefined()
+
+      expect(partner!.verifactuRecords).toHaveLength(1)
+      expect(partner!.verifactuRecords[0]!.recordType).toBe('ALTA')
+      // No recipient on a beach sale → a factura simplificada.
+      expect(partner!.verifactuRecords[0]!.tipoFactura).toBe('F2')
+
+      // The trap the PLATFORM branch exists for: a PLATFORM invoice's accountId
+      // is the RECIPIENT partner, so resolving the regime off it would file our
+      // own invoice under the customer's jurisdiction. It is filed under OUR
+      // nif, on OUR chain, as an ordinary B2B invoice.
+      expect(platform!.verifactuRecords).toHaveLength(1)
+      expect(platform!.verifactuRecords[0]!.tipoFactura).toBe('F1')
+      expect(platform!.verifactuRecords[0]!.issuerNif).toBe(PLATFORM_ES_ISSUER_NIF)
+      expect(partner!.verifactuRecords[0]!.issuerNif).not.toBe(
+        platform!.verifactuRecords[0]!.issuerNif,
+      )
+    })
+
+    it('files nothing for a FINNISH partner going through the same path', async () => {
+      const invoices = await sellOneSunbed({
+        partnerCountry: 'FI',
+        partnerTaxRegion: null,
+        platform: SPANISH_PLATFORM,
+      })
+
+      const partner = invoices.find((i) => i.issuerType === 'PARTNER')
+      expect(partner!.verifactuRecords).toHaveLength(0)
+    })
+
+    it('does not file OUR commission invoice when a non-Spanish group entity issued it', async () => {
+      // getBusinessEntity() reads a Settings row and there is more than one.
+      // A commission invoice issued by the Finnish entity must not be filed to
+      // AEAT under a NIF it has never heard of — even though the SALE beneath it
+      // is a Spanish partner's and is filed normally.
+      const invoices = await sellOneSunbed({
+        partnerCountry: 'ES',
+        partnerTaxRegion: 'MA',
+        platform: { country: 'FI', vat: 25.5, vatId: 'FI99999999' },
+      })
+
+      const partner = invoices.find((i) => i.issuerType === 'PARTNER')
+      const platform = invoices.find((i) => i.issuerType === 'PLATFORM')
+      expect(partner!.verifactuRecords).toHaveLength(1)
+      expect(platform).toBeDefined()
+      expect(platform!.verifactuRecords).toHaveLength(0)
+    })
   })
 })
