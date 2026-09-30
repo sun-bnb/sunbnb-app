@@ -40,39 +40,32 @@ implements them. No partner is in a foral territory today.
 
 ## Resume here
 
-**Next action — P6: the AEAT QR and the VERI\*FACTU legend on every Spanish receipt.**
-Records are now generated and chained; nothing is yet rendered for a guest to scan, and
-"every receipt includes a QR code formatted per AEAT specifications" remains the most
-conspicuous false claim on the live legal page.
+**Next action — P7a: capture each partner's representation grant in the product.** It gates P7
+per partner, it is a product surface rather than paperwork, and AEAT is explicit that
+*"ningún colaborador social realice envíos sin estar previamente autorizado"* — so the
+submission sweep must refuse a partner who has not granted it (D2, FAQ §16 Q4).
 
-**The property that makes the rest of the design lawful, and the one to state loudly in the
-code: the QR payload does NOT contain the CSV.** It is issuer NIF + invoice number + date +
-total, encoded into AEAT's `ValidarQR` URL. So a receipt can be rendered, printed and
-emailed before AEAT has ever seen the record — which is exactly what permits P7's
-cron-swept, retrying transport. Anyone who builds a blocking submit to "get the CSV first"
-has broken both the checkout and the reason the transport is allowed to be asynchronous.
-
-**Shape:**
-- `packages/data/src/tax/es-verifactu/qr.ts` — pure payload builder (URL + percent-encoding
-  rules), unit-tested. No prisma, no `qrcode` dependency: the payload and the image are
-  different concerns and only the payload has legal content.
-- A hosted PNG route in `apps/user` rather than a data URI — Gmail strips inline data-URI
-  images and the emailed receipt is the copy a guest keeps. One encoder, four surfaces.
-  `qrcode` must be added to `apps/user` (it is already in `apps/partner`).
-- Gated on the regime: the Finnish partner's receipt gets no QR and no legend. The gate
-  belongs on `ReceiptModel` (built server-side in `receipt.ts`) so all four presenters
-  inherit one decision instead of each re-deriving it.
+**Shape:** a consent surface in the partner app (web form with electronic signature is
+what AEAT blesses), storing the grant with its timestamp and evidence on
+`PartnerAccount`; then P7's sweep filters on it. Build the storage and the gate BEFORE the
+transport, so there is never a window in which the sweep can send for an ungranted partner.
 
 **Context needed:**
-- `packages/data/src/receipt.ts` + `receipt-model.ts` — the one DTO all four surfaces render;
-  add the QR + legend fields here.
-- `packages/data/src/tax/es-verifactu/record.ts` — where a record (and its `tipoFactura`)
-  now exists per invoice; the QR describes the INVOICE, not the record.
-- `packages/data/src/tax/regime.ts` — `resolveTaxRegime`, for the gate.
-- `apps/user/app/reservations/[id]/receipt/` — HTML + PDF presenters;
-  `packages/data/src/reservation-emails.ts` — the email one.
+- `.claude/tracks/026-verifactu.md` D2 (closed) — the Convenio 17 / colaboración social
+  mechanics and the one-certificate model that follows from it.
+- `packages/data/src/tax/es-verifactu/record.ts` — records are written with
+  `status`/`nextAttemptAt`, which is what P7 sweeps.
+- `packages/data/src/viva/` — the stub-vs-real mode-switch pattern P7's client should copy.
+- `apps/partner/app/account/` — where partner-level consent belongs.
 
-**Not yet done and easy to forget:** 14 commits are unpushed (5 carry migrations, all applied
+**Then P7 (transmission).** Two things in that phase are easy to get wrong and are written
+down in the roadmap rather than left to judgement: the sweep must **stop at the first
+failure for a given NIF** (records within a chain must arrive in order — head-of-line
+blocking is correct here, not a bug), and the cron must be **wired in `vercel.json` in the
+same commit** (`/api/reconcile` is the standing proof that a route shipped without its
+trigger stays dark forever).
+
+**Not yet done and easy to forget:** 17 commits are unpushed (5 carry migrations, all applied
 to `sunbnb_test`); the production clean-slate deletion (D3) is deferred to cutover; D4's
 signature and the remaining half of D5 are founder/asesor actions, not engineering.
 
@@ -121,14 +114,33 @@ signature and the remaining half of D5 are founder/asesor actions, not engineeri
   (it is now a function of the issuing tax id). Neither is visible to a unit test of the
   builder; both were caught by an integration test that drives `processConfirmedReservation`
   end to end. Keep that test — it is the only thing proving the builder is CALLED.
-- ▶ **P6 — QR and the VERI\*FACTU legend.** Key property: **the QR payload does not contain
-  the CSV** (issuer NIF + number + date + total only), so receipt rendering never waits on
-  AEAT — which is what makes a cron-swept transport lawful. Say that loudly so nobody builds
-  a blocking submit. Hosted PNG endpoint rather than a data URI: Gmail strips inline
-  data-URI images, and the email receipt is the copy a guest keeps. `qrcode` must be added
-  to `apps/user`. *Makes true: "every receipt includes a QR code" — the most conspicuous
-  false claim on the live page.*
-- ☐ **P7a — Capture the representation grant.** AEAT explicitly blesses a web form or
+- ✅ **P6 — QR and the VERI\*FACTU legend** (`e1adb95`, `976a94f`). Built against AEAT's own
+  spec (*Detalle de las especificaciones técnicas del código «QR»…*, **v0.5.0, 10/12/2025**),
+  not from recall — its §4 and §8.1 worked examples are pinned as tests, including the one
+  that exists to show the failure: an invoice number containing `&`, which unencoded turns
+  the URL into a different, valid-looking request. **The payload carries no CSV** (§6:
+  nif + numserie + fecha + importe), which is what makes P7's asynchronous transport lawful,
+  and a test asserts the parameter set so nobody can later make the checkout block on AEAT.
+  The gate is `ReceiptModel.fiscal`, computed once so all four presenters inherit one regime
+  decision — null for the Finnish partner and for a foral issuer. `ES_ISSUER_TIME_ZONE` is
+  now shared with the record builder, because the QR's `fecha` is cotejed against the
+  record's `FechaExpedicionFactura` and deriving it twice would fail every scan while every
+  unit test passed. The PNG route is keyed on `invoiceId`, never on the payload: an endpoint
+  taking `nif`/`importe` would draw a QR claiming any amount for any tax id.
+  `qrcode` margin is **0** on purpose — art. 21.1 measures the CODE at 30–40 mm and a baked-in
+  quiet zone leaves it at ~76% of the printed size, so the presenters supply the zone as white
+  padding; verified by decoding the generated PNG with CoreImage (both margin-0 and margin-4
+  round-trip to the exact URL). *Makes true: "every receipt includes a QR code formatted per
+  AEAT specifications" — the most conspicuous false claim on the live page.*
+- ☐ **P6a — Our OWN commission invoice has no rendered document.** Found while closing P6:
+  a PLATFORM invoice now gets a Veri\*factu record, but nothing anywhere renders it as an
+  invoice a human can read — the partner accounting page shows list rows and a CSV column,
+  and there is no PDF or printable page. So art. 20's QR + legend requirement currently has
+  **no surface to attach to** for the B2B commission invoice, which is why P6 did not cover
+  it rather than an oversight. A partner needs that document for their own books, and the
+  moment it is built it must carry the QR and the legend like any other invoice we issue.
+  Small, but do not let it be built without them.
+- ▶ **P7a — Capture the representation grant.** AEAT explicitly blesses a web form or
   onboarding pop-up with electronic signature (D2, §16 Q4), so this is a product surface, not
   paperwork: the partner grants Sunbnb representation for VERI*FACTU remission, the grant is
   stored with its timestamp and evidence, and **the submission sweep refuses any partner who
@@ -218,6 +230,21 @@ signature and the remaining half of D5 are founder/asesor actions, not engineeri
   RECIPIENT partner, so resolving the regime off it would file our invoice under the
   customer's jurisdiction. Full suite green: 439 data integration tests, all 9 turbo tasks,
   three apps typecheck, `migrate:check` clean.
+
+- **2026-09-30 — P6 shipped: the QR is real, and the spec was worth fetching again.** Same
+  method as D1 — read AEAT's published document rather than trusting recall — and it paid
+  twice. The spec is now **v0.5.0 (10/12/2025)**, newer than the model's knowledge, and it
+  fixes two things a plausible implementation would have got wrong: `formato=json` must
+  **never** appear in a QR's URL (§7.2), and art. 21.1's 30–40 mm is the size of the CODE, so
+  a quiet zone baked into the PNG pushes the code under the legal minimum. Verified the second
+  by decoding both variants with CoreImage rather than reasoning about it — margin 0 still
+  scans, so the presenters can own the quiet zone.
+  Also confirmed the property the whole transport design rests on, from §6 directly: the
+  payload is nif + numserie + fecha + importe and **nothing AEAT returns**, so the receipt is
+  complete before submission. There is now a test asserting exactly that parameter set.
+  One gap found and recorded rather than quietly skipped (P6a): our own PLATFORM commission
+  invoice gets a record but has no rendered document anywhere, so there is no surface for its
+  QR yet.
 
 ## Open decisions
 
