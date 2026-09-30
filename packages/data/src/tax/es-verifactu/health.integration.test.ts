@@ -184,6 +184,29 @@ describe('getVerifactuHealth', () => {
     expect(health.unfiledByIssuerType).toEqual({ PARTNER: 1, PLATFORM: 1 })
   })
 
+  it('counts our own nameless commission invoices without calling the register unhealthy', async () => {
+    // Found on the TEST database: all 8 PLATFORM invoices were unfilable — 7 with
+    // a NULL tax id and the name "Platform Operator" (phase 3's placeholder leak)
+    // and one carrying a PARTNER's Finnish VAT number. None showed up anywhere,
+    // because no issuer id means no jurisdiction means out of scope.
+    //
+    // Informational rather than unhealthy: it is historical debris cleared by the
+    // cutover, and phase 3 already fixed the cause. What matters is that it never
+    // grows.
+    const accountId = await partner()
+    await invoiceFor(accountId, {
+      issuerType: 'PLATFORM',
+      issuerVatNumber: null,
+      issuerCompanyName: 'Platform Operator',
+      invoiceNumber: 'PLATFORM-2026-00001',
+    })
+
+    const health = await getVerifactuHealth()
+    expect(health.platformInvoicesWithoutIssuerId).toBe(1)
+    expect(health.unfiled).toEqual([])
+    expect(health.healthy).toBe(true)
+  })
+
   it('does not flag a commission invoice issued by a non-Spanish group entity', async () => {
     const accountId = await partner()
     await invoiceFor(accountId, {
@@ -194,6 +217,21 @@ describe('getVerifactuHealth', () => {
 
     const health = await getVerifactuHealth()
     expect(health.unfiled).toEqual([])
+  })
+
+  it('treats an ES-prefixed platform tax id as our own entity', async () => {
+    // The TEST/production Settings row stores "ESB22435705", with the country
+    // prefix. Without folding that off, every one of our own commission invoices
+    // would resolve to a different entity and be silently out of scope.
+    const accountId = await partner()
+    await invoiceFor(accountId, {
+      issuerType: 'PLATFORM',
+      issuerVatNumber: `ES${PLATFORM_ES_ISSUER_NIF}`,
+      invoiceNumber: 'PLATFORM-F-2026-00009',
+    })
+
+    const health = await getVerifactuHealth()
+    expect(health.unfiledByIssuerType).toEqual({ PLATFORM: 1 })
   })
 
   it('counts blocked and errored records as unhealthy', async () => {

@@ -71,6 +71,16 @@ async function main() {
   }
   console.log('')
 
+  if (health.platformInvoicesWithoutIssuerId > 0) {
+    console.log(
+      `NOTE: ${health.platformInvoicesWithoutIssuerId} PLATFORM invoice(s) carry no issuer tax id.\n` +
+        '  Historical: the getBusinessEntity() placeholder leaking onto a real invoice, fixed at\n' +
+        '  the cause in phase 3 and cleared by the cutover deletion. This count must never GROW —\n' +
+        '  an increase means we are minting nameless commission invoices again.',
+    )
+    console.log('')
+  }
+
   if (health.unresolvedEsIssuers.length > 0) {
     console.log(`Spanish issuers with NO taxRegion (${health.unresolvedEsIssuers.length}):`)
     for (const i of health.unresolvedEsIssuers) {

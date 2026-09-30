@@ -86,6 +86,21 @@ export interface UnresolvedEsIssuer {
   invoiceCount: number
 }
 
+/**
+ * PLATFORM invoices carrying no issuer tax id at all.
+ *
+ * Informational, and deliberately NOT folded into `healthy`. These are the
+ * `getBusinessEntity()` DEFAULTS placeholder leaking onto a real invoice — the
+ * `PLATFORM-2026-00001` / "Platform Operator" / NULL-NIF defect phase 3
+ * documented and fixed at the cause (an unconfigured platform now SKIPS the
+ * commission invoice rather than issuing a nameless one). They are out of scope
+ * rather than unfiled, because an invoice with no issuer id resolves to no
+ * jurisdiction, so no other figure here would mention them.
+ *
+ * The reason to report it: this count must never GROW. It is historical debris
+ * that the cutover deletion clears, but an increase means phase 3's guard
+ * regressed and we are minting nameless invoices again.
+ */
 export interface VerifactuHealth {
   /**
    * Invoices in scope with no record at all. **Should be empty.** Anything here
@@ -112,6 +127,12 @@ export interface VerifactuHealth {
    * real state is "nothing is configured". See `UnresolvedEsIssuer`.
    */
   unresolvedEsIssuers: UnresolvedEsIssuer[]
+  /**
+   * Count of PLATFORM invoices with no issuer tax id — phase 3's placeholder
+   * leak. Informational only; see the note above `VerifactuHealth`. Must never
+   * grow.
+   */
+  platformInvoicesWithoutIssuerId: number
   /**
    * True when nothing needs attention: no unfiled, no blocked or errored record,
    * every chain intact, and no Spanish issuer left unclassified.
@@ -196,6 +217,19 @@ export async function getVerifactuHealth(
     .map(([issuerNif, invoiceCount]) => ({ issuerNif, invoiceCount }))
     .sort((a, b) => (a.issuerNif ?? '').localeCompare(b.issuerNif ?? ''))
 
+  // ── 1c. Our own invoices with no issuer identity at all ──
+  //
+  // Counted over ALL platform invoices, not just record-less ones: the point is
+  // to notice the defect reappearing, and such an invoice never gets a record
+  // anyway.
+  const platformInvoicesWithoutIssuerId = await prisma.invoice.count({
+    where: {
+      ...(invoicedAt ? { invoicedAt } : {}),
+      issuerType: 'PLATFORM',
+      OR: [{ issuerVatNumber: null }, { issuerVatNumber: '' }],
+    },
+  })
+
   // ── 2. Submission states ──
   const statusGroups = await prisma.verifactuRecord.groupBy({
     by: ['status'],
@@ -249,6 +283,7 @@ export async function getVerifactuHealth(
     oldestUnsentAt: oldestUnsent?.createdAt ?? null,
     chains,
     unresolvedEsIssuers,
+    platformInvoicesWithoutIssuerId,
     healthy,
   }
 }
