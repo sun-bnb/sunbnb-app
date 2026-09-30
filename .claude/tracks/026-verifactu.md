@@ -3,7 +3,7 @@ id: 026-verifactu
 title: Veri*factu — Spanish fiscal compliance for receipts and invoices
 status: active
 created: 2026-09-29
-updated: 2026-09-29
+updated: 2026-09-30
 worktree: null
 ---
 
@@ -40,32 +40,41 @@ implements them. No partner is in a foral territory today.
 
 ## Resume here
 
-**Next action — the `VerifactuRecord` / `VerifactuChain` schema, and writing a record inside
-the invoice transaction.** Everything a record is BUILT from exists and is tested; nothing
-produces one yet.
+**Next action — P6: the AEAT QR and the VERI\*FACTU legend on every Spanish receipt.**
+Records are now generated and chained; nothing is yet rendered for a guest to scan, and
+"every receipt includes a QR code formatted per AEAT specifications" remains the most
+conspicuous false claim on the live legal page.
 
-Recommended shape is in the plan and in phase 5 below: one table, not columns on `Invoice`,
-because it is 1:N (an alta, a later anulación, a rectificativa's own alta), because
-submission state is churny while `Invoice` must stay immutable, and because the *registro*
-stream is what an inspector asks for. Store `huellaInput` verbatim — it is the only way to
-debug a rejection.
+**The property that makes the rest of the design lawful, and the one to state loudly in the
+code: the QR payload does NOT contain the CSV.** It is issuer NIF + invoice number + date +
+total, encoded into AEAT's `ValidarQR` URL. So a receipt can be rendered, printed and
+emailed before AEAT has ever seen the record — which is exactly what permits P7's
+cron-swept, retrying transport. Anyone who builds a blocking submit to "get the CSV first"
+has broken both the checkout and the reason the transport is allowed to be asynchronous.
+
+**Shape:**
+- `packages/data/src/tax/es-verifactu/qr.ts` — pure payload builder (URL + percent-encoding
+  rules), unit-tested. No prisma, no `qrcode` dependency: the payload and the image are
+  different concerns and only the payload has legal content.
+- A hosted PNG route in `apps/user` rather than a data URI — Gmail strips inline data-URI
+  images and the emailed receipt is the copy a guest keeps. One encoder, four surfaces.
+  `qrcode` must be added to `apps/user` (it is already in `apps/partner`).
+- Gated on the regime: the Finnish partner's receipt gets no QR and no legend. The gate
+  belongs on `ReceiptModel` (built server-side in `receipt.ts`) so all four presenters
+  inherit one decision instead of each re-deriving it.
 
 **Context needed:**
-- `packages/data/src/tax/es-verifactu/huella.ts` — canonical string + serialization helpers,
-  now verified against the official spec (D1 closed) and pinned by AEAT's own three vectors.
-- `packages/data/src/tax/es-verifactu/tipo-factura.ts` — `classifyTipoFactura`, `buildDesglose`.
-- `packages/data/src/tax/regime.ts` — `resolveTaxRegime`, `regimeRequiresRecords`.
-- `packages/data/src/invoice-series.ts` — the per-issuer allocator and `lockInvoiceSeries`;
-  a record is written in the SAME transaction as its invoice, under the same lock.
-- `packages/data/src/payment.ts` — seven writers, each already taking the issuer lock before
-  its idempotency re-check.
+- `packages/data/src/receipt.ts` + `receipt-model.ts` — the one DTO all four surfaces render;
+  add the QR + legend fields here.
+- `packages/data/src/tax/es-verifactu/record.ts` — where a record (and its `tipoFactura`)
+  now exists per invoice; the QR describes the INVOICE, not the record.
+- `packages/data/src/tax/regime.ts` — `resolveTaxRegime`, for the gate.
+- `apps/user/app/reservations/[id]/receipt/` — HTML + PDF presenters;
+  `packages/data/src/reservation-emails.ts` — the email one.
 
-**No longer blocked.** D2 is closed: Sunbnb submits as a *colaborador social* under Convenio
-17, using ONE platform certificate, with each partner's representation collected in-product
-(P7a). The record schema can proceed on that assumption.
-
-**Not yet done and easy to forget:** seven commits are unpushed; the production
-clean-slate deletion (D3) is deferred to cutover.
+**Not yet done and easy to forget:** 14 commits are unpushed (5 carry migrations, all applied
+to `sunbnb_test`); the production clean-slate deletion (D3) is deferred to cutover; D4's
+signature and the remaining half of D5 are founder/asesor actions, not engineering.
 
 ## Roadmap
 
@@ -96,14 +105,23 @@ clean-slate deletion (D3) is deferred to cutover.
   showing a VAT rate where the others showed an amount. `platformSection` DELETED rather
   than populated (the agent model means it is a number the guest neither paid nor is party
   to). Credit notes excluded from being rendered as the receipt for a sale.
-- ▶ **P5 — ES record generation** (`737a28d`, `77df2fa` — *partial*). Done: the huella with
-  a verified golden vector, `TipoFactura` classification, `buildDesglose` refusing null and
-  illegal rates, and the credit-note rate fix (`issueCashCreditNote` derived
-  `totalTax/totalCharge*100`, producing stored rates of 20.98/21.01/21.03 that AEAT rejects
-  — all 29 production credit notes are unfilable as they stand). **Remaining: the
-  `VerifactuRecord`/`VerifactuChain` schema and writing a record in the invoice transaction,
-  gated on the regime.** `fechaExpedicion` in `Site.timeZone`.
-- ☐ **P6 — QR and the VERI\*FACTU legend.** Key property: **the QR payload does not contain
+- ✅ **P5 — ES record generation** (`737a28d`, `77df2fa`, `ce6b4e2`, `b21a85f`). The huella
+  verified against AEAT's own published vectors (D1), `TipoFactura` classification,
+  `buildDesglose` refusing null and illegal rates, the `VerifactuRecord`/`VerifactuChain`
+  schema, and a record written inside the invoice's own transaction from all twelve
+  `tx.invoice.create` sites across the seven writers. Fixed on the way: `issueCashCreditNote`
+  derived an effective rate as `totalTax/totalCharge*100`, producing stored rates of
+  20.98/21.01/21.03 that AEAT rejects outright — all 29 production credit notes are
+  unfilable as they stand, and credit notes now carry one line per original rate.
+  **Two defects the wiring itself produced, both worth remembering:** the record call first
+  sat immediately after `tx.invoice.create`, which reads correctly and silently blocked every
+  ES record for having no `Desglose` — it is built from the invoice LINES, which are written
+  afterwards; and the platform's own jurisdiction was a constant `ES`, which would have filed
+  the Finnish group entity's commission invoices to AEAT under a NIF it has never heard of
+  (it is now a function of the issuing tax id). Neither is visible to a unit test of the
+  builder; both were caught by an integration test that drives `processConfirmedReservation`
+  end to end. Keep that test — it is the only thing proving the builder is CALLED.
+- ▶ **P6 — QR and the VERI\*FACTU legend.** Key property: **the QR payload does not contain
   the CSV** (issuer NIF + number + date + total only), so receipt rendering never waits on
   AEAT — which is what makes a cron-swept transport lawful. Say that loudly so nobody builds
   a blocking submit. Hosted PNG endpoint rather than a data URI: Gmail strips inline
@@ -181,6 +199,25 @@ clean-slate deletion (D3) is deferred to cutover.
   been prevented only by the shared counter colliding on `invoice_number` and throwing
   inside a payment transaction. Removing the collision required making the serialisation
   deliberate. `table-deposit.integration.test.ts` had the old behaviour in its title.
+
+- **2026-09-30 — P5 closed; the generator is wired and the wiring was where the bugs were.**
+  The remaining half of P5 landed: the `VerifactuRecord`/`VerifactuChain` schema
+  (migration `20260929160000`), records generated inside the invoice transaction, and calls
+  from all twelve `tx.invoice.create` sites. Both defects found were in the WIRING rather
+  than in the generator, and neither was reachable from a unit test.
+  (1) The call was placed beside the invoice header, before `tx.invoiceLine.createMany` —
+  so `buildDesglose` saw no lines and every Spanish invoice came back
+  `blocked: "an invoice with no lines has no VAT breakdown to declare"`. The code read as
+  obviously correct; only driving `processConfirmedReservation` end to end exposed it.
+  (2) `PLATFORM_ISSUER_JURISDICTION` was a constant `{ES, MA}`. But `getBusinessEntity()`
+  reads a `Settings` row and there is more than one — the platform has a Finnish entity too —
+  so a commission invoice it issued would have been filed to AEAT under a Finnish VAT id.
+  It is now `platformIssuerJurisdiction(issuerVatNumber)`, and anything that is not the
+  Spanish entity's NIF is out of scope: not filed anywhere beats filed in the wrong place.
+  Also fixed the sibling trap in the same branch — a PLATFORM invoice's `accountId` is the
+  RECIPIENT partner, so resolving the regime off it would file our invoice under the
+  customer's jurisdiction. Full suite green: 439 data integration tests, all 9 turbo tasks,
+  three apps typecheck, `migrate:check` clean.
 
 ## Open decisions
 
