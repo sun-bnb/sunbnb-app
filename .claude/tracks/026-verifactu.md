@@ -163,8 +163,8 @@ signature and the remaining half of D5 are founder/asesor actions, not engineeri
   hard requirement of RD 1007/2023 that no other phase covers, and it is the only phase that
   touches the "certified software" line on the legal page (see D4).
 - ☐ **P9 — Ops surface.** Pending/blocked/rejected per issuer, both verify routines runnable
-  on demand, per-invoice CSV, **certificate expiry countdown** (a representative cert is
-  often one year — an unmonitored time bomb), and the alerts "invoice with no record" and
+  on demand, per-invoice CSV, **certificate expiry countdown** (the FNMT representative
+  certificate is valid **2 years** — an unmonitored time bomb), and the alerts "invoice with no record" and
   "record pending > 1 h". *Makes true: "record retention / exportable at any time".*
 - 💤 **Cutover.** The production clean-slate deletion (D3), after P5–P7 deploy.
 
@@ -343,6 +343,70 @@ signature and the remaining half of D5 are founder/asesor actions, not engineeri
 - **D6 — Legacy data.** 120 invoices carry `"Alonso Beach"` as issuer tax id and 29 credit
   notes carry illegal VAT rates. Both are frozen, not corrected — `buildDesglose` refuses the
   rates so they cannot reach AEAT by accident. D3 removes both when it runs.
+
+## Founder actions (not engineering) — the real critical path
+
+P7 cannot go live however fast the code is built. Both items below have external lead time
+and should start in parallel with the remaining phases. Sourced from AEAT's developer FAQ
+(*Preguntas frecuentes de empresas de desarrollo*, **04-12-2025**, §16) and FNMT's own pages,
+read 2026-09-30 — not from recall.
+
+### A. The electronic certificate
+
+**What it is.** One qualified electronic certificate belonging to **Sunbnb España SL** — not
+one per partner. The FAQ requires "un certificado electrónico cualificado válido y admitido"
+meeting eIDAS (Reg. UE 910/2014) "y, en su caso, contando con el otorgamiento de las
+facultades necesarias" — the facultades being the colaboración social grant in B. It is used
+as the TLS client certificate when submitting records, so it lives in the server environment,
+never on a laptop.
+
+**Which one.** A **Certificado de Representante de Persona Jurídica**. Admitted issuers are
+those on the Ministry's list per **Orden HAP/800/2014**; FNMT is the default choice.
+
+**How it is obtained (FNMT):** configure software → request online (returns a *Código de
+Solicitud* by email) → accredit identity → download and pay.
+- **€14 + IVA**, valid **2 years**, card payment at download, ~1 hour after accreditation.
+- Sunbnb España SL's NIF is **B22435705** — a **B** prefix, which qualifies for FNMT's
+  **online accreditation** (offered for prefixes A, B, C, D), so no in-person AEAT appointment
+  is needed provided the legal representative is the one registered in the Registro Mercantil
+  and holds a valid personal certificate. In-person is the fallback and needs *cita previa*.
+
+**Custody note, unchanged from the plan:** we hold OUR certificate, never a partner's. Custody
+of a partner's own qualified certificate is the ability to act as that company everywhere, not
+just at AEAT.
+
+### B. The colaboración social agreement (Convenio)
+
+Registration is separate from and additional to the certificate, and AEAT is explicit that
+*"ningún colaborador social realice envíos sin estar previamente autorizado"*.
+
+**Convenio code: 017.** The FAQ states that for VERIFACTU one may work with 001, 002 (for
+*intermediarios*) and **017 (both intermediarios and software companies)** — Sunbnb is a
+software company, so 017.
+
+**Where to apply:** the AEAT Delegación for the company's fiscal domicile, **or** by email to
+`comunicacion.sepri@correo.aeat.es`.
+
+**Documentation AEAT asks for**, verbatim from §16 Q2 — each item as a PDF:
+- a formal written request, signed by someone with representation, for an *acuerdo de
+  colaboración social en la aplicación de los tributos* under **art. 92 Ley 58/2003**
+- full name and NIF of the entity
+- the article of the *estatutos* referring to the **objeto social**
+- name and NIF of whoever signs for the entity — if *representante por estatutos*, a
+  certificate from the company secretary evidencing the appointment; otherwise an
+  *escritura de apoderamiento suficiente*
+- name and NIF of a contact person, a contact phone, the entity's domicile, an email address
+
+**After approval,** the per-partner grants are managed through Sede Electrónica →
+*Gestiones de colaboración social*. AEAT blesses collecting each partner's grant by web form
+with electronic signature, which is what P7a builds.
+
+### C. The declaración responsable (D4)
+
+Unchanged: Sunbnb self-certifies as *productor de software*; AEAT does not homologate. The
+declaration is not filed but must be visible inside the software in every version (P9a), and
+it is the only thing that makes the live legal page's "certified software" line true.
+
 
 ## Links
 
