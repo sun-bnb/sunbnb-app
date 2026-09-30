@@ -166,6 +166,17 @@ export interface DesgloseLine {
 }
 
 export interface DesgloseEntry {
+  /**
+   * How the operation is qualified for VAT. `S1` is *sujeta y no exenta, sin
+   * inversión del sujeto pasivo* — an ordinary taxed domestic supply, which is
+   * every line we currently emit.
+   *
+   * The XSD makes this (or `OperacionExenta`) MANDATORY inside each
+   * `DetalleDesglose`, so a breakdown without it is not merely incomplete, it is
+   * schema-invalid. It was missing from this type until the payload was built
+   * against AEAT's own schema.
+   */
+  calificacionOperacion: 'S1'
   tipoImpositivo: number
   baseImponible: number
   cuotaRepercutida: number
@@ -188,9 +199,37 @@ function cents(value: number): number {
  * summary and an unacceptable one here: it would declare a zero-rated supply
  * that never happened. Four invoice lines in production carry a null rate.
  */
-export function buildDesglose(lines: DesgloseLine[]): DesgloseResult {
+export interface BuildDesgloseOptions {
+  /**
+   * True for a cross-border EU B2B commission invoice, where Spanish VAT is not
+   * charged and the customer self-accounts.
+   */
+  reverseCharge?: boolean
+}
+
+export function buildDesglose(
+  lines: DesgloseLine[],
+  options: BuildDesgloseOptions = {},
+): DesgloseResult {
   if (lines.length === 0) {
     return { ok: false, reason: 'An invoice with no lines has no VAT breakdown to declare.' }
+  }
+
+  // A reverse-charge supply is NOT a 0% taxed supply, and declaring it as one
+  // would be a false statement about Spanish VAT. The correct qualification is
+  // either `N2` (not subject under the localisation rules) or an
+  // `OperacionExenta` code, and which of those applies to a commission invoice
+  // from a Spanish platform to an EU business customer is a question for the
+  // asesor, not for this function to guess. Refused rather than mislabelled —
+  // tracked as D6.
+  if (options.reverseCharge) {
+    return {
+      ok: false,
+      reason:
+        'Reverse-charge invoice: a cross-border EU B2B supply is not a 0% taxed supply, and ' +
+        'declaring it as S1 at 0% would misstate it. The correct CalificacionOperacion (N2) or ' +
+        'OperacionExenta code is an open question (D6).',
+    }
   }
 
   const byRate = new Map<number, { base: number; cuota: number }>()
@@ -222,6 +261,7 @@ export function buildDesglose(lines: DesgloseLine[]): DesgloseResult {
   const entries = Array.from(byRate.entries())
     .sort(([a], [b]) => a - b)
     .map(([tipoImpositivo, sums]) => ({
+      calificacionOperacion: 'S1' as const,
       tipoImpositivo,
       baseImponible: cents(sums.base),
       cuotaRepercutida: cents(sums.cuota),

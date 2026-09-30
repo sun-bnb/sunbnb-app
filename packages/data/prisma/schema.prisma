@@ -945,6 +945,24 @@ model VerifactuRecord {
   /// VAT breakdown per rate, and the software block RD 1007/2023 requires.
   desglose           Json
   sistemaInformatico Json?   @map("sistema_informatico")
+
+  /// The rest of what the wire format needs, frozen here for the same reason
+  /// `issuerNif` is: re-deriving it from the invoice at submission time would let
+  /// an edit change what gets filed, and since a mismatched huella is "aceptado
+  /// con errores" rather than rejected, nothing would surface the drift.
+  /// `AEAT`'s RegistroAlta requires all four; phase 5 stored only what the huella
+  /// needed, which turned out to be a subset.
+  nombreRazonEmisor    String? @map("nombre_razon_emisor")
+  descripcionOperacion String? @map("descripcion_operacion")
+  /// Serialized by `formatImporte`, NOT a number — these exact strings were
+  /// hashed into the huella, so re-formatting them would break it.
+  cuotaTotal           String? @map("cuota_total")
+  importeTotal         String? @map("importe_total")
+
+  /// The `RegistroFactura` fragment exactly as it will be sent, built inside the
+  /// invoice's transaction. The submission wraps these in a `Cabecera`, which is
+  /// per-envío rather than per-record (it carries the Representante, which does
+  /// not exist until the colaboración social grant does).
   payloadXml         String? @map("payload_xml")
 
   /// Submission state. `pending` -> `sent` | `error` | `blocked`.

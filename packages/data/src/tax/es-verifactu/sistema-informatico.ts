@@ -43,6 +43,30 @@ export interface SistemaInformatico {
    * one per customer.
    */
   numeroInstalacion: string
+  /**
+   * `S` when the system can ONLY be used to issue verifiable invoices.
+   *
+   * Ours is `S`: we implement remisión and nothing else. There is no
+   * NO VERI*FACTU mode in this codebase — no XAdES signing of records, no local
+   * conservation, no registro de eventos — so a user could not operate it that
+   * way even if they wanted to. Answering `N` would claim a capability we do not
+   * have and would invite AEAT to expect an event log.
+   */
+  tipoUsoPosibleSoloVerifactu: 'S' | 'N'
+  /**
+   * `S` when the system is CAPABLE of serving several obligados tributarios.
+   *
+   * Ours is `S` — it is a multi-tenant SaaS platform by design.
+   */
+  tipoUsoPosibleMultiOT: 'S' | 'N'
+  /**
+   * `S` when this installation IS currently serving several obligados.
+   *
+   * Distinct from the field above: that one is about the software's capability,
+   * this one about the running instance. Both are `S` for us, and they would
+   * diverge for a single-tenant deployment of the same product.
+   */
+  indicadorMultiplesOT: 'S' | 'N'
 }
 
 /** Sunbnb España SL, from the legal page and the platform Settings row. */
@@ -69,6 +93,13 @@ export function sistemaInformatico(
     idSistemaInformatico: SYSTEM_ID,
     version: env.VERIFACTU_SYSTEM_VERSION ?? '0.0.0-dev',
     numeroInstalacion: INSTALLATION,
+    // All three are `S`, and all three describe the system rather than the
+    // invoice — which is why they must stay consistent with the declaración
+    // responsable (D4). Changing one here without amending the declaration makes
+    // the declaration false.
+    tipoUsoPosibleSoloVerifactu: 'S',
+    tipoUsoPosibleMultiOT: 'S',
+    indicadorMultiplesOT: 'S',
   }
 }
 

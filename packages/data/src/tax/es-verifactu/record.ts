@@ -34,6 +34,7 @@ import {
   HUELLA_SPEC_VERSION,
 } from './huella'
 import { buildDesglose, classifyTipoFactura, type TipoFactura } from './tipo-factura'
+import { buildRegistroAltaXml, type Encadenamiento } from './registro-xml'
 import { resolveTaxRegime, regimeRequiresRecords } from '../regime'
 import {
   platformIssuerJurisdiction,
@@ -69,6 +70,35 @@ export const RECORD_BLOCKED = 'blocked'
 
 /** States that still owe AEAT a successful submission. */
 export const RECORD_UNSENT_STATUSES = [RECORD_PENDING, RECORD_ERROR, RECORD_BLOCKED] as const
+
+/**
+ * `DescripcionOperacion` — mandatory, max 500 chars in the XSD.
+ *
+ * Built from the invoice's own line descriptions, de-duplicated, because that is
+ * the most faithful description of what was actually sold and it needs no new
+ * data. Falls back to a document-type phrase rather than an empty string: the
+ * field cannot be omitted, and an invoice whose lines happen to be unlabelled is
+ * not a reason to refuse to file a real sale.
+ */
+const DESCRIPCION_MAX = 500
+
+export function describeOperacion(
+  lines: { description: string | null }[],
+  tipoFactura: TipoFactura,
+): string {
+  const seen = new Set<string>()
+  for (const l of lines) {
+    const d = (l.description ?? '').trim()
+    if (d !== '') seen.add(d)
+  }
+  const joined = Array.from(seen).join('; ')
+  if (joined !== '') {
+    return joined.length > DESCRIPCION_MAX
+      ? `${joined.slice(0, DESCRIPCION_MAX - 1)}\u2026`
+      : joined
+  }
+  return tipoFactura.startsWith('R') ? 'Rectificación de factura' : 'Prestación de servicios'
+}
 
 /** The fields needed to decide whose invoice this is. */
 export interface InvoiceIssuerFields {
@@ -127,7 +157,16 @@ export async function recordInvoiceForTax(
     include: {
       invoiceLines: true,
       account: { select: { country: true, taxRegion: true } },
-      creditsInvoice: { select: { tipoFactura: true } },
+      creditsInvoice: {
+        select: {
+          tipoFactura: true,
+          // Identity of what this note rectifies — FacturasRectificadas needs the
+          // triplet, and the credited invoice is immutable so reading it is safe.
+          invoiceNumber: true,
+          invoicedAt: true,
+          issuerVatNumber: true,
+        },
+      },
     },
   })
   if (!invoice) return { status: 'blocked', reason: 'Invoice disappeared mid-transaction' }
@@ -156,8 +195,22 @@ export async function recordInvoiceForTax(
   // ── the VAT breakdown ──
   const desglose = buildDesglose(
     invoice.invoiceLines.map((l) => ({ vatRate: l.vatRate, charge: l.charge, tax: l.tax })),
+    { reverseCharge: invoice.reverseCharge },
   )
   if (!desglose.ok) return { status: 'blocked', reason: desglose.reason }
+
+  // ── who issued it, and what it was for ──
+  //
+  // Both are MANDATORY in AEAT's RegistroAlta and neither was stored before the
+  // payload was built against the XSD.
+  const nombreRazonEmisor = (invoice.issuerCompanyName ?? '').trim()
+  if (nombreRazonEmisor === '') {
+    return {
+      status: 'blocked',
+      reason: 'Issuer has no company name; NombreRazonEmisor is mandatory on a record',
+    }
+  }
+  const descripcionOperacion = describeOperacion(invoice.invoiceLines, classified.tipoFactura)
 
   // ── dates in the ISSUER's territory ──
   // Falls back to Madrid rather than UTC: this branch only runs for a Spanish
@@ -175,10 +228,34 @@ export async function recordInvoiceForTax(
 
   const chain = await tx.verifactuChain.findUnique({
     where: { issuerNif },
-    select: { lastHuella: true, lastChainSeq: true },
+    // `lastRecordId` is needed for Encadenamiento: RegistroAnterior must name the
+    // preceding record, not just carry its hash. Omitting it from this select made
+    // every record emit PrimerRegistro and silently restart the chain.
+    select: { lastHuella: true, lastChainSeq: true, lastRecordId: true },
   })
   const huellaPrevious = chain?.lastHuella ?? null
   const chainSeq = (chain?.lastChainSeq ?? 0) + 1
+
+  // `Encadenamiento` needs the preceding record's full identity, not just its
+  // hash — IDEmisorFactura, NumSerieFactura, FechaExpedicionFactura AND Huella.
+  // Read from the record itself rather than duplicated onto every row; records
+  // are immutable, so this cannot drift.
+  let encadenamiento: Encadenamiento = { first: true }
+  if (chain?.lastRecordId) {
+    const previous = await tx.verifactuRecord.findUnique({
+      where: { id: chain.lastRecordId },
+      select: { issuerNif: true, numSerieFactura: true, fechaExpedicion: true, huella: true },
+    })
+    if (!previous) {
+      // The chain head names a record that no longer exists. Filing the next one
+      // as PrimerRegistro would quietly restart the chain and hide the loss.
+      return {
+        status: 'blocked',
+        reason: `Chain head for ${issuerNif} points at a record that no longer exists`,
+      }
+    }
+    encadenamiento = { first: false, previous }
+  }
 
   const huellaInput = {
     idEmisorFactura: issuerNif,
@@ -193,6 +270,55 @@ export async function recordInvoiceForTax(
     fechaHoraHusoGenRegistro,
   }
 
+  const huella = computeAltaHuella(huellaInput)
+
+  // The recipient goes on the record only when the invoice actually names one —
+  // a factura simplificada has none, and an empty Destinatarios block is
+  // schema-invalid rather than merely redundant.
+  const recipientNif = (invoice.recipientVatNumber ?? '').trim()
+  const recipientName = (invoice.recipientCompanyName ?? '').trim()
+  const destinatarios =
+    recipientNif !== '' && recipientName !== ''
+      ? [{ nombreRazon: recipientName, nif: recipientNif }]
+      : undefined
+
+  // What this note rectifies. Only present on an R type, and only when the
+  // credited invoice carries the identity triplet the XSD asks for.
+  const credited = invoice.creditsInvoice
+  const facturasRectificadas =
+    classified.tipoFactura.startsWith('R') &&
+    credited?.invoiceNumber &&
+    credited.issuerVatNumber
+      ? [
+          {
+            issuerNif: credited.issuerVatNumber.trim(),
+            numSerieFactura: credited.invoiceNumber,
+            fechaExpedicion: formatFechaExpedicion(credited.invoicedAt, timeZone),
+          },
+        ]
+      : undefined
+
+  const payloadXml = buildRegistroAltaXml({
+    issuerNif,
+    nombreRazonEmisor,
+    numSerieFactura: invoice.invoiceNumber,
+    fechaExpedicion,
+    tipoFactura: classified.tipoFactura,
+    tipoRectificativa:
+      classified.tipoFactura === 'R1' || classified.tipoFactura === 'R5' ? 'I' : null,
+    facturasRectificadas,
+    descripcionOperacion,
+    destinatarios,
+    desglose: desglose.entries,
+    // The SAME strings the huella hashed — see huellaInput above.
+    cuotaTotal: huellaInput.cuotaTotal,
+    importeTotal: huellaInput.importeTotal,
+    encadenamiento,
+    sistemaInformatico,
+    fechaHoraHusoGenRegistro,
+    huella,
+  })
+
   const record = await tx.verifactuRecord.create({
     data: {
       invoiceId: invoice.id,
@@ -205,15 +331,20 @@ export async function recordInvoiceForTax(
       // totals, which is the `I` model, not the `S` (substitution) one.
       tipoRectificativa:
         classified.tipoFactura === 'R1' || classified.tipoFactura === 'R5' ? 'I' : null,
-      huella: computeAltaHuella(huellaInput),
+      huella,
       huellaPrevious,
       huellaInput: altaHuellaInputString(huellaInput),
       chainSeq,
       fechaHoraHusoGenRegistro,
+      nombreRazonEmisor,
+      descripcionOperacion,
+      cuotaTotal: huellaInput.cuotaTotal,
+      importeTotal: huellaInput.importeTotal,
       // Spread into plain objects: Prisma's Json input type does not accept a
       // typed array directly, and a cast would hide a real shape change later.
       desglose: desglose.entries.map((e) => ({ ...e })),
       sistemaInformatico: { ...sistemaInformatico },
+      payloadXml,
       specVersion: HUELLA_SPEC_VERSION,
     },
   })

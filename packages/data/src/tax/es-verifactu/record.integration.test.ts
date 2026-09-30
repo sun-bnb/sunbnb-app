@@ -11,9 +11,14 @@ import {
   resetCounter,
 } from '../../test/fixtures'
 import { processConfirmedReservation } from '../../payment'
-import { PLATFORM_ES_ISSUER_NIF } from './sistema-informatico'
+import { PLATFORM_ES_ISSUER_NIF, sistemaInformatico } from './sistema-informatico'
 import { recordInvoiceForTax } from './record'
+import { buildSubmissionXml } from './registro-xml'
 import { HUELLA_SPEC_VERSION } from './huella'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 
 beforeEach(async () => {
   await cleanDatabase()
@@ -23,14 +28,9 @@ afterAll(async () => {
   await disconnectDatabase()
 })
 
-const SIF = {
-  nombreRazon: 'Sunbnb España SL',
-  nif: 'B22435705',
-  nombreSistemaInformatico: 'Sunbnb',
-  idSistemaInformatico: '01',
-  version: '1.0',
-  numeroInstalacion: '001',
-}
+// The REAL block, not a hand-built literal: a literal silently went stale when
+// the XSD turned out to require three more SistemaInformatico fields.
+const SIF = sistemaInformatico({ VERIFACTU_SYSTEM_VERSION: '1.0-test' })
 
 /** A Spanish partner in common territory — the in-scope case. */
 async function spanishPartner(overrides: Record<string, unknown> = {}) {
@@ -61,6 +61,9 @@ async function invoiceFor(
       totalTax: 21,
       totalAmount: 121,
       issuerVatNumber: 'B22435705',
+      // NombreRazonEmisor is mandatory in AEAT's RegistroAlta, so an invoice
+      // without an issuer company name cannot be filed at all.
+      issuerCompanyName: 'Alonso Beach SL',
       invoiceNumber: `AB-F-2026-0000${Math.floor(Math.random() * 90000) + 10000}`,
       ...data,
     },
@@ -329,6 +332,107 @@ describe('recordInvoiceForTax', () => {
       expect(partner!.verifactuRecords).toHaveLength(1)
       expect(platform).toBeDefined()
       expect(platform!.verifactuRecords).toHaveLength(0)
+    })
+  })
+
+  // ── the payload, validated against AEAT's own schema ──────────────────────
+
+  describe('the frozen payload XML', () => {
+    function xmllintAvailable(): boolean {
+      try {
+        execFileSync('xmllint', ['--version'], { stdio: 'ignore' })
+        return true
+      } catch {
+        return false
+      }
+    }
+
+    /** Validate a real submission built from stored fragments. */
+    function assertValidates(fragments: string[]) {
+      const doc = buildSubmissionXml(
+        { obligadoEmision: { nombreRazon: 'Alonso Beach SL', nif: 'B22435705' } },
+        fragments,
+      )
+      const dir = mkdtempSync(join(tmpdir(), 'verifactu-live-'))
+      const file = join(dir, 'submission.xml')
+      writeFileSync(file, doc)
+      execFileSync(
+        'xmllint',
+        ['--noout', '--schema', resolve(__dirname, 'schemas/SuministroLR.xsd'), file],
+        { stdio: 'pipe' },
+      )
+    }
+
+    const available = xmllintAvailable()
+    const run = available ? it : it.skip
+    if (!available) {
+      console.warn('[record] xmllint not found — SKIPPING live payload XSD validation.')
+    }
+
+    it('stores the wire fragment on the record, frozen with the huella', async () => {
+      const accountId = await spanishPartner()
+      const inv = await invoiceFor(accountId)
+      await prisma.$transaction((tx) => recordInvoiceForTax(tx, inv.id, SIF))
+
+      const rec = await prisma.verifactuRecord.findFirstOrThrow({
+        where: { invoiceId: inv.id },
+      })
+      expect(rec.payloadXml).toBeTruthy()
+      // The four fields AEAT needs that the huella alone did not cover.
+      expect(rec.nombreRazonEmisor).toBe('Alonso Beach SL')
+      expect(rec.descripcionOperacion).toBeTruthy()
+      expect(rec.cuotaTotal).toBe('21.00')
+      expect(rec.importeTotal).toBe('121.00')
+      // The payload must carry the SAME huella that was hashed, not a re-derived one.
+      expect(rec.payloadXml).toContain(`<sf:Huella>${rec.huella}</sf:Huella>`)
+      expect(rec.payloadXml).toContain(`<sf:CuotaTotal>${rec.cuotaTotal}</sf:CuotaTotal>`)
+      expect(rec.payloadXml).toContain(`<sf:ImporteTotal>${rec.importeTotal}</sf:ImporteTotal>`)
+    })
+
+    run('produces a document AEAT\u2019s XSD accepts, from the real writer', async () => {
+      // The end-to-end proof of this phase: not "the builder can make valid XML"
+      // but "what the writer actually stored is valid". Two records, so the
+      // chaining branch (PrimerRegistro then RegistroAnterior) is exercised too.
+      const accountId = await spanishPartner()
+      const first = await invoiceFor(accountId)
+      await prisma.$transaction((tx) => recordInvoiceForTax(tx, first.id, SIF))
+      const second = await invoiceFor(accountId)
+      await prisma.$transaction((tx) => recordInvoiceForTax(tx, second.id, SIF))
+
+      const records = await prisma.verifactuRecord.findMany({ orderBy: { chainSeq: 'asc' } })
+      expect(records).toHaveLength(2)
+      expect(records[0]!.payloadXml).toContain('<sf:PrimerRegistro>S</sf:PrimerRegistro>')
+      expect(records[1]!.payloadXml).toContain('<sf:RegistroAnterior>')
+      // The second record names the first by number AND hash.
+      expect(records[1]!.payloadXml).toContain(records[0]!.huella)
+
+      assertValidates(records.map((r) => r.payloadXml!))
+    })
+
+    run('produces a valid rectificativa for a credit note', async () => {
+      const accountId = await spanishPartner()
+      const sale = await invoiceFor(accountId)
+      await prisma.$transaction((tx) => recordInvoiceForTax(tx, sale.id, SIF))
+
+      const note = await invoiceFor(accountId, {
+        creditsInvoiceId: sale.id,
+        totalCharge: -100,
+        totalTax: -21,
+        totalAmount: -121,
+      })
+      await prisma.$transaction((tx) => recordInvoiceForTax(tx, note.id, SIF))
+
+      const rec = await prisma.verifactuRecord.findFirstOrThrow({
+        where: { invoiceId: note.id },
+      })
+      expect(rec.tipoFactura).toBe('R5')
+      expect(rec.payloadXml).toContain('<sf:TipoRectificativa>I</sf:TipoRectificativa>')
+      // FacturasRectificadas must name the invoice being corrected.
+      expect(rec.payloadXml).toContain('<sf:IDFacturaRectificada>')
+      expect(rec.payloadXml).toContain(sale.invoiceNumber!)
+
+      const all = await prisma.verifactuRecord.findMany({ orderBy: { chainSeq: 'asc' } })
+      assertValidates(all.map((r) => r.payloadXml!))
     })
   })
 })

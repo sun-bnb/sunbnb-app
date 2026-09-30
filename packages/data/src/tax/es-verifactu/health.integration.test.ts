@@ -13,7 +13,7 @@ import {
 import { processConfirmedReservation } from '../../payment'
 import { getVerifactuHealth, describeVerifactuHealth } from './health'
 import { recordInvoiceForTax, RECORD_BLOCKED, RECORD_SENT } from './record'
-import { PLATFORM_ES_ISSUER_NIF } from './sistema-informatico'
+import { PLATFORM_ES_ISSUER_NIF, sistemaInformatico } from './sistema-informatico'
 
 let seq = 0
 
@@ -28,14 +28,9 @@ afterAll(async () => {
   await disconnectDatabase()
 })
 
-const SIF = {
-  nombreRazon: 'Sunbnb España SL',
-  nif: PLATFORM_ES_ISSUER_NIF,
-  nombreSistemaInformatico: 'Sunbnb',
-  idSistemaInformatico: '01',
-  version: '1.0',
-  numeroInstalacion: '001',
-}
+// The REAL block, not a hand-built literal: a literal silently went stale when
+// the XSD turned out to require three more SistemaInformatico fields.
+const SIF = sistemaInformatico({ VERIFACTU_SYSTEM_VERSION: '1.0-test' })
 
 async function partner(overrides: Record<string, unknown> = {}) {
   const user = await createTestUser()
@@ -60,6 +55,8 @@ async function invoiceFor(accountId: string, data: Record<string, unknown> = {})
       totalTax: 21,
       totalAmount: 121,
       issuerVatNumber: 'B29806043',
+      // NombreRazonEmisor is mandatory in AEAT's RegistroAlta.
+      issuerCompanyName: 'Alonso Beach SL',
       invoiceNumber: `AB-F-2026-${String(seq).padStart(5, '0')}`,
       ...data,
     },

@@ -128,10 +128,22 @@ describe('buildDesglose', () => {
     expect(r).toEqual({
       ok: true,
       entries: [
-        { tipoImpositivo: 10, baseImponible: 20, cuotaRepercutida: 2 },
-        { tipoImpositivo: 21, baseImponible: 150, cuotaRepercutida: 31.5 },
+        // `calificacionOperacion` is mandatory inside DetalleDesglose per AEAT's
+        // XSD — S1 is an ordinary taxed domestic supply, which is all we emit.
+        { calificacionOperacion: 'S1', tipoImpositivo: 10, baseImponible: 20, cuotaRepercutida: 2 },
+        { calificacionOperacion: 'S1', tipoImpositivo: 21, baseImponible: 150, cuotaRepercutida: 31.5 },
       ],
     })
+  })
+
+  it('REFUSES a reverse-charge invoice rather than calling it a 0% supply', () => {
+    // A cross-border EU B2B commission invoice carries 0 VAT because the customer
+    // self-accounts — that is NOT the same statement as "taxed at 0%", and S1 at
+    // 0.00 would misstate it to AEAT. The right code (N2, or an OperacionExenta)
+    // is an open question for the asesor (D6), so this refuses instead of guessing.
+    const r = buildDesglose([{ vatRate: 0, charge: 100, tax: 0 }], { reverseCharge: true })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.reason).toMatch(/reverse-charge/i)
   })
 
   it('rounds to cents so summed floats do not reach the wire', () => {
