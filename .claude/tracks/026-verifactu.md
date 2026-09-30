@@ -181,33 +181,48 @@ watch it rather than assume it is gone.
   stored as `ESB22435705` with the country prefix, so `foldNif`'s prefix stripping is
   load-bearing: without it every commission invoice of ours resolves to a different company
   and drops silently out of scope.
-- ▶ **P7.1 — Transmission, PLATFORM issuer only.** The whole transport, restricted to
-  `issuerNif === PLATFORM_ES_ISSUER_NIF`. Not blocked on the Convenio or on any partner:
-  `4112` accepts the certificate holder as *Obligado Emisión* and we are that on our own
-  commission invoices, so this can be proven against **production** AEAT with the €14
-  certificate alone.
-  - SOAP over mTLS, with an `AEAT_MODE=stub|http` switch mirroring `packages/data/src/viva/`
-    so CI never needs a certificate.
-  - DB-state-as-queue sweep modelled on `/api/reconcile` but **with** the attempt counter,
-    exponential backoff and `blocked` terminal state it lacks. **Wire the cron in
-    `vercel.json` in the same commit** — `/api/reconcile` is the standing proof that a route
-    shipped without its trigger stays dark forever.
-  - **Records within a chain must arrive in chain order, so the sweep stops at the first
-    failure for that NIF.** Head-of-line blocking is correct here, not a bug; a future
-    maintainer will otherwise "fix" it into a compliance breach. Different NIFs proceed
-    independently. The `Cabecera` carries a single `ObligadoEmision`, so a message is
-    structurally single-issuer — never batch across issuers, since `4112` rejects the whole
-    envío.
-  - **Queue-and-retry is AEAT's own answer to an outage**, not our workaround: records sit
-    *"encolados, pendientes de remisión, con reintentos periódicos, como si se tratara de una
-    incidencia, sin que ello suponga ningún problema"* (developer FAQ §2). The counterweight
-    is *"no pueden quedar RF generados sin remitir a la AEAT"* — queueing is fine, giving up is
-    not, which is what makes P7.0 and P9 load-bearing. No maximum retry window is documented.
-  - **Verify:** stub tests for accepted / accepted-with-errors / rejected / duplicate resubmit
-    (idempotency) / **missing certificate must fail closed, never silently skip**; then a
-    laptop run against AEAT **preproducción** (`https://preportal.aeat.es`) as the manual gate
-    before promote — preproducción needs a real certificate, so it can never run in CI.
-  - *Makes true: "transmitted to AEAT", for our own invoices.*
+- ✅ **P7.1a — The wire payload, built from AEAT's XSD** (`3053012`). AEAT's schemas are
+  committed under `src/tax/es-verifactu/schemas/`; `registro-xml.ts` builds the
+  `RegistroFactura` fragment and the `RegFactuSistemaFacturacion` envelope from them. The
+  fragment is generated inside the invoice's transaction and **frozen** in `payload_xml`
+  (migration `20260930140000` adds the four fields the huella did not cover), for the reason
+  the schema already gives for `issuerNif`: rebuilding it at send time would let an invoice
+  edit change what gets filed, and a mismatched huella is *"aceptado con errores"* rather than
+  rejected, so the drift would be silent.
+  **Four things the XSD corrected that recall would not have.** `Cabecera` is declared locally
+  in `SuministroLR.xsd`, so the ELEMENT is in the LR namespace while its TYPE comes from the
+  other schema (the first generated document was invalid on exactly this).
+  `SistemaInformaticoType` requires `TipoUsoPosibleSoloVerifactu`, `TipoUsoPosibleMultiOT` and
+  `IndicadorMultiplesOT`, which we did not have — all `S`, all describing the SYSTEM, so they
+  must stay consistent with D4's declaration. `DetalleDesglose` requires
+  `CalificacionOperacion` (`S1` for an ordinary taxed domestic supply). And
+  `RegistroAnterior` needs the previous record's whole identity, not just its hash.
+  **The bug worth remembering:** the chain read selected `lastHuella` and `lastChainSeq` but
+  not `lastRecordId`, which the new chaining code then read — so every record would have
+  emitted `PrimerRegistro` and silently restarted the chain on every invoice. Lint cannot see
+  it (`packages/data` has no typecheck); the test that the second record chains onto the first
+  is what caught it.
+  Verified by `xmllint` against `SuministroLR.xsd`, including **what the real writer stored**
+  rather than only a hand-built document, plus a negative case proving the validation
+  discriminates.
+- ▶ **P7.1b — The client and the sweep.** What remains of P7.1, and now purely mechanical: the
+  payload exists and validates.
+  - `client.ts` + `stub-client.ts`, `AEAT_MODE=stub|http` mirroring `packages/data/src/viva/`,
+    so CI needs no certificate and **a missing certificate fails CLOSED rather than skipping**.
+  - Endpoint constants are already in `registro-xml.ts` `ENDPOINTS`. **Use the non-Sello
+    hosts** (`www1`/`prewww1`): `www10` expects a *certificado de sello electrónico* and we
+    hold a *representante*, so pointing there fails in the TLS handshake and looks like a
+    network fault.
+  - The sweep: `RECORD_UNSENT_STATUSES` + `nextAttemptAt <= now()`, restricted to `issuerNif`
+    folding to `PLATFORM_ES_ISSUER_NIF`; attempt counter, exponential backoff, `blocked` as
+    terminal-until-fixed. **Stop at the first failure per NIF** — chain order is mandatory and
+    head-of-line blocking is correct here. Never batch across issuers: a message carries one
+    `ObligadoEmision` and `4112` rejects the whole envío.
+  - Parse the reply with `RespuestaSuministro.xsd` (committed). Handle
+    **`Aceptado con errores`** as its own outcome — it is an acceptance, not a rejection, and a
+    mismatched huella arrives that way (huella spec §7), so treating it as failure would retry
+    forever while treating it as success would hide a real defect.
+  - **Wire the cron in `vercel.json` in the same commit.**
 - ☐ **P7a — Capture the representation grant.** AEAT blesses a web form or onboarding pop-up
   with electronic signature (D2, FAQ §16 Q4), so this is a product surface, not paperwork: the
   partner grants Sunbnb representation for VERI\*FACTU remisión, the grant is stored with its
@@ -362,6 +377,26 @@ watch it rather than assume it is gone.
   Wired as a CLI in the same commit, per this track's own rule: `/api/reconcile` is the
   standing proof that a route shipped without its trigger stays dark forever.
 
+- **2026-09-30 — P7.1a: the payload, and a reminder that fetching the schema beats recalling
+  it.** Four separate details in AEAT's XSD would have been wrong from memory, and the one that
+  actually broke the first generated document was the subtlest: `Cabecera` is declared locally
+  inside `RegFactuSistemaFacturacion`, so the element sits in the `SuministroLR` namespace
+  while its type comes from `SuministroInformacion`. `xmllint` named the element and not the
+  reason. Schemas are now committed so this is checkable offline.
+  The record as phase 5 stored it could not build the document — it kept what the *huella*
+  needs, which is a strict subset of what the *XML* needs. Four additive columns and the frozen
+  `payload_xml` close that, and the freezing is deliberate: a payload rebuilt at send time
+  could disagree with the hash that certifies it, and AEAT would answer *"aceptado con
+  errores"* rather than rejecting it, so nothing would surface the drift.
+  New open decision **D6**: a reverse-charge commission invoice is not a 0% taxed supply, and
+  `buildDesglose` now refuses it rather than declaring `S1` at 0.00. Our invoices to the
+  Finnish partner are consequently blocked and visible in the health check — the honest state.
+  Process note: the `lastRecordId` bug (every record emitting `PrimerRegistro`, silently
+  restarting the chain) reached the tests because **`packages/data` has no typecheck script**.
+  `npx tsc --noEmit --rootDir .` works and reports 111 pre-existing errors, none in the new
+  files, mostly `ServiceFee` test fixtures missing `product`. Worth its own task — the package
+  all three apps depend on is the one with no type gate.
+
 ## Open decisions
 
 - ✅ **D1 — CLOSED 2026-09-29.** The official document was located and read:
@@ -459,6 +494,16 @@ watch it rather than assume it is gone.
 - **D6 — Legacy data.** 120 invoices carry `"Alonso Beach"` as issuer tax id and 29 credit
   notes carry illegal VAT rates. Both are frozen, not corrected — `buildDesglose` refuses the
   rates so they cannot reach AEAT by accident. D3 removes both when it runs.
+
+- ☐ **D6 — How is a reverse-charge commission invoice declared in the `Desglose`?** Our
+  PLATFORM commission invoice to an EU partner outside Spain carries 0 VAT under reverse
+  charge, and the customer self-accounts. That is **not** a 0% taxed supply, so
+  `CalificacionOperacion = S1` at `TipoImpositivo 0.00` would misstate it to AEAT. The
+  candidates are `N2` (*no sujeta por reglas de localización*) or an `OperacionExenta` code.
+  `buildDesglose` refuses these invoices until this is answered, so they show up unfiled in
+  `verifactu:health` rather than being mis-declared — the right failure, but it does mean our
+  own commission invoices to the Finnish partner are currently unfilable. One question for the
+  asesor.
 
 ## Founder actions (not engineering) — the real critical path
 
