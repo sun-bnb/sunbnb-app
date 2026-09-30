@@ -40,34 +40,49 @@ implements them. No partner is in a foral territory today.
 
 ## Resume here
 
-**Next action — P7a: capture each partner's representation grant in the product.** It gates P7
-per partner, it is a product surface rather than paperwork, and AEAT is explicit that
-*"ningún colaborador social realice envíos sin estar previamente autorizado"* — so the
-submission sweep must refuse a partner who has not granted it (D2, FAQ §16 Q4).
+**Next action — P7.0: the missing-record detector.** Small, and it is a debt this track
+created rather than a new feature. P5 made a blocked invoice write **no record at all** on the
+argument that a placeholder would put a hole in the chain, and justified that in
+`record.ts`'s own header with "the gap is surfaced by the missing-record alert rather than by
+breaking a payment". That alert does not exist, so today a blocked Spanish invoice is visible
+only as a `console.error` in a Vercel log. It is also the instrument that answers the question
+P7.1 needs answered first: **are our own commission invoices actually filable?**
 
-**Shape:** a consent surface in the partner app (web form with electronic signature is
-what AEAT blesses), storing the grant with its timestamp and evidence on
-`PartnerAccount`; then P7's sweep filters on it. Build the storage and the gate BEFORE the
-transport, so there is never a window in which the sweep can send for an ungranted partner.
+**Shape:** a query for in-scope invoices with no `VerifactuRecord`, plus a count of records
+stuck `pending`, added to `fiscal.ts` beside the `unInvoicedRefunds` watchdog P1 already
+established there. No new dependency, no new surface — the number can be rendered in P9's ops
+page later. Split by `issuerType` so "our own" and "partners'" are separately visible.
+
+**Then P7.1 — transmission for the PLATFORM issuer only**, which is buildable now and is NOT
+blocked on either external process (see below). Stub-mode first so CI can run it.
+
+### The sequencing that changed, and why
+
+AEAT enforces representation at the service, not just in law: `4112 = El titular del
+certificado debe ser Obligado Emisión, Colaborador Social, Apoderado o Sucesor`, and it is in
+the list of errors that reject the **whole envío**. But *Obligado Emisión* is an accepted
+role, and Sunbnb España SL **is** the obligado on its own PLATFORM commission invoices. So the
+entire transport — mTLS, chain order, the sweep, backoff, `Aceptado con errores` — can be
+built and proven against **production** AEAT on the €14 certificate alone, with no Convenio
+and no partner signature. Partner submission is a filter widening afterwards (P7.2), gated on
+P7a. AEAT's services have been live since 23 April 2025.
 
 **Context needed:**
-- `.claude/tracks/026-verifactu.md` D2 (closed) — the Convenio 17 / colaboración social
-  mechanics and the one-certificate model that follows from it.
-- `packages/data/src/tax/es-verifactu/record.ts` — records are written with
-  `status`/`nextAttemptAt`, which is what P7 sweeps.
-- `packages/data/src/viva/` — the stub-vs-real mode-switch pattern P7's client should copy.
-- `apps/partner/app/account/` — where partner-level consent belongs.
+- `packages/data/src/fiscal.ts` — where the detector goes; `unInvoicedRefunds` is the
+  precedent for a watchdog that should read zero.
+- `packages/data/src/tax/es-verifactu/record.ts` — `VerifactuRecord` carries
+  `status`/`nextAttemptAt`/`chainSeq`; `VerifactuChain` is keyed on `issuerNif`.
+- `packages/data/src/tax/es-verifactu/sistema-informatico.ts` — `PLATFORM_ES_ISSUER_NIF` is
+  the filter P7.1 restricts the sweep to.
+- `packages/data/src/viva/` — the stub-vs-real mode-switch pattern to copy.
+- `.claude/rules/migrations.md` + `vercel.json` — the cron must be wired in the same commit.
 
-**Then P7 (transmission).** Two things in that phase are easy to get wrong and are written
-down in the roadmap rather than left to judgement: the sweep must **stop at the first
-failure for a given NIF** (records within a chain must arrive in order — head-of-line
-blocking is correct here, not a bug), and the cron must be **wired in `vercel.json` in the
-same commit** (`/api/reconcile` is the standing proof that a route shipped without its
-trigger stays dark forever).
-
-**Not yet done and easy to forget:** 17 commits are unpushed (5 carry migrations, all applied
-to `sunbnb_test`); the production clean-slate deletion (D3) is deferred to cutover; D4's
-signature and the remaining half of D5 are founder/asesor actions, not engineering.
+**Not yet done and easy to forget:** **21 commits are unpushed**, 4 of them carrying migrations
+(`20260929113904`, `20260929120000`, `20260929140000`, `20260929160000`) — all applied to the
+LOCAL Docker `sunbnb_test` but **not** to the Neon TEST database, so `.githooks/pre-push` will
+block a `main` push until `npm run migrate:test` runs. All four are additive, so applying them
+ahead of the code is correct per expand/contract. The production clean-slate deletion (D3) is
+deferred to cutover; D4's signature and the remaining half of D5 are founder/asesor actions.
 
 ## Roadmap
 
@@ -132,57 +147,74 @@ signature and the remaining half of D5 are founder/asesor actions, not engineeri
   padding; verified by decoding the generated PNG with CoreImage (both margin-0 and margin-4
   round-trip to the exact URL). *Makes true: "every receipt includes a QR code formatted per
   AEAT specifications" — the most conspicuous false claim on the live page.*
-- ☐ **P6a — Our OWN commission invoice has no rendered document.** Found while closing P6:
-  a PLATFORM invoice now gets a Veri\*factu record, but nothing anywhere renders it as an
-  invoice a human can read — the partner accounting page shows list rows and a CSV column,
-  and there is no PDF or printable page. So art. 20's QR + legend requirement currently has
-  **no surface to attach to** for the B2B commission invoice, which is why P6 did not cover
-  it rather than an oversight. A partner needs that document for their own books, and the
-  moment it is built it must carry the QR and the legend like any other invoice we issue.
-  Small, but do not let it be built without them.
-- ▶ **P7 (platform-issuer slice) — RECOMMENDED FIRST, and newly unblocked.**
-  **AEAT explicitly blesses queue-and-retry**, which is the justification for the whole
-  transport design rather than an inference from it. From the developer FAQ §2: before the
-  services went live, *"los RF quedarían «encolados», pendientes de remisión, con reintentos
-  periódicos, **como si se tratara de una incidencia, sin que ello suponga ningún problema**"*.
-  So an AEAT outage is an operational event, not a compliance breach, and invoicing must never
-  block on it. The counterweight is §5's *"no pueden quedar RF generados sin remitir a la
-  AEAT"* — queueing is fine, giving up is not, so the sweep must be durable and monitored
-  (P9), and there is no documented maximum retry window (for subsanación/anulación the FAQ
-  states outright *"no existiendo, en principio, un plazo máximo fijado para ello"*).
-  All Veri\*factu services have been in production since **23 April 2025**. AEAT error `4112`
-  accepts the certificate holder as *Obligado Emisión*, and Sunbnb España SL is exactly that on
-  its own PLATFORM commission invoices. So the full transport can be built and proven against
-  production AEAT on the €14 certificate alone, with no Convenio and no partner signature —
-  while partner submission stays refused until P7a. This removes the dependency that made P7
-  look blocked behind two external processes.
-- ▶ **P7a — Capture the representation grant.** AEAT explicitly blesses a web form or
-  onboarding pop-up with electronic signature (D2, §16 Q4), so this is a product surface, not
-  paperwork: the partner grants Sunbnb representation for VERI*FACTU remission, the grant is
-  stored with its timestamp and evidence, and **the submission sweep refuses any partner who
-  has not granted it** — *"ningún colaborador social realice envíos sin estar previamente
-  autorizado"*. Blocks P7 for any given partner, not P7 as a whole.
-- ☐ **P7 — Transmission.** SOAP over mTLS with a stub for CI (`packages/data/src/viva/` is
-  the mode-switch pattern). DB-state-as-queue sweep modelled on `/api/reconcile` but WITH
-  the attempt counter, backoff and `blocked` terminal state it lacks. **Wire the cron in
-  `vercel.json` in the same commit** — `/api/reconcile` is the standing proof that a route
-  shipped without its trigger stays dark forever. **Records within a chain must arrive in
-  chain order, so the sweep stops at the first failure for that NIF**; head-of-line blocking
-  is correct here, not a bug, and a future maintainer will otherwise "fix" it into a
-  compliance breach. *Makes true: "transmitted to AEAT".*
+- ▶ **P7.0 — The missing-record detector.** Pulled out of P9 and put first, because P5's
+  design depends on it: a blocked invoice writes no record by design, and `record.ts` claims
+  the absence "is surfaced by the missing-record alert" — which does not exist. A promise in a
+  code comment that is not kept. In `fiscal.ts` beside `unInvoicedRefunds`, split by
+  `issuerType`, counting both in-scope invoices with no record and records stuck `pending`.
+  Also the prerequisite for P7.1: it tells us whether our own commission invoices are filable
+  before we start sending them.
+- ☐ **P7.1 — Transmission, PLATFORM issuer only.** The whole transport, restricted to
+  `issuerNif === PLATFORM_ES_ISSUER_NIF`. Not blocked on the Convenio or on any partner:
+  `4112` accepts the certificate holder as *Obligado Emisión* and we are that on our own
+  commission invoices, so this can be proven against **production** AEAT with the €14
+  certificate alone.
+  - SOAP over mTLS, with an `AEAT_MODE=stub|http` switch mirroring `packages/data/src/viva/`
+    so CI never needs a certificate.
+  - DB-state-as-queue sweep modelled on `/api/reconcile` but **with** the attempt counter,
+    exponential backoff and `blocked` terminal state it lacks. **Wire the cron in
+    `vercel.json` in the same commit** — `/api/reconcile` is the standing proof that a route
+    shipped without its trigger stays dark forever.
+  - **Records within a chain must arrive in chain order, so the sweep stops at the first
+    failure for that NIF.** Head-of-line blocking is correct here, not a bug; a future
+    maintainer will otherwise "fix" it into a compliance breach. Different NIFs proceed
+    independently. The `Cabecera` carries a single `ObligadoEmision`, so a message is
+    structurally single-issuer — never batch across issuers, since `4112` rejects the whole
+    envío.
+  - **Queue-and-retry is AEAT's own answer to an outage**, not our workaround: records sit
+    *"encolados, pendientes de remisión, con reintentos periódicos, como si se tratara de una
+    incidencia, sin que ello suponga ningún problema"* (developer FAQ §2). The counterweight
+    is *"no pueden quedar RF generados sin remitir a la AEAT"* — queueing is fine, giving up is
+    not, which is what makes P7.0 and P9 load-bearing. No maximum retry window is documented.
+  - **Verify:** stub tests for accepted / accepted-with-errors / rejected / duplicate resubmit
+    (idempotency) / **missing certificate must fail closed, never silently skip**; then a
+    laptop run against AEAT **preproducción** (`https://preportal.aeat.es`) as the manual gate
+    before promote — preproducción needs a real certificate, so it can never run in CI.
+  - *Makes true: "transmitted to AEAT", for our own invoices.*
+- ☐ **P7a — Capture the representation grant.** AEAT blesses a web form or onboarding pop-up
+  with electronic signature (D2, FAQ §16 Q4), so this is a product surface, not paperwork: the
+  partner grants Sunbnb representation for VERI\*FACTU remisión, the grant is stored with its
+  timestamp and evidence, and **the sweep refuses any partner who has not granted it** —
+  *"ningún colaborador social realice envíos sin estar previamente autorizado"*. Build the
+  storage and the refusal BEFORE P7.2, so there is never a window in which the sweep can send
+  for an ungranted partner.
+- ☐ **P7.2 — Transmission, partners.** Mostly a filter widening once P7a's grant exists and the
+  Convenio 017 agreement is approved. Until both hold, a partner's records stay queued — which
+  is the correct state, not a failure.
 - ☐ **P8 — Anulación and rectificativa completeness.** **A credit note is an `Alta` of a
-  rectificativa, not an `Anulación`**; anulación is for a record issued in error. Getting
-  that wrong is a compliance defect that looks like a working feature.
+  rectificativa, not an `Anulación`**; anulación is for a record issued in error. Getting that
+  wrong is a compliance defect that looks like a working feature. P5 already emits the
+  rectificativa ALTA with `tipoRectificativa: 'I'`; what is missing is the anulación path and
+  the *alta de subsanación*. Note from the FAQ: for both of these *"no existiendo, en
+  principio, un plazo máximo fijado"*, and they must be sent *"en cuanto sea posible"*.
+- ☐ **P6a — Our OWN commission invoice has no rendered document.** Found while closing P6: a
+  PLATFORM invoice gets a record, but nothing anywhere renders it as an invoice a human can
+  read — the partner accounting page shows list rows and a CSV column, and there is no PDF or
+  printable page. So art. 20's QR + legend requirement has **no surface to attach to** for the
+  B2B commission invoice, which is why P6 did not cover it. A partner needs that document for
+  their own books, and the moment it is built it must carry the QR and the legend.
 - ☐ **P9a — The declaración responsable, in the product.** A route in the partner app
   rendering the signed declaration, reachable from anywhere in the software and carrying the
-  running version, plus a downloadable copy for resellers and customers. Small, but it is a
-  hard requirement of RD 1007/2023 that no other phase covers, and it is the only phase that
-  touches the "certified software" line on the legal page (see D4).
-- ☐ **P9 — Ops surface.** Pending/blocked/rejected per issuer, both verify routines runnable
-  on demand, per-invoice CSV, **certificate expiry countdown** (the FNMT representative
-  certificate is valid **2 years** — an unmonitored time bomb), and the alerts "invoice with no record" and
-  "record pending > 1 h". *Makes true: "record retention / exportable at any time".*
-- 💤 **Cutover.** The production clean-slate deletion (D3), after P5–P7 deploy.
+  running version, plus a downloadable copy for resellers and customers. Small, but a hard
+  requirement of RD 1007/2023 that no other phase covers, and the only phase that touches the
+  "certified software" line on the legal page (see D4). Must stay consistent with
+  `sistema-informatico.ts` — if the system name or id changes there, the declaration is stale.
+- ☐ **P9 — Ops surface.** The rest of it, once P7.0 exists: pending/blocked/rejected per
+  issuer, both verify routines runnable on demand, per-invoice CSV, **certificate expiry
+  countdown** (the FNMT representative certificate is valid **2 years** — an unmonitored time
+  bomb), and the alert "record pending > 1 h". *Makes true: "record retention / exportable at
+  any time".*
+- 💤 **Cutover.** The production clean-slate deletion (D3), after P7.1 deploys.
 
 ## Log
 
@@ -273,6 +305,20 @@ signature and the remaining half of D5 are founder/asesor actions, not engineeri
   are the obligado on our own PLATFORM commission invoices. P7 can therefore be built and
   proven end to end against production AEAT with only the certificate — no Convenio, no partner
   signature — which is now the recommended first slice. Partner submission stays gated on P7a.
+
+- **2026-09-30 — Roadmap resequenced after establishing what the certificate actually buys.**
+  P7 had looked blocked behind two external processes (an FNMT certificate and an AEAT Convenio),
+  which would have left the transport unwritten for weeks. Establishing that `4112` accepts
+  *Obligado Emisión* changed that: we are the obligado on our own commission invoices, so the
+  transport is fully buildable and provable against production AEAT on the certificate alone.
+  P7 is therefore split — **P7.1 platform-issuer** (unblocked now) and **P7.2 partners** (a
+  filter widening behind P7a and the Convenio).
+  Also pulled the **missing-record detector out of P9 and put it first as P7.0**. It is a debt
+  this track created: P5 deliberately writes no record for a blocked invoice and justified that
+  in `record.ts` by pointing at an alert that was never built, so a blocked invoice is currently
+  invisible outside a Vercel log. It is also the instrument that tells us whether our own
+  commission invoices are filable before P7.1 starts sending them.
+  Corrected a figure repeated several times in this track: **4** unpushed migrations, not 5.
 
 ## Open decisions
 
