@@ -140,6 +140,12 @@ signature and the remaining half of D5 are founder/asesor actions, not engineeri
   it rather than an oversight. A partner needs that document for their own books, and the
   moment it is built it must carry the QR and the legend like any other invoice we issue.
   Small, but do not let it be built without them.
+- ▶ **P7 (platform-issuer slice) — RECOMMENDED FIRST, and newly unblocked.** AEAT error `4112`
+  accepts the certificate holder as *Obligado Emisión*, and Sunbnb España SL is exactly that on
+  its own PLATFORM commission invoices. So the full transport can be built and proven against
+  production AEAT on the €14 certificate alone, with no Convenio and no partner signature —
+  while partner submission stays refused until P7a. This removes the dependency that made P7
+  look blocked behind two external processes.
 - ▶ **P7a — Capture the representation grant.** AEAT explicitly blesses a web form or
   onboarding pop-up with electronic signature (D2, §16 Q4), so this is a product surface, not
   paperwork: the partner grants Sunbnb representation for VERI*FACTU remission, the grant is
@@ -245,6 +251,18 @@ signature and the remaining half of D5 are founder/asesor actions, not engineeri
   One gap found and recorded rather than quietly skipped (P6a): our own PLATFORM commission
   invoice gets a record but has no rendered document anywhere, so there is no surface for its
   QR yet.
+
+- **2026-09-30 — The Convenio is a technical gate, not just a legal one — and it does not block
+  all of P7.** Asked whether the €14 certificate is technically sufficient. It is a real
+  qualified certificate and exports to `.p12`, so it runs on a server; but AEAT enforces
+  representation at the service: `4112 = El titular del certificado debe ser Obligado Emisión,
+  Colaborador Social, Apoderado o Sucesor`, in the list of errors that **reject the whole
+  envío**. Treating the Convenio as paperwork would have produced a transport that authenticates
+  cleanly and has every submission rejected.
+  The same error code carries the way forward: *Obligado Emisión* is an accepted role, and we
+  are the obligado on our own PLATFORM commission invoices. P7 can therefore be built and
+  proven end to end against production AEAT with only the certificate — no Convenio, no partner
+  signature — which is now the recommended first slice. Partner submission stays gated on P7a.
 
 ## Open decisions
 
@@ -371,9 +389,37 @@ Solicitud* by email) → accredit identity → download and pay.
   is needed provided the legal representative is the one registered in the Registro Mercantil
   and holds a valid personal certificate. In-person is the fallback and needs *cita previa*.
 
+**It can live on a server.** The key pair is generated locally during the request and FNMT
+recommends making a *copia de seguridad* at download — i.e. it exports to `.p12`/`.pfx`, which
+is what `AEAT_CERT_PFX_BASE64` needs. It is a software certificate, not card-bound.
+
 **Custody note, unchanged from the plan:** we hold OUR certificate, never a partner's. Custody
 of a partner's own qualified certificate is the ability to act as that company everywhere, not
 just at AEAT.
+
+### A2. The authorization is enforced TECHNICALLY, not only legally — and it splits P7 in two
+
+Checked against AEAT's live error list
+(`https://prewww2.aeat.es/static_files/common/internet/dep/aplicaciones/es/aeat/tikeV1.0/cont/ws/errores.properties`,
+read 2026-09-30). In the section *"códigos de error que provocan el rechazo del envío completo"*:
+
+> `4112 = El titular del certificado debe ser Obligado Emisión, Colaborador Social, Apoderado o Sucesor.`
+> `4110 = Error técnico al comprobar los apoderamientos.`
+
+So the certificate alone is not enough to submit for a partner: without the Convenio the whole
+**envío** is rejected, not one record. But note the first accepted role — **Obligado Emisión**.
+That has two consequences worth building around:
+
+1. **Our own PLATFORM commission invoices need no authorization at all.** Sunbnb España SL is
+   the *obligado emisión* on them and holds the certificate, so they can be filed for real on
+   the €14 certificate alone, before the Convenio is granted and before any partner signs
+   anything. **P7 should therefore ship platform-issuer-first**: it exercises the whole
+   transport — mTLS, the chain, the sweep, error handling, `Aceptado con errores` — against
+   production AEAT with real documents, while partner submission stays gated behind P7a.
+2. **Never mix issuers in one message.** The `Cabecera` carries a single `ObligadoEmision`, so
+   a submission is structurally single-issuer anyway — but 4112 rejecting the *entire* envío
+   makes it worse than a wasted call if it were ever batched. This independently confirms the
+   per-NIF sweep and the stop-at-first-failure rule.
 
 ### B. The colaboración social agreement (Convenio)
 
