@@ -140,7 +140,17 @@ signature and the remaining half of D5 are founder/asesor actions, not engineeri
   it rather than an oversight. A partner needs that document for their own books, and the
   moment it is built it must carry the QR and the legend like any other invoice we issue.
   Small, but do not let it be built without them.
-- ▶ **P7 (platform-issuer slice) — RECOMMENDED FIRST, and newly unblocked.** AEAT error `4112`
+- ▶ **P7 (platform-issuer slice) — RECOMMENDED FIRST, and newly unblocked.**
+  **AEAT explicitly blesses queue-and-retry**, which is the justification for the whole
+  transport design rather than an inference from it. From the developer FAQ §2: before the
+  services went live, *"los RF quedarían «encolados», pendientes de remisión, con reintentos
+  periódicos, **como si se tratara de una incidencia, sin que ello suponga ningún problema**"*.
+  So an AEAT outage is an operational event, not a compliance breach, and invoicing must never
+  block on it. The counterweight is §5's *"no pueden quedar RF generados sin remitir a la
+  AEAT"* — queueing is fine, giving up is not, so the sweep must be durable and monitored
+  (P9), and there is no documented maximum retry window (for subsanación/anulación the FAQ
+  states outright *"no existiendo, en principio, un plazo máximo fijado para ello"*).
+  All Veri\*factu services have been in production since **23 April 2025**. AEAT error `4112`
   accepts the certificate holder as *Obligado Emisión*, and Sunbnb España SL is exactly that on
   its own PLATFORM commission invoices. So the full transport can be built and proven against
   production AEAT on the €14 certificate alone, with no Convenio and no partner signature —
