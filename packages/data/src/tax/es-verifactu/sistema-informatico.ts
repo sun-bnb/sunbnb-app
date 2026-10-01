@@ -132,6 +132,19 @@ function foldNif(value: string | null | undefined): string {
   return bare.startsWith('ES') ? bare.slice(2) : bare
 }
 
+/**
+ * Every spelling of our own NIF that a stored record might carry.
+ *
+ * Needed because a database filter cannot fold a prefix the way `foldNif` does,
+ * and the platform `Settings` row in test and production actually stores
+ * `ESB22435705`. A sweep filtering on the bare NIF alone would match nothing and
+ * report a clean, empty run.
+ */
+export function platformIssuerNifCandidates(): string[] {
+  const bare = foldNif(PLATFORM_ES_ISSUER_NIF)
+  return [bare, `ES${bare}`]
+}
+
 export function platformIssuerJurisdiction(issuerVatNumber: string | null | undefined): {
   country: string | null
   taxRegion: string | null

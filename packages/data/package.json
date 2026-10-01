@@ -54,6 +54,10 @@
     "./tax/es-verifactu/health": "./src/tax/es-verifactu/health.ts",
     "./tax/es-verifactu/huella": "./src/tax/es-verifactu/huella.ts",
     "./tax/es-verifactu/qr": "./src/tax/es-verifactu/qr.ts",
+    "./tax/es-verifactu/client": "./src/tax/es-verifactu/client.ts",
+    "./tax/es-verifactu/soap": "./src/tax/es-verifactu/soap.ts",
+    "./tax/es-verifactu/submit": "./src/tax/es-verifactu/submit.ts",
+    "./tax/es-verifactu/registro-xml": "./src/tax/es-verifactu/registro-xml.ts",
     "./tax/es-verifactu/record": "./src/tax/es-verifactu/record.ts",
     "./tax/es-verifactu/sistema-informatico": "./src/tax/es-verifactu/sistema-informatico.ts",
     "./tax/es-verifactu/tipo-factura": "./src/tax/es-verifactu/tipo-factura.ts",
@@ -177,6 +181,18 @@
       "tax/es-verifactu/qr": [
         "./src/tax/es-verifactu/qr.ts"
       ],
+      "tax/es-verifactu/client": [
+        "./src/tax/es-verifactu/client.ts"
+      ],
+      "tax/es-verifactu/soap": [
+        "./src/tax/es-verifactu/soap.ts"
+      ],
+      "tax/es-verifactu/submit": [
+        "./src/tax/es-verifactu/submit.ts"
+      ],
+      "tax/es-verifactu/registro-xml": [
+        "./src/tax/es-verifactu/registro-xml.ts"
+      ],
       "tax/es-verifactu/record": [
         "./src/tax/es-verifactu/record.ts"
       ],
@@ -210,7 +226,7 @@
     "lint": "eslint . --max-warnings 0",
     "generate:component": "turbo gen react-component",
     "postinstall": "npx prisma generate",
-    "migrate:local": "cp .env.local .env && npx prisma migrate dev && npx prisma generate && (npm run migrate:integration || echo '\u26a0 sunbnb_test not migrated \u2014 create the DB if you run integration tests')",
+    "migrate:local": "cp .env.local .env && npx prisma migrate dev && npx prisma generate && (npm run migrate:integration || echo '⚠ sunbnb_test not migrated — create the DB if you run integration tests')",
     "migrate:integration": "POSTGRES_URL=postgres://postgres:sunbnb@localhost:5432/sunbnb_test npx prisma migrate deploy",
     "migrate:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx prisma migrate deploy && npx prisma generate",
     "migrate:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx prisma migrate deploy && npx prisma generate",
@@ -294,6 +310,7 @@
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.4.2",
+    "@xmldom/xmldom": "0.8.15",
     "dotenv": "^17.3.1",
     "pg": "^8.19.0",
     "prisma": "^7",

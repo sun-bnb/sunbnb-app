@@ -1,3 +1,11 @@
 {
-  "regions": ["fra1"]
+  "regions": [
+    "fra1"
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/verifactu-submit",
+      "schedule": "*/15 * * * *"
+    }
+  ]
 }

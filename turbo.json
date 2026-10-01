@@ -37,7 +37,13 @@
     "FF_RESTAURANTS",
     "PREF_*",
     "CONSUMER_APP_URL",
-    "HW_CLIENT_UA"
+    "HW_CLIENT_UA",
+    "CRON_SECRET",
+    "AEAT_MODE",
+    "AEAT_ENV",
+    "AEAT_CERT_PFX_BASE64",
+    "AEAT_CERT_PASSWORD",
+    "VERIFACTU_SYSTEM_VERSION"
   ],
   "tasks": {
     "build": {
