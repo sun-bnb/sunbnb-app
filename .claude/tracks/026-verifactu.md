@@ -40,63 +40,47 @@ implements them. No partner is in a foral territory today.
 
 ## Resume here
 
-**Next action — P7.1: transmission for the PLATFORM issuer only.** The detector (P7.0) is in
-and has already told us what we need to know before switching anything on, including two
-things that must be fixed first (see *Blocking data fixes* below).
+**P7.1 is complete and the transport is ready to point at AEAT. The next action is not
+code — it is the two data fixes and the certificate.**
 
-**Why platform-only, and why it is not blocked:** AEAT error `4112` accepts the certificate
-holder as *Obligado Emisión*, and Sunbnb España SL **is** the obligado on its own PLATFORM
-commission invoices. So the whole transport — mTLS, chain order, the sweep, backoff,
-`Aceptado con errores` — can be built and proven against **production** AEAT on the €14
-certificate alone, with no Convenio and no partner signature. Partners are a filter widening
-afterwards (P7.2), gated on P7a.
+### What is ready
 
-**Shape:**
-- `packages/data/src/tax/es-verifactu/client.ts` + `stub-client.ts` with an
-  `AEAT_MODE=stub|http` switch mirroring `packages/data/src/viva/`, so CI never needs a
-  certificate and **a missing certificate fails CLOSED rather than silently skipping**.
-- The sweep reads `VerifactuRecord` where `status` is one of `RECORD_UNSENT_STATUSES` and
-  `nextAttemptAt <= now()`, restricted to `issuerNif` folding to `PLATFORM_ES_ISSUER_NIF`.
-  Attempt counter, exponential backoff, `blocked` as terminal-until-fixed — the things
-  `/api/reconcile` lacks.
-- **Stop at the first failure for a given NIF.** Records within a chain must arrive in order;
-  head-of-line blocking is correct here and a maintainer will otherwise "fix" it into a
-  compliance breach. Different NIFs proceed independently. A message carries a single
-  `ObligadoEmision`, so never batch across issuers — `4112` rejects the whole envío.
-- **Wire the cron in `vercel.json` in the same commit.** `/api/reconcile` is the standing
-  proof that a route shipped without its trigger stays dark forever.
+`submitPlatformRecords()` sends our own commission invoices, scoped by
+`platformIssuerNifCandidates()`. The cron is live in `apps/admin/vercel.json`
+(`*/15`), the client defaults to **stub** so nothing happens until a certificate is
+configured, and `AEAT_MODE=http` with no certificate **throws** rather than degrading.
+`AEAT_ENV` defaults to `pruebas`.
 
-**Context needed:**
-- `packages/data/src/tax/es-verifactu/health.ts` — `getVerifactuHealth`, and the
-  `RECORD_*` constants live in `record.ts` beside it.
-- `packages/data/src/tax/es-verifactu/sistema-informatico.ts` — `PLATFORM_ES_ISSUER_NIF`
-  (the filter) and `platformIssuerJurisdiction` (which folds an `ES` prefix — load-bearing).
-- `packages/data/src/viva/` — the stub-vs-real mode switch to copy.
-- `npm run verifactu:health:{local,test,production}` — run it before and after.
+### To go live, in order
 
-### Blocking data fixes, both admin actions rather than code
+1. **Fix the two data defects** (admin actions, both block trusting what is sent):
+   - No partner has `taxRegion`, so no Spanish partner is in scope at all.
+   - The Spanish company's identity (`ESB22435705` / Sunbnb España SL) sits on a `Settings`
+     row labelled `country = 'FI'`, while the `ES` row has a NULL `vatId`. `getBusinessEntity()`
+     picks the right one by *vatId preference*, not by country — correct today, fragile.
+2. **Obtain the FNMT certificate** (€14, 2 years, online accreditation for our B-prefix NIF).
+   See *Founder actions*.
+3. **Run against preproducción from a laptop**: set `AEAT_CERT_PFX_BASE64`,
+   `AEAT_CERT_PASSWORD`, `AEAT_MODE=http`, `AEAT_ENV=pruebas`, then
+   `npm run verifactu:health:local` → sweep → health again. This is the manual gate that
+   cannot run in CI, because preproducción needs a real certificate.
+4. **Then production**: `AEAT_ENV=production` in Vercel for the admin app only.
 
-Found by running the detector against the TEST database:
+**Check before and after every step with `npm run verifactu:health:{local,test,production}`.**
+Note `verifactu:health:production` cannot run until the migrations reach production.
 
-1. **No partner has `taxRegion` set**, so no Spanish partner is in scope at all. One issuer
-   (12 invoices) is `country = ES` with `taxRegion` null. Until this is set in admin, a
-   Spanish partner's invoices are silently *out of scope* rather than filed — which is why
-   `unresolvedEsIssuers` exists and why the report refuses to say "complete" while any remain.
-2. **The `Settings` rows are mislabelled.** There are two: one with `country = 'ES'` and a
-   NULL `vatId`/`companyName`, and one with `country = 'FI'` carrying
-   `vatId = 'ESB22435705'` / `companyName = 'Sunbnb España SL'`. The Spanish company's
-   identity is sitting on the row labelled Finland. `getBusinessEntity()` prefers a row with
-   a `vatId`, so it currently picks the right identity — by preference, not by country — which
-   works and is fragile. Fix the labelling before P7.1 files anything real.
+### Then P7a → P7.2
 
-Neither blocks writing the transport; both block trusting what it sends.
+P7a captures each partner's representation grant and must gate the sweep BEFORE P7.2 widens
+it beyond our own NIF — there must never be a window in which the sweep can send for an
+ungranted partner.
 
-**Not yet done and easy to forget:** the production clean-slate deletion (D3) is deferred to
-cutover — and note `verifactu_record` does not exist on production yet, so
-`verifactu:health:production` cannot run until those migrations ship. D4's signature and the
-remaining half of D5 are founder/asesor actions. One full-suite run failed on
-`record.integration.test.ts`'s platform assertion and has not reproduced in four runs since;
-watch it rather than assume it is gone.
+**Open and worth knowing:** **D6** (how a reverse-charge commission invoice is declared) blocks
+our own invoices to the Finnish partner — they are refused rather than mis-declared, and show
+up in `verifactu:health`. D4's signature and half of D5 remain founder/asesor actions. The
+production clean-slate deletion (D3) is deferred to cutover. `packages/data` still has no
+typecheck script (111 pre-existing errors, none in the Veri\*factu files) — the gap that let a
+missing `select` field through in P7.1a.
 
 ## Roadmap
 
@@ -205,25 +189,28 @@ watch it rather than assume it is gone.
   Verified by `xmllint` against `SuministroLR.xsd`, including **what the real writer stored**
   rather than only a hand-built document, plus a negative case proving the validation
   discriminates.
-- ▶ **P7.1b — The client and the sweep.** What remains of P7.1, and now purely mechanical: the
-  payload exists and validates.
-  - `client.ts` + `stub-client.ts`, `AEAT_MODE=stub|http` mirroring `packages/data/src/viva/`,
-    so CI needs no certificate and **a missing certificate fails CLOSED rather than skipping**.
-  - Endpoint constants are already in `registro-xml.ts` `ENDPOINTS`. **Use the non-Sello
-    hosts** (`www1`/`prewww1`): `www10` expects a *certificado de sello electrónico* and we
-    hold a *representante*, so pointing there fails in the TLS handshake and looks like a
-    network fault.
-  - The sweep: `RECORD_UNSENT_STATUSES` + `nextAttemptAt <= now()`, restricted to `issuerNif`
-    folding to `PLATFORM_ES_ISSUER_NIF`; attempt counter, exponential backoff, `blocked` as
-    terminal-until-fixed. **Stop at the first failure per NIF** — chain order is mandatory and
-    head-of-line blocking is correct here. Never batch across issuers: a message carries one
-    `ObligadoEmision` and `4112` rejects the whole envío.
-  - Parse the reply with `RespuestaSuministro.xsd` (committed). Handle
-    **`Aceptado con errores`** as its own outcome — it is an acceptance, not a rejection, and a
-    mismatched huella arrives that way (huella spec §7), so treating it as failure would retry
-    forever while treating it as success would hide a real defect.
-  - **Wire the cron in `vercel.json` in the same commit.**
-- ☐ **P7a — Capture the representation grant.** AEAT blesses a web form or onboarding pop-up
+- ✅ **P7.1b — The client, the sweep and its cron** (`856c16f`). `soap.ts` (SOAP 1.1,
+  document/literal, empty `soapAction`, all from the committed WSDL), `client.ts`
+  (`AEAT_MODE=stub|http`, **throws** in explicit http mode with no certificate, defaults to
+  the `pruebas` endpoint and the non-Sello host), `submit.ts` (DB-state-as-queue with the
+  attempt counter, backoff and terminal `blocked` state `/api/reconcile` lacks), and the cron
+  in `apps/admin` wired into `vercel.json` in the same commit. `turbo.json` `globalEnv` gained
+  the AEAT variables and `CRON_SECRET`, which was missing despite three crons depending on it.
+  **`AceptadoConErrores` is an ACCEPTANCE**, not a failure — AEAT holds the record and the
+  errors need a later *subsanación*. Treating it as failure resends what AEAT already has;
+  treating it as plain success hides a real defect, and per huella spec §7 a mismatched huella
+  arrives exactly this way, so this branch is the only thing that would tell us the chain is
+  wrong. `RegistroDuplicado` also counts as accepted — the idempotency signal that makes a
+  lost reply recoverable.
+  **The sweep stops at the first failure per issuer**, on a rejection *and* on a reply that
+  omits a record. Chain order is mandatory, so head-of-line blocking is correct, and the code
+  says so to stop a maintainer "fixing" it into a compliance breach. Replies are matched by
+  invoice number, never by position.
+  **The bug worth remembering:** the platform filter compared the bare NIF while the `Settings`
+  row stores `ESB22435705`, so the sweep would have matched nothing and reported a clean empty
+  run — a silent no-op that looks like success. `platformIssuerNifCandidates()` passes both
+  spellings, because SQL cannot fold the prefix the way `foldNif` does.
+- ▶ **P7a — Capture the representation grant.** AEAT blesses a web form or onboarding pop-up
   with electronic signature (D2, FAQ §16 Q4), so this is a product surface, not paperwork: the
   partner grants Sunbnb representation for VERI\*FACTU remisión, the grant is stored with its
   timestamp and evidence, and **the sweep refuses any partner who has not granted it** —
@@ -396,6 +383,21 @@ watch it rather than assume it is gone.
   `npx tsc --noEmit --rootDir .` works and reports 111 pre-existing errors, none in the new
   files, mostly `ServiceFee` test fixtures missing `product`. Worth its own task — the package
   all three apps depend on is the one with no type gate.
+
+- **2026-10-01 — P7.1 complete: the transport exists and is stub-safe by default.** Nothing
+  reaches AEAT until a certificate is configured, and `AEAT_MODE=http` without one throws
+  rather than degrading — the one failure mode worse than not submitting is believing we did,
+  which a stub fallback would produce at scale.
+  Two judgements worth keeping. **`AceptadoConErrores` is an acceptance**, so it marks the
+  record `sent` while preserving the error text; it is also the only channel through which a
+  wrong huella would ever surface (§7), which is why it is not collapsed into success.
+  **The sweep halts per issuer on the first failure**, including when a reply simply does not
+  mention a record — silence is not consent, and the next sweep must resume from the gap.
+  The bug found before the first test run is the instructive one: the platform filter compared
+  the bare NIF against stored values that carry an `ES` prefix, so the sweep would have found
+  nothing and reported a clean empty run. A no-op that looks like success is the worst shape a
+  compliance bug can take, and it is the second time this track has hit that shape after the
+  health check reporting "register complete" over zero in-scope invoices.
 
 ## Open decisions
 
