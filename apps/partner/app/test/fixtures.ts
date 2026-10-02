@@ -73,6 +73,31 @@ export async function createTestSubscription(
   return { plan, subscription }
 }
 
+/**
+ * The platform's own business identity, on a `Settings` row.
+ *
+ * Needed by any test that expects a PLATFORM commission invoice. The fee-context
+ * bootstrap (`ensureSettingsAndFee`) creates a `Settings` row when none exists,
+ * but with NO company name or tax id — and since track 026 phase 3 the invoicing
+ * code REFUSES to issue a commission invoice from an unconfigured platform rather
+ * than stamping it "Platform Operator" with a NULL NIF, which is how the real
+ * `PLATFORM-2026-00001` came to exist. So a test that wants two invoices has to
+ * configure the platform, exactly as a real deployment does.
+ */
+export async function createTestPlatformIdentity(overrides: Record<string, any> = {}) {
+  return prisma.settings.create({
+    data: {
+      country: 'ES',
+      currency: 'EUR',
+      vat: 21,
+      companyName: 'Sunbnb España SL',
+      vatId: 'ESB22435705',
+      companyAddress: 'Fuengirola, Málaga',
+      ...overrides,
+    },
+  })
+}
+
 export async function createTestSite(userId: string, overrides: Record<string, any> = {}) {
   return prisma.site.create({
     data: {

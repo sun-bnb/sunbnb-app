@@ -19,6 +19,7 @@ import {
   createTestRestaurant,
   createTestTable,
   createTestTableReservation,
+  createTestPlatformIdentity,
 } from '@/app/test/fixtures'
 
 // ---------------------------------------------------------------------------
@@ -83,6 +84,12 @@ describe('chargeRestaurantReservationDeposit integration', () => {
    * calls loadFeeContext(siteId) which needs Site → PartnerAccount.
    */
   async function buildDepositScenario(depositAmount = 20) {
+    // The platform must have an identity for a commission invoice to exist at
+    // all. Since track 026 phase 3 an unconfigured platform makes the invoicing
+    // code SKIP the PLATFORM invoice rather than issue a nameless one, so
+    // leaning on the fee-context bootstrap (which creates a Settings row with no
+    // company name or tax id) silently produces a one-invoice cascade.
+    await createTestPlatformIdentity()
     const user = await createTestUser()
     // PartnerAccount.userId === user.id; the fee cascade reads partnerAccount off the site.
     await createTestPartnerAccount(user.id)

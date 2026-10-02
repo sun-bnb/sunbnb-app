@@ -39,6 +39,16 @@ export async function cleanDatabase() {
   await assertTestDatabase()
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
+      -- Veri*factu (track 026). verifactu_chain has NO foreign key: it is
+      -- keyed on an issuer NIF string, so the Invoice cascade does not reach
+      -- it and its head would keep pointing at a record truncated by an earlier
+      -- test. The record writer then refuses to file (chain head points at a
+      -- record that no longer exists), which leaks as a spurious block in
+      -- unrelated suites.
+      "verifactu_record",
+      "verifactu_chain",
+      "invoice_series",
+      "invoice_chain",
       "InvoiceLine",
       "Invoice",
       "OrderItem",
