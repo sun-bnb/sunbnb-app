@@ -426,6 +426,22 @@ missing `select` field through in P7.1a.
   the fee-context bootstrap created it after the last identity save; `getBusinessEntity()`
   already prefers a row that has one. Downgraded from blocker to tidiness.
 
+- **2026-10-02 — FNMT recommends a different certificate than the one this track assumed.**
+  Asked to obtain the certificate directly; declined — it needs the company NIF, the
+  administrador's identity document, a password protecting a qualified credential, and a card
+  payment, and the product is a credential that can act as the company. Read FNMT's pages
+  instead, which turned up something that changes the plan: their *Certificados electrónicos
+  válidos para el sistema VERI\*FACTU* page recommends the **Sello de Entidad** for "una
+  plataforma en la nube" doing "firma automática y desatendida" — our exact shape — and says
+  such certificates require a **different web-service endpoint**, the `www10`/`prewww10` pair
+  I had already put in `ENDPOINTS` and deliberately marked unused.
+  Opened as **D8** rather than acted on, because two things are unverified: whether FNMT sells
+  a Sello self-service at all (the sede's company section lists only the three Representante
+  variants), and whether a Sello is accepted as a *colaborador social* for third-party
+  partners, which P7.2 depends on. Also confirmed the real prices (29,04 € / 16,94 € inc. IVA)
+  and a **7-day refund window** that auto-revokes an unused certificate — so this decision is
+  reversible if taken quickly.
+
 ## Open decisions
 
 - ✅ **D1 — CLOSED 2026-09-29.** The official document was located and read:
@@ -540,6 +556,28 @@ missing `select` field through in P7.1a.
   `ES_INDIRECT_TAX_UNSUPPORTED` so nothing is filed, rather than producing a breakdown with the
   wrong tax in it. No partner is established there today. One question for the asesor.
 
+- ☐ **D8 — Representante or Sello de Entidad?** FNMT recommends the **Sello de Entidad** for a
+  cloud platform doing unattended high-volume submission, which is exactly what the sweep is.
+  Arguments for it: issued to the ENTITY rather than to a named person, so it does not depend on
+  one administrador's personal certificate and does not break when that person's *cargo*
+  changes (the *administrador único* variant auto-revokes on a Registro Mercantil change —
+  a sharp edge for a credential a server depends on all season); and it is purpose-built for
+  automatic signing.
+  Arguments against / unknowns: **(a)** the sede's company section sells only the three
+  Representante variants, so a Sello appears to need a direct enquiry to FNMT rather than a
+  self-service purchase; **(b)** whether a Sello is accepted as a *colaborador social* acting
+  for third-party partners is **unverified** — AEAT's `4112` lists the acceptable roles but a
+  seal identifies an entity, not a representative, and P7.2 depends on that working; **(c)** a
+  Sello cannot be used interactively on the sede electrónica, so we would still want a
+  Representante for human admin tasks.
+  **Code impact if we choose Sello:** switch `client.ts` to `ENDPOINTS.productionSello` /
+  `pruebasSello`. Those constants already exist; the comment in `registro-xml.ts` currently
+  asserts we use the non-Sello hosts *because* we hold a Representante, and that assertion
+  becomes wrong rather than merely stale.
+  **Cheapest resolution:** ask FNMT (or the asesor) whether a Sello de Entidad can act under
+  Convenio 017 colaboración social. If yes, Sello for the server and Representante for humans.
+  If no, Representante for both.
+
 ## Founder actions (not engineering) — the real critical path
 
 P7 cannot go live however fast the code is built. Both items below have external lead time
@@ -559,6 +597,12 @@ never on a laptop.
 **Which one.** A **Certificado de Representante de Persona Jurídica**. Admitted issuers are
 those on the Ministry's list per **Orden HAP/800/2014**; FNMT is the default choice.
 
+**Prices, confirmed from FNMT's own list (2026-10-02).** *Administrador único o solidario*
+**29,04 €** inc. IVA · *Persona jurídica* **16,94 €** inc. IVA · *Entidad sin personalidad
+jurídica* free. Card only. **There is a 7-day refund window** from accreditation, which
+automatically revokes the certificate and requires that it has not been used — so a wrong
+choice is recoverable if caught quickly (FNMT 91 740 68 48).
+
 **How it is obtained (FNMT):** configure software → request online (returns a *Código de
 Solicitud* by email) → accredit identity → download and pay.
 - **€14 + IVA**, valid **2 years**, card payment at download, ~1 hour after accreditation.
@@ -566,6 +610,18 @@ Solicitud* by email) → accredit identity → download and pay.
   **online accreditation** (offered for prefixes A, B, C, D), so no in-person AEAT appointment
   is needed provided the legal representative is the one registered in the Registro Mercantil
   and holds a valid personal certificate. In-person is the fallback and needs *cita previa*.
+
+**[2026-10-02] Which certificate TYPE is now an open decision — see D8.** FNMT publishes a
+page specifically on this (*Certificados electrónicos válidos para el sistema VERI\*FACTU*,
+read 2026-10-02) and it points away from the representative certificate for our shape of
+system. Its recommendation, verbatim: *"Si tu empresa cuenta con varios empleados o genera un
+alto volumen de facturas mediante un software de gestión o una plataforma en la nube, el
+**Sello de Entidad** es la alternativa más eficiente y segura, ya que permite la firma
+automática y desatendida de los registros de facturación."* It also states that seal
+certificates *"no sirven para realizar los envíos/consultas por sede electrónica"* — Web
+Service only, which is all we do — and that programs authenticating with a Sello **must use a
+different endpoint**. That is the `www10`/`prewww10` pair already in `ENDPOINTS` as
+`productionSello`/`pruebasSello`, currently marked unused.
 
 **It can live on a server.** The key pair is generated locally during the request and FNMT
 recommends making a *copia de seguridad* at download — i.e. it exports to `.p12`/`.pfx`, which
