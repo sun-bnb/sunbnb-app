@@ -22,6 +22,7 @@ import {
   waiveAllServiceFees,
   getPartnerDetail,
   setFeatureOverride,
+  setPartnerTaxIdentity,
 } from './actions'
 import { saveServiceFee, getFeesByAccount } from '../../fees/actions'
 import { auth } from '@/app/auth'
@@ -403,5 +404,92 @@ describe('setFeatureOverride', () => {
         create: expect.objectContaining({ partnerAccountId: 'acc-1' }),
       }),
     )
+  })
+})
+
+// ─── Tax identity (track 026) ────────────────────────────────────────────────
+
+describe('setPartnerTaxIdentity', () => {
+  function spanishPartner() {
+    vi.mocked(prisma.partnerAccount.findUnique).mockResolvedValue({
+      country: 'ES',
+      businessId: 'B29806043',
+    } as never)
+  }
+
+  it('requires sudo', async () => {
+    await expect(
+      setPartnerTaxIdentity('acc-1', { taxRegion: 'MA', isTestAccount: false }),
+    ).rejects.toThrow()
+    expect(prisma.partnerAccount.update).not.toHaveBeenCalled()
+  })
+
+  it('stores a recognised province and reports the resulting regime', async () => {
+    // This action exists because taxRegion was added in phase 3 and NOTHING could
+    // write it — so "set taxRegion in admin" was impossible and no Spanish partner
+    // was ever in scope of Veri*factu.
+    authenticateAsSudo()
+    spanishPartner()
+
+    const res = await setPartnerTaxIdentity('acc-1', { taxRegion: 'MA', isTestAccount: false })
+    expect(res.status).toBe('ok')
+    expect(res.regime).toBe('ES_VERIFACTU')
+    expect(prisma.partnerAccount.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: 'acc-1' },
+        data: { taxRegion: 'MA', isTestAccount: false },
+      }),
+    )
+  })
+
+  it('REFUSES an unrecognised region instead of storing it', async () => {
+    // The hazard: before the resolver was tightened, any non-foral string resolved
+    // to ES_VERIFACTU, so a hand-typed "BIZKAIA" would have filed a foral
+    // taxpayer's records to AEAT. Now it would silently leave them out of scope.
+    // Either way the operator must be told, not guessed at.
+    authenticateAsSudo()
+    spanishPartner()
+
+    const res = await setPartnerTaxIdentity('acc-1', {
+      taxRegion: 'BIZKAIA',
+      isTestAccount: false,
+    })
+    expect(res.status).toBe('error')
+    expect(res.errors?.[0]).toContain('not a Spanish province code')
+    expect(prisma.partnerAccount.update).not.toHaveBeenCalled()
+  })
+
+  it('normalises case and whitespace', async () => {
+    authenticateAsSudo()
+    spanishPartner()
+    await setPartnerTaxIdentity('acc-1', { taxRegion: ' ma ', isTestAccount: false })
+    expect(prisma.partnerAccount.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { taxRegion: 'MA', isTestAccount: false } }),
+    )
+  })
+
+  it('clears the region to null, which leaves the partner out of scope', async () => {
+    authenticateAsSudo()
+    spanishPartner()
+    const res = await setPartnerTaxIdentity('acc-1', { taxRegion: null, isTestAccount: true })
+    expect(res.status).toBe('ok')
+    expect(res.regime).toBe('NONE')
+    expect(prisma.partnerAccount.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { taxRegion: null, isTestAccount: true } }),
+    )
+  })
+
+  it('reports a foral province as unsupported rather than as Veri*factu', async () => {
+    authenticateAsSudo()
+    spanishPartner()
+    const res = await setPartnerTaxIdentity('acc-1', { taxRegion: 'BI', isTestAccount: false })
+    expect(res.regime).toBe('ES_FORAL_UNSUPPORTED')
+  })
+
+  it('errors on an unknown account', async () => {
+    authenticateAsSudo()
+    vi.mocked(prisma.partnerAccount.findUnique).mockResolvedValue(null as never)
+    const res = await setPartnerTaxIdentity('nope', { taxRegion: 'MA', isTestAccount: false })
+    expect(res.status).toBe('error')
   })
 })

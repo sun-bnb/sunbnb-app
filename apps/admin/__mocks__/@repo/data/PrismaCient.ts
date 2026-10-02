@@ -51,6 +51,8 @@ const prisma = {
   partnerAccount: {
     findUnique: vi.fn(),
     findMany: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
   },
   customSubscription: {
     findUnique: vi.fn(),

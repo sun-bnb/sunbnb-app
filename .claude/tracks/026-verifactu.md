@@ -53,11 +53,20 @@ configured, and `AEAT_MODE=http` with no certificate **throws** rather than degr
 
 ### To go live, in order
 
-1. **Fix the two data defects** (admin actions, both block trusting what is sent):
-   - No partner has `taxRegion`, so no Spanish partner is in scope at all.
-   - The Spanish company's identity (`ESB22435705` / Sunbnb España SL) sits on a `Settings`
-     row labelled `country = 'FI'`, while the `ES` row has a NULL `vatId`. `getBusinessEntity()`
-     picks the right one by *vatId preference*, not by country — correct today, fragile.
+1. **Set `taxRegion` on each Spanish partner** — now possible: the admin partner page has a
+   Tax Identity card with a province dropdown (P7b). Until it is set, `resolveTaxRegime`
+   returns `NONE` and that partner's invoices are out of scope rather than filed, which is why
+   `verifactu:health` refuses to call the register complete while any remain.
+2. **Re-save the business entity on admin `/platform`** — a one-click backfill, not a
+   mislabelling fix. **Correction to an earlier entry in this track:** it is NOT a defect that
+   the Spanish company's identity sits on a `Settings` row whose `country` is `FI`. Platform
+   identity is a deliberate **singleton copied onto every per-country `Settings` row**
+   (`saveBusinessEntity` does `updateMany` with no `where`, and says so), and `Settings.country`
+   is the per-country VAT/currency table — not a statement about who issues. What is real is
+   narrower: the `ES` row has a NULL `vatId`/`companyName` because the fee-context bootstrap
+   (`ensureSettingsAndFee`) created it AFTER the last identity save, and nothing has copied the
+   identity onto it since. `getBusinessEntity()` already resolves correctly regardless, because
+   `readIdentityRow` prefers a row that HAS a `vatId` — so this is tidiness, not a blocker.
 2. **Obtain the FNMT certificate** (€14, 2 years, online accreditation for our B-prefix NIF).
    See *Founder actions*.
 3. **Run against preproducción from a laptop**: set `AEAT_CERT_PFX_BASE64`,
@@ -399,6 +408,24 @@ missing `select` field through in P7.1a.
   compliance bug can take, and it is the second time this track has hit that shape after the
   health check reporting "register complete" over zero in-scope invoices.
 
+- **2026-10-02 — P7b: made the instruction I had given actually followable, and corrected a
+  claim.** The track told the operator to "set `taxRegion` in admin". That was impossible:
+  phase 3 added the column and **nothing anywhere could write it** — it appeared in no app
+  outside the code that reads it. So the headline blocker on going live was an instruction with
+  no mechanism, and no Spanish partner could ever be in scope.
+  Building the UI surfaced a worse latent bug in `resolveTaxRegime`: it returned `ES_VERIFACTU`
+  for **any** non-empty, non-foral string. A hand-typed `"BIZKAIA"`, `"Bilbao"` or `"PV"` would
+  have filed a foral taxpayer's records to AEAT — exactly what `ES_FORAL_UNSUPPORTED`'s own
+  comment calls worse than filing nothing. The province list is now closed (52 codes), an
+  unrecognised value resolves to `NONE`, and Canarias/Ceuta/Melilla get their own
+  `ES_INDIRECT_TAX_UNSUPPORTED` because IGIC/IPSI are not IVA (**D7**).
+  **A correction:** I had recorded "the Spanish company's identity sits on a `Settings` row
+  labelled `country = FI`" as a blocking data defect. It is not. Platform identity is a
+  singleton deliberately copied onto every per-country row, and `country` there is the VAT
+  table, not the issuer. The real residue is only that the `ES` row has a NULL `vatId` because
+  the fee-context bootstrap created it after the last identity save; `getBusinessEntity()`
+  already prefers a row that has one. Downgraded from blocker to tidiness.
+
 ## Open decisions
 
 - ✅ **D1 — CLOSED 2026-09-29.** The official document was located and read:
@@ -506,6 +533,12 @@ missing `select` field through in P7.1a.
   `verifactu:health` rather than being mis-declared — the right failure, but it does mean our
   own commission invoices to the Finnish partner are currently unfilable. One question for the
   asesor.
+
+- ☐ **D7 — Does Veri\*factu apply in Canarias, Ceuta and Melilla, and how is a non-IVA rate
+  declared?** Those territories levy IGIC and IPSI rather than IVA, so a `Desglose` built from
+  `LEGAL_ES_VAT_RATES` does not describe them. `resolveTaxRegime` now returns
+  `ES_INDIRECT_TAX_UNSUPPORTED` so nothing is filed, rather than producing a breakdown with the
+  wrong tax in it. No partner is established there today. One question for the asesor.
 
 ## Founder actions (not engineering) — the real critical path
 

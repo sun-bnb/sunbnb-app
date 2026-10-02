@@ -25,7 +25,9 @@ import {
   waiveAllServiceFees,
   getPartnerDetail,
   setFeatureOverride,
+  setPartnerTaxIdentity,
 } from "./actions"
+import { ES_PROVINCES, resolveTaxRegime, type TaxRegime } from "@repo/data/tax/regime"
 import {
   saveServiceFee,
   deleteServiceFee,
@@ -94,12 +96,58 @@ export interface PartnerDetailViewProps {
   settings: Settings[]
   serviceCodes: ServiceCode[]
   featureCatalog: FeatureCatalogRow[]
+  /** ISO-3166 alpha-2 of the partner's tax residence. */
+  partnerCountry: string | null
+  /** Their stored tax id, shown so an operator can see what would be filed. */
+  businessId: string | null
+  initialTaxRegion: string | null
+  initialIsTestAccount: boolean
+  vatIdStatus: string | null
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function settingsLabel(s: Settings): string {
   return [s.country, s.currency].filter(Boolean).join(" · ") || s.id.slice(0, 8)
+}
+
+function regimeLabel(regime: TaxRegime): string {
+  switch (regime) {
+    case "ES_VERIFACTU":
+      return "Veri*factu"
+    case "ES_FORAL_UNSUPPORTED":
+      return "Foral \u2014 unsupported"
+    case "ES_INDIRECT_TAX_UNSUPPORTED":
+      return "IGIC/IPSI \u2014 unsupported"
+    default:
+      return "None"
+  }
+}
+
+function regimeColor(regime: TaxRegime): string {
+  switch (regime) {
+    case "ES_VERIFACTU":
+      return "text-green-400"
+    case "ES_FORAL_UNSUPPORTED":
+    case "ES_INDIRECT_TAX_UNSUPPORTED":
+      return "text-amber-400"
+    default:
+      return "text-gray-400"
+  }
+}
+
+/** Say what the regime MEANS for this partner's invoices, not just its name. */
+function regimeExplanation(regime: TaxRegime): string {
+  switch (regime) {
+    case "ES_VERIFACTU":
+      return "Invoices get a chained fiscal record, an AEAT QR, and are transmitted to AEAT."
+    case "ES_FORAL_UNSUPPORTED":
+      return "Basque Country or Navarra: TicketBAI, not Veri*factu. Nothing is filed \u2014 filing to the wrong tax agency is worse than filing nothing."
+    case "ES_INDIRECT_TAX_UNSUPPORTED":
+      return "Canarias (IGIC) or Ceuta/Melilla (IPSI): not IVA, so the VAT breakdown we build does not apply. Nothing is filed."
+    default:
+      return "No fiscal record is produced. For a Spanish partner this means the province is unset or unrecognised \u2014 set it, or their invoices stay out of scope."
+  }
 }
 
 function tierBadgeColor(tier: string) {
@@ -296,6 +344,11 @@ function FeeForm({
 export default function PartnerDetailView({
   accountId,
   company,
+  partnerCountry,
+  businessId,
+  initialTaxRegion,
+  initialIsTestAccount,
+  vatIdStatus,
   ownerEmail,
   ownerName,
   baseTier,
@@ -311,6 +364,34 @@ export default function PartnerDetailView({
   serviceCodes,
   featureCatalog,
 }: PartnerDetailViewProps) {
+  // ── Tax identity ──
+  const [taxRegionInput, setTaxRegionInput] = useState(initialTaxRegion ?? "")
+  const [isTestAccountInput, setIsTestAccountInput] = useState(initialIsTestAccount)
+  const [taxSaving, setTaxSaving] = useState(false)
+  const [taxErrors, setTaxErrors] = useState<string[]>([])
+  // Resolved in the SAME function the record writer uses, so the operator sees
+  // the consequence of the choice rather than a label we maintain separately.
+  const effectiveRegime: TaxRegime = resolveTaxRegime({
+    country: partnerCountry,
+    taxRegion: taxRegionInput,
+  })
+
+  async function handleSaveTaxIdentity() {
+    setTaxSaving(true)
+    setTaxErrors([])
+    try {
+      const res = await setPartnerTaxIdentity(accountId, {
+        taxRegion: taxRegionInput === "" ? null : taxRegionInput,
+        isTestAccount: isTestAccountInput,
+      })
+      if (res.status !== "ok") setTaxErrors(res.errors ?? ["Could not save"])
+    } catch {
+      setTaxErrors(["Could not save"])
+    } finally {
+      setTaxSaving(false)
+    }
+  }
+
   // ── Custom subscription state ──────────────────────────────────────────────
   const [maxSitesInput, setMaxSitesInput] = useState<string>(
     customMaxSites != null ? String(customMaxSites) : "",
@@ -569,6 +650,106 @@ export default function PartnerDetailView({
             </Button>
           )}
         </div>
+      </div>
+
+      <div className="border-t border-gray-800 mb-6" />
+
+      {/* ── Tax identity (track 026) ─────────────────────────────── */}
+      <div className="mb-8">
+        <h3 className="text-sm font-semibold text-gray-200 mb-1">Tax Identity</h3>
+        <p className="text-xs text-gray-500 mb-4">
+          Which fiscal regime this partner&rsquo;s invoices fall under. The province is the
+          company&rsquo;s <em>domicilio fiscal</em> &mdash; never the venue&rsquo;s location, since a
+          Bilbao company can run a beach club in M&aacute;laga.
+        </p>
+
+        {taxErrors.length > 0 && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 mb-3">
+            {taxErrors.map((e, i) => (
+              <p key={i} className="text-xs text-red-400">{e}</p>
+            ))}
+          </div>
+        )}
+
+        <div className="border border-gray-800 rounded-lg bg-gray-900 p-4 mb-4">
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Country</div>
+              <div className="text-sm text-gray-100">{partnerCountry ?? "\u2014"}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Tax ID</div>
+              <div className="text-sm text-gray-100">{businessId || "\u2014"}</div>
+              {vatIdStatus && (
+                <div
+                  className={`text-xs mt-0.5 ${
+                    vatIdStatus === "valid"
+                      ? "text-green-400"
+                      : vatIdStatus === "invalid"
+                        ? "text-red-400"
+                        : "text-amber-400"
+                  }`}
+                >
+                  {vatIdStatus}
+                </div>
+              )}
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Regime</div>
+              <div className={`text-sm font-medium ${regimeColor(effectiveRegime)}`}>
+                {regimeLabel(effectiveRegime)}
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-3">{regimeExplanation(effectiveRegime)}</p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <TextField
+            select
+            label="Province (domicilio fiscal)"
+            size="small"
+            value={taxRegionInput}
+            onChange={(e) => setTaxRegionInput(e.target.value)}
+            sx={{ width: 260 }}
+            SelectProps={{ MenuProps: { PaperProps: { sx: { maxHeight: 360 } } } }}
+          >
+            <MenuItem value="">&mdash; Not set &mdash;</MenuItem>
+            {ES_PROVINCES.map((p) => (
+              <MenuItem key={p.code} value={p.code}>
+                {p.name} ({p.code})
+              </MenuItem>
+            ))}
+          </TextField>
+          <label className="flex items-center gap-2 text-xs text-gray-400">
+            <input
+              type="checkbox"
+              checked={isTestAccountInput}
+              onChange={(e) => setIsTestAccountInput(e.target.checked)}
+              className="accent-purple-500"
+            />
+            Test account
+          </label>
+          <Button
+            variant="contained"
+            size="small"
+            onClick={handleSaveTaxIdentity}
+            disabled={taxSaving}
+            sx={{ textTransform: "none" }}
+          >
+            {taxSaving ? (
+              <><CircularProgress size={14} color="inherit" sx={{ mr: 0.5 }} /> Saving&hellip;</>
+            ) : (
+              "Save"
+            )}
+          </Button>
+        </div>
+        {partnerCountry !== "ES" && (
+          <p className="text-xs text-gray-600 mt-2">
+            This partner is not Spanish, so the province changes nothing. Veri*factu applies to
+            Spanish issuers only.
+          </p>
+        )}
       </div>
 
       <div className="border-t border-gray-800 mb-6" />

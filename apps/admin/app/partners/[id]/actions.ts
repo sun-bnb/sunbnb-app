@@ -8,6 +8,7 @@ import {
   saveServiceFee,
   getFeesByAccount,
 } from '../../fees/actions'
+import { isKnownEsRegion, resolveTaxRegime, type TaxRegime } from '@repo/data/tax/regime'
 
 // ─── Auth guard ─────────────────────────────────────────────────────────────
 
@@ -207,5 +208,61 @@ export async function getPartnerDetail(accountId: string) {
   return {
     partnerAccount,
     accountFees,
+  }
+}
+
+// ─── Tax identity (track 026 phase 7a prerequisite) ─────────────────────────
+
+/**
+ * Set the partner's fiscal classification.
+ *
+ * This exists because `PartnerAccount.taxRegion` was added in phase 3 and
+ * nothing could ever write it — so the instruction "set taxRegion in admin" was
+ * impossible to carry out, and no Spanish partner was in scope of Veri*factu at
+ * all. The register reported itself complete precisely because of that.
+ *
+ * **`taxRegion` must be a recognised province code.** `resolveTaxRegime` treats
+ * an unrecognised value as `NONE` rather than as common territory, so a typo here
+ * silently stops a partner's records being produced; and before that resolver was
+ * tightened, a typo would have *filed a foral taxpayer's records to AEAT*.
+ * Validated here as well as there — the setter explains the rejection, the
+ * resolver fails safe.
+ */
+export async function setPartnerTaxIdentity(
+  accountId: string,
+  input: { taxRegion: string | null; isTestAccount: boolean },
+): Promise<{ status: string; errors?: string[]; regime?: TaxRegime }> {
+  await requireSudo()
+
+  const account = await prisma.partnerAccount.findUnique({
+    where: { userId: accountId },
+    select: { country: true, businessId: true },
+  })
+  if (!account) return { status: 'error', errors: ['Partner account not found'] }
+
+  const region = (input.taxRegion ?? '').trim().toUpperCase()
+  if (region !== '' && !isKnownEsRegion(region)) {
+    return {
+      status: 'error',
+      errors: [
+        `"${input.taxRegion}" is not a Spanish province code. Pick one from the list — an ` +
+          'unrecognised value leaves the partner out of scope rather than filed.',
+      ],
+    }
+  }
+
+  await prisma.partnerAccount.update({
+    where: { userId: accountId },
+    data: {
+      taxRegion: region === '' ? null : region,
+      isTestAccount: input.isTestAccount,
+    },
+  })
+
+  revalidatePath(`/partners/${accountId}`)
+  return {
+    status: 'ok',
+    // The consequence, returned so the UI can state it rather than imply it.
+    regime: resolveTaxRegime({ country: account.country, taxRegion: region }),
   }
 }

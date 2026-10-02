@@ -40,9 +40,102 @@ export type TaxRegime =
    * warning.
    */
   | 'ES_FORAL_UNSUPPORTED'
+  /**
+   * Spain, but a territory whose INDIRECT TAX is not IVA — the Canary Islands
+   * (IGIC) and Ceuta/Melilla (IPSI).
+   *
+   * Separated from `ES_VERIFACTU` because a `Desglose` built here would carry
+   * IGIC or IPSI rates, and `LEGAL_ES_VAT_RATES` is the IVA set — so such an
+   * invoice would be refused downstream anyway, but for a confusing reason
+   * ("not a legal Spanish rate") rather than the real one. Whether Veri*factu
+   * applies in these territories at all, and how a non-IVA rate is declared, is
+   * **D7** — unanswered, so nothing is filed.
+   */
+  | 'ES_INDIRECT_TAX_UNSUPPORTED'
 
-/** Foral territories, by the ISO-3166-2 province codes we store. */
+/** Foral territories, by the province codes we store. */
 const FORAL_REGIONS = new Set(['VI', 'BI', 'SS', 'NA'])
+
+/** Territories under IGIC (Canarias) or IPSI (Ceuta, Melilla) rather than IVA. */
+const NON_IVA_REGIONS = new Set(['GC', 'TF', 'CE', 'ML'])
+
+/**
+ * The Spanish provinces, by the two-letter codes in common use on tax
+ * documents, with the name an operator will recognise.
+ *
+ * A CLOSED list, and that is the point. `resolveTaxRegime` used to treat any
+ * non-empty, non-foral string as common territory, so `"BIZKAIA"`, `"Bilbao"`,
+ * `"PV"` or a typo would all have resolved to `ES_VERIFACTU` and filed a foral
+ * taxpayer's records to AEAT — the precise outcome `ES_FORAL_UNSUPPORTED`'s own
+ * comment calls worse than filing nothing. The field is set by a human, so the
+ * only safe reading of an unrecognised value is "unknown".
+ */
+export const ES_PROVINCES: { code: string; name: string }[] = [
+  { code: 'A', name: 'Alicante' },
+  { code: 'AB', name: 'Albacete' },
+  { code: 'AL', name: 'Almería' },
+  { code: 'AV', name: 'Ávila' },
+  { code: 'B', name: 'Barcelona' },
+  { code: 'BA', name: 'Badajoz' },
+  { code: 'BI', name: 'Bizkaia' },
+  { code: 'BU', name: 'Burgos' },
+  { code: 'C', name: 'A Coruña' },
+  { code: 'CA', name: 'Cádiz' },
+  { code: 'CC', name: 'Cáceres' },
+  { code: 'CE', name: 'Ceuta' },
+  { code: 'CO', name: 'Córdoba' },
+  { code: 'CR', name: 'Ciudad Real' },
+  { code: 'CS', name: 'Castellón' },
+  { code: 'CU', name: 'Cuenca' },
+  { code: 'GC', name: 'Las Palmas' },
+  { code: 'GI', name: 'Girona' },
+  { code: 'GR', name: 'Granada' },
+  { code: 'GU', name: 'Guadalajara' },
+  { code: 'H', name: 'Huelva' },
+  { code: 'HU', name: 'Huesca' },
+  { code: 'J', name: 'Jaén' },
+  { code: 'L', name: 'Lleida' },
+  { code: 'LE', name: 'León' },
+  { code: 'LO', name: 'La Rioja' },
+  { code: 'LU', name: 'Lugo' },
+  { code: 'M', name: 'Madrid' },
+  { code: 'MA', name: 'Málaga' },
+  { code: 'ML', name: 'Melilla' },
+  { code: 'MU', name: 'Murcia' },
+  { code: 'NA', name: 'Navarra' },
+  { code: 'O', name: 'Asturias' },
+  { code: 'OR', name: 'Ourense' },
+  { code: 'P', name: 'Palencia' },
+  { code: 'PM', name: 'Illes Balears' },
+  { code: 'PO', name: 'Pontevedra' },
+  { code: 'S', name: 'Cantabria' },
+  { code: 'SA', name: 'Salamanca' },
+  { code: 'SE', name: 'Sevilla' },
+  { code: 'SG', name: 'Segovia' },
+  { code: 'SO', name: 'Soria' },
+  { code: 'SS', name: 'Gipuzkoa' },
+  { code: 'T', name: 'Tarragona' },
+  { code: 'TE', name: 'Teruel' },
+  { code: 'TF', name: 'Santa Cruz de Tenerife' },
+  { code: 'TO', name: 'Toledo' },
+  { code: 'V', name: 'Valencia' },
+  { code: 'VA', name: 'Valladolid' },
+  { code: 'VI', name: 'Araba/Álava' },
+  { code: 'Z', name: 'Zaragoza' },
+  { code: 'ZA', name: 'Zamora' },
+]
+
+const ES_PROVINCE_CODES = new Set(ES_PROVINCES.map((p) => p.code))
+
+/** Is this a province code we recognise? Case- and whitespace-insensitive. */
+export function isKnownEsRegion(region: string | null | undefined): boolean {
+  return ES_PROVINCE_CODES.has((region ?? '').trim().toUpperCase())
+}
+
+/** What regime a province implies, for an operator UI to show the consequence. */
+export function regimeForEsRegion(region: string | null | undefined): TaxRegime {
+  return resolveTaxRegime({ country: 'ES', taxRegion: region })
+}
 
 export interface RegimeIssuer {
   /** ISO-3166 alpha-2 of the issuing entity's tax residence. */
@@ -75,6 +168,11 @@ export function resolveTaxRegime(issuer: RegimeIssuer): TaxRegime {
   const region = (issuer.taxRegion ?? '').trim().toUpperCase()
   if (region === '') return 'NONE'
   if (FORAL_REGIONS.has(region)) return 'ES_FORAL_UNSUPPORTED'
+  if (NON_IVA_REGIONS.has(region)) return 'ES_INDIRECT_TAX_UNSUPPORTED'
+  // An UNRECOGNISED region is `NONE`, never Veri*factu. It used to fall through
+  // to `ES_VERIFACTU`, which meant a hand-typed "BIZKAIA" or "Bilbao" filed a
+  // foral taxpayer's records to AEAT. Unknown means unknown.
+  if (!ES_PROVINCE_CODES.has(region)) return 'NONE'
   return 'ES_VERIFACTU'
 }
 
@@ -87,10 +185,11 @@ export function resolveTaxRegime(issuer: RegimeIssuer): TaxRegime {
  * anything.
  */
 export function needsTaxRegion(issuer: RegimeIssuer): boolean {
-  return (
-    (issuer.country ?? '').trim().toUpperCase() === 'ES' &&
-    (issuer.taxRegion ?? '').trim() === ''
-  )
+  if ((issuer.country ?? '').trim().toUpperCase() !== 'ES') return false
+  const region = (issuer.taxRegion ?? '').trim()
+  // An unrecognised code needs an operator just as much as a blank one does, and
+  // is more dangerous because it LOOKS set.
+  return region === '' || !isKnownEsRegion(region)
 }
 
 /** Does this regime produce fiscal records that must be built and transmitted? */

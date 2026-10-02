@@ -35,6 +35,10 @@ export default async function PartnerDetailPage({
       firstName: true,
       lastName: true,
       country: true,
+      businessId: true,
+      taxRegion: true,
+      isTestAccount: true,
+      vatIdStatus: true,
       subscription: {
         include: { plan: true },
       },
@@ -91,6 +95,11 @@ export default async function PartnerDetailPage({
         settings={settings}
         serviceCodes={serviceCodes}
         featureCatalog={featureCatalog}
+        partnerCountry={partnerAccount.country}
+        businessId={partnerAccount.businessId}
+        initialTaxRegion={partnerAccount.taxRegion}
+        initialIsTestAccount={partnerAccount.isTestAccount}
+        vatIdStatus={partnerAccount.vatIdStatus}
       />
     </div>
   )
