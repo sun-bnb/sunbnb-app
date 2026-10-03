@@ -442,6 +442,25 @@ missing `select` field through in P7.1a.
   and a **7-day refund window** that auto-revokes an unused certificate — so this decision is
   reversible if taken quickly.
 
+- **2026-10-03 — Closed the "nothing exercises all of this together" gap, and verified the
+  endpoints for real.** Seven phases had shipped with each seam tested in isolation, which is
+  precisely the shape that let a blocked `Desglose` and a silently-restarting chain through.
+  `lifecycle.integration.test.ts` now drives one Spanish sale through
+  `processConfirmedReservation` and asserts the whole chain of consequences: two invoices under
+  the agent model, one ALTA each with the right `TipoFactura` on separate issuer chains, a
+  huella that recomputes from its own stored input, a verifying invoice chain, a receipt whose
+  QR names that invoice and carries no CSV, a health check that is green before submission and
+  reports the queue, the platform-only sweep leaving the partner's record queued, and the
+  register reporting itself complete afterwards. Plus the same documents validated against
+  AEAT's XSD, and a Finnish sale confirmed to produce nothing at all. It passed first run,
+  which is the first real evidence the phases compose.
+  Also probed the live AEAT endpoints (see *Founder actions* A1b): both are up, both request a
+  client certificate, `prewww1` accepts FNMT's `AC REPRESENTACIÓN G2` — so the certificate
+  being obtained will be accepted at the TLS layer — and the `…Sello` host accepts
+  `AC ENTIDADES G2` instead, empirically confirming the endpoint split the code already
+  encodes. The only thing left that a certificate unlocks is AEAT's application-level verdict
+  on our document content.
+
 ## Open decisions
 
 - ✅ **D1 — CLOSED 2026-09-29.** The official document was located and read:
@@ -630,6 +649,33 @@ is what `AEAT_CERT_PFX_BASE64` needs. It is a software certificate, not card-bou
 **Custody note, unchanged from the plan:** we hold OUR certificate, never a partner's. Custody
 of a partner's own qualified certificate is the ability to act as that company everywhere, not
 just at AEAT.
+
+### A1b. The endpoints and the certificate chain, verified against the live service (2026-10-03)
+
+Probed AEAT's TLS endpoints directly — no certificate needed to learn this, and it checks
+assumptions the code already bakes in:
+
+- **Both endpoints are live and genuinely AEAT.** `prewww1.aeat.es` presents
+  `CN=*.aeat.es, O=Agencia Estatal de Administración Tributaria`, Entrust-issued, `Verify
+  return code: 0 (ok)`.
+- **Both request a client certificate** during the handshake, confirming mTLS is the right
+  model and that `client.ts`'s `https.Agent({ pfx, passphrase })` is the right shape.
+- **`prewww1` accepts `CN=AC REPRESENTACIÓN G2` (FNMT-RCM)** — the exact CA that issues the
+  *Certificado de Representante*, including the *administrador único* variant. So the
+  certificate being obtained will be accepted at the TLS layer. 100 CAs accepted in total,
+  including FNMT's `AC USUARIOS` (persona física).
+- **`prewww10` — the `…Sello` endpoint — accepts `CN=AC ENTIDADES G2`**, which is FNMT's CA
+  for *certificados de sello de entidad*, and only 56 CAs in total. This is empirical
+  confirmation of the split the WSDL implied and that `ENDPOINTS.productionSello` /
+  `pruebasSello` exist for: a Sello would be issued under a different CA AND submitted to a
+  different host. Relevant to **D8**.
+- `AC Representación` appears on BOTH lists, so a representante certificate is not locked out
+  of the Sello host — but FNMT's own guidance says to use the matching endpoint, and that is
+  what the code does.
+
+What remains unverifiable without the certificate is narrow and specific: whether AEAT's
+APPLICATION layer accepts our document content. Everything up to and including the TLS
+handshake is now confirmed.
 
 ### A2. The authorization is enforced TECHNICALLY, not only legally — and it splits P7 in two
 
