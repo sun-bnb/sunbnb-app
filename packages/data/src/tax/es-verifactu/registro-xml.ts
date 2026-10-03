@@ -320,6 +320,93 @@ export function buildRegistroAltaXml(input: RegistroAltaXmlInput): string {
   )
 }
 
+
+// ─── the anulación record ────────────────────────────────────────────────────
+
+export interface RegistroAnulacionXmlInput {
+  /** The ANNULLED invoice's issuer, number and date. */
+  issuerNif: string
+  numSerieFactura: string
+  /** `DD-MM-YYYY`. */
+  fechaExpedicion: string
+  /**
+   * `S` when the record being annulled does NOT exist at AEAT — never sent, or
+   * sent and rejected. Omitted (or `N`) when AEAT holds it.
+   */
+  sinRegistroPrevio?: 'S' | 'N' | null
+  /** `S` when a PREVIOUS annulment of this record was rejected. */
+  rechazoPrevio?: 'S' | 'N' | null
+  encadenamiento: Encadenamiento
+  sistemaInformatico: SistemaInformatico
+  fechaHoraHusoGenRegistro: string
+  huella: string
+}
+
+/** The annulled invoice's identity. Different element names from IDFactura on
+ *  an alta — `…Anulada` throughout — which is easy to miss. */
+function anulladaRefXml(input: RegistroAnulacionXmlInput): string {
+  return (
+    '<sf:IDFactura>' +
+    el('IDEmisorFacturaAnulada', input.issuerNif) +
+    el('NumSerieFacturaAnulada', input.numSerieFactura) +
+    el('FechaExpedicionFacturaAnulada', input.fechaExpedicion) +
+    '</sf:IDFactura>'
+  )
+}
+
+/**
+ * One `RegistroFactura` wrapping a `RegistroAnulacion`.
+ *
+ * Much smaller than an alta: no `Desglose`, no amounts, no `TipoFactura`. An
+ * annulment says only "this record should not have been issued" and points at
+ * the record it voids — which is why a refund is NOT one of these. A refund
+ * means money moved back and the invoice stands; that is a credit note, filed as
+ * an ALTA of a rectificativa. Annulling a refunded sale would erase the record of
+ * a sale that genuinely happened.
+ *
+ * `GeneradoPor` / `Generador` are optional and deliberately omitted: they name
+ * who produced the record (issuer, recipient or third party), and which of those
+ * we are differs between our own commission invoices and a partner's sales.
+ * Guessing would state something about the filing we have not established.
+ */
+export function buildRegistroAnulacionXml(input: RegistroAnulacionXmlInput): string {
+  // Note: `SinRegistroPrevio=S` together with `RechazoPrevio=S` is LEGAL — it is
+  // AEAT's "ANULACIÓN POR RECHAZO SIN REGISTRO PREVIO" case. The two flags are
+  // independent axes (does AEAT hold the record / was a previous annulment
+  // rejected), not alternatives, so there is deliberately no guard against the
+  // combination.
+  //
+  // RegistroFacturacionAnulacionType, in schema order.
+  const parts: string[] = [el('IDVersion', ID_VERSION), anulladaRefXml(input)]
+
+  if (input.sinRegistroPrevio) parts.push(el('SinRegistroPrevio', input.sinRegistroPrevio))
+  if (input.rechazoPrevio) parts.push(el('RechazoPrevio', input.rechazoPrevio))
+
+  parts.push(
+    '<sf:Encadenamiento>' +
+      (input.encadenamiento.first
+        ? el('PrimerRegistro', 'S')
+        : invoiceRefXml(
+            'RegistroAnterior',
+            input.encadenamiento.previous,
+            input.encadenamiento.previous.huella,
+          )) +
+      '</sf:Encadenamiento>',
+  )
+  parts.push(sistemaInformaticoXml(input.sistemaInformatico))
+  parts.push(el('FechaHoraHusoGenRegistro', input.fechaHoraHusoGenRegistro))
+  parts.push(el('TipoHuella', TIPO_HUELLA_SHA256))
+  parts.push(el('Huella', input.huella))
+
+  return (
+    `<sfLR:RegistroFactura xmlns:sfLR="${NS_SUMINISTRO_LR}" xmlns:sf="${NS_SUMINISTRO_INFORMACION}">` +
+    '<sf:RegistroAnulacion>' +
+    parts.join('') +
+    '</sf:RegistroAnulacion>' +
+    '</sfLR:RegistroFactura>'
+  )
+}
+
 // ─── the envelope ────────────────────────────────────────────────────────────
 
 export interface CabeceraInput {

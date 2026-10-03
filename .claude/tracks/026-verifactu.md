@@ -229,29 +229,31 @@ missing `select` field through in P7.1a.
 - ☐ **P7.2 — Transmission, partners.** Mostly a filter widening once P7a's grant exists and the
   Convenio 017 agreement is approved. Until both hold, a partner's records stay queued — which
   is the correct state, not a failure.
-- ◐ **P8 — Subsanación done; anulación remains** (`<this commit>`). **The gap it closed was in
-  shipped code, not a missing feature:** the sweep handles `AceptadoConErrores` by marking the
-  record `sent` and storing the message — AEAT holding a document we know is defective, with
-  nothing able to act on it. That matters because, per huella spec §7, **a wrong huella arrives
-  exactly that way rather than as a rejection**, so the one signal that would reveal a broken
-  chain was landing in a column and dying.
-  `subsanacion.ts` files an *alta de subsanación*: a new record under the SAME invoice identity,
-  chained onto the original, with corrected content. The three-way case mapping comes from the
-  validations document's operations table (v1.2.2), because **the XSD's own documentation for
-  `Subsanacion` and `RechazoPrevio` is a copy-paste error** reading "Clave del tipo de factura":
-  record held by AEAT → `Subsanacion=S`, no `RechazoPrevio`; never reached AEAT → `+ X`; a
-  previous *correction* rejected → `+ S`, which is the subtle one since such a record is both a
-  SUBSANACION and not-at-AEAT and only `S` is right.
-  **Deliberately not automatic.** A correction re-sends *corrected* data, and what to correct is
-  a judgement about why AEAT objected; auto-resending identical content reproduces the error
-  forever, which is the `/api/reconcile` failure mode this track keeps avoiding. Wired as
-  `npm run verifactu:subsanar:{local,test,production}` — listing candidates by default, filing
-  only with an explicit `--invoice`.
-  **Known limit, documented in the module:** one subsanación per invoice, because
-  `@@unique([invoiceId, recordType])` caps it. Lifting it needs a partial unique index limited
-  to `('ALTA','ANULACION')`, which Prisma cannot express in schema and so must be raw SQL.
-  **Still open: the ANULACION path** — for a record issued in error, as distinct from a credit
-  note (which is an ALTA of a rectificativa and already works).
+- ✅ **P8 — Subsanación and anulación** (`9587a5d`, `<this commit>`).
+  **Subsanación** closed a gap in shipped code: the sweep handled `AceptadoConErrores` by
+  marking the record `sent` and storing the message, leaving AEAT holding a document we knew
+  was defective with nothing able to act on it — and per huella spec §7 that is exactly how a
+  **wrong huella** arrives, so the one signal that would reveal a broken chain was dying in a
+  column. **Anulación** voids a record that should never have been issued.
+  **Both case mappings came from the operations tables in AEAT's validations document**, not
+  the XSD, whose documentation for `Subsanacion` and `RechazoPrevio` is a copy-paste error
+  reading "Clave del tipo de factura".
+  Subsanación: held by AEAT → `S` alone; never reached AEAT → `+X`; a previous *correction*
+  rejected → `+S` (the subtle one — such a record is both a SUBSANACION and not-at-AEAT, and
+  the obvious branch picks the wrong flag).
+  Anulación: two INDEPENDENT axes, not alternatives — `SinRegistroPrevio` (AEAT does not hold
+  it) and `RechazoPrevio` (a previous annulment was rejected). All four combinations are legal.
+  **The distinction that matters most, stated in both modules:** a refund is NOT an anulación.
+  The sale happened and its record is true; the correction is a credit note, filed as an ALTA
+  of a rectificativa, which `payment.ts` already does. Annulling a refunded sale would erase
+  the record of a real transaction. An anulación is for an invoice that should not exist at all.
+  Neither is automatic — both re-send or void based on a judgement about why AEAT objected, and
+  an automatic version would either reproduce an error forever or erase real sales. Wired as
+  `verifactu:subsanar:*` (lists candidates by default) and `verifactu:anular:*` (dry run unless
+  `--confirm`).
+  **Known limit:** one SUBSANACION and one ANULACION per invoice, capped by
+  `@@unique([invoiceId, recordType])`. Lifting it needs a partial unique index limited to
+  `('ALTA')`, which Prisma cannot express in schema.
 - ☐ **P6a — Our OWN commission invoice has no rendered document.** Found while closing P6: a
   PLATFORM invoice gets a record, but nothing anywhere renders it as an invoice a human can
   read — the partner accounting page shows list rows and a CSV column, and there is no PDF or
@@ -492,6 +494,21 @@ missing `select` field through in P7.1a.
   ordinary and corrective paths cannot drift about timezone, huella input or chaining. Verified
   the corrected document against AEAT's XSD, since `Subsanacion`/`RechazoPrevio` sit between
   `NombreRazonEmisor` and `TipoFactura` in the sequence and only the schema can confirm that.
+
+- **2026-10-03 — P8 complete.** Anulación joins subsanación, and the useful thing to keep is
+  how different they are. A *subsanación* re-sends a record under the same invoice identity with
+  corrected content; an *anulación* says the invoice should never have existed and carries no
+  amounts, no `Desglose` and no `TipoFactura` at all — it asserts nothing about money, only that
+  a record is void. Its huella covers a different field set, which is why `huella.ts` has had
+  `computeAnulacionHuella` since P5.
+  **The line both modules now state in their headers:** a refund is neither of these. The sale
+  happened, the record is true, and the remedy is a credit note — already working. Annulling a
+  refunded sale would erase a real transaction, and it is exactly the mistake a future
+  maintainer would make, because "cancel the invoice" sounds like what a refund is.
+  Anulación's flags are two independent axes rather than a sequence of cases, so all four
+  combinations are legal; a test covers each. Verified a submission carrying BOTH an alta and an
+  anulación against AEAT's XSD, since they are a `<choice>` inside `RegistroFactura` and the
+  anulación uses its own `…Anulada` element names.
 
 ## Open decisions
 

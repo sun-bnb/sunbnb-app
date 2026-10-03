@@ -54,6 +54,7 @@
     "./tax/es-verifactu/health": "./src/tax/es-verifactu/health.ts",
     "./tax/es-verifactu/huella": "./src/tax/es-verifactu/huella.ts",
     "./tax/es-verifactu/qr": "./src/tax/es-verifactu/qr.ts",
+    "./tax/es-verifactu/anulacion": "./src/tax/es-verifactu/anulacion.ts",
     "./tax/es-verifactu/client": "./src/tax/es-verifactu/client.ts",
     "./tax/es-verifactu/soap": "./src/tax/es-verifactu/soap.ts",
     "./tax/es-verifactu/subsanacion": "./src/tax/es-verifactu/subsanacion.ts",
@@ -182,6 +183,9 @@
       "tax/es-verifactu/qr": [
         "./src/tax/es-verifactu/qr.ts"
       ],
+      "tax/es-verifactu/anulacion": [
+        "./src/tax/es-verifactu/anulacion.ts"
+      ],
       "tax/es-verifactu/client": [
         "./src/tax/es-verifactu/client.ts"
       ],
@@ -235,6 +239,9 @@
     "migrate:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx prisma migrate deploy && npx prisma generate",
     "migrate:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx prisma migrate deploy && npx prisma generate",
     "migrate:check": "./scripts/with-db-url.sh POSTGRES_URL npx prisma migrate diff --from-config-datasource --to-schema ./prisma/schema.prisma --exit-code",
+    "verifactu:anular:local": "npx --yes tsx scripts/verifactu-anular.ts",
+    "verifactu:anular:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx --yes tsx scripts/verifactu-anular.ts",
+    "verifactu:anular:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx --yes tsx scripts/verifactu-anular.ts",
     "verifactu:subsanar:local": "npx --yes tsx scripts/verifactu-subsanar.ts",
     "verifactu:subsanar:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx --yes tsx scripts/verifactu-subsanar.ts",
     "verifactu:subsanar:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx --yes tsx scripts/verifactu-subsanar.ts",
