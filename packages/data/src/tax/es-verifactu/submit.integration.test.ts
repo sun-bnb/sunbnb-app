@@ -374,3 +374,144 @@ describe('the client mode switch', () => {
     expect(prod.endpoint).not.toContain('www10')
   })
 })
+
+// ─── the colaboración social gate (P7a) ──────────────────────────────────────
+
+describe('the submission grant', () => {
+  /** A Spanish partner with a filed, pending record. */
+  async function partnerWithRecord(grants: Record<string, unknown> = {}) {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id, {
+      company: 'Alonso Beach SL',
+      country: 'ES',
+      taxRegion: 'MA',
+      businessId: 'B29806043',
+      ...grants,
+    })
+    seq += 1
+    const inv = await prisma.invoice.create({
+      data: {
+        accountId: user.id,
+        issuerType: 'PARTNER',
+        invoicedAt: new Date('2026-07-10T09:30:00Z'),
+        totalCharge: 100,
+        totalTax: 21,
+        totalAmount: 121,
+        issuerVatNumber: 'B29806043',
+        issuerCompanyName: 'Alonso Beach SL',
+        invoiceNumber: `AB-F-2026-${String(seq).padStart(5, '0')}`,
+      },
+    })
+    await prisma.invoiceLine.create({
+      data: {
+        invoiceId: inv.id,
+        charge: 100,
+        tax: 21,
+        amount: 121,
+        vatRate: 21,
+        productCode: 'sunbed-rental',
+        description: 'Hamaca',
+      },
+    })
+    await prisma.$transaction((tx) => recordInvoiceForTax(tx, inv.id, SIF))
+    return inv
+  }
+
+  it('REFUSES to submit for a partner who has not granted representation', async () => {
+    // AEAT: "ningún colaborador social realice envíos sin estar previamente
+    // autorizado". This is the gate, and it exists BEFORE anything widens the
+    // sweep past our own invoices.
+    await partnerWithRecord()
+    const client = createStubAeatClient()
+
+    const result = await submitPendingRecords({ client })
+    expect(client.submissions).toHaveLength(0)
+    expect(result.accepted).toBe(0)
+    expect(result.issuers[0]!.awaitingAuthorisation).toBe(true)
+  })
+
+  it('leaves their records PENDING, not blocked', async () => {
+    // Blocked is terminal-until-fixed and stops retrying. These should go out
+    // untouched the moment the grant arrives, so they must stay pending.
+    await partnerWithRecord()
+    await submitPendingRecords({ client: createStubAeatClient() })
+
+    const rec = await prisma.verifactuRecord.findFirstOrThrow({
+      where: { issuerNif: 'B29806043' },
+    })
+    expect(rec.status).toBe('pending')
+    expect(rec.attempts).toBe(0)
+    expect(rec.nextAttemptAt).toBeNull()
+  })
+
+  it('submits as soon as the grant is recorded, with nothing else changing', async () => {
+    await partnerWithRecord()
+    const before = createStubAeatClient()
+    await submitPendingRecords({ client: before })
+    expect(before.submissions).toHaveLength(0)
+
+    await prisma.partnerAccount.updateMany({
+      where: { businessId: 'B29806043' },
+      data: { aeatSubmissionGrantedAt: new Date() },
+    })
+
+    const after = createStubAeatClient()
+    const result = await submitPendingRecords({ client: after })
+    expect(after.submissions).toHaveLength(1)
+    expect(result.accepted).toBe(1)
+  })
+
+  it('never gates OUR OWN invoices on a grant', async () => {
+    // There is no third party on a PLATFORM commission invoice — we are the
+    // Obligado Emisión, which `4112` accepts outright.
+    await platformRecord()
+    const client = createStubAeatClient()
+    const result = await submitPendingRecords({ client })
+    expect(result.accepted).toBe(1)
+  })
+
+  it('submits for the granted partner while skipping the ungranted one', async () => {
+    // Different issuers are independent: one partner's missing mandate must not
+    // hold up another's records.
+    await partnerWithRecord({ aeatSubmissionGrantedAt: new Date() })
+
+    const other = await createTestUser()
+    await createTestPartnerAccount(other.id, {
+      company: 'Brisa Marina SL',
+      country: 'ES',
+      taxRegion: 'CA',
+      businessId: 'B11111111',
+    })
+    const inv = await prisma.invoice.create({
+      data: {
+        accountId: other.id,
+        issuerType: 'PARTNER',
+        invoicedAt: new Date('2026-07-11T09:30:00Z'),
+        totalCharge: 100,
+        totalTax: 21,
+        totalAmount: 121,
+        issuerVatNumber: 'B11111111',
+        issuerCompanyName: 'Brisa Marina SL',
+        invoiceNumber: 'BM-F-2026-00001',
+      },
+    })
+    await prisma.invoiceLine.create({
+      data: {
+        invoiceId: inv.id,
+        charge: 100,
+        tax: 21,
+        amount: 121,
+        vatRate: 21,
+        productCode: 'sunbed-rental',
+        description: 'Hamaca',
+      },
+    })
+    await prisma.$transaction((tx) => recordInvoiceForTax(tx, inv.id, SIF))
+
+    const client = createStubAeatClient()
+    const result = await submitPendingRecords({ client })
+    expect(result.accepted).toBe(1)
+    const skipped = result.issuers.find((i) => i.issuerNif === 'B11111111')
+    expect(skipped?.awaitingAuthorisation).toBe(true)
+  })
+})

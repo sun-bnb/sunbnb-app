@@ -219,13 +219,26 @@ missing `select` field through in P7.1a.
   row stores `ESB22435705`, so the sweep would have matched nothing and reported a clean empty
   run — a silent no-op that looks like success. `platformIssuerNifCandidates()` passes both
   spellings, because SQL cannot fold the prefix the way `foldNif` does.
-- ▶ **P7a — Capture the representation grant.** AEAT blesses a web form or onboarding pop-up
-  with electronic signature (D2, FAQ §16 Q4), so this is a product surface, not paperwork: the
-  partner grants Sunbnb representation for VERI\*FACTU remisión, the grant is stored with its
-  timestamp and evidence, and **the sweep refuses any partner who has not granted it** —
-  *"ningún colaborador social realice envíos sin estar previamente autorizado"*. Build the
-  storage and the refusal BEFORE P7.2, so there is never a window in which the sweep can send
-  for an ungranted partner.
+- ✅ **P7a — The partner's authorisations, captured and enforced** (`<this commit>`).
+  **TWO grants, not one**, because they are separate legal acts resting on different provisions
+  and gating different things — a single "agreed to Veri\*factu" flag would misstate what was
+  agreed:
+  `invoicingAuthorityGrantedAt` (art. 5 RD 1619/2012 — we expedite invoices in their name, which
+  every record already declares via `EmitidaPorTerceroODestinatario=T`) and
+  `aeatSubmissionGrantedAt` (colaboración social — we submit their records). Stored separately
+  with a `termsVersion`, so a later rewording cannot retroactively claim a partner agreed to text
+  they never saw, and with evidence of who accepted, when and from where.
+  **The gate is on SUBMISSION, not on generation.** A partner who has not granted still gets
+  records — they are owed regardless, and withholding them would recreate the gap phase 5 exists
+  to avoid. Their records stay **`pending`**, deliberately not `blocked`: blocked is
+  terminal-until-fixed and stops retrying, whereas these must go out untouched the moment the
+  grant arrives. The sweep reports them as `awaitingAuthorisation`.
+  **Our own invoices are never gated** — there is no third party on a PLATFORM commission
+  invoice, and `4112` accepts the certificate holder as *Obligado Emisión*.
+  Partner surface at `/account/verifactu`, shown to Spanish partners only, stating plainly what
+  the authorisation does NOT do: it hands over no certificate, authorises nothing else at AEAT,
+  and moves no liability. Built now rather than later so the grant is actually obtainable —
+  the `taxRegion` lesson, where the instruction existed and the mechanism did not.
 - ☐ **P7.2 — Transmission, partners.** Mostly a filter widening once P7a's grant exists and the
   Convenio 017 agreement is approved. Until both hold, a partner's records stay queued — which
   is the correct state, not a failure.
@@ -587,6 +600,24 @@ missing `select` field through in P7.1a.
   for third-party issuance. The merchant agreement establishes the partner as Seller of Record
   but does not explicitly authorise Sunbnb to expedite invoices in their name. That clause is a
   separate act from P7a's submission grant and should be added.
+
+- **2026-10-03 — P7a, built as two grants because it is two legal acts.** The obvious design is
+  one "I agree to Veri\*factu" checkbox. That would misstate what was agreed: authorising
+  someone to *issue invoices in your name* (art. 5 ROF) and authorising them to *file your
+  records with the tax agency* (colaboración social) rest on different provisions, gate
+  different things, and a partner can reasonably be in one state and not the other. Stored and
+  checked separately.
+  The gate sits on submission rather than generation, and skips rather than fails: records for
+  an unauthorised partner stay `pending` with zero attempts, so nothing has to be undone when
+  the grant arrives. Marking them `blocked` would have been the easy choice and would have
+  stopped them retrying forever.
+  Two things caught the work mid-flight and both were the system working: the partner app's
+  coverage-contract meta-guard refused the new server action until it was registered with a
+  justification, and the lifecycle test failed because it had asserted a partner's record would
+  be submitted — which is exactly the behaviour this phase changes. The lifecycle test now
+  demonstrates both halves: skipped without the grant, sent once it exists.
+  Also fixed a bug while writing the action: it keyed the invoicing grant off the submission
+  grant's presence, which would have silently skipped recording one of the two mandates.
 
 ## Open decisions
 

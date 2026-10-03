@@ -85,6 +85,8 @@ export interface SweepOptions {
 
 export interface IssuerSweepResult {
   issuerNif: string
+  /** True when this issuer was skipped for want of a submission grant. */
+  awaitingAuthorisation?: boolean
   submitted: number
   accepted: number
   rejected: number
@@ -129,10 +131,32 @@ export async function submitPendingRecords(options: SweepOptions = {}): Promise<
     where: due,
     _count: { _all: true },
   })
-  const issuers = issuerRows.map((r) => r.issuerNif).sort()
+  const allIssuers = issuerRows.map((r) => r.issuerNif).sort()
+
+  // ── the colaboración social gate ──
+  //
+  // AEAT: "ningún colaborador social realice envíos sin estar previamente
+  // autorizado". A partner who has not granted representation is skipped, NOT
+  // failed — their records stay `pending` and go out untouched the moment the
+  // grant arrives. Marking them `blocked` would stop them retrying, which is the
+  // opposite of what should happen.
+  //
+  // We are always authorised for our OWN invoices: there is no third party, and
+  // `4112` accepts the certificate holder as Obligado Emisión.
+  const authorised = await authorisedIssuerNifs(allIssuers)
+  const issuers = allIssuers.filter((nif) => authorised.has(nif))
+  const skipped = allIssuers.filter((nif) => !authorised.has(nif))
+
   const complete = issuers.length <= maxIssuers
 
-  const results: IssuerSweepResult[] = []
+  const results: IssuerSweepResult[] = skipped.map((issuerNif) => ({
+    issuerNif,
+    submitted: 0,
+    accepted: 0,
+    rejected: 0,
+    haltedForChainOrder: false,
+    awaitingAuthorisation: true,
+  }))
   for (const issuerNif of issuers.slice(0, maxIssuers)) {
     results.push(await sweepOneIssuer(issuerNif, client, now, due))
   }
@@ -145,6 +169,34 @@ export async function submitPendingRecords(options: SweepOptions = {}): Promise<
     rejected: results.reduce((n, r) => n + r.rejected, 0),
     complete,
   }
+}
+
+/**
+ * Which of these issuer NIFs may we actually submit for?
+ *
+ * Always ourselves. For partners, only where `aeatSubmissionGrantedAt` is set.
+ * Matched on the stored `issuerVatNumber` of their invoices rather than on the
+ * account id, because the sweep works in NIF space and the two are joined only
+ * through the invoice.
+ */
+async function authorisedIssuerNifs(issuerNifs: string[]): Promise<Set<string>> {
+  const ours = new Set(platformIssuerNifCandidates())
+  const allowed = new Set(issuerNifs.filter((nif) => ours.has(nif)))
+
+  const partnerNifs = issuerNifs.filter((nif) => !ours.has(nif))
+  if (partnerNifs.length === 0) return allowed
+
+  const granted = await prisma.partnerAccount.findMany({
+    where: {
+      businessId: { in: partnerNifs },
+      aeatSubmissionGrantedAt: { not: null },
+    },
+    select: { businessId: true },
+  })
+  for (const row of granted) {
+    if (row.businessId) allowed.add(row.businessId)
+  }
+  return allowed
 }
 
 async function sweepOneIssuer(

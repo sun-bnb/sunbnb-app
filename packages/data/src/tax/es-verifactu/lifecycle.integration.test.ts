@@ -181,7 +181,24 @@ describe('the full Veri*factu lifecycle', () => {
     })
     expect(stillQueued.status).toBe('pending')
 
-    // ── 8. Then everything, as P7.2 eventually will ──
+    // ── 8. The partner's record waits for THEIR authorisation (P7a) ──
+    // AEAT: "ningún colaborador social realice envíos sin estar previamente
+    // autorizado". Without the grant the sweep skips them — it does not fail
+    // them, so nothing has to be undone when the grant arrives.
+    const ungranted = await submitPendingRecords({ client })
+    expect(ungranted.accepted).toBe(0)
+    expect(ungranted.issuers.some((i) => i.awaitingAuthorisation)).toBe(true)
+    const stillPending = await prisma.verifactuRecord.findFirstOrThrow({
+      where: { issuerNif: 'B29806043' },
+    })
+    expect(stillPending.status).toBe('pending')
+    expect(stillPending.attempts).toBe(0)
+
+    // ── 9. Once they authorise, it goes, with nothing else changed ──
+    await prisma.partnerAccount.updateMany({
+      where: { businessId: 'B29806043' },
+      data: { aeatSubmissionGrantedAt: new Date() },
+    })
     const all = await submitPendingRecords({ client })
     expect(all.accepted).toBe(1)
 

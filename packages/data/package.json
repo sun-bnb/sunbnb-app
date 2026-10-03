@@ -52,6 +52,7 @@
     "./receipt": "./src/receipt.ts",
     "./receipt-model": "./src/receipt-model.ts",
     "./tax/es-verifactu/declaracion-responsable": "./src/tax/es-verifactu/declaracion-responsable.ts",
+    "./tax/es-verifactu/grants": "./src/tax/es-verifactu/grants.ts",
     "./tax/es-verifactu/health": "./src/tax/es-verifactu/health.ts",
     "./tax/es-verifactu/huella": "./src/tax/es-verifactu/huella.ts",
     "./tax/es-verifactu/qr": "./src/tax/es-verifactu/qr.ts",
@@ -178,6 +179,9 @@
       ],
       "tax/es-verifactu/declaracion-responsable": [
         "./src/tax/es-verifactu/declaracion-responsable.ts"
+      ],
+      "tax/es-verifactu/grants": [
+        "./src/tax/es-verifactu/grants.ts"
       ],
       "tax/es-verifactu/health": [
         "./src/tax/es-verifactu/health.ts"

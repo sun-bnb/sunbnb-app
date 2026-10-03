@@ -601,6 +601,17 @@ const UNGATED_ALLOWLIST: AllowlistEntry[] = [
     reason: 'No-auth locale cookie write — sets NEXT_LOCALE cookie only; no data access, no user-scoped resource mutations',
   },
 
+  // ── Server actions: account/verifactu (session-account-scoped grant) ────────
+  {
+    export: 'grantVerifactuAuthorisations',
+    file: 'app/account/verifactu/actions.ts',
+    reason:
+      'Session-gated: updates PartnerAccount where { userId: session.user.id }; throws if not ' +
+      'authenticated. Takes NO arguments at all, so there is no resource id to tamper with — a ' +
+      'partner can only ever grant for their own account. Existing grant timestamps are ' +
+      'preserved on re-accept, so replaying it cannot backdate or move a mandate.',
+  },
+
   // ── Server actions: account/staff (session-account-scoped employee CRUD) ────
   {
     export: 'getEmployees',

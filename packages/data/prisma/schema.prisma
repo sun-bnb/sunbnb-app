@@ -208,6 +208,29 @@ model PartnerAccount {
   /// company is "gdhgdhg" and whose tax id is "wdcecec"; flagging it is
   /// cheaper and safer than deleting rows that other tables reference.
   isTestAccount        Boolean      @default(false) @map("is_test_account")
+
+  /// Veri*factu authorisations (track 026 P7a). TWO distinct legal acts, stored
+  /// separately because they gate different things and can be granted at
+  /// different times:
+  ///
+  ///  - `invoicingAuthorityGrantedAt` — art. 5 RD 1619/2012: the obligado
+  ///    authorises a third party to EXPEDITE invoices in their name. We already
+  ///    rely on this for every partner sale, and every record declares it via
+  ///    `EmitidaPorTerceroODestinatario=T`.
+  ///  - `aeatSubmissionGrantedAt` — colaboración social: the obligado authorises
+  ///    Sunbnb to SUBMIT their records to AEAT. Without it a submission is
+  ///    refused outright with `4112`, and AEAT is explicit that no colaborador
+  ///    social may send without prior authorisation.
+  ///
+  /// `termsVersion` records WHICH wording was accepted — a later change to the
+  /// text does not retroactively alter what a partner agreed to.
+  invoicingAuthorityGrantedAt DateTime? @map("invoicing_authority_granted_at")
+  aeatSubmissionGrantedAt     DateTime? @map("aeat_submission_granted_at")
+  verifactuGrantTermsVersion  String?   @map("verifactu_grant_terms_version")
+  /// Who accepted, and from where. Evidence that the grant happened, since the
+  /// grant is the only thing standing between us and an unauthorised filing.
+  verifactuGrantEvidence      Json?     @map("verifactu_grant_evidence")
+
   mollieProfileId      String?      @map("mollie_profile_id")
   mollieAccessToken    String?      @map("mollie_access_token")
   mollieRefreshToken   String?      @map("mollie_refresh_token")
