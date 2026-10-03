@@ -56,6 +56,7 @@
     "./tax/es-verifactu/huella": "./src/tax/es-verifactu/huella.ts",
     "./tax/es-verifactu/qr": "./src/tax/es-verifactu/qr.ts",
     "./tax/es-verifactu/anulacion": "./src/tax/es-verifactu/anulacion.ts",
+    "./tax/es-verifactu/certificate": "./src/tax/es-verifactu/certificate.ts",
     "./tax/es-verifactu/client": "./src/tax/es-verifactu/client.ts",
     "./tax/es-verifactu/soap": "./src/tax/es-verifactu/soap.ts",
     "./tax/es-verifactu/subsanacion": "./src/tax/es-verifactu/subsanacion.ts",
@@ -190,6 +191,9 @@
       "tax/es-verifactu/anulacion": [
         "./src/tax/es-verifactu/anulacion.ts"
       ],
+      "tax/es-verifactu/certificate": [
+        "./src/tax/es-verifactu/certificate.ts"
+      ],
       "tax/es-verifactu/client": [
         "./src/tax/es-verifactu/client.ts"
       ],
@@ -315,6 +319,7 @@
     "@turbo/gen": "^1.12.4",
     "@types/eslint": "^8.56.5",
     "@types/node": "^20.11.24",
+    "@types/node-forge": "1.3.11",
     "@types/pg": "^8.18.0",
     "@types/react": "^18.2.61",
     "@types/react-dom": "^18.2.19",
@@ -330,6 +335,7 @@
     "@prisma/adapter-pg": "^7.4.2",
     "@xmldom/xmldom": "0.8.15",
     "dotenv": "^17.3.1",
+    "node-forge": "1.4.0",
     "pg": "^8.19.0",
     "prisma": "^7",
     "react": "^18.3.1",

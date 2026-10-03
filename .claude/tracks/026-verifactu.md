@@ -278,11 +278,26 @@ missing `select` field through in P7.1a.
   homologates nothing. That line now says what is actually required, states that AEAT does not
   certify invoicing software, and links to the declaration. It is the one claim on that page
   that no amount of shipping could make true.
-- ☐ **P9 — Ops surface.** The rest of it, once P7.0 exists: pending/blocked/rejected per
-  issuer, both verify routines runnable on demand, per-invoice CSV, **certificate expiry
-  countdown** (the FNMT representative certificate is valid **2 years** — an unmonitored time
-  bomb), and the alert "record pending > 1 h". *Makes true: "record retention / exportable at
-  any time".*
+- ✅ **P9 — Ops surface** (`<this commit>`). Admin `/verifactu`, sudo-gated, bringing together
+  what was previously only reachable by CLI: health, submission states, per-issuer chain
+  integrity, invoices with no record, records needing correction, unclassified Spanish issuers,
+  and the transport's mode/environment.
+  **Read-only on purpose.** Everything that changes a filing — correcting, voiding — stays
+  behind `verifactu:subsanar` / `verifactu:anular`, because both act on a judgement about why
+  AEAT objected and neither belongs behind a button someone hits while scanning a dashboard.
+  **Certificate expiry is read FROM the certificate**, not from a setting. `certificate.ts`
+  parses the configured PKCS#12 with `node-forge` (now a declared dependency of `@repo/data`
+  rather than borrowed transitively from Expo) and reports subject, issuer and days remaining.
+  An operator-entered date would be exactly as wrong as the day it was mistyped, and the stakes
+  are specific: an FNMT certificate **cannot be renewed once expired**, and a lapse fails at the
+  TLS handshake — which reads as a network fault while records quietly queue. Warning window is
+  **60 days**, because replacement needs a tax-office appointment whose lead time we do not
+  control. It returns metadata only: never the key, never the passphrase, and the error string
+  deliberately does not echo the attempted password, since it is rendered on a web page.
+  **One real bug found by testing it:** forge hands back certificate attributes as BINARY
+  strings, so "Sunbnb España SL" rendered as mojibake — on the one screen meant to prove we know
+  what we are filing with. Fixed with a UTF-8 decode. (The test fixture needed openssl's `-utf8`
+  to stop double-encoding and making the fix look broken.)
 - 💤 **Cutover.** The production clean-slate deletion (D3), after P7.1 deploys.
 
 ## Log
@@ -534,6 +549,24 @@ missing `select` field through in P7.1a.
   It renders as explicitly unsigned until `VERIFACTU_DECLARATION_SIGNED_ON`/`_AT` are set, which
   is deliberate — shipping a page that looks like a signed legal instrument but is not would
   repeat exactly the failure this phase was created to fix.
+
+- **2026-10-03 — P9: the ops surface, and certificate expiry read from the certificate.**
+  Everything the CLIs could already answer is now on one sudo-gated admin page, and
+  deliberately read-only — correcting or voiding a record is a judgement, not a dashboard
+  button.
+  The part worth the dependency is expiry monitoring. An FNMT certificate lasts two years and
+  **cannot be renewed after it expires**; a lapse fails during the TLS handshake, which looks
+  like a network fault while records queue behind a backoff. A date typed into a setting would
+  be wrong the day someone mistyped it, so `node-forge` now parses the configured PKCS#12 and
+  the page counts down from what the certificate actually says. Declared as a direct dependency
+  of `@repo/data` — it was present only via Expo in `apps/mobile`, the same trap as
+  `@xmldom/xmldom`.
+  Two things the work itself caught: a type error in `certificate.ts` that only the APPS'
+  typecheck sees (further confirmation that the transitive typecheck is real coverage, and that
+  the earlier claim about `packages/data` having none was wrong), and forge returning attribute
+  values as binary strings — so our own producer name rendered as "Sunbnb EspaÃ±a SL" on the
+  ops page. Both fixed; the second has a test, and its fixture needed openssl's `-utf8` to avoid
+  double-encoding and making the fix appear not to work.
 
 ## Open decisions
 
