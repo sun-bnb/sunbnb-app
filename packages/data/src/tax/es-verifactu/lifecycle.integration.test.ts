@@ -113,6 +113,19 @@ describe('the full Veri*factu lifecycle', () => {
     expect(partnerRec.issuerNif).toBe('B29806043')
     expect(platform.verifactuRecords[0]!.issuerNif).toBe(PLATFORM_ES_ISSUER_NIF)
 
+    // ── 2b. Who issued what, as AEAT needs to be able to tell ──
+    // The beach operator is the Seller of Record and we expedite in their name
+    // (art. 6 RRSIF / art. 5 ROF), so their record must say so. Our own
+    // commission invoice must NOT — there we are the obligado.
+    expect(partnerRec.payloadXml).toContain(
+      '<sf:EmitidaPorTerceroODestinatario>T</sf:EmitidaPorTerceroODestinatario>',
+    )
+    expect(partnerRec.payloadXml).toContain('<sf:Tercero>')
+    expect(platform.verifactuRecords[0]!.payloadXml).not.toContain(
+      'EmitidaPorTerceroODestinatario',
+    )
+    expect(platform.verifactuRecords[0]!.payloadXml).not.toContain('<sf:Tercero>')
+
     // ── 3. The huella recomputes from its own stored input ──
     // If this ever fails, the chain is asserting something it cannot prove.
     const stored = JSON.parse(

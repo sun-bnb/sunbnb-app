@@ -124,6 +124,24 @@ export function sistemaInformatico(
  * a group entity we have not classified is not filed anywhere, rather than
  * filed in the wrong place.
  */
+/**
+ * Who we are when we issue an invoice **in a partner's name**.
+ *
+ * The beach operator is the Seller of Record; Sunbnb materially expedites the
+ * invoice on their behalf under art. 6 RRSIF in relation to art. 5 ROF. That
+ * fact has to appear in the record (`EmitidaPorTerceroODestinatario` = `T` plus
+ * this block), because it is what distinguishes a partner's own invoices from
+ * ones issued for them.
+ *
+ * Same company as the software producer above, deliberately spelled out
+ * separately: they are different ROLES, and a future group restructuring could
+ * split them.
+ */
+export const THIRD_PARTY_ISSUER = {
+  nombreRazon: PRODUCER_NAME,
+  nif: PRODUCER_NIF,
+} as const
+
 export const PLATFORM_ES_ISSUER_NIF = PRODUCER_NIF
 
 /** Fold a tax id for comparison: case, spaces, punctuation and a country prefix. */

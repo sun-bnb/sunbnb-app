@@ -38,6 +38,7 @@ import { buildRegistroAltaXml, type Encadenamiento } from './registro-xml'
 import { resolveTaxRegime, regimeRequiresRecords } from '../regime'
 import {
   platformIssuerJurisdiction,
+  THIRD_PARTY_ISSUER,
   type SistemaInformatico,
 } from './sistema-informatico'
 
@@ -326,6 +327,10 @@ export async function recordInvoiceForTax(
       classified.tipoFactura === 'R1' || classified.tipoFactura === 'R5' ? 'I' : null,
     facturasRectificadas,
     descripcionOperacion,
+    // A PARTNER invoice is the venue's sale, expedited by us in their name. Our
+    // own PLATFORM commission invoices are not: there we ARE the obligado.
+    emitidaPorTerceroODestinatario: invoice.issuerType === 'PARTNER' ? 'T' : null,
+    tercero: invoice.issuerType === 'PARTNER' ? { ...THIRD_PARTY_ISSUER } : null,
     destinatarios,
     desglose: desglose.entries,
     // The SAME strings the huella hashed — see huellaInput above.

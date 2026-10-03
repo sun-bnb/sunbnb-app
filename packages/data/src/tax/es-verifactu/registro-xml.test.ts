@@ -25,6 +25,8 @@ function altaInput(over: Partial<RegistroAltaXmlInput> = {}): RegistroAltaXmlInp
     fechaExpedicion: '10-07-2026',
     tipoFactura: 'F1',
     descripcionOperacion: 'Comisión por servicios de intermediación',
+    emitidaPorTerceroODestinatario: 'T',
+    tercero: { nombreRazon: 'Sunbnb España SL', nif: 'B22435705' },
     destinatarios: [{ nombreRazon: 'Alonso Beach SL', nif: 'B29806043' }],
     desglose: [
       { calificacionOperacion: 'S1', tipoImpositivo: 21, baseImponible: 100, cuotaRepercutida: 21 },
@@ -62,6 +64,10 @@ describe('buildRegistroAltaXml', () => {
       'NombreRazonEmisor',
       'TipoFactura',
       'DescripcionOperacion',
+      'EmitidaPorTerceroODestinatario',
+      'Tercero',
+      'NombreRazon',
+      'NIF',
       'Destinatarios',
       'IDDestinatario',
       'NombreRazon',
@@ -341,5 +347,44 @@ describe('against AEAT’s published XSD', () => {
     expect(() =>
       execFileSync('xmllint', ['--noout', '--schema', schema, file], { stdio: 'pipe' }),
     ).toThrow()
+  })
+})
+
+describe('issued in somebody else\u2019s name', () => {
+  it('names the third party that materially expedited the invoice', () => {
+    // The beach operator is the Seller of Record; Sunbnb issues in their name
+    // under art. 6 RRSIF / art. 5 ROF. AEAT's developer FAQ requires that fact to
+    // be "correctamente informada en el XML del RF" — it is how an inspector
+    // tells a partner's own invoices from ones issued for them.
+    const xml = buildRegistroAltaXml(altaInput())
+    expect(xml).toContain(
+      '<sf:EmitidaPorTerceroODestinatario>T</sf:EmitidaPorTerceroODestinatario>',
+    )
+    expect(xml).toContain('<sf:Tercero>')
+    expect(xml).toContain('<sf:NIF>B22435705</sf:NIF>')
+  })
+
+  it('omits both when nobody else issued it', () => {
+    const xml = buildRegistroAltaXml(
+      altaInput({ emitidaPorTerceroODestinatario: null, tercero: null }),
+    )
+    expect(xml).not.toContain('EmitidaPorTerceroODestinatario')
+    expect(xml).not.toContain('Tercero')
+  })
+
+  it('enforces the two co-dependency rules', () => {
+    // Validations doc §3.1.1 items 11 and 12. A document breaking either is
+    // refused, and the error names neither field.
+    expect(() =>
+      buildRegistroAltaXml(altaInput({ emitidaPorTerceroODestinatario: 'T', tercero: null })),
+    ).toThrow(/requires the Tercero block/)
+    expect(() =>
+      buildRegistroAltaXml(
+        altaInput({
+          emitidaPorTerceroODestinatario: null,
+          tercero: { nombreRazon: 'X', nif: 'Y' },
+        }),
+      ),
+    ).toThrow(/only be given when/)
   })
 })

@@ -146,6 +146,22 @@ export interface RegistroAltaXmlInput {
   facturasRectificadas?: InvoiceRef[]
   /** `DescripcionOperacion` — mandatory, max 500 chars. */
   descripcionOperacion: string
+  /**
+   * `T` when a THIRD PARTY materially issued this invoice on the obligado's
+   * behalf, `D` when the recipient did (self-billing).
+   *
+   * Required for us on every PARTNER invoice: the beach operator is the Seller
+   * of Record, and Sunbnb issues in their name under art. 6 RRSIF in relation to
+   * art. 5 ROF. AEAT's developer FAQ is explicit that *"la constancia de que se
+   * ha producido emisión en nombre de tercero … debe estar correctamente
+   * informada en el XML del RF"* — it is how an inspector tells a partner's own
+   * invoices from ones issued for them.
+   *
+   * Absent on our own PLATFORM commission invoices, where we ARE the obligado.
+   */
+  emitidaPorTerceroODestinatario?: 'D' | 'T' | null
+  /** Who that third party is. Mandatory when the flag is `T`, forbidden otherwise. */
+  tercero?: { nombreRazon: string; nif: string } | null
   /** `Destinatarios`. Omitted on a factura simplificada, which has no recipient. */
   destinatarios?: { nombreRazon: string; nif: string }[]
   desglose: DesgloseEntry[]
@@ -234,6 +250,14 @@ export function buildRegistroAltaXml(input: RegistroAltaXmlInput): string {
   if (input.rechazoPrevio === 'S' && input.subsanacion !== 'S') {
     throw new Error('RechazoPrevio=S is only valid when Subsanacion=S')
   }
+  // Validations doc §3.1.1 items 11 and 12: the block is mandatory when the flag
+  // is `T`, and may not appear otherwise.
+  if (input.emitidaPorTerceroODestinatario === 'T' && !input.tercero) {
+    throw new Error('EmitidaPorTerceroODestinatario=T requires the Tercero block')
+  }
+  if (input.tercero && input.emitidaPorTerceroODestinatario !== 'T') {
+    throw new Error('Tercero may only be given when EmitidaPorTerceroODestinatario=T')
+  }
 
   // RegistroFacturacionAltaType, in schema order. Optional elements we never
   // emit (RefExterna, Subsanacion, RechazoPrevio, FacturasSustituidas,
@@ -273,6 +297,20 @@ export function buildRegistroAltaXml(input: RegistroAltaXmlInput): string {
   }
 
   parts.push(el('DescripcionOperacion', input.descripcionOperacion))
+
+  // EmitidaPorTerceroODestinatario and Tercero sit between DescripcionOperacion
+  // and Destinatarios in the sequence.
+  if (input.emitidaPorTerceroODestinatario) {
+    parts.push(el('EmitidaPorTerceroODestinatario', input.emitidaPorTerceroODestinatario))
+  }
+  if (input.tercero) {
+    parts.push(
+      '<sf:Tercero>' +
+        el('NombreRazon', input.tercero.nombreRazon) +
+        el('NIF', input.tercero.nif) +
+        '</sf:Tercero>',
+    )
+  }
 
   if (input.destinatarios && input.destinatarios.length > 0) {
     parts.push(

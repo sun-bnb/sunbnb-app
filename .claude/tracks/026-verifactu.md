@@ -568,6 +568,26 @@ missing `select` field through in P7.1a.
   ops page. Both fixed; the second has a test, and its fixture needed openssl's `-utf8` to avoid
   double-encoding and making the fix appear not to work.
 
+- **2026-10-03 — Records now say that we issue in the partner's name, which they did not.**
+  Prompted by a question about whether we may invoice on the operator's behalf at all. The
+  answer is yes and it is the model the regulation anticipates — invoices expedited *por
+  delegación* under **art. 6 RRSIF** in relation to **art. 5 ROF**, where the obligations fall on
+  *"el SIF del empresario que materialmente emite las facturas"*, i.e. us. The partner does not
+  re-print the QR or re-send anything; they receive the invoices for their own bookkeeping.
+  But checking it surfaced a defect. AEAT's developer FAQ: *"la constancia de que se ha
+  producido emisión en nombre de tercero … debe estar correctamente informada en el XML del
+  RF"*. The schema carries `EmitidaPorTerceroODestinatario` and a `Tercero` block, and I had
+  omitted both when building the payload on the grounds that I could not establish which role we
+  were in. We can: a **PARTNER** invoice is the venue's sale expedited by us (`T` + Tercero =
+  Sunbnb España SL); a **PLATFORM** commission invoice is our own (neither field). It maps off
+  `issuerType`, which every record already carried.
+  Without it, an inspector could not distinguish a partner's own invoices from ones issued for
+  them — which is precisely what the field exists for.
+  **Still outstanding, and not code:** art. 5 ROF requires the obligado's **prior authorisation**
+  for third-party issuance. The merchant agreement establishes the partner as Seller of Record
+  but does not explicitly authorise Sunbnb to expedite invoices in their name. That clause is a
+  separate act from P7a's submission grant and should be added.
+
 ## Open decisions
 
 - ✅ **D1 — CLOSED 2026-09-29.** The official document was located and read:
@@ -703,6 +723,15 @@ missing `select` field through in P7.1a.
   **Cheapest resolution:** ask FNMT (or the asesor) whether a Sello de Entidad can act under
   Convenio 017 colaboración social. If yes, Sello for the server and Representante for humans.
   If no, Representante for both.
+
+- ☐ **D9 — The merchant agreement does not authorise third-party invoicing.** Art. 5 ROF
+  (RD 1619/2012) permits a third party to expedite invoices for the obligado, but requires the
+  obligado's **prior authorisation**. `apps/partner/app/legal/merchant-agreement` establishes
+  the partner as Seller of Record and says nothing about Sunbnb issuing in their name — which is
+  what the system actually does, and now declares in every record via
+  `EmitidaPorTerceroODestinatario=T`. A clause is needed. Distinct from P7a: that grant covers
+  *submitting* records to AEAT as a colaborador social, this one covers *issuing* the invoice.
+  One for the asesor to word.
 
 ## Founder actions (not engineering) — the real critical path
 
