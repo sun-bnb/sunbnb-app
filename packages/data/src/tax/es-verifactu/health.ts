@@ -40,6 +40,7 @@ import {
   RECORD_BLOCKED,
   RECORD_ERROR,
 } from './record'
+import { grantState, type GrantState } from './grants'
 
 /** An invoice that owes AEAT a record and has none. */
 export interface UnfiledInvoice {
@@ -328,4 +329,68 @@ export function describeVerifactuHealth(health: VerifactuHealth): string {
     )
   }
   return `Veri*factu register NEEDS ATTENTION: ${problems.join('; ')}.`
+}
+
+
+// ─── who has authorised us, and who has not (P7a) ────────────────────────────
+
+export interface PartnerGrantStatus {
+  userId: string
+  company: string
+  businessId: string | null
+  state: GrantState
+  invoicingGrantedAt: Date | null
+  submissionGrantedAt: Date | null
+  /** Records of theirs currently waiting on the submission grant. */
+  queuedRecords: number
+}
+
+/**
+ * Spanish partners and whether they have authorised us.
+ *
+ * Only Spanish ones: Veri*factu does not apply elsewhere, and listing a Finnish
+ * partner as "not authorised" would invent an obligation.
+ *
+ * The queued count is the part that makes this actionable — it says what the
+ * missing grant is actually costing, rather than just that it is missing.
+ */
+export async function getPartnerGrantStatuses(): Promise<PartnerGrantStatus[]> {
+  const partners = await prisma.partnerAccount.findMany({
+    where: { country: 'ES', isTestAccount: false },
+    select: {
+      userId: true,
+      company: true,
+      businessId: true,
+      invoicingAuthorityGrantedAt: true,
+      aeatSubmissionGrantedAt: true,
+    },
+    orderBy: { company: 'asc' },
+  })
+  if (partners.length === 0) return []
+
+  // One grouped count rather than a query per partner.
+  const nifs = partners.map((p) => p.businessId).filter((n): n is string => Boolean(n))
+  const queued =
+    nifs.length === 0
+      ? []
+      : await prisma.verifactuRecord.groupBy({
+          by: ['issuerNif'],
+          where: { issuerNif: { in: nifs }, status: RECORD_PENDING },
+          _count: { _all: true },
+        })
+  const queuedByNif = new Map(queued.map((q) => [q.issuerNif, q._count._all]))
+
+  return partners.map((p) => ({
+    userId: p.userId,
+    company: p.company,
+    businessId: p.businessId,
+    state: grantState({
+      invoicingAuthorityGrantedAt: p.invoicingAuthorityGrantedAt,
+      aeatSubmissionGrantedAt: p.aeatSubmissionGrantedAt,
+      verifactuGrantTermsVersion: null,
+    }),
+    invoicingGrantedAt: p.invoicingAuthorityGrantedAt,
+    submissionGrantedAt: p.aeatSubmissionGrantedAt,
+    queuedRecords: (p.businessId && queuedByNif.get(p.businessId)) || 0,
+  }))
 }

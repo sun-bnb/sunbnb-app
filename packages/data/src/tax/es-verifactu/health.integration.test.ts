@@ -11,7 +11,11 @@ import {
   resetCounter,
 } from '../../test/fixtures'
 import { processConfirmedReservation } from '../../payment'
-import { getVerifactuHealth, describeVerifactuHealth } from './health'
+import {
+  getVerifactuHealth,
+  describeVerifactuHealth,
+  getPartnerGrantStatuses,
+} from './health'
 import { recordInvoiceForTax, RECORD_BLOCKED, RECORD_SENT } from './record'
 import { PLATFORM_ES_ISSUER_NIF, sistemaInformatico } from './sistema-informatico'
 
@@ -333,5 +337,71 @@ describe('getVerifactuHealth', () => {
     expect(health.unfiledByIssuerType).toEqual({ PARTNER: 1 })
     expect(health.healthy).toBe(false)
     expect(health.unfiled[0]!.issuerNif).toBe('B29806043')
+  })
+})
+
+// ─── partner authorisations (P7a) ────────────────────────────────────────────
+
+describe('getPartnerGrantStatuses', () => {
+  it('reports a Spanish partner with no mandate at all', async () => {
+    await partner({ country: 'ES', taxRegion: 'MA', company: 'Alonso Beach SL' })
+    const rows = await getPartnerGrantStatuses()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.state).toBe('none')
+    expect(rows[0]!.company).toBe('Alonso Beach SL')
+  })
+
+  it('distinguishes a half-granted partner from a complete one', async () => {
+    // The two authorisations are separate acts, so the half state is real and
+    // must not be rounded to yes or no.
+    const half = await partner({
+      country: 'ES',
+      taxRegion: 'MA',
+      company: 'Half SL',
+      businessId: 'B11111111',
+      invoicingAuthorityGrantedAt: new Date(),
+    })
+    expect(half).toBeTruthy()
+    await partner({
+      country: 'ES',
+      taxRegion: 'CA',
+      company: 'Full SL',
+      businessId: 'B22222222',
+      invoicingAuthorityGrantedAt: new Date(),
+      aeatSubmissionGrantedAt: new Date(),
+    })
+
+    const rows = await getPartnerGrantStatuses()
+    const byCompany = new Map(rows.map((r) => [r.company, r.state]))
+    expect(byCompany.get('Half SL')).toBe('invoicing-only')
+    expect(byCompany.get('Full SL')).toBe('complete')
+  })
+
+  it('counts what the missing grant is actually costing', async () => {
+    // A count of held records makes the row actionable: it says what the absent
+    // mandate is holding up, not merely that it is absent.
+    const accountId = await partner({
+      country: 'ES',
+      taxRegion: 'MA',
+      businessId: 'B29806043',
+    })
+    await invoiceFor(accountId)
+    await file(
+      (await prisma.invoice.findFirstOrThrow({ where: { accountId } })).id,
+    )
+
+    const rows = await getPartnerGrantStatuses()
+    expect(rows[0]!.queuedRecords).toBe(1)
+  })
+
+  it('leaves non-Spanish partners out entirely', async () => {
+    // Listing a Finnish partner as "not authorised" would invent an obligation.
+    await partner({ country: 'FI', taxRegion: null, company: 'Refactory DX Oy' })
+    expect(await getPartnerGrantStatuses()).toEqual([])
+  })
+
+  it('excludes accounts flagged as test data', async () => {
+    await partner({ country: 'ES', taxRegion: 'MA', isTestAccount: true })
+    expect(await getPartnerGrantStatuses()).toEqual([])
   })
 })

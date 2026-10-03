@@ -239,6 +239,10 @@ missing `select` field through in P7.1a.
   the authorisation does NOT do: it hands over no certificate, authorises nothing else at AEAT,
   and moves no liability. Built now rather than later so the grant is actually obtainable —
   the `taxRegion` lesson, where the instruction existed and the mechanism did not.
+  Admin `/verifactu` lists every Spanish partner's grant state **with the count of records the
+  missing mandate is holding up** — a row that says what it costs, rather than merely that
+  something is absent. A partner showing `none` is called out specifically: we are already
+  issuing invoices in their name with no mandate on file.
 - ☐ **P7.2 — Transmission, partners.** Mostly a filter widening once P7a's grant exists and the
   Convenio 017 agreement is approved. Until both hold, a partner's records stay queued — which
   is the correct state, not a failure.
@@ -618,6 +622,13 @@ missing `select` field through in P7.1a.
   demonstrates both halves: skipped without the grant, sent once it exists.
   Also fixed a bug while writing the action: it keyed the invoicing grant off the submission
   grant's presence, which would have silently skipped recording one of the two mandates.
+
+- **2026-10-03 — P7a finished with the half that makes it usable.** Capturing a grant is only
+  useful if somebody can see who has not given one. Admin `/verifactu` now lists every Spanish
+  partner's state alongside **how many of their records the missing mandate is holding** — the
+  difference between "this is absent" and "this is costing you 40 unfiled records". The `none`
+  state is singled out, because it means we are issuing invoices in a partner's name with no
+  mandate at all, which is a different problem from merely not being able to file yet.
 
 ## Open decisions
 

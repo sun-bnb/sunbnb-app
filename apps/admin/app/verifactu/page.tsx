@@ -1,7 +1,11 @@
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { redirect } from 'next/navigation'
-import { getVerifactuHealth, describeVerifactuHealth } from '@repo/data/tax/es-verifactu/health'
+import {
+  getVerifactuHealth,
+  describeVerifactuHealth,
+  getPartnerGrantStatuses,
+} from '@repo/data/tax/es-verifactu/health'
 import {
   getCertificateStatus,
   describeCertificateStatus,
@@ -41,10 +45,12 @@ export default async function VerifactuOpsPage() {
   })
   if (!user?.sudo) redirect('/')
 
-  const [health, candidates] = await Promise.all([
+  const [health, candidates, grants] = await Promise.all([
     getVerifactuHealth(),
     findRecordsNeedingSubsanacion(),
+    getPartnerGrantStatuses(),
   ])
+  const ungranted = grants.filter((g) => g.state !== 'complete')
   const cert = getCertificateStatus()
   const mode = resolveAeatMode(process.env)
   const environment = resolveAeatEnvironment(process.env)
@@ -218,6 +224,62 @@ export default async function VerifactuOpsPage() {
             exactly why it needs its own figure. Set the province on the partner&rsquo;s Tax
             Identity card.
           </p>
+        </Section>
+      )}
+
+      {grants.length > 0 && (
+        <Section
+          title={`Partner authorisations (${grants.length - ungranted.length}/${grants.length})`}
+          alert={ungranted.length > 0}
+        >
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-gray-500 border-b border-gray-800">
+                <th className="text-left py-1.5">Partner</th>
+                <th className="text-left py-1.5">Tax id</th>
+                <th className="text-left py-1.5">Authorisation</th>
+                <th className="text-right py-1.5">Records waiting</th>
+              </tr>
+            </thead>
+            <tbody>
+              {grants.map((g) => (
+                <tr key={g.userId} className="border-b border-gray-900">
+                  <td className="py-1.5 text-gray-200">{g.company}</td>
+                  <td className="py-1.5 text-gray-500">{g.businessId ?? '—'}</td>
+                  <td
+                    className={`py-1.5 font-medium ${
+                      g.state === 'complete'
+                        ? 'text-green-400'
+                        : g.state === 'invoicing-only'
+                          ? 'text-amber-400'
+                          : 'text-red-400'
+                    }`}
+                  >
+                    {g.state === 'complete'
+                      ? 'complete'
+                      : g.state === 'invoicing-only'
+                        ? 'invoicing only'
+                        : 'none'}
+                  </td>
+                  <td className="py-1.5 text-right text-gray-400">
+                    {g.queuedRecords > 0 ? g.queuedRecords : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="text-xs text-gray-500 mt-2">
+            Spanish partners only. Without the AEAT submission grant their records are
+            generated and held, never sent — AEAT refuses a submission from a colaborador
+            social who was not previously authorised. Partners grant it themselves at{' '}
+            <code>/account/verifactu</code> in the partner app.
+          </p>
+          {grants.some((g) => g.state === 'none') && (
+            <p className="text-xs text-amber-400 mt-2">
+              A partner showing <strong>none</strong> has given no mandate at all, yet we are
+              already issuing invoices in their name. That is the one to chase first.
+            </p>
+          )}
         </Section>
       )}
 
