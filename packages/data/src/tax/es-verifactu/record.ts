@@ -140,6 +140,21 @@ export function invoiceRequiresRecord(invoice: InvoiceIssuerFields): boolean {
 }
 
 /**
+ * How this record relates to one filed earlier, when it is a correction.
+ *
+ * Carried through rather than branched on, so the ordinary filing path and the
+ * correction path build the document with ONE piece of code. A second
+ * implementation is how the two would come to disagree about, say, which
+ * timezone the date is in.
+ */
+export interface RecordVariant {
+  /** Row type. `SUBSANACION` is an ALTA that corrects an earlier record. */
+  recordType?: 'ALTA' | 'SUBSANACION'
+  subsanacion?: 'S' | 'N' | null
+  rechazoPrevio?: 'S' | 'N' | 'X' | null
+}
+
+/**
  * Write the record for an invoice, inside the caller's transaction.
  *
  * Re-reads the invoice rather than taking it as an argument: the caller has
@@ -151,6 +166,7 @@ export async function recordInvoiceForTax(
   invoiceId: string,
   sistemaInformatico: SistemaInformatico,
   now: Date = new Date(),
+  variant: RecordVariant = {},
 ): Promise<RecordOutcome> {
   const invoice = await tx.invoice.findUnique({
     where: { id: invoiceId },
@@ -300,6 +316,8 @@ export async function recordInvoiceForTax(
 
   const payloadXml = buildRegistroAltaXml({
     issuerNif,
+    subsanacion: variant.subsanacion ?? null,
+    rechazoPrevio: variant.rechazoPrevio ?? null,
     nombreRazonEmisor,
     numSerieFactura: invoice.invoiceNumber,
     fechaExpedicion,
@@ -322,7 +340,7 @@ export async function recordInvoiceForTax(
   const record = await tx.verifactuRecord.create({
     data: {
       invoiceId: invoice.id,
-      recordType: 'ALTA',
+      recordType: variant.recordType ?? 'ALTA',
       issuerNif,
       numSerieFactura: invoice.invoiceNumber,
       fechaExpedicion,

@@ -118,6 +118,28 @@ export interface RegistroAltaXmlInput {
   /** `DD-MM-YYYY` in the issuer's territory. */
   fechaExpedicion: string
   tipoFactura: TipoFactura
+  /**
+   * `S` when this record CORRECTS one already generated — an *alta de
+   * subsanación*. See `subsanacion.ts` for when that applies.
+   */
+  subsanacion?: 'S' | 'N' | null
+  /**
+   * Says what happened to the record being corrected. The schema's own
+   * documentation for this field is a copy-paste error ("Clave del tipo de
+   * factura"), so these meanings come from the validations document's operations
+   * table (v1.2.2):
+   *
+   *   - **absent / `N`** — the record EXISTS at AEAT. The ordinary case, and the
+   *     one our `AceptadoConErrores` records fall into.
+   *   - **`X`** — the record does NOT exist at AEAT, because the earlier
+   *     submission was rejected or never sent.
+   *   - **`S`** — the record exists at AEAT and a PREVIOUS subsanación of it was
+   *     rejected.
+   *
+   * Two hard rules (validations doc §3.1.1): `X` may only appear when
+   * `Subsanacion = S`, and `S` may not appear unless `Subsanacion = S`.
+   */
+  rechazoPrevio?: 'S' | 'N' | 'X' | null
   /** `S` (sustitución) or `I` (diferencias). Required on a rectificativa. */
   tipoRectificativa?: 'S' | 'I' | null
   /** The invoices this one rectifies, when it is an R-type. */
@@ -203,6 +225,16 @@ function invoiceRefXml(tag: string, ref: InvoiceRef, huella?: string): string {
 export function buildRegistroAltaXml(input: RegistroAltaXmlInput): string {
   const isRectificativa = input.tipoFactura.startsWith('R')
 
+  // The two co-dependency rules, enforced here rather than discovered as a
+  // rejection. AEAT states them as validations, so a document breaking them is
+  // refused — and the error would name neither field.
+  if (input.rechazoPrevio === 'X' && input.subsanacion !== 'S') {
+    throw new Error('RechazoPrevio=X is only valid when Subsanacion=S')
+  }
+  if (input.rechazoPrevio === 'S' && input.subsanacion !== 'S') {
+    throw new Error('RechazoPrevio=S is only valid when Subsanacion=S')
+  }
+
   // RegistroFacturacionAltaType, in schema order. Optional elements we never
   // emit (RefExterna, Subsanacion, RechazoPrevio, FacturasSustituidas,
   // ImporteRectificacion, FechaOperacion, FacturaSimplificadaArt7273,
@@ -218,8 +250,14 @@ export function buildRegistroAltaXml(input: RegistroAltaXmlInput): string {
       fechaExpedicion: input.fechaExpedicion,
     }),
     el('NombreRazonEmisor', input.nombreRazonEmisor),
-    el('TipoFactura', input.tipoFactura),
   ]
+
+  // Subsanacion and RechazoPrevio sit BETWEEN NombreRazonEmisor and TipoFactura
+  // in the schema sequence. Putting them anywhere else is schema-invalid.
+  if (input.subsanacion) parts.push(el('Subsanacion', input.subsanacion))
+  if (input.rechazoPrevio) parts.push(el('RechazoPrevio', input.rechazoPrevio))
+
+  parts.push(el('TipoFactura', input.tipoFactura))
 
   if (isRectificativa && input.tipoRectificativa) {
     parts.push(el('TipoRectificativa', input.tipoRectificativa))

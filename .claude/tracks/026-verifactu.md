@@ -229,12 +229,29 @@ missing `select` field through in P7.1a.
 - ☐ **P7.2 — Transmission, partners.** Mostly a filter widening once P7a's grant exists and the
   Convenio 017 agreement is approved. Until both hold, a partner's records stay queued — which
   is the correct state, not a failure.
-- ☐ **P8 — Anulación and rectificativa completeness.** **A credit note is an `Alta` of a
-  rectificativa, not an `Anulación`**; anulación is for a record issued in error. Getting that
-  wrong is a compliance defect that looks like a working feature. P5 already emits the
-  rectificativa ALTA with `tipoRectificativa: 'I'`; what is missing is the anulación path and
-  the *alta de subsanación*. Note from the FAQ: for both of these *"no existiendo, en
-  principio, un plazo máximo fijado"*, and they must be sent *"en cuanto sea posible"*.
+- ◐ **P8 — Subsanación done; anulación remains** (`<this commit>`). **The gap it closed was in
+  shipped code, not a missing feature:** the sweep handles `AceptadoConErrores` by marking the
+  record `sent` and storing the message — AEAT holding a document we know is defective, with
+  nothing able to act on it. That matters because, per huella spec §7, **a wrong huella arrives
+  exactly that way rather than as a rejection**, so the one signal that would reveal a broken
+  chain was landing in a column and dying.
+  `subsanacion.ts` files an *alta de subsanación*: a new record under the SAME invoice identity,
+  chained onto the original, with corrected content. The three-way case mapping comes from the
+  validations document's operations table (v1.2.2), because **the XSD's own documentation for
+  `Subsanacion` and `RechazoPrevio` is a copy-paste error** reading "Clave del tipo de factura":
+  record held by AEAT → `Subsanacion=S`, no `RechazoPrevio`; never reached AEAT → `+ X`; a
+  previous *correction* rejected → `+ S`, which is the subtle one since such a record is both a
+  SUBSANACION and not-at-AEAT and only `S` is right.
+  **Deliberately not automatic.** A correction re-sends *corrected* data, and what to correct is
+  a judgement about why AEAT objected; auto-resending identical content reproduces the error
+  forever, which is the `/api/reconcile` failure mode this track keeps avoiding. Wired as
+  `npm run verifactu:subsanar:{local,test,production}` — listing candidates by default, filing
+  only with an explicit `--invoice`.
+  **Known limit, documented in the module:** one subsanación per invoice, because
+  `@@unique([invoiceId, recordType])` caps it. Lifting it needs a partial unique index limited
+  to `('ALTA','ANULACION')`, which Prisma cannot express in schema and so must be raw SQL.
+  **Still open: the ANULACION path** — for a record issued in error, as distinct from a credit
+  note (which is an ALTA of a rectificativa and already works).
 - ☐ **P6a — Our OWN commission invoice has no rendered document.** Found while closing P6: a
   PLATFORM invoice gets a record, but nothing anywhere renders it as an invoice a human can
   read — the partner accounting page shows list rows and a CSV column, and there is no PDF or
@@ -460,6 +477,21 @@ missing `select` field through in P7.1a.
   `AC ENTIDADES G2` instead, empirically confirming the endpoint split the code already
   encodes. The only thing left that a certificate unlocks is AEAT's application-level verdict
   on our document content.
+
+- **2026-10-03 — P8 part one: records AEAT accepts "with errors" now have a remedy.** This was
+  the most defensible thing left to build, because it was an incoherence in working code rather
+  than an absent feature — the submission sweep could produce a state the system could not then
+  act on. AEAT's own documentation made it harder than it should have been: the XSD documents
+  both `Subsanacion` and `RechazoPrevio` as "Clave del tipo de factura", a copy-paste error, so
+  the semantics had to come from the operations table in the validations document instead.
+  The case that is easy to get wrong, and now has a test of its own: a REJECTED CORRECTION takes
+  `RechazoPrevio=S`, not `X`. Such a record is simultaneously a SUBSANACION and not-held-by-AEAT,
+  so the obvious branch picks `X` — which would assert the ORIGINAL was never filed, when AEAT
+  is holding it.
+  Built by parameterising `recordInvoiceForTax` rather than writing a second builder, so the
+  ordinary and corrective paths cannot drift about timezone, huella input or chaining. Verified
+  the corrected document against AEAT's XSD, since `Subsanacion`/`RechazoPrevio` sit between
+  `NombreRazonEmisor` and `TipoFactura` in the sequence and only the schema can confirm that.
 
 ## Open decisions
 
