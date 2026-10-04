@@ -244,6 +244,17 @@ const prisma = {
     upsert: vi.fn(),
     deleteMany: vi.fn(),
   },
+  // Track 027: marketing leads (try.sunbnb.app). NO partner code reads or writes them — the
+  // delegate exists because the mock mirrors the real client and mock-contract.test.ts requires
+  // one per model.
+  lead: {
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+    deleteMany: vi.fn(),
+  },
   impersonationLog: {
     create: vi.fn(),
     findUnique: vi.fn(),
