@@ -30,6 +30,26 @@
  * single-issuer. Mixing would also be worse than useless: `4112` (certificate not
  * entitled to act for this obligado) rejects the WHOLE envío, so one unauthorised
  * partner would take down everyone batched with it.
+ *
+ * ## TWO authorisation gates, and neither one blocks a record (P7.2)
+ *
+ * Sending for a partner needs two separate things to be true, held in two
+ * different places:
+ *
+ *  1. **The partner has granted us representation** — `aeatSubmissionGrantedAt`,
+ *     captured at `/account/verifactu`. Ours to read, in our own database, so it
+ *     is checked BEFORE anything goes over the wire (`authorisedIssuerNifs`).
+ *  2. **AEAT has registered us as their colaborador social** — the Convenio.
+ *     Only AEAT knows this, and it reports it by refusing a submission with
+ *     `ERROR_NOT_ENTITLED`.
+ *
+ * There is deliberately no local "Convenio approved" setting. AEAT is the
+ * authority on its own register, and a flag an operator has to remember to flip
+ * is how `taxRegion` silently held every Spanish invoice out of scope.
+ *
+ * **Neither gate may ever mark a record `blocked`.** Both are states the world
+ * grows out of, so the records stay `pending` and go out untouched when it does
+ * — see `deferForAuthorisation` for the three ways that is easy to get wrong.
  */
 
 import prisma from '../../../index'
@@ -42,6 +62,7 @@ import { isAccepted, SoapFaultError, type RecordReply } from './soap'
 import { getAeatClient, type AeatClient } from './client'
 import { RECORD_PENDING, RECORD_SENT, RECORD_ERROR, RECORD_BLOCKED } from './record'
 import {
+  COLABORADOR_SOCIAL,
   platformIssuerJurisdiction,
   platformIssuerNifCandidates,
 } from './sistema-informatico'
@@ -52,6 +73,43 @@ import {
  * record blocks fewer good ones behind it.
  */
 export const SUBMISSION_BATCH_SIZE = 100
+
+/**
+ * AEAT's code for *"el titular del certificado debe ser Obligado Emision,
+ * Colaborador Social, Apoderado o Sucesor"*.
+ *
+ * It is the one rejection that says nothing about what we sent. Our own
+ * database can tell us whether a PARTNER has granted us representation; only
+ * AEAT can tell us whether the Convenio registering us as their colaborador
+ * social has actually been approved. So this code is how that second gate
+ * reports itself, and it is the reason there is no "Convenio approved" flag to
+ * maintain by hand: AEAT is the authority on its own register, and a flag
+ * someone has to remember to flip is the `taxRegion` mistake again.
+ */
+export const ERROR_NOT_ENTITLED = 4112
+
+/**
+ * How long to wait before trying an unauthorised issuer again.
+ *
+ * Hours, not minutes: the thing being waited on is an administrative approval
+ * at the tax agency, which does not complete between two cron ticks. Retrying
+ * on the ordinary backoff would only fill the log.
+ */
+export const AUTHORISATION_RETRY_MS = 6 * 60 * 60 * 1000
+
+/**
+ * Why an issuer's records were not sent, when the reason is an authorisation
+ * rather than a fault.
+ *
+ * Two gates, and the distinction is an OPERATIONAL one — it decides who has to
+ * do something next:
+ *   - `no-grant-on-file` — the partner has not signed. Chase the partner; the
+ *     mechanism is `/account/verifactu`.
+ *   - `aeat-not-entitled` — the partner HAS signed and AEAT refused us anyway,
+ *     which means the Convenio is not approved for them yet. Chase AEAT.
+ * Collapsing them into one boolean would point the operator at the wrong party.
+ */
+export type AuthorisationGap = 'no-grant-on-file' | 'aeat-not-entitled'
 
 /** Backoff schedule in minutes, by attempt number. Capped, then stays capped. */
 const BACKOFF_MINUTES = [1, 5, 15, 60, 240]
@@ -68,9 +126,10 @@ export interface SweepOptions {
   client?: AeatClient
   now?: Date
   /**
-   * Restrict to these issuer NIFs. P7.1 passes the platform's own: we are the
-   * *Obligado Emisión* on our commission invoices, so those need no Convenio and
-   * no partner signature, while a partner's records stay queued until P7a.
+   * Restrict to these issuer NIFs. Left unset the sweep covers every issuer with
+   * due records, which is what the cron does since P7.2; `submitPlatformRecords`
+   * passes our own, which is the narrow case that needs neither a Convenio nor a
+   * partner signature.
    *
    * A LIST rather than one value because the same entity appears under more than
    * one spelling — the platform `Settings` row stores `ESB22435705` while the
@@ -85,8 +144,14 @@ export interface SweepOptions {
 
 export interface IssuerSweepResult {
   issuerNif: string
-  /** True when this issuer was skipped for want of a submission grant. */
-  awaitingAuthorisation?: boolean
+  /**
+   * Set when the records could not be sent for want of an authorisation.
+   *
+   * NOT a failure: the records stay sendable and go out untouched once the
+   * missing mandate exists. The value says which mandate, and therefore who
+   * has to act.
+   */
+  awaitingAuthorisation?: AuthorisationGap
   submitted: number
   accepted: number
   rejected: number
@@ -155,7 +220,7 @@ export async function submitPendingRecords(options: SweepOptions = {}): Promise<
     accepted: 0,
     rejected: 0,
     haltedForChainOrder: false,
-    awaitingAuthorisation: true,
+    awaitingAuthorisation: 'no-grant-on-file',
   }))
   for (const issuerNif of issuers.slice(0, maxIssuers)) {
     results.push(await sweepOneIssuer(issuerNif, client, now, due))
@@ -252,9 +317,17 @@ async function sweepOneIssuer(
       nombreRazon: records[0]!.nombreRazonEmisor ?? '',
       nif: issuerNif,
     },
-    // No Representante: P7.1 only submits where WE are the obligado. When P7.2
-    // widens this to partners, the platform goes here — and P7a's grant must be
-    // checked before it does.
+    // Who is doing the sending (P7.2). Present only when the obligado is somebody
+    // else: we submit a partner's records as their colaborador social, and AEAT
+    // has to be told by whom. Omitted for our own commission invoices, where we
+    // ARE the obligado — a representative of oneself is not a thing, and AEAT
+    // validates the pair rather than ignoring a redundant one.
+    //
+    // This is the whole of what "widening the sweep to partners" means on the
+    // wire. The authorisation gate it depends on is `authorisedIssuerNifs`, which
+    // already ran above, so there is no window in which this can send for a
+    // partner who has not granted.
+    ...(isPlatformIssuer(issuerNif) ? {} : { representante: { ...COLABORADOR_SOCIAL } }),
   }
 
   const document = buildSubmissionXml(
@@ -267,9 +340,24 @@ async function sweepOneIssuer(
     reply = await client.submit(document)
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : String(cause)
-    // A SOAP Fault is a verdict on the whole envío, not a transport blip — `4112`
-    // (certificate not entitled to act for this obligado) arrives this way. It
-    // will not resolve by retrying, so the batch is blocked rather than requeued.
+
+    // `4112` first. It is a SOAP Fault like the rest, but it is the only one that
+    // is not a verdict on anything we sent — AEAT is saying we are not entitled
+    // to act for this obligado, typically because the Convenio has not been
+    // approved for them yet. Blocking here would be the exact trap P7a exists to
+    // avoid: the first partner to accept at `/account/verifactu` would pass our
+    // own gate, get refused by AEAT, and have their whole register go terminal.
+    if (cause instanceof SoapFaultError && isNotEntitledFault(cause)) {
+      await deferForAuthorisation(records, now, message)
+      result.error = message
+      // Deliberately not `haltedForChainOrder`: nothing was sent, so nothing is
+      // out of order. The dedicated flag carries the reason.
+      result.awaitingAuthorisation = 'aeat-not-entitled'
+      return result
+    }
+
+    // Any OTHER SOAP Fault is a verdict on the whole envío, not a transport blip,
+    // and will not resolve by retrying — so the batch is blocked, not requeued.
     const terminal = cause instanceof SoapFaultError
     await failBatch(records, now, message, terminal)
     result.error = message
@@ -327,6 +415,20 @@ async function sweepOneIssuer(
       continue
     }
 
+    // Defensive: `4112` is documented as an envío-level fault and should have
+    // been caught above. If it ever arrives per line it is still an authorisation
+    // gap, and blocking it is still the thing that must not happen.
+    if (line.codigoError === ERROR_NOT_ENTITLED) {
+      await deferForAuthorisation(
+        [record],
+        now,
+        `${ERROR_NOT_ENTITLED}: ${line.descripcionError ?? 'not entitled to act for this obligado'}`,
+      )
+      result.awaitingAuthorisation = 'aeat-not-entitled'
+      halted = true
+      continue
+    }
+
     // Rejected. A rejection is about the content, so retrying the same bytes
     // changes nothing — block it and let the health check surface it.
     await prisma.verifactuRecord.update({
@@ -345,6 +447,57 @@ async function sweepOneIssuer(
 
   result.haltedForChainOrder = halted
   return result
+}
+
+/**
+ * Is this fault AEAT refusing us the right to act for the obligado?
+ *
+ * Matched on the TEXT, which deserves an explanation. SOAP 1.1 `faultcode` is a
+ * qualified name — AEAT sends `env:Client` — so the numeric code lives in the
+ * `faultstring` and there is no structured field to read it from. The match is
+ * therefore anchored on word boundaries rather than a bare `includes`, so an
+ * invoice number or a timestamp that happens to contain the digits cannot be
+ * mistaken for it.
+ *
+ * Erring toward NOT matching is the safe direction: a missed `4112` blocks
+ * records that an operator then has to unblock, which is visible and
+ * recoverable. A false positive would silently defer a genuine rejection
+ * forever.
+ */
+function isNotEntitledFault(fault: SoapFaultError): boolean {
+  const code = new RegExp(`\\b${ERROR_NOT_ENTITLED}\\b`)
+  return code.test(fault.faultCode ?? '') || code.test(fault.message)
+}
+
+/**
+ * Park a batch until we are authorised, WITHOUT consuming its retry budget.
+ *
+ * Three deliberate choices, each of which would otherwise reintroduce the bug
+ * this function exists to fix:
+ *   - status stays `pending`, never `blocked` — blocked is terminal-until-fixed
+ *     and stops retrying, and these must go out untouched the moment the
+ *     Convenio lands.
+ *   - `attempts` is NOT incremented. Counting an authorisation gap toward
+ *     `MAX_SUBMISSION_ATTEMPTS` would exhaust the budget while an approval is
+ *     pending and block the records anyway, two days later, for a reason that no
+ *     longer applies.
+ *   - the error is still stored, because "pending with no explanation" is how an
+ *     operator concludes the sweep is simply behind.
+ */
+async function deferForAuthorisation(
+  records: { id: string }[],
+  now: Date,
+  message: string,
+): Promise<void> {
+  await prisma.verifactuRecord.updateMany({
+    where: { id: { in: records.map((r) => r.id) } },
+    data: {
+      status: RECORD_PENDING,
+      lastAttemptAt: now,
+      lastError: message.slice(0, 1000),
+      nextAttemptAt: new Date(now.getTime() + AUTHORISATION_RETRY_MS),
+    },
+  })
 }
 
 async function failBatch(
@@ -392,13 +545,18 @@ async function requeue(
 }
 
 /**
- * The P7.1 entry point: submit only OUR own records.
+ * Submit only OUR own records.
  *
- * Scoped deliberately. AEAT error `4112` accepts the certificate holder as
- * *Obligado Emisión*, and Sunbnb España SL is exactly that on its own commission
- * invoices — so this works on the certificate alone, with no Convenio and no
- * partner having signed anything. Partner records stay queued until P7a captures
- * their representation grant, which is the correct state and not a failure.
+ * No longer what the cron calls — since P7.2 that is `submitPendingRecords`,
+ * which covers every authorised issuer. This narrower entry point is kept
+ * because it is the one sweep that depends on NOTHING external: `4112` accepts
+ * the certificate holder as *Obligado Emisión*, and Sunbnb España SL is exactly
+ * that on its own commission invoices, so this works on the certificate alone
+ * with no Convenio and no partner signature.
+ *
+ * That makes it the right thing to run as the first live proof against
+ * preproducción, and the right thing to fall back to if the Convenio is ever
+ * withdrawn.
  */
 export async function submitPlatformRecords(
   options: Omit<SweepOptions, 'onlyIssuerNifIn'> = {},

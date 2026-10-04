@@ -405,3 +405,59 @@ describe('getPartnerGrantStatuses', () => {
     expect(await getPartnerGrantStatuses()).toEqual([])
   })
 })
+
+// ─── P7.2: records AEAT parked on its own authorisation gate ─────────────────
+
+describe('records parked awaiting AEAT authorisation (P7.2)', () => {
+  /** What the sweep leaves behind on a `4112`: pending, but already attempted. */
+  async function parked() {
+    const accountId = await partner({ aeatSubmissionGrantedAt: new Date() })
+    const inv = await invoiceFor(accountId)
+    await file(inv.id)
+    await prisma.verifactuRecord.updateMany({
+      where: { invoiceId: inv.id },
+      data: {
+        lastAttemptAt: new Date('2026-10-04T12:00:00Z'),
+        lastError: '4112 El titular del certificado debe ser Obligado Emision...',
+        nextAttemptAt: new Date('2026-10-04T18:00:00Z'),
+      },
+    })
+    return inv
+  }
+
+  it('counts them separately from a queue that is merely pending', async () => {
+    // The distinction the figure exists for. Both are `pending`; only one of
+    // them is waiting on something a human has to go and do.
+    await parked()
+    const health = await getVerifactuHealth()
+
+    expect(health.parkedAwaitingAuthorisation).toBe(1)
+    expect(health.recordsByStatus['pending']).toBe(1)
+  })
+
+  it('does not count a never-attempted pending record', async () => {
+    // A record the sweep has simply not reached yet is not parked, and calling
+    // it parked would send an operator chasing AEAT over nothing.
+    const accountId = await partner()
+    const inv = await invoiceFor(accountId)
+    await file(inv.id)
+
+    const health = await getVerifactuHealth()
+    expect(health.recordsByStatus['pending']).toBe(1)
+    expect(health.parkedAwaitingAuthorisation).toBe(0)
+  })
+
+  it('refuses to call the register complete while any are parked', async () => {
+    // Without this the banner reads "register complete" over partner records
+    // that nothing is going to send — the structurally-clean report this track
+    // has already had to fix twice.
+    await parked()
+    const health = await getVerifactuHealth()
+
+    expect(health.healthy).toBe(false)
+    const summary = describeVerifactuHealth(health)
+    expect(summary).toContain('4112')
+    // And it must say whose problem it is, because the partner has done their part.
+    expect(summary).toContain('Convenio')
+  })
+})

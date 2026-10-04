@@ -171,3 +171,23 @@ export function platformIssuerJurisdiction(issuerVatNumber: string | null | unde
     ? { country: 'ES', taxRegion: 'MA' }
     : { country: null, taxRegion: null }
 }
+
+/**
+ * Who we are when we **submit a partner's records** under colaboración social.
+ *
+ * This is the `Representante` in the `Cabecera`: the obligado is the partner,
+ * and AEAT needs to know which authorised third party is doing the sending.
+ * Omitted entirely when we are the obligado ourselves, because a representative
+ * of oneself is not a thing.
+ *
+ * Third role, third constant, same company — following the reasoning already
+ * given for `THIRD_PARTY_ISSUER`. The roles are genuinely distinct and rest on
+ * different provisions: producer (RD 1007/2023), third-party issuer (art. 5
+ * ROF), colaborador social (Convenio). A group restructuring could split them,
+ * and folding them into one constant now would make that a search-and-replace
+ * through code that reads as if it had only ever meant one thing.
+ */
+export const COLABORADOR_SOCIAL = {
+  nombreRazon: PRODUCER_NAME,
+  nif: PRODUCER_NIF,
+} as const

@@ -12,6 +12,7 @@ import {
 } from '@repo/data/tax/es-verifactu/certificate'
 import { findRecordsNeedingSubsanacion } from '@repo/data/tax/es-verifactu/subsanacion'
 import { resolveAeatMode, resolveAeatEnvironment } from '@repo/data/tax/es-verifactu/client'
+import { AUTHORISATION_RETRY_MS } from '@repo/data/tax/es-verifactu/submit'
 
 /**
  * Veri*factu operations (track 026 P9).
@@ -33,6 +34,8 @@ import { resolveAeatMode, resolveAeatEnvironment } from '@repo/data/tax/es-verif
  *    network fault while records quietly queue.
  *  - **Spanish issuers with no province set**, whose invoices are silently out of
  *    scope rather than filed.
+ *  - **Records parked on AEAT's own authorisation gate** (`4112`), which read as
+ *    plain `pending` everywhere else and so look like a sweep running late.
  */
 export const dynamic = 'force-dynamic'
 
@@ -120,6 +123,16 @@ export default async function VerifactuOpsPage() {
           <p className="text-xs text-gray-500 mt-3">
             Oldest unsent: {health.oldestUnsentAt.toISOString()}. A queue is normal — AEAT
             treats it as an incident, not a breach — but one that stops draining is not.
+          </p>
+        )}
+        {health.parkedAwaitingAuthorisation > 0 && (
+          <p className="text-xs text-amber-400 mt-2">
+            {health.parkedAwaitingAuthorisation} of those pending records are parked: AEAT
+            refused us with <code>4112</code>, so we are not registered as colaborador
+            social for that issuer yet. The partner has already granted — this one is on
+            us, not on them. Retried every{' '}
+            {Math.round(AUTHORISATION_RETRY_MS / 3_600_000)} h; nothing is lost and no
+            deploy is needed once the Convenio is approved.
           </p>
         )}
       </Section>

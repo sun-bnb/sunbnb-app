@@ -5,11 +5,19 @@ import {
   createTestPartnerAccount,
   resetCounter,
 } from '../../test/fixtures'
-import { recordInvoiceForTax, RECORD_BLOCKED, RECORD_ERROR, RECORD_SENT } from './record'
+import {
+  recordInvoiceForTax,
+  RECORD_BLOCKED,
+  RECORD_ERROR,
+  RECORD_PENDING,
+  RECORD_SENT,
+} from './record'
 import {
   submitPendingRecords,
   submitPlatformRecords,
   nextAttemptDelayMs,
+  AUTHORISATION_RETRY_MS,
+  ERROR_NOT_ENTITLED,
   MAX_SUBMISSION_ATTEMPTS,
 } from './submit'
 import {
@@ -217,15 +225,15 @@ describe('submitPendingRecords', () => {
   })
 
   it('BLOCKS the batch on a SOAP Fault, because retrying cannot fix it', async () => {
-    // 4112 arrives this way — the certificate is not entitled to act for this
-    // obligado. No amount of retrying changes that.
+    // A fault is a verdict on the whole envío rather than a transport blip. The
+    // one exception is 4112, which has its own suite below.
     await platformRecord()
     const client = createStubAeatClient({
-      failWith: new SoapFaultError('4112 El titular del certificado...', 'env:Client'),
+      failWith: new SoapFaultError('3000 Error en la estructura del mensaje', 'env:Client'),
     })
 
     const result = await submitPendingRecords({ client })
-    expect(result.issuers[0]!.error).toContain('4112')
+    expect(result.issuers[0]!.error).toContain('3000')
     const rec = await prisma.verifactuRecord.findFirstOrThrow({})
     expect(rec.status).toBe(RECORD_BLOCKED)
     expect(rec.nextAttemptAt).toBeNull()
@@ -427,7 +435,7 @@ describe('the submission grant', () => {
     const result = await submitPendingRecords({ client })
     expect(client.submissions).toHaveLength(0)
     expect(result.accepted).toBe(0)
-    expect(result.issuers[0]!.awaitingAuthorisation).toBe(true)
+    expect(result.issuers[0]!.awaitingAuthorisation).toBe('no-grant-on-file')
   })
 
   it('leaves their records PENDING, not blocked', async () => {
@@ -512,6 +520,194 @@ describe('the submission grant', () => {
     const result = await submitPendingRecords({ client })
     expect(result.accepted).toBe(1)
     const skipped = result.issuers.find((i) => i.issuerNif === 'B11111111')
-    expect(skipped?.awaitingAuthorisation).toBe(true)
+    expect(skipped?.awaitingAuthorisation).toBe('no-grant-on-file')
+  })
+})
+
+// ─── P7.2: the sweep beyond our own NIF ──────────────────────────────────────
+
+describe('widening the sweep to partners (P7.2)', () => {
+  /** A Spanish partner who HAS granted submission, with one pending record. */
+  async function grantedPartner(businessId = 'B29806043') {
+    const user = await createTestUser()
+    await createTestPartnerAccount(user.id, {
+      company: 'Alonso Beach SL',
+      country: 'ES',
+      taxRegion: 'MA',
+      businessId,
+      invoicingAuthorityGrantedAt: new Date('2026-10-01T10:00:00Z'),
+      aeatSubmissionGrantedAt: new Date('2026-10-01T10:00:00Z'),
+    })
+    seq += 1
+    const inv = await prisma.invoice.create({
+      data: {
+        accountId: user.id,
+        issuerType: 'PARTNER',
+        invoicedAt: new Date('2026-07-10T09:30:00Z'),
+        totalCharge: 100,
+        totalTax: 21,
+        totalAmount: 121,
+        issuerVatNumber: businessId,
+        issuerCompanyName: 'Alonso Beach SL',
+        invoiceNumber: `AB-F-2026-${String(seq).padStart(5, '0')}`,
+      },
+    })
+    await prisma.invoiceLine.create({
+      data: {
+        invoiceId: inv.id,
+        charge: 100,
+        tax: 21,
+        amount: 121,
+        vatRate: 21,
+        productCode: 'sunbed-rental',
+        description: 'Hamaca',
+      },
+    })
+    await prisma.$transaction((tx) => recordInvoiceForTax(tx, inv.id, SIF))
+    return inv
+  }
+
+  it('names US as Representante when the obligado is a partner', async () => {
+    // Colaboración social: the obligado is the partner, and AEAT has to be told
+    // who is submitting on their behalf. This is the whole of the wire change.
+    await grantedPartner()
+    const client = createStubAeatClient()
+    await submitPendingRecords({ client })
+
+    expect(client.submissions).toHaveLength(1)
+    expect(client.submissions[0]).toContain('<sf:Representante>')
+    expect(client.submissions[0]).toContain(`<sf:NIF>${PLATFORM_ES_ISSUER_NIF}</sf:NIF>`)
+    // The obligado is still the partner, not us.
+    expect(client.submissions[0]).toContain('<sf:ObligadoEmision>')
+    expect(client.submissions[0]).toContain('<sf:NIF>B29806043</sf:NIF>')
+  })
+
+  it('omits Representante on our OWN invoices', async () => {
+    // A representative of oneself is not a thing, and AEAT validates the pair
+    // rather than ignoring a redundant one.
+    await platformRecord()
+    const client = createStubAeatClient()
+    await submitPendingRecords({ client })
+
+    expect(client.submissions[0]).not.toContain('Representante')
+  })
+})
+
+describe('AEAT refusing us for want of a Convenio (error 4112)', () => {
+  /** AEAT's refusal, in the shape it actually arrives: a SOAP Fault. */
+  function notEntitled() {
+    return new SoapFaultError(
+      `${ERROR_NOT_ENTITLED} El titular del certificado debe ser Obligado Emision, ` +
+        'Colaborador Social, Apoderado o Sucesor',
+      'env:Client',
+    )
+  }
+
+  it('PARKS the records instead of blocking them', async () => {
+    // The trap this phase exists to close. Our own gate says the partner has
+    // granted; AEAT's register says the Convenio is not approved yet. Blocking
+    // here would make the first partner to accept at /account/verifactu need
+    // manual repair, which is precisely what P7a promised would never happen.
+    await platformRecord()
+    const now = new Date('2026-10-04T12:00:00Z')
+    const client = createStubAeatClient({ failWith: notEntitled() })
+
+    const result = await submitPendingRecords({ client, now })
+    expect(result.issuers[0]!.awaitingAuthorisation).toBe('aeat-not-entitled')
+    expect(result.issuers[0]!.error).toContain(String(ERROR_NOT_ENTITLED))
+
+    const rec = await prisma.verifactuRecord.findFirstOrThrow({})
+    expect(rec.status).toBe(RECORD_PENDING)
+    expect(rec.nextAttemptAt).toEqual(new Date(now.getTime() + AUTHORISATION_RETRY_MS))
+    // Stored, because "pending with no explanation" reads as a sweep running late.
+    expect(rec.lastError).toContain('Colaborador Social')
+  })
+
+  it('does NOT consume the retry budget, however long the Convenio takes', async () => {
+    // The subtle half. Parking the record is not enough on its own: if each
+    // refusal counted an attempt, a fortnight of waiting would exhaust
+    // MAX_SUBMISSION_ATTEMPTS and block the records anyway — two weeks later,
+    // for a reason that no longer applied.
+    await platformRecord()
+    const client = createStubAeatClient({ failWith: notEntitled() })
+
+    let now = new Date('2026-10-04T12:00:00Z')
+    for (let i = 0; i < MAX_SUBMISSION_ATTEMPTS + 3; i += 1) {
+      await submitPendingRecords({ client, now })
+      now = new Date(now.getTime() + AUTHORISATION_RETRY_MS + 1000)
+    }
+
+    const rec = await prisma.verifactuRecord.findFirstOrThrow({})
+    expect(rec.attempts).toBe(0)
+    expect(rec.status).toBe(RECORD_PENDING)
+  })
+
+  it('goes out on the next sweep once AEAT accepts us, with nothing done by hand', async () => {
+    // What makes it correct to ship P7.2 before the Convenio is approved: the
+    // code needs no change when it lands, and nobody has to unblock anything.
+    await platformRecord()
+    const t0 = new Date('2026-10-04T12:00:00Z')
+    await submitPendingRecords({ client: createStubAeatClient({ failWith: notEntitled() }), now: t0 })
+
+    const approved = createStubAeatClient()
+    const result = await submitPendingRecords({
+      client: approved,
+      now: new Date(t0.getTime() + AUTHORISATION_RETRY_MS + 1000),
+    })
+
+    expect(result.accepted).toBe(1)
+    const rec = await prisma.verifactuRecord.findFirstOrThrow({})
+    expect(rec.status).toBe(RECORD_SENT)
+  })
+
+  it('waits out the long backoff rather than hammering AEAT every 15 minutes', async () => {
+    await platformRecord()
+    const t0 = new Date('2026-10-04T12:00:00Z')
+    await submitPendingRecords({ client: createStubAeatClient({ failWith: notEntitled() }), now: t0 })
+
+    const tooSoon = createStubAeatClient()
+    await submitPendingRecords({ client: tooSoon, now: new Date(t0.getTime() + 60 * 60_000) })
+    expect(tooSoon.submissions).toHaveLength(0)
+  })
+
+  it('parks it even if 4112 ever arrives per line rather than as a fault', async () => {
+    // Documented as an envío-level fault, so this branch is insurance. It is
+    // cheap, and getting it wrong reintroduces the terminal-block bug by a side
+    // door that nobody would think to look at.
+    await platformRecord()
+    const now = new Date('2026-10-04T12:00:00Z')
+    const client = createStubAeatClient({
+      replyFor: () => ({
+        estado: 'Incorrecto' as const,
+        codigoError: ERROR_NOT_ENTITLED,
+        descripcionError: 'El titular del certificado debe ser Obligado Emision...',
+      }),
+    })
+
+    const result = await submitPendingRecords({ client, now })
+    expect(result.issuers[0]!.awaitingAuthorisation).toBe('aeat-not-entitled')
+
+    const rec = await prisma.verifactuRecord.findFirstOrThrow({})
+    expect(rec.status).toBe(RECORD_PENDING)
+    expect(rec.nextAttemptAt).toEqual(new Date(now.getTime() + AUTHORISATION_RETRY_MS))
+  })
+
+  it('still BLOCKS a genuine content rejection, so the fix did not widen', async () => {
+    // The counterweight: if every rejection were parked, a real defect would
+    // retry forever in silence — the /api/reconcile failure mode this sweep was
+    // built to improve on.
+    await platformRecord()
+    const client = createStubAeatClient({
+      replyFor: () => ({
+        estado: 'Incorrecto' as const,
+        codigoError: 1100,
+        descripcionError: 'Valor no permitido en el campo TipoImpositivo',
+      }),
+    })
+
+    await submitPendingRecords({ client, now: new Date('2026-10-04T12:00:00Z') })
+    const rec = await prisma.verifactuRecord.findFirstOrThrow({})
+    expect(rec.status).toBe(RECORD_BLOCKED)
+    expect(rec.nextAttemptAt).toBeNull()
   })
 })

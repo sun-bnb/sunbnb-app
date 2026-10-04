@@ -3,7 +3,7 @@ id: 026-verifactu
 title: Veri*factu — Spanish fiscal compliance for receipts and invoices
 status: active
 created: 2026-09-29
-updated: 2026-09-30
+updated: 2026-10-04
 worktree: null
 ---
 
@@ -40,19 +40,31 @@ implements them. No partner is in a foral territory today.
 
 ## Resume here
 
-**P7.1 is complete and the transport is ready to point at AEAT. The next action is not
-code — it is the two data fixes and the certificate.**
+**Every code phase but P6a is complete. The transport covers every authorised issuer and
+needs no further deploy to go live — the next actions are the certificate and the Convenio,
+both external.**
+
+### What P7.2 changed about this section
+
+The sweep is no longer scoped to our own NIF, and it is safe to run that way *before* the
+Convenio is approved: an AEAT refusal (`4112`) parks a partner's records and retries them
+rather than blocking them, so the first sweep after approval simply succeeds. Nothing below
+is gated on P7.2 any more.
 
 ### What is ready
 
-`submitPlatformRecords()` sends our own commission invoices, scoped by
-`platformIssuerNifCandidates()`. The cron is live in `apps/admin/vercel.json`
-(`*/15`), the client defaults to **stub** so nothing happens until a certificate is
+`submitPendingRecords()` — the `*/15` cron in `apps/admin/vercel.json` — sends our own
+commission invoices AND every partner who has granted submission, with us named as
+`Representante`. The client defaults to **stub** so nothing happens until a certificate is
 configured, and `AEAT_MODE=http` with no certificate **throws** rather than degrading.
-`AEAT_ENV` defaults to `pruebas`.
+`AEAT_ENV` defaults to `pruebas`. `submitPlatformRecords()` is retained as the
+nothing-external sweep: the right first proof against preproducción.
 
 ### To go live, in order
 
+0. **Each Spanish partner accepts at `/account/verifactu`** (P7a) — two grants, and the
+   submission one is what the sweep checks. Until then their records queue as
+   `no-grant-on-file`, which is correct rather than broken.
 1. **Set `taxRegion` on each Spanish partner** — now possible: the admin partner page has a
    Tax Identity card with a province dropdown (P7b). Until it is set, `resolveTaxRegime`
    returns `NONE` and that partner's invoices are out of scope rather than filed, which is why
@@ -78,11 +90,13 @@ configured, and `AEAT_MODE=http` with no certificate **throws** rather than degr
 **Check before and after every step with `npm run verifactu:health:{local,test,production}`.**
 Note `verifactu:health:production` cannot run until the migrations reach production.
 
-### Then P7a → P7.2
+### The Convenio, and why nothing waits on it
 
-P7a captures each partner's representation grant and must gate the sweep BEFORE P7.2 widens
-it beyond our own NIF — there must never be a window in which the sweep can send for an
-ungranted partner.
+Convenio 017 (colaboración social) is the remaining external dependency for PARTNER records
+only. Our own commission invoices need none of it. Nothing needs to be built or deployed when
+it is approved: the sweep already tries, AEAT already answers `4112`, and the records are
+parked rather than blocked precisely so that approval is self-acting. `verifactu:health` and
+admin `/verifactu` report the parked count while it is pending.
 
 **Open and worth knowing:** **D6** (how a reverse-charge commission invoice is declared) blocks
 our own invoices to the Finnish partner — they are refused rather than mis-declared, and show
@@ -243,9 +257,45 @@ missing `select` field through in P7.1a.
   missing mandate is holding up** — a row that says what it costs, rather than merely that
   something is absent. A partner showing `none` is called out specifically: we are already
   issuing invoices in their name with no mandate on file.
-- ☐ **P7.2 — Transmission, partners.** Mostly a filter widening once P7a's grant exists and the
-  Convenio 017 agreement is approved. Until both hold, a partner's records stay queued — which
-  is the correct state, not a failure.
+- ✅ **P7.2 — Transmission, partners** (`<this commit>`). The cron now calls
+  `submitPendingRecords` (every authorised issuer) rather than `submitPlatformRecords` (only
+  our own NIF), and `sweepOneIssuer` puts `COLABORADOR_SOCIAL` in the `Cabecera`'s
+  `Representante` whenever the obligado is somebody else. `buildSubmissionXml` already
+  supported the element, so that half really was the two-line change the plan predicted.
+  **The half the plan did NOT predict, and the reason this is not a filter flip.** Shipping
+  the widening alone would have sprung a trap on the first partner to accept at
+  `/account/verifactu`: `4112` arrives as a SOAP Fault, `sweepOneIssuer` treated every fault
+  as terminal, and terminal means `blocked` with `nextAttemptAt: null` and no retry. So a
+  partner who had done everything right would pass our own grant gate, be refused by AEAT for
+  want of a Convenio nobody had approved yet, and have their entire register go terminal
+  pending manual repair — the exact outcome P7a's "deliberately NOT blocked" paragraph exists
+  to prevent, reintroduced one layer down.
+  **So there are TWO authorisation gates, and the second one is AEAT's.** Our database knows
+  whether a partner has granted; only AEAT knows whether the Convenio registering us as their
+  colaborador social is approved, and `ERROR_NOT_ENTITLED` is how it says so.
+  `deferForAuthorisation` parks such a batch: status stays `pending`, a long
+  `AUTHORISATION_RETRY_MS` (6 h, because the thing being waited on is an administrative
+  approval, not a socket) and — the subtle part — **`attempts` is NOT incremented**. Counting
+  an authorisation gap toward `MAX_SUBMISSION_ATTEMPTS` would have blocked the records anyway,
+  a fortnight later, for a reason that no longer applied. A test runs the refusal
+  `MAX_SUBMISSION_ATTEMPTS + 3` times and asserts `attempts === 0`.
+  **There is deliberately no local "Convenio approved" switch.** AEAT is the authority on its
+  own register, so the code asks it and self-heals; a flag an operator has to remember to flip
+  is how `taxRegion` held every Spanish invoice out of scope while the report read clean.
+  Which also means **this phase needed no deploy to go live** — the first sweep after the
+  Convenio is approved simply succeeds.
+  **Wired its own visibility, per the plan's rule.** A parked record is `pending`, which is
+  indistinguishable from "the cron has not got to it yet" — and those call for opposite
+  responses (nothing, versus chase AEAT for a partner who has already signed). So
+  `getVerifactuHealth` gained `parkedAwaitingAuthorisation`, identified STRUCTURALLY rather
+  than by matching the error text (`deferForAuthorisation` is the only writer that leaves a
+  record `pending` with `lastAttemptAt` set), it counts against `healthy`, and the ops page
+  names it in amber. Health going red for the duration of an AEAT approval is the lesser evil
+  against a banner reading "register complete" over records nothing will send.
+  Kept `submitPlatformRecords` — it is the one sweep depending on nothing external, so it
+  stays the right first live proof against preproducción and the right fallback if the
+  Convenio is ever withdrawn. A test pins the cron to the WIDE sweep, because narrowing it
+  back would silently stop filing every partner while every other test still passed.
 - ✅ **P8 — Subsanación and anulación** (`9587a5d`, `<this commit>`).
   **Subsanación** closed a gap in shipped code: the sweep handled `AceptadoConErrores` by
   marking the record `sent` and storing the message, leaving AEAT holding a document we knew

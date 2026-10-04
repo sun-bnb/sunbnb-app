@@ -135,6 +135,21 @@ export interface VerifactuHealth {
    */
   platformInvoicesWithoutIssuerId: number
   /**
+   * Records AEAT has refused to accept from us for want of an authorisation
+   * (`4112`), parked and waiting rather than failed (track 026 P7.2).
+   *
+   * Worth its own figure because such a record is `pending`, which is otherwise
+   * indistinguishable from "the cron has not got to it yet". The two call for
+   * opposite responses: one is nothing, the other is that the Convenio is not
+   * approved for an issuer whose partner HAS signed, and only we can chase that.
+   *
+   * Identified structurally rather than by matching the error text:
+   * `deferForAuthorisation` is the only writer that leaves a record `pending`
+   * with `lastAttemptAt` set, because every other failure path moves it to
+   * `error` or `blocked`.
+   */
+  parkedAwaitingAuthorisation: number
+  /**
    * True when nothing needs attention: no unfiled, no blocked or errored record,
    * every chain intact, and no Spanish issuer left unclassified.
    */
@@ -245,6 +260,11 @@ export async function getVerifactuHealth(
     orderBy: { createdAt: 'asc' },
   })
 
+  // Pending AND already attempted — see `parkedAwaitingAuthorisation`.
+  const parkedAwaitingAuthorisation = await prisma.verifactuRecord.count({
+    where: { status: RECORD_PENDING, lastAttemptAt: { not: null } },
+  })
+
   // ── 3. Chain integrity ──
   //
   // `chainSeq` runs 1..N per issuer, so the count of records must equal the
@@ -270,12 +290,19 @@ export async function getVerifactuHealth(
     }
   })
 
+  // Parked records count AGAINST health, deliberately, even though the state is
+  // expected while an AEAT approval is pending. The alternative is a banner
+  // reading "register complete" over partner records that nothing will send —
+  // the same shape of structurally-clean report as the refunds figure this track
+  // already fixed and the "register complete over zero records" one P7.0 found.
+  // The description names the reason so it cannot be mistaken for a fault.
   const healthy =
     unfiled.length === 0 &&
     (recordsByStatus[RECORD_BLOCKED] ?? 0) === 0 &&
     (recordsByStatus[RECORD_ERROR] ?? 0) === 0 &&
     chains.every((c) => c.contiguous) &&
-    unresolvedEsIssuers.length === 0
+    unresolvedEsIssuers.length === 0 &&
+    parkedAwaitingAuthorisation === 0
 
   return {
     unfiled,
@@ -285,6 +312,7 @@ export async function getVerifactuHealth(
     chains,
     unresolvedEsIssuers,
     platformInvoicesWithoutIssuerId,
+    parkedAwaitingAuthorisation,
     healthy,
   }
 }
@@ -319,6 +347,13 @@ export function describeVerifactuHealth(health: VerifactuHealth): string {
   if (broken.length > 0) {
     problems.push(
       `chain gap for ${broken.map((c) => `${c.issuerNif} (${c.recordCount}/${c.lastChainSeq})`).join(', ')}`,
+    )
+  }
+  if (health.parkedAwaitingAuthorisation > 0) {
+    problems.push(
+      `${health.parkedAwaitingAuthorisation} record(s) parked because AEAT refused us as ` +
+        'colaborador social (4112) — the partner has granted, the Convenio has not been ' +
+        'approved for them yet; they are retried, not lost',
     )
   }
   if (health.unresolvedEsIssuers.length > 0) {

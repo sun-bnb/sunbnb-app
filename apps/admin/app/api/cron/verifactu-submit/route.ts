@@ -8,14 +8,18 @@
  * and admin has by far the smallest public attack surface of the three apps. The
  * ops surface (P9) belongs here too, so the dashboard and the sweep stay together.
  *
- * ## Scope: our OWN invoices only, for now
+ * ## Scope: every authorised issuer (P7.2)
  *
- * `submitPlatformRecords` restricts the sweep to records whose issuer is Sunbnb
- * España SL. AEAT error `4112` accepts the certificate holder as *Obligado
- * Emisión*, and we are exactly that on our own commission invoices — so this
- * works on the certificate alone, with no colaboración social agreement and no
- * partner having signed anything. A partner's records stay queued, which is the
- * correct state rather than a failure, until P7a captures their grant.
+ * `submitPendingRecords` covers our own commission invoices AND every partner
+ * who has granted us representation. It is safe to widen it before the Convenio
+ * 017 agreement is approved, which is the whole point of P7.2: the sweep checks
+ * our own grant record before sending, and if AEAT refuses us anyway with
+ * `4112` the records are parked and retried rather than blocked. So this route
+ * needs no change when the Convenio lands — the first sweep afterwards simply
+ * succeeds.
+ *
+ * It was deliberately `submitPlatformRecords` until P7.2, when all it could
+ * safely cover was the case needing no external approval at all.
  *
  * ## What a non-200 means
  *
@@ -29,7 +33,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { submitPlatformRecords } from '@repo/data/tax/es-verifactu/submit'
+import { submitPendingRecords } from '@repo/data/tax/es-verifactu/submit'
 import { AeatCertificateMissingError } from '@repo/data/tax/es-verifactu/client'
 
 export const dynamic = 'force-dynamic'
@@ -46,7 +50,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await submitPlatformRecords()
+    const result = await submitPendingRecords()
     return NextResponse.json(result)
   } catch (error) {
     // A missing certificate in explicit `http` mode is a configuration error, not
