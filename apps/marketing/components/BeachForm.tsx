@@ -1,8 +1,8 @@
 'use client'
 
 import { useLocale, useTranslations } from 'next-intl'
-import { useRouter } from 'next/navigation'
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, useTransition } from 'react'
+import { createMockup } from '@/app/actions'
 import { MAX_SUNBEDS, parseSunbedCount } from '@/lib/places.ts'
 
 interface Suggestion {
@@ -17,13 +17,13 @@ const DEBOUNCE_MS = 250
 
 /**
  * The two-field form that starts the funnel (track 027 D1): pick a beach from Places
- * autocomplete, type a sunbed count, go to /beach. The beach must be PICKED from the list —
- * free text has no coordinates to build a mockup on.
+ * autocomplete, type a sunbed count → `createMockup` stores an anonymous lead and redirects to
+ * the shareable /m/<token>. The beach must be PICKED from the list — free text has no coordinates
+ * to build a mockup on.
  */
 export default function BeachForm() {
   const t = useTranslations('Form')
   const locale = useLocale()
-  const router = useRouter()
   const ids = { beach: useId(), list: useId(), beds: useId(), error: useId() }
 
   // One Places session per form visit: every keystroke plus the final details lookup bill once.
@@ -37,7 +37,7 @@ export default function BeachForm() {
   const [searchState, setSearchState] = useState<SearchState>('idle')
   const [beds, setBeds] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
+  const [submitting, startSubmit] = useTransition()
   const requestSeq = useRef(0)
 
   useEffect(() => {
@@ -94,13 +94,22 @@ export default function BeachForm() {
     if (!selected) return setError(t('errorPickBeach'))
     const count = parseSunbedCount(beds)
     if (count === null) return setError(t('errorSunbeds', { max: MAX_SUNBEDS }))
-    setSubmitting(true)
-    const params = new URLSearchParams({ place: selected.placeId, beds: String(count), s: session })
-    // Carry ad attribution through to the mockup page (and later the lead record).
+    const data = new FormData()
+    data.set('place', selected.placeId)
+    data.set('beds', String(count))
+    data.set('session', session)
+    // Ad attribution from the landing URL is stored on the lead.
     for (const [k, v] of new URLSearchParams(window.location.search)) {
-      if (k.startsWith('utm_')) params.set(k, v)
+      if (k.startsWith('utm_')) data.set(k, v)
     }
-    router.push(`/beach?${params}`)
+    startSubmit(async () => {
+      // On success the action redirects; it only returns on error.
+      const res = await createMockup(data)
+      if (res?.status === 'error') {
+        const e = res.errors[0]
+        setError(e === 'sunbeds' ? t('errorSunbeds', { max: MAX_SUNBEDS }) : e === 'rateLimited' ? t('errorRateLimited') : t('errorPickBeach'))
+      }
+    })
   }
 
   const showList = open && !selected && query.trim().length >= 2

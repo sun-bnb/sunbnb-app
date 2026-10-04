@@ -21,7 +21,8 @@
     "errorSunbeds": "Anna kokonaisluku väliltä 1–{max}.",
     "errorSearch": "Haku ei ole juuri nyt käytettävissä. Yritä hetken päästä uudelleen.",
     "noResults": "Ei tuloksia. Kokeile rannan tai kaupungin nimeä.",
-    "searching": "Haetaan…"
+    "searching": "Haetaan…",
+    "errorRateLimited": "Liian monta yritystä. Odota muutama minuutti ja yritä uudelleen."
   },
   "Facts": {
     "f1Title": "Asiakkaat varaavat juuri oman tuolinsa",
@@ -46,5 +47,59 @@
     "rotateRight": "Käännä oikealle",
     "moveHint": "Käännä tuolit kohti merta ja siirrä niitä klikkaamalla karttaa.",
     "shown": "{count, plural, one {# tuoli} other {# tuolia}}, {rows, plural, one {# rivi} other {# riviä}}"
+  },
+  "Mockup": {
+    "move": "Siirrä",
+    "moveActive": "Napauta karttaa kohtaan, johon tuolit tulevat",
+    "tapHint": "Napauta tuolia nähdäksesi, mitä asiakkaasi varaisivat.",
+    "saved": "Asettelu tallennettu",
+    "shareHint": "Tällä sivulla on oma linkkinsä – tallenna tai jaa se palataksesi rannallesi."
+  },
+  "Booking": {
+    "title": "Asiakkaan varausdemo",
+    "empty": "Napauta mitä tahansa tuolia kartalla. Tämän asiakkaasi näkevät varatessaan.",
+    "bed": "Tuoli {label}",
+    "rowFront": "Eturivi",
+    "rowN": "Rivi {row}",
+    "date": "Tänään",
+    "priceLabel": "Hintasi päivältä (€)",
+    "book": "Varaa tämä tuoli",
+    "checkoutTitle": "Maksu",
+    "total": "Yhteensä",
+    "pay": "Maksa {price} €",
+    "demoNote": "Demo – mitään ei veloiteta eikä varata.",
+    "back": "Takaisin",
+    "passTitle": "Varaus vahvistettu",
+    "passBody": "Asiakas saa tämän passin puhelimeensa. Henkilökuntasi skannaa sen saapuessa.",
+    "another": "Varaa toinen tuoli",
+    "bookedCount": "{count, plural, one {# tuoli varattu} other {# tuolia varattu}} tässä demossa"
+  },
+  "Demo": {
+    "title": "Haluatko tämän rannallesi?",
+    "subtitle": "Jätä yhteystietosi, niin näytämme Sunbnb:n valmiiksi asetettuna kohteeseen {beach}.",
+    "name": "Nimesi",
+    "email": "Sähköposti",
+    "phone": "Puhelin tai WhatsApp",
+    "contactHint": "Sähköposti tai puhelin – kumpi sopii paremmin.",
+    "business": "Yrityksen nimi (valinnainen)",
+    "message": "Jotain, mitä meidän pitäisi tietää? (valinnainen)",
+    "consent": "Hyväksyn, että Sunbnb tallentaa nämä tiedot ottaakseen minuun yhteyttä demosta <link>tietosuojailmoituksen</link> mukaisesti.",
+    "submit": "Pyydä demo",
+    "sending": "Lähetetään…",
+    "thanks": "Kiitos! Otamme pian yhteyttä.",
+    "thanksBody": "Mallisi pysyy tallessa tämän sivun linkissä.",
+    "errName": "Anna nimesi.",
+    "errContact": "Anna sähköposti tai puhelinnumero.",
+    "errEmail": "Sähköpostiosoite ei näytä oikealta.",
+    "errPhone": "Puhelinnumero ei näytä oikealta.",
+    "errConsent": "Rastita ruutu, jotta voimme ottaa sinuun yhteyttä.",
+    "errTooLong": "Viesti on liian pitkä.",
+    "errRateLimited": "Liian monta pyyntöä. Yritä myöhemmin uudelleen.",
+    "errGeneric": "Jokin meni pieleen. Yritä uudelleen."
+  },
+  "Privacy": {
+    "title": "Tietosuojailmoitus",
+    "updated": "Versio {version}",
+    "link": "Tietosuoja"
   }
 }

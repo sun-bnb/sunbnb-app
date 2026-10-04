@@ -22,10 +22,15 @@ export async function SiteHeader() {
 }
 
 export async function SiteFooter() {
-  const t = await getTranslations('Footer')
+  const t = await getTranslations()
   return (
     <footer className="mt-auto border-t border-gray-100">
-      <div className="mx-auto max-w-6xl px-4 py-6 text-xs text-gray-400">{t('copyright', { year: new Date().getFullYear() })}</div>
+      <div className="mx-auto flex max-w-6xl justify-between px-4 py-6 text-xs text-gray-400">
+        <span>{t('Footer.copyright', { year: new Date().getFullYear() })}</span>
+        <Link href="/privacy" className="hover:text-gray-600">
+          {t('Privacy.link')}
+        </Link>
+      </div>
     </footer>
   )
 }

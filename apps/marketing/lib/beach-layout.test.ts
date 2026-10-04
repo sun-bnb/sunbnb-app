@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_LAYOUT, generateBeachLayout, type MockSunbed } from './beach-layout.ts'
+import { DEFAULT_LAYOUT, generateBeachLayout, nearestSunbed, type MockSunbed } from './beach-layout.ts'
 
 const anchor = { lat: 39.795, lng: 3.12 } // Platja de Muro
 
@@ -114,5 +114,24 @@ describe('generateBeachLayout', () => {
   it('rejects a non-positive or fractional count', () => {
     expect(() => generateBeachLayout({ anchor, seaBearingDeg: 0, sunbedCount: 0 })).toThrow()
     expect(() => generateBeachLayout({ anchor, seaBearingDeg: 0, sunbedCount: 2.5 })).toThrow()
+  })
+})
+
+describe('nearestSunbed — tap to pick a bed', () => {
+  const layout = generateBeachLayout({ anchor, seaBearingDeg: 180, sunbedCount: 40 })
+
+  it('picks the bed under the tap', () => {
+    const target = layout.sunbeds[17]!
+    expect(nearestSunbed(layout, { lat: target.lat, lng: target.lng })?.label).toBe(target.label)
+  })
+
+  it('picks the nearer of two neighbours (the umbrella gap between a pair)', () => {
+    const [a, b] = layout.sunbeds
+    const nearA = { lat: a!.lat + (b!.lat - a!.lat) * 0.3, lng: a!.lng + (b!.lng - a!.lng) * 0.3 }
+    expect(nearestSunbed(layout, nearA)?.label).toBe(a!.label)
+  })
+
+  it('returns null for a tap on open sand', () => {
+    expect(nearestSunbed(layout, { lat: anchor.lat + 0.001, lng: anchor.lng })).toBeNull()
   })
 })

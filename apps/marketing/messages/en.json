@@ -21,7 +21,8 @@
     "errorSunbeds": "Enter a whole number between 1 and {max}.",
     "errorSearch": "Search isn't available right now. Please try again in a moment.",
     "noResults": "No matches. Try the beach or town name.",
-    "searching": "Searching…"
+    "searching": "Searching…",
+    "errorRateLimited": "Too many attempts. Please wait a few minutes and try again."
   },
   "Facts": {
     "f1Title": "Guests book their exact sunbed",
@@ -46,5 +47,59 @@
     "rotateRight": "Rotate right",
     "moveHint": "Turn the sunbeds to face the sea, and click the map to move them.",
     "shown": "{count, plural, one {# sunbed} other {# sunbeds}} in {rows, plural, one {# row} other {# rows}}"
+  },
+  "Mockup": {
+    "move": "Move",
+    "moveActive": "Tap the map where the sunbeds should go",
+    "tapHint": "Tap a sunbed to see what your guests would book.",
+    "saved": "Layout saved",
+    "shareHint": "This page has its own link — bookmark or share it to come back to your beach."
+  },
+  "Booking": {
+    "title": "Guest booking demo",
+    "empty": "Tap any sunbed on the map. This is what your guests see when they book.",
+    "bed": "Sunbed {label}",
+    "rowFront": "Front row",
+    "rowN": "Row {row}",
+    "date": "Today",
+    "priceLabel": "Your price per day (€)",
+    "book": "Book this sunbed",
+    "checkoutTitle": "Checkout",
+    "total": "Total",
+    "pay": "Pay €{price}",
+    "demoNote": "Demo — no payment is taken and nothing is reserved.",
+    "back": "Back",
+    "passTitle": "Booking confirmed",
+    "passBody": "The guest gets this pass on their phone. Your staff scan it on arrival.",
+    "another": "Book another sunbed",
+    "bookedCount": "{count, plural, one {# sunbed} other {# sunbeds}} booked in this demo"
+  },
+  "Demo": {
+    "title": "Want this on your beach?",
+    "subtitle": "Leave your details and we'll show you Sunbnb set up for {beach}.",
+    "name": "Your name",
+    "email": "Email",
+    "phone": "Phone or WhatsApp",
+    "contactHint": "Email or phone — whichever you prefer.",
+    "business": "Business name (optional)",
+    "message": "Anything you'd like us to know? (optional)",
+    "consent": "I agree that Sunbnb stores these details to contact me about a demo, as described in the <link>privacy notice</link>.",
+    "submit": "Request a demo",
+    "sending": "Sending…",
+    "thanks": "Thanks! We'll be in touch soon.",
+    "thanksBody": "Your mockup stays saved at this page's link.",
+    "errName": "Please enter your name.",
+    "errContact": "Please give an email or a phone number.",
+    "errEmail": "That email doesn't look right.",
+    "errPhone": "That phone number doesn't look right.",
+    "errConsent": "Please tick the box so we're allowed to contact you.",
+    "errTooLong": "The message is too long.",
+    "errRateLimited": "Too many requests. Please try again later.",
+    "errGeneric": "Something went wrong. Please try again."
+  },
+  "Privacy": {
+    "title": "Privacy notice",
+    "updated": "Version {version}",
+    "link": "Privacy"
   }
 }

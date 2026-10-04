@@ -13,9 +13,20 @@ import { DEFAULT_LAYOUT, type BeachLayout } from '@/lib/beach-layout.ts'
  * Sizes are true to scale: each bed is drawn at its real footprint (metres → pixels at the
  * current zoom), so the mockup shows how the beach would actually fill.
  */
-export default function SunbedOverlay({ layout }: { layout: BeachLayout }) {
+export default function SunbedOverlay({
+  layout,
+  selected = null,
+  booked,
+}: {
+  layout: BeachLayout
+  /** Label of the bed the prospect tapped (demo booking). */
+  selected?: string | null
+  /** Labels booked in this demo session. */
+  booked?: ReadonlySet<string>
+}) {
   const map = useMap()
   const layoutRef = useRef(layout)
+  const marksRef = useRef({ selected, booked })
   const overlayRef = useRef<google.maps.OverlayView | null>(null)
 
   useEffect(() => {
@@ -91,7 +102,9 @@ export default function SunbedOverlay({ layout }: { layout: BeachLayout }) {
           ctx.translate(p.x, p.y)
           // After rotating by the sea bearing, canvas "up" points at the sea: feet up, head down.
           ctx.rotate(angle)
-          ctx.fillStyle = '#ffffff'
+          // Status colours per .claude/rules/ui.md: selected = blue, booked = green.
+          const { selected: sel, booked: bk } = marksRef.current
+          ctx.fillStyle = s.label === sel ? '#3b82f6' : bk?.has(s.label) ? '#22c55e' : '#ffffff'
           ctx.strokeStyle = 'rgba(17,24,39,0.85)'
           ctx.lineWidth = Math.max(0.75, bedW * 0.08)
           roundRect(ctx, -bedW / 2, -bedL / 2, bedW, bedL, Math.min(bedW, bedL) * 0.2)
@@ -119,6 +132,27 @@ export default function SunbedOverlay({ layout }: { layout: BeachLayout }) {
           ctx.fill()
           ctx.stroke()
         }
+
+        // Seen from above the umbrellas hide the beds, so selected / demo-booked beds get an
+        // outline drawn ON TOP of everything — otherwise a tapped bed shows no change at all.
+        const { selected: sel, booked: bk } = marksRef.current
+        if (sel || bk?.size) {
+          for (const s of sunbeds) {
+            const color = s.label === sel ? '#2563eb' : bk?.has(s.label) ? '#16a34a' : null
+            if (!color) continue
+            const p = toLocal(s.lat, s.lng)
+            if (!p) continue
+            ctx.save()
+            ctx.translate(p.x, p.y)
+            ctx.rotate(angle)
+            ctx.strokeStyle = color
+            ctx.lineWidth = Math.max(2, bedW * 0.25)
+            const pad = ctx.lineWidth
+            roundRect(ctx, -bedW / 2 - pad, -bedL / 2 - pad, bedW + 2 * pad, bedL + 2 * pad, Math.min(bedW, bedL) * 0.3)
+            ctx.stroke()
+            ctx.restore()
+          }
+        }
       }
     }
 
@@ -131,11 +165,12 @@ export default function SunbedOverlay({ layout }: { layout: BeachLayout }) {
     }
   }, [map])
 
-  // New layout (rotate / move / count change) → redraw without re-creating the overlay.
+  // New layout or marks (rotate / move / select / book) → redraw without re-creating the overlay.
   useEffect(() => {
     layoutRef.current = layout
+    marksRef.current = { selected, booked }
     overlayRef.current?.draw()
-  }, [layout])
+  }, [layout, selected, booked])
 
   return null
 }

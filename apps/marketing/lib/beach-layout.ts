@@ -167,3 +167,23 @@ export function generateBeachLayout(input: LayoutInput, options: Partial<LayoutO
 
   return { sunbeds, umbrellas, rows, pairsPerRow }
 }
+
+/**
+ * The sunbed a tap landed on: the nearest bed centre within `maxM` metres, or null for a tap on
+ * open sand. Used for the demo booking — the canvas overlay itself takes no pointer events.
+ */
+export function nearestSunbed(layout: BeachLayout, point: { lat: number; lng: number }, maxM = 1.5): MockSunbed | null {
+  const mPerDegLng = METRES_PER_DEG_LAT * Math.cos((point.lat * Math.PI) / 180)
+  let best: MockSunbed | null = null
+  let bestD2 = maxM * maxM
+  for (const s of layout.sunbeds) {
+    const dx = (s.lng - point.lng) * mPerDegLng
+    const dy = (s.lat - point.lat) * METRES_PER_DEG_LAT
+    const d2 = dx * dx + dy * dy
+    if (d2 <= bestD2) {
+      best = s
+      bestD2 = d2
+    }
+  }
+  return best
+}
