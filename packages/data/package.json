@@ -51,6 +51,9 @@
     "./payment-math": "./src/payment-math.ts",
     "./receipt": "./src/receipt.ts",
     "./receipt-model": "./src/receipt-model.ts",
+    "./invoice-fiscal": "./src/invoice-fiscal.ts",
+    "./commission-invoice": "./src/commission-invoice.ts",
+    "./commission-invoice-model": "./src/commission-invoice-model.ts",
     "./tax/es-verifactu/declaracion-responsable": "./src/tax/es-verifactu/declaracion-responsable.ts",
     "./tax/es-verifactu/grants": "./src/tax/es-verifactu/grants.ts",
     "./tax/es-verifactu/health": "./src/tax/es-verifactu/health.ts",
@@ -176,6 +179,15 @@
       ],
       "receipt-model": [
         "./src/receipt-model.ts"
+      ],
+      "invoice-fiscal": [
+        "./src/invoice-fiscal.ts"
+      ],
+      "commission-invoice": [
+        "./src/commission-invoice.ts"
+      ],
+      "commission-invoice-model": [
+        "./src/commission-invoice-model.ts"
       ],
       "tax/es-verifactu/declaracion-responsable": [
         "./src/tax/es-verifactu/declaracion-responsable.ts"

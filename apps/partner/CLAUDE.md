@@ -31,6 +31,8 @@ Google OAuth only. `app.tsx` checks session; redirects unauthenticated to `/api/
 | `/calendar` | Monthly reservation calendar — site selector, day detail panel | Auth |
 | `/account` | Partner account settings — personal info, company, billing (IBAN) | Auth |
 | `/account/staff` | Staff roster — per-account `Employee` CRUD (current-worker chip source) | Auth |
+| `/account/invoices` | Commission invoices Sunbnb issues to the partner — month picker, list (`issuerType: 'PLATFORM'`; the accounting page's `getInvoicesByMonth` deliberately shows only `PARTNER`) | Auth |
+| `/account/invoices/[id]` | One commission invoice as a printable `F1` document — both parties, reverse-charge declaration, AEAT QR + `VERI*FACTU` legend. Ownership enforced inside `buildCommissionInvoice`, which returns null for "not yours" and "no such invoice" alike | Auth |
 | `/security` | API token management — create, list, delete | Auth |
 | `/reservations/[id]` | Individual reservation detail | Auth |
 | `/info` | Marketing landing page with animated chapters | Public |

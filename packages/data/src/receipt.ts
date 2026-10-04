@@ -18,14 +18,11 @@
 
 import prisma from '../index'
 import { formatSeatId } from './seat-label'
-import { buildInvoiceQrUrl, QR_LABEL_ABOVE, QR_LEGEND_BELOW } from './tax/es-verifactu/qr'
-import { ES_ISSUER_TIME_ZONE, formatFechaExpedicion } from './tax/es-verifactu/huella'
-import { resolveTaxRegime } from './tax/regime'
+import { buildInvoiceFiscal } from './invoice-fiscal'
 import {
   extractVatCountryCode,
   formatIssuedAt,
   formatStayPeriod,
-  type ReceiptFiscal,
   type ReceiptKind,
   type ReceiptModel,
 } from './receipt-model'
@@ -72,6 +69,8 @@ type InvoiceRow = {
   id: string
   invoiceNumber: string | null
   invoicedAt: Date
+  /** Needed to resolve the ISSUER's jurisdiction — see `buildInvoiceFiscal`. */
+  issuerType: string
   issuerCompanyName: string | null
   issuerVatNumber: string | null
   issuerCompanyAddress: string | null
@@ -86,47 +85,6 @@ type InvoiceRow = {
     amount: number
   }[]
   account: { country: string | null; taxRegion: string | null } | null
-}
-
-/**
- * The QR and legend, or null when the issuer is not a Spanish Veri*factu filer.
- *
- * Returns null rather than throwing on a payload the spec would reject — the
- * receipt is the legal obligation and must still be issued. A Spanish invoice
- * that ends up here without a QR is the same defect as one without a record, and
- * is surfaced by the same alert (P9) rather than by refusing the guest a
- * document.
- */
-function buildFiscal(invoice: InvoiceRow): ReceiptFiscal | null {
-  const regime = resolveTaxRegime({
-    country: invoice.account?.country ?? null,
-    taxRegion: invoice.account?.taxRegion ?? null,
-  })
-  if (regime !== 'ES_VERIFACTU') return null
-
-  const qr = buildInvoiceQrUrl({
-    issuerNif: invoice.issuerVatNumber ?? '',
-    invoiceNumber: invoice.invoiceNumber ?? '',
-    fechaExpedicion: formatFechaExpedicion(invoice.invoicedAt, ES_ISSUER_TIME_ZONE),
-    totalAmount: invoice.totalAmount,
-  })
-  if (!qr.ok) {
-    console.error(
-      `[Verifactu] ${invoice.invoiceNumber ?? invoice.id} gets no QR: ${qr.reason}`,
-    )
-    return null
-  }
-
-  // Absolute when configured, because the emailed receipt is the copy a guest
-  // keeps and a relative src is silently blank there. The relative fallback
-  // keeps local development working without the env var.
-  const base = (process.env.CONSUMER_APP_URL ?? '').replace(/\/+$/, '')
-  return {
-    qrUrl: qr.url,
-    qrImageUrl: `${base}/api/receipts/${invoice.id}/qr.png`,
-    labelAbove: QR_LABEL_ABOVE,
-    legendBelow: QR_LEGEND_BELOW,
-  }
 }
 
 /** The PARTNER invoice, or null. Credit notes carry a crediting link and are
@@ -175,7 +133,7 @@ function toModel(
     subtotalVat: invoice.totalTax,
     subtotalAmount: invoice.totalAmount,
     grandTotal: invoice.totalAmount,
-    fiscal: buildFiscal(invoice),
+    fiscal: buildInvoiceFiscal(invoice),
   }
 }
 

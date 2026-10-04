@@ -40,7 +40,7 @@ implements them. No partner is in a foral territory today.
 
 ## Resume here
 
-**Every code phase but P6a is complete. The transport covers every authorised issuer and
+**Every code phase is complete. The transport covers every authorised issuer and
 needs no further deploy to go live — the next actions are the certificate and the Convenio,
 both external.**
 
@@ -321,12 +321,40 @@ missing `select` field through in P7.1a.
   **Known limit:** one SUBSANACION and one ANULACION per invoice, capped by
   `@@unique([invoiceId, recordType])`. Lifting it needs a partial unique index limited to
   `('ALTA')`, which Prisma cannot express in schema.
-- ☐ **P6a — Our OWN commission invoice has no rendered document.** Found while closing P6: a
-  PLATFORM invoice gets a record, but nothing anywhere renders it as an invoice a human can
-  read — the partner accounting page shows list rows and a CSV column, and there is no PDF or
-  printable page. So art. 20's QR + legend requirement has **no surface to attach to** for the
-  B2B commission invoice, which is why P6 did not cover it. A partner needs that document for
-  their own books, and the moment it is built it must carry the QR and the legend.
+- ✅ **P6a — Our OWN commission invoice, as a document** (`<this commit>`).
+  **Correction to this track's own earlier entry**, which said the partner accounting page
+  showed commission invoices as "list rows and a CSV column". It did not. `getInvoicesByMonth`
+  hard-filters `issuerType: 'PARTNER'`, and `getRevenueCsv` is reservation day statistics — so
+  a partner's only view of the commission we bill them was **one year-to-date aggregate on the
+  dashboard**. There was no list, no document, and no per-invoice access at all. That is an
+  ordinary invoicing failure, not a Veri*factu one: we invoice another business monthly and
+  gave it nothing to put in its books. Art. 20's QR is what RD 1007/2023 adds on top, and it
+  had nowhere to attach because the document did not exist.
+  **New model rather than a reuse of `ReceiptModel`**, for structural reasons: this is a
+  *factura completa* (F1) with TWO identified parties, where a receipt has one merchant and
+  `ReceiptModel`'s own header forbids it growing a platform section; the amounts mean something
+  different (commission billed TO the partner, which under the agent model sums with nothing);
+  and it can carry a reverse-charge declaration a consumer receipt never does. The *fiscal
+  furniture* is reused, not reimplemented — `ReceiptFiscal` and the formatters come from
+  `receipt-model`.
+  Surfaces at `/account/invoices` (month picker defaulting to the newest month that HAS
+  invoices, because a seasonal business opening on an empty current month reads as broken) and
+  `/account/invoices/[id]`, printable rather than a generated PDF — the browser's print-to-PDF
+  gives the accountant the file, and art. 20 asks for the QR on the document, not for a file
+  format. Account-level, not per-site: commission is billed to the `PartnerAccount`, and a
+  partner with two venues gets one invoice stream.
+  **The bug it uncovered, which is the same one phase 5 recorded in a different place.**
+  `receipt.ts` and the QR PNG route both resolved the Veri*factu regime from
+  `invoice.account.country` — correct for a consumer receipt, where the account IS the issuing
+  partner, and wrong for a commission invoice, where **`Invoice.accountId` is the RECIPIENT**.
+  Both directions were broken: our invoice to the Finnish partner resolved to `NONE` and got no
+  QR although Sunbnb España SL owes one, and our invoice to a Spanish partner got one by
+  accident that would have vanished the moment that partner turned out to be foral — a property
+  of the *customer* deciding the *issuer's* regime. `resolveInvoiceIssuerJurisdiction` exists
+  precisely for this and its doc comment names the trap; neither caller used it. Extracted
+  `buildInvoiceFiscal` (`invoice-fiscal.ts`) as the single builder for every document that
+  renders a QR, so the document and the filing can no longer disagree about whether an invoice
+  is Spanish. It never bit because nothing rendered a PLATFORM invoice until this phase.
 - ✅ **P9a — The declaración responsable, in the product** (`<this commit>`). Built from AEAT's
   published *Ejemplos de declaraciones responsables*, so the section lettering (1.a–1.l plus the
   2.a–2.c annex) and the §1.k compliance wording are theirs, not invented.

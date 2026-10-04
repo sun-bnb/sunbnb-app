@@ -203,6 +203,23 @@ single snapshot writer (records `carryOverAmount`/`carryOverCount` on `TillClose
 window and are **close-independent** — daily accumulation never changes when tills close.
 
 ## Other Exports
+- `src/invoice-fiscal.ts` — **the one** builder of the AEAT QR block for any invoice that
+  renders one (track 026 P6a). Resolves the regime through `resolveInvoiceIssuerJurisdiction`,
+  never off `invoice.account`: on a PLATFORM commission invoice `accountId` is the **recipient**,
+  so the old inline version asked the customer's jurisdiction about OUR document — no QR on our
+  invoice to the Finnish partner (art. 20 says there must be one), and a QR on a Spanish
+  partner's that would have vanished had they turned out to be foral. `receipt.ts` and the user
+  app's `qr.png` route both call it now, so a document and its filing cannot disagree about
+  whether an invoice is Spanish
+- `src/commission-invoice.ts` + `src/commission-invoice-model.ts` — OUR OWN commission invoice as
+  a readable document (track 026 P6a; model is PURE/client-safe, loader imports prisma). Before
+  this, a partner could see only a year-to-date aggregate — `getInvoicesByMonth` filters
+  `issuerType: 'PARTNER'` — so the B2B invoices we bill them monthly had no document at all.
+  Deliberately NOT `ReceiptModel`: two identified parties (a *factura completa* `F1`, not a
+  simplified receipt), amounts that sum with nothing under the agent model, and a possible
+  reverse-charge declaration; only the `ReceiptFiscal` furniture is shared. **Ownership is
+  scoped inside the loader**, not left to callers, and null means "not yours" and "no such
+  invoice" indistinguishably so a guessed id cannot confirm another partner's invoice exists
 - `src/reservation-emails.ts` — confirmation, reminder, cancellation emails via Resend
 - `src/settlement.ts` — monthly payout aggregation
 - `src/subscription.ts` — partner subscription tier management

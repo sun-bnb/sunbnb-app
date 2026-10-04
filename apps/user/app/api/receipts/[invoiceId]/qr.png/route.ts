@@ -22,6 +22,13 @@
  * document — and a guest reaching their receipt without a session is a
  * first-class case here (anonymous POS and dine-in tab flows). Invoice ids are
  * cuids, so the set is not enumerable. Rate-limited as the cost backstop.
+ *
+ * Phase 6a widened what that covers: a PLATFORM commission invoice now renders
+ * too, so the same reasoning has to hold for a partner's commission figure as
+ * for a guest's purchase. It does - the payload is still only what is on the
+ * face of the document, still reachable only with the exact cuid - but it is a
+ * B2B amount rather than a consumer one, so it is worth having said so rather
+ * than inheriting the earlier judgement silently.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -31,6 +38,7 @@ import { rateLimit } from '@repo/data/rate-limit'
 import { buildInvoiceQrUrl, QR_IMAGE_SPEC } from '@repo/data/tax/es-verifactu/qr'
 import { ES_ISSUER_TIME_ZONE, formatFechaExpedicion } from '@repo/data/tax/es-verifactu/huella'
 import { resolveTaxRegime } from '@repo/data/tax/regime'
+import { resolveInvoiceIssuerJurisdiction } from '@repo/data/tax/es-verifactu/record'
 
 /** Cuid or uuid, checked before the query so a junk id costs nothing. */
 const ID_PATTERN = /^[a-z0-9]{20,32}$|^[0-9a-f-]{36}$/i
@@ -55,6 +63,7 @@ export async function GET(
     select: {
       invoiceNumber: true,
       invoicedAt: true,
+      issuerType: true,
       issuerVatNumber: true,
       totalAmount: true,
       account: { select: { country: true, taxRegion: true } },
@@ -65,10 +74,15 @@ export async function GET(
   // A non-Spanish issuer has no QR to draw. 404 rather than a blank image: a
   // broken-image icon on a Finnish receipt would look like an outage, and the
   // presenters already omit the element entirely.
-  const regime = resolveTaxRegime({
-    country: invoice.account?.country ?? null,
-    taxRegion: invoice.account?.taxRegion ?? null,
-  })
+  //
+  // Resolved through `resolveInvoiceIssuerJurisdiction`, NOT off `account`. On a
+  // PLATFORM commission invoice `accountId` is the RECIPIENT partner, so reading
+  // the regime there asked the customer's jurisdiction about OUR document: it
+  // 404'd the QR for our invoice to the Finnish partner, which Sunbnb España SL
+  // owes under art. 20, and would have withdrawn it from a Spanish partner's the
+  // moment that partner turned out to be foral. Harmless until phase 6a gave the
+  // commission invoice a surface that asks for the image.
+  const regime = resolveTaxRegime(resolveInvoiceIssuerJurisdiction(invoice))
   if (regime !== 'ES_VERIFACTU') return new NextResponse('Not found', { status: 404 })
 
   const qr = buildInvoiceQrUrl({
