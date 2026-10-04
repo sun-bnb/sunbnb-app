@@ -79,11 +79,11 @@ export async function runTurn(
     modelCalls.push(result.timing)
 
     if (!result.toolCalls.length) {
-      appended.push({ role: 'assistant', content: result.content })
+      appended.push({ role: 'assistant', content: result.content, providerContent: result.providerContent })
       return { messages: appended, reply: result.content, toolEvents, lead: state, modelCalls, exhausted: false }
     }
 
-    appended.push({ role: 'assistant', content: result.content, toolCalls: result.toolCalls })
+    appended.push({ role: 'assistant', content: result.content, toolCalls: result.toolCalls, providerContent: result.providerContent })
     for (const call of result.toolCalls) {
       let args: Record<string, unknown> | null = null
       try {

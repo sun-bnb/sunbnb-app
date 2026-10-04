@@ -24,12 +24,27 @@ export interface ToolCall {
 
 export type ChatMessage =
   | { role: 'system' | 'user'; content: string }
-  | { role: 'assistant'; content: string; toolCalls?: ToolCall[] }
+  | {
+      role: 'assistant'
+      content: string
+      toolCalls?: ToolCall[]
+      /**
+       * The provider's own content blocks for this turn, echoed back verbatim on the next request.
+       * Claude needs this: its thinking blocks are bound to the conversation, and rebuilding a turn
+       * from text + tool calls alone would drop them ("preserved thinking"). Opaque to everything
+       * else.
+       */
+      providerContent?: unknown
+    }
   | { role: 'tool'; toolCallId: string; content: string }
 
 export interface ChatResult {
   content: string
   toolCalls: ToolCall[]
+  /** See ChatMessage['providerContent']. */
+  providerContent?: unknown
+  /** Provider stop reason when it matters to the caller (e.g. 'refusal', 'max_tokens'). */
+  stopReason?: string
   timing: {
     /** Request start → first content or tool-call token. */
     firstTokenMs: number | null

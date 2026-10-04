@@ -95,7 +95,9 @@ export const SCENARIOS: Scenario[] = [
     turns: ['Email me at maria at chiringuitosol dot'],
     checks: [
       { kind: 'lead_missing', field: 'email' },
-      { kind: 'not_mentions', pattern: /\S+@\S+\.\S+/, label: 'a guessed email address' },
+      // A guess is an address assembled from what they typed; a format example ("name@domain.com")
+      // is fine — Opus 5.5 used one and the first version of this check failed it.
+      { kind: 'not_mentions', pattern: /\S*@\S*chiringuitosol\S*|maria@/i, label: 'a guessed email address' },
       { kind: 'mentions', pattern: /email|correo|address|confirm/i, label: 'a request to confirm the email' },
     ],
   },

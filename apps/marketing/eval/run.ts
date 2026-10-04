@@ -1,13 +1,18 @@
 /**
  * Lead-agent eval runner (track 027, P0).
  *
- *   node eval/run.ts --models qwen3:14b,mistral-small3.2:24b,llama3.1:8b [--scenario pricing-en] [--repeat 2] [--reasoning none|low|medium|high]
+ *   node eval/run.ts --models qwen3:14b,claude-haiku-4-5,claude-opus-5-5 [--scenario pricing-en] [--repeat 2]
+ *     [--reasoning none|low|medium|high]   local models: thinking budget (default none)
+ *     [--effort low|medium|high]           Claude 5.x models: effort (default low — chat latency)
+ *
+ * claude-* models need ANTHROPIC_API_KEY (apps/marketing/.env.local).
  *
  * Defaults to the local Ollama OpenAI-compatible endpoint. Prints a per-model summary and writes
  * the full transcripts to eval/results/<timestamp>.json (gitignored) for reading failures.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
+import { createClaudeModel } from '../lib/agent/claude-model.ts'
 import { createOpenAICompatibleModel, type ChatMessage, type LeadAgentModel } from '../lib/agent/model.ts'
 import { runTurn, type LeadState } from '../lib/agent/run-turn.ts'
 import { buildSystemPrompt } from '../lib/agent/system-prompt.ts'
@@ -20,6 +25,7 @@ const { values } = parseArgs({
     scenario: { type: 'string' },
     repeat: { type: 'string', default: '1' },
     reasoning: { type: 'string', default: 'none' },
+    effort: { type: 'string' },
     'base-url': { type: 'string', default: process.env.LEAD_AGENT_BASE_URL ?? 'http://localhost:11434/v1' },
   },
 })
@@ -78,11 +84,14 @@ async function main() {
   const records: RunRecord[] = []
 
   for (const modelName of models) {
-    const model = createOpenAICompatibleModel({
-      baseUrl: values['base-url']!,
-      model: modelName,
-      reasoningEffort: values.reasoning as 'none' | 'low' | 'medium' | 'high',
-    })
+    // claude-* → the Anthropic API (live path); anything else → the local OpenAI-compatible server.
+    const model = modelName.startsWith('claude-')
+      ? createClaudeModel({ model: modelName, effort: (values.effort ?? 'low') as 'low' | 'medium' | 'high' })
+      : createOpenAICompatibleModel({
+          baseUrl: values['base-url']!,
+          model: modelName,
+          reasoningEffort: values.reasoning as 'none' | 'low' | 'medium' | 'high',
+        })
     console.log(`\n▶ ${modelName}`)
     for (const scenario of scenarios) {
       for (let attempt = 1; attempt <= repeat; attempt++) {
