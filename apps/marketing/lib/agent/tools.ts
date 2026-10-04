@@ -43,15 +43,15 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: 'request_demo',
     description:
-      'Ask the Sunbnb team to contact the prospect for a demo or call. Call it as soon as the prospect wants one and you have their email or phone, from this message or earlier. Include any contact details they just gave.',
+      'Ask the Sunbnb team to contact the prospect for a demo or call. Call it as soon as the prospect wants one and you have their email or phone, from this message or earlier. Include any contact details they just gave. Every other field is OPTIONAL: fill preferred_time and notes only from what they already said, and never ask for them before calling — the team gathers the rest on the call.',
     parameters: {
       type: 'object',
       properties: {
         name: { type: 'string', description: 'Contact person name, if given' },
         email: { type: 'string', description: 'Email address, exactly as given' },
         phone: { type: 'string', description: 'Phone or WhatsApp number, exactly as given' },
-        preferred_time: { type: 'string', description: 'When they would like to be contacted, in their words' },
-        notes: { type: 'string', description: 'Short summary of what they want to see or ask' },
+        preferred_time: { type: 'string', description: 'Optional. When they would like to be contacted, in their words, if they said' },
+        notes: { type: 'string', description: 'Optional. Short summary of what they want to see or ask, if they said' },
       },
       additionalProperties: false,
     },

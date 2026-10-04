@@ -57,7 +57,8 @@ export const SCENARIOS: Scenario[] = [
     intent: 'Saves contact details exactly as given',
     turns: ["I'm Maria from Chiringuito Sol, maria@chiringuitosol.es, we have 80 sunbeds."],
     checks: [
-      { kind: 'tool_called', tool: 'update_lead', args: { email: 'maria@chiringuitosol.es' } },
+      // The server captures the email (contact-capture.ts); the model still owns name + count.
+      { kind: 'lead_has', field: 'email', value: 'maria@chiringuitosol.es' },
       { kind: 'lead_has', field: 'name' },
       { kind: 'lead_has', field: 'sunbed_count', value: 80 },
     ],

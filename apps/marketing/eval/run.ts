@@ -53,7 +53,8 @@ async function runScenario(model: LeadAgentModel, scenario: Scenario): Promise<O
   for (const userMessage of scenario.turns) {
     history.push({ role: 'user', content: userMessage })
     transcript.userMessages.push(userMessage)
-    const turn = await runTurn(model, history, lead)
+    // Same setting as the live /api/chat route.
+    const turn = await runTurn(model, history, lead, { autoCapture: true })
     history.push(...turn.messages)
     lead = turn.lead
     transcript.replies.push(turn.reply)

@@ -66,7 +66,7 @@ export function renderFactSheet(): string {
     PAYMENTS,
     '',
     'LANGUAGES',
-    `The Sunbnb apps are available in ${PRODUCT_LANGUAGES.join(', ')}.`,
+    `The Sunbnb apps are available in ${PRODUCT_LANGUAGES.join(', ')}. No other languages are available yet.`,
     '',
     'ALWAYS REFER TO THE TEAM (never answer yourself)',
     ...ASK_THE_TEAM.map((q) => `- ${q}`),
