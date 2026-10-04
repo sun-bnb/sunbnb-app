@@ -181,14 +181,11 @@ pure layout generator (location TBD — see Q2)
   tests). Partner landing CTA (`apps/partner/lib/marketing-cta.ts` + `landing.tsx`,
   `Landing.seeYourBeach` × 3 locales, `NEXT_PUBLIC_MARKETING_URL` in turbo `globalEnv`) — built
   by partner-dev, verified in browser.
-- **USER OPS before anything is live:** (1) Google Cloud: add `https://try.sunbnb.app/*`,
-  `https://trytest.sunbnb.app/*` and `https://local.sunbnb.app:3004/*` to the HTTP-referrer
-  allow-list of the `NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY` key — today it fails with
-  `RefererNotAllowedMapError` (local verification ran with the server key injected into the dev
-  process only; the code has NO server-key fallback on purpose). (2) Vercel: new project for
-  `apps/marketing` (fra1), env `GOOGLE_MAPS_API_KEY` + `NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY`, domains
-  `try.sunbnb.app` (DNS resolves to Vercel) + `trytest.sunbnb.app` (did NOT resolve at time of
-  writing — check the GoDaddy record). (3) Partner test deployment: `NEXT_PUBLIC_MARKETING_URL=https://trytest.sunbnb.app`.
+- **Ops status (2026-10-04):** ✅ Maps client-key referrer allow-list (founder; verified locally
+  with the real client key — no auth errors, tiles + layout render). ✅ Vercel project
+  `sunbnb-app-marketing` (see Log). ✅ Partner `NEXT_PUBLIC_MARKETING_URL`: production →
+  `https://try.sunbnb.app`, preview → `https://trytest.sunbnb.app`. (4) `try`/`trytest` go live only when `apps/marketing` reaches the `production`/`test`
+  branches — i.e. the founder's normal `promote-to-test.sh` / `deploy-to-production.sh`.
 
 - **Next action:** finish P0. Load the `claude-api` skill, add a Claude implementation of
   `LeadAgentModel` (tool use + streaming), and run Haiku 4.5 through `npm run eval` —
@@ -230,6 +227,24 @@ pure layout generator (location TBD — see Q2)
 
 ## Log
 
+- **2026-10-04** — **Vercel project `sunbnb-app-marketing` created** (via API, admin project as
+  template): root `apps/marketing`, `turbo run build`, `npm install --prefix=../..`, Node 24,
+  `npx turbo-ignore`, production branch `production`, SSO on all but custom domains, functions
+  pinned to fra1 by `apps/marketing/vercel.json`. Env: Maps keys copied server-side from the user
+  project per target/branch; `NEXT_PUBLIC_PARTNER_URL` (prod / test branch). Domains:
+  `try.sunbnb.app` → production, `trytest.sunbnb.app` → `test` branch,
+  `sunbnb-app-marketing.vercel.app` → `main`. First `main` preview READY (SSO-protected).
+  Gotchas, each hit once:
+  - **API-created git deployments default to the PRODUCTION target regardless of branch**, and
+    `target: "preview"` is rejected. One was cancelled before building (only vercel.app aliases
+    were attached). Trigger builds by git push, or `vercel redeploy <preview-url>` (keeps target).
+  - **`turbo-ignore` skips a build when the app didn't change** — including the very first build
+    from an empty commit. Toggled off for the first redeploy, then back on.
+  - **`packages/data`'s postinstall runs `prisma generate`, which requires `POSTGRES_URL` to EXIST**
+    (`prisma.config.ts` → `env()`), even in an app with no database. Set to an explicit
+    placeholder (`…invalid.localhost…/marketing-has-no-db-until-p3`) rather than handing the
+    marketing app real DB credentials before it needs them. **P3 must replace it** with the real
+    per-branch URLs (test DB for `main`/`test`, prod DB for production), as admin has.
 - **2026-10-04** — **P1 + P2 built.** Findings worth keeping:
   - **Google's point for a beach is often NOT on the sand** (Platja de Muro: ~80 m inland in the
     dune forest) and Places says nothing about the sea's direction — a centred, south-facing
