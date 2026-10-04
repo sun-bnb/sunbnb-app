@@ -4,6 +4,7 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import sunbnbLogo from '@/app/sunbnb-logo.svg'
+import { marketingCtaUrl } from '@/lib/marketing-cta'
 import { PRICING_TIERS, PRICING_TIER_ORDER, FEATURED_TIER } from '@repo/data/pricing-tiers'
 
 interface BusinessEntity {
@@ -160,7 +161,7 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
         <p className="mt-5 text-lg text-gray-500 max-w-2xl mx-auto leading-relaxed">
           {t('heroDescription')}
         </p>
-        <div className="mt-8 flex items-center justify-center gap-3">
+        <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
           <button
             onClick={() => router.push('/sign-in')}
             className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors shadow-sm"
@@ -170,6 +171,12 @@ export default function LandingPage({ businessEntity }: { businessEntity: Busine
               <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
             </svg>
           </button>
+          <a
+            href={marketingCtaUrl(process.env.NEXT_PUBLIC_MARKETING_URL)}
+            className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            {t('seeYourBeach')}
+          </a>
         </div>
       </section>
 

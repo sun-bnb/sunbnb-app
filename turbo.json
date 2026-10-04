@@ -37,6 +37,7 @@
     "FF_RESTAURANTS",
     "PREF_*",
     "CONSUMER_APP_URL",
+    "NEXT_PUBLIC_MARKETING_URL",
     "HW_CLIENT_UA",
     "CRON_SECRET",
     "AEAT_MODE",
