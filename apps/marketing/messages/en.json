@@ -1,0 +1,50 @@
+{
+  "Meta": {
+    "title": "See your beach on Sunbnb",
+    "description": "Enter your beach and number of sunbeds and see them on the map, ready for guests to book online."
+  },
+  "Header": {
+    "signIn": "Partner sign in"
+  },
+  "Hero": {
+    "eyebrow": "For beach clubs, sunbed concessions and hotels",
+    "title": "See your beach on Sunbnb",
+    "subtitle": "Tell us where your beach is and how many sunbeds you have. We'll lay them out on the satellite map, so you can see what your guests would book."
+  },
+  "Form": {
+    "beachLabel": "Your beach",
+    "beachPlaceholder": "Search for your beach or beach club",
+    "sunbedsLabel": "Number of sunbeds",
+    "sunbedsPlaceholder": "e.g. 120",
+    "submit": "Show my beach",
+    "errorPickBeach": "Pick your beach from the list.",
+    "errorSunbeds": "Enter a whole number between 1 and {max}.",
+    "errorSearch": "Search isn't available right now. Please try again in a moment.",
+    "noResults": "No matches. Try the beach or town name.",
+    "searching": "Searching…"
+  },
+  "Facts": {
+    "f1Title": "Guests book their exact sunbed",
+    "f1": "They pick a sunbed on your map, pay online and get a QR pass your staff can scan.",
+    "f2Title": "Food and drinks from the sunbed",
+    "f2": "Guests scan a QR code at their sunbed to order and pay from their phone.",
+    "f3Title": "No hardware to buy",
+    "f3": "Runs in the browser on the phones, tablets and laptops you already have."
+  },
+  "Pricing": {
+    "line": "Free to start. {commission}% commission only on purchases made through Sunbnb."
+  },
+  "Footer": {
+    "copyright": "© {year} Sunbnb"
+  },
+  "Beach": {
+    "sunbeds": "{count, plural, one {# sunbed} other {# sunbeds}}",
+    "change": "Change beach or sunbed count",
+    "notFound": "We couldn't find that beach. Please search again.",
+    "mapUnavailable": "The map can't be shown right now.",
+    "rotateLeft": "Rotate left",
+    "rotateRight": "Rotate right",
+    "moveHint": "Turn the sunbeds to face the sea, and click the map to move them.",
+    "shown": "{count, plural, one {# sunbed} other {# sunbeds}} in {rows, plural, one {# row} other {# rows}}"
+  }
+}

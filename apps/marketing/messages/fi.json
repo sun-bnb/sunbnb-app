@@ -1,0 +1,50 @@
+{
+  "Meta": {
+    "title": "Katso rantasi Sunbnb:ssä",
+    "description": "Kerro rantasi ja aurinkotuoliesi määrä, ja näe ne kartalla valmiina asiakkaiden varattaviksi verkossa."
+  },
+  "Header": {
+    "signIn": "Kumppanin kirjautuminen"
+  },
+  "Hero": {
+    "eyebrow": "Beach clubeille, aurinkotuolien vuokraajille ja hotelleille",
+    "title": "Katso rantasi Sunbnb:ssä",
+    "subtitle": "Kerro missä rantasi on ja montako aurinkotuolia sinulla on. Asettelemme ne satelliittikartalle, jotta näet mitä asiakkaasi varaisivat."
+  },
+  "Form": {
+    "beachLabel": "Rantasi",
+    "beachPlaceholder": "Hae rantaa tai beach clubia",
+    "sunbedsLabel": "Aurinkotuolien määrä",
+    "sunbedsPlaceholder": "esim. 120",
+    "submit": "Näytä rantani",
+    "errorPickBeach": "Valitse rantasi listalta.",
+    "errorSunbeds": "Anna kokonaisluku väliltä 1–{max}.",
+    "errorSearch": "Haku ei ole juuri nyt käytettävissä. Yritä hetken päästä uudelleen.",
+    "noResults": "Ei tuloksia. Kokeile rannan tai kaupungin nimeä.",
+    "searching": "Haetaan…"
+  },
+  "Facts": {
+    "f1Title": "Asiakkaat varaavat juuri oman tuolinsa",
+    "f1": "He valitsevat tuolin kartaltasi, maksavat verkossa ja saavat QR-passin, jonka henkilökuntasi voi skannata.",
+    "f2Title": "Ruoat ja juomat suoraan tuoliin",
+    "f2": "Asiakkaat skannaavat tuolin QR-koodin ja tilaavat ja maksavat puhelimellaan.",
+    "f3Title": "Ei laitteita ostettavaksi",
+    "f3": "Toimii selaimessa puhelimilla, tableteilla ja kannettavilla, jotka sinulla jo on."
+  },
+  "Pricing": {
+    "line": "Aloita ilmaiseksi. {commission} %:n provisio vain Sunbnb:n kautta tehdyistä ostoista."
+  },
+  "Footer": {
+    "copyright": "© {year} Sunbnb"
+  },
+  "Beach": {
+    "sunbeds": "{count, plural, one {# aurinkotuoli} other {# aurinkotuolia}}",
+    "change": "Vaihda rantaa tai tuolien määrää",
+    "notFound": "Rantaa ei löytynyt. Hae uudelleen.",
+    "mapUnavailable": "Karttaa ei voi näyttää juuri nyt.",
+    "rotateLeft": "Käännä vasemmalle",
+    "rotateRight": "Käännä oikealle",
+    "moveHint": "Käännä tuolit kohti merta ja siirrä niitä klikkaamalla karttaa.",
+    "shown": "{count, plural, one {# tuoli} other {# tuolia}}, {rows, plural, one {# rivi} other {# riviä}}"
+  }
+}

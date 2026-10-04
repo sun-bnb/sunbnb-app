@@ -1,0 +1,51 @@
+/**
+ * GET /api/coastline?lat=…&lng=… → { frame: ShoreFrame | null }
+ *
+ * Nearest OpenStreetMap coastline to a beach, reduced to a waterline point + sea bearing
+ * (lib/coastline.ts). Called by the mockup map AFTER it renders: the public Overpass API answered
+ * in 0.8 s and in 12 s+ during testing, so it must never block the page — the map shows a
+ * default layout and snaps to the shore only if this answers.
+ *
+ * Only coordinates leave us (no lead data). Responses are cached per ~10 m cell for 30 days to
+ * stay within Overpass's fair-use policy at ad traffic.
+ */
+import type { NextRequest } from 'next/server'
+import { rateLimit } from '@repo/data/rate-limit'
+import { nearestShoreFrame, type GeoPoint } from '@/lib/coastline.ts'
+import { clientIp } from '@/lib/places.ts'
+
+const OVERPASS_URL = 'https://overpass-api.de/api/interpreter'
+/** Google's beach point can sit in the dunes behind the sand; beyond this there is no beach to snap to. */
+const SEARCH_RADIUS_M = 400
+const TIMEOUT_MS = 6000
+
+function coord(raw: string | null, max: number): number | null {
+  if (raw === null || !/^-?\d{1,3}(\.\d{1,10})?$/.test(raw)) return null
+  const n = Number(raw)
+  return Math.abs(n) <= max ? Math.round(n * 1e4) / 1e4 : null
+}
+
+export async function GET(request: NextRequest) {
+  const limit = rateLimit(`coastline:${clientIp(request.headers)}`, { maxAttempts: 30, windowMs: 60_000 })
+  if (!limit.allowed) return Response.json({ error: 'rate_limited' }, { status: 429 })
+
+  const lat = coord(request.nextUrl.searchParams.get('lat'), 90)
+  const lng = coord(request.nextUrl.searchParams.get('lng'), 180)
+  if (lat === null || lng === null) return Response.json({ error: 'invalid_coordinates' }, { status: 400 })
+
+  const query = `[out:json][timeout:5];way["natural"="coastline"](around:${SEARCH_RADIUS_M},${lat},${lng});out geom;`
+  try {
+    const res = await fetch(`${OVERPASS_URL}?data=${encodeURIComponent(query)}`, {
+      headers: { 'user-agent': 'Sunbnb-marketing/0.1 (info@sunbnb.app)' },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      next: { revalidate: 60 * 60 * 24 * 30 },
+    })
+    if (!res.ok) return Response.json({ frame: null })
+    const data = (await res.json()) as { elements?: { geometry?: { lat: number; lon: number }[] }[] }
+    const ways: GeoPoint[][] = (data.elements ?? []).map((w) => (w.geometry ?? []).map((g) => ({ lat: g.lat, lng: g.lon })))
+    return Response.json({ frame: nearestShoreFrame(ways, { lat, lng }) })
+  } catch {
+    // Timeout or Overpass down: the map keeps its default layout and manual controls.
+    return Response.json({ frame: null })
+  }
+}

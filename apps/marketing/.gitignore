@@ -1,2 +1,11 @@
 /node_modules
+/.next/
+/coverage
 /eval/results
+*.pem
+certificates
+.env*
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
