@@ -72,6 +72,8 @@
     "./tax/regime": "./src/tax/regime.ts",
     "./vat-id": "./src/vat-id.ts",
     "./pricing-tiers": "./src/pricing-tiers.ts",
+    "./lead-model": "./src/lead-model.ts",
+    "./leads": "./src/leads.ts",
     "./mollie-app-fee": "./src/mollie-app-fee.ts",
     "./viva": "./src/viva/index.ts",
     "./viva/refs": "./src/viva/refs.ts"
@@ -251,6 +253,12 @@
       ],
       "viva/refs": [
         "./src/viva/refs.ts"
+      ],
+      "lead-model": [
+        "./src/lead-model.ts"
+      ],
+      "leads": [
+        "./src/leads.ts"
       ]
     }
   },
@@ -258,7 +266,7 @@
     "lint": "eslint . --max-warnings 0",
     "generate:component": "turbo gen react-component",
     "postinstall": "npx prisma generate",
-    "migrate:local": "cp .env.local .env && npx prisma migrate dev && npx prisma generate && (npm run migrate:integration || echo '⚠ sunbnb_test not migrated — create the DB if you run integration tests')",
+    "migrate:local": "cp .env.local .env && npx prisma migrate dev && npx prisma generate && (npm run migrate:integration || echo '\u26a0 sunbnb_test not migrated \u2014 create the DB if you run integration tests')",
     "migrate:integration": "POSTGRES_URL=postgres://postgres:sunbnb@localhost:5432/sunbnb_test npx prisma migrate deploy",
     "migrate:test": "./scripts/with-db-url.sh POSTGRES_URL_TEST npx prisma migrate deploy && npx prisma generate",
     "migrate:production": "./scripts/with-db-url.sh POSTGRES_URL_PRODUCTION npx prisma migrate deploy && npx prisma generate",

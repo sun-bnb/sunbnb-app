@@ -50,6 +50,8 @@ export async function cleanDatabase() {
       -- across test files. Same for per-account flags, which key on a user id.
       "device",
       "account_feature_flag",
+      -- Marketing leads (track 027) are standalone: no FK reaches them.
+      "lead",
       -- The fiscal chains have NO foreign key to anything we truncate below --
       -- they are keyed on an issuer NIF and a partner id, not on a row we own --
       -- so nothing cascades to them and their sequences leak across test files,

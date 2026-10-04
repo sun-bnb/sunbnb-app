@@ -1917,3 +1917,54 @@ model spatial_ref_sys {
   srtext    String? @db.VarChar(2048)
   proj4text String? @db.VarChar(2048)
 }
+
+/// A marketing lead from try.sunbnb.app (track 027).
+///
+/// Created ANONYMOUS when a prospect generates a beach mockup — only the beach,
+/// the sunbed count and ad attribution, no personal data. Contact fields and
+/// consent are written only when they request a demo (`requestLeadDemo`).
+///
+/// `token` is the public id in the shareable mockup link (/m/<token>), so the
+/// mockup page must never render the contact fields: `getLeadMockup` selects
+/// the beach/layout columns only.
+///
+/// Retention (`purgeExpiredLeads`, daily cron): rows with no contact are deleted
+/// 90 days after `lastActivityAt`; rows with contact 24 months after it.
+model Lead {
+  id               String    @id @default(cuid())
+  token            String    @unique
+  status           String    @default("mockup") // mockup | demo_requested | contacted | converted | closed
+  placeId          String    @map("place_id")
+  beachName        String    @map("beach_name")
+  beachAddress     String    @map("beach_address")
+  lat              Float
+  lng              Float
+  sunbedCount      Int       @map("sunbed_count")
+  /// Layout as the prospect last left it; null = never adjusted or shore-snapped.
+  layoutAnchorLat  Float?    @map("layout_anchor_lat")
+  layoutAnchorLng  Float?    @map("layout_anchor_lng")
+  layoutSeaBearing Int?      @map("layout_sea_bearing")
+  layoutPlacement  String?   @map("layout_placement") // center | waterline
+  locale           String    @default("en")
+  utmSource        String?   @map("utm_source")
+  utmMedium        String?   @map("utm_medium")
+  utmCampaign      String?   @map("utm_campaign")
+  utmTerm          String?   @map("utm_term")
+  utmContent       String?   @map("utm_content")
+  contactName      String?   @map("contact_name")
+  email            String?
+  phone            String?
+  businessName     String?   @map("business_name")
+  message          String?
+  /// When the prospect ticked the privacy consent, and which notice version they saw.
+  consentAt        DateTime? @map("consent_at")
+  consentVersion   String?   @map("consent_version")
+  demoRequestedAt  DateTime? @map("demo_requested_at")
+  lastActivityAt   DateTime  @default(now()) @map("last_activity_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, createdAt])
+  @@index([lastActivityAt])
+  @@map("lead")
+}
