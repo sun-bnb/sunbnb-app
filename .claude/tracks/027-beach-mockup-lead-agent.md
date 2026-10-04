@@ -200,13 +200,12 @@ pure layout generator (location TBD — see Q2)
   `https://try.sunbnb.app`, preview → `https://trytest.sunbnb.app`. (4) `try`/`trytest` go live only when `apps/marketing` reaches the `production`/`test`
   branches — i.e. the founder's normal `promote-to-test.sh` / `deploy-to-production.sh`.
 
-- **Next action:** USER OPS to take the chat live — (1) create a FRESH Anthropic key (the one
-  pasted in the 2026-10-04 session must be rotated) and set `ANTHROPIC_API_KEY` on the
-  `sunbnb-app-marketing` Vercel project (production + preview); (2) set a monthly spend limit in
-  the Anthropic Console; (3) review `/privacy` (now incl. the chat section) + all new EN/ES/FI copy.
-  Then build P0b (local background jobs on qwen3:14b: lead summary/score, LLM-graded transcripts)
-  or P6 (admin leads list). Migration `20261004191649_add_lead_chat` must reach the TEST DB
-  (`npm run migrate:test`) before the P5 commits are pushed.
+- **Next action:** the chat is configured on Vercel (`ANTHROPIC_API_KEY` set 2026-10-04, sensitive,
+  production + preview). Founder decision: keep the existing key, **no rotation and no Console
+  spend limit** — the only bounds are the in-code abuse limits (per-IP, per-lead, per-message).
+  It goes live with the founder's promote/deploy. Remaining before production: founder review of
+  `/privacy` + new EN/ES/FI copy. Then P0b (local background jobs on qwen3:14b) or P6 (admin
+  leads list).
 - **State 2026-10-04 (end of session): P1 + P2 built, NOT committed.** What exists:
   `apps/marketing` Next 14 app (port 3004, `npm run dev` = HTTPS `server.cjs`; certs + `.env.local`
   copied from the user app, both gitignored) — landing page `/` with `BeachForm` (Places
