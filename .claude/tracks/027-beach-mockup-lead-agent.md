@@ -1,7 +1,7 @@
 ---
 id: 027-beach-mockup-lead-agent
 title: Beach mockup lead agent — marketing landing page that builds a prospect's beach
-status: proposed
+status: active
 created: 2026-10-04
 updated: 2026-10-04
 worktree: null
@@ -16,8 +16,9 @@ out on the real satellite image of their beach, clickable, with a demo booking f
 AI agent beside it answers questions and moves them toward a demo call or signup.
 
 End state: a separate `apps/marketing` app, form-first funnel, deterministic mockup generator,
-a self-hosted open-weights model carrying the conversation, and leads landing in the DB with a
-summary the founder can act on.
+an API model (Claude) carrying the live conversation, a local open-weights model doing the
+background work nobody waits on (lead summaries, transcript grading, objection analysis), and
+leads landing in the DB with a summary the founder can act on.
 
 ## Decisions (founder, 2026-10-04)
 
@@ -26,10 +27,35 @@ summary the founder can act on.
   at. Ad traffic bounces off an empty chat box; it does not bounce off its own beach.
 - **D2 — Separate app: `apps/marketing`.** Own SEO, analytics, ad-pixel and deploy surface;
   the consumer booking app is untouched by marketing experiments. Port **3004**.
-- **D3 — Local / self-hosted model, for privacy and for technical experience.** Lead
-  conversations (personal + commercial data of prospects) do not go to a third-party LLM
-  provider. Running inference ourselves is also an explicit learning goal, so the track is
-  allowed to spend effort there that a pure cost analysis would not justify.
+- **D3 — Hybrid by latency: API for the live conversation, local for background work**
+  (founder, 2026-10-04 — REVISED the same day; see Log). The first reading of "local for
+  privacy and experience" put the whole conversation on a local model. P0 data said otherwise,
+  and the founder confirmed the original intent was the split:
+  - **Live conversation → API** (Claude Haiku 4.5 default). A prospect waits on every reply,
+    and reply quality is what converts. On the M1 Max with ONE user, qwen3:14b reached first
+    token in 0.3 s but full replies took 10–28 s at p90; a production GPU box under concurrent
+    ad traffic only gets worse. Cost is ~1–2 cents per conversation with no always-on GPU.
+  - **Background work → local open-weights model.** Lead summary + score at session end,
+    LLM-graded eval of transcripts (tone, accuracy, pushiness — what regex scorers can't see),
+    periodic objection/question analysis feeding the fact sheet and landing copy, follow-up
+    email drafts for founder review. None of it is latency-critical, so it runs as batch jobs
+    and needs no always-on inference host.
+  - **Privacy, restated honestly:** the conversation now goes to Anthropic as a processor
+    under its commercial API terms (no training on API data) — needs the DPA and a line in the
+    privacy notice. Contact details reach OUR DB only through validated tools. Transcript
+    ANALYSIS stays in-house on the local model. The hands-on-with-local-models goal is still
+    met, on work where a slow or imperfect answer costs nothing.
+
+- **D4 — The agent does NOT live on the partner landing page** (founder, 2026-10-04). The
+  logged-out root of `partner.sunbnb.app` (`apps/partner/app/landing.tsx`, rendered from
+  `app.tsx` when unauthenticated) is the front door of the operators' working app. Hosting
+  the agent there would put LLM streaming, the Maps mockup bundle, ad pixels and a consent
+  banner into the portal operators run their beaches on; mix cold ad prospects with existing
+  partners logging in; and couple weekly funnel experiments to partner-app releases. Instead
+  the partner landing page gets ONE CTA ("See your beach on Sunbnb →") into the marketing
+  form, tagged `utm_source=partner-landing` (P1). Later, once the agent proves it converts,
+  consider making `apps/marketing` the single public sales site and reducing the partner
+  root to sign-in — two public partner pages duplicate pricing/copy and compete in search.
 
 ## The premise that shapes every other decision
 
@@ -42,12 +68,12 @@ wrong, invents geography — and a picture is not clickable.
 Consequences:
 
 - **The funnel must work with the model DOWN.** Form → mockup → "book a demo" CTA is the
-  conversion path; the agent augments it. A dead inference box costs us conversation, never
-  the lead. (Same fail-safe doctrine as [[track:023]]: fall back to the plain path, never to
+  conversion path; the agent augments it. An API outage costs us conversation, never the
+  lead. (Same fail-safe doctrine as [[track:023]]: fall back to the plain path, never to
   an error.)
 - **The model's job is narrow**: answer product questions from a fact sheet, handle
-  objections, collect contact details, call a handful of tools, write a lead summary. That is
-  well within an 8–24B open-weights model — which is what makes D3 realistic.
+  objections, collect contact details, call a handful of tools. Narrow enough that the
+  cheapest API tier should carry it — the eval harness decides, not intuition.
 - **The mockup can seed a real site.** Layout output is geo-placed (lat/lng + rotation), the
   same shape `InventoryItem` stores (`locationLat`/`locationLng`/`rotation`). "Claim this
   beach" → partner onboarding with the inventory pre-placed is the long-term payoff (P7).
@@ -59,11 +85,17 @@ apps/marketing (Vercel, fra1)
   /                  landing + form (Places autocomplete, sunbed count)
   /m/[token]         the mockup: map + demo booking + agent panel (shareable link)
   /api/chat          streams agent turns; holds tool implementations
-        │  OpenAI-compatible HTTP, bearer secret, EU host
+        │  LIVE (latency-critical)
         ▼
-inference host (self-hosted)
-  dev:  Ollama on the M1 Max (64 GB) — localhost
-  prod: llama.cpp server / vLLM on an EU GPU box (e.g. Hetzner GEX44, RTX 4000 Ada 20 GB)
+  Claude API (Haiku 4.5 default)
+
+background jobs (latency-insensitive, batch)
+  lead summary + score · LLM-graded eval · objection analysis · follow-up drafts
+        │  OpenAI-compatible HTTP
+        ▼
+  local open-weights model
+    dev:  Ollama on the M1 Max (64 GB)
+    prod: batch host TBD (Q3) — no always-on GPU required
 
 packages/data
   Lead model (additive migration) — contact, placeId, coords, sunbedCount,
@@ -72,27 +104,34 @@ pure layout generator (location TBD — see Q2)
   (anchor lat/lng, bearing, count, options) → [{ lat, lng, rotation, pairId }]
 ```
 
-- **Provider-agnostic seam**: `LeadAgentModel` interface over an OpenAI-compatible chat
-  endpoint. Ollama, llama.cpp and vLLM all speak it, so dev→prod is a base-URL change and an
-  API fallback (Q1) is a config change, not a rewrite.
-- **Tool calling** is the capability that matters most for model choice: `getMockup`,
-  `updateLead`, `requestDemo`. Validate every tool argument server-side; the model never
-  writes to the DB directly.
+- **Provider-agnostic seam**: `LeadAgentModel` (`apps/marketing/lib/agent/model.ts`). The
+  OpenAI-compatible implementation serves every local runtime (Ollama, llama.cpp, vLLM); the
+  live path adds a Claude implementation behind the same interface, so the eval harness runs
+  either unchanged.
+- **Tools**: `update_lead`, `adjust_mockup`, `request_demo` (`lib/agent/tools.ts`). The model
+  PROPOSES, `validateToolCall` decides; the model never writes to the DB. Contact details must
+  be **grounded** — found in what the prospect actually typed — because a model will complete
+  "maria at chiringuitosol dot" into a perfectly valid, invented address (seen in P0).
 - **Grounding**: prices, plans, payment providers, countries and features come from a
   versioned fact sheet in the system prompt. The agent must refuse rather than invent — a
   made-up price to a prospect is the worst failure this feature can have.
 
 ## Roadmap
 
-- ☐ **P0 — Local inference spike (the experience goal, front-loaded).** Ollama on the M1 Max.
-  Shortlist 3 models with solid tool calling and EN/ES/FI (candidates: Qwen3 8B/14B,
-  Mistral Small 3.x 24B, Llama 3.1 8B). Build a small **eval harness** (~20 scripted lead
-  conversations: pricing questions, objections, off-topic, prompt-injection, ES/FI) scoring
-  tool-call validity, fact adherence and latency (time-to-first-token, tokens/s). Output: a
-  model pick + the harness kept in-repo as the regression gate for prompt/model changes.
+- ▶ **P0 — Eval harness + model trial.** Harness DONE (`apps/marketing/eval/`, 20 scenarios,
+  41 unit tests); local trial done for qwen3:14b (60/60), three-way comparison with
+  mistral-small3.2:24b and llama3.1:8b running. **Remaining:** (a) Claude adapter behind
+  `LeadAgentModel` and run Haiku 4.5 through the same suite — the live-path pick; (b) pick the
+  local model for background work from the three-way results; (c) explain qwen3's 10–28 s
+  slow replies (suspected hidden/trailing tokens to the 400-token cap — measure
+  `completion_tokens`).
+- ☐ **P0b — Local background jobs.** Lead summary + score from a transcript; LLM-as-judge
+  grader added to the eval harness (alongside the regex scorers); a periodic objection
+  analysis over stored transcripts. All on the local model via the OpenAI-compatible client.
 - ☐ **P1 — `apps/marketing` scaffold + form.** Next 14 App Router, Tailwind (`/ui` priming;
   own `accent` token), next-intl EN/ES/FI, Places autocomplete via a server proxy (reuse the
-  user app's pattern), sunbed-count input. No AI, no DB yet.
+  user app's pattern), sunbed-count input. No AI, no DB yet. Plus the D4 CTA on the partner
+  landing page (`apps/partner/app/landing.tsx`) linking into the form with UTM tags.
 - ☐ **P2 — Layout generator.** Pure, unit-tested: anchor + bearing + count → geo-placed
   pairs in rows parallel to the shore, walkways every N pairs, exact count, deterministic.
   Bearing v1 = heuristic + **user rotate/drag on the map** (interactive anyway); v2 = derive
@@ -103,10 +142,10 @@ pure layout generator (location TBD — see Q2)
   see") — never writes real reservations. Additive `Lead` migration in `packages/data`
   (expand-only; `migrate:local` → `migrate:test` before pushing `main`). Consent + privacy
   notice on the form; retention period decided (Q4). Rate limit + bot check on the form.
-- ☐ **P4 — Production inference host.** EU GPU box running the P0 pick behind
-  llama.cpp-server or vLLM; TLS, bearer auth from Vercel, request/latency logging without
-  transcript content, health endpoint, restart-on-failure. Load-test against expected ad
-  traffic; decide concurrency limits and queue/degrade behaviour.
+- ☐ **P4 — Production wiring for both paths.** Live: Anthropic key in Vercel env, prompt
+  caching on the fact-sheet system prompt, per-session turn/token caps, spend alert, DPA +
+  privacy-notice line. Background: the batch host from Q3 running the local pick on a schedule
+  over new transcripts; nothing user-facing depends on it being up.
 - ☐ **P5 — Agent panel.** Streaming chat on `/m/[token]` via `/api/chat`; system prompt =
   fact sheet + mockup context (beach name, count); tools wired; turn/session caps; graceful
   "assistant unavailable" state that leaves the CTA intact. Eval harness green before ship.
@@ -119,42 +158,74 @@ pure layout generator (location TBD — see Q2)
 
 ## Resume here
 
-- **Next action:** P0. Install Ollama locally, pull the three candidate models, and write the
-  eval harness (scripted conversations + scoring) — start with tool-call validity and fact
-  adherence, add latency. Write findings and the model pick into this track's Log.
+- **Next action:** finish P0. (1) Read the three-way local comparison
+  (`cd apps/marketing && npm run eval:summary`) and pick the background-work model. (2) Load the
+  `claude-api` skill, add a Claude implementation of `LeadAgentModel` (tool use + streaming),
+  and run Haiku 4.5 through `npm run eval` — **needs `ANTHROPIC_API_KEY` from the founder**.
+  (3) Measure qwen3's slow-reply cause. Record all three in the Log.
+- **State on disk (uncommitted at time of writing):** `apps/marketing/` holds only the agent
+  library (`lib/agent/`) and the eval harness (`eval/`) — no Next.js app yet (P1). Run:
+  `npm test`, `npm run typecheck`, `npm run eval -- --models <a,b> [--repeat N] [--scenario id]`.
+  Ollama is installed via Homebrew (`brew services start ollama`); models pulled: qwen3:14b,
+  mistral-small3.2:24b, llama3.1:8b.
 - **Context needed:** this file; `.claude/rules/architecture.md` (new app + new model =
   architecture pass before P1/P3 code); `.claude/rules/migrations.md` (P3); `/ui marketing`
   doesn't exist yet — prime with `/ui user` and create `apps/marketing/UI.md` in P1.
   Existing geo-map rendering to mirror: `apps/partner/app/sites/[id]/inventory/InventoryMap.tsx`,
   `SunbedMarker.tsx`; schematic types `packages/schematic/src/types.ts`.
-- **Blocked by:** nothing for P0–P2. P4 needs a hosting decision + spend approval (Q3).
-- **No LLM code exists in the repo yet** — this track introduces the first AI integration.
+- **Blocked by:** the Haiku run needs an Anthropic API key. P4 needs the Q3 batch-host
+  decision and the Anthropic DPA.
+- This track introduces the repo's first AI integration.
 
 ## Open decisions
 
-- **Q1 — What does "hybrid" mean under D3?** Options: (a) **local-only**, degrade to
-  form + CTA when the box is down or saturated; (b) local primary, **API fallback** (e.g.
-  Claude Haiku) only on failure/overload, with PII redacted before it leaves; (c) local for
-  conversation, API for the non-PII lead summary/scoring only. Privacy argues (a);
-  quality/availability argues (b). Decide after P0 shows how good the local pick is.
+- ~~**Q1 — What does "hybrid" mean?**~~ **Closed by D3 (revised):** API live, local
+  background. Remaining sub-question: does a high-value lead (e.g. 200+ sunbeds) escalate to
+  Sonnet mid-conversation, or is Haiku enough? Decide from the Haiku eval run.
 - **Q2 — Where does the layout generator live?** `@repo/schematic` (geometry, but it is
   world-unit/metres and domain-agnostic), `@repo/floor-core`, or a new `@repo/beach-layout`.
   It must be client-safe (no prisma) — see the `@repo/data` client-safe-export lesson.
-- **Q3 — Production host.** Dedicated EU GPU box (~€180+/month always-on) vs. a
-  serverless-GPU provider in the EU (cheaper at low volume, cold starts, and a third party
-  again runs the model — weakens D3). The Mac + tunnel is dev-only, not production.
+- **Q3 — Where do the local batch jobs run in production?** No longer an always-on GPU
+  question. Options: a scheduled job on an EU GPU box rented by the hour; a CPU box running a
+  smaller quantised model (slow is fine for batch); or, early on, the founder's Mac pulling
+  from a queue (acceptable only while nothing depends on it — it is not production).
 - **Q4 — Lead data retention + consent wording.** Transcripts are personal data; pick a
-  retention window and whether transcripts are stored at all or only the summary.
+  retention window and whether transcripts are stored at all or only the summary. The notice
+  must name Anthropic as processor for the live chat.
 - **Q5 — Privacy residue to accept or address:** the location query still goes to Google
   Places/Maps. Acceptable (it's not the conversation), but the privacy notice must say so.
 - **Q6 — Anti-abuse.** Ad traffic attracts bots; the in-memory rate limiter resets on every
   cold start. Options: Vercel KV/Upstash-backed limiter, Cloudflare Turnstile, per-token
-  turn caps on the inference host.
+  session turn/token caps on the API path (they now also cap spend).
 
 ## Log
 
+- **2026-10-04** — **D3 REVISED to the latency split** (API live, local background) after the
+  P0 data and a founder correction: the original intent of "local for privacy and experience"
+  was the less-demanding, non-latency-critical work, not the conversation. Recorded so nobody
+  re-litigates it from the first wording.
+- **2026-10-04** — **P0 findings (qwen3:14b, Ollama, M1 Max 64 GB).** Harness built:
+  `lib/agent/{model,fact-sheet,tools,system-prompt,run-turn}.ts` + `eval/{scenarios,scorers,run,summarise}.ts`,
+  41 unit tests. Results and what they forced:
+  - **Thinking mode is unusable for chat**: TTFT 8.5 s median, one turn 100 s. Sending
+    `reasoning_effort: "none"` (Ollama's OpenAI-compatible endpoint honours it) → 0.3 s.
+  - **Without thinking, the model completed a garbled email** ("maria at chiringuitosol dot"
+    → `maria@chiringuitosol.com`) and saved it — format validation cannot catch an invented
+    but valid address. Fixed structurally: contact details must appear in the prospect's own
+    text (`groundedIn` in `tools.ts`).
+  - **It claimed actions it never took** ("the team will contact you", "I'll let the team
+    know") with no `request_demo` call. Added a universal scorer for unbacked promises.
+  - **It would not chain `update_lead` → `request_demo` in one turn.** Fixed by letting
+    `request_demo` carry the contact fields itself — one call, not two.
+  - One generation ran >120 s (degenerate loop) → `max_tokens` 400 cap on every call.
+  - After fixes: **60/60** over 3 repeats; TTFT median 0.31 s / p90 6.6 s; full call median
+    2.9 s / **p90 16.9 s** — the slow tail is what tipped D3 toward the API for live chat.
+  - Lesson for the scorers: the first 19/20 pass HID the email guess and the false promise;
+    reading transcripts found both. Every new failure seen in a transcript becomes a check.
+- **2026-10-04** — D4: agent stays out of the partner landing page; a tagged CTA there links
+  into `apps/marketing`. Track flipped to **active**; P0 starting.
 - **2026-10-04** — Track created from founder brief. D1 form-first, D2 `apps/marketing`,
-  D3 self-hosted model for privacy + hands-on experience. Key design call recorded: the mockup
+  D3 (first wording, since revised) self-hosted model for privacy + hands-on experience. Key design call recorded: the mockup
   is code-generated on real satellite imagery, not AI image generation; the model handles only
   the conversation, and the funnel must survive the model being down. Cost note for the
   record: at landing-page volumes an API-only agent (Haiku + prompt caching) would be roughly
