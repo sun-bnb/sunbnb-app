@@ -1955,7 +1955,14 @@ model Lead {
   email            String?
   phone            String?
   businessName     String?   @map("business_name")
+  businessType     String?   @map("business_type")
   message          String?
+  /// AI sales chat (track 027 P5): `{ sessions: { [sessionId]: ChatMessage[] } }` in the
+  /// marketing app's provider-neutral shape. One session per page visit. Personal data — kept
+  /// and purged with the lead, never rendered on the public mockup page.
+  chatSessions     Json?     @map("chat_sessions")
+  /// Prospect messages across all sessions; capped per lead to bound API spend.
+  chatTurns        Int       @default(0) @map("chat_turns")
   /// When the prospect ticked the privacy consent, and which notice version they saw.
   consentAt        DateTime? @map("consent_at")
   consentVersion   String?   @map("consent_version")

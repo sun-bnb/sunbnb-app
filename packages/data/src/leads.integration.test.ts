@@ -6,7 +6,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import prisma from '../index'
 import { cleanDatabase } from './test/setup'
-import { createLeadMockup, getLeadMockup, purgeExpiredLeads, requestLeadDemo, saveLeadLayout } from './leads'
+import { createLeadMockup, getLeadChatContext, getLeadMockup, purgeExpiredLeads, requestLeadDemo, saveLeadChatTurn, saveLeadLayout } from './leads'
 
 beforeEach(async () => { await cleanDatabase() })
 afterAll(async () => { await cleanDatabase(); await prisma.$disconnect() })
@@ -125,5 +125,45 @@ describe('purgeExpiredLeads — exactly what the privacy notice promises', () =>
     expect(await purgeExpiredLeads(now)).toEqual({ anonymous: 0, contact: 1 })
     expect(await getLeadMockup(kept)).not.toBeNull()
     expect(await getLeadMockup(expired)).toBeNull()
+  })
+})
+
+describe('chat persistence', () => {
+  const turn = (messages: unknown[], extra: Partial<Parameters<typeof saveLeadChatTurn>[1]> = {}) => ({
+    sessionId: 's1', messages, contact: {}, demoRequested: false, consentVersion: 'chat-2026-10-04.2', ...extra,
+  })
+
+  it('stores each session separately and counts turns across them', async () => {
+    const { token } = await createLeadMockup(mockup)
+    await saveLeadChatTurn(token, turn([{ role: 'user', content: 'hi' }]))
+    await saveLeadChatTurn(token, turn([{ role: 'user', content: 'hola' }], { sessionId: 's2' }))
+    const s1 = await getLeadChatContext(token, 's1')
+    expect(s1?.history).toEqual([{ role: 'user', content: 'hi' }])
+    expect(s1?.chatTurns).toBe(2)
+    expect((await getLeadChatContext(token, 'new'))?.history).toEqual([])
+  })
+
+  it('a chat demo request records contact, chat consent and the first-request transition', async () => {
+    const { token } = await createLeadMockup(mockup)
+    const r = await saveLeadChatTurn(token, turn([], { contact: { phone: '+34 600 123 456', contactName: 'Jordi' }, demoRequested: true }))
+    expect(r).toMatchObject({ ok: true, firstRequest: true, lead: { phone: '+34 600 123 456' } })
+    const row = await prisma.lead.findUniqueOrThrow({ where: { token } })
+    expect(row).toMatchObject({ status: 'demo_requested', contactName: 'Jordi', consentVersion: 'chat-2026-10-04.2' })
+    const again = await saveLeadChatTurn(token, turn([], { demoRequested: true }))
+    expect(again).toMatchObject({ ok: true, firstRequest: false })
+  })
+
+  it('never blanks a contact field and updates the mockup sunbed count', async () => {
+    const { token } = await createLeadMockup(mockup)
+    await requestLeadDemo(token, demo)
+    await saveLeadChatTurn(token, turn([], { contact: { email: '', businessType: 'beach_club' }, sunbedCount: 140 }))
+    const row = await prisma.lead.findUniqueOrThrow({ where: { token } })
+    expect(row).toMatchObject({ email: demo.email, businessType: 'beach_club', sunbedCount: 140 })
+  })
+
+  it('the PUBLIC read still carries no chat content', async () => {
+    const { token } = await createLeadMockup(mockup)
+    await saveLeadChatTurn(token, turn([{ role: 'user', content: 'my email is secret@x.es' }]))
+    expect(JSON.stringify(await getLeadMockup(token))).not.toContain('secret@x.es')
   })
 })

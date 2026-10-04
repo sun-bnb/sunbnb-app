@@ -142,3 +142,79 @@ export async function purgeExpiredLeads(now = new Date()): Promise<{ anonymous: 
   const contact = await prisma.lead.deleteMany({ where: { lastActivityAt: { lt: contactBefore } } })
   return { anonymous: anonymous.count, contact: contact.count }
 }
+
+// ── AI sales chat (track 027 P5) ────────────────────────────────────────────
+
+/** Max prospect messages per lead, across all sessions — bounds what one link can spend. */
+export const LEAD_CHAT_MAX_TURNS = 40
+
+/**
+ * Everything the chat route needs to continue a conversation. SERVER-ONLY: it carries contact
+ * data, so it must never back a page render (that is what `getLeadMockup` is for).
+ */
+export async function getLeadChatContext(token: string, sessionId: string) {
+  const lead = await prisma.lead.findUnique({
+    where: { token },
+    select: {
+      status: true,
+      beachName: true,
+      sunbedCount: true,
+      contactName: true,
+      email: true,
+      phone: true,
+      businessName: true,
+      businessType: true,
+      chatTurns: true,
+      chatSessions: true,
+    },
+  })
+  if (!lead) return null
+  const sessions = (lead.chatSessions as { sessions?: Record<string, unknown[]> } | null)?.sessions ?? {}
+  const { chatSessions: _omit, ...rest } = lead
+  return { ...rest, history: (sessions[sessionId] ?? []) as unknown[] }
+}
+
+export interface ChatTurnUpdate {
+  sessionId: string
+  /** The session's full message list after this turn (provider-neutral, opaque here). */
+  messages: unknown[]
+  contact: { contactName?: string; email?: string; phone?: string; businessName?: string; businessType?: string }
+  sunbedCount?: number
+  demoRequested: boolean
+  consentVersion: string
+}
+
+/**
+ * Persist one chat turn and its effects atomically. Contact details only ever ADD or replace —
+ * the chat never blanks a field — and, as with the form, a status the team set is not regressed.
+ */
+export async function saveLeadChatTurn(token: string, u: ChatTurnUpdate) {
+  return prisma.$transaction(async (tx) => {
+    const current = await tx.lead.findUnique({ where: { token }, select: { status: true, chatSessions: true } })
+    if (!current) return { ok: false as const }
+    const sessions = { ...((current.chatSessions as { sessions?: Record<string, unknown[]> } | null)?.sessions ?? {}) }
+    sessions[u.sessionId] = u.messages
+    const firstRequest = u.demoRequested && current.status === LEAD_STATUS.MOCKUP
+    const hasContact = Boolean(u.contact.email || u.contact.phone)
+    const now = new Date()
+    const contact = Object.fromEntries(Object.entries(u.contact).filter(([, v]) => typeof v === 'string' && v.trim()))
+    const lead = await tx.lead.update({
+      where: { token },
+      data: {
+        chatSessions: { sessions } as object,
+        chatTurns: { increment: 1 },
+        lastActivityAt: now,
+        ...contact,
+        ...(u.sunbedCount ? { sunbedCount: u.sunbedCount } : {}),
+        // Sharing contact in the chat is consent under the notice shown next to the chat input.
+        ...(hasContact ? { consentAt: now, consentVersion: u.consentVersion } : {}),
+        ...(firstRequest ? { status: LEAD_STATUS.DEMO_REQUESTED, demoRequestedAt: now } : {}),
+      },
+      select: {
+        beachName: true, beachAddress: true, sunbedCount: true, contactName: true, email: true, phone: true,
+        businessName: true, utmSource: true, utmCampaign: true,
+      },
+    })
+    return { ok: true as const, firstRequest, lead }
+  })
+}
