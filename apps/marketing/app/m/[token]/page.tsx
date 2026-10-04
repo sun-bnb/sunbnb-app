@@ -3,8 +3,7 @@ import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { LEAD_TOKEN_RE, parseLeadLayout } from '@repo/data/lead-model'
 import { getLeadMockup } from '@repo/data/leads'
-import DemoRequestForm from '@/components/DemoRequestForm'
-import MockupView from '@/components/MockupView'
+import MockupWorkspace from '@/components/MockupWorkspace'
 import { SiteFooter, SiteHeader } from '@/components/SiteChrome'
 
 export const dynamic = 'force-dynamic'
@@ -44,18 +43,17 @@ export default async function MockupPage({ params }: { params: { token: string }
         </div>
 
         {/* Client key only — never fall back to the server key, which would ship it in the HTML. */}
-        <MockupView
+        <MockupWorkspace
           token={lead.token}
           apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY ?? ''}
           center={{ lat: lead.lat, lng: lead.lng }}
-          sunbedCount={lead.sunbedCount}
+          initialSunbedCount={lead.sunbedCount}
           saved={saved}
+          beachName={lead.beachName}
+          shareHint={t('Mockup.shareHint')}
+          // The chat only appears where it can work; without a key the page is form-only (D1).
+          chatEnabled={Boolean(process.env.ANTHROPIC_API_KEY)}
         />
-        <p className="mt-2 text-xs text-gray-400">{t('Mockup.shareHint')}</p>
-
-        <div className="mx-auto mt-10 max-w-xl">
-          <DemoRequestForm token={lead.token} beachName={lead.beachName} />
-        </div>
       </main>
       <SiteFooter />
     </>

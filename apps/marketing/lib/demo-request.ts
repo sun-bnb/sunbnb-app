@@ -7,7 +7,7 @@
  */
 
 /** Version of the privacy notice the consent checkbox refers to; stored on the lead. Bump with the notice. */
-export const CONSENT_VERSION = '2026-10-04'
+export const CONSENT_VERSION = '2026-10-04.2' // .2: the AI chat (Anthropic, transcripts, contact-in-chat)
 
 /** Faster than this from render to submit is a script, not a person typing a name and an email. */
 export const MIN_FILL_MS = 3000

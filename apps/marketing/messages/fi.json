@@ -101,5 +101,18 @@
     "title": "Tietosuojailmoitus",
     "updated": "Versio {version}",
     "link": "Tietosuoja"
+  },
+  "Chat": {
+    "title": "Kysy Sunbnb:stä",
+    "greeting": "Hei! Olen Sunbnb:n tekoälyavustaja. Kysy mitä tahansa siitä, miten {beach} toimisi Sunbnb:ssä – hinnat, maksut, miten asiakkaat varaavat.",
+    "placeholder": "Kirjoita kysymyksesi…",
+    "send": "Lähetä",
+    "thinking": "Kirjoittaa…",
+    "notice": "Tekoälyavustaja. Viestisi tallennetaan ja lähetetään Anthropicille vastausten tuottamiseksi; jos jaat sähköpostin tai puhelinnumeron, otamme yhteyttä demosta. <link>Tietosuoja</link>",
+    "unavailable": "Avustaja ei ole juuri nyt käytettävissä – voit silti pyytää demoa alta.",
+    "limit": "Tämä keskustelu on saavuttanut rajansa. Käytä alla olevaa demolomaketta, niin palaamme asiaan.",
+    "rateLimited": "Lähetät viestejä liian nopeasti. Odota hetki.",
+    "fallbackReply": "Valitettavasti en osannut vastata tuohon. Voitko muotoilla kysymyksen toisin, tai jättää sähköpostin tai puhelinnumeron, niin tiimi auttaa suoraan?",
+    "demoBooked": "Demo pyydetty – tiimi on yhteydessä."
   }
 }

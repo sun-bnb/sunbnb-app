@@ -34,6 +34,13 @@ export function privacySections(locale: Locale, c: Controller): PrivacySection[]
         paragraphs: [
           'Cuando creas una maqueta guardamos la playa que elegiste (nombre, dirección y coordenadas de Google), el número de hamacas, cómo ajustaste la distribución, tu idioma y, si llegaste desde un anuncio, los parámetros de campaña del enlace (utm). Esto no incluye datos personales.',
           'Si solicitas una demo, guardamos además tu nombre, email y/o teléfono, el nombre de tu negocio, tu mensaje y el momento en que diste tu consentimiento.',
+          'Si usas el asistente de chat con IA, guardamos la conversación junto con tu maqueta.',
+        ],
+      },
+      {
+        heading: 'Asistente de chat con IA',
+        paragraphs: [
+          'El chat de la página de tu maqueta es un asistente de IA, no una persona. Tus mensajes se envían a Anthropic, que proporciona el modelo de IA, para generar las respuestas. Si escribes un email o un teléfono en el chat, lo tratamos como una solicitud de contacto para una demo y avisamos al equipo.',
         ],
       },
       {
@@ -50,7 +57,7 @@ export function privacySections(locale: Locale, c: Controller): PrivacySection[]
       {
         heading: 'Servicios de terceros',
         paragraphs: [
-          'Google Maps Platform recibe lo que escribes en el buscador de playas y muestra el mapa satélite. El servicio público Overpass (datos de OpenStreetMap) recibe únicamente las coordenadas de la playa para encontrar la línea de costa. Alojamos el sitio en Vercel y los datos en una base de datos de Neon, ambos en la UE. Los avisos de nuevas solicitudes se envían a nuestro equipo mediante Resend.',
+          'Google Maps Platform recibe lo que escribes en el buscador de playas y muestra el mapa satélite. El servicio público Overpass (datos de OpenStreetMap) recibe únicamente las coordenadas de la playa para encontrar la línea de costa. Anthropic recibe lo que escribes en el chat con IA. Alojamos el sitio en Vercel y los datos en una base de datos de Neon, ambos en la UE. Los avisos de nuevas solicitudes se envían a nuestro equipo mediante Resend.',
           'Este sitio no usa cookies de seguimiento ni de publicidad.',
         ],
       },
@@ -69,6 +76,13 @@ export function privacySections(locale: Locale, c: Controller): PrivacySection[]
         paragraphs: [
           'Kun luot mallin, tallennamme valitsemasi rannan (Googlen nimi, osoite ja koordinaatit), aurinkotuolien määrän, asetteluun tekemäsi muutokset, kielesi ja – jos tulit mainoksesta – linkin kampanjaparametrit (utm). Nämä eivät ole henkilötietoja.',
           'Jos pyydät demoa, tallennamme lisäksi nimesi, sähköpostisi ja/tai puhelinnumerosi, yrityksesi nimen, viestisi ja ajankohdan, jolloin annoit suostumuksesi.',
+          'Jos käytät tekoälyavustajaa, tallennamme keskustelun mallisi yhteyteen.',
+        ],
+      },
+      {
+        heading: 'Tekoälyavustaja',
+        paragraphs: [
+          'Mallisivusi chat on tekoälyavustaja, ei ihminen. Viestisi lähetetään tekoälymallin tarjoavalle Anthropicille vastausten tuottamiseksi. Jos kirjoitat chattiin sähköpostiosoitteen tai puhelinnumeron, käsittelemme sen pyyntönä ottaa sinuun yhteyttä demosta, ja tiimille ilmoitetaan.',
         ],
       },
       {
@@ -85,7 +99,7 @@ export function privacySections(locale: Locale, c: Controller): PrivacySection[]
       {
         heading: 'Kolmannen osapuolen palvelut',
         paragraphs: [
-          'Google Maps Platform vastaanottaa rantahakuun kirjoittamasi tekstin ja näyttää satelliittikartan. Julkinen Overpass-palvelu (OpenStreetMap-tiedot) saa vain rannan koordinaatit rantaviivan löytämiseksi. Sivusto on Vercelin ja tiedot Neonin tietokannassa, molemmat EU:ssa. Ilmoitukset uusista pyynnöistä lähetetään tiimillemme Resendin kautta.',
+          'Google Maps Platform vastaanottaa rantahakuun kirjoittamasi tekstin ja näyttää satelliittikartan. Julkinen Overpass-palvelu (OpenStreetMap-tiedot) saa vain rannan koordinaatit rantaviivan löytämiseksi. Anthropic saa sen, mitä kirjoitat tekoälyavustajalle. Sivusto on Vercelin ja tiedot Neonin tietokannassa, molemmat EU:ssa. Ilmoitukset uusista pyynnöistä lähetetään tiimillemme Resendin kautta.',
           'Sivusto ei käytä seuranta- tai mainosevästeitä.',
         ],
       },
@@ -103,6 +117,13 @@ export function privacySections(locale: Locale, c: Controller): PrivacySection[]
       paragraphs: [
         'When you create a mockup we store the beach you picked (its Google name, address and coordinates), your number of sunbeds, how you adjusted the layout, your language and — if you came from an ad — the campaign parameters in the link (utm). None of this is personal data.',
         'If you request a demo we also store your name, email and/or phone, your business name, your message and when you gave your consent.',
+        'If you use the AI chat assistant we store the conversation with your mockup.',
+      ],
+    },
+    {
+      heading: 'AI chat assistant',
+      paragraphs: [
+        'The chat on your mockup page is an AI assistant, not a person. Your messages are sent to Anthropic, which provides the AI model, to generate the replies. If you type an email address or phone number into the chat, we treat it as a request to be contacted about a demo, and the team is notified.',
       ],
     },
     {
@@ -119,7 +140,7 @@ export function privacySections(locale: Locale, c: Controller): PrivacySection[]
     {
       heading: 'Third-party services',
       paragraphs: [
-        'Google Maps Platform receives what you type into the beach search and serves the satellite map. The public Overpass service (OpenStreetMap data) receives only the beach coordinates, to find the shoreline. The site is hosted on Vercel and the data kept in a Neon database, both in the EU. Notifications of new requests reach our team through Resend.',
+        'Google Maps Platform receives what you type into the beach search and serves the satellite map. The public Overpass service (OpenStreetMap data) receives only the beach coordinates, to find the shoreline. Anthropic receives what you write in the AI chat. The site is hosted on Vercel and the data kept in a Neon database, both in the EU. Notifications of new requests reach our team through Resend.',
         'This site uses no tracking or advertising cookies.',
       ],
     },

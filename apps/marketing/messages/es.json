@@ -101,5 +101,18 @@
     "title": "Aviso de privacidad",
     "updated": "Versión {version}",
     "link": "Privacidad"
+  },
+  "Chat": {
+    "title": "Pregunta sobre Sunbnb",
+    "greeting": "¡Hola! Soy el asistente de IA de Sunbnb. Pregúntame lo que quieras sobre gestionar {beach} con Sunbnb: precios, pagos, cómo reservan los clientes.",
+    "placeholder": "Escribe tu pregunta…",
+    "send": "Enviar",
+    "thinking": "Escribiendo…",
+    "notice": "Asistente de IA. Tus mensajes se guardan y se envían a Anthropic para generar respuestas; si compartes un email o teléfono, te contactaremos para una demo. <link>Privacidad</link>",
+    "unavailable": "El asistente no está disponible ahora mismo; puedes solicitar una demo más abajo.",
+    "limit": "Este chat ha alcanzado su límite. Usa el formulario de demo de abajo y te responderemos.",
+    "rateLimited": "Estás enviando mensajes demasiado rápido. Espera un momento.",
+    "fallbackReply": "Lo siento, no he podido responder a eso. ¿Puedes reformularlo, o dejar tu email o teléfono para que el equipo te ayude directamente?",
+    "demoBooked": "Demo solicitada: el equipo se pondrá en contacto."
   }
 }
