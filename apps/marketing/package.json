@@ -1,0 +1,21 @@
+{
+  "name": "marketing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "eval": "node eval/run.ts",
+    "eval:summary": "node eval/summarise.ts"
+  },
+  "dependencies": {
+    "@repo/data": "*"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "*",
+    "@types/node": "^20",
+    "typescript": "^5",
+    "vitest": "^3"
+  }
+}
