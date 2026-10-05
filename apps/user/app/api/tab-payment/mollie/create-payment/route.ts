@@ -30,7 +30,7 @@
 import prisma from '@repo/data/PrismaCient'
 import {
   loadTabFeeContext,
-  resolveServiceFee,
+  chargeableServiceFee, resolveServiceFee,
   calculateServiceFeeAmount,
   calculateTabTotal,
   round,
@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
   // Load the tab to get siteId/restaurantId for fee context
   const tab = await prisma.tableTab.findUnique({
     where: { id: tabId },
-    select: { id: true, siteId: true, restaurantId: true },
+    select: { id: true, siteId: true, restaurantId: true, createdAt: true },
   })
 
   if (!tab) {
@@ -179,12 +179,18 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Compute application fee (our platform commission) ────────────────────
-  const matchedFee = resolveServiceFee(
-    siteFees,
-    partnerAccount.serviceFees,
-    settings?.serviceFees ?? [],
-    'food-and-beverage',
-    tier,
+  // Launch offer (track 027 D9): no applicationFee for bookings the promotion covers — decided
+  // from the booking's createdAt, exactly as the PLATFORM invoice will be at confirmation.
+  const matchedFee = chargeableServiceFee(
+    resolveServiceFee(
+      siteFees,
+      partnerAccount.serviceFees,
+      settings?.serviceFees ?? [],
+      'food-and-beverage',
+      tier,
+    ),
+    partnerAccount,
+    tab.createdAt
   )
   const applicationFeeAmount = round(calculateServiceFeeAmount(matchedFee, totals.payableTotal))
 

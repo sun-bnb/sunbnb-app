@@ -74,6 +74,8 @@
     "./pricing-tiers": "./src/pricing-tiers.ts",
     "./lead-model": "./src/lead-model.ts",
     "./leads": "./src/leads.ts",
+    "./promotion": "./src/promotion.ts",
+    "./promotion-db": "./src/promotion-db.ts",
     "./mollie-app-fee": "./src/mollie-app-fee.ts",
     "./viva": "./src/viva/index.ts",
     "./viva/refs": "./src/viva/refs.ts"
@@ -259,6 +261,12 @@
       ],
       "leads": [
         "./src/leads.ts"
+      ],
+      "promotion": [
+        "./src/promotion.ts"
+      ],
+      "promotion-db": [
+        "./src/promotion-db.ts"
       ]
     }
   },

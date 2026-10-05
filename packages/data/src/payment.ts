@@ -24,6 +24,8 @@
  * - Veri*factu ready: sequential invoice numbering and hash chaining per issuer
  */
 
+import { activeLaunchPromotion, isCommissionWaived, type PromotionState } from './promotion'
+import { stampPromotionClock } from './promotion-db'
 import prisma from '../index'
 import { ServiceFee, SubscriptionTier } from '@prisma/client'
 import { getBusinessEntity, isPlatformIssuable } from './business-entity'
@@ -250,6 +252,22 @@ function computeCommissionVat(
 // impossible to verify from outside this file. See that module's header for the
 // two concurrency/ordering defects the move also fixes.
 
+/**
+ * The fee actually CHARGED for a booking: the resolved fee, or none while the partner's launch
+ * promotion covers that booking (track 027 D9). Every charge point — the Mollie applicationFee at
+ * payment creation and the PLATFORM invoice at confirmation — must go through this, passing the
+ * BOOKING's createdAt, so both sides reach the same answer (`isCommissionWaived`). With no fee
+ * the existing `> 0` guards already skip the PLATFORM invoice and the Mollie applicationFee.
+ */
+export function chargeableServiceFee(
+  fee: ServiceFee | undefined,
+  partnerAccount: { promotions?: PromotionState[] } | null | undefined,
+  bookingCreatedAt: Date
+): ServiceFee | undefined {
+  if (!fee) return fee
+  return isCommissionWaived(activeLaunchPromotion(partnerAccount?.promotions), bookingCreatedAt) ? undefined : fee
+}
+
 // ─── Fee Context Loading ────────────────────────────────────────────────────
 
 export interface FeeContext {
@@ -259,6 +277,8 @@ export interface FeeContext {
   partnerAccount: (Awaited<ReturnType<typeof prisma.partnerAccount.findUnique>> & {
     serviceFees: ServiceFee[]
     subscription: { plan: { tier: SubscriptionTier } } | null
+    /** Launch offer etc. (track 027 D9) — read via `chargeableServiceFee`. */
+    promotions?: PromotionState[]
   }) | null
   settings: (Awaited<ReturnType<typeof prisma.settings.findFirst>> & {
     serviceFees: ServiceFee[]
@@ -333,6 +353,7 @@ export async function getSiteFeeContext(siteId: string): Promise<SiteFeeContext>
       serviceFees: true,
       subscription: { include: { plan: { select: { tier: true } } } },
       customSubscription: true,
+      promotions: { select: { code: true, startedAt: true, endsAt: true, revokedAt: true } },
     },
   })
 
@@ -361,6 +382,7 @@ export async function getPartnerFeeContext(userId: string): Promise<PartnerFeeCo
       serviceFees: true,
       subscription: { include: { plan: { select: { tier: true } } } },
       customSubscription: true,
+      promotions: { select: { code: true, startedAt: true, endsAt: true, revokedAt: true } },
     },
   })
   const settings = await findCountryMatchedSettings(partnerAccount?.country)
@@ -620,12 +642,16 @@ export async function processConfirmedReservation(
   )
 
   const tier = partnerAccount?.subscription?.plan?.tier ?? null
-  const matchedFee = resolveServiceFee(
-    site.serviceFees,
-    partnerAccount?.serviceFees ?? [],
-    settings?.serviceFees ?? [],
-    'sunbed-rental',
-    tier
+  const matchedFee = chargeableServiceFee(
+    resolveServiceFee(
+      site.serviceFees,
+      partnerAccount?.serviceFees ?? [],
+      settings?.serviceFees ?? [],
+      'sunbed-rental',
+      tier
+    ),
+    partnerAccount,
+    reservation.createdAt
   )
 
   const totalPayment = round(reservation.paymentAmount ?? 0)
@@ -724,6 +750,10 @@ export async function processConfirmedReservation(
         ...partnerIdentity,
       },
     })
+    // Launch offer (track 027 D9): the first LIVE paid booking starts the partner's 30-day
+    // clock. Inside this transaction the invoice-series lock serialises the partner, and the
+    // stamp is write-once, so concurrent first bookings can't both start it.
+    if (partnerAccount?.userId) await stampPromotionClock(tx, partnerAccount.userId, reservation.paymentRef)
 
 
     // Product lines — one per sunbed item, at the full listed price (gross).
@@ -1052,12 +1082,16 @@ export async function processConfirmedRentalBooking(
   )
 
   const tier = partnerAccount?.subscription?.plan?.tier ?? null
-  const matchedFee = resolveServiceFee(
-    site.serviceFees,
-    partnerAccount?.serviceFees ?? [],
-    settings?.serviceFees ?? [],
-    'equipment-rental',
-    tier
+  const matchedFee = chargeableServiceFee(
+    resolveServiceFee(
+      site.serviceFees,
+      partnerAccount?.serviceFees ?? [],
+      settings?.serviceFees ?? [],
+      'equipment-rental',
+      tier
+    ),
+    partnerAccount,
+    bookings[0]!.createdAt
   )
 
   const totalPayment = round(
@@ -1143,6 +1177,10 @@ export async function processConfirmedRentalBooking(
         ...partnerIdentity,
       },
     })
+    // Launch offer (track 027 D9): the first LIVE paid booking starts the partner's 30-day
+    // clock. Inside this transaction the invoice-series lock serialises the partner, and the
+    // stamp is write-once, so concurrent first bookings can't both start it.
+    if (partnerAccount?.userId) await stampPromotionClock(tx, partnerAccount.userId, paymentRef)
 
 
     // One line per booking, at the full price (gross).
@@ -1483,12 +1521,16 @@ export async function processConfirmedOrder(
   )
 
   const tier = partnerAccount?.subscription?.plan?.tier ?? null
-  const matchedFee = resolveServiceFee(
-    site.serviceFees,
-    partnerAccount?.serviceFees ?? [],
-    settings?.serviceFees ?? [],
-    'food-and-beverage',
-    tier
+  const matchedFee = chargeableServiceFee(
+    resolveServiceFee(
+      site.serviceFees,
+      partnerAccount?.serviceFees ?? [],
+      settings?.serviceFees ?? [],
+      'food-and-beverage',
+      tier
+    ),
+    partnerAccount,
+    order.createdAt
   )
 
   const totalProductAmount = order.paymentAmount ?? 0
@@ -1591,6 +1633,10 @@ export async function processConfirmedOrder(
         ...partnerIdentity,
       },
     })
+    // Launch offer (track 027 D9): the first LIVE paid booking starts the partner's 30-day
+    // clock. Inside this transaction the invoice-series lock serialises the partner, and the
+    // stamp is write-once, so concurrent first bookings can't both start it.
+    if (partnerAccount?.userId) await stampPromotionClock(tx, partnerAccount.userId, order.paymentRef)
 
 
     const itemLines = itemCalcs.map(({ lineBase, lineVat, itemGross, item }) => {
@@ -1757,12 +1803,16 @@ export async function processChargedTableDeposit(
   )
 
   const tier = partnerAccount?.subscription?.plan?.tier ?? null
-  const matchedFee = resolveServiceFee(
-    site.serviceFees,
-    partnerAccount?.serviceFees ?? [],
-    settings?.serviceFees ?? [],
-    'no-show-deposit',
-    tier
+  const matchedFee = chargeableServiceFee(
+    resolveServiceFee(
+      site.serviceFees,
+      partnerAccount?.serviceFees ?? [],
+      settings?.serviceFees ?? [],
+      'no-show-deposit',
+      tier
+    ),
+    partnerAccount,
+    tableReservation.createdAt
   )
 
   const totalDeposit = round(tableReservation.depositAmount)
@@ -1842,6 +1892,10 @@ export async function processChargedTableDeposit(
         product: 'restaurant',
       },
     })
+    // Launch offer (track 027 D9): the first LIVE paid booking starts the partner's 30-day
+    // clock. Inside this transaction the invoice-series lock serialises the partner, and the
+    // stamp is write-once, so concurrent first bookings can't both start it.
+    if (partnerAccount?.userId) await stampPromotionClock(tx, partnerAccount.userId, tableReservation.paymentRef)
 
 
     // Single line: the kept no-show deposit
@@ -1958,12 +2012,16 @@ export async function calculateOrderServiceFee(
   )
 
   const tier = partnerAccount?.subscription?.plan?.tier ?? null
-  const matchedFee = resolveServiceFee(
-    site.serviceFees,
-    partnerAccount?.serviceFees ?? [],
-    settings?.serviceFees ?? [],
-    'food-and-beverage',
-    tier
+  const matchedFee = chargeableServiceFee(
+    resolveServiceFee(
+      site.serviceFees,
+      partnerAccount?.serviceFees ?? [],
+      settings?.serviceFees ?? [],
+      'food-and-beverage',
+      tier
+    ),
+    partnerAccount,
+    order.createdAt
   )
 
   const amount = order.paymentAmount ?? 0
@@ -2027,12 +2085,16 @@ export async function calculateTabTotal(tabId: string): Promise<TabTotalResult> 
     'food-and-beverage'
   )
 
-  const matchedFee = resolveServiceFee(
-    siteFees,
-    partnerAccount?.serviceFees ?? [],
-    settings?.serviceFees ?? [],
-    'food-and-beverage',
-    tier
+  const matchedFee = chargeableServiceFee(
+    resolveServiceFee(
+      siteFees,
+      partnerAccount?.serviceFees ?? [],
+      settings?.serviceFees ?? [],
+      'food-and-beverage',
+      tier
+    ),
+    partnerAccount,
+    tab.createdAt
   )
 
   const serviceFee = calculateServiceFeeAmount(matchedFee, ordersTotal)
@@ -2128,12 +2190,16 @@ export async function processConfirmedTabPayment(
     'food-and-beverage'
   )
 
-  const matchedFee = resolveServiceFee(
-    siteFees,
-    partnerAccount?.serviceFees ?? [],
-    settings?.serviceFees ?? [],
-    'food-and-beverage',
-    tier
+  const matchedFee = chargeableServiceFee(
+    resolveServiceFee(
+      siteFees,
+      partnerAccount?.serviceFees ?? [],
+      settings?.serviceFees ?? [],
+      'food-and-beverage',
+      tier
+    ),
+    partnerAccount,
+    tab.createdAt
   )
 
   // Accumulate per-item lines (per-item VAT like processConfirmedOrder).
@@ -2247,6 +2313,10 @@ export async function processConfirmedTabPayment(
         product: 'restaurant',
       },
     })
+    // Launch offer (track 027 D9): the first LIVE paid booking starts the partner's 30-day
+    // clock. Inside this transaction the invoice-series lock serialises the partner, and the
+    // stamp is write-once, so concurrent first bookings can't both start it.
+    if (partnerAccount?.userId) await stampPromotionClock(tx, partnerAccount.userId, tab.paymentRef)
 
 
     const itemLines = allItemCalcs.map(({ lineBase, lineVat, itemGross, item }) => ({

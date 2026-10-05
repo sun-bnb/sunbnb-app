@@ -47,7 +47,7 @@ import { randomUUID } from 'node:crypto'
 import { recordSettlement } from './till'
 import {
   processConfirmedReservation, issueCashCreditNote,
-  loadFeeContext, resolveServiceFee, calculateServiceFeeAmount, round,
+  loadFeeContext, chargeableServiceFee, resolveServiceFee, calculateServiceFeeAmount, round,
 } from './payment'
 import {
   createReservationMolliePayment,
@@ -646,13 +646,27 @@ async function runCollectStartCard(
   }
 
   const tier = partnerAccount.subscription?.plan?.tier ?? null
-  const matchedFee = resolveServiceFee(
+  const resolvedFee = resolveServiceFee(
     site.serviceFees,
     partnerAccount.serviceFees,
     settings?.serviceFees ?? [],
     VIVA_SERVICE_CODE,
     tier,
   )
+  // Launch offer (track 027 D9) waives commission, but a Viva sale cannot simply drop its ISV fee:
+  // `isvDetails` also names the merchant to pay, and whether Viva accepts a zero ISV fee is the
+  // SAME open question as the own-venue/no-fee case (track 024 Q2/Q3). Until Viva answers,
+  // refuse clearly rather than charge a fee the offer promised to waive (the confirmation path
+  // would then issue no PLATFORM invoice for money we did take). The venue can still take cash.
+  const matchedFee = chargeableServiceFee(resolvedFee, partnerAccount, r.createdAt)
+  if (resolvedFee && !matchedFee) {
+    return {
+      outcome: 'effect-failed',
+      effect: 'vivaSale',
+      event: row.event,
+      error: 'card-present (Viva) payments are not available while the launch promotion waives commission (track 024 Q2/Q3)',
+    }
+  }
   const feeAmount = round(calculateServiceFeeAmount(matchedFee, amount))
   const amountCents = toCents(amount)
   const feeCents = toCents(feeAmount)

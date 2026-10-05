@@ -25,6 +25,7 @@ vi.mock('@/app/api/_lib/payment-ids', () => ({
 vi.mock('@repo/data/payment', () => ({
   loadFeeContext: vi.fn(),
   resolveServiceFee: vi.fn().mockReturnValue(null),
+  chargeableServiceFee: vi.fn((fee: unknown) => fee),
   calculateServiceFeeAmount: vi.fn().mockReturnValue(0),
   round: (v: number) => Math.round(v * 100) / 100,
 }))

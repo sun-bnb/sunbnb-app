@@ -14,7 +14,7 @@
 import prisma from '@repo/data/PrismaCient'
 import {
   loadFeeContext,
-  resolveServiceFee,
+  chargeableServiceFee, resolveServiceFee,
   calculateServiceFeeAmount,
   round,
 } from '@repo/data/payment'
@@ -134,12 +134,18 @@ export async function POST(request: NextRequest) {
 
   // ── Compute application fee (our platform commission) ────────────────────
   const tier = partnerAccount.subscription?.plan?.tier ?? null
-  const matchedFee = resolveServiceFee(
-    site.serviceFees,
-    partnerAccount.serviceFees,
-    settings?.serviceFees ?? [],
-    'equipment-rental',
-    tier
+  // Launch offer (track 027 D9): no applicationFee for bookings the promotion covers — decided
+  // from the booking's createdAt, exactly as the PLATFORM invoice will be at confirmation.
+  const matchedFee = chargeableServiceFee(
+    resolveServiceFee(
+      site.serviceFees,
+      partnerAccount.serviceFees,
+      settings?.serviceFees ?? [],
+      'equipment-rental',
+      tier
+    ),
+    partnerAccount,
+    bookings[0]!.createdAt
   )
   const applicationFeeAmount = round(calculateServiceFeeAmount(matchedFee, paymentAmount))
 

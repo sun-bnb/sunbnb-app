@@ -26,7 +26,7 @@
 import prisma from '../index'
 import {
   loadFeeContext,
-  resolveServiceFee,
+  chargeableServiceFee, resolveServiceFee,
   calculateServiceFeeAmount,
   round,
   processConfirmedRentalBooking,
@@ -162,12 +162,18 @@ export async function createRentalBookingMolliePayment(
 
   // Platform commission via the three-tier cascade (site → account → settings).
   const tier = partnerAccount.subscription?.plan?.tier ?? null
-  const matchedFee = resolveServiceFee(
-    site.serviceFees,
-    partnerAccount.serviceFees,
-    settings?.serviceFees ?? [],
-    SERVICE_CODE,
-    tier,
+  // Launch offer (track 027 D9): no applicationFee for bookings the promotion covers — decided
+  // from the booking's createdAt, exactly as the PLATFORM invoice will be at confirmation.
+  const matchedFee = chargeableServiceFee(
+    resolveServiceFee(
+      site.serviceFees,
+      partnerAccount.serviceFees,
+      settings?.serviceFees ?? [],
+      SERVICE_CODE,
+      tier,
+    ),
+    partnerAccount,
+    bookings[0]!.createdAt
   )
   const applicationFeeAmount = round(calculateServiceFeeAmount(matchedFee, paymentAmount))
 

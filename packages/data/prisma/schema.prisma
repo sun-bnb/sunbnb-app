@@ -267,6 +267,7 @@ model PartnerAccount {
   serviceFees         ServiceFee[]
   restaurants         Restaurant[]
   employees           Employee[]
+  promotions          PartnerPromotion[]
 }
 
 model CustomSubscription {
@@ -2013,4 +2014,29 @@ model LeadEvent {
   @@index([name, createdAt])
   @@index([leadId])
   @@map("lead_event")
+}
+
+/// A time-limited commercial promotion for a partner (track 027 D9). Today: the launch offer —
+/// no commission and no plan fees for 30 days from the partner's FIRST LIVE PAID booking, for
+/// partner accounts created by the cut-off (`@repo/data/promotion`).
+///
+/// The clock is stamped once (`startedAt`/`endsAt`) inside the per-partner invoice-series lock,
+/// so concurrent first bookings cannot both start it. Whether a given booking is waived is
+/// decided from the BOOKING's createdAt, so payment creation (Mollie applicationFee) and
+/// confirmation (PLATFORM invoice) always agree, even across the 30-day boundary.
+model PartnerPromotion {
+  id               String         @id @default(cuid())
+  partnerAccountId String         @map("partner_account_id")
+  code             String
+  startedAt        DateTime?      @map("started_at")
+  endsAt           DateTime?      @map("ends_at")
+  revokedAt        DateTime?      @map("revoked_at")
+  /// 'signup' when granted automatically, otherwise the admin who granted it.
+  grantedBy        String         @map("granted_by")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  partnerAccount   PartnerAccount @relation(fields: [partnerAccountId], references: [userId], onDelete: Cascade)
+
+  @@unique([partnerAccountId, code])
+  @@map("partner_promotion")
 }
