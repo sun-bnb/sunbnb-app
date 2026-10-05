@@ -294,6 +294,18 @@ pure layout generator (location TBD — see Q2)
 - ☐ **P12 — Local intelligence brief** (tiered fetchers + research agent + citation verifier).
 - ☐ **P13 — Variant B automated claim + A/B on** (partner `/claim/[token]`).
 - ☐ **P14 — Server-side conversions + localized ad variants.**
+- ☐ **P15 — Inland water: lake and river beaches** (founder, 2026-10-05: "will Austria handle Danube
+  beaches?" — no). OSM `natural=coastline` / osmdata water polygons are the SEA only; a landlocked
+  country imports nothing, and the Overpass fallback asks for coastline only, so lake/river beaches
+  (Danube, Wörthersee, Neusiedler See, Saimaa) get no snap — the visitor turns the beds by hand.
+  Scope: (1) import inland water polygons per country (Geofabrik extract, e.g. Austria ~700 MB:
+  `natural=water` lakes/rivers + `waterway=riverbank`, above a size threshold) into the coastline DB
+  as a second water layer; (2) derive the shore from the nearest polygon edge — the polygon interior
+  is the water, so no line-direction convention to get wrong — and reuse `inWater` /
+  `keepOnLand` / `shoreBand` unchanged; (3) Overpass fallback also asks for water areas;
+  (4) a long-and-shallow layout (few rows along the bank) for narrow beaches — river strips need
+  it, and narrow sea beaches already overflow into dunes/roads at 250 beds. Then regions: Austria,
+  Finland's lakes.
 - 💤 **P7 — Claim this beach** (superseded by P13). Lead → partner signup with the mockup inventory pre-placed
   (layout → `InventoryItem` rows). Cross-app (marketing → partner → data); needs its own
   architecture pass.
