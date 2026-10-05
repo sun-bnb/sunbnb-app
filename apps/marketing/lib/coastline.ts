@@ -60,3 +60,53 @@ export function nearestShoreFrame(ways: GeoPoint[][], point: GeoPoint): ShoreFra
     distanceM: Math.sqrt(best.d2),
   }
 }
+
+/**
+ * Signed distance (metres) from a point to the nearest coastline: POSITIVE on land, NEGATIVE in
+ * the sea — by the same water-on-the-right rule. Null with no geometry.
+ */
+export function signedShoreDistance(ways: GeoPoint[][], point: GeoPoint): number | null {
+  const mPerDegLng = M_PER_DEG_LAT * Math.cos((point.lat * Math.PI) / 180)
+  const toXY = (p: GeoPoint) => ({ x: (p.lng - point.lng) * mPerDegLng, y: (p.lat - point.lat) * M_PER_DEG_LAT })
+  let best: { d2: number; side: number } | null = null
+  for (const way of ways) {
+    for (let i = 0; i < way.length - 1; i++) {
+      const a = toXY(way[i]!)
+      const b = toXY(way[i + 1]!)
+      const dx = b.x - a.x
+      const dy = b.y - a.y
+      const len2 = dx * dx + dy * dy
+      if (len2 === 0) continue
+      const t = Math.max(0, Math.min(1, -(a.x * dx + a.y * dy) / len2))
+      const x = a.x + t * dx
+      const y = a.y + t * dy
+      const d2 = x * x + y * y
+      // Cross product of the segment direction with segment-start→point: > 0 left (land), < 0 right (sea).
+      const side = dx * (0 - a.y) - dy * (0 - a.x)
+      if (!best || d2 < best.d2 - 1e-9) best = { d2, side }
+    }
+  }
+  if (!best) return null
+  return Math.sign(best.side || 1) * Math.sqrt(best.d2)
+}
+
+/** Only the coastline near a beach, for the page: segments with an end within `radiusM`. */
+export function trimShore(ways: GeoPoint[][], center: GeoPoint, radiusM = 500): GeoPoint[][] {
+  const mPerDegLng = M_PER_DEG_LAT * Math.cos((center.lat * Math.PI) / 180)
+  const near = (p: GeoPoint) => Math.hypot((p.lng - center.lng) * mPerDegLng, (p.lat - center.lat) * M_PER_DEG_LAT) <= radiusM
+  const round = (p: GeoPoint) => ({ lat: Math.round(p.lat * 1e6) / 1e6, lng: Math.round(p.lng * 1e6) / 1e6 })
+  const out: GeoPoint[][] = []
+  for (const way of ways) {
+    let run: GeoPoint[] = []
+    for (let i = 0; i < way.length; i++) {
+      const keep = near(way[i]!) || (i > 0 && near(way[i - 1]!)) || (i < way.length - 1 && near(way[i + 1]!))
+      if (keep) run.push(round(way[i]!))
+      else if (run.length) {
+        if (run.length > 1) out.push(run)
+        run = []
+      }
+    }
+    if (run.length > 1) out.push(run)
+  }
+  return out
+}
