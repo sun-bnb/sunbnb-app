@@ -10,6 +10,7 @@ import {
 } from '@repo/data/subscription'
 import { getFeesByAccount } from '../../fees/actions'
 import PartnerDetailView from './view'
+import { LAUNCH_PROMOTION } from '@repo/data/promotion'
 
 export default async function PartnerDetailPage({
   params,
@@ -76,10 +77,19 @@ export default async function PartnerDetailPage({
     override: featureOverrides?.[f.key as SubscriptionFeatureKey] ?? null,
   }))
 
+  const promo = await prisma.partnerPromotion.findFirst({
+    where: { partnerAccountId: id, code: LAUNCH_PROMOTION.code },
+    select: { startedAt: true, endsAt: true, revokedAt: true },
+  })
+  const launchOffer = promo
+    ? { startedAt: promo.startedAt?.toISOString() ?? null, endsAt: promo.endsAt?.toISOString() ?? null, revokedAt: promo.revokedAt?.toISOString() ?? null }
+    : null
+
   return (
     <div className="container mx-auto max-w-[768px]">
       <PartnerDetailView
         accountId={id}
+        launchOffer={launchOffer}
         company={partnerAccount.company}
         ownerEmail={partnerAccount.user.email}
         ownerName={partnerAccount.user.name}

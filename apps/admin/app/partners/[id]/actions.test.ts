@@ -23,7 +23,10 @@ import {
   getPartnerDetail,
   setFeatureOverride,
   setPartnerTaxIdentity,
+  grantPartnerPromotion,
+  revokePartnerPromotion,
 } from './actions'
+import { grantLaunchPromotion, revokeLaunchPromotion } from '@repo/data/promotion-db'
 import { saveServiceFee, getFeesByAccount } from '../../fees/actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
@@ -491,5 +494,38 @@ describe('setPartnerTaxIdentity', () => {
     vi.mocked(prisma.partnerAccount.findUnique).mockResolvedValue(null as never)
     const res = await setPartnerTaxIdentity('nope', { taxRegion: 'MA', isTestAccount: false })
     expect(res.status).toBe('error')
+  })
+})
+
+// ─── Launch offer (track 027 D9) ─────────────────────────────────────────────
+
+describe('grantPartnerPromotion / revokePartnerPromotion', () => {
+  it('refuse non-sudo users and write nothing', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'u-1' } } as any)
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ sudo: false } as any)
+    await expect(grantPartnerPromotion('acc-1')).rejects.toThrow(/sudo/)
+    await expect(revokePartnerPromotion('acc-1')).rejects.toThrow(/sudo/)
+    expect(vi.mocked(grantLaunchPromotion)).not.toHaveBeenCalled()
+    expect(vi.mocked(revokeLaunchPromotion)).not.toHaveBeenCalled()
+  })
+
+  it('grant records which admin granted it', async () => {
+    authenticateAsSudo()
+    vi.mocked(prisma.partnerAccount.findUnique).mockResolvedValue({ userId: 'acc-1' } as any)
+    expect(await grantPartnerPromotion('acc-1')).toEqual({ status: 'ok' })
+    expect(vi.mocked(grantLaunchPromotion)).toHaveBeenCalledWith('acc-1', 'admin-1')
+  })
+
+  it('grant refuses an unknown partner', async () => {
+    authenticateAsSudo()
+    vi.mocked(prisma.partnerAccount.findUnique).mockResolvedValue(null)
+    expect(await grantPartnerPromotion('nope')).toEqual({ status: 'error', errors: ['Partner not found'] })
+    expect(vi.mocked(grantLaunchPromotion)).not.toHaveBeenCalled()
+  })
+
+  it('revoke', async () => {
+    authenticateAsSudo()
+    expect(await revokePartnerPromotion('acc-1')).toEqual({ status: 'ok' })
+    expect(vi.mocked(revokeLaunchPromotion)).toHaveBeenCalledWith('acc-1')
   })
 })

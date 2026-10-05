@@ -1,5 +1,6 @@
 "use client"
 
+import LaunchOfferCard, { type LaunchOfferState } from "./LaunchOfferCard"
 import { useState } from "react"
 import TextField from "@mui/material/TextField"
 import MenuItem from "@mui/material/MenuItem"
@@ -80,6 +81,8 @@ const chargeTypes = [
 ]
 
 export interface PartnerDetailViewProps {
+  /** Launch offer state (track 027 D9); null = never granted. */
+  launchOffer: LaunchOfferState | null
   accountId: string
   company: string
   ownerEmail: string
@@ -363,6 +366,7 @@ export default function PartnerDetailView({
   settings,
   serviceCodes,
   featureCatalog,
+  launchOffer,
 }: PartnerDetailViewProps) {
   // ── Tax identity ──
   const [taxRegionInput, setTaxRegionInput] = useState(initialTaxRegion ?? "")
@@ -573,6 +577,8 @@ export default function PartnerDetailView({
       </div>
 
       <div className="border-t border-gray-800 mb-6" />
+
+      <LaunchOfferCard accountId={accountId} initial={launchOffer} />
 
       {/* ── Effective subscription summary ─────────────────────── */}
       <div className="mb-6">

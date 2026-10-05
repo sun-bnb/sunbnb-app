@@ -9,6 +9,7 @@ import {
   getFeesByAccount,
 } from '../../fees/actions'
 import { isKnownEsRegion, resolveTaxRegime, type TaxRegime } from '@repo/data/tax/regime'
+import { grantLaunchPromotion, revokeLaunchPromotion } from '@repo/data/promotion-db'
 
 // ─── Auth guard ─────────────────────────────────────────────────────────────
 
@@ -265,4 +266,27 @@ export async function setPartnerTaxIdentity(
     // The consequence, returned so the UI can state it rather than imply it.
     regime: resolveTaxRegime({ country: account.country, taxRegion: region }),
   }
+}
+
+// ─── Launch offer (track 027 D9) ────────────────────────────────────────────
+
+/**
+ * Grant the launch offer by hand — e.g. goodwill for a partner who signed up before the offer,
+ * or re-activating a revoked one. The 30-day clock still starts at their first live paid booking.
+ */
+export async function grantPartnerPromotion(accountId: string): Promise<{ status: 'ok' | 'error'; errors?: string[] }> {
+  const session = await requireSudo()
+  const exists = await prisma.partnerAccount.findUnique({ where: { userId: accountId }, select: { userId: true } })
+  if (!exists) return { status: 'error', errors: ['Partner not found'] }
+  await grantLaunchPromotion(accountId, session.user!.id!)
+  revalidatePath(`/partners/${accountId}`)
+  return { status: 'ok' }
+}
+
+/** Revoke the launch offer: bookings created from now on are charged normally. */
+export async function revokePartnerPromotion(accountId: string): Promise<{ status: 'ok' | 'error'; errors?: string[] }> {
+  await requireSudo()
+  await revokeLaunchPromotion(accountId)
+  revalidatePath(`/partners/${accountId}`)
+  return { status: 'ok' }
 }
