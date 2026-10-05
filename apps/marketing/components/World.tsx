@@ -4,7 +4,7 @@
 import { APIProvider as VisAPIProvider, Map as VisMap, useMap, type APIProviderProps, type MapMouseEvent, type MapProps } from '@vis.gl/react-google-maps'
 import { useEffect, useRef, useState, type FC } from 'react'
 import { nearestSunbed, type BeachLayout, type MockSunbed } from '@/lib/beach-layout.ts'
-import HeroBeach from './HeroBeach'
+import HeroBeach, { type HeroMode } from './HeroBeach'
 import SunbedOverlay, { type FloatTag } from './SunbedOverlay'
 
 // @vis.gl resolves the hoisted @types/react 19; re-type against this app's React 18 (keeps props).
@@ -44,6 +44,8 @@ export default function World({
   onBedTap,
   onMapClick,
   ground = null,
+  heroMode = 'book',
+  heroTags,
 }: {
   apiKey: string
   /** The picked beach; null shows the illustrated scene. */
@@ -63,6 +65,8 @@ export default function World({
   /** When set, a tap on the map goes here instead of picking a bed (moving the parcel). */
   onMapClick?: (ll: { lat: number; lng: number }) => void
   ground?: { lat: number; lng: number }[][] | null
+  heroMode?: HeroMode
+  heroTags: Record<HeroMode, string>
 }) {
   const [heroGone, setHeroGone] = useState(false)
   // When the current fly-in lands — a framing before that would be overridden by the fly-in.
@@ -102,7 +106,7 @@ export default function World({
       )}
       {!heroGone && (
         <div className={`absolute inset-0 transition-opacity duration-700 ${center ? 'pointer-events-none opacity-0' : 'opacity-100'}`}>
-          {scene && <HeroBeach shore={scene.shore} band={scene.band} showCount={false} />}
+          {scene && <HeroBeach shore={scene.shore} band={scene.band} mode={heroMode} tags={heroTags} />}
         </div>
       )}
     </div>

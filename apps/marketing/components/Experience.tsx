@@ -22,6 +22,8 @@ import type { FloatTag } from './SunbedOverlay'
 import Thread from './Thread'
 import { BedCard, BigButton, chipCls, Chips, CountCard, PassCard, PayCard, RunsChips, StaffCard, cardCls } from './ThreadAttach'
 import World, { FLY_MS, type Insets } from './World'
+import HeroSlides, { type HeroSlide } from './HeroSlides'
+import type { HeroMode } from './HeroBeach'
 
 type Frame = Required<Pick<LayoutInput, 'anchor' | 'seaBearingDeg' | 'placement'>>
 type CoastlineAnswer = { frame: ShoreFrame | null; shore?: GeoPoint[][] }
@@ -31,6 +33,9 @@ const PAY_MS = 900
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
 const shortestTurn = (from: number, to: number) => ((((to - from) % 360) + 540) % 360) - 180
 const GUIDE_STEPS: readonly Step[] = ['beach', 'flying', 'count', 'building']
+/** One feature per slide on the first screen — only SHIPPED features (lib/agent/knowledge.ts). */
+const SLIDE_MODES: HeroMode[] = ['book', 'order', 'rent', 'checkin', 'invoice']
+const SLIDE_MS = 5500
 
 export interface ResumeProps {
   beach: JourneyBeach
@@ -67,6 +72,7 @@ export default function Experience({
 }) {
   const t = useTranslations('Thread')
   const tc = useTranslations('Chat')
+  const th = useTranslations('Hero')
   const locale = useLocale()
   const [s, dispatch] = useReducer(journeyReducer, undefined, () => (resume ? resumedJourney(resume) : initialJourney()))
   const [frame, setFrame] = useState<Frame | null>(() =>
@@ -95,6 +101,29 @@ export default function Experience({
   const say = useCallback((key: string) => dispatch({ type: 'sayKey', key }), [])
   const sayText = useCallback((text: string) => dispatch({ type: 'say', from: 'agent', text }), [])
   const search = useBeachSearch({ enabled: s.step === 'beach', onSay: say })
+
+  // ── First-screen feature showcase: the ad's promise first, then one feature at a time ──
+  const slides: HeroSlide[] = useMemo(
+    () =>
+      SLIDE_MODES.map((mode) =>
+        mode === 'book' ? { mode, title, subtitle } : { mode, title: th(`slides.${mode}.title`), subtitle: th(`slides.${mode}.subtitle`) },
+      ),
+    [title, subtitle, th],
+  )
+  const heroTags = useMemo(
+    () => Object.fromEntries(SLIDE_MODES.map((m) => [m, m === 'book' ? th('sceneTag') : th(`slides.${m}.tag`)])) as Record<HeroMode, string>,
+    [th],
+  )
+  const [slide, setSlide] = useState(0)
+  const [reducedMotion, setReducedMotion] = useState(false)
+  useEffect(() => setReducedMotion(window.matchMedia('(prefers-reduced-motion: reduce)').matches), [])
+  // The showcase steps aside the moment the visitor engages: typing, a reply, or anything said.
+  const showcasing = !s.beach && !reducedMotion && !search.text && s.msgs.length <= 1 && !typing
+  useEffect(() => {
+    if (!showcasing) return
+    const timer = setTimeout(() => setSlide((i) => (i + 1) % SLIDE_MODES.length), SLIDE_MS)
+    return () => clearTimeout(timer)
+  }, [showcasing, slide])
 
   useEffect(() => {
     setTrackingContext(resume ? { token: resume.token, variant: resume.variant } : { angle })
@@ -572,6 +601,8 @@ export default function Experience({
         tag={tag}
         onBedTap={onBedTap}
         onMapClick={moving && s.step === 'count' ? moveTo : undefined}
+        heroMode={SLIDE_MODES[slide]}
+        heroTags={heroTags}
         ground={ground}
       />
       {moving && s.step === 'count' && (
@@ -586,8 +617,17 @@ export default function Experience({
       {!s.beach && (
         <div ref={headRef} className="pointer-events-none absolute inset-x-0 top-0 px-4 pt-[4.25rem] sm:pt-24 [@media(max-height:700px)]:pt-14">
           <div className="mx-auto max-w-3xl">
-            <h1 className="text-[clamp(2rem,8.6vw,4rem)] font-semibold leading-[1.02] tracking-[-0.03em] text-[#0e3a4a] [@media(max-height:700px)]:text-[1.75rem]">{title}</h1>
-            <p className="mt-3 hidden max-w-xl text-[clamp(1rem,4vw,1.25rem)] leading-snug text-[#0e3a4a]/80 sm:block">{subtitle}</p>
+            <HeroSlides
+              slides={slides}
+              active={slide}
+              intervalMs={SLIDE_MS}
+              running={showcasing}
+              onPick={(i) => {
+                haptic(6)
+                setSlide(i)
+              }}
+              showLabel={(f) => th('slides.show', { feature: f })}
+            />
             {offer?.launchOfferShort && <OfferPill short={offer.launchOfferShort} full={offer.launchOffer ?? offer.launchOfferShort} />}
           </div>
         </div>

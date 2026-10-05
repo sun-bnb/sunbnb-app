@@ -344,6 +344,16 @@ pure layout generator (location TBD — see Q2)
 
 ## Log
 
+- **2026-10-05** — **First-screen feature showcase (founder spec).** The hero headline now cycles
+  one feature at a time every 5.5 s — the ad's promise (sunbed booking) first, then drinks to the
+  sunbed, rentals by the hour, the staff view / check-in, automatic invoices with VAT; only
+  SHIPPED features (per `lib/agent/knowledge.ts`). `HeroSlides` stacks all slides in one grid cell
+  (block height fixed by the tallest → the beach never jumps), slides up/out, timer-fill dots that
+  can be tapped; the first slide stays the page's h1. `HeroBeach` takes a `mode` the running loop
+  reads live (no restart): booking, drink tags on booked beds, a board rack + rental tags, green
+  check-in ticks, receipt tags. The showcase pauses as soon as the visitor types or the thread
+  moves; reduced motion = no cycling.
+
 - **2026-10-05** — **Agent product knowledge (founder: "it wasn't sure about verifactu").** The
   ten-line fact sheet → `lib/agent/knowledge.ts`: 18 curated entries, each with a status
   (`shipped` / `coming` / `not_offered`), what the agent may say, `neverClaim` fences, declared

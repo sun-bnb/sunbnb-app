@@ -28,7 +28,29 @@
       }
     },
     "sceneTag": "Booked · paid by card",
-    "sceneCount": "{booked}/{total} booked"
+    "slides": {
+      "order": {
+        "title": "Drinks ordered from the sunbed, paid in the app",
+        "subtitle": "Guests order from their phone. Your bar sees every order live, with a sound alert.",
+        "tag": "Drinks · paid"
+      },
+      "rent": {
+        "title": "Rent out paddleboards and kayaks by the hour",
+        "subtitle": "Guests book and pay for equipment online. Staff mark it picked up and returned.",
+        "tag": "Paddleboard · paid"
+      },
+      "checkin": {
+        "title": "Your staff see every booking, live",
+        "subtitle": "Find any guest by name and check them in with one tap. Cash sales and the day close too.",
+        "tag": "Checked in"
+      },
+      "invoice": {
+        "title": "Every sale invoiced, VAT included",
+        "subtitle": "Receipts and invoices go out automatically, with your own numbering and VAT rate.",
+        "tag": "Receipt sent"
+      },
+      "show": "Show: {feature}"
+    }
   },
   "Facts": {
     "f1Title": "Guests book their exact sunbed",

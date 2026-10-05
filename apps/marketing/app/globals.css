@@ -47,3 +47,9 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }
+
+/* Hero slide timer: the active dot fills over the slide's interval (components/HeroSlides). */
+@keyframes hero-fill {
+  from { width: 0%; }
+  to { width: 100%; }
+}

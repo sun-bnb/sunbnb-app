@@ -28,7 +28,29 @@
       }
     },
     "sceneTag": "Varattu · maksettu kortilla",
-    "sceneCount": "{booked}/{total} varattu"
+    "slides": {
+      "order": {
+        "title": "Juomat tilataan aurinkotuolista ja maksetaan sovelluksessa",
+        "subtitle": "Asiakkaat tilaavat puhelimellaan. Baarisi näkee jokaisen tilauksen heti, äänimerkin kera.",
+        "tag": "Juomat · maksettu"
+      },
+      "rent": {
+        "title": "Vuokraa SUP-lautoja ja kajakkeja tunneittain",
+        "subtitle": "Asiakkaat varaavat ja maksavat välineet verkossa. Henkilökunta kirjaa noudon ja palautuksen.",
+        "tag": "SUP-lauta · maksettu"
+      },
+      "checkin": {
+        "title": "Henkilökuntasi näkee jokaisen varauksen heti",
+        "subtitle": "Etsi asiakas nimellä ja kirjaa hänet sisään yhdellä napautuksella. Myös käteismyynti ja päivän sulkeminen.",
+        "tag": "Kirjattu sisään"
+      },
+      "invoice": {
+        "title": "Jokainen myynti laskutettu, ALV mukana",
+        "subtitle": "Kuitit ja laskut lähtevät automaattisesti, omalla numeroinnillasi ja ALV-kannallasi.",
+        "tag": "Kuitti lähetetty"
+      },
+      "show": "Näytä: {feature}"
+    }
   },
   "Facts": {
     "f1Title": "Asiakkaat varaavat juuri oman tuolinsa",

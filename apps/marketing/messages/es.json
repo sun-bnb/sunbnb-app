@@ -28,7 +28,29 @@
       }
     },
     "sceneTag": "Reservada · pagada con tarjeta",
-    "sceneCount": "{booked}/{total} reservadas"
+    "slides": {
+      "order": {
+        "title": "Bebidas pedidas desde la hamaca, pagadas en la app",
+        "subtitle": "Tus clientes piden desde el móvil. Tu barra ve cada pedido al momento, con aviso sonoro.",
+        "tag": "Bebidas · pagado"
+      },
+      "rent": {
+        "title": "Alquila tablas de paddle y kayaks por horas",
+        "subtitle": "Tus clientes reservan y pagan el material online. Tu personal marca la recogida y la devolución.",
+        "tag": "Paddle · pagado"
+      },
+      "checkin": {
+        "title": "Tu personal ve cada reserva al momento",
+        "subtitle": "Busca a cualquier cliente por su nombre y registra su llegada con un toque. También ventas en efectivo y cierre de caja.",
+        "tag": "Llegada registrada"
+      },
+      "invoice": {
+        "title": "Cada venta facturada, con IVA",
+        "subtitle": "Recibos y facturas se emiten automáticamente, con tu propia numeración y tu tipo de IVA.",
+        "tag": "Recibo enviado"
+      },
+      "show": "Ver: {feature}"
+    }
   },
   "Facts": {
     "f1Title": "Tus clientes reservan su hamaca exacta",
