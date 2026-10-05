@@ -93,3 +93,29 @@ describe('shoreBand — a strip of sand along the coast, on the land side', () =
     for (const p of band!.slice(bent[0]!.length)) expect(signedShoreDistance(bent, p)!).toBeGreaterThan(5)
   })
 })
+
+describe('water polygons — the exact "is it in the sea?"', () => {
+  // The sea: everything east of the shore line (x ≥ 30 m), as a polygon.
+  const sea = [[off(30, -2000), off(30, 2000), off(3000, 2000), off(3000, -2000), off(30, -2000)]]
+  it('inWater: east of the shore is sea, west is land; an island ring inside the sea is land', async () => {
+    const { inWater } = await import('./coastline.ts')
+    expect(inWater(sea, off(100, 0))).toBe(true)
+    expect(inWater(sea, off(0, 0))).toBe(false)
+    const island = [off(500, -50), off(600, -50), off(600, 50), off(500, 50), off(500, -50)]
+    expect(inWater([...sea, island], off(550, 0))).toBe(false)
+  })
+  it('a REVERSED coastline way (water on the left) is overruled by the polygons', async () => {
+    const { verifyShoreFrame, nearestShoreFrame } = await import('./coastline.ts')
+    const reversed = [[off(30, 2000), off(30, -2000)]] // drawn the wrong way: the rule says sea is west
+    const raw = nearestShoreFrame(reversed, at)!
+    expect(raw.seaBearingDeg).toBe(270)
+    expect(verifyShoreFrame(raw, sea).seaBearingDeg).toBe(90)
+    expect(verifyShoreFrame(raw, []).seaBearingDeg).toBe(270) // no polygons → unchanged
+  })
+  it('keepOnLand with polygons still clears the water when the line alone would be wrong', () => {
+    const reversed = [[off(30, 2000), off(30, -2000)]]
+    const f: Frame = { anchor: off(35, 0), seaBearingDeg: 90, placement: 'center' }
+    const fixed = keepOnLand(f, 60, reversed, { shoreSeaBearingDeg: 90, water: sea })
+    for (const b of generateBeachLayout({ ...fixed, sunbedCount: 60 }).sunbeds) expect(signedShoreDistance(reversed, b, sea)!).toBeGreaterThanOrEqual(3.9)
+  })
+})

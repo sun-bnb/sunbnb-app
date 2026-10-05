@@ -26,7 +26,12 @@ function exposed(beds: MockSunbed[]): MockSunbed[] {
   return [...out]
 }
 
-export function keepOnLand(frame: Frame, sunbedCount: number, shore: GeoPoint[][], opts: { gapM?: number; shoreSeaBearingDeg: number }): Frame {
+export function keepOnLand(
+  frame: Frame,
+  sunbedCount: number,
+  shore: GeoPoint[][],
+  opts: { gapM?: number; shoreSeaBearingDeg: number; water?: GeoPoint[][] },
+): Frame {
   const gap = opts.gapM ?? 4
   const inland = ((opts.shoreSeaBearingDeg + 180) * Math.PI) / 180
   let f = frame
@@ -34,7 +39,7 @@ export function keepOnLand(frame: Frame, sunbedCount: number, shore: GeoPoint[][
     const beds = exposed(generateBeachLayout({ ...f, sunbedCount }).sunbeds)
     let min = Infinity
     for (const b of beds) {
-      const d = signedShoreDistance(shore, b)
+      const d = signedShoreDistance(shore, b, opts.water)
       if (d !== null && d < min) min = d
     }
     if (!Number.isFinite(min) || min >= gap - 0.05) return f
@@ -112,10 +117,10 @@ export function shoreBand(shore: GeoPoint[][], widthM: number): GeoPoint[][] {
 }
 
 /** How far the BACK of the parcel stands from the OSM waterline (max over its beds), or null. */
-export function parcelDepthFromWater(beds: readonly MockSunbed[], shore: GeoPoint[][]): number | null {
+export function parcelDepthFromWater(beds: readonly MockSunbed[], shore: GeoPoint[][], water?: GeoPoint[][]): number | null {
   let d = -Infinity
   for (const b of beds) {
-    const s = signedShoreDistance(shore, b)
+    const s = signedShoreDistance(shore, b, water)
     if (s !== null) d = Math.max(d, s)
   }
   return Number.isFinite(d) ? d : null

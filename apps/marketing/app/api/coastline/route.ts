@@ -1,5 +1,5 @@
 /**
- * GET /api/coastline?lat=…&lng=… → { frame: ShoreFrame | null, shore: GeoPoint[][] }
+ * GET /api/coastline?lat=…&lng=… → { frame: ShoreFrame | null, shore: GeoPoint[][], water: GeoPoint[][] }
  *
  * `shore` is the coastline within ~500 m, so the page can keep every bed on the sand
  * (`lib/land-fit.ts`) however the parcel is turned or moved.
@@ -15,10 +15,10 @@
  */
 import type { NextRequest } from 'next/server'
 import { rateLimit } from '@repo/data/rate-limit'
-import { nearestShoreFrame, trimShore, type GeoPoint } from '@/lib/coastline.ts'
+import { nearestShoreFrame, trimShore, verifyShoreFrame, type GeoPoint } from '@/lib/coastline.ts'
 import { clientIp } from '@/lib/places.ts'
 import { fetchCoastTile } from '@/lib/overpass.ts'
-import { coastlineNear, storeCoastTile, uncoveredCoastTiles } from '@repo/data/coastline-db'
+import { coastlineNear, storeCoastTile, uncoveredCoastTiles, waterNear } from '@repo/data/coastline-db'
 import { coastTilesAround } from '@repo/data/coastline-tiles'
 
 /** Google's beach point can sit in the dunes behind the sand; beyond this there is no beach to snap to. */
@@ -44,24 +44,34 @@ export async function GET(request: NextRequest) {
   if (lat === null || lng === null) return Response.json({ error: 'invalid_coordinates' }, { status: 400 })
 
   try {
-    // Read-through cache: fetch any tile around the beach that was never fetched (once per ~10 km
-    // tile, ever — pre-seeded for campaign coasts by scripts/seed-coastline.ts), then answer from
-    // our own PostGIS table. A tile Overpass couldn't deliver stays uncovered and is retried by
-    // the next visitor; whatever is already cached still answers.
-    const missing = await uncoveredCoastTiles(coastTilesAround(lat, lng, SHORE_RADIUS_M))
-    await Promise.all(
-      missing.map(async (key) => {
-        const ways = await fetchCoastTile(key)
-        if (ways) await storeCoastTile(key, ways)
-      }),
-    )
-    const ways: GeoPoint[][] = (await coastlineNear(lat, lng, SHORE_RADIUS_M)).map((w) => w.points)
-    const frame = nearestShoreFrame(ways, { lat, lng })
-    if (!frame || frame.distanceM > SEARCH_RADIUS_M) return Response.json({ frame: null, shore: [] })
-    return Response.json({ frame, shore: trimShore(ways, { lat, lng }, SHORE_RADIUS_M) })
+    // 1. Bulk-imported regions (scripts/import-coastline.ts — OSM coastlines + water polygons):
+    //    answered from our own tables, never touching Overpass. Recognised by the imported rows
+    //    themselves (negative ids), so a world import needs no per-tile bookkeeping.
+    let found = await coastlineNear(lat, lng, SHORE_RADIUS_M)
+    let imported = found.filter((w) => w.id < 0)
+    if (!imported.length) {
+      // 2. Elsewhere: read-through cache, one Overpass request per never-fetched ~10 km tile.
+      //    A tile Overpass couldn't deliver stays uncovered and is retried by the next visitor.
+      const missing = await uncoveredCoastTiles(coastTilesAround(lat, lng, SHORE_RADIUS_M))
+      await Promise.all(
+        missing.map(async (key) => {
+          const ways = await fetchCoastTile(key)
+          if (ways) await storeCoastTile(key, ways)
+        }),
+      )
+      if (missing.length) found = await coastlineNear(lat, lng, SHORE_RADIUS_M)
+      imported = found.filter((w) => w.id < 0)
+    }
+    // Imported and Overpass copies of the same shore can coexist; prefer one consistent source.
+    const ways: GeoPoint[][] = (imported.length ? imported : found).map((w) => w.points)
+    const water = imported.length ? await waterNear(lat, lng, SHORE_RADIUS_M + 200) : []
+    const raw = nearestShoreFrame(ways, { lat, lng })
+    if (!raw || raw.distanceM > SEARCH_RADIUS_M) return Response.json({ frame: null, shore: [], water: [] })
+    const frame = verifyShoreFrame(raw, water)
+    return Response.json({ frame, shore: trimShore(ways, { lat, lng }, SHORE_RADIUS_M), water })
   } catch (err) {
     console.error('[marketing] coastline lookup failed', err)
     // The visitor turns the beds by hand; the page never blocks on this.
-    return Response.json({ frame: null, shore: [] })
+    return Response.json({ frame: null, shore: [], water: [] })
   }
 }

@@ -346,6 +346,30 @@ pure layout generator (location TBD — see Q2)
 
 ## Log
 
+- **2026-10-05** — **Bulk OSM coastline + water polygons (founder: options 1+2, Spain + Balearics,
+  world-ready).** Migration `20261005151126_add_coast_water` (additive: `coast_water` polygons with
+  GiST; `coast_tile.source`). `scripts/import-coastline.ts` streams osmdata.openstreetmap.de's
+  `lines.shp` + `water_polygons.shp` (pure reader `lib/shapefile.ts`, no dependency; per-record
+  bbox skips the rest of the world) for named regions (`lib/coast-regions.ts`: `spain` = mainland +
+  Balearics + Canaries + Ceuta/Melilla; `world`). Imported lines get NEGATIVE ids; re-import replaces
+  a region, Overpass rows untouched. `/api/coastline`: imported data near the point → answer from
+  our tables only (no Overpass, no per-tile bookkeeping, so `world` works), else the Overpass
+  read-through. Water polygons (clipped to the area, ~7 KB) make land/sea exact: `inWater`
+  (even-odd over all rings), `verifyShoreFrame` flips a reversed coastline way,
+  `signedShoreDistance`/`keepOnLand`/`parcelDepthFromWater` take the polygons' side over the line's.
+  Spain import: 30 s, 5.5k segments + 137 polygons, ~44 MB with indexes. Local lookups 30–230 ms;
+  La Concha, Benidorm, Las Canteras, Cala Millor, Tarifa, Barceloneta, Muro all face the right way.
+  World: 79M + 79M points ≈ 4 GB.
+  **One copy, shared (founder):** coastline data is public and identical everywhere, so test reads
+  production's — `COASTLINE_POSTGRES_URL` points `@repo/data/coastline-db` (reads AND the Overpass
+  read-through writes) at that database; unset = the app's own DB. Verified locally by pointing it
+  at another DB: all coast reads/writes went there, the main DB untouched. Setup: import into
+  PRODUCTION only (after its migration), then on the marketing Vercel project's preview/test env
+  set `COASTLINE_POSTGRES_URL` to a production connection with a least-privilege role:
+  `CREATE ROLE coast_rw LOGIN PASSWORD '…'; GRANT SELECT, INSERT, UPDATE, DELETE ON coast_line,
+  coast_water, coast_tile TO coast_rw;` (the coast tables still exist, empty, in the test DB — the
+  migration runs everywhere).
+
 - **2026-10-05** — **P9c below the fold: a walk along the beach.** `BeachTour`: a sticky,
   full-screen world while the page scrolls natively (no hijacking); scroll progress pans the
   illustrated beach sideways and glides four places into view — beach bar (drinks), rental hut,

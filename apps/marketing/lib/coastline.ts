@@ -63,9 +63,10 @@ export function nearestShoreFrame(ways: GeoPoint[][], point: GeoPoint): ShoreFra
 
 /**
  * Signed distance (metres) from a point to the nearest coastline: POSITIVE on land, NEGATIVE in
- * the sea — by the same water-on-the-right rule. Null with no geometry.
+ * the sea — by the water polygons when given, else the water-on-the-right rule. Null with no
+ * geometry.
  */
-export function signedShoreDistance(ways: GeoPoint[][], point: GeoPoint): number | null {
+export function signedShoreDistance(ways: GeoPoint[][], point: GeoPoint, water?: GeoPoint[][]): number | null {
   const mPerDegLng = M_PER_DEG_LAT * Math.cos((point.lat * Math.PI) / 180)
   const toXY = (p: GeoPoint) => ({ x: (p.lng - point.lng) * mPerDegLng, y: (p.lat - point.lat) * M_PER_DEG_LAT })
   let best: { d2: number; side: number } | null = null
@@ -87,7 +88,10 @@ export function signedShoreDistance(ways: GeoPoint[][], point: GeoPoint): number
     }
   }
   if (!best) return null
-  return Math.sign(best.side || 1) * Math.sqrt(best.d2)
+  // With water polygons, which side is decided by them — exact, even on bends where the nearest
+  // segment's side can mislead. Without, by the water-on-the-right rule.
+  const sign = water?.length ? (inWater(water, point) ? -1 : 1) : Math.sign(best.side || 1)
+  return sign * Math.sqrt(best.d2)
 }
 
 /** Only the coastline near a beach, for the page: segments with an end within `radiusM`. */
@@ -109,4 +113,38 @@ export function trimShore(ways: GeoPoint[][], center: GeoPoint, radiusM = 500): 
     if (run.length > 1) out.push(run)
   }
   return out
+}
+
+/**
+ * Is the point in the sea? Even-odd ray casting over every ring of the imported water polygons
+ * (outer rings and holes alike), so islands inside a clipped sea polygon come out as land.
+ */
+export function inWater(rings: GeoPoint[][], p: GeoPoint): boolean {
+  let inside = false
+  for (const ring of rings) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[i]!
+      const b = ring[j]!
+      if (a.lat > p.lat !== b.lat > p.lat && p.lng < ((b.lng - a.lng) * (p.lat - a.lat)) / (b.lat - a.lat) + a.lng) inside = !inside
+    }
+  }
+  return inside
+}
+
+/**
+ * Check a snap's sea direction against the water polygons, when we have them: a point a few
+ * metres seaward of the waterline must be in the sea. If the polygons say otherwise (a mis-drawn
+ * or reversed coastline way), turn the frame round. Without polygons the frame is unchanged.
+ */
+export function verifyShoreFrame(frame: ShoreFrame, water: GeoPoint[][]): ShoreFrame {
+  if (!water.length) return frame
+  const probe = (deg: number, m: number) => {
+    const r = (deg * Math.PI) / 180
+    const mPerDegLng = M_PER_DEG_LAT * Math.cos((frame.waterline.lat * Math.PI) / 180)
+    return { lat: frame.waterline.lat + (Math.cos(r) * m) / M_PER_DEG_LAT, lng: frame.waterline.lng + (Math.sin(r) * m) / mPerDegLng }
+  }
+  const seaward = inWater(water, probe(frame.seaBearingDeg, 8))
+  const landward = inWater(water, probe(frame.seaBearingDeg + 180, 8))
+  if (!seaward && landward) return { ...frame, seaBearingDeg: (frame.seaBearingDeg + 180) % 360 }
+  return frame
 }

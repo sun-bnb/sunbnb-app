@@ -27,7 +27,7 @@ import HeroVignettes from './HeroVignettes'
 import type { HeroMode } from './HeroBeach'
 
 type Frame = Required<Pick<LayoutInput, 'anchor' | 'seaBearingDeg' | 'placement'>>
-type CoastlineAnswer = { frame: ShoreFrame | null; shore?: GeoPoint[][] }
+type CoastlineAnswer = { frame: ShoreFrame | null; shore?: GeoPoint[][]; water?: GeoPoint[][] }
 
 const SNAP_MS = 900
 const PAY_MS = 900
@@ -133,11 +133,11 @@ export default function Experience({
 
   // ── The world's geometry ────────────────────────────────────────────────
   /** The real coastline near the beach, when we have it: keeps every bed on the sand. */
-  const [shore, setShore] = useState<{ ways: GeoPoint[][]; seaBearingDeg: number } | null>(null)
+  const [shore, setShore] = useState<{ ways: GeoPoint[][]; seaBearingDeg: number; water: GeoPoint[][] } | null>(null)
   // What the visitor set (snap, turn, move) → where it actually sits: slid inland if any bed would
   // be in the water. This is the frame that is drawn AND saved.
   const placed = useMemo(
-    () => (frame && shore && s.count > 0 ? keepOnLand(frame, s.count, shore.ways, { shoreSeaBearingDeg: shore.seaBearingDeg }) : frame),
+    () => (frame && shore && s.count > 0 ? keepOnLand(frame, s.count, shore.ways, { shoreSeaBearingDeg: shore.seaBearingDeg, water: shore.water }) : frame),
     [frame, shore, s.count],
   )
   const placedRef = useRef(placed)
@@ -151,7 +151,7 @@ export default function Experience({
   // the parcel's own pad.
   const ground = useMemo(() => {
     if (!layout || !placed || !shore) return null
-    const depth = parcelDepthFromWater(layout.sunbeds, shore.ways)
+    const depth = parcelDepthFromWater(layout.sunbeds, shore.ways, shore.water)
     const band = depth !== null && depth > 0 ? shoreBand(shore.ways, Math.min(depth + 3, 60)) : []
     return [...band, parcelGround(layout.sunbeds, placed)]
   }, [layout, placed, shore])
@@ -200,7 +200,7 @@ export default function Experience({
     fetch(`/api/coastline?lat=${beach.lat}&lng=${beach.lng}`)
       .then((r) => (r.ok ? (r.json() as Promise<CoastlineAnswer>) : { frame: null }))
       .catch((): CoastlineAnswer => ({ frame: null }))
-      .then(({ frame: shore, shore: ways }) => {
+      .then(({ frame: shore, shore: ways, water }) => {
         if (cancelled) return
         // Never turn the parcel before the camera lands on it — the turn should be seen.
         whenLanded(() => {
@@ -210,7 +210,7 @@ export default function Experience({
             setFitKey((k) => k + 1)
           }
           if (!shore) return done(false)
-          if (ways?.length) setShore({ ways, seaBearingDeg: shore.seaBearingDeg })
+          if (ways?.length) setShore({ ways, seaBearingDeg: shore.seaBearingDeg, water: water ?? [] })
           animateTo({ anchor: shore.waterline, seaBearingDeg: shore.seaBearingDeg, placement: 'waterline' }, () => {
             haptic(14)
             done(true)
@@ -228,11 +228,11 @@ export default function Experience({
     let cancelled = false
     fetch(`/api/coastline?lat=${resume.beach.lat}&lng=${resume.beach.lng}`)
       .then((r) => (r.ok ? (r.json() as Promise<CoastlineAnswer>) : { frame: null }))
-      .then(({ frame: shore, shore: ways }) => {
+      .then(({ frame: shore, shore: ways, water }) => {
         if (cancelled || !shore) return
         const snapped: Frame = { anchor: shore.waterline, seaBearingDeg: shore.seaBearingDeg, placement: 'waterline' }
-        const f = ways?.length ? keepOnLand(snapped, resume.count, ways, { shoreSeaBearingDeg: shore.seaBearingDeg }) : snapped
-        if (ways?.length) setShore({ ways, seaBearingDeg: shore.seaBearingDeg })
+        const f = ways?.length ? keepOnLand(snapped, resume.count, ways, { shoreSeaBearingDeg: shore.seaBearingDeg, water }) : snapped
+        if (ways?.length) setShore({ ways, seaBearingDeg: shore.seaBearingDeg, water: water ?? [] })
         setFrame(f)
         setFitKey((k) => k + 1)
         void saveLayout(resume.token, { anchorLat: f.anchor.lat, anchorLng: f.anchor.lng, seaBearingDeg: f.seaBearingDeg, placement: f.placement })
