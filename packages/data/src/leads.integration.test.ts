@@ -6,7 +6,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import prisma from '../index'
 import { cleanDatabase } from './test/setup'
-import { createLeadMockup, getLeadChatContext, recordLeadEvent, recordMarketingConsent, getLeadMockup, purgeExpiredLeads, requestLeadDemo, saveLeadChatTurn, saveLeadLayout } from './leads'
+import { createLeadMockup, getLeadChatContext, recordLeadEvent, recordMarketingConsent, getLeadMockup, purgeExpiredLeads, requestLeadDemo, saveLeadChatTurn, saveLeadLayout, saveLeadProjection } from './leads'
 
 beforeEach(async () => { await cleanDatabase() })
 afterAll(async () => { await cleanDatabase(); await prisma.$disconnect() })
@@ -216,5 +216,15 @@ describe('funnel fields & events (P8)', () => {
     const first = (await prisma.lead.findUniqueOrThrow({ where: { token } })).marketingConsentAt
     await recordMarketingConsent(token)
     expect((await prisma.lead.findUniqueOrThrow({ where: { token } })).marketingConsentAt).toEqual(first)
+  })
+})
+
+describe('saveLeadProjection', () => {
+  beforeEach(cleanDatabase)
+  it('stores the projection on the lead, and refuses an unknown token', async () => {
+    const { token } = await createLeadMockup({ placeId: 'p', beachName: 'B', beachAddress: 'A', lat: 1, lng: 2, sunbedCount: 60, locale: 'en' })
+    expect(await saveLeadProjection(token, { input: { price: 22 } })).toBe(true)
+    expect((await prisma.lead.findUnique({ where: { token }, select: { projection: true } }))?.projection).toEqual({ input: { price: 22 } })
+    expect(await saveLeadProjection('nopenopenope', { a: 1 })).toBe(false)
   })
 })

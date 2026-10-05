@@ -2,6 +2,7 @@
  * Marketing leads (track 027) — the only writers of the `lead` table. Pure rules (statuses,
  * retention, token format, layout validation) are in `./lead-model`.
  */
+import type { Prisma } from '@prisma/client'
 import prisma from '../index'
 import { assignVariant, generateLeadToken, LEAD_STATUS, retentionCutoffs, type AdAngle, type LeadEventName, type LeadLayout, type LeadRun, type LeadVariant } from './lead-model'
 
@@ -82,6 +83,7 @@ export async function getLeadMockup(token: string) {
       placeId: true,
       beachName: true,
       runs: true,
+      projection: true,
       beachAddress: true,
       lat: true,
       lng: true,
@@ -151,7 +153,7 @@ export async function requestLeadDemo(
         lastActivityAt: now,
         ...(firstRequest ? { status: LEAD_STATUS.DEMO_REQUESTED, demoRequestedAt: now } : {}),
       },
-      select: { beachName: true, beachAddress: true, sunbedCount: true, runs: true, utmSource: true, utmCampaign: true },
+      select: { beachName: true, beachAddress: true, sunbedCount: true, runs: true, projection: true, utmSource: true, utmCampaign: true },
     })
     return { ok: true as const, firstRequest, lead }
   })
@@ -186,6 +188,7 @@ export async function getLeadChatContext(token: string, sessionId: string) {
       status: true,
       beachName: true,
       runs: true,
+      projection: true,
       sunbedCount: true,
       contactName: true,
       email: true,
@@ -239,7 +242,7 @@ export async function saveLeadChatTurn(token: string, u: ChatTurnUpdate) {
         ...(firstRequest ? { status: LEAD_STATUS.DEMO_REQUESTED, demoRequestedAt: now } : {}),
       },
       select: {
-        beachName: true, beachAddress: true, sunbedCount: true, runs: true, contactName: true, email: true, phone: true,
+        beachName: true, beachAddress: true, sunbedCount: true, runs: true, projection: true, contactName: true, email: true, phone: true,
         businessName: true, utmSource: true, utmCampaign: true,
       },
     })
@@ -276,4 +279,10 @@ export async function recordLeadEvent(e: {
 /** The visitor accepted marketing cookies on this lead's page (first acceptance wins). */
 export async function recordMarketingConsent(token: string): Promise<void> {
   await prisma.lead.updateMany({ where: { token, marketingConsentAt: null }, data: { marketingConsentAt: new Date() } })
+}
+
+/** Store the prospect's projection (already recomputed server-side from validated inputs). */
+export async function saveLeadProjection(token: string, projection: Prisma.InputJsonValue): Promise<boolean> {
+  const res = await prisma.lead.updateMany({ where: { token }, data: { projection } })
+  return res.count > 0
 }
