@@ -1,0 +1,36 @@
+/**
+ * "No invented claims" guard (track 027 D8). The previous AI-built page invented "100+ beaches",
+ * "35 % uplift" and fake scarcity. Every user-facing string is scanned for figures, percentages
+ * and customer-count language; a string may contain them only if its key is allow-listed below
+ * with the reason it is true. ICU placeholders ({count}, {max}…) are data, not claims.
+ */
+import { readFileSync } from 'node:fs'
+import { describe, expect, it } from 'vitest'
+
+const ALLOWED: Record<string, string> = {
+  'Form.sunbedsPlaceholder': 'an example input value, not a claim',
+  'Form.errorSunbeds': 'the validation range',
+  'Pricing.line': 'commission is interpolated from PRICING_TIERS',
+}
+
+// Digits and % catch "100+ beaches" / "35 %"; number words catch "hundreds of venues"; promise
+// words catch outcome guarantees. Plain nouns ("customers", "clientes") are not claims on their own.
+const CLAIM = /\d|%|\b(dozens|hundreds|thousands|millions|docenas|cientos|miles|millones|kymmeniä|satoja|tuhansia|miljoonia|uplift|guarantee[sd]?|garantiza\w*|garantía|takaa\w*|takuu)\b/i
+
+function leaves(obj: unknown, prefix = ''): [string, string][] {
+  if (typeof obj === 'string') return [[prefix, obj]]
+  if (obj && typeof obj === 'object') return Object.entries(obj).flatMap(([k, v]) => leaves(v, prefix ? `${prefix}.${k}` : k))
+  return []
+}
+
+describe.each(['en', 'es', 'fi'])('messages/%s.json', (locale) => {
+  const messages = JSON.parse(readFileSync(new URL(`../messages/${locale}.json`, import.meta.url), 'utf8')) as unknown
+
+  it('states no figure, percentage or customer count unless allow-listed', () => {
+    const offenders = leaves(messages)
+      .filter(([key]) => !ALLOWED[key])
+      .map(([key, text]) => [key, text.replace(/\{[^{}]*\{[^{}]*\}[^{}]*\}|\{[^{}]*\}|#/g, '')] as const)
+      .filter(([, text]) => CLAIM.test(text))
+    expect(offenders).toEqual([])
+  })
+})

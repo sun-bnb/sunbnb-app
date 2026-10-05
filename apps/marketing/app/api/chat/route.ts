@@ -10,7 +10,7 @@
 import type { NextRequest } from 'next/server'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { rateLimit } from '@repo/data/rate-limit'
-import { getLeadChatContext, LEAD_CHAT_MAX_TURNS, saveLeadChatTurn } from '@repo/data/leads'
+import { getLeadChatContext, LEAD_CHAT_MAX_TURNS, recordLeadEvent, saveLeadChatTurn } from '@repo/data/leads'
 import { createClaudeModel } from '@/lib/agent/claude-model.ts'
 import type { ChatMessage } from '@/lib/agent/model.ts'
 import { runTurn } from '@/lib/agent/run-turn.ts'
@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
   if (!saved.ok) return Response.json({ status: 'not_found' }, { status: 404 })
 
   if (saved.firstRequest) {
+    await recordLeadEvent({ name: 'demo_requested', token: req.token, props: { via: 'chat' } })
     await notifyDemoRequest({
       token: req.token,
       host: request.headers.get('host') ?? 'try.sunbnb.app',

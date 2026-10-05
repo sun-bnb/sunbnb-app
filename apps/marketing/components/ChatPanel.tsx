@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { track } from '@/lib/track.ts'
 
 type Line = { role: 'assistant' | 'user' | 'note'; text: string }
 
@@ -42,6 +43,7 @@ export default function ChatPanel({
     const message = draft.trim()
     if (!message || pending || closed) return
     setDraft('')
+    if (!lines.some((l) => l.role === 'user')) track('chat_open')
     setLines((l) => [...l, { role: 'user', text: message }])
     setPending(true)
     try {
@@ -59,7 +61,11 @@ export default function ChatPanel({
       if (data.status === 'ok' && data.reply) {
         setLines((l) => [...l, { role: 'assistant', text: data.reply! }])
         if (typeof data.sunbedCount === 'number') onSunbedCount(data.sunbedCount)
-        if (data.demoRequested) setBooked(true)
+        if (data.demoRequested && !booked) {
+          setBooked(true)
+          // Counted server-side in /api/chat; this only fires the ad pixel.
+          track('demo_requested', { via: 'chat' }, { beacon: false })
+        }
       } else if (data.status === 'rate_limited') {
         setLines((l) => [...l, { role: 'note', text: t('rateLimited') }])
       } else {

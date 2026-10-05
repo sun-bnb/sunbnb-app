@@ -9,7 +9,25 @@
   "Hero": {
     "eyebrow": "Para beach clubs, concesiones de hamacas y hoteles",
     "title": "Mira tu playa en Sunbnb",
-    "subtitle": "Dinos dónde está tu playa y cuántas hamacas tienes. Las colocaremos sobre el mapa satélite para que veas lo que reservarían tus clientes."
+    "subtitle": "Dinos dónde está tu playa y cuántas hamacas tienes. Las colocaremos sobre el mapa satélite para que veas lo que reservarían tus clientes.",
+    "angles": {
+      "noshow": {
+        "title": "Primera fila pagada antes de que lleguen los clientes",
+        "subtitle": "Tus clientes eligen su hamaca exacta en un mapa y pagan online. Míralo en tu propia playa: gratis y en menos de un minuto."
+      },
+      "cash": {
+        "title": "Deja de manejar efectivo en la arena",
+        "subtitle": "Tus clientes pagan con tarjeta al reservar su hamaca o al pedir bebidas a la hamaca. Mira cómo queda en tu propia playa."
+      },
+      "online": {
+        "title": "Que los turistas reserven tus hamacas online",
+        "subtitle": "Pon tus hamacas exactas en un mapa que los clientes reservan desde el móvil. Míralo ahora en tu propia playa."
+      },
+      "queue": {
+        "title": "Se acabaron las colas en la caseta de hamacas",
+        "subtitle": "Tus clientes llegan con un pase QR y van directos a su hamaca. Míralo en tu propia playa."
+      }
+    }
   },
   "Form": {
     "beachLabel": "Tu playa",
@@ -114,5 +132,15 @@
     "rateLimited": "Estás enviando mensajes demasiado rápido. Espera un momento.",
     "fallbackReply": "Lo siento, no he podido responder a eso. ¿Puedes reformularlo, o dejar tu email o teléfono para que el equipo te ayude directamente?",
     "demoBooked": "Demo solicitada: el equipo se pondrá en contacto."
+  },
+  "Consent": {
+    "title": "Cookies",
+    "body": "Usamos cookies necesarias para que este sitio funcione. Con tu permiso, también usamos cookies publicitarias de Meta y Google para medir nuestros anuncios. <link>Aviso de privacidad</link>",
+    "accept": "Aceptar todas",
+    "necessary": "Solo necesarias",
+    "settings": "Configurar cookies"
+  },
+  "Cta": {
+    "bookDemo": "Reserva una demo gratis"
   }
 }

@@ -9,8 +9,9 @@ import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { getLocale } from 'next-intl/server'
 import { rateLimit } from '@repo/data/rate-limit'
-import { parseLeadLayout, LEAD_TOKEN_RE } from '@repo/data/lead-model'
-import { createLeadMockup, requestLeadDemo, saveLeadLayout } from '@repo/data/leads'
+import { parseAngle, parseClickId, parseLeadLayout, parseVariants, LEAD_TOKEN_RE, LEAD_VARIANTS, type LeadVariant } from '@repo/data/lead-model'
+import { createLeadMockup, recordLeadEvent, requestLeadDemo, saveLeadLayout } from '@repo/data/leads'
+import { readConsentCookie } from '@/lib/consent.ts'
 import { notifyDemoRequest } from '@/lib/notify.ts'
 import { fetchBeachPlace } from '@/lib/place-details.ts'
 import { clientIp, isValidPlaceId, isValidSessionToken, localeOrDefault, parseSunbedCount } from '@/lib/places.ts'
@@ -22,7 +23,8 @@ const UTM_KEYS = ['source', 'medium', 'campaign', 'term', 'content'] as const
 
 /** Beach form → anonymous lead → the shareable mockup page. */
 export async function createMockup(form: FormData): Promise<ActionResult<'beach' | 'sunbeds' | 'rateLimited' | 'place'>> {
-  const ip = clientIp(headers())
+  const h = headers()
+  const ip = clientIp(h)
   if (!rateLimit(`mockup:${ip}`, { maxAttempts: 20, windowMs: 60 * 60_000 }).allowed) {
     return { status: 'error', errors: ['rateLimited'] }
   }
@@ -46,6 +48,7 @@ export async function createMockup(form: FormData): Promise<ActionResult<'beach'
     if (typeof v === 'string' && v) utm[k] = v
   }
 
+  const forced = form.get('v')
   const { token } = await createLeadMockup({
     placeId: place.placeId,
     beachName: place.name,
@@ -55,8 +58,18 @@ export async function createMockup(form: FormData): Promise<ActionResult<'beach'
     sunbedCount,
     locale,
     utm,
+    angle: parseAngle(form.get('a')),
+    gclid: parseClickId(form.get('gclid')),
+    fbclid: parseClickId(form.get('fbclid')),
+    // D8 A/B arms live per environment; one arm = no test.
+    variants: parseVariants(process.env.MARKETING_VARIANTS),
+    forceVariant: (LEAD_VARIANTS as readonly unknown[]).includes(forced) ? (forced as LeadVariant) : null,
+    // Accepted on the landing page, before this lead existed.
+    marketingConsent: readConsentCookie(h.get('cookie') ?? '')?.marketing === true,
   })
-  redirect(`/m/${token}`)
+  // Recorded server-side so the funnel count is exact; the page fires the ad-platform pixel.
+  await recordLeadEvent({ name: 'mockup_created', token })
+  redirect(`/m/${token}?new=1`)
 }
 
 /** Persist the prospect's layout (rotation, position, shore snap) so the shared link matches. */
@@ -87,6 +100,7 @@ export async function requestDemo(token: string, form: FormData): Promise<Action
   if (!result.ok) return { status: 'error', errors: ['notFound'] }
 
   if (result.firstRequest) {
+    await recordLeadEvent({ name: 'demo_requested', token, props: { via: 'form' } })
     await notifyDemoRequest({
       token,
       host: h.get('host') ?? 'try.sunbnb.app',

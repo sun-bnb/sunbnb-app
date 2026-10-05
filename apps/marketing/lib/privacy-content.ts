@@ -58,7 +58,13 @@ export function privacySections(locale: Locale, c: Controller): PrivacySection[]
         heading: 'Servicios de terceros',
         paragraphs: [
           'Google Maps Platform recibe lo que escribes en el buscador de playas y muestra el mapa satélite. El servicio público Overpass (datos de OpenStreetMap) recibe únicamente las coordenadas de la playa para encontrar la línea de costa. Anthropic recibe lo que escribes en el chat con IA. Alojamos el sitio en Vercel y los datos en una base de datos de Neon, ambos en la UE. Los avisos de nuevas solicitudes se envían a nuestro equipo mediante Resend.',
-          'Este sitio no usa cookies de seguimiento ni de publicidad.',
+        ],
+      },
+      {
+        heading: 'Cookies, publicidad y medición',
+        paragraphs: [
+          'Usamos una cookie necesaria para recordar tu elección sobre cookies. Solo si aceptas las cookies de marketing cargamos el Píxel de Meta (Meta Platforms Ireland) y las etiquetas de Google Ads (Google Ireland), que instalan sus propias cookies e informan a Meta o Google cuando creas una maqueta, solicitas una demo o te registras, para que podamos medir nuestros anuncios. Puedes cambiar tu elección en cualquier momento con "Configurar cookies" al pie de cada página.',
+          'Independientemente de esa elección, registramos recuentos anónimos de cómo avanzan los visitantes por el sitio (por ejemplo, cuántos llegan al formulario de demo), sin cookies y sin identificarte. Una vez creada tu maqueta, estos pasos se registran con ella, junto con los identificadores de anuncio del enlace por el que llegaste (gclid / fbclid), el mensaje del anuncio que viste y qué versión de la página se te mostró: probamos dos versiones del último paso.',
         ],
       },
       {
@@ -100,7 +106,13 @@ export function privacySections(locale: Locale, c: Controller): PrivacySection[]
         heading: 'Kolmannen osapuolen palvelut',
         paragraphs: [
           'Google Maps Platform vastaanottaa rantahakuun kirjoittamasi tekstin ja näyttää satelliittikartan. Julkinen Overpass-palvelu (OpenStreetMap-tiedot) saa vain rannan koordinaatit rantaviivan löytämiseksi. Anthropic saa sen, mitä kirjoitat tekoälyavustajalle. Sivusto on Vercelin ja tiedot Neonin tietokannassa, molemmat EU:ssa. Ilmoitukset uusista pyynnöistä lähetetään tiimillemme Resendin kautta.',
-          'Sivusto ei käytä seuranta- tai mainosevästeitä.',
+        ],
+      },
+      {
+        heading: 'Evästeet, mainonta ja mittaus',
+        paragraphs: [
+          'Käytämme välttämätöntä evästettä evästevalintasi muistamiseen. Vain jos hyväksyt markkinointievästeet, lataamme Meta-pikselin (Meta Platforms Ireland) ja Google Ads -tagit (Google Ireland), jotka asettavat omat evästeensä ja kertovat Metalle tai Googlelle, kun luot mallin, pyydät demoa tai rekisteröidyt, jotta voimme mitata mainontaamme. Voit muuttaa valintaasi milloin tahansa jokaisen sivun alareunan "Evästeasetukset"-linkistä.',
+          'Valinnastasi riippumatta tallennamme nimettömiä lukumääriä siitä, miten kävijät etenevät sivustolla (esimerkiksi kuinka moni päätyy demolomakkeelle), ilman evästeitä ja sinua tunnistamatta. Kun olet luonut mallin, nämä vaiheet tallennetaan mallisi yhteyteen yhdessä sen linkin mainostunnisteiden (gclid / fbclid), näkemäsi mainosviestin ja sinulle näytetyn sivuversion kanssa – testaamme kahta versiota viimeisestä vaiheesta.',
         ],
       },
       {
@@ -141,7 +153,13 @@ export function privacySections(locale: Locale, c: Controller): PrivacySection[]
       heading: 'Third-party services',
       paragraphs: [
         'Google Maps Platform receives what you type into the beach search and serves the satellite map. The public Overpass service (OpenStreetMap data) receives only the beach coordinates, to find the shoreline. Anthropic receives what you write in the AI chat. The site is hosted on Vercel and the data kept in a Neon database, both in the EU. Notifications of new requests reach our team through Resend.',
-        'This site uses no tracking or advertising cookies.',
+      ],
+    },
+    {
+      heading: 'Cookies, advertising and measurement',
+      paragraphs: [
+        'We use a necessary cookie to remember your cookie choice. Only if you accept marketing cookies do we load the Meta Pixel (Meta Platforms Ireland) and Google Ads tags (Google Ireland), which set their own cookies and tell Meta or Google when you create a mockup, request a demo or sign up, so we can measure our ads. You can change your choice any time with "Cookie settings" at the bottom of every page.',
+        'Regardless of that choice, we record anonymous counts of how visitors move through the site (for example, how many reach the demo form), without cookies and without identifying you. Once you create a mockup, these steps are recorded with your mockup, together with the ad identifiers in the link you arrived from (gclid / fbclid), the ad message you saw and which version of the page you were shown — we test two versions of the final step.',
       ],
     },
     {

@@ -1,6 +1,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
+import CookieSettingsLink from './CookieSettingsLink'
 
 export const PARTNER_PORTAL_URL = process.env.NEXT_PUBLIC_PARTNER_URL ?? 'https://partner.sunbnb.app'
 
@@ -27,9 +28,12 @@ export async function SiteFooter() {
     <footer className="mt-auto border-t border-gray-100">
       <div className="mx-auto flex max-w-6xl justify-between px-4 py-6 text-xs text-gray-400">
         <span>{t('Footer.copyright', { year: new Date().getFullYear() })}</span>
-        <Link href="/privacy" className="hover:text-gray-600">
-          {t('Privacy.link')}
-        </Link>
+        <span className="flex gap-4">
+          <CookieSettingsLink label={t('Consent.settings')} />
+          <Link href="/privacy" className="hover:text-gray-600">
+            {t('Privacy.link')}
+          </Link>
+        </span>
       </div>
     </footer>
   )

@@ -9,7 +9,25 @@
   "Hero": {
     "eyebrow": "Beach clubeille, aurinkotuolien vuokraajille ja hotelleille",
     "title": "Katso rantasi Sunbnb:ssä",
-    "subtitle": "Kerro missä rantasi on ja montako aurinkotuolia sinulla on. Asettelemme ne satelliittikartalle, jotta näet mitä asiakkaasi varaisivat."
+    "subtitle": "Kerro missä rantasi on ja montako aurinkotuolia sinulla on. Asettelemme ne satelliittikartalle, jotta näet mitä asiakkaasi varaisivat.",
+    "angles": {
+      "noshow": {
+        "title": "Eturivi maksettu ennen kuin asiakkaat saapuvat",
+        "subtitle": "Asiakkaat valitsevat juuri oman tuolinsa kartalta ja maksavat verkossa. Katso se omalla rannallasi – ilmaiseksi, alle minuutissa."
+      },
+      "cash": {
+        "title": "Ei enää käteistä rannalla",
+        "subtitle": "Asiakkaat maksavat kortilla varatessaan tuolin tai tilatessaan juomia tuoliinsa. Katso miltä se näyttää omalla rannallasi."
+      },
+      "online": {
+        "title": "Anna turistien varata tuolisi verkossa",
+        "subtitle": "Laita tuolisi kartalle, josta asiakkaat varaavat puhelimellaan. Katso se nyt omalla rannallasi."
+      },
+      "queue": {
+        "title": "Ei enää jonoja tuolikioskilla",
+        "subtitle": "Asiakkaat saapuvat QR-passin kanssa ja kävelevät suoraan tuolilleen. Katso se omalla rannallasi."
+      }
+    }
   },
   "Form": {
     "beachLabel": "Rantasi",
@@ -114,5 +132,15 @@
     "rateLimited": "Lähetät viestejä liian nopeasti. Odota hetki.",
     "fallbackReply": "Valitettavasti en osannut vastata tuohon. Voitko muotoilla kysymyksen toisin, tai jättää sähköpostin tai puhelinnumeron, niin tiimi auttaa suoraan?",
     "demoBooked": "Demo pyydetty – tiimi on yhteydessä."
+  },
+  "Consent": {
+    "title": "Evästeet",
+    "body": "Käytämme sivuston toimintaan välttämättömiä evästeitä. Luvallasi käytämme myös Metan ja Googlen mainosevästeitä mainostemme mittaamiseen. <link>Tietosuojailmoitus</link>",
+    "accept": "Hyväksy kaikki",
+    "necessary": "Vain välttämättömät",
+    "settings": "Evästeasetukset"
+  },
+  "Cta": {
+    "bookDemo": "Varaa ilmainen demo"
   }
 }

@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl'
 import { useEffect, useState, type FC } from 'react'
 import QRCodeLib from 'react-qr-code'
 import type { MockSunbed } from '@/lib/beach-layout.ts'
+import { track } from '@/lib/track.ts'
 
 // react-qr-code types against the hoisted @types/react 19; re-type for this app's React 18 types
 // (same cast as apps/user PassView).
@@ -64,7 +65,14 @@ export default function DemoBookingPanel({
               onChange={(e) => setPrice(e.target.value.replace(/[^\d.]/g, '').slice(0, 6))}
             />
           </div>
-          <button type="button" className="btn-primary w-full" onClick={() => setStep('checkout')}>
+          <button
+            type="button"
+            className="btn-primary w-full"
+            onClick={() => {
+              track('guest_demo_start')
+              setStep('checkout')
+            }}
+          >
             {t('book')}
           </button>
         </div>
@@ -85,6 +93,7 @@ export default function DemoBookingPanel({
             className="btn-primary w-full"
             onClick={() => {
               onBooked(bed.label)
+              track('guest_demo_done')
               setStep('pass')
             }}
           >

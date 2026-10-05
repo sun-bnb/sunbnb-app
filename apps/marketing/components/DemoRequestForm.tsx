@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { useId, useMemo, useState, useTransition } from 'react'
 import { requestDemo } from '@/app/actions'
 import { HONEYPOT_FIELD, parseDemoRequest, type DemoRequestError } from '@/lib/demo-request.ts'
+import { track } from '@/lib/track.ts'
 
 const ERROR_KEYS: Record<DemoRequestError | 'rateLimited' | 'notFound', string> = {
   name: 'errName',
@@ -36,7 +37,11 @@ export default function DemoRequestForm({ token, beachName }: { token: string; b
     if (!local.ok) return setErrors(local.errors.map((k) => ERROR_KEYS[k]))
     start(async () => {
       const res = await requestDemo(token, data).catch(() => ({ status: 'error' as const, errors: ['notFound' as const] }))
-      if (res.status === 'ok') return setDone(true)
+      if (res.status === 'ok') {
+        // Counted server-side in requestDemo; this only fires the ad pixel.
+        track('demo_requested', { via: 'form' }, { beacon: false })
+        return setDone(true)
+      }
       setErrors(res.errors.map((k) => ERROR_KEYS[k] ?? 'errGeneric'))
     })
   }

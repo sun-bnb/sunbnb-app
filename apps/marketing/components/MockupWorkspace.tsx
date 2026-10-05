@@ -5,6 +5,7 @@ import type { LeadLayout } from '@repo/data/lead-model'
 import ChatPanel from './ChatPanel'
 import DemoRequestForm from './DemoRequestForm'
 import MockupView from './MockupView'
+import StickyCta from './StickyCta'
 
 /**
  * Client shell of the mockup page: owns the sunbed count so a count the prospect gives in the chat
@@ -19,6 +20,7 @@ export default function MockupWorkspace(props: {
   beachName: string
   shareHint: string
   chatEnabled: boolean
+  variant: 'a' | 'b'
 }) {
   const [sunbedCount, setSunbedCount] = useState(props.initialSunbedCount)
   return (
@@ -28,8 +30,12 @@ export default function MockupWorkspace(props: {
 
       <div className={`mt-10 grid gap-6 ${props.chatEnabled ? 'lg:grid-cols-2' : 'mx-auto max-w-xl'}`}>
         {props.chatEnabled && <ChatPanel token={props.token} beachName={props.beachName} onSunbedCount={setSunbedCount} />}
-        <DemoRequestForm token={props.token} beachName={props.beachName} />
+        <div id="demo">
+          <DemoRequestForm token={props.token} beachName={props.beachName} />
+        </div>
       </div>
+      {/* Variant B (start free) gets its own CTA in P13; until then both arms book a demo. */}
+      <StickyCta targetId="demo" />
     </>
   )
 }

@@ -1,14 +1,21 @@
 import { getTranslations } from 'next-intl/server'
+import { parseAngle } from '@repo/data/lead-model'
 import { PRICING_TIERS } from '@repo/data/pricing-tiers'
 import BeachForm from '@/components/BeachForm'
 import { SiteFooter, SiteHeader } from '@/components/SiteChrome'
+import TrackOnMount from '@/components/TrackOnMount'
 
 /**
  * try.sunbnb.app — the ad landing page (track 027). Every claim here must be TRUE TODAY:
  * features are shipped ones, and the price line reads the same catalog billing is seeded from.
  */
-export default async function LandingPage() {
+export default async function LandingPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
   const t = await getTranslations()
+  // Ad scent: the headline repeats the promise of the ad that brought them (`?a=` angle key).
+  // Only fixed copy keys are ever rendered — never text from the query string.
+  const angle = parseAngle(searchParams.a)
+  const title = angle ? t(`Hero.angles.${angle}.title`) : t('Hero.title')
+  const subtitle = angle ? t(`Hero.angles.${angle}.subtitle`) : t('Hero.subtitle')
   const facts = [
     { title: t('Facts.f1Title'), body: t('Facts.f1'), icon: <MapIcon /> },
     { title: t('Facts.f2Title'), body: t('Facts.f2'), icon: <QrIcon /> },
@@ -18,13 +25,14 @@ export default async function LandingPage() {
   return (
     <>
       <SiteHeader />
+      <TrackOnMount name="landing_view" context={{ angle }} />
       <main>
         <section className="bg-gradient-to-b from-sand-light to-white">
           <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-12 sm:py-20 lg:grid-cols-2">
             <div>
               <p className="mb-3 text-xs font-medium uppercase tracking-wider text-amber-700">{t('Hero.eyebrow')}</p>
-              <h1 className="text-4xl font-semibold tracking-tight text-gray-900 sm:text-5xl">{t('Hero.title')}</h1>
-              <p className="mt-4 max-w-xl text-base leading-relaxed text-gray-600">{t('Hero.subtitle')}</p>
+              <h1 className="text-4xl font-semibold tracking-tight text-gray-900 sm:text-5xl">{title}</h1>
+              <p className="mt-4 max-w-xl text-base leading-relaxed text-gray-600">{subtitle}</p>
               <p className="mt-6 text-sm text-gray-500">
                 {t('Pricing.line', { commission: PRICING_TIERS.STARTER.commissionPercent })}
               </p>

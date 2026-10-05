@@ -9,7 +9,25 @@
   "Hero": {
     "eyebrow": "For beach clubs, sunbed concessions and hotels",
     "title": "See your beach on Sunbnb",
-    "subtitle": "Tell us where your beach is and how many sunbeds you have. We'll lay them out on the satellite map, so you can see what your guests would book."
+    "subtitle": "Tell us where your beach is and how many sunbeds you have. We'll lay them out on the satellite map, so you can see what your guests would book.",
+    "angles": {
+      "noshow": {
+        "title": "Front-row sunbeds, paid before guests arrive",
+        "subtitle": "Guests choose their exact sunbed on a map and pay online. See it on your own beach — free, in under a minute."
+      },
+      "cash": {
+        "title": "Stop handling cash on the sand",
+        "subtitle": "Guests pay by card when they book their sunbed or order drinks to it. See how it looks on your own beach."
+      },
+      "online": {
+        "title": "Let tourists book your sunbeds online",
+        "subtitle": "Put your exact sunbeds on a map guests can book from their phone. See it on your own beach now."
+      },
+      "queue": {
+        "title": "No more queues at the sunbed kiosk",
+        "subtitle": "Guests arrive with a QR pass and walk straight to their sunbed. See it on your own beach."
+      }
+    }
   },
   "Form": {
     "beachLabel": "Your beach",
@@ -114,5 +132,15 @@
     "rateLimited": "You're sending messages too fast. Please wait a moment.",
     "fallbackReply": "Sorry, I couldn't answer that one. Could you rephrase it, or leave your email or phone and the team will help directly?",
     "demoBooked": "Demo requested — the team will be in touch."
+  },
+  "Consent": {
+    "title": "Cookies",
+    "body": "We use necessary cookies to run this site. With your permission we also use Meta and Google advertising cookies to measure our ads. <link>Privacy notice</link>",
+    "accept": "Accept all",
+    "necessary": "Only necessary",
+    "settings": "Cookie settings"
+  },
+  "Cta": {
+    "bookDemo": "Book a free demo"
   }
 }

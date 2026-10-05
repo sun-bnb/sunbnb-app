@@ -4,6 +4,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import { useEffect, useId, useMemo, useRef, useState, useTransition } from 'react'
 import { createMockup } from '@/app/actions'
 import { MAX_SUNBEDS, parseSunbedCount } from '@/lib/places.ts'
+import { track } from '@/lib/track.ts'
 
 interface Suggestion {
   placeId: string
@@ -67,6 +68,7 @@ export default function BeachForm() {
   }, [query, selected, session, locale])
 
   function choose(s: Suggestion) {
+    track('beach_pick')
     setSelected(s)
     setQuery(s.secondary ? `${s.main}, ${s.secondary}` : s.main)
     setOpen(false)
@@ -98,9 +100,9 @@ export default function BeachForm() {
     data.set('place', selected.placeId)
     data.set('beds', String(count))
     data.set('session', session)
-    // Ad attribution from the landing URL is stored on the lead.
+    // Ad attribution from the landing URL is stored on the lead (validated server-side).
     for (const [k, v] of new URLSearchParams(window.location.search)) {
-      if (k.startsWith('utm_')) data.set(k, v)
+      if (k.startsWith('utm_') || k === 'a' || k === 'gclid' || k === 'fbclid' || k === 'v') data.set(k, v)
     }
     startSubmit(async () => {
       // On success the action redirects; it only returns on error.
@@ -133,6 +135,7 @@ export default function BeachForm() {
           placeholder={t('beachPlaceholder')}
           value={query}
           onChange={(e) => {
+            if (!query) track('search_start')
             setQuery(e.target.value)
             setSelected(null)
             setOpen(true)
