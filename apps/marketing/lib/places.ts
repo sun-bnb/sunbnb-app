@@ -55,3 +55,17 @@ export function clientIp(headers: Headers): string {
 export function localeOrDefault(locale: string | null | undefined): Locale {
   return SUPPORTED_LOCALES.includes(locale as Locale) ? (locale as Locale) : 'en'
 }
+
+/**
+ * "Near me" bias for autocomplete: `lat,lng`, rounded to 2 decimals (~1 km) before it leaves us —
+ * enough to find the beach they're standing on, not their exact position.
+ */
+export function parseNear(raw: string | null): { lat: number; lng: number } | null {
+  if (!raw) return null
+  const m = /^(-?\d{1,2}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)$/.exec(raw)
+  if (!m) return null
+  const lat = Number(m[1])
+  const lng = Number(m[2])
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null
+  return { lat: Math.round(lat * 100) / 100, lng: Math.round(lng * 100) / 100 }
+}

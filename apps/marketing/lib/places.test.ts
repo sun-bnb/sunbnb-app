@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clientIp, isValidPlaceId, isValidQuery, isValidSessionToken, parseBeachParams, parseSunbedCount } from './places.ts'
+import { clientIp, isValidPlaceId, isValidQuery, isValidSessionToken, parseBeachParams, parseNear, parseSunbedCount } from './places.ts'
 
 describe('parseSunbedCount — what the sunbed field accepts', () => {
   it.each([
@@ -49,5 +49,14 @@ describe('Places proxy input rules', () => {
   it('takes the first x-forwarded-for hop as the client ip', () => {
     expect(clientIp(new Headers({ 'x-forwarded-for': '203.0.113.7, 10.0.0.1' }))).toBe('203.0.113.7')
     expect(clientIp(new Headers())).toBe('unknown')
+  })
+})
+
+describe('parseNear — the "near me" bias', () => {
+  it('rounds to ~1 km before anything leaves us', () => {
+    expect(parseNear('39.80719,3.11650')).toEqual({ lat: 39.81, lng: 3.12 })
+  })
+  it('rejects anything that is not two coordinates', () => {
+    for (const bad of [null, '', '39.8', '91,3', '39.8,181', '39.8;3.1', 'a,b', '39.8,3.1,5']) expect(parseNear(bad)).toBeNull()
   })
 })

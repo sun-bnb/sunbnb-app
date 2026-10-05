@@ -41,7 +41,7 @@ export default function ConsentManager() {
 
   if (!open) return null
   return (
-    <div role="dialog" aria-live="polite" aria-label={t('title')} className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-xl rounded-xl border border-gray-200 bg-white p-4 shadow-lg sm:inset-x-auto sm:right-4">
+    <div role="dialog" aria-live="polite" aria-label={t('title')} className="fixed inset-x-3 top-3 z-50 mx-auto max-w-xl rounded-xl border border-gray-200 bg-white p-4 shadow-lg sm:inset-x-auto sm:bottom-3 sm:right-4 sm:top-auto">
       <p className="text-sm text-gray-700">
         {
           // next-intl's rich-text types resolve the hoisted @types/react 19; this app is on 18.

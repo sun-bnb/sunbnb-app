@@ -40,7 +40,7 @@ export function privacySections(locale: Locale, c: Controller): PrivacySection[]
       {
         heading: 'Asistente de chat con IA',
         paragraphs: [
-          'El chat de la página de tu maqueta es un asistente de IA, no una persona. Tus mensajes se envían a Anthropic, que proporciona el modelo de IA, para generar las respuestas. Si escribes un email o un teléfono en el chat, lo tratamos como una solicitud de contacto para una demo y avisamos al equipo.',
+          'El asistente del sitio es una IA, no una persona, y responde desde la primera pantalla. Tus mensajes se envían a Anthropic, que proporciona el modelo de IA, para generar las respuestas. Antes de crear tu maqueta no guardamos tus preguntas; después, la conversación se guarda con tu maqueta. Si escribes un email o un teléfono en el chat, lo tratamos como una solicitud de contacto para una demo y avisamos al equipo.',
         ],
       },
       {
@@ -88,7 +88,7 @@ export function privacySections(locale: Locale, c: Controller): PrivacySection[]
       {
         heading: 'Tekoälyavustaja',
         paragraphs: [
-          'Mallisivusi chat on tekoälyavustaja, ei ihminen. Viestisi lähetetään tekoälymallin tarjoavalle Anthropicille vastausten tuottamiseksi. Jos kirjoitat chattiin sähköpostiosoitteen tai puhelinnumeron, käsittelemme sen pyyntönä ottaa sinuun yhteyttä demosta, ja tiimille ilmoitetaan.',
+          'Sivuston avustaja on tekoäly, ei ihminen, ja se vastaa heti ensimmäiseltä näkymältä. Viestisi lähetetään tekoälymallin tarjoavalle Anthropicille vastausten tuottamiseksi. Ennen kuin luot mallin, emme tallenna kysymyksiäsi; sen jälkeen keskustelu tallennetaan mallisi yhteyteen. Jos kirjoitat chattiin sähköpostiosoitteen tai puhelinnumeron, käsittelemme sen pyyntönä ottaa sinuun yhteyttä demosta, ja tiimille ilmoitetaan.',
         ],
       },
       {
@@ -135,7 +135,7 @@ export function privacySections(locale: Locale, c: Controller): PrivacySection[]
     {
       heading: 'AI chat assistant',
       paragraphs: [
-        'The chat on your mockup page is an AI assistant, not a person. Your messages are sent to Anthropic, which provides the AI model, to generate the replies. If you type an email address or phone number into the chat, we treat it as a request to be contacted about a demo, and the team is notified.',
+        'The assistant on this site is an AI, not a person, and it answers from the first screen. Your messages are sent to Anthropic, which provides the AI model, to generate the replies. Before you create a mockup we do not store your questions; after that, the conversation is stored with your mockup. If you type an email address or phone number into the chat, we treat it as a request to be contacted about a demo, and the team is notified.',
       ],
     },
     {

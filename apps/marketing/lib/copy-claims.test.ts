@@ -8,9 +8,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const ALLOWED: Record<string, string> = {
-  'Form.sunbedsPlaceholder': 'an example input value, not a claim',
-  'Form.errorSunbeds': 'the validation range',
-  'Pricing.line': 'commission is interpolated from PRICING_TIERS',
+  'Thread.greeting': 'quotes an example of what to type ("…, 80 sunbeds and a bar"), not a claim',
 }
 
 // Digits and % catch "100+ beaches" / "35 %"; number words catch "hundreds of venues"; promise

@@ -37,3 +37,13 @@
     @apply bg-white rounded-xl border border-gray-200 p-4;
   }
 }
+
+/* The count's little bounce when it changes (BeachBuilder) — feedback for every tap. */
+@keyframes pop {
+  0% { transform: scale(0.86); }
+  60% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}

@@ -6,7 +6,6 @@
  * checks are a convenience, not a guard.
  */
 import { headers } from 'next/headers'
-import { redirect } from 'next/navigation'
 import { getLocale } from 'next-intl/server'
 import { rateLimit } from '@repo/data/rate-limit'
 import { parseAngle, parseClickId, parseLeadLayout, parseVariants, LEAD_TOKEN_RE, LEAD_VARIANTS, type LeadVariant } from '@repo/data/lead-model'
@@ -21,8 +20,13 @@ type ActionResult<E extends string = string> = { status: 'ok' } | { status: 'err
 
 const UTM_KEYS = ['source', 'medium', 'campaign', 'term', 'content'] as const
 
-/** Beach form → anonymous lead → the shareable mockup page. */
-export async function createMockup(form: FormData): Promise<ActionResult<'beach' | 'sunbeds' | 'rateLimited' | 'place'>> {
+/**
+ * "Build my beach" → anonymous lead. Returns the token instead of redirecting (D11): the visitor
+ * stays in the same world and the page swaps its URL to `/m/<token>` without a reload.
+ */
+export async function createMockup(
+  form: FormData,
+): Promise<{ status: 'ok'; token: string; variant: string } | { status: 'error'; errors: ('beach' | 'sunbeds' | 'rateLimited' | 'place')[] }> {
   const h = headers()
   const ip = clientIp(h)
   if (!rateLimit(`mockup:${ip}`, { maxAttempts: 20, windowMs: 60 * 60_000 }).allowed) {
@@ -49,7 +53,7 @@ export async function createMockup(form: FormData): Promise<ActionResult<'beach'
   }
 
   const forced = form.get('v')
-  const { token } = await createLeadMockup({
+  const { token, variant } = await createLeadMockup({
     placeId: place.placeId,
     beachName: place.name,
     beachAddress: place.address,
@@ -67,9 +71,20 @@ export async function createMockup(form: FormData): Promise<ActionResult<'beach'
     // Accepted on the landing page, before this lead existed.
     marketingConsent: readConsentCookie(h.get('cookie') ?? '')?.marketing === true,
   })
+  // The layout the visitor built in the builder (turned to the sea, moved) — saved so their link
+  // reopens exactly as they left it. Validated like any public input; ignored if absent/invalid.
+  const layout = parseLeadLayout({
+    anchorLat: Number(form.get('anchorLat')),
+    anchorLng: Number(form.get('anchorLng')),
+    seaBearingDeg: Number(form.get('seaBearingDeg')),
+    placement: form.get('placement'),
+  })
+  // Keep a shore-snapped parcel, or one the visitor turned/moved by hand. An untouched unsnapped
+  // one sits on the Places point (often a road) — not saving it lets the link retry the snap.
+  if (layout && (layout.placement === 'waterline' || form.get('adjusted') === '1')) await saveLeadLayout(token, layout)
   // Recorded server-side so the funnel count is exact; the page fires the ad-platform pixel.
   await recordLeadEvent({ name: 'mockup_created', token })
-  redirect(`/m/${token}?new=1`)
+  return { status: 'ok', token, variant }
 }
 
 /** Persist the prospect's layout (rotation, position, shore snap) so the shared link matches. */

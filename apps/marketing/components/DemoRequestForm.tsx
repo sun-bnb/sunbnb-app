@@ -22,7 +22,17 @@ const ERROR_KEYS: Record<DemoRequestError | 'rateLimited' | 'notFound', string> 
  * "Request a demo" — the only place personal data enters the lead (track 027 P3). Consent is a
  * required, unticked checkbox linked to the versioned privacy notice.
  */
-export default function DemoRequestForm({ token, beachName }: { token: string; beachName: string }) {
+export default function DemoRequestForm({
+  token,
+  beachName,
+  bare = false,
+  onSuccess,
+}: {
+  token: string
+  beachName: string
+  bare?: boolean
+  onSuccess?: () => void
+}) {
   const t = useTranslations('Demo')
   const ids = { name: useId(), email: useId(), phone: useId(), business: useId(), message: useId(), consent: useId() }
   const renderedAt = useMemo(() => String(Date.now()), [])
@@ -40,6 +50,7 @@ export default function DemoRequestForm({ token, beachName }: { token: string; b
       if (res.status === 'ok') {
         // Counted server-side in requestDemo; this only fires the ad pixel.
         track('demo_requested', { via: 'form' }, { beacon: false })
+        onSuccess?.()
         return setDone(true)
       }
       setErrors(res.errors.map((k) => ERROR_KEYS[k] ?? 'errGeneric'))
@@ -56,11 +67,14 @@ export default function DemoRequestForm({ token, beachName }: { token: string; b
   }
 
   return (
-    <form onSubmit={onSubmit} noValidate className="card space-y-4 p-5 shadow-sm sm:p-6">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900">{t('title')}</h2>
-        <p className="mt-1 text-sm text-gray-600">{t('subtitle', { beach: beachName })}</p>
-      </div>
+    <form onSubmit={onSubmit} noValidate className={bare ? 'relative space-y-4' : 'card space-y-4 p-5 shadow-sm sm:p-6'}>
+      {/* Bare = embedded in a mission sheet that already says what this is. */}
+      {!bare && (
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">{t('title')}</h2>
+          <p className="mt-1 text-sm text-gray-600">{t('subtitle', { beach: beachName })}</p>
+        </div>
+      )}
 
       {/* Honeypot: invisible to people (and to assistive tech), irresistible to form-filling bots. */}
       <div aria-hidden="true" className="absolute -left-[9999px] h-px w-px overflow-hidden">

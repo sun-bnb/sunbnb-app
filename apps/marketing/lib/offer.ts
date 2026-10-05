@@ -9,6 +9,8 @@ import type { Locale } from './places.ts'
 export interface Offer {
   /** e.g. a launch discount or free setup, with its exact conditions and end date. */
   launchOffer: string | null
+  /** The one-glance form for the immersive first screen; the full terms are one tap away. Null iff launchOffer is. */
+  launchOfferShort: string | null
   /** e.g. a personal setup guarantee the founder can actually deliver. */
   founderPromise: string | null
 }
@@ -18,14 +20,17 @@ export interface Offer {
 export const OFFERS: Record<Locale, Offer> = {
   en: {
     launchOffer: 'Launch offer: no commission and no monthly fees for 30 days from your first paid booking — for beaches that join by 31 May 2027.',
+    launchOfferShort: 'Launch offer: 30 days with no commission and no fees',
     founderPromise: null,
   },
   es: {
     launchOffer: 'Oferta de lanzamiento: sin comisión ni cuotas mensuales durante 30 días desde tu primera reserva pagada, para playas que se unan hasta el 31 de mayo de 2027.',
+    launchOfferShort: 'Oferta de lanzamiento: 30 días sin comisión ni cuotas',
     founderPromise: null,
   },
   fi: {
     launchOffer: 'Lanseeraustarjous: ei provisiota eikä kuukausimaksuja 30 päivään ensimmäisestä maksetusta varauksesta – rannoille, jotka liittyvät 31.5.2027 mennessä.',
+    launchOfferShort: 'Lanseeraustarjous: 30 päivää ilman provisiota ja maksuja',
     founderPromise: null,
   },
 }

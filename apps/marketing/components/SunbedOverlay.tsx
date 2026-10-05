@@ -4,30 +4,72 @@
 import { useMap } from '@vis.gl/react-google-maps'
 import { useEffect, useRef } from 'react'
 import { DEFAULT_LAYOUT, type BeachLayout } from '@/lib/beach-layout.ts'
+import { drawAppBed, drawAppShade, loadAppSprites, type AppSprites, type BedStatus } from '@/lib/app-sprites.ts'
+
+/** A newly added bed pops in over this long; additions are staggered so the beach fills row by row. */
+const POP_MS = 320
+const STAGGER_MS = 12
+/** Below this bed length in px the app stops drawing seats and shows the parcel outline + count chip. */
+const LOD_MIN_BED_PX = 9
+
+const easeOutBack = (t: number) => {
+  const c = 1.70158
+  return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2)
+}
 
 /**
- * Draws a generated beach layout on the map with ONE canvas overlay. A marker per sunbed does
- * not scale — track 020 measured the cost of per-item map markers at venue scale, and a prospect
- * can type 5,000 — whereas one canvas redraw per pan/zoom stays cheap at any count.
- *
- * Sizes are true to scale: each bed is drawn at its real footprint (metres → pixels at the
- * current zoom), so the mockup shows how the beach would actually fill.
+ * Draws a generated beach layout on the map with ONE canvas overlay, in the guest app's exact
+ * visual language (`lib/app-sprites.ts`). One canvas, not a marker per bed: a prospect can type
+ * 5,000, and track 020 measured what per-item map markers cost at venue scale. Beds that appear
+ * (first draw, or a higher count) pop in staggered — the "game feel" of setting the count.
  */
+export interface FloatTag {
+  label: string
+  text: string
+  /** performance.now() when it was raised */
+  at: number
+}
+
+const TAG_MS = 1600
+
 export default function SunbedOverlay({
   layout,
   selected = null,
   booked,
+  hint = null,
+  tag = null,
+  ground = null,
 }: {
   layout: BeachLayout
-  /** Label of the bed the prospect tapped (demo booking). */
   selected?: string | null
-  /** Labels booked in this demo session. */
   booked?: ReadonlySet<string>
+  /** A bed to pulse a "tap me" ring around (the first-guest mission). */
+  hint?: string | null
+  /** A "+€20 · paid" tag rising from a bed that was just booked. */
+  tag?: FloatTag | null
+  /** The parcel's sand patch (`lib/land-fit.ts` parcelGround), painted under the beds. */
+  ground?: { lat: number; lng: number }[][] | null
 }) {
   const map = useMap()
   const layoutRef = useRef(layout)
-  const marksRef = useRef({ selected, booked })
+  const marksRef = useRef({ selected, booked, hint, tag, ground })
   const overlayRef = useRef<google.maps.OverlayView | null>(null)
+  const spritesRef = useRef<AppSprites | null>(null)
+  /** bed label → when it (re)appeared; umbrellas use their pair's first bed. */
+  const bornRef = useRef(new Map<string, number>())
+  const rafRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void loadAppSprites().then((s) => {
+      if (cancelled) return
+      spritesRef.current = s
+      overlayRef.current?.draw()
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (!map) return
@@ -70,88 +112,130 @@ export default function SunbedOverlay({
 
         const { sunbeds, umbrellas } = layoutRef.current
         if (!sunbeds.length) return
-
-        // Pixels per metre at this zoom, measured at the first bed (1e-5° lat ≈ 1.11 m).
-        const first = sunbeds[0]!
-        const a = projection.fromLatLngToDivPixel(new google.maps.LatLng(first.lat, first.lng))
-        const b = projection.fromLatLngToDivPixel(new google.maps.LatLng(first.lat + 1e-5, first.lng))
-        if (!a || !b) return
-        const pxPerM = Math.abs(a.y - b.y) / 1.1132
-        const bedW = DEFAULT_LAYOUT.bedWidthM * pxPerM
-        const bedL = DEFAULT_LAYOUT.bedLengthM * pxPerM
         const toLocal = (lat: number, lng: number) => {
           const p = projection.fromLatLngToDivPixel(new google.maps.LatLng(lat, lng))
           return p ? { x: p.x - sw.x, y: p.y - ne.y } : null
         }
 
-        // Zoomed far out a bed is under a pixel: draw dots so the beach still reads as filled.
-        if (bedW < 2) {
-          ctx.fillStyle = 'rgba(255,255,255,0.9)'
-          for (const s of sunbeds) {
-            const p = toLocal(s.lat, s.lng)
-            if (p) ctx.fillRect(p.x - 1, p.y - 1, 2, 2)
-          }
-          return
+        // Pixels per metre at this zoom, measured at the first bed (1e-5° lat ≈ 1.1132 m).
+        const first = sunbeds[0]!
+        const a = projection.fromLatLngToDivPixel(new google.maps.LatLng(first.lat, first.lng))
+        const b = projection.fromLatLngToDivPixel(new google.maps.LatLng(first.lat + 1e-5, first.lng))
+        if (!a || !b) return
+        const pxPerM = Math.abs(a.y - b.y) / 1.1132
+        const bedL = DEFAULT_LAYOUT.bedLengthM * pxPerM
+        const angle = (first.rotationDeg * Math.PI) / 180
+        const { selected: sel, booked: bk, hint: hn, tag: tg, ground: gd } = marksRef.current
+        const now = performance.now()
+        let animating = false
+        const popOf = (key: string) => {
+          const born = bornRef.current.get(key)
+          if (born === undefined) return 1
+          const t = (now - born) / POP_MS
+          if (t >= 1) return 1
+          animating = true
+          return t <= 0 ? 0 : Math.max(0, easeOutBack(t))
         }
 
-        const angle = (first.rotationDeg * Math.PI) / 180
-        for (const s of sunbeds) {
-          const p = toLocal(s.lat, s.lng)
-          if (!p || p.x < -bedL || p.y < -bedL || p.x > width + bedL || p.y > height + bedL) continue
+        // The sand the beds stand on, in the basemap's own sand colour: where Google's water and the
+        // OSM coastline disagree, the beach shown matches the shore the beds were placed by.
+        if (gd?.length) {
           ctx.save()
-          ctx.translate(p.x, p.y)
-          // After rotating by the sea bearing, canvas "up" points at the sea: feet up, head down.
-          ctx.rotate(angle)
-          // Status colours per .claude/rules/ui.md: selected = blue, booked = green.
-          const { selected: sel, booked: bk } = marksRef.current
-          ctx.fillStyle = s.label === sel ? '#3b82f6' : bk?.has(s.label) ? '#22c55e' : '#ffffff'
-          ctx.strokeStyle = 'rgba(17,24,39,0.85)'
-          ctx.lineWidth = Math.max(0.75, bedW * 0.08)
-          roundRect(ctx, -bedW / 2, -bedL / 2, bedW, bedL, Math.min(bedW, bedL) * 0.2)
-          ctx.fill()
-          ctx.stroke()
-          // Raised backrest at the land end.
-          ctx.fillStyle = 'rgba(17,24,39,0.18)'
-          roundRect(ctx, -bedW / 2, bedL / 2 - bedL * 0.3, bedW, bedL * 0.3, Math.min(bedW, bedL) * 0.2)
-          ctx.fill()
+          ctx.fillStyle = '#f8ecd0'
+          ctx.strokeStyle = '#f8ecd0'
+          ctx.lineJoin = 'round'
+          ctx.lineWidth = Math.max(3, bedL * 0.3)
+          // Each shape filled on its own: as one path, opposite windings cancel where the coast
+          // strip and the parcel pad overlap — a hole exactly under the beds.
+          for (const poly of gd) {
+            const pts = poly.map((g) => toLocal(g.lat, g.lng)).filter((p): p is { x: number; y: number } => !!p)
+            if (pts.length < 3) continue
+            ctx.beginPath()
+            pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)))
+            ctx.closePath()
+            ctx.fill()
+            ctx.stroke()
+          }
           ctx.restore()
         }
 
-        // Umbrellas sit between the two beds of each pair, over the backrests.
-        const r = 1.0 * pxPerM
-        ctx.fillStyle = 'rgba(251,191,36,0.55)'
-        ctx.strokeStyle = 'rgba(180,83,9,0.8)'
-        ctx.lineWidth = Math.max(0.75, r * 0.08)
-        for (const u of umbrellas) {
-          const p = toLocal(u.lat, u.lng)
-          if (!p) continue
-          // Canvas "toward land" is (−sin θ, cos θ) after the sea-bearing rotation.
-          const back = { x: p.x - Math.sin(angle) * bedL * 0.25, y: p.y + Math.cos(angle) * bedL * 0.25 }
-          ctx.beginPath()
-          ctx.arc(back.x, back.y, r, 0, Math.PI * 2)
-          ctx.fill()
-          ctx.stroke()
-        }
-
-        // Seen from above the umbrellas hide the beds, so selected / demo-booked beds get an
-        // outline drawn ON TOP of everything — otherwise a tapped bed shows no change at all.
-        const { selected: sel, booked: bk } = marksRef.current
-        if (sel || bk?.size) {
+        if (bedL < LOD_MIN_BED_PX || !spritesRef.current) {
+          drawParcelOutline(ctx, sunbeds.map((s) => toLocal(s.lat, s.lng)), angle, bedL, `${sunbeds.length - (bk?.size ?? 0)}/${sunbeds.length}`)
+        } else {
+          const sprites = spritesRef.current
+          const margin = bedL * 2
           for (const s of sunbeds) {
-            const color = s.label === sel ? '#2563eb' : bk?.has(s.label) ? '#16a34a' : null
-            if (!color) continue
             const p = toLocal(s.lat, s.lng)
+            if (!p || p.x < -margin || p.y < -margin || p.x > width + margin || p.y > height + margin) continue
+            const status: BedStatus = s.label === sel ? 'selected' : bk?.has(s.label) ? 'booked' : 'free'
+            const pop = popOf(s.label)
+            if (pop > 0) drawAppBed(ctx, sprites, p.x, p.y, angle, bedL, status, pop)
+          }
+          // A sunshade over each pair, set back toward the land like the app's primary-bed umbrella.
+          for (const u of umbrellas) {
+            const p = toLocal(u.lat, u.lng)
             if (!p) continue
+            const pop = popOf(`u:${u.row}:${u.pair}`)
+            const back = { x: p.x - Math.sin(angle) * bedL * 0.22, y: p.y + Math.cos(angle) * bedL * 0.22 }
+            if (pop > 0) drawAppShade(ctx, sprites, back.x, back.y, bedL, pop)
+          }
+          // The selected bed stays visible above its sunshade.
+          const s = sel ? sunbeds.find((x) => x.label === sel) : undefined
+          const p = s && toLocal(s.lat, s.lng)
+          if (p) {
             ctx.save()
             ctx.translate(p.x, p.y)
             ctx.rotate(angle)
-            ctx.strokeStyle = color
-            ctx.lineWidth = Math.max(2, bedW * 0.25)
-            const pad = ctx.lineWidth
-            roundRect(ctx, -bedW / 2 - pad, -bedL / 2 - pad, bedW + 2 * pad, bedL + 2 * pad, Math.min(bedW, bedL) * 0.3)
+            ctx.strokeStyle = '#2563eb'
+            ctx.lineWidth = Math.max(2, bedL * 0.08)
+            const w = bedL / 2.1
+            ctx.beginPath()
+            ctx.roundRect(-w / 2 - 3, -bedL / 2 - 3, w + 6, bedL + 6, 4)
             ctx.stroke()
             ctx.restore()
           }
+          // "Tap me": two expanding rings around the hinted bed, looping until it is tapped.
+          const h = hn && hn !== sel ? sunbeds.find((x) => x.label === hn) : undefined
+          const hp = h && toLocal(h.lat, h.lng)
+          if (hp) {
+            animating = true
+            for (const phase of [0, 0.5]) {
+              const k = ((now / 1400 + phase) % 1 + 1) % 1
+              ctx.beginPath()
+              ctx.arc(hp.x, hp.y, bedL * (0.55 + k * 1.1), 0, Math.PI * 2)
+              ctx.strokeStyle = `rgba(0,206,241,${(1 - k) * 0.9})`
+              ctx.lineWidth = 3
+              ctx.stroke()
+            }
+          }
+        }
+
+        // A booking's rising tag, like the hero scene.
+        const tb = tg && now - tg.at < TAG_MS ? sunbeds.find((x) => x.label === tg.label) : undefined
+        const tp = tb && toLocal(tb.lat, tb.lng)
+        if (tg && tp) {
+          animating = true
+          const k = (now - tg.at) / TAG_MS
+          const y = tp.y - Math.max(18, bedL) - k * 34
+          ctx.globalAlpha = k < 0.12 ? k / 0.12 : 1 - Math.max(0, (k - 0.6) / 0.4)
+          ctx.font = '600 13px system-ui, sans-serif'
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          const tw = ctx.measureText(tg.text).width + 20
+          ctx.fillStyle = '#0e3a4a'
+          ctx.beginPath()
+          ctx.roundRect(tp.x - tw / 2, y - 13, tw, 26, 13)
+          ctx.fill()
+          ctx.fillStyle = '#ffffff'
+          ctx.fillText(tg.text, tp.x, y + 0.5)
+          ctx.globalAlpha = 1
+        }
+
+        if (animating && rafRef.current === null) {
+          rafRef.current = requestAnimationFrame(() => {
+            rafRef.current = null
+            this.draw()
+          })
         }
       }
     }
@@ -162,25 +246,76 @@ export default function SunbedOverlay({
     return () => {
       overlay.setMap(null)
       overlayRef.current = null
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
     }
   }, [map])
 
-  // New layout or marks (rotate / move / select / book) → redraw without re-creating the overlay.
+  // New layout or marks → beds that weren't there before pop in, staggered front row first.
   useEffect(() => {
+    const now = performance.now()
+    const reduced = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const born = new Map<string, number>()
+    let i = 0
+    for (const s of layout.sunbeds) {
+      const known = bornRef.current.get(s.label)
+      const t = known ?? (reduced ? now - POP_MS : now + i++ * STAGGER_MS)
+      born.set(s.label, t)
+      const uKey = `u:${s.row}:${s.pair}`
+      if (!born.has(uKey)) born.set(uKey, bornRef.current.get(uKey) ?? t + 60)
+    }
+    bornRef.current = born
     layoutRef.current = layout
-    marksRef.current = { selected, booked }
+    marksRef.current = { selected, booked, hint, tag, ground }
     overlayRef.current?.draw()
-  }, [layout, selected, booked])
+  }, [layout, selected, booked, hint, tag, ground])
 
   return null
 }
 
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+/** The guest app's zoomed-out parcel: green outline (#16a34a, 15 % fill) + an "available/total" chip. */
+function drawParcelOutline(
+  ctx: CanvasRenderingContext2D,
+  points: ({ x: number; y: number } | null)[],
+  angle: number,
+  bedL: number,
+  chip: string,
+) {
+  const pts = points.filter((p): p is { x: number; y: number } => !!p)
+  if (!pts.length) return
+  const cos = Math.cos(angle)
+  const sin = Math.sin(angle)
+  let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity
+  for (const p of pts) {
+    const u = p.x * cos + p.y * sin
+    const v = -p.x * sin + p.y * cos
+    minU = Math.min(minU, u); maxU = Math.max(maxU, u); minV = Math.min(minV, v); maxV = Math.max(maxV, v)
+  }
+  const pad = Math.max(4, bedL)
+  const corners = [
+    [minU - pad, minV - pad], [maxU + pad, minV - pad], [maxU + pad, maxV + pad], [minU - pad, maxV + pad],
+  ].map(([u, v]) => ({ x: u! * cos - v! * sin, y: u! * sin + v! * cos }))
   ctx.beginPath()
-  ctx.moveTo(x + r, y)
-  ctx.arcTo(x + w, y, x + w, y + h, r)
-  ctx.arcTo(x + w, y + h, x, y + h, r)
-  ctx.arcTo(x, y + h, x, y, r)
-  ctx.arcTo(x, y, x + w, y, r)
+  corners.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)))
   ctx.closePath()
+  ctx.fillStyle = 'rgba(34,197,94,0.15)'
+  ctx.fill()
+  ctx.lineWidth = 2
+  ctx.strokeStyle = '#16a34a'
+  ctx.stroke()
+  const cx = corners.reduce((s, p) => s + p.x, 0) / 4
+  const cy = corners.reduce((s, p) => s + p.y, 0) / 4
+  ctx.font = '600 12px system-ui, sans-serif'
+  const tw = ctx.measureText(chip).width
+  ctx.fillStyle = '#f0fdf4'
+  ctx.strokeStyle = '#86efac'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.roundRect(cx - tw / 2 - 10, cy - 12, tw + 20, 24, 12)
+  ctx.fill()
+  ctx.stroke()
+  ctx.fillStyle = '#16a34a'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(chip, cx, cy + 0.5)
 }

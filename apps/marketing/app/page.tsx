@@ -1,10 +1,8 @@
 import { getLocale, getTranslations } from 'next-intl/server'
 import { parseAngle } from '@repo/data/lead-model'
-import { PRICING_TIERS } from '@repo/data/pricing-tiers'
-import BeachForm from '@/components/BeachForm'
+import Experience from '@/components/Experience'
 import { SiteFooter, SiteHeader } from '@/components/SiteChrome'
 import TrackOnMount from '@/components/TrackOnMount'
-import OfferNote from '@/components/OfferNote'
 import { offerFor } from '@/lib/offer.ts'
 import { localeOrDefault } from '@/lib/places.ts'
 
@@ -19,6 +17,7 @@ export default async function LandingPage({ searchParams }: { searchParams: Reco
   const angle = parseAngle(searchParams.a)
   const title = angle ? t(`Hero.angles.${angle}.title`) : t('Hero.title')
   const subtitle = angle ? t(`Hero.angles.${angle}.subtitle`) : t('Hero.subtitle')
+  const offer = offerFor(localeOrDefault(await getLocale()))
   const facts = [
     { title: t('Facts.f1Title'), body: t('Facts.f1'), icon: <MapIcon /> },
     { title: t('Facts.f2Title'), body: t('Facts.f2'), icon: <QrIcon /> },
@@ -27,32 +26,24 @@ export default async function LandingPage({ searchParams }: { searchParams: Reco
 
   return (
     <>
-      <SiteHeader />
       <TrackOnMount name="landing_view" context={{ angle }} />
-      <main>
-        <section className="bg-gradient-to-b from-sand-light to-white">
-          <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-12 sm:py-20 lg:grid-cols-2">
-            <div>
-              <p className="mb-3 text-xs font-medium uppercase tracking-wider text-amber-700">{t('Hero.eyebrow')}</p>
-              <h1 className="text-4xl font-semibold tracking-tight text-gray-900 sm:text-5xl">{title}</h1>
-              <p className="mt-4 max-w-xl text-base leading-relaxed text-gray-600">{subtitle}</p>
-              <p className="mt-6 text-sm text-gray-500">
-                {t('Pricing.line', { commission: PRICING_TIERS.STARTER.commissionPercent })}
-              </p>
-              <OfferNote offer={offerFor(localeOrDefault(await getLocale()))} className="mt-4 max-w-xl" />
-            </div>
-            <BeachForm />
-          </div>
-        </section>
+      <main className="relative bg-[#fff5e1]">
+        <SiteHeader overlay />
+        <Experience
+          title={title}
+          subtitle={subtitle}
+          offer={offer}
+          angle={angle}
+          chatEnabled={Boolean(process.env.ANTHROPIC_API_KEY)}
+          apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY ?? ''}
+        />
 
-        <section className="mx-auto grid max-w-6xl gap-6 px-4 py-12 sm:grid-cols-3">
+        <section className="mx-auto grid max-w-6xl gap-8 px-4 pb-16 pt-4 sm:grid-cols-3">
           {facts.map((f) => (
             <div key={f.title}>
-              <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-100 to-orange-100 text-amber-700">
-                {f.icon}
-              </div>
-              <h2 className="text-sm font-semibold text-gray-900">{f.title}</h2>
-              <p className="mt-1 text-sm leading-relaxed text-gray-600">{f.body}</p>
+              <div className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#00cef1]/15 text-[#0083a0]">{f.icon}</div>
+              <h2 className="text-base font-semibold text-[#0e3a4a]">{f.title}</h2>
+              <p className="mt-1 text-sm leading-relaxed text-[#0e3a4a]/70">{f.body}</p>
             </div>
           ))}
         </section>

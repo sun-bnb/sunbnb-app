@@ -1,5 +1,5 @@
 /**
- * GET /api/places/autocomplete?input=…&session=…&lang=…
+ * GET /api/places/autocomplete?input=…&session=…&lang=…[&near=lat,lng]
  *
  * Proxies Google Places Autocomplete for the beach field. Public and ad-driven, so: validated
  * input, a per-IP rate limit, and a Places session token so a whole typing session plus the
@@ -7,7 +7,7 @@
  */
 import type { NextRequest } from 'next/server'
 import { rateLimit } from '@repo/data/rate-limit'
-import { clientIp, isValidQuery, isValidSessionToken, localeOrDefault } from '@/lib/places.ts'
+import { clientIp, isValidQuery, isValidSessionToken, localeOrDefault, parseNear } from '@/lib/places.ts'
 
 export async function GET(request: NextRequest) {
   const limit = rateLimit(`places-ac:${clientIp(request.headers)}`, { maxAttempts: 120, windowMs: 60_000 })
@@ -23,6 +23,11 @@ export async function GET(request: NextRequest) {
   url.searchParams.set('input', input)
   url.searchParams.set('sessiontoken', session)
   url.searchParams.set('language', localeOrDefault(params.get('lang')))
+  const near = parseNear(params.get('near'))
+  if (near) {
+    url.searchParams.set('location', `${near.lat},${near.lng}`)
+    url.searchParams.set('radius', '8000')
+  }
   url.searchParams.set('key', process.env.GOOGLE_MAPS_API_KEY ?? '')
 
   const res = await fetch(url, { cache: 'no-store' })

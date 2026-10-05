@@ -5,10 +5,11 @@ import CookieSettingsLink from './CookieSettingsLink'
 
 export const PARTNER_PORTAL_URL = process.env.NEXT_PUBLIC_PARTNER_URL ?? 'https://partner.sunbnb.app'
 
-export async function SiteHeader() {
+/** `overlay`: floats transparently over the immersive scene instead of sitting above it. */
+export async function SiteHeader({ overlay = false }: { overlay?: boolean } = {}) {
   const t = await getTranslations('Header')
   return (
-    <header className="border-b border-gray-100 bg-white/80 backdrop-blur">
+    <header className={overlay ? 'absolute inset-x-0 top-0 z-20' : 'border-b border-gray-100 bg-white/80 backdrop-blur'}>
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
         <Link href="/" className="flex items-center gap-2">
           <Image src="/sunbnb-logo.svg" alt="" width={28} height={26} />
