@@ -12,6 +12,7 @@ import { submitForm } from './actions'
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { revalidatePath } from 'next/cache'
+import { grantLaunchPromotionIfEligible } from '@repo/data/promotion-db'
 
 const mockAuth = vi.mocked(auth)
 const OWNER_ID = 'owner-1'
@@ -195,6 +196,38 @@ describe('submitForm', () => {
         status: 'ACTIVE',
       }),
     })
+  })
+
+  it('grants the launch offer to a NEW account (eligibility is decided in @repo/data)', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.partnerAccount.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.partnerAccount.create).mockResolvedValue({} as any)
+    vi.mocked(prisma.subscriptionPlan.findUnique).mockResolvedValue(null)
+
+    await submitForm({ status: 'ok' }, makeFormData())
+
+    expect(vi.mocked(grantLaunchPromotionIfEligible)).toHaveBeenCalledWith(OWNER_ID)
+  })
+
+  it('a failing promotion grant never blocks the signup', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.partnerAccount.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.partnerAccount.create).mockResolvedValue({} as any)
+    vi.mocked(prisma.subscriptionPlan.findUnique).mockResolvedValue(null)
+    vi.mocked(grantLaunchPromotionIfEligible).mockRejectedValueOnce(new Error('db down'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    expect((await submitForm({ status: 'ok' }, makeFormData())).status).toBe('ok')
+  })
+
+  it('does not grant the offer when an EXISTING account is updated', async () => {
+    authenticateAsOwner()
+    vi.mocked(prisma.partnerAccount.findUnique).mockResolvedValue({ userId: OWNER_ID } as any)
+    vi.mocked(prisma.partnerAccount.update).mockResolvedValue({} as any)
+
+    await submitForm({ status: 'ok' }, makeFormData())
+
+    expect(vi.mocked(grantLaunchPromotionIfEligible)).not.toHaveBeenCalled()
   })
 
   it('does not assign subscription when no STARTER plan exists', async () => {

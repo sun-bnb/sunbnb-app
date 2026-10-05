@@ -1,7 +1,15 @@
 {
-  "crons": [{
-    "path": "/api/reservations-cleanup",
-    "schedule": "*/15 * * * *"
-  }],
-  "regions": ["fra1"]
+  "crons": [
+    {
+      "path": "/api/reservations-cleanup",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/sync-promotion-trials",
+      "schedule": "30 4 * * *"
+    }
+  ],
+  "regions": [
+    "fra1"
+  ]
 }

@@ -39,6 +39,8 @@ export default defineConfig({
       '@repo/data/reservation-machine-apply': path.resolve(__dirname, '__mocks__/@repo/data/reservation-machine-apply'),
       '@repo/data/reservation-emails': path.resolve(__dirname, '__mocks__/@repo/data/reservation-emails'),
       '@repo/data/subscription': path.resolve(__dirname, '__mocks__/@repo/data/subscription'),
+      '@repo/data/promotion-db': path.resolve(__dirname, '__mocks__/@repo/data/promotion-db'),
+      '@repo/data/promotion': path.resolve(__dirname, '../../packages/data/src/promotion'),
       '@repo/data/seat-label': path.resolve(__dirname, '__mocks__/@repo/data/seat-label'),
       '@repo/data/seat-label-db': path.resolve(__dirname, '__mocks__/@repo/data/seat-label-db'),
       '@repo/data/unit': path.resolve(__dirname, '__mocks__/@repo/data/unit'),

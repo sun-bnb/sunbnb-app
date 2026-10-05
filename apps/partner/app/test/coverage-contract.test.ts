@@ -322,6 +322,11 @@ const UNGATED_ALLOWLIST: AllowlistEntry[] = [
     file: 'app/api/reservations-cleanup/route.ts',
     reason: 'Cron route — gated by CRON_SECRET in Authorization: Bearer header. Covered by reservations-cleanup/route.test.ts',
   },
+  {
+    export: 'GET',
+    file: 'app/api/cron/sync-promotion-trials/route.ts',
+    reason: 'Cron route — gated by CRON_SECRET (fails closed 503 without it). Covered by cron/sync-promotion-trials/route.test.ts (track 027 D9)',
+  },
 
   // ── Route handlers: subscription webhook (Stripe signature-gated) ─────────
   {

@@ -21,6 +21,7 @@ import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { getStripeClient } from '@/app/api/_lib/stripe'
 import { NextRequest } from 'next/server'
+import { getLaunchPromotion } from '@repo/data/promotion-db'
 
 const mockAuth = vi.mocked(auth)
 const mockGetStripeClient = vi.mocked(getStripeClient)
@@ -180,6 +181,38 @@ describe('POST /api/subscription/checkout', () => {
         metadata: expect.objectContaining({ partnerAccountId: USER_ID, planId: 'plan-pro' }),
       }),
     )
+  })
+
+  // ── Launch offer (track 027 D9) ─────────────────────────────────────────────
+
+  it('a plan bought during a RUNNING promotion starts as a trial ending with the promotion', async () => {
+    mockAuth.mockResolvedValue({ user: { id: USER_ID, email: 'u@e.com' } } as any)
+    mockSubscriptionFindUnique.mockResolvedValue(null)
+    const endsAt = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000)
+    vi.mocked(getLaunchPromotion).mockResolvedValueOnce({ code: 'launch-30d', startedAt: new Date(), endsAt, revokedAt: null })
+    const stripe = makeStripeClient()
+    mockGetStripeClient.mockReturnValue(stripe as any)
+
+    await POST(makeRequest({ planId: 'plan-pro' }))
+
+    expect(stripe.checkout.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subscription_data: expect.objectContaining({ trial_end: Math.floor(endsAt.getTime() / 1000) }),
+      }),
+    )
+  })
+
+  it('without a promotion there is no trial', async () => {
+    mockAuth.mockResolvedValue({ user: { id: USER_ID, email: 'u@e.com' } } as any)
+    mockSubscriptionFindUnique.mockResolvedValue(null)
+    vi.mocked(getLaunchPromotion).mockResolvedValueOnce(null)
+    const stripe = makeStripeClient()
+    mockGetStripeClient.mockReturnValue(stripe as any)
+
+    await POST(makeRequest({ planId: 'plan-pro' }))
+
+    const args = vi.mocked(stripe.checkout.sessions.create).mock.calls[0]![0] as { subscription_data: Record<string, unknown> }
+    expect(args.subscription_data).not.toHaveProperty('trial_end')
   })
 
   // ── Existing subscription with active Stripe subscription ID ─────────────────

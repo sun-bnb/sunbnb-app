@@ -15,6 +15,8 @@
 import { auth } from '@/app/auth'
 import prisma from '@repo/data/PrismaCient'
 import { getStripeClient } from '@/app/api/_lib/stripe'
+import { getLaunchPromotion } from '@repo/data/promotion-db'
+import { planTrialEnd } from '@repo/data/promotion'
 import { NextRequest } from 'next/server'
 
 export async function POST(request: NextRequest) {
@@ -82,6 +84,11 @@ export async function POST(request: NextRequest) {
     return Response.json({ url: portalSession.url })
   }
 
+  // Launch offer (track 027 D9): a plan bought during the promotion starts as a Stripe trial that
+  // ends with the promotion (provisionally 30 days before the clock starts; the
+  // sync-promotion-trials cron extends it once the first live paid booking starts the clock).
+  const trialEnd = planTrialEnd(await getLaunchPromotion(userId), new Date())
+
   // Create a new Stripe Checkout Session
   const checkoutSession = await stripe.checkout.sessions.create({
     customer: stripeCustomerId,
@@ -98,6 +105,7 @@ export async function POST(request: NextRequest) {
         partnerAccountId: userId,
         planId: plan.id,
       },
+      ...(trialEnd ? { trial_end: Math.floor(trialEnd.getTime() / 1000) } : {}),
     },
   })
 
