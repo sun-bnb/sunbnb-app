@@ -3,6 +3,7 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { LEAD_TOKEN_RE, parseLeadLayout } from '@repo/data/lead-model'
 import { getLeadMockup } from '@repo/data/leads'
 import Experience from '@/components/Experience'
+import type { Run } from '@/lib/intent.ts'
 import { SiteHeader } from '@/components/SiteChrome'
 import { offerFor } from '@/lib/offer.ts'
 import { localeOrDefault } from '@/lib/places.ts'
@@ -46,6 +47,8 @@ export default async function MockupPage({ params }: { params: { token: string }
           token: lead.token,
           saved,
           variant: lead.variant,
+          // Stored: [] = not answered, ['none'] = just sunbeds (track 027 D10).
+          runs: lead.runs.length ? (lead.runs.filter((r) => r !== 'none') as Run[]) : null,
         }}
       />
     </main>

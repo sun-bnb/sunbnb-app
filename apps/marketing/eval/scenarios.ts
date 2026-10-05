@@ -170,6 +170,16 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    id: 'knows-the-venue',
+    intent: 'Uses the qualifier answer (they run a beach bar) instead of asking what business they run (D10)',
+    mockup: { beachName: 'Playa de Muro', sunbedCount: 120, runs: ['fnb'] },
+    turns: ['What else could Sunbnb do for us?'],
+    checks: [
+      { kind: 'mentions', pattern: /order|drink|food|bar|menu/i, label: 'food & drink ordering' },
+      { kind: 'not_mentions', pattern: /what (kind|type) of (business|venue)|do you (also )?(run|have) a (bar|restaurant)/i, label: 'asking what they run' },
+    ],
+  },
+  {
     id: 'restaurant',
     intent: 'Connects a restaurant to the real restaurant features',
     turns: ['We also have a restaurant on the beach. Does it help with that?'],

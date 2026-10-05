@@ -309,7 +309,8 @@ pure layout generator (location TBD — see Q2)
   go live, Haiku from the first screen. Remaining P9c: the aerial illustrated→map hand-off, the
   scroll-driven camera along the beach places (below-hero content), agent narration lines.
 - **Coastline cache built** (uncommitted at time of writing) — seed campaign coasts per environment before ads.
-- **Next action: P9b (D10).** Start with the shipped-feature audit (what can each module
+- **P9b built** (modules, summary, stored qualifier). Remaining P9b: ad-matched hero headlines per angle exist; below-fold pillars/FAQ (folded into D11's scroll-driven places).
+- **Next action: P10 projection.** Start with the shipped-feature audit (what can each module
   honestly show — F&B orders, rentals, table bookings, QR walk-ins, day close/invoicing are
   believed shipped; dynamic pricing, hotel channel, Viva need checking), then the qualifier in
   `BeachBuilder`'s fly-in phase and the `lib/modules.ts` rule table, then modules one by one.
@@ -344,6 +345,21 @@ pure layout generator (location TBD — see Q2)
   session turn/token caps on the API path (they now also cap spend).
 
 ## Log
+
+- **2026-10-05** — **P9b: the demo follows what they run (D10).** Pure rule table `lib/modules.ts`
+  (`planModules`): fnb → drinks to the sunbed on the bar's order board (the map raises
+  "Drinks · paid" on the guest's bed); rentals → paddleboard picked up / returned; tables → seat a
+  party of four (too-small tables refuse); always → day close (only the demo's own figures: count
+  of online payments, the visitor's own sunbed price, receipts, VAT); Spanish address → Veri*factu
+  card, badged "coming before the 2027 deadline"; unanswered → drinks + day close. Each module
+  maps to a knowledge entry (test). Then a "Your Sunbnb" summary (coming items never wear the
+  green tick) → go live. Reducer: `continue` plays the next module, plan fixed once started, every
+  step skippable (18 journey tests). The answer is stored on the lead (migration
+  `20261005105847_add_lead_runs`, additive `lead.runs TEXT[]`; `parseLeadRuns`, 'none' = just
+  sunbeds), so a reopened link replays the same modules, the chat prompt knows the venue
+  (new eval scenario `knows-the-venue`; Haiku 48/50 ×2, misses were noise — capture-contact 4/4 on
+  rerun) and the team email shows "Also runs". **Before pushing main: `npm run migrate:test`**
+  (two pending: coastline cache + lead runs).
 
 - **2026-10-05** — **Own coastline cache in PostGIS** (migration `20261005104249_add_coastline_cache`,
   additive: `coast_tile`, `coast_line` with a GiST index). Read-through by 0.1° tile (~10 km): the

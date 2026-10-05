@@ -10,7 +10,7 @@ import { generateBeachLayout, type LayoutInput, type MockSunbed } from '@/lib/be
 import type { GeoPoint, ShoreFrame } from '@/lib/coastline.ts'
 import { keepOnLand, parcelDepthFromWater, parcelGround, shoreBand } from '@/lib/land-fit.ts'
 import type { GuideAction } from '@/lib/guide.ts'
-import { isAffirmative, parseBareCount, parsePrice, type Intent } from '@/lib/intent.ts'
+import { isAffirmative, parseBareCount, parsePrice, type Intent, type Run } from '@/lib/intent.ts'
 import { initialJourney, journeyReducer, liveAttach, resumedJourney, staffBed, type Attach, type JourneyBeach, type Step } from '@/lib/journey.ts'
 import { hintBed } from '@/lib/missions.ts'
 import type { Offer } from '@/lib/offer.ts'
@@ -20,7 +20,7 @@ import DemoRequestForm from './DemoRequestForm'
 import OfferNote from './OfferNote'
 import type { FloatTag } from './SunbedOverlay'
 import Thread from './Thread'
-import { BedCard, BigButton, chipCls, Chips, CountCard, PassCard, PayCard, RunsChips, StaffCard, cardCls } from './ThreadAttach'
+import { BedCard, BigButton, chipCls, Chips, CountCard, DayCloseCard, OrderCard, PassCard, PayCard, RentalCard, RunsChips, StaffCard, SummaryCard, TablesCard, VerifactuCard, cardCls } from './ThreadAttach'
 import World, { FLY_MS, type Insets } from './World'
 import HeroSlides, { type HeroSlide } from './HeroSlides'
 import type { HeroMode } from './HeroBeach'
@@ -43,6 +43,7 @@ export interface ResumeProps {
   token: string
   saved: LeadLayout | null
   variant: string | null
+  runs: Run[] | null
 }
 
 /**
@@ -311,6 +312,7 @@ export default function Experience({
     data.set('seaBearingDeg', String(f.seaBearingDeg))
     data.set('placement', f.placement)
     if (adjusted.current) data.set('adjusted', '1')
+    if (s.runs !== null) data.set('runs', s.runs.length ? s.runs.join(',') : 'none')
     for (const [k, v] of new URLSearchParams(window.location.search)) {
       if (k.startsWith('utm_') || k === 'a' || k === 'gclid' || k === 'fbclid' || k === 'v') data.set(k, v)
     }
@@ -462,6 +464,18 @@ export default function Experience({
 
   // ── Attachments: the live step UI on the agent's latest message ──────────
   const rowText = (label: string, row: number) => (row === 0 ? t('rowFront') : t('rowN', { row: label.replace(/\d+$/, '') }))
+  const next = (echoKey?: string) => {
+    track('cta_click', { place: `module_${s.played.at(-1) ?? 'none'}` })
+    dispatch({ type: 'continue', echoKey })
+  }
+  const withSkip = (card: ReactNode) => (
+    <div className="space-y-2">
+      {card}
+      <button type="button" onClick={() => dispatch({ type: 'toLive' })} className="text-xs font-medium text-[#0e3a4a]/60 underline-offset-2 hover:underline">
+        {t('skipToEnd')}
+      </button>
+    </div>
+  )
   function renderAttach(attach: Attach): ReactNode {
     switch (attach) {
       case 'start':
@@ -538,13 +552,37 @@ export default function Experience({
                 dispatch({ type: 'checkIn', label })
               }}
             />
-            <button type="button" onClick={() => dispatch({ type: 'toLive' })} className="text-xs font-medium text-[#0e3a4a]/60 underline-offset-2 hover:underline">
+            <button type="button" onClick={() => dispatch({ type: 'continue' })} className="text-xs font-medium text-[#0e3a4a]/60 underline-offset-2 hover:underline">
               {t('skipToLive')}
             </button>
           </div>
         ) : null
       case 'checked':
-        return <BigButton onClick={() => dispatch({ type: 'toLive' })}>{t('nextLive')}</BigButton>
+        return <BigButton onClick={() => dispatch({ type: 'continue' })}>{t('continue')}</BigButton>
+      case 'mod_order':
+        return withSkip(<OrderCard guestBed={staffBed(s)} onDone={next} />)
+      case 'mod_rental':
+        return withSkip(<RentalCard onDone={next} />)
+      case 'mod_tables':
+        return withSkip(<TablesCard onDone={next} />)
+      case 'mod_dayclose':
+        return withSkip(
+          <DayCloseCard
+            sunbedPrice={s.guestBed ? s.price : null}
+            // One payment (and receipt) per paid thing in this demo: the sunbed, any order / rental.
+            paidOnline={(s.guestBed ? 1 : 0) + s.played.filter((m) => m === 'order' || m === 'rental').length}
+            onDone={next}
+          />,
+        )
+      case 'mod_verifactu':
+        return withSkip(<VerifactuCard onDone={() => next()} />)
+      case 'summary':
+        return (
+          <SummaryCard
+            items={[{ text: t('sum_book') }, { text: t('sum_staff') }, ...s.played.map((m) => ({ text: t(`sum_${m}`), coming: m === 'verifactu' }))]}
+            onLive={() => dispatch({ type: 'toLive' })}
+          />
+        )
       case 'live':
         // Contact is a message in the bar (the lead chat captures it); the form is there for
         // those who prefer one, not in the way of those who don't.
@@ -578,6 +616,13 @@ export default function Experience({
   }
 
   const live = liveAttach(s)
+  // The world reacts to the module being played: the drinks land on the guest's own sunbed.
+  useEffect(() => {
+    if (live?.attach === 'mod_order' && layout) {
+      setTag({ label: staffBed(s), text: th('slides.order.tag'), at: performance.now() })
+      haptic(15)
+    }
+  }, [live?.id])
   const hint = s.step === 'guest' && layout ? hintBed(layout)?.label ?? null : null
   const placeholder = t(
     s.step === 'beach' ? 'ph_beach' : s.step === 'flying' || s.step === 'count' ? 'ph_count' : s.step === 'bed' ? 'ph_price' : s.step === 'live' ? 'ph_live' : 'ph_ask',

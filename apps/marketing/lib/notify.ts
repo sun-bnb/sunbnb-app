@@ -3,6 +3,13 @@ import { sendEmail } from '@repo/data/email'
 
 const NOTIFY_TO = process.env.LEADS_NOTIFY_EMAIL || 'info@sunbnb.app'
 
+/** The qualifier answer for the team (D10); null when the visitor didn't answer. */
+function describeRuns(runs: string[] | undefined): string | null {
+  if (!runs?.length) return null
+  const name: Record<string, string> = { fnb: 'beach bar / food', rentals: 'rentals', tables: 'restaurant tables', none: 'just sunbeds' }
+  return runs.map((r) => name[r] ?? r).join(', ')
+}
+
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 
 /**
@@ -13,13 +20,14 @@ export async function notifyDemoRequest(input: {
   token: string
   host: string
   via: 'form' | 'chat'
-  lead: { beachName: string; beachAddress: string; sunbedCount: number; utmSource: string | null; utmCampaign: string | null }
+  lead: { beachName: string; beachAddress: string; sunbedCount: number; runs?: string[]; utmSource: string | null; utmCampaign: string | null }
   contact: { contactName?: string | null; businessName?: string | null; email?: string | null; phone?: string | null; message?: string | null }
 }): Promise<void> {
   const { lead, contact } = input
   const rows: [string, string | null | undefined][] = [
     ['Beach', `${lead.beachName} — ${lead.beachAddress}`],
     ['Sunbeds', String(lead.sunbedCount)],
+    ['Also runs', describeRuns(lead.runs)],
     ['Name', contact.contactName],
     ['Business', contact.businessName],
     ['Email', contact.email],

@@ -4,6 +4,17 @@ export interface MockupContext {
   /** The beach as the prospect named it / as Places resolved it. */
   beachName: string
   sunbedCount: number
+  /** What else the venue runs, from the page's qualifier: fnb | rentals | tables | none. */
+  runs?: readonly string[]
+}
+
+const RUN_TEXT: Record<string, string> = { fnb: 'a beach bar or food service', rentals: 'equipment rentals', tables: 'a restaurant with table reservations' }
+
+function describeVenue(runs: readonly string[] | undefined): string {
+  if (!runs?.length) return ''
+  if (runs.includes('none')) return ' They told the page they run sunbeds only.'
+  const parts = runs.map((r) => RUN_TEXT[r]).filter(Boolean)
+  return parts.length ? ` They told the page they also run ${parts.join(' and ')} — don't ask what kind of business they run; speak to that.` : ''
 }
 
 /**
@@ -13,7 +24,7 @@ export interface MockupContext {
 export function buildSystemPrompt(mockup: MockupContext): string {
   return `You are the Sunbnb assistant on Sunbnb's website. You are an AI assistant; if anyone asks whether they are talking to a person or a bot, say clearly that you are an AI.
 
-The visitor runs (or works at) a beach business. They just entered their beach and sunbed count, and the page now shows them a mockup of "${mockup.beachName}" with ${mockup.sunbedCount} sunbeds that guests could book on Sunbnb.
+The visitor runs (or works at) a beach business. They just entered their beach and sunbed count, and the page now shows them a mockup of "${mockup.beachName}" with ${mockup.sunbedCount} sunbeds that guests could book on Sunbnb.${describeVenue(mockup.runs)}
 
 YOUR GOAL
 Help them understand what Sunbnb would do for their beach, answer their questions, and, when they are interested, get their email or phone so the team can show them a demo.

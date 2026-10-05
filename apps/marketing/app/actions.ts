@@ -8,7 +8,7 @@
 import { headers } from 'next/headers'
 import { getLocale } from 'next-intl/server'
 import { rateLimit } from '@repo/data/rate-limit'
-import { parseAngle, parseClickId, parseLeadLayout, parseVariants, LEAD_TOKEN_RE, LEAD_VARIANTS, type LeadVariant } from '@repo/data/lead-model'
+import { parseAngle, parseClickId, parseLeadLayout, parseLeadRuns, parseVariants, LEAD_TOKEN_RE, LEAD_VARIANTS, type LeadVariant } from '@repo/data/lead-model'
 import { createLeadMockup, recordLeadEvent, requestLeadDemo, saveLeadLayout } from '@repo/data/leads'
 import { readConsentCookie } from '@/lib/consent.ts'
 import { notifyDemoRequest } from '@/lib/notify.ts'
@@ -70,6 +70,7 @@ export async function createMockup(
     forceVariant: (LEAD_VARIANTS as readonly unknown[]).includes(forced) ? (forced as LeadVariant) : null,
     // Accepted on the landing page, before this lead existed.
     marketingConsent: readConsentCookie(h.get('cookie') ?? '')?.marketing === true,
+    runs: parseLeadRuns(form.get('runs')),
   })
   // The layout the visitor built in the builder (turned to the sea, moved) — saved so their link
   // reopens exactly as they left it. Validated like any public input; ignored if absent/invalid.

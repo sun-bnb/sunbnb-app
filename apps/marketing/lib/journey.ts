@@ -8,6 +8,7 @@
  * by the visitor, or written by the model) is carried as `text`.
  */
 import type { Run } from './intent.ts'
+import { isSpanishAddress, planModules, type Module } from './modules.ts'
 
 export type Step =
   | 'beach' // find your beach
@@ -20,10 +21,12 @@ export type Step =
   | 'pass'
   | 'staff' // your morning: check the guest in
   | 'checked'
+  | 'module' // a feature module chosen by lib/modules.ts (D10)
+  | 'summary' // "Your Sunbnb": what they played through
   | 'live' // the offer + contact
   | 'done'
 
-export type Attach = 'start' | 'runs' | 'count' | 'guest' | 'bed' | 'pay' | 'pass' | 'staff' | 'checked' | 'live'
+export type Attach = 'start' | 'runs' | 'count' | 'guest' | 'bed' | 'pay' | 'pass' | 'staff' | 'checked' | `mod_${Module}` | 'summary' | 'live'
 
 export interface Msg {
   id: number
@@ -58,6 +61,9 @@ export interface JourneyState {
   price: number
   booked: string[]
   checkedIn: string[]
+  /** Modules planned after the staff mission (fixed when the first one starts), and how many have started. */
+  plan: Module[] | null
+  played: Module[]
 }
 
 export const START_PRICE_EUR = 20
@@ -77,6 +83,8 @@ export type JourneyEvent =
   | { type: 'paid' }
   | { type: 'toStaff' }
   | { type: 'checkIn'; label: string }
+  /** Next feature module, or the summary when none remain. `echo`: the visitor's line for what they just did. */
+  | { type: 'continue'; echoKey?: string }
   | { type: 'toLive' }
   | { type: 'demoRequested' }
   | { type: 'changeBeach' }
@@ -85,14 +93,14 @@ export type JourneyEvent =
 
 export function initialJourney(): JourneyState {
   return push(
-    { step: 'beach', msgs: [], nextId: 1, beach: null, count: 0, runs: null, shoreRead: false, token: null, bed: null, guestBed: null, price: START_PRICE_EUR, booked: [], checkedIn: [] },
+    { step: 'beach', msgs: [], nextId: 1, beach: null, count: 0, runs: null, shoreRead: false, token: null, bed: null, guestBed: null, price: START_PRICE_EUR, booked: [], checkedIn: [], plan: null, played: [] },
     { from: 'agent', key: 'greeting', attach: 'start' },
   )
 }
 
 /** A saved mockup reopened from its link: straight to the guest mission on their beach. */
-export function resumedJourney(r: { beach: JourneyBeach; count: number; token: string }): JourneyState {
-  const s: JourneyState = { ...initialJourney(), msgs: [], nextId: 1, step: 'guest', beach: r.beach, count: r.count, token: r.token, shoreRead: true }
+export function resumedJourney(r: { beach: JourneyBeach; count: number; token: string; runs?: Run[] | null }): JourneyState {
+  const s: JourneyState = { ...initialJourney(), msgs: [], nextId: 1, step: 'guest', beach: r.beach, count: r.count, token: r.token, shoreRead: true, runs: r.runs ?? null }
   return push(s, { from: 'agent', key: 'welcomeBack', params: { beach: r.beach.name, count: r.count }, attach: 'guest' })
 }
 
@@ -177,8 +185,18 @@ export function journeyReducer(s: JourneyState, e: JourneyEvent): JourneyState {
       if (e.label !== staffBed(s)) return next // the example bookings check in silently
       return push({ ...next, step: 'checked' }, { from: 'me', key: 'meCheckIn', params: { label: e.label } }, { from: 'agent', key: 'checked', attach: 'checked' })
     }
+    case 'continue': {
+      if (!['checked', 'module', 'staff'].includes(s.step)) return s
+      const plan = s.plan ?? planModules({ runs: s.runs, spain: isSpanishAddress(s.beach?.address ?? '') })
+      const echo: Omit<Msg, 'id'>[] = e.echoKey ? [{ from: 'me', key: e.echoKey }] : []
+      const nextModule = plan[s.played.length]
+      if (nextModule) {
+        return push({ ...s, step: 'module', plan, played: [...s.played, nextModule] }, ...echo, { from: 'agent', key: `mod_${nextModule}`, params: { beach: s.beach?.name ?? '' }, attach: `mod_${nextModule}` })
+      }
+      return push({ ...s, step: 'summary', plan }, ...echo, { from: 'agent', key: 'summary', params: { beach: s.beach?.name ?? '' }, attach: 'summary' })
+    }
     case 'toLive':
-      if (!['staff', 'checked', 'guest', 'pass'].includes(s.step)) return s
+      if (!['staff', 'checked', 'guest', 'pass', 'module', 'summary'].includes(s.step)) return s
       return push({ ...s, step: 'live' }, { from: 'me', key: 'meLive' }, { from: 'agent', key: 'liveAsk', params: { beach: s.beach?.name ?? '' }, attach: 'live' })
     case 'demoRequested':
       if (s.step === 'done') return s

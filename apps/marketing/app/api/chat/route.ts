@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
   const before = leadStateFromRow(ctx)
   const history = ctx.history as ChatMessage[]
   const userMessage: ChatMessage = { role: 'user', content: req.message }
-  const system: ChatMessage = { role: 'system', content: buildSystemPrompt({ beachName: ctx.beachName, sunbedCount: ctx.sunbedCount }) }
+  const system: ChatMessage = { role: 'system', content: buildSystemPrompt({ beachName: ctx.beachName, sunbedCount: ctx.sunbedCount, runs: ctx.runs }) }
 
   let turn
   try {

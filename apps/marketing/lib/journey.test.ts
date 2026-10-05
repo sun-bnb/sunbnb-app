@@ -123,4 +123,30 @@ describe('journey — one conversation from beach to go-live', () => {
       expect(journeyReducer(s, e)).toBe(s)
     }
   })
+
+  it('after check-in, the modules follow what they run, then the summary, then go-live', () => {
+    const muro = { ...beach, address: 'Muro, Illes Balears, Spain' }
+    let s = run([{ type: 'checkIn', label: 'A1' }], run([{ type: 'toStaff' }], resumedJourney({ beach: muro, count: 60, token: 'tok', runs: ['rentals'] })))
+    expect(s.step).toBe('checked')
+    const seen: string[] = []
+    for (let i = 0; i < 4 && s.step !== 'summary'; i++) {
+      s = journeyReducer(s, { type: 'continue', echoKey: i ? 'meDone' : undefined })
+      seen.push(liveAttach(s)!.attach)
+    }
+    expect(seen).toEqual(['mod_rental', 'mod_dayclose', 'mod_verifactu', 'summary'])
+    expect(s.played).toEqual(['rental', 'dayclose', 'verifactu'])
+    expect(journeyReducer(s, { type: 'toLive' }).step).toBe('live')
+  })
+
+  it('the plan is fixed once modules start — a late answer cannot reshuffle the demo', () => {
+    let s = run([{ type: 'toStaff' }, { type: 'checkIn', label: 'A1' }, { type: 'continue' }], resumedJourney({ beach, count: 60, token: 'tok', runs: [] }))
+    expect(s.plan).toEqual(['dayclose'])
+    s = journeyReducer(s, { type: 'continue' })
+    expect(s.step).toBe('summary')
+  })
+
+  it('go-live can be reached from any module (every step is skippable)', () => {
+    const s = run([{ type: 'toStaff' }, { type: 'checkIn', label: 'A1' }, { type: 'continue' }, { type: 'toLive' }], resumedJourney({ beach, count: 60, token: 'tok' }))
+    expect(s.step).toBe('live')
+  })
 })

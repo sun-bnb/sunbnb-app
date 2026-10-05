@@ -283,3 +283,229 @@ export function StaffCard({ layout, guestBed, checkedIn, onCheckIn }: { layout: 
     </div>
   )
 }
+
+// ── Feature modules (track 027 D10) — each a ~20 s play, each ends with onDone(echo key) ──────
+
+/** Tap-through status pipeline, the order board's own vocabulary. */
+function Pipeline({ steps, onDone, doneKey }: { steps: string[]; onDone: (echoKey: string) => void; doneKey: string }) {
+  const t = useTranslations('Thread')
+  const [at, setAt] = useState(0)
+  const finished = at >= steps.length - 1
+  return (
+    <div className="mt-3">
+      <div className="flex flex-wrap gap-1.5">
+        {steps.map((st, i) => (
+          <span
+            key={st}
+            className={`rounded-full border px-2.5 py-0.5 text-xs font-medium transition ${
+              i < at ? 'border-green-200 bg-green-50 text-green-700' : i === at ? 'animate-[pop_200ms_ease-out] border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-400'
+            }`}
+          >
+            {st}
+          </span>
+        ))}
+      </div>
+      <div className="mt-3">
+        <BigButton
+          onClick={() => {
+            if (finished) return onDone(doneKey)
+            setAt((a) => a + 1)
+          }}
+        >
+          {finished ? t('continue') : steps[at + 1]}
+        </BigButton>
+      </div>
+    </div>
+  )
+}
+
+export function OrderCard({ guestBed, onDone }: { guestBed: string; onDone: (echoKey: string) => void }) {
+  const t = useTranslations('Thread')
+  return (
+    <div className={`${cardCls} !border-gray-200`}>
+      <div className="flex items-center justify-between text-xs text-gray-500">
+        <span>{t('orderBoard')}</span>
+        <span>{t('example')}</span>
+      </div>
+      <div className="mt-2 rounded-xl border border-gray-200 p-3">
+        <div className="flex items-center justify-between">
+          <p className="font-semibold text-gray-900">{t('bedTitle', { label: guestBed })}</p>
+          <span className="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">{t('paidOnline')}</span>
+        </div>
+        <p className="mt-1 text-sm text-gray-600">{t('orderItems')}</p>
+      </div>
+      <Pipeline steps={[t('st_new'), t('st_accepted'), t('st_preparing'), t('st_ready'), t('st_delivered')]} onDone={onDone} doneKey="meDelivered" />
+    </div>
+  )
+}
+
+export function RentalCard({ onDone }: { onDone: (echoKey: string) => void }) {
+  const t = useTranslations('Thread')
+  return (
+    <div className={`${cardCls} !border-gray-200`}>
+      <div className="flex items-center justify-between text-xs text-gray-500">
+        <span>{t('rentalsToday')}</span>
+        <span>{t('example')}</span>
+      </div>
+      <div className="mt-2 flex items-center justify-between rounded-xl border border-gray-200 p-3">
+        <div>
+          <p className="font-semibold text-gray-900">{t('rentalItem')}</p>
+          <p className="text-sm text-gray-500">{t('rentalWhen')}</p>
+        </div>
+        <span className="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">{t('paidOnline')}</span>
+      </div>
+      <Pipeline steps={[t('st_booked'), t('st_pickedUp'), t('st_returned')]} onDone={onDone} doneKey="meReturned" />
+    </div>
+  )
+}
+
+/** Restaurant floor: seat the party at a table big enough for it. */
+export function TablesCard({ onDone }: { onDone: (echoKey: string) => void }) {
+  const t = useTranslations('Thread')
+  const tables = [
+    { id: 'T1', seats: 2 },
+    { id: 'T2', seats: 2 },
+    { id: 'T3', seats: 4 },
+    { id: 'T4', seats: 4 },
+    { id: 'T5', seats: 6 },
+    { id: 'T6', seats: 2 },
+  ]
+  const [seated, setSeated] = useState<string | null>(null)
+  const [nope, setNope] = useState<string | null>(null)
+  return (
+    <div className={`${cardCls} !border-gray-200`}>
+      <div className="flex items-center justify-between text-xs text-gray-500">
+        <span>{t('tablesTonight')}</span>
+        <span>{t('example')}</span>
+      </div>
+      <p className="mt-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">{t('tablesParty')}</p>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {tables.map((tb) => {
+          const isSeated = seated === tb.id
+          return (
+            <button
+              key={tb.id}
+              type="button"
+              disabled={!!seated}
+              onClick={() => {
+                if (tb.seats < 4) {
+                  haptic(30)
+                  setNope(tb.id)
+                  return
+                }
+                haptic(18)
+                setSeated(tb.id)
+              }}
+              className={`flex h-14 flex-col items-center justify-center rounded-xl border-2 text-xs font-semibold transition active:scale-95 ${
+                isSeated ? 'animate-[pop_220ms_ease-out] border-red-600 bg-red-400 text-white' : nope === tb.id ? 'animate-[pop_160ms_ease-out] border-gray-300 bg-gray-100 text-gray-400' : 'border-green-500 bg-green-300 text-green-900'
+              } ${tb.seats >= 6 ? 'rounded-full' : ''}`}
+            >
+              {tb.id}
+              <span className="font-normal">{t('seats', { count: tb.seats })}</span>
+            </button>
+          )
+        })}
+      </div>
+      {nope && !seated && <p className="mt-2 text-xs text-gray-500">{t('tablesTooSmall')}</p>}
+      {seated && (
+        <div className="mt-3">
+          <BigButton onClick={() => onDone('meSeated')}>{t('continue')}</BigButton>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The demo day, closed: only figures the visitor produced in this demo (their own price). */
+export function DayCloseCard({ sunbedPrice, paidOnline, onDone }: { sunbedPrice: number | null; paidOnline: number; onDone: (echoKey: string) => void }) {
+  const t = useTranslations('Thread')
+  const [closed, setClosed] = useState(false)
+  // Only what this demo produced: a count of online payments, and the one amount the visitor set
+  // themselves (their sunbed price) — never a made-up turnover.
+  const rows: [string, string][] = [
+    [t('dc_online'), String(paidOnline)],
+    ...(sunbedPrice !== null ? ([[t('dc_sunbed'), `€${sunbedPrice}`]] as [string, string][]) : []),
+    [t('dc_cash'), '€0'],
+    [t('dc_receipts'), String(paidOnline)],
+    [t('dc_vat'), t('dc_vatValue')],
+  ]
+  return (
+    <div className={`${cardCls} !border-gray-200`}>
+      <div className="flex items-center justify-between text-xs text-gray-500">
+        <span>{t('dc_title')}</span>
+        <span>{t('dc_fromDemo')}</span>
+      </div>
+      <dl className="mt-2 divide-y divide-gray-100 rounded-xl border border-gray-200">
+        {rows.map(([k, v]) => (
+          <div key={k} className="flex justify-between px-3 py-2 text-sm">
+            <dt className="text-gray-600">{k}</dt>
+            <dd className="font-semibold tabular-nums text-gray-900">{v}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="mt-3">
+        {closed ? (
+          <>
+            <p className="mb-3 animate-[pop_220ms_ease-out] rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm font-medium text-green-700">{t('dc_closed')}</p>
+            <BigButton onClick={() => onDone('meClosed')}>{t('continue')}</BigButton>
+          </>
+        ) : (
+          <BigButton
+            onClick={() => {
+              haptic(20)
+              setClosed(true)
+            }}
+          >
+            {t('dc_close')}
+          </BigButton>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Veri*factu (Spain): COMING — founder wording, never "works today" (lib/agent/knowledge.ts). */
+export function VerifactuCard({ onDone }: { onDone: () => void }) {
+  const t = useTranslations('Thread')
+  return (
+    <div className={`${cardCls} !border-gray-200`}>
+      <span className="inline-block rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800">{t('vf_badge')}</span>
+      <ul className="mt-2 space-y-1.5 text-sm text-gray-700">
+        {(['vf_1', 'vf_2', 'vf_3'] as const).map((k) => (
+          <li key={k} className="flex gap-2">
+            <span className="text-[#00a9c7]" aria-hidden>
+              ›
+            </span>
+            {t(k)}
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3">
+        <BigButton onClick={onDone}>{t('continue')}</BigButton>
+      </div>
+    </div>
+  )
+}
+
+/** "Your Sunbnb": everything they just ran on their own beach, then the way to make it real. */
+export function SummaryCard({ items, onLive }: { items: { text: string; coming?: boolean }[]; onLive: () => void }) {
+  const t = useTranslations('Thread')
+  return (
+    <div className="space-y-2">
+      <div className={cardCls}>
+        <ul className="space-y-2">
+          {items.map((it, i) => (
+            <li key={it.text} className="flex animate-[pop_220ms_ease-out] items-center gap-2 text-sm font-medium text-[#0e3a4a]" style={{ animationDelay: `${i * 90}ms`, animationFillMode: 'backwards' }}>
+              {/* A coming feature never wears the same tick as a working one. */}
+              <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] ${it.coming ? 'border border-amber-300 bg-amber-50 text-amber-700' : 'bg-green-600 text-white'}`} aria-hidden>
+                {it.coming ? '…' : '✓'}
+              </span>
+              {it.text}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <BigButton onClick={onLive}>{t('nextLive')}</BigButton>
+    </div>
+  )
+}
