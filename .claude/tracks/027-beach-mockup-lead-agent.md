@@ -346,6 +346,16 @@ pure layout generator (location TBD — see Q2)
 
 ## Log
 
+- **2026-10-05** — **Coastline from our own data: deployed to test and production.** Contract
+  migration `20261005171532_drop_app_coast_tables` (models + partner mock delegates removed) after
+  test and production both ran 904c01c; applied to test before the push and to production by
+  `deploy-to-production.sh`. Promoted (`00500f2`) and deployed by Claude (founder authorised
+  promotes/deploys/migrations for the session). Verified live: trytest (via a Vercel-logged-in
+  browser — Deployment Protection still on) and try.sunbnb.app `/api/coastline` answer Benidorm
+  186°, Las Canteras 281°, Muro 76°, La Concha 307°, Tarifa 232°, each with water polygons, from
+  the shared `coastline` database (coast_rw). Still open: Deployment Protection on the marketing
+  project; more regions = one line in `lib/coast-regions.ts` + an import into the coastline DB.
+
 - **2026-10-05** — **Coastline moved to its OWN database (founder: option A).** `CREATE DATABASE
   coastline` in the production Neon project (same compute, no new bill); schema is NOT a Prisma
   migration but `packages/data/coastline/schema.sql` (idempotent, PostGIS) applied with
@@ -358,7 +368,7 @@ pure layout generator (location TBD — see Q2)
   share one copy). Local: `coastline` + `coastline_test` databases in Docker
   (`test:integration:setup` applies the schema; integration tests truncate coastline_test only).
   Coastline rows deleted from the prod, test and local APP databases.
-  **Contract step still to do (next release, migrations.md):** test + production run `bfbc2f5`,
+  **Contract step (done the same day, see the entry above):** test + production run `bfbc2f5`,
   whose coastline code still reads the app-DB tables when the env var is unset — drop them only
   after this code is deployed everywhere: remove CoastTile/CoastLine/CoastWater from
   schema.prisma + a `DROP TABLE coast_line, coast_water, coast_tile` migration (+ partner mock
