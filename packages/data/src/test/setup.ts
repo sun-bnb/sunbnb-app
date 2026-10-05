@@ -51,6 +51,7 @@ export async function cleanDatabase() {
       "device",
       "account_feature_flag",
       -- Marketing leads (track 027) are standalone: no FK reaches them.
+      "lead_event",
       "lead",
       -- The fiscal chains have NO foreign key to anything we truncate below --
       -- they are keyed on an issuer NIF and a partner id, not on a row we own --

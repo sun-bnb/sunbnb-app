@@ -1963,6 +1963,26 @@ model Lead {
   chatSessions     Json?     @map("chat_sessions")
   /// Prospect messages across all sessions; capped per lead to bound API spend.
   chatTurns        Int       @default(0) @map("chat_turns")
+  /// Landing A/B arm (track 027 D8): 'a' = book a demo, 'b' = start free. Sticky per lead.
+  variant          String?
+  /// Ad angle the visitor arrived on (`?a=` key, e.g. noshow | cash | online | queue).
+  angle            String?
+  /// Ad click ids, kept for offline-conversion import (P14). Personal data — purged with the lead.
+  gclid            String?
+  fbclid           String?
+  /// When the visitor accepted marketing cookies (Meta / Google tags), if they did.
+  marketingConsentAt DateTime? @map("marketing_consent_at")
+  /// vision | coastline | point — how the mockup was placed (P11).
+  placementSource  String?   @map("placement_source")
+  /// The prospect's own projection inputs + server-recomputed outputs (P10).
+  projection       Json?
+  projectionAt     DateTime? @map("projection_at")
+  /// Variant B "claim this beach" (P13): a separate expiring token, never the mockup token.
+  claimToken       String?   @unique @map("claim_token")
+  claimedAt        DateTime? @map("claimed_at")
+  claimedByUserId  String?   @map("claimed_by_user_id")
+  claimedSiteId    String?   @map("claimed_site_id")
+  events           LeadEvent[]
   /// When the prospect ticked the privacy consent, and which notice version they saw.
   consentAt        DateTime? @map("consent_at")
   consentVersion   String?   @map("consent_version")
@@ -1974,4 +1994,23 @@ model Lead {
   @@index([status, createdAt])
   @@index([lastActivityAt])
   @@map("lead")
+}
+
+/// First-party funnel event for try.sunbnb.app (track 027 P8). Events before a lead exists carry
+/// NO identifier (leadId null) — aggregate counts only, so no cookie is needed to collect them.
+/// Lead-linked events are deleted with their lead (retention via purgeExpiredLeads).
+model LeadEvent {
+  id        String   @id @default(cuid())
+  leadId    String?  @map("lead_id")
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  name      String
+  variant   String?
+  angle     String?
+  /// Small, allow-listed properties (≤ 1 KB), never free text from the visitor.
+  props     Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([name, createdAt])
+  @@index([leadId])
+  @@map("lead_event")
 }

@@ -3,7 +3,7 @@
  * retention, token format, layout validation) are in `./lead-model`.
  */
 import prisma from '../index'
-import { generateLeadToken, LEAD_STATUS, retentionCutoffs, type LeadLayout } from './lead-model'
+import { assignVariant, generateLeadToken, LEAD_STATUS, retentionCutoffs, type AdAngle, type LeadEventName, type LeadLayout, type LeadVariant } from './lead-model'
 
 export interface NewLeadMockup {
   placeId: string
@@ -14,18 +14,36 @@ export interface NewLeadMockup {
   sunbedCount: number
   locale: string
   utm?: Partial<Record<'source' | 'medium' | 'campaign' | 'term' | 'content', string>>
+  /** Ad angle and click ids, already validated by the caller (`parseAngle` / `parseClickId`). */
+  angle?: AdAngle | null
+  gclid?: string | null
+  fbclid?: string | null
+  /** Live A/B arms; the lead's arm is derived from its token (sticky, no cookie). */
+  variants?: readonly LeadVariant[]
+  /** QA override (`?v=a|b`) — only honoured if that arm is live. */
+  forceVariant?: LeadVariant | null
+  /** The visitor had already accepted marketing cookies when the mockup was created. */
+  marketingConsent?: boolean
 }
 
 const UTM_MAX = 200
 
-export async function createLeadMockup(input: NewLeadMockup): Promise<{ token: string }> {
+export async function createLeadMockup(input: NewLeadMockup): Promise<{ token: string; variant: LeadVariant }> {
   const utm = (k: keyof NonNullable<NewLeadMockup['utm']>) => input.utm?.[k]?.slice(0, UTM_MAX) || null
   // A token collision is ~2^-67 per pair; retry once on the unique index rather than pre-checking.
   for (let attempt = 0; ; attempt++) {
     try {
+      const token = generateLeadToken()
+      const live = input.variants ?? ['a']
+      const variant = input.forceVariant && live.includes(input.forceVariant) ? input.forceVariant : assignVariant(token, live)
       const lead = await prisma.lead.create({
         data: {
-          token: generateLeadToken(),
+          token,
+          variant,
+          angle: input.angle ?? null,
+          gclid: input.gclid ?? null,
+          fbclid: input.fbclid ?? null,
+          marketingConsentAt: input.marketingConsent ? new Date() : null,
           placeId: input.placeId,
           beachName: input.beachName.slice(0, 300),
           beachAddress: input.beachAddress.slice(0, 500),
@@ -39,9 +57,9 @@ export async function createLeadMockup(input: NewLeadMockup): Promise<{ token: s
           utmTerm: utm('term'),
           utmContent: utm('content'),
         },
-        select: { token: true },
+        select: { token: true, variant: true },
       })
-      return lead
+      return { token: lead.token, variant: (lead.variant ?? 'a') as LeadVariant }
     } catch (err) {
       if (attempt < 2 && (err as { code?: string }).code === 'P2002') continue
       throw err
@@ -70,6 +88,8 @@ export async function getLeadMockup(token: string) {
       layoutPlacement: true,
       locale: true,
       status: true,
+      variant: true,
+      angle: true,
     },
   })
 }
@@ -140,6 +160,9 @@ export async function purgeExpiredLeads(now = new Date()): Promise<{ anonymous: 
     where: { email: null, phone: null, contactName: null, lastActivityAt: { lt: anonymousBefore } },
   })
   const contact = await prisma.lead.deleteMany({ where: { lastActivityAt: { lt: contactBefore } } })
+  // Lead-linked events go with their lead (FK cascade). Anonymous funnel counts carry no personal
+  // data, but are still not kept forever.
+  await prisma.leadEvent.deleteMany({ where: { leadId: null, createdAt: { lt: contactBefore } } })
   return { anonymous: anonymous.count, contact: contact.count }
 }
 
@@ -217,4 +240,35 @@ export async function saveLeadChatTurn(token: string, u: ChatTurnUpdate) {
     })
     return { ok: true as const, firstRequest, lead }
   })
+}
+
+// ── Funnel events & consent (track 027 P8) ──────────────────────────────────
+
+/**
+ * Record one funnel event. With a token the event is tied to that lead and takes the lead's own
+ * variant/angle (the client can't relabel itself); without one it is an anonymous count. Inputs
+ * are validated by the caller (`isLeadEventName`, `parseEventProps`, `parseAngle`).
+ */
+export async function recordLeadEvent(e: {
+  name: LeadEventName
+  token?: string | null
+  props?: Record<string, string | number | boolean> | null
+  variant?: LeadVariant | null
+  angle?: AdAngle | null
+}): Promise<boolean> {
+  if (e.token) {
+    const lead = await prisma.lead.findUnique({ where: { token: e.token }, select: { id: true, variant: true, angle: true } })
+    if (!lead) return false
+    await prisma.leadEvent.create({
+      data: { leadId: lead.id, name: e.name, variant: lead.variant, angle: lead.angle, props: e.props ?? undefined },
+    })
+    return true
+  }
+  await prisma.leadEvent.create({ data: { name: e.name, variant: e.variant ?? null, angle: e.angle ?? null, props: e.props ?? undefined } })
+  return true
+}
+
+/** The visitor accepted marketing cookies on this lead's page (first acceptance wins). */
+export async function recordMarketingConsent(token: string): Promise<void> {
+  await prisma.lead.updateMany({ where: { token, marketingConsentAt: null }, data: { marketingConsentAt: new Date() } })
 }

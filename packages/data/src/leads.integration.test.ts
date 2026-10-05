@@ -6,7 +6,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import prisma from '../index'
 import { cleanDatabase } from './test/setup'
-import { createLeadMockup, getLeadChatContext, getLeadMockup, purgeExpiredLeads, requestLeadDemo, saveLeadChatTurn, saveLeadLayout } from './leads'
+import { createLeadMockup, getLeadChatContext, recordLeadEvent, recordMarketingConsent, getLeadMockup, purgeExpiredLeads, requestLeadDemo, saveLeadChatTurn, saveLeadLayout } from './leads'
 
 beforeEach(async () => { await cleanDatabase() })
 afterAll(async () => { await cleanDatabase(); await prisma.$disconnect() })
@@ -165,5 +165,56 @@ describe('chat persistence', () => {
     const { token } = await createLeadMockup(mockup)
     await saveLeadChatTurn(token, turn([{ role: 'user', content: 'my email is secret@x.es' }]))
     expect(JSON.stringify(await getLeadMockup(token))).not.toContain('secret@x.es')
+  })
+})
+
+describe('funnel fields & events (P8)', () => {
+  it('stores the arm, angle and click ids at creation; the arm is sticky and QA-overridable', async () => {
+    const a = await createLeadMockup({ ...mockup, angle: 'noshow', gclid: 'Cj0KCQjwABC123', variants: ['a', 'b'] })
+    expect(['a', 'b']).toContain(a.variant)
+    expect(await prisma.lead.findUniqueOrThrow({ where: { token: a.token } })).toMatchObject({ angle: 'noshow', gclid: 'Cj0KCQjwABC123', variant: a.variant })
+    const forced = await createLeadMockup({ ...mockup, variants: ['a', 'b'], forceVariant: 'b' })
+    expect(forced.variant).toBe('b')
+    const notLive = await createLeadMockup({ ...mockup, variants: ['a'], forceVariant: 'b' })
+    expect(notLive.variant).toBe('a')
+  })
+
+  it("a lead-linked event takes the LEAD's variant, not the caller's", async () => {
+    const { token } = await createLeadMockup({ ...mockup, variants: ['a'] })
+    expect(await recordLeadEvent({ name: 'cta_click', token, variant: 'b', props: { step: 7 } })).toBe(true)
+    const ev = await prisma.leadEvent.findFirstOrThrow({ where: { name: 'cta_click' } })
+    expect(ev).toMatchObject({ variant: 'a', props: { step: 7 } })
+    expect(ev.leadId).not.toBeNull()
+  })
+
+  it('anonymous events carry no lead; unknown tokens are refused', async () => {
+    await recordLeadEvent({ name: 'landing_view', angle: 'cash' })
+    expect(await prisma.leadEvent.findFirstOrThrow({ where: { name: 'landing_view' } })).toMatchObject({ leadId: null, angle: 'cash' })
+    expect(await recordLeadEvent({ name: 'cta_view', token: 'nope' })).toBe(false)
+  })
+
+  it('events are deleted with their lead; old anonymous events are purged too', async () => {
+    const now = new Date('2026-10-04T12:00:00Z')
+    const { token } = await createLeadMockup(mockup)
+    await recordLeadEvent({ name: 'beach_pick', token })
+    await prisma.lead.update({ where: { token }, data: { lastActivityAt: new Date(now.getTime() - 91 * 86_400_000) } })
+    await prisma.leadEvent.create({ data: { name: 'landing_view', createdAt: new Date('2024-01-01T00:00:00Z') } })
+    await purgeExpiredLeads(now)
+    expect(await prisma.leadEvent.count()).toBe(0)
+  })
+
+  it('consent given before the lead existed is stored at creation', async () => {
+    const { token } = await createLeadMockup({ ...mockup, marketingConsent: true })
+    expect((await prisma.lead.findUniqueOrThrow({ where: { token } })).marketingConsentAt).not.toBeNull()
+    const { token: t2 } = await createLeadMockup(mockup)
+    expect((await prisma.lead.findUniqueOrThrow({ where: { token: t2 } })).marketingConsentAt).toBeNull()
+  })
+
+  it('marketing consent: first acceptance is kept', async () => {
+    const { token } = await createLeadMockup(mockup)
+    await recordMarketingConsent(token)
+    const first = (await prisma.lead.findUniqueOrThrow({ where: { token } })).marketingConsentAt
+    await recordMarketingConsent(token)
+    expect((await prisma.lead.findUniqueOrThrow({ where: { token } })).marketingConsentAt).toEqual(first)
   })
 })

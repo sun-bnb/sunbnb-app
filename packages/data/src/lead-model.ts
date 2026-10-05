@@ -70,3 +70,72 @@ export function parseLeadLayout(raw: unknown): LeadLayout | null {
   if (!LEAD_PLACEMENTS.includes(placement as LeadPlacement)) return null
   return { anchorLat, anchorLng, seaBearingDeg, placement: placement as LeadPlacement }
 }
+
+// ── Funnel tracking (track 027 P8) ──────────────────────────────────────────
+
+/** A/B arms: 'a' = book a demo, 'b' = start free (D8). */
+export const LEAD_VARIANTS = ['a', 'b'] as const
+export type LeadVariant = (typeof LEAD_VARIANTS)[number]
+
+/**
+ * Sticky arm per lead, derived from its token: no cookie needed, and a shared mockup link keeps
+ * its arm. `enabled` is the live set (env `MARKETING_VARIANTS`) — with one arm, everyone gets it.
+ */
+export function assignVariant(token: string, enabled: readonly LeadVariant[]): LeadVariant {
+  const arms = enabled.length ? enabled : (['a'] as const)
+  let h = 0
+  for (let i = 0; i < token.length; i++) h = (h * 31 + token.charCodeAt(i)) >>> 0
+  return arms[h % arms.length]!
+}
+
+export function parseVariants(raw: string | undefined | null): LeadVariant[] {
+  const arms = (raw ?? 'a').split(',').map((s) => s.trim()).filter((s): s is LeadVariant => (LEAD_VARIANTS as readonly string[]).includes(s))
+  return arms.length ? [...new Set(arms)] : ['a']
+}
+
+/** The ONLY event names /api/events accepts — free-form names would turn the table into a log of anything. */
+export const LEAD_EVENT_NAMES = [
+  'landing_view', 'search_start', 'beach_pick', 'mockup_created', 'beds_count_set', 'flown', 'beds_placed',
+  'layout_adjusted', 'guest_demo_start', 'guest_demo_done', 'operator_checked_in', 'price_set',
+  'projection_view', 'projection_finetune', 'projection_formula_open', 'brief_view', 'cta_view', 'cta_click',
+  'link_emailed', 'demo_requested', 'signup_click', 'signup_done', 'claim_done', 'chat_open',
+  'consent_marketing', 'consent_necessary',
+] as const
+export type LeadEventName = (typeof LEAD_EVENT_NAMES)[number]
+
+export function isLeadEventName(v: unknown): v is LeadEventName {
+  return typeof v === 'string' && (LEAD_EVENT_NAMES as readonly string[]).includes(v)
+}
+
+/** Ad angles the hero can speak to (`?a=`); anything else is stored as null. */
+export const AD_ANGLES = ['noshow', 'cash', 'online', 'queue'] as const
+export type AdAngle = (typeof AD_ANGLES)[number]
+export function parseAngle(v: unknown): AdAngle | null {
+  return typeof v === 'string' && (AD_ANGLES as readonly string[]).includes(v) ? (v as AdAngle) : null
+}
+
+/**
+ * Event properties: a flat object of ≤ 12 short keys with string (≤ 64 chars) / number / boolean
+ * values, ≤ 1 KB serialised. Anything else is rejected — properties carry funnel facts
+ * (`{source:'vision', ms: 840}`), never visitor text.
+ */
+export function parseEventProps(raw: unknown): Record<string, string | number | boolean> | null {
+  if (raw === undefined || raw === null) return null
+  if (typeof raw !== 'object' || Array.isArray(raw)) return null
+  const entries = Object.entries(raw as Record<string, unknown>)
+  if (entries.length > 12) return null
+  const out: Record<string, string | number | boolean> = {}
+  for (const [k, v] of entries) {
+    if (!/^[a-z][a-zA-Z0-9_]{0,31}$/.test(k)) return null
+    if (typeof v === 'string' && v.length <= 64) out[k] = v
+    else if (typeof v === 'number' && Number.isFinite(v)) out[k] = v
+    else if (typeof v === 'boolean') out[k] = v
+    else return null
+  }
+  return JSON.stringify(out).length <= 1024 ? out : null
+}
+
+/** Ad click ids as Google / Meta issue them; anything else is not stored. */
+export function parseClickId(v: unknown): string | null {
+  return typeof v === 'string' && /^[A-Za-z0-9_.-]{10,255}$/.test(v) ? v : null
+}

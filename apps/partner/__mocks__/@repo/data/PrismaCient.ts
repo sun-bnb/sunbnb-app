@@ -247,6 +247,11 @@ const prisma = {
   // Track 027: marketing leads (try.sunbnb.app). NO partner code reads or writes them — the
   // delegate exists because the mock mirrors the real client and mock-contract.test.ts requires
   // one per model.
+  leadEvent: {
+    create: vi.fn(),
+    findMany: vi.fn(),
+    deleteMany: vi.fn(),
+  },
   lead: {
     findUnique: vi.fn(),
     findMany: vi.fn(),
