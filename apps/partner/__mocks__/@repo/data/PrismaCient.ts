@@ -256,6 +256,9 @@ const prisma = {
   coastLine: {
     findMany: vi.fn(),
   },
+  coastWater: {
+    findMany: vi.fn(),
+  },
   // Track 027 D9: partner promotions (launch offer); read/written via @repo/data/promotion-db.
   partnerPromotion: {
     findMany: vi.fn(),

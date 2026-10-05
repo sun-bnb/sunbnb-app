@@ -52,6 +52,7 @@ export async function cleanDatabase() {
       "account_feature_flag",
       -- Marketing leads (track 027) are standalone: no FK reaches them.
       "coast_line",
+      "coast_water",
       "coast_tile",
       "lead_event",
       "lead",
