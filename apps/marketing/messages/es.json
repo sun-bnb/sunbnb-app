@@ -283,6 +283,22 @@
     "sum_dayclose": "Día cerrado, facturas e IVA hechos",
     "sum_verifactu": "Veri*factu: llega antes del plazo",
     "dc_online": "Pagos online",
-    "dc_sunbed": "Tu reserva de hamaca"
+    "dc_sunbed": "Tu reserva de hamaca",
+    "nextNumbers": "Ver mis números",
+    "meNumbers": "Enséñame mis números",
+    "numbersAsk": "Esto es lo que te costaría Sunbnb, con tu propio precio. Starter no tiene cuota mensual: solo ganamos cuando vendemos por ti.",
+    "pj_price": "Tu precio por hamaca y día",
+    "pj_priceAsk": "¿Es {price} tu precio por día?",
+    "pj_cheapest": "El más barato para ti",
+    "pj_fee": "{fee} al mes",
+    "pj_noFee": "Sin cuota mensual",
+    "pj_keep": "Te quedas {keep} de cada hamaca de {price} reservada online ({pct} % de comisión).",
+    "pj_breakEven": "Más barato que Starter a partir de {days} hamacas-día online al mes.",
+    "pj_month": "Tu mes: {cost} a Sunbnb",
+    "pj_addEstimate": "Añade cuántas venderías online",
+    "pj_online": "Hamacas reservadas online en un día normal",
+    "pj_onlineValue": "{n} de {total}",
+    "pj_yourEstimate": "Tu estimación, para un mes de 30 días. No la calculamos por ti.",
+    "pj_how": "¿Cómo se calcula?"
   }
 }

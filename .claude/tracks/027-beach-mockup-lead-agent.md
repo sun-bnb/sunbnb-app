@@ -310,7 +310,7 @@ pure layout generator (location TBD — see Q2)
   scroll-driven camera along the beach places (below-hero content), agent narration lines.
 - **Coastline cache built** (uncommitted at time of writing) — seed campaign coasts per environment before ads.
 - **P9b built** (modules, summary, stored qualifier). Remaining P9b: ad-matched hero headlines per angle exist; below-fold pillars/FAQ (folded into D11's scroll-driven places).
-- **Next action: P10 projection.** Start with the shipped-feature audit (what can each module
+- **P10 built.** Next: aerial illustrated→map hand-off (P9c) or P13 claim flow — founder's call. Start with the shipped-feature audit (what can each module
   honestly show — F&B orders, rentals, table bookings, QR walk-ins, day close/invoicing are
   believed shipped; dynamic pricing, hotel channel, Viva need checking), then the qualifier in
   `BeachBuilder`'s fly-in phase and the `lib/modules.ts` rule table, then modules one by one.
@@ -345,6 +345,24 @@ pure layout generator (location TBD — see Q2)
   session turn/token caps on the API path (they now also cap spend).
 
 ## Log
+
+- **2026-10-05** — **P10 projection built.** `lib/projection.ts` (pure, 8 tests): only the plan
+  catalogue (`@repo/data/pricing-tiers`) + the prospect's own inputs — their sunbed price (from the
+  guest booking; "Is €20 your price?" until they touch it) and, ONLY if they add it, sunbeds sold
+  online on a typical day. Without that estimate: no monthly figures at all. Outputs per plan: what
+  they keep of every online sunbed-day, break-even vs Starter in online sunbed-days a month, and
+  (with the estimate) the 30-day cost + cheapest plan; every figure carries a trace shown under
+  "How is this calculated?". Commission is on the price the guest pays (`calculateServiceFeeAmount`).
+  Journey: summary → "See my numbers" → go live. Server action `saveProjection` recomputes from
+  validated inputs and stores `lead.projection` (the column already existed from P8 — a duplicate
+  field was caught by `prisma validate`); the team email shows "Their numbers"; the chat prompt
+  gets "THE PROSPECT'S OWN ESTIMATES — restate, never extend"; eval scenarios restates-estimate /
+  refuses-to-extrapolate (the scorer read "€1,800" as 1.8 — `parseFigure` now handles thousands
+  groups). Haiku 54/54 ×2.
+  **Bug found on the way:** after "Build" swaps the URL to `/m/<token>`, Next's patched
+  `replaceState` moved its router to `/m/[token]`, so the NEXT server action (saveProjection,
+  requestDemo) re-rendered that route — a fresh visit that wiped the conversation. The swap now
+  passes `__NA` so the router stays put; verified the demo form submits inside the thread.
 
 - **2026-10-05** — **Hero slides get their own scenes.** Founder: on every slide "the sunbeds never
   went away" — the feature showcase only changed tags on the same beach. Now booking keeps the live

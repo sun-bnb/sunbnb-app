@@ -10,6 +10,16 @@ function describeRuns(runs: string[] | undefined): string | null {
   return runs.map((r) => name[r] ?? r).join(', ')
 }
 
+/** The prospect's own estimate (P10) in one line for the team; null if they didn't look. */
+function describeProjection(p: unknown): string | null {
+  const proj = p as { input?: { price?: number; onlinePerDay?: number | null }; cheapest?: string | null } | null
+  if (!proj?.input?.price) return null
+  const parts = [`price €${proj.input.price}/sunbed-day`]
+  if (proj.input.onlinePerDay != null) parts.push(`~${proj.input.onlinePerDay} sunbeds online/day (their estimate)`)
+  if (proj.cheapest) parts.push(`cheapest plan: ${proj.cheapest}`)
+  return parts.join(' · ')
+}
+
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 
 /**
@@ -20,7 +30,7 @@ export async function notifyDemoRequest(input: {
   token: string
   host: string
   via: 'form' | 'chat'
-  lead: { beachName: string; beachAddress: string; sunbedCount: number; runs?: string[]; utmSource: string | null; utmCampaign: string | null }
+  lead: { beachName: string; beachAddress: string; sunbedCount: number; runs?: string[]; projection?: unknown; utmSource: string | null; utmCampaign: string | null }
   contact: { contactName?: string | null; businessName?: string | null; email?: string | null; phone?: string | null; message?: string | null }
 }): Promise<void> {
   const { lead, contact } = input
@@ -28,6 +38,7 @@ export async function notifyDemoRequest(input: {
     ['Beach', `${lead.beachName} — ${lead.beachAddress}`],
     ['Sunbeds', String(lead.sunbedCount)],
     ['Also runs', describeRuns(lead.runs)],
+    ['Their numbers', describeProjection(lead.projection)],
     ['Name', contact.contactName],
     ['Business', contact.businessName],
     ['Email', contact.email],

@@ -283,6 +283,22 @@
     "sum_dayclose": "Päivä suljettu, laskut ja ALV valmiina",
     "sum_verifactu": "Veri*factu: tulossa ennen määräaikaa",
     "dc_online": "Maksettu verkossa",
-    "dc_sunbed": "Aurinkotuolivarauksesi"
+    "dc_sunbed": "Aurinkotuolivarauksesi",
+    "nextNumbers": "Näytä lukuni",
+    "meNumbers": "Näytä minun lukuni",
+    "numbersAsk": "Tämän verran Sunbnb maksaisi sinulle omalla hinnallasi. Starterissa ei ole kuukausimaksua: ansaitsemme vain, kun myymme puolestasi.",
+    "pj_price": "Hintasi tuolilta päivässä",
+    "pj_priceAsk": "Onko {price} päivähintasi?",
+    "pj_cheapest": "Edullisin sinulle",
+    "pj_fee": "{fee} kuukaudessa",
+    "pj_noFee": "Ei kuukausimaksua",
+    "pj_keep": "Pidät {keep} jokaisesta verkossa varatusta {price} tuolista ({pct} % provisio).",
+    "pj_breakEven": "Starteria edullisempi alkaen {days} verkossa myydystä tuolipäivästä kuukaudessa.",
+    "pj_month": "Kuukautesi: {cost} Sunbnb:lle",
+    "pj_addEstimate": "Lisää, montako myisit verkossa",
+    "pj_online": "Verkossa varatut tuolit tavallisena päivänä",
+    "pj_onlineValue": "{n} / {total}",
+    "pj_yourEstimate": "Oma arviosi, 30 päivän kuukaudelle. Emme arvaa sitä puolestasi.",
+    "pj_how": "Miten tämä lasketaan?"
   }
 }

@@ -4,7 +4,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react'
 import type { LeadLayout } from '@repo/data/lead-model'
-import { createMockup, saveLayout } from '@/app/actions'
+import { createMockup, saveLayout, saveProjection } from '@/app/actions'
 import { haptic } from '@/lib/app-sprites.ts'
 import { generateBeachLayout, type LayoutInput, type MockSunbed } from '@/lib/beach-layout.ts'
 import type { GeoPoint, ShoreFrame } from '@/lib/coastline.ts'
@@ -20,7 +20,7 @@ import DemoRequestForm from './DemoRequestForm'
 import OfferNote from './OfferNote'
 import type { FloatTag } from './SunbedOverlay'
 import Thread from './Thread'
-import { BedCard, BigButton, chipCls, Chips, CountCard, DayCloseCard, OrderCard, PassCard, PayCard, RentalCard, RunsChips, StaffCard, SummaryCard, TablesCard, VerifactuCard, cardCls } from './ThreadAttach'
+import { BedCard, BigButton, chipCls, Chips, CountCard, DayCloseCard, OrderCard, PassCard, PayCard, RentalCard, RunsChips, StaffCard, SummaryCard, TablesCard, VerifactuCard, ProjectionCard, cardCls } from './ThreadAttach'
 import World, { FLY_MS, type Insets } from './World'
 import HeroSlides, { type HeroSlide } from './HeroSlides'
 import HeroVignettes from './HeroVignettes'
@@ -320,7 +320,10 @@ export default function Experience({
     const res = await createMockup(data).catch(() => null)
     if (res?.status !== 'ok') return dispatch({ type: 'buildFailed' })
     // Same world, new address: the link now reopens this beach. No reload, no blink.
-    window.history.replaceState(null, '', `/m/${res.token}`)
+    // `__NA` makes Next's patched replaceState leave its router alone: the router must stay on
+    // this page. Letting it follow the URL made every later server action (saveProjection,
+    // requestDemo) re-render /m/[token] — a fresh visit that wiped the whole conversation.
+    window.history.replaceState({ ...(window.history.state ?? {}), __NA: true }, '', `/m/${res.token}`)
     setTrackingContext({ token: res.token, variant: res.variant })
     track('mockup_created', undefined, { beacon: false }) // counted server-side; this is the ad pixel
     dispatch({ type: 'built', token: res.token })
@@ -581,6 +584,19 @@ export default function Experience({
         return (
           <SummaryCard
             items={[{ text: t('sum_book') }, { text: t('sum_staff') }, ...s.played.map((m) => ({ text: t(`sum_${m}`), coming: m === 'verifactu' }))]}
+            onLive={() => dispatch({ type: 'toNumbers' })}
+            cta={t('nextNumbers')}
+          />
+        )
+      case 'numbers':
+        return (
+          <ProjectionCard
+            price={s.price}
+            priceConfirmed={priceTouched}
+            sunbeds={s.count}
+            onChange={(input) => {
+              if (s.token) void saveProjection(s.token, input)
+            }}
             onLive={() => dispatch({ type: 'toLive' })}
           />
         )

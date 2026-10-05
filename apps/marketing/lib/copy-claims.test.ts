@@ -12,6 +12,8 @@ const ALLOWED: Record<string, string> = {
   'Thread.vf_badge': 'the 2027 Veri*factu deadline — founder-approved wording',
   'Hero.v.sunbed': 'a sunbed label in an illustration (A3), not a figure',
   'Hero.v.rc_sunbed': 'a sunbed label in an illustration (A3), not a figure',
+  'Thread.pj_yourEstimate': 'the 30-day month the arithmetic uses (lib/projection.ts MONTH_DAYS), not a claim',
+  'Thread.pj_keep': 'the % sign of the plan commission, interpolated from PRICING_TIERS (lib/projection.ts)',
   'Thread.greeting': 'quotes an example of what to type ("…, 80 sunbeds and a bar"), not a claim',
 }
 

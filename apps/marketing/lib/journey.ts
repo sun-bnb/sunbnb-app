@@ -23,10 +23,11 @@ export type Step =
   | 'checked'
   | 'module' // a feature module chosen by lib/modules.ts (D10)
   | 'summary' // "Your Sunbnb": what they played through
+  | 'numbers' // P10: their own numbers on each plan
   | 'live' // the offer + contact
   | 'done'
 
-export type Attach = 'start' | 'runs' | 'count' | 'guest' | 'bed' | 'pay' | 'pass' | 'staff' | 'checked' | `mod_${Module}` | 'summary' | 'live'
+export type Attach = 'start' | 'runs' | 'count' | 'guest' | 'bed' | 'pay' | 'pass' | 'staff' | 'checked' | `mod_${Module}` | 'summary' | 'numbers' | 'live'
 
 export interface Msg {
   id: number
@@ -85,6 +86,7 @@ export type JourneyEvent =
   | { type: 'checkIn'; label: string }
   /** Next feature module, or the summary when none remain. `echo`: the visitor's line for what they just did. */
   | { type: 'continue'; echoKey?: string }
+  | { type: 'toNumbers' }
   | { type: 'toLive' }
   | { type: 'demoRequested' }
   | { type: 'changeBeach' }
@@ -195,8 +197,11 @@ export function journeyReducer(s: JourneyState, e: JourneyEvent): JourneyState {
       }
       return push({ ...s, step: 'summary', plan }, ...echo, { from: 'agent', key: 'summary', params: { beach: s.beach?.name ?? '' }, attach: 'summary' })
     }
+    case 'toNumbers':
+      if (s.step !== 'summary') return s
+      return push({ ...s, step: 'numbers' }, { from: 'me', key: 'meNumbers' }, { from: 'agent', key: 'numbersAsk', attach: 'numbers' })
     case 'toLive':
-      if (!['staff', 'checked', 'guest', 'pass', 'module', 'summary'].includes(s.step)) return s
+      if (!['staff', 'checked', 'guest', 'pass', 'module', 'summary', 'numbers'].includes(s.step)) return s
       return push({ ...s, step: 'live' }, { from: 'me', key: 'meLive' }, { from: 'agent', key: 'liveAsk', params: { beach: s.beach?.name ?? '' }, attach: 'live' })
     case 'demoRequested':
       if (s.step === 'done') return s

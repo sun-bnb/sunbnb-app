@@ -9,7 +9,8 @@ import { headers } from 'next/headers'
 import { getLocale } from 'next-intl/server'
 import { rateLimit } from '@repo/data/rate-limit'
 import { parseAngle, parseClickId, parseLeadLayout, parseLeadRuns, parseVariants, LEAD_TOKEN_RE, LEAD_VARIANTS, type LeadVariant } from '@repo/data/lead-model'
-import { createLeadMockup, recordLeadEvent, requestLeadDemo, saveLeadLayout } from '@repo/data/leads'
+import { createLeadMockup, recordLeadEvent, requestLeadDemo, saveLeadLayout, saveLeadProjection } from '@repo/data/leads'
+import { parseProjectionInput, project } from '@/lib/projection.ts'
 import { readConsentCookie } from '@/lib/consent.ts'
 import { notifyDemoRequest } from '@/lib/notify.ts'
 import { fetchBeachPlace } from '@/lib/place-details.ts'
@@ -126,4 +127,20 @@ export async function requestDemo(token: string, form: FormData): Promise<Action
     })
   }
   return { status: 'ok' }
+}
+
+/**
+ * The prospect's numbers (P10): validated inputs, recomputed HERE from the plan catalogue (never
+ * trusting a client-computed figure), stored on the lead for the team email and the chat.
+ */
+export async function saveProjection(token: string, input: unknown): Promise<ActionResult<'invalid' | 'rateLimited'>> {
+  if (!rateLimit(`projection:${clientIp(headers())}`, { maxAttempts: 60, windowMs: 60 * 60_000 }).allowed) {
+    return { status: 'error', errors: ['rateLimited'] }
+  }
+  const parsed = parseProjectionInput(input)
+  if (!LEAD_TOKEN_RE.test(token) || !parsed) return { status: 'error', errors: ['invalid'] }
+  const projection = project(parsed)
+  const ok = await saveLeadProjection(token, JSON.parse(JSON.stringify(projection)))
+  if (ok) await recordLeadEvent({ name: 'projection_view', token })
+  return ok ? { status: 'ok' } : { status: 'error', errors: ['invalid'] }
 }

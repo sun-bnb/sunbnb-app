@@ -15,6 +15,8 @@ export interface Transcript {
   toolEvents: ToolEvent[]
   lead: LeadState
   exhaustedTurns: number
+  /** Numbers that are the prospect's own (their projection on the page) — they may be restated. */
+  ownFigures?: number[]
 }
 
 export type Check =
@@ -36,9 +38,19 @@ export type Check =
  * claims a prospect would rely on. Bare numbers (a time, "3 sentences") are deliberately not
  * extracted: only figures attached to €, %, or a business noun count as claims.
  */
+/** "1,800" / "1.800" / "1 800" → 1800; "6,5" / "6.5" → 6.5 (a 3-digit tail after the last separator is a thousands group). */
+export function parseFigure(raw: string): number {
+  const groups = raw.split(/[.,\u00a0 ]/)
+  const last = groups.at(-1)!
+  if (groups.length > 1 && last.length === 3) return Number(groups.join(''))
+  if (groups.length > 2) return Number(`${groups.slice(0, -1).join('')}.${last}`)
+  return Number(raw.replace(',', '.'))
+}
+
 export function extractClaimedFigures(text: string): number[] {
   const out: number[] = []
-  const num = String.raw`(\d+(?:[.,]\d+)?)`
+  // Thousands groups first ("€1,800", "1.800 €", "1 800 €"), then an optional decimal part.
+  const num = String.raw`(\d{1,3}(?:[.,\u00a0 ]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d+)?)`
   const patterns = [
     new RegExp(String.raw`€\s?${num}`, 'g'),
     new RegExp(String.raw`${num}\s?(?:€|eur\b|euros?\b|euroa?\b)`, 'gi'),
@@ -49,14 +61,14 @@ export function extractClaimedFigures(text: string): number[] {
     ),
   ]
   for (const re of patterns) {
-    for (const m of text.matchAll(re)) out.push(Number(m[1]!.replace(',', '.')))
+    for (const m of text.matchAll(re)) out.push(parseFigure(m[1]!))
   }
   return out
 }
 
 /** Figures the agent may quote: the fact sheet's, plus anything the prospect said themselves. */
-export function allowedFigures(userMessages: string[]): Set<number> {
-  const allowed = new Set<number>(factSheetFigures())
+export function allowedFigures(userMessages: string[], ownFigures: number[] = []): Set<number> {
+  const allowed = new Set<number>([...factSheetFigures(), ...ownFigures])
   for (const msg of userMessages) {
     for (const m of msg.matchAll(/\d+(?:[.,]\d+)?/g)) allowed.add(Number(m[0].replace(',', '.')))
   }
@@ -123,7 +135,7 @@ export function runCheck(check: Check, t: Transcript): string[] {
         return lang === check.lang ? [] : [`reply ${i + 1} looks ${lang}, expected ${check.lang}`]
       })
     case 'no_invented_figures': {
-      const allowed = allowedFigures(t.userMessages)
+      const allowed = allowedFigures(t.userMessages, t.ownFigures)
       const invented = replies.flatMap((r) => extractClaimedFigures(r)).filter((f) => !allowed.has(f))
       return invented.length ? [`invented figures: ${[...new Set(invented)].join(', ')}`] : []
     }

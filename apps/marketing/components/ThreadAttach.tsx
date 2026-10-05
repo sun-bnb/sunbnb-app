@@ -1,6 +1,6 @@
 'use client'
 
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { useMemo, useRef, useState, useEffect, type FC, type ReactNode } from 'react'
 import QRCodeLib from 'react-qr-code'
 import { haptic } from '@/lib/app-sprites.ts'
@@ -8,6 +8,7 @@ import type { BeachLayout } from '@/lib/beach-layout.ts'
 import type { Run } from '@/lib/intent.ts'
 import { exampleBookings, staffWindow } from '@/lib/missions.ts'
 import { MAX_SUNBEDS } from '@/lib/places.ts'
+import { project } from '@/lib/projection.ts'
 
 // react-qr-code types against the hoisted @types/react 19 (same cast as apps/user PassView).
 const QRCode = QRCodeLib as unknown as FC<{ value: string; size?: number; style?: React.CSSProperties }>
@@ -490,7 +491,7 @@ export function VerifactuCard({ onDone }: { onDone: () => void }) {
 }
 
 /** "Your Sunbnb": everything they just ran on their own beach, then the way to make it real. */
-export function SummaryCard({ items, onLive }: { items: { text: string; coming?: boolean }[]; onLive: () => void }) {
+export function SummaryCard({ items, onLive, cta }: { items: { text: string; coming?: boolean }[]; onLive: () => void; cta?: string }) {
   const t = useTranslations('Thread')
   return (
     <div className="space-y-2">
@@ -506,6 +507,120 @@ export function SummaryCard({ items, onLive }: { items: { text: string; coming?:
             </li>
           ))}
         </ul>
+      </div>
+      <BigButton onClick={onLive}>{cta ?? t('nextLive')}</BigButton>
+    </div>
+  )
+}
+
+/**
+ * Their numbers on each plan (P10). Inputs are theirs only: the price they set for their guest's
+ * sunbed (confirmed here if they never touched our starting value) and — optionally — how many
+ * sunbeds they'd sell online on a typical day. Without that estimate there are no monthly
+ * figures at all. Everything shown traces back to the plan catalogue ("How is this calculated?").
+ */
+export function ProjectionCard({
+  price,
+  priceConfirmed,
+  sunbeds,
+  onChange,
+  onLive,
+}: {
+  price: number
+  priceConfirmed: boolean
+  sunbeds: number
+  onChange: (input: { price: number; sunbeds: number; onlinePerDay: number | null }) => void
+  onLive: () => void
+}) {
+  const t = useTranslations('Thread')
+  const locale = useLocale()
+  // Money in the visitor's own notation; whole euros without decimals ("€79", "€19.70").
+  const eur = (n: number) =>
+    new Intl.NumberFormat(locale, { style: 'currency', currency: 'EUR', minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 }).format(n)
+  const [p, setP] = useState(price)
+  const [confirmed, setConfirmed] = useState(priceConfirmed)
+  const [online, setOnline] = useState<number | null>(null)
+  const [why, setWhy] = useState(false)
+  const proj = useMemo(() => project({ price: p, sunbeds, onlinePerDay: online }), [p, sunbeds, online])
+  useEffect(() => {
+    const timer = setTimeout(() => onChange({ price: p, sunbeds, onlinePerDay: online }), 600)
+    return () => clearTimeout(timer)
+  }, [p, sunbeds, online]) // onChange is a fresh closure each render; the inputs are what matter
+  const btn = 'grid h-9 w-9 place-items-center rounded-full border-2 border-gray-900 text-lg font-semibold text-gray-900 transition active:scale-90 select-none touch-manipulation'
+  const setPrice = (v: number) => {
+    haptic(5)
+    setConfirmed(true)
+    setP(Math.max(1, Math.min(500, v)))
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className={`${cardCls} !border-gray-200`}>
+        <div className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2">
+          <span className="text-sm text-gray-600">{confirmed ? t('pj_price') : t('pj_priceAsk', { price: eur(p) })}</span>
+          <div className="flex items-center gap-2">
+            <button type="button" aria-label={t('priceLess')} className={btn} onClick={() => setPrice(p - 1)}>
+              −
+            </button>
+            <span key={p} className="w-12 animate-[pop_160ms_ease-out] text-center text-lg font-semibold tabular-nums text-gray-900">€{p}</span>
+            <button type="button" aria-label={t('priceMore')} className={btn} onClick={() => setPrice(p + 1)}>
+              +
+            </button>
+          </div>
+        </div>
+
+        <ul className="mt-3 space-y-2">
+          {proj.tiers.map((l) => {
+            const best = proj.cheapest === l.tier
+            return (
+              <li key={l.tier} className={`rounded-xl border p-3 transition ${best ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}>
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="font-semibold text-gray-900">{l.name}</p>
+                  <p className="shrink-0 whitespace-nowrap text-sm text-gray-600">{l.monthlyPrice ? t('pj_fee', { fee: eur(l.monthlyPrice) }) : t('pj_noFee')}</p>
+                </div>
+                {/* Its own line: squeezed next to the name it wrapped mid-badge on phones. */}
+                {best && <span className="mt-1 inline-block animate-[pop_200ms_ease-out] whitespace-nowrap rounded-full bg-green-600 px-2 py-0.5 text-[11px] font-semibold text-white">{t('pj_cheapest')}</span>}
+                <p className="mt-1 text-sm text-gray-700">{t('pj_keep', { keep: eur(l.keepPerBed), price: eur(p), pct: l.commissionPercent })}</p>
+                {l.breakEvenBedDays !== null && <p className="text-xs text-gray-500">{t('pj_breakEven', { days: l.breakEvenBedDays })}</p>}
+                {l.monthlyCost !== null && <p key={l.monthlyCost} className="mt-1 animate-[pop_160ms_ease-out] text-sm font-semibold text-gray-900">{t('pj_month', { cost: eur(l.monthlyCost) })}</p>}
+              </li>
+            )
+          })}
+        </ul>
+
+        {online === null ? (
+          <button type="button" onClick={() => setOnline(Math.max(1, Math.round(sunbeds / 4)))} className={`${chipCls} mt-3`}>
+            {t('pj_addEstimate')}
+          </button>
+        ) : (
+          <div className="mt-3 rounded-xl bg-gray-50 px-3 py-2">
+            <div className="flex items-baseline justify-between gap-3 text-sm">
+              <span className="text-gray-600">{t('pj_online')}</span>
+              <span className="shrink-0 whitespace-nowrap font-semibold tabular-nums text-gray-900">{t('pj_onlineValue', { n: online, total: sunbeds })}</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={sunbeds}
+              value={online}
+              onChange={(e) => setOnline(Number(e.target.value))}
+              aria-label={t('pj_online')}
+              className="mt-2 w-full accent-[#00a9c7]"
+            />
+            <p className="text-[11px] text-gray-500">{t('pj_yourEstimate')}</p>
+          </div>
+        )}
+
+        <button type="button" onClick={() => setWhy((w) => !w)} aria-expanded={why} className="mt-3 text-xs font-medium text-[#0083a0] underline-offset-2 hover:underline">
+          {t('pj_how')}
+        </button>
+        {why && (
+          <ul className="mt-2 space-y-1 rounded-lg bg-gray-50 p-2.5 text-[11px] leading-snug text-gray-600">
+            {[...proj.trace, ...proj.tiers.flatMap((l) => l.trace)].map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        )}
       </div>
       <BigButton onClick={onLive}>{t('nextLive')}</BigButton>
     </div>

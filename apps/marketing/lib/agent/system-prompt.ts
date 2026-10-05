@@ -6,6 +6,16 @@ export interface MockupContext {
   sunbedCount: number
   /** What else the venue runs, from the page's qualifier: fnb | rentals | tables | none. */
   runs?: readonly string[]
+  /** Their own numbers from the page (P10), if they looked. */
+  projection?: unknown
+}
+
+/** The prospect's own estimate, for the agent to restate — attributed, never extended. */
+function describeProjection(p: unknown): string {
+  const proj = p as { input?: { price?: number; onlinePerDay?: number | null }; cheapest?: string | null; tiers?: { name: string; commissionPerBed: number; breakEvenBedDays: number | null; monthlyCost: number | null }[] } | null
+  if (!proj?.input?.price || !proj.tiers) return ''
+  const lines = proj.tiers.map((t) => `${t.name}: €${t.commissionPerBed} commission per online sunbed-day${t.breakEvenBedDays ? `, cheaper than Starter from ${t.breakEvenBedDays} online sunbed-days a month` : ''}${t.monthlyCost !== null ? `, €${t.monthlyCost} for a 30-day month` : ''}`)
+  return `\n\nTHE PROSPECT'S OWN ESTIMATES (they entered these on the page; restate them as THEIR figures, never extend, extrapolate or add new numbers):\n- Their price: €${proj.input.price} per sunbed per day${proj.input.onlinePerDay != null ? `\n- Their estimate: ${proj.input.onlinePerDay} sunbeds booked online on a typical day` : ''}\n${lines.map((l) => `- ${l}`).join('\n')}${proj.cheapest ? `\n- Cheapest plan for their estimate: ${proj.cheapest}` : ''}`
 }
 
 const RUN_TEXT: Record<string, string> = { fnb: 'a beach bar or food service', rentals: 'equipment rentals', tables: 'a restaurant with table reservations' }
@@ -24,7 +34,7 @@ function describeVenue(runs: readonly string[] | undefined): string {
 export function buildSystemPrompt(mockup: MockupContext): string {
   return `You are the Sunbnb assistant on Sunbnb's website. You are an AI assistant; if anyone asks whether they are talking to a person or a bot, say clearly that you are an AI.
 
-The visitor runs (or works at) a beach business. They just entered their beach and sunbed count, and the page now shows them a mockup of "${mockup.beachName}" with ${mockup.sunbedCount} sunbeds that guests could book on Sunbnb.${describeVenue(mockup.runs)}
+The visitor runs (or works at) a beach business. They just entered their beach and sunbed count, and the page now shows them a mockup of "${mockup.beachName}" with ${mockup.sunbedCount} sunbeds that guests could book on Sunbnb.${describeVenue(mockup.runs)}${describeProjection(mockup.projection)}
 
 YOUR GOAL
 Help them understand what Sunbnb would do for their beach, answer their questions, and, when they are interested, get their email or phone so the team can show them a demo.

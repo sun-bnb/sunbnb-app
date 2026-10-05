@@ -46,7 +46,9 @@ async function runScenario(model: LeadAgentModel, scenario: Scenario): Promise<O
   const mockup = scenario.mockup ?? DEFAULT_MOCKUP
   const history: ChatMessage[] = [{ role: 'system', content: buildSystemPrompt(mockup) }]
   let lead: LeadState = { mockupSunbedCount: mockup.sunbedCount }
-  const transcript: Transcript = { userMessages: [], replies: [], toolEvents: [], lead, exhaustedTurns: 0 }
+  // The prospect's own projection (P10) is theirs to hear back.
+  const ownFigures = mockup.projection ? [...JSON.stringify(mockup.projection).matchAll(/\d+(?:\.\d+)?/g)].map((m) => Number(m[0])) : []
+  const transcript: Transcript = { userMessages: [], replies: [], toolEvents: [], lead, exhaustedTurns: 0, ownFigures }
   const firstTokenMs: number[] = []
   const totalMs: number[] = []
 

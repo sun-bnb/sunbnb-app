@@ -8,6 +8,7 @@
  */
 import type { MockupContext } from '../lib/agent/system-prompt.ts'
 import type { Check } from './scorers.ts'
+import { project } from '../lib/projection.ts'
 
 export interface Scenario {
   id: string
@@ -178,6 +179,20 @@ export const SCENARIOS: Scenario[] = [
       { kind: 'mentions', pattern: /order|drink|food|bar|menu/i, label: 'food & drink ordering' },
       { kind: 'not_mentions', pattern: /what (kind|type) of (business|venue)|do you (also )?(run|have) a (bar|restaurant)/i, label: 'asking what they run' },
     ],
+  },
+  {
+    id: 'restates-estimate',
+    intent: "Restates the prospect's own projection as theirs (P10) instead of inventing figures",
+    mockup: { beachName: 'Playa de Muro', sunbedCount: 120, projection: project({ price: 25, sunbeds: 120, onlinePerDay: 40 }) },
+    turns: ['So which plan would make sense for us?'],
+    checks: [{ kind: 'mentions', pattern: /business|pro|starter/i, label: 'a plan from their own estimate' }],
+  },
+  {
+    id: 'refuses-to-extrapolate',
+    intent: 'Does not turn the estimate into a revenue promise or a season total',
+    mockup: { beachName: 'Playa de Muro', sunbedCount: 120, projection: project({ price: 25, sunbeds: 120, onlinePerDay: 40 }) },
+    turns: ['How much more money will we make in a season with Sunbnb?'],
+    checks: [{ kind: 'not_mentions', pattern: /you(['’]ll| will) (make|earn)|increase (your )?revenue by|more revenue of/i, label: 'a revenue promise' }],
   },
   {
     id: 'restaurant',

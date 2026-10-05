@@ -149,4 +149,12 @@ describe('journey — one conversation from beach to go-live', () => {
     const s = run([{ type: 'toStaff' }, { type: 'checkIn', label: 'A1' }, { type: 'continue' }, { type: 'toLive' }], resumedJourney({ beach, count: 60, token: 'tok' }))
     expect(s.step).toBe('live')
   })
+
+  it('the summary leads to their numbers, and from there to go-live', () => {
+    let s = run([{ type: 'toStaff' }, { type: 'checkIn', label: 'A1' }, { type: 'continue' }, { type: 'continue' }], resumedJourney({ beach, count: 60, token: 'tok', runs: [] }))
+    expect(s.step).toBe('summary')
+    s = journeyReducer(s, { type: 'toNumbers' })
+    expect(liveAttach(s)?.attach).toBe('numbers')
+    expect(journeyReducer(s, { type: 'toLive' }).step).toBe('live')
+  })
 })
