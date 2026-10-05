@@ -6,8 +6,6 @@ datasource db {
   provider = "postgresql"
 }
 
-
-
 enum SettlementStatus {
   DRAFT
   CLOSED
@@ -111,26 +109,26 @@ model PaymentProcessingFee {
 }
 
 model User {
-  id             String               @id @default(cuid())
-  name           String?
-  email          String               @unique
-  emailVerified  DateTime?
-  image          String?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
-  password       String?
-  sudo           Boolean              @default(false)
-  accounts       Account[]
-  Authenticator  Authenticator[]
-  inventoryItems InventoryItem[]
-  orders         Order[]
-  partnerAccount PartnerAccount?
+  id                  String               @id @default(cuid())
+  name                String?
+  email               String               @unique
+  emailVerified       DateTime?
+  image               String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  password            String?
+  sudo                Boolean              @default(false)
+  accounts            Account[]
+  Authenticator       Authenticator[]
+  inventoryItems      InventoryItem[]
+  orders              Order[]
+  partnerAccount      PartnerAccount?
   passwordResetTokens PasswordResetToken[]
-  rentalBookings RentalBooking[]
-  reservations   Reservation[]
-  sessions       Session[]
-  sites          Site[]
-  tableReservations TableReservation[]
+  rentalBookings      RentalBooking[]
+  reservations        Reservation[]
+  sessions            Session[]
+  sites               Site[]
+  tableReservations   TableReservation[]
 }
 
 model PasswordResetToken {
@@ -168,46 +166,46 @@ model PartnerAccount {
   /// Stable EXTERNAL identifier (track 021). Devices are flashed with this, not
   /// with `userId`, so an account restructure is a repoint here rather than a
   /// reflash of every potted unit. Nullable during expand; backfilled.
-  code        String?      @unique
-  firstName   String       @map("first_name")
-  lastName    String       @map("last_name")
-  email       String
-  phoneNumber String       @map("phone_number")
-  company     String
-  websiteUrl  String?      @map("website_url")
-  address     String
-  city        String?
-  postalCode  String?      @map("postal_code")
-  country     String?
-  bankAccount          String?      @map("bank_account")
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
-  userId               String       @id @unique @map("user_id")
+  code                String?   @unique
+  firstName           String    @map("first_name")
+  lastName            String    @map("last_name")
+  email               String
+  phoneNumber         String    @map("phone_number")
+  company             String
+  websiteUrl          String?   @map("website_url")
+  address             String
+  city                String?
+  postalCode          String?   @map("postal_code")
+  country             String?
+  bankAccount         String?   @map("bank_account")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  userId              String    @id @unique @map("user_id")
   /// The human-readable stem of this partner's invoice numbers (`AB` →
   /// `AB-F-2026-00001`). GLOBALLY UNIQUE because the rendered number carries a
   /// unique constraint of its own: two partners sharing a prefix would collide
   /// on their Nth invoice, inside a payment transaction. Assigned once and then
   /// immutable — it is printed on documents a customer holds.
-  invoiceSeriesPrefix  String?      @unique @map("invoice_series_prefix")
-  businessId           String?      @map("business_id")
+  invoiceSeriesPrefix String?   @unique @map("invoice_series_prefix")
+  businessId          String?   @map("business_id")
   /// How far `businessId` got through `@repo/data/vat-id`: missing · invalid ·
   /// unchecked (well-formed, no checksum for that country) · valid. RECORDED,
   /// never used to block a sale: a till that refuses at 14:00 in August turns
   /// into an UN-INVOICED cash sale, which is a real offence with no remedy,
   /// where a late or corrected record has a defined one.
-  vatIdStatus          String?      @map("vat_id_status")
-  vatIdCheckedAt       DateTime?    @map("vat_id_checked_at")
+  vatIdStatus         String?   @map("vat_id_status")
+  vatIdCheckedAt      DateTime? @map("vat_id_checked_at")
   /// Province/region, where it changes the fiscal regime — Basque and
   /// Navarrese issuers fall under TicketBAI, not Veri*factu. Set by an
   /// operator and NEVER geocoded from a venue's coordinates: a beach club's
   /// location does not determine its domicilio fiscal, and a Bilbao company
   /// can run a venue in Málaga. Null for a Spanish partner means "not yet
   /// classified", which resolves to NO regime rather than a guessed one.
-  taxRegion            String?      @map("tax_region")
+  taxRegion           String?   @map("tax_region")
   /// Excluded from every fiscal path. Production carries an account whose
   /// company is "gdhgdhg" and whose tax id is "wdcecec"; flagging it is
   /// cheaper and safer than deleting rows that other tables reference.
-  isTestAccount        Boolean      @default(false) @map("is_test_account")
+  isTestAccount       Boolean   @default(false) @map("is_test_account")
 
   /// Veri*factu authorisations (track 026 P7a). TWO distinct legal acts, stored
   /// separately because they gate different things and can be granted at
@@ -231,43 +229,43 @@ model PartnerAccount {
   /// grant is the only thing standing between us and an unauthorised filing.
   verifactuGrantEvidence      Json?     @map("verifactu_grant_evidence")
 
-  mollieProfileId      String?      @map("mollie_profile_id")
-  mollieAccessToken    String?      @map("mollie_access_token")
-  mollieRefreshToken   String?      @map("mollie_refresh_token")
-  mollieTokenExpiresAt DateTime?    @map("mollie_token_expires_at")
-  mollieOnboardingStatus String?    @map("mollie_onboarding_status")
+  mollieProfileId        String?             @map("mollie_profile_id")
+  mollieAccessToken      String?             @map("mollie_access_token")
+  mollieRefreshToken     String?             @map("mollie_refresh_token")
+  mollieTokenExpiresAt   DateTime?           @map("mollie_token_expires_at")
+  mollieOnboardingStatus String?             @map("mollie_onboarding_status")
   /// Viva ISV connected-account id (track 024, W8, P1 — merchant connect).
   /// Unlike Mollie there is no per-partner OAuth token pair: the ISV credential
   /// is ours alone, and this id is what identifies the venue's connected
   /// account to Viva (`POST /isv/v1/accounts` -> `accountId`, packet A2's
   /// `src/viva/accounts.ts`).
-  vivaAccountId          String?    @map("viva_account_id")
+  vivaAccountId          String?             @map("viva_account_id")
   /// The venue's Viva merchant id, present once connected/verified
   /// (`GET /isv/v1/accounts/{accountId}` -> `merchantId`, or the `Account
   /// Connected` webhook). This is what becomes `isvDetails.terminalMerchantId`
   /// on a Cloud Terminal sale (`src/viva/http-client.ts`).
-  vivaMerchantId         String?    @map("viva_merchant_id")
+  vivaMerchantId         String?             @map("viva_merchant_id")
   /// Plain string in Viva's own vocabulary, NOT the accounts client's
   /// normalised `VivaAccountVerificationStatus` — this column is a cache of
   /// whatever the last poll/webhook reported, kept alongside `vivaConnectedAt`
   /// for support/debugging; the normalised enum lives only in `accounts.ts`'s
   /// return type, never persisted, per this repo's String-column-not-enum
   /// status convention (`src/reservation-status.ts`).
-  vivaVerificationStatus String?    @map("viva_verification_status")
+  vivaVerificationStatus String?             @map("viva_verification_status")
   /// The merchant's own store/source code under our ISV account (Sales >
   /// Physical payments), applied as `isvDetails.sourceCode` on a sale when
   /// the venue has its own rather than inheriting the ISV Partner default.
-  vivaSourceCode         String?    @map("viva_source_code")
-  vivaConnectedAt        DateTime?  @map("viva_connected_at")
-  invoices            Invoice[]
-  settlements         Settlement[]
-  subscription        Subscription?
-  customSubscription  CustomSubscription?
-  user                User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  serviceFees         ServiceFee[]
-  restaurants         Restaurant[]
-  employees           Employee[]
-  promotions          PartnerPromotion[]
+  vivaSourceCode         String?             @map("viva_source_code")
+  vivaConnectedAt        DateTime?           @map("viva_connected_at")
+  invoices               Invoice[]
+  settlements            Settlement[]
+  subscription           Subscription?
+  customSubscription     CustomSubscription?
+  user                   User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serviceFees            ServiceFee[]
+  restaurants            Restaurant[]
+  employees              Employee[]
+  promotions             PartnerPromotion[]
 }
 
 model CustomSubscription {
@@ -282,7 +280,7 @@ model CustomSubscription {
 }
 
 model Site {
-  id              String                   @id @unique @default(cuid())
+  id                         String                   @id @unique @default(cuid())
   /// Stable EXTERNAL identifier (track 022) — the site half of the printed QR
   /// URL: `/q/S-K7M2X9/1-1-1`. `id` is a 25-char cuid, which was half of an
   /// 80-character URL and therefore half of the card's QR-density problem.
@@ -294,42 +292,42 @@ model Site {
   /// Public, and authenticates nothing — it is printed on a card on a public
   /// beach and routes to a public booking page. Format and minting rules live in
   /// `src/site-code.ts`. Nullable during expand; backfilled.
-  code            String?                  @unique
-  userId          String                   @map("user_id")
-  name            String
-  locationLat     String                   @map("location_lat")
-  locationLng     String                   @map("location_lng")
-  createdAt       DateTime                 @default(now())
-  updatedAt       DateTime                 @updatedAt
-  description     String?
-  image           String?
-  coords          Unsupported("geometry")?
-  price           Float?
-  imageHeight     Int?                     @map("image_height")
-  imageWidth      Int?                     @map("image_width")
-  services        String[]                 @default([])
-  vat             Float?
-  rentalVat       Float?                   @map("rental_vat")
-  rentalPaymentType String?                @map("rental_payment_type")
-  status          String                   @default("active")
-  appSalesEnabled Boolean                  @default(false) @map("app_sales_enabled")
-  type            String?
-  orderPaymentType String?                 @map("order_payment_type")
-  background      String?
-  bgImageUrl      String?                  @map("bg_image_url")
-  bgImageWidth    Int?                     @map("bg_image_width")
-  bgImageHeight   Int?                     @map("bg_image_height")
-  slug            String?
-  paymentProvider String                   @default("mollie") @map("payment_provider")
-  noShowDeadlineMinutes Int?                @map("no_show_deadline_minutes")
-  features        String[]                 @default(["sunbeds"])
+  code                       String?                  @unique
+  userId                     String                   @map("user_id")
+  name                       String
+  locationLat                String                   @map("location_lat")
+  locationLng                String                   @map("location_lng")
+  createdAt                  DateTime                 @default(now())
+  updatedAt                  DateTime                 @updatedAt
+  description                String?
+  image                      String?
+  coords                     Unsupported("geometry")?
+  price                      Float?
+  imageHeight                Int?                     @map("image_height")
+  imageWidth                 Int?                     @map("image_width")
+  services                   String[]                 @default([])
+  vat                        Float?
+  rentalVat                  Float?                   @map("rental_vat")
+  rentalPaymentType          String?                  @map("rental_payment_type")
+  status                     String                   @default("active")
+  appSalesEnabled            Boolean                  @default(false) @map("app_sales_enabled")
+  type                       String?
+  orderPaymentType           String?                  @map("order_payment_type")
+  background                 String?
+  bgImageUrl                 String?                  @map("bg_image_url")
+  bgImageWidth               Int?                     @map("bg_image_width")
+  bgImageHeight              Int?                     @map("bg_image_height")
+  slug                       String?
+  paymentProvider            String                   @default("mollie") @map("payment_provider")
+  noShowDeadlineMinutes      Int?                     @map("no_show_deadline_minutes")
+  features                   String[]                 @default(["sunbeds"])
   /// Sunbed reservations are unit-granular by default: a guest books a whole
   /// SunbedGroup (the beds standing together under one parasol), never a part
   /// of it. With this on, any subset of a unit — down to a single seat — is
   /// bookable, in all three flows (online, venue/POS, on-site manage grid).
   /// Opt-in per site, because splitting a unit means a stranger can end up on
   /// the neighbouring bed, which many venues sell against.
-  partialGroupBookingEnabled Boolean         @default(false) @map("partial_group_booking_enabled")
+  partialGroupBookingEnabled Boolean                  @default(false) @map("partial_group_booking_enabled")
   /// Track 023 — this site renders a BESPOKE brand page instead of the standard
   /// branded one at `/s/{slug}`. Admin-only: bespoke work is platform-delivered,
   /// not partner-configurable.
@@ -342,7 +340,7 @@ model Site {
   ///
   /// On alone (no module) the standard page renders, deliberately: a bespoke
   /// page failing must cost the customer their design, not their bookings.
-  customBrandEnabled Boolean               @default(false) @map("custom_brand_enabled")
+  customBrandEnabled         Boolean                  @default(false) @map("custom_brand_enabled")
   /// Track 023 — WHICH bespoke brand module renders this site, e.g. `alcudia`.
   ///
   /// Not `Site.code`, and not the slug. The code is minted per DATABASE, so the
@@ -354,37 +352,37 @@ model Site {
   ///
   /// Nullable: most sites have no bespoke module. A key that matches nothing in
   /// the registry resolves to the standard page, exactly like `enabled` off.
-  customBrandKey  String?                  @map("custom_brand_key")
-  layoutMode      String                   @default("geo") @map("layout_mode")
-  layoutWidth     Float?                   @map("layout_width")
-  layoutHeight    Float?                   @map("layout_height")
+  customBrandKey             String?                  @map("custom_brand_key")
+  layoutMode                 String                   @default("geo") @map("layout_mode")
+  layoutWidth                Float?                   @map("layout_width")
+  layoutHeight               Float?                   @map("layout_height")
   // Soft link to a Restaurant for chiringuitos. No Prisma relation declared —
   // plain column with FK constraint at the DB level only (see migration SQL).
   // Kept soft to preserve a clean extraction path if the restaurant product
   // ever needs its own database.
-  restaurantId    String?                  @unique @map("restaurant_id")
+  restaurantId               String?                  @unique @map("restaurant_id")
   // IANA timezone (e.g. "Europe/Madrid") for this venue. Null = derive from
   // locationLat/locationLng via tz-lookup at read time. See src/site-day.ts.
-  timeZone        String?                  @map("time_zone")
+  timeZone                   String?                  @map("time_zone")
 
-  inventoryItems  InventoryItem[]
-  layoutElements  LayoutElement[]
-  orders          Order[]
-  products        Product[]
-  rentalItems     RentalItem[]
-  rentalBookings  RentalBooking[]
-  reservations    Reservation[]
-  serviceFees     ServiceFee[]
-  settlements     Settlement[]
-  sunbedGroups    SunbedGroup[]
-  user            User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inventoryItems InventoryItem[]
+  layoutElements LayoutElement[]
+  orders         Order[]
+  products       Product[]
+  rentalItems    RentalItem[]
+  rentalBookings RentalBooking[]
+  reservations   Reservation[]
+  serviceFees    ServiceFee[]
+  settlements    Settlement[]
+  sunbedGroups   SunbedGroup[]
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  workingHours    SiteWorkingHours[]
-  brand           SiteBrand?
-  tillCloses      TillClose[]
-  tillEntries     TillEntry[]
-  tableTabs       TableTab[]
-  vivaTerminals   VivaTerminal[]
+  workingHours  SiteWorkingHours[]
+  brand         SiteBrand?
+  tillCloses    TillClose[]
+  tillEntries   TillEntry[]
+  tableTabs     TableTab[]
+  vivaTerminals VivaTerminal[]
 
   @@index([coords], map: "site_coords_idx", type: Gist)
 }
@@ -423,21 +421,21 @@ model VivaTerminal {
 }
 
 model SiteBrand {
-  id              String                   @id @unique @default(cuid())
-  siteId          String                   @map("site_id") @unique
-  brandName       String
-  tagline         String?
-  primaryColor    String?                  @map("primary_color")
-  accentColor     String?                  @map("accent_color")
-  bgColor         String?                  @map("bg_color")
-  fgColor         String?                  @map("fg_color")
-  logoUrl         String?                  @map("logo_url")
-  bgImageUrl      String?                  @map("bg_image_url")
-  bgImageWidth    Int?                     @map("bg_image_width")
-  bgImageHeight   Int?                     @map("bg_image_height")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  site            Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  id            String   @id @unique @default(cuid())
+  siteId        String   @unique @map("site_id")
+  brandName     String
+  tagline       String?
+  primaryColor  String?  @map("primary_color")
+  accentColor   String?  @map("accent_color")
+  bgColor       String?  @map("bg_color")
+  fgColor       String?  @map("fg_color")
+  logoUrl       String?  @map("logo_url")
+  bgImageUrl    String?  @map("bg_image_url")
+  bgImageWidth  Int?     @map("bg_image_width")
+  bgImageHeight Int?     @map("bg_image_height")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  site          Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 }
 
 model SiteWorkingHours {
@@ -452,23 +450,23 @@ model SiteWorkingHours {
 }
 
 model InventoryItem {
-  id             String         @id @unique @default(cuid())
-  userId         String         @map("user_id")
-  siteId         String         @map("site_id")
-  number         Int
-  locationLat    String         @map("location_lat")
-  locationLng    String         @map("location_lng")
-  schematicX     Float?         @map("schematic_x")
-  schematicY     Float?         @map("schematic_y")
-  status         String
-  notes          String?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  image          String?
-  label          String?
-  rotation       Int?
-  category       String?
-  price          Float?
+  id            String        @id @unique @default(cuid())
+  userId        String        @map("user_id")
+  siteId        String        @map("site_id")
+  number        Int
+  locationLat   String        @map("location_lat")
+  locationLng   String        @map("location_lng")
+  schematicX    Float?        @map("schematic_x")
+  schematicY    Float?        @map("schematic_y")
+  status        String
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  image         String?
+  label         String?
+  rotation      Int?
+  category      String?
+  price         Float?
   /// Track 021 — LEGACY, retired, dropped in a later release.
   ///
   /// Superseded by `SunbedGroup`: every row carrying one points at a seat in its
@@ -476,17 +474,17 @@ model InventoryItem {
   /// not. Nothing reads it. The self-relation was dropped this release; the
   /// COLUMN stays one release longer because deployed code still writes
   /// `pairId: null`, and `main` and `test` share one database.
-  pairId         String?        @unique @map("pair_id")
-  group          Int            @default(0)
-  itemGroupId    String?        @map("item_group_id")
-  sunbedGroupId  String?        @map("sunbed_group_id")
-  seatLabel      String?        @map("seat_label")
-  itemGroup      ItemGroup?     @relation(fields: [itemGroupId], references: [id])
-  sunbedGroup    SunbedGroup?   @relation(fields: [sunbedGroupId], references: [id])
-  site           Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  orders         Order[]
-  reservations   Reservation[]  @relation("InventoryItemToReservation")
+  pairId        String?       @unique @map("pair_id")
+  group         Int           @default(0)
+  itemGroupId   String?       @map("item_group_id")
+  sunbedGroupId String?       @map("sunbed_group_id")
+  seatLabel     String?       @map("seat_label")
+  itemGroup     ItemGroup?    @relation(fields: [itemGroupId], references: [id])
+  sunbedGroup   SunbedGroup?  @relation(fields: [sunbedGroupId], references: [id])
+  site          Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders        Order[]
+  reservations  Reservation[] @relation("InventoryItemToReservation")
 
   // Track 020 P1. Postgres does NOT auto-index foreign keys, so before these
   // every `where: { siteId }` was a sequential scan of the whole table across
@@ -498,7 +496,7 @@ model InventoryItem {
   // status)` was also measured and REJECTED — `status = 'active'` matches ~99%
   // of a site's seats, so it is not selective enough to earn its cost.
   // Benchmarked via `npm run scale:bench` (packages/data/scripts).
-  @@index([siteId, group])  // parcel ops: moveParcel, deleteItemsByGroup (39x)
+  @@index([siteId, group]) // parcel ops: moveParcel, deleteItemsByGroup (39x)
   @@index([siteId, number]) // next-seat-number lookup + ordered site load (79x)
 }
 
@@ -570,24 +568,24 @@ model ItemGroup {
 }
 
 model LayoutElement {
-  id        String   @id @default(cuid())
+  id           String      @id @default(cuid())
   // Exactly one of siteId or restaurantId must be set (enforced by a CHECK
   // constraint in the migration SQL — Prisma itself cannot express an XOR).
-  siteId       String?  @map("site_id")
-  restaurantId String?  @map("restaurant_id")
-  type      String
-  shape     String
-  x         Float
-  y         Float
-  width     Float
-  height    Float
-  rotation  Float    @default(0)
-  z         Int      @default(0)
+  siteId       String?     @map("site_id")
+  restaurantId String?     @map("restaurant_id")
+  type         String
+  shape        String
+  x            Float
+  y            Float
+  width        Float
+  height       Float
+  rotation     Float       @default(0)
+  z            Int         @default(0)
   label        String?
   color        String?
-  cornerRadius Float?   @default(0) @map("corner_radius")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  cornerRadius Float?      @default(0) @map("corner_radius")
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
   site         Site?       @relation(fields: [siteId], references: [id], onDelete: Cascade)
   restaurant   Restaurant? @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
@@ -597,46 +595,46 @@ model LayoutElement {
 }
 
 model Reservation {
-  id                String          @id @unique @default(cuid())
-  userId            String          @map("user_id")
-  siteId            String          @map("site_id")
-  itemId            String?         @map("item_id")
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  status            String          @default("pending")
-  operationalStatus String          @default("expected") @map("operational_status")
-  isComp            Boolean         @default(false) @map("is_comp")
-  refundedAt        DateTime?       @map("refunded_at")
-  type              String          @default("hours")
-  from              DateTime        @map("from")
-  to                DateTime        @map("to")
-  paymentAmount     Float?          @map("payment_amount")
-  paymentRef        String?         @map("payment_ref")
-  anonId            String?         @map("anon_id")
-  checkedInAt       DateTime?       @map("checked_in_at")
-  departedAt        DateTime?       @map("departed_at")
-  guestName         String?         @map("guest_name")
-  guestContact      String?         @map("guest_contact")
-  guestEmail        String?         @map("guest_email")
-  internalNotes     String?         @map("internal_notes")
-  reminderSentAt    DateTime?       @map("reminder_sent_at")
-  employeeId        String?         @map("employee_id")
+  id                String           @id @unique @default(cuid())
+  userId            String           @map("user_id")
+  siteId            String           @map("site_id")
+  itemId            String?          @map("item_id")
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  status            String           @default("pending")
+  operationalStatus String           @default("expected") @map("operational_status")
+  isComp            Boolean          @default(false) @map("is_comp")
+  refundedAt        DateTime?        @map("refunded_at")
+  type              String           @default("hours")
+  from              DateTime         @map("from")
+  to                DateTime         @map("to")
+  paymentAmount     Float?           @map("payment_amount")
+  paymentRef        String?          @map("payment_ref")
+  anonId            String?          @map("anon_id")
+  checkedInAt       DateTime?        @map("checked_in_at")
+  departedAt        DateTime?        @map("departed_at")
+  guestName         String?          @map("guest_name")
+  guestContact      String?          @map("guest_contact")
+  guestEmail        String?          @map("guest_email")
+  internalNotes     String?          @map("internal_notes")
+  reminderSentAt    DateTime?        @map("reminder_sent_at")
+  employeeId        String?          @map("employee_id")
   // Split lineage (track 018): when a subset of seats is peeled into a new
   // reservation (depart-split / seat-collect / hold-convert), the new row points
   // at its origin. Conservation invariants (I1 till, I2 receipts) are checked
   // across a lineage, and audit can walk a party's full history. SetNull: a
   // deleted origin (only ever a zero-money row, I4) must not orphan-cascade.
-  splitFromId       String?         @map("split_from_id")
-  splitFrom         Reservation?    @relation("ReservationSplitLineage", fields: [splitFromId], references: [id], onDelete: SetNull)
-  splitInto         Reservation[]   @relation("ReservationSplitLineage")
+  splitFromId       String?          @map("split_from_id")
+  splitFrom         Reservation?     @relation("ReservationSplitLineage", fields: [splitFromId], references: [id], onDelete: SetNull)
+  splitInto         Reservation[]    @relation("ReservationSplitLineage")
   orders            Order[]
   invoices          Invoice[]
   days              ReservationDay[]
   tillEntries       TillEntry[]
-  site              Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  employee          Employee?       @relation(fields: [employeeId], references: [id], onDelete: SetNull)
-  items             InventoryItem[] @relation("InventoryItemToReservation")
+  site              Site             @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employee          Employee?        @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  items             InventoryItem[]  @relation("InventoryItemToReservation")
 
   // Track 020 P1 — the single highest-value index in the schema.
   //
@@ -755,89 +753,87 @@ model OrderItem {
 }
 
 model Invoice {
-  id           String         @id @unique @default(cuid())
-  accountId    String         @map("account_id")
-  status       String         @default("created")
-  paymentRef   String?        @map("payment_ref")
-  totalCharge  Float          @map("total_charge")
-  totalTax     Float          @default(0) @map("total_tax")
-  totalAmount  Float          @map("total_amount")
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  invoicedAt       DateTime          @default(now()) @map("invoiced_at")
-  issuerType       String            @default("PARTNER") @map("issuer_type")
-  issuerVatNumber  String?           @map("issuer_vat_number")
-  issuerCompanyName   String?        @map("issuer_company_name")
-  issuerCompanyAddress String?       @map("issuer_company_address")
+  id                      String            @id @unique @default(cuid())
+  accountId               String            @map("account_id")
+  status                  String            @default("created")
+  paymentRef              String?           @map("payment_ref")
+  totalCharge             Float             @map("total_charge")
+  totalTax                Float             @default(0) @map("total_tax")
+  totalAmount             Float             @map("total_amount")
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+  invoicedAt              DateTime          @default(now()) @map("invoiced_at")
+  issuerType              String            @default("PARTNER") @map("issuer_type")
+  issuerVatNumber         String?           @map("issuer_vat_number")
+  issuerCompanyName       String?           @map("issuer_company_name")
+  issuerCompanyAddress    String?           @map("issuer_company_address")
   // Bill-to party. Populated on the PLATFORM (B2B commission) invoice, whose
   // recipient is the partner. Null on PARTNER invoices (consumer sale / simplified receipt).
-  recipientCompanyName    String?    @map("recipient_company_name")
-  recipientVatNumber      String?    @map("recipient_vat_number")
-  recipientCompanyAddress String?    @map("recipient_company_address")
+  recipientCompanyName    String?           @map("recipient_company_name")
+  recipientVatNumber      String?           @map("recipient_vat_number")
+  recipientCompanyAddress String?           @map("recipient_company_address")
   // EU B2B reverse charge: when set, the issuer charged 0 VAT and the recipient
   // self-accounts. Used on cross-border PLATFORM commission invoices.
-  reverseCharge    Boolean           @default(false) @map("reverse_charge")
+  reverseCharge           Boolean           @default(false) @map("reverse_charge")
   // Mollie (or other PSP) processing fee for this payment, captured for partner
   // reconciliation. VAT-exempt — not part of the invoice VAT total. Populated by
   // the settlement-sync step (deferred); null until captured.
-  processingFee    Float?            @map("processing_fee")
-  settlementId     String?           @map("settlement_id")
-  settlementBatchId String?          @map("settlement_batch_id")
-  reservationId    String?           @map("reservation_id")
-  orderId          String?           @map("order_id")
+  processingFee           Float?            @map("processing_fee")
+  settlementId            String?           @map("settlement_id")
+  settlementBatchId       String?           @map("settlement_batch_id")
+  reservationId           String?           @map("reservation_id")
+  orderId                 String?           @map("order_id")
   // Table-reservation deposit invoice link (no-show deposit cascade).
-  tableReservationId String?         @map("table_reservation_id")
+  tableReservationId      String?           @map("table_reservation_id")
   // Dine-in tab invoice link — idempotency anchor for processConfirmedTabPayment.
   // Mirrors the tableReservationId precedent (chunk 1e).
-  tableTabId         String?         @map("table_tab_id")
-  invoiceNumber    String?           @unique @map("invoice_number")
-  previousHash     String?           @map("previous_hash")
-  hash             String?
+  tableTabId              String?           @map("table_tab_id")
+  invoiceNumber           String?           @unique @map("invoice_number")
+  previousHash            String?           @map("previous_hash")
+  hash                    String?
   /// Per-ISSUER numbering (track 026). The series key is the issuing entity —
   /// `PartnerAccount.userId` for a partner receipt, the literal `PLATFORM` for
   /// Sunbnb's own commission invoices. Deliberately NOT the NIF: that field is
   /// mutable free text, and re-keying a series when a partner corrects their
   /// tax id would fork it in two.
-  seriesKey        String?           @map("series_key")
+  seriesKey               String?           @map("series_key")
   /// `F` = factura, `R` = rectificativa (credit note). Each has its own dense
   /// counter within an issuer-year, so a refund never puts a gap in the sales
   /// sequence.
-  seriesCode       String?           @map("series_code")
-  seriesYear       Int?              @map("series_year")
-  seriesSeq        Int?              @map("series_seq")
+  seriesCode              String?           @map("series_code")
+  seriesYear              Int?              @map("series_year")
+  seriesSeq               Int?              @map("series_seq")
   /// Which canonical string `hash` was computed over. One value today; the
   /// column exists so a future format change is distinguishable rather than
   /// silently mixed into one unverifiable chain.
-  hashVersion      String?           @map("hash_version")
+  hashVersion             String?           @map("hash_version")
   /// `F1` · `F2` · `R1` · `R5` — what KIND of document this is under RD
   /// 1619/2012. It belongs on the invoice rather than on the fiscal record
   /// because it is a property of the document itself, decided at issuance and
   /// then fixed; a record is one of possibly several filings ABOUT it.
-  tipoFactura      String?           @map("tipo_factura")
+  tipoFactura             String?           @map("tipo_factura")
   // Credit-note link (track 018 P2d / track 015 deferred): a credit note is an
   // Invoice with negative totals whose creditsInvoiceId points at the original
   // receipt it rectifies. Own number series (PARTNER-CN-YYYY-NNNNN), same
   // issuer hash chain. Invoices are never deleted (hash chain), so SetNull is
   // a formality.
-  creditsInvoiceId String?           @map("credits_invoice_id")
-  creditsInvoice   Invoice?          @relation("InvoiceCreditNote", fields: [creditsInvoiceId], references: [id], onDelete: SetNull)
-  creditNotes      Invoice[]         @relation("InvoiceCreditNote")
+  creditsInvoiceId        String?           @map("credits_invoice_id")
+  creditsInvoice          Invoice?          @relation("InvoiceCreditNote", fields: [creditsInvoiceId], references: [id], onDelete: SetNull)
+  creditNotes             Invoice[]         @relation("InvoiceCreditNote")
   // Product discriminator. Brand-neutral values: "beachclub" for sunbed / F&B
   // order / rental invoices, "restaurant" for (future) table-reservation
   // invoices. Default preserves existing behaviour for code that doesn't set
   // it explicitly.
-  product          String            @default("beachclub") @map("product")
-  account          PartnerAccount    @relation(fields: [accountId], references: [userId], onDelete: Cascade)
-  settlementBatch  Settlement?       @relation(fields: [settlementBatchId], references: [id])
-  reservation      Reservation?      @relation(fields: [reservationId], references: [id])
-  order            Order?            @relation(fields: [orderId], references: [id])
-  tableReservation TableReservation? @relation(fields: [tableReservationId], references: [id])
-  tableTab         TableTab?         @relation(fields: [tableTabId], references: [id])
-  invoiceLines     InvoiceLine[]
-  verifactuRecords VerifactuRecord[]
+  product                 String            @default("beachclub") @map("product")
+  account                 PartnerAccount    @relation(fields: [accountId], references: [userId], onDelete: Cascade)
+  settlementBatch         Settlement?       @relation(fields: [settlementBatchId], references: [id])
+  reservation             Reservation?      @relation(fields: [reservationId], references: [id])
+  order                   Order?            @relation(fields: [orderId], references: [id])
+  tableReservation        TableReservation? @relation(fields: [tableReservationId], references: [id])
+  tableTab                TableTab?         @relation(fields: [tableTabId], references: [id])
+  invoiceLines            InvoiceLine[]
+  verifactuRecords        VerifactuRecord[]
 
-  @@index([tableReservationId])
-  @@index([tableTabId])
   /// The fiscal register reads one issuer type over a month window, and the
   /// per-issuer series/chain lookups will read the same shape. Neither had an
   /// index until 2026-09-29 — `getLastHash` was doing an unindexed scan ordered
@@ -845,6 +841,8 @@ model Invoice {
   /// The allocator's uniqueness guarantee, independent of how the number is
   /// rendered. NULLs don't collide in Postgres, so rows predating this are fine.
   @@unique([seriesKey, seriesCode, seriesYear, seriesSeq])
+  @@index([tableReservationId])
+  @@index([tableTabId])
   /// Chain walks: one issuer, in chain order.
   @@index([seriesKey, seriesSeq])
   @@index([issuerType, invoicedAt])
@@ -853,27 +851,27 @@ model Invoice {
 }
 
 model Settlement {
-  id             String           @id @default(cuid())
-  accountId      String           @map("account_id")
-  siteId         String           @map("site_id")
-  periodStart    DateTime         @map("period_start")
-  periodEnd      DateTime         @map("period_end")
-  grossRevenue   Float            @map("gross_revenue")
-  totalTax       Float            @default(0) @map("total_tax")
-  commission     Float
-  netPayout      Float            @map("net_payout")
-  currency       String           @default("EUR")
-  status         SettlementStatus @default(DRAFT)
-  bankReference  String?          @map("bank_reference")
-  paidAt         DateTime?        @map("paid_at")
-  notes          String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  id            String           @id @default(cuid())
+  accountId     String           @map("account_id")
+  siteId        String           @map("site_id")
+  periodStart   DateTime         @map("period_start")
+  periodEnd     DateTime         @map("period_end")
+  grossRevenue  Float            @map("gross_revenue")
+  totalTax      Float            @default(0) @map("total_tax")
+  commission    Float
+  netPayout     Float            @map("net_payout")
+  currency      String           @default("EUR")
+  status        SettlementStatus @default(DRAFT)
+  bankReference String?          @map("bank_reference")
+  paidAt        DateTime?        @map("paid_at")
+  notes         String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
   // Product discriminator (see Invoice.product).
-  product        String           @default("beachclub") @map("product")
-  account        PartnerAccount   @relation(fields: [accountId], references: [userId])
-  site           Site             @relation(fields: [siteId], references: [id])
-  invoices       Invoice[]
+  product       String           @default("beachclub") @map("product")
+  account       PartnerAccount   @relation(fields: [accountId], references: [userId])
+  site          Site             @relation(fields: [siteId], references: [id])
+  invoices      Invoice[]
 }
 
 /// The invoice-number counter, one row per (issuer, series, year).
@@ -968,7 +966,7 @@ model VerifactuRecord {
 
   /// VAT breakdown per rate, and the software block RD 1007/2023 requires.
   desglose           Json
-  sistemaInformatico Json?   @map("sistema_informatico")
+  sistemaInformatico Json? @map("sistema_informatico")
 
   /// The rest of what the wire format needs, frozen here for the same reason
   /// `issuerNif` is: re-deriving it from the invoice at submission time would let
@@ -987,7 +985,7 @@ model VerifactuRecord {
   /// invoice's transaction. The submission wraps these in a `Cabecera`, which is
   /// per-envío rather than per-record (it carries the Representante, which does
   /// not exist until the colaboración social grant does).
-  payloadXml         String? @map("payload_xml")
+  payloadXml String? @map("payload_xml")
 
   /// Submission state. `pending` -> `sent` | `error` | `blocked`.
   /// `blocked` is terminal-until-fixed: an invalid issuer NIF, or a partner who
@@ -1109,29 +1107,29 @@ model RentalItem {
 }
 
 model RentalBooking {
-  id                String     @id @unique @default(cuid())
-  siteId            String     @map("site_id")
-  rentalItemId      String     @map("rental_item_id")
-  userId            String     @map("user_id")
+  id                String      @id @unique @default(cuid())
+  siteId            String      @map("site_id")
+  rentalItemId      String      @map("rental_item_id")
+  userId            String      @map("user_id")
   from              DateTime
   to                DateTime
-  quantity          Int        @default(1)
-  durationType      String     @default("hours") @map("duration_type")
-  totalPrice        Float      @map("total_price")
-  status            String     @default("pending")
-  operationalStatus String     @default("reserved") @map("operational_status")
-  guestName         String?    @map("guest_name")
-  paymentRef        String?    @map("payment_ref")
-  paymentAmount     Float?     @map("payment_amount")
-  pickedUpAt        DateTime?  @map("picked_up_at")
-  returnedAt        DateTime?  @map("returned_at")
-  anonId            String?    @map("anon_id")
-  guestEmail        String?    @map("guest_email")
-  guestContact      String?    @map("guest_contact")
-  reminderSentAt    DateTime?  @map("reminder_sent_at")
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
-  employeeId        String?    @map("employee_id")
+  quantity          Int         @default(1)
+  durationType      String      @default("hours") @map("duration_type")
+  totalPrice        Float       @map("total_price")
+  status            String      @default("pending")
+  operationalStatus String      @default("reserved") @map("operational_status")
+  guestName         String?     @map("guest_name")
+  paymentRef        String?     @map("payment_ref")
+  paymentAmount     Float?      @map("payment_amount")
+  pickedUpAt        DateTime?   @map("picked_up_at")
+  returnedAt        DateTime?   @map("returned_at")
+  anonId            String?     @map("anon_id")
+  guestEmail        String?     @map("guest_email")
+  guestContact      String?     @map("guest_contact")
+  reminderSentAt    DateTime?   @map("reminder_sent_at")
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  employeeId        String?     @map("employee_id")
   site              Site        @relation(fields: [siteId], references: [id], onDelete: Cascade)
   rentalItem        RentalItem  @relation(fields: [rentalItemId], references: [id], onDelete: Cascade)
   user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1186,19 +1184,19 @@ model TillClose {
 // onDelete: SetNull on reservation — an unreserve deletes the reservation but a
 // forfeited/retained settlement must persist and keep counting.
 model TillEntry {
-  id               String        @id @default(cuid())
-  siteId           String        @map("site_id")
-  reservationId    String?       @map("reservation_id")
-  rentalBookingId  String?       @map("rental_booking_id")
-  employeeId       String?       @map("employee_id")
-  amount           Float
-  settledAt        DateTime      @map("settled_at")
-  voidedAt         DateTime?     @map("voided_at")
-  createdAt        DateTime      @default(now()) @map("created_at")
-  site             Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  reservation      Reservation?  @relation(fields: [reservationId], references: [id], onDelete: SetNull)
-  rentalBooking    RentalBooking? @relation(fields: [rentalBookingId], references: [id], onDelete: SetNull)
-  employee         Employee?     @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  id              String         @id @default(cuid())
+  siteId          String         @map("site_id")
+  reservationId   String?        @map("reservation_id")
+  rentalBookingId String?        @map("rental_booking_id")
+  employeeId      String?        @map("employee_id")
+  amount          Float
+  settledAt       DateTime       @map("settled_at")
+  voidedAt        DateTime?      @map("voided_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  site            Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  reservation     Reservation?   @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  rentalBooking   RentalBooking? @relation(fields: [rentalBookingId], references: [id], onDelete: SetNull)
+  employee        Employee?      @relation(fields: [employeeId], references: [id], onDelete: SetNull)
 
   @@index([siteId, employeeId, settledAt])
   @@index([reservationId])
@@ -1217,103 +1215,103 @@ model TillEntry {
 // ═══════════════════════════════════════════════════════════════════════════
 
 model Restaurant {
-  id                    String              @id @default(cuid())
-  slug                  String              @unique
-  name                  String
-  tagline               String?
-  description           String?
-  partnerAccountId      String              @map("partner_account_id")
+  id                        String               @id @default(cuid())
+  slug                      String               @unique
+  name                      String
+  tagline                   String?
+  description               String?
+  partnerAccountId          String               @map("partner_account_id")
   // Optional soft link to a Sunbnb Site for chiringuitos. Plain FK at the
   // DB level; no Prisma relation on the Site side (see Site.restaurantId).
-  siteId                String?             @unique @map("site_id")
-  cuisineType           String?             @map("cuisine_type")
-  priceRange            Int?                @map("price_range")            // 1..4
-  averageMealDuration   Int                 @default(120) @map("average_meal_duration")
-  reservationWindow     Int                 @default(60)  @map("reservation_window")
+  siteId                    String?              @unique @map("site_id")
+  cuisineType               String?              @map("cuisine_type")
+  priceRange                Int?                 @map("price_range") // 1..4
+  averageMealDuration       Int                  @default(120) @map("average_meal_duration")
+  reservationWindow         Int                  @default(60) @map("reservation_window")
   // IANA timezone (e.g. "Europe/Madrid") the venue's working hours and slot
   // wall-clock times are interpreted in. Null falls back to a default in the
   // availability engine — the server process TZ must never be used for slot math.
-  timeZone              String?             @map("time_zone")
+  timeZone                  String?              @map("time_zone")
   // No-show protection. "none" = free bookings (default). "deposit" = a
   // per-guest deposit is required for shifts/parties that opt in (per-shift
   // `requiresDeposit` + `depositMinPartySize`). Consumer-paid via the apps.
-  noShowPolicy          String              @default("none") @map("no_show_policy")
-  depositPerGuest       Float?              @map("deposit_per_guest")
+  noShowPolicy              String               @default("none") @map("no_show_policy")
+  depositPerGuest           Float?               @map("deposit_per_guest")
   // Hours before a reservation's start that a guest may still cancel/modify
   // online. Null = no restriction. A timely (before-deadline) cancel refunds the
   // deposit; a late cancel forfeits it; modify is blocked within the deadline.
-  cancellationDeadlineHours Int?            @map("cancellation_deadline_hours")
-  layoutWidth           Float?              @map("layout_width")
-  layoutHeight          Float?              @map("layout_height")
+  cancellationDeadlineHours Int?                 @map("cancellation_deadline_hours")
+  layoutWidth               Float?               @map("layout_width")
+  layoutHeight              Float?               @map("layout_height")
   // If false, chiringuito-linked restaurants stay hidden from tablefind.app's
   // public listing. Always discoverable on Sunbnb. Brand-neutral column name
   // so the standalone brand can change.
-  publicOnStandaloneApp Boolean             @default(true) @map("public_on_standalone_app")
+  publicOnStandaloneApp     Boolean              @default(true) @map("public_on_standalone_app")
   // Master switch for guest table-selection ("pick your spot"). When false
   // (default) the consumer never sees the floor map and tables are auto-assigned.
   // When true, tables individually flagged `Table.guestSelectable` become
   // guest-pickable from the read-only floor map. Opt-in, never the default.
-  guestSelectionEnabled Boolean             @default(false) @map("guest_selection_enabled")
+  guestSelectionEnabled     Boolean              @default(false) @map("guest_selection_enabled")
   // Master switch for QR dine-in tab ordering (v2: the single gate for both
   // standalone and site-linked restaurants; Site.appSalesEnabled now governs
   // sunbed room-service only). Backfilled true for linked venues whose site
   // had appSalesEnabled at migration time.
-  dineInEnabled         Boolean             @default(false) @map("dine_in_enabled")
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
-  partnerAccount        PartnerAccount      @relation(fields: [partnerAccountId], references: [userId], onDelete: Cascade)
-  tables                Table[]
-  reservations          TableReservation[]
-  menuItems             MenuItem[]
-  workingHours          RestaurantHours[]
-  shifts                RestaurantShift[]
-  combinations          TableCombination[]
-  waitlistEntries       TableWaitlistEntry[]
-  layoutElements        LayoutElement[]
-  tabs                  TableTab[]
-  orders                Order[]
+  dineInEnabled             Boolean              @default(false) @map("dine_in_enabled")
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+  partnerAccount            PartnerAccount       @relation(fields: [partnerAccountId], references: [userId], onDelete: Cascade)
+  tables                    Table[]
+  reservations              TableReservation[]
+  menuItems                 MenuItem[]
+  workingHours              RestaurantHours[]
+  shifts                    RestaurantShift[]
+  combinations              TableCombination[]
+  waitlistEntries           TableWaitlistEntry[]
+  layoutElements            LayoutElement[]
+  tabs                      TableTab[]
+  orders                    Order[]
 
   @@index([partnerAccountId])
   @@map("restaurant")
 }
 
 model Table {
-  id             String              @id @default(cuid())
-  restaurantId   String              @map("restaurant_id")
-  number         Int
-  label          String?
-  capacity       Int
-  minPartySize   Int                 @default(1) @map("min_party_size")
+  id              String             @id @default(cuid())
+  restaurantId    String             @map("restaurant_id")
+  number          Int
+  label           String?
+  capacity        Int
+  minPartySize    Int                @default(1) @map("min_party_size")
   // Cap above which a party should be steered to a larger table even if the
   // physical capacity allows. Null = no upper bound beyond `capacity`.
-  maxPartySize   Int?                @map("max_party_size")
-  shape          String              @default("square")   // "square" | "round" | "rect" | "oval" | "booth" | "bar"
+  maxPartySize    Int?               @map("max_party_size")
+  shape           String             @default("square") // "square" | "round" | "rect" | "oval" | "booth" | "bar"
   // Physical footprint in metres. Explicit per-table so a 2-top renders
   // smaller than an 8-top. Defaults are a reasonable 4-seater — callers that
   // care (palette presets, grid generator) always pass concrete values.
-  width          Float               @default(1.2)
-  height         Float               @default(1.2)
-  schematicX     Float?              @map("schematic_x")
-  schematicY     Float?              @map("schematic_y")
-  rotation       Float               @default(0)
-  status         String              @default("active")   // "active" | "inactive"
+  width           Float              @default(1.2)
+  height          Float              @default(1.2)
+  schematicX      Float?             @map("schematic_x")
+  schematicY      Float?             @map("schematic_y")
+  rotation        Float              @default(0)
+  status          String             @default("active") // "active" | "inactive"
   // Optional section grouping ("Terrace", "Indoor", "Bar").
-  zone           String?
+  zone            String?
   // Partner-internal note shown on the reservation row when seating guests.
   // Never visible to the customer.
-  staffNote      String?             @map("staff_note")
+  staffNote       String?            @map("staff_note")
   // When false, the table is reserved for walk-ins / staff seating only and
   // never surfaces in the consumer availability search.
-  onlineBookable Boolean             @default(true) @map("online_bookable")
+  onlineBookable  Boolean            @default(true) @map("online_bookable")
   // Eligible to be joined into a TableCombination for larger parties.
-  combinable     Boolean             @default(false)
+  combinable      Boolean            @default(false)
   // "Pick your spot": when true (and the restaurant's guestSelectionEnabled
   // master switch is on), this table is guest-pickable from the consumer floor
   // map. Gate to a premium/view subset — never the whole floor.
   guestSelectable Boolean            @default(false) @map("guest_selectable")
   // Booking-relevant attributes (validated allowed set in core): "accessible",
   // "window", "outdoor", "high_top", "communal", "quiet". Section = `zone`.
-  features       String[]            @default([])
+  features        String[]           @default([])
   // Per-table no-show deposit override (chunk 1e). `requiresDeposit`: null =
   // inherit the shift's gate; true = always require (ignores shift + min party);
   // false = exempt this table. `depositPerGuest`: null = inherit
@@ -1324,19 +1322,19 @@ model Table {
   // Per-table override of `Restaurant.averageMealDuration`. Null inherits.
   turnTimeMinutes Int?               @map("turn_time_minutes")
   // Editor-only flag: prevents accidental drag/resize on the floor plan.
-  locked         Boolean             @default(false)
+  locked          Boolean            @default(false)
   // Optional per-side chair-count override. Null on all four = auto-distribute
   // by capacity (default). When any is non-null, the renderer uses these
   // counts directly; their sum is validated to equal `capacity`.
-  seatsTop       Int?                @map("seats_top")
-  seatsRight     Int?                @map("seats_right")
-  seatsBottom    Int?                @map("seats_bottom")
-  seatsLeft      Int?                @map("seats_left")
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-  restaurant     Restaurant          @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  reservations   TableReservation[]
-  tableTabs      TableTab[]
+  seatsTop        Int?               @map("seats_top")
+  seatsRight      Int?               @map("seats_right")
+  seatsBottom     Int?               @map("seats_bottom")
+  seatsLeft       Int?               @map("seats_left")
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  restaurant      Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  reservations    TableReservation[]
+  tableTabs       TableTab[]
 
   @@unique([restaurantId, number])
   @@index([restaurantId])
@@ -1344,40 +1342,40 @@ model Table {
 }
 
 model TableReservation {
-  id                String      @id @default(cuid())
-  restaurantId      String      @map("restaurant_id")
-  tableId           String?     @map("table_id")          // optional; may be assigned at check-in
-  userId            String?     @map("user_id")
-  anonId            String?     @map("anon_id")
+  id                String     @id @default(cuid())
+  restaurantId      String     @map("restaurant_id")
+  tableId           String?    @map("table_id") // optional; may be assigned at check-in
+  userId            String?    @map("user_id")
+  anonId            String?    @map("anon_id")
   from              DateTime
   to                DateTime
-  partySize         Int         @map("party_size")
-  status            String      @default("confirmed")     // confirmed | canceled
-  operationalStatus String      @default("expected") @map("operational_status")
-                                                          // expected | seated | departed | no_show
+  partySize         Int        @map("party_size")
+  status            String     @default("confirmed") // confirmed | canceled
+  operationalStatus String     @default("expected") @map("operational_status")
+  // expected | seated | departed | no_show
   // When a large party books a TableCombination, one TableReservation row is
   // created per member table, all sharing this group id (cancel/seat operate on
   // the group). Null for ordinary single-table bookings.
-  bookingGroupId    String?     @map("booking_group_id")
+  bookingGroupId    String?    @map("booking_group_id")
   // No-show deposit (chunk 1e). depositAmount = required deposit (null = free);
   // depositStatus = none|pending|held|charged|refunded|released; paymentRef is
   // the Stripe/Mollie/demo reference once a deposit is collected by the app.
-  depositAmount     Float?      @map("deposit_amount")
-  depositStatus     String?     @map("deposit_status")
-  paymentRef        String?     @map("payment_ref")
-  guestName         String      @map("guest_name")
-  guestEmail        String      @map("guest_email")
-  guestPhone        String?     @map("guest_phone")
-  specialRequests   String?     @map("special_requests")
-  internalNotes     String?     @map("internal_notes")
-  seatedAt          DateTime?   @map("seated_at")
-  departedAt        DateTime?   @map("departed_at")
-  reminderSentAt    DateTime?   @map("reminder_sent_at")
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-  restaurant        Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  table             Table?      @relation(fields: [tableId], references: [id])
-  user              User?       @relation(fields: [userId], references: [id])
+  depositAmount     Float?     @map("deposit_amount")
+  depositStatus     String?    @map("deposit_status")
+  paymentRef        String?    @map("payment_ref")
+  guestName         String     @map("guest_name")
+  guestEmail        String     @map("guest_email")
+  guestPhone        String?    @map("guest_phone")
+  specialRequests   String?    @map("special_requests")
+  internalNotes     String?    @map("internal_notes")
+  seatedAt          DateTime?  @map("seated_at")
+  departedAt        DateTime?  @map("departed_at")
+  reminderSentAt    DateTime?  @map("reminder_sent_at")
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  restaurant        Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  table             Table?     @relation(fields: [tableId], references: [id])
+  user              User?      @relation(fields: [userId], references: [id])
   invoices          Invoice[]
 
   @@index([restaurantId, from])
@@ -1393,8 +1391,8 @@ model TableCombination {
   id           String     @id @default(cuid())
   restaurantId String     @map("restaurant_id")
   name         String?
-  capacity     Int                                  // combined seating
-  tableIds     String[]   @map("table_ids")         // member Table ids
+  capacity     Int // combined seating
+  tableIds     String[]   @map("table_ids") // member Table ids
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
@@ -1408,13 +1406,13 @@ model TableCombination {
 model TableWaitlistEntry {
   id            String     @id @default(cuid())
   restaurantId  String     @map("restaurant_id")
-  dateISO       String     @map("date_iso")          // venue civil date "YYYY-MM-DD"
-  requestedTime String?    @map("requested_time")     // "HH:mm" preference, optional
+  dateISO       String     @map("date_iso") // venue civil date "YYYY-MM-DD"
+  requestedTime String?    @map("requested_time") // "HH:mm" preference, optional
   partySize     Int        @map("party_size")
   guestName     String     @map("guest_name")
   guestEmail    String     @map("guest_email")
   guestPhone    String?    @map("guest_phone")
-  status        String     @default("waiting")        // waiting | notified | converted | expired
+  status        String     @default("waiting") // waiting | notified | converted | expired
   notifiedAt    DateTime?  @map("notified_at")
   userId        String?    @map("user_id")
   anonId        String?    @map("anon_id")
@@ -1427,38 +1425,38 @@ model TableWaitlistEntry {
 }
 
 model MenuItem {
-  id           String      @id @default(cuid())
-  restaurantId String      @map("restaurant_id")
+  id           String     @id @default(cuid())
+  restaurantId String     @map("restaurant_id")
   name         String
   description  String?
   // VAT triple (mirrors Product): partner enters the gross `totalPrice` +
   // `tax` (VAT %); `price` is the derived net base via reverse VAT. Rows
   // created before dine-in v2 have tax=0 and total_price backfilled = price.
   price        Float
-  tax          Float       @default(0)
-  totalPrice   Float       @default(0) @map("total_price")
-  imageUrl     String?     @map("image_url")
-  category     String      @default("main")
-  soldOut      Boolean     @default(false) @map("sold_out")
-  active       Boolean     @default(true)
-  displayOrder Int         @default(0) @map("display_order")
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  tax          Float      @default(0)
+  totalPrice   Float      @default(0) @map("total_price")
+  imageUrl     String?    @map("image_url")
+  category     String     @default("main")
+  soldOut      Boolean    @default(false) @map("sold_out")
+  active       Boolean    @default(true)
+  displayOrder Int        @default(0) @map("display_order")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@index([restaurantId])
   @@map("menu_item")
 }
 
 model RestaurantHours {
-  id           String      @id @default(cuid())
-  restaurantId String      @map("restaurant_id")
-  day          Int                                         // 0 (Sun) .. 6 (Sat)
-  openTime     String      @map("open_time")               // "HH:mm"
-  closeTime    String      @map("close_time")              // "HH:mm"
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  id           String     @id @default(cuid())
+  restaurantId String     @map("restaurant_id")
+  day          Int // 0 (Sun) .. 6 (Sat)
+  openTime     String     @map("open_time") // "HH:mm"
+  closeTime    String     @map("close_time") // "HH:mm"
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@index([restaurantId])
   @@map("restaurant_hours")
@@ -1469,26 +1467,26 @@ model RestaurantHours {
 // (which it falls back to when there are none). Shifts add pacing — a cap on the
 // covers (summed party size) that may *start* within each pacing window.
 model RestaurantShift {
-  id                      String     @id @default(cuid())
-  restaurantId            String     @map("restaurant_id")
-  name                    String
-  day                     Int                                 // 0 (Sun) .. 6 (Sat)
-  startTime               String     @map("start_time")       // "HH:mm"
-  endTime                 String     @map("end_time")         // "HH:mm"
+  id                       String     @id @default(cuid())
+  restaurantId             String     @map("restaurant_id")
+  name                     String
+  day                      Int // 0 (Sun) .. 6 (Sat)
+  startTime                String     @map("start_time") // "HH:mm"
+  endTime                  String     @map("end_time") // "HH:mm"
   // Max covers (sum of party sizes) that may start in one pacing window. Null =
   // unlimited (no pacing on this shift).
-  pacingCovers            Int?       @map("pacing_covers")
-  pacingWindowMinutes     Int        @default(15) @map("pacing_window_minutes")
+  pacingCovers             Int?       @map("pacing_covers")
+  pacingWindowMinutes      Int        @default(15) @map("pacing_window_minutes")
   // Latest booking start before the shift ends, as minutes-before-end. Null =
   // only bounded by the meal fitting before end.
-  lastSeatingOffsetMinutes Int?      @map("last_seating_offset_minutes")
+  lastSeatingOffsetMinutes Int?       @map("last_seating_offset_minutes")
   // No-show deposit gate (consumed in chunk 1e). When true, this shift requires
   // a deposit for parties ≥ depositMinPartySize.
-  requiresDeposit         Boolean    @default(false) @map("requires_deposit")
-  depositMinPartySize     Int?       @map("deposit_min_party_size")
-  createdAt               DateTime   @default(now())
-  updatedAt               DateTime   @updatedAt
-  restaurant              Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  requiresDeposit          Boolean    @default(false) @map("requires_deposit")
+  depositMinPartySize      Int?       @map("deposit_min_party_size")
+  createdAt                DateTime   @default(now())
+  updatedAt                DateTime   @updatedAt
+  restaurant               Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@index([restaurantId, day])
   @@map("restaurant_shift")
@@ -1553,7 +1551,7 @@ model ImpersonationLog {
   adminId      String    @map("admin_id")
   targetUserId String    @map("target_user_id")
   tokenId      String    @unique @map("token_id")
-  app          String                                 // 'partner' | 'user'
+  app          String // 'partner' | 'user'
   startedAt    DateTime  @default(now()) @map("started_at")
   endedAt      DateTime? @map("ended_at")
   ip           String?
@@ -1563,9 +1561,6 @@ model ImpersonationLog {
   @@index([targetUserId, startedAt])
   @@map("impersonation_log")
 }
-
-
-
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Dine-in tab — QR order & pay at the table (P1.5)
@@ -1577,13 +1572,13 @@ model ImpersonationLog {
 // ═══════════════════════════════════════════════════════════════════════════
 
 model TableTab {
-  id           String    @id @default(cuid())
-  tableId      String    @map("table_id")
-  restaurantId String    @map("restaurant_id")
+  id           String     @id @default(cuid())
+  tableId      String     @map("table_id")
+  restaurantId String     @map("restaurant_id")
   // Nullable since dine-in v2: linked venues dual-write their siteId so site
   // dashboards/accounting keep working; standalone restaurants leave it NULL.
-  siteId       String?   @map("site_id")
-  status       String    @default("open") @map("status")
+  siteId       String?    @map("site_id")
+  status       String     @default("open") @map("status")
   // Concurrency guard: exactly one OPEN tab per table. Set to `tableId` while
   // the tab is open, NULLed when it closes (paid/settled/discarded) — NULLs
   // never collide, so this plain unique index enforces "one open tab per
@@ -1592,18 +1587,18 @@ model TableTab {
   // relies on the unique violation: the loser of a concurrent create re-reads
   // and joins the winner's tab. Every tab-closing path MUST null this column
   // in the same update that sets the terminal status.
-  openTableId  String?   @unique @map("open_table_id")
+  openTableId  String?    @unique @map("open_table_id")
   // Opener attribution (mirrors Reservation.anonId / .userId conventions).
   // Plain columns, no FK relations — attribution only, not authorization.
-  anonId       String?   @map("anon_id")
-  userId       String?   @map("user_id")
+  anonId       String?    @map("anon_id")
+  userId       String?    @map("user_id")
   // Payment reference populated when the tab is submitted for payment.
   // Shared across all orders in the tab (mirrors RentalBooking group pattern).
-  paymentRef   String?   @map("payment_ref")
-  openedAt     DateTime  @default(now()) @map("opened_at")
-  closedAt     DateTime? @map("closed_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  paymentRef   String?    @map("payment_ref")
+  openedAt     DateTime   @default(now()) @map("opened_at")
+  closedAt     DateTime?  @map("closed_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
   table        Table      @relation(fields: [tableId], references: [id])
   site         Site?      @relation(fields: [siteId], references: [id], onDelete: Cascade)
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
@@ -1625,49 +1620,49 @@ model TableTab {
 /// data behind it is public occupancy. `code` is PUBLIC — it is printed on the
 /// device's sticker and routes to the binding; it authenticates nothing.
 model Device {
-  id         String       @id @default(cuid())
+  id                  String            @id @default(cuid())
   /// Server-issued, random 6-char Crockford base32. Public, printed on the
   /// sticker. Random not sequential: sequential leaks fleet size.
-  code       String       @unique
+  code                String            @unique
   /// Provisioning fingerprint for support. MUTABLE — a board swap re-flashes the
   /// same code and changes this. Never treat it as identity (../sunbnb-hw ADR 0003).
-  macAddr    String?      @map("mac_addr")
+  macAddr             String?           @map("mac_addr")
   /// provisioned → active → retired. A failed flash leaves a `provisioned` row,
   /// which is the safe direction (the reverse would be a live device with no row).
-  status     String       @default("provisioned")
+  status              String            @default("provisioned")
   /// The customer this device belongs to (flashed permanently at the bench, so
   /// it lands in the right partner's fleet list with no claiming step). A
   /// return or resale is a bulk reflash — accepted, track 021 P5.
-  partnerAccountId String?  @map("partner_account_id")
+  partnerAccountId    String?           @map("partner_account_id")
   /// The ASSIGNED location — set from the partner UI, delivered to the device
   /// in the state (poll) response. Resolves to "the unit at this address".
   /// Null = self-registered but not yet assigned.
-  assignedSiteId   String?  @map("assigned_site_id")
-  assignedParcel   Int?     @map("assigned_parcel")
-  assignedRow      Int?     @map("assigned_row")
-  assignedSeq      Int?     @map("assigned_seq")
+  assignedSiteId      String?           @map("assigned_site_id")
+  assignedParcel      Int?              @map("assigned_parcel")
+  assignedRow         Int?              @map("assigned_row")
+  assignedSeq         Int?              @map("assigned_seq")
   /// The location the device says it is RUNNING, echoed back in telemetry. The
   /// gap between this and the assigned one is what the fleet UI shows as
   /// "assigned but not yet applied" for a device asleep, out of range or dead.
-  reportedLocation String?  @map("reported_location")
+  reportedLocation    String?           @map("reported_location")
   /// Last-values telemetry (track 019 P5 writes these; the P1.5 stub does not).
-  fw         String?
-  lastSeenAt DateTime?    @map("last_seen_at")
-  battMv     Int?         @map("batt_mv")
-  rssiDbm    Int?         @map("rssi_dbm")
+  fw                  String?
+  lastSeenAt          DateTime?         @map("last_seen_at")
+  battMv              Int?              @map("batt_mv")
+  rssiDbm             Int?              @map("rssi_dbm")
   /// What the DEVICE claims its customer is, when that disagrees with the row.
   /// Recorded, never acted on: a legitimately reflashed device and a spoofed
   /// claim are indistinguishable from here, and this endpoint has no auth — so
   /// a human resolves the handful of real ones instead of handing an
   /// unauthenticated caller the ability to re-point someone else's hardware.
-  claimedPartnerCode String? @map("claimed_partner_code")
+  claimedPartnerCode  String?           @map("claimed_partner_code")
   /// Q2 (track 021): the bar's segments run left-to-right from the DEVICE's
   /// point of view, but seats are emitted in seat order — so a device mounted
   /// rotated, or on a row numbered right-to-left, lights the wrong half. This
   /// flips the emitted order. Deliberately SERVER-side: the firmware must not
   /// hold a second opinion about a physical fact, which is the same reason the
   /// state projection is not on the device.
-  reverseSegments Boolean @default(false) @map("reverse_segments")
+  reverseSegments     Boolean           @default(false) @map("reverse_segments")
   /// Per-device power policy (track 025), overriding the platform preference
   /// pair (`device-power-mode` + `device-poll-interval-sec`). A PAIR: both null
   /// means "inherit the platform policy", and anything less than a complete,
@@ -1676,47 +1671,47 @@ model Device {
   /// writer and by the resolver rather than by a CHECK constraint: this row is
   /// read on every poll, and a constraint violation there would be a 500 on the
   /// serving path instead of a device quietly running the fleet default.
-  powerMode       String? @map("power_mode")
-  pollIntervalSec Int?    @map("poll_interval_sec")
+  powerMode           String?           @map("power_mode")
+  pollIntervalSec     Int?              @map("poll_interval_sec")
   /// A one-shot command for the device, delivered in the state (poll) response
   /// and EXPIRING on its own — there is no ack channel, so a command that is
   /// never picked up must not linger forever. `identify` flashes the bar so
   /// staff can confirm they assigned the right box before walking away.
-  pendingCmd   String?   @map("pending_cmd")
-  pendingCmdAt DateTime? @map("pending_cmd_at")
+  pendingCmd          String?           @map("pending_cmd")
+  pendingCmdAt        DateTime?         @map("pending_cmd_at")
   /// Uptime seconds at last report — a drop means the device rebooted, which is
   /// the cheapest crash signal available.
-  upSec      Int?         @map("up_sec")
+  upSec               Int?              @map("up_sec")
   /// ESP32 on-die temperature, °C. The CHIP, not the cell and not the air — it
   /// runs warm relative to ambient, so it is a trend and a "case cooking in the
   /// sun" signal, never a calibrated environmental reading.
-  tempC      Int?         @map("temp_c")
+  tempC               Int?              @map("temp_c")
   /// Cell current, µA, SIGNED: positive = discharging, negative = charging.
   /// Microamps because deep sleep lives near 3.5 mA and integer mA would
   /// quantise away the mode that matters most. 0 is a real measurement (an idle
   /// cell), not a missing one — the firmware omits the key when it cannot read.
-  currentUa  Int?         @map("current_ua")
+  currentUa           Int?              @map("current_ua")
   /// Net charge since the device's counter was last zeroed, µAh, same sign
   /// convention. Integrates `currentUa`, so it IS the solar energy balance over
   /// days, and it is the real state-of-charge signal: LiFePO4 rests 3.2–3.3 V on
   /// a famously flat curve, so `battMv` alone says almost nothing about
   /// remaining capacity. A counter, not an absolute — a reboot does NOT reset it.
-  chargeUah  Int?         @map("charge_uah")
+  chargeUah           Int?              @map("charge_uah")
   /// Why the device last restarted: `poweron` · `brownout` · `panic` · `wdt` ·
   /// `sw` · `deepsleep` · `other`. `brownout` is the one to act on — the supply
   /// sagged under load, which on this hardware has meant a failing cell or a bad
   /// connection. Stored as the raw token, unvalidated against a list, so a
   /// firmware that gains a cause reports it instead of leaving a stale one here.
-  resetReason String?     @map("reset_reason")
+  resetReason         String?           @map("reset_reason")
   /// The power mode the device says is ACTUALLY IN FORCE — not the stored
   /// setting in `powerMode` (a console cable holds a unit in continuous whatever
   /// NVS says). The applied half of the declarative loop, so the fleet UI can
   /// show an assigned-vs-applied gap for power the way it does for location.
-  reportedPowerMode String? @map("reported_power_mode")
+  reportedPowerMode   String?           @map("reported_power_mode")
   /// Smallest free heap since boot, bytes. The only leak detector available once
   /// a unit is potted: a slow decline across days is the signal, a single value
   /// means little.
-  heapFreeBytes Int?      @map("heap_free_bytes")
+  heapFreeBytes       Int?              @map("heap_free_bytes")
   /// Consecutive FAILED polls, as counted by the device. Distinguishes "polling
   /// happily" from "polling and being declined", which are identical in a poll
   /// count. Non-zero on a device that is still reporting means the request
@@ -1724,12 +1719,12 @@ model Device {
   /// poll and builds its report BEFORE polling, so a non-zero value arrives on
   /// exactly one poll — the one that recovered — and reads as "this is what the
   /// outage cost", not "this device is failing now".
-  pollFails  Int?         @map("poll_fails")
+  pollFails           Int?              @map("poll_fails")
   /// CELL-side temperature, °C, from the INA228's own die — not `tempC`, which
   /// is the ESP32's. The one that speaks to cell capacity, and the only
   /// measurement of the case interior that exists: the 40–45 °C the PETG choice
   /// rests on has always been an estimate (../sunbnb-hw).
-  cellTempC  Int?         @map("cell_temp_c")
+  cellTempC           Int?              @map("cell_temp_c")
   /// The face the disc is actually SHOWING (`FREE` · `RESERVED` · `OCCUPIED` ·
   /// `UNAVAILABLE` · `STALE`), in the server's own state vocabulary. The applied
   /// half of the STATE loop, and the third one of these after location and power
@@ -1737,18 +1732,18 @@ model Device {
   /// happily and renders the wrong thing — the one failure a poll count cannot
   /// see. `STALE` is the device's own "I have lost the server" face, so it
   /// arrives on the recovery poll rather than during the outage.
-  reportedFace String?    @map("reported_face")
+  reportedFace        String?           @map("reported_face")
   /// The poll interval the device says is IN FORCE, seconds — the applied half
   /// of `pollIntervalSec` the way `reportedPowerMode` is of `powerMode`. Also
   /// reveals the device's CONNECTIVITY LADDER: it degrades itself when it cannot
   /// reach us (15 s while retrying, 3600 s once it has given up), so this
   /// disagreeing with the assignment can mean "backed off deliberately" rather
   /// than "not obeying" — read it with `pollFails` before calling it a fault.
-  reportedIntervalSec Int? @map("reported_interval_sec")
+  reportedIntervalSec Int?              @map("reported_interval_sec")
   /// Wi-Fi channel in use. Tells apart units on different APs in one venue,
   /// which RSSI alone cannot — the cheapest way to find the one bad AP behind a
   /// cluster of weak units.
-  wifiChannel Int?        @map("wifi_channel")
+  wifiChannel         Int?              @map("wifi_channel")
   /// LOWEST cell voltage the device saw in the poll window it last reported, mV.
   /// `battMv` is a spot reading and spot readings land BETWEEN the radio's
   /// bursts, so they describe the quiet moments. **Read this as a gap, not a
@@ -1763,13 +1758,13 @@ model Device {
   /// fixed in the poll cycle, so two reports are comparable), and the strongest
   /// argument for the deferred time series. Never publish it as a headline
   /// number — it is opportunistic, not a peak detector (../sunbnb-hw).
-  vminMv     Int?         @map("vmin_mv")
+  vminMv              Int?              @map("vmin_mv")
   /// HIGHEST cell current in that same window, µA, signed as `currentUa` is.
   /// Prices the burst instead of the idle — one sample caught mid-join measured
   /// 82.7 mA against a ~25 mA idle. A rising `imaxUa` beside a falling `vminMv`
   /// is the same ageing story from the other side. Same window caveat as above,
   /// and the absolute value UNDERSTATES the true peak by design.
-  imaxUa     Int?         @map("imax_ua")
+  imaxUa              Int?              @map("imax_ua")
   /// How many times the device has detected charge-complete and ZEROED its
   /// charge counter. Load-bearing for reading `chargeUah`: after the first step
   /// `chargeUah` means "µAh drawn since the cell was last full", and **a step
@@ -1779,7 +1774,7 @@ model Device {
   /// not a discharge. It lives in RTC memory, so it survives deep sleep and
   /// DECREASES to 0 on a power cut, which also clears the INA228's accumulator:
   /// a decrease invalidates a `chargeUah` baseline exactly as a step does.
-  fullCount  Int?         @map("full_count")
+  fullCount           Int?              @map("full_count")
   /// Wi-Fi health counters, all SINCE BOOT and all restarting on a deep-sleep
   /// wake — so on a deep-sleep fleet these describe one wake cycle, not the
   /// unit's life. The last value is a SAMPLE of the last recorded poll (the
@@ -1790,22 +1785,22 @@ model Device {
   /// connection keeps dying. Telling those apart used to need the USB console,
   /// and a deployed unit has none — on 2026-09-26 a phone hotspot's power
   /// saving produced reconnect bursts that were 64% of a 75-minute drain.
-  wifiDrops          Int? @map("wifi_drops")
-  wifiRetries        Int? @map("wifi_retries")
-  wifiJoins          Int? @map("wifi_joins")
-  wifiStaleReuses    Int? @map("wifi_stale_reuses")
+  wifiDrops           Int?              @map("wifi_drops")
+  wifiRetries         Int?              @map("wifi_retries")
+  wifiJoins           Int?              @map("wifi_joins")
+  wifiStaleReuses     Int?              @map("wifi_stale_reuses")
   /// Of the stale reuses, the ones that burned a full 5 s timeout of radio
   /// before reconnecting. The expensive subset — this is the drain signal.
-  wifiStaleTimeouts  Int? @map("wifi_stale_timeouts")
+  wifiStaleTimeouts   Int?              @map("wifi_stale_timeouts")
   /// Share of time actually spent in light sleep, per THOUSAND (0–1000). The
   /// applied half of the light-sleep mode: a device assigned light sleep that
   /// reports a low value is not getting the sleep the mode is chosen for.
-  lightSleepPerMille Int? @map("light_sleep_per_mille")
+  lightSleepPerMille  Int?              @map("light_sleep_per_mille")
   /// The SSID the device says it is joined to — the applied half of the served
   /// `device-wifi-ssid` pair, the fourth of these declarative loops after
   /// location, power mode and disc face. Compare it against the offered SSID to
   /// see whether a provisioning change has actually taken.
-  reportedSsid String? @map("reported_ssid")
+  reportedSsid        String?           @map("reported_ssid")
   /// When the device last reported that an OFFERED network was tried and
   /// FAILED (`netfail=1`). A TIMESTAMP rather than the boolean the wire
   /// carries, because the firmware only ever sends the failure and never its
@@ -1815,7 +1810,7 @@ model Device {
   /// asks — is it failing NOW — and ages out on its own. The per-reading
   /// boolean is kept in `device_telemetry.net_fail`, where each row is one poll
   /// and stickiness cannot arise.
-  netFailAt DateTime? @map("net_fail_at")
+  netFailAt           DateTime?         @map("net_fail_at")
   /// When this device was last SERVED the broadcast Wi-Fi pair. The credentials
   /// are not a standing field on the wire — an operator opens a bounded window
   /// and each device receives them exactly once inside it. This column is the
@@ -1823,15 +1818,15 @@ model Device {
   /// broadcast's start, so starting a NEW broadcast re-arms the whole fleet
   /// without touching a single device row, and a mistyped password is corrected
   /// by broadcasting again. See `@repo/data/device-wifi` `shouldSendWifi`.
-  wifiSentAt DateTime? @map("wifi_sent_at")
-  createdAt  DateTime     @default(now()) @map("created_at")
-  updatedAt  DateTime     @updatedAt @map("updated_at")
+  wifiSentAt          DateTime?         @map("wifi_sent_at")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
   /// The HISTORY of the columns above. The fields here are a LAST VALUE — what
   /// the fleet list reads — and answer "how is this unit now". Every question
   /// worth asking of telemetry is a TREND (is this unit energy-positive, what
   /// does a power mode really cost, is the cell ageing), and a trend needs the
   /// series.
-  telemetry  DeviceTelemetry[]
+  telemetry           DeviceTelemetry[]
 
   @@map("device")
 }
@@ -1932,65 +1927,65 @@ model spatial_ref_sys {
 /// Retention (`purgeExpiredLeads`, daily cron): rows with no contact are deleted
 /// 90 days after `lastActivityAt`; rows with contact 24 months after it.
 model Lead {
-  id               String    @id @default(cuid())
-  token            String    @unique
-  status           String    @default("mockup") // mockup | demo_requested | contacted | converted | closed
-  placeId          String    @map("place_id")
-  beachName        String    @map("beach_name")
-  beachAddress     String    @map("beach_address")
-  lat              Float
-  lng              Float
-  sunbedCount      Int       @map("sunbed_count")
+  id                 String      @id @default(cuid())
+  token              String      @unique
+  status             String      @default("mockup") // mockup | demo_requested | contacted | converted | closed
+  placeId            String      @map("place_id")
+  beachName          String      @map("beach_name")
+  beachAddress       String      @map("beach_address")
+  lat                Float
+  lng                Float
+  sunbedCount        Int         @map("sunbed_count")
   /// Layout as the prospect last left it; null = never adjusted or shore-snapped.
-  layoutAnchorLat  Float?    @map("layout_anchor_lat")
-  layoutAnchorLng  Float?    @map("layout_anchor_lng")
-  layoutSeaBearing Int?      @map("layout_sea_bearing")
-  layoutPlacement  String?   @map("layout_placement") // center | waterline
-  locale           String    @default("en")
-  utmSource        String?   @map("utm_source")
-  utmMedium        String?   @map("utm_medium")
-  utmCampaign      String?   @map("utm_campaign")
-  utmTerm          String?   @map("utm_term")
-  utmContent       String?   @map("utm_content")
-  contactName      String?   @map("contact_name")
-  email            String?
-  phone            String?
-  businessName     String?   @map("business_name")
-  businessType     String?   @map("business_type")
-  message          String?
+  layoutAnchorLat    Float?      @map("layout_anchor_lat")
+  layoutAnchorLng    Float?      @map("layout_anchor_lng")
+  layoutSeaBearing   Int?        @map("layout_sea_bearing")
+  layoutPlacement    String?     @map("layout_placement") // center | waterline
+  locale             String      @default("en")
+  utmSource          String?     @map("utm_source")
+  utmMedium          String?     @map("utm_medium")
+  utmCampaign        String?     @map("utm_campaign")
+  utmTerm            String?     @map("utm_term")
+  utmContent         String?     @map("utm_content")
+  contactName        String?     @map("contact_name")
+  email              String?
+  phone              String?
+  businessName       String?     @map("business_name")
+  businessType       String?     @map("business_type")
+  message            String?
   /// AI sales chat (track 027 P5): `{ sessions: { [sessionId]: ChatMessage[] } }` in the
   /// marketing app's provider-neutral shape. One session per page visit. Personal data — kept
   /// and purged with the lead, never rendered on the public mockup page.
-  chatSessions     Json?     @map("chat_sessions")
+  chatSessions       Json?       @map("chat_sessions")
   /// Prospect messages across all sessions; capped per lead to bound API spend.
-  chatTurns        Int       @default(0) @map("chat_turns")
+  chatTurns          Int         @default(0) @map("chat_turns")
   /// Landing A/B arm (track 027 D8): 'a' = book a demo, 'b' = start free. Sticky per lead.
-  variant          String?
+  variant            String?
   /// Ad angle the visitor arrived on (`?a=` key, e.g. noshow | cash | online | queue).
-  angle            String?
+  angle              String?
   /// Ad click ids, kept for offline-conversion import (P14). Personal data — purged with the lead.
-  gclid            String?
-  fbclid           String?
+  gclid              String?
+  fbclid             String?
   /// When the visitor accepted marketing cookies (Meta / Google tags), if they did.
-  marketingConsentAt DateTime? @map("marketing_consent_at")
+  marketingConsentAt DateTime?   @map("marketing_consent_at")
   /// vision | coastline | point — how the mockup was placed (P11).
-  placementSource  String?   @map("placement_source")
+  placementSource    String?     @map("placement_source")
   /// The prospect's own projection inputs + server-recomputed outputs (P10).
-  projection       Json?
-  projectionAt     DateTime? @map("projection_at")
+  projection         Json?
+  projectionAt       DateTime?   @map("projection_at")
   /// Variant B "claim this beach" (P13): a separate expiring token, never the mockup token.
-  claimToken       String?   @unique @map("claim_token")
-  claimedAt        DateTime? @map("claimed_at")
-  claimedByUserId  String?   @map("claimed_by_user_id")
-  claimedSiteId    String?   @map("claimed_site_id")
-  events           LeadEvent[]
+  claimToken         String?     @unique @map("claim_token")
+  claimedAt          DateTime?   @map("claimed_at")
+  claimedByUserId    String?     @map("claimed_by_user_id")
+  claimedSiteId      String?     @map("claimed_site_id")
+  events             LeadEvent[]
   /// When the prospect ticked the privacy consent, and which notice version they saw.
-  consentAt        DateTime? @map("consent_at")
-  consentVersion   String?   @map("consent_version")
-  demoRequestedAt  DateTime? @map("demo_requested_at")
-  lastActivityAt   DateTime  @default(now()) @map("last_activity_at")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  consentAt          DateTime?   @map("consent_at")
+  consentVersion     String?     @map("consent_version")
+  demoRequestedAt    DateTime?   @map("demo_requested_at")
+  lastActivityAt     DateTime    @default(now()) @map("last_activity_at")
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @updatedAt @map("updated_at")
 
   @@index([status, createdAt])
   @@index([lastActivityAt])
@@ -2039,4 +2034,27 @@ model PartnerPromotion {
 
   @@unique([partnerAccountId, code])
   @@map("partner_promotion")
+}
+
+/// OSM coastline cache for the marketing beach mockup (track 027). A 0.1° tile (~10 km) is fetched
+/// from Overpass ONCE — `coastline` rows for every coastline way touching it, plus this row saying
+/// the tile is covered (so "no coast here" is distinguishable from "never fetched"). Read-only
+/// public map data, no personal data. Read by apps/marketing via @repo/data/coastline-db.
+model CoastTile {
+  /// "<latIndex>:<lngIndex>" of the 0.1° grid (floor(lat*10), floor(lng*10)).
+  key       String   @id
+  ways      Int
+  fetchedAt DateTime @default(now()) @map("fetched_at")
+
+  @@map("coast_tile")
+}
+
+model CoastLine {
+  /// The OSM way id — a way crossing several tiles is stored once.
+  osmWayId  BigInt                  @id @map("osm_way_id")
+  geom      Unsupported("geometry")
+  fetchedAt DateTime                @default(now()) @map("fetched_at")
+
+  @@index([geom], type: Gist)
+  @@map("coast_line")
 }

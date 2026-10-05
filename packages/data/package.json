@@ -74,6 +74,8 @@
     "./pricing-tiers": "./src/pricing-tiers.ts",
     "./lead-model": "./src/lead-model.ts",
     "./leads": "./src/leads.ts",
+    "./coastline-db": "./src/coastline-db.ts",
+    "./coastline-tiles": "./src/coastline-tiles.ts",
     "./promotion": "./src/promotion.ts",
     "./promotion-db": "./src/promotion-db.ts",
     "./mollie-app-fee": "./src/mollie-app-fee.ts",
