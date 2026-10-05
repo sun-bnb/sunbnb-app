@@ -13,10 +13,11 @@ const Map = VisMap as unknown as FC<MapProps>
 
 /** The guest app's own cloud-styled map. */
 const APP_MAP_ID = '7a0196a7ba317ea5'
-const FLY_FROM_ZOOM = 12.5
+/** Regional, aerial view the camera starts from — the hand-off from the illustrated beach. */
+const FLY_FROM_ZOOM = 10
 const FLY_TO_ZOOM = 19.3
-export const FLY_MS = 1700
-const FADE_MS = 700
+export const FLY_MS = 2200
+const FADE_MS = 1000
 
 export interface Insets {
   top: number
@@ -44,6 +45,7 @@ export default function World({
   onBedTap,
   onMapClick,
   ground = null,
+  onFlown,
   heroMode = 'book',
   heroTags,
 }: {
@@ -65,16 +67,22 @@ export default function World({
   /** When set, a tap on the map goes here instead of picking a bed (moving the parcel). */
   onMapClick?: (ll: { lat: number; lng: number }) => void
   ground?: { lat: number; lng: number }[][] | null
+  /** The camera has landed on the beach (the shore snap waits for this, so it is seen). */
+  onFlown?: () => void
   heroMode?: HeroMode
   heroTags: Record<HeroMode, string>
 }) {
   const [heroGone, setHeroGone] = useState(false)
-  // When the current fly-in lands — a framing before that would be overridden by the fly-in.
-  const flyEndsAt = useRef(0)
-  if (center && !flyEndsAt.current) flyEndsAt.current = performance.now() + FLY_MS + 150
-  if (!center) flyEndsAt.current = 0
+  // The map fades in only once its first tiles are drawn — never a blank grey flash.
+  const [mapShown, setMapShown] = useState(false)
+  // The fly-in has landed: framing before that would be overridden by the fly-in's camera.
+  const [flown, setFlown] = useState(false)
   useEffect(() => {
-    if (!center) return setHeroGone(false)
+    if (!center) {
+      setMapShown(false)
+      setFlown(false)
+      return setHeroGone(false)
+    }
     const timer = setTimeout(() => setHeroGone(true), FADE_MS)
     return () => clearTimeout(timer)
   }, [center])
@@ -82,7 +90,8 @@ export default function World({
   return (
     <div className="absolute inset-0 overflow-hidden bg-[#f7ebd1]">
       {center && apiKey && (
-        <APIProvider apiKey={apiKey}>
+        <div className={`absolute inset-0 transition-opacity duration-700 ${mapShown ? 'opacity-100' : 'opacity-0'}`}>
+          <APIProvider apiKey={apiKey}>
           <Map
             mapId={APP_MAP_ID}
             defaultCenter={center}
@@ -91,6 +100,7 @@ export default function World({
             isFractionalZoomEnabled
             disableDefaultUI
             clickableIcons={false}
+            onTilesLoaded={() => setMapShown(true)}
             onClick={(e: MapMouseEvent) => {
               const ll = e.detail.latLng
               if (ll && onMapClick) return onMapClick(ll)
@@ -98,14 +108,29 @@ export default function World({
               if (bed) onBedTap?.(bed)
             }}
           >
-            <FlyIn target={center} insets={insets} />
+            {/* The flight starts once the aerial tiles are drawn — the hand-off is seen, not loaded. */}
+            <FlyIn
+              target={center}
+              insets={insets}
+              start={mapShown}
+              onLanded={() => {
+                setFlown(true)
+                onFlown?.()
+              }}
+            />
             {layout && <SunbedOverlay layout={layout} selected={selected} booked={booked} hint={hint} tag={tag} ground={ground} />}
-            <Frame layout={layout} insets={insets} fitKey={fitKey} flyEndsAt={flyEndsAt} />
+            <Frame layout={layout} insets={insets} fitKey={fitKey} flown={flown} />
           </Map>
-        </APIProvider>
+          </APIProvider>
+        </div>
       )}
       {!heroGone && (
-        <div className={`absolute inset-0 transition-opacity duration-700 ${center ? 'pointer-events-none opacity-0' : 'opacity-100'}`}>
+        // The illustrated beach recedes like a camera rising away from it, as the real coast fades in.
+        <div
+          className={`absolute inset-0 origin-[50%_60%] transition-all duration-1000 ease-in motion-reduce:transition-none ${
+            center ? 'pointer-events-none scale-[0.55] opacity-0 blur-[3px]' : 'scale-100 opacity-100'
+          }`}
+        >
           {scene && <HeroBeach shore={scene.shore} band={scene.band} mode={heroMode} tags={heroTags} />}
         </div>
       )}
@@ -122,16 +147,19 @@ function offsetFor(insets: Insets) {
 }
 
 /** Camera fly-in from coast level down to the beach (one orchestrated motion). */
-function FlyIn({ target, insets }: { target: { lat: number; lng: number }; insets: Insets }) {
+function FlyIn({ target, insets, start, onLanded }: { target: { lat: number; lng: number }; insets: Insets; start: boolean; onLanded: () => void }) {
   const map = useMap()
   const insetsRef = useRef(insets)
   insetsRef.current = insets
+  const landedRef = useRef(onLanded)
+  landedRef.current = onLanded
   useEffect(() => {
-    if (!map) return
+    if (!map || !start) return
     const land = () => {
       // Centre the beach in the visible part, above the conversation.
       const o = offsetFor(insetsRef.current)
       map.panBy(o.x, o.y)
+      landedRef.current()
     }
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       map.moveCamera({ center: target, zoom: FLY_TO_ZOOM })
@@ -148,7 +176,7 @@ function FlyIn({ target, insets }: { target: { lat: number; lng: number }; inset
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [map, target.lat, target.lng])
+  }, [map, start, target.lat, target.lng])
   return null
 }
 
@@ -156,7 +184,7 @@ function FlyIn({ target, insets }: { target: { lat: number; lng: number }; inset
  * Frames the parcel in the uncovered part of the screen whenever `fitKey` changes, so 20 beds and
  * 400 beds both fill the view instead of shrinking to icons or hiding under the conversation.
  */
-function Frame({ layout, insets, fitKey, flyEndsAt }: { layout: BeachLayout | null; insets: Insets; fitKey: number; flyEndsAt: { current: number } }) {
+function Frame({ layout, insets, fitKey, flown }: { layout: BeachLayout | null; insets: Insets; fitKey: number; flown: boolean }) {
   const map = useMap()
   const layoutRef = useRef(layout)
   layoutRef.current = layout
@@ -166,8 +194,9 @@ function Frame({ layout, insets, fitKey, flyEndsAt }: { layout: BeachLayout | nu
   useEffect(() => {
     const l = layoutRef.current
     const insets = insetsRef.current
-    if (!map || !fitKey || !l?.sunbeds.length) return
-    // Never frame before the fly-in has landed, or the fly-in's camera overrides it.
+    // Never frame before the fly-in has landed, or the fly-in's camera overrides it; a request
+    // made during the flight runs when it lands (`flown` is a dependency).
+    if (!map || !fitKey || !flown || !l?.sunbeds.length) return
     const timer = setTimeout(() => {
       const b = new google.maps.LatLngBounds()
       for (const s of l.sunbeds) b.extend({ lat: s.lat, lng: s.lng })
@@ -175,8 +204,8 @@ function Frame({ layout, insets, fitKey, flyEndsAt }: { layout: BeachLayout | nu
       google.maps.event.addListenerOnce(map, 'idle', () => {
         if ((map.getZoom() ?? FLY_TO_ZOOM) > 21) map.setZoom(21)
       })
-    }, Math.max(350, flyEndsAt.current - performance.now()))
+    }, 350)
     return () => clearTimeout(timer)
-  }, [map, fitKey])
+  }, [map, fitKey, flown])
   return null
 }

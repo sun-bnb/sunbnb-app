@@ -167,12 +167,34 @@ export default function Experience({
     }
   }, [s.beach])
 
+  // The camera's flight to the beach (World reports when it lands). A fallback releases waiters
+  // if the map never flies (no key, tiles blocked) so the visit can't stall on it.
+  const flight = useRef<{ landed: boolean; waiters: (() => void)[] }>({ landed: false, waiters: [] })
+  function whenLanded(fn: () => void) {
+    if (flight.current.landed) return fn()
+    flight.current.waiters.push(fn)
+    const f = flight.current
+    setTimeout(() => {
+      if (f.waiters.includes(fn)) {
+        f.waiters = f.waiters.filter((w) => w !== fn)
+        fn()
+      }
+    }, FLY_MS * 3)
+  }
+  function onFlown() {
+    const f = flight.current
+    f.landed = true
+    const ws = f.waiters
+    f.waiters = []
+    ws.forEach((w) => w())
+  }
+
   // Read the shoreline while the camera flies; then turn the parcel to face the sea, visibly.
   useEffect(() => {
     if (!s.beach || s.step !== 'flying') return
     const beach = s.beach
     let cancelled = false
-    const started = performance.now()
+    flight.current = { landed: false, waiters: [] }
     setFrame({ anchor: { lat: beach.lat, lng: beach.lng }, seaBearingDeg: 180, placement: 'center' })
     setShore(null)
     fetch(`/api/coastline?lat=${beach.lat}&lng=${beach.lng}`)
@@ -180,8 +202,8 @@ export default function Experience({
       .catch((): CoastlineAnswer => ({ frame: null }))
       .then(({ frame: shore, shore: ways }) => {
         if (cancelled) return
-        const wait = Math.max(0, FLY_MS - (performance.now() - started))
-        setTimeout(() => {
+        // Never turn the parcel before the camera lands on it — the turn should be seen.
+        whenLanded(() => {
           if (cancelled) return
           const done = (snapped: boolean) => {
             dispatch({ type: 'shoreRead', snapped })
@@ -193,7 +215,7 @@ export default function Experience({
             haptic(14)
             done(true)
           })
-        }, wait)
+        })
       })
     return () => {
       cancelled = true
@@ -666,6 +688,7 @@ export default function Experience({
         heroMode={SLIDE_MODES[slide]}
         heroTags={heroTags}
         ground={ground}
+        onFlown={onFlown}
       />
       {moving && s.step === 'count' && (
         <div className="pointer-events-none absolute inset-x-0 top-16 z-10 flex justify-center px-4">

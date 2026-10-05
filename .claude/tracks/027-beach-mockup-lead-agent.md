@@ -310,7 +310,7 @@ pure layout generator (location TBD — see Q2)
   scroll-driven camera along the beach places (below-hero content), agent narration lines.
 - **Coastline cache built** (uncommitted at time of writing) — seed campaign coasts per environment before ads.
 - **P9b built** (modules, summary, stored qualifier). Remaining P9b: ad-matched hero headlines per angle exist; below-fold pillars/FAQ (folded into D11's scroll-driven places).
-- **P10 built.** Next: aerial illustrated→map hand-off (P9c) or P13 claim flow — founder's call. Start with the shipped-feature audit (what can each module
+- **P10 + P9c hand-off built.** Remaining P9c: scroll-driven camera along beach places (below-hero content). Then P13 claim flow (cross-app — needs an architecture pass). Start with the shipped-feature audit (what can each module
   honestly show — F&B orders, rentals, table bookings, QR walk-ins, day close/invoicing are
   believed shipped; dynamic pricing, hotel channel, Viva need checking), then the qualifier in
   `BeachBuilder`'s fly-in phase and the `lib/modules.ts` rule table, then modules one by one.
@@ -345,6 +345,14 @@ pure layout generator (location TBD — see Q2)
   session turn/token caps on the API path (they now also cap spend).
 
 ## Log
+
+- **2026-10-05** — **P9c aerial hand-off.** Picking a beach: the illustrated beach recedes like a
+  camera rising (scale 0.55, blur, fade); the real map mounts still at a regional zoom (10), fades in
+  once its first tiles are drawn, and only THEN flies down to the shore (2.2 s). First attempt faded
+  the map in on `tilesloaded` while already flying — Google keeps loading during camera motion, so it
+  fired only after landing and the whole flight was invisible (blank sand). The shore snap and the
+  camera framing now wait for the real landing (`onFlown` / `flown`) instead of a fixed timer, with a
+  3× fallback so a map that never flies can't stall the visit.
 
 - **2026-10-05** — **P10 projection built.** `lib/projection.ts` (pure, 8 tests): only the plan
   catalogue (`@repo/data/pricing-tiers`) + the prospect's own inputs — their sunbed price (from the
