@@ -6,6 +6,8 @@ import ChatPanel from './ChatPanel'
 import DemoRequestForm from './DemoRequestForm'
 import MockupView from './MockupView'
 import StickyCta from './StickyCta'
+import OfferNote from './OfferNote'
+import type { Offer } from '@/lib/offer.ts'
 
 /**
  * Client shell of the mockup page: owns the sunbed count so a count the prospect gives in the chat
@@ -21,6 +23,7 @@ export default function MockupWorkspace(props: {
   shareHint: string
   chatEnabled: boolean
   variant: 'a' | 'b'
+  offer: Offer | null
 }) {
   const [sunbedCount, setSunbedCount] = useState(props.initialSunbedCount)
   return (
@@ -30,7 +33,8 @@ export default function MockupWorkspace(props: {
 
       <div className={`mt-10 grid gap-6 ${props.chatEnabled ? 'lg:grid-cols-2' : 'mx-auto max-w-xl'}`}>
         {props.chatEnabled && <ChatPanel token={props.token} beachName={props.beachName} onSunbedCount={setSunbedCount} />}
-        <div id="demo">
+        <div id="demo" className="space-y-3">
+          <OfferNote offer={props.offer} />
           <DemoRequestForm token={props.token} beachName={props.beachName} />
         </div>
       </div>

@@ -5,6 +5,9 @@ import { LEAD_TOKEN_RE, parseLeadLayout } from '@repo/data/lead-model'
 import { getLeadMockup } from '@repo/data/leads'
 import MockupWorkspace from '@/components/MockupWorkspace'
 import TrackOnMount from '@/components/TrackOnMount'
+import { offerFor } from '@/lib/offer.ts'
+import { localeOrDefault } from '@/lib/places.ts'
+import { getLocale } from 'next-intl/server'
 import { SiteFooter, SiteHeader } from '@/components/SiteChrome'
 
 export const dynamic = 'force-dynamic'
@@ -67,6 +70,7 @@ export default async function MockupPage({
           // The chat only appears where it can work; without a key the page is form-only (D1).
           chatEnabled={Boolean(process.env.ANTHROPIC_API_KEY)}
           variant={lead.variant === 'b' ? 'b' : 'a'}
+          offer={offerFor(localeOrDefault(await getLocale()))}
         />
       </main>
       <SiteFooter />

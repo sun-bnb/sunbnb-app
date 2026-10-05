@@ -18,3 +18,17 @@ describe('offer copy guard', () => {
     expect(shape(OFFERS.fi)).toEqual(shape(OFFERS.en))
   })
 })
+
+describe('the launch offer copy matches what billing enforces', () => {
+  it('states the same 30 days and cut-off date as @repo/data/promotion in every language', async () => {
+    const { LAUNCH_PROMOTION } = await import('@repo/data/promotion')
+    expect(LAUNCH_PROMOTION.days).toBe(30)
+    // 1 June 00:00 Madrid = joined by 31 May inclusive
+    expect(LAUNCH_PROMOTION.joinCutoff.toISOString()).toBe('2027-05-31T22:00:00.000Z')
+    for (const o of Object.values(OFFERS)) {
+      expect(o.launchOffer).toMatch(/30/)
+      expect(o.launchOffer).toMatch(/2027/)
+      expect(o.launchOffer).toMatch(/31/)
+    }
+  })
+})

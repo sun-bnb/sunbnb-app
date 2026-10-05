@@ -1,9 +1,12 @@
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { parseAngle } from '@repo/data/lead-model'
 import { PRICING_TIERS } from '@repo/data/pricing-tiers'
 import BeachForm from '@/components/BeachForm'
 import { SiteFooter, SiteHeader } from '@/components/SiteChrome'
 import TrackOnMount from '@/components/TrackOnMount'
+import OfferNote from '@/components/OfferNote'
+import { offerFor } from '@/lib/offer.ts'
+import { localeOrDefault } from '@/lib/places.ts'
 
 /**
  * try.sunbnb.app — the ad landing page (track 027). Every claim here must be TRUE TODAY:
@@ -36,6 +39,7 @@ export default async function LandingPage({ searchParams }: { searchParams: Reco
               <p className="mt-6 text-sm text-gray-500">
                 {t('Pricing.line', { commission: PRICING_TIERS.STARTER.commissionPercent })}
               </p>
+              <OfferNote offer={offerFor(localeOrDefault(await getLocale()))} className="mt-4 max-w-xl" />
             </div>
             <BeachForm />
           </div>
