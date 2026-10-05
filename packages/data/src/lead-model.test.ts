@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assignVariant, generateLeadToken, isLeadEventName, LEAD_TOKEN_RE, parseAngle, parseClickId, parseEventProps, parseLeadLayout, parseVariants, retentionCutoffs } from './lead-model'
+import { assignVariant, generateLeadToken, isLeadEventName, LEAD_TOKEN_RE, parseAngle, parseClickId, parseEventProps, parseLeadLayout, parseLeadRuns, parseVariants, retentionCutoffs } from './lead-model'
 
 describe('retentionCutoffs — the periods the privacy notice promises', () => {
   const now = new Date('2026-10-04T12:00:00Z')
@@ -104,5 +104,20 @@ describe('event input rules — /api/events is public', () => {
     expect(parseClickId('Cj0KCQjw_abc-123.xyz')).toBe('Cj0KCQjw_abc-123.xyz')
     expect(parseClickId('short')).toBeNull()
     expect(parseClickId('has space in it ok')).toBeNull()
+  })
+})
+
+describe('parseLeadRuns — the qualifier answer from a public form', () => {
+  it('keeps known values, de-duplicated', () => {
+    expect(parseLeadRuns('fnb,rentals,fnb')).toEqual(['fnb', 'rentals'])
+  })
+  it('"none" means just sunbeds, and only stands alone', () => {
+    expect(parseLeadRuns('none')).toEqual(['none'])
+    expect(parseLeadRuns('none,tables')).toEqual(['tables'])
+  })
+  it('drops anything else; absent or oversized = not answered', () => {
+    expect(parseLeadRuns('fnb,<script>,casino')).toEqual(['fnb'])
+    expect(parseLeadRuns(null)).toEqual([])
+    expect(parseLeadRuns('fnb,'.repeat(40))).toEqual([])
   })
 })

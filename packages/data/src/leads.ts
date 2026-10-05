@@ -3,7 +3,7 @@
  * retention, token format, layout validation) are in `./lead-model`.
  */
 import prisma from '../index'
-import { assignVariant, generateLeadToken, LEAD_STATUS, retentionCutoffs, type AdAngle, type LeadEventName, type LeadLayout, type LeadVariant } from './lead-model'
+import { assignVariant, generateLeadToken, LEAD_STATUS, retentionCutoffs, type AdAngle, type LeadEventName, type LeadLayout, type LeadRun, type LeadVariant } from './lead-model'
 
 export interface NewLeadMockup {
   placeId: string
@@ -24,6 +24,8 @@ export interface NewLeadMockup {
   forceVariant?: LeadVariant | null
   /** The visitor had already accepted marketing cookies when the mockup was created. */
   marketingConsent?: boolean
+  /** The qualifier answer (`parseLeadRuns`); empty = not answered. */
+  runs?: LeadRun[]
 }
 
 const UTM_MAX = 200
@@ -41,6 +43,7 @@ export async function createLeadMockup(input: NewLeadMockup): Promise<{ token: s
           token,
           variant,
           angle: input.angle ?? null,
+          runs: input.runs ?? [],
           gclid: input.gclid ?? null,
           fbclid: input.fbclid ?? null,
           marketingConsentAt: input.marketingConsent ? new Date() : null,
@@ -78,6 +81,7 @@ export async function getLeadMockup(token: string) {
       token: true,
       placeId: true,
       beachName: true,
+      runs: true,
       beachAddress: true,
       lat: true,
       lng: true,
@@ -147,7 +151,7 @@ export async function requestLeadDemo(
         lastActivityAt: now,
         ...(firstRequest ? { status: LEAD_STATUS.DEMO_REQUESTED, demoRequestedAt: now } : {}),
       },
-      select: { beachName: true, beachAddress: true, sunbedCount: true, utmSource: true, utmCampaign: true },
+      select: { beachName: true, beachAddress: true, sunbedCount: true, runs: true, utmSource: true, utmCampaign: true },
     })
     return { ok: true as const, firstRequest, lead }
   })
@@ -181,6 +185,7 @@ export async function getLeadChatContext(token: string, sessionId: string) {
     select: {
       status: true,
       beachName: true,
+      runs: true,
       sunbedCount: true,
       contactName: true,
       email: true,
@@ -234,7 +239,7 @@ export async function saveLeadChatTurn(token: string, u: ChatTurnUpdate) {
         ...(firstRequest ? { status: LEAD_STATUS.DEMO_REQUESTED, demoRequestedAt: now } : {}),
       },
       select: {
-        beachName: true, beachAddress: true, sunbedCount: true, contactName: true, email: true, phone: true,
+        beachName: true, beachAddress: true, sunbedCount: true, runs: true, contactName: true, email: true, phone: true,
         businessName: true, utmSource: true, utmCampaign: true,
       },
     })

@@ -139,3 +139,16 @@ export function parseEventProps(raw: unknown): Record<string, string | number | 
 export function parseClickId(v: unknown): string | null {
   return typeof v === 'string' && /^[A-Za-z0-9_.-]{10,255}$/.test(v) ? v : null
 }
+
+// ── Qualifier (track 027 D10) ───────────────────────────────────────────────
+
+/** What else a venue runs, as stored on the lead. 'none' = "just sunbeds". */
+export const LEAD_RUNS = ['fnb', 'rentals', 'tables', 'none'] as const
+export type LeadRun = (typeof LEAD_RUNS)[number]
+
+/** "fnb,rentals" from a public form → validated, de-duplicated; 'none' only alone. */
+export function parseLeadRuns(raw: unknown): LeadRun[] {
+  if (typeof raw !== 'string' || raw.length > 60) return []
+  const runs = [...new Set(raw.split(',').map((r) => r.trim()))].filter((r): r is LeadRun => (LEAD_RUNS as readonly string[]).includes(r))
+  return runs.includes('none') ? (runs.length === 1 ? ['none'] : runs.filter((r) => r !== 'none')) : runs
+}

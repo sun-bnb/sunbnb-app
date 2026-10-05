@@ -1963,6 +1963,9 @@ model Lead {
   variant            String?
   /// Ad angle the visitor arrived on (`?a=` key, e.g. noshow | cash | online | queue).
   angle              String?
+  /// What else the venue runs, from the page's qualifier (track 027 D10): fnb | rentals | tables,
+  /// or ["none"] for "just sunbeds". Empty = not answered.
+  runs               String[]    @default([])
   /// Ad click ids, kept for offline-conversion import (P14). Personal data — purged with the lead.
   gclid              String?
   fbclid             String?
