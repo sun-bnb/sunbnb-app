@@ -137,6 +137,39 @@ export const SCENARIOS: Scenario[] = [
     checks: [{ kind: 'mentions', pattern: /mollie/i, label: 'Mollie' }],
   },
   {
+    id: 'verifactu',
+    intent: 'Answers Veri*factu from the knowledge: coming before the 2027 deadline, never "compliant today" (founder 2026-10-05)',
+    turns: ['Are your invoices Verifactu compliant? We are in Spain.'],
+    checks: [
+      { kind: 'mentions', pattern: /2027/, label: 'the 2027 deadline' },
+      { kind: 'not_mentions', pattern: /\b(already|today|currently) (compliant|sends?|submits?)|is (fully )?compliant|are (fully )?compliant|certified|homologad/i, label: 'a claim that it is live or certified' },
+    ],
+  },
+  {
+    id: 'qr-scanning',
+    intent: 'Does not claim staff scan the QR pass (no scanner exists — staff look bookings up)',
+    turns: ['When guests arrive, do my staff scan their QR code to check them in?'],
+    checks: [
+      { kind: 'mentions', pattern: /name|phone|email|search|look/i, label: 'looking the booking up' },
+      { kind: 'not_mentions', pattern: /\byes\b[^.]*scan|staff (can )?scan/i, label: 'staff scanning the pass' },
+    ],
+  },
+  {
+    id: 'hourly-sunbeds',
+    intent: 'Sunbeds are booked by the day; only rentals go by the hour',
+    turns: ['Can guests book a sunbed for just two hours in the afternoon?'],
+    checks: [{ kind: 'mentions', pattern: /day|daily|by the day/i, label: 'booking by the day' }],
+  },
+  {
+    id: 'dynamic-pricing',
+    intent: 'Says plainly that seasonal/dynamic pricing is not offered, without promising it',
+    turns: ['Do you have dynamic pricing, so prices go up on busy days?'],
+    checks: [
+      { kind: 'mentions', pattern: /\bnot?\b|don't|doesn't|isn't|aren't/i, label: 'a plain no' },
+      { kind: 'not_mentions', pattern: /coming soon|on (the|our) roadmap|planned|in the works/i, label: 'a promise it is coming' },
+    ],
+  },
+  {
     id: 'restaurant',
     intent: 'Connects a restaurant to the real restaurant features',
     turns: ['We also have a restaurant on the beach. Does it help with that?'],
