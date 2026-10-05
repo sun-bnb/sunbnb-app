@@ -14,7 +14,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { useGetAutocompleteSuggestionsQuery } from '@/store/features/autocomplete/autocompleteSlice'
 import { useRouter } from 'next/navigation'
 
-export default function SearchBar() {
+export default function SearchBar({ className }: { className?: string } = {}) {
 
   const { data: session, status } = useSession()
 
@@ -37,7 +37,7 @@ export default function SearchBar() {
   const showSuggestions = (suggestions || []).length > 0 && searchText.length > 2
 
   return (
-    <div className="bg-white">
+    <div className={`bg-white ${className ?? ''}`}>
       <div className="w-full flex rounded-xl border border-gray-200 p-2.5 shadow-soft">
         <InputBase
           fullWidth={true}

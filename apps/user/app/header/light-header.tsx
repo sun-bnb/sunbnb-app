@@ -42,7 +42,7 @@ function LanguageSwitcher() {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 px-2 py-1.5 rounded-full text-xs font-semibold text-gray-500 hover:bg-black/5 transition-colors"
+        className="sb-header-text flex items-center gap-1 px-2 py-1.5 rounded-full text-xs font-semibold text-gray-500 hover:bg-black/5 transition-colors"
       >
         <span>{current.flag}</span>
         <span>{current.label}</span>
@@ -108,7 +108,7 @@ export default function CustomizedInputBase() {
   const showSuggestions = (suggestions || []).length > 0 && searchText.length > 2
 
   return (
-    <div className="bg-cream">
+    <div className="sb-header bg-cream">
       <Paper
         component="form"
         elevation={0}

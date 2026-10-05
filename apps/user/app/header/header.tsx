@@ -65,7 +65,7 @@ export default function CustomizedInputBase() {
   const showSuggestions = (suggestions || []).length > 0 && searchText.length > 2
 
   return (
-    <div className="bg-cream">
+    <div className="sb-header bg-cream">
       <Paper
         component="form"
         elevation={0}

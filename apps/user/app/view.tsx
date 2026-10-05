@@ -1,13 +1,41 @@
 'use client'
 
+/**
+ * Landing page — a day at the beach, told by scrolling.
+ *
+ * The whole top of the page is one WebGL beach club (`BeachStage` →
+ * `BeachScene`), pinned while the page scrolls through ~5.5 screens. The copy
+ * is a handful of panels fading in and out over it at scroll positions that
+ * match what the camera is doing: the map at rest, the club standing up into
+ * 3D, noon by the pole and its code plaque, golden hour with drinks on the
+ * table, dusk with the lights coming on for the closing call to action. The
+ * verifiable facts and the footer follow on a dusk-dark section so the day
+ * ends rather than snapping back to cream.
+ *
+ * Nothing on this page is claimed that cannot be checked: the earlier
+ * "100+ beaches" / 10k bookings / 4.8★ / testimonial copy is gone for good.
+ *
+ * Type: Fraunces (soft/wonky optical serif) for display, Geist for everything
+ * else, loaded here so the rest of the app is untouched. Panels animate with
+ * CSS only — `--p` is written once per scroll frame by BeachStage, and each
+ * panel's opacity is `clamp()` math on it, so scrolling never re-renders React.
+ */
+
 import Image from 'next/image'
-import SearchBar from '@/components/search/search-bar'
-import sunbnbHorizontalBlack from './sunbnb-horizontal-black.png'
-import reservationScreen from './reservation-screen.png'
-import scanQrImage from './scan-qr-image.png'
-import beachProducts from './beach-products.png'
+import { Fraunces } from 'next/font/google'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import type { CSSProperties, ReactNode } from 'react'
+
+import SearchBar from '@/components/search/search-bar'
+import BeachStage from '@/components/landing/beach-stage'
+import sunbnbHorizontalBlack from './sunbnb-horizontal-black.png'
+
+const display = Fraunces({
+  subsets: ['latin'],
+  axes: ['SOFT', 'WONK', 'opsz'],
+  variable: '--sb-display',
+})
 
 interface BusinessEntity {
   companyName: string
@@ -18,275 +46,337 @@ interface BusinessEntity {
   contactPhone: string | null
 }
 
-export default function HomeView({ businessEntity }: { businessEntity: BusinessEntity }) {
+/** Scroll windows (fractions of the stage): fade in over [a,b], out over [c,d]. */
+const BEATS = {
+  hero: [-0.02, 0, 0.09, 0.16], // fully in at p = 0 (a window starting AT 0 is invisible at rest)
+  hint: [-0.02, 0, 0.01, 0.05],
+  stage1: [0.2, 0.26, 0.4, 0.46],
+  stage2: [0.5, 0.56, 0.66, 0.72],
+  stage3: [0.74, 0.8, 0.86, 0.9],
+  close: [0.92, 0.97, 1.5, 1.6], // stays once it is in
+} as const
 
+/** The pointer-event windows BeachStage switches between — hoisted so the stage's scroll effect binds once. */
+const BEAT_WINDOWS: Record<string, [number, number]> = Object.fromEntries(
+  Object.entries(BEATS)
+    .filter(([k]) => k !== 'hint')
+    .map(([k, [a, , , d]]) => [k, [a, d] as [number, number]]),
+)
+
+/**
+ * A copy panel over the stage. Visible when `--p` is inside its window; the
+ * fade is computed in CSS from the slopes below, so scroll costs no React work.
+ * Pointer events are enabled only while the panel is (mostly) visible, else a
+ * hidden panel would eat the hovers meant for the beach behind it.
+ */
+function Panel({
+  beat,
+  className,
+  children,
+}: {
+  beat: keyof typeof BEATS
+  className?: string
+  children: ReactNode
+}) {
+  const [a, b, c, d] = BEATS[beat]
+  const style = {
+    '--a': a,
+    '--ka': b > a ? 1 / (b - a) : 1e6,
+    '--d': d,
+    '--kd': d > c ? 1 / (d - c) : 1e6,
+  } as CSSProperties
+  return (
+    <div className={`lp-panel absolute ${className ?? ''}`} style={style} data-beat={beat}>
+      {children}
+    </div>
+  )
+}
+
+export default function HomeView({ businessEntity }: { businessEntity: BusinessEntity }) {
   const router = useRouter()
   const t = useTranslations('LandingPage')
+  const facts = ['fact1', 'fact2', 'fact3', 'fact4'] as const
 
   return (
-    <div className="bg-cream font-sans text-[#2d2d2d] pt-14 overflow-x-hidden">
+    <div className={`${display.variable} lp-root bg-cream font-sans`}>
+      <style>{`
+        .lp-root {
+          --lp-ink: #17323a;
+          --lp-straw: #7a6029;
+          --lp-sea: #046b7d;
+          --lp-dusk: #272b46;
+          color: var(--lp-ink);
+        }
+        .lp-display {
+          font-family: var(--sb-display), Georgia, serif;
+          font-variation-settings: 'SOFT' 80, 'WONK' 1, 'opsz' 144;
+          font-weight: 700;
+          letter-spacing: -0.025em;
+        }
+        .lp-stage-label {
+          font-family: var(--sb-display), Georgia, serif;
+          font-variation-settings: 'SOFT' 100, 'WONK' 1, 'opsz' 14;
+          font-weight: 600;
+          font-style: italic;
+        }
+        .lp-link {
+          color: var(--lp-sea);
+          text-decoration: underline;
+          text-underline-offset: 3px;
+          text-decoration-thickness: 1px;
+        }
+        .lp-link:hover { color: var(--lp-ink); }
 
-      {/* ─── Hero ─── */}
-      <section className="relative px-5 md:px-8 pt-12 md:pt-24 lg:pt-32 pb-10 md:pb-20 max-w-6xl mx-auto">
-        {/* Ambient background */}
-        <div className="absolute -top-20 -right-24 w-64 h-64 md:w-[420px] md:h-[420px] bg-gradient-to-br from-brand-cyan/12 to-cyan-300/8 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute top-32 -left-28 w-52 h-52 md:w-80 md:h-80 bg-gradient-to-tr from-amber-200/15 to-yellow-300/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-40 bg-gradient-to-t from-brand-cyan/5 to-transparent rounded-full blur-3xl pointer-events-none" />
+        /* panel visibility: min(fade-in slope, fade-out slope), clamped — pure CSS on --p */
+        .lp-panel {
+          --o: clamp(0, min((var(--p) - var(--a)) * var(--ka), (var(--d) - var(--p)) * var(--kd)), 1);
+          opacity: var(--o);
+          transform: translateY(calc((1 - var(--o)) * 22px));
+          pointer-events: none;
+          will-change: opacity, transform;
+        }
+        .lp-panel > * { pointer-events: auto; }
+        /* while a panel is faded out, its controls must not intercept the beach */
+        .lp-panel[data-beat] { visibility: hidden; }
+        .lp-stage[data-beat="hero"]   .lp-panel[data-beat="hero"],
+        .lp-stage[data-beat="hero"]   .lp-panel[data-beat="hint"],
+        .lp-stage[data-beat="stage1"] .lp-panel[data-beat="stage1"],
+        .lp-stage[data-beat="stage2"] .lp-panel[data-beat="stage2"],
+        .lp-stage[data-beat="stage3"] .lp-panel[data-beat="stage3"],
+        .lp-stage[data-beat="close"]  .lp-panel[data-beat="close"] { visibility: visible; }
 
-        <div className="relative flex flex-col lg:flex-row lg:items-center lg:gap-16">
-          {/* Left column — text + search */}
-          <div className="lg:flex-1 text-center lg:text-left">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/70 backdrop-blur-sm rounded-full border border-white/80 shadow-soft mb-5 md:mb-7 animate-fade-in">
-              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
-              <span className="text-[11px] md:text-xs font-medium text-gray-500 tracking-wide">{t('badge')}</span>
-            </div>
+        .lp-glass {
+          background: rgba(255, 245, 225, 0.82);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+          border: 1px solid rgba(122, 96, 41, 0.18);
+          box-shadow: 0 10px 40px rgba(23, 50, 58, 0.08);
+        }
+        .lp-glass-dusk {
+          background: rgba(23, 50, 58, 0.62);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1px solid rgba(255, 245, 225, 0.14);
+          color: #fdf6e6;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .lp-panel { transform: none; transition: none; }
+        }
+        /* the docked search: fixed to the viewport, hidden only while the hero's own search is up */
+        .lp-dock {
+          opacity: 0;
+          transform: translateY(14px);
+          pointer-events: none;
+          transition: opacity 320ms ease, transform 320ms ease;
+        }
+        .lp-stage:not([data-beat="hero"]) .lp-dock { opacity: 1; transform: none; }
+        .lp-stage:not([data-beat="hero"]) .lp-dock > * { pointer-events: auto; }
+        @media (prefers-reduced-motion: reduce) { .lp-dock { transition: none; transform: none; } }
+        @keyframes lpHint { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(6px); } }
+        .lp-hint-arrow { animation: lpHint 1.8s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) { .lp-hint-arrow { animation: none; } }
+      `}</style>
 
-            <h1 className="text-[32px] md:text-5xl lg:text-[56px] font-extrabold leading-[1.1] tracking-tight mb-4 md:mb-5 animate-fade-in-up">
-              {t('heroLine1')}
-              <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-cyan via-cyan-400 to-brand-cyan animate-shimmer">
-                {t('heroLine2')}
-              </span>
-            </h1>
-
-            <p className="text-[15px] md:text-lg lg:text-xl text-gray-500 leading-relaxed mb-7 md:mb-9 max-w-[320px] md:max-w-lg mx-auto lg:mx-0 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-              {t('heroDesc')}
-            </p>
-
-            <div className="relative z-10 w-full max-w-md mx-auto lg:mx-0 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-              <SearchBar />
-              <p className="mt-3 text-[11px] md:text-xs text-gray-400">
-                {t('searchHint')} <button onClick={() => router.push('/sites')} className="text-brand-cyan hover:text-brand-cyan-dark font-medium underline underline-offset-2">{t('browseAll')}</button> {t('searchOr')}
-              </p>
-            </div>
-          </div>
-
-          {/* Right column — hero visual */}
-          <div className="hidden lg:block lg:flex-1 relative animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-            <div className="relative w-full max-w-[420px] mx-auto">
-              {/* Phone frame */}
-              <div className="relative rounded-[28px] bg-white shadow-card border border-gray-100 p-2 overflow-hidden animate-float">
-                <Image
-                  src={reservationScreen}
-                  width={600}
-                  height={400}
-                  alt="Sunbnb reservation screen"
-                  className="rounded-[20px] w-full"
-                />
-              </div>
-              {/* Floating badge */}
-              <div className="absolute -bottom-4 -left-6 bg-white rounded-2xl px-4 py-3 shadow-card border border-gray-100 animate-bubble-up" style={{ animationDelay: '0.6s' }}>
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">⛱️</span>
-                  <div>
-                    <p className="text-xs font-bold text-gray-800">{t('sunbedNumber')}</p>
-                    <p className="text-[10px] text-emerald-500 font-medium">{t('sunbedBooked')}</p>
-                  </div>
+      {/* ── The day ─────────────────────────────────────────────────────── */}
+      <BeachStage
+        heightVh={560}
+        yoursLabel={t('planYours')}
+        label={t('planAria')}
+        beats={BEAT_WINDOWS}
+      >
+        {/* Hero: the headline over the sand of the map */}
+        <Panel beat="hero" className="inset-x-0 bottom-0 top-14 flex items-end md:items-center">
+          <div className="w-full px-5 pb-[9svh] md:px-8 md:pb-0">
+            <div className="mx-auto max-w-6xl">
+              <div className="relative max-w-[600px] rounded-[26px] p-6 md:-ml-6 md:p-8 lg:p-10 lp-glass md:bg-[rgba(255,245,225,0.72)]">
+                <h1 className="lp-display text-[clamp(2.7rem,8.5vw,5.1rem)] leading-[0.92]">
+                  {t('heroLine1')}
+                  <br />
+                  {t('heroLine2')}
+                </h1>
+                <p className="mt-5 max-w-[44ch] text-[15.5px] leading-relaxed text-[#3f5157] md:text-[17.5px]">
+                  {t('heroLead')}
+                </p>
+                <div className="relative z-10 mt-7 max-w-md">
+                  <SearchBar />
+                  <p className="mt-3 text-[13px] text-[#4f6065]">
+                    {t('searchHint')}{' '}
+                    <button type="button" onClick={() => router.push('/sites')} className="lp-link font-medium">
+                      {t('browseAll')}
+                    </button>
+                  </p>
                 </div>
               </div>
-              {/* Floating rating */}
-              <div className="absolute -top-3 -right-4 bg-white rounded-xl px-3 py-2 shadow-card border border-gray-100 animate-bubble-up" style={{ animationDelay: '0.8s' }}>
-                <p className="text-xs font-bold text-gray-800">4.8 <span className="text-amber-400">★★★★★</span></p>
-              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </Panel>
 
-      {/* ─── How It Works ─── */}
-      <section className="px-5 md:px-8 pt-4 md:pt-8 pb-2 max-w-4xl mx-auto">
-        <p className="text-[11px] md:text-xs font-semibold uppercase tracking-[0.2em] text-gray-400 mb-5 md:mb-8 text-center">{t('howItWorks')}</p>
-        <div className="flex gap-3 md:gap-6">
-          {[
-            { step: '1', emoji: '🔍', titleKey: 'step1Title', descKey: 'step1Desc' },
-            { step: '2', emoji: '⛱️', titleKey: 'step2Title', descKey: 'step2Desc' },
-            { step: '3', emoji: '✅', titleKey: 'step3Title', descKey: 'step3Desc' },
-          ].map((s, i) => (
-            <div
-              key={s.step}
-              className="flex-1 bg-white rounded-2xl p-4 md:p-6 text-center border border-white/80 shadow-soft hover:shadow-card transition-shadow duration-300 animate-bubble-up"
-              style={{ animationDelay: `${i * 0.12}s` }}
-            >
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-cream-dark rounded-xl flex items-center justify-center mx-auto mb-2.5 md:mb-3">
-                <span className="text-xl md:text-2xl">{s.emoji}</span>
-              </div>
-              <p className="text-[13px] md:text-[15px] font-bold text-gray-800 mb-1">{t(s.titleKey as Parameters<typeof t>[0])}</p>
-              <p className="text-[11px] md:text-xs text-gray-400 leading-relaxed hidden md:block">{t(s.descKey as Parameters<typeof t>[0])}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+        <Panel beat="hint" className="bottom-4 left-1/2 -translate-x-1/2 text-center md:bottom-6">
+          <div className="flex flex-col items-center gap-1 text-[11px] font-medium uppercase tracking-[0.18em] text-[#4f6065]">
+            <span>{t('scrollHint')}</span>
+            <svg className="lp-hint-arrow h-4 w-4" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M3 6l5 5 5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+        </Panel>
 
-      {/* ─── Feature Showcase ─── */}
-      <section className="px-5 md:px-8 pt-10 md:pt-20 max-w-6xl mx-auto space-y-6 md:space-y-0">
-
-        {/* Feature 1 — full-width hero card */}
-        <div className="bg-white rounded-2xl md:rounded-3xl overflow-hidden shadow-card md:flex md:items-stretch">
-          <div className="md:flex-1 relative h-52 md:h-auto md:min-h-[320px] overflow-hidden">
-            <Image
-              src={reservationScreen}
-              width={800}
-              height={500}
-              alt="Book before you go"
-              className="w-full h-full object-cover"
+        {/* Beat 1 — late morning, the map stands up */}
+        <Panel beat="stage1" className="inset-x-0 bottom-0 md:inset-y-0 md:left-auto md:right-0 md:flex md:w-1/2 md:items-center">
+          <div className="px-5 pb-[17svh] md:px-8 md:pb-0 lg:pr-[max(2rem,calc((100vw-72rem)/2))]">
+            <StageCopy
+              label={t('stage1Label')}
+              title={t('stage1Title')}
+              desc={t('stage1Desc')}
+              cta={{ label: t('stage1Cta'), onClick: () => router.push('/sites') }}
             />
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-white/60 hidden md:block" />
-            <div className="absolute inset-0 bg-gradient-to-t from-white/70 via-transparent to-transparent md:hidden" />
           </div>
-          <div className="md:flex-1 p-6 md:p-10 lg:p-14 flex flex-col justify-center">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-brand-cyan/10 rounded-full text-[10px] md:text-xs font-semibold text-brand-cyan w-fit mb-3 md:mb-4">
-              {t('feature1Badge')}
-            </span>
-            <h2 className="text-xl md:text-2xl lg:text-3xl font-bold tracking-tight mb-2 md:mb-3">
-              {t('feature1Title')}
-            </h2>
-            <p className="text-sm md:text-base text-gray-500 leading-relaxed mb-4 md:mb-6">
-              {t('feature1Desc')}
+        </Panel>
+
+        {/* Beat 2 — noon, at the pole */}
+        <Panel beat="stage2" className="inset-x-0 bottom-0 md:inset-y-0 md:right-auto md:left-0 md:flex md:w-1/2 md:items-center">
+          <div className="px-5 pb-[17svh] md:px-8 md:pb-0 lg:pl-[max(2rem,calc((100vw-72rem)/2))]">
+            <StageCopy label={t('stage2Label')} title={t('stage2Title')} desc={t('stage2Desc')} />
+          </div>
+        </Panel>
+
+        {/* Beat 3 — golden hour, on the lounger */}
+        <Panel beat="stage3" className="inset-x-0 bottom-0 md:inset-y-0 md:left-auto md:right-0 md:flex md:w-1/2 md:items-center">
+          <div className="px-5 pb-[17svh] md:px-8 md:pb-0 lg:pr-[max(2rem,calc((100vw-72rem)/2))]">
+            <StageCopy label={t('stage3Label')} title={t('stage3Title')} desc={t('stage3Desc')} />
+          </div>
+        </Panel>
+
+        {/* Docked search — takes over from the hero's and stays for the rest of the page */}
+        <div className="lp-dock fixed inset-x-0 bottom-3 z-30 flex justify-center px-3 md:bottom-5">
+          <div className="lp-glass w-full max-w-xl rounded-2xl p-2">
+            <SearchBar className="flex flex-col-reverse overflow-hidden rounded-xl" />
+            <p className="mt-1.5 px-1 text-center text-[12px] text-[#4f6065]">
+              {t('searchHint')}{' '}
+              <button type="button" onClick={() => router.push('/sites')} className="lp-link font-medium">
+                {t('browseAll')}
+              </button>
             </p>
-            <button
-              onClick={() => router.push('/sites')}
-              className="w-fit px-5 py-2 text-sm font-semibold text-white bg-gray-900 rounded-xl hover:bg-gray-800 shadow-soft transition-colors"
-            >
-              {t('feature1Button')}
-            </button>
           </div>
         </div>
 
-        {/* Feature 2 + 3 side by side on desktop */}
-        <div className="md:grid md:grid-cols-2 md:gap-6 md:pt-6 space-y-6 md:space-y-0">
-
-          {/* Feature 2 */}
-          <div className="bg-white rounded-2xl overflow-hidden shadow-card hover:shadow-lg transition-shadow duration-300">
-            <div className="relative h-48 md:h-56 overflow-hidden">
-              <Image
-                src={scanQrImage}
-                width={600}
-                height={350}
-                alt="Scan QR code on the beach"
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-white/80 via-transparent to-transparent" />
-            </div>
-            <div className="p-5 md:p-6">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 rounded-full text-[10px] md:text-xs font-semibold text-amber-600 w-fit mb-2.5">
-                {t('feature2Badge')}
-              </span>
-              <h3 className="text-lg md:text-xl font-bold tracking-tight mb-1.5">{t('feature2Title')}</h3>
-              <p className="text-[13px] md:text-sm text-gray-500 leading-relaxed">
-                {t('feature2Desc')}
+        {/* Close — dusk */}
+        <Panel beat="close" className="inset-0 flex items-center">
+          <div className="w-full px-5 pb-[10svh] md:px-8 md:pb-0">
+            <div className="mx-auto max-w-xl rounded-[26px] p-7 text-center md:p-10 lp-glass-dusk">
+              <h2 className="lp-display text-[clamp(2.1rem,6vw,3.4rem)] leading-[1]">{t('ctaTitle')}</h2>
+              <p className="mx-auto mt-4 max-w-[42ch] text-[15px] leading-relaxed text-[#c9d6dc] md:text-[16px]">
+                {t('ctaDesc')}
+              </p>
+              <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => router.push('/sites')}
+                  className="rounded-xl bg-[#fdf6e6] px-7 py-3 text-sm font-semibold text-[#17323a] transition-colors hover:bg-white"
+                >
+                  {t('ctaExplore')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push('/sign-in')}
+                  className="rounded-xl border border-[rgba(253,246,230,0.35)] px-7 py-3 text-sm font-medium text-[#e6edf0] transition-colors hover:border-[rgba(253,246,230,0.7)] hover:text-white"
+                >
+                  {t('ctaSignIn')}
+                </button>
+              </div>
+              <p className="mt-7 text-[13px] text-[#a9bcc3]">
+                {t('ctaPartner')}{' '}
+                <a
+                  href="https://partner.sunbnb.app"
+                  className="font-medium text-[#8fe3f2] underline underline-offset-[3px] hover:text-white"
+                >
+                  {t('ctaBecomePartner')}
+                </a>
               </p>
             </div>
           </div>
+        </Panel>
+      </BeachStage>
 
-          {/* Feature 3 */}
-          <div className="bg-white rounded-2xl overflow-hidden shadow-card hover:shadow-lg transition-shadow duration-300">
-            <div className="relative h-48 md:h-56 overflow-hidden">
-              <Image
-                src={beachProducts}
-                width={600}
-                height={350}
-                alt="Order food and drinks to your sunbed"
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-white/80 via-transparent to-transparent" />
-            </div>
-            <div className="p-5 md:p-6">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 rounded-full text-[10px] md:text-xs font-semibold text-emerald-600 w-fit mb-2.5">
-                {t('feature3Badge')}
-              </span>
-              <h3 className="text-lg md:text-xl font-bold tracking-tight mb-1.5">{t('feature3Title')}</h3>
-              <p className="text-[13px] md:text-sm text-gray-500 leading-relaxed">
-                {t('feature3Desc')}
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ─── Social Proof ─── */}
-      <section className="px-5 md:px-8 pt-12 md:pt-20 max-w-4xl mx-auto">
-        <div className="bg-white/60 backdrop-blur-sm rounded-2xl border border-white/80 shadow-soft p-6 md:p-10">
-          <div className="flex items-center justify-center gap-6 md:gap-16 text-center">
-            {[
-              { value: '100+', labelKey: 'statBeaches', icon: '🏖️' },
-              { value: '10k+', labelKey: 'statBookings', icon: '📋' },
-              { value: '4.8★', labelKey: 'statRating', icon: '⭐' },
-            ].map((stat, i) => (
-              <div key={stat.labelKey} className="flex-1 animate-fade-in-up" style={{ animationDelay: `${0.1 * i}s` }}>
-                <span className="text-xl md:text-2xl block mb-1">{stat.icon}</span>
-                <p className="text-xl md:text-3xl font-extrabold text-gray-800">{stat.value}</p>
-                <p className="text-[11px] md:text-sm text-gray-400 font-medium mt-0.5">{t(stat.labelKey as Parameters<typeof t>[0])}</p>
+      {/* ── After dark: what is actually true, and the footer ───────────── */}
+      <section className="bg-[var(--lp-dusk)] text-[#fdf6e6]">
+        <div className="mx-auto max-w-6xl px-5 pb-6 pt-14 md:px-8 md:pt-20">
+          <dl className="grid grid-cols-1 gap-y-9 sm:grid-cols-2 sm:gap-x-10 lg:grid-cols-4 lg:gap-x-0">
+            {facts.map((fact, i) => (
+              <div
+                key={fact}
+                className={`border-[rgba(253,246,230,0.14)] lg:px-7 ${i > 0 ? 'lg:border-l' : ''} ${
+                  i === 0 ? 'lg:pl-0' : ''
+                } ${i === facts.length - 1 ? 'lg:pr-0' : ''}`}
+              >
+                <dt className="lp-display text-[17px] leading-snug md:text-[19px]">
+                  {t(`${fact}Title` as Parameters<typeof t>[0])}
+                </dt>
+                <dd className="mt-2 max-w-[34ch] text-[14px] leading-relaxed text-[#b9c6cc]">
+                  {t(`${fact}Desc` as Parameters<typeof t>[0])}
+                  {fact === 'fact2' && (
+                    <>
+                      {' '}
+                      <a
+                        href="/cancellation-policy"
+                        className="text-[#8fe3f2] underline underline-offset-[3px] hover:text-white"
+                      >
+                        {t('fact2Link')}
+                      </a>
+                    </>
+                  )}
+                </dd>
               </div>
             ))}
-          </div>
+          </dl>
         </div>
-      </section>
 
-      {/* ─── Testimonial / Quote ─── */}
-      <section className="px-5 md:px-8 pt-10 md:pt-16 max-w-3xl mx-auto text-center">
-        <blockquote className="text-lg md:text-2xl lg:text-[28px] font-semibold text-gray-700 leading-snug tracking-tight italic">
-          &ldquo;{t('quoteStart')}
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-cyan to-cyan-400 not-italic"> {t('quoteHighlight')}</span>&rdquo;
-        </blockquote>
-        <p className="mt-4 text-xs md:text-sm text-gray-400">— {t('quoteAttribution')}</p>
-      </section>
-
-      {/* ─── CTA ─── */}
-      <section className="px-5 md:px-8 pt-10 md:pt-16 pb-10 md:pb-16 max-w-4xl mx-auto">
-        <div className="relative bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-2xl md:rounded-3xl p-8 md:p-12 lg:p-16 text-center shadow-card overflow-hidden">
-          {/* Decorative circles */}
-          <div className="absolute -top-12 -right-12 w-40 h-40 bg-brand-cyan/10 rounded-full blur-2xl" />
-          <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-cyan-400/8 rounded-full blur-2xl" />
-
-          <div className="relative">
-            <p className="text-xl md:text-3xl lg:text-4xl font-extrabold text-white leading-snug mb-2 md:mb-4 tracking-tight">
-              {t('ctaTitle')}
-              <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-cyan to-cyan-300">{t('ctaHighlight')}</span>
-            </p>
-            <p className="text-[13px] md:text-base text-gray-400 mb-6 md:mb-9 max-w-md mx-auto">
-              {t('ctaDesc')}
-            </p>
-            <div className="flex flex-col sm:flex-row sm:justify-center gap-3 md:gap-4">
-              <button
-                onClick={() => router.push('/sites')}
-                className="w-full sm:w-auto px-8 py-3 md:py-3.5 text-sm md:text-base font-semibold text-gray-900 bg-white rounded-xl hover:bg-gray-50 shadow-soft transition-colors"
-              >
-                {t('ctaExplore')}
-              </button>
-              <button
-                onClick={() => router.push('/sign-in')}
-                className="w-full sm:w-auto px-8 py-3 md:py-3.5 text-sm md:text-base font-medium text-gray-300 bg-white/10 rounded-xl hover:bg-white/15 border border-white/10 transition-colors"
-              >
-                {t('ctaSignIn')}
-              </button>
-            </div>
-            <p className="mt-6 md:mt-8 text-[12px] md:text-sm text-gray-500">
-              {t('ctaPartner')}{' '}
-              <a href="https://partner.sunbnb.app" className="text-brand-cyan hover:text-cyan-300 underline underline-offset-2 font-medium transition-colors">
-                {t('ctaBecomePartner')}
-              </a>
-            </p>
+        {/* extra bottom room: the docked search is fixed over the page bottom */}
+        <footer className="mx-auto max-w-6xl px-5 pb-32 pt-10 md:px-8 md:pb-36 md:pt-14">
+          <div className="flex flex-col gap-5 border-t border-[rgba(253,246,230,0.14)] pt-8 sm:flex-row sm:items-center sm:justify-between">
+            <Image src={sunbnbHorizontalBlack} alt="Sunbnb" className="w-[96px] opacity-70 invert" />
+            <nav className="flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-[#b9c6cc]">
+              <a href="/tos" className="hover:text-white">{t('footerTerms')}</a>
+              <a href="/privacy" className="hover:text-white">{t('footerPrivacy')}</a>
+              <a href="/cancellation-policy" className="hover:text-white">{t('footerCancellation')}</a>
+              <a href="https://partner.sunbnb.app" className="hover:text-white">{t('footerPartners')}</a>
+            </nav>
           </div>
-        </div>
+          <p className="mt-6 text-[12px] leading-relaxed text-[#8d9ca3]">
+            © {new Date().getFullYear()} Sunbnb · {t('operatedBy')} {businessEntity.companyName}
+            {businessEntity.businessId ? ` · ${t('businessId')} ${businessEntity.businessId}` : ''}
+            {businessEntity.companyAddress ? ` · ${businessEntity.companyAddress}` : ''}
+          </p>
+        </footer>
       </section>
+    </div>
+  )
+}
 
-      {/* ─── Footer ─── */}
-      <footer className="pb-8 md:pb-12 pt-2 text-center">
-        <Image
-          src={sunbnbHorizontalBlack}
-          alt="Sunbnb"
-          className="mx-auto mb-3 w-[100px] md:w-[120px] opacity-30"
-        />
-        <p className="text-[11px] md:text-xs text-gray-400 mb-2">
-          © {new Date().getFullYear()} Sunbnb · <a href="/tos" className="underline hover:text-gray-600 transition-colors">{t('footerTerms')}</a> · <a href="/privacy" className="underline hover:text-gray-600 transition-colors">{t('footerPrivacy')}</a> · <a href="/cancellation-policy" className="underline hover:text-gray-600 transition-colors">{t('footerCancellation')}</a> · <a href="https://partner.sunbnb.app" className="underline hover:text-gray-600 transition-colors">{t('footerPartners')}</a>
-        </p>
-        <p className="text-[10px] md:text-[11px] text-gray-300">
-          {t('operatedBy')} {businessEntity.companyName}
-          {businessEntity.businessId ? ` · ${t('businessId')} ${businessEntity.businessId}` : ''}
-          {businessEntity.companyAddress ? ` · ${businessEntity.companyAddress}` : ''}
-        </p>
-      </footer>
+function StageCopy({
+  label,
+  title,
+  desc,
+  cta,
+}: {
+  label: string
+  title: string
+  desc: string
+  cta?: { label: string; onClick: () => void }
+}) {
+  return (
+    <div className="max-w-[520px] rounded-[24px] p-6 md:p-8 lp-glass">
+      <p className="lp-stage-label text-[15px] text-[var(--lp-straw)] md:text-[17px]">{label}</p>
+      <h2 className="lp-display mt-2 text-[clamp(1.6rem,3.6vw,2.3rem)] leading-[1.08]">{title}</h2>
+      <p className="mt-4 max-w-[48ch] text-[15px] leading-relaxed text-[#3f5157] md:text-[16px]">{desc}</p>
+      {cta && (
+        <button
+          type="button"
+          onClick={cta.onClick}
+          className="mt-6 rounded-xl bg-[#17323a] px-5 py-2.5 text-sm font-semibold text-[#fffdf7] transition-colors hover:bg-[#0f242a]"
+        >
+          {cta.label}
+        </button>
+      )}
     </div>
   )
 }

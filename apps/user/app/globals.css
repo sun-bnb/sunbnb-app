@@ -154,3 +154,36 @@
   animation: float 4s ease-in-out infinite;
 }
 
+
+/* ── Landing page: the fixed header blends into the WebGL stage ─────────────
+   BeachStage sets body[data-lp-stage] while mounted and body[data-lp-theme]
+   as the scene's light changes. Both app shells carry .sb-header-bar, both
+   headers carry .sb-header; nothing else about them changes. */
+body[data-lp-stage] .sb-header-bar {
+  background: transparent !important;
+  border-color: transparent !important;
+}
+body[data-lp-stage] .sb-header,
+body[data-lp-stage] .sb-header .MuiPaper-root {
+  background-color: transparent !important;
+  transition: color 400ms ease;
+}
+body[data-lp-stage][data-lp-theme="dark"] .sb-header,
+body[data-lp-stage][data-lp-theme="dark"] .sb-header .MuiPaper-root {
+  /* Paper sets its own text colour; the icons inherit from it, so it must follow */
+  color: #fdf6e6;
+}
+body[data-lp-stage][data-lp-theme="dark"] .sb-header .MuiIconButton-root,
+body[data-lp-stage][data-lp-theme="dark"] .sb-header .MuiSvgIcon-root,
+body[data-lp-stage][data-lp-theme="dark"] .sb-header .MuiInputBase-root,
+body[data-lp-stage][data-lp-theme="dark"] .sb-header .sb-header-text,
+body[data-lp-stage][data-lp-theme="dark"] .sb-header .sb-header-text svg {
+  color: inherit;
+}
+body[data-lp-stage][data-lp-theme="dark"] .sb-header .sb-header-text:hover {
+  background-color: rgba(253, 246, 230, 0.1);
+}
+body[data-lp-stage][data-lp-theme="dark"] .sb-header img[alt="logo"] {
+  filter: invert(1) brightness(1.3);
+  transition: filter 400ms ease;
+}
