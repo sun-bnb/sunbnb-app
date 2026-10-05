@@ -71,13 +71,19 @@ export default function BeachTour({ tags }: { tags: Record<HeroMode, string> }) 
 
   return (
     <section ref={ref} aria-label={t('label')} className="relative" style={{ height: `${STOPS.length * 85}svh` }}>
-      <div className="sticky top-0 h-[100svh] overflow-hidden bg-[#f7ebd1]">
+      {/* dvh, not svh: when the mobile address bar hides on scroll-down the stage grows to the full
+          screen and the stop cards (bottom-anchored) move down into the freed space. */}
+      <div className="sticky top-0 h-[100svh] overflow-hidden bg-[#f7ebd1] supports-[height:100dvh]:h-[100dvh]">
         {/* The beach, panned like a camera walking along it (slower than the scenes: depth). */}
         <div className="absolute inset-y-0 left-0 w-[220%]" style={{ transform: `translateX(-${(pos / (STOPS.length - 1)) * 54.5}%)` }}>
           <HeroBeach shore={0.12} band={[0.2, 0.5]} mode="book" tags={tags} />
         </div>
         {/* A sand veil behind the scenes: the beach is the place, the scene is the subject. */}
         <div className="pointer-events-none absolute inset-x-0 top-[14%] h-[44%] bg-[#f7ebd1]/75" aria-hidden />
+        {/* The sea's TOP edge is a shoreline too — the hero's sand above meets it in a gentle wave. */}
+        <svg className="pointer-events-none absolute inset-x-0 -top-px h-5 w-[200%] animate-[tour-wave_14s_linear_infinite] motion-reduce:animate-none" viewBox="0 0 1200 20" preserveAspectRatio="none" aria-hidden>
+          <path d="M0 0 H1200 V8 C1150 14 1100 14 1050 8 S950 2 900 8 S800 14 750 8 S650 2 600 8 S500 14 450 8 S350 2 300 8 S200 14 150 8 S50 2 0 8 Z" fill="#f7ebd1" />
+        </svg>
 
         {/* Each stop's scene, gliding in with the scroll. */}
         <div className="pointer-events-none absolute inset-x-0 top-[14%] h-[44%] overflow-hidden" aria-hidden>

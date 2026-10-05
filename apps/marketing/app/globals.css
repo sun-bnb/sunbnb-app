@@ -53,3 +53,10 @@
   from { width: 0%; }
   to { width: 100%; }
 }
+
+/* The tour's top shoreline drifts sideways (components/BeachTour). The path repeats every 600 of
+   1200 units across a 200%-wide SVG, so shifting by a quarter of its width loops seamlessly. */
+@keyframes tour-wave {
+  from { transform: translateX(0); }
+  to { transform: translateX(-25%); }
+}

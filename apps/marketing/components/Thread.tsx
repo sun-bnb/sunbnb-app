@@ -1,7 +1,7 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { Attach, Msg } from '@/lib/journey.ts'
 
 /** Messages shown before "Show conversation" — the product stays in front, the chat behind. */
@@ -32,6 +32,13 @@ export default function Thread({
   const start = Math.max(0, Math.min(msgs.length - VISIBLE, liveIdx < 0 ? Infinity : liveIdx))
   const shown = expanded ? msgs : msgs.slice(start)
   const hidden = msgs.length - shown.length
+
+  // Expanding shows the history ABOVE where the visitor is: the current step stays in view at the
+  // bottom (opening at the top pushed the live step out of sight — "the content disappeared").
+  useLayoutEffect(() => {
+    const box = boxRef.current
+    if (box) box.scrollTop = box.scrollHeight
+  }, [expanded])
 
   useEffect(() => {
     // Scroll the thread itself, never the page.
