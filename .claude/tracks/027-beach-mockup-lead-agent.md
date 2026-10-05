@@ -3,7 +3,7 @@ id: 027-beach-mockup-lead-agent
 title: Beach mockup lead agent — marketing landing page that builds a prospect's beach
 status: active
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-05
 worktree: null
 ---
 
@@ -110,6 +110,61 @@ leads landing in the DB with a summary the founder can act on.
   createdAt, so the Mollie applicationFee and the PLATFORM invoice can't disagree at the boundary.
   Founder promise: still to be chosen (slot hidden).
 
+- **D10 — The page sells the platform, not one feature: ad-matched hero → qualifier → a demo
+  assembled from feature modules** (founder, 2026-10-05). Trigger: the P9 journey made it look
+  as if online sunbed booking were all Sunbnb does. Structure:
+  - **Hero = ONE promise, matched to the ad** (`?a=` angle): bookings, drinks to the sunbed,
+    paperwork done… One message per visit; which one depends on the ad.
+  - **Qualifier asked DURING THE FLY-IN** (founder's call), not before the search: while the map
+    flies in and the shore is read (~3–5 s of existing dead time), one tap-only question "What
+    else do you run?" (beach bar / food · rentals · restaurant tables · just sunbeds) and an
+    optional "What takes most of your time?" (cash & queues · staff · empty / no-show beds ·
+    paperwork). Asking before the search would add a step before the payoff.
+  - **The demo is assembled from ~20 s modules on their own beach**: guest books a sunbed
+    (always, the anchor) · drink ordered to the sunbed → bar ticket (F&B) · paddleboard by the
+    hour (rentals) · your morning: staff grid, one-tap check-in, QR walk-in payment (always) ·
+    day close: cash + cards + invoices reconciled (pain = paperwork, or unanswered) ·
+    Veri*factu-ready invoicing (Spanish beaches, claiming only what track 026 has shipped).
+    Ends on a "Your Sunbnb" card of what they unlocked → projection (P10) → offer → CTA.
+  - **Below the hero for scrollers**: three tappable pillars (more revenue · less work ·
+    paperwork done) that each launch their module, "how it starts" in three steps, pricing line,
+    an objections FAQ (guests without smartphones, walk-ins/cash still work, hardware, setup time).
+  - **"Directed agentic" = rules choose the path, AI adds colour.** Module selection is a
+    deterministic rule table over the qualifier answers — predictable, testable, free, and
+    unable to invent a feature. The model maps free text onto the same answers, narrates
+    modules with the local brief (P12), and answers in the chat (the escape hatch). An agent
+    choosing the next module via a tool restricted to allow-listed modules is a later option,
+    only if funnel data says the rules are too blunt.
+  - **Gate: only shipped features are shown.** Each module is verified against the live product
+    before it is built; the old partner `/info` page claims things (dynamic pricing, hotel
+    channel) that need checking, and card-present (Viva, track 024) is not live.
+
+- **D11 — Immersive UI: the beach IS the page** (founder, 2026-10-05). The first screen is one
+  full-viewport live beach scene; content floats in it.
+  - **One world start to finish**: the illustrated scene (canvas, no Maps API → fast LCP) hands
+    over to the prospect's real map — camera rises to aerial, the map fades in, flies down to
+    their shore. Maps JS loads only on intent (bar focus).
+  - **One command bar for search AND the agent** (founder: yes): bottom thumb zone; accepts a tap
+    (chips), a beach name (Places), or a sentence ("Platja de Muro, 80 beds and a bar") parsed by
+    rules first (numbers, places, keywords) and by Haiku only when genuinely free-form. The agent
+    speaks in bubbles anchored in the scene; every later step is a bubble + chips + the bar.
+  - **Below-hero content = places along the same beach** (founder: yes): scrolling glides the
+    camera to the beach bar (drinks to the sunbed), rental hut, staff/till (day close) — each
+    tappable into its D10 module. Scroll stays NATIVE (pinned world, scroll-triggered camera; no
+    hijacking); "how it starts", FAQ, footer remain ordinary content after it.
+  - Guardrails: headline + bar visible without scrolling; reduced motion = still scene + cuts;
+    headline / pillars / FAQ are real HTML (SEO, a11y), never canvas-only; free text maps onto the
+    same structured answers (D10) — the agent cannot invent features.
+  - **One conversation, start to finish** (founder, 2026-10-05: "same seamless interaction…
+    Telegram style, but completely focused on the product experience"). Landing and `/m/<token>`
+    are ONE `Experience` (world + thread + bar) in different states; "Build" swaps the URL in place
+    (no navigation). Every tap/typed action is echoed as the visitor's message; step UIs ride on
+    the agent's latest message as attachments; only the live step + last lines show, history on
+    demand. **Haiku answers from the first screen** (founder): `/api/guide` — stateless, nothing
+    stored, client-held capped history, tools only steer the page (`find_beach`,
+    `set_sunbed_count`), per-IP + per-session caps; after "Build" the stored lead chat
+    (`/api/chat`). Contact is a message in the bar (server-side capture), the form is optional.
+
 ## The premise that shapes every other decision
 
 **The model does not draw the beach.** The mockup is *generated by code*: Google Places →
@@ -214,9 +269,26 @@ pure layout generator (location TBD — see Q2)
   offer/promise slots (null = hidden) + guard test; "no invented claims" copy test; sticky CTA.
   **Deferred to P9:** the real-app hero poster image (needs the app-faithful map capture) and the
   Lighthouse LCP measurement.
-- ☐ **P9 — Journey + app-faithful map**: reducer `lib/journey.ts`, fly-in / drop-in / settle, PNG
-  sprite canvas on the styled roadmap, LOD, guest + operator steps, `beach-layout` on
-  `generateChairGrid`.
+- ▶ **P9 — Journey + app-faithful map** (BUILT 2026-10-05, uncommitted, browser-verified mobile +
+  desktop): app sprites (`scripts/build-sprites.mjs` → `public/app/*.webp`, `lib/app-sprites.ts`
+  mirrors `SunbedSelection.tsx` layer for layer), `SunbedOverlay` sprite canvas + pop-in + LOD +
+  hint rings + rising "paid" tag, styled roadmap (`mapId`) everywhere; landing = `HeroBeach`
+  self-booking scene → `BeachSearch` → `BeachBuilder` (fly-in, shore snap, docked count control
+  on mobile, Build waits for the shore answer); `/m/[token]` = `MockupJourney` missions (guest
+  booking in an app-style sheet → staff grid in `@repo/floor-core` colours → go live), pure
+  `lib/missions.ts` + tests. **Not done:** `beach-layout` on `generateChairGrid` (moves to P13,
+  where partner geometry matters), hero poster image + Lighthouse.
+- ☐ **P9b — Platform journey (D10)**: (1) shipped-feature audit → module catalogue with the
+  real app surface each one mirrors; (2) qualifier chips in the fly-in + `lib/modules.ts` rule
+  table (answers → ordered modules; pure, tested; every module id must exist in the catalogue);
+  (3) modules beyond the two built (F&B order, rental, day close, Veri*factu ES); (4) "Your
+  Sunbnb" summary card; (5) ad-matched hero headlines per angle; (6) below-fold pillars /
+  how-it-starts / FAQ; (7) qualifier answers stored on the lead (additive columns) and passed to
+  the chat + team email; funnel events per module.
+- ▶ **P9c — Immersive shell (D11)**: full-screen scene first screen + floating headline + agent
+  bubble + one command bar (rules-parsed sentence → beach + count; "near me" + example chips) →
+  then the illustrated→map hand-off, the scroll-driven camera along the beach places, and the
+  agent bubbles carried through builder and missions.
 - ☐ **P10 — Projection** (`lib/projection.ts`, traced outputs, stored, emailed, chat-grounded).
 - ☐ **P11 — AI placement** (after the imagery-licensing gate; eval of 15 labelled beaches).
 - ☐ **P12 — Local intelligence brief** (tiered fetchers + research agent + citation verifier).
@@ -228,84 +300,27 @@ pure layout generator (location TBD — see Q2)
 
 ## Resume here
 
-- **State 2026-10-04 (end of session): P1 + P2 built, NOT committed.** What exists:
-  `apps/marketing` Next 14 app (port 3004, `npm run dev` = HTTPS `server.cjs`; certs + `.env.local`
-  copied from the user app, both gitignored) — landing page `/` with `BeachForm` (Places
-  autocomplete, one Places session per visit, UTM pass-through) → `/beach?place&beds&s` with
-  `BeachMap` (satellite, `SunbedOverlay` = ONE canvas OverlayView, true-to-scale beds; rotate
-  buttons + click-to-move). `/api/places/autocomplete` (validated, rate-limited, trimmed payload)
-  and `/api/coastline` (OSM Overpass → `nearestShoreFrame`; never blocks the page, 30-day cache,
-  fails soft). Pure + tested: `lib/places.ts`, `lib/beach-layout.ts`, `lib/coastline.ts` (89 unit
-  tests). Partner landing CTA (`apps/partner/lib/marketing-cta.ts` + `landing.tsx`,
-  `Landing.seeYourBeach` × 3 locales, `NEXT_PUBLIC_MARKETING_URL` in turbo `globalEnv`) — built
-  by partner-dev, verified in browser.
-- **Ops status (2026-10-04):** ✅ Maps client-key referrer allow-list (founder; verified locally
-  with the real client key — no auth errors, tiles + layout render). ✅ Vercel project
-  `sunbnb-app-marketing` (see Log). ✅ Partner `NEXT_PUBLIC_MARKETING_URL`: production →
-  `https://try.sunbnb.app`, preview → `https://trytest.sunbnb.app`. (4) `try`/`trytest` go live only when `apps/marketing` reaches the `production`/`test`
-  branches — i.e. the founder's normal `promote-to-test.sh` / `deploy-to-production.sh`.
-
-- **Next action:** the chat is configured on Vercel (`ANTHROPIC_API_KEY` set 2026-10-04, sensitive,
-  production + preview). Founder decision: keep the existing key, **no rotation and no Console
-  spend limit** — the only bounds are the in-code abuse limits (per-IP, per-lead, per-message).
-  It goes live with the founder's promote/deploy. Remaining before production: founder review of
-  `/privacy` + new EN/ES/FI copy. Then P0b (local background jobs on qwen3:14b) or P6 (admin
-  leads list).
-- **State 2026-10-04 (end of session): P1 + P2 built, NOT committed.** What exists:
-  `apps/marketing` Next 14 app (port 3004, `npm run dev` = HTTPS `server.cjs`; certs + `.env.local`
-  copied from the user app, both gitignored) — landing page `/` with `BeachForm` (Places
-  autocomplete, one Places session per visit, UTM pass-through) → `/beach?place&beds&s` with
-  `BeachMap` (satellite, `SunbedOverlay` = ONE canvas OverlayView, true-to-scale beds; rotate
-  buttons + click-to-move). `/api/places/autocomplete` (validated, rate-limited, trimmed payload)
-  and `/api/coastline` (OSM Overpass → `nearestShoreFrame`; never blocks the page, 30-day cache,
-  fails soft). Pure + tested: `lib/places.ts`, `lib/beach-layout.ts`, `lib/coastline.ts` (89 unit
-  tests). Partner landing CTA (`apps/partner/lib/marketing-cta.ts` + `landing.tsx`,
-  `Landing.seeYourBeach` × 3 locales, `NEXT_PUBLIC_MARKETING_URL` in turbo `globalEnv`) — built
-  by partner-dev, verified in browser.
-- **Ops status (2026-10-04):** ✅ Maps client-key referrer allow-list (founder; verified locally
-  with the real client key — no auth errors, tiles + layout render). ✅ Vercel project
-  `sunbnb-app-marketing` (see Log). ✅ Partner `NEXT_PUBLIC_MARKETING_URL`: production →
-  `https://try.sunbnb.app`, preview → `https://trytest.sunbnb.app`. (4) `try`/`trytest` go live only when `apps/marketing` reaches the `production`/`test`
-  branches — i.e. the founder's normal `promote-to-test.sh` / `deploy-to-production.sh`.
-
-- **Next action:** read the Haiku 4.5 vs Opus 5.5 eval (`cd apps/marketing && npm run eval:summary`),
-  founder picks the live model; then **P4** (wire `/api/chat` on the chosen model, Anthropic key +
-  spend alert in Vercel) or **P0b** (local background jobs on qwen3:14b). Before production:
-  founder review of `/privacy` + the new EN/ES/FI copy; confirm the `CRON_SECRET` finding (Log).
-- **State 2026-10-04 (end of session): P1 + P2 built, NOT committed.** What exists:
-  `apps/marketing` Next 14 app (port 3004, `npm run dev` = HTTPS `server.cjs`; certs + `.env.local`
-  copied from the user app, both gitignored) — landing page `/` with `BeachForm` (Places
-  autocomplete, one Places session per visit, UTM pass-through) → `/beach?place&beds&s` with
-  `BeachMap` (satellite, `SunbedOverlay` = ONE canvas OverlayView, true-to-scale beds; rotate
-  buttons + click-to-move). `/api/places/autocomplete` (validated, rate-limited, trimmed payload)
-  and `/api/coastline` (OSM Overpass → `nearestShoreFrame`; never blocks the page, 30-day cache,
-  fails soft). Pure + tested: `lib/places.ts`, `lib/beach-layout.ts`, `lib/coastline.ts` (89 unit
-  tests). Partner landing CTA (`apps/partner/lib/marketing-cta.ts` + `landing.tsx`,
-  `Landing.seeYourBeach` × 3 locales, `NEXT_PUBLIC_MARKETING_URL` in turbo `globalEnv`) — built
-  by partner-dev, verified in browser.
-- **Ops status (2026-10-04):** ✅ Maps client-key referrer allow-list (founder; verified locally
-  with the real client key — no auth errors, tiles + layout render). ✅ Vercel project
-  `sunbnb-app-marketing` (see Log). ✅ Partner `NEXT_PUBLIC_MARKETING_URL`: production →
-  `https://try.sunbnb.app`, preview → `https://trytest.sunbnb.app`. (4) `try`/`trytest` go live only when `apps/marketing` reaches the `production`/`test`
-  branches — i.e. the founder's normal `promote-to-test.sh` / `deploy-to-production.sh`.
-
-- **Next action:** finish P0. Load the `claude-api` skill, add a Claude implementation of
-  `LeadAgentModel` (tool use + streaming), and run Haiku 4.5 through `npm run eval` —
-  **needs `ANTHROPIC_API_KEY` from the founder**. Record the result against qwen3:14b's
-  40/40 in the Log. Then P0b (local background jobs on qwen3:14b) or P1, founder's call.
-- **State on disk (uncommitted at time of writing):** `apps/marketing/` holds only the agent
-  library (`lib/agent/`) and the eval harness (`eval/`) — no Next.js app yet (P1). Run:
-  `npm test`, `npm run typecheck`, `npm run eval -- --models <a,b> [--repeat N] [--scenario id]`.
-  Ollama is installed via Homebrew (`brew services start ollama`); models pulled: qwen3:14b,
-  mistral-small3.2:24b, llama3.1:8b.
-- **Context needed:** this file; `.claude/rules/architecture.md` (new app + new model =
-  architecture pass before P1/P3 code); `.claude/rules/migrations.md` (P3); `/ui marketing`
-  doesn't exist yet — prime with `/ui user` and create `apps/marketing/UI.md` in P1.
-  Existing geo-map rendering to mirror: `apps/partner/app/sites/[id]/inventory/InventoryMap.tsx`,
-  `SunbedMarker.tsx`; schematic types `packages/schematic/src/types.ts`.
-- **Blocked by:** the Haiku run needs an Anthropic API key. P4 needs the Q3 batch-host
-  decision and the Anthropic DPA.
-- This track introduces the repo's first AI integration.
+- **State 2026-10-05:** P0–P8 + D9 committed and pushed. **P9 built, NOT committed** (all in
+  `apps/marketing`; see the P9 roadmap line for the file map). Typecheck, lint and 157 marketing
+  unit tests green; full journey verified in Playwright (iPhone 13 + 1440 desktop): hero →
+  search → fly-in/shore snap → count → Build → `/m/<token>` → guest booking → staff check-in →
+  demo form, no console errors.
+- **P9c built (uncommitted): one conversation over one world**, landing → build → guest → staff →
+  go live, Haiku from the first screen. Remaining P9c: the aerial illustrated→map hand-off, the
+  scroll-driven camera along the beach places (below-hero content), agent narration lines.
+- **Next action: P9b (D10).** Start with the shipped-feature audit (what can each module
+  honestly show — F&B orders, rentals, table bookings, QR walk-ins, day close/invoicing are
+  believed shipped; dynamic pricing, hotel channel, Viva need checking), then the qualifier in
+  `BeachBuilder`'s fly-in phase and the `lib/modules.ts` rule table, then modules one by one.
+- **Before production:** founder review of the new EN/ES/FI copy (Journey, Missions, Hero),
+  `/privacy`, the founder promise wording; Meta Pixel / Google Ads IDs in Vercel; Viva zero-ISV
+  answer (track 024) before Viva goes live; a production deploy activates `CRON_SECRET` on
+  user/partner/admin.
+- **Local dev gotcha:** if the marketing page renders unstyled, its `.next` went stale (every
+  `/_next/static/*` 404s) — kill :3004, `rm -rf apps/marketing/.next`, restart `npm run dev`.
+- **Context needed:** this file; plan `~/.claude/plans/first-let-s-plan-the-gleaming-salamander.md`;
+  `/ui user` for the app's visual language; `packages/floor-core/src/bed-state.ts`
+  (`getCellAppearance`) for staff-grid colours.
 
 ## Open decisions
 
@@ -328,6 +343,101 @@ pure layout generator (location TBD — see Q2)
   session turn/token caps on the API path (they now also cap spend).
 
 ## Log
+
+- **2026-10-05** — **Agent product knowledge (founder: "it wasn't sure about verifactu").** The
+  ten-line fact sheet → `lib/agent/knowledge.ts`: 18 curated entries, each with a status
+  (`shipped` / `coming` / `not_offered`), what the agent may say, `neverClaim` fences, declared
+  figures and the code/track sources it was verified against (code audit 2026-10-05). Whole in the
+  cached system prompt of BOTH agents (guide + lead chat) — no retrieval at this size; add a search
+  tool over the same entries past ~40k tokens. Contract tests (`knowledge-schema.ts`): sources
+  required, every stated number declared (feeds the eval allow-list), a `coming` entry can't read
+  as live. Founder decision: **Veri*factu = "coming before the 2027 deadline"**, never live/certified.
+  The audit found public overclaims the knowledge fences off: staff "scan" QR passes (no scanner —
+  lookup by name/phone/email; also fixed in our own `Facts.f1` copy, EN/ES/FI), hourly sunbeds,
+  Stripe for guests, dynamic pricing / discounts / forecasts / feedback / hotel channel
+  (`apps/partner/app/info`), tiered refunds (`apps/user/app/cancellation-policy`; code refunds 100 %),
+  the live Veri*factu legal page (QR + "certified"), and stale "5 % / 2 % / 0 %" fee upsells in the
+  partner site settings (real ladder 6 / 3 / 1.5 %). Those pages are partner/user-app work, not
+  fixed here. Eval: 4 new scenarios (verifactu, qr-scanning, hourly-sunbeds, dynamic-pricing);
+  Haiku 4.5 47/48 ×2 (the miss: a Spanish pricing reply 3 words over the 120 cap).
+
+- **2026-10-05** — **Copacabana: front rows still drawn in the sea — basemap ≠ OSM.** By the OSM
+  coastline the front row stood 5.6–6 m up the sand, but Google's basemap draws water ~20 m
+  further inland there (Platja de Muro happens to agree). The visitor sees Google's water, so
+  placement alone can't fix it. Fix: paint the sand the beds were placed by — `shoreBand` (a strip
+  along the OSM coast from the waterline to just behind the back row) + `parcelGround` (pad under
+  the parcel), in the basemap's own sand colour `#f8ecd0` (sampled), under the beds. Invisible where
+  the two agree, one continuous beach where they don't. Bug found on the way: drawing strip + pad
+  as ONE canvas path cancelled their overlap (opposite windings) — a hole exactly under the beds;
+  each shape is filled separately. Tests: band stays on the land side and follows a bend; pad
+  covers every bed.
+
+- **2026-10-05** — **Parcel kept out of the sea.** Founder: "rotated parcel tends to be partially
+  out in the sea". `/api/coastline` now also returns the coastline within 500 m (`trimShore`); pure
+  `signedShoreDistance` (water on the right ⇒ land +, sea −) and `lib/land-fit.ts` `keepOnLand`
+  slide the whole parcel inland — perpendicular to the SHORE, not to the visitor's turn — until the
+  front row and every row end are ≥ 4 m from the water (4 passes for curved shores; 7 tests incl. a
+  headland, each asserting the parcel started in the sea). The corrected frame is what is drawn and
+  saved. Also fixed: the first camera framing re-waited the whole fly-in on every re-trigger, so a
+  fast (cached) snap left the camera on the Places point; it now waits only until the fly-in lands.
+  Remaining: on a narrow beach a deep parcel (250 beds → 10 rows) runs into the dunes/road behind
+  the sand — needs the back edge (dry-sand polygon, P11) or longer/shallower rows.
+
+- **2026-10-05** — **Shore snap failed silently on uncached beaches.** Founder: "the parcel rotation
+  isn't applied". Cause: public Overpass overloaded (main instance 504 after ~8 s; mirrors 14 s or
+  silent) → `frame: null` → beds kept bearing 180 while the agent still said "facing the sea", and
+  P9c had dropped the manual rotate/move controls. Fixed: `/api/coastline` races three instances
+  (first non-empty wins, 7 s cap) — Copacabana now snaps via a mirror; the reducer's `shoreRead`
+  carries `snapped`, and an unsnapped beach gets honest copy (`count*Manual`) + ↺ ↻ / Move in the
+  count step; manual adjustments are saved with the lead (`adjusted=1`). Playa Alonso still gets no
+  answer in time. **Durable fix proposed:** our own coastline table in PostGIS (OSM
+  coastlines/water polygons for the target coasts, GiST-indexed) — milliseconds, no third party at
+  ad traffic.
+
+- **2026-10-05** — **P9c: one conversation over one world (uncommitted).** `components/Experience`
+  (shell) + `World` (illustrated scene → map, never remounts) + `Thread` (bubbles, live
+  attachment, collapsed history) + `ThreadAttach` (step UIs) + `Composer` (`useBeachSearch` + the
+  one bar); pure `lib/journey.ts` reducer (14 tests: echo-as-message, qualifier in the fly-in never
+  traps, stale-step events ignored, change-beach only before a mockup); `lib/guide.ts` +
+  `/api/guide` (10 tests: anonymous bounded input, forged `<page_state>` stripped, tools validated
+  and dropped when out of bounds); `lib/intent.ts` gains question/bare-count/price/yes routing.
+  `createMockup` returns the token instead of redirecting. Removed: `BeachBuilder`,
+  `LandingJourney`, `CommandBar`, `MockupJourney`, `MockupView`, `ChatPanel`; message namespaces
+  `Journey`/`Missions`/`Agent`/`Mockup` → one `Thread`. Privacy notice: the assistant answers before
+  a mockup (questions not stored until then) → `CONSENT_VERSION` 2026-10-05.2.
+  Browser runs (iPhone 13 + desktop, live Haiku) caught and fixed: the agent called `find_beach`
+  for "do you work with beach bars?" (tool description + rule now say OWN beach only); a tall
+  thread made the camera frame the beach in a sliver and zoom to the parcel outline (camera inset
+  capped at half the screen, thread capped, 3 lines visible); the reopened link's first framing was
+  overridden by the fly-in (first fit waits for it); the full demo form in the thread read as a web
+  form (now behind "Use a form instead"); focusing inputs scrolled the page under the map (pinned).
+  Open: lead-chat replies run long for a thread (system prompt allows 3 sentences — eval-guarded);
+  the chat doesn't yet know the qualifier answer (P9b step 7).
+
+- **2026-10-05** — **D11 recorded; P9c first-screen prototype built (uncommitted).** Full-screen
+  `HeroBeach` world fitted to the floating UI by measurement (shore under the headline block, 1–3
+  bed rows in whatever band is left); headline + short launch-offer pill (`launchOfferShort`,
+  full terms on tap; guard test: short exists iff full does) on the sea; agent bubble + one
+  `CommandBar` (replaces `BeachSearch`) in the thumb zone with "Near me" (autocomplete biased to
+  coordinates rounded to ~1 km, `parseNear`) and "Show me an example" chips. Sentences are read by
+  pure `lib/intent.ts` (count needs a unit word in EN/ES/FI so an address number never becomes a
+  count; also detects bar / rentals / tables for the D10 qualifier). Verified iPhone 13, iPhone SE,
+  1440 desktop: "Platja de Muro, 80 beds and a bar" → builder opens at 80, shore-snapped. Phones
+  hide the subtitle (bubble + scene carry it) and short screens shrink the headline, or the bar
+  fell below the fold on an SE.
+
+- **2026-10-05** — **D10 recorded; P9 journey built (uncommitted).**
+  - Founder: the page read as "we make sunbeds bookable online" only. Decided: ad-matched
+    one-promise hero, a qualifier asked during the fly-in, and a demo assembled from feature
+    modules chosen by a rule table (AI narrates and maps free text; it does not pick features).
+  - P9 findings that became code: on mobile a sticky map hid the count control → the control
+    moved into a bottom dock with the Build button; the cookie banner covered that dock → top
+    of screen on mobile; a cold Overpass answer took 4.6 s and Build pressed before it saved the
+    parcel unturned on the Places point (on a road) → Build queues until the shore answer, and
+    `createMockup` only saves `placement = 'waterline'` layouts; fitBounds rounded to whole
+    zooms and shrank the beds → `isFractionalZoomEnabled`.
+  - Superseded and removed: `MockupWorkspace`, `DemoBookingPanel`, `StickyCta`, `BeachForm`
+    and the `Booking` / `Cta` message namespaces.
 
 - **2026-10-05** — **D9 launch offer built** (migration `20261005062737_add_partner_promotion`, additive).
   - Charge points wrapped: payment creation (`reservation-payment.ts`, `rental-payment.ts`, user
