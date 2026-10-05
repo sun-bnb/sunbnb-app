@@ -23,6 +23,7 @@ import Thread from './Thread'
 import { BedCard, BigButton, chipCls, Chips, CountCard, DayCloseCard, OrderCard, PassCard, PayCard, RentalCard, RunsChips, StaffCard, SummaryCard, TablesCard, VerifactuCard, cardCls } from './ThreadAttach'
 import World, { FLY_MS, type Insets } from './World'
 import HeroSlides, { type HeroSlide } from './HeroSlides'
+import HeroVignettes from './HeroVignettes'
 import type { HeroMode } from './HeroBeach'
 
 type Frame = Required<Pick<LayoutInput, 'anchor' | 'seaBearingDeg' | 'placement'>>
@@ -632,7 +633,7 @@ export default function Experience({
   return (
     // Once about a beach, the experience is pinned to the viewport: focusing an input or a long
     // thread can't scroll the page out from under the map.
-    <section ref={stageRef} className={`w-full overflow-hidden ${s.beach ? 'fixed inset-0 z-10 h-[100svh]' : 'relative h-[100svh] min-h-[600px]'}`}>
+    <section ref={stageRef} className={`w-full overflow-hidden ${s.beach ? 'fixed inset-0 z-10 h-[100svh]' : 'relative h-[100svh] min-h-[560px]'}`}>
       <World
         apiKey={apiKey}
         center={s.beach ? { lat: s.beach.lat, lng: s.beach.lng } : null}
@@ -655,6 +656,13 @@ export default function Experience({
           <p role="status" className="rounded-full bg-[#0e3a4a]/90 px-4 py-2 text-sm text-white shadow">
             {t('moveHint')}
           </p>
+        </div>
+      )}
+
+      {/* Each feature slide's own scene, scrolled in over the sand (the beach's sunbeds fade out). */}
+      {!s.beach && scene && (
+        <div className="pointer-events-none absolute inset-x-0" style={{ top: `${scene.band[0] * 100}%`, height: `${(scene.band[1] - scene.band[0]) * 100}%` }}>
+          <HeroVignettes mode={SLIDE_MODES[slide]!} reduced={reducedMotion} />
         </div>
       )}
 
@@ -708,14 +716,14 @@ const richNode = (n: unknown) => n as ReactNode
 function OfferPill({ short, full }: { short: string; full: string }) {
   const [open, setOpen] = useState(false)
   return (
-    <div className="pointer-events-auto relative mt-4 max-w-xl">
+    <div className="pointer-events-auto relative mt-4 max-w-xl [@media(max-height:700px)]:mt-2.5">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50/95 px-3 py-1 text-left text-xs font-medium text-amber-800 shadow-sm sm:px-3.5 sm:py-1.5 sm:text-sm"
+        className="inline-flex max-w-full items-center gap-2 rounded-full border border-amber-200 bg-amber-50/95 px-3 py-1 text-left text-xs font-medium [@media(max-height:700px)]:whitespace-nowrap text-amber-800 shadow-sm sm:px-3.5 sm:py-1.5 sm:text-sm"
       >
-        {short}
+        <span className="min-w-0 truncate">{short}</span>
         <svg className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden>
           <path fillRule="evenodd" d="M5.2 7.2a1 1 0 0 1 1.4 0L10 10.6l3.4-3.4a1 1 0 1 1 1.4 1.4l-4.1 4.1a1 1 0 0 1-1.4 0L5.2 8.6a1 1 0 0 1 0-1.4Z" clipRule="evenodd" />
         </svg>

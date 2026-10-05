@@ -50,6 +50,36 @@
         "tag": "Kuitti lähetetty"
       },
       "show": "Näytä: {feature}"
+    },
+    "v": {
+      "sunbed": "Aurinkotuoli A3",
+      "item1": "Limonadi",
+      "item2": "Kivennäisvesi",
+      "orderPay": "Tilaa ja maksa",
+      "paid": "Maksettu",
+      "board": "Tilaukset · baari",
+      "st_new": "Uusi",
+      "st_preparing": "Valmisteilla",
+      "st_ready": "Valmis",
+      "st_delivered": "Toimitettu",
+      "rentals": "Vuokraukset · tänään",
+      "byHour": "Tunneittain",
+      "pickedUp": "Noudettu",
+      "returned": "Palautettu",
+      "frontDesk": "Vastaanotto",
+      "today": "Tänään",
+      "reserved": "Varattu, maksettu",
+      "checkedIn": "Kirjattu sisään",
+      "rc_title": "Kuitti",
+      "rc_venue": "Beach clubisi",
+      "rc_sunbed": "Aurinkotuoli A3 · yksi päivä",
+      "rc_drinks": "Limonadi, kivennäisvesi",
+      "rc_board": "SUP-lauta · tunneittain",
+      "rc_vat": "ALV mukana, verokannoittain",
+      "rc_numbered": "Oma laskunumerointisi",
+      "rc_sent": "Kuitti lähetetty",
+      "paddleboard": "SUP-lauta",
+      "rc_qr": "Kuitti verkossa"
     }
   },
   "Facts": {

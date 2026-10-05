@@ -50,6 +50,36 @@
         "tag": "Receipt sent"
       },
       "show": "Show: {feature}"
+    },
+    "v": {
+      "sunbed": "Sunbed A3",
+      "item1": "Lemonade",
+      "item2": "Sparkling water",
+      "orderPay": "Order and pay",
+      "paid": "Paid",
+      "board": "Orders · bar",
+      "st_new": "New",
+      "st_preparing": "Preparing",
+      "st_ready": "Ready",
+      "st_delivered": "Delivered",
+      "rentals": "Rentals · today",
+      "byHour": "By the hour",
+      "pickedUp": "Picked up",
+      "returned": "Returned",
+      "frontDesk": "Front desk",
+      "today": "Today",
+      "reserved": "Reserved, paid",
+      "checkedIn": "Checked in",
+      "rc_title": "Receipt",
+      "rc_venue": "Your beach club",
+      "rc_sunbed": "Sunbed A3 · one day",
+      "rc_drinks": "Lemonade, sparkling water",
+      "rc_board": "Paddleboard · by the hour",
+      "rc_vat": "VAT included, by rate",
+      "rc_numbered": "Your own invoice numbering",
+      "rc_sent": "Receipt sent",
+      "paddleboard": "Paddleboard",
+      "rc_qr": "Receipt online"
     }
   },
   "Facts": {

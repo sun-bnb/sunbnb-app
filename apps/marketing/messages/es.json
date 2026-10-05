@@ -50,6 +50,36 @@
         "tag": "Recibo enviado"
       },
       "show": "Ver: {feature}"
+    },
+    "v": {
+      "sunbed": "Hamaca A3",
+      "item1": "Limonada",
+      "item2": "Agua con gas",
+      "orderPay": "Pedir y pagar",
+      "paid": "Pagado",
+      "board": "Pedidos · barra",
+      "st_new": "Nuevo",
+      "st_preparing": "Preparando",
+      "st_ready": "Listo",
+      "st_delivered": "Entregado",
+      "rentals": "Alquileres · hoy",
+      "byHour": "Por horas",
+      "pickedUp": "Recogido",
+      "returned": "Devuelto",
+      "frontDesk": "Recepción",
+      "today": "Hoy",
+      "reserved": "Reservada, pagada",
+      "checkedIn": "Llegada registrada",
+      "rc_title": "Recibo",
+      "rc_venue": "Tu beach club",
+      "rc_sunbed": "Hamaca A3 · un día",
+      "rc_drinks": "Limonada, agua con gas",
+      "rc_board": "Tabla de paddle · por horas",
+      "rc_vat": "IVA incluido, por tipo",
+      "rc_numbered": "Tu propia numeración de facturas",
+      "rc_sent": "Recibo enviado",
+      "paddleboard": "Tabla de paddle",
+      "rc_qr": "Recibo online"
     }
   },
   "Facts": {

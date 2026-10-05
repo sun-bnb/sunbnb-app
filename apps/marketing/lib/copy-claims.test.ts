@@ -10,6 +10,8 @@ import { describe, expect, it } from 'vitest'
 const ALLOWED: Record<string, string> = {
   'Thread.mod_verifactu': 'the 2027 Veri*factu deadline — founder-approved wording (track 027, lib/agent/knowledge.ts)',
   'Thread.vf_badge': 'the 2027 Veri*factu deadline — founder-approved wording',
+  'Hero.v.sunbed': 'a sunbed label in an illustration (A3), not a figure',
+  'Hero.v.rc_sunbed': 'a sunbed label in an illustration (A3), not a figure',
   'Thread.greeting': 'quotes an example of what to type ("…, 80 sunbeds and a bar"), not a claim',
 }
 

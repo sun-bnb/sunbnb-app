@@ -45,7 +45,7 @@ export default function HeroSlides({
           )
         })}
       </div>
-      <div className="pointer-events-auto mt-4 flex gap-1.5" role="tablist">
+      <div className="pointer-events-auto mt-4 flex gap-1.5 [@media(max-height:700px)]:mt-2.5" role="tablist">
         {slides.map((s, i) => (
           <button
             key={s.mode}

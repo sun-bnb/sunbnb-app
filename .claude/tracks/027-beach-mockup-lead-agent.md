@@ -346,6 +346,16 @@ pure layout generator (location TBD — see Q2)
 
 ## Log
 
+- **2026-10-05** — **Hero slides get their own scenes.** Founder: on every slide "the sunbeds never
+  went away" — the feature showcase only changed tags on the same beach. Now booking keeps the live
+  beach, and for every other slide the sunbeds fade out and that feature's scene scrolls in over the
+  sand (`HeroVignettes`, a horizontal strip): a phone ordering to the sunbed + the bar's order board
+  moving New → Delivered, a board rack with boards leaving and returning, the staff grid flipping
+  reserved → checked in, a receipt printing then "Receipt sent". Scenes are designed at 250 px and
+  scaled to the band they get; the sea stays as the shared backdrop. iPhone SE (320×568): offer pill
+  truncates on short screens, chips scroll sideways under 400 px, stage min-height 560 px — before
+  this the bar fell below the fold.
+
 - **2026-10-05** — **P9b: the demo follows what they run (D10).** Pure rule table `lib/modules.ts`
   (`planModules`): fnb → drinks to the sunbed on the bar's order board (the map raises
   "Drinks · paid" on the guest's bed); rentals → paddleboard picked up / returned; tables → seat a

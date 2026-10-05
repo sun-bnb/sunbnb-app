@@ -19,12 +19,14 @@ const QRCode = QRCodeLib as unknown as FC<{ value: string; size?: number; style?
 
 export const cardCls = 'rounded-2xl border border-[#0e3a4a]/10 bg-white/95 p-3 shadow-md backdrop-blur'
 export const chipCls =
-  'flex items-center gap-1.5 rounded-full border border-[#0e3a4a]/15 bg-white/95 px-3.5 py-2 text-sm font-medium text-[#0e3a4a] shadow-sm backdrop-blur transition active:scale-95'
+  'flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[#0e3a4a]/15 bg-white/95 px-3.5 py-2 text-sm font-medium [@media(max-width:400px)]:px-3 [@media(max-width:400px)]:text-[13px] text-[#0e3a4a] shadow-sm backdrop-blur transition active:scale-95'
 const bigBtn =
   'w-full rounded-xl bg-[#0e3a4a] px-5 py-3 text-base font-semibold text-white shadow-[0_4px_0_#06222c] transition active:translate-y-[3px] active:shadow-[0_1px_0_#06222c] disabled:opacity-50 disabled:shadow-none'
 
 export function Chips({ children }: { children: ReactNode }) {
-  return <div className="flex flex-wrap gap-2">{children}</div>
+  // Wraps on roomy screens; on the narrowest phones one row that scrolls sideways, so the bar
+  // below never gets pushed off screen.
+  return <div className="flex flex-wrap gap-2 [@media(max-width:400px)]:-mr-3 [@media(max-width:400px)]:flex-nowrap [@media(max-width:400px)]:overflow-x-auto [@media(max-width:400px)]:pr-3">{children}</div>
 }
 
 export function BigButton({ onClick, disabled, children }: { onClick: () => void; disabled?: boolean; children: ReactNode }) {
