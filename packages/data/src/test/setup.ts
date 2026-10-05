@@ -7,6 +7,8 @@
 
 // Must be set before any prisma import
 process.env.POSTGRES_URL = 'postgres://postgres:sunbnb@localhost:5432/sunbnb_test'
+// The coastline lives in its own database (coastline/schema.sql); tests use a local throwaway one.
+process.env.COASTLINE_POSTGRES_URL = 'postgres://postgres:sunbnb@localhost:5432/coastline_test'
 process.env.ALLOWED_ORIGINS = 'https://test.sunbnb.app'
 process.env.RESEND_API_KEY = 'test-key'
 process.env.AUTH_SECRET = process.env.AUTH_SECRET ?? 'integration-test-auth-secret'
@@ -51,9 +53,6 @@ export async function cleanDatabase() {
       "device",
       "account_feature_flag",
       -- Marketing leads (track 027) are standalone: no FK reaches them.
-      "coast_line",
-      "coast_water",
-      "coast_tile",
       "lead_event",
       "lead",
       -- The fiscal chains have NO foreign key to anything we truncate below --

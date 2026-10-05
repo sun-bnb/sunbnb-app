@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
-import { cleanDatabase, disconnectDatabase } from './test/setup'
+import { Client } from 'pg'
+import { disconnectDatabase } from './test/setup'
 import { clearImportedRegion, coastlineNear, insertImportedLines, insertImportedWater, markImportedTiles, storeCoastTile, uncoveredCoastTiles, waterNear } from './coastline-db'
 
 const M = 111_320
@@ -7,7 +8,14 @@ const at = { lat: 39.85, lng: 3.15 }
 const off = (e: number, n: number) => ({ lat: at.lat + n / M, lng: at.lng + e / (M * Math.cos((at.lat * Math.PI) / 180)) })
 
 describe('coastline cache', () => {
-  beforeEach(cleanDatabase)
+  // Its own database (COASTLINE_POSTGRES_URL → coastline_test, set in test/setup.ts).
+  beforeEach(async () => {
+    const c = new Client({ connectionString: process.env.COASTLINE_POSTGRES_URL })
+    await c.connect()
+    if ((await c.query('SELECT current_database() db')).rows[0].db !== 'coastline_test') throw new Error('refusing to truncate a non-test coastline database')
+    await c.query('TRUNCATE coast_line, coast_water, coast_tile')
+    await c.end()
+  })
   afterAll(disconnectDatabase)
 
   it('a tile is uncovered until stored — including an empty, coast-less tile', async () => {

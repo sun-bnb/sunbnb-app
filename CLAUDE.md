@@ -110,7 +110,8 @@ cd apps/user && npm run test        # unit + API route + server action tests
 **Test DB setup** (for integration tests):
 ```bash
 docker exec sunbnb-postgres psql -U postgres -c "CREATE DATABASE sunbnb_test;"
-cd packages/data && npm run test:integration:setup   # runs prisma migrate deploy against sunbnb_test
+docker exec sunbnb-postgres psql -U postgres -c "CREATE DATABASE coastline_test;"   # marketing coastline DB (track 027)
+cd packages/data && npm run test:integration:setup   # migrate deploy → sunbnb_test, coastline schema → coastline_test
 ```
 
 ### Database
