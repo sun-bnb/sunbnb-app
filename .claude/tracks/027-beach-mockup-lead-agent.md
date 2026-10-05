@@ -346,6 +346,24 @@ pure layout generator (location TBD — see Q2)
 
 ## Log
 
+- **2026-10-05** — **Coastline moved to its OWN database (founder: option A).** `CREATE DATABASE
+  coastline` in the production Neon project (same compute, no new bill); schema is NOT a Prisma
+  migration but `packages/data/coastline/schema.sql` (idempotent, PostGIS) applied with
+  `npm run coastline:schema` (COASTLINE_POSTGRES_URL decides where). `coastline-db.ts` now issues
+  raw SQL only over `COASTLINE_POSTGRES_URL` (required; unset → calls throw → the route falls back
+  to manual turning) — no dependency on app models. Role `coast_rw` (LOGIN; CONNECT on coastline;
+  SELECT/INSERT/UPDATE/DELETE on the three coast tables) — verified it has no USAGE on the app
+  DB's public schema. Spain imported into it (17 s). Vercel `sunbnb-app-marketing`:
+  `COASTLINE_POSTGRES_URL` = coast_rw@coastline, sensitive, Production + Preview (test and prod
+  share one copy). Local: `coastline` + `coastline_test` databases in Docker
+  (`test:integration:setup` applies the schema; integration tests truncate coastline_test only).
+  Coastline rows deleted from the prod, test and local APP databases.
+  **Contract step still to do (next release, migrations.md):** test + production run `bfbc2f5`,
+  whose coastline code still reads the app-DB tables when the env var is unset — drop them only
+  after this code is deployed everywhere: remove CoastTile/CoastLine/CoastWater from
+  schema.prisma + a `DROP TABLE coast_line, coast_water, coast_tile` migration (+ partner mock
+  delegates), applied to test at promote and to prod at deploy.
+
 - **2026-10-05** — **Bulk OSM coastline + water polygons (founder: options 1+2, Spain + Balearics,
   world-ready).** Migration `20261005151126_add_coast_water` (additive: `coast_water` polygons with
   GiST; `coast_tile.source`). `scripts/import-coastline.ts` streams osmdata.openstreetmap.de's
