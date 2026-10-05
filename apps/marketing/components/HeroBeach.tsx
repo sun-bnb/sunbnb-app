@@ -74,6 +74,10 @@ export default function HeroBeach({
 
     function layout() {
       const rect = canvas!.getBoundingClientRect()
+      // Re-assigning canvas.width wipes the canvas — skip no-op resizes (ResizeObserver fires for
+      // sub-pixel changes), and on a real one repaint at once below rather than leaving a blank
+      // frame until the next animation tick (that blank frame was a visible flicker on mobile).
+      if (Math.abs(rect.width - width) < 0.5 && Math.abs(rect.height - height) < 0.5) return
       width = rect.width
       height = rect.height
       const dpr = window.devicePixelRatio || 1
@@ -102,6 +106,7 @@ export default function HeroBeach({
       }
       // Keep the scene's state across a resize.
       prev.forEach((b, i) => beds[i] && (beds[i]!.status = b.status))
+      draw(performance.now())
     }
 
     function shoreY(x: number, now: number) {

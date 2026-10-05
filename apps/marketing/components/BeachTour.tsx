@@ -74,30 +74,35 @@ export default function BeachTour({ tags }: { tags: Record<HeroMode, string> }) 
       {/* dvh, not svh: when the mobile address bar hides on scroll-down the stage grows to the full
           screen and the stop cards (bottom-anchored) move down into the freed space. */}
       <div className="sticky top-0 h-[100svh] overflow-hidden bg-[#f7ebd1] supports-[height:100dvh]:h-[100dvh]">
-        {/* The beach, panned like a camera walking along it (slower than the scenes: depth). */}
-        <div className="absolute inset-y-0 left-0 w-[220%]" style={{ transform: `translateX(-${(pos / (STOPS.length - 1)) * 54.5}%)` }}>
-          <HeroBeach shore={0.12} band={[0.2, 0.5]} mode="book" tags={tags} />
-        </div>
-        {/* A sand veil behind the scenes: the beach is the place, the scene is the subject. */}
-        <div className="pointer-events-none absolute inset-x-0 top-[14%] h-[44%] bg-[#f7ebd1]/75" aria-hidden />
-        {/* The sea's TOP edge is a shoreline too — the hero's sand above meets it in a gentle wave. */}
-        <svg className="pointer-events-none absolute inset-x-0 -top-px h-5 w-[200%] animate-[tour-wave_14s_linear_infinite] motion-reduce:animate-none" viewBox="0 0 1200 20" preserveAspectRatio="none" aria-hidden>
-          <path d="M0 0 H1200 V8 C1150 14 1100 14 1050 8 S950 2 900 8 S800 14 750 8 S650 2 600 8 S500 14 450 8 S350 2 300 8 S200 14 150 8 S50 2 0 8 Z" fill="#f7ebd1" />
-        </svg>
+        {/* Everything top-anchored sits in a LARGEST-viewport box (lvh): when the mobile address bar
+            hides, the stage grows but this layer — and the canvas inside it — keeps its size, so
+            nothing is resized (a canvas resize wipes it: that was the scroll-down flicker). */}
+        <div className="absolute inset-x-0 top-0 h-[100svh] supports-[height:100lvh]:h-[100lvh]">
+          {/* The beach, panned like a camera walking along it (slower than the scenes: depth). */}
+          <div className="absolute inset-y-0 left-0 w-[220%]" style={{ transform: `translateX(-${(pos / (STOPS.length - 1)) * 54.5}%)` }}>
+            <HeroBeach shore={0.12} band={[0.2, 0.5]} mode="book" tags={tags} />
+          </div>
+          {/* A sand veil behind the scenes: the beach is the place, the scene is the subject. */}
+          <div className="pointer-events-none absolute inset-x-0 top-[14%] h-[44%] bg-[#f7ebd1]/75" aria-hidden />
+          {/* The sea's TOP edge is a shoreline too — the hero's sand above meets it in a gentle wave. */}
+          <svg className="pointer-events-none absolute inset-x-0 -top-px h-5 w-[200%] animate-[tour-wave_14s_linear_infinite] motion-reduce:animate-none" viewBox="0 0 1200 20" preserveAspectRatio="none" aria-hidden>
+            <path d="M0 0 H1200 V8 C1150 14 1100 14 1050 8 S950 2 900 8 S800 14 750 8 S650 2 600 8 S500 14 450 8 S350 2 300 8 S200 14 150 8 S50 2 0 8 Z" fill="#f7ebd1" />
+          </svg>
 
-        {/* Each stop's scene, gliding in with the scroll. */}
-        <div className="pointer-events-none absolute inset-x-0 top-[14%] h-[44%] overflow-hidden" aria-hidden>
-          <div className="flex h-full" style={{ transform: `translateX(-${pos * 100}%)` }}>
-            {STOPS.map((m, i) => (
-              <div key={m} className="flex h-full w-full shrink-0 items-center justify-center px-4">
-                <FitScale>
-                  {m === 'order' && <OrderScene active={active === i} />}
-                  {m === 'rent' && <RentScene active={active === i} />}
-                  {m === 'checkin' && <CheckinScene active={active === i} />}
-                  {m === 'invoice' && <InvoiceScene active={active === i} />}
-                </FitScale>
-              </div>
-            ))}
+          {/* Each stop's scene, gliding in with the scroll. */}
+          <div className="pointer-events-none absolute inset-x-0 top-[14%] h-[44%] overflow-hidden" aria-hidden>
+            <div className="flex h-full" style={{ transform: `translateX(-${pos * 100}%)` }}>
+              {STOPS.map((m, i) => (
+                <div key={m} className="flex h-full w-full shrink-0 items-center justify-center px-4">
+                  <FitScale>
+                    {m === 'order' && <OrderScene active={active === i} />}
+                    {m === 'rent' && <RentScene active={active === i} />}
+                    {m === 'checkin' && <CheckinScene active={active === i} />}
+                    {m === 'invoice' && <InvoiceScene active={active === i} />}
+                  </FitScale>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
