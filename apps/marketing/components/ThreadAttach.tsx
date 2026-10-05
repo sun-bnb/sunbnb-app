@@ -9,6 +9,7 @@ import type { Run } from '@/lib/intent.ts'
 import { exampleBookings, staffWindow } from '@/lib/missions.ts'
 import { MAX_SUNBEDS } from '@/lib/places.ts'
 import { project } from '@/lib/projection.ts'
+import { DEMO_PRICES, drinksTotal, formatEur } from '@/lib/demo-prices.ts'
 
 // react-qr-code types against the hoisted @types/react 19 (same cast as apps/user PassView).
 const QRCode = QRCodeLib as unknown as FC<{ value: string; size?: number; style?: React.CSSProperties }>
@@ -324,6 +325,7 @@ function Pipeline({ steps, onDone, doneKey }: { steps: string[]; onDone: (echoKe
 
 export function OrderCard({ guestBed, onDone }: { guestBed: string; onDone: (echoKey: string) => void }) {
   const t = useTranslations('Thread')
+  const locale = useLocale()
   return (
     <div className={`${cardCls} !border-gray-200`}>
       <div className="flex items-center justify-between text-xs text-gray-500">
@@ -336,6 +338,7 @@ export function OrderCard({ guestBed, onDone }: { guestBed: string; onDone: (ech
           <span className="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">{t('paidOnline')}</span>
         </div>
         <p className="mt-1 text-sm text-gray-600">{t('orderItems')}</p>
+        <p className="mt-1 text-sm font-semibold text-gray-900">{formatEur(locale, drinksTotal())}</p>
       </div>
       <Pipeline steps={[t('st_new'), t('st_accepted'), t('st_preparing'), t('st_ready'), t('st_delivered')]} onDone={onDone} doneKey="meDelivered" />
     </div>
@@ -344,6 +347,7 @@ export function OrderCard({ guestBed, onDone }: { guestBed: string; onDone: (ech
 
 export function RentalCard({ onDone }: { onDone: (echoKey: string) => void }) {
   const t = useTranslations('Thread')
+  const locale = useLocale()
   return (
     <div className={`${cardCls} !border-gray-200`}>
       <div className="flex items-center justify-between text-xs text-gray-500">
@@ -353,7 +357,9 @@ export function RentalCard({ onDone }: { onDone: (echoKey: string) => void }) {
       <div className="mt-2 flex items-center justify-between rounded-xl border border-gray-200 p-3">
         <div>
           <p className="font-semibold text-gray-900">{t('rentalItem')}</p>
-          <p className="text-sm text-gray-500">{t('rentalWhen')}</p>
+          <p className="text-sm text-gray-500">
+            {t('rentalWhen')} · {formatEur(locale, DEMO_PRICES.paddleboardHour)}
+          </p>
         </div>
         <span className="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">{t('paidOnline')}</span>
       </div>
@@ -420,16 +426,22 @@ export function TablesCard({ onDone }: { onDone: (echoKey: string) => void }) {
 }
 
 /** The demo day, closed: only figures the visitor produced in this demo (their own price). */
-export function DayCloseCard({ sunbedPrice, paidOnline, onDone }: { sunbedPrice: number | null; paidOnline: number; onDone: (echoKey: string) => void }) {
+export interface PaidLine {
+  label: string
+  amount: number
+}
+
+export function DayCloseCard({ lines, onDone }: { lines: PaidLine[]; onDone: (echoKey: string) => void }) {
   const t = useTranslations('Thread')
+  const locale = useLocale()
   const [closed, setClosed] = useState(false)
-  // Only what this demo produced: a count of online payments, and the one amount the visitor set
-  // themselves (their sunbed price) — never a made-up turnover.
-  const rows: [string, string][] = [
-    [t('dc_online'), String(paidOnline)],
-    ...(sunbedPrice !== null ? ([[t('dc_sunbed'), `€${sunbedPrice}`]] as [string, string][]) : []),
-    [t('dc_cash'), '€0'],
-    [t('dc_receipts'), String(paidOnline)],
+  // Exactly what this demo sold — one line per payment, each with its own receipt.
+  const total = Math.round(lines.reduce((sum, l) => sum + l.amount, 0) * 100) / 100
+  const rows: [string, string, boolean?][] = [
+    ...lines.map((l): [string, string] => [l.label, formatEur(locale, l.amount)]),
+    [t('dc_total'), formatEur(locale, total), true],
+    [t('dc_cash'), formatEur(locale, 0)],
+    [t('dc_receipts'), String(lines.length)],
     [t('dc_vat'), t('dc_vatValue')],
   ]
   return (
@@ -439,9 +451,9 @@ export function DayCloseCard({ sunbedPrice, paidOnline, onDone }: { sunbedPrice:
         <span>{t('dc_fromDemo')}</span>
       </div>
       <dl className="mt-2 divide-y divide-gray-100 rounded-xl border border-gray-200">
-        {rows.map(([k, v]) => (
-          <div key={k} className="flex justify-between px-3 py-2 text-sm">
-            <dt className="text-gray-600">{k}</dt>
+        {rows.map(([k, v, strong]) => (
+          <div key={k} className={`flex justify-between px-3 py-2 text-sm ${strong ? 'bg-gray-50' : ''}`}>
+            <dt className={strong ? 'font-semibold text-gray-900' : 'text-gray-600'}>{k}</dt>
             <dd className="font-semibold tabular-nums text-gray-900">{v}</dd>
           </div>
         ))}

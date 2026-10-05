@@ -274,8 +274,7 @@
     "sum_tables": "Mesas de restaurante reservadas",
     "sum_dayclose": "Día cerrado, facturas e IVA hechos",
     "sum_verifactu": "Veri*factu: llega antes del plazo",
-    "dc_online": "Pagos online",
-    "dc_sunbed": "Tu reserva de hamaca",
+    "dc_sunbed": "Hamaca {label}",
     "nextNumbers": "Ver mis números",
     "meNumbers": "Enséñame mis números",
     "numbersAsk": "Esto es lo que te costaría Sunbnb, con tu propio precio. Starter no tiene cuota mensual: solo ganamos cuando vendemos por ti.",
@@ -291,7 +290,10 @@
     "pj_online": "Hamacas reservadas online en un día normal",
     "pj_onlineValue": "{n} de {total}",
     "pj_yourEstimate": "Tu estimación, para un mes de 30 días. No la calculamos por ti.",
-    "pj_how": "¿Cómo se calcula?"
+    "pj_how": "¿Cómo se calcula?",
+    "dc_drinks": "Bebidas a la hamaca",
+    "dc_rental": "Alquiler de paddle",
+    "dc_total": "Pagado online"
   },
   "Tour": {
     "label": "Un paseo por tu playa",

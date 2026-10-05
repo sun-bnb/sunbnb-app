@@ -9,7 +9,7 @@ export const PARTNER_PORTAL_URL = process.env.NEXT_PUBLIC_PARTNER_URL ?? 'https:
 export async function SiteHeader({ overlay = false }: { overlay?: boolean } = {}) {
   const t = await getTranslations('Header')
   return (
-    <header className={overlay ? 'absolute inset-x-0 top-0 z-20' : 'border-b border-gray-100 bg-white/80 backdrop-blur'}>
+    <header className={overlay ? 'absolute inset-x-0 top-0 z-20 [html[data-chat]_&]:fixed' : 'border-b border-gray-100 bg-white/80 backdrop-blur'}>
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
         {/* A plain link, not next/link: in the conversation the address is /m/<token> while the
             router deliberately stays on "/" (Experience), so a client-side Link to "/" was a no-op. */}

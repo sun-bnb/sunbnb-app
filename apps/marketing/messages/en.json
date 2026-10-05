@@ -274,8 +274,7 @@
     "sum_tables": "Restaurant tables reserved",
     "sum_dayclose": "The day closed, invoices and VAT done",
     "sum_verifactu": "Veri*factu: coming before the deadline",
-    "dc_online": "Paid online",
-    "dc_sunbed": "Your sunbed booking",
+    "dc_sunbed": "Sunbed {label}",
     "nextNumbers": "See my numbers",
     "meNumbers": "Show me my numbers",
     "numbersAsk": "Here’s what Sunbnb would cost you, from your own price. No monthly fee on Starter; we only earn when we sell for you.",
@@ -291,7 +290,10 @@
     "pj_online": "Sunbeds booked online on a typical day",
     "pj_onlineValue": "{n} of {total}",
     "pj_yourEstimate": "Your estimate, for a 30-day month. We don’t guess this for you.",
-    "pj_how": "How is this calculated?"
+    "pj_how": "How is this calculated?",
+    "dc_drinks": "Drinks to the sunbed",
+    "dc_rental": "Paddleboard rental",
+    "dc_total": "Paid online"
   },
   "Tour": {
     "label": "A walk along your beach",

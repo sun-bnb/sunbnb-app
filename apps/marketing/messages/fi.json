@@ -274,8 +274,7 @@
     "sum_tables": "Ravintolapöydät varattu",
     "sum_dayclose": "Päivä suljettu, laskut ja ALV valmiina",
     "sum_verifactu": "Veri*factu: tulossa ennen määräaikaa",
-    "dc_online": "Maksettu verkossa",
-    "dc_sunbed": "Aurinkotuolivarauksesi",
+    "dc_sunbed": "Aurinkotuoli {label}",
     "nextNumbers": "Näytä lukuni",
     "meNumbers": "Näytä minun lukuni",
     "numbersAsk": "Tämän verran Sunbnb maksaisi sinulle omalla hinnallasi. Starterissa ei ole kuukausimaksua: ansaitsemme vain, kun myymme puolestasi.",
@@ -291,7 +290,10 @@
     "pj_online": "Verkossa varatut tuolit tavallisena päivänä",
     "pj_onlineValue": "{n} / {total}",
     "pj_yourEstimate": "Oma arviosi, 30 päivän kuukaudelle. Emme arvaa sitä puolestasi.",
-    "pj_how": "Miten tämä lasketaan?"
+    "pj_how": "Miten tämä lasketaan?",
+    "dc_drinks": "Juomat tuoliin",
+    "dc_rental": "SUP-laudan vuokra",
+    "dc_total": "Maksettu verkossa"
   },
   "Tour": {
     "label": "Kävely rannallasi",

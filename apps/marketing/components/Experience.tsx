@@ -13,6 +13,7 @@ import type { GuideAction } from '@/lib/guide.ts'
 import { isAffirmative, parseBareCount, parsePrice, type Intent, type Run } from '@/lib/intent.ts'
 import { initialJourney, journeyReducer, liveAttach, resumedJourney, staffBed, type Attach, type JourneyBeach, type Step } from '@/lib/journey.ts'
 import { hintBed } from '@/lib/missions.ts'
+import { DEMO_PRICES, drinksTotal } from '@/lib/demo-prices.ts'
 import type { Offer } from '@/lib/offer.ts'
 import { setTrackingContext, track } from '@/lib/track.ts'
 import Composer, { EXAMPLE_COUNT, EXAMPLE_QUERY, useBeachSearch, type BeachSuggestion } from './Composer'
@@ -160,10 +161,15 @@ export default function Experience({
   useEffect(() => {
     if (!s.beach) return
     window.scrollTo({ top: 0 })
-    const prev = document.documentElement.style.overflow
-    document.documentElement.style.overflow = 'hidden'
+    const html = document.documentElement
+    const prev = html.style.overflow
+    html.style.overflow = 'hidden'
+    // Pins the site header to the screen too (SiteChrome): iOS still scrolls the page when the
+    // keyboard opens, which carried the page-attached header — the only way out — off screen.
+    html.dataset.chat = '1'
     return () => {
-      document.documentElement.style.overflow = prev
+      html.style.overflow = prev
+      delete html.dataset.chat
     }
   }, [s.beach])
 
@@ -594,9 +600,13 @@ export default function Experience({
       case 'mod_dayclose':
         return withSkip(
           <DayCloseCard
-            sunbedPrice={s.guestBed ? s.price : null}
-            // One payment (and receipt) per paid thing in this demo: the sunbed, any order / rental.
-            paidOnline={(s.guestBed ? 1 : 0) + s.played.filter((m) => m === 'order' || m === 'rental').length}
+            // One line per thing paid in this demo: their sunbed (their own price), the drinks and
+            // the rental they played (example prices, lib/demo-prices.ts).
+            lines={[
+              ...(s.guestBed ? [{ label: t('dc_sunbed', { label: s.guestBed }), amount: s.price }] : []),
+              ...(s.played.includes('order') ? [{ label: t('dc_drinks'), amount: drinksTotal() }] : []),
+              ...(s.played.includes('rental') ? [{ label: t('dc_rental'), amount: DEMO_PRICES.paddleboardHour }] : []),
+            ]}
             onDone={next}
           />,
         )

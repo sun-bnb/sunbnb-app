@@ -49,9 +49,11 @@ export default function Thread({
   const text = (m: Msg) => m.text ?? (m.key ? t(m.key, m.params) : '')
 
   return (
+    // No backdrop-filter on this scrolling box: iOS Safari stops painting the children of a
+    // scrolled element with backdrop-blur — the expanded history rendered as an empty blur.
     <div
       ref={boxRef}
-      className={`flex flex-col gap-2 overflow-y-auto overscroll-contain pt-6 ${expanded ? 'max-h-[60svh] rounded-2xl bg-[#fff5e1]/85 px-2 backdrop-blur' : 'max-h-[46svh]'}`}
+      className={`flex flex-col gap-2 overflow-y-auto overscroll-contain pt-6 ${expanded ? 'max-h-[60svh] rounded-2xl bg-[#fff5e1]/95 px-2' : 'max-h-[46svh]'}`}
       // Older lines dissolve into the scene instead of stacking up like a chat log.
       style={expanded ? undefined : { maskImage: 'linear-gradient(to bottom, transparent 0, black 2.5rem)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, black 2.5rem)' }}
       aria-live="polite"
