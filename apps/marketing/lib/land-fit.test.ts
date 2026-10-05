@@ -119,3 +119,15 @@ describe('water polygons — the exact "is it in the sea?"', () => {
     for (const b of generateBeachLayout({ ...fixed, sunbedCount: 60 }).sunbeds) expect(signedShoreDistance(reversed, b, sea)!).toBeGreaterThanOrEqual(3.9)
   })
 })
+
+describe('shoreBand with water polygons — a reversed coastline never paints sand in the sea', () => {
+  const sea = [[off(30, -2000), off(30, 2000), off(3000, 2000), off(3000, -2000), off(30, -2000)]]
+  it('follows the polygons over the line direction', async () => {
+    const { inWater } = await import('./coastline.ts')
+    const reversed = [[off(30, 100), off(30, 0), off(30, -100)]] // water on the LEFT
+    const [band] = shoreBand(reversed, 15, sea)
+    for (const p of band!.slice(3)) expect(inWater(sea, p)).toBe(false)
+    const [wrong] = shoreBand(reversed, 15) // without polygons it trusts the (reversed) line
+    expect(wrong!.slice(3).some((p) => inWater(sea, p))).toBe(true)
+  })
+})

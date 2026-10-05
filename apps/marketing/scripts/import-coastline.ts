@@ -3,7 +3,7 @@
  * there never depend on the public Overpass API.
  *
  * Data: osmdata.openstreetmap.de (© OpenStreetMap contributors, ODbL), refreshed daily —
- *   coastlines-split-4326.zip   → lines.shp           (OSM direction: land left, water right)
+ *   coastlines-split-4326.zip   → lines.shp           (water on the LEFT — reversed on import, see below)
  *   water-polygons-split-4326.zip → water_polygons.shp (the sea, in ≤ 1° pieces)
  * Download + unzip both into one folder (≈ 1.8 GB zipped, 2.6 GB unzipped), then:
  *
@@ -20,7 +20,7 @@ import { parseArgs } from 'node:util'
 import { clearImportedRegion, insertImportedLines, insertImportedWater, markImportedTiles } from '@repo/data/coastline-db'
 import { coastTilesInBox } from '@repo/data/coastline-tiles'
 import { regionBoxes } from '../lib/coast-regions'
-import { readShapes, toWkt, type Box } from '../lib/shapefile'
+import { readShapes, toWkt, type Box, type ShapeRecord } from '../lib/shapefile'
 
 /** Marking every 0.1° tile covered is only sensible for country-sized boxes; beyond this the
  *  route recognises imported coverage from the imported rows themselves (negative line ids). */
@@ -42,12 +42,20 @@ const WATER = dataFile('water-polygons-split-4326', 'water_polygons.shp')
 const boxes = regionBoxes(positionals)
 if (!boxes.length) throw new Error('name at least one region (see lib/coast-regions.ts)')
 
-async function importLayer(file: string, box: Box, insert: (rows: { id: number; wkt: string }[]) => Promise<void>): Promise<number> {
+/**
+ * osmdata's split coastline lines run with the water on the LEFT — the reverse of OSM coastline
+ * ways (water on the right), which everything downstream assumes. Measured against the water
+ * polygons on Muro, Benidorm, Las Canteras and La Concha (2026-10-05): every segment reversed.
+ * So lines are stored reversed; water polygons are direction-free.
+ */
+const toOsmDirection = (rec: ShapeRecord): ShapeRecord => ({ ...rec, parts: rec.parts.map((p) => [...p].reverse()) })
+
+async function importLayer(file: string, box: Box, insert: (rows: { id: number; wkt: string }[]) => Promise<void>, reverse = false): Promise<number> {
   let batch: { id: number; wkt: string }[] = []
   let chars = 0
   let count = 0
   for (const rec of readShapes(file, box)) {
-    const wkt = toWkt(rec)
+    const wkt = toWkt(reverse ? toOsmDirection(rec) : rec)
     if (wkt.endsWith('()') || wkt.endsWith('(()')) continue
     batch.push({ id: rec.n, wkt })
     chars += wkt.length
@@ -67,7 +75,7 @@ const started = Date.now()
 for (const [name, box] of boxes) {
   console.log(`${name} ${JSON.stringify(box)}`)
   await clearImportedRegion(box)
-  const lines = await importLayer(LINES, box, insertImportedLines)
+  const lines = await importLayer(LINES, box, insertImportedLines, true)
   console.log(`\r  coastline segments: ${lines}`)
   const water = await importLayer(WATER, box, insertImportedWater)
   console.log(`\r  water polygons: ${water}`)

@@ -153,7 +153,7 @@ export default function Experience({
   const ground = useMemo(() => {
     if (!layout || !placed || !shore) return null
     const depth = parcelDepthFromWater(layout.sunbeds, shore.ways, shore.water)
-    const band = depth !== null && depth > 0 ? shoreBand(shore.ways, Math.min(depth + 3, 60)) : []
+    const band = depth !== null && depth > 0 ? shoreBand(shore.ways, Math.min(depth + 3, 60), shore.water) : []
     return [...band, parcelGround(layout.sunbeds, placed)]
   }, [layout, placed, shore])
 

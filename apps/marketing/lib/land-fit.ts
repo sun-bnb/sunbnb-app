@@ -6,7 +6,7 @@
  * Pure; a few passes cover curved shores.
  */
 import { generateBeachLayout, type LayoutInput, type MockSunbed } from './beach-layout.ts'
-import { signedShoreDistance, type GeoPoint } from './coastline.ts'
+import { inWater, signedShoreDistance, type GeoPoint } from './coastline.ts'
 
 export type Frame = Required<Pick<LayoutInput, 'anchor' | 'seaBearingDeg' | 'placement'>>
 
@@ -92,13 +92,26 @@ export function parcelGround(beds: readonly MockSunbed[], frame: Frame): GeoPoin
  * and fills Google's water up to the OSM waterline where they don't — a natural beach edge that
  * follows the coast, not a rectangle. One polygon per way.
  */
-export function shoreBand(shore: GeoPoint[][], widthM: number): GeoPoint[][] {
+export function shoreBand(shore: GeoPoint[][], widthM: number, water?: GeoPoint[][]): GeoPoint[][] {
   const out: GeoPoint[][] = []
   for (const way of shore) {
     if (way.length < 2) continue
     const lat0 = way[0]!.lat
     const mPerDegLng = M_PER_DEG_LAT * Math.cos((lat0 * Math.PI) / 180)
     const xy = way.map((p) => ({ x: p.lng * mPerDegLng, y: p.lat * M_PER_DEG_LAT }))
+    // Inland is the LEFT of travel by the OSM convention — but where the water polygons are known
+    // they decide: a probe on the left side of the way's middle that lands in the sea flips it
+    // (a reversed line once painted sand over the sea, 2026-10-05).
+    let side = 1
+    if (water?.length) {
+      const m = Math.floor((xy.length - 1) / 2)
+      const a = xy[m]!
+      const b = xy[m + 1] ?? xy[m - 1]!
+      const dir = xy[m + 1] ? 1 : -1
+      const len = Math.hypot(b.x - a.x, b.y - a.y) || 1
+      const probe = { lat: (a.y + (dir * (b.x - a.x) / len) * Math.min(5, widthM / 2)) / M_PER_DEG_LAT, lng: (a.x - (dir * (b.y - a.y) / len) * Math.min(5, widthM / 2)) / mPerDegLng }
+      if (inWater(water, probe)) side = -1
+    }
     const inner: GeoPoint[] = []
     for (let i = 0; i < xy.length; i++) {
       const a = xy[Math.max(0, i - 1)]!
@@ -107,8 +120,8 @@ export function shoreBand(shore: GeoPoint[][], widthM: number): GeoPoint[][] {
       const dy = b.y - a.y
       const len = Math.hypot(dx, dy) || 1
       // Left normal of the direction of travel = inland.
-      const nx = -dy / len
-      const ny = dx / len
+      const nx = (side * -dy) / len
+      const ny = (side * dx) / len
       inner.push({ lat: (xy[i]!.y + ny * widthM) / M_PER_DEG_LAT, lng: (xy[i]!.x + nx * widthM) / mPerDegLng })
     }
     out.push([...way, ...inner.reverse()])
