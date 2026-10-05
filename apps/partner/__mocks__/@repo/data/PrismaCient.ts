@@ -247,18 +247,6 @@ const prisma = {
   // Track 027: marketing leads (try.sunbnb.app). NO partner code reads or writes them — the
   // delegate exists because the mock mirrors the real client and mock-contract.test.ts requires
   // one per model.
-  // Track 027: coastline cache for the marketing beach mockup. No partner code touches it — the
-  // delegates exist because mock-contract.test.ts requires one per model.
-  coastTile: {
-    findMany: vi.fn(),
-    upsert: vi.fn(),
-  },
-  coastLine: {
-    findMany: vi.fn(),
-  },
-  coastWater: {
-    findMany: vi.fn(),
-  },
   // Track 027 D9: partner promotions (launch offer); read/written via @repo/data/promotion-db.
   partnerPromotion: {
     findMany: vi.fn(),
