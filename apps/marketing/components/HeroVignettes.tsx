@@ -53,7 +53,7 @@ export default function HeroVignettes({ mode, reduced }: { mode: HeroMode; reduc
 }
 
 /** Scales a DESIGN_H-tall scene down to the height it is given (never up). */
-function FitScale({ children }: { children: ReactNode }) {
+export function FitScale({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)
   const [k, setK] = useState(1)
   useLayoutEffect(() => {
@@ -114,7 +114,7 @@ function Sparkling({ size = 22 }: { size?: number }) {
   )
 }
 
-function OrderScene({ active }: { active: boolean }) {
+export function OrderScene({ active }: { active: boolean }) {
   const t = useTranslations('Hero.v')
   // 0 phone idle · 1 tap · 2 ticket New · 3 Preparing · 4 Ready · 5 Delivered
   const n = useTicks(active, 900, 7)
@@ -163,7 +163,7 @@ function OrderScene({ active }: { active: boolean }) {
   )
 }
 
-function RentScene({ active }: { active: boolean }) {
+export function RentScene({ active }: { active: boolean }) {
   const t = useTranslations('Hero.v')
   const boards = ['#00cef1', '#f59e0b', '#22c55e', '#ef4444', '#8b5cf6']
   // Each tick, one board is out on the water; it comes back as the next one leaves.
@@ -194,7 +194,7 @@ function RentScene({ active }: { active: boolean }) {
   )
 }
 
-function CheckinScene({ active }: { active: boolean }) {
+export function CheckinScene({ active }: { active: boolean }) {
   const t = useTranslations('Hero.v')
   // The partner grid's colours (@repo/floor-core): free green-300, reserved fuchsia-400, occupied red-400.
   const reserved = [0, 2, 3, 5, 8, 10]
@@ -227,7 +227,7 @@ function CheckinScene({ active }: { active: boolean }) {
   )
 }
 
-function InvoiceScene({ active }: { active: boolean }) {
+export function InvoiceScene({ active }: { active: boolean }) {
   const t = useTranslations('Hero.v')
   const lines = [t('rc_sunbed'), t('rc_drinks'), t('rc_board'), t('rc_vat')]
   const n = useTicks(active, 650, lines.length + 4)

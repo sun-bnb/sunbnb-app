@@ -82,14 +82,6 @@
       "rc_qr": "Recibo online"
     }
   },
-  "Facts": {
-    "f1Title": "Tus clientes reservan su hamaca exacta",
-    "f1": "Eligen una hamaca en tu mapa, pagan online y reciben en el móvil un pase de reserva con código QR.",
-    "f2Title": "Comida y bebida desde la hamaca",
-    "f2": "Tus clientes escanean un código QR en su hamaca para pedir y pagar desde el móvil.",
-    "f3Title": "Sin hardware que comprar",
-    "f3": "Funciona en el navegador de los móviles, tablets y portátiles que ya tienes."
-  },
   "Footer": {
     "copyright": "© {year} Sunbnb"
   },
@@ -300,5 +292,52 @@
     "pj_onlineValue": "{n} de {total}",
     "pj_yourEstimate": "Tu estimación, para un mes de 30 días. No la calculamos por ti.",
     "pj_how": "¿Cómo se calcula?"
+  },
+  "Tour": {
+    "label": "Un paseo por tu playa",
+    "try": "Pruébalo en tu playa",
+    "order": {
+      "place": "En el chiringuito",
+      "title": "Bebidas pedidas desde la hamaca",
+      "body": "Tus clientes piden desde el móvil y pagan en la app. Tu barra ve cada pedido al momento, con aviso sonoro, y lo lleva de nuevo a entregado."
+    },
+    "rent": {
+      "place": "En el puesto de alquiler",
+      "title": "Alquileres por horas o por días",
+      "body": "Tablas de paddle, kayaks, hidropedales y más: tus clientes reservan y pagan online, y tu personal marca la recogida y la devolución."
+    },
+    "checkin": {
+      "place": "En recepción",
+      "title": "Toda tu playa, al momento",
+      "body": "Cada reserva en una sola cuadrícula. Busca a un cliente por su nombre y registra su llegada con un toque; añade clientes sin reserva y ventas en efectivo; cierra la caja por empleado."
+    },
+    "invoice": {
+      "place": "En la oficina",
+      "title": "Facturas e IVA, hechos",
+      "body": "Cada venta tiene su recibo o factura a tu nombre, con tu propia numeración y tu tipo de IVA, y una exportación para tu gestor.",
+      "spain": "En España, Veri*factu llega antes del plazo de 2027."
+    }
+  },
+  "Start": {
+    "title": "Cómo se empieza",
+    "s1Title": "Coloca tus hamacas",
+    "s1": "Dibuja tus filas sobre el mapa de tu playa e imprime una tarjeta QR para cada hamaca.",
+    "s2Title": "Pon precios y conecta Mollie",
+    "s2": "Tu precio por día, por fila o por hamaca. Los pagos van a tu propia cuenta de Mollie.",
+    "s3Title": "Comparte tu página de reservas",
+    "s3": "Tus clientes encuentran tu playa, eligen su hamaca y pagan. Tú ves cada reserva al momento."
+  },
+  "Faq": {
+    "title": "Lo que preguntan los dueños de playas",
+    "noPhoneQ": "¿Y los clientes sin smartphone?",
+    "noPhoneA": "Tu personal añade reservas sin cita y ventas en efectivo en recepción, en la misma cuadrícula que las reservas online.",
+    "hardwareQ": "¿Necesito comprar algún equipo?",
+    "hardwareA": "No. Sunbnb funciona en el navegador de los móviles, tablets y portátiles que ya tienes, y tus clientes no tienen que descargar ninguna app.",
+    "paidQ": "¿Cómo cobro?",
+    "paidA": "A través de tu propia cuenta de Mollie. Mollie te paga según su calendario con la comisión de Sunbnb descontada; Sunbnb nunca toca tu dinero.",
+    "costQ": "¿Cuánto cuesta?",
+    "costA": "Starter no tiene cuota mensual: Sunbnb se queda un {pct} % solo de lo que vende por ti. Pro y Business bajan la comisión al {pro} % y al {business} % por una cuota mensual.",
+    "languagesQ": "¿En qué idiomas funciona?",
+    "languagesA": "Inglés, español y finés, para ti, tu personal y tus clientes."
   }
 }

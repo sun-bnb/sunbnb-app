@@ -1,5 +1,7 @@
 import { getLocale, getTranslations } from 'next-intl/server'
 import { parseAngle } from '@repo/data/lead-model'
+import { PRICING_TIERS } from '@repo/data/pricing-tiers'
+import BeachTour from '@/components/BeachTour'
 import Experience from '@/components/Experience'
 import { SiteFooter, SiteHeader } from '@/components/SiteChrome'
 import TrackOnMount from '@/components/TrackOnMount'
@@ -18,11 +20,21 @@ export default async function LandingPage({ searchParams }: { searchParams: Reco
   const title = angle ? t(`Hero.angles.${angle}.title`) : t('Hero.title')
   const subtitle = angle ? t(`Hero.angles.${angle}.subtitle`) : t('Hero.subtitle')
   const offer = offerFor(localeOrDefault(await getLocale()))
-  const facts = [
-    { title: t('Facts.f1Title'), body: t('Facts.f1'), icon: <MapIcon /> },
-    { title: t('Facts.f2Title'), body: t('Facts.f2'), icon: <QrIcon /> },
-    { title: t('Facts.f3Title'), body: t('Facts.f3'), icon: <DeviceIcon /> },
-  ]
+  const tourTags = {
+    book: t('Hero.sceneTag'),
+    order: t('Hero.slides.order.tag'),
+    rent: t('Hero.slides.rent.tag'),
+    checkin: t('Hero.slides.checkin.tag'),
+    invoice: t('Hero.slides.invoice.tag'),
+  }
+  const starter = PRICING_TIERS.STARTER
+  const faq = [
+    ['noPhone', {}],
+    ['hardware', {}],
+    ['paid', {}],
+    ['cost', { pct: starter.commissionPercent, pro: PRICING_TIERS.PRO.commissionPercent, business: PRICING_TIERS.BUSINESS.commissionPercent }],
+    ['languages', {}],
+  ] as const
 
   return (
     <>
@@ -38,44 +50,41 @@ export default async function LandingPage({ searchParams }: { searchParams: Reco
           apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_CLIENT_KEY ?? ''}
         />
 
-        <section className="mx-auto grid max-w-6xl gap-8 px-4 pb-16 pt-4 sm:grid-cols-3">
-          {facts.map((f) => (
-            <div key={f.title}>
-              <div className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#00cef1]/15 text-[#0083a0]">{f.icon}</div>
-              <h2 className="text-base font-semibold text-[#0e3a4a]">{f.title}</h2>
-              <p className="mt-1 text-sm leading-relaxed text-[#0e3a4a]/70">{f.body}</p>
-            </div>
-          ))}
+        <BeachTour tags={tourTags} />
+
+        <section className="mx-auto max-w-3xl px-4 py-16">
+          <h2 className="text-3xl font-semibold tracking-tight text-[#0e3a4a]">{t('Start.title')}</h2>
+          <ol className="mt-6 space-y-4">
+            {(['s1', 's2', 's3'] as const).map((k, i) => (
+              <li key={k} className="flex gap-4">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border-2 border-[#0e3a4a] bg-[#00cef1] text-sm font-bold text-[#0e3a4a]">{i + 1}</span>
+                <div>
+                  <h3 className="text-lg font-semibold text-[#0e3a4a]">{t(`Start.${k}Title`)}</h3>
+                  <p className="mt-0.5 text-[15px] leading-relaxed text-[#0e3a4a]/70">{t(`Start.${k}`)}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section className="mx-auto max-w-3xl px-4 pb-20">
+          <h2 className="text-3xl font-semibold tracking-tight text-[#0e3a4a]">{t('Faq.title')}</h2>
+          <div className="mt-6 divide-y divide-[#0e3a4a]/10 rounded-3xl border-2 border-[#0e3a4a] bg-white">
+            {faq.map(([k, params]) => (
+              <details key={k} className="group px-5 py-4">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-semibold text-[#0e3a4a]">
+                  {t(`Faq.${k}Q`)}
+                  <span className="text-xl leading-none text-[#0083a0] transition group-open:rotate-45" aria-hidden>
+                    +
+                  </span>
+                </summary>
+                <p className="mt-2 text-[15px] leading-relaxed text-[#0e3a4a]/75">{t(`Faq.${k}A`, params)}</p>
+              </details>
+            ))}
+          </div>
         </section>
       </main>
       <SiteFooter />
     </>
-  )
-}
-
-const iconProps = { className: 'h-5 w-5', fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor', strokeWidth: 1.5, 'aria-hidden': true } as const
-
-function MapIcon() {
-  return (
-    <svg {...iconProps}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" />
-    </svg>
-  )
-}
-
-function QrIcon() {
-  return (
-    <svg {...iconProps}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 3.75 9.375v-4.5ZM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5ZM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 13.5 9.375v-4.5Z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75ZM6.75 16.5h.75v.75h-.75v-.75ZM16.5 6.75h.75v.75h-.75v-.75ZM13.5 13.5h.75v.75h-.75v-.75ZM13.5 19.5h.75v.75h-.75v-.75ZM19.5 13.5h.75v.75h-.75v-.75ZM19.5 19.5h.75v.75h-.75v-.75ZM16.5 16.5h.75v.75h-.75v-.75Z" />
-    </svg>
-  )
-}
-
-function DeviceIcon() {
-  return (
-    <svg {...iconProps}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
-    </svg>
   )
 }

@@ -82,14 +82,6 @@
       "rc_qr": "Kuitti verkossa"
     }
   },
-  "Facts": {
-    "f1Title": "Asiakkaat varaavat juuri oman tuolinsa",
-    "f1": "He valitsevat tuolin kartaltasi, maksavat verkossa ja saavat puhelimeensa varauspassin QR-koodilla.",
-    "f2Title": "Ruoat ja juomat suoraan tuoliin",
-    "f2": "Asiakkaat skannaavat tuolin QR-koodin ja tilaavat ja maksavat puhelimellaan.",
-    "f3Title": "Ei laitteita ostettavaksi",
-    "f3": "Toimii selaimessa puhelimilla, tableteilla ja kannettavilla, jotka sinulla jo on."
-  },
   "Footer": {
     "copyright": "© {year} Sunbnb"
   },
@@ -300,5 +292,52 @@
     "pj_onlineValue": "{n} / {total}",
     "pj_yourEstimate": "Oma arviosi, 30 päivän kuukaudelle. Emme arvaa sitä puolestasi.",
     "pj_how": "Miten tämä lasketaan?"
+  },
+  "Tour": {
+    "label": "Kävely rannallasi",
+    "try": "Kokeile omalla rannallasi",
+    "order": {
+      "place": "Rantabaarissa",
+      "title": "Juomat tilataan aurinkotuolista",
+      "body": "Asiakkaat tilaavat puhelimellaan ja maksavat sovelluksessa. Baarisi näkee jokaisen tilauksen heti, äänimerkin kera, ja vie sen uudesta toimitettuun."
+    },
+    "rent": {
+      "place": "Vuokrakojulla",
+      "title": "Vuokraus tunneittain tai päivittäin",
+      "body": "SUP-laudat, kajakit, polkuveneet ja muut: asiakkaat varaavat ja maksavat verkossa, ja henkilökuntasi kirjaa noudon ja palautuksen."
+    },
+    "checkin": {
+      "place": "Vastaanotossa",
+      "title": "Koko rantasi, reaaliajassa",
+      "body": "Jokainen varaus yhdessä ruudukossa. Etsi asiakas nimellä ja kirjaa hänet sisään napautuksella; lisää paikan päältä tulevat ja käteismyynnit; sulje päivä työntekijäkohtaisesti."
+    },
+    "invoice": {
+      "place": "Toimistossa",
+      "title": "Laskut ja ALV, valmiina",
+      "body": "Jokaisesta myynnistä tulee kuitti tai lasku nimissäsi, omalla numeroinnillasi ja ALV-kannallasi, ja vienti kirjanpitäjällesi.",
+      "spain": "Espanjassa Veri*factu tulee ennen vuoden 2027 määräaikaa."
+    }
+  },
+  "Start": {
+    "title": "Näin alat",
+    "s1Title": "Aseta aurinkotuolisi",
+    "s1": "Piirrä rivisi rantasi kartalle ja tulosta QR-kortti jokaiseen tuoliin.",
+    "s2Title": "Aseta hinnat ja yhdistä Mollie",
+    "s2": "Päivähintasi koko rannalle, riveittäin tai tuoleittain. Maksut menevät omalle Mollie-tilillesi.",
+    "s3Title": "Jaa varaussivusi",
+    "s3": "Asiakkaat löytävät rantasi, valitsevat tuolinsa ja maksavat. Näet jokaisen varauksen heti."
+  },
+  "Faq": {
+    "title": "Mitä rannanomistajat kysyvät",
+    "noPhoneQ": "Entä asiakkaat ilman älypuhelinta?",
+    "noPhoneA": "Henkilökuntasi lisää paikan päältä tulevat varaukset ja käteismyynnit vastaanotossa, samaan ruudukkoon kuin verkkovaraukset.",
+    "hardwareQ": "Pitääkö minun ostaa laitteita?",
+    "hardwareA": "Ei. Sunbnb toimii selaimessa puhelimilla, tableteilla ja kannettavilla, jotka sinulla jo on, eikä asiakkaiden tarvitse ladata sovellusta.",
+    "paidQ": "Miten saan rahani?",
+    "paidA": "Oman Mollie-tilisi kautta. Mollie maksaa sinulle aikataulunsa mukaan Sunbnb:n provisio vähennettynä; Sunbnb ei koskaan pidä rahojasi.",
+    "costQ": "Mitä se maksaa?",
+    "costA": "Starterissa ei ole kuukausimaksua: Sunbnb ottaa {pct} % vain siitä, mitä se myy puolestasi. Pro ja Business laskevat provision {pro} %:iin ja {business} %:iin kuukausimaksua vastaan.",
+    "languagesQ": "Millä kielillä se toimii?",
+    "languagesA": "Englanniksi, espanjaksi ja suomeksi – sinulle, henkilökunnallesi ja asiakkaillesi."
   }
 }

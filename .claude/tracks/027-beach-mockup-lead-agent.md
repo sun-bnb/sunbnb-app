@@ -310,7 +310,7 @@ pure layout generator (location TBD — see Q2)
   scroll-driven camera along the beach places (below-hero content), agent narration lines.
 - **Coastline cache built** (uncommitted at time of writing) — seed campaign coasts per environment before ads.
 - **P9b built** (modules, summary, stored qualifier). Remaining P9b: ad-matched hero headlines per angle exist; below-fold pillars/FAQ (folded into D11's scroll-driven places).
-- **P10 + P9c hand-off built.** Remaining P9c: scroll-driven camera along beach places (below-hero content). Then P13 claim flow (cross-app — needs an architecture pass). Start with the shipped-feature audit (what can each module
+- **P10 + P9c built** (hand-off + beach tour). Next: P13 claim flow — cross-app (marketing → partner → data), needs an architecture pass and founder go-ahead before code. Start with the shipped-feature audit (what can each module
   honestly show — F&B orders, rentals, table bookings, QR walk-ins, day close/invoicing are
   believed shipped; dynamic pricing, hotel channel, Viva need checking), then the qualifier in
   `BeachBuilder`'s fly-in phase and the `lib/modules.ts` rule table, then modules one by one.
@@ -345,6 +345,15 @@ pure layout generator (location TBD — see Q2)
   session turn/token caps on the API path (they now also cap spend).
 
 ## Log
+
+- **2026-10-05** — **P9c below the fold: a walk along the beach.** `BeachTour`: a sticky,
+  full-screen world while the page scrolls natively (no hijacking); scroll progress pans the
+  illustrated beach sideways and glides four places into view — beach bar (drinks), rental hut,
+  front desk (staff grid), office (invoices; "Veri*factu coming before the 2027 deadline" for
+  Spain) — reusing the hero's feature scenes, each with a real-HTML text card and "Try it on your
+  beach" (scrolls up, focuses the bar). Then "How it starts" (place beds → prices + Mollie → share)
+  and an objections FAQ (no smartphone, hardware, payouts, cost from PRICING_TIERS, languages) as
+  server-rendered HTML. Replaces the old three-fact strip (`Facts` copy removed).
 
 - **2026-10-05** — **P9c aerial hand-off.** Picking a beach: the illustrated beach recedes like a
   camera rising (scale 0.55, blur, fade); the real map mounts still at a regional zoom (10), fades in

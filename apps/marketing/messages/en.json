@@ -82,14 +82,6 @@
       "rc_qr": "Receipt online"
     }
   },
-  "Facts": {
-    "f1Title": "Guests book their exact sunbed",
-    "f1": "They pick a sunbed on your map, pay online and get a booking pass with a QR code on their phone.",
-    "f2Title": "Food and drinks from the sunbed",
-    "f2": "Guests scan a QR code at their sunbed to order and pay from their phone.",
-    "f3Title": "No hardware to buy",
-    "f3": "Runs in the browser on the phones, tablets and laptops you already have."
-  },
   "Footer": {
     "copyright": "© {year} Sunbnb"
   },
@@ -300,5 +292,52 @@
     "pj_onlineValue": "{n} of {total}",
     "pj_yourEstimate": "Your estimate, for a 30-day month. We don’t guess this for you.",
     "pj_how": "How is this calculated?"
+  },
+  "Tour": {
+    "label": "A walk along your beach",
+    "try": "Try it on your beach",
+    "order": {
+      "place": "At the beach bar",
+      "title": "Drinks ordered from the sunbed",
+      "body": "Guests order from their phone and pay in the app. Your bar sees every order live, with a sound alert, and moves it from new to delivered."
+    },
+    "rent": {
+      "place": "At the rental hut",
+      "title": "Rentals by the hour or the day",
+      "body": "Paddleboards, kayaks, pedal boats and more: guests book and pay online, and your staff mark them picked up and returned."
+    },
+    "checkin": {
+      "place": "At the front desk",
+      "title": "Your whole beach, live",
+      "body": "Every booking on one grid. Find a guest by name and check them in with a tap; add walk-ins and cash sales; close the day per employee."
+    },
+    "invoice": {
+      "place": "In the office",
+      "title": "Invoices and VAT, done",
+      "body": "Every sale gets its receipt or invoice in your name, with your own numbering and VAT rate, and an export for your accountant.",
+      "spain": "In Spain, Veri*factu is coming before the 2027 deadline."
+    }
+  },
+  "Start": {
+    "title": "How it starts",
+    "s1Title": "Place your sunbeds",
+    "s1": "Lay out your rows on the map of your beach and print a QR card for each sunbed.",
+    "s2Title": "Set prices and connect Mollie",
+    "s2": "Your price per day, per row or per sunbed. Payments go to your own Mollie account.",
+    "s3Title": "Share your booking page",
+    "s3": "Guests find your beach, pick their sunbed and pay. You see every booking live."
+  },
+  "Faq": {
+    "title": "Questions beach owners ask",
+    "noPhoneQ": "What about guests without a smartphone?",
+    "noPhoneA": "Your staff add walk-in bookings and cash sales at the desk, on the same grid as the online bookings.",
+    "hardwareQ": "Do I need to buy any hardware?",
+    "hardwareA": "No. Sunbnb runs in the browser on the phones, tablets and laptops you already have, and guests don’t need to download an app.",
+    "paidQ": "How do I get paid?",
+    "paidA": "Through your own Mollie account. Mollie pays you out on its schedule with Sunbnb’s commission deducted; Sunbnb never holds your money.",
+    "costQ": "What does it cost?",
+    "costA": "Starter has no monthly fee: Sunbnb takes {pct}% only of what it sells for you. Pro and Business lower the commission to {pro}% and {business}% for a monthly fee.",
+    "languagesQ": "Which languages does it speak?",
+    "languagesA": "English, Spanish and Finnish, for you, your staff and your guests."
   }
 }
