@@ -308,6 +308,7 @@ pure layout generator (location TBD — see Q2)
 - **P9c built (uncommitted): one conversation over one world**, landing → build → guest → staff →
   go live, Haiku from the first screen. Remaining P9c: the aerial illustrated→map hand-off, the
   scroll-driven camera along the beach places (below-hero content), agent narration lines.
+- **Coastline cache built** (uncommitted at time of writing) — seed campaign coasts per environment before ads.
 - **Next action: P9b (D10).** Start with the shipped-feature audit (what can each module
   honestly show — F&B orders, rentals, table bookings, QR walk-ins, day close/invoicing are
   believed shipped; dynamic pricing, hotel channel, Viva need checking), then the qualifier in
@@ -343,6 +344,17 @@ pure layout generator (location TBD — see Q2)
   session turn/token caps on the API path (they now also cap spend).
 
 ## Log
+
+- **2026-10-05** — **Own coastline cache in PostGIS** (migration `20261005104249_add_coastline_cache`,
+  additive: `coast_tile`, `coast_line` with a GiST index). Read-through by 0.1° tile (~10 km): the
+  first lookup in a tile fetches its coastline from Overpass ONCE (`lib/overpass.ts`, instances
+  raced, an Overpass "200 + timeout remark" is not cached as "no coast"), every later beach in the
+  tile is answered from our table (~20 ms vs 5–9 s). `@repo/data/coastline-db` (DB) +
+  `@repo/data/coastline-tiles` (pure, float-safe grid — `2.3 / 0.1` is 22.999…, found by the tile
+  test). Seeding for campaign coasts: `npm run seed:coastline -- mallorca costa-del-sol …` (slow
+  and polite; re-runnable, retries failed tiles). Playa Alonso, which never snapped, now does.
+  **Before pushing main:** `npm run migrate:test`; before ads run, seed the campaign coasts against
+  the test and production DBs (POSTGRES_URL decides which).
 
 - **2026-10-05** — **First-screen feature showcase (founder spec).** The hero headline now cycles
   one feature at a time every 5.5 s — the ad's promise (sunbed booking) first, then drinks to the

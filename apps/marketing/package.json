@@ -14,7 +14,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "eval": "node eval/run.ts",
-    "eval:summary": "node eval/summarise.ts"
+    "eval:summary": "node eval/summarise.ts",
+    "seed:coastline": "npx --yes tsx scripts/seed-coastline.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
