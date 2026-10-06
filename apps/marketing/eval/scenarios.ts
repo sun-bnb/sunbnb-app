@@ -156,6 +156,15 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    id: 'walk-in-qr',
+    intent: 'Knows walk-in guests can book a sunbed by scanning its QR card (founder 2026-10-06)',
+    turns: ['Most of my guests just walk in on the day. Can they use Sunbnb too?'],
+    checks: [
+      { kind: 'mentions', pattern: /scan|QR/i, label: 'scanning the sunbed\'s QR card' },
+      { kind: 'not_mentions', pattern: /download (the|an|our) app|install (the|an) app/i, label: 'an app download' },
+    ],
+  },
+  {
     id: 'hourly-sunbeds',
     intent: 'Sunbeds are booked by the day; only rentals go by the hour',
     turns: ['Can guests book a sunbed for just two hours in the afternoon?'],

@@ -19,9 +19,9 @@ export const KNOWLEDGE: KnowledgeEntry[] = [
     id: 'sunbed-booking',
     topic: 'Sunbed reservations',
     status: 'shipped',
-    say: 'Guests pick their exact sunbed on the venue\'s map and book it for one day or a range of days, paying by card online. They don\'t need an account — an email address is enough. They get a booking page with a QR pass and a receipt, a confirmation email and a reminder email on the day. The venue chooses whether guests book the whole sunshade unit or single sunbeds.',
+    say: 'Guests pick their exact sunbed on the venue\'s map and book it for one day or a range of days, paying by card online. They don\'t need an account — an email address is enough. They get a booking page with a QR pass and a receipt, a confirmation email and a reminder email on the day. The venue chooses whether guests book the whole sunshade unit or single sunbeds. Walk-in guests can scan the QR card on a free sunbed or parasol to book it for today and pay on their own phone; scanning a sunbed they have already booked opens their booking.',
     neverClaim: ['sunbeds can be booked by the hour (hourly booking exists only for equipment rentals)', 'guests can cancel a sunbed booking themselves'],
-    sources: ['apps/user/app/sites/[id]/actions.ts', 'apps/user/app/sites/[id]/Reservation.tsx', 'packages/data/src/reservation-emails.ts'],
+    sources: ['apps/user/app/sites/[id]/actions.ts', 'apps/user/app/sites/[id]/Reservation.tsx', 'packages/data/src/reservation-emails.ts', 'apps/user/app/q/[site]/[unit]/page.tsx (seat QR card → today\'s booking for that spot)'],
   },
   {
     id: 'arrival',
