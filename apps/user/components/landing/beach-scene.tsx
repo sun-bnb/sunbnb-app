@@ -5,14 +5,16 @@
  *
  * A stylised beach club built from the parts the real reservation map draws:
  * a white octagonal canopy on a pole between two loungers on a green frame, a
- * coral towel on the ones that are taken. It is driven by ONE number, the
+ * coral towel on the ones that are taken. Loungers face the sea (-z): backrest
+ * and parasol at the land end, feet to the water. It is driven by ONE number, the
  * page's scroll progress `p` in [0, 1], which the parent writes into a ref:
  *
  *   p = 0     straight down — this IS the map the product uses — morning light
- *   p ≈ 0.2   the map stands up into a wide tilted view
- *   p ≈ 0.4   gliding over the rows; a free unit is claimed ("Yours")
- *   p ≈ 0.6   noon, low beside a pole: every pole carries its QR plaque
- *   p ≈ 0.8   golden hour: the camera leaves the path and circles the tray of drinks
+ *   p ≈ 0.1   the map stands up into a wide tilted view
+ *   p ≈ 0.2   gliding over the rows toward the seat; a free unit is claimed ("Yours")
+ *   p ≈ 0.36  arrive at the parasol; slow turn around the QR plaque — noon
+ *   p ≈ 0.7   slow turn around the drinks table on the far side — golden hour
+ *   p ≈ 0.92  back to the middle of the boardwalk, then out low and straight
  *   p = 1     dusk: parasols fold, string lights come on along the boardwalk
  *
  * Camera, sun, sky, sea and sand are all functions of p (Catmull-Rom through
@@ -54,7 +56,7 @@ const DX = 2.75
 const DZ = 3.35
 const WALK_W = 2.6
 const SHORE_Z = -12.5 // sea is -z
-const POLE_Z = -0.35 // between the beds, a little toward the head end
+const POLE_Z = 0.35 // between the beds at the head end — the LAND side: you lie facing the sea
 
 interface UnitSpec {
   id: number
@@ -170,31 +172,67 @@ const SEA_SHALLOW: Key[] = [
   { p: 1, v: hex('#5c7391') },
 ]
 
-// ── Camera path: keyframes at equal p-steps, Catmull-Rom between them ───────
-const CAM_POS = [
-  new THREE.Vector3(0, 36, 4.5), // 0.0  the map
-  new THREE.Vector3(2.0, 12, 27), // 0.2  wide
-  new THREE.Vector3(7.5, 4.6, 9.5), // 0.4  gliding toward the claimed unit
-  new THREE.Vector3(CLAIMED.x + 1.7, 1.55, CLAIMED.z + 2.2), // 0.6  beside the pole, noon
-  new THREE.Vector3(CLAIMED.x + 0.12, 1.0, CLAIMED.z + 2.45), // 0.8  sitting on the bed: tray in the foreground, sea ahead
-  new THREE.Vector3(-4, 6.5, 26), // 1.0  dusk, wide
-]
-const CAM_LOOK = [
-  new THREE.Vector3(0, 0, -2.5),
-  new THREE.Vector3(0.6, 0.2, -5),
-  new THREE.Vector3(CLAIMED.x + 3.2, 0.9, CLAIMED.z - 1),
-  new THREE.Vector3(CLAIMED.x, 1.3, CLAIMED.z + POLE_Z),
-  new THREE.Vector3(CLAIMED.x + 0.05, 0.1, CLAIMED.z - 4.0),
-  new THREE.Vector3(0, 1.2, -6),
-]
-const posCurve = new THREE.CatmullRomCurve3(CAM_POS, false, 'centripetal')
-const lookCurve = new THREE.CatmullRomCurve3(CAM_LOOK, false, 'centripetal')
+// ── Camera path ─────────────────────────────────────────────────────────────
+// Each key carries the scroll position it is reached at, so a segment can be
+// slow (the QR turn, the drinks) or quick (the hops between). Catmull-Rom runs
+// over the key index; `tOfP` maps scroll → index, piecewise-linear.
+//
+//   0.00 the map · 0.09 wide · 0.17–0.26 gliding over the rows toward the seat
+//   0.36 arrive at the parasol from the walkway side, plaque in view
+//   0.36–0.62 slow turn around the plaque, staying on its front (the back is blank)
+//   0.68–0.86 slow turn around the drinks table on the far side
+//   0.86–0.95 spiral in to the middle of the boardwalk, still turning, to face the sea
+//   1.00 backed out low and straight along the boardwalk
+const PLAQUE = new THREE.Vector3(CLAIMED.x, 1.3, CLAIMED.z + POLE_Z + 0.05)
+/** The side table, beside the right-hand lounger at the head end (see Drinks). */
+const TABLE = new THREE.Vector3(CLAIMED.x + 1.08, 0.45, CLAIMED.z + 0.55)
+/** A point on a circle around `c`: φ 0 = land side (+z), 90° = +x, 180° = sea. */
+const around = (c: THREE.Vector3, deg: number, r: number, h: number) => {
+  const a = (deg * Math.PI) / 180
+  return new THREE.Vector3(c.x + Math.sin(a) * r, h, c.z + Math.cos(a) * r)
+}
+const UNIT_C = new THREE.Vector3(CLAIMED.x, 0, CLAIMED.z + POLE_Z)
+const TABLE_C = new THREE.Vector3(TABLE.x, 0, TABLE.z)
+const tableLook = new THREE.Vector3(TABLE.x, TABLE.y + 0.18, TABLE.z)
+/** The middle of the boardwalk, level with the claimed row. */
+const WALK_C = new THREE.Vector3(0, 0, CLAIMED.z + 0.5)
+/** The spiral window: the drinks turn keeps rotating (φ 165° → 360°) while the
+ *  orbit centre slides from the table to the boardwalk and the radius closes to
+ *  zero, so the camera arrives at the boardwalk's middle facing the sea with no
+ *  change of turn direction. */
+const SPIRAL_IN = 0.86
+const SPIRAL_OUT = 0.95
 
-/** Where the tray sits (see Drinks) — the fly-around orbits this point. */
-const TRAY = new THREE.Vector3(CLAIMED.x, 0.62, CLAIMED.z + 1.22)
-/** The drinks window: the camera leaves the path, circles the tray, and returns. */
-const ORBIT_IN = 0.7
-const ORBIT_OUT = 0.95
+const KEYS: { p: number; pos: THREE.Vector3; look: THREE.Vector3 }[] = [
+  { p: 0.0, pos: new THREE.Vector3(0, 36, 4.5), look: new THREE.Vector3(0, 0, -2.5) },
+  { p: 0.09, pos: new THREE.Vector3(2.0, 12, 27), look: new THREE.Vector3(0.6, 0.2, -5) },
+  { p: 0.17, pos: new THREE.Vector3(7.5, 4.6, 9.5), look: new THREE.Vector3(CLAIMED.x + 3.2, 0.9, CLAIMED.z - 1) },
+  { p: 0.26, pos: new THREE.Vector3(CLAIMED.x - 4.5, 3.2, CLAIMED.z + 6.5), look: new THREE.Vector3(CLAIMED.x, 1.0, CLAIMED.z) },
+  // the plaque faces ~326° (toward the walkway); the turn stays on that side
+  { p: 0.36, pos: around(UNIT_C, 282, 2.6, 1.8), look: PLAQUE.clone() },
+  { p: 0.5, pos: around(UNIT_C, 326, 2.1, 1.55), look: PLAQUE.clone() },
+  { p: 0.62, pos: around(UNIT_C, 14, 2.2, 1.5), look: PLAQUE.clone() },
+  // quick hop to the far side, then a slow turn around the table
+  { p: 0.68, pos: around(TABLE_C, 10, 1.45, 1.1), look: tableLook.clone() },
+  { p: 0.78, pos: around(TABLE_C, 90, 1.35, 1.05), look: tableLook.clone() },
+  { p: 0.86, pos: around(TABLE_C, 165, 1.3, 1.0), look: tableLook.clone() },
+  // 0.86–0.95 is the spiral (see Rig): same turn direction, in to the boardwalk,
+  // facing the sea on arrival. Then straight out along it.
+  { p: SPIRAL_OUT, pos: WALK_C.clone().setY(1.9), look: new THREE.Vector3(0, 0.8, WALK_C.z - 10) },
+  { p: 1.0, pos: new THREE.Vector3(0, 2.2, 26), look: new THREE.Vector3(0, 1.0, -8) },
+]
+const posCurve = new THREE.CatmullRomCurve3(KEYS.map((k) => k.pos), false, 'centripetal')
+const lookCurve = new THREE.CatmullRomCurve3(KEYS.map((k) => k.look), false, 'centripetal')
+/** Scroll position → curve parameter: key i sits at t = i/(n-1), linear in between. */
+function tOfP(p: number) {
+  const n = KEYS.length
+  for (let i = 0; i < n - 1; i++) {
+    const a = KEYS[i]!.p
+    const b = KEYS[i + 1]!.p
+    if (p <= b) return (i + (p - a) / (b - a)) / (n - 1)
+  }
+  return 1
+}
 
 // ── Shared geometry / material ───────────────────────────────────────────────
 function useParts() {
@@ -300,7 +338,7 @@ function Unit({
     }
     if (!ring.current || spec.taken) return
     // the free-bed rings belong to the wide, map-like views only
-    const wide = 1 - THREE.MathUtils.smoothstep(p, 0.42, 0.5)
+    const wide = 1 - THREE.MathUtils.smoothstep(p, 0.3, 0.36)
     let opacity = (0.22 + Math.sin(t * 1.6 + spec.id) * 0.06) * wide
     let scale = 1
     if (lit) opacity = 0.85 * wide
@@ -323,11 +361,11 @@ function Unit({
       {[-0.42, 0.42].map((dx) => (
         <group key={dx} position={[dx, 0, 0]}>
           <mesh geometry={geo.frame} material={mat.frame} position={[0, 0.16, 0]} castShadow receiveShadow />
-          <mesh geometry={geo.cushion} material={mat.cushion} position={[0, 0.27, 0.14]} castShadow receiveShadow />
+          <mesh geometry={geo.cushion} material={mat.cushion} position={[0, 0.27, -0.14]} castShadow receiveShadow />
           <mesh
             geometry={geo.backrest}
             material={mat.cushion}
-            position={[0, 0.5, -0.78]}
+            position={[0, 0.5, 0.78]}
             rotation={[-0.95, 0, 0]}
             castShadow
             receiveShadow
@@ -336,7 +374,7 @@ function Unit({
             <mesh
               geometry={geo.towel}
               material={mat.towel}
-              position={[0, 0.355, 0.22]}
+              position={[0, 0.355, -0.22]}
               rotation={[0, (spec.id % 3) * 0.04 - 0.04, 0]}
               castShadow
             />
@@ -344,9 +382,9 @@ function Unit({
         </group>
       ))}
 
-      {/* pole between the beds; the plaque faces the foot end, where a guest walks up */}
+      {/* pole between the beds at the head end; the plaque faces the walkway, where a guest walks in; its sea side is blank */}
       <mesh geometry={geo.pole} material={mat.pole} position={[0, 1.15, POLE_Z]} castShadow />
-      <group position={[0, 1.32, POLE_Z + 0.05]}>
+      <group position={[0, 1.32, POLE_Z + 0.05]} rotation={[0, spec.x < 0 ? 0.6 : -0.6, 0]}>
         <mesh geometry={geo.plaque} material={mat.plaque} castShadow />
         <mesh geometry={geo.plaqueFace} material={mat.plaqueFace} position={[0, 0, 0.016]} />
       </group>
@@ -385,7 +423,7 @@ function Drinks({ parts, progress }: { parts: Parts; progress: MutableRefObject<
   useFrame(() => {
     if (!g.current) return
     const p = progress.current
-    const s = THREE.MathUtils.smoothstep(p, 0.64, 0.72) * (1 - THREE.MathUtils.smoothstep(p, 0.95, 0.99))
+    const s = THREE.MathUtils.smoothstep(p, 0.56, 0.64) * (1 - THREE.MathUtils.smoothstep(p, 0.95, 0.99))
     g.current.scale.setScalar(Math.max(0.0001, s))
     g.current.visible = s > 0.001
   })
@@ -401,7 +439,7 @@ function Drinks({ parts, progress }: { parts: Parts; progress: MutableRefObject<
   )
   const { geo, mat } = parts
   return (
-    <group position={[CLAIMED.x, 0, CLAIMED.z + 1.22]}>
+    <group position={[TABLE.x, 0, TABLE.z]}>
       <mesh geometry={geo.table} material={mat.wood} position={[0, 0.21, 0]} castShadow receiveShadow />
       <group ref={g} position={[0, 0.42, 0]}>
         <mesh material={mats.tray} position={[0, 0.012, 0]} castShadow>
@@ -766,8 +804,7 @@ function Rig({ progress, reduced }: { progress: MutableRefObject<number>; reduce
   const pos = useMemo(() => new THREE.Vector3(), [])
   const look = useMemo(() => new THREE.Vector3(), [])
   const dir = useMemo(() => new THREE.Vector3(), [])
-  const orbitPos = useMemo(() => new THREE.Vector3(), [])
-  const orbitLook = useMemo(() => new THREE.Vector3(), [])
+  const centre = useMemo(() => new THREE.Vector3(), [])
 
   useFrame(({ clock }, dt) => {
     // ease toward the scroll position so a flick reads as a camera move
@@ -775,24 +812,21 @@ function Rig({ progress, reduced }: { progress: MutableRefObject<number>; reduce
     smooth.current += (progress.current - smooth.current) * k
     const p = THREE.MathUtils.clamp(smooth.current, 0, 1)
 
-    posCurve.getPoint(p, pos)
-    lookCurve.getPoint(p, look)
+    const t = tOfP(p)
+    posCurve.getPoint(t, pos)
+    lookCurve.getPoint(t, look)
 
-    // Golden hour: a slow half-circle around the tray. Starts behind it on the
-    // land side (continuing the path's seaward view), passes close on the right,
-    // ends on the sea side looking back at the drinks with the parasols behind.
-    // the hand-back to the wide dusk shot is a long camera move, so it gets a long window
-    const w = THREE.MathUtils.smoothstep(p, ORBIT_IN, ORBIT_IN + 0.05) * (1 - THREE.MathUtils.smoothstep(p, ORBIT_OUT - 0.08, ORBIT_OUT))
-    if (w > 0) {
-      const u = THREE.MathUtils.clamp((p - ORBIT_IN) / (ORBIT_OUT - ORBIT_IN), 0, 1)
-      const theta = u * Math.PI * 0.58 // 0 = land side; stop on the right so the pull-back to dusk clears the pole
-      const bulge = Math.sin(u * Math.PI) // closest and lowest at mid-pass
-      const r = 1.75 - 0.55 * bulge
-      const h = 1.15 - 0.3 * bulge // high enough that the plaque behind the tray clears it
-      orbitPos.set(TRAY.x + Math.sin(theta) * r, TRAY.y + h, TRAY.z + Math.cos(theta) * r)
-      orbitLook.copy(TRAY).setY(TRAY.y - 0.04) // aim a touch low so the glasses sit above the docked search
-      pos.lerp(orbitPos, w)
-      look.lerp(orbitLook, w)
+    if (p > SPIRAL_IN && p < SPIRAL_OUT) {
+      const u = THREE.MathUtils.smoothstep(p, SPIRAL_IN, SPIRAL_OUT)
+      const phi = (THREE.MathUtils.lerp(165, 360, u) * Math.PI) / 180
+      const r = THREE.MathUtils.lerp(1.3, 0, u)
+      const h = THREE.MathUtils.lerp(1.0, 1.9, u)
+      centre.lerpVectors(TABLE_C, WALK_C, u)
+      pos.set(centre.x + Math.sin(phi) * r, h, centre.z + Math.cos(phi) * r)
+      // the yaw keeps pointing "at the centre" along φ, so it turns continuously
+      // from the table round to the sea; the look distance opens up as we arrive
+      const d = THREE.MathUtils.lerp(1.3, 10, u)
+      look.set(pos.x - Math.sin(phi) * d, THREE.MathUtils.lerp(tableLook.y, 0.8, u), pos.z - Math.cos(phi) * d)
     }
 
     // portrait viewports stand further back from the look target
@@ -805,7 +839,7 @@ function Rig({ progress, reduced }: { progress: MutableRefObject<number>; reduce
     if (!reduced) {
       const t = clock.getElapsedTime()
       // less drift in the close-ups
-      const calm = 1 - THREE.MathUtils.smoothstep(p, 0.5, 0.62) + THREE.MathUtils.smoothstep(p, ORBIT_OUT, 1)
+      const calm = 1 - THREE.MathUtils.smoothstep(p, 0.3, 0.36) + THREE.MathUtils.smoothstep(p, SPIRAL_OUT, 1)
       pos.x += Math.sin(t * 0.18) * 0.5 * calm
       pos.y += Math.sin(t * 0.23) * 0.12 * calm
     }
@@ -834,12 +868,12 @@ function Club({
 
   useFrame(({ clock }) => {
     const p = progress.current
-    if (!claimed && p > 0.28) {
+    if (!claimed && p > 0.2) {
       setClaimStart(reduced ? null : clock.getElapsedTime())
       setClaimed(true)
     }
     // the tag belongs to the wide views; close-ups and dusk drop it
-    const show = claimed && p < 0.46
+    const show = claimed && p < 0.34
     if (show !== tagOn) setTagOn(show)
   })
 

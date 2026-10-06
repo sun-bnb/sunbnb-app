@@ -37,8 +37,8 @@ export default function SearchBar({ className }: { className?: string } = {}) {
   const showSuggestions = (suggestions || []).length > 0 && searchText.length > 2
 
   return (
-    <div className={`bg-white ${className ?? ''}`}>
-      <div className="w-full flex rounded-xl border border-gray-200 p-2.5 shadow-soft">
+    <div className={className}>
+      <div className="w-full flex rounded-xl border border-gray-200 bg-white p-2.5 shadow-soft">
         <InputBase
           fullWidth={true}
           sx={{ ml: 1, flex: 1 }}
@@ -67,7 +67,7 @@ export default function SearchBar({ className }: { className?: string } = {}) {
         
       { 
         (!selectedPlace && !isMenuOpen && showSuggestions) && (
-          <div className="bg-cream flex flex-wrap justify-center pt-2 pb-4 gap-1.5">
+          <div className="flex flex-wrap justify-center gap-1.5 px-1 pb-3 pt-2">
             {
               ((searchText.length > 2 && suggestions) || []).map((suggestion, index) => {
                 return (

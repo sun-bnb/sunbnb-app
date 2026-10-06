@@ -48,12 +48,12 @@ interface BusinessEntity {
 
 /** Scroll windows (fractions of the stage): fade in over [a,b], out over [c,d]. */
 const BEATS = {
-  hero: [-0.02, 0, 0.09, 0.16], // fully in at p = 0 (a window starting AT 0 is invisible at rest)
+  hero: [-0.02, 0, 0.07, 0.13], // fully in at p = 0 (a window starting AT 0 is invisible at rest)
   hint: [-0.02, 0, 0.01, 0.05],
-  stage1: [0.2, 0.26, 0.4, 0.46],
-  stage2: [0.5, 0.56, 0.66, 0.72],
-  stage3: [0.74, 0.8, 0.86, 0.9],
-  close: [0.92, 0.97, 1.5, 1.6], // stays once it is in
+  stage1: [0.13, 0.18, 0.31, 0.36], // the flyover and the travel to the seat
+  stage2: [0.38, 0.43, 0.6, 0.65], // arriving: the plaque is in view, and stays while we turn around it
+  stage3: [0.68, 0.73, 0.84, 0.88], // the turn around the drinks
+  close: [0.94, 0.985, 1.5, 1.6], // stays once it is in
 } as const
 
 /** The pointer-event windows BeachStage switches between — hoisted so the stage's scroll effect binds once. */
@@ -211,7 +211,7 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
           </div>
         </Panel>
 
-        <Panel beat="hint" className="bottom-4 left-1/2 -translate-x-1/2 text-center md:bottom-6">
+        <Panel beat="hint" className="inset-x-0 bottom-4 flex justify-center text-center md:bottom-6">
           <div className="flex flex-col items-center gap-1 text-[11px] font-medium uppercase tracking-[0.18em] text-[#4f6065]">
             <span>{t('scrollHint')}</span>
             <svg className="lp-hint-arrow h-4 w-4" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -222,7 +222,7 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
 
         {/* Beat 1 — late morning, the map stands up */}
         <Panel beat="stage1" className="inset-x-0 bottom-0 md:inset-y-0 md:left-auto md:right-0 md:flex md:w-1/2 md:items-center">
-          <div className="px-5 pb-[17svh] md:px-8 md:pb-0 lg:pr-[max(2rem,calc((100vw-72rem)/2))]">
+          <div className="px-5 pb-[21svh] md:px-8 md:pb-0 lg:pr-[max(2rem,calc((100vw-72rem)/2))]">
             <StageCopy
               label={t('stage1Label')}
               title={t('stage1Title')}
@@ -234,14 +234,14 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
 
         {/* Beat 2 — noon, at the pole */}
         <Panel beat="stage2" className="inset-x-0 bottom-0 md:inset-y-0 md:right-auto md:left-0 md:flex md:w-1/2 md:items-center">
-          <div className="px-5 pb-[17svh] md:px-8 md:pb-0 lg:pl-[max(2rem,calc((100vw-72rem)/2))]">
+          <div className="px-5 pb-[21svh] md:px-8 md:pb-0 lg:pl-[max(2rem,calc((100vw-72rem)/2))]">
             <StageCopy label={t('stage2Label')} title={t('stage2Title')} desc={t('stage2Desc')} />
           </div>
         </Panel>
 
         {/* Beat 3 — golden hour, on the lounger */}
         <Panel beat="stage3" className="inset-x-0 bottom-0 md:inset-y-0 md:left-auto md:right-0 md:flex md:w-1/2 md:items-center">
-          <div className="px-5 pb-[17svh] md:px-8 md:pb-0 lg:pr-[max(2rem,calc((100vw-72rem)/2))]">
+          <div className="px-5 pb-[21svh] md:px-8 md:pb-0 lg:pr-[max(2rem,calc((100vw-72rem)/2))]">
             <StageCopy label={t('stage3Label')} title={t('stage3Title')} desc={t('stage3Desc')} />
           </div>
         </Panel>
@@ -249,7 +249,7 @@ export default function HomeView({ businessEntity }: { businessEntity: BusinessE
         {/* Docked search — takes over from the hero's and stays for the rest of the page */}
         <div className="lp-dock fixed inset-x-0 bottom-3 z-30 flex justify-center px-3 md:bottom-5">
           <div className="lp-glass w-full max-w-xl rounded-2xl p-2">
-            <SearchBar className="flex flex-col-reverse overflow-hidden rounded-xl" />
+            <SearchBar className="flex flex-col-reverse" />
             <p className="mt-1.5 px-1 text-center text-[12px] text-[#4f6065]">
               {t('searchHint')}{' '}
               <button type="button" onClick={() => router.push('/sites')} className="lp-link font-medium">
