@@ -1577,61 +1577,155 @@
     "backToSites": "Takaisin kohteisiin"
   },
   "Landing": {
-    "partnerBadge": "Kumppani",
-    "signIn": "Kirjaudu sisään",
-    "acceptingPartners": "Otamme nyt vastaan kumppaneita",
-    "heroLine1": "Hoida rantabisneksesi",
-    "heroEmphasis": "vaivattomasti",
-    "heroDescription": "Yksi työkalu aurinkotuolien hallintaan, varausten vastaanottoon ja maksujen käsittelyyn. Aseta aurinkotuolisi, tuotteesi ja palvelusi tänne, niin alat ottaa varauksia vastaan minuuteissa. Helppoa sinulle, helppoa asiakkaillesi.",
-    "getStartedNow": "Aloita nyt",
-    "seeYourBeach": "Katso rantasi Sunbnb:ssä →",
-    "featuresTitle": "Kaikki mitä tarvitset bisneksesi pyörittämiseen",
-    "featuresSubtitle": "Aurinkotuolien hallinnasta maksujen tilitykseen",
-    "feature1Title": "Interaktiiviset kohdekartat",
-    "feature1Desc": "Vedä ja pudota aurinkotuolit satelliittikartalle. Määritä lohkot, rivit ja parit.",
-    "feature2Title": "Reaaliaikainen kalenteri",
-    "feature2Desc": "Näe varaukset tunneittain ja päivittäin. Älä koskaan ylimyy — saatavuus päivittyy reaaliajassa.",
-    "feature3Title": "Maksut ja tilitykset",
-    "feature3Desc": "Ota korttimaksuja vastaan Stripen kautta. Automaattinen laskutus, ALV-käsittely ja läpinäkyvät tilitykset.",
-    "feature4Title": "Mobiili-QR-passit",
-    "feature4Desc": "Asiakkaat saavat QR-passin varauksen jälkeen. Henkilökunta skannaa ja vahvistaa — paperilippuja ei tarvita.",
-    "feature5Title": "Tilaukset paikan päällä",
-    "feature5Desc": "Myy ruokaa, juomia ja tarvikkeita. Asiakkaat tilaavat puhelimestaan, sinä toimitat baarista.",
-    "feature6Title": "Käyttöoikeudet",
-    "feature6Desc": "Luo aikarajoitettuja käyttöavaimia henkilökunnalle. Hallitse kuka näkee mitä ja milloin.",
-    "pricingTitle": "Selkeä ja läpinäkyvä hinnoittelu",
-    "pricingSubtitle": "Aloita ilmaiseksi. Päivitä, kun kasvat.",
-    "planStarter": "Starter",
-    "planStarterPrice": "Ilmainen",
-    "planStarterNote": "ikuisesti",
-    "planPro": "Pro",
-    "planProNote": "/kk",
-    "planBusiness": "Business",
-    "planBusinessNote": "/kk",
-    "planMostChosen": "Suosituin",
-    "commissionLabel": "komissio jokaisesta Sunbnb-ostoksesta",
-    "feat1Venue": "1 ranta tai kohde",
-    "featUpToVenues": "Enintään {count} kohdetta",
-    "featEverythingIn": "Kaikki {plan}-tason ominaisuudet",
-    "featReservationsQr": "Aurinkotuolivaraukset + QR-tilaukset",
-    "featCardPayments": "Integroidut korttimaksut",
-    "featOffPlatformBilling": "Alustan ulkopuolinen laskutus",
-    "featBranded": "Brändätty varaussivu",
-    "featCommunitySupport": "Yhteisötuki",
-    "featPrioritySupport": "Priorisoitu tuki",
-    "featDedicatedSupport": "Oma tukikontakti",
-    "getStarted": "Aloita",
-    "ctaTitle": "Valmiina modernisoimaan rantabisneksesi?",
-    "ctaBody": "Liity Välimeren kohteisiin, jotka jo käyttävät Sunbnb:tä varausten, varaston ja maksujen hallintaan.",
-    "signUpGoogle": "Rekisteröidy Googlella",
-    "footerOnboarding": "Käyttöönotto-opas",
-    "footerMerchantAgreement": "Kauppiassopimus",
-    "footerVerifactu": "Veri*factu-yhteensopivuus",
-    "footerContact": "Yhteystiedot",
-    "footerCopyright": "© {year} Sunbnb",
-    "footerOperatedBy": "Palvelusta vastaa {company}",
-    "footerBusinessId": "Y-tunnus {id}",
-    "footerVatId": "ALV-tunnus {id}"
+    "nav": {
+      "badge": "Kumppani",
+      "signIn": "Kirjaudu sisään"
+    },
+    "hero": {
+      "eyebrow": "Rantaklubeille, aurinkotuolien vuokraajille ja rantaravintoloille",
+      "title1": "Aurinkotuolit varattaviksi verkossa.",
+      "title2": "Koko ranta yhdellä näytöllä.",
+      "body": "Asiakkaat valitsevat tarkan aurinkotuolin kartaltasi ja maksavat kortilla jo ennen saapumista. Henkilökunta hoitaa päivän rannan reaaliaikaisesta näkymästä: walk-in-asiakkaat, saapumiset, tilaukset ja käteinen samassa paikassa.",
+      "cta": "Luo tili",
+      "seeYourBeach": "Katso rantasi Sunbnb:ssä",
+      "noHardware": "Toimii selaimessa puhelimilla ja tableteilla, jotka sinulla jo on. Ei ostettavaa laitteistoa, eikä asiakkaiden tarvitse ladata sovellusta.",
+      "gridLabel": "Kuva henkilökunnan rantanäkymästä: aurinkotuolit riveissä tilan mukaan väritettyinä",
+      "gridTitle": "Rantanäkymä",
+      "gridToday": "Tänään",
+      "legend": {
+        "free": "Vapaa",
+        "booked": "Varattu",
+        "occupied": "Rannalla",
+        "comp": "Veloitukseton"
+      }
+    },
+    "day": {
+      "title": "Päivä paikassasi",
+      "subtitle": "Mitä Sunbnb tekee, siinä järjestyksessä kuin se tapahtuu.",
+      "setup": {
+        "time": "Ennen kautta",
+        "title": "Piirrä rantasi",
+        "body": "Sijoita aurinkotuolit satelliittikartalle tai piirretylle pohjalle rivien, välien ja kierron kanssa. Aseta päivähinta koko paikalle, osiolle tai yksittäiselle eturivin tuolille, ja tulosta jokaiselle tuolille QR-kortti."
+      },
+      "book": {
+        "time": "Milloin vain",
+        "title": "Asiakkaat varaavat verkossa",
+        "body": "Asiakkaat valitsevat tarkan tuolin yhdeksi tai useammaksi päiväksi ja maksavat kortilla. Tiliä ei tarvita, pelkkä sähköposti riittää. He saavat QR-passin, kuitin ja muistutuksen varauspäivänä."
+      },
+      "arrive": {
+        "time": "Saapuessa",
+        "title": "Kirjaa asiakas sisään",
+        "body": "Henkilökunta löytää varauksen nimellä, puhelinnumerolla tai sähköpostilla ja kirjaa asiakkaan sisään yhdellä napautuksella. Tuoli näkyy ruudukossa varattuna."
+      },
+      "order": {
+        "time": "Keskipäivä",
+        "title": "Tilaukset tuolille",
+        "body": "Asiakkaat tilaavat ruokaa ja juomaa varauksestaan tai skannaamalla tuolin QR-kortin ja maksavat samalla. Tilaukset tulevat reaaliaikaiselle tilaustaululle äänimerkin kera."
+      },
+      "desk": {
+        "time": "Walk-in",
+        "title": "Myy suoraan rannalla",
+        "body": "Walk-in-asiakkaat skannaavat vapaan tuolin QR-kortin ja maksavat omalla puhelimellaan. Henkilökunta voi myös kirjata käteismyynnin kuitilla, siirtää asiakkaita, estää tuolin tai antaa sen veloituksetta ja varata ryhmälle tuolit kerralla."
+      },
+      "close": {
+        "time": "Päivän päätteeksi",
+        "title": "Sulje kassa",
+        "body": "Käteistä seurataan työntekijäkohtaisesti kassan ja päivän sulkemisen kanssa. Jokaisesta verkkomyynnistä syntyy lasku nimissäsi omalla ALV-kannallasi, ja kirjanpidon voi viedä CSV-muodossa."
+      }
+    },
+    "more": {
+      "title": "Mukana myös",
+      "rentals": {
+        "title": "Välinevuokraus",
+        "body": "Surffilaudat, SUP-laudat, kajakit, polkuveneet ja muut, tunneittain tai päivittäin, varastorajoilla."
+      },
+      "tables": {
+        "title": "Ravintolapöydät",
+        "body": "Pöytäkartta, vuorot, jonotuslista, valinnainen no-show-talletus ja varauswidget omille verkkosivuillesi. Ruokailijat voivat avata laskun pöydän QR-koodilla."
+      },
+      "reports": {
+        "title": "Raportit",
+        "body": "Liikevaihdon kehitys, käyttöaste, myynti kanavittain ja työntekijöittäin, CSV-vienti."
+      },
+      "staff": {
+        "title": "Henkilökunnan pääsy",
+        "body": "Anna henkilökunnalle linkki rantanäkymään ja tilaustaululle työntekijä- tai esihenkilötasolla."
+      },
+      "refunds": {
+        "title": "Hyvitykset",
+        "body": "Hyvitä varaus kokonaan rantanäkymästä. Rahat palaavat asiakkaan kortille."
+      },
+      "languages": {
+        "title": "Englanti, espanja, suomi",
+        "body": "Asiakkaan ja yrityksen sovellukset seuraavat selaimen kieltä. Hinnat ovat euroissa."
+      }
+    },
+    "money": {
+      "title": "Näin rahaliikenne toimii",
+      "body": "Yhdistät oman Mollie-tilisi, ja asiakkaat maksavat sinulle. Sunbnb ottaa provision vain siitä, mitä ostetaan Sunbnb:n kautta.",
+      "merchant": {
+        "title": "Sinä olet kauppias",
+        "body": "Mollie, luvanvarainen eurooppalainen maksupalvelu, tilittää rahat tilillesi omassa aikataulussaan. Sunbnb ei koskaan pidä hallussaan rahojasi."
+      },
+      "listed": {
+        "title": "Asiakas maksaa sinun hintasi",
+        "body": "Asiakkaalle ei lisätä mitään. Provisio vähennetään myynnistä, ja Sunbnb laskuttaa sen sinulta erikseen."
+      },
+      "commission": {
+        "title": "Provisio paketin mukaan",
+        "body": "{starter} %, {pro} % tai {business} % paketista riippuen, Sunbnb:n kautta myydyistä tuolivarauksista, ruoasta ja juomasta sekä vuokrista."
+      },
+      "cash": {
+        "title": "Ei provisiota käteisestä",
+        "body": "Henkilökunnan rannalla kirjaama käteismyynti on kokonaan sinun."
+      }
+    },
+    "plans": {
+      "title": "Paketit",
+      "subtitle": "Provisio on se, mitä maksat jokaisesta myynnistä. Kuukausipaketti laskee sitä ja tuo lisää paikkoja.",
+      "free": "Ilmainen",
+      "freeNote": "ei kuukausimaksua",
+      "perMonth": "/ kk",
+      "mostChosen": "Suosituin",
+      "commissionLabel": "provisio jokaisesta Sunbnb:n kautta tehdystä ostosta",
+      "oneVenue": "1 paikka",
+      "starterAll": "Tuolivaraukset, tilaukset ja vuokraus",
+      "upToVenues": "Enintään {count} paikkaa",
+      "everythingIn": "Kaikki {plan}-paketista",
+      "offPlatform": "Laskutus alustan ulkopuolella",
+      "branded": "Brändätty varaussivu",
+      "supportCommunity": "Yhteisötuki",
+      "supportPriority": "Etusijatuki",
+      "supportDedicated": "Oma tukihenkilö",
+      "cta": "Aloita"
+    },
+    "start": {
+      "title": "Näin pääset alkuun",
+      "account": {
+        "title": "Luo tili",
+        "body": "Kirjaudu Googlella tai sähköpostilla ja salasanalla."
+      },
+      "beach": {
+        "title": "Määritä rantasi",
+        "body": "Lyhyt ohjattu toiminto luo paikkasi, minkä jälkeen sijoitat tuolit ja asetat hinnat. Tarkistuslista näyttää, mitä vielä puuttuu ennen julkaisua."
+      },
+      "mollie": {
+        "title": "Yhdistä Mollie",
+        "body": "Maksulliset varaukset alkavat, kun Mollie-tilisi on yhdistetty ja Mollie on vahvistanut yrityksesi."
+      },
+      "cta": "Luo tili",
+      "questions": "Kysyttävää ensin? Kirjoita osoitteeseen"
+    },
+    "footer": {
+      "onboarding": "Käyttöönotto-opas",
+      "merchantAgreement": "Kauppiassopimus",
+      "verifactu": "Veri*factu-yhteensopivuus",
+      "contact": "Yhteystiedot",
+      "copyright": "© {year} Sunbnb",
+      "operatedBy": "Palvelusta vastaa {company}",
+      "businessId": "Y-tunnus {id}",
+      "vatId": "ALV-tunnus {id}"
+    }
   },
   "Info": {
     "sloganLine1": "Sunbnb - Kumppanisi",

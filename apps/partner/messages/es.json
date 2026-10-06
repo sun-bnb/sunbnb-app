@@ -1577,61 +1577,155 @@
     "backToSites": "Volver a los sitios"
   },
   "Landing": {
-    "partnerBadge": "Partner",
-    "signIn": "Iniciar sesión",
-    "acceptingPartners": "Aceptando nuevos partners",
-    "heroLine1": "Gestiona tu negocio de playa,",
-    "heroEmphasis": "sin esfuerzo",
-    "heroDescription": "Una sola herramienta para gestionar tus hamacas, recibir reservas y aceptar pagos. Configura tus hamacas, productos y servicios aquí, y empieza a recibir reservas en minutos. Sencillo para ti, fácil para tus clientes.",
-    "getStartedNow": "Empezar ahora",
-    "seeYourBeach": "Mira tu playa en Sunbnb →",
-    "featuresTitle": "Todo lo que necesitas para gestionar tu negocio",
-    "featuresSubtitle": "Del inventario de hamacas a la liquidación de pagos",
-    "feature1Title": "Mapas interactivos del recinto",
-    "feature1Desc": "Distribución de hamacas con arrastrar y soltar sobre mapa satélite. Configura parcelas, filas y emparejamientos.",
-    "feature2Title": "Calendario en tiempo real",
-    "feature2Desc": "Mira las reservas por hora y por día. Nunca sobrevendas — la disponibilidad se actualiza en tiempo real.",
-    "feature3Title": "Pagos y liquidaciones",
-    "feature3Desc": "Acepta pagos con tarjeta mediante Stripe. Facturación automática, gestión de IVA y liquidaciones transparentes.",
-    "feature4Title": "Pases QR móviles",
-    "feature4Desc": "Los clientes reciben un pase QR tras reservar. El personal escanea para validar — sin tickets de papel.",
-    "feature5Title": "Pedidos en el sitio",
-    "feature5Desc": "Vende comida, bebida y accesorios. Los clientes piden desde el móvil y tú entregas desde la barra.",
-    "feature6Title": "Panel de seguridad",
-    "feature6Desc": "Genera tokens de acceso limitados en el tiempo para el personal. Controla quién ve qué y cuándo.",
-    "pricingTitle": "Precios sencillos y transparentes",
-    "pricingSubtitle": "Empieza gratis. Sube de plan cuando crezcas.",
-    "planStarter": "Starter",
-    "planStarterPrice": "Gratis",
-    "planStarterNote": "para siempre",
-    "planPro": "Pro",
-    "planProNote": "/mes",
-    "planBusiness": "Business",
-    "planBusinessNote": "/mes",
-    "planMostChosen": "El más elegido",
-    "commissionLabel": "de comisión por compra en Sunbnb",
-    "feat1Venue": "1 playa o local",
-    "featUpToVenues": "Hasta {count} locales",
-    "featEverythingIn": "Todo lo de {plan}",
-    "featReservationsQr": "Reservas de hamacas + pedidos por QR",
-    "featCardPayments": "Pagos con tarjeta integrados",
-    "featOffPlatformBilling": "Facturación fuera de plataforma",
-    "featBranded": "Página de reservas con tu marca",
-    "featCommunitySupport": "Soporte de la comunidad",
-    "featPrioritySupport": "Soporte prioritario",
-    "featDedicatedSupport": "Soporte dedicado",
-    "getStarted": "Empezar",
-    "ctaTitle": "¿Listo para modernizar tu negocio de playa?",
-    "ctaBody": "Únete a los locales del Mediterráneo que ya usan Sunbnb para gestionar reservas, inventario y pagos.",
-    "signUpGoogle": "Registrarse con Google",
-    "footerOnboarding": "Guía de onboarding",
-    "footerMerchantAgreement": "Contrato del comerciante",
-    "footerVerifactu": "Cumplimiento Veri*factu",
-    "footerContact": "Contacto",
-    "footerCopyright": "© {year} Sunbnb",
-    "footerOperatedBy": "Operado por {company}",
-    "footerBusinessId": "CIF/NIF {id}",
-    "footerVatId": "IVA {id}"
+    "nav": {
+      "badge": "Partner",
+      "signIn": "Iniciar sesión"
+    },
+    "hero": {
+      "eyebrow": "Para beach clubs, concesiones de hamacas y restaurantes de playa",
+      "title1": "Tus hamacas, reservables online.",
+      "title2": "Tu playa, en una sola pantalla.",
+      "body": "Los clientes eligen su hamaca exacta en tu mapa y pagan con tarjeta antes de llegar. Tu equipo lleva el día desde una cuadrícula en vivo de la playa: clientes sin reserva, llegadas, pedidos y efectivo en un solo lugar.",
+      "cta": "Crea tu cuenta",
+      "seeYourBeach": "Mira tu playa en Sunbnb",
+      "noHardware": "Funciona en el navegador de los móviles y tablets que ya tienes. Sin hardware que comprar y sin app que descargar para los clientes.",
+      "gridLabel": "Ilustración de la vista de playa del personal: hamacas en filas, coloreadas por estado",
+      "gridTitle": "Vista de playa",
+      "gridToday": "Hoy",
+      "legend": {
+        "free": "Libre",
+        "booked": "Reservada",
+        "occupied": "En la playa",
+        "comp": "Cortesía"
+      }
+    },
+    "day": {
+      "title": "Un día en tu negocio",
+      "subtitle": "Lo que hace Sunbnb, en el orden en que ocurre.",
+      "setup": {
+        "time": "Antes de la temporada",
+        "title": "Dibuja tu playa",
+        "body": "Coloca tus hamacas sobre un mapa satélite o un plano dibujado, con filas, separación y rotación. Fija un precio por día para todo el negocio, una zona o una sola hamaca de primera línea, e imprime una tarjeta QR para cada hamaca."
+      },
+      "book": {
+        "time": "En cualquier momento",
+        "title": "Los clientes reservan online",
+        "body": "Los clientes eligen su hamaca exacta para uno o varios días y pagan con tarjeta. Sin cuenta, solo un email. Reciben un pase QR, un recibo y un recordatorio el mismo día."
+      },
+      "arrive": {
+        "time": "A la llegada",
+        "title": "Registra la llegada",
+        "body": "El personal busca la reserva por nombre, teléfono o email y registra la llegada con un toque. La hamaca pasa a ocupada en la cuadrícula."
+      },
+      "order": {
+        "time": "Mediodía",
+        "title": "Pedidos a la hamaca",
+        "body": "Los clientes piden comida y bebida desde su reserva o escaneando la tarjeta QR de su hamaca, y pagan en el mismo paso. Los pedidos llegan a un panel en vivo con aviso sonoro."
+      },
+      "desk": {
+        "time": "Sin reserva",
+        "title": "Vende en la arena",
+        "body": "Los clientes sin reserva escanean la tarjeta QR de una hamaca libre y pagan en su propio móvil. El personal también puede registrar ventas en efectivo con recibo, mover clientes, bloquear o regalar una hamaca y reservar un grupo de una vez."
+      },
+      "close": {
+        "time": "Fin del día",
+        "title": "Cierra la caja",
+        "body": "El efectivo se controla por empleado, con caja y cierre del día. Cada venta online genera una factura a tu nombre con tu tipo de IVA, y la contabilidad se exporta a CSV."
+      }
+    },
+    "more": {
+      "title": "También incluido",
+      "rentals": {
+        "title": "Alquiler de material",
+        "body": "Tablas de surf, paddle surf, kayaks, patines a pedales y más, por horas o por días, con control de stock."
+      },
+      "tables": {
+        "title": "Mesas de restaurante",
+        "body": "Plano de mesas, turnos, lista de espera, depósito opcional contra no presentados y un widget de reservas para tu propia web. Los comensales pueden abrir una cuenta con el QR de la mesa."
+      },
+      "reports": {
+        "title": "Informes",
+        "body": "Evolución de ingresos, ocupación, ventas por canal y por empleado, con exportación a CSV."
+      },
+      "staff": {
+        "title": "Acceso del personal",
+        "body": "Da al personal un enlace a la vista de playa y al panel de pedidos, con nivel de personal o de encargado."
+      },
+      "refunds": {
+        "title": "Reembolsos",
+        "body": "Reembolsa una reserva completa desde la vista de playa. El dinero vuelve a la tarjeta del cliente."
+      },
+      "languages": {
+        "title": "Inglés, español, finés",
+        "body": "Las apps de clientes y del negocio siguen el idioma del navegador. Los precios son en euros."
+      }
+    },
+    "money": {
+      "title": "Cómo funciona el dinero",
+      "body": "Conectas tu propia cuenta de Mollie y los clientes te pagan a ti. Sunbnb solo cobra comisión por lo que se compra a través de Sunbnb.",
+      "merchant": {
+        "title": "Tú eres el comercio",
+        "body": "Mollie, un proveedor de pagos europeo autorizado, abona en tu cuenta según su propio calendario. Sunbnb nunca retiene tu dinero."
+      },
+      "listed": {
+        "title": "El cliente paga tu precio",
+        "body": "No se añade nada para el cliente. La comisión se descuenta de la venta y Sunbnb te la factura por separado."
+      },
+      "commission": {
+        "title": "Comisión según plan",
+        "body": "{starter} %, {pro} % o {business} % según tu plan, sobre reservas de hamacas, comida y bebida, y alquileres vendidos a través de Sunbnb."
+      },
+      "cash": {
+        "title": "Sin comisión en efectivo",
+        "body": "Las ventas en efectivo que registra tu personal en la playa son íntegramente tuyas."
+      }
+    },
+    "plans": {
+      "title": "Planes",
+      "subtitle": "La comisión es lo que pagas por cada venta. Un plan mensual la reduce y añade negocios.",
+      "free": "Gratis",
+      "freeNote": "sin cuota mensual",
+      "perMonth": "/ mes",
+      "mostChosen": "El más elegido",
+      "commissionLabel": "de comisión por cada compra a través de Sunbnb",
+      "oneVenue": "1 negocio",
+      "starterAll": "Reservas de hamacas, pedidos y alquileres",
+      "upToVenues": "Hasta {count} negocios",
+      "everythingIn": "Todo lo de {plan}",
+      "offPlatform": "Cobro fuera de la plataforma",
+      "branded": "Página de reservas con tu marca",
+      "supportCommunity": "Soporte de la comunidad",
+      "supportPriority": "Soporte prioritario",
+      "supportDedicated": "Soporte dedicado",
+      "cta": "Empezar"
+    },
+    "start": {
+      "title": "Cómo empezar",
+      "account": {
+        "title": "Crea tu cuenta",
+        "body": "Entra con Google, o con email y contraseña."
+      },
+      "beach": {
+        "title": "Configura tu playa",
+        "body": "Un asistente breve crea tu negocio; después colocas tus hamacas y fijas precios. Una lista te muestra lo que falta antes de publicar."
+      },
+      "mollie": {
+        "title": "Conecta Mollie",
+        "body": "Las reservas de pago empiezan cuando tu cuenta de Mollie está conectada y Mollie ha verificado tu empresa."
+      },
+      "cta": "Crea tu cuenta",
+      "questions": "¿Tienes preguntas? Escribe a"
+    },
+    "footer": {
+      "onboarding": "Guía de onboarding",
+      "merchantAgreement": "Contrato del comerciante",
+      "verifactu": "Cumplimiento Veri*factu",
+      "contact": "Contacto",
+      "copyright": "© {year} Sunbnb",
+      "operatedBy": "Operado por {company}",
+      "businessId": "CIF/NIF {id}",
+      "vatId": "IVA {id}"
+    }
   },
   "Info": {
     "sloganLine1": "Sunbnb - Tu partner",

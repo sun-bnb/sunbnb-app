@@ -1577,61 +1577,155 @@
     "backToSites": "Back to sites"
   },
   "Landing": {
-    "partnerBadge": "Partner",
-    "signIn": "Sign in",
-    "acceptingPartners": "Now accepting partners",
-    "heroLine1": "Manage your beach business,",
-    "heroEmphasis": "effortlessly",
-    "heroDescription": "One tool to manage your sunbeds, take bookings, and accept payments. Set up your sunbeds, products and services here, and start taking reservations in minutes. Simple for you, easy for your guests.",
-    "getStartedNow": "Get started now",
-    "seeYourBeach": "See your beach on Sunbnb →",
-    "featuresTitle": "Everything you need to run your venue",
-    "featuresSubtitle": "From sunbed inventory to payment settlement",
-    "feature1Title": "Interactive site maps",
-    "feature1Desc": "Drag-and-drop sunbed layout with satellite map overlay. Configure parcels, rows, and pairing.",
-    "feature2Title": "Real-time calendar",
-    "feature2Desc": "See bookings per hour and per day. Never oversell — availability updates in real time.",
-    "feature3Title": "Payments & settlements",
-    "feature3Desc": "Accept card payments via Stripe. Automated invoicing, VAT handling, and transparent settlements.",
-    "feature4Title": "Mobile QR passes",
-    "feature4Desc": "Guests get a QR pass after booking. Staff scan to validate — no paper tickets needed.",
-    "feature5Title": "On-site orders",
-    "feature5Desc": "Sell food, drinks, and accessories. Guests order from their phone, you fulfill from the bar.",
-    "feature6Title": "Security dashboard",
-    "feature6Desc": "Generate time-limited access tokens for on-site staff. Control who sees what, and when.",
-    "pricingTitle": "Simple, transparent pricing",
-    "pricingSubtitle": "Start free. Upgrade when you grow.",
-    "planStarter": "Starter",
-    "planStarterPrice": "Free",
-    "planStarterNote": "forever",
-    "planPro": "Pro",
-    "planProNote": "/month",
-    "planBusiness": "Business",
-    "planBusinessNote": "/month",
-    "planMostChosen": "Most chosen",
-    "commissionLabel": "commission per Sunbnb purchase",
-    "feat1Venue": "1 beach or venue",
-    "featUpToVenues": "Up to {count} venues",
-    "featEverythingIn": "Everything in {plan}",
-    "featReservationsQr": "Sunbed reservations + QR ordering",
-    "featCardPayments": "Integrated card payments",
-    "featOffPlatformBilling": "Off-platform billing",
-    "featBranded": "Branded booking page",
-    "featCommunitySupport": "Community support",
-    "featPrioritySupport": "Priority support",
-    "featDedicatedSupport": "Dedicated support",
-    "getStarted": "Get started",
-    "ctaTitle": "Ready to modernize your beach business?",
-    "ctaBody": "Join venues across the Mediterranean already using Sunbnb to manage reservations, inventory, and payments.",
-    "signUpGoogle": "Sign up with Google",
-    "footerOnboarding": "Onboarding Guide",
-    "footerMerchantAgreement": "Merchant Agreement",
-    "footerVerifactu": "Veri*factu Compliance",
-    "footerContact": "Contact",
-    "footerCopyright": "© {year} Sunbnb",
-    "footerOperatedBy": "Operated by {company}",
-    "footerBusinessId": "Business ID {id}",
-    "footerVatId": "VAT {id}"
+    "nav": {
+      "badge": "Partner",
+      "signIn": "Sign in"
+    },
+    "hero": {
+      "eyebrow": "For beach clubs, sunbed concessions and beach restaurants",
+      "title1": "Your sunbeds, bookable online.",
+      "title2": "Your beach, on one screen.",
+      "body": "Guests pick their exact sunbed on your map and pay by card before they arrive. Your staff run the day from a live grid of the beach: walk-ins, check-ins, orders and cash in one place.",
+      "cta": "Create your account",
+      "seeYourBeach": "See your beach on Sunbnb",
+      "noHardware": "Runs in the browser on the phones and tablets you already have. No hardware to buy, no app for guests to download.",
+      "gridLabel": "Illustration of the staff floor view: sunbeds in rows, coloured by status",
+      "gridTitle": "Floor view",
+      "gridToday": "Today",
+      "legend": {
+        "free": "Free",
+        "booked": "Booked",
+        "occupied": "On the beach",
+        "comp": "Complimentary"
+      }
+    },
+    "day": {
+      "title": "A day at your venue",
+      "subtitle": "What Sunbnb does, in the order it happens.",
+      "setup": {
+        "time": "Before the season",
+        "title": "Draw your beach",
+        "body": "Place your sunbeds on a satellite map or a drawn plan, with rows, spacing and rotation. Set a day price for the whole venue, a section or a single front-row sunbed, and print a QR card for every sunbed."
+      },
+      "book": {
+        "time": "Any time",
+        "title": "Guests book online",
+        "body": "Guests choose their exact sunbed for one day or several and pay by card. No account needed, just an email. They get a QR pass, a receipt and a reminder on the day."
+      },
+      "arrive": {
+        "time": "On arrival",
+        "title": "Check guests in",
+        "body": "Staff find the booking by name, phone or email and check the guest in with one tap. The sunbed turns occupied on the grid."
+      },
+      "order": {
+        "time": "Midday",
+        "title": "Orders to the sunbed",
+        "body": "Guests order food and drinks from their booking or by scanning the QR card on their sunbed, and pay in the same flow. Orders land on a live order board with a sound alert."
+      },
+      "desk": {
+        "time": "Walk-ins",
+        "title": "Sell on the sand",
+        "body": "Walk-in guests scan the QR card on a free sunbed and pay on their own phone. Staff can also record cash sales with a receipt, move guests, block or comp a sunbed, and book a group as one."
+      },
+      "close": {
+        "time": "End of day",
+        "title": "Close the till",
+        "body": "Cash is tracked per employee, with a till and a day close. Every online sale produces an invoice in your name with your VAT rate, and the accounting page exports to CSV."
+      }
+    },
+    "more": {
+      "title": "Also included",
+      "rentals": {
+        "title": "Equipment rentals",
+        "body": "Surfboards, paddleboards, kayaks, pedal boats and more, by the hour or by the day, with stock limits."
+      },
+      "tables": {
+        "title": "Restaurant tables",
+        "body": "A floor plan of your tables, shifts, a waitlist, an optional no-show deposit and a booking widget for your own website. Diners can open a tab with the table’s QR code."
+      },
+      "reports": {
+        "title": "Reports",
+        "body": "Revenue trend, occupancy, sales by channel and per employee, with CSV export."
+      },
+      "staff": {
+        "title": "Staff access",
+        "body": "Give staff a link to the floor view and the order board, at staff or manager level."
+      },
+      "refunds": {
+        "title": "Refunds",
+        "body": "Refund a booking in full from the floor view. The money goes back to the guest’s card."
+      },
+      "languages": {
+        "title": "English, Spanish, Finnish",
+        "body": "The guest and venue apps follow the browser’s language. Prices are in euros."
+      }
+    },
+    "money": {
+      "title": "How the money works",
+      "body": "You connect your own Mollie account and guests pay you. Sunbnb takes a commission only on what is bought through Sunbnb.",
+      "merchant": {
+        "title": "You are the merchant",
+        "body": "Mollie, a licensed European payment provider, pays out to your account on its own schedule. Sunbnb never holds your money."
+      },
+      "listed": {
+        "title": "Guests pay your price",
+        "body": "Nothing is added on top for the guest. The commission is deducted from the sale, and Sunbnb invoices it to you separately."
+      },
+      "commission": {
+        "title": "Commission by plan",
+        "body": "{starter}%, {pro}% or {business}% depending on your plan, on sunbed bookings, food and drink, and rentals sold through Sunbnb."
+      },
+      "cash": {
+        "title": "No commission on cash",
+        "body": "Cash sales your staff record on the beach are yours in full."
+      }
+    },
+    "plans": {
+      "title": "Plans",
+      "subtitle": "The commission is what you pay on each sale. A monthly plan lowers it and adds venues.",
+      "free": "Free",
+      "freeNote": "no monthly fee",
+      "perMonth": "/ month",
+      "mostChosen": "Most chosen",
+      "commissionLabel": "commission on each purchase through Sunbnb",
+      "oneVenue": "1 venue",
+      "starterAll": "Sunbed bookings, orders and rentals",
+      "upToVenues": "Up to {count} venues",
+      "everythingIn": "Everything in {plan}",
+      "offPlatform": "Off-platform billing",
+      "branded": "Branded booking page",
+      "supportCommunity": "Community support",
+      "supportPriority": "Priority support",
+      "supportDedicated": "Dedicated support",
+      "cta": "Get started"
+    },
+    "start": {
+      "title": "Getting started",
+      "account": {
+        "title": "Create your account",
+        "body": "Sign in with Google, or with an email and password."
+      },
+      "beach": {
+        "title": "Set up your beach",
+        "body": "A short wizard creates your venue, then you place your sunbeds and set prices. A checklist shows what is still missing before you go live."
+      },
+      "mollie": {
+        "title": "Connect Mollie",
+        "body": "Paid bookings start once your Mollie account is connected and Mollie has verified your business."
+      },
+      "cta": "Create your account",
+      "questions": "Questions first? Write to"
+    },
+    "footer": {
+      "onboarding": "Onboarding Guide",
+      "merchantAgreement": "Merchant Agreement",
+      "verifactu": "Veri*factu Compliance",
+      "contact": "Contact",
+      "copyright": "© {year} Sunbnb",
+      "operatedBy": "Operated by {company}",
+      "businessId": "Business ID {id}",
+      "vatId": "VAT {id}"
+    }
   },
   "Info": {
     "sloganLine1": "Sunbnb - Your partner",

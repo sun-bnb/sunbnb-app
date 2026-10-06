@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import sunbnbLogo from '@/app/sunbnb-logo.svg'
 import { marketingCtaUrl } from '@/lib/marketing-cta'
@@ -16,286 +16,309 @@ interface BusinessEntity {
   contactPhone: string | null
 }
 
+/**
+ * The partner front door (signed-out `/`). Every claim on it must be TRUE TODAY — the
+ * verified source is the marketing agent's `apps/marketing/lib/agent/knowledge.ts`
+ * (shipped vs coming vs not offered). Things that are easy to overclaim and are NOT true:
+ * guest payments via Stripe (Mollie only), hourly sunbed booking, staff scanning the QR
+ * pass (they search by name), card terminals, live Veri*factu, a native app.
+ */
+
+const mono = 'font-[family-name:var(--font-geist-mono)]'
+
+// The floor grid's own palette (`getCellAppearance` in @repo/floor-core) — the hero shows
+// the beach the way staff actually see it, not a stock icon.
+const SEAT = {
+  free: 'bg-green-300 border-green-500',
+  booked: 'bg-fuchsia-400 border-fuchsia-600',
+  occupied: 'bg-red-400 border-red-600',
+  comp: 'bg-sky-400 border-sky-600',
+} as const
+type Seat = keyof typeof SEAT
+
+const F = 'free', B = 'booked', O = 'occupied', C = 'comp'
+const BEACH: Seat[][] = [
+  [O, O, B, F, B, B, O, F],
+  [B, F, O, O, F, C, B, B],
+  [F, B, B, F, F, O, F, B],
+  [F, F, B, F, F, F, B, F],
+]
+
+function SignInLink({ className, children }: { className: string; children: React.ReactNode }) {
+  return (
+    <Link href="/sign-in" className={className}>
+      {children}
+    </Link>
+  )
+}
+
+function BeachGrid() {
+  const t = useTranslations('Landing.hero')
+  return (
+    <figure className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm" aria-label={t('gridLabel')}>
+      <div className="flex items-baseline justify-between border-b border-gray-100 pb-3">
+        <span className="text-sm font-semibold text-gray-900">{t('gridTitle')}</span>
+        <span className={`${mono} text-xs text-gray-400`}>{t('gridToday')}</span>
+      </div>
+      {/* The sea is at the top of the floor view, as on the manage page. */}
+      <div className="mt-3 h-1.5 rounded-full bg-sky-100" aria-hidden />
+      <div className="mt-3 space-y-1.5" aria-hidden>
+        {BEACH.map((row, r) => (
+          <div key={r} className="flex items-center gap-1.5">
+            <span className={`${mono} w-4 text-[10px] text-gray-400`}>{r + 1}</span>
+            {row.map((s, i) => (
+              <span key={i} className={`h-6 flex-1 rounded border-2 ${SEAT[s]}`} />
+            ))}
+          </div>
+        ))}
+      </div>
+      <figcaption className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-gray-500">
+        {(Object.keys(SEAT) as Seat[]).map((s) => (
+          <span key={s} className="inline-flex items-center gap-1.5">
+            <span className={`h-3 w-3 rounded-sm border-2 ${SEAT[s]}`} aria-hidden />
+            {t(`legend.${s}`)}
+          </span>
+        ))}
+      </figcaption>
+    </figure>
+  )
+}
+
 export default function LandingPage({ businessEntity }: { businessEntity: BusinessEntity }) {
-  const router = useRouter()
   const t = useTranslations('Landing')
 
-  const features = [
-    {
-      title: t('feature1Title'),
-      desc: t('feature1Desc'),
-      icon: (
-        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" />
-        </svg>
-      ),
-    },
-    {
-      title: t('feature2Title'),
-      desc: t('feature2Desc'),
-      icon: (
-        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
-        </svg>
-      ),
-    },
-    {
-      title: t('feature3Title'),
-      desc: t('feature3Desc'),
-      icon: (
-        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z" />
-        </svg>
-      ),
-    },
-    {
-      title: t('feature4Title'),
-      desc: t('feature4Desc'),
-      icon: (
-        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
-        </svg>
-      ),
-    },
-    {
-      title: t('feature5Title'),
-      desc: t('feature5Desc'),
-      icon: (
-        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-        </svg>
-      ),
-    },
-    {
-      title: t('feature6Title'),
-      desc: t('feature6Desc'),
-      icon: (
-        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
-        </svg>
-      ),
-    },
+  // The day, in the order it happens at a venue — not a feature grid.
+  const day = [
+    { time: t('day.setup.time'), title: t('day.setup.title'), body: t('day.setup.body') },
+    { time: t('day.book.time'), title: t('day.book.title'), body: t('day.book.body') },
+    { time: t('day.arrive.time'), title: t('day.arrive.title'), body: t('day.arrive.body') },
+    { time: t('day.order.time'), title: t('day.order.title'), body: t('day.order.body') },
+    { time: t('day.desk.time'), title: t('day.desk.title'), body: t('day.desk.body') },
+    { time: t('day.close.time'), title: t('day.close.title'), body: t('day.close.body') },
   ]
+
+  const more = (['rentals', 'tables', 'reports', 'staff', 'refunds', 'languages'] as const).map((k) => ({
+    key: k,
+    title: t(`more.${k}.title`),
+    body: t(`more.${k}.body`),
+  }))
 
   // Card copy per tier. The numbers — price, venue cap, commission — come from
   // PRICING_TIERS, the same catalog the DB is seeded from, so the page can't
   // advertise a rate the cascade doesn't charge. Only the wording is translated.
-  const planNameKeys = {
-    STARTER: 'planStarter',
-    PRO: 'planPro',
-    BUSINESS: 'planBusiness',
-  } as const
-
-  const planNoteKeys = {
-    STARTER: 'planStarterNote',
-    PRO: 'planProNote',
-    BUSINESS: 'planBusinessNote',
-  } as const
-
   const planFeatureLines = {
-    STARTER: [
-      t('feat1Venue'),
-      t('featReservationsQr'),
-      t('featCardPayments'),
-      t('featCommunitySupport'),
-    ],
+    STARTER: [t('plans.oneVenue'), t('plans.starterAll'), t('plans.supportCommunity')],
     PRO: [
-      t('featUpToVenues', { count: PRICING_TIERS.PRO.maxSites }),
-      t('featEverythingIn', { plan: PRICING_TIERS.STARTER.name }),
-      t('featOffPlatformBilling'),
-      t('featPrioritySupport'),
+      t('plans.upToVenues', { count: PRICING_TIERS.PRO.maxSites }),
+      t('plans.everythingIn', { plan: PRICING_TIERS.STARTER.name }),
+      t('plans.offPlatform'),
+      t('plans.supportPriority'),
     ],
     BUSINESS: [
-      t('featUpToVenues', { count: PRICING_TIERS.BUSINESS.maxSites }),
-      t('featEverythingIn', { plan: PRICING_TIERS.PRO.name }),
-      t('featBranded'),
-      t('featDedicatedSupport'),
+      t('plans.upToVenues', { count: PRICING_TIERS.BUSINESS.maxSites }),
+      t('plans.everythingIn', { plan: PRICING_TIERS.PRO.name }),
+      t('plans.branded'),
+      t('plans.supportDedicated'),
     ],
   } as const
+
+  const commissionRates = {
+    starter: PRICING_TIERS.STARTER.commissionPercent,
+    pro: PRICING_TIERS.PRO.commissionPercent,
+    business: PRICING_TIERS.BUSINESS.commissionPercent,
+  }
 
   const plans = PRICING_TIER_ORDER.map((tier) => {
     const spec = PRICING_TIERS[tier]
     return {
       tier,
-      name: t(planNameKeys[tier]),
-      price: spec.monthlyPrice === 0 ? t('planStarterPrice') : `€${spec.monthlyPrice}`,
-      note: t(planNoteKeys[tier]),
+      name: spec.name,
+      price: spec.monthlyPrice === 0 ? t('plans.free') : `€${spec.monthlyPrice}`,
+      note: spec.monthlyPrice === 0 ? t('plans.freeNote') : t('plans.perMonth'),
       commission: `${spec.commissionPercent}%`,
-      highlight: tier === FEATURED_TIER,
+      featured: tier === FEATURED_TIER,
       features: planFeatureLines[tier],
     }
   })
 
   return (
-    <div className="min-h-screen bg-white">
-
+    <div className="min-h-screen bg-white text-gray-900">
       {/* Nav */}
-      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-100">
-        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
+      <header className="border-b border-gray-200">
+        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
           <div className="flex items-center gap-2">
-            <Image alt="Sunbnb" src={sunbnbLogo} className="w-8 h-8" />
-            <span className="text-sm font-bold text-gray-900">sunbnb</span>
-            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider ml-1">{t('partnerBadge')}</span>
+            <Image alt="Sunbnb" src={sunbnbLogo} className="h-7 w-7" />
+            <span className="font-semibold tracking-tight">Sunbnb</span>
+            <span className="ml-1 rounded border border-gray-300 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+              {t('nav.badge')}
+            </span>
           </div>
-          <button
-            onClick={() => router.push('/sign-in')}
-            className="px-4 py-1.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors"
-          >
-            {t('signIn')}
-          </button>
+          <SignInLink className="btn-ghost">{t('nav.signIn')}</SignInLink>
         </div>
       </header>
 
       {/* Hero */}
-      <section className="max-w-5xl mx-auto px-6 pt-20 pb-16 text-center">
-        <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 rounded-full mb-6">
-          <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-          <span className="text-xs font-medium text-emerald-700">{t('acceptingPartners')}</span>
+      <section className="mx-auto grid max-w-5xl items-center gap-12 px-6 pb-20 pt-16 md:grid-cols-[1.15fr_1fr] md:pt-24">
+        <div>
+          <p className="text-sm font-medium text-gray-500">{t('hero.eyebrow')}</p>
+          <h1 className="mt-3 text-4xl font-bold leading-[1.1] tracking-tight md:text-5xl">
+            <span className="block">{t('hero.title1')}</span>
+            <span className="block text-gray-400">{t('hero.title2')}</span>
+          </h1>
+          <p className="mt-5 max-w-xl text-lg leading-relaxed text-gray-600">{t('hero.body')}</p>
+          <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
+            <SignInLink className="btn-primary px-5 py-2.5">{t('hero.cta')}</SignInLink>
+            <a href={marketingCtaUrl(process.env.NEXT_PUBLIC_MARKETING_URL)} className="btn-ghost underline underline-offset-4">
+              {t('hero.seeYourBeach')}
+            </a>
+          </div>
+          <p className="mt-6 text-sm text-gray-500">{t('hero.noHardware')}</p>
         </div>
-        <h1 className="text-4xl md:text-5xl font-bold text-gray-900 tracking-tight leading-tight max-w-3xl mx-auto">
-          {t('heroLine1')}{' '}
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-emerald-500">
-            {t('heroEmphasis')}
-          </span>
-        </h1>
-        <p className="mt-5 text-lg text-gray-500 max-w-2xl mx-auto leading-relaxed">
-          {t('heroDescription')}
-        </p>
-        <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-          <button
-            onClick={() => router.push('/sign-in')}
-            className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors shadow-sm"
-          >
-            {t('getStartedNow')}
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-            </svg>
-          </button>
-          <a
-            href={marketingCtaUrl(process.env.NEXT_PUBLIC_MARKETING_URL)}
-            className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            {t('seeYourBeach')}
-          </a>
+        <BeachGrid />
+      </section>
+
+      {/* A day at the venue */}
+      <section className="border-t border-gray-200">
+        <div className="mx-auto max-w-5xl px-6 py-20">
+          <h2 className="text-3xl font-bold tracking-tight">{t('day.title')}</h2>
+          <p className="mt-2 max-w-2xl text-gray-600">{t('day.subtitle')}</p>
+          <ol className="mt-10 divide-y divide-gray-200 border-y border-gray-200">
+            {day.map((d) => (
+              <li key={d.title} className="grid gap-1 py-6 md:grid-cols-[9rem_14rem_1fr] md:gap-6">
+                <span className={`${mono} text-sm text-gray-400`}>{d.time}</span>
+                <h3 className="font-semibold">{d.title}</h3>
+                <p className="leading-relaxed text-gray-600">{d.body}</p>
+              </li>
+            ))}
+          </ol>
         </div>
       </section>
 
-      {/* Features */}
-      <section className="max-w-5xl mx-auto px-6 py-16">
-        <div className="text-center mb-12">
-          <h2 className="text-2xl font-bold text-gray-900">{t('featuresTitle')}</h2>
-          <p className="mt-2 text-sm text-gray-500">{t('featuresSubtitle')}</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {features.map((f) => (
-            <div key={f.title} className="bg-gray-50 rounded-xl p-5 border border-gray-100">
-              <div className="w-10 h-10 bg-white rounded-lg border border-gray-200 flex items-center justify-center text-gray-700 mb-3">
-                {f.icon}
-              </div>
-              <h3 className="text-sm font-semibold text-gray-900 mb-1">{f.title}</h3>
-              <p className="text-sm text-gray-500 leading-relaxed">{f.desc}</p>
+      {/* More */}
+      <section className="mx-auto max-w-5xl px-6 pb-20">
+        <h2 className="text-2xl font-bold tracking-tight">{t('more.title')}</h2>
+        <dl className="mt-8 grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
+          {more.map((m) => (
+            <div key={m.key} className="border-l-2 border-gray-900 pl-4">
+              <dt className="font-semibold">{m.title}</dt>
+              <dd className="mt-1 text-sm leading-relaxed text-gray-600">{m.body}</dd>
             </div>
           ))}
+        </dl>
+      </section>
+
+      {/* Money — the deal in plain words, before the price table. */}
+      <section className="bg-gray-900 text-white">
+        <div className="mx-auto grid max-w-5xl gap-10 px-6 py-20 md:grid-cols-2">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight">{t('money.title')}</h2>
+            <p className="mt-4 leading-relaxed text-gray-300">{t('money.body')}</p>
+          </div>
+          <ul className="space-y-5">
+            {(['merchant', 'listed', 'commission', 'cash'] as const).map((k) => (
+              <li key={k} className="border-t border-white/15 pt-4">
+                <p className="font-semibold">{t(`money.${k}.title`)}</p>
+                <p className="mt-1 text-sm leading-relaxed text-gray-400">{t(`money.${k}.body`, commissionRates)}</p>
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 
       {/* Pricing */}
-      <section className="max-w-5xl mx-auto px-6 py-16">
-        <div className="text-center mb-12">
-          <h2 className="text-2xl font-bold text-gray-900">{t('pricingTitle')}</h2>
-          <p className="mt-2 text-sm text-gray-500">{t('pricingSubtitle')}</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-3xl mx-auto">
+      <section className="mx-auto max-w-5xl px-6 py-20">
+        <h2 className="text-3xl font-bold tracking-tight">{t('plans.title')}</h2>
+        <p className="mt-2 text-gray-600">{t('plans.subtitle')}</p>
+        <div className="mt-10 grid gap-6 md:grid-cols-3">
           {plans.map((p) => (
             <div
               key={p.tier}
-              className={`relative rounded-xl p-5 border flex flex-col ${
-                p.highlight
-                  ? 'border-blue-500 ring-2 ring-blue-500 bg-white'
-                  : 'border-gray-200 bg-white'
-              }`}
+              className={`flex flex-col rounded-xl border bg-white p-6 ${p.featured ? 'border-2 border-gray-900' : 'border-gray-200'}`}
             >
-              {p.highlight && (
-                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap">
-                  {t('planMostChosen')}
-                </span>
-              )}
-              <p className="text-sm font-semibold text-gray-900">{p.name}</p>
-              <div className="mt-2 mb-3">
-                <span className="text-2xl font-bold text-gray-900">{p.price}</span>
-                <span className="text-sm text-gray-400 ml-1">{p.note}</span>
+              <div className="flex items-center justify-between">
+                <p className="font-semibold">{p.name}</p>
+                {p.featured && (
+                  <span className="rounded bg-gray-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
+                    {t('plans.mostChosen')}
+                  </span>
+                )}
               </div>
               {/* Commission is the headline term of the deal, not a footnote —
                   it is what a partner actually pays on every sale. */}
-              <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
-                <span className="text-base font-bold text-amber-700">{p.commission}</span>
-                <span className="text-xs text-gray-500 ml-1.5">{t('commissionLabel')}</span>
-              </div>
-              <ul className="space-y-2 mb-5 flex-1">
+              <p className="mt-5">
+                <span className="text-4xl font-bold tracking-tight">{p.commission}</span>
+              </p>
+              <p className="text-sm text-gray-500">{t('plans.commissionLabel')}</p>
+              <p className="mt-4 border-t border-gray-100 pt-4">
+                <span className="text-xl font-semibold">{p.price}</span>
+                <span className="ml-1 text-sm text-gray-500">{p.note}</span>
+              </p>
+              <ul className="mt-4 flex-1 space-y-2">
                 {p.features.map((f) => (
-                  <li key={f} className="flex items-center gap-2 text-sm text-gray-500">
-                    <svg className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                    </svg>
+                  <li key={f} className="flex gap-2 text-sm text-gray-600">
+                    <span className="text-gray-900" aria-hidden>
+                      —
+                    </span>
                     {f}
                   </li>
                 ))}
               </ul>
-              <button
-                onClick={() => router.push('/sign-in')}
-                className={`w-full py-2 text-sm font-medium rounded-lg transition-colors ${
-                  p.highlight
-                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              <SignInLink
+                className={`mt-6 w-full text-center ${
+                  p.featured ? 'btn-primary' : 'rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium transition-colors hover:bg-gray-50'
                 }`}
               >
-                {t('getStarted')}
-              </button>
+                {t('plans.cta')}
+              </SignInLink>
             </div>
           ))}
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="max-w-5xl mx-auto px-6 py-16 text-center">
-        <div className="bg-gray-900 rounded-2xl p-10 md:p-14">
-          <h2 className="text-2xl md:text-3xl font-bold text-white">
-            {t('ctaTitle')}
-          </h2>
-          <p className="mt-3 text-gray-400 max-w-xl mx-auto">
-            {t('ctaBody')}
-          </p>
-          <button
-            onClick={() => router.push('/sign-in')}
-            className="mt-6 inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-gray-900 bg-white rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            {t('signUpGoogle')}
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-            </svg>
-          </button>
+      {/* Getting started — honest about the Mollie step instead of "in minutes". */}
+      <section className="border-t border-gray-200">
+        <div className="mx-auto max-w-5xl px-6 py-20">
+          <h2 className="text-3xl font-bold tracking-tight">{t('start.title')}</h2>
+          <ol className="mt-10 grid gap-8 md:grid-cols-3">
+            {(['account', 'beach', 'mollie'] as const).map((k, i) => (
+              <li key={k}>
+                <span className={`${mono} text-sm text-gray-400`}>0{i + 1}</span>
+                <h3 className="mt-2 font-semibold">{t(`start.${k}.title`)}</h3>
+                <p className="mt-1 text-sm leading-relaxed text-gray-600">{t(`start.${k}.body`)}</p>
+              </li>
+            ))}
+          </ol>
+          <div className="mt-12 flex flex-wrap items-center gap-x-6 gap-y-3">
+            <SignInLink className="btn-primary px-5 py-2.5">{t('start.cta')}</SignInLink>
+            <span className="text-sm text-gray-500">
+              {t('start.questions')}{' '}
+              <a href="mailto:partners@sunbnb.app" className="font-medium text-gray-900 underline underline-offset-4">
+                partners@sunbnb.app
+              </a>
+            </span>
+          </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-gray-100 mt-8">
-        <div className="max-w-5xl mx-auto px-6 py-8">
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+      <footer className="border-t border-gray-200">
+        <div className="mx-auto max-w-5xl px-6 py-8">
+          <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
             <div className="flex items-center gap-2">
-              <Image alt="Sunbnb" src={sunbnbLogo} className="w-5 h-5 opacity-50" />
-              <span className="text-xs text-gray-400">{t('footerCopyright', { year: new Date().getFullYear() })}</span>
+              <Image alt="Sunbnb" src={sunbnbLogo} className="h-5 w-5 opacity-50" />
+              <span className="text-xs text-gray-400">{t('footer.copyright', { year: new Date().getFullYear() })}</span>
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-400">
-              <a href="/legal/onboarding" className="hover:text-gray-600 transition-colors">{t('footerOnboarding')}</a>
-              <a href="/legal/merchant-agreement" className="hover:text-gray-600 transition-colors">{t('footerMerchantAgreement')}</a>
-              <a href="/legal/verifactu" className="hover:text-gray-600 transition-colors">{t('footerVerifactu')}</a>
-              <a href="mailto:partners@sunbnb.app" className="hover:text-gray-600 transition-colors">{t('footerContact')}</a>
+              <a href="/legal/onboarding" className="transition-colors hover:text-gray-600">{t('footer.onboarding')}</a>
+              <a href="/legal/merchant-agreement" className="transition-colors hover:text-gray-600">{t('footer.merchantAgreement')}</a>
+              <a href="/legal/verifactu" className="transition-colors hover:text-gray-600">{t('footer.verifactu')}</a>
+              <a href="mailto:partners@sunbnb.app" className="transition-colors hover:text-gray-600">{t('footer.contact')}</a>
             </div>
           </div>
-          <p className="mt-4 text-[10px] text-gray-300">
-            {t('footerOperatedBy', { company: businessEntity.companyName })}
-            {businessEntity.businessId ? ` · ${t('footerBusinessId', { id: businessEntity.businessId })}` : ''}
-            {businessEntity.vatId ? ` · ${t('footerVatId', { id: businessEntity.vatId })}` : ''}
+          <p className="mt-4 text-[10px] text-gray-400">
+            {t('footer.operatedBy', { company: businessEntity.companyName })}
+            {businessEntity.businessId ? ` · ${t('footer.businessId', { id: businessEntity.businessId })}` : ''}
+            {businessEntity.vatId ? ` · ${t('footer.vatId', { id: businessEntity.vatId })}` : ''}
             {businessEntity.companyAddress ? ` · ${businessEntity.companyAddress}` : ''}
           </p>
         </div>
