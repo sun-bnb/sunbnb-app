@@ -120,6 +120,16 @@ export default function Experience({
   const [slide, setSlide] = useState(0)
   const [reducedMotion, setReducedMotion] = useState(false)
   useEffect(() => setReducedMotion(window.matchMedia('(prefers-reduced-motion: reduce)').matches), [])
+  // Wide screens show each feature's scene in a column beside the headline (the strip of sand
+  // between headline and composer is too short to show it at a readable size there).
+  const [desk, setDesk] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)')
+    const on = () => setDesk(mq.matches)
+    on()
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
   // The showcase steps aside the moment the visitor engages: typing, a reply, or anything said.
   const showcasing = !s.beach && !reducedMotion && !search.text && s.msgs.length <= 1 && !typing
   useEffect(() => {
@@ -695,7 +705,8 @@ export default function Experience({
         tag={tag}
         onBedTap={onBedTap}
         onMapClick={moving && s.step === 'count' ? moveTo : undefined}
-        heroMode={SLIDE_MODES[slide]}
+        // On a wide screen the features play in their own column, so the beach keeps its bookings.
+        heroMode={desk ? 'book' : SLIDE_MODES[slide]}
         heroTags={heroTags}
         ground={ground}
         onFlown={onFlown}
@@ -709,7 +720,7 @@ export default function Experience({
       )}
 
       {/* Each feature slide's own scene, scrolled in over the sand (the beach's sunbeds fade out). */}
-      {!s.beach && scene && (
+      {!s.beach && scene && !desk && (
         <div className="pointer-events-none absolute inset-x-0" style={{ top: `${scene.band[0] * 100}%`, height: `${(scene.band[1] - scene.band[0]) * 100}%` }}>
           <HeroVignettes mode={SLIDE_MODES[slide]!} reduced={reducedMotion} />
         </div>
@@ -718,19 +729,25 @@ export default function Experience({
       {/* The landing headline floats on the sea until the visit becomes about their beach. */}
       {!s.beach && (
         <div ref={headRef} className="pointer-events-none absolute inset-x-0 top-0 px-4 pt-[4.25rem] sm:pt-24 [@media(max-height:700px)]:pt-14">
-          <div className="mx-auto max-w-3xl">
-            <HeroSlides
-              slides={slides}
-              active={slide}
-              intervalMs={SLIDE_MS}
-              running={showcasing}
-              onPick={(i) => {
-                haptic(6)
-                setSlide(i)
-              }}
-              showLabel={(f) => th('slides.show', { feature: f })}
-            />
-            {offer?.launchOfferShort && <OfferPill short={offer.launchOfferShort} full={offer.launchOffer ?? offer.launchOfferShort} />}
+          <div className="mx-auto max-w-3xl lg:grid lg:max-w-6xl lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-center lg:gap-12">
+            <div>
+              <HeroSlides
+                slides={slides}
+                active={slide}
+                intervalMs={SLIDE_MS}
+                running={showcasing}
+                onPick={(i) => {
+                  haptic(6)
+                  setSlide(i)
+                }}
+                showLabel={(f) => th('slides.show', { feature: f })}
+              />
+              {offer?.launchOfferShort && <OfferPill short={offer.launchOfferShort} full={offer.launchOffer ?? offer.launchOfferShort} />}
+            </div>
+            {/* Its height leaves the sand room for the beach's rows and the composer below. */}
+            <div className="hidden h-[clamp(240px,calc(100svh-480px),460px)] lg:block">
+              {desk && <HeroVignettes mode={SLIDE_MODES[slide]!} reduced={reducedMotion} withBook maxScale={1.9} />}
+            </div>
           </div>
         </div>
       )}

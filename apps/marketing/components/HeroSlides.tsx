@@ -39,7 +39,7 @@ export default function HeroSlides({
           const Title = i === 0 ? 'h1' : 'p'
           return (
             <div key={s.mode} aria-hidden={i !== active} className={`col-start-1 row-start-1 transition-all duration-700 ease-out motion-reduce:transition-none ${state}`}>
-              <Title className="text-[clamp(2rem,8.6vw,4rem)] font-semibold leading-[1.02] tracking-[-0.03em] text-[#0e3a4a] [@media(max-height:700px)]:text-[1.75rem]">{s.title}</Title>
+              <Title className="text-[clamp(2rem,8.6vw,4rem)] font-semibold lg:text-[clamp(2.25rem,min(4.2vw,7vh),3.75rem)] leading-[1.02] tracking-[-0.03em] text-[#0e3a4a] [@media(max-height:700px)]:text-[1.75rem]">{s.title}</Title>
               <p className="mt-3 hidden max-w-xl text-[clamp(1rem,4vw,1.25rem)] leading-snug text-[#0e3a4a]/80 sm:block">{s.subtitle}</p>
             </div>
           )

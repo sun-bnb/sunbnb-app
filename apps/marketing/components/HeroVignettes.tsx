@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl'
 import { useEffect, useLayoutEffect, useRef, useState, type FC, type ReactNode } from 'react'
 import QRCodeLib from 'react-qr-code'
+import { STATUS_FILL } from '@/lib/app-sprites'
 import type { HeroMode } from './HeroBeach'
 
 /**
@@ -20,7 +21,19 @@ const DESIGN_H = 250
 // react-qr-code types against the hoisted @types/react 19 (same cast as apps/user PassView).
 const QRCode = QRCodeLib as unknown as FC<{ value: string; size?: number; style?: React.CSSProperties }>
 
-export default function HeroVignettes({ mode, reduced }: { mode: HeroMode; reduced: boolean }) {
+export default function HeroVignettes({
+  mode,
+  reduced,
+  withBook = false,
+  maxScale = 1,
+}: {
+  mode: HeroMode
+  reduced: boolean
+  /** Desktop column: slide 0 gets its own scene too (on mobile the beach itself is slide 0's scene). */
+  withBook?: boolean
+  /** How far a scene may grow past its design size to fill a large column. */
+  maxScale?: number
+}) {
   const index = ORDER.indexOf(mode)
   // Moving backwards (the loop starting over, or a tapped earlier dot) jumps there at once — a
   // smooth rewind would sweep every scene past in reverse.
@@ -37,8 +50,9 @@ export default function HeroVignettes({ mode, reduced }: { mode: HeroMode; reduc
       >
         {ORDER.map((m) => (
           <div key={m} className="flex h-full w-full shrink-0 items-center justify-center px-4">
-            {m !== 'book' && (
-              <FitScale>
+            {(m !== 'book' || withBook) && (
+              <FitScale max={maxScale}>
+                {m === 'book' && <BookScene active={mode === m && !reduced} />}
                 {m === 'order' && <OrderScene active={mode === m && !reduced} />}
                 {m === 'rent' && <RentScene active={mode === m && !reduced} />}
                 {m === 'checkin' && <CheckinScene active={mode === m && !reduced} />}
@@ -52,19 +66,19 @@ export default function HeroVignettes({ mode, reduced }: { mode: HeroMode; reduc
   )
 }
 
-/** Scales a DESIGN_H-tall scene down to the height it is given (never up). */
-export function FitScale({ children }: { children: ReactNode }) {
+/** Scales a DESIGN_H-tall scene to the box it is given: down to fit, up to `max` (default: never up). */
+export function FitScale({ children, max = 1 }: { children: ReactNode; max?: number }) {
   const ref = useRef<HTMLDivElement>(null)
   const [k, setK] = useState(1)
   useLayoutEffect(() => {
     const el = ref.current?.parentElement
     if (!el) return
-    const fit = () => setK(Math.min(1, el.clientHeight / DESIGN_H, el.clientWidth / 360))
+    const fit = () => setK(Math.min(max, el.clientHeight / DESIGN_H, el.clientWidth / 360))
     fit()
     const ro = new ResizeObserver(fit)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [max])
   return (
     <div ref={ref} style={{ transform: `scale(${k})`, height: DESIGN_H }} className="flex origin-center items-center">
       {children}
@@ -157,6 +171,55 @@ export function OrderScene({ active }: { active: boolean }) {
             <Lemonade size={14} />
             <Sparkling size={14} />
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** One sunbed as the guest app draws it: status box, the perforated bed over it, a towel when taken. */
+function AppBed({ status }: { status: 'free' | 'selected' | 'booked' }) {
+  return (
+    <span className={`relative block h-[34px] w-4 border border-black ${status === 'selected' ? 'animate-[pop_240ms_ease-out]' : ''}`} style={{ background: STATUS_FILL[status] }}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- tiny decorative sprite */}
+      <img src="/app/sunbed.webp" alt="" className="absolute inset-0 h-full w-full" />
+      {status !== 'free' && (
+        // eslint-disable-next-line @next/next/no-img-element -- tiny decorative sprite
+        <img src="/app/towel.webp" alt="" className="absolute left-0.5 top-1 h-[26px] w-3 rotate-[30deg]" />
+      )}
+    </span>
+  )
+}
+
+export function BookScene({ active }: { active: boolean }) {
+  const t = useTranslations('Hero.v')
+  // 0 idle · 1 a bed picked · 2 Reserve pressed · 3 paid · 4–6 the pass is out
+  const n = useTicks(active, 950, 8)
+  // The guest picks A3 — the same sunbed the other scenes order drinks to and receipt.
+  const booked = [1, 4, 7]
+  const pick = 2
+  return (
+    <div className="flex items-center gap-4">
+      <div className="w-[150px] rounded-[26px] border-[5px] border-[#0e3a4a] bg-white p-2.5 shadow-xl">
+        <div className="flex items-center justify-between text-[10px]">
+          <span className="font-semibold text-gray-900">{t('bk_choose')}</span>
+          <span className="text-gray-500">{t('today')}</span>
+        </div>
+        <div className="mt-2 grid grid-cols-5 justify-items-center gap-y-2 rounded-lg bg-[#f8ecd0] px-1 py-2">
+          {Array.from({ length: 10 }, (_, i) => (
+            <AppBed key={i} status={booked.includes(i) ? 'booked' : i === pick && n >= 1 ? 'selected' : 'free'} />
+          ))}
+        </div>
+        <div className={`mt-2 rounded-lg py-1.5 text-center text-[10px] font-semibold text-white transition ${n === 2 ? 'scale-95 bg-blue-600' : n >= 3 ? 'bg-green-600' : 'bg-[#0e3a4a]'}`}>
+          {n >= 3 ? t('paid') : t('bk_reserve')}
+        </div>
+      </div>
+      <div className={`w-[150px] p-3 transition-all duration-500 ${paper} ${n >= 4 ? 'translate-x-0 opacity-100' : 'translate-x-6 opacity-0'}`}>
+        <p className="text-[11px] font-medium text-gray-500">{t('bk_pass')}</p>
+        <p className="mt-1 text-[13px] font-semibold text-gray-900">{t('sunbed')}</p>
+        <p className="text-[10px] text-gray-500">{t('today')}</p>
+        <div className="mt-2 grid place-items-center">
+          <QRCode value="https://sunbnb.app" size={84} style={{ width: 84, height: 84 }} />
         </div>
       </div>
     </div>

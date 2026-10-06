@@ -79,7 +79,10 @@
       "rc_numbered": "Your own invoice numbering",
       "rc_sent": "Receipt sent",
       "paddleboard": "Paddleboard",
-      "rc_qr": "Receipt online"
+      "rc_qr": "Receipt online",
+      "bk_choose": "Choose your sunbed",
+      "bk_reserve": "Reserve",
+      "bk_pass": "Your pass"
     }
   },
   "Footer": {

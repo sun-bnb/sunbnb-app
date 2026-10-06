@@ -79,7 +79,10 @@
       "rc_numbered": "Tu propia numeración de facturas",
       "rc_sent": "Recibo enviado",
       "paddleboard": "Tabla de paddle",
-      "rc_qr": "Recibo online"
+      "rc_qr": "Recibo online",
+      "bk_choose": "Elige tu hamaca",
+      "bk_reserve": "Reservar",
+      "bk_pass": "Tu pase"
     }
   },
   "Footer": {

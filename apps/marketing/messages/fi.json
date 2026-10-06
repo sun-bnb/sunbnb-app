@@ -79,7 +79,10 @@
       "rc_numbered": "Oma laskunumerointisi",
       "rc_sent": "Kuitti lähetetty",
       "paddleboard": "SUP-lauta",
-      "rc_qr": "Kuitti verkossa"
+      "rc_qr": "Kuitti verkossa",
+      "bk_choose": "Valitse aurinkotuoli",
+      "bk_reserve": "Varaa",
+      "bk_pass": "Pääsylippusi"
     }
   },
   "Footer": {
