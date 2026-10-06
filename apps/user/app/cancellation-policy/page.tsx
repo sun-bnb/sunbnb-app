@@ -56,21 +56,14 @@ export default async function CancellationPolicy() {
           If a Beach Club cancels a confirmed Booking (e.g., due to weather closure, equipment failure, or force majeure), you are entitled to a <strong>full refund (100%)</strong>. The Beach Club bears sole responsibility for such cancellations.
         </p>
         <p className="mt-2">
-          {co.companyName} will process the refund to your original payment method within 5–10 business days of the cancellation being confirmed.
+          The Beach Club issues the refund through its payment provider to your original payment method.
         </p>
       </section>
 
       <section className="mb-8">
         <h2 className="text-base font-semibold text-gray-900 mb-2">5. Refund Method &amp; Timing</h2>
         <p>
-          Refunds are issued to the original payment method (credit/debit card, iDEAL, or other supported method). Processing times depend on your payment provider and are typically:
-        </p>
-        <ul className="mt-2 list-disc list-inside text-gray-600 space-y-1">
-          <li>Card payments: 5–10 business days</li>
-          <li>iDEAL / bank transfers: 2–5 business days</li>
-        </ul>
-        <p className="mt-2">
-          {co.companyName} initiates refunds promptly. Delays beyond our control (e.g., bank processing times) are the responsibility of the Guest&rsquo;s financial institution.
+          Refunds are issued by the Beach Club through its payment provider (Mollie) to the original payment method (credit/debit card, iDEAL, or other supported method). When the money reaches you depends on the payment provider and your bank.
         </p>
       </section>
 
