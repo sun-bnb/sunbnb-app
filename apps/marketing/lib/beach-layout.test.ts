@@ -82,10 +82,21 @@ describe('generateBeachLayout', () => {
   it('keeps a beach shape — long along the shore, few rows deep', () => {
     const small = generateBeachLayout({ anchor, seaBearingDeg: 180, sunbedCount: 20 })
     expect(small.rows).toBe(1)
-    const typical = generateBeachLayout({ anchor, seaBearingDeg: 180, sunbedCount: 120 })
-    expect(typical.rows).toBe(5)
+    const typical = generateBeachLayout({ anchor, seaBearingDeg: 180, sunbedCount: 40 })
+    expect(typical.rows).toBe(2)
     const huge = generateBeachLayout({ anchor, seaBearingDeg: 180, sunbedCount: 5000 })
     expect(huge.rows).toBe(DEFAULT_LAYOUT.maxRows)
+  })
+
+  it('fits a narrow beach: 250 beds stay within ~20 m of the waterline, growing along the shore', () => {
+    const l = generateBeachLayout({ anchor, seaBearingDeg: 180, sunbedCount: 250, placement: 'waterline' })
+    expect(l.rows).toBe(4)
+    expect(l.sunbeds).toHaveLength(250)
+    // seaBearing 180 → the sea is south; depth = how far north of the waterline the back row sits
+    const depthM = Math.max(...l.sunbeds.map((s) => (s.lat - anchor.lat) * 111_320))
+    expect(depthM).toBeLessThan(20)
+    const lengths = l.sunbeds.map((s) => s.lng)
+    expect((Math.max(...lengths) - Math.min(...lengths)) * 111_320 * Math.cos((anchor.lat * Math.PI) / 180)).toBeGreaterThan(80)
   })
 
   it('opens a cross-walkway between blocks of pairs', () => {

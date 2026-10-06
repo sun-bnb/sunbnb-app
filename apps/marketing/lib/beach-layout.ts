@@ -55,7 +55,10 @@ export const DEFAULT_LAYOUT: LayoutOptions = {
   pairsPerBlock: 6,
   walkwayM: 2.5,
   targetPairsPerRow: 12,
-  maxRows: 10,
+  // Long and shallow: most beaches are 20–40 m deep, and 10-row blocks (250 beds) ran off narrow
+  // ones into dunes and roads. 4 rows from the waterline ≈ 6 + 3 × 3.7 + 2.1 ≈ 19 m deep; extra
+  // beds lengthen the rows along the shore instead (250 beds → 4 rows of 32 pairs, ~100 m).
+  maxRows: 4,
   // OSM coastline ≈ the high-water line; 6 m of wet sand, then row A. 12 m pushed 5-row blocks
   // into the dune vegetation on a ~30 m wide beach (Platja de Muro, 2026-10-04).
   waterlineGapM: 6,
