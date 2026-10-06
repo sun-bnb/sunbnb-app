@@ -48,6 +48,15 @@ export const KNOWLEDGE: KnowledgeEntry[] = [
     sources: ['apps/user/app/api/table-reservations/[id]/deposit/mollie', 'packages/data/prisma/schema.prisma (Site.noShowDeadlineMinutes unused)'],
   },
   {
+    id: 'cancellation',
+    topic: 'Cancellations and refunds',
+    status: 'shipped',
+    say: 'Guests who cancel more than 24 hours before the booking date get a full refund; within 24 hours of the booking date, or for a no-show, there is no refund. If the venue cancels (for example for weather), the guest gets a full refund. Refunds go back through the payment provider to the guest\'s card.',
+    neverClaim: ['partial refunds', 'a 50% refund tier'],
+    figures: [24],
+    sources: ['apps/user/app/cancellation-policy/page.tsx (founder decision 2026-10-06: 100% if > 24 h before, none within 24 h)', 'packages/data/src/refund.ts'],
+  },
+  {
     id: 'food-drink',
     topic: 'Food and drink orders',
     status: 'shipped',
