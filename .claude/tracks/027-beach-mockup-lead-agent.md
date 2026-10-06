@@ -226,7 +226,7 @@ pure layout generator (location TBD — see Q2)
 
 ## Roadmap
 
-- ▶ **P0 — Eval harness + model trial.** Harness DONE (`apps/marketing/eval/`, 20 scenarios,
+- ✅ **P0 — Eval harness + model trial.** (Haiku 4.5 live path chosen and shipped in P5/P9c.) Harness DONE (`apps/marketing/eval/`, 20 scenarios,
   41 unit tests). Local pick DONE: **qwen3:14b** (40/40 vs mistral 24B 33/40, llama 8B 19/40).
   Slow-tail question answered: download contention, not the model. **Remaining:** Claude
   adapter behind `LeadAgentModel` and run Haiku 4.5 through the same suite — the live-path
@@ -260,16 +260,17 @@ pure layout generator (location TBD — see Q2)
 - ✅ **P5 — Agent panel.** BUILT 2026-10-04, browser-verified with live Haiku 4.5 against the local DB (uncommitted at time of writing). Original scope: Streaming chat on `/m/[token]` via `/api/chat`; system prompt =
   fact sheet + mockup context (beach name, count); tools wired; turn/session caps; graceful
   "assistant unavailable" state that leaves the CTA intact. Eval harness green before ship.
-- ☐ **P6 — Lead handoff.** Lead summary + score written at session end; email to founder
-  (Resend) on qualified leads; leads list in `apps/admin`. Shareable mockup link emailed to
-  the prospect.
+- ✅ **P6 — Lead handoff.** DONE 2026-10-06: `scoreLead` (points + reasons, `lead-model.ts`),
+  admin `/leads` list + `/leads/[id]` (timeline, sudo-gated status), team email links the lead in
+  admin, prospect gets their mockup link by email (EN/ES/FI). Plus a 4-row cap for narrow beaches.
+  **Deferred to P0b:** the AI-written lead summary (local model).
 - ✅ **P8 — Ad-ready baseline** BUILT 2026-10-05 (uncommitted at time of writing; browser-verified):
   consent banner + Meta/Google tags gated on consent; `lead_event` + `/api/events` + Lead funnel
   columns (migration `20261005055904_add_lead_funnel_fields`); hero by ad angle (`?a=`);
   offer/promise slots (null = hidden) + guard test; "no invented claims" copy test; sticky CTA.
   **Deferred to P9:** the real-app hero poster image (needs the app-faithful map capture) and the
   Lighthouse LCP measurement.
-- ▶ **P9 — Journey + app-faithful map** (BUILT 2026-10-05, uncommitted, browser-verified mobile +
+- ✅ **P9 — Journey + app-faithful map** (BUILT 2026-10-05, uncommitted, browser-verified mobile +
   desktop): app sprites (`scripts/build-sprites.mjs` → `public/app/*.webp`, `lib/app-sprites.ts`
   mirrors `SunbedSelection.tsx` layer for layer), `SunbedOverlay` sprite canvas + pop-in + LOD +
   hint rings + rising "paid" tag, styled roadmap (`mapId`) everywhere; landing = `HeroBeach`
@@ -278,18 +279,18 @@ pure layout generator (location TBD — see Q2)
   booking in an app-style sheet → staff grid in `@repo/floor-core` colours → go live), pure
   `lib/missions.ts` + tests. **Not done:** `beach-layout` on `generateChairGrid` (moves to P13,
   where partner geometry matters), hero poster image + Lighthouse.
-- ☐ **P9b — Platform journey (D10)**: (1) shipped-feature audit → module catalogue with the
+- ✅ **P9b — Platform journey (D10)**: (1) shipped-feature audit → module catalogue with the
   real app surface each one mirrors; (2) qualifier chips in the fly-in + `lib/modules.ts` rule
   table (answers → ordered modules; pure, tested; every module id must exist in the catalogue);
   (3) modules beyond the two built (F&B order, rental, day close, Veri*factu ES); (4) "Your
   Sunbnb" summary card; (5) ad-matched hero headlines per angle; (6) below-fold pillars /
   how-it-starts / FAQ; (7) qualifier answers stored on the lead (additive columns) and passed to
   the chat + team email; funnel events per module.
-- ▶ **P9c — Immersive shell (D11)**: full-screen scene first screen + floating headline + agent
+- ✅ **P9c — Immersive shell (D11)**: full-screen scene first screen + floating headline + agent
   bubble + one command bar (rules-parsed sentence → beach + count; "near me" + example chips) →
   then the illustrated→map hand-off, the scroll-driven camera along the beach places, and the
   agent bubbles carried through builder and missions.
-- ☐ **P10 — Projection** (`lib/projection.ts`, traced outputs, stored, emailed, chat-grounded).
+- ✅ **P10 — Projection** (`lib/projection.ts`, traced outputs, stored, emailed, chat-grounded).
 - ☐ **P11 — AI placement** (after the imagery-licensing gate; eval of 15 labelled beaches).
 - ☐ **P12 — Local intelligence brief** (tiered fetchers + research agent + citation verifier).
 - ☐ **P13 — Variant B automated claim + A/B on** (partner `/claim/[token]`).
@@ -312,20 +313,13 @@ pure layout generator (location TBD — see Q2)
 
 ## Resume here
 
-- **State 2026-10-05:** P0–P8 + D9 committed and pushed. **P9 built, NOT committed** (all in
-  `apps/marketing`; see the P9 roadmap line for the file map). Typecheck, lint and 157 marketing
-  unit tests green; full journey verified in Playwright (iPhone 13 + 1440 desktop): hero →
-  search → fly-in/shore snap → count → Build → `/m/<token>` → guest booking → staff check-in →
-  demo form, no console errors.
-- **P9c built (uncommitted): one conversation over one world**, landing → build → guest → staff →
-  go live, Haiku from the first screen. Remaining P9c: the aerial illustrated→map hand-off, the
-  scroll-driven camera along the beach places (below-hero content), agent narration lines.
-- **Coastline cache built** (uncommitted at time of writing) — seed campaign coasts per environment before ads.
-- **P9b built** (modules, summary, stored qualifier). Remaining P9b: ad-matched hero headlines per angle exist; below-fold pillars/FAQ (folded into D11's scroll-driven places).
-- **P10 + P9c built** (hand-off + beach tour). Next: P13 claim flow — cross-app (marketing → partner → data), needs an architecture pass and founder go-ahead before code. Start with the shipped-feature audit (what can each module
-  honestly show — F&B orders, rentals, table bookings, QR walk-ins, day close/invoicing are
-  believed shipped; dynamic pricing, hotel channel, Viva need checking), then the qualifier in
-  `BeachBuilder`'s fly-in phase and the `lib/modules.ts` rule table, then modules one by one.
+- **State 2026-10-06:** P0–P6, P8–P10 and the coastline DB are committed and deployed to test and
+  production. Next: **P13 claim flow**. It spans three surfaces (marketing → partner → data), so it
+  needs an architecture pass and the founder's go-ahead before any code. Other candidates:
+  P0b (AI lead summary), P15 (inland water).
+- **Open with the founder:** "QR is true", but the knowledge base says staff look guests up rather
+  than scan. Confirm whether a staff scanner exists before the agent claims it. The cancellation
+  page says Sunbnb España SL processes refunds, while venues refund through their own Mollie.
 - **Before production:** founder review of the new EN/ES/FI copy (Journey, Missions, Hero),
   `/privacy`, the founder promise wording; Meta Pixel / Google Ads IDs in Vercel; Viva zero-ISV
   answer (track 024) before Viva goes live; a production deploy activates `CRON_SECRET` on
@@ -358,6 +352,14 @@ pure layout generator (location TBD — see Q2)
 
 ## Log
 
+- **2026-10-06** — **P6 lead handoff + narrow beaches** (`f62abd9`, `998348b`). `scoreLead` gives
+  transparent points (demo 35, contact 15, guest demo 8, check-in 6, numbers 8, chat 6, extra runs
+  6, size 4/10/16; capped at 100) with reasons. Admin `/leads` and `/leads/[id]` added. The team
+  email links the lead in admin (`adminUrlFor`: try→admin, trytest→admintest). The prospect email
+  sends their mockup link in their locale; email failures never block the request. `maxRows: 4`
+  (250 beds stay within about 20 m of sand). Verified: data 919 unit + 576 integration tests,
+  admin 239, marketing 246, lint 13/13, admin `next build`, and the Playwright demo-request flow
+  (lead stored with runs + projectionAt).
 - **2026-10-05** — **Coastline from our own data: deployed to test and production.** Contract
   migration `20261005171532_drop_app_coast_tables` (models + partner mock delegates removed) after
   test and production both ran 904c01c; applied to test before the push and to production by
